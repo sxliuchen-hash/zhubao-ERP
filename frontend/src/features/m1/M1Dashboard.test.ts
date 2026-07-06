@@ -19,5 +19,10 @@ describe('M1Dashboard', () => {
     expect(wrapper.text()).toContain('证据链健康');
     expect(wrapper.text()).toContain('在制工单看板');
     expect(wrapper.text()).toContain('超标损耗审批');
+    expect(wrapper.text()).toContain('来料加工生产运营指挥台');
+    expect(wrapper.text()).toContain('拆包台');
+    expect(wrapper.text()).toContain('真实写账');
+    expect(wrapper.text()).toContain('8 条业务命令');
+    expect(wrapper.text()).toContain('售后复核');
   });
 });

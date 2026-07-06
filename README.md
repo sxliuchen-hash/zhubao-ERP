@@ -33,6 +33,7 @@
 - M3.14 复检放行入库业务操作基线，新增 `POST /api/business/operations/quality-releases`，将同一子工单维度下的半成品库存转为成品库存。
 - M3.15 成品出库业务操作基线，新增 `POST /api/business/operations/outbound-shipments`，将同一子工单维度下的成品库存转为已发货库存。
 - M3.17 客户退货入库业务操作基线，新增 `POST /api/business/operations/customer-returns`，将同一子工单维度下的已发货库存转回退货复核库存。
+- M3.18 首页产品级信息架构整改，参考 ERPNext/Odoo/InvenTree 的制造、库存和质量作业结构，将首页首屏重做为生产运营指挥台，补充工位运行、执行质量、风险热区、损耗审批快照和 M3.17 状态同步。
 
 ## 目录结构
 
@@ -177,7 +178,7 @@ pnpm --filter zhubao-erp-frontend dev
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.16 调整为更紧凑的工业 ERP 工作台样式。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.18 调整为更接近生产现场使用的工业 ERP/MES 指挥台。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
