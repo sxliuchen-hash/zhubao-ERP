@@ -8,7 +8,9 @@ import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
+import com.zhubao.erp.business.domain.ReportReworkCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
+import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,5 +46,10 @@ public class BusinessOperationController {
     @PostMapping("/rework-dispatches")
     public ApiResponse<ReworkDispatchResult> dispatchRework(@Valid @RequestBody DispatchReworkCommand command) {
         return ApiResponse.ok(businessOperationService.dispatchRework(command));
+    }
+
+    @PostMapping("/rework-reports")
+    public ApiResponse<ReworkReportResult> reportRework(@Valid @RequestBody ReportReworkCommand command) {
+        return ApiResponse.ok(businessOperationService.reportRework(command));
     }
 }

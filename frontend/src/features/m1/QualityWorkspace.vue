@@ -5,6 +5,7 @@ import {
   lossApprovals as fallbackLossApprovals,
   qualityCases as fallbackQualityCases,
   qualityMetrics as fallbackQualityMetrics,
+  type Tone,
 } from '../../data/m1PrototypeData';
 import {
   fetchQualityWorkspace,
@@ -13,7 +14,9 @@ import {
 import {
   dispatchRework,
   freezeQualityStock,
+  reportRework,
   type ReworkDispatchResult,
+  type ReworkReportResult,
   type QualityFreezeResult,
 } from '../../services/businessOperationApi';
 
@@ -28,6 +31,9 @@ const qualityFreezeError = ref('');
 const dispatchingRework = ref(false);
 const reworkDispatchResult = ref<ReworkDispatchResult | null>(null);
 const reworkDispatchError = ref('');
+const reportingRework = ref(false);
+const reworkReportResult = ref<ReworkReportResult | null>(null);
+const reworkReportError = ref('');
 
 const activeCase = computed(
   () =>
@@ -40,6 +46,68 @@ const activeApproval = computed(
     workspace.value.lossApprovals.find((item) => item.action.includes('待')) ??
     workspace.value.lossApprovals[0],
 );
+
+const qualityActionRows: Array<{
+  step: string;
+  action: string;
+  stockFlow: string;
+  api: string;
+  evidence: string;
+  state: string;
+  tone: Tone;
+}> = [
+  {
+    step: '01',
+    action: '冻结异常库存',
+    stockFlow: 'SEMI_FINISHED -> FROZEN',
+    api: 'POST /quality-freezes',
+    evidence: '缺陷照片、质检结论、称重记录',
+    state: '已接真实台账',
+    tone: 'green',
+  },
+  {
+    step: '02',
+    action: '生成返工工单',
+    stockFlow: 'FROZEN -> REWORK',
+    api: 'POST /rework-dispatches',
+    evidence: '返工原因、派发人、冻结库存',
+    state: '已接真实台账',
+    tone: 'green',
+  },
+  {
+    step: '03',
+    action: '提交返工报工',
+    stockFlow: 'REWORK -> SEMI_FINISHED',
+    api: 'POST /rework-reports',
+    evidence: '返工产出、操作人、返工照片',
+    state: '已接真实台账',
+    tone: 'green',
+  },
+  {
+    step: '04',
+    action: '复检放行',
+    stockFlow: 'SEMI_FINISHED -> FINISHED',
+    api: '待设计 /quality-releases',
+    evidence: '复检结果、放行人、抽检记录',
+    state: '待开发',
+    tone: 'red',
+  },
+  {
+    step: '05',
+    action: '损耗归因',
+    stockFlow: '差异入损耗审批',
+    api: '待设计 /loss-approvals',
+    evidence: '投入产出重量、责任工序、审批链',
+    state: '待开发',
+    tone: 'amber',
+  },
+];
+
+const qualityBoundaryRows = [
+  { label: '真实能力', value: '冻结、返工派发、返工报工会调用后端并写库存台账', tone: 'green' },
+  { label: '样例数据', value: '质检队列、损耗审批和证据列表仍来自评审快照或本地样例', tone: 'amber' },
+  { label: '明显缺口', value: '复检放行、附件上传、审批流、工资试算尚未形成闭环', tone: 'red' },
+] as const;
 
 onMounted(async () => {
   try {
@@ -80,6 +148,22 @@ async function dispatchActiveRework() {
     dispatchingRework.value = false;
   }
 }
+
+async function reportActiveRework() {
+  if (!activeCase.value) return;
+
+  reportingRework.value = true;
+  reworkReportResult.value = null;
+  reworkReportError.value = '';
+
+  try {
+    reworkReportResult.value = await reportRework(activeCase.value);
+  } catch (error) {
+    reworkReportError.value = error instanceof Error ? error.message : '提交返工报工失败';
+  } finally {
+    reportingRework.value = false;
+  }
+}
 </script>
 
 <template>
@@ -115,6 +199,57 @@ async function dispatchActiveRework() {
         <button class="secondary-button" type="button">只看阻断</button>
         <button class="secondary-button" type="button">批量复检</button>
       </div>
+    </section>
+
+    <section class="quality-runtime-board" aria-label="质检返工真实动作核验">
+      <div class="quality-runtime-main">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Operation Contract</span>
+            <h2>质检返工真实动作核验</h2>
+            <p>把页面按钮、库存流转、后端 API 和证据要求对齐，避免只做展示页却没有业务闭环。</p>
+          </div>
+          <StatusBadge label="M3.10 已接 3 个写账动作" tone="blue" />
+        </div>
+        <div class="quality-action-table-wrap">
+          <table class="quality-action-table">
+            <thead>
+              <tr>
+                <th>步骤</th>
+                <th>业务动作</th>
+                <th>库存流转</th>
+                <th>后端接口</th>
+                <th>证据要求</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in qualityActionRows" :key="row.step">
+                <td><strong>{{ row.step }}</strong></td>
+                <td>{{ row.action }}</td>
+                <td><code>{{ row.stockFlow }}</code></td>
+                <td><code>{{ row.api }}</code></td>
+                <td>{{ row.evidence }}</td>
+                <td><StatusBadge :label="row.state" :tone="row.tone" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <aside class="quality-boundary-panel">
+        <div class="section-heading compact">
+          <div>
+            <span class="eyebrow">Delivery Boundary</span>
+            <h2>当前边界</h2>
+          </div>
+        </div>
+        <div class="quality-boundary-list">
+          <article v-for="row in qualityBoundaryRows" :key="row.label" :class="`tone-${row.tone}`">
+            <StatusBadge :label="row.label" :tone="row.tone" />
+            <span>{{ row.value }}</span>
+          </article>
+        </div>
+      </aside>
     </section>
 
     <section class="module-ops-board" aria-label="质检作业主控台">
@@ -194,6 +329,9 @@ async function dispatchActiveRework() {
           <button class="secondary-button" type="button" :disabled="dispatchingRework" @click="dispatchActiveRework">
             {{ dispatchingRework ? '正在派发' : '生成返工工单' }}
           </button>
+          <button class="secondary-button" type="button" :disabled="reportingRework" @click="reportActiveRework">
+            {{ reportingRework ? '正在报工' : '提交返工报工' }}
+          </button>
           <button class="secondary-button" type="button">提交损耗审批</button>
         </div>
         <div v-if="qualityFreezeResult" class="operation-feedback success">
@@ -215,6 +353,16 @@ async function dispatchActiveRework() {
           <strong>生成返工工单失败</strong>
           <span>{{ reworkDispatchError }}</span>
           <small>请确认该工单已有冻结库存，并保留质检缺陷证据。</small>
+        </div>
+        <div v-if="reworkReportResult" class="operation-feedback success">
+          <strong>返工报工已写入台账</strong>
+          <span>{{ reworkReportResult.ledgerCode }} / {{ reworkReportResult.reworkOrderCode }}</span>
+          <small>{{ reworkReportResult.fromStockStatus }} -> {{ reworkReportResult.toStockStatus }}</small>
+        </div>
+        <div v-else-if="reworkReportError" class="operation-feedback danger">
+          <strong>提交返工报工失败</strong>
+          <span>{{ reworkReportError }}</span>
+          <small>请确认该返工单已有返工在制库存，并完成返工报工证据。</small>
         </div>
       </aside>
     </section>

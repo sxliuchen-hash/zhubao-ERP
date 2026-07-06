@@ -4287,3 +4287,123 @@ button:hover {
     flex-direction: column;
   }
 }
+
+/* M3.10 quality review rescue: expose real operations, contracts, and gaps. */
+.quality-runtime-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.34fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.quality-runtime-main,
+.quality-boundary-panel {
+  min-width: 0;
+  border: 1px solid #cfdbe7;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.055);
+  padding: 14px;
+}
+
+.quality-runtime-board .section-heading {
+  margin-bottom: 10px;
+}
+
+.quality-runtime-board .section-heading.compact {
+  margin-bottom: 8px;
+}
+
+.quality-action-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #dce6f0;
+  border-radius: 7px;
+}
+
+.quality-action-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.quality-action-table th,
+.quality-action-table td {
+  border-bottom: 1px solid #e5edf5;
+  color: #334155;
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.quality-action-table th {
+  background: #edf4fa;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.quality-action-table tbody tr:hover {
+  background: #f8fbfd;
+}
+
+.quality-action-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.quality-action-table th:nth-child(1) {
+  width: 56px;
+}
+
+.quality-action-table th:nth-child(2) {
+  width: 128px;
+}
+
+.quality-action-table th:nth-child(3),
+.quality-action-table th:nth-child(4) {
+  width: 190px;
+}
+
+.quality-action-table th:nth-child(6) {
+  width: 126px;
+}
+
+.quality-action-table code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid #d7e1ec;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #0f766e;
+  padding: 3px 5px;
+}
+
+.quality-boundary-list {
+  display: grid;
+  gap: 8px;
+}
+
+.quality-boundary-list article {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid #dde7f1;
+  border-left: 4px solid var(--tone);
+  border-radius: 7px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.quality-boundary-list span {
+  color: #52606d;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1360px) {
+  .quality-runtime-board {
+    grid-template-columns: 1fr;
+  }
+}

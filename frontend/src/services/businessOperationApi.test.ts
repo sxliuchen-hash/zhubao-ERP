@@ -5,6 +5,7 @@ import {
   buildQualityFreezeRequest,
   buildProductionReportRequest,
   buildReworkDispatchRequest,
+  buildReworkReportRequest,
 } from './businessOperationApi';
 
 describe('businessOperationApi', () => {
@@ -119,6 +120,35 @@ describe('businessOperationApi', () => {
       operator: '车间组长 马杰',
       reason: '焊点偏移 6 件',
       evidenceCode: 'PHOTO-QC-20260706-022',
+    });
+  });
+
+  it('builds a rework report command from rework stock back to semi-finished stock', () => {
+    const qualityCase: QualityCase = {
+      code: 'QC-20260706-022',
+      workOrder: 'ZD-20260706-006',
+      process: '焊接',
+      inspector: '周娜',
+      defect: '焊点偏移 6 件',
+      action: '复检',
+      status: '待确认称重',
+    };
+
+    expect(buildReworkReportRequest(qualityCase)).toMatchObject({
+      reworkOrderCode: 'FG-20260706-022',
+      qualityCaseCode: 'QC-20260706-022',
+      motherOrderCode: 'MD-20260706-002',
+      workOrderCode: 'ZD-20260706-006',
+      customerId: 1002,
+      ownerCustomerId: 1002,
+      materialCode: 'MAT-SILVER-CHAIN',
+      fromWarehouseCode: 'REWORK-LINE-01',
+      toWarehouseCode: 'SEMI-FINISHED',
+      quantity: 6,
+      weight: '13.660',
+      process: '返工焊接',
+      operator: '王强',
+      evidenceCode: 'PHOTO-REWORK-QC-20260706-022',
     });
   });
 });

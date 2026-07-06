@@ -33,11 +33,15 @@ describe('M1 business workspaces', () => {
     const wrapper = mount(QualityWorkspace);
 
     expect(wrapper.text()).toContain('质检返工处理台');
+    expect(wrapper.text()).toContain('质检返工真实动作核验');
     expect(wrapper.text()).toContain('质检作业主控台');
     expect(wrapper.find('table.module-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('质检指标');
     expect(wrapper.text()).toContain('损耗审批');
     expect(wrapper.text()).toContain('冻结异常库存');
+    expect(wrapper.text()).toContain('提交返工报工');
+    expect(wrapper.text()).toContain('POST /rework-reports');
+    expect(wrapper.text()).toContain('复检放行');
     expect(wrapper.text()).toContain('LOSS-20260706-009');
   });
 

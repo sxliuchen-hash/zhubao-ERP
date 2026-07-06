@@ -26,6 +26,7 @@
 - M3.7 前端评审台信息架构整改，首页显式展示当前真实完成范围、未完成缺口、一期业务闭环状态图和模块完成度台账，避免把样例页面误判为完整交付系统。
 - M3.8 质检冻结业务操作基线，新增 `POST /api/business/operations/quality-freezes`，将同一子工单维度下的半成品异常库存转为冻结库存。
 - M3.9 返工派发业务操作基线，新增 `POST /api/business/operations/rework-dispatches`，将同一子工单维度下的冻结库存转为返工在制库存。
+- M3.10 返工报工业务操作基线，新增 `POST /api/business/operations/rework-reports`，将同一子工单维度下的返工在制库存转回半成品库存，并在质检页增加真实动作核验区。
 
 ## 目录结构
 
@@ -145,6 +146,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `POST /api/business/operations/production-reports`
 - `POST /api/business/operations/quality-freezes`
 - `POST /api/business/operations/rework-dispatches`
+- `POST /api/business/operations/rework-reports`
 - `GET /api/configuration/baseline/summary`
 - `GET /api/configuration/baseline/system-parameters`
 - `GET /api/configuration/baseline/code-rules`

@@ -7,7 +7,7 @@ describe('App', () => {
     const wrapper = mount(App);
 
     expect(wrapper.text()).toContain('Operations Review Console');
-    expect(wrapper.text()).toContain('M3.9 / 返工派发写台账');
+    expect(wrapper.text()).toContain('M3.10 / 返工报工写台账');
     expect(wrapper.text()).toContain('首页工作台');
     expect(wrapper.text()).toContain('来料母单');
     expect(wrapper.text()).toContain('生产工单');

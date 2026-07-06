@@ -65,6 +65,7 @@
 | `POST /production-reports` | 生产工单 | 提交工序报工，将同一子工单的在制库存转为半成品库存 |
 | `POST /quality-freezes` | 质检返工 | 冻结质检异常库存，将同一子工单的半成品库存转为冻结库存 |
 | `POST /rework-dispatches` | 质检返工 | 派发返工库存，将同一子工单的冻结库存转为返工在制库存 |
+| `POST /rework-reports` | 质检返工 | 提交返工报工，将同一子工单的返工在制库存转回半成品库存 |
 
 配置基线接口前缀：
 
@@ -374,6 +375,54 @@
 - 返工派发只允许改变仓库和库存状态，当前基线为 `FROZEN -> REWORK`。
 - 若来源冻结库存不足，后端必须拒绝写台账。
 
+### 6.7 `ReportReworkCommand`
+
+`POST /api/business/operations/rework-reports` 使用该命令模型。该接口是 M3.10 返工报工写台账基线。
+
+| 字段 | 说明 |
+|---|---|
+| `reworkOrderCode` | 返工单号，作为库存台账来源单据 |
+| `qualityCaseCode` | 质检单号 |
+| `motherOrderCode` | 母单号 |
+| `workOrderCode` | 原子工单号，库存维度保持不变 |
+| `customerId` | 业务客户 ID |
+| `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
+| `materialCode` | 物料编码 |
+| `fromWarehouseCode` | 来源返工工位/返工区 |
+| `toWarehouseCode` | 目标半成品仓/暂存区 |
+| `quantity` | 本次返工报工产出数量，必须大于 0 |
+| `weight` | 本次返工报工产出重量，必须大于 0 |
+| `process` | 返工工序名称快照 |
+| `operator` | 返工报工操作人快照 |
+| `evidenceCode` | 返工照片、称重或质检证据编码 |
+| `remark` | 备注 |
+
+### 6.8 `ReworkReportResult`
+
+| 字段 | 说明 |
+|---|---|
+| `reworkOrderCode` | 返工单号 |
+| `qualityCaseCode` | 质检单号 |
+| `workOrderCode` | 原子工单号 |
+| `ledgerCode` | 库存台账号 |
+| `fromWarehouseCode` | 来源返工工位/返工区 |
+| `toWarehouseCode` | 目标半成品仓/暂存区 |
+| `fromStockStatus` | 来源库存状态，当前为 `REWORK` |
+| `toStockStatus` | 目标库存状态，当前为 `SEMI_FINISHED` |
+| `quantity` | 已报工数量 |
+| `weight` | 已报工重量 |
+| `process` | 返工工序名称快照 |
+| `operator` | 返工报工操作人快照 |
+| `evidenceCode` | 证据编码 |
+
+实现约束：
+
+- `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
+- `reworkOrderCode` 是业务单据快照和台账来源，不直接改变库存维度里的 `workOrderCode`。
+- 返工报工只允许改变仓库和库存状态，当前基线为 `REWORK -> SEMI_FINISHED`。
+- 若来源返工在制库存不足，后端必须拒绝写台账。
+- 返工报工不等同于复检放行；复检放行仍需独立业务命令把合格半成品推进到成品或可出库状态。
+
 ---
 
 ## 7. 库存与追溯字段
@@ -489,11 +538,12 @@ PWA 一期边界：
 | 生产报工 | `POST /api/business/operations/production-reports`，`WIP -> SEMI_FINISHED` |
 | 质检冻结 | `POST /api/business/operations/quality-freezes`，`SEMI_FINISHED -> FROZEN` |
 | 返工派发 | `POST /api/business/operations/rework-dispatches`，`FROZEN -> REWORK` |
+| 返工报工 | `POST /api/business/operations/rework-reports`，`REWORK -> SEMI_FINISHED` |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态，返工报工、复检放行和出库仍需继续接入业务命令 |
+| 当前限制 | 尚未更新工作台快照状态，复检放行、成品入库和出库仍需继续接入业务命令 |
 
-这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、返工报工、复检放行、出库都必须先建业务命令，再调用库存服务产生只追加台账。
+这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、复检放行、成品入库、出库都必须先建业务命令，再调用库存服务产生只追加台账。
 
 ---
 

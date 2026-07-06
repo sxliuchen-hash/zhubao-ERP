@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.9 / 返工派发写台账</strong>
-        <i>文档与样例工作台已成体系；来料入库、生产报工、质检冻结、返工派发已写真实库存台账；复检、出库、审批、附件仍待开发</i>
+        <strong>M3.10 / 返工报工写台账</strong>
+        <i>文档与样例工作台已成体系；来料入库、生产报工、质检冻结、返工派发、返工报工已写真实库存台账；复检、出库、审批、附件仍待开发</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
