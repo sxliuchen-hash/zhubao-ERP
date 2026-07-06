@@ -5,8 +5,8 @@ defineProps<{
 </script>
 
 <template>
-  <div class="app-shell ops-shell">
-    <aside class="sidebar ops-sidebar">
+  <div class="app-shell ops-shell review-shell">
+    <aside class="sidebar ops-sidebar review-sidebar">
       <div class="brand ops-brand">
         <span class="brand-mark">ZB</span>
         <div>
@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.19 / 台账闭环扩展中</strong>
-        <i>已接：来料入库、生产报工、质检冻结、返工、复检放行、成品出库、客户退货、损耗审批试算、附件上传。待接：售后复核、对象存储、真实权限。</i>
+        <strong>M3.21 / UI 与真实链路深化中</strong>
+        <i>已接：文档体系、开源调研、库存台账、来料入库、生产报工、质检冻结、返工、复检放行、成品出库、客户退货、损耗试算、文档附件与硬件 POC。待接：真实权限、审批流、对象存储、正式工资、售后复核。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -38,8 +38,8 @@ defineProps<{
       </div>
     </aside>
 
-    <main class="workspace ops-workspace">
-      <div class="top-strip ops-topbar">
+    <main class="workspace ops-workspace review-workspace">
+      <div class="top-strip ops-topbar review-topbar">
         <div class="context-stack">
           <span>车间：总装一线</span>
           <span>班次：白班</span>
@@ -52,14 +52,15 @@ defineProps<{
         </div>
       </div>
 
-      <header class="workspace-header ops-page-header">
+      <header class="workspace-header ops-page-header review-page-header">
         <div>
           <span class="eyebrow">Operations Console</span>
           <h1>{{ title }}</h1>
-          <p>围绕客户来料、工序报工、质检返工、库存台账和硬件证据组织现场作业。</p>
+          <p>当前前端是评审版工作台，目标是把已实现能力、真实缺口和下一步业务动作放在同一个操作界面里，而不是只展示几张静态页面。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>
+            <span>验收 fixture</span>
             <span>附件元数据</span>
             <span>硬件 POC</span>
             <span>工资试算基线</span>

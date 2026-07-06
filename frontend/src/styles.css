@@ -7182,3 +7182,362 @@ body {
     flex-direction: column;
   }
 }
+
+/* M3.21: clearer ERP/MES review console after UI critique. */
+.review-shell {
+  grid-template-columns: 252px minmax(0, 1fr);
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.045), transparent 340px),
+    #edf2f5;
+}
+
+.review-sidebar {
+  background: #0f171f;
+}
+
+.review-workspace {
+  padding: 12px 18px 28px;
+}
+
+.review-topbar {
+  margin: -12px -18px 12px;
+  min-height: 42px;
+}
+
+.review-page-header {
+  margin-bottom: 12px;
+  border: 1px solid #cfd9e3;
+  border-left: 4px solid #087f7b;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.review-page-header h1 {
+  font-size: 20px;
+}
+
+.review-dashboard {
+  gap: 12px;
+}
+
+.mission-control-v2,
+.project-reality-board,
+.dispatch-table-panel,
+.focus-order-panel,
+.command-api-panel,
+.delivery-verdict-panel,
+.ops-stage-map-panel,
+.readiness-board,
+.review-dashboard .section-block {
+  border: 1px solid #cfd9e3;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.mission-control-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mission-primary-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  border-left: 4px solid #087f7b;
+  padding: 18px;
+  background:
+    linear-gradient(90deg, rgba(8, 127, 123, 0.08), transparent 42%),
+    #fff;
+}
+
+.mission-primary-panel h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+.mission-primary-panel p,
+.delivery-verdict-panel p,
+.project-reality-board p {
+  margin: 0;
+  color: #52606d;
+  line-height: 1.6;
+}
+
+.delivery-verdict-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border: 0;
+  border-left: 1px solid #dce5ed;
+  border-radius: 0;
+  background: #f8fbfd;
+  padding: 18px;
+  box-shadow: none;
+}
+
+.delivery-verdict-panel > strong {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.verdict-meter {
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.verdict-meter span {
+  color: #52606d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.verdict-meter b {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #dbe5ee;
+}
+
+.verdict-meter b::after {
+  content: "";
+  display: block;
+  width: var(--value);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #087f7b, #1f5fbf);
+}
+
+.project-reality-board {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.project-reality-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-reality-grid article {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 222px;
+  border: 1px solid #dde7ef;
+  border-top: 3px solid var(--tone);
+  border-radius: 4px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.project-reality-grid strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.project-reality-grid dl {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 6px 8px;
+  margin: 0;
+  color: #52606d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.project-reality-grid dt {
+  color: var(--tone-fg);
+  font-weight: 900;
+}
+
+.project-reality-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-dashboard .operator-workbench-grid {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.review-dashboard .right-command-column {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.review-dashboard .dispatch-table-panel {
+  overflow: hidden;
+}
+
+.review-dashboard .refined-toolbar {
+  padding: 12px 14px;
+}
+
+.review-dashboard .erp-table th,
+.review-dashboard .erp-table td,
+.review-dashboard .dispatch-table th,
+.review-dashboard .dispatch-table td,
+.review-dashboard .readiness-table th,
+.review-dashboard .readiness-table td {
+  padding: 9px 10px;
+  border-bottom-color: #e2e8f0;
+  vertical-align: middle;
+}
+
+.review-dashboard .dispatch-table {
+  min-width: 880px;
+}
+
+.review-dashboard .command-api-panel {
+  max-height: 520px;
+  overflow: auto;
+}
+
+.review-dashboard .command-api-panel article {
+  padding: 9px;
+}
+
+.review-dashboard .focus-order-panel {
+  padding: 12px;
+}
+
+.review-dashboard .compact-process-strip {
+  border-color: #cfd9e3;
+  box-shadow: none;
+}
+
+.review-dashboard .evidence-risk-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(320px, 0.85fr);
+}
+
+.review-dashboard .gap-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.review-dashboard .gap-stack article {
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid var(--tone);
+  border-radius: 4px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.review-dashboard .gap-stack strong,
+.review-dashboard .gap-stack span {
+  display: block;
+}
+
+.review-dashboard .gap-stack span {
+  margin-top: 4px;
+  color: #52606d;
+  line-height: 1.45;
+}
+
+.review-dashboard .queue-row {
+  min-height: 70px;
+  border-radius: 4px;
+}
+
+.review-dashboard .evidence-matrix {
+  display: grid;
+  gap: 8px;
+}
+
+.review-dashboard .evidence-matrix article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #1f5fbf;
+  border-radius: 4px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.review-dashboard .evidence-matrix strong,
+.review-dashboard .evidence-matrix span {
+  display: block;
+}
+
+.review-dashboard .evidence-matrix span {
+  margin-top: 3px;
+  color: #52606d;
+  font-size: 12px;
+}
+
+.review-dashboard .readiness-table {
+  min-width: 920px;
+}
+
+.review-dashboard .readiness-table-wrap {
+  overflow-x: auto;
+}
+
+.review-dashboard .ops-boundary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.review-dashboard .ops-boundary-grid article {
+  border-top: 3px solid var(--tone);
+  min-height: 130px;
+}
+
+@media (max-width: 1420px) {
+  .project-reality-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .review-dashboard .operator-workbench-grid,
+  .review-dashboard .evidence-risk-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-dashboard .right-command-column {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .review-shell,
+  .mission-control-v2,
+  .project-reality-grid,
+  .review-dashboard .right-command-column,
+  .review-dashboard .ops-boundary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .delivery-verdict-panel {
+    border-left: 0;
+    border-top: 1px solid #dce5ed;
+  }
+}
+
+@media (max-width: 640px) {
+  .review-workspace {
+    padding: 8px;
+  }
+
+  .review-topbar {
+    margin: -8px -8px 8px;
+  }
+
+  .mission-primary-panel h2 {
+    font-size: 24px;
+  }
+}

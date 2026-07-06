@@ -56,14 +56,71 @@ const activeWorkOrder = workOrders.find((order) => order.status.includes('称重
 const activeQuality = qualityCases[0];
 const activeInventory = inventoryBalances[1] ?? inventoryBalances[0];
 
-const shiftSignals = [
-  { label: '入库阻断', value: '2', hint: '物料确认 / 视频失败', tone: 'amber' },
-  { label: '生产瓶颈', value: '5', hint: '镶石工位积压', tone: 'red' },
-  { label: '质检积压', value: '7', hint: '最早 09:40 提交', tone: 'amber' },
-  { label: '出库风险', value: '0', hint: '追溯链路可核验', tone: 'green' },
+const commandSummaryTiles = [
+  { label: '今日来料', value: '6', unit: '单', detail: '2 单需确认客户/物料', tone: 'amber' },
+  { label: '在制工单', value: '18', unit: '张', detail: '5 张停留超过 4 小时', tone: 'red' },
+  { label: '质检队列', value: '7', unit: '批', detail: '2 批返工复检', tone: 'amber' },
+  { label: '可出库', value: '4', unit: '单', detail: '追溯链路可核验', tone: 'green' },
 ] as const;
 
-const consoleRows = [
+const projectRealityRows = [
+  {
+    area: '文档与业务设计',
+    done: '已形成 00-17 多文档体系，覆盖开源调研、PRD、流程、领域模型、架构、硬件、接口、验收和样例数据来源。',
+    evidence: 'docs/00-17 + 优化版需求文档',
+    gap: '还需要用现场真实单据继续压测流程口径。',
+    tone: 'green',
+  },
+  {
+    area: '后端业务闭环',
+    done: '已接来料入库、生产报工、质检冻结、返工派发、返工报工、复检放行、出库、客户退货和损耗审批试算。',
+    evidence: 'Spring Boot API + 库存台账服务',
+    gap: '审批流、权限、售后复核和正式工资锁账还没有完成。',
+    tone: 'amber',
+  },
+  {
+    area: '验收样例',
+    done: '新增 JSON fixture 驱动的真实链路测试，验证同一客户/母单/工单/物料维度下的台账流转。',
+    evidence: 'real-flow-scenario-20260706.json',
+    gap: '目前只有单份脱敏样例，还不是批量真实数据回归。',
+    tone: 'amber',
+  },
+  {
+    area: '前端页面',
+    done: '已有来料、生产、质检、库存、配置、文档、样例、硬件、PWA 等评审入口，并能调用部分真实业务 API。',
+    evidence: 'Vue 3 + PWA + Vitest',
+    gap: '之前界面偏 demo，内容表达不够系统，本轮开始按 ERP/MES 工作台重构。',
+    tone: 'red',
+  },
+  {
+    area: '硬件与证据',
+    done: '已设计 NVR/视频截取、扫码、标签、电子秤兜底和附件归档路径。',
+    evidence: '硬件 POC 页面 + 文档附件 API',
+    gap: 'MinIO/S3、真实 NVR、打印机和电子秤现场联调仍未完成。',
+    tone: 'amber',
+  },
+] as const;
+
+const deliveryGaps = [
+  { title: '真实权限与审批流', detail: '当前只有角色字段和页面占位，还没有登录、角色授权、审批流转和审计锁定。', tone: 'red' },
+  { title: '正式工资发放', detail: '损耗审批只生成工资试算快照，不进入正式工资单、锁账或发放。', tone: 'red' },
+  { title: '对象存储与文件签名', detail: '附件元数据、checksum 和预览 URL 已有基线，MinIO/S3 实际落盘未接。', tone: 'amber' },
+  { title: '售后复核闭环', detail: '客户退货已能写台账，但退货后的售后质检、返工、报废和客户确认仍需补齐。', tone: 'amber' },
+] as const;
+
+const commandRows = [
+  { scene: '来料入库', api: 'POST /api/business/operations/inbound-confirmations', state: '写 RAW_WAITING 台账', tone: 'green' },
+  { scene: '生产报工', api: 'POST /api/business/operations/production-reports', state: 'WIP 转半成品', tone: 'green' },
+  { scene: '质检冻结', api: 'POST /api/business/operations/quality-freezes', state: '冻结库存', tone: 'green' },
+  { scene: '返工派发', api: 'POST /api/business/operations/rework-dispatches', state: '单状态机返工', tone: 'green' },
+  { scene: '返工报工', api: 'POST /api/business/operations/rework-reports', state: '返工产出回半成品', tone: 'green' },
+  { scene: '复检放行', api: 'POST /api/business/operations/quality-releases', state: '半成品转成品', tone: 'green' },
+  { scene: '成品出库', api: 'POST /api/business/operations/outbound-shipments', state: 'FINISHED 转 SHIPPED', tone: 'green' },
+  { scene: '客户退货', api: 'POST /api/business/operations/customer-returns', state: '退货入 RETURN-CHECK', tone: 'amber' },
+  { scene: '损耗审批', api: 'POST /api/business/operations/loss-approvals', state: '工资试算，不锁账', tone: 'amber' },
+] as const;
+
+const dispatchRows = [
   ...inboundOrders.map((order) => ({
     code: order.code,
     type: '来料母单',
@@ -113,6 +170,8 @@ const consoleRows = [
   })),
 ];
 
+const dispatchPreviewRows = dispatchRows.slice(0, 10);
+
 const controlSteps = [
   { index: '01', title: '扫码收货', detail: '绑定快递单、客户、物料档案', state: '2 单待处理', tone: 'amber' },
   { index: '02', title: '拆包称重', detail: '记录拆包前后重量与视频时间段', state: '1 单视频失败', tone: 'red' },
@@ -129,109 +188,38 @@ const evidenceMatrix = [
   { label: '库存台账', status: '只追加', link: activeInventory.batch, tone: 'green' },
 ] as const;
 
-const approvalDock = [
-  { title: '超标损耗审批', code: 'LOSS-20260706-009', owner: '车间组长', sla: '18 分钟', tone: 'red' },
-  { title: '配置阈值变更', code: 'CFG-CR-20260706-001', owner: '生产负责人', sla: '今日 16:40', tone: 'amber' },
-  { title: '视频人工上传', code: 'VID-20260706-004', owner: '库管员', sla: '34 分钟', tone: 'amber' },
-] as const;
-
-const boundaryCards = [
-  { label: '真实后端', value: '库存台账 JDBC', detail: 'M3.1 已具备 MySQL profile 与仓储测试', tone: 'green' },
-  { label: '评审样例', value: '业务工作台数据', detail: '仍以固定样例和内存 API 兜底为主', tone: 'amber' },
-  { label: '硬件策略', value: `${getHardwareManualFallbackCount()} 项需兜底`, detail: 'NVR、标签、扫码、电子秤按兼容方案推进', tone: 'blue' },
-] as const;
-
-const implementationLanes = [
-  {
-    code: 'DOC',
-    title: '文档与设计',
-    value: '10+2 份',
-    detail: '需求、流程、领域模型、接口、硬件、配置和进度文档已成体系。',
-    state: '可评审',
-    tone: 'green',
-  },
-  {
-    code: 'API',
-    title: '真实业务动作',
-    value: '9 条',
-    detail: '8 条库存写账命令已接入台账；损耗审批已能生成工资试算快照，但不进入正式工资。',
-    state: '部分可验',
-    tone: 'amber',
-  },
-  {
-    code: 'UI',
-    title: '作业页面',
-    value: '10 个模块',
-    detail: '来料、生产、质检、库存、配置、文档附件、样例、硬件和 PWA 已有评审入口。',
-    state: '需深化',
-    tone: 'amber',
-  },
-  {
-    code: 'HW',
-    title: '软硬件联动',
-    value: '4 类 POC',
-    detail: '视频、标签、扫码、称重按兼容方案记录兜底路径。',
-    state: 'POC',
-    tone: 'blue',
-  },
-] as const;
-
-const deliveryGaps = [
-  { title: '正式审批 / 工资锁账', detail: '损耗审批和工资试算已有命令基线，但还不是正式审批流、正式工资发放或锁账。', tone: 'red' },
-  { title: '售后复核 / 完工归档', detail: '客户退货入库已写台账，但退货后的售后质检复核、返工或报废分流仍未闭环。', tone: 'amber' },
-  { title: '权限 / 审批 / 审计', detail: '已有字段和页面占位，未接入真实登录、角色和审批流。', tone: 'amber' },
-  { title: '对象存储 / 版本锁定', detail: '附件上传、checksum 和预览 URL 已接，MinIO/S3、签名 URL 和审批锁定仍未完成。', tone: 'blue' },
-] as const;
-
 const chainStages = [
   { index: '01', title: '客户来料', state: '可操作', detail: '确认入库写 RAW_WAITING 台账', tone: 'green' },
   { index: '02', title: '拆包称重', state: '样例', detail: '称重和视频证据仍是评审数据', tone: 'amber' },
   { index: '03', title: '子工单', state: '样例', detail: '工序模板和标签待接真实业务表', tone: 'amber' },
   { index: '04', title: '生产报工', state: '可操作', detail: 'WIP 转 SEMI_FINISHED 台账', tone: 'green' },
   { index: '05', title: '质检返工', state: '可操作', detail: '冻结、返工、返工报工、复检放行已接台账', tone: 'green' },
-  { index: '06', title: '出库退货', state: '部分可操作', detail: 'FINISHED 转 SHIPPED、SHIPPED 退回 RETURN-CHECK 已接', tone: 'green' },
+  { index: '06', title: '出库退货', state: '部分可操作', detail: 'FINISHED 转 SHIPPED，SHIPPED 退回 RETURN-CHECK 已接', tone: 'green' },
 ] as const;
 
 const readinessRows = [
   { module: '来料母单', api: '写账 API 已接', ui: '主表 + 详情 + 入库动作', data: '样例 + 内存兜底', status: '可演示验收' },
   { module: '生产工单', api: '报工 API 已接', ui: '派工 + 报工 + 交接', data: '样例 + JDBC 快照', status: '可演示验收' },
-  { module: '质检返工', api: '冻结/返工派发/返工报工/复检放行/损耗审批 API 已接', ui: '质检队列 + 库存动作核验 + 工资试算', data: '样例 + 真实台账', status: '待正式审批流' },
-  { module: '库存追溯', api: '台账读写、成品出库、客户退货 API 已接', ui: '余额 + 台账 + 出库 + 退货 + 证据', data: '真实台账 + 样例', status: '待售后复核分流' },
+  { module: '质检返工', api: '冻结/返工/复检/损耗 API 已接', ui: '质检队列 + 库存动作校验 + 工资试算', data: '样例 + 真实台账', status: '待正式审批流' },
+  { module: '库存追溯', api: '台账读写、出库、退货 API 已接', ui: '余额 + 台账 + 出库 + 退货 + 证据', data: '真实台账 + 样例', status: '待售后复核分流' },
   { module: '配置/构型', api: '只读基线 API', ui: '参数 + 权限 + 版本', data: 'seed 数据', status: '待审批写入' },
   { module: '文档附件', api: '文档包/附件/上传/预览 API 已接', ui: '文档包 + 上传测试 + 审计', data: '样例 + 内存上传', status: '待对象存储' },
   { module: '硬件联动', api: 'POC 记录 API', ui: '设备矩阵 + 兜底任务', data: 'POC 样例', status: '待现场复测' },
 ] as const;
-
-const dispatchRows = consoleRows.slice(0, 10);
-
-const commandSummaryTiles = [
-  { label: '待收货', value: '6', unit: '单', detail: '2 单需确认客户/物料', tone: 'amber' },
-  { label: '在制工单', value: '18', unit: '张', detail: '5 张停留超过 4 小时', tone: 'red' },
-  { label: '质检队列', value: '7', unit: '批', detail: '2 批返工复检', tone: 'amber' },
-  { label: '可出库', value: '4', unit: '单', detail: '追溯链路可核验', tone: 'green' },
-] as const;
-
-const workbenchActionRows = [
-  { scene: '来料入库', command: 'confirm-inbound', api: 'POST /confirm-inbounds', state: '已接台账', tone: 'green' },
-  { scene: '工序报工', command: 'report-production', api: 'POST /production-reports', state: '已接台账', tone: 'green' },
-  { scene: '质检冻结', command: 'freeze-quality-stock', api: 'POST /quality-freezes', state: '已接台账', tone: 'green' },
-  { scene: '损耗审批', command: 'approve-loss', api: 'POST /loss-approvals', state: '工资试算', tone: 'amber' },
-] as const;
-
 </script>
 
 <template>
-  <div class="page-stack cockpit-page ops-dashboard refined-dashboard">
-    <section class="review-console-panel" aria-label="来料加工生产运营指挥台">
-      <div class="review-console-copy">
+  <div class="page-stack ops-dashboard review-dashboard">
+    <section class="mission-control-v2" aria-label="来料加工生产运营台">
+      <div class="mission-primary-panel">
         <div class="console-title-line">
-          <span class="eyebrow">M3.19 Review Console</span>
-          <StatusBadge label="评审原型，不是完整交付系统" tone="amber" />
+          <span class="eyebrow">M3.21 Review Console</span>
+          <StatusBadge label="评审原型，距离交付还有差距" tone="amber" />
         </div>
-        <h2>来料加工生产运营指挥台</h2>
+        <h2>来料加工生产运营台</h2>
         <p>
-          首页按车间真实调度组织：单据队列、阻断原因、证据缺口、库存台账命令和下一动作放在同一个操作面。
-          当前已接 8 条库存写账命令和 1 条损耗工资试算命令；审批流、对象存储、真实权限和售后复核仍按缺口管理。
+          你看到的前端目前还不是完整交付系统。实际完成的工作更多在需求文档、业务模型、后端台账、接口和验收测试上；
+          本轮开始把这些能力显式放回首页，让页面能说明项目真实状态，而不是只有几个简单入口。
         </p>
         <div class="summary-tile-grid" aria-label="今日运行摘要">
           <article v-for="tile in commandSummaryTiles" :key="tile.label" :class="`tone-${tile.tone}`">
@@ -242,19 +230,41 @@ const workbenchActionRows = [
         </div>
       </div>
 
-      <aside class="shift-brief-panel" aria-label="白班现场风险">
-        <div class="panel-kicker">
-          <span>白班现场风险</span>
-          <strong>3 项需要处理</strong>
+      <aside class="delivery-verdict-panel">
+        <span class="eyebrow">Project Verdict</span>
+        <strong>可以继续做 POC，不能说已经可开发交付</strong>
+        <p>前端需要从评审页升级为真实作业台；后端还要补正式审批、权限、对象存储、售后复核和真实数据聚合。</p>
+        <div class="verdict-meter">
+          <span>业务闭环</span><b style="--value: 64%" />
+          <span>前端可用性</span><b style="--value: 38%" />
+          <span>交付完整度</span><b style="--value: 42%" />
         </div>
-        <article v-for="signal in shiftSignals" :key="signal.label" :class="`tone-${signal.tone}`">
-          <div>
-            <strong>{{ signal.label }}</strong>
-            <span>{{ signal.hint }}</span>
-          </div>
-          <b>{{ signal.value }}</b>
-        </article>
       </aside>
+    </section>
+
+    <section class="project-reality-board" aria-label="项目真实进展">
+      <div class="review-ledger-head">
+        <div>
+          <span class="eyebrow">Implementation Ledger</span>
+          <h2>我目前实际做到了什么</h2>
+          <p>把“已经验证的能力”和“仍然只是样例或规划的部分”拆开，避免把评审页面包装成完整系统。</p>
+        </div>
+        <StatusBadge label="已提交验收 fixture" tone="blue" />
+      </div>
+      <div class="project-reality-grid">
+        <article v-for="row in projectRealityRows" :key="row.area" :class="`tone-${row.tone}`">
+          <div>
+            <strong>{{ row.area }}</strong>
+            <p>{{ row.done }}</p>
+          </div>
+          <dl>
+            <dt>证据</dt>
+            <dd>{{ row.evidence }}</dd>
+            <dt>缺口</dt>
+            <dd>{{ row.gap }}</dd>
+          </dl>
+        </article>
+      </div>
     </section>
 
     <section class="operator-workbench-grid" aria-label="业务调度台">
@@ -296,7 +306,7 @@ const workbenchActionRows = [
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in dispatchRows" :key="row.code">
+              <tr v-for="row in dispatchPreviewRows" :key="row.code">
                 <td><strong>{{ row.code }}</strong></td>
                 <td>
                   <span class="cell-stack">
@@ -328,7 +338,7 @@ const workbenchActionRows = [
             <dd>{{ activeWorkOrder.material }}</dd>
             <dt>工序</dt>
             <dd>{{ activeWorkOrder.process }}</dd>
-            <dt>负责人</dt>
+            <dt>责任人</dt>
             <dd>{{ activeWorkOrder.assignee }}</dd>
             <dt>产出</dt>
             <dd>{{ activeWorkOrder.finishedQty }}/{{ activeWorkOrder.plannedQty }} 件</dd>
@@ -344,7 +354,7 @@ const workbenchActionRows = [
             <span>已接业务命令</span>
             <strong>真实命令 / 样例数据分层</strong>
           </div>
-          <article v-for="item in workbenchActionRows" :key="item.command" :class="`tone-${item.tone}`">
+          <article v-for="item in commandRows" :key="item.scene" :class="`tone-${item.tone}`">
             <div>
               <strong>{{ item.scene }}</strong>
               <span>{{ item.api }}</span>
@@ -391,7 +401,7 @@ const workbenchActionRows = [
         <div class="section-heading">
           <div>
             <span class="eyebrow">Evidence Health</span>
-            <h2>证据链健康</h2>
+            <h2>证据链健康度</h2>
             <p>每个关键动作必须落到附件、视频、称重、台账或审批记录。</p>
           </div>
         </div>
@@ -409,51 +419,9 @@ const workbenchActionRows = [
       <div class="section-block refined-section">
         <div class="section-heading">
           <div>
-            <span class="eyebrow">Approval Dock</span>
-            <h2>审批与兜底</h2>
-            <p>硬件失败、损耗超标、配置变更必须有责任人和时限。</p>
-          </div>
-        </div>
-        <div class="approval-dock">
-          <article v-for="item in approvalDock" :key="item.code">
-            <StatusBadge :label="item.sla" :tone="item.tone" />
-            <div>
-              <strong>{{ item.title }}</strong>
-              <span>{{ item.code }} / {{ item.owner }}</span>
-            </div>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="review-ledger-board" aria-label="当前实现进度">
-      <div class="review-ledger-main">
-        <div class="review-ledger-head">
-          <div>
-            <span class="eyebrow">Implementation Ledger</span>
-            <h2>我目前实际做到了什么</h2>
-            <p>把“看起来像页面”和“已经能验收的能力”拆开，评审时按这张表判断是否可以进入下一阶段。</p>
-          </div>
-          <StatusBadge label="M3.19 基线" tone="blue" />
-        </div>
-        <div class="review-lane-grid">
-          <article v-for="lane in implementationLanes" :key="lane.code" :class="`review-lane tone-${lane.tone}`">
-            <span>{{ lane.code }}</span>
-            <div>
-              <strong>{{ lane.title }}</strong>
-              <b>{{ lane.value }}</b>
-              <small>{{ lane.detail }}</small>
-            </div>
-            <StatusBadge :label="lane.state" :tone="lane.tone" />
-          </article>
-        </div>
-      </div>
-
-      <aside class="delivery-gap-panel">
-        <div class="review-ledger-head compact">
-          <div>
             <span class="eyebrow">Open Gaps</span>
-            <h2>还不能说完成的部分</h2>
+            <h2>还不具备交付条件</h2>
+            <p>这些不是美化页面能解决的，需要继续按计划补后端和现场 POC。</p>
           </div>
         </div>
         <div class="gap-stack">
@@ -462,7 +430,7 @@ const workbenchActionRows = [
             <span>{{ gap.detail }}</span>
           </article>
         </div>
-      </aside>
+      </div>
     </section>
 
     <section class="ops-stage-map-panel" aria-label="一期业务闭环状态">
@@ -535,7 +503,7 @@ const workbenchActionRows = [
             <span>工单</span>
             <span>客户/物料</span>
             <span>当前工序</span>
-            <span>负责人</span>
+            <span>责任人</span>
             <span>进度</span>
             <span>状态</span>
           </div>
@@ -576,16 +544,37 @@ const workbenchActionRows = [
       <div class="section-heading">
         <div>
           <h2>当前边界说明</h2>
-          <p>这里明确哪些已经进入真实实现，哪些仍是样例评审数据，避免把演示页面误当成交付系统。</p>
+          <p>这些边界会继续保留在页面里，避免把演示页面误当成交付系统。</p>
         </div>
       </div>
       <div class="owner-grid ops-boundary-grid">
-        <article v-for="item in boundaryCards" :key="item.label" :class="`tone-${item.tone}`">
+        <article class="tone-green">
           <div>
-            <strong>{{ item.label }}：{{ item.value }}</strong>
-            <span>{{ item.detail }}</span>
+            <strong>真实后端：库存台账 JDBC</strong>
+            <span>MySQL profile、JDBC 仓储测试和同一客户/母单/工单/物料维度验收测试已补齐。</span>
           </div>
-          <StatusBadge :label="item.tone === 'green' ? '已推进' : item.tone === 'amber' ? '待迁移' : '规划中'" :tone="item.tone" />
+          <StatusBadge label="已推进" tone="green" />
+        </article>
+        <article class="tone-amber">
+          <div>
+            <strong>评审样例：业务工作台数据</strong>
+            <span>页面仍以固定样例和内存 API 兜底为主，需要迁移到真实业务聚合查询。</span>
+          </div>
+          <StatusBadge label="待迁移" tone="amber" />
+        </article>
+        <article class="tone-blue">
+          <div>
+            <strong>硬件策略：{{ getHardwareManualFallbackCount() }} 项需要兜底</strong>
+            <span>NVR、标签、扫码、电子秤按兼容方案推进，一期不能被强硬件集成卡死。</span>
+          </div>
+          <StatusBadge label="POC 中" tone="blue" />
+        </article>
+        <article class="tone-red">
+          <div>
+            <strong>超标损耗审批：试算快照，不是正式工资</strong>
+            <span>POST /loss-approvals 可以计算损耗扣减和工资试算，但不代表正式工资发放。</span>
+          </div>
+          <StatusBadge label="未交付" tone="red" />
         </article>
       </div>
     </section>

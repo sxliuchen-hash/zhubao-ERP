@@ -25,7 +25,7 @@ type TabKey =
   | 'mobile';
 
 const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; code: string }> = [
-  { key: 'dashboard', label: '首页工作台', meta: '全局态势', badge: '3', code: 'OP' },
+  { key: 'dashboard', label: '首页工作台', meta: '项目进展 / 调度', badge: '3', code: 'OP' },
   { key: 'inbound', label: '来料母单', meta: '收货 / 拆包', badge: '6', code: 'IN' },
   { key: 'production', label: '生产工单', meta: '排产 / 报工', badge: '18', code: 'MO' },
   { key: 'quality', label: '质检返工', meta: '缺陷 / 损耗', badge: '7', code: 'QC' },
