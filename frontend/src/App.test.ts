@@ -6,7 +6,8 @@ describe('App', () => {
   it('starts on the M1 business workbench and exposes core modules', () => {
     const wrapper = mount(App);
 
-    expect(wrapper.text()).toContain('M2 业务评审台');
+    expect(wrapper.text()).toContain('Operations Review Console');
+    expect(wrapper.text()).toContain('M3.1 / 库存持久化切入');
     expect(wrapper.text()).toContain('首页工作台');
     expect(wrapper.text()).toContain('来料母单');
     expect(wrapper.text()).toContain('生产工单');

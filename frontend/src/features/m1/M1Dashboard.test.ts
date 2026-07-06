@@ -11,8 +11,8 @@ describe('M1Dashboard', () => {
     expect(wrapper.text()).toContain('生产运营主控台');
     expect(wrapper.text()).toContain('追溯查询');
     expect(wrapper.find('table.erp-table').exists()).toBe(true);
-    expect(wrapper.text()).toContain('核心链路进度');
+    expect(wrapper.text()).toContain('证据链健康');
     expect(wrapper.text()).toContain('在制工单看板');
-    expect(wrapper.text()).toContain('超标损耗待审批');
+    expect(wrapper.text()).toContain('超标损耗审批');
   });
 });
