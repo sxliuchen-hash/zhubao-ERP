@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.23 / 前端作业台视觉整改</strong>
-        <i>已接：文档体系、开源调研、库存台账、来料入库、生产报工、质检冻结、返工、复检放行、成品出库、客户退货、损耗试算、轻量审批任务、文档附件与硬件 POC。当前重点：把评审页改成更像现场可用的 ERP/MES 作业台。待接：真实权限、复杂流程编排、对象存储、正式工资、售后复核。</i>
+        <strong>M3.25 / 现场作业台重构</strong>
+        <i>库存台账、业务动作、轻量审批、附件元数据和硬件 POC 已接入；真实权限、审批 UI、对象存储、售后复核和正式工资仍在开发队列。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -56,7 +56,7 @@ defineProps<{
         <div>
           <span class="eyebrow">Operations Console</span>
           <h1>{{ title }}</h1>
-          <p>当前前端正在从评审版工作台升级为现场作业台：把已实现能力、真实缺口、今日待办、证据链和下一步业务动作放在同一个操作界面里。</p>
+          <p>白班来料 6 单、在制 18 张、质检 7 批、证据完整率 92%，高风险阻断 3 项。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>
