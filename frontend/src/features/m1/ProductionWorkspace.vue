@@ -10,16 +10,24 @@ import {
   fetchProductionWorkspace,
   type ProductionWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
+import {
+  reportProduction,
+  type ProductionReportResult,
+} from '../../services/businessOperationApi';
 
 const workspace = ref<ProductionWorkspaceModel>({
   stationLoads: fallbackProductionStationLoads,
   workOrders: fallbackWorkOrders,
   handoffs: fallbackProductionHandoffs,
 });
+const reportingProduction = ref(false);
+const productionReportResult = ref<ProductionReportResult | null>(null);
+const productionReportError = ref('');
 
 const activeWorkOrder = computed(
   () =>
-    workspace.value.workOrders.find((order) => order.status.includes('称重') || order.status.includes('待')) ??
+    workspace.value.workOrders.find((order) => order.status.includes('称重')) ??
+    workspace.value.workOrders.find((order) => order.status.includes('待')) ??
     workspace.value.workOrders[0],
 );
 
@@ -36,6 +44,22 @@ onMounted(async () => {
     // Keep deterministic local samples available when the backend is not running.
   }
 });
+
+async function reportActiveProduction() {
+  if (!activeWorkOrder.value) return;
+
+  reportingProduction.value = true;
+  productionReportResult.value = null;
+  productionReportError.value = '';
+
+  try {
+    productionReportResult.value = await reportProduction(activeWorkOrder.value, activeHandoff.value?.code);
+  } catch (error) {
+    productionReportError.value = error instanceof Error ? error.message : '提交报工失败';
+  } finally {
+    reportingProduction.value = false;
+  }
+}
 </script>
 
 <template>
@@ -155,9 +179,21 @@ onMounted(async () => {
           <dd>计件试算，单价按报工快照</dd>
         </dl>
         <div class="detail-actions">
-          <button class="primary-button" type="button">提交报工</button>
+          <button class="primary-button" type="button" :disabled="reportingProduction" @click="reportActiveProduction">
+            {{ reportingProduction ? '正在入账' : '提交报工' }}
+          </button>
           <button class="secondary-button" type="button">称重交接</button>
           <button class="secondary-button" type="button">打印工单标签</button>
+        </div>
+        <div v-if="productionReportResult" class="operation-feedback success">
+          <strong>生产报工已写入台账</strong>
+          <span>{{ productionReportResult.ledgerCode }} / {{ productionReportResult.workOrderCode }}</span>
+          <small>{{ productionReportResult.fromStockStatus }} -> {{ productionReportResult.toStockStatus }}</small>
+        </div>
+        <div v-else-if="productionReportError" class="operation-feedback danger">
+          <strong>提交报工失败</strong>
+          <span>{{ productionReportError }}</span>
+          <small>请确认该工单已有在制库存，并完成必要称重交接。</small>
         </div>
       </aside>
     </section>

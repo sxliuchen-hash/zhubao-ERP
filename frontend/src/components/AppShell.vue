@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.3 / 业务工作台 JDBC 读取</strong>
-        <i>页面仍是评审样例，但库存与工作台数据已开始迁移到 MySQL 契约</i>
+        <strong>M3.6 / 生产报工写台账</strong>
+        <i>页面仍是评审样例，但来料入库和生产报工已开始接入真实库存台账</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -60,6 +60,7 @@ defineProps<{
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务工作台快照</span>
+            <span>业务动作写台账</span>
             <span>硬件 POC 记录</span>
             <span>权限审批待接入</span>
           </div>

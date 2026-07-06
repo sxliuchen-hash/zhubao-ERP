@@ -62,6 +62,7 @@
 | 接口 | 页面 | 用途 |
 |---|---|---|
 | `POST /inbound-confirmations` | 来料母单 | 确认客户来料入库，写入库存台账和客户所有原料库存余额 |
+| `POST /production-reports` | 生产工单 | 提交工序报工，将同一子工单的在制库存转为半成品库存 |
 
 配置基线接口前缀：
 
@@ -207,6 +208,48 @@
 - 工序单价、损耗率必须按报工时快照保存。
 - 返工仍走同一套工单状态机。
 
+### 5.3 `ReportProductionCommand`
+
+`POST /api/business/operations/production-reports` 使用该命令模型。该接口是 M3.6 生产报工写台账基线。
+
+| 字段 | 说明 |
+|---|---|
+| `motherOrderCode` | 母单号 |
+| `workOrderCode` | 子工单或返工工单号 |
+| `customerId` | 业务客户 ID |
+| `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
+| `materialCode` | 物料编码 |
+| `fromWarehouseCode` | 来源在制仓/工位 |
+| `toWarehouseCode` | 目标半成品仓/暂存区 |
+| `quantity` | 本次报工产出数量，必须大于 0 |
+| `weight` | 本次报工产出重量，必须大于 0 |
+| `process` | 工序名称快照 |
+| `operator` | 操作人快照 |
+| `handoffCode` | 称重交接记录编码 |
+| `remark` | 业务备注 |
+
+返回 `ProductionReportResult`：
+
+| 字段 | 说明 |
+|---|---|
+| `workOrderCode` | 工单号 |
+| `ledgerCode` | 库存台账号 |
+| `fromWarehouseCode` | 来源仓/工位 |
+| `toWarehouseCode` | 目标仓/暂存区 |
+| `fromStockStatus` | 来源库存状态，当前为 `WIP` |
+| `toStockStatus` | 目标库存状态，当前为 `SEMI_FINISHED` |
+| `quantity` | 已入账数量 |
+| `weight` | 已入账重量 |
+| `process` | 工序名称快照 |
+| `operator` | 操作人快照 |
+| `handoffCode` | 称重交接记录编码 |
+
+实现约束：
+
+- `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
+- 报工只允许改变仓库和库存状态，当前基线为 `WIP -> SEMI_FINISHED`。
+- 若来源在制库存不足，后端必须拒绝写台账。
+
 ---
 
 ## 6. 质检字段
@@ -342,18 +385,17 @@ PWA 一期边界：
 
 ### 9.2 业务操作写台账基线
 
-当前已新增 `BusinessOperationService` 和 `POST /api/business/operations/inbound-confirmations`，用于把来料页面的确认入库动作落到库存台账。
+当前已新增 `BusinessOperationService`，用于把页面操作落到库存台账。
 
 | 项目 | 契约 |
 |---|---|
-| 操作入口 | 来料母单页面 `确认入库` |
-| 后端入口 | `BusinessOperationController.confirmInbound` |
-| 领域命令 | `ConfirmInboundCommand` |
-| 库存动作 | `StockTransferCommand(documentType=inbound_confirm, from=null, to=RAW_WAITING)` |
-| 权属边界 | `OwnerType.CUSTOMER` |
+| 来料确认入库 | `POST /api/business/operations/inbound-confirmations`，`RAW_WAITING` 入账 |
+| 生产报工 | `POST /api/business/operations/production-reports`，`WIP -> SEMI_FINISHED` |
+| 后端入口 | `BusinessOperationController` |
+| 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
 | 当前限制 | 尚未更新工作台快照状态，后续需从真实业务聚合刷新页面 |
 
-该接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：报工、称重交接、质检冻结、返工、出库都必须先建业务命令，再调用库存服务产生只追加台账。
+这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、质检冻结、返工、出库都必须先建业务命令，再调用库存服务产生只追加台账。
 
 ---
 

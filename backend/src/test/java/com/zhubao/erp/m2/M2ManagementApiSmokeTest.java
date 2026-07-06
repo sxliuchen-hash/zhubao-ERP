@@ -7,6 +7,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,6 +99,64 @@ class M2ManagementApiSmokeTest {
                 "MAT-18K-RING",
                 "RAW-CUSTOMER",
                 "RAW_WAITING"
+        );
+    }
+
+    @Test
+    void reportsProductionThroughBusinessOperationApiAndMovesWipStock() {
+        Map<String, Object> wipDimension = Map.of(
+                "ownerType", "CUSTOMER",
+                "ownerCustomerId", 1002L,
+                "customerId", 1002L,
+                "motherOrderCode", "MD-SMOKE-20260706-002",
+                "workOrderCode", "ZD-SMOKE-20260706-006",
+                "materialCode", "MAT-SILVER-CHAIN",
+                "warehouseCode", "WIP-LINE-01",
+                "stockStatus", "WIP"
+        );
+        Map<String, Object> seedWip = Map.of(
+                "documentType", "split_work_order",
+                "documentCode", "ZD-SMOKE-20260706-006",
+                "to", wipDimension,
+                "quantity", new BigDecimal("300"),
+                "weight", new BigDecimal("683.200"),
+                "remark", "seed WIP for production report smoke test"
+        );
+        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedWip, String.class);
+
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("motherOrderCode", "MD-SMOKE-20260706-002");
+        request.put("workOrderCode", "ZD-SMOKE-20260706-006");
+        request.put("customerId", 1002L);
+        request.put("materialCode", "MAT-SILVER-CHAIN");
+        request.put("fromWarehouseCode", "WIP-LINE-01");
+        request.put("toWarehouseCode", "SEMI-FINISHED");
+        request.put("quantity", new BigDecimal("210"));
+        request.put("weight", new BigDecimal("478.240"));
+        request.put("process", "焊接");
+        request.put("operator", "王强");
+        request.put("handoffCode", "HO-SMOKE-001");
+        request.put("remark", "production report smoke test");
+
+        ResponseEntity<String> reported = restTemplate.postForEntity(
+                "/api/business/operations/production-reports",
+                request,
+                String.class
+        );
+        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+
+        assertThat(reported.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(reported.getBody()).contains(
+                "ZD-SMOKE-20260706-006",
+                "WIP",
+                "SEMI_FINISHED",
+                "HO-SMOKE-001"
+        );
+        assertThat(balances.getBody()).contains(
+                "MD-SMOKE-20260706-002",
+                "ZD-SMOKE-20260706-006",
+                "SEMI-FINISHED",
+                "SEMI_FINISHED"
         );
     }
 

@@ -1,4 +1,4 @@
-import type { InboundOrder } from '../data/m1PrototypeData';
+import type { InboundOrder, WorkOrder } from '../data/m1PrototypeData';
 import { apiPost } from './apiClient';
 
 export interface ConfirmInboundRequest {
@@ -25,6 +25,36 @@ export interface InboundConfirmationResult {
   evidenceCode?: string;
 }
 
+export interface ProductionReportRequest {
+  motherOrderCode: string;
+  workOrderCode: string;
+  customerId: number;
+  ownerCustomerId?: number;
+  materialCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  quantity: number;
+  weight: string;
+  process: string;
+  operator: string;
+  handoffCode?: string;
+  remark?: string;
+}
+
+export interface ProductionReportResult {
+  workOrderCode: string;
+  ledgerCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  fromStockStatus: string;
+  toStockStatus: string;
+  quantity: number;
+  weight: number;
+  process: string;
+  operator: string;
+  handoffCode?: string;
+}
+
 const customerIds: Record<string, number> = {
   恒信珠宝: 1001,
   雅辰饰品: 1002,
@@ -37,6 +67,20 @@ const materialCodes: Record<string, string> = {
   银链半成品: 'MAT-SILVER-CHAIN',
   宝石托坯: 'MAT-GEM-BASE',
   'PT950 吊坠坯': 'MAT-PT950-PENDANT',
+};
+
+const workOrderMotherOrders: Record<string, string> = {
+  'ZD-20260706-001': 'MD-20260706-001',
+  'ZD-20260706-002': 'MD-20260706-001',
+  'ZD-20260706-006': 'MD-20260706-002',
+  'FG-20260706-002': 'MD-20260706-004',
+};
+
+const productionWeights: Record<string, string> = {
+  'ZD-20260706-001': '84.950',
+  'ZD-20260706-002': '121.150',
+  'ZD-20260706-006': '478.240',
+  'FG-20260706-002': '26.200',
 };
 
 export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundRequest {
@@ -60,6 +104,33 @@ export async function confirmInbound(order: InboundOrder): Promise<InboundConfir
   return apiPost<ConfirmInboundRequest, InboundConfirmationResult>(
     '/api/business/operations/inbound-confirmations',
     buildConfirmInboundRequest(order),
+  );
+}
+
+export function buildProductionReportRequest(order: WorkOrder, handoffCode?: string): ProductionReportRequest {
+  const customerId = customerIds[order.customer] ?? 9000;
+
+  return {
+    motherOrderCode: workOrderMotherOrders[order.code] ?? order.code,
+    workOrderCode: order.code,
+    customerId,
+    ownerCustomerId: customerId,
+    materialCode: materialCodes[order.material] ?? `MAT-${order.code}`,
+    fromWarehouseCode: 'WIP-LINE-01',
+    toWarehouseCode: 'SEMI-FINISHED',
+    quantity: order.finishedQty,
+    weight: productionWeights[order.code] ?? String(order.finishedQty),
+    process: order.process,
+    operator: order.assignee,
+    handoffCode,
+    remark: '前端生产派工主控台报工',
+  };
+}
+
+export async function reportProduction(order: WorkOrder, handoffCode?: string): Promise<ProductionReportResult> {
+  return apiPost<ProductionReportRequest, ProductionReportResult>(
+    '/api/business/operations/production-reports',
+    buildProductionReportRequest(order, handoffCode),
   );
 }
 
