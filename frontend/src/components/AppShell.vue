@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.10 / 返工报工写台账</strong>
-        <i>文档与样例工作台已成体系；来料入库、生产报工、质检冻结、返工派发、返工报工已写真实库存台账；复检、出库、审批、附件仍待开发</i>
+        <strong>M3.11 / 文档附件管理基线</strong>
+        <i>来料入库、生产报工、质检冻结、返工派发、返工报工已写真实库存台账；文档附件元数据已接 API；复检、出库、审批、真实上传仍待开发</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -61,6 +61,7 @@ defineProps<{
             <span>库存台账 JDBC</span>
             <span>业务工作台快照</span>
             <span>业务动作写台账</span>
+            <span>文档附件元数据</span>
             <span>硬件 POC 记录</span>
             <span>权限审批待接入</span>
           </div>

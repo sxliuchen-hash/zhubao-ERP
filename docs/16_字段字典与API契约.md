@@ -33,6 +33,9 @@
 - [V7__m3_hardware_poc_record_contract.sql](../backend/src/main/resources/db/mysql/V7__m3_hardware_poc_record_contract.sql)
 - [V8__m3_business_workspace_jdbc_repository_contract.sql](../backend/src/main/resources/db/mysql/V8__m3_business_workspace_jdbc_repository_contract.sql)
 - [V9__m3_business_workspace_review_seed.sql](../backend/src/main/resources/db/mysql/V9__m3_business_workspace_review_seed.sql)
+- [DocumentManagementService.java](../backend/src/main/java/com/zhubao/erp/document/app/DocumentManagementService.java)
+- [documentManagementApi.ts](../frontend/src/services/documentManagementApi.ts)
+- [V10__m3_document_management_contract.sql](../backend/src/main/resources/db/mysql/V10__m3_document_management_contract.sql)
 
 ---
 
@@ -99,6 +102,19 @@
 | `GET /integration-tasks` | 软硬件联动 | 返回硬件调用任务和健康度 |
 | `GET /poc-records` | 软硬件联动 | 返回现场 POC 验证记录 |
 | `GET /summary` | 软硬件联动 | 返回设备、兜底、健康度和 POC 阻断汇总 |
+
+文档附件接口前缀：
+
+```http
+/api/documents
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /summary` | 文档附件 | 返回文档包、附件、证据缺口、人工兜底和审计事件数量 |
+| `GET /packages` | 文档附件 | 返回业务文档包和证据完整度 |
+| `GET /attachments` | 文档附件 | 返回附件元数据、存储位置、校验和和兜底动作 |
+| `GET /audit-events` | 文档附件 | 返回上传、补传、归档、审批锁定审计事件 |
 
 ---
 
@@ -500,7 +516,67 @@ PWA 一期边界：
 
 ---
 
-## 9. M3 迁移要求
+## 9. 文档与附件字段
+
+### 9.1 `DocumentPackage`
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 文档包编码，例如 `DOC-QC-20260706-021` |
+| `title` | 文档包标题 |
+| `category` | 分类：业务单据、质检证据、软硬件联动、配置/构型 |
+| `businessCode` | 关联业务对象编码 |
+| `owner` | 当前负责人快照 |
+| `purpose` | 文档包用途 |
+| `requiredEvidence` | 必需证据数量 |
+| `linkedEvidence` | 已关联证据数量 |
+| `status` | 文档包状态 |
+| `retentionPolicy` | 保留策略 |
+| `lastUpdated` | 最后更新时间 |
+| `tone` | 前端状态色 |
+
+### 9.2 `EvidenceAttachment`
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 附件编码 |
+| `documentCode` | 所属文档包编码 |
+| `businessType` | 业务类型，例如来料母单、质检记录、硬件 POC |
+| `businessCode` | 业务对象编码 |
+| `fileName` | 原始文件名或归档文件名 |
+| `mediaType` | MIME 类型 |
+| `storageLocation` | 对象存储、NAS 或待上传位置 |
+| `storagePolicy` | 生命周期或归档策略 |
+| `source` | 来源：PWA 上传、质检台上传、现场录屏、配置评审等 |
+| `status` | 附件状态 |
+| `owner` | 附件责任人快照 |
+| `checksum` | 校验和，审批锁定后不得变化 |
+| `uploadedAt` | 上传或待上传时间 |
+| `fallbackAction` | 失败兜底动作 |
+| `tone` | 前端状态色 |
+
+### 9.3 `DocumentAuditEvent`
+
+| 字段 | 说明 |
+|---|---|
+| `time` | 审计时间 |
+| `eventCode` | 审计事件编码 |
+| `documentCode` | 文档包编码 |
+| `action` | 上传、补传、归档、审批锁定等动作 |
+| `operator` | 操作人快照 |
+| `detail` | 事件说明 |
+| `tone` | 前端状态色 |
+
+文档附件约束：
+
+- 当前 M3.11 只实现文档和附件元数据基线，不直接上传文件。
+- 后续真实上传必须接 MinIO/S3 或 NAS，并通过签名 URL 控制预览和下载。
+- 质检、称重、视频、配置审批证据必须能绑定业务对象、校验和、保留策略和审计事件。
+- 审批完成后的配置和质检证据应锁定 checksum，后续修改必须产生新版本或新审计事件。
+
+---
+
+## 10. M3 迁移要求
 
 1. 将当前 `BusinessWorkspaceService` 内存样例迁移为 seed 数据。
 2. 用 MySQL repository 替换当前 `InMemoryBusinessWorkspaceRepository`。
@@ -509,7 +585,7 @@ PWA 一期边界：
 5. 将客户、物料、人员、工序单价、损耗率保存快照字段。
 6. 将工作台 API 改为读取真实业务聚合，不再直接维护独立样例数据。
 
-### 9.1 业务工作台 JDBC 读取基线
+### 10.1 业务工作台 JDBC 读取基线
 
 当前已新增 `JdbcBusinessWorkspaceRepository` 作为业务工作台从内存样例迁移到 MySQL seed 数据的第一步。
 
@@ -528,7 +604,7 @@ PWA 一期边界：
 - 页面仍不得直接修改库存余额，正式动作必须继续落到业务命令和库存台账。
 - 后续应将读取来源从评审快照升级为来料、工单、质检、库存和附件的真实聚合查询。
 
-### 9.2 业务操作写台账基线
+### 10.2 业务操作写台账基线
 
 当前已新增 `BusinessOperationService`，用于把页面操作落到库存台账。
 
@@ -547,9 +623,9 @@ PWA 一期边界：
 
 ---
 
-## 10. 硬件联动字段
+## 11. 硬件联动字段
 
-### 10.1 `HardwarePocRecord`
+### 11.1 `HardwarePocRecord`
 
 | 字段 | 说明 |
 |---|---|

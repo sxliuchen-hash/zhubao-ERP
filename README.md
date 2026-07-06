@@ -27,6 +27,7 @@
 - M3.8 质检冻结业务操作基线，新增 `POST /api/business/operations/quality-freezes`，将同一子工单维度下的半成品异常库存转为冻结库存。
 - M3.9 返工派发业务操作基线，新增 `POST /api/business/operations/rework-dispatches`，将同一子工单维度下的冻结库存转为返工在制库存。
 - M3.10 返工报工业务操作基线，新增 `POST /api/business/operations/rework-reports`，将同一子工单维度下的返工在制库存转回半成品库存，并在质检页增加真实动作核验区。
+- M3.11 文档与附件管理基线，新增 `/api/documents/*` 元数据 API、前端文档附件工作台和 MySQL 合同脚本，用于管理文档包、证据附件、存储策略和归档审计。
 
 ## 目录结构
 
@@ -136,6 +137,10 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/hardware/integration-tasks`
 - `GET /api/hardware/poc-records`
 - `GET /api/hardware/summary`
+- `GET /api/documents/summary`
+- `GET /api/documents/packages`
+- `GET /api/documents/attachments`
+- `GET /api/documents/audit-events`
 - `GET /api/business/workspaces/summary`
 - `GET /api/business/workspaces/inbound`
 - `GET /api/business/workspaces/production`
@@ -177,3 +182,4 @@ M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3
 - [开发进度跟踪](docs/14_开发进度跟踪.md)
 - [样例与软硬件联动管理](docs/15_样例与软硬件联动管理.md)
 - [字段字典与 API 契约](docs/16_字段字典与API契约.md)
+- [样例数据来源与真实数据测试](docs/17_样例数据来源与真实数据测试.md)

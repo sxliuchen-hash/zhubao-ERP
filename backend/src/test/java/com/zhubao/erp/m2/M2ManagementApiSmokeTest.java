@@ -49,6 +49,26 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void exposesDocumentManagementApis() {
+        ResponseEntity<String> summary = restTemplate.getForEntity("/api/documents/summary", String.class);
+        ResponseEntity<String> packages = restTemplate.getForEntity("/api/documents/packages", String.class);
+        ResponseEntity<String> attachments = restTemplate.getForEntity("/api/documents/attachments", String.class);
+        ResponseEntity<String> auditEvents = restTemplate.getForEntity("/api/documents/audit-events", String.class);
+
+        assertThat(summary.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(summary.getBody()).contains(
+                "\"packages\":4",
+                "\"attachments\":5",
+                "\"missingEvidence\":3",
+                "\"manualFallbacks\":3",
+                "\"auditEvents\":4"
+        );
+        assertThat(packages.getBody()).contains("DOC-QC-20260706-021", "质检返工证据包");
+        assertThat(attachments.getBody()).contains("ATT-QC-20260706-021", "QC-20260706-021-defects.zip");
+        assertThat(auditEvents.getBody()).contains("DOC-AUD-004", "配置变更单等待审批");
+    }
+
+    @Test
     void exposesBusinessWorkspaceApis() {
         ResponseEntity<String> inbound = restTemplate.getForEntity("/api/business/workspaces/inbound", String.class);
         ResponseEntity<String> production = restTemplate.getForEntity("/api/business/workspaces/production", String.class);

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import AppShell from './components/AppShell.vue';
 import ConfigurationWorkspace from './features/m1/ConfigurationWorkspace.vue';
+import DocumentManagementWorkspace from './features/m1/DocumentManagementWorkspace.vue';
 import HardwareIntegrationWorkspace from './features/m1/HardwareIntegrationWorkspace.vue';
 import InboundWorkspace from './features/m1/InboundWorkspace.vue';
 import InventoryTraceWorkspace from './features/m1/InventoryTraceWorkspace.vue';
@@ -18,6 +19,7 @@ type TabKey =
   | 'quality'
   | 'inventory'
   | 'configuration'
+  | 'documents'
   | 'sample'
   | 'hardware'
   | 'mobile';
@@ -29,6 +31,7 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string }> 
   { key: 'quality', label: '质检返工', meta: '缺陷 / 损耗', badge: '7' },
   { key: 'inventory', label: '库存追溯', meta: '客户所有权' },
   { key: 'configuration', label: '配置基线', meta: '参数 / 构型', badge: '8' },
+  { key: 'documents', label: '文档附件', meta: '证据 / 归档', badge: '5' },
   { key: 'sample', label: '样例库', meta: '验收脚本' },
   { key: 'hardware', label: '软硬件联动', meta: '设备 / 兜底', badge: '4' },
   { key: 'mobile', label: 'PWA 作业', meta: '扫码 / 现场' },
@@ -64,6 +67,7 @@ const activeTitle = computed(() => tabs.find((tab) => tab.key === activeTab.valu
     <QualityWorkspace v-else-if="activeTab === 'quality'" />
     <InventoryTraceWorkspace v-else-if="activeTab === 'inventory'" />
     <ConfigurationWorkspace v-else-if="activeTab === 'configuration'" />
+    <DocumentManagementWorkspace v-else-if="activeTab === 'documents'" />
     <SampleLibraryWorkspace v-else-if="activeTab === 'sample'" />
     <HardwareIntegrationWorkspace v-else-if="activeTab === 'hardware'" />
     <MobileOpsWorkspace v-else />

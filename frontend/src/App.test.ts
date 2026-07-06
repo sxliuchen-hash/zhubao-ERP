@@ -7,13 +7,14 @@ describe('App', () => {
     const wrapper = mount(App);
 
     expect(wrapper.text()).toContain('Operations Review Console');
-    expect(wrapper.text()).toContain('M3.10 / 返工报工写台账');
+    expect(wrapper.text()).toContain('M3.11 / 文档附件管理基线');
     expect(wrapper.text()).toContain('首页工作台');
     expect(wrapper.text()).toContain('来料母单');
     expect(wrapper.text()).toContain('生产工单');
     expect(wrapper.text()).toContain('质检返工');
     expect(wrapper.text()).toContain('库存追溯');
     expect(wrapper.text()).toContain('配置基线');
+    expect(wrapper.text()).toContain('文档附件');
     expect(wrapper.text()).toContain('样例库');
     expect(wrapper.text()).toContain('软硬件联动');
     expect(wrapper.text()).toContain('PWA 作业');
