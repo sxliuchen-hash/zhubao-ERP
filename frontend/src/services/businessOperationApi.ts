@@ -1,4 +1,4 @@
-import type { InboundOrder, QualityCase, WorkOrder } from '../data/m1PrototypeData';
+import type { InboundOrder, InventoryBalance, QualityCase, WorkOrder } from '../data/m1PrototypeData';
 import { apiPost } from './apiClient';
 
 export interface ConfirmInboundRequest {
@@ -191,6 +191,38 @@ export interface QualityReleaseResult {
   evidenceCode?: string;
 }
 
+export interface OutboundShipmentRequest {
+  shipmentCode: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  customerId: number;
+  ownerCustomerId?: number;
+  materialCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  quantity: number;
+  weight: string;
+  logisticsNo: string;
+  operator: string;
+  evidenceCode?: string;
+  remark?: string;
+}
+
+export interface OutboundShipmentResult {
+  shipmentCode: string;
+  workOrderCode: string;
+  ledgerCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  fromStockStatus: string;
+  toStockStatus: string;
+  quantity: number;
+  weight: number;
+  logisticsNo: string;
+  operator: string;
+  evidenceCode?: string;
+}
+
 const customerIds: Record<string, number> = {
   恒信珠宝: 1001,
   雅辰饰品: 1002,
@@ -227,6 +259,13 @@ const workOrderMaterials: Record<string, string> = {
   'ZD-20260706-006': '银链半成品',
   'FG-20260706-001': 'PT950 吊坠坯',
   'FG-20260706-002': 'PT950 吊坠坯',
+};
+
+const inventoryBatchWorkOrders: Record<string, string> = {
+  'MD-20260706-001': 'ZD-20260706-001',
+  'MD-20260706-002': 'ZD-20260706-006',
+  'ZD-20260706-001': 'ZD-20260706-001',
+  'FG-20260706-002': 'FG-20260706-002',
 };
 
 const productionWeights: Record<string, string> = {
@@ -421,6 +460,36 @@ export async function releaseQualityStock(qualityCase: QualityCase): Promise<Qua
   return apiPost<QualityReleaseRequest, QualityReleaseResult>(
     '/api/business/operations/quality-releases',
     buildQualityReleaseRequest(qualityCase),
+  );
+}
+
+export function buildOutboundShipmentRequest(balance: InventoryBalance): OutboundShipmentRequest {
+  const customerId = customerIds[balance.owner] ?? 9000;
+  const workOrderCode = inventoryBatchWorkOrders[balance.batch] ?? balance.batch;
+  const shortCode = balance.batch.replace(/[^0-9]/g, '') || '20260706001';
+
+  return {
+    shipmentCode: `OUT-${shortCode}`,
+    motherOrderCode: balance.batch.startsWith('MD-') ? balance.batch : (workOrderMotherOrders[workOrderCode] ?? balance.batch),
+    workOrderCode,
+    customerId,
+    ownerCustomerId: customerId,
+    materialCode: materialCodes[balance.material] ?? `MAT-${balance.batch}`,
+    fromWarehouseCode: 'FINISHED-CUSTOMER',
+    toWarehouseCode: 'SHIPPED-CUSTOMER',
+    quantity: balance.qty,
+    weight: parseWeight(balance.weight),
+    logisticsNo: `SF-OUT-${shortCode}`,
+    operator: '库管员 何琳',
+    evidenceCode: `ATT-OUT-${shortCode}`,
+    remark: '前端库存追溯主控台确认出库',
+  };
+}
+
+export async function shipFinishedStock(balance: InventoryBalance): Promise<OutboundShipmentResult> {
+  return apiPost<OutboundShipmentRequest, OutboundShipmentResult>(
+    '/api/business/operations/outbound-shipments',
+    buildOutboundShipmentRequest(balance),
   );
 }
 

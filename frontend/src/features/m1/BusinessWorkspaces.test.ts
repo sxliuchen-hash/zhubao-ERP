@@ -53,6 +53,7 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('库存与追溯证据台');
     expect(wrapper.text()).toContain('库存追溯主控台');
     expect(wrapper.find('table.module-table').exists()).toBe(true);
+    expect(wrapper.text()).toContain('确认出库');
     expect(wrapper.text()).toContain('库存台账明细');
     expect(wrapper.text()).toContain('追溯证据');
     expect(wrapper.text()).toContain('LEDGER-20260706-001');

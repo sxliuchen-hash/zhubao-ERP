@@ -70,6 +70,7 @@
 | `POST /rework-dispatches` | 质检返工 | 派发返工库存，将同一子工单的冻结库存转为返工在制库存 |
 | `POST /rework-reports` | 质检返工 | 提交返工报工，将同一子工单的返工在制库存转回半成品库存 |
 | `POST /quality-releases` | 质检返工 | 复检放行，将同一子工单的半成品库存转为成品库存 |
+| `POST /outbound-shipments` | 库存追溯 | 确认成品出库，将同一子工单的成品库存转为已发货库存 |
 
 配置基线接口前缀：
 
@@ -544,6 +545,51 @@
 - `dimension_key` 用于规避 MySQL 可空字段参与唯一索引时的重复余额问题。
 - 库存台账号使用日期时间戳 + 序列，避免服务重启后简单日序列重复。
 
+### 7.5 `ShipFinishedStockCommand`
+
+`POST /api/business/operations/outbound-shipments` 使用该命令模型。该接口是 M3.15 成品出库写台账基线。
+
+| 字段 | 说明 |
+|---|---|
+| `shipmentCode` | 出库单号，作为库存台账来源单据 |
+| `motherOrderCode` | 母单号 |
+| `workOrderCode` | 子工单或返工工单号 |
+| `customerId` | 业务客户 ID |
+| `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
+| `materialCode` | 物料编码 |
+| `fromWarehouseCode` | 来源成品仓/客户成品区 |
+| `toWarehouseCode` | 目标已发货区或发货状态仓 |
+| `quantity` | 本次出库数量，必须大于 0 |
+| `weight` | 本次出库重量，必须大于 0 |
+| `logisticsNo` | 物流单号或客户交接单号 |
+| `operator` | 出库操作人快照 |
+| `evidenceCode` | 出库照片、物流单、交接单或附件编码 |
+| `remark` | 备注 |
+
+返回 `OutboundShipmentResult`：
+
+| 字段 | 说明 |
+|---|---|
+| `shipmentCode` | 出库单号 |
+| `workOrderCode` | 工单号 |
+| `ledgerCode` | 库存台账号 |
+| `fromWarehouseCode` | 来源成品仓/客户成品区 |
+| `toWarehouseCode` | 目标已发货区或发货状态仓 |
+| `fromStockStatus` | 来源库存状态，当前为 `FINISHED` |
+| `toStockStatus` | 目标库存状态，当前为 `SHIPPED` |
+| `quantity` | 已出库数量 |
+| `weight` | 已出库重量 |
+| `logisticsNo` | 物流单号或客户交接单号 |
+| `operator` | 出库操作人快照 |
+| `evidenceCode` | 证据编码 |
+
+实现约束：
+
+- `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
+- 成品出库只允许改变仓库和库存状态，当前基线为 `FINISHED -> SHIPPED`。
+- 若来源成品库存不足，后端必须拒绝写台账。
+- 出库不等同于退货；客户退料和出库撤销仍需独立业务命令。
+
 ---
 
 ## 8. PWA 字段
@@ -691,11 +737,12 @@ PWA 一期边界：
 | 返工派发 | `POST /api/business/operations/rework-dispatches`，`FROZEN -> REWORK` |
 | 返工报工 | `POST /api/business/operations/rework-reports`，`REWORK -> SEMI_FINISHED` |
 | 复检放行 | `POST /api/business/operations/quality-releases`，`SEMI_FINISHED -> FINISHED` |
+| 成品出库 | `POST /api/business/operations/outbound-shipments`，`FINISHED -> SHIPPED` |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态，出库、退货、损耗审批和工资试算仍需继续接入业务命令 |
+| 当前限制 | 尚未更新工作台快照状态，退货、损耗审批和工资试算仍需继续接入业务命令 |
 
-这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、出库、退货、损耗审批和工资试算都必须先建业务命令，再调用库存服务或审批服务产生只追加台账。
+这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、退货、损耗审批和工资试算都必须先建业务命令，再调用库存服务或审批服务产生只追加台账。
 
 ---
 

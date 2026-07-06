@@ -4,6 +4,7 @@ import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
+import com.zhubao.erp.business.domain.OutboundShipmentResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
@@ -12,6 +13,7 @@ import com.zhubao.erp.business.domain.ReportReworkCommand;
 import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
+import com.zhubao.erp.business.domain.ShipFinishedStockCommand;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockBalance;
@@ -328,6 +330,58 @@ class BusinessOperationServiceTest {
         assertThat(ledger.documentType()).isEqualTo("quality_release");
         assertThat(ledger.documentCode()).isEqualTo("QC-20260706-022");
         assertThat(ledger.remark()).contains("周娜", "复检合格", "PHOTO-RELEASE-20260706-022");
+    }
+
+    @Test
+    void shipFinishedStockMovesFinishedToShippedForSameWorkOrderDimension() {
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        StockLedgerService stockLedgerService = new StockLedgerService(repository);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        StockDimension finished = dimension(StockStatus.FINISHED, "FINISHED-CUSTOMER");
+
+        stockLedgerService.transfer(new StockTransferCommand(
+                "quality_release",
+                "QC-20260706-022",
+                null,
+                finished,
+                bd("6"),
+                bd("13.660"),
+                "测试预置成品库存"
+        ));
+
+        OutboundShipmentResult result = service.shipFinishedStock(new ShipFinishedStockCommand(
+                "OUT-20260706-022",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "FINISHED-CUSTOMER",
+                "SHIPPED-CUSTOMER",
+                bd("6"),
+                bd("13.660"),
+                "SF-OUT-20260706-022",
+                "库管员 何琳",
+                "ATT-OUT-20260706-022",
+                "客户成品出库"
+        ));
+
+        StockDimension shipped = dimension(StockStatus.SHIPPED, "SHIPPED-CUSTOMER");
+        StockBalance finishedBalance = repository.findBalance(finished);
+        StockBalance shippedBalance = repository.findBalance(shipped);
+        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
+
+        assertThat(result.shipmentCode()).isEqualTo("OUT-20260706-022");
+        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.FINISHED);
+        assertThat(result.toStockStatus()).isEqualTo(StockStatus.SHIPPED);
+        assertThat(result.logisticsNo()).isEqualTo("SF-OUT-20260706-022");
+        assertThat(finishedBalance.quantity()).isEqualByComparingTo("0");
+        assertThat(finishedBalance.weight()).isEqualByComparingTo("0.000");
+        assertThat(shippedBalance.quantity()).isEqualByComparingTo("6");
+        assertThat(shippedBalance.weight()).isEqualByComparingTo("13.660");
+        assertThat(ledger.documentType()).isEqualTo("outbound_shipment");
+        assertThat(ledger.documentCode()).isEqualTo("OUT-20260706-022");
+        assertThat(ledger.remark()).contains("SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
     }
 
     private StockDimension dimension(StockStatus status, String warehouseCode) {

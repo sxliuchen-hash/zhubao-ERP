@@ -11,6 +11,10 @@ import {
   fetchInventoryWorkspace,
   type InventoryWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
+import {
+  shipFinishedStock,
+  type OutboundShipmentResult,
+} from '../../services/businessOperationApi';
 
 const workspace = ref<InventoryWorkspaceModel>({
   balances: fallbackInventoryBalances,
@@ -18,9 +22,13 @@ const workspace = ref<InventoryWorkspaceModel>({
   timeline: fallbackTraceEvents,
   evidence: fallbackTraceEvidence,
 });
+const shippingFinishedStock = ref(false);
+const outboundShipmentResult = ref<OutboundShipmentResult | null>(null);
+const outboundShipmentError = ref('');
 
 const activeBalance = computed(
   () =>
+    workspace.value.balances.find((item) => item.status.includes('成品')) ??
     workspace.value.balances.find((item) => item.status.includes('在制') || item.frozen !== '0') ??
     workspace.value.balances[0],
 );
@@ -34,6 +42,22 @@ onMounted(async () => {
     // Keep deterministic local samples available when the backend is not running.
   }
 });
+
+async function shipActiveFinishedStock() {
+  if (!activeBalance.value) return;
+
+  shippingFinishedStock.value = true;
+  outboundShipmentResult.value = null;
+  outboundShipmentError.value = '';
+
+  try {
+    outboundShipmentResult.value = await shipFinishedStock(activeBalance.value);
+  } catch (error) {
+    outboundShipmentError.value = error instanceof Error ? error.message : '确认出库失败';
+  } finally {
+    shippingFinishedStock.value = false;
+  }
+}
 </script>
 
 <template>
@@ -75,6 +99,9 @@ onMounted(async () => {
       </div>
       <div class="filter-actions">
         <button class="secondary-button" type="button">冻结库存</button>
+        <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
+          {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
+        </button>
         <button class="secondary-button" type="button">证据缺口</button>
       </div>
     </section>
@@ -93,7 +120,9 @@ onMounted(async () => {
               <input value="ZD-20260706-001" aria-label="库存追溯关键字" />
             </label>
             <button class="primary-button" type="button">追溯查询</button>
-            <button class="secondary-button" type="button">冻结库存</button>
+            <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
+              {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
+            </button>
           </div>
         </div>
         <div class="module-table-wrap">
@@ -146,8 +175,21 @@ onMounted(async () => {
         </dl>
         <div class="detail-actions">
           <button class="primary-button" type="button">打开追溯链</button>
+          <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
+            {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
+          </button>
           <button class="secondary-button" type="button">导出台账</button>
           <button class="secondary-button" type="button">查看证据缺口</button>
+        </div>
+        <div v-if="outboundShipmentResult" class="operation-feedback success">
+          <strong>成品出库已写入台账</strong>
+          <span>{{ outboundShipmentResult.ledgerCode }} / {{ outboundShipmentResult.shipmentCode }}</span>
+          <small>{{ outboundShipmentResult.fromStockStatus }} -> {{ outboundShipmentResult.toStockStatus }} / {{ outboundShipmentResult.logisticsNo }}</small>
+        </div>
+        <div v-else-if="outboundShipmentError" class="operation-feedback danger">
+          <strong>确认出库失败</strong>
+          <span>{{ outboundShipmentError }}</span>
+          <small>请确认该客户成品库存已存在，并已完成出库证据归档。</small>
         </div>
       </aside>
     </section>
@@ -283,7 +325,7 @@ onMounted(async () => {
           </article>
           <article>
             <strong>出库发货</strong>
-            <span>成品先冻结，确认后转已发货。</span>
+            <span>成品确认后通过出库单转为已发货库存状态。</span>
           </article>
         </div>
       </div>

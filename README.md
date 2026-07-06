@@ -31,6 +31,7 @@
 - M3.12 附件上传与预览基线，新增 multipart 上传、checksum、上传审计、预览 URL 和内容读取接口，前端文档附件页提供上传/预览测试台。
 - M3.13 前端评审台视觉整改，补强工业 ERP 工作台样式、模块代码导航、桌面/移动响应式约束和状态标签显示，避免宽表撑破移动端页面。
 - M3.14 复检放行入库业务操作基线，新增 `POST /api/business/operations/quality-releases`，将同一子工单维度下的半成品库存转为成品库存。
+- M3.15 成品出库业务操作基线，新增 `POST /api/business/operations/outbound-shipments`，将同一子工单维度下的成品库存转为已发货库存。
 
 ## 目录结构
 
@@ -159,6 +160,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `POST /api/business/operations/rework-dispatches`
 - `POST /api/business/operations/rework-reports`
 - `POST /api/business/operations/quality-releases`
+- `POST /api/business/operations/outbound-shipments`
 - `GET /api/configuration/baseline/summary`
 - `GET /api/configuration/baseline/system-parameters`
 - `GET /api/configuration/baseline/code-rules`

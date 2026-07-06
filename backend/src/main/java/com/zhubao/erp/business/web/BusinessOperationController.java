@@ -5,6 +5,7 @@ import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
+import com.zhubao.erp.business.domain.OutboundShipmentResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
@@ -13,6 +14,7 @@ import com.zhubao.erp.business.domain.ReportReworkCommand;
 import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
+import com.zhubao.erp.business.domain.ShipFinishedStockCommand;
 import com.zhubao.erp.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -58,5 +60,10 @@ public class BusinessOperationController {
     @PostMapping("/quality-releases")
     public ApiResponse<QualityReleaseResult> releaseQualityStock(@Valid @RequestBody ReleaseQualityStockCommand command) {
         return ApiResponse.ok(businessOperationService.releaseQualityStock(command));
+    }
+
+    @PostMapping("/outbound-shipments")
+    public ApiResponse<OutboundShipmentResult> shipFinishedStock(@Valid @RequestBody ShipFinishedStockCommand command) {
+        return ApiResponse.ok(businessOperationService.shipFinishedStock(command));
     }
 }

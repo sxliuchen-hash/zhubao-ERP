@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { InboundOrder, QualityCase, WorkOrder } from '../data/m1PrototypeData';
+import type { InboundOrder, InventoryBalance, QualityCase, WorkOrder } from '../data/m1PrototypeData';
 import {
   buildConfirmInboundRequest,
+  buildOutboundShipmentRequest,
   buildQualityFreezeRequest,
   buildQualityReleaseRequest,
   buildProductionReportRequest,
@@ -179,6 +180,35 @@ describe('businessOperationApi', () => {
       inspector: '刘洋',
       releaseResult: '复检合格，允许成品入库',
       evidenceCode: 'PHOTO-RELEASE-QC-20260706-023',
+    });
+  });
+
+  it('builds an outbound shipment command from finished stock to shipped stock', () => {
+    const balance: InventoryBalance = {
+      owner: '雅辰饰品',
+      batch: 'MD-20260706-002',
+      material: '银链半成品',
+      location: '成品库 F-02',
+      status: '成品',
+      qty: 620,
+      weight: '1,451.20 g',
+      frozen: '200 件',
+    };
+
+    expect(buildOutboundShipmentRequest(balance)).toMatchObject({
+      shipmentCode: 'OUT-20260706002',
+      motherOrderCode: 'MD-20260706-002',
+      workOrderCode: 'ZD-20260706-006',
+      customerId: 1002,
+      ownerCustomerId: 1002,
+      materialCode: 'MAT-SILVER-CHAIN',
+      fromWarehouseCode: 'FINISHED-CUSTOMER',
+      toWarehouseCode: 'SHIPPED-CUSTOMER',
+      quantity: 620,
+      weight: '1451.20',
+      logisticsNo: 'SF-OUT-20260706002',
+      operator: '库管员 何琳',
+      evidenceCode: 'ATT-OUT-20260706002',
     });
   });
 });

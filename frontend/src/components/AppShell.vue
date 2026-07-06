@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.14 / 复检放行入库基线</strong>
-        <i>来料入库、生产报工、质检冻结、返工派发、返工报工、复检放行已写真实库存台账；文档附件支持上传、校验和、预览 URL；出库、审批、对象存储仍待开发</i>
+        <strong>M3.15 / 成品出库台账基线</strong>
+        <i>来料入库、生产报工、质检冻结、返工派发、返工报工、复检放行、成品出库已写真实库存台账；文档附件支持上传、校验和、预览 URL；退货、审批、对象存储仍待开发</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">

@@ -4,6 +4,7 @@ import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
+import com.zhubao.erp.business.domain.OutboundShipmentResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
@@ -12,6 +13,7 @@ import com.zhubao.erp.business.domain.ReportReworkCommand;
 import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
+import com.zhubao.erp.business.domain.ShipFinishedStockCommand;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockDimension;
@@ -312,6 +314,55 @@ public class BusinessOperationService {
         );
     }
 
+    public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command) {
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        StockDimension fromFinished = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.fromWarehouseCode(),
+                StockStatus.FINISHED
+        );
+        StockDimension toShipped = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.toWarehouseCode(),
+                StockStatus.SHIPPED
+        );
+
+        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+                "outbound_shipment",
+                command.shipmentCode(),
+                fromFinished,
+                toShipped,
+                command.quantity(),
+                command.weight(),
+                buildRemark(command)
+        ));
+
+        return new OutboundShipmentResult(
+                command.shipmentCode(),
+                command.workOrderCode(),
+                entry.code(),
+                command.fromWarehouseCode(),
+                command.toWarehouseCode(),
+                fromFinished.stockStatus(),
+                toShipped.stockStatus(),
+                entry.quantity(),
+                entry.weight(),
+                command.logisticsNo(),
+                command.operator(),
+                command.evidenceCode()
+        );
+    }
+
     private String buildRemark(ConfirmInboundCommand command) {
         StringBuilder remark = new StringBuilder("确认来料入库；操作人：").append(command.operator());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
@@ -400,6 +451,22 @@ public class BusinessOperationService {
                 .append(command.inspector())
                 .append("；结论：")
                 .append(command.releaseResult());
+        if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
+            remark.append("；证据：").append(command.evidenceCode());
+        }
+        if (command.remark() != null && !command.remark().isBlank()) {
+            remark.append("；备注：").append(command.remark());
+        }
+        return remark.toString();
+    }
+
+    private String buildRemark(ShipFinishedStockCommand command) {
+        StringBuilder remark = new StringBuilder("成品出库；出库单：")
+                .append(command.shipmentCode())
+                .append("；物流单：")
+                .append(command.logisticsNo())
+                .append("；操作人：")
+                .append(command.operator());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
             remark.append("；证据：").append(command.evidenceCode());
         }
