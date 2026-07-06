@@ -52,6 +52,35 @@ const sourceBasis = [
   { label: '对象存储', value: 'Local / JDBC metadata / NAS / S3', detail: '当前对象内容默认本地存储，附件元数据可切换 JDBC 仓储。' },
 ] as const;
 
+const evidenceCoverage = computed(() => {
+  const required = packages.value.reduce((total, item) => total + item.requiredEvidence, 0);
+  const linked = packages.value.reduce((total, item) => total + item.linkedEvidence, 0);
+
+  if (required === 0) return 0;
+
+  return Math.round((linked / required) * 100);
+});
+
+const missingPackages = computed(() =>
+  packages.value
+    .filter((item) => item.linkedEvidence < item.requiredEvidence)
+    .map((item) => ({
+      code: item.code,
+      title: item.title,
+      owner: item.owner,
+      gap: `${item.requiredEvidence - item.linkedEvidence} 个缺口`,
+      tone: item.tone,
+    }))
+    .slice(0, 4),
+);
+
+const controlRows = [
+  { label: '元数据仓储', value: 'zhubao.documents.repository', state: 'memory / JDBC', tone: 'green' },
+  { label: '内容存储', value: 'zhubao.documents.storage.local-root', state: 'local://evidence', tone: 'blue' },
+  { label: '预览边界', value: 'preview-url + checksum', state: '15 分钟签名', tone: 'amber' },
+  { label: '后续复用', value: 'NAS / S3 / MinIO', state: '接口预留', tone: 'violet' },
+] as const;
+
 onMounted(async () => {
   try {
     const [nextSummary, nextPackages, nextAttachments, nextAuditEvents] = await Promise.all([
@@ -143,7 +172,10 @@ async function createPreviewUrl() {
   <div class="page-stack document-page">
     <section class="operations-hero document-hero">
       <div class="hero-copy">
-        <span class="eyebrow">Document & Evidence Control</span>
+        <div class="console-title-line">
+          <span class="eyebrow">Document & Evidence Control</span>
+          <StatusBadge label="M3.38 界面密度整改" tone="green" />
+        </div>
         <h2>文档与附件管理工作台</h2>
         <p>把需求文档、评审包、质检照片、称重记录、视频兜底和配置审批证据统一管理；当前对象内容默认本地存储，附件元数据可切换 JDBC 仓储。</p>
       </div>
@@ -157,8 +189,68 @@ async function createPreviewUrl() {
           <strong>{{ summary.attachments }}</strong>
         </article>
         <article>
+          <span>覆盖率</span>
+          <strong>{{ evidenceCoverage }}%</strong>
+        </article>
+        <article>
           <span>缺口</span>
           <strong>{{ summary.missingEvidence }}</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="document-control-board" aria-label="文档证据运营板">
+      <article v-if="activePackage" class="document-active-case" :class="`tone-${activePackage.tone}`">
+        <div class="panel-title-row">
+          <div>
+            <span class="eyebrow">Active Package</span>
+            <h2>{{ activePackage.title }}</h2>
+          </div>
+          <StatusBadge :label="activePackage.status" :tone="activePackage.tone" />
+        </div>
+        <dl class="document-case-grid">
+          <dt>文档包</dt>
+          <dd>{{ activePackage.code }}</dd>
+          <dt>业务对象</dt>
+          <dd>{{ activePackage.businessCode }}</dd>
+          <dt>负责人</dt>
+          <dd>{{ activePackage.owner }}</dd>
+          <dt>证据</dt>
+          <dd>{{ activePackage.linkedEvidence }}/{{ activePackage.requiredEvidence }}</dd>
+          <dt>保留策略</dt>
+          <dd>{{ activePackage.retentionPolicy }}</dd>
+          <dt>更新时间</dt>
+          <dd>{{ activePackage.lastUpdated }}</dd>
+        </dl>
+      </article>
+
+      <div class="document-gap-stack">
+        <div class="panel-title-row">
+          <div>
+            <span class="eyebrow">Evidence Gaps</span>
+            <h2>待补证据</h2>
+          </div>
+          <StatusBadge :label="`${missingPackages.length} 项`" tone="amber" />
+        </div>
+        <article v-for="item in missingPackages" :key="item.code" :class="`tone-${item.tone}`">
+          <strong>{{ item.code }}</strong>
+          <span>{{ item.title }}</span>
+          <small>{{ item.owner }} / {{ item.gap }}</small>
+        </article>
+      </div>
+
+      <div class="document-control-checks">
+        <div class="panel-title-row">
+          <div>
+            <span class="eyebrow">Storage Boundary</span>
+            <h2>仓储边界</h2>
+          </div>
+          <StatusBadge label="可切换" tone="blue" />
+        </div>
+        <article v-for="item in controlRows" :key="item.label" :class="`tone-${item.tone}`">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <small>{{ item.state }}</small>
         </article>
       </div>
     </section>
