@@ -12,6 +12,7 @@
 - SQL 基线脚本。
 - 后端单元测试和前端组件/函数测试。
 - M1 首页工作台、来料母单、生产工单、质检返工、库存追溯、PWA 作业原型。
+- M2 核心业务工作台 API 基线，覆盖来料、生产、质检、库存、PWA。
 
 ## 目录结构
 
@@ -76,7 +77,7 @@ pnpm --filter zhubao-erp-frontend dev
 - 后端 API：`http://localhost:8080`
 - 前端：`http://localhost:5173`
 
-## M0 API
+## 当前 API
 
 - `GET /api/m0/status`
 - `POST /api/scan/resolve`
@@ -90,6 +91,12 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/hardware/devices`
 - `GET /api/hardware/integration-tasks`
 - `GET /api/hardware/summary`
+- `GET /api/business/workspaces/summary`
+- `GET /api/business/workspaces/inbound`
+- `GET /api/business/workspaces/production`
+- `GET /api/business/workspaces/quality`
+- `GET /api/business/workspaces/inventory`
+- `GET /api/business/workspaces/mobile`
 
 ## 下一阶段
 
@@ -99,6 +106,7 @@ M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3
 - API 字段字典。
 - RuoYi-Vue 具体分支和许可证确认。
 - NVR、标签打印、PWA 扫码、备份恢复的现场 POC 记录。
+- 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 
 ## 开发管理文档
 
@@ -106,3 +114,4 @@ M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3
 - [开发原则与版本管理规范](docs/13_开发原则与版本管理规范.md)
 - [开发进度跟踪](docs/14_开发进度跟踪.md)
 - [样例与软硬件联动管理](docs/15_样例与软硬件联动管理.md)
+- [字段字典与 API 契约](docs/16_字段字典与API契约.md)
