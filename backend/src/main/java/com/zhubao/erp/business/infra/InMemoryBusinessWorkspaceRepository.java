@@ -6,9 +6,11 @@ import com.zhubao.erp.business.domain.BusinessReviewData.MobileWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.ProductionWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.QualityWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessWorkspaceRepository;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@ConditionalOnProperty(name = "zhubao.business.repository", havingValue = "memory", matchIfMissing = true)
 public class InMemoryBusinessWorkspaceRepository implements BusinessWorkspaceRepository {
 
     private final BusinessWorkspaceSeedData seedData;

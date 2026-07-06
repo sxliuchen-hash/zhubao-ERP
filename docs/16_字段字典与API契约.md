@@ -31,6 +31,8 @@
 - [V4__m2_configuration_baseline_contract.sql](../backend/src/main/resources/db/mysql/V4__m2_configuration_baseline_contract.sql)
 - [V5__m2_configuration_change_control_contract.sql](../backend/src/main/resources/db/mysql/V5__m2_configuration_change_control_contract.sql)
 - [V7__m3_hardware_poc_record_contract.sql](../backend/src/main/resources/db/mysql/V7__m3_hardware_poc_record_contract.sql)
+- [V8__m3_business_workspace_jdbc_repository_contract.sql](../backend/src/main/resources/db/mysql/V8__m3_business_workspace_jdbc_repository_contract.sql)
+- [V9__m3_business_workspace_review_seed.sql](../backend/src/main/resources/db/mysql/V9__m3_business_workspace_review_seed.sql)
 
 ---
 
@@ -272,6 +274,25 @@ PWA 一期边界：
 4. 将重量字段拆为数值和单位，禁止长期使用字符串重量参与计算。
 5. 将客户、物料、人员、工序单价、损耗率保存快照字段。
 6. 将工作台 API 改为读取真实业务聚合，不再直接维护独立样例数据。
+
+### 9.1 业务工作台 JDBC 读取基线
+
+当前已新增 `JdbcBusinessWorkspaceRepository` 作为业务工作台从内存样例迁移到 MySQL seed 数据的第一步。
+
+| 项目 | 契约 |
+|---|---|
+| 默认模式 | `zhubao.business.repository=memory`，继续使用内存 seed，便于无数据库评审 |
+| JDBC 模式 | `zhubao.business.repository=jdbc`，读取 `biz_workspace_*` 合同表 |
+| 快照选择 | 优先使用 `zhubao.business.snapshot-code`，未配置时读取 `biz_workspace_snapshot` 中最新业务日期 |
+| MySQL profile | `ZHUBAO_BUSINESS_REPOSITORY=jdbc`、`ZHUBAO_BUSINESS_SNAPSHOT_CODE=SNAP-20260706-DAY` |
+| 追溯时间线 | `biz_workspace_trace_event`，由 `V8__m3_business_workspace_jdbc_repository_contract.sql` 提供 |
+| 评审 seed | `V9__m3_business_workspace_review_seed.sql`，提供当前 M2/M3 页面评审样例 |
+
+约束：
+
+- `biz_workspace_*` 是评审快照表，不是最终交易表。
+- 页面仍不得直接修改库存余额，正式动作必须继续落到业务命令和库存台账。
+- 后续应将读取来源从评审快照升级为来料、工单、质检、库存和附件的真实聚合查询。
 
 ---
 
