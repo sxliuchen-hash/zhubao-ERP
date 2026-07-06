@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.25 / 现场作业台重构</strong>
-        <i>库存台账、业务动作、轻量审批、附件元数据和硬件 POC 已接入；真实权限、审批 UI、对象存储、售后复核和正式工资仍在开发队列。</i>
+        <strong>M3.27 / UI 密度整改</strong>
+        <i>首页、来料母单和生产工单已压缩为更接近 ERP/MES 的高密度作业台；库存台账、业务动作、轻量审批、附件元数据和硬件 POC 已接入，真实权限、审批 UI、对象存储、售后复核和正式工资仍在开发队列。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">

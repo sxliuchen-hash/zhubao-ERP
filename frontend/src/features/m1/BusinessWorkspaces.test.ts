@@ -10,22 +10,25 @@ describe('M1 business workspaces', () => {
   it('renders inbound receiving evidence and exception handling', () => {
     const wrapper = mount(InboundWorkspace);
 
-    expect(wrapper.text()).toContain('来料接收控制台');
-    expect(wrapper.text()).toContain('来料作业主控台');
-    expect(wrapper.find('table.module-table').exists()).toBe(true);
-    expect(wrapper.text()).toContain('入库检查点');
-    expect(wrapper.text()).toContain('入库异常处置');
+    expect(wrapper.text()).toContain('来料收货拆包作业台');
+    expect(wrapper.text()).toContain('今日母单池');
+    expect(wrapper.find('table.inbound-dispatch-table').exists()).toBe(true);
+    expect(wrapper.text()).toContain('入库证据槽');
+    expect(wrapper.text()).toContain('入库校验规则');
+    expect(wrapper.text()).toContain('确认入库');
     expect(wrapper.text()).toContain('拆包视频截取失败');
   });
 
   it('renders production station load and weighing handoff controls', () => {
     const wrapper = mount(ProductionWorkspace);
 
-    expect(wrapper.text()).toContain('生产工单调度台');
-    expect(wrapper.text()).toContain('生产派工主控台');
-    expect(wrapper.find('table.module-table').exists()).toBe(true);
+    expect(wrapper.text()).toContain('生产派工报工作业台');
+    expect(wrapper.text()).toContain('今日工单池');
+    expect(wrapper.find('table.production-dispatch-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('工位负载');
-    expect(wrapper.text()).toContain('称重交接记录');
+    expect(wrapper.text()).toContain('称重交接阻断');
+    expect(wrapper.text()).toContain('报工校验规则');
+    expect(wrapper.text()).toContain('提交报工');
     expect(wrapper.text()).toContain('审批阻断');
   });
 
