@@ -7,7 +7,7 @@ describe('App', () => {
     const wrapper = mount(App);
 
     expect(wrapper.text()).toContain('Operations Console');
-    expect(wrapper.text()).toContain('M3.35 / 附件存储边界');
+    expect(wrapper.text()).toContain('M3.36 / 现场指挥台产品化');
     expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
     expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
     expect(wrapper.text()).toContain('首页工作台');
