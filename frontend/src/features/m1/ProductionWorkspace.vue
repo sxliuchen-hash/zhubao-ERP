@@ -1,10 +1,32 @@
 <script setup lang="ts">
 import StatusBadge from '../../components/StatusBadge.vue';
-import { workOrders } from '../../data/m1PrototypeData';
+import { productionHandoffs, productionStationLoads, workOrders } from '../../data/m1PrototypeData';
 </script>
 
 <template>
   <div class="page-stack">
+    <section class="operations-hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Workshop Control</span>
+        <h2>生产工单调度台</h2>
+        <p>用工位负载、称重交接和工序状态判断是否能继续派工，避免只看到工单列表。</p>
+      </div>
+      <div class="hero-kpis">
+        <article>
+          <span>在制工单</span>
+          <strong>{{ workOrders.length }}</strong>
+        </article>
+        <article>
+          <span>交接阻断</span>
+          <strong>1</strong>
+        </article>
+        <article>
+          <span>工位满载</span>
+          <strong>1</strong>
+        </article>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>生产工单与工序报工</h2>
@@ -13,6 +35,24 @@ import { workOrders } from '../../data/m1PrototypeData';
       <div class="button-row">
         <button class="secondary-button" type="button">打印工单标签</button>
         <button class="primary-button" type="button">拆分子工单</button>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <h2>工位负载</h2>
+          <p>派工前先看瓶颈工位，避免继续向已积压工序推单。</p>
+        </div>
+      </div>
+      <div class="station-grid">
+        <article v-for="station in productionStationLoads" :key="station.station">
+          <div>
+            <strong>{{ station.station }}</strong>
+            <span>{{ station.bottleneck }}</span>
+          </div>
+          <StatusBadge :label="`${station.queue} / ${station.capacity}`" :tone="station.tone" />
+        </article>
       </div>
     </section>
 
@@ -86,6 +126,35 @@ import { workOrders } from '../../data/m1PrototypeData';
             </div>
           </li>
         </ol>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <h2>称重交接记录</h2>
+          <p>损耗、工资试算和质检归因都必须能追溯到交接证据。</p>
+        </div>
+      </div>
+      <div class="handoff-table">
+        <div class="handoff-row handoff-head">
+          <span>交接单</span>
+          <span>从</span>
+          <span>到</span>
+          <span>投入</span>
+          <span>产出</span>
+          <span>损耗</span>
+          <span>状态</span>
+        </div>
+        <div v-for="handoff in productionHandoffs" :key="handoff.code" class="handoff-row">
+          <strong>{{ handoff.code }}</strong>
+          <span>{{ handoff.from }}</span>
+          <span>{{ handoff.to }}</span>
+          <span>{{ handoff.inputWeight }}</span>
+          <span>{{ handoff.outputWeight }}</span>
+          <span>{{ handoff.lossRate }}</span>
+          <StatusBadge :label="handoff.status" :tone="handoff.tone" />
+        </div>
       </div>
     </section>
 

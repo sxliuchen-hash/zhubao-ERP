@@ -1,10 +1,32 @@
 <script setup lang="ts">
 import StatusBadge from '../../components/StatusBadge.vue';
-import { inventoryBalances, traceEvents } from '../../data/m1PrototypeData';
+import { inventoryBalances, inventoryLedgerEntries, traceEvents, traceEvidence } from '../../data/m1PrototypeData';
 </script>
 
 <template>
   <div class="page-stack">
+    <section class="operations-hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Trace Control</span>
+        <h2>库存与追溯证据台</h2>
+        <p>库存余额只看当前结果，台账明细解释每一次变化，证据清单证明业务动作真实发生。</p>
+      </div>
+      <div class="hero-kpis">
+        <article>
+          <span>客户库存批次</span>
+          <strong>{{ inventoryBalances.length }}</strong>
+        </article>
+        <article>
+          <span>台账事件</span>
+          <strong>{{ inventoryLedgerEntries.length }}</strong>
+        </article>
+        <article>
+          <span>证据缺口</span>
+          <strong>3</strong>
+        </article>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>库存台账与全链路追溯</h2>
@@ -16,31 +38,80 @@ import { inventoryBalances, traceEvents } from '../../data/m1PrototypeData';
       </div>
     </section>
 
+    <section class="split-layout wide-left">
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>实时库存余额</h2>
+            <p>余额只来自库存台账汇总，页面不提供直接编辑入口。</p>
+          </div>
+        </div>
+        <div class="data-table inventory-table">
+          <div class="table-row table-head">
+            <span>客户所有权</span>
+            <span>批次/来源</span>
+            <span>物料</span>
+            <span>位置</span>
+            <span>状态</span>
+            <span>数量/重量</span>
+            <span>冻结</span>
+          </div>
+          <div v-for="item in inventoryBalances" :key="`${item.owner}-${item.batch}-${item.status}`" class="table-row">
+            <strong>{{ item.owner }}</strong>
+            <span>{{ item.batch }}</span>
+            <span>{{ item.material }}</span>
+            <span>{{ item.location }}</span>
+            <StatusBadge :label="item.status" :tone="item.status.includes('返工') ? 'violet' : item.status.includes('在制') ? 'amber' : item.status.includes('成品') ? 'green' : 'blue'" />
+            <span>{{ item.qty }} 件 / {{ item.weight }}</span>
+            <span>{{ item.frozen }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>追溯证据</h2>
+            <p>证据缺口必须能定位到具体任务或附件。</p>
+          </div>
+        </div>
+        <div class="evidence-health">
+          <article v-for="item in traceEvidence" :key="item.label">
+            <div>
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.link }}</span>
+            </div>
+            <StatusBadge :label="item.status" :tone="item.tone" />
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="section-block">
       <div class="section-heading">
         <div>
-          <h2>实时库存余额</h2>
-          <p>余额只来自库存台账汇总，页面不提供直接编辑入口。</p>
+          <h2>库存台账明细</h2>
+          <p>这张表用来解释余额从哪里来，后续必须成为库存问题排查的第一入口。</p>
         </div>
       </div>
-      <div class="data-table inventory-table">
-        <div class="table-row table-head">
-          <span>客户所有权</span>
-          <span>批次/来源</span>
-          <span>物料</span>
-          <span>位置</span>
-          <span>状态</span>
-          <span>数量/重量</span>
-          <span>冻结</span>
+      <div class="ledger-table">
+        <div class="ledger-row ledger-head">
+          <span>时间</span>
+          <span>台账号</span>
+          <span>动作</span>
+          <span>变化前</span>
+          <span>变化后</span>
+          <span>来源单据</span>
+          <span>操作人</span>
         </div>
-        <div v-for="item in inventoryBalances" :key="`${item.owner}-${item.batch}-${item.status}`" class="table-row">
-          <strong>{{ item.owner }}</strong>
-          <span>{{ item.batch }}</span>
-          <span>{{ item.material }}</span>
-          <span>{{ item.location }}</span>
-          <StatusBadge :label="item.status" :tone="item.status.includes('返工') ? 'violet' : item.status.includes('在制') ? 'amber' : item.status.includes('成品') ? 'green' : 'blue'" />
-          <span>{{ item.qty }} 件 / {{ item.weight }}</span>
-          <span>{{ item.frozen }}</span>
+        <div v-for="entry in inventoryLedgerEntries" :key="entry.bizCode" class="ledger-row">
+          <time>{{ entry.time }}</time>
+          <strong>{{ entry.bizCode }}</strong>
+          <span>{{ entry.movement }}</span>
+          <span>{{ entry.before }}</span>
+          <span>{{ entry.after }}</span>
+          <span>{{ entry.source }}</span>
+          <span>{{ entry.operator }}</span>
         </div>
       </div>
     </section>

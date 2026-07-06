@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from '../../components/StatusBadge.vue';
-import { inboundOrders } from '../../data/m1PrototypeData';
+import { inboundCheckpoints, inboundOrders, inboundRisks } from '../../data/m1PrototypeData';
 
 function videoTone(video: string) {
   if (video === '失败') return 'red';
@@ -18,6 +18,20 @@ function statusTone(status: string) {
 
 <template>
   <div class="page-stack">
+    <section class="operations-hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Inbound Control</span>
+        <h2>来料接收控制台</h2>
+        <p>把快递收货、拆包称重、客户所有库存、视频证据和标签打印压在同一条入库链路里。</p>
+      </div>
+      <div class="hero-kpis">
+        <article v-for="item in inboundCheckpoints.slice(0, 3)" :key="item.label">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </article>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>来料入库与母单</h2>
@@ -29,31 +43,51 @@ function statusTone(status: string) {
       </div>
     </section>
 
-    <section class="section-block">
-      <div class="section-heading">
-        <div>
-          <h2>今日来料队列</h2>
-          <p>确认入库后只通过业务单据影响客户所有库存，不允许直接改余额。</p>
+    <section class="split-layout wide-left">
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>今日来料队列</h2>
+            <p>确认入库后只通过业务单据影响客户所有库存，不允许直接改余额。</p>
+          </div>
+        </div>
+        <div class="data-table inbound-table">
+          <div class="table-row table-head">
+            <span>母单</span>
+            <span>客户</span>
+            <span>快递单号</span>
+            <span>物料</span>
+            <span>数量/重量</span>
+            <span>状态</span>
+            <span>视频</span>
+          </div>
+          <div v-for="order in inboundOrders" :key="order.code" class="table-row">
+            <strong>{{ order.code }}</strong>
+            <span>{{ order.customer }}</span>
+            <span>{{ order.courierNo }}</span>
+            <span>{{ order.material }}</span>
+            <span>{{ order.qty }} 件 / {{ order.weight }}</span>
+            <StatusBadge :label="order.status" :tone="statusTone(order.status)" />
+            <StatusBadge :label="order.video" :tone="videoTone(order.video)" />
+          </div>
         </div>
       </div>
-      <div class="data-table inbound-table">
-        <div class="table-row table-head">
-          <span>母单</span>
-          <span>客户</span>
-          <span>快递单号</span>
-          <span>物料</span>
-          <span>数量/重量</span>
-          <span>状态</span>
-          <span>视频</span>
+
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>入库检查点</h2>
+            <p>缺少任一关键证据时，系统应阻止确认入库或进入异常处理。</p>
+          </div>
         </div>
-        <div v-for="order in inboundOrders" :key="order.code" class="table-row">
-          <strong>{{ order.code }}</strong>
-          <span>{{ order.customer }}</span>
-          <span>{{ order.courierNo }}</span>
-          <span>{{ order.material }}</span>
-          <span>{{ order.qty }} 件 / {{ order.weight }}</span>
-          <StatusBadge :label="order.status" :tone="statusTone(order.status)" />
-          <StatusBadge :label="order.video" :tone="videoTone(order.video)" />
+        <div class="evidence-health">
+          <article v-for="item in inboundCheckpoints" :key="item.label">
+            <div>
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.status }}</span>
+            </div>
+            <StatusBadge :label="item.value" :tone="item.tone" />
+          </article>
         </div>
       </div>
     </section>
@@ -110,6 +144,28 @@ function statusTone(status: string) {
           <button class="secondary-button" type="button">打印标签</button>
           <button class="secondary-button" type="button">补打记录</button>
         </div>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <h2>入库异常处置</h2>
+          <p>异常必须有责任人、处置动作和证据兜底，不能停留在口头沟通。</p>
+        </div>
+      </div>
+      <div class="ops-card-grid">
+        <article v-for="risk in inboundRisks" :key="risk.code" class="ops-card">
+          <div class="ops-card-head">
+            <div>
+              <small>{{ risk.code }}</small>
+              <strong>{{ risk.title }}</strong>
+            </div>
+            <StatusBadge :label="risk.action" :tone="risk.tone" />
+          </div>
+          <p>{{ risk.detail }}</p>
+          <span>责任人：{{ risk.owner }}</span>
+        </article>
       </div>
     </section>
   </div>

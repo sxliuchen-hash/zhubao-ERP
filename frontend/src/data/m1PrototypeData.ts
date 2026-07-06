@@ -106,6 +106,91 @@ export interface IntegrationTask {
   owner: string;
 }
 
+export interface InboundCheckpoint {
+  label: string;
+  value: string;
+  status: string;
+  tone: Tone;
+}
+
+export interface InboundRisk {
+  code: string;
+  title: string;
+  detail: string;
+  owner: string;
+  action: string;
+  tone: Tone;
+}
+
+export interface ProductionStationLoad {
+  station: string;
+  queue: string;
+  capacity: string;
+  bottleneck: string;
+  tone: Tone;
+}
+
+export interface ProductionHandoff {
+  code: string;
+  from: string;
+  to: string;
+  inputWeight: string;
+  outputWeight: string;
+  lossRate: string;
+  status: string;
+  tone: Tone;
+}
+
+export interface QualityMetric {
+  label: string;
+  value: string;
+  detail: string;
+  tone: Tone;
+}
+
+export interface LossApproval {
+  code: string;
+  workOrder: string;
+  process: string;
+  standard: string;
+  actual: string;
+  evidence: string;
+  action: string;
+  tone: Tone;
+}
+
+export interface InventoryLedgerEntry {
+  time: string;
+  bizCode: string;
+  movement: string;
+  before: string;
+  after: string;
+  source: string;
+  operator: string;
+}
+
+export interface TraceEvidence {
+  label: string;
+  status: string;
+  link: string;
+  tone: Tone;
+}
+
+export interface MobileCapability {
+  label: string;
+  status: string;
+  detail: string;
+  tone: Tone;
+}
+
+export interface OfflineDraft {
+  code: string;
+  scene: string;
+  savedAt: string;
+  risk: string;
+  tone: Tone;
+}
+
 // These samples are the review baseline for M1. In M3 they should become API seed data
 // so UI tests, demos, and acceptance scripts all run against the same business cases.
 export const metrics: Metric[] = [
@@ -199,6 +284,32 @@ export const inboundOrders: InboundOrder[] = [
   },
 ];
 
+export const inboundCheckpoints: InboundCheckpoint[] = [
+  { label: '待扫码收货', value: '2 单', status: '快递单未绑定母单', tone: 'amber' },
+  { label: '待拆包称重', value: '3 单', status: '需记录拆包前后重量', tone: 'blue' },
+  { label: '视频完整率', value: '92%', status: '1 个截取任务失败', tone: 'amber' },
+  { label: '标签可打印', value: '4 张', status: '含 1 张待补打', tone: 'green' },
+];
+
+export const inboundRisks: InboundRisk[] = [
+  {
+    code: 'MD-20260706-003',
+    title: '物料名称待确认',
+    detail: '宝石托盘客户描述与历史物料档案不一致，需要业务员确认后才能入账。',
+    owner: '业务员',
+    action: '确认物料档案',
+    tone: 'amber',
+  },
+  {
+    code: 'MD-20260706-004',
+    title: '拆包视频截取失败',
+    detail: 'NVR 时间段任务返回失败，系统允许重试一次，仍失败则人工上传视频。',
+    owner: '库管员',
+    action: '重试截取',
+    tone: 'red',
+  },
+];
+
 export const workOrders: WorkOrder[] = [
   {
     code: 'ZD-20260706-001',
@@ -246,6 +357,46 @@ export const workOrders: WorkOrder[] = [
   },
 ];
 
+export const productionStationLoads: ProductionStationLoad[] = [
+  { station: '抛光', queue: '6 张', capacity: '78%', bottleneck: '2 张等待称重交接', tone: 'amber' },
+  { station: '镶石', queue: '5 张', capacity: '92%', bottleneck: '质检积压，暂缓派新单', tone: 'red' },
+  { station: '焊接', queue: '4 张', capacity: '64%', bottleneck: '设备正常，可继续派工', tone: 'green' },
+  { station: '终检', queue: '3 张', capacity: '55%', bottleneck: '等待缺陷照片归档', tone: 'blue' },
+];
+
+export const productionHandoffs: ProductionHandoff[] = [
+  {
+    code: 'HO-20260706-014',
+    from: '粗抛 / 李华',
+    to: '精抛 / 陈敏',
+    inputWeight: '121.15 g',
+    outputWeight: '119.92 g',
+    lossRate: '1.02%',
+    status: '可交接',
+    tone: 'green',
+  },
+  {
+    code: 'HO-20260706-018',
+    from: '焊接 / 王强',
+    to: '质检 / 周婷',
+    inputWeight: '684.40 g',
+    outputWeight: '683.20 g',
+    lossRate: '0.18%',
+    status: '待补照片',
+    tone: 'amber',
+  },
+  {
+    code: 'HO-20260706-021',
+    from: '抛光 / 赵磊',
+    to: '返工复检 / 刘洋',
+    inputWeight: '52.40 g',
+    outputWeight: '50.41 g',
+    lossRate: '3.80%',
+    status: '审批阻断',
+    tone: 'red',
+  },
+];
+
 export const qualityCases: QualityCase[] = [
   {
     code: 'QC-20260706-021',
@@ -273,6 +424,36 @@ export const qualityCases: QualityCase[] = [
     defect: '返工通过',
     action: '放行',
     status: '已完成',
+  },
+];
+
+export const qualityMetrics: QualityMetric[] = [
+  { label: '待派检', value: '7 批', detail: '最早提交 09:40', tone: 'amber' },
+  { label: '返工复检', value: '2 批', detail: '均已生成返工工单', tone: 'violet' },
+  { label: '缺陷照片', value: '15 张', detail: '2 张待补拍', tone: 'blue' },
+  { label: '损耗阻断', value: '1 条', detail: '超过工序标准 1.8%', tone: 'red' },
+];
+
+export const lossApprovals: LossApproval[] = [
+  {
+    code: 'LOSS-20260706-009',
+    workOrder: 'ZD-20260706-001',
+    process: '抛光',
+    standard: '2.0%',
+    actual: '3.8%',
+    evidence: '投入 121.15g / 产出 116.55g / 缺陷照片 5 张',
+    action: '待组长审批',
+    tone: 'red',
+  },
+  {
+    code: 'LOSS-20260706-010',
+    workOrder: 'ZD-20260706-006',
+    process: '焊接',
+    standard: '0.8%',
+    actual: '待确认',
+    evidence: '缺少产出称重照片',
+    action: '待补称重',
+    tone: 'amber',
   },
 ];
 
@@ -357,6 +538,52 @@ export const traceEvents: TraceEvent[] = [
   },
 ];
 
+export const inventoryLedgerEntries: InventoryLedgerEntry[] = [
+  {
+    time: '09:05',
+    bizCode: 'LEDGER-20260706-001',
+    movement: '来料入库',
+    before: '0 件 / 0 g',
+    after: '320 件 / 486.25 g',
+    source: 'MD-20260706-001',
+    operator: '何琳',
+  },
+  {
+    time: '10:20',
+    bizCode: 'LEDGER-20260706-007',
+    movement: '工单领料',
+    before: '320 件 / 486.25 g',
+    after: '240 件 / 365.10 g',
+    source: 'ZD-20260706-001',
+    operator: '马杰',
+  },
+  {
+    time: '14:30',
+    bizCode: 'LEDGER-20260706-018',
+    movement: '工序产出',
+    before: '80 件 / 121.15 g',
+    after: '56 件 / 84.95 g',
+    source: 'BG-20260706-044',
+    operator: '李华',
+  },
+  {
+    time: '15:10',
+    bizCode: 'LEDGER-20260706-022',
+    movement: '质检冻结',
+    before: '56 件 / 84.95 g',
+    after: '5 件冻结 / 7.20 g',
+    source: 'QC-20260706-021',
+    operator: '周婷',
+  },
+];
+
+export const traceEvidence: TraceEvidence[] = [
+  { label: '业务单据', status: '已关联 6 张', link: '母单 / 子工单 / 报工 / 质检 / 台账 / 出库', tone: 'green' },
+  { label: '称重记录', status: '2 条待补照片', link: 'HO-20260706-018 / HO-20260706-021', tone: 'amber' },
+  { label: '视频证据', status: '1 个截取失败', link: 'INT-VID-001', tone: 'red' },
+  { label: '操作审计', status: '完整', link: '扫码、补打、审批均已留痕', tone: 'green' },
+];
+
 export const mobileTasks: MobileTask[] = [
   {
     code: 'ZD-20260706-001',
@@ -378,6 +605,30 @@ export const mobileTasks: MobileTask[] = [
     nextAction: '选择返工原因并拍照',
     required: '不合格数量、原因、处理方式',
     status: '待质检',
+  },
+];
+
+export const mobileCapabilities: MobileCapability[] = [
+  { label: '扫码识别', status: '可用', detail: 'BarcodeDetector 优先，ZXing 兜底，失败可手输编码。', tone: 'green' },
+  { label: '离线草稿', status: '设计中', detail: '弱网时暂存报工和质检，恢复网络后补提交。', tone: 'amber' },
+  { label: '拍照留证', status: '一期必做', detail: '缺陷、称重、人工视频兜底都需要附件。', tone: 'blue' },
+  { label: '权限边界', status: '待接入', detail: '当前为样例身份，M3 接入真实角色权限。', tone: 'gray' },
+];
+
+export const offlineDrafts: OfflineDraft[] = [
+  {
+    code: 'DRAFT-BG-001',
+    scene: '抛光报工',
+    savedAt: '14:28',
+    risk: '恢复网络后需复核工单状态',
+    tone: 'amber',
+  },
+  {
+    code: 'DRAFT-QC-003',
+    scene: '缺陷拍照',
+    savedAt: '15:06',
+    risk: '照片已缓存，质检结果未提交',
+    tone: 'red',
   },
 ];
 

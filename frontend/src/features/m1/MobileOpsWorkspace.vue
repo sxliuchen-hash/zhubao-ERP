@@ -1,11 +1,33 @@
 <script setup lang="ts">
 import ScanResolver from '../scan/ScanResolver.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import { mobileTasks } from '../../data/m1PrototypeData';
+import { mobileCapabilities, mobileTasks, offlineDrafts } from '../../data/m1PrototypeData';
 </script>
 
 <template>
   <div class="page-stack">
+    <section class="operations-hero">
+      <div class="hero-copy">
+        <span class="eyebrow">PWA Field Ops</span>
+        <h2>移动现场作业台</h2>
+        <p>移动端只服务扫码、报工、称重、质检和库存查询，复杂管理动作回到 PC 后台处理。</p>
+      </div>
+      <div class="hero-kpis">
+        <article>
+          <span>现场任务</span>
+          <strong>{{ mobileTasks.length }}</strong>
+        </article>
+        <article>
+          <span>离线草稿</span>
+          <strong>{{ offlineDrafts.length }}</strong>
+        </article>
+        <article>
+          <span>能力项</span>
+          <strong>{{ mobileCapabilities.length }}</strong>
+        </article>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>PWA 移动作业端</h2>
@@ -47,23 +69,63 @@ import { mobileTasks } from '../../data/m1PrototypeData';
         </div>
       </div>
 
-      <div class="section-block">
-        <div class="section-heading">
-          <div>
-            <h2>移动端任务校验</h2>
-            <p>移动页面只保留现场必须信息，减少录入负担。</p>
+      <div class="mobile-workspace-stack">
+        <div class="section-block">
+          <div class="section-heading">
+            <div>
+              <h2>移动端任务校验</h2>
+              <p>移动页面只保留现场必须信息，减少录入负担。</p>
+            </div>
+          </div>
+          <div class="mobile-task-list">
+            <article v-for="task in mobileTasks" :key="task.code">
+              <div>
+                <strong>{{ task.code }}</strong>
+                <span>{{ task.scene }}</span>
+              </div>
+              <p>{{ task.nextAction }}</p>
+              <small>{{ task.required }}</small>
+              <StatusBadge :label="task.status" :tone="task.status.includes('阻断') ? 'red' : task.status.includes('质检') ? 'amber' : 'green'" />
+            </article>
           </div>
         </div>
-        <div class="mobile-task-list">
-          <article v-for="task in mobileTasks" :key="task.code">
-            <div>
-              <strong>{{ task.code }}</strong>
-              <span>{{ task.scene }}</span>
+
+        <div class="split-layout mobile-subgrid">
+          <div class="section-block">
+            <div class="section-heading">
+              <div>
+                <h2>PWA 能力边界</h2>
+                <p>先满足现场高频动作，权限、离线和附件策略逐步增强。</p>
+              </div>
             </div>
-            <p>{{ task.nextAction }}</p>
-            <small>{{ task.required }}</small>
-            <StatusBadge :label="task.status" :tone="task.status.includes('阻断') ? 'red' : task.status.includes('质检') ? 'amber' : 'green'" />
-          </article>
+            <div class="evidence-health">
+              <article v-for="capability in mobileCapabilities" :key="capability.label">
+                <div>
+                  <strong>{{ capability.label }}</strong>
+                  <span>{{ capability.detail }}</span>
+                </div>
+                <StatusBadge :label="capability.status" :tone="capability.tone" />
+              </article>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-heading">
+              <div>
+                <h2>离线草稿</h2>
+                <p>弱网场景不能丢数据，但恢复后必须复核状态。</p>
+              </div>
+            </div>
+            <div class="draft-list">
+              <article v-for="draft in offlineDrafts" :key="draft.code">
+                <div>
+                  <strong>{{ draft.code }}</strong>
+                  <span>{{ draft.scene }} / {{ draft.savedAt }}</span>
+                </div>
+                <StatusBadge :label="draft.risk" :tone="draft.tone" />
+              </article>
+            </div>
+          </div>
         </div>
       </div>
     </section>

@@ -1522,6 +1522,121 @@ body {
   padding: 12px;
 }
 
+.ops-card-grid,
+.station-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ops-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ops-card,
+.station-grid article,
+.draft-list article {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e4ebf3;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 12px;
+}
+
+.ops-card-head,
+.station-grid article,
+.draft-list article {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.ops-card-head {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-card small {
+  display: block;
+  margin-bottom: 4px;
+  color: #236fd0;
+  font-weight: 800;
+}
+
+.ops-card p,
+.ops-card span,
+.station-grid span,
+.draft-list span {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.handoff-table,
+.ledger-table {
+  display: grid;
+  overflow-x: auto;
+  border: 1px solid #e4ebf3;
+  border-radius: 8px;
+}
+
+.handoff-row,
+.ledger-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #e4ebf3;
+  padding: 11px 12px;
+}
+
+.handoff-row {
+  min-width: 900px;
+  grid-template-columns: 1.1fr 1fr 1fr 0.8fr 0.8fr 0.65fr 0.8fr;
+}
+
+.ledger-row {
+  min-width: 980px;
+  grid-template-columns: 0.55fr 1.2fr 0.8fr 1.1fr 1.1fr 1fr 0.7fr;
+}
+
+.handoff-row:first-child,
+.ledger-row:first-child {
+  border-top: 0;
+}
+
+.handoff-head,
+.ledger-head {
+  background: #f7f9fc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.handoff-row span,
+.ledger-row span,
+.ledger-row time {
+  color: #52606d;
+  line-height: 1.4;
+}
+
+.quality-grid.dense {
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
+
+.mobile-workspace-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.mobile-subgrid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+}
+
+.draft-list {
+  display: grid;
+  gap: 10px;
+}
+
 .topology-map span,
 .topology-map strong {
   min-height: 48px;
@@ -1551,6 +1666,16 @@ body {
 
   .hardware-matrix-layout .boundary-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-card-grid,
+  .station-grid,
+  .quality-grid.dense {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mobile-subgrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1587,6 +1712,12 @@ body {
   }
 
   .hardware-matrix-layout .boundary-list {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-card-grid,
+  .station-grid,
+  .quality-grid.dense {
     grid-template-columns: 1fr;
   }
 }
