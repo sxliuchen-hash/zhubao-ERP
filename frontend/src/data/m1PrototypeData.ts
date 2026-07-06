@@ -106,6 +106,19 @@ export interface IntegrationTask {
   owner: string;
 }
 
+export interface HardwarePocRecord {
+  code: string;
+  deviceCode: string;
+  scene: string;
+  testWindow: string;
+  result: string;
+  evidence: string;
+  blocker: string;
+  owner: string;
+  nextAction: string;
+  tone: Tone;
+}
+
 export interface InboundCheckpoint {
   label: string;
   value: string;
@@ -753,10 +766,65 @@ export const integrationTasks: IntegrationTask[] = [
   },
 ];
 
+export const hardwarePocRecords: HardwarePocRecord[] = [
+  {
+    code: 'POC-VID-20260706-001',
+    deviceCode: 'CAM-UNPACK-01',
+    scene: '拆包台视频截取',
+    testWindow: '2026-07-06 08:40-09:10',
+    result: '有条件通过',
+    evidence: 'NVR 时间段可定位，FFmpeg 截取偶发超时',
+    blocker: '需要确认 NVR 账号权限和时间同步',
+    owner: '实施顾问',
+    nextAction: '补充 NTP 校时检查和一次弱网重试',
+    tone: 'amber',
+  },
+  {
+    code: 'POC-LBL-20260706-001',
+    deviceCode: 'PRN-LABEL-01',
+    scene: '母单/子工单标签打印',
+    testWindow: '2026-07-06 10:30-10:45',
+    result: '通过',
+    evidence: '浏览器打印成功，PDF 模板可兜底',
+    blocker: '无阻断',
+    owner: '库管员',
+    nextAction: '锁定标签模板尺寸并补打印审计',
+    tone: 'green',
+  },
+  {
+    code: 'POC-SCAN-20260706-001',
+    deviceCode: 'PWA-CAM-01',
+    scene: 'PWA 弱光扫码',
+    testWindow: '2026-07-06 15:20-15:45',
+    result: '阻断',
+    evidence: '弱光下识别率不足，手工输入可继续业务',
+    blocker: '需要补充 ZXing 兜底和现场光照标准',
+    owner: '车间组长',
+    nextAction: '安排第二轮弱光 POC 并记录失败样本',
+    tone: 'red',
+  },
+  {
+    code: 'POC-SCALE-20260706-001',
+    deviceCode: 'SCALE-01',
+    scene: '称重交接人工录入',
+    testWindow: '2026-07-06 14:00-14:20',
+    result: '有条件通过',
+    evidence: '人工读数、拍照留证、误差参数可支撑一期',
+    blocker: '二期电子秤接口未冻结',
+    owner: '质检员',
+    nextAction: '一期冻结人工录入，二期单独验证 RS232/USB/TCP',
+    tone: 'amber',
+  },
+];
+
 export function getOpenExceptionCount(): number {
   return workQueues.filter((item) => item.severity !== 'normal').length;
 }
 
 export function getHardwareManualFallbackCount(): number {
   return hardwareDevices.filter((device) => device.status !== 'online').length;
+}
+
+export function getHardwarePocBlockedCount(): number {
+  return hardwarePocRecords.filter((record) => record.result === '阻断').length;
 }

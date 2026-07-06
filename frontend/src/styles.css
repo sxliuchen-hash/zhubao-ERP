@@ -3448,6 +3448,71 @@ button:hover {
   line-height: 1.45;
 }
 
+.poc-record-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.poc-record-grid article {
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+  border: 1px solid #dfe8f1;
+  border-top: 3px solid var(--tone);
+  border-radius: 8px;
+  background: #fff;
+  padding: 13px;
+}
+
+.poc-record-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.poc-record-head small,
+.poc-record-grid dt,
+.poc-record-grid p {
+  color: #64748b;
+}
+
+.poc-record-head small,
+.poc-record-head strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.poc-record-head strong {
+  margin-top: 4px;
+  color: #172033;
+}
+
+.poc-record-grid dl {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 6px 9px;
+  margin: 0;
+}
+
+.poc-record-grid dt {
+  font-weight: 800;
+}
+
+.poc-record-grid dd {
+  min-width: 0;
+  margin: 0;
+  color: #334155;
+  overflow-wrap: anywhere;
+}
+
+.poc-record-grid p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .ops-boundary-grid article {
   min-height: 86px;
 }
@@ -3473,6 +3538,7 @@ button:hover {
 @media (max-width: 1360px) {
   .ops-command-center,
   .ops-layout-grid,
+  .poc-record-grid,
   .ops-three-column {
     grid-template-columns: 1fr;
   }

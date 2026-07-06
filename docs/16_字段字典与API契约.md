@@ -30,6 +30,7 @@
 - [configurationBaselineApi.ts](../frontend/src/services/configurationBaselineApi.ts)
 - [V4__m2_configuration_baseline_contract.sql](../backend/src/main/resources/db/mysql/V4__m2_configuration_baseline_contract.sql)
 - [V5__m2_configuration_change_control_contract.sql](../backend/src/main/resources/db/mysql/V5__m2_configuration_change_control_contract.sql)
+- [V7__m3_hardware_poc_record_contract.sql](../backend/src/main/resources/db/mysql/V7__m3_hardware_poc_record_contract.sql)
 
 ---
 
@@ -69,6 +70,19 @@
 | `GET /backup-policies` | 配置基线 | 返回数据库、附件、配置模板的备份策略 |
 | `GET /change-requests` | 配置基线 | 返回配置变更单、审批状态和风险等级 |
 | `GET /audit-events` | 配置基线 | 返回配置审批、导出和后续修改的审计事件 |
+
+硬件联动接口前缀：
+
+```http
+/api/hardware
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /devices` | 软硬件联动 | 返回设备兼容矩阵 |
+| `GET /integration-tasks` | 软硬件联动 | 返回硬件调用任务和健康度 |
+| `GET /poc-records` | 软硬件联动 | 返回现场 POC 验证记录 |
+| `GET /summary` | 软硬件联动 | 返回设备、兜底、健康度和 POC 阻断汇总 |
 
 ---
 
@@ -261,9 +275,34 @@ PWA 一期边界：
 
 ---
 
-## 10. 配置基线字段
+## 10. 硬件联动字段
 
-### 10.1 `SystemParameter`
+### 10.1 `HardwarePocRecord`
+
+| 字段 | 说明 |
+|---|---|
+| `code` | POC 记录号，例如 `POC-SCAN-20260706-001` |
+| `deviceCode` | 设备编码，例如 `PWA-CAM-01` |
+| `scene` | 验证场景，例如 PWA 弱光扫码 |
+| `testWindow` | 验证日期和时间段 |
+| `result` | 验证结果：通过、有条件通过、阻断 |
+| `evidence` | 现场证据摘要，后续应关联附件或日志 |
+| `blocker` | 阻断项或剩余风险 |
+| `owner` | 当前责任人快照 |
+| `nextAction` | 下一步动作 |
+
+硬件 POC 约束：
+
+- 没有 POC 记录的硬件能力不能承诺为一期强集成。
+- 结果为阻断时必须有人工兜底或明确排期。
+- POC 记录必须能关联设备、业务场景和证据附件。
+- 电子秤、NVR、PWA 扫码、标签打印至少各保留一条现场验证记录。
+
+---
+
+## 11. 配置基线字段
+
+### 11.1 `SystemParameter`
 
 | 字段 | 说明 |
 |---|---|
@@ -275,7 +314,7 @@ PWA 一期边界：
 | `changeControl` | 变更要求，例如需审批、记录日志 |
 | `effectiveScope` | 影响范围 |
 
-### 10.2 `CodeRule`
+### 11.2 `CodeRule`
 
 | 字段 | 说明 |
 |---|---|
@@ -285,7 +324,7 @@ PWA 一期边界：
 | `uniqueness` | 唯一性规则 |
 | `changePolicy` | 冻结或变更策略 |
 
-### 10.3 `RolePermissionBaseline`
+### 11.3 `RolePermissionBaseline`
 
 | 字段 | 说明 |
 |---|---|
@@ -294,7 +333,7 @@ PWA 一期边界：
 | `permissions` | 基础权限列表 |
 | `sensitiveActions` | 必须审计的敏感动作 |
 
-### 10.4 `ProcessTemplate`
+### 11.4 `ProcessTemplate`
 
 | 字段 | 说明 |
 |---|---|
@@ -307,7 +346,7 @@ PWA 一期边界：
 | `qualityRule` | 质检规则 |
 | `snapshotFields` | 工单创建时必须快照的字段 |
 
-### 10.5 `WarehouseState`
+### 11.5 `WarehouseState`
 
 | 字段 | 说明 |
 |---|---|
@@ -318,7 +357,7 @@ PWA 一期边界：
 | `transitionRule` | 状态流转规则 |
 | `negativeAllowed` | 是否允许负库存，一期默认 false |
 
-### 10.6 `VideoParameter`
+### 11.6 `VideoParameter`
 
 | 字段 | 说明 |
 |---|---|
@@ -329,7 +368,7 @@ PWA 一期边界：
 | `retention` | 保存周期或保留策略 |
 | `changeControl` | 变更要求 |
 
-### 10.7 `ConfigurationChangeRequest`
+### 11.7 `ConfigurationChangeRequest`
 
 | 字段 | 说明 |
 |---|---|
@@ -346,7 +385,7 @@ PWA 一期边界：
 | `riskLevel` | 风险等级 |
 | `submittedAt` | 提交时间 |
 
-### 10.8 `ConfigurationAuditEvent`
+### 11.8 `ConfigurationAuditEvent`
 
 | 字段 | 说明 |
 |---|---|

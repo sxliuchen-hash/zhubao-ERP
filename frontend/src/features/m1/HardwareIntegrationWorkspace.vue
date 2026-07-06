@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import StatusBadge from '../../components/StatusBadge.vue';
-import { hardwareDevices, integrationTasks } from '../../data/m1PrototypeData';
+import {
+  getHardwarePocBlockedCount,
+  hardwareDevices,
+  hardwarePocRecords,
+  integrationTasks,
+} from '../../data/m1PrototypeData';
 
 function deviceTone(status: string) {
   if (status === 'online') return 'green';
@@ -33,8 +38,8 @@ function deviceLabel(status: string) {
           <strong>2</strong>
         </article>
         <article>
-          <span>待验证</span>
-          <strong>2</strong>
+          <span>POC 阻断</span>
+          <strong>{{ getHardwarePocBlockedCount() }}</strong>
         </article>
       </div>
     </section>
@@ -94,6 +99,38 @@ function deviceLabel(status: string) {
             <span>扫码失败允许手工输入编码并二次确认。</span>
           </article>
         </div>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <h2>现场 POC 记录</h2>
+          <p>每次硬件验证必须记录时间窗口、结果、证据、阻断项和下一步，避免只用口头结论推进集成。</p>
+        </div>
+        <button class="secondary-button" type="button">导出 POC 记录</button>
+      </div>
+      <div class="poc-record-grid">
+        <article v-for="record in hardwarePocRecords" :key="record.code" :class="`tone-${record.tone}`">
+          <div class="poc-record-head">
+            <div>
+              <small>{{ record.code }} / {{ record.deviceCode }}</small>
+              <strong>{{ record.scene }}</strong>
+            </div>
+            <StatusBadge :label="record.result" :tone="record.tone" />
+          </div>
+          <dl>
+            <dt>窗口</dt>
+            <dd>{{ record.testWindow }}</dd>
+            <dt>证据</dt>
+            <dd>{{ record.evidence }}</dd>
+            <dt>阻断</dt>
+            <dd>{{ record.blocker }}</dd>
+            <dt>负责人</dt>
+            <dd>{{ record.owner }}</dd>
+          </dl>
+          <p>{{ record.nextAction }}</p>
+        </article>
       </div>
     </section>
 

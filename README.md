@@ -19,6 +19,7 @@
 - M2.4 操作型 UI 重构第一轮，将首页升级为生产运营主控台，补充真实业务表格、单据详情、证据链、审批兜底队列和紧凑科技风格外壳。
 - M2.5 核心业务页操作化，将来料、生产、质检、库存追溯页统一升级为主表、详情侧栏、扫码/查询入口和动作按钮的 ERP 操作界面。
 - M3.1 库存台账 JDBC 持久化切入，新增 MySQL profile、JDBC 仓储、库存维度键迁移脚本和 H2 仓储测试，默认仍使用内存仓储便于评审。
+- M3.2 软硬件现场 POC 记录基线，新增硬件 POC API、前端记录区和 MySQL 合同脚本，用于管理验证窗口、证据、阻断项和下一步动作。
 
 ## 目录结构
 
@@ -115,6 +116,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/samples/summary`
 - `GET /api/hardware/devices`
 - `GET /api/hardware/integration-tasks`
+- `GET /api/hardware/poc-records`
 - `GET /api/hardware/summary`
 - `GET /api/business/workspaces/summary`
 - `GET /api/business/workspaces/inbound`
@@ -141,7 +143,7 @@ M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
 - RuoYi-Vue 具体分支和许可证确认。
-- NVR、标签打印、PWA 扫码、备份恢复的现场 POC 记录。
+- NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实权限。
 

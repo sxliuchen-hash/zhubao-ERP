@@ -21,5 +21,12 @@ class HardwareIntegrationServiceTest {
                 });
         assertThat(service.findTasks())
                 .anySatisfy(task -> assertThat(task.nextAction()).contains("人工上传"));
+        assertThat(service.findPocRecords()).hasSize(4);
+        assertThat(service.blockedPocCount()).isEqualTo(1);
+        assertThat(service.findPocRecords())
+                .anySatisfy(record -> {
+                    assertThat(record.code()).isEqualTo("POC-SCAN-20260706-001");
+                    assertThat(record.nextAction()).contains("弱光 POC");
+                });
     }
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   getHardwareManualFallbackCount,
+  getHardwarePocBlockedCount,
   getOpenExceptionCount,
   hardwareDevices,
+  hardwarePocRecords,
   inboundCheckpoints,
   inboundRisks,
   inboundOrders,
@@ -34,6 +36,8 @@ describe('m1PrototypeData', () => {
     expect(sampleScenarios.some((scenario) => scenario.id === 'SAMPLE-MAIN-001')).toBe(true);
     expect(hardwareDevices.some((device) => device.fallback.includes('人工'))).toBe(true);
     expect(getHardwareManualFallbackCount()).toBe(4);
+    expect(hardwarePocRecords.some((record) => record.code === 'POC-SCAN-20260706-001')).toBe(true);
+    expect(getHardwarePocBlockedCount()).toBe(1);
   });
 
   it('keeps M2 workspace review samples centralized', () => {
