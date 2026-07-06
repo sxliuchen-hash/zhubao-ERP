@@ -1,5 +1,7 @@
 package com.zhubao.erp.business.app;
 
+import com.zhubao.erp.business.infra.BusinessWorkspaceSeedData;
+import com.zhubao.erp.business.infra.InMemoryBusinessWorkspaceRepository;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -8,7 +10,9 @@ class BusinessWorkspaceServiceTest {
 
     @Test
     void exposesCoreBusinessWorkspaceBaseline() {
-        BusinessWorkspaceService service = new BusinessWorkspaceService();
+        BusinessWorkspaceService service = new BusinessWorkspaceService(
+                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData())
+        );
 
         assertThat(service.summary().inboundOrders()).isEqualTo(4);
         assertThat(service.summary().activeWorkOrders()).isEqualTo(4);

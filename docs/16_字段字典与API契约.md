@@ -21,6 +21,8 @@
 
 - [BusinessWorkspaceService.java](../backend/src/main/java/com/zhubao/erp/business/app/BusinessWorkspaceService.java)
 - [BusinessReviewData.java](../backend/src/main/java/com/zhubao/erp/business/domain/BusinessReviewData.java)
+- [BusinessWorkspaceRepository.java](../backend/src/main/java/com/zhubao/erp/business/domain/BusinessWorkspaceRepository.java)
+- [BusinessWorkspaceSeedData.java](../backend/src/main/java/com/zhubao/erp/business/infra/BusinessWorkspaceSeedData.java)
 - [businessWorkspaceApi.ts](../frontend/src/services/businessWorkspaceApi.ts)
 - [V3__m2_business_workspace_contract.sql](../backend/src/main/resources/db/mysql/V3__m2_business_workspace_contract.sql)
 
@@ -207,7 +209,8 @@ PWA 一期边界：
 ## 9. M3 迁移要求
 
 1. 将当前 `BusinessWorkspaceService` 内存样例迁移为 seed 数据。
-2. 将 `status`、`action`、`tone` 分离，避免前端展示状态污染业务状态。
-3. 将重量字段拆为数值和单位，禁止长期使用字符串重量参与计算。
-4. 将客户、物料、人员、工序单价、损耗率保存快照字段。
-5. 将工作台 API 改为读取真实业务聚合，不再直接维护独立样例数据。
+2. 用 MySQL repository 替换当前 `InMemoryBusinessWorkspaceRepository`。
+3. 将 `status`、`action`、`tone` 分离，避免前端展示状态污染业务状态。
+4. 将重量字段拆为数值和单位，禁止长期使用字符串重量参与计算。
+5. 将客户、物料、人员、工序单价、损耗率保存快照字段。
+6. 将工作台 API 改为读取真实业务聚合，不再直接维护独立样例数据。
