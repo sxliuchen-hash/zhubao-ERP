@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.34 / 评审界面产品化</strong>
-        <i>前端从内部调试看板继续收敛为业务作业台；真实登录、菜单权限、对象存储、现场设备直连和正式工资仍在开发队列。</i>
+        <strong>M3.35 / 附件存储边界</strong>
+        <i>附件上传已从内存缓存推进到本地存储适配；真实登录、菜单权限、NAS/S3 部署、现场设备直连和正式工资仍在开发队列。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -79,7 +79,7 @@ defineProps<{
           </article>
           <article>
             <span>台账</span>
-            <strong>54</strong>
+            <strong>55</strong>
             <small>自动化测试通过</small>
           </article>
         </div>

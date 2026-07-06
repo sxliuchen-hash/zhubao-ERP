@@ -2,20 +2,19 @@ package com.zhubao.erp.document.app;
 
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.AttachmentContent;
+import com.zhubao.erp.document.domain.AttachmentObjectStorage;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentManagementSummary;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.document.domain.StoredAttachmentObject;
 import org.springframework.stereotype.Service;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,8 +26,13 @@ public class DocumentManagementService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    private final AttachmentObjectStorage attachmentObjectStorage;
     private final AtomicInteger uploadSequence = new AtomicInteger(1);
-    private final Map<String, byte[]> uploadedContent = new ConcurrentHashMap<>();
+    private final Map<String, String> uploadedStorageKeys = new ConcurrentHashMap<>();
+
+    public DocumentManagementService(AttachmentObjectStorage attachmentObjectStorage) {
+        this.attachmentObjectStorage = attachmentObjectStorage;
+    }
 
     private final List<DocumentPackage> packages = new ArrayList<>(List.of(
             new DocumentPackage(
@@ -236,10 +240,15 @@ public class DocumentManagementService {
         String code = "ATT-UP-" + now.replace("-", "").replace(":", "").replace(" ", "-")
                 + "-" + String.format("%03d", uploadSequence.getAndIncrement());
         String sanitizedFileName = sanitizeFileName(fileName);
-        String storageLocation = "memory://evidence/" + documentCode + "/" + code + "/" + sanitizedFileName;
-        String checksum = "sha256:" + sha256(content);
         String safeMediaType = mediaType == null || mediaType.isBlank() ? "application/octet-stream" : mediaType;
         String safeFallbackAction = fallbackAction == null || fallbackAction.isBlank() ? "无" : fallbackAction;
+        StoredAttachmentObject storedObject = attachmentObjectStorage.put(
+                documentCode,
+                code,
+                sanitizedFileName,
+                safeMediaType,
+                content
+        );
 
         EvidenceAttachment attachment = new EvidenceAttachment(
                 code,
@@ -247,26 +256,26 @@ public class DocumentManagementService {
                 businessType,
                 businessCode,
                 sanitizedFileName,
-                safeMediaType,
-                storageLocation,
+                storedObject.mediaType(),
+                storedObject.storageLocation(),
                 defaultStoragePolicy(safeMediaType),
                 source,
                 "已上传",
                 owner,
-                checksum,
+                storedObject.checksum(),
                 now,
                 safeFallbackAction,
                 "green"
         );
         attachments.add(attachment);
-        uploadedContent.put(code, content.clone());
+        uploadedStorageKeys.put(code, storedObject.storageKey());
         auditEvents.add(new DocumentAuditEvent(
                 now,
                 "DOC-AUD-UP-" + String.format("%03d", auditEvents.size() + 1),
                 documentCode,
                 "上传附件",
                 owner,
-                "上传 " + sanitizedFileName + " 并生成校验和 " + checksum + "。",
+                "上传 " + sanitizedFileName + " 并生成校验和 " + storedObject.checksum() + "。",
                 "green"
         ));
 
@@ -274,10 +283,10 @@ public class DocumentManagementService {
                 code,
                 documentCode,
                 sanitizedFileName,
-                safeMediaType,
-                content.length,
-                storageLocation,
-                checksum,
+                storedObject.mediaType(),
+                storedObject.size(),
+                storedObject.storageLocation(),
+                storedObject.checksum(),
                 now,
                 previewContentUrl(code)
         );
@@ -298,15 +307,16 @@ public class DocumentManagementService {
     public AttachmentContent content(String code) {
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
-        byte[] content = uploadedContent.get(code);
-        if (content == null) {
-            throw new BusinessException("附件尚未进入本地预览缓存：" + code);
+        String storageKey = uploadedStorageKeys.get(code);
+        if (storageKey == null) {
+            throw new BusinessException("附件尚未进入本地对象存储：" + code);
         }
+        byte[] content = attachmentObjectStorage.get(storageKey);
         return new AttachmentContent(
                 attachment.code(),
                 attachment.fileName(),
                 attachment.mediaType(),
-                content.clone()
+                content
         );
     }
 
@@ -337,12 +347,4 @@ public class DocumentManagementService {
         return "hot 180d -> archive";
     }
 
-    private String sha256(byte[] content) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(content));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("当前运行环境不支持 SHA-256", exception);
-        }
-    }
 }

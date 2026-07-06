@@ -90,7 +90,7 @@ describe('documentManagementApi', () => {
               fileName: 'weight-photo.jpg',
               mediaType: 'image/jpeg',
               size: 12,
-              storageLocation: 'memory://evidence/DOC-INBOUND-20260706-001/ATT-UP-001/weight-photo.jpg',
+              storageLocation: 'local://evidence/DOC-INBOUND-20260706-001/ATT-UP-001/weight-photo.jpg',
               checksum: 'sha256:demo',
               uploadedAt: '2026-07-07 00:05',
               previewUrl: '/api/documents/attachments/ATT-UP-001/content?token=preview-demo',

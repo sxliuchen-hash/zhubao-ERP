@@ -137,7 +137,7 @@
 | `GET /audit-events` | 文档附件 | 返回上传、补传、归档、审批锁定审计事件 |
 | `POST /attachments/uploads` | 文档附件 | multipart 上传附件，生成附件元数据、checksum、审计事件和预览 URL |
 | `GET /attachments/{code}/preview-url` | 文档附件 | 返回附件预览 URL 和过期时间 |
-| `GET /attachments/{code}/content` | 文档附件 | 读取已上传到本地缓存的附件内容，后续替换为对象存储签名 URL |
+| `GET /attachments/{code}/content` | 文档附件 | 读取已上传到当前存储适配器的附件内容，后续生产环境替换为 NAS/S3 签名 URL |
 
 ---
 
@@ -908,7 +908,7 @@ PWA 一期边界：
 | `fileName` | 上传文件名 |
 | `mediaType` | MIME 类型 |
 | `size` | 文件字节数 |
-| `storageLocation` | 当前存储位置，M3.12 为 `memory://`，后续迁移为对象存储或 NAS |
+| `storageLocation` | 当前存储位置，M3.35 默认 `local://evidence/{documentCode}/{attachmentCode}/{fileName}`，后续迁移为 NAS/S3 签名访问 |
 | `checksum` | `sha256` 校验和 |
 | `uploadedAt` | 上传时间 |
 | `previewUrl` | 预览内容地址 |
@@ -925,10 +925,17 @@ PWA 一期边界：
 
 文档附件约束：
 
-- 当前 M3.12 已支持 multipart 上传到后端内存缓存、checksum、审计事件、预览 URL 和内容读取。
-- 后续生产环境必须接 MinIO/S3 或 NAS，并通过签名 URL 控制预览和下载。
+- 当前 M3.35 已支持 multipart 上传到后端本地存储适配、checksum、审计事件、预览 URL 和内容读取；默认根目录由 `zhubao.documents.storage.local-root` 指定。
+- 后续生产环境必须按部署条件接 NAS/S3 兼容存储，并通过签名 URL 控制预览和下载。
 - 质检、称重、视频、配置审批证据必须能绑定业务对象、校验和、保留策略和审计事件。
 - 审批完成后的配置和质检证据应锁定 checksum，后续修改必须产生新版本或新审计事件。
+
+文档附件存储配置：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `zhubao.documents.storage.provider` | `local` | 当前只落地本地文件适配；后续可扩展为 `nas`、`s3` 或其他实现 |
+| `zhubao.documents.storage.local-root` | `target/zhubao-evidence` | 本地附件根目录，测试环境可覆盖为临时目录 |
 
 ---
 

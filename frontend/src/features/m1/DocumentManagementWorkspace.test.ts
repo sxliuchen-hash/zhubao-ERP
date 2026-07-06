@@ -14,7 +14,8 @@ describe('DocumentManagementWorkspace', () => {
     expect(wrapper.text()).toContain('DOC-QC-20260706-021');
     expect(wrapper.text()).toContain('附件与证据清单');
     expect(wrapper.text()).toContain('ATT-QC-20260706-021');
-    expect(wrapper.text()).toContain('MinIO/S3');
+    expect(wrapper.text()).toContain('M3.35 本地存储适配');
+    expect(wrapper.text()).toContain('NAS/S3');
     expect(wrapper.text()).toContain('归档审计');
     expect(wrapper.find('table.document-table').exists()).toBe(true);
   });

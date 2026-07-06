@@ -16,3 +16,7 @@ zhubao:
     storage-mode: nas-first
     video-buffer-seconds: 5
     max-video-retry: 3
+  documents:
+    storage:
+      provider: local
+      local-root: target/zhubao-evidence

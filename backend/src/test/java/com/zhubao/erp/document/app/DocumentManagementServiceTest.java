@@ -1,14 +1,23 @@
 package com.zhubao.erp.document.app;
 
+import com.zhubao.erp.document.infra.AttachmentStorageProperties;
+import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DocumentManagementServiceTest {
 
+    @TempDir
+    Path tempDir;
+
     @Test
     void exposesDocumentPackagesAttachmentsAndAuditSummary() {
-        DocumentManagementService service = new DocumentManagementService();
+        DocumentManagementService service = newService();
 
         assertThat(service.packages()).hasSize(4);
         assertThat(service.attachments())
@@ -25,7 +34,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void uploadsAttachmentAndExposesPreviewContent() {
-        DocumentManagementService service = new DocumentManagementService();
+        DocumentManagementService service = newService();
         byte[] content = "weight photo demo".getBytes();
 
         var uploaded = service.uploadAttachment(
@@ -41,12 +50,19 @@ class DocumentManagementServiceTest {
         );
 
         assertThat(uploaded.code()).startsWith("ATT-UP-");
-        assertThat(uploaded.storageLocation()).contains("memory://evidence/DOC-INBOUND-20260706-001");
+        assertThat(uploaded.storageLocation()).contains("local://evidence/DOC-INBOUND-20260706-001");
         assertThat(uploaded.checksum()).startsWith("sha256:");
         assertThat(uploaded.previewUrl()).contains(uploaded.code());
         assertThat(service.previewUrl(uploaded.code()).url()).contains("/content?token=preview-demo");
         assertThat(service.content(uploaded.code()).content()).isEqualTo(content);
+        assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
         assertThat(service.summary().attachments()).isEqualTo(6);
         assertThat(service.auditEvents()).extracting("action").contains("上传附件");
+    }
+
+    private DocumentManagementService newService() {
+        AttachmentStorageProperties properties = new AttachmentStorageProperties();
+        properties.setLocalRoot(tempDir.toString());
+        return new DocumentManagementService(new LocalAttachmentObjectStorage(properties));
     }
 }

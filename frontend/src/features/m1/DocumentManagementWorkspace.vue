@@ -49,7 +49,7 @@ const sourceBasis = [
   { label: '制造工单', value: 'Work Order / Job Card / Stock Entry', detail: '样例按工单、工序和库存台账组织。' },
   { label: '质量检查', value: 'Quality Check / Defect Evidence', detail: '质检附件必须绑定缺陷、处理动作和复检。' },
   { label: '标签编码', value: 'GS1 / 批次 / 业务单号', detail: '附件包围绕母单、工单、质检单和 POC 编码追溯。' },
-  { label: '对象存储', value: 'S3 / NAS / lifecycle', detail: '附件记录保留存储位置、生命周期、校验和兜底动作。' },
+  { label: '对象存储', value: 'Local / NAS / S3 lifecycle', detail: '当前后端默认本地存储适配，后续切换 NAS/S3 签名访问。' },
 ] as const;
 
 onMounted(async () => {
@@ -145,7 +145,7 @@ async function createPreviewUrl() {
       <div class="hero-copy">
         <span class="eyebrow">Document & Evidence Control</span>
         <h2>文档与附件管理工作台</h2>
-        <p>把需求文档、评审包、质检照片、称重记录、视频兜底和配置审批证据统一管理，后续再接 MinIO/NAS 真实上传。</p>
+        <p>把需求文档、评审包、质检照片、称重记录、视频兜底和配置审批证据统一管理；当前默认本地存储适配，后续切 NAS/S3。</p>
       </div>
       <div class="hero-kpis">
         <article>
@@ -176,7 +176,7 @@ async function createPreviewUrl() {
         <div>
           <span class="eyebrow">Upload & Preview</span>
           <h2>附件上传与预览测试台</h2>
-          <p>使用后端 multipart API 上传示例称重附件，生成 checksum、审计事件和 15 分钟预览链接；后续替换为 MinIO/S3 或 NAS 存储。</p>
+          <p>使用后端 multipart API 上传示例称重附件，写入本地存储适配，生成 checksum、审计事件和 15 分钟预览链接。</p>
         </div>
         <div class="button-row">
           <button class="primary-button" type="button" :disabled="uploading" @click="uploadDemoEvidence">
@@ -219,7 +219,7 @@ async function createPreviewUrl() {
             <h2>文档包台账</h2>
             <p>每个业务动作都必须能关联文档包、附件、存储策略和审计事件。</p>
           </div>
-          <StatusBadge label="M3.12 上传预览基线" tone="blue" />
+          <StatusBadge label="M3.35 本地存储适配" tone="green" />
         </div>
         <div class="document-table-wrap">
           <table class="document-table">
@@ -290,7 +290,7 @@ async function createPreviewUrl() {
         <div>
           <span class="eyebrow">Attachment Register</span>
           <h2>附件与证据清单</h2>
-          <p>当前先管理附件元数据、存储位置、校验和与兜底动作，后续接对象存储上传和预览。</p>
+          <p>当前管理附件元数据、存储位置、校验和与兜底动作，上传内容已进入本地存储适配。</p>
         </div>
       </div>
       <div class="document-table-wrap">
@@ -357,7 +357,7 @@ async function createPreviewUrl() {
         <div class="rule-grid compact">
           <article>
             <strong>上传服务</strong>
-            <span>后续接 MinIO/S3 或 NAS，当前只做元数据 API 和评审样例。</span>
+            <span>当前默认 local://evidence，本地根目录由 `zhubao.documents.storage.local-root` 配置，后续切 NAS/S3。</span>
           </article>
           <article>
             <strong>附件预览</strong>
