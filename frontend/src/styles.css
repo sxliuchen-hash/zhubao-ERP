@@ -4004,3 +4004,286 @@ button:hover {
     padding: 11px;
   }
 }
+
+/* M3.7 review dashboard: make the real delivery state explicit. */
+.review-ledger-board,
+.ops-stage-map-panel,
+.readiness-board {
+  border: 1px solid #cfdbe7;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+}
+
+.review-ledger-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.36fr);
+  gap: 0;
+  overflow: hidden;
+}
+
+.review-ledger-main,
+.delivery-gap-panel {
+  min-width: 0;
+  padding: 14px;
+}
+
+.review-ledger-main {
+  border-right: 1px solid #e1e9f2;
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.06), transparent 34%),
+    #fff;
+}
+
+.delivery-gap-panel {
+  background: #f8fafc;
+}
+
+.review-ledger-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.review-ledger-head.compact {
+  margin-bottom: 10px;
+}
+
+.review-ledger-head h2,
+.ops-stage-map-panel h2,
+.readiness-board h2 {
+  margin: 2px 0 5px;
+  color: #172033;
+  font-size: 18px;
+}
+
+.review-ledger-head p,
+.ops-stage-map-panel p,
+.readiness-board p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.review-lane-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.review-lane {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  border: 1px solid #dde7f1;
+  border-left: 4px solid var(--tone);
+  border-radius: 7px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.review-lane > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.review-lane > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.review-lane strong,
+.review-lane b,
+.review-lane small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-lane strong {
+  color: #172033;
+}
+
+.review-lane b {
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+.review-lane small {
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.review-lane .status-badge {
+  grid-column: 2;
+  margin-top: 3px;
+}
+
+.gap-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.gap-stack article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dde7f1;
+  border-left: 4px solid var(--tone);
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px;
+}
+
+.gap-stack strong {
+  color: #172033;
+}
+
+.gap-stack span {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ops-stage-map-panel,
+.readiness-board {
+  padding: 14px;
+}
+
+.ops-stage-map {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stage-node {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(76px, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #dde7f1;
+  border-top: 4px solid var(--tone);
+  border-radius: 7px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.stage-node > span {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  border-radius: 5px;
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.stage-node strong {
+  display: block;
+  color: #172033;
+  font-size: 15px;
+}
+
+.stage-node small {
+  display: block;
+  margin-top: 5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.readiness-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #dce6f0;
+  border-radius: 7px;
+}
+
+.readiness-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.readiness-table th,
+.readiness-table td {
+  border-bottom: 1px solid #e5edf5;
+  color: #334155;
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.readiness-table th {
+  background: #edf4fa;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.readiness-table tbody tr:hover {
+  background: #f8fbfd;
+}
+
+.readiness-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.readiness-table td:first-child {
+  color: #172033;
+}
+
+@media (max-width: 1360px) {
+  .review-ledger-board {
+    grid-template-columns: 1fr;
+  }
+
+  .review-ledger-main {
+    border-right: 0;
+    border-bottom: 1px solid #e1e9f2;
+  }
+
+  .review-lane-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-stage-map {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .review-lane-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-stage-map {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .review-lane-grid,
+  .ops-stage-map {
+    grid-template-columns: 1fr;
+  }
+
+  .review-ledger-head {
+    flex-direction: column;
+  }
+}

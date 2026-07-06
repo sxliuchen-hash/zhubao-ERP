@@ -8,6 +8,11 @@ describe('M1Dashboard', () => {
 
     expect(wrapper.text()).toContain('今日来料');
     expect(wrapper.text()).toContain('现场待办');
+    expect(wrapper.text()).toContain('当前不是完整交付系统，是可运行评审原型');
+    expect(wrapper.text()).toContain('我目前实际做到了什么');
+    expect(wrapper.text()).toContain('还不能说完成的部分');
+    expect(wrapper.text()).toContain('一期业务闭环状态图');
+    expect(wrapper.text()).toContain('模块完成度台账');
     expect(wrapper.text()).toContain('生产运营主控台');
     expect(wrapper.text()).toContain('追溯查询');
     expect(wrapper.find('table.erp-table').exists()).toBe(true);

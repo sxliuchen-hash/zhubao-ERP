@@ -140,18 +140,78 @@ const boundaryCards = [
   { label: '评审样例', value: '业务工作台数据', detail: '仍以固定样例和内存 API 兜底为主', tone: 'amber' },
   { label: '硬件策略', value: `${getHardwareManualFallbackCount()} 项需兜底`, detail: 'NVR、标签、扫码、电子秤按兼容方案推进', tone: 'blue' },
 ] as const;
+
+const implementationLanes = [
+  {
+    code: 'DOC',
+    title: '文档与设计',
+    value: '10+2 份',
+    detail: '需求、流程、领域模型、接口、硬件、配置和进度文档已成体系。',
+    state: '可评审',
+    tone: 'green',
+  },
+  {
+    code: 'API',
+    title: '真实业务动作',
+    value: '2 条',
+    detail: '来料确认入库、生产报工已能写入库存台账。',
+    state: '部分可验',
+    tone: 'amber',
+  },
+  {
+    code: 'UI',
+    title: '作业页面',
+    value: '9 个模块',
+    detail: '来料、生产、质检、库存、配置、样例、硬件和 PWA 已有评审入口。',
+    state: '需深化',
+    tone: 'amber',
+  },
+  {
+    code: 'HW',
+    title: '软硬件联动',
+    value: '4 类 POC',
+    detail: '视频、标签、扫码、称重按兼容方案记录兜底路径。',
+    state: 'POC',
+    tone: 'blue',
+  },
+] as const;
+
+const deliveryGaps = [
+  { title: '质检冻结 / 返工', detail: '还未接入真实库存动作，当前仍是样例页和静态处理按钮。', tone: 'red' },
+  { title: '出库 / 退货 / 完工', detail: '尚未形成成品冻结、发货和客户退料闭环。', tone: 'amber' },
+  { title: '权限 / 审批 / 审计', detail: '已有字段和页面占位，未接入真实登录、角色和审批流。', tone: 'amber' },
+  { title: '文档管理 / 附件', detail: '证据链有模型和页面，缺少真实上传、归档、预览和版本记录。', tone: 'blue' },
+] as const;
+
+const chainStages = [
+  { index: '01', title: '客户来料', state: '可操作', detail: '确认入库写 RAW_WAITING 台账', tone: 'green' },
+  { index: '02', title: '拆包称重', state: '样例', detail: '称重和视频证据仍是评审数据', tone: 'amber' },
+  { index: '03', title: '子工单', state: '样例', detail: '工序模板和标签待接真实业务表', tone: 'amber' },
+  { index: '04', title: '生产报工', state: '可操作', detail: 'WIP 转 SEMI_FINISHED 台账', tone: 'green' },
+  { index: '05', title: '质检冻结', state: '待开发', detail: '下一步应接入 FROZEN/REWORK', tone: 'red' },
+  { index: '06', title: '出库追溯', state: '待开发', detail: '成品冻结、发货和退货未完成', tone: 'red' },
+] as const;
+
+const readinessRows = [
+  { module: '来料母单', api: '写账 API 已接', ui: '主表 + 详情 + 入库动作', data: '样例 + 内存兜底', status: '可演示验收' },
+  { module: '生产工单', api: '报工 API 已接', ui: '派工 + 报工 + 交接', data: '样例 + JDBC 快照', status: '可演示验收' },
+  { module: '质检返工', api: '未接真实动作', ui: '质检队列 + 损耗审批', data: '样例', status: '下一优先级' },
+  { module: '库存追溯', api: '台账读写已具备', ui: '余额 + 台账 + 证据', data: '真实台账 + 样例', status: '继续聚合' },
+  { module: '配置/构型', api: '只读基线 API', ui: '参数 + 权限 + 版本', data: 'seed 数据', status: '待审批写入' },
+  { module: '硬件联动', api: 'POC 记录 API', ui: '设备矩阵 + 兜底任务', data: 'POC 样例', status: '待现场复测' },
+] as const;
 </script>
 
 <template>
   <div class="page-stack cockpit-page ops-dashboard">
     <section class="ops-command-center">
       <div class="ops-command-copy">
-        <span class="eyebrow">Production Control</span>
-        <h2>今日生产追溯指挥台</h2>
-        <p>优先暴露会影响入库、报工、质检和出库的阻断项，不再把系统做成只有指标和按钮的静态页面。</p>
+        <span class="eyebrow">Delivery Review</span>
+        <h2>当前不是完整交付系统，是可运行评审原型</h2>
+        <p>已完成工程基线、文档包、样例工作台、库存台账、来料入库和生产报工两条真实写账链路；质检返工、出库、审批权限、附件文档和硬件闭环还需要继续开发。</p>
         <div class="command-actions">
-          <button class="primary-button" type="button">处理最高风险</button>
-          <button class="secondary-button" type="button">打开追溯链路</button>
+          <button class="primary-button" type="button">查看真实闭环</button>
+          <button class="secondary-button" type="button">查看待开发缺口</button>
           <span><i class="live-dot" />车间实时评审视图</span>
         </div>
       </div>
@@ -161,6 +221,97 @@ const boundaryCards = [
           <strong>{{ signal.value }}</strong>
           <small>{{ signal.hint }}</small>
         </article>
+      </div>
+    </section>
+
+    <section class="review-ledger-board" aria-label="当前实现进度">
+      <div class="review-ledger-main">
+        <div class="review-ledger-head">
+          <div>
+            <span class="eyebrow">Implementation Ledger</span>
+            <h2>我目前实际做到了什么</h2>
+            <p>把“看起来像页面”和“已经能验收的能力”拆开，评审时按这张表判断是否可以进入下一阶段。</p>
+          </div>
+          <StatusBadge label="M3.6 基线" tone="blue" />
+        </div>
+        <div class="review-lane-grid">
+          <article v-for="lane in implementationLanes" :key="lane.code" :class="`review-lane tone-${lane.tone}`">
+            <span>{{ lane.code }}</span>
+            <div>
+              <strong>{{ lane.title }}</strong>
+              <b>{{ lane.value }}</b>
+              <small>{{ lane.detail }}</small>
+            </div>
+            <StatusBadge :label="lane.state" :tone="lane.tone" />
+          </article>
+        </div>
+      </div>
+
+      <aside class="delivery-gap-panel">
+        <div class="review-ledger-head compact">
+          <div>
+            <span class="eyebrow">Open Gaps</span>
+            <h2>还不能说完成的部分</h2>
+          </div>
+        </div>
+        <div class="gap-stack">
+          <article v-for="gap in deliveryGaps" :key="gap.title" :class="`tone-${gap.tone}`">
+            <strong>{{ gap.title }}</strong>
+            <span>{{ gap.detail }}</span>
+          </article>
+        </div>
+      </aside>
+    </section>
+
+    <section class="ops-stage-map-panel" aria-label="一期业务闭环状态">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Business Chain</span>
+          <h2>一期业务闭环状态图</h2>
+          <p>真实开发必须沿着这条链路推进，不再继续只做孤立页面。</p>
+        </div>
+      </div>
+      <div class="ops-stage-map">
+        <article v-for="stage in chainStages" :key="stage.index" :class="`stage-node tone-${stage.tone}`">
+          <span>{{ stage.index }}</span>
+          <div>
+            <strong>{{ stage.title }}</strong>
+            <small>{{ stage.detail }}</small>
+          </div>
+          <StatusBadge :label="stage.state" :tone="stage.tone" />
+        </article>
+      </div>
+    </section>
+
+    <section class="readiness-board" aria-label="模块完成度台账">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Module Readiness</span>
+          <h2>模块完成度台账</h2>
+          <p>用 API、页面、数据来源和状态四个维度说明，不把样例页面包装成已完成系统。</p>
+        </div>
+      </div>
+      <div class="readiness-table-wrap">
+        <table class="readiness-table">
+          <thead>
+            <tr>
+              <th>模块</th>
+              <th>接口状态</th>
+              <th>页面状态</th>
+              <th>数据来源</th>
+              <th>结论</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in readinessRows" :key="row.module">
+              <td><strong>{{ row.module }}</strong></td>
+              <td>{{ row.api }}</td>
+              <td>{{ row.ui }}</td>
+              <td>{{ row.data }}</td>
+              <td>{{ row.status }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
