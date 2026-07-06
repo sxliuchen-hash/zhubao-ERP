@@ -17,46 +17,83 @@ function deviceLabel(status: string) {
 
 <template>
   <div class="page-stack">
-    <section class="command-hero hardware-hero">
-      <div>
+    <section class="operations-hero hardware-hero">
+      <div class="hero-copy">
         <span class="eyebrow">Hardware Link</span>
         <h2>软硬件联动指挥台</h2>
-        <p>一期按兼容方案落地：扫码、标签、视频、称重全部保留人工兜底，不让硬件集成卡死业务上线。</p>
+        <p>扫码、标签、视频、称重按兼容方案先上线；失败任务进入兜底队列，业务单据继续闭环。</p>
       </div>
-      <div class="signal-stack">
-        <span>API</span>
-        <i />
-        <span>PWA</span>
-        <i />
-        <span>Device</span>
+      <div class="hero-kpis">
+        <article>
+          <span>在线设备</span>
+          <strong>1</strong>
+        </article>
+        <article>
+          <span>人工兜底</span>
+          <strong>2</strong>
+        </article>
+        <article>
+          <span>待验证</span>
+          <strong>2</strong>
+        </article>
       </div>
     </section>
 
-    <section class="section-block">
-      <div class="section-heading">
-        <div>
-          <h2>设备兼容矩阵</h2>
-          <p>这里不绑定具体型号，先管理协议、现场场景、状态和失败兜底。</p>
+    <section class="hardware-matrix-layout">
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>设备兼容矩阵</h2>
+            <p>按设备、协议、现场动作和兜底方式管理，不绑定具体型号。</p>
+          </div>
+          <button class="secondary-button" type="button">导出设备清单</button>
         </div>
-      </div>
-      <div class="device-grid">
-        <article v-for="device in hardwareDevices" :key="device.code" class="device-card">
-          <div class="device-card-head">
+        <div class="device-ops-table">
+          <div class="device-ops-row device-ops-head">
+            <span>设备</span>
+            <span>场景</span>
+            <span>协议</span>
+            <span>状态</span>
+            <span>失败兜底</span>
+          </div>
+          <div v-for="device in hardwareDevices" :key="device.code" class="device-ops-row">
             <div>
               <small>{{ device.code }}</small>
               <strong>{{ device.name }}</strong>
             </div>
+            <span>{{ device.scene }}</span>
+            <span>{{ device.protocol }}</span>
             <StatusBadge :label="deviceLabel(device.status)" :tone="deviceTone(device.status)" />
+            <span>{{ device.fallback }}</span>
           </div>
-          <dl>
-            <dt>场景</dt>
-            <dd>{{ device.scene }}</dd>
-            <dt>协议</dt>
-            <dd>{{ device.protocol }}</dd>
-            <dt>兜底</dt>
-            <dd>{{ device.fallback }}</dd>
-          </dl>
-        </article>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>联动边界</h2>
+            <p>一期只承诺业务可用和证据可追溯。</p>
+          </div>
+        </div>
+        <div class="boundary-list">
+          <article>
+            <strong>视频</strong>
+            <span>NVR 时间段截取优先，失败后人工上传 MP4。</span>
+          </article>
+          <article>
+            <strong>标签</strong>
+            <span>浏览器打印优先，PDF 标签模板兜底。</span>
+          </article>
+          <article>
+            <strong>称重</strong>
+            <span>一期人工读数录入，二期再接 RS232/USB/TCP。</span>
+          </article>
+          <article>
+            <strong>扫码</strong>
+            <span>扫码失败允许手工输入编码并二次确认。</span>
+          </article>
+        </div>
       </div>
     </section>
 

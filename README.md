@@ -85,6 +85,11 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/inventory/balances`
 - `POST /api/video-clip-tasks`
 - `GET /api/video-clip-tasks`
+- `GET /api/samples/scenarios`
+- `GET /api/samples/summary`
+- `GET /api/hardware/devices`
+- `GET /api/hardware/integration-tasks`
+- `GET /api/hardware/summary`
 
 ## 下一阶段
 
@@ -100,3 +105,4 @@ M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3
 - [M1 开发验证报告](docs/12_M1开发验证报告.md)
 - [开发原则与版本管理规范](docs/13_开发原则与版本管理规范.md)
 - [开发进度跟踪](docs/14_开发进度跟踪.md)
+- [样例与软硬件联动管理](docs/15_样例与软硬件联动管理.md)
