@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import MetricCard from '../../components/MetricCard.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
+import type { Tone } from '../../data/m1PrototypeData';
 import {
   getHardwareManualFallbackCount,
   inboundOrders,
@@ -13,7 +14,7 @@ import {
   workQueues,
 } from '../../data/m1PrototypeData';
 
-function severityTone(severity: string) {
+function severityTone(severity: string): Tone {
   if (severity === 'high') return 'red';
   if (severity === 'medium') return 'amber';
   return 'gray';
@@ -25,9 +26,28 @@ function severityLabel(severity: string) {
   return '普通';
 }
 
-function workOrderTone(status: string) {
+function workOrderTone(status: string): Tone {
   if (status.includes('称重') || status.includes('阻断')) return 'red';
   if (status.includes('待') || status.includes('返工')) return 'amber';
+  return 'green';
+}
+
+function inboundTone(status: string, video: string): Tone {
+  if (video === '失败' || status.includes('异常')) return 'red';
+  if (status.includes('待') || video === '截取中') return 'amber';
+  return 'green';
+}
+
+function qualityTone(status: string): Tone {
+  if (status.includes('待')) return 'amber';
+  if (status.includes('完成')) return 'green';
+  return 'blue';
+}
+
+function inventoryTone(status: string): Tone {
+  if (status.includes('冻结') || status.includes('返工')) return 'red';
+  if (status.includes('在制')) return 'violet';
+  if (status.includes('待')) return 'amber';
   return 'green';
 }
 
@@ -44,51 +64,54 @@ const shiftSignals = [
 ] as const;
 
 const consoleRows = [
-  {
-    code: activeInbound.code,
+  ...inboundOrders.map((order) => ({
+    code: order.code,
     type: '来料母单',
-    customer: activeInbound.customer,
-    material: activeInbound.material,
-    node: '拆包称重',
+    customer: order.customer,
+    material: order.material,
+    node: order.status,
     owner: '库管员 何琳',
-    blocker: activeInbound.video === '失败' ? '视频截取失败' : '待称重确认',
-    next: '开始拆包视频',
-    tone: activeInbound.video === '失败' ? 'red' : 'amber',
-  },
-  {
-    code: activeWorkOrder.code,
+    blocker: order.video === '失败' ? '视频截取失败' : order.video,
+    next: order.video === '失败' ? '人工上传' : '收货处理',
+    tone: inboundTone(order.status, order.video),
+  })),
+  ...workOrders.map((order) => ({
+    code: order.code,
     type: '生产工单',
-    customer: activeWorkOrder.customer,
-    material: activeWorkOrder.material,
-    node: activeWorkOrder.process,
-    owner: activeWorkOrder.assignee,
-    blocker: activeWorkOrder.status,
-    next: '补录称重交接',
-    tone: workOrderTone(activeWorkOrder.status),
-  },
-  {
-    code: activeQuality.code,
-    type: '质检记录',
-    customer: activeWorkOrder.customer,
-    material: activeWorkOrder.material,
-    node: activeQuality.process,
-    owner: activeQuality.inspector,
-    blocker: activeQuality.status,
-    next: activeQuality.action,
-    tone: 'amber',
-  },
-  {
-    code: activeInventory.batch,
+    customer: order.customer,
+    material: order.material,
+    node: order.process,
+    owner: order.assignee,
+    blocker: order.status,
+    next: order.status.includes('称重') ? '补称重' : '报工',
+    tone: workOrderTone(order.status),
+  })),
+  ...qualityCases.map((item) => {
+    const order = workOrders.find((workOrder) => workOrder.code === item.workOrder) ?? activeWorkOrder;
+    return {
+      code: item.code,
+      type: '质检记录',
+      customer: order.customer,
+      material: order.material,
+      node: item.process,
+      owner: item.inspector,
+      blocker: item.status,
+      next: item.action,
+      tone: qualityTone(item.status),
+    };
+  }),
+  ...inventoryBalances.map((item) => ({
+    code: item.batch,
     type: '库存批次',
-    customer: activeInventory.owner,
-    material: activeInventory.material,
-    node: activeInventory.location,
+    customer: item.owner,
+    material: item.material,
+    node: item.location,
     owner: '库存服务',
-    blocker: activeInventory.status,
-    next: '查看台账',
-    tone: activeInventory.status.includes('在制') ? 'violet' : 'green',
-  },
-] as const;
+    blocker: item.status,
+    next: item.frozen === '0' ? '查看台账' : '处理冻结',
+    tone: inventoryTone(item.status),
+  })),
+];
 
 const controlSteps = [
   { index: '01', title: '扫码收货', detail: '绑定快递单、客户、物料档案', state: '2 单待处理', tone: 'amber' },
@@ -139,10 +162,6 @@ const boundaryCards = [
           <small>{{ signal.hint }}</small>
         </article>
       </div>
-    </section>
-
-    <section class="metric-grid ops-metric-grid" aria-label="今日业务指标">
-      <MetricCard v-for="metric in metrics" :key="metric.label" :metric="metric" />
     </section>
 
     <section class="ops-layout-grid">
@@ -241,6 +260,10 @@ const boundaryCards = [
         </div>
         <StatusBadge :label="step.state" :tone="step.tone" />
       </article>
+    </section>
+
+    <section class="metric-grid ops-metric-grid" aria-label="今日业务指标">
+      <MetricCard v-for="metric in metrics" :key="metric.label" :metric="metric" />
     </section>
 
     <section class="ops-three-column">

@@ -3623,3 +3623,349 @@ button:hover {
     display: none;
   }
 }
+
+/* M3.4 visual correction: dense ERP workbench instead of a card-heavy demo page. */
+.ops-shell {
+  grid-template-columns: 250px minmax(0, 1fr);
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(15, 23, 42, 0.026) 1px, transparent 1px) 0 0 / 24px 24px,
+    #f2f5f8;
+}
+
+.ops-sidebar {
+  background: #0b1220;
+  padding: 14px 12px;
+}
+
+.ops-brand {
+  padding: 6px 6px 13px;
+}
+
+.ops-status-card,
+.ops-version-card {
+  margin: 10px 0;
+  padding: 11px;
+}
+
+.ops-status-card strong,
+.ops-version-card strong {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.ops-status-card i {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ops-nav {
+  gap: 4px;
+  scrollbar-width: none;
+}
+
+.ops-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.ops-nav .nav-button {
+  min-height: 44px;
+  padding: 8px 10px;
+}
+
+.ops-nav .nav-button strong {
+  font-size: 14px;
+}
+
+.ops-nav .nav-button small {
+  font-size: 11px;
+}
+
+.ops-workspace {
+  padding: 12px 16px 24px;
+}
+
+.ops-topbar {
+  min-height: 36px;
+  margin-bottom: 8px;
+}
+
+.context-stack,
+.sync-stack {
+  gap: 6px;
+}
+
+.context-stack span,
+.sync-stack span {
+  min-height: 28px;
+  padding: 6px 9px;
+}
+
+.ops-page-header {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  min-height: auto;
+  margin-bottom: 10px;
+  border-left: 4px solid #0f766e;
+  padding: 12px 14px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045);
+}
+
+.ops-page-header h1 {
+  font-size: 22px;
+}
+
+.ops-page-header p {
+  max-width: 1040px;
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ops-scope-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.ops-scope-ribbon span {
+  border: 1px solid #d4dee9;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 8px;
+}
+
+.ops-page-header .command-actions-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ops-command-center {
+  grid-template-columns: minmax(0, 0.95fr) minmax(430px, 1.05fr);
+  gap: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.045);
+}
+
+.ops-command-copy {
+  gap: 6px;
+}
+
+.ops-command-copy h2 {
+  font-size: 21px;
+}
+
+.ops-command-copy p {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ops-command-kpis {
+  gap: 7px;
+}
+
+.ops-command-kpis article {
+  min-height: 68px;
+  padding: 9px 10px;
+}
+
+.ops-command-kpis strong {
+  font-size: 24px;
+}
+
+.ops-command-kpis small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-layout-grid {
+  grid-template-columns: minmax(0, 1fr) 312px;
+  gap: 10px;
+}
+
+.ops-main-panel,
+.ops-focus-panel,
+.ops-three-column > .section-block,
+.ops-command-center {
+  border-color: #d7e1ec;
+  border-radius: 6px;
+}
+
+.ops-main-panel,
+.ops-focus-panel {
+  padding: 12px;
+}
+
+.console-toolbar {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+}
+
+.console-toolbar h2 {
+  margin-bottom: 2px;
+  font-size: 19px;
+}
+
+.console-toolbar p {
+  font-size: 13px;
+}
+
+.console-tools {
+  grid-template-columns: minmax(130px, 0.8fr) minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.global-search input,
+.console-tools input,
+.console-tools select {
+  min-height: 34px;
+  border-radius: 6px;
+}
+
+.ops-dashboard .erp-table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.erp-table th,
+.erp-table td {
+  padding: 9px 10px;
+}
+
+.ops-dashboard .erp-table th:nth-child(1) {
+  width: 150px;
+}
+
+.ops-dashboard .erp-table th:nth-child(2) {
+  width: 82px;
+}
+
+.ops-dashboard .erp-table th:nth-child(4),
+.ops-dashboard .erp-table th:nth-child(5) {
+  width: 92px;
+}
+
+.ops-dashboard .erp-table th:nth-child(6),
+.ops-dashboard .erp-table th:nth-child(7) {
+  width: 108px;
+}
+
+.ops-dashboard .erp-table td {
+  overflow: hidden;
+}
+
+.table-action {
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 0 8px;
+}
+
+.detail-title {
+  padding-bottom: 9px;
+}
+
+.detail-title strong {
+  font-size: 18px;
+}
+
+.detail-grid {
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px 9px;
+}
+
+.detail-actions {
+  gap: 7px;
+}
+
+.operations-dock {
+  border-radius: 6px;
+}
+
+.operations-dock article {
+  min-height: 62px;
+  padding: 10px;
+}
+
+.operations-dock article > span {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.ops-metric-grid {
+  grid-template-columns: repeat(6, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.metric-card {
+  min-height: 72px;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.metric-card strong {
+  font-size: 23px;
+}
+
+.ops-three-column {
+  gap: 10px;
+}
+
+.ops-three-column .section-block {
+  padding: 12px;
+}
+
+.ops-dashboard .section-heading {
+  margin-bottom: 9px;
+}
+
+.ops-dashboard .section-heading h2 {
+  font-size: 17px;
+}
+
+.queue-row,
+.evidence-matrix article,
+.approval-dock article,
+.station-stack article {
+  border-radius: 6px;
+  padding: 9px 10px;
+}
+
+@media (max-width: 1360px) {
+  .ops-command-center {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-layout-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .ops-shell,
+  .ops-page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-command-kpis,
+  .ops-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .ops-command-kpis,
+  .ops-metric-grid,
+  .console-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-page-header {
+    padding: 11px;
+  }
+}
