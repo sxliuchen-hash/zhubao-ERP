@@ -1,6 +1,7 @@
 package com.zhubao.erp.common.error;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -14,6 +15,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleBusinessException(BusinessException ex) {
+        return ApiResponse.error(ex.code(), ex.getMessage());
+    }
+
+    @ExceptionHandler(PermissionDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ApiResponse<Void> handlePermissionDeniedException(PermissionDeniedException ex) {
         return ApiResponse.error(ex.code(), ex.getMessage());
     }
 

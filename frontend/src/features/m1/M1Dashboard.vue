@@ -165,7 +165,7 @@ const sourceRows = [
 const moduleRows = [
   { module: '来料母单', api: 'inbound-confirmations', state: '写入 RAW_WAITING 台账', next: '拆包视频失败兜底', tone: 'green' },
   { module: '生产工单', api: 'production-reports', state: 'WIP 转半成品', next: '称重交接强校验', tone: 'green' },
-  { module: '质检返工', api: 'quality-freezes / rework-*', state: '冻结、返工、复检可跑通', next: '审批 UI 与权限', tone: 'amber' },
+  { module: '质检返工', api: 'quality-freezes / rework-*', state: '冻结、返工、复检可跑通', next: '审批 UI 与登录权限', tone: 'amber' },
   { module: '损耗审批', api: 'loss-approvals / approvals/tasks', state: '工资试算 + 轻量审批', next: '正式锁账边界', tone: 'amber' },
   { module: '库存追溯', api: 'ledger / shipment / return', state: '台账、出库、退货可回归', next: '售后复核分流', tone: 'amber' },
   { module: '文档附件', api: 'documents / uploads', state: '上传、预览、审计可用', next: 'MinIO/S3 或 NAS', tone: 'amber' },
@@ -455,7 +455,7 @@ const moduleRows = [
       </article>
       <article class="tone-amber">
         <strong>仍需开发</strong>
-        <span>真实权限、审批 UI、对象存储、售后复核和复杂流程编排未完成。</span>
+        <span>敏感 POST 已有轻量角色守卫；真实登录、菜单权限、对象存储和复杂流程编排未完成。</span>
       </article>
       <article class="tone-red">
         <strong>工资边界</strong>

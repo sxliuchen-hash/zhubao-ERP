@@ -1117,3 +1117,63 @@ PWA 一期边界：
 5. 视频和硬件参数必须支持失败兜底，不允许让硬件集成阻断业务闭环。
 6. 配置变更必须先形成 `ConfigurationChangeRequest`，审批完成后才能写入配置表。
 7. 每一次审批、驳回、导出、修改都必须写入 `ConfigurationAuditEvent` 并关联 `traceId`。
+
+---
+
+## 12. M3.33 轻量权限守卫契约
+
+当前版本尚未接入完整登录、菜单权限和数据范围过滤，但敏感 POST 已接入后端轻量角色守卫，避免评审原型继续处于“所有人都能提交关键动作”的状态。
+
+### 12.1 请求头
+
+| Header | 说明 | 默认值 | 示例 |
+|---|---|---|---|
+| `X-Zhubao-Operator` | 操作人快照，用于后续审计上下文 | `system-review` | `车间组长 马杰` |
+| `X-Zhubao-Role` | 当前操作角色 | `ADMIN` | `WORKSHOP_LEADER` |
+| `X-Zhubao-Data-Scope` | 数据范围提示，当前只解析不做数据过滤 | `ALL` | `TEAM` |
+
+说明：
+- 默认 `ADMIN` 是为了兼容现有评审脚本和自动化测试，不代表生产环境允许匿名管理员。
+- 后续接真实登录后，应由登录态、JWT 或网关注入操作人、角色和数据范围，前端不得自行伪造。
+- 角色或数据范围无法识别时返回 `403`。
+
+### 12.2 受保护接口
+
+| 接口 | 权限码 | 允许角色 |
+|---|---|---|
+| `POST /api/inventory/ledger/transfers` | `INVENTORY_LEDGER_TRANSFER` | `ADMIN`、`GENERAL_MANAGER` |
+| `POST /api/business/operations/inbound-confirmations` | `BUSINESS_INBOUND_CONFIRM` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER` |
+| `POST /api/business/operations/production-reports` | `BUSINESS_PRODUCTION_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/quality-freezes` | `BUSINESS_QUALITY_FREEZE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/rework-dispatches` | `BUSINESS_REWORK_DISPATCH` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/rework-reports` | `BUSINESS_REWORK_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/quality-releases` | `BUSINESS_QUALITY_RELEASE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/outbound-shipments` | `BUSINESS_OUTBOUND_SHIPMENT` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`SALES` |
+| `POST /api/business/operations/customer-returns` | `BUSINESS_CUSTOMER_RETURN` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`SALES`、`QUALITY_INSPECTOR` |
+| `POST /api/business/operations/after-sales-reviews` | `BUSINESS_AFTER_SALES_REVIEW` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/loss-approvals` | `BUSINESS_LOSS_APPROVAL` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER` |
+| `POST /api/approvals/tasks/{approvalCode}/decisions` | `APPROVAL_DECISION` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER`、`FINANCE_STATISTICIAN` |
+| `POST /api/documents/attachments/uploads` | `DOCUMENT_ATTACHMENT_UPLOAD` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/video-clip-tasks`、`POST /api/video-clip-tasks/{code}/retry`、`POST /api/video-clip-tasks/{code}/manual-upload` | `VIDEO_TASK_OPERATE` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`WORKSHOP_LEADER` |
+
+### 12.3 错误响应
+
+角色越权时返回：
+
+```json
+{
+  "success": false,
+  "code": 40301,
+  "message": "角色 OPERATOR 无权执行 损耗审批试算",
+  "data": null
+}
+```
+
+HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角色调用损耗审批会被拒绝。
+
+### 12.4 当前限制
+
+- 尚未接入真实登录、密码、会话、JWT 或 SSO。
+- 尚未按客户、部门、班组做数据范围过滤。
+- 尚未把权限矩阵持久化到数据库或配置基线变更流程。
+- 尚未把审批人和权限守卫结果统一写入完整审计事件。

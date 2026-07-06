@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.32 / 作业台视觉重整</strong>
-        <i>真实业务动作、台账、售后复核和硬件 POC 已进入评审原型；真实权限、对象存储、现场设备直连和正式工资仍在开发队列。</i>
+        <strong>M3.33 / 权限守卫基线</strong>
+        <i>敏感业务动作已接入轻量角色守卫；真实登录、菜单权限、对象存储、现场设备直连和正式工资仍在开发队列。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -79,7 +79,7 @@ defineProps<{
           </article>
           <article>
             <span>台账</span>
-            <strong>51</strong>
+            <strong>54</strong>
             <small>自动化测试通过</small>
           </article>
         </div>

@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.ResponseEntity;
@@ -734,6 +735,41 @@ class M2ManagementApiSmokeTest {
                 "\"locked\":true"
         );
         assertThat(pendingAfterDecision.getBody()).doesNotContain("LOSS-SMOKE-20260706-009");
+    }
+
+    @Test
+    void deniesSensitiveBusinessOperationForRoleOutsidePermissionBoundary() {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("approvalCode", "LOSS-DENY-20260706-001");
+        request.put("motherOrderCode", "MD-SMOKE-20260706-009");
+        request.put("workOrderCode", "ZD-SMOKE-20260706-009");
+        request.put("customerId", 1001L);
+        request.put("materialCode", "MAT-18K-RING");
+        request.put("process", "抛光");
+        request.put("operator", "操作工 王强");
+        request.put("approver", "操作工 王强");
+        request.put("inputWeight", new BigDecimal("100.000"));
+        request.put("outputWeight", new BigDecimal("96.000"));
+        request.put("reasonableTransferWeight", new BigDecimal("1.000"));
+        request.put("standardLossRatePercent", new BigDecimal("2.0"));
+        request.put("acceptedQuantity", new BigDecimal("56"));
+        request.put("pieceRate", new BigDecimal("0.80"));
+        request.put("lossDeductionUnitPrice", new BigDecimal("6.00"));
+        request.put("evidenceCode", "EVD-DENY-001");
+        request.put("remark", "permission deny smoke");
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Zhubao-Role", "OPERATOR");
+        headers.set("X-Zhubao-Operator", "操作工 王强");
+
+        ResponseEntity<String> denied = restTemplate.exchange(
+                "/api/business/operations/loss-approvals",
+                HttpMethod.POST,
+                new HttpEntity<>(request, headers),
+                String.class
+        );
+
+        assertThat(denied.getStatusCode().value()).isEqualTo(403);
+        assertThat(denied.getBody()).contains("40301", "OPERATOR", "损耗审批试算");
     }
 
     @Test

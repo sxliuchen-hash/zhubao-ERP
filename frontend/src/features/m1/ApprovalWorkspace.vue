@@ -308,7 +308,7 @@ function taskTone(task: ApprovalTask): Tone {
             </article>
             <article>
               <strong>当前边界</strong>
-              <span>轻量审批不等于完整工作流、真实权限、正式工资锁账或财务凭证。</span>
+              <span>轻量审批不等于完整工作流、真实登录、正式工资锁账或财务凭证。</span>
             </article>
           </div>
         </section>
