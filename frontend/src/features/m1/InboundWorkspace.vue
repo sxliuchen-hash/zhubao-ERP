@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   inboundCheckpoints as fallbackInboundCheckpoints,
@@ -16,6 +16,16 @@ const workspace = ref<InboundWorkspaceModel>({
   orders: fallbackInboundOrders,
   risks: fallbackInboundRisks,
 });
+
+const activeOrder = computed(
+  () =>
+    workspace.value.orders.find((order) => order.status.includes('异常') || order.video === '失败') ??
+    workspace.value.orders[0],
+);
+
+const activeRisk = computed(
+  () => workspace.value.risks.find((risk) => risk.code === activeOrder.value?.code) ?? workspace.value.risks[0],
+);
 
 onMounted(async () => {
   try {
@@ -72,6 +82,84 @@ function statusTone(status: string) {
         <button class="secondary-button" type="button">只看异常</button>
         <button class="secondary-button" type="button">打印队列</button>
       </div>
+    </section>
+
+    <section class="module-ops-board" aria-label="来料作业主控台">
+      <div class="module-master">
+        <div class="module-toolbar">
+          <div>
+            <span class="eyebrow">Inbound Desk</span>
+            <h2>来料作业主控台</h2>
+            <p>按母单推进收货、拆包、称重、视频和标签，不把入库动作拆散到多个页面。</p>
+          </div>
+          <div class="module-tools">
+            <label>
+              <span>扫码入口</span>
+              <input value="SF1048329001" aria-label="快递或母单扫码" />
+            </label>
+            <button class="primary-button" type="button">扫码收货</button>
+            <button class="secondary-button" type="button">批量打印</button>
+          </div>
+        </div>
+        <div class="module-table-wrap">
+          <table class="module-table">
+            <thead>
+              <tr>
+                <th>母单</th>
+                <th>客户/物料</th>
+                <th>快递单</th>
+                <th>重量</th>
+                <th>入库状态</th>
+                <th>视频证据</th>
+                <th>动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in workspace.orders" :key="order.code">
+                <td><strong>{{ order.code }}</strong></td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ order.customer }}</b>
+                    <small>{{ order.material }}</small>
+                  </span>
+                </td>
+                <td>{{ order.courierNo }}</td>
+                <td>{{ order.qty }} 件 / {{ order.weight }}</td>
+                <td><StatusBadge :label="order.status" :tone="statusTone(order.status)" /></td>
+                <td><StatusBadge :label="order.video" :tone="videoTone(order.video)" /></td>
+                <td><button class="table-action" type="button">处理</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside v-if="activeOrder" class="module-detail">
+        <div class="detail-title">
+          <span>当前母单</span>
+          <strong>{{ activeOrder.code }}</strong>
+          <StatusBadge :label="activeOrder.status" :tone="statusTone(activeOrder.status)" />
+        </div>
+        <dl class="detail-grid">
+          <dt>客户</dt>
+          <dd>{{ activeOrder.customer }}</dd>
+          <dt>物料</dt>
+          <dd>{{ activeOrder.material }}</dd>
+          <dt>快递单</dt>
+          <dd>{{ activeOrder.courierNo }}</dd>
+          <dt>权属</dt>
+          <dd>{{ activeOrder.owner }}</dd>
+          <dt>数量重量</dt>
+          <dd>{{ activeOrder.qty }} 件 / {{ activeOrder.weight }}</dd>
+          <dt>风险</dt>
+          <dd>{{ activeRisk?.title ?? '无阻断' }}</dd>
+        </dl>
+        <div class="detail-actions">
+          <button class="primary-button" type="button">确认入库</button>
+          <button class="secondary-button" type="button">创建视频任务</button>
+          <button class="secondary-button" type="button">打印母单标签</button>
+        </div>
+      </aside>
     </section>
 
     <section class="toolbar-band">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   productionHandoffs as fallbackProductionHandoffs,
@@ -16,6 +16,18 @@ const workspace = ref<ProductionWorkspaceModel>({
   workOrders: fallbackWorkOrders,
   handoffs: fallbackProductionHandoffs,
 });
+
+const activeWorkOrder = computed(
+  () =>
+    workspace.value.workOrders.find((order) => order.status.includes('称重') || order.status.includes('待')) ??
+    workspace.value.workOrders[0],
+);
+
+const activeHandoff = computed(
+  () =>
+    workspace.value.handoffs.find((handoff) => handoff.status.includes('阻断') || handoff.status.includes('待')) ??
+    workspace.value.handoffs[0],
+);
 
 onMounted(async () => {
   try {
@@ -67,6 +79,87 @@ onMounted(async () => {
         <button class="secondary-button" type="button">瓶颈工位</button>
         <button class="secondary-button" type="button">待交接</button>
       </div>
+    </section>
+
+    <section class="module-ops-board" aria-label="生产派工主控台">
+      <div class="module-master">
+        <div class="module-toolbar">
+          <div>
+            <span class="eyebrow">Dispatch Desk</span>
+            <h2>生产派工主控台</h2>
+            <p>工单、工位、报工和称重交接放在同一操作区，现场组长可以直接判断下一步。</p>
+          </div>
+          <div class="module-tools">
+            <label>
+              <span>工单扫码</span>
+              <input value="ZD-20260706-006" aria-label="工单扫码" />
+            </label>
+            <button class="primary-button" type="button">扫码报工</button>
+            <button class="secondary-button" type="button">补录交接</button>
+          </div>
+        </div>
+        <div class="module-table-wrap">
+          <table class="module-table">
+            <thead>
+              <tr>
+                <th>工单</th>
+                <th>客户/物料</th>
+                <th>工序</th>
+                <th>负责人</th>
+                <th>产出进度</th>
+                <th>状态</th>
+                <th>动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in workspace.workOrders" :key="order.code">
+                <td><strong>{{ order.code }}</strong></td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ order.customer }}</b>
+                    <small>{{ order.material }}</small>
+                  </span>
+                </td>
+                <td>{{ order.process }}</td>
+                <td>{{ order.assignee }}</td>
+                <td>
+                  <i class="progress-bar"><b :style="{ width: `${order.progress}%` }" /></i>
+                  {{ order.finishedQty }}/{{ order.plannedQty }}
+                </td>
+                <td><StatusBadge :label="order.status" :tone="order.status.includes('称重') ? 'red' : order.status.includes('待') ? 'amber' : order.status.includes('返工') ? 'violet' : 'green'" /></td>
+                <td><button class="table-action" type="button">进入工序</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside v-if="activeWorkOrder" class="module-detail">
+        <div class="detail-title">
+          <span>当前工单</span>
+          <strong>{{ activeWorkOrder.code }}</strong>
+          <StatusBadge :label="activeWorkOrder.status" :tone="activeWorkOrder.status.includes('称重') ? 'red' : activeWorkOrder.status.includes('待') ? 'amber' : 'blue'" />
+        </div>
+        <dl class="detail-grid">
+          <dt>客户</dt>
+          <dd>{{ activeWorkOrder.customer }}</dd>
+          <dt>物料</dt>
+          <dd>{{ activeWorkOrder.material }}</dd>
+          <dt>当前工序</dt>
+          <dd>{{ activeWorkOrder.process }}</dd>
+          <dt>负责人</dt>
+          <dd>{{ activeWorkOrder.assignee }}</dd>
+          <dt>交接阻断</dt>
+          <dd>{{ activeHandoff?.code ?? '无' }} / {{ activeHandoff?.status ?? '正常' }}</dd>
+          <dt>工资口径</dt>
+          <dd>计件试算，单价按报工快照</dd>
+        </dl>
+        <div class="detail-actions">
+          <button class="primary-button" type="button">提交报工</button>
+          <button class="secondary-button" type="button">称重交接</button>
+          <button class="secondary-button" type="button">打印工单标签</button>
+        </div>
+      </aside>
     </section>
 
     <section class="toolbar-band">

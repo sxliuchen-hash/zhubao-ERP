@@ -3065,3 +3065,164 @@ button:hover {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+.module-ops-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.module-master,
+.module-detail {
+  min-width: 0;
+  border: 1px solid #d8e3ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+}
+
+.module-master {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.module-detail {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 14px;
+}
+
+.module-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.module-toolbar h2 {
+  margin: 2px 0 5px;
+  color: #172033;
+  font-size: 20px;
+}
+
+.module-toolbar p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.module-tools {
+  display: grid;
+  grid-template-columns: 190px auto auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.module-tools label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.module-tools label span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.module-tools input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd8e6;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #172033;
+  font: inherit;
+  outline: none;
+  padding: 0 11px;
+}
+
+.module-tools input:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+}
+
+.module-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid #dce6f0;
+  border-radius: 8px;
+}
+
+.module-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.module-table th,
+.module-table td {
+  border-bottom: 1px solid #e5edf5;
+  color: #334155;
+  padding: 10px 11px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.module-table th {
+  background: #f1f6fb;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.module-table tbody tr:hover {
+  background: #f8fbfd;
+}
+
+.module-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.module-table .progress-bar {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+@media (max-width: 1280px) {
+  .module-ops-board,
+  .module-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .module-tools {
+    grid-template-columns: minmax(180px, 1fr) auto auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .module-tools {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ledger-row {
+  min-width: 0;
+  grid-template-columns:
+    minmax(48px, 0.45fr)
+    minmax(136px, 1.1fr)
+    minmax(82px, 0.75fr)
+    minmax(116px, 1fr)
+    minmax(116px, 1fr)
+    minmax(128px, 1fr)
+    minmax(60px, 0.55fr);
+}
+
+.ledger-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

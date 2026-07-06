@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   inventoryBalances as fallbackInventoryBalances,
@@ -18,6 +18,14 @@ const workspace = ref<InventoryWorkspaceModel>({
   timeline: fallbackTraceEvents,
   evidence: fallbackTraceEvidence,
 });
+
+const activeBalance = computed(
+  () =>
+    workspace.value.balances.find((item) => item.status.includes('在制') || item.frozen !== '0') ??
+    workspace.value.balances[0],
+);
+
+const latestLedger = computed(() => workspace.value.ledgerEntries[0]);
 
 onMounted(async () => {
   try {
@@ -69,6 +77,79 @@ onMounted(async () => {
         <button class="secondary-button" type="button">冻结库存</button>
         <button class="secondary-button" type="button">证据缺口</button>
       </div>
+    </section>
+
+    <section class="module-ops-board" aria-label="库存追溯主控台">
+      <div class="module-master">
+        <div class="module-toolbar">
+          <div>
+            <span class="eyebrow">Inventory Desk</span>
+            <h2>库存追溯主控台</h2>
+            <p>从余额、台账、证据和冻结状态同时查询，确保每次库存变化都有业务来源。</p>
+          </div>
+          <div class="module-tools">
+            <label>
+              <span>追溯关键字</span>
+              <input value="ZD-20260706-001" aria-label="库存追溯关键字" />
+            </label>
+            <button class="primary-button" type="button">追溯查询</button>
+            <button class="secondary-button" type="button">冻结库存</button>
+          </div>
+        </div>
+        <div class="module-table-wrap">
+          <table class="module-table">
+            <thead>
+              <tr>
+                <th>客户所有权</th>
+                <th>批次/来源</th>
+                <th>物料</th>
+                <th>位置</th>
+                <th>状态</th>
+                <th>数量重量</th>
+                <th>动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in workspace.balances" :key="`${item.owner}-${item.batch}-${item.status}`">
+                <td><strong>{{ item.owner }}</strong></td>
+                <td>{{ item.batch }}</td>
+                <td>{{ item.material }}</td>
+                <td>{{ item.location }}</td>
+                <td><StatusBadge :label="item.status" :tone="item.status.includes('返工') ? 'violet' : item.status.includes('在制') ? 'amber' : item.status.includes('成品') ? 'green' : 'blue'" /></td>
+                <td>{{ item.qty }} 件 / {{ item.weight }}</td>
+                <td><button class="table-action" type="button">看台账</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside v-if="activeBalance" class="module-detail">
+        <div class="detail-title">
+          <span>当前库存</span>
+          <strong>{{ activeBalance.batch }}</strong>
+          <StatusBadge :label="activeBalance.status" :tone="activeBalance.status.includes('在制') ? 'amber' : activeBalance.status.includes('成品') ? 'green' : 'blue'" />
+        </div>
+        <dl class="detail-grid">
+          <dt>客户</dt>
+          <dd>{{ activeBalance.owner }}</dd>
+          <dt>物料</dt>
+          <dd>{{ activeBalance.material }}</dd>
+          <dt>位置</dt>
+          <dd>{{ activeBalance.location }}</dd>
+          <dt>数量重量</dt>
+          <dd>{{ activeBalance.qty }} 件 / {{ activeBalance.weight }}</dd>
+          <dt>冻结</dt>
+          <dd>{{ activeBalance.frozen }}</dd>
+          <dt>最近台账</dt>
+          <dd>{{ latestLedger?.bizCode ?? '暂无' }} / {{ latestLedger?.movement ?? '暂无' }}</dd>
+        </dl>
+        <div class="detail-actions">
+          <button class="primary-button" type="button">打开追溯链</button>
+          <button class="secondary-button" type="button">导出台账</button>
+          <button class="secondary-button" type="button">查看证据缺口</button>
+        </div>
+      </aside>
     </section>
 
     <section class="toolbar-band">

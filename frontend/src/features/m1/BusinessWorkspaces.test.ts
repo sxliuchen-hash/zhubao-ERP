@@ -11,6 +11,8 @@ describe('M1 business workspaces', () => {
     const wrapper = mount(InboundWorkspace);
 
     expect(wrapper.text()).toContain('来料接收控制台');
+    expect(wrapper.text()).toContain('来料作业主控台');
+    expect(wrapper.find('table.module-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('入库检查点');
     expect(wrapper.text()).toContain('入库异常处置');
     expect(wrapper.text()).toContain('拆包视频截取失败');
@@ -20,6 +22,8 @@ describe('M1 business workspaces', () => {
     const wrapper = mount(ProductionWorkspace);
 
     expect(wrapper.text()).toContain('生产工单调度台');
+    expect(wrapper.text()).toContain('生产派工主控台');
+    expect(wrapper.find('table.module-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('工位负载');
     expect(wrapper.text()).toContain('称重交接记录');
     expect(wrapper.text()).toContain('审批阻断');
@@ -29,6 +33,8 @@ describe('M1 business workspaces', () => {
     const wrapper = mount(QualityWorkspace);
 
     expect(wrapper.text()).toContain('质检返工处理台');
+    expect(wrapper.text()).toContain('质检作业主控台');
+    expect(wrapper.find('table.module-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('质检指标');
     expect(wrapper.text()).toContain('损耗审批');
     expect(wrapper.text()).toContain('LOSS-20260706-009');
@@ -38,6 +44,8 @@ describe('M1 business workspaces', () => {
     const wrapper = mount(InventoryTraceWorkspace);
 
     expect(wrapper.text()).toContain('库存与追溯证据台');
+    expect(wrapper.text()).toContain('库存追溯主控台');
+    expect(wrapper.find('table.module-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('库存台账明细');
     expect(wrapper.text()).toContain('追溯证据');
     expect(wrapper.text()).toContain('LEDGER-20260706-001');

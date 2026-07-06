@@ -45,6 +45,7 @@ const activeTitle = computed(() => tabs.find((tab) => tab.key === activeTab.valu
         v-for="tab in tabs"
         :key="tab.key"
         class="nav-button"
+        :data-tab="tab.key"
         :class="{ active: activeTab === tab.key }"
         type="button"
         @click="activeTab = tab.key"
