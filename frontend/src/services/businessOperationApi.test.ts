@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { InboundOrder, InventoryBalance, LossApproval, QualityCase, WorkOrder } from '../data/m1PrototypeData';
 import {
+  buildAfterSalesReviewRequest,
   buildLossApprovalRequest,
   buildConfirmInboundRequest,
   buildCustomerReturnRequest,
@@ -242,6 +243,37 @@ describe('businessOperationApi', () => {
       reason: '客户退回复核',
       operator: '库管员 何琳',
       evidenceCode: 'ATT-RET-20260706002',
+    });
+  });
+
+  it('builds an after-sales review command from return check stock to rework stock', () => {
+    const balance: InventoryBalance = {
+      owner: '雅辰饰品',
+      batch: 'MD-20260706-002',
+      material: '银链半成品',
+      location: '退货复核区 R-CHECK',
+      status: '退货复核',
+      qty: 2,
+      weight: '4.55 g',
+      frozen: '0',
+    };
+
+    expect(buildAfterSalesReviewRequest(balance)).toMatchObject({
+      reviewCode: 'ASR-20260706002',
+      returnCode: 'RET-20260706002',
+      originalShipmentCode: 'OUT-20260706002',
+      motherOrderCode: 'MD-20260706-002',
+      workOrderCode: 'ZD-20260706-006',
+      customerId: 1002,
+      ownerCustomerId: 1002,
+      materialCode: 'MAT-SILVER-CHAIN',
+      fromWarehouseCode: 'RETURN-CHECK',
+      toWarehouseCode: 'REWORK-LINE-01',
+      quantity: 2,
+      weight: '4.55',
+      disposition: 'REWORK',
+      inspector: '周娜',
+      evidenceCode: 'PHOTO-ASR-20260706002',
     });
   });
 

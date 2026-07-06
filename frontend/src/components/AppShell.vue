@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.30 / 软硬件联动作业台</strong>
-        <i>首页、来料、生产、质检、库存、审批和硬件页已收敛为高密度作业台；真实权限、对象存储、现场设备直连和正式工资仍在开发队列。</i>
+        <strong>M3.31 / 售后复核闭环</strong>
+        <i>首页、来料、生产、质检、库存、审批和硬件页已收敛为高密度作业台；售后复核分流已接入，真实权限、对象存储、现场设备直连和正式工资仍在开发队列。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">

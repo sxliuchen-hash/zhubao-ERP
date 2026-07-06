@@ -1,6 +1,8 @@
 package com.zhubao.erp.business.web;
 
 import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.business.domain.AfterSalesReviewCommand;
+import com.zhubao.erp.business.domain.AfterSalesReviewResult;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
@@ -74,6 +76,11 @@ public class BusinessOperationController {
     @PostMapping("/customer-returns")
     public ApiResponse<CustomerReturnResult> returnCustomerShipment(@Valid @RequestBody CustomerReturnCommand command) {
         return ApiResponse.ok(businessOperationService.returnCustomerShipment(command));
+    }
+
+    @PostMapping("/after-sales-reviews")
+    public ApiResponse<AfterSalesReviewResult> reviewAfterSalesReturn(@Valid @RequestBody AfterSalesReviewCommand command) {
+        return ApiResponse.ok(businessOperationService.reviewAfterSalesReturn(command));
     }
 
     @PostMapping("/loss-approvals")

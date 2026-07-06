@@ -61,6 +61,7 @@ describe('M1 business workspaces', () => {
     expect(wrapper.find('table.inventory-dispatch-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('确认出库');
     expect(wrapper.text()).toContain('退货入库');
+    expect(wrapper.text()).toContain('售后复核');
     expect(wrapper.text()).toContain('库存台账明细');
     expect(wrapper.text()).toContain('追溯证据');
     expect(wrapper.text()).toContain('LEDGER-20260706-001');

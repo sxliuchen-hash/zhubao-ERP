@@ -46,6 +46,7 @@
 - M3.28 质检库存作业台重构，将质检返工页改为“质检返工损耗作业台”，库存追溯页改为“库存台账追溯作业台”，首屏补齐质检阻断队列、今日质检池、客户库存池、追溯阻断队列、台账明细和证据槽。
 - M3.29 轻量审批工作台，新增前端 `AP 审批工作台`，接入 `/api/approvals/tasks`、`/pending` 和 `/decisions`，展示待审批、已锁定、审批快照、工资边界和通过/驳回动作；仍不替代完整流程引擎、真实权限或正式工资锁账。
 - M3.30 软硬件联动作业台，前端 `软硬件联动` 页面接入 `/api/hardware/devices`、`/integration-tasks`、`/poc-records` 和 `/summary`，形成设备兼容池、联动阻断队列、POC 记录、任务健康度和部署拓扑；接口失败时保留本地样例兜底，不把一期业务卡死在设备直连上。
+- M3.31 售后复核闭环，新增 `POST /api/business/operations/after-sales-reviews`，将 `RETURN-CHECK` 退货复核库存按复核结论分流到成品、返工、报废或冻结状态；库存追溯页新增“售后复核”真实动作入口。
 
 ## 目录结构
 
@@ -186,6 +187,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `POST /api/business/operations/quality-releases`
 - `POST /api/business/operations/outbound-shipments`
 - `POST /api/business/operations/customer-returns`
+- `POST /api/business/operations/after-sales-reviews`
 - `POST /api/business/operations/loss-approvals`
 - `GET /api/approvals/tasks`
 - `GET /api/approvals/tasks/pending`
@@ -205,7 +207,7 @@ pnpm --filter zhubao-erp-frontend dev
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.30 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页、来料母单、生产工单、质检返工、库存追溯、轻量审批和软硬件联动已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、硬件兜底和真实 API 动作。后端已补入轻量审批任务、硬件联动 API 与 JDBC 持久化基线。下一步重点不再是继续堆演示页，而是把真实业务闭环、权限审批、对象存储和软硬件证据补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.31 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页、来料母单、生产工单、质检返工、库存追溯、轻量审批和软硬件联动已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、硬件兜底和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流与 JDBC 持久化基线。下一步重点不再是继续堆演示页，而是把真实权限审批、对象存储和软硬件证据补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
@@ -213,7 +215,7 @@ pnpm --filter zhubao-erp-frontend dev
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实权限。
-- 补齐退货后的售后质检复核、真实权限、审批 UI、复杂审批流、工资锁账/发放边界和对象存储，避免当前原型停留在局部台账动作与工资试算快照。
+- 补齐真实权限、审批 UI、复杂审批流、工资锁账/发放边界、对象存储和售后结算边界，避免当前原型停留在局部台账动作与工资试算快照。
 
 ## 开发管理文档
 

@@ -75,6 +75,7 @@
 | `POST /quality-releases` | 质检返工 | 复检放行，将同一子工单的半成品库存转为成品库存 |
 | `POST /outbound-shipments` | 库存追溯 | 确认成品出库，将同一子工单的成品库存转为已发货库存 |
 | `POST /customer-returns` | 库存追溯 | 客户退货入库，将同一子工单的已发货库存转回退货复核库存 |
+| `POST /after-sales-reviews` | 库存追溯 | 售后复核分流，将退货复核库存转为成品、返工、报废或冻结库存 |
 | `POST /loss-approvals` | 质检返工 | 生成损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账，不代表正式工资发放 |
 
 审批任务接口前缀：
@@ -771,7 +772,58 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 - `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
 - 客户退货只允许改变仓库和库存状态，当前基线为 `SHIPPED -> FINISHED`，仓库从 `SHIPPED-CUSTOMER` 转入 `RETURN-CHECK`。
 - 若来源已发货库存不足，后端必须拒绝写台账。
-- M3.17 只完成退货入库台账基线；是否复检放行、返工或报废仍需后续售后/质检流程决定。
+- M3.17 只完成退货入库台账基线；M3.31 起由 `POST /after-sales-reviews` 决定复核后的放行、返工、报废或冻结分流。
+
+### 7.7 `AfterSalesReviewCommand`
+
+`POST /api/business/operations/after-sales-reviews` 使用该命令模型。该接口是 M3.31 售后复核分流写台账基线。
+
+| 字段 | 说明 |
+|---|---|
+| `reviewCode` | 售后复核单号，作为库存台账来源单据 |
+| `returnCode` | 退货单号 |
+| `originalShipmentCode` | 原出库单号，用于追溯退货来源 |
+| `motherOrderCode` | 母单号 |
+| `workOrderCode` | 子工单或返工工单号 |
+| `customerId` | 业务客户 ID |
+| `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
+| `materialCode` | 物料编码 |
+| `fromWarehouseCode` | 来源退货复核区，当前前端样例为 `RETURN-CHECK` |
+| `toWarehouseCode` | 目标库位，例如 `FINISHED-CUSTOMER`、`REWORK-LINE-01`、`SCRAP-CUSTOMER`、`FROZEN-QC` |
+| `quantity` | 本次复核分流数量，必须大于 0 |
+| `weight` | 本次复核分流重量，必须大于 0 |
+| `disposition` | 复核结论：`RELEASE`、`REWORK`、`SCRAP`、`FREEZE` |
+| `inspector` | 售后复核/质检人员快照 |
+| `finding` | 复核发现和处理依据 |
+| `evidenceCode` | 复核照片、视频、客户沟通、质检附件编码 |
+| `remark` | 备注 |
+
+返回 `AfterSalesReviewResult`：
+
+| 字段 | 说明 |
+|---|---|
+| `reviewCode` | 售后复核单号 |
+| `returnCode` | 退货单号 |
+| `originalShipmentCode` | 原出库单号 |
+| `workOrderCode` | 工单号 |
+| `ledgerCode` | 库存台账号 |
+| `fromWarehouseCode` | 来源退货复核区 |
+| `toWarehouseCode` | 目标库位 |
+| `fromStockStatus` | 来源库存状态，当前为 `FINISHED`，仓库为 `RETURN-CHECK` |
+| `toStockStatus` | 目标库存状态，由 `disposition` 映射为 `FINISHED`、`REWORK`、`SCRAP` 或 `FROZEN` |
+| `quantity` | 已复核分流数量 |
+| `weight` | 已复核分流重量 |
+| `disposition` | 复核结论 |
+| `inspector` | 售后复核/质检人员快照 |
+| `finding` | 复核发现和处理依据 |
+| `evidenceCode` | 证据编码 |
+
+实现约束：
+
+- `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
+- 来源固定为 `RETURN-CHECK` 的退货复核库存，库存状态为 `FINISHED`；它不代表已重新放行，只代表退回实物已回到厂内待复核区。
+- `disposition=RELEASE` 映射到 `FINISHED`，`REWORK` 映射到 `REWORK`，`SCRAP` 映射到 `SCRAP`，`FREEZE` 映射到 `FROZEN`。
+- 售后复核只写库存台账和证据快照，不做售后结算、客户门户、财务红冲或正式赔付。
 
 ---
 
@@ -922,11 +974,12 @@ PWA 一期边界：
 | 复检放行 | `POST /api/business/operations/quality-releases`，`SEMI_FINISHED -> FINISHED` |
 | 成品出库 | `POST /api/business/operations/outbound-shipments`，`FINISHED -> SHIPPED` |
 | 客户退货 | `POST /api/business/operations/customer-returns`，`SHIPPED -> FINISHED` |
+| 售后复核 | `POST /api/business/operations/after-sales-reviews`，`FINISHED@RETURN-CHECK -> FINISHED/REWORK/SCRAP/FROZEN` |
 | 损耗审批 | `POST /api/business/operations/loss-approvals`，返回损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账 |
 | 轻量审批任务 | `GET /api/approvals/tasks`、`GET /api/approvals/tasks/pending`、`POST /api/approvals/tasks/{approvalCode}/decisions`，用于固定场景待审批、审批通过/驳回和锁定 |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态；轻量审批可切换 JDBC 持久化，但正式权限、复杂审批流、审批 UI、工资锁账/发放和退货后的售后质检复核仍需继续接入 |
+| 当前限制 | 尚未更新工作台快照状态；轻量审批可切换 JDBC 持久化，但正式权限、复杂审批流、审批 UI、工资锁账/发放、售后结算和对象存储仍需继续接入 |
 
 这些接口证明一期闭环开始从“展示样例”进入“业务命令”。库存变化必须通过库存服务产生只追加台账；损耗审批、工资试算、称重交接和退货复核这类非库存动作也必须先建独立业务命令，再按职责接入审批服务、工资服务或证据服务。
 

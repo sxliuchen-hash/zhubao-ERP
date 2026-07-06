@@ -13,8 +13,10 @@ import {
   type InventoryWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
 import {
+  reviewAfterSalesReturn,
   returnCustomerShipment,
   shipFinishedStock,
+  type AfterSalesReviewResult,
   type CustomerReturnResult,
   type OutboundShipmentResult,
 } from '../../services/businessOperationApi';
@@ -31,6 +33,9 @@ const outboundShipmentError = ref('');
 const returningCustomerStock = ref(false);
 const customerReturnResult = ref<CustomerReturnResult | null>(null);
 const customerReturnError = ref('');
+const reviewingAfterSalesReturn = ref(false);
+const afterSalesReviewResult = ref<AfterSalesReviewResult | null>(null);
+const afterSalesReviewError = ref('');
 
 const activeBalance = computed(
   () =>
@@ -122,6 +127,8 @@ async function shipActiveFinishedStock() {
   outboundShipmentError.value = '';
   customerReturnResult.value = null;
   customerReturnError.value = '';
+  afterSalesReviewResult.value = null;
+  afterSalesReviewError.value = '';
 
   try {
     outboundShipmentResult.value = await shipFinishedStock(activeBalance.value);
@@ -138,6 +145,8 @@ async function returnActiveCustomerShipment() {
   returningCustomerStock.value = true;
   customerReturnResult.value = null;
   customerReturnError.value = '';
+  afterSalesReviewResult.value = null;
+  afterSalesReviewError.value = '';
 
   try {
     customerReturnResult.value = await returnCustomerShipment(activeBalance.value);
@@ -145,6 +154,22 @@ async function returnActiveCustomerShipment() {
     customerReturnError.value = error instanceof Error ? error.message : '客户退货入库失败';
   } finally {
     returningCustomerStock.value = false;
+  }
+}
+
+async function reviewActiveAfterSalesReturn() {
+  if (!activeBalance.value) return;
+
+  reviewingAfterSalesReturn.value = true;
+  afterSalesReviewResult.value = null;
+  afterSalesReviewError.value = '';
+
+  try {
+    afterSalesReviewResult.value = await reviewAfterSalesReturn(activeBalance.value);
+  } catch (error) {
+    afterSalesReviewError.value = error instanceof Error ? error.message : '售后复核分流失败';
+  } finally {
+    reviewingAfterSalesReturn.value = false;
   }
 }
 </script>
@@ -219,6 +244,9 @@ async function returnActiveCustomerShipment() {
             <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
               {{ returningCustomerStock ? '正在退货' : '退货入库' }}
             </button>
+            <button class="secondary-button" type="button" :disabled="reviewingAfterSalesReturn" @click="reviewActiveAfterSalesReturn">
+              {{ reviewingAfterSalesReturn ? '正在复核' : '售后复核' }}
+            </button>
           </div>
         </div>
 
@@ -281,6 +309,9 @@ async function returnActiveCustomerShipment() {
             <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
               {{ returningCustomerStock ? '正在退货' : '退货入库' }}
             </button>
+            <button class="secondary-button" type="button" :disabled="reviewingAfterSalesReturn" @click="reviewActiveAfterSalesReturn">
+              {{ reviewingAfterSalesReturn ? '正在复核' : '售后复核' }}
+            </button>
             <button class="secondary-button" type="button">导出台账</button>
           </div>
           <div v-if="outboundShipmentResult" class="operation-feedback success">
@@ -300,6 +331,16 @@ async function returnActiveCustomerShipment() {
           <div v-else-if="customerReturnError" class="operation-feedback danger">
             <strong>客户退货入库失败</strong>
             <span>{{ customerReturnError }}</span>
+          </div>
+          <div v-if="afterSalesReviewResult" class="operation-feedback success">
+            <strong>售后复核已写入台账</strong>
+            <span>{{ afterSalesReviewResult.ledgerCode }} / {{ afterSalesReviewResult.reviewCode }}</span>
+            <small>{{ afterSalesReviewResult.fromStockStatus }} -> {{ afterSalesReviewResult.toStockStatus }} / {{ afterSalesReviewResult.disposition }}</small>
+          </div>
+          <div v-else-if="afterSalesReviewError" class="operation-feedback danger">
+            <strong>售后复核分流失败</strong>
+            <span>{{ afterSalesReviewError }}</span>
+            <small>请确认退货库存已进入 RETURN-CHECK，并已补齐复核照片或视频证据。</small>
           </div>
         </section>
 
@@ -378,7 +419,7 @@ async function returnActiveCustomerShipment() {
           </article>
           <article>
             <strong>退货复核</strong>
-            <span>客户退货先回 RETURN-CHECK，再决定放行、返工或报废。</span>
+            <span>客户退货先回 RETURN-CHECK，再通过售后复核决定放行、返工、冻结或报废。</span>
           </article>
         </div>
       </section>

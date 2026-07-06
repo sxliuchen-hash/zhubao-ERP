@@ -1,6 +1,8 @@
 package com.zhubao.erp.business.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhubao.erp.business.domain.AfterSalesReviewCommand;
+import com.zhubao.erp.business.domain.AfterSalesReviewDisposition;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
@@ -182,6 +184,27 @@ class BusinessOperationRealFlowTest {
                 customerReturn.remark()
         ));
 
+        AfterSalesReviewFixture afterSalesReview = scenario.afterSalesReview();
+        service.reviewAfterSalesReturn(new AfterSalesReviewCommand(
+                afterSalesReview.reviewCode(),
+                afterSalesReview.returnCode(),
+                afterSalesReview.originalShipmentCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
+                null,
+                scenario.materialCode(),
+                afterSalesReview.fromWarehouseCode(),
+                afterSalesReview.toWarehouseCode(),
+                afterSalesReview.quantity(),
+                afterSalesReview.weight(),
+                AfterSalesReviewDisposition.valueOf(afterSalesReview.disposition()),
+                afterSalesReview.inspector(),
+                afterSalesReview.finding(),
+                afterSalesReview.evidenceCode(),
+                afterSalesReview.remark()
+        ));
+
         LossApprovalFixture lossApprovalFixture = scenario.lossApproval();
         LossApprovalResult lossApproval = service.approveLoss(new ApproveLossCommand(
                 lossApprovalFixture.approvalCode(),
@@ -282,6 +305,7 @@ class BusinessOperationRealFlowTest {
             QualityReleaseFixture qualityRelease,
             OutboundShipmentFixture outboundShipment,
             CustomerReturnFixture customerReturn,
+            AfterSalesReviewFixture afterSalesReview,
             LossApprovalFixture lossApproval,
             List<String> expectedLedgerTypes,
             List<ExpectedBalance> expectedBalances,
@@ -384,6 +408,22 @@ class BusinessOperationRealFlowTest {
             String returnLogisticsNo,
             String reason,
             String operator,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record AfterSalesReviewFixture(
+            String reviewCode,
+            String returnCode,
+            String originalShipmentCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String disposition,
+            String inspector,
+            String finding,
             String evidenceCode,
             String remark
     ) {

@@ -259,6 +259,46 @@ export interface CustomerReturnResult {
   evidenceCode?: string;
 }
 
+export type AfterSalesReviewDisposition = 'RELEASE' | 'REWORK' | 'SCRAP' | 'FREEZE';
+
+export interface AfterSalesReviewRequest {
+  reviewCode: string;
+  returnCode: string;
+  originalShipmentCode: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  customerId: number;
+  ownerCustomerId?: number;
+  materialCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  quantity: number;
+  weight: string;
+  disposition: AfterSalesReviewDisposition;
+  inspector: string;
+  finding: string;
+  evidenceCode?: string;
+  remark?: string;
+}
+
+export interface AfterSalesReviewResult {
+  reviewCode: string;
+  returnCode: string;
+  originalShipmentCode: string;
+  workOrderCode: string;
+  ledgerCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  fromStockStatus: string;
+  toStockStatus: string;
+  quantity: number;
+  weight: number;
+  disposition: AfterSalesReviewDisposition;
+  inspector: string;
+  finding: string;
+  evidenceCode?: string;
+}
+
 export interface LossApprovalRequest {
   approvalCode: string;
   motherOrderCode: string;
@@ -622,6 +662,39 @@ export async function returnCustomerShipment(balance: InventoryBalance): Promise
   return apiPost<CustomerReturnRequest, CustomerReturnResult>(
     '/api/business/operations/customer-returns',
     buildCustomerReturnRequest(balance),
+  );
+}
+
+export function buildAfterSalesReviewRequest(balance: InventoryBalance): AfterSalesReviewRequest {
+  const customerId = customerIds[balance.owner] ?? 9000;
+  const workOrderCode = inventoryBatchWorkOrders[balance.batch] ?? balance.batch;
+  const shortCode = balance.batch.replace(/[^0-9]/g, '') || '20260706001';
+
+  return {
+    reviewCode: `ASR-${shortCode}`,
+    returnCode: `RET-${shortCode}`,
+    originalShipmentCode: `OUT-${shortCode}`,
+    motherOrderCode: balance.batch.startsWith('MD-') ? balance.batch : (workOrderMotherOrders[workOrderCode] ?? balance.batch),
+    workOrderCode,
+    customerId,
+    ownerCustomerId: customerId,
+    materialCode: materialCodes[balance.material] ?? `MAT-${balance.batch}`,
+    fromWarehouseCode: 'RETURN-CHECK',
+    toWarehouseCode: 'REWORK-LINE-01',
+    quantity: Math.min(balance.qty, 2),
+    weight: parseWeight(balance.weight),
+    disposition: 'REWORK',
+    inspector: '周娜',
+    finding: '售后复核发现外观/工艺问题，转返工处理',
+    evidenceCode: `PHOTO-ASR-${shortCode}`,
+    remark: '前端库存追溯主控台售后复核分流',
+  };
+}
+
+export async function reviewAfterSalesReturn(balance: InventoryBalance): Promise<AfterSalesReviewResult> {
+  return apiPost<AfterSalesReviewRequest, AfterSalesReviewResult>(
+    '/api/business/operations/after-sales-reviews',
+    buildAfterSalesReviewRequest(balance),
   );
 }
 

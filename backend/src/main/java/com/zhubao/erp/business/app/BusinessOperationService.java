@@ -1,6 +1,9 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.approval.app.ApprovalService;
+import com.zhubao.erp.business.domain.AfterSalesReviewCommand;
+import com.zhubao.erp.business.domain.AfterSalesReviewDisposition;
+import com.zhubao.erp.business.domain.AfterSalesReviewResult;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
@@ -433,6 +436,59 @@ public class BusinessOperationService {
         );
     }
 
+    public AfterSalesReviewResult reviewAfterSalesReturn(AfterSalesReviewCommand command) {
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        StockDimension fromReturnCheck = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.fromWarehouseCode(),
+                StockStatus.FINISHED
+        );
+        StockStatus targetStatus = targetStatus(command.disposition());
+        StockDimension toReviewedStock = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.toWarehouseCode(),
+                targetStatus
+        );
+
+        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+                "after_sales_review",
+                command.reviewCode(),
+                fromReturnCheck,
+                toReviewedStock,
+                command.quantity(),
+                command.weight(),
+                buildRemark(command)
+        ));
+
+        return new AfterSalesReviewResult(
+                command.reviewCode(),
+                command.returnCode(),
+                command.originalShipmentCode(),
+                command.workOrderCode(),
+                entry.code(),
+                command.fromWarehouseCode(),
+                command.toWarehouseCode(),
+                fromReturnCheck.stockStatus(),
+                toReviewedStock.stockStatus(),
+                entry.quantity(),
+                entry.weight(),
+                command.disposition(),
+                command.inspector(),
+                command.finding(),
+                command.evidenceCode()
+        );
+    }
+
     public LossApprovalResult approveLoss(ApproveLossCommand command) {
         BigDecimal rawLossWeight = command.inputWeight()
                 .subtract(command.outputWeight())
@@ -619,5 +675,36 @@ public class BusinessOperationService {
             remark.append("；备注：").append(command.remark());
         }
         return remark.toString();
+    }
+
+    private String buildRemark(AfterSalesReviewCommand command) {
+        StringBuilder remark = new StringBuilder("售后退货复核；复核单：")
+                .append(command.reviewCode())
+                .append("；退货单：")
+                .append(command.returnCode())
+                .append("；原出库单：")
+                .append(command.originalShipmentCode())
+                .append("；分流：")
+                .append(command.disposition())
+                .append("；质检员：")
+                .append(command.inspector())
+                .append("；结论：")
+                .append(command.finding());
+        if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
+            remark.append("；证据：").append(command.evidenceCode());
+        }
+        if (command.remark() != null && !command.remark().isBlank()) {
+            remark.append("；备注：").append(command.remark());
+        }
+        return remark.toString();
+    }
+
+    private StockStatus targetStatus(AfterSalesReviewDisposition disposition) {
+        return switch (disposition) {
+            case RELEASE -> StockStatus.FINISHED;
+            case REWORK -> StockStatus.REWORK;
+            case SCRAP -> StockStatus.SCRAP;
+            case FREEZE -> StockStatus.FROZEN;
+        };
     }
 }

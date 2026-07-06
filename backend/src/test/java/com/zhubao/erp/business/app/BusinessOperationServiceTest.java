@@ -3,6 +3,9 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
+import com.zhubao.erp.business.domain.AfterSalesReviewCommand;
+import com.zhubao.erp.business.domain.AfterSalesReviewDisposition;
+import com.zhubao.erp.business.domain.AfterSalesReviewResult;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.CustomerReturnResult;
@@ -444,6 +447,68 @@ class BusinessOperationServiceTest {
         assertThat(ledger.documentType()).isEqualTo("customer_return");
         assertThat(ledger.documentCode()).isEqualTo("RET-20260707-022");
         assertThat(ledger.remark()).contains("OUT-20260706-022", "SF-RET-20260707-022", "客户退回复核", "ATT-RET-20260707-022");
+    }
+
+    @Test
+    void reviewAfterSalesReturnMovesReturnCheckStockToReworkForSameWorkOrderDimension() {
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        StockLedgerService stockLedgerService = new StockLedgerService(repository);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        StockDimension returnCheck = dimension(StockStatus.FINISHED, "RETURN-CHECK");
+
+        stockLedgerService.transfer(new StockTransferCommand(
+                "customer_return",
+                "RET-20260707-022",
+                null,
+                returnCheck,
+                bd("2"),
+                bd("4.550"),
+                "测试预置退货复核库存"
+        ));
+
+        AfterSalesReviewResult result = service.reviewAfterSalesReturn(new AfterSalesReviewCommand(
+                "ASR-20260707-022",
+                "RET-20260707-022",
+                "OUT-20260706-022",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "RETURN-CHECK",
+                "REWORK-LINE-01",
+                bd("2"),
+                bd("4.550"),
+                AfterSalesReviewDisposition.REWORK,
+                "周娜",
+                "客户退回件焊点偏移，转返工",
+                "PHOTO-ASR-20260707-022",
+                "售后复核分流"
+        ));
+
+        StockDimension rework = dimension(StockStatus.REWORK, "REWORK-LINE-01");
+        StockBalance returnCheckBalance = repository.findBalance(returnCheck);
+        StockBalance reworkBalance = repository.findBalance(rework);
+        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
+
+        assertThat(result.reviewCode()).isEqualTo("ASR-20260707-022");
+        assertThat(result.returnCode()).isEqualTo("RET-20260707-022");
+        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.FINISHED);
+        assertThat(result.toStockStatus()).isEqualTo(StockStatus.REWORK);
+        assertThat(result.disposition()).isEqualTo(AfterSalesReviewDisposition.REWORK);
+        assertThat(returnCheckBalance.quantity()).isEqualByComparingTo("0");
+        assertThat(returnCheckBalance.weight()).isEqualByComparingTo("0.000");
+        assertThat(reworkBalance.quantity()).isEqualByComparingTo("2");
+        assertThat(reworkBalance.weight()).isEqualByComparingTo("4.550");
+        assertThat(ledger.documentType()).isEqualTo("after_sales_review");
+        assertThat(ledger.documentCode()).isEqualTo("ASR-20260707-022");
+        assertThat(ledger.remark()).contains(
+                "RET-20260707-022",
+                "OUT-20260706-022",
+                "REWORK",
+                "周娜",
+                "PHOTO-ASR-20260707-022"
+        );
     }
 
     @Test

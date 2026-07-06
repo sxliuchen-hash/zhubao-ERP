@@ -93,6 +93,20 @@
     "evidenceCode": "ATT-RET-20260707-021",
     "remark": "脱敏样例：退货入库"
   },
+  "afterSalesReview": {
+    "reviewCode": "ASR-20260707-021",
+    "returnCode": "RET-20260707-021",
+    "originalShipmentCode": "OUT-20260706-021",
+    "fromWarehouseCode": "RETURN-CHECK",
+    "toWarehouseCode": "REWORK-POLISH",
+    "quantity": "2",
+    "weight": "3.100",
+    "disposition": "REWORK",
+    "inspector": "周娜",
+    "finding": "客户退回件划痕复现，转返工抛光",
+    "evidenceCode": "PHOTO-ASR-20260707-021",
+    "remark": "脱敏样例：售后复核分流"
+  },
   "lossApproval": {
     "approvalCode": "LOSS-20260706-009",
     "process": "抛光",
@@ -116,16 +130,17 @@
     "rework_report",
     "quality_release",
     "outbound_shipment",
-    "customer_return"
+    "customer_return",
+    "after_sales_review"
   ],
   "expectedBalances": [
     { "stockStatus": "WIP", "warehouseCode": "WIP-POLISH", "quantity": "4", "weight": "4.600" },
     { "stockStatus": "SEMI_FINISHED", "warehouseCode": "SEMI-FINISHED", "quantity": "0", "weight": "0.000" },
     { "stockStatus": "FROZEN", "warehouseCode": "FROZEN-QC", "quantity": "0", "weight": "0.000" },
-    { "stockStatus": "REWORK", "warehouseCode": "REWORK-POLISH", "quantity": "0", "weight": "0.000" },
+    { "stockStatus": "REWORK", "warehouseCode": "REWORK-POLISH", "quantity": "2", "weight": "3.100" },
     { "stockStatus": "FINISHED", "warehouseCode": "FINISHED-CUSTOMER", "quantity": "6", "weight": "9.300" },
     { "stockStatus": "SHIPPED", "warehouseCode": "SHIPPED-CUSTOMER", "quantity": "68", "weight": "104.150" },
-    { "stockStatus": "FINISHED", "warehouseCode": "RETURN-CHECK", "quantity": "2", "weight": "3.100" }
+    { "stockStatus": "FINISHED", "warehouseCode": "RETURN-CHECK", "quantity": "0", "weight": "0.000" }
   ],
   "expectedLossApproval": {
     "lossWeight": "4.600",

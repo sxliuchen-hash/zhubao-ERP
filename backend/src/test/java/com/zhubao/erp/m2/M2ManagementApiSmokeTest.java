@@ -596,6 +596,70 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void reviewsAfterSalesReturnThroughBusinessOperationApiAndWritesLedger() {
+        Map<String, Object> returnCheckDimension = Map.of(
+                "ownerType", "CUSTOMER",
+                "ownerCustomerId", 1002L,
+                "customerId", 1002L,
+                "motherOrderCode", "MD-SMOKE-20260706-010",
+                "workOrderCode", "ZD-SMOKE-20260706-030",
+                "materialCode", "MAT-SILVER-CHAIN",
+                "warehouseCode", "RETURN-CHECK",
+                "stockStatus", "FINISHED"
+        );
+        Map<String, Object> seedReturnCheck = Map.of(
+                "documentType", "customer_return",
+                "documentCode", "RET-SMOKE-20260707-030",
+                "to", returnCheckDimension,
+                "quantity", new BigDecimal("2"),
+                "weight", new BigDecimal("4.550"),
+                "remark", "seed return check stock for after sales review smoke test"
+        );
+        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedReturnCheck, String.class);
+
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("reviewCode", "ASR-SMOKE-20260707-030");
+        request.put("returnCode", "RET-SMOKE-20260707-030");
+        request.put("originalShipmentCode", "OUT-SMOKE-20260706-030");
+        request.put("motherOrderCode", "MD-SMOKE-20260706-010");
+        request.put("workOrderCode", "ZD-SMOKE-20260706-030");
+        request.put("customerId", 1002L);
+        request.put("materialCode", "MAT-SILVER-CHAIN");
+        request.put("fromWarehouseCode", "RETURN-CHECK");
+        request.put("toWarehouseCode", "REWORK-LINE-01");
+        request.put("quantity", new BigDecimal("2"));
+        request.put("weight", new BigDecimal("4.550"));
+        request.put("disposition", "REWORK");
+        request.put("inspector", "周娜");
+        request.put("finding", "售后复核发现焊点偏移，转返工");
+        request.put("evidenceCode", "PHOTO-ASR-SMOKE-030");
+        request.put("remark", "after sales review smoke test");
+
+        ResponseEntity<String> reviewed = restTemplate.postForEntity(
+                "/api/business/operations/after-sales-reviews",
+                request,
+                String.class
+        );
+        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+
+        assertThat(reviewed.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(reviewed.getBody()).contains(
+                "ASR-SMOKE-20260707-030",
+                "RET-SMOKE-20260707-030",
+                "OUT-SMOKE-20260706-030",
+                "FINISHED",
+                "REWORK",
+                "PHOTO-ASR-SMOKE-030"
+        );
+        assertThat(balances.getBody()).contains(
+                "MD-SMOKE-20260706-010",
+                "ZD-SMOKE-20260706-030",
+                "REWORK-LINE-01",
+                "REWORK"
+        );
+    }
+
+    @Test
     void approvesLossThroughBusinessOperationApiAndReturnsWageTrialSnapshot() {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("approvalCode", "LOSS-SMOKE-20260706-009");
