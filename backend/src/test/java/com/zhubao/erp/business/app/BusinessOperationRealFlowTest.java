@@ -1,5 +1,6 @@
 package com.zhubao.erp.business.app;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
@@ -19,6 +20,8 @@ import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -26,244 +29,396 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class BusinessOperationRealFlowTest {
 
-    private static final long CUSTOMER_ID = 1001L;
-    private static final String MOTHER_ORDER = "MD-20260706-001";
-    private static final String WORK_ORDER = "ZD-20260706-001";
-    private static final String MATERIAL = "MAT-18K-RING";
+    private static final String FIXTURE = "acceptance/real-flow-scenario-20260706.json";
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void runsCustomerOwnedProductionQualityShipmentReturnAndLossTrialScenario() {
+    void runsFixtureBackedCustomerOwnedProductionQualityShipmentReturnAndLossTrialScenario() throws IOException {
+        RealFlowScenario scenario = loadScenario();
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
         StockLedgerService stockLedgerService = new StockLedgerService(repository);
         BusinessOperationService service = new BusinessOperationService(stockLedgerService);
 
         stockLedgerService.transfer(new StockTransferCommand(
                 "split_work_order",
-                WORK_ORDER,
+                scenario.workOrderCode(),
                 null,
-                dimension(StockStatus.WIP, "WIP-POLISH"),
-                bd("80"),
-                bd("121.150"),
-                "真实链路测试预置在制库存"
+                dimension(scenario, StockStatus.WIP, scenario.initialWip().warehouseCode()),
+                scenario.initialWip().quantity(),
+                scenario.initialWip().weight(),
+                scenario.sourceNote()
         ));
 
+        ProductionReportFixture production = scenario.productionReport();
         service.reportProduction(new ReportProductionCommand(
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "WIP-POLISH",
-                "SEMI-FINISHED",
-                bd("76"),
-                bd("116.550"),
-                "抛光",
-                "李华",
-                "HO-20260706-021",
-                "真实链路测试：抛光报工"
+                scenario.materialCode(),
+                production.fromWarehouseCode(),
+                production.toWarehouseCode(),
+                production.quantity(),
+                production.weight(),
+                production.process(),
+                production.operator(),
+                production.handoffCode(),
+                production.remark()
         ));
 
+        QualityFreezeFixture qualityFreeze = scenario.qualityFreeze();
         service.freezeQualityStock(new FreezeQualityStockCommand(
-                "QC-20260706-021",
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                qualityFreeze.qualityCaseCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "SEMI-FINISHED",
-                "FROZEN-QC",
-                bd("5"),
-                bd("7.700"),
-                "抛光",
-                "周娜",
-                "划痕 5 件",
-                "PHOTO-QC-20260706-021",
-                "真实链路测试：质检冻结"
+                scenario.materialCode(),
+                qualityFreeze.fromWarehouseCode(),
+                qualityFreeze.toWarehouseCode(),
+                qualityFreeze.quantity(),
+                qualityFreeze.weight(),
+                qualityFreeze.process(),
+                qualityFreeze.inspector(),
+                qualityFreeze.defect(),
+                qualityFreeze.evidenceCode(),
+                qualityFreeze.remark()
         ));
 
+        ReworkDispatchFixture reworkDispatch = scenario.reworkDispatch();
         service.dispatchRework(new DispatchReworkCommand(
-                "FG-20260706-021",
-                "QC-20260706-021",
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                reworkDispatch.reworkOrderCode(),
+                reworkDispatch.qualityCaseCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "FROZEN-QC",
-                "REWORK-POLISH",
-                bd("5"),
-                bd("7.700"),
-                "返工抛光",
-                "车间组长 马杰",
-                "划痕返工",
-                "PHOTO-QC-20260706-021",
-                "真实链路测试：返工派发"
+                scenario.materialCode(),
+                reworkDispatch.fromWarehouseCode(),
+                reworkDispatch.toWarehouseCode(),
+                reworkDispatch.quantity(),
+                reworkDispatch.weight(),
+                reworkDispatch.process(),
+                reworkDispatch.operator(),
+                reworkDispatch.reason(),
+                reworkDispatch.evidenceCode(),
+                reworkDispatch.remark()
         ));
 
+        ReworkReportFixture reworkReport = scenario.reworkReport();
         service.reportRework(new ReportReworkCommand(
-                "FG-20260706-021",
-                "QC-20260706-021",
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                reworkReport.reworkOrderCode(),
+                reworkReport.qualityCaseCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "REWORK-POLISH",
-                "SEMI-FINISHED",
-                bd("5"),
-                bd("7.700"),
-                "返工抛光",
-                "赵磊",
-                "PHOTO-REWORK-20260706-021",
-                "真实链路测试：返工报工"
+                scenario.materialCode(),
+                reworkReport.fromWarehouseCode(),
+                reworkReport.toWarehouseCode(),
+                reworkReport.quantity(),
+                reworkReport.weight(),
+                reworkReport.process(),
+                reworkReport.operator(),
+                reworkReport.evidenceCode(),
+                reworkReport.remark()
         ));
 
+        QualityReleaseFixture qualityRelease = scenario.qualityRelease();
         service.releaseQualityStock(new ReleaseQualityStockCommand(
-                "QC-20260706-021",
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                qualityRelease.qualityCaseCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "SEMI-FINISHED",
-                "FINISHED-CUSTOMER",
-                bd("76"),
-                bd("116.550"),
-                "复检抛光",
-                "周娜",
-                "复检合格，允许成品入库",
-                "PHOTO-RELEASE-20260706-021",
-                "真实链路测试：复检放行"
+                scenario.materialCode(),
+                qualityRelease.fromWarehouseCode(),
+                qualityRelease.toWarehouseCode(),
+                qualityRelease.quantity(),
+                qualityRelease.weight(),
+                qualityRelease.process(),
+                qualityRelease.inspector(),
+                qualityRelease.releaseResult(),
+                qualityRelease.evidenceCode(),
+                qualityRelease.remark()
         ));
 
+        OutboundShipmentFixture outboundShipment = scenario.outboundShipment();
         service.shipFinishedStock(new ShipFinishedStockCommand(
-                "OUT-20260706-021",
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                outboundShipment.shipmentCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "FINISHED-CUSTOMER",
-                "SHIPPED-CUSTOMER",
-                bd("70"),
-                bd("107.250"),
-                "SF-OUT-20260706-021",
-                "库管员 何琳",
-                "ATT-OUT-20260706-021",
-                "真实链路测试：成品出库"
+                scenario.materialCode(),
+                outboundShipment.fromWarehouseCode(),
+                outboundShipment.toWarehouseCode(),
+                outboundShipment.quantity(),
+                outboundShipment.weight(),
+                outboundShipment.logisticsNo(),
+                outboundShipment.operator(),
+                outboundShipment.evidenceCode(),
+                outboundShipment.remark()
         ));
 
+        CustomerReturnFixture customerReturn = scenario.customerReturn();
         service.returnCustomerShipment(new CustomerReturnCommand(
-                "RET-20260707-021",
-                "OUT-20260706-021",
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                customerReturn.returnCode(),
+                customerReturn.originalShipmentCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "SHIPPED-CUSTOMER",
-                "RETURN-CHECK",
-                bd("2"),
-                bd("3.100"),
-                "SF-RET-20260707-021",
-                "客户退回复核",
-                "库管员 何琳",
-                "ATT-RET-20260707-021",
-                "真实链路测试：退货入库"
+                scenario.materialCode(),
+                customerReturn.fromWarehouseCode(),
+                customerReturn.toWarehouseCode(),
+                customerReturn.quantity(),
+                customerReturn.weight(),
+                customerReturn.returnLogisticsNo(),
+                customerReturn.reason(),
+                customerReturn.operator(),
+                customerReturn.evidenceCode(),
+                customerReturn.remark()
         ));
 
+        LossApprovalFixture lossApprovalFixture = scenario.lossApproval();
         LossApprovalResult lossApproval = service.approveLoss(new ApproveLossCommand(
-                "LOSS-20260706-009",
-                MOTHER_ORDER,
-                WORK_ORDER,
-                CUSTOMER_ID,
+                lossApprovalFixture.approvalCode(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.customerId(),
                 null,
-                MATERIAL,
-                "抛光",
-                "李华",
-                "车间组长 马杰",
-                bd("121.150"),
-                bd("116.550"),
-                bd("0.000"),
-                bd("2.0"),
-                bd("76"),
-                bd("0.80"),
-                bd("6.00"),
-                "HO-20260706-021",
-                "真实链路测试：损耗试算"
+                scenario.materialCode(),
+                lossApprovalFixture.process(),
+                lossApprovalFixture.operator(),
+                lossApprovalFixture.approver(),
+                lossApprovalFixture.inputWeight(),
+                lossApprovalFixture.outputWeight(),
+                lossApprovalFixture.reasonableTransferWeight(),
+                lossApprovalFixture.standardLossRatePercent(),
+                lossApprovalFixture.acceptedQuantity(),
+                lossApprovalFixture.pieceRate(),
+                lossApprovalFixture.lossDeductionUnitPrice(),
+                lossApprovalFixture.evidenceCode(),
+                lossApprovalFixture.remark()
         ));
 
         assertThat(repository.findAllLedgers())
                 .extracting(StockLedgerEntry::documentType)
-                .containsExactly(
-                        "split_work_order",
-                        "production_report",
-                        "quality_freeze",
-                        "rework_dispatch",
-                        "rework_report",
-                        "quality_release",
-                        "outbound_shipment",
-                        "customer_return"
-                );
-        assertAllLedgerDimensionsStayCustomerOwned(repository.findAllLedgers());
-        assertBalance(repository, StockStatus.WIP, "WIP-POLISH", "4", "4.600");
-        assertBalance(repository, StockStatus.SEMI_FINISHED, "SEMI-FINISHED", "0", "0.000");
-        assertBalance(repository, StockStatus.FROZEN, "FROZEN-QC", "0", "0.000");
-        assertBalance(repository, StockStatus.REWORK, "REWORK-POLISH", "0", "0.000");
-        assertBalance(repository, StockStatus.FINISHED, "FINISHED-CUSTOMER", "6", "9.300");
-        assertBalance(repository, StockStatus.SHIPPED, "SHIPPED-CUSTOMER", "68", "104.150");
-        assertBalance(repository, StockStatus.FINISHED, "RETURN-CHECK", "2", "3.100");
-        assertThat(lossApproval.lossWeight()).isEqualByComparingTo("4.600");
-        assertThat(lossApproval.excessLossWeight()).isEqualByComparingTo("2.177");
-        assertThat(lossApproval.trialWage()).isEqualByComparingTo("47.74");
-        assertThat(lossApproval.formalPayroll()).isFalse();
-        assertThat(repository.findAllLedgers()).hasSize(8);
+                .containsExactlyElementsOf(scenario.expectedLedgerTypes());
+        assertAllLedgerDimensionsStayCustomerOwned(scenario, repository.findAllLedgers());
+        for (ExpectedBalance expectedBalance : scenario.expectedBalances()) {
+            assertBalance(scenario, repository, expectedBalance);
+        }
+        assertThat(lossApproval.lossWeight()).isEqualByComparingTo(scenario.expectedLossApproval().lossWeight());
+        assertThat(lossApproval.excessLossWeight()).isEqualByComparingTo(scenario.expectedLossApproval().excessLossWeight());
+        assertThat(lossApproval.trialWage()).isEqualByComparingTo(scenario.expectedLossApproval().trialWage());
+        assertThat(lossApproval.formalPayroll()).isEqualTo(scenario.expectedLossApproval().formalPayroll());
+        assertThat(repository.findAllLedgers()).hasSize(scenario.expectedLedgerTypes().size());
     }
 
-    private void assertAllLedgerDimensionsStayCustomerOwned(List<StockLedgerEntry> ledgers) {
-        for (StockLedgerEntry ledger : ledgers) {
-            if (ledger.from() != null) {
-                assertSameBusinessDimension(ledger.from());
-            }
-            assertSameBusinessDimension(ledger.to());
+    private RealFlowScenario loadScenario() throws IOException {
+        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(FIXTURE)) {
+            assertThat(inputStream).as("acceptance fixture exists: %s", FIXTURE).isNotNull();
+            return objectMapper.readValue(inputStream, RealFlowScenario.class);
         }
     }
 
-    private void assertSameBusinessDimension(StockDimension dimension) {
+    private void assertAllLedgerDimensionsStayCustomerOwned(RealFlowScenario scenario, List<StockLedgerEntry> ledgers) {
+        for (StockLedgerEntry ledger : ledgers) {
+            if (ledger.from() != null) {
+                assertSameBusinessDimension(scenario, ledger.from());
+            }
+            assertSameBusinessDimension(scenario, ledger.to());
+        }
+    }
+
+    private void assertSameBusinessDimension(RealFlowScenario scenario, StockDimension dimension) {
         assertThat(dimension.ownerType()).isEqualTo(OwnerType.CUSTOMER);
-        assertThat(dimension.ownerCustomerId()).isEqualTo(CUSTOMER_ID);
-        assertThat(dimension.customerId()).isEqualTo(CUSTOMER_ID);
-        assertThat(dimension.motherOrderCode()).isEqualTo(MOTHER_ORDER);
-        assertThat(dimension.workOrderCode()).isEqualTo(WORK_ORDER);
-        assertThat(dimension.materialCode()).isEqualTo(MATERIAL);
+        assertThat(dimension.ownerCustomerId()).isEqualTo(scenario.customerId());
+        assertThat(dimension.customerId()).isEqualTo(scenario.customerId());
+        assertThat(dimension.motherOrderCode()).isEqualTo(scenario.motherOrderCode());
+        assertThat(dimension.workOrderCode()).isEqualTo(scenario.workOrderCode());
+        assertThat(dimension.materialCode()).isEqualTo(scenario.materialCode());
     }
 
     private void assertBalance(
+            RealFlowScenario scenario,
             InMemoryStockLedgerRepository repository,
-            StockStatus status,
-            String warehouseCode,
-            String expectedQuantity,
-            String expectedWeight
+            ExpectedBalance expectedBalance
     ) {
-        StockBalance balance = repository.findBalance(dimension(status, warehouseCode));
-        assertThat(balance.quantity()).isEqualByComparingTo(expectedQuantity);
-        assertThat(balance.weight()).isEqualByComparingTo(expectedWeight);
+        StockStatus stockStatus = StockStatus.valueOf(expectedBalance.stockStatus());
+        StockBalance balance = repository.findBalance(dimension(scenario, stockStatus, expectedBalance.warehouseCode()));
+        assertThat(balance.quantity()).isEqualByComparingTo(expectedBalance.quantity());
+        assertThat(balance.weight()).isEqualByComparingTo(expectedBalance.weight());
     }
 
-    private StockDimension dimension(StockStatus status, String warehouseCode) {
+    private StockDimension dimension(RealFlowScenario scenario, StockStatus status, String warehouseCode) {
         return new StockDimension(
                 OwnerType.CUSTOMER,
-                CUSTOMER_ID,
-                CUSTOMER_ID,
-                MOTHER_ORDER,
-                WORK_ORDER,
-                MATERIAL,
+                scenario.customerId(),
+                scenario.customerId(),
+                scenario.motherOrderCode(),
+                scenario.workOrderCode(),
+                scenario.materialCode(),
                 warehouseCode,
                 status
         );
     }
 
-    private BigDecimal bd(String value) {
-        return new BigDecimal(value);
+    private record RealFlowScenario(
+            String scenarioCode,
+            String sourceNote,
+            Long customerId,
+            String motherOrderCode,
+            String workOrderCode,
+            String materialCode,
+            StockFixture initialWip,
+            ProductionReportFixture productionReport,
+            QualityFreezeFixture qualityFreeze,
+            ReworkDispatchFixture reworkDispatch,
+            ReworkReportFixture reworkReport,
+            QualityReleaseFixture qualityRelease,
+            OutboundShipmentFixture outboundShipment,
+            CustomerReturnFixture customerReturn,
+            LossApprovalFixture lossApproval,
+            List<String> expectedLedgerTypes,
+            List<ExpectedBalance> expectedBalances,
+            ExpectedLossApproval expectedLossApproval
+    ) {
+    }
+
+    private record StockFixture(String warehouseCode, BigDecimal quantity, BigDecimal weight) {
+    }
+
+    private record ProductionReportFixture(
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String process,
+            String operator,
+            String handoffCode,
+            String remark
+    ) {
+    }
+
+    private record QualityFreezeFixture(
+            String qualityCaseCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String process,
+            String inspector,
+            String defect,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record ReworkDispatchFixture(
+            String reworkOrderCode,
+            String qualityCaseCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String process,
+            String operator,
+            String reason,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record ReworkReportFixture(
+            String reworkOrderCode,
+            String qualityCaseCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String process,
+            String operator,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record QualityReleaseFixture(
+            String qualityCaseCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String process,
+            String inspector,
+            String releaseResult,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record OutboundShipmentFixture(
+            String shipmentCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String logisticsNo,
+            String operator,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record CustomerReturnFixture(
+            String returnCode,
+            String originalShipmentCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String returnLogisticsNo,
+            String reason,
+            String operator,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record LossApprovalFixture(
+            String approvalCode,
+            String process,
+            String operator,
+            String approver,
+            BigDecimal inputWeight,
+            BigDecimal outputWeight,
+            BigDecimal reasonableTransferWeight,
+            BigDecimal standardLossRatePercent,
+            BigDecimal acceptedQuantity,
+            BigDecimal pieceRate,
+            BigDecimal lossDeductionUnitPrice,
+            String evidenceCode,
+            String remark
+    ) {
+    }
+
+    private record ExpectedBalance(
+            String stockStatus,
+            String warehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight
+    ) {
+    }
+
+    private record ExpectedLossApproval(
+            BigDecimal lossWeight,
+            BigDecimal excessLossWeight,
+            BigDecimal trialWage,
+            boolean formalPayroll
+    ) {
     }
 }
