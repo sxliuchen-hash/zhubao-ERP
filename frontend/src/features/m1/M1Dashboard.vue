@@ -9,43 +9,80 @@ function severityTone(severity: string) {
   return 'gray';
 }
 
+function severityLabel(severity: string) {
+  if (severity === 'high') return '高';
+  if (severity === 'medium') return '中';
+  return '普通';
+}
+
 const flowRows = [
-  { node: '来料接收', total: '6 单', abnormal: '2 单待确认', owner: '库管组', next: '扫码收货 / 拆包称重' },
-  { node: '母单拆分', total: '11 张子工单', abnormal: '1 张未打印', owner: '计划员', next: '生成标签 / 分配工序' },
-  { node: '工序报工', total: '18 张在制', abnormal: '5 张停留超时', owner: '车间组长', next: '补称重 / 派工' },
-  { node: '质检返工', total: '7 批待检', abnormal: '2 批返工复检', owner: '质检组', next: '登记缺陷 / 生成返工单' },
-  { node: '成品出库', total: '4 单待出库', abnormal: '0 单阻断', owner: '仓储组', next: '复核追溯证据' },
-];
+  { node: '来料接收', total: '6 单', abnormal: '2 单待确认', owner: '库管组', next: '扫码收货 / 拆包称重', tone: 'amber' },
+  { node: '母单拆分', total: '11 张子工单', abnormal: '1 张未打印', owner: '计划员', next: '生成标签 / 分配工序', tone: 'blue' },
+  { node: '工序报工', total: '18 张在制', abnormal: '5 张停留超时', owner: '车间组长', next: '补称重 / 派工', tone: 'red' },
+  { node: '质检返工', total: '7 批待检', abnormal: '2 批返工复检', owner: '质检组', next: '登记缺陷 / 生成返工单', tone: 'amber' },
+  { node: '成品出库', total: '4 单待出库', abnormal: '0 单阻断', owner: '仓储组', next: '复核追溯证据', tone: 'green' },
+] as const;
 
 const evidenceRows = [
-  { item: '拆包视频', value: '92%', status: '1 个截取失败', tone: 'amber' },
-  { item: '称重交接', value: '86%', status: '2 个待补照片', tone: 'amber' },
-  { item: '标签扫描', value: '100%', status: '今日无漏扫', tone: 'green' },
-  { item: '硬件兜底', value: `${getHardwareManualFallbackCount()} 项`, status: '已纳入任务队列', tone: 'gray' },
+  { item: '拆包视频', value: '92%', status: '1 个截取失败', owner: '库管员', tone: 'amber' },
+  { item: '称重交接', value: '86%', status: '2 个待补照片', owner: '车间组长', tone: 'amber' },
+  { item: '标签扫描', value: '100%', status: '今日无漏扫', owner: '计划员', tone: 'green' },
+  { item: '硬件兜底', value: `${getHardwareManualFallbackCount()} 项`, status: '已纳入任务队列', owner: '实施顾问', tone: 'gray' },
+] as const;
+
+const shiftSignals = [
+  { label: '入库阻断', value: '2', hint: '物料确认 / 视频失败', tone: 'amber' },
+  { label: '生产瓶颈', value: '5', hint: '镶石工位积压', tone: 'red' },
+  { label: '质检积压', value: '7', hint: '最早 09:40 提交', tone: 'amber' },
+  { label: '出库风险', value: '0', hint: '追溯链路可核验', tone: 'green' },
+] as const;
+
+const ownerLoads = [
+  { owner: '库管组', task: '拆包视频失败、母单待确认', count: '3 项', tone: 'amber' },
+  { owner: '车间组长', task: '超标损耗、称重待补', count: '4 项', tone: 'red' },
+  { owner: '质检组', task: '待检积压、返工复检', count: '7 批', tone: 'amber' },
+  { owner: '实施顾问', task: '硬件兜底和样例脚本', count: '4 项', tone: 'blue' },
 ] as const;
 </script>
 
 <template>
-  <div class="page-stack">
-    <section class="operations-hero">
-      <div class="hero-copy">
+  <div class="page-stack cockpit-page">
+    <section class="command-center">
+      <div class="command-main">
         <span class="eyebrow">Production Control</span>
-        <h2>今日生产追溯驾驶舱</h2>
-        <p>当前重点是把客户来料所有权、称重证据、工序报工、质检返工和库存台账跑成一条可核验闭环。</p>
+        <h2>今日生产追溯指挥台</h2>
+        <p>把客户来料所有权、称重证据、工序报工、质检返工和库存台账放到一张可排查、可追责、可验收的业务台面。</p>
+        <div class="command-actions">
+          <button class="primary-button" type="button">处理最高风险</button>
+          <button class="secondary-button" type="button">打开追溯链路</button>
+          <span><i class="live-dot" />车间实时评审视图</span>
+        </div>
       </div>
-      <div class="hero-kpis">
-        <article>
-          <span>待处理异常</span>
-          <strong>3</strong>
+      <div class="command-kpis">
+        <article v-for="signal in shiftSignals" :key="signal.label" :class="`tone-${signal.tone}`">
+          <span>{{ signal.label }}</span>
+          <strong>{{ signal.value }}</strong>
+          <small>{{ signal.hint }}</small>
         </article>
-        <article>
-          <span>在制批次</span>
-          <strong>18</strong>
-        </article>
-        <article>
-          <span>证据完整率</span>
-          <strong>92%</strong>
-        </article>
+      </div>
+    </section>
+
+    <section class="control-filter-bar" aria-label="业务筛选">
+      <div>
+        <span>评审范围</span>
+        <strong>今日白班 / 总装一线 / 客户来料</strong>
+      </div>
+      <div>
+        <span>追溯对象</span>
+        <strong>MD-20260706-001 / ZD-20260706-001</strong>
+      </div>
+      <div>
+        <span>证据策略</span>
+        <strong>NVR 优先，失败人工上传</strong>
+      </div>
+      <div class="filter-actions">
+        <button class="secondary-button" type="button">切换班次</button>
+        <button class="secondary-button" type="button">导出日报</button>
       </div>
     </section>
 
@@ -64,7 +101,7 @@ const evidenceRows = [
         </div>
         <div class="work-queue">
           <article v-for="item in workQueues" :key="item.id" class="queue-row">
-            <StatusBadge :label="item.severity === 'high' ? '高' : item.severity === 'medium' ? '中' : '普通'" :tone="severityTone(item.severity)" />
+            <StatusBadge :label="severityLabel(item.severity)" :tone="severityTone(item.severity)" />
             <div>
               <strong>{{ item.title }}</strong>
               <span>{{ item.subtitle }}</span>
@@ -92,7 +129,7 @@ const evidenceRows = [
           <div v-for="row in flowRows" :key="row.node" class="flow-row">
             <strong>{{ row.node }}</strong>
             <span>{{ row.total }}</span>
-            <span>{{ row.abnormal }}</span>
+            <StatusBadge :label="row.abnormal" :tone="row.tone" />
             <span>{{ row.owner }}</span>
             <span>{{ row.next }}</span>
           </div>
@@ -143,11 +180,29 @@ const evidenceRows = [
           <article v-for="row in evidenceRows" :key="row.item">
             <div>
               <strong>{{ row.item }}</strong>
-              <span>{{ row.status }}</span>
+              <span>{{ row.status }} / {{ row.owner }}</span>
             </div>
             <StatusBadge :label="row.value" :tone="row.tone" />
           </article>
         </div>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <h2>责任分布与下一步</h2>
+          <p>评审时优先确认“谁处理、处理什么、处理后影响哪条链路”。</p>
+        </div>
+      </div>
+      <div class="owner-grid">
+        <article v-for="item in ownerLoads" :key="item.owner" :class="`tone-${item.tone}`">
+          <div>
+            <strong>{{ item.owner }}</strong>
+            <span>{{ item.task }}</span>
+          </div>
+          <StatusBadge :label="item.count" :tone="item.tone" />
+        </article>
       </div>
     </section>
   </div>

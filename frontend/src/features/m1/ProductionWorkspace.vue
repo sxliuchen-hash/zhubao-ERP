@@ -50,6 +50,25 @@ onMounted(async () => {
       </div>
     </section>
 
+    <section class="control-filter-bar" aria-label="生产筛选">
+      <div>
+        <span>派工范围</span>
+        <strong>总装一线 / 白班 / 在制工单</strong>
+      </div>
+      <div>
+        <span>阻断规则</span>
+        <strong>称重缺失、质检积压、损耗超标</strong>
+      </div>
+      <div>
+        <span>工资口径</span>
+        <strong>只做计件试算，单价按报工快照</strong>
+      </div>
+      <div class="filter-actions">
+        <button class="secondary-button" type="button">瓶颈工位</button>
+        <button class="secondary-button" type="button">待交接</button>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>生产工单与工序报工</h2>

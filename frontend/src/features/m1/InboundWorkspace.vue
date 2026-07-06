@@ -55,6 +55,25 @@ function statusTone(status: string) {
       </div>
     </section>
 
+    <section class="control-filter-bar" aria-label="来料筛选">
+      <div>
+        <span>业务对象</span>
+        <strong>客户来料 / 母单 / 拆包称重</strong>
+      </div>
+      <div>
+        <span>优先级</span>
+        <strong>视频失败与物料待确认优先</strong>
+      </div>
+      <div>
+        <span>库存归属</span>
+        <strong>客户所有，不进入企业自有库存</strong>
+      </div>
+      <div class="filter-actions">
+        <button class="secondary-button" type="button">只看异常</button>
+        <button class="secondary-button" type="button">打印队列</button>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>来料入库与母单</h2>

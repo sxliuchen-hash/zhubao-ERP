@@ -42,6 +42,25 @@ onMounted(async () => {
       </div>
     </section>
 
+    <section class="control-filter-bar" aria-label="质检筛选">
+      <div>
+        <span>质检队列</span>
+        <strong>待检 / 返工复检 / 损耗审批</strong>
+      </div>
+      <div>
+        <span>证据要求</span>
+        <strong>缺陷照片、称重记录、处理动作</strong>
+      </div>
+      <div>
+        <span>返工策略</span>
+        <strong>返工仍走同一套工单状态机</strong>
+      </div>
+      <div class="filter-actions">
+        <button class="secondary-button" type="button">只看阻断</button>
+        <button class="secondary-button" type="button">批量复检</button>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>质检返工与损耗处理</h2>

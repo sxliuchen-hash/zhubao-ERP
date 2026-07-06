@@ -52,6 +52,25 @@ onMounted(async () => {
       </div>
     </section>
 
+    <section class="control-filter-bar" aria-label="库存追溯筛选">
+      <div>
+        <span>查询维度</span>
+        <strong>客户 / 批次 / 物料 / 库位 / 状态</strong>
+      </div>
+      <div>
+        <span>追溯对象</span>
+        <strong>MD-20260706-001 到 ZD-20260706-001</strong>
+      </div>
+      <div>
+        <span>台账原则</span>
+        <strong>只追加，不直接改余额</strong>
+      </div>
+      <div class="filter-actions">
+        <button class="secondary-button" type="button">冻结库存</button>
+        <button class="secondary-button" type="button">证据缺口</button>
+      </div>
+    </section>
+
     <section class="toolbar-band">
       <div>
         <h2>库存台账与全链路追溯</h2>
