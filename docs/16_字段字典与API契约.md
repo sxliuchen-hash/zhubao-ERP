@@ -63,6 +63,7 @@
 |---|---|---|
 | `POST /inbound-confirmations` | 来料母单 | 确认客户来料入库，写入库存台账和客户所有原料库存余额 |
 | `POST /production-reports` | 生产工单 | 提交工序报工，将同一子工单的在制库存转为半成品库存 |
+| `POST /quality-freezes` | 质检返工 | 冻结质检异常库存，将同一子工单的半成品库存转为冻结库存 |
 
 配置基线接口前缀：
 
@@ -278,6 +279,52 @@
 | `evidence` | 称重和照片证据摘要 |
 | `action` | 当前审批动作 |
 
+### 6.3 `FreezeQualityStockCommand`
+
+`POST /api/business/operations/quality-freezes` 使用该命令模型。该接口是 M3.8 质检冻结写台账基线。
+
+| 字段 | 说明 |
+|---|---|
+| `qualityCaseCode` | 质检单号，作为库存台账来源单据 |
+| `motherOrderCode` | 母单号 |
+| `workOrderCode` | 子工单或返工工单号 |
+| `customerId` | 业务客户 ID |
+| `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
+| `materialCode` | 物料编码 |
+| `fromWarehouseCode` | 来源半成品仓/暂存区 |
+| `toWarehouseCode` | 目标冻结仓/质检冻结区 |
+| `quantity` | 本次冻结数量，必须大于 0 |
+| `weight` | 本次冻结重量，必须大于 0 |
+| `process` | 工序名称快照 |
+| `inspector` | 质检员快照 |
+| `defect` | 缺陷描述快照 |
+| `evidenceCode` | 缺陷照片、称重或质检证据编码 |
+| `remark` | 备注 |
+
+### 6.4 `QualityFreezeResult`
+
+| 字段 | 说明 |
+|---|---|
+| `qualityCaseCode` | 质检单号 |
+| `workOrderCode` | 工单号 |
+| `ledgerCode` | 库存台账号 |
+| `fromWarehouseCode` | 来源仓/暂存区 |
+| `toWarehouseCode` | 目标冻结仓/质检冻结区 |
+| `fromStockStatus` | 来源库存状态，当前为 `SEMI_FINISHED` |
+| `toStockStatus` | 目标库存状态，当前为 `FROZEN` |
+| `quantity` | 已冻结数量 |
+| `weight` | 已冻结重量 |
+| `process` | 工序名称快照 |
+| `inspector` | 质检员快照 |
+| `evidenceCode` | 证据编码 |
+
+实现约束：
+
+- `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
+- 质检冻结只允许改变仓库和库存状态，当前基线为 `SEMI_FINISHED -> FROZEN`。
+- 若来源半成品库存不足，后端必须拒绝写台账。
+- 冻结库存只是库存状态变更，不等同于生成返工工单；返工仍需后续业务命令接入同一工单状态机。
+
 ---
 
 ## 7. 库存与追溯字段
@@ -391,11 +438,12 @@ PWA 一期边界：
 |---|---|
 | 来料确认入库 | `POST /api/business/operations/inbound-confirmations`，`RAW_WAITING` 入账 |
 | 生产报工 | `POST /api/business/operations/production-reports`，`WIP -> SEMI_FINISHED` |
+| 质检冻结 | `POST /api/business/operations/quality-freezes`，`SEMI_FINISHED -> FROZEN` |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态，后续需从真实业务聚合刷新页面 |
+| 当前限制 | 尚未更新工作台快照状态，返工和出库仍需继续接入业务命令 |
 
-这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、质检冻结、返工、出库都必须先建业务命令，再调用库存服务产生只追加台账。
+这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、返工、出库都必须先建业务命令，再调用库存服务产生只追加台账。
 
 ---
 

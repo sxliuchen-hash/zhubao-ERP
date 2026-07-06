@@ -1,8 +1,10 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
+import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
@@ -107,6 +109,59 @@ class BusinessOperationServiceTest {
         assertThat(semiFinishedBalance.weight()).isEqualByComparingTo("478.240");
         assertThat(ledger.documentType()).isEqualTo("production_report");
         assertThat(ledger.remark()).contains("焊接", "王强", "HO-20260706-018");
+    }
+
+    @Test
+    void freezeQualityStockMovesSemiFinishedToFrozenForSameWorkOrderDimension() {
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        StockLedgerService stockLedgerService = new StockLedgerService(repository);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        StockDimension semiFinished = dimension(StockStatus.SEMI_FINISHED, "SEMI-FINISHED");
+
+        stockLedgerService.transfer(new StockTransferCommand(
+                "production_report",
+                "ZD-20260706-006",
+                null,
+                semiFinished,
+                bd("210"),
+                bd("478.240"),
+                "测试预置半成品库存"
+        ));
+
+        QualityFreezeResult result = service.freezeQualityStock(new FreezeQualityStockCommand(
+                "QC-20260706-022",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "SEMI-FINISHED",
+                "FROZEN-QC",
+                bd("6"),
+                bd("13.660"),
+                "焊接",
+                "周娜",
+                "焊点偏移 6 件",
+                "PHOTO-QC-20260706-022",
+                "质检异常冻结"
+        ));
+
+        StockDimension frozen = dimension(StockStatus.FROZEN, "FROZEN-QC");
+        StockBalance semiFinishedBalance = repository.findBalance(semiFinished);
+        StockBalance frozenBalance = repository.findBalance(frozen);
+        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
+
+        assertThat(result.qualityCaseCode()).isEqualTo("QC-20260706-022");
+        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.SEMI_FINISHED);
+        assertThat(result.toStockStatus()).isEqualTo(StockStatus.FROZEN);
+        assertThat(result.evidenceCode()).isEqualTo("PHOTO-QC-20260706-022");
+        assertThat(semiFinishedBalance.quantity()).isEqualByComparingTo("204");
+        assertThat(semiFinishedBalance.weight()).isEqualByComparingTo("464.580");
+        assertThat(frozenBalance.quantity()).isEqualByComparingTo("6");
+        assertThat(frozenBalance.weight()).isEqualByComparingTo("13.660");
+        assertThat(ledger.documentType()).isEqualTo("quality_freeze");
+        assertThat(ledger.documentCode()).isEqualTo("QC-20260706-022");
+        assertThat(ledger.remark()).contains("周娜", "焊点偏移 6 件", "PHOTO-QC-20260706-022");
     }
 
     private StockDimension dimension(StockStatus status, String warehouseCode) {

@@ -24,6 +24,7 @@
 - M3.5 来料确认入库业务操作基线，新增 `POST /api/business/operations/inbound-confirmations`，前端来料页可调用真实业务命令写入库存台账。
 - M3.6 生产报工业务操作基线，新增 `POST /api/business/operations/production-reports`，将同一子工单维度下的在制库存转为半成品库存。
 - M3.7 前端评审台信息架构整改，首页显式展示当前真实完成范围、未完成缺口、一期业务闭环状态图和模块完成度台账，避免把样例页面误判为完整交付系统。
+- M3.8 质检冻结业务操作基线，新增 `POST /api/business/operations/quality-freezes`，将同一子工单维度下的半成品异常库存转为冻结库存。
 
 ## 目录结构
 
@@ -141,6 +142,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/business/workspaces/mobile`
 - `POST /api/business/operations/inbound-confirmations`
 - `POST /api/business/operations/production-reports`
+- `POST /api/business/operations/quality-freezes`
 - `GET /api/configuration/baseline/summary`
 - `GET /api/configuration/baseline/system-parameters`
 - `GET /api/configuration/baseline/code-rules`

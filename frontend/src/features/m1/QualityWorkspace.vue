@@ -10,12 +10,19 @@ import {
   fetchQualityWorkspace,
   type QualityWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
+import {
+  freezeQualityStock,
+  type QualityFreezeResult,
+} from '../../services/businessOperationApi';
 
 const workspace = ref<QualityWorkspaceModel>({
   metrics: fallbackQualityMetrics,
   cases: fallbackQualityCases,
   lossApprovals: fallbackLossApprovals,
 });
+const freezingQualityStock = ref(false);
+const qualityFreezeResult = ref<QualityFreezeResult | null>(null);
+const qualityFreezeError = ref('');
 
 const activeCase = computed(
   () =>
@@ -36,6 +43,22 @@ onMounted(async () => {
     // Keep deterministic local samples available when the backend is not running.
   }
 });
+
+async function freezeActiveQualityStock() {
+  if (!activeCase.value) return;
+
+  freezingQualityStock.value = true;
+  qualityFreezeResult.value = null;
+  qualityFreezeError.value = '';
+
+  try {
+    qualityFreezeResult.value = await freezeQualityStock(activeCase.value);
+  } catch (error) {
+    qualityFreezeError.value = error instanceof Error ? error.message : '冻结异常库存失败';
+  } finally {
+    freezingQualityStock.value = false;
+  }
+}
 </script>
 
 <template>
@@ -144,9 +167,21 @@ onMounted(async () => {
           <dd>缺陷照片、称重记录、处理结论</dd>
         </dl>
         <div class="detail-actions">
-          <button class="primary-button" type="button">生成返工工单</button>
+          <button class="primary-button" type="button" :disabled="freezingQualityStock" @click="freezeActiveQualityStock">
+            {{ freezingQualityStock ? '正在冻结' : '冻结异常库存' }}
+          </button>
           <button class="secondary-button" type="button">登记缺陷照片</button>
           <button class="secondary-button" type="button">提交损耗审批</button>
+        </div>
+        <div v-if="qualityFreezeResult" class="operation-feedback success">
+          <strong>质检冻结已写入台账</strong>
+          <span>{{ qualityFreezeResult.ledgerCode }} / {{ qualityFreezeResult.qualityCaseCode }}</span>
+          <small>{{ qualityFreezeResult.fromStockStatus }} -> {{ qualityFreezeResult.toStockStatus }}</small>
+        </div>
+        <div v-else-if="qualityFreezeError" class="operation-feedback danger">
+          <strong>冻结异常库存失败</strong>
+          <span>{{ qualityFreezeError }}</span>
+          <small>请确认该工单已有半成品库存，并已完成必要质检证据归档。</small>
         </div>
       </aside>
     </section>

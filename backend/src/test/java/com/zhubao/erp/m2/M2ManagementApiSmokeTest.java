@@ -161,6 +161,66 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void freezesQualityStockThroughBusinessOperationApiAndMovesSemiFinishedStock() {
+        Map<String, Object> semiFinishedDimension = Map.of(
+                "ownerType", "CUSTOMER",
+                "ownerCustomerId", 1002L,
+                "customerId", 1002L,
+                "motherOrderCode", "MD-SMOKE-20260706-003",
+                "workOrderCode", "ZD-SMOKE-20260706-022",
+                "materialCode", "MAT-SILVER-CHAIN",
+                "warehouseCode", "SEMI-FINISHED",
+                "stockStatus", "SEMI_FINISHED"
+        );
+        Map<String, Object> seedSemiFinished = Map.of(
+                "documentType", "production_report",
+                "documentCode", "ZD-SMOKE-20260706-022",
+                "to", semiFinishedDimension,
+                "quantity", new BigDecimal("80"),
+                "weight", new BigDecimal("121.150"),
+                "remark", "seed semi-finished for quality freeze smoke test"
+        );
+        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedSemiFinished, String.class);
+
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("qualityCaseCode", "QC-SMOKE-20260706-022");
+        request.put("motherOrderCode", "MD-SMOKE-20260706-003");
+        request.put("workOrderCode", "ZD-SMOKE-20260706-022");
+        request.put("customerId", 1002L);
+        request.put("materialCode", "MAT-SILVER-CHAIN");
+        request.put("fromWarehouseCode", "SEMI-FINISHED");
+        request.put("toWarehouseCode", "FROZEN-QC");
+        request.put("quantity", new BigDecimal("6"));
+        request.put("weight", new BigDecimal("13.660"));
+        request.put("process", "焊接");
+        request.put("inspector", "周娜");
+        request.put("defect", "焊点偏移 6 件");
+        request.put("evidenceCode", "PHOTO-QC-SMOKE-001");
+        request.put("remark", "quality freeze smoke test");
+
+        ResponseEntity<String> frozen = restTemplate.postForEntity(
+                "/api/business/operations/quality-freezes",
+                request,
+                String.class
+        );
+        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+
+        assertThat(frozen.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(frozen.getBody()).contains(
+                "QC-SMOKE-20260706-022",
+                "SEMI_FINISHED",
+                "FROZEN",
+                "PHOTO-QC-SMOKE-001"
+        );
+        assertThat(balances.getBody()).contains(
+                "MD-SMOKE-20260706-003",
+                "ZD-SMOKE-20260706-022",
+                "FROZEN-QC",
+                "FROZEN"
+        );
+    }
+
+    @Test
     void exposesConfigurationBaselineApis() {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/configuration/baseline/summary", String.class);
         ResponseEntity<String> parameters = restTemplate.getForEntity("/api/configuration/baseline/system-parameters", String.class);

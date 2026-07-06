@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { InboundOrder, WorkOrder } from '../data/m1PrototypeData';
+import type { InboundOrder, QualityCase, WorkOrder } from '../data/m1PrototypeData';
 import {
   buildConfirmInboundRequest,
+  buildQualityFreezeRequest,
   buildProductionReportRequest,
 } from './businessOperationApi';
 
@@ -58,6 +59,35 @@ describe('businessOperationApi', () => {
       process: '焊接',
       operator: '王强',
       handoffCode: 'HO-20260706-018',
+    });
+  });
+
+  it('builds a quality freeze command that only changes stock status and warehouse', () => {
+    const qualityCase: QualityCase = {
+      code: 'QC-20260706-022',
+      workOrder: 'ZD-20260706-006',
+      process: '焊接',
+      inspector: '周娜',
+      defect: '焊点偏移 6 件',
+      action: '复检',
+      status: '待确认称重',
+    };
+
+    expect(buildQualityFreezeRequest(qualityCase)).toMatchObject({
+      qualityCaseCode: 'QC-20260706-022',
+      motherOrderCode: 'MD-20260706-002',
+      workOrderCode: 'ZD-20260706-006',
+      customerId: 1002,
+      ownerCustomerId: 1002,
+      materialCode: 'MAT-SILVER-CHAIN',
+      fromWarehouseCode: 'SEMI-FINISHED',
+      toWarehouseCode: 'FROZEN-QC',
+      quantity: 6,
+      weight: '13.660',
+      process: '焊接',
+      inspector: '周娜',
+      defect: '焊点偏移 6 件',
+      evidenceCode: 'PHOTO-QC-20260706-022',
     });
   });
 });

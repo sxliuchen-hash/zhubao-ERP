@@ -37,6 +37,7 @@ describe('M1 business workspaces', () => {
     expect(wrapper.find('table.module-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('质检指标');
     expect(wrapper.text()).toContain('损耗审批');
+    expect(wrapper.text()).toContain('冻结异常库存');
     expect(wrapper.text()).toContain('LOSS-20260706-009');
   });
 
