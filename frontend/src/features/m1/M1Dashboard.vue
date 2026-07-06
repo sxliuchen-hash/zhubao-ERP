@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import MetricCard from '../../components/MetricCard.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import { getHardwareManualFallbackCount, metrics, workOrders, workQueues } from '../../data/m1PrototypeData';
+import {
+  getHardwareManualFallbackCount,
+  inboundOrders,
+  inventoryBalances,
+  metrics,
+  productionHandoffs,
+  qualityCases,
+  workOrders,
+  workQueues,
+} from '../../data/m1PrototypeData';
 
 function severityTone(severity: string) {
   if (severity === 'high') return 'red';
@@ -43,6 +52,80 @@ const ownerLoads = [
   { owner: '质检组', task: '待检积压、返工复检', count: '7 批', tone: 'amber' },
   { owner: '实施顾问', task: '硬件兜底和样例脚本', count: '4 项', tone: 'blue' },
 ] as const;
+
+const activeInbound = inboundOrders[0];
+const activeWorkOrder = workOrders[2] ?? workOrders[0];
+const activeQuality = qualityCases[0];
+const activeInventory = inventoryBalances[1] ?? inventoryBalances[0];
+
+const operationSteps = [
+  { index: '01', title: '扫码收货', detail: '绑定快递单、客户、物料档案', state: '2 单待处理', tone: 'amber' },
+  { index: '02', title: '拆包称重', detail: '记录拆包前后重量与视频时间段', state: '1 单视频失败', tone: 'red' },
+  { index: '03', title: '生成子工单', detail: '按工序模板拆分并打印标签', state: '11 张已生成', tone: 'blue' },
+  { index: '04', title: '工序报工', detail: '扫码确认投入、产出、计件快照', state: '18 张在制', tone: 'violet' },
+  { index: '05', title: '质检放行', detail: '缺陷、返工、损耗审批闭环', state: '7 批待检', tone: 'amber' },
+] as const;
+
+const consoleRows = [
+  {
+    code: activeInbound.code,
+    type: '来料母单',
+    customer: activeInbound.customer,
+    material: activeInbound.material,
+    node: '拆包称重',
+    owner: '库管员 何琳',
+    blocker: activeInbound.video === '失败' ? '视频截取失败' : '待称重确认',
+    next: '开始拆包视频',
+    tone: activeInbound.video === '失败' ? 'red' : 'amber',
+  },
+  {
+    code: activeWorkOrder.code,
+    type: '生产工单',
+    customer: activeWorkOrder.customer,
+    material: activeWorkOrder.material,
+    node: activeWorkOrder.process,
+    owner: activeWorkOrder.assignee,
+    blocker: activeWorkOrder.status,
+    next: '补录称重交接',
+    tone: activeWorkOrder.status.includes('称重') ? 'red' : 'blue',
+  },
+  {
+    code: activeQuality.code,
+    type: '质检记录',
+    customer: '恒信珠宝',
+    material: '18K 金戒托',
+    node: activeQuality.process,
+    owner: activeQuality.inspector,
+    blocker: activeQuality.status,
+    next: activeQuality.action,
+    tone: 'amber',
+  },
+  {
+    code: activeInventory.batch,
+    type: '库存批次',
+    customer: activeInventory.owner,
+    material: activeInventory.material,
+    node: activeInventory.location,
+    owner: '库存服务',
+    blocker: activeInventory.status,
+    next: '查看台账',
+    tone: activeInventory.status.includes('在制') ? 'violet' : 'green',
+  },
+] as const;
+
+const evidenceMatrix = [
+  { label: '快递单照片', status: '已上传', link: activeInbound.courierNo, tone: 'green' },
+  { label: '拆包视频', status: activeInbound.video, link: 'NVR 08:42-09:05', tone: activeInbound.video === '已关联' ? 'green' : 'amber' },
+  { label: '称重交接', status: productionHandoffs[2]?.status ?? '待确认', link: productionHandoffs[2]?.code ?? 'HO-待生成', tone: 'red' },
+  { label: '缺陷照片', status: '5 张', link: activeQuality.code, tone: 'blue' },
+  { label: '库存台账', status: '只追加', link: activeInventory.batch, tone: 'green' },
+] as const;
+
+const approvalDock = [
+  { title: '超标损耗审批', code: 'LOSS-20260706-009', owner: '车间组长', sla: '18 分钟', tone: 'red' },
+  { title: '配置阈值变更', code: 'CFG-CR-20260706-001', owner: '生产负责人', sla: '今日 16:40', tone: 'amber' },
+  { title: '视频人工上传', code: 'VID-20260706-004', owner: '库管员', sla: '34 分钟', tone: 'amber' },
+] as const;
 </script>
 
 <template>
@@ -64,6 +147,142 @@ const ownerLoads = [
           <strong>{{ signal.value }}</strong>
           <small>{{ signal.hint }}</small>
         </article>
+      </div>
+    </section>
+
+    <section class="erp-console-board" aria-label="生产运营工作台">
+      <div class="console-master">
+        <div class="console-toolbar">
+          <div>
+            <span class="eyebrow">Live Operations</span>
+            <h2>生产运营主控台</h2>
+            <p>按单据、工序、责任人和阻断原因组织操作入口，避免只看摘要指标。</p>
+          </div>
+          <div class="console-tools">
+            <label>
+              <span>业务对象</span>
+              <select>
+                <option>全部单据</option>
+                <option>只看来料母单</option>
+                <option>只看生产工单</option>
+                <option>只看质检阻断</option>
+              </select>
+            </label>
+            <label>
+              <span>关键词</span>
+              <input value="MD-20260706-001" aria-label="追溯关键词" />
+            </label>
+            <button class="primary-button" type="button">追溯查询</button>
+          </div>
+        </div>
+
+        <div class="erp-table-wrap">
+          <table class="erp-table">
+            <thead>
+              <tr>
+                <th>业务单号</th>
+                <th>类型</th>
+                <th>客户/物料</th>
+                <th>当前节点</th>
+                <th>责任人</th>
+                <th>阻断/状态</th>
+                <th>下一动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in consoleRows" :key="row.code">
+                <td><strong>{{ row.code }}</strong></td>
+                <td>{{ row.type }}</td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ row.customer }}</b>
+                    <small>{{ row.material }}</small>
+                  </span>
+                </td>
+                <td>{{ row.node }}</td>
+                <td>{{ row.owner }}</td>
+                <td><StatusBadge :label="row.blocker" :tone="row.tone" /></td>
+                <td><button class="table-action" type="button">{{ row.next }}</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside class="console-detail">
+        <div class="detail-title">
+          <span>当前焦点</span>
+          <strong>{{ activeWorkOrder.code }}</strong>
+          <StatusBadge :label="activeWorkOrder.status" :tone="activeWorkOrder.status.includes('称重') ? 'red' : 'blue'" />
+        </div>
+        <dl class="detail-grid">
+          <dt>客户</dt>
+          <dd>{{ activeWorkOrder.customer }}</dd>
+          <dt>物料</dt>
+          <dd>{{ activeWorkOrder.material }}</dd>
+          <dt>当前工序</dt>
+          <dd>{{ activeWorkOrder.process }}</dd>
+          <dt>负责人</dt>
+          <dd>{{ activeWorkOrder.assignee }}</dd>
+          <dt>产出进度</dt>
+          <dd>{{ activeWorkOrder.finishedQty }}/{{ activeWorkOrder.plannedQty }} 件</dd>
+          <dt>库存归属</dt>
+          <dd>客户所有，在制库存</dd>
+        </dl>
+        <div class="detail-actions">
+          <button class="primary-button" type="button">扫码报工</button>
+          <button class="secondary-button" type="button">称重交接</button>
+          <button class="secondary-button" type="button">查看证据</button>
+        </div>
+      </aside>
+    </section>
+
+    <section class="operations-dock" aria-label="核心作业入口">
+      <article v-for="step in operationSteps" :key="step.index" :class="`tone-${step.tone}`">
+        <span>{{ step.index }}</span>
+        <div>
+          <strong>{{ step.title }}</strong>
+          <small>{{ step.detail }}</small>
+        </div>
+        <StatusBadge :label="step.state" :tone="step.tone" />
+      </article>
+    </section>
+
+    <section class="split-layout">
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>证据链完整性</h2>
+            <p>每个关键动作必须能落到附件、视频、称重、台账或审批记录。</p>
+          </div>
+        </div>
+        <div class="evidence-matrix">
+          <article v-for="item in evidenceMatrix" :key="item.label">
+            <div>
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.link }}</span>
+            </div>
+            <StatusBadge :label="item.status" :tone="item.tone" />
+          </article>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>审批与兜底队列</h2>
+            <p>硬件失败、损耗超标、配置变更必须有责任人和时限。</p>
+          </div>
+        </div>
+        <div class="approval-dock">
+          <article v-for="item in approvalDock" :key="item.code">
+            <StatusBadge :label="item.sla" :tone="item.tone" />
+            <div>
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.code }} / {{ item.owner }}</span>
+            </div>
+          </article>
+        </div>
       </div>
     </section>
 
