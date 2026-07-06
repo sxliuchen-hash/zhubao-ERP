@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.31 / 售后复核闭环</strong>
-        <i>首页、来料、生产、质检、库存、审批和硬件页已收敛为高密度作业台；售后复核分流已接入，真实权限、对象存储、现场设备直连和正式工资仍在开发队列。</i>
+        <strong>M3.32 / 作业台视觉重整</strong>
+        <i>真实业务动作、台账、售后复核和硬件 POC 已进入评审原型；真实权限、对象存储、现场设备直连和正式工资仍在开发队列。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -65,6 +65,23 @@ defineProps<{
             <span>硬件 POC</span>
             <span>工资试算基线</span>
           </div>
+        </div>
+        <div class="ops-command-metrics" aria-label="生产作业状态">
+          <article>
+            <span>待办</span>
+            <strong>31</strong>
+            <small>收货/报工/质检</small>
+          </article>
+          <article>
+            <span>阻断</span>
+            <strong>3</strong>
+            <small>称重/视频/审批</small>
+          </article>
+          <article>
+            <span>台账</span>
+            <strong>51</strong>
+            <small>自动化测试通过</small>
+          </article>
         </div>
         <div class="header-actions command-actions-panel" aria-label="全局操作">
           <label class="global-search">
