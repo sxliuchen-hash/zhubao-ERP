@@ -1,0 +1,61 @@
+package com.zhubao.erp.inventory.infra;
+
+import com.zhubao.erp.inventory.domain.StockBalance;
+import com.zhubao.erp.inventory.domain.StockDimension;
+import com.zhubao.erp.inventory.domain.StockLedgerEntry;
+import com.zhubao.erp.inventory.domain.StockLedgerRepository;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Repository
+public class InMemoryStockLedgerRepository implements StockLedgerRepository {
+
+    private final List<StockLedgerEntry> ledgers = new ArrayList<>();
+    private final Map<StockDimension, StockBalance> balances = new LinkedHashMap<>();
+
+    @Override
+    public synchronized StockLedgerEntry save(StockLedgerEntry entry) {
+        ledgers.add(entry);
+        if (entry.from() != null) {
+            applyDelta(entry.from(), entry.quantity().negate(), entry.weight().negate());
+        }
+        applyDelta(entry.to(), entry.quantity(), entry.weight());
+        return entry;
+    }
+
+    @Override
+    public synchronized List<StockLedgerEntry> findAllLedgers() {
+        return List.copyOf(ledgers);
+    }
+
+    @Override
+    public synchronized List<StockBalance> findAllBalances() {
+        return List.copyOf(balances.values());
+    }
+
+    @Override
+    public synchronized StockBalance findBalance(StockDimension dimension) {
+        return balances.getOrDefault(dimension, new StockBalance(dimension, BigDecimal.ZERO, BigDecimal.ZERO));
+    }
+
+    @Override
+    public synchronized void clear() {
+        ledgers.clear();
+        balances.clear();
+    }
+
+    private void applyDelta(StockDimension dimension, BigDecimal quantityDelta, BigDecimal weightDelta) {
+        StockBalance current = findBalance(dimension);
+        StockBalance next = new StockBalance(
+                dimension,
+                current.quantity().add(quantityDelta),
+                current.weight().add(weightDelta)
+        );
+        balances.put(dimension, next);
+    }
+}

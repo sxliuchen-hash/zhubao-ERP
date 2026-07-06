@@ -1,0 +1,9 @@
+{
+  "name": "来料加工 ERP M0",
+  "short_name": "ERP M0",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f7f2",
+  "theme_color": "#1f6f64",
+  "icons": []
+}

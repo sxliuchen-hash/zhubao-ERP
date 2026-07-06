@@ -1,0 +1,48 @@
+package com.zhubao.erp.scan.app;
+
+import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.scan.domain.ScanObjectType;
+import com.zhubao.erp.scan.domain.ScanResolveResponse;
+import org.springframework.stereotype.Service;
+
+import java.util.Map;
+
+@Service
+public class ScanCodeParser {
+
+    private static final String SYSTEM_PREFIX = "JG";
+    private static final Map<String, ScanObjectType> TYPE_MAP = Map.of(
+            "MO", ScanObjectType.MOTHER_ORDER,
+            "WO", ScanObjectType.WORK_ORDER,
+            "OUT", ScanObjectType.OUTBOUND_ORDER,
+            "EXP", ScanObjectType.EXPRESS_NO
+    );
+
+    public ScanResolveResponse resolve(String content, String scene) {
+        String normalized = content == null ? "" : content.trim();
+        String[] parts = normalized.split("\\|");
+        if (parts.length != 3 || !SYSTEM_PREFIX.equals(parts[0])) {
+            throw new BusinessException("未识别的二维码内容");
+        }
+
+        ScanObjectType objectType = TYPE_MAP.get(parts[1]);
+        if (objectType == null || parts[2].isBlank()) {
+            throw new BusinessException("未识别的二维码类型");
+        }
+
+        return new ScanResolveResponse(objectType, parts[2], nextAction(objectType, scene), true);
+    }
+
+    private String nextAction(ScanObjectType objectType, String scene) {
+        if (objectType == ScanObjectType.WORK_ORDER && "pwa_report".equals(scene)) {
+            return "report";
+        }
+        if (objectType == ScanObjectType.MOTHER_ORDER) {
+            return "trace";
+        }
+        if (objectType == ScanObjectType.OUTBOUND_ORDER) {
+            return "outbound";
+        }
+        return "lookup";
+    }
+}

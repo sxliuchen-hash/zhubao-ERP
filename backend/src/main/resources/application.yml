@@ -1,0 +1,18 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: zhubao-erp-backend
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+zhubao:
+  m0:
+    storage-mode: nas-first
+    video-buffer-seconds: 5
+    max-video-retry: 3

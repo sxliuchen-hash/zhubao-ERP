@@ -1,0 +1,17 @@
+.tools/
+.npm-cache/
+.pnpm-store/
+node_modules/
+dist/
+target/
+.idea/
+.vscode/
+*.log
+*.tmp
+
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+
+backend/target/
