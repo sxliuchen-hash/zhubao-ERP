@@ -10,6 +10,7 @@ import {
   inboundOrders,
   inventoryBalances,
   inventoryLedgerEntries,
+  lossApprovals,
   mobileCapabilities,
   offlineDrafts,
   productionHandoffs,
@@ -50,5 +51,19 @@ describe('m1PrototypeData', () => {
     expect(traceEvidence.some((item) => item.status.includes('失败'))).toBe(true);
     expect(mobileCapabilities.some((item) => item.label === '离线草稿')).toBe(true);
     expect(offlineDrafts.some((draft) => draft.tone === 'red')).toBe(true);
+  });
+
+  it('keeps loss approval samples usable for wage trial commands', () => {
+    const overLimitLoss = lossApprovals.find((approval) => approval.code === 'LOSS-20260706-009');
+    const missingWeightLoss = lossApprovals.find((approval) => approval.code === 'LOSS-20260706-010');
+
+    expect(overLimitLoss).toBeDefined();
+    expect(overLimitLoss?.standard).toMatch(/^\d+(\.\d+)?%$/);
+    expect(overLimitLoss?.actual).toMatch(/^\d+(\.\d+)?%$/);
+    expect(overLimitLoss?.evidence).toMatch(/投入 \d+(\.\d+)?g \/ 产出 \d+(\.\d+)?g/);
+    expect(overLimitLoss?.action).toContain('审批');
+    expect(missingWeightLoss?.actual).toBe('待确认');
+    expect(missingWeightLoss?.evidence).toContain('缺少产出称重照片');
+    expect(missingWeightLoss?.tone).toBe('amber');
   });
 });
