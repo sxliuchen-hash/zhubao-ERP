@@ -153,8 +153,8 @@ const implementationLanes = [
   {
     code: 'API',
     title: '真实业务动作',
-    value: '5 条',
-    detail: '来料确认入库、生产报工、质检冻结、返工派发、返工报工已能写入库存台账。',
+    value: '6 条',
+    detail: '来料确认入库、生产报工、质检冻结、返工派发、返工报工、复检放行已能写入库存台账。',
     state: '部分可验',
     tone: 'amber',
   },
@@ -177,7 +177,7 @@ const implementationLanes = [
 ] as const;
 
 const deliveryGaps = [
-  { title: '复检放行 / 工资口径', detail: '返工报工已写台账，但复检放行、最终合格入库和工资试算口径仍未闭环。', tone: 'red' },
+  { title: '工资口径 / 损耗审批', detail: '复检放行已写台账，但工资试算、超标损耗审批和审批流仍未闭环。', tone: 'red' },
   { title: '出库 / 退货 / 完工', detail: '尚未形成成品冻结、发货和客户退料闭环。', tone: 'amber' },
   { title: '权限 / 审批 / 审计', detail: '已有字段和页面占位，未接入真实登录、角色和审批流。', tone: 'amber' },
   { title: '对象存储 / 版本锁定', detail: '附件上传、checksum 和预览 URL 已接，MinIO/S3、签名 URL 和审批锁定仍未完成。', tone: 'blue' },
@@ -188,14 +188,14 @@ const chainStages = [
   { index: '02', title: '拆包称重', state: '样例', detail: '称重和视频证据仍是评审数据', tone: 'amber' },
   { index: '03', title: '子工单', state: '样例', detail: '工序模板和标签待接真实业务表', tone: 'amber' },
   { index: '04', title: '生产报工', state: '可操作', detail: 'WIP 转 SEMI_FINISHED 台账', tone: 'green' },
-  { index: '05', title: '质检返工', state: '部分可操作', detail: 'FROZEN 转 REWORK，REWORK 转 SEMI_FINISHED 已接', tone: 'amber' },
+  { index: '05', title: '质检返工', state: '可操作', detail: '冻结、返工、返工报工、复检放行已接台账', tone: 'green' },
   { index: '06', title: '出库追溯', state: '待开发', detail: '成品冻结、发货和退货未完成', tone: 'red' },
 ] as const;
 
 const readinessRows = [
   { module: '来料母单', api: '写账 API 已接', ui: '主表 + 详情 + 入库动作', data: '样例 + 内存兜底', status: '可演示验收' },
   { module: '生产工单', api: '报工 API 已接', ui: '派工 + 报工 + 交接', data: '样例 + JDBC 快照', status: '可演示验收' },
-  { module: '质检返工', api: '冻结/返工派发/返工报工 API 已接', ui: '质检队列 + 库存动作核验', data: '样例 + 真实台账', status: '待复检放行' },
+  { module: '质检返工', api: '冻结/返工派发/返工报工/复检放行 API 已接', ui: '质检队列 + 库存动作核验', data: '样例 + 真实台账', status: '待审批与工资口径' },
   { module: '库存追溯', api: '台账读写已具备', ui: '余额 + 台账 + 证据', data: '真实台账 + 样例', status: '继续聚合' },
   { module: '配置/构型', api: '只读基线 API', ui: '参数 + 权限 + 版本', data: 'seed 数据', status: '待审批写入' },
   { module: '文档附件', api: '文档包/附件/上传/预览 API 已接', ui: '文档包 + 上传测试 + 审计', data: '样例 + 内存上传', status: '待对象存储' },

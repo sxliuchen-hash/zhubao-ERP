@@ -3,6 +3,7 @@ import type { InboundOrder, QualityCase, WorkOrder } from '../data/m1PrototypeDa
 import {
   buildConfirmInboundRequest,
   buildQualityFreezeRequest,
+  buildQualityReleaseRequest,
   buildProductionReportRequest,
   buildReworkDispatchRequest,
   buildReworkReportRequest,
@@ -149,6 +150,35 @@ describe('businessOperationApi', () => {
       process: '返工焊接',
       operator: '王强',
       evidenceCode: 'PHOTO-REWORK-QC-20260706-022',
+    });
+  });
+
+  it('builds a quality release command from semi-finished stock to finished stock', () => {
+    const qualityCase: QualityCase = {
+      code: 'QC-20260706-023',
+      workOrder: 'FG-20260706-001',
+      process: '返工抛光',
+      inspector: '刘洋',
+      defect: '返工通过',
+      action: '放行',
+      status: '已完成',
+    };
+
+    expect(buildQualityReleaseRequest(qualityCase)).toMatchObject({
+      qualityCaseCode: 'QC-20260706-023',
+      motherOrderCode: 'MD-20260706-004',
+      workOrderCode: 'FG-20260706-001',
+      customerId: 1004,
+      ownerCustomerId: 1004,
+      materialCode: 'MAT-PT950-PENDANT',
+      fromWarehouseCode: 'SEMI-FINISHED',
+      toWarehouseCode: 'FINISHED-CUSTOMER',
+      quantity: 1,
+      weight: '1.250',
+      process: '复检返工抛光',
+      inspector: '刘洋',
+      releaseResult: '复检合格，允许成品入库',
+      evidenceCode: 'PHOTO-RELEASE-QC-20260706-023',
     });
   });
 });

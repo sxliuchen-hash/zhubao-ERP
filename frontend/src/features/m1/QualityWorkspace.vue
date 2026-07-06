@@ -14,7 +14,9 @@ import {
 import {
   dispatchRework,
   freezeQualityStock,
+  releaseQualityStock,
   reportRework,
+  type QualityReleaseResult,
   type ReworkDispatchResult,
   type ReworkReportResult,
   type QualityFreezeResult,
@@ -34,6 +36,9 @@ const reworkDispatchError = ref('');
 const reportingRework = ref(false);
 const reworkReportResult = ref<ReworkReportResult | null>(null);
 const reworkReportError = ref('');
+const releasingQualityStock = ref(false);
+const qualityReleaseResult = ref<QualityReleaseResult | null>(null);
+const qualityReleaseError = ref('');
 
 const activeCase = computed(
   () =>
@@ -87,10 +92,10 @@ const qualityActionRows: Array<{
     step: '04',
     action: '复检放行',
     stockFlow: 'SEMI_FINISHED -> FINISHED',
-    api: '待设计 /quality-releases',
+    api: 'POST /quality-releases',
     evidence: '复检结果、放行人、抽检记录',
-    state: '待开发',
-    tone: 'red',
+    state: '已接真实台账',
+    tone: 'green',
   },
   {
     step: '05',
@@ -104,9 +109,9 @@ const qualityActionRows: Array<{
 ];
 
 const qualityBoundaryRows = [
-  { label: '真实能力', value: '冻结、返工派发、返工报工会调用后端并写库存台账', tone: 'green' },
+  { label: '真实能力', value: '冻结、返工派发、返工报工、复检放行会调用后端并写库存台账', tone: 'green' },
   { label: '样例数据', value: '质检队列、损耗审批和证据列表仍来自评审快照或本地样例', tone: 'amber' },
-  { label: '明显缺口', value: '复检放行、附件上传、审批流、工资试算尚未形成闭环', tone: 'red' },
+  { label: '明显缺口', value: '损耗审批、工资试算、出库动作和真实审批流尚未形成闭环', tone: 'red' },
 ] as const;
 
 onMounted(async () => {
@@ -164,6 +169,22 @@ async function reportActiveRework() {
     reportingRework.value = false;
   }
 }
+
+async function releaseActiveQualityStock() {
+  if (!activeCase.value) return;
+
+  releasingQualityStock.value = true;
+  qualityReleaseResult.value = null;
+  qualityReleaseError.value = '';
+
+  try {
+    qualityReleaseResult.value = await releaseQualityStock(activeCase.value);
+  } catch (error) {
+    qualityReleaseError.value = error instanceof Error ? error.message : '复检放行失败';
+  } finally {
+    releasingQualityStock.value = false;
+  }
+}
 </script>
 
 <template>
@@ -209,7 +230,7 @@ async function reportActiveRework() {
             <h2>质检返工真实动作核验</h2>
             <p>把页面按钮、库存流转、后端 API 和证据要求对齐，避免只做展示页却没有业务闭环。</p>
           </div>
-          <StatusBadge label="M3.10 已接 3 个写账动作" tone="blue" />
+          <StatusBadge label="M3.14 已接 4 个写账动作" tone="blue" />
         </div>
         <div class="quality-action-table-wrap">
           <table class="quality-action-table">
@@ -332,6 +353,9 @@ async function reportActiveRework() {
           <button class="secondary-button" type="button" :disabled="reportingRework" @click="reportActiveRework">
             {{ reportingRework ? '正在报工' : '提交返工报工' }}
           </button>
+          <button class="secondary-button" type="button" :disabled="releasingQualityStock" @click="releaseActiveQualityStock">
+            {{ releasingQualityStock ? '正在放行' : '复检放行入库' }}
+          </button>
           <button class="secondary-button" type="button">提交损耗审批</button>
         </div>
         <div v-if="qualityFreezeResult" class="operation-feedback success">
@@ -363,6 +387,16 @@ async function reportActiveRework() {
           <strong>提交返工报工失败</strong>
           <span>{{ reworkReportError }}</span>
           <small>请确认该返工单已有返工在制库存，并完成返工报工证据。</small>
+        </div>
+        <div v-if="qualityReleaseResult" class="operation-feedback success">
+          <strong>复检放行已写入台账</strong>
+          <span>{{ qualityReleaseResult.ledgerCode }} / {{ qualityReleaseResult.qualityCaseCode }}</span>
+          <small>{{ qualityReleaseResult.fromStockStatus }} -> {{ qualityReleaseResult.toStockStatus }}</small>
+        </div>
+        <div v-else-if="qualityReleaseError" class="operation-feedback danger">
+          <strong>复检放行失败</strong>
+          <span>{{ qualityReleaseError }}</span>
+          <small>请确认该工单已有半成品库存，并完成复检结论和放行证据。</small>
         </div>
       </aside>
     </section>

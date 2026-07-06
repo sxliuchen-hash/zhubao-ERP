@@ -157,6 +157,40 @@ export interface ReworkReportResult {
   evidenceCode?: string;
 }
 
+export interface QualityReleaseRequest {
+  qualityCaseCode: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  customerId: number;
+  ownerCustomerId?: number;
+  materialCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  quantity: number;
+  weight: string;
+  process: string;
+  inspector: string;
+  releaseResult: string;
+  evidenceCode?: string;
+  remark?: string;
+}
+
+export interface QualityReleaseResult {
+  qualityCaseCode: string;
+  workOrderCode: string;
+  ledgerCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  fromStockStatus: string;
+  toStockStatus: string;
+  quantity: number;
+  weight: number;
+  process: string;
+  inspector: string;
+  releaseResult: string;
+  evidenceCode?: string;
+}
+
 const customerIds: Record<string, number> = {
   恒信珠宝: 1001,
   雅辰饰品: 1002,
@@ -175,6 +209,7 @@ const workOrderMotherOrders: Record<string, string> = {
   'ZD-20260706-001': 'MD-20260706-001',
   'ZD-20260706-002': 'MD-20260706-001',
   'ZD-20260706-006': 'MD-20260706-002',
+  'FG-20260706-001': 'MD-20260706-004',
   'FG-20260706-002': 'MD-20260706-004',
 };
 
@@ -355,6 +390,37 @@ export async function reportRework(qualityCase: QualityCase): Promise<ReworkRepo
   return apiPost<ReworkReportRequest, ReworkReportResult>(
     '/api/business/operations/rework-reports',
     buildReworkReportRequest(qualityCase),
+  );
+}
+
+export function buildQualityReleaseRequest(qualityCase: QualityCase): QualityReleaseRequest {
+  const customer = workOrderCustomers[qualityCase.workOrder] ?? '恒信珠宝';
+  const material = workOrderMaterials[qualityCase.workOrder] ?? qualityCase.workOrder;
+  const customerId = customerIds[customer] ?? 9000;
+
+  return {
+    qualityCaseCode: qualityCase.code,
+    motherOrderCode: workOrderMotherOrders[qualityCase.workOrder] ?? qualityCase.workOrder,
+    workOrderCode: qualityCase.workOrder,
+    customerId,
+    ownerCustomerId: customerId,
+    materialCode: materialCodes[material] ?? `MAT-${qualityCase.workOrder}`,
+    fromWarehouseCode: 'SEMI-FINISHED',
+    toWarehouseCode: 'FINISHED-CUSTOMER',
+    quantity: qualityFreezeQuantities[qualityCase.code] ?? 1,
+    weight: qualityFreezeWeights[qualityCase.code] ?? '1.000',
+    process: qualityCase.process.includes('复检') ? qualityCase.process : `复检${qualityCase.process}`,
+    inspector: qualityCase.inspector,
+    releaseResult: qualityCase.action === '放行' ? '复检合格，允许成品入库' : `${qualityCase.action}后复检放行`,
+    evidenceCode: `PHOTO-RELEASE-${qualityCase.code}`,
+    remark: '前端质检作业主控台复检放行',
+  };
+}
+
+export async function releaseQualityStock(qualityCase: QualityCase): Promise<QualityReleaseResult> {
+  return apiPost<QualityReleaseRequest, QualityReleaseResult>(
+    '/api/business/operations/quality-releases',
+    buildQualityReleaseRequest(qualityCase),
   );
 }
 

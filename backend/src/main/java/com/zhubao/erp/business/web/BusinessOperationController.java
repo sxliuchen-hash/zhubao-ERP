@@ -7,8 +7,10 @@ import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
+import com.zhubao.erp.business.domain.QualityReleaseResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.business.domain.ReportReworkCommand;
+import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.common.api.ApiResponse;
@@ -51,5 +53,10 @@ public class BusinessOperationController {
     @PostMapping("/rework-reports")
     public ApiResponse<ReworkReportResult> reportRework(@Valid @RequestBody ReportReworkCommand command) {
         return ApiResponse.ok(businessOperationService.reportRework(command));
+    }
+
+    @PostMapping("/quality-releases")
+    public ApiResponse<QualityReleaseResult> releaseQualityStock(@Valid @RequestBody ReleaseQualityStockCommand command) {
+        return ApiResponse.ok(businessOperationService.releaseQualityStock(command));
     }
 }

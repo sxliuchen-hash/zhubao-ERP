@@ -6,8 +6,10 @@ import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
+import com.zhubao.erp.business.domain.QualityReleaseResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.business.domain.ReportReworkCommand;
+import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -260,6 +262,56 @@ public class BusinessOperationService {
         );
     }
 
+    public QualityReleaseResult releaseQualityStock(ReleaseQualityStockCommand command) {
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        StockDimension fromSemiFinished = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.fromWarehouseCode(),
+                StockStatus.SEMI_FINISHED
+        );
+        StockDimension toFinished = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.toWarehouseCode(),
+                StockStatus.FINISHED
+        );
+
+        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+                "quality_release",
+                command.qualityCaseCode(),
+                fromSemiFinished,
+                toFinished,
+                command.quantity(),
+                command.weight(),
+                buildRemark(command)
+        ));
+
+        return new QualityReleaseResult(
+                command.qualityCaseCode(),
+                command.workOrderCode(),
+                entry.code(),
+                command.fromWarehouseCode(),
+                command.toWarehouseCode(),
+                fromSemiFinished.stockStatus(),
+                toFinished.stockStatus(),
+                entry.quantity(),
+                entry.weight(),
+                command.process(),
+                command.inspector(),
+                command.releaseResult(),
+                command.evidenceCode()
+        );
+    }
+
     private String buildRemark(ConfirmInboundCommand command) {
         StringBuilder remark = new StringBuilder("确认来料入库；操作人：").append(command.operator());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
@@ -330,6 +382,24 @@ public class BusinessOperationService {
                 .append(command.process())
                 .append("；操作人：")
                 .append(command.operator());
+        if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
+            remark.append("；证据：").append(command.evidenceCode());
+        }
+        if (command.remark() != null && !command.remark().isBlank()) {
+            remark.append("；备注：").append(command.remark());
+        }
+        return remark.toString();
+    }
+
+    private String buildRemark(ReleaseQualityStockCommand command) {
+        StringBuilder remark = new StringBuilder("质检放行；质检单：")
+                .append(command.qualityCaseCode())
+                .append("；工序：")
+                .append(command.process())
+                .append("；质检员：")
+                .append(command.inspector())
+                .append("；结论：")
+                .append(command.releaseResult());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
             remark.append("；证据：").append(command.evidenceCode());
         }

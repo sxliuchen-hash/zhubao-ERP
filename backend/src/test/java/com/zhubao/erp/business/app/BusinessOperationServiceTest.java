@@ -6,8 +6,10 @@ import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
+import com.zhubao.erp.business.domain.QualityReleaseResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.business.domain.ReportReworkCommand;
+import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -273,6 +275,59 @@ class BusinessOperationServiceTest {
         assertThat(ledger.documentType()).isEqualTo("rework_report");
         assertThat(ledger.documentCode()).isEqualTo("FG-20260706-022");
         assertThat(ledger.remark()).contains("QC-20260706-022", "返工焊接", "王强");
+    }
+
+    @Test
+    void releaseQualityStockMovesSemiFinishedToFinishedForSameWorkOrderDimension() {
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        StockLedgerService stockLedgerService = new StockLedgerService(repository);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        StockDimension semiFinished = dimension(StockStatus.SEMI_FINISHED, "SEMI-FINISHED");
+
+        stockLedgerService.transfer(new StockTransferCommand(
+                "rework_report",
+                "FG-20260706-022",
+                null,
+                semiFinished,
+                bd("6"),
+                bd("13.660"),
+                "测试预置复检后半成品库存"
+        ));
+
+        QualityReleaseResult result = service.releaseQualityStock(new ReleaseQualityStockCommand(
+                "QC-20260706-022",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "SEMI-FINISHED",
+                "FINISHED-CUSTOMER",
+                bd("6"),
+                bd("13.660"),
+                "复检焊接",
+                "周娜",
+                "复检合格，允许成品入库",
+                "PHOTO-RELEASE-20260706-022",
+                "复检放行转成品库存"
+        ));
+
+        StockDimension finished = dimension(StockStatus.FINISHED, "FINISHED-CUSTOMER");
+        StockBalance semiFinishedBalance = repository.findBalance(semiFinished);
+        StockBalance finishedBalance = repository.findBalance(finished);
+        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
+
+        assertThat(result.qualityCaseCode()).isEqualTo("QC-20260706-022");
+        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.SEMI_FINISHED);
+        assertThat(result.toStockStatus()).isEqualTo(StockStatus.FINISHED);
+        assertThat(result.releaseResult()).contains("复检合格");
+        assertThat(semiFinishedBalance.quantity()).isEqualByComparingTo("0");
+        assertThat(semiFinishedBalance.weight()).isEqualByComparingTo("0.000");
+        assertThat(finishedBalance.quantity()).isEqualByComparingTo("6");
+        assertThat(finishedBalance.weight()).isEqualByComparingTo("13.660");
+        assertThat(ledger.documentType()).isEqualTo("quality_release");
+        assertThat(ledger.documentCode()).isEqualTo("QC-20260706-022");
+        assertThat(ledger.remark()).contains("周娜", "复检合格", "PHOTO-RELEASE-20260706-022");
     }
 
     private StockDimension dimension(StockStatus status, String warehouseCode) {
