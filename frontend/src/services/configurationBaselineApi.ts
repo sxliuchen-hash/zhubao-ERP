@@ -2,8 +2,10 @@ import type {
   BackupPolicy,
   CodeRule,
   ComponentBaseline,
+  ConfigurationAuditEvent,
   ConfigurationBaselineSummary,
   ConfigurationBaselineWorkspace,
+  ConfigurationChangeRequest,
   ProcessTemplate,
   RolePermissionBaseline,
   SystemParameter,
@@ -25,6 +27,8 @@ export async function fetchConfigurationBaselineWorkspace(): Promise<Configurati
     videoParameters,
     components,
     backupPolicies,
+    changeRequests,
+    auditEvents,
   ] = await Promise.all([
     apiGet<ConfigurationBaselineSummary>(`${baselinePath}/summary`),
     apiGet<SystemParameter[]>(`${baselinePath}/system-parameters`),
@@ -35,6 +39,8 @@ export async function fetchConfigurationBaselineWorkspace(): Promise<Configurati
     apiGet<VideoParameter[]>(`${baselinePath}/video-parameters`),
     apiGet<ComponentBaseline[]>(`${baselinePath}/components`),
     apiGet<BackupPolicy[]>(`${baselinePath}/backup-policies`),
+    apiGet<ConfigurationChangeRequest[]>(`${baselinePath}/change-requests`),
+    apiGet<ConfigurationAuditEvent[]>(`${baselinePath}/audit-events`),
   ]);
 
   return {
@@ -47,5 +53,7 @@ export async function fetchConfigurationBaselineWorkspace(): Promise<Configurati
     videoParameters,
     components,
     backupPolicies,
+    changeRequests,
+    auditEvents,
   };
 }

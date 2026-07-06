@@ -28,6 +28,18 @@ function changeTone(changeControl: string): Tone {
   if (changeControl.includes('日志')) return 'amber';
   return 'blue';
 }
+
+function requestStatusTone(status: string): Tone {
+  if (status.includes('待')) return 'amber';
+  if (status.includes('驳回')) return 'red';
+  return 'green';
+}
+
+function riskTone(riskLevel: string): Tone {
+  if (riskLevel === '高') return 'red';
+  if (riskLevel === '中') return 'amber';
+  return 'green';
+}
 </script>
 
 <template>
@@ -50,6 +62,10 @@ function changeTone(changeControl: string): Tone {
         <article>
           <span>仓库状态</span>
           <strong>{{ workspace.summary.warehouseStates }}</strong>
+        </article>
+        <article>
+          <span>变更单</span>
+          <strong>{{ workspace.summary.changeRequests }}</strong>
         </article>
       </div>
     </section>
@@ -81,6 +97,59 @@ function changeTone(changeControl: string): Tone {
       <div class="button-row">
         <button class="secondary-button" type="button">变更记录</button>
         <button class="primary-button" type="button">冻结当前基线</button>
+      </div>
+    </section>
+
+    <section class="split-layout wide-left">
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>配置变更审批</h2>
+            <p>C1 配置和编码规则变更必须先形成变更单，再审批、落库和留痕。</p>
+          </div>
+          <StatusBadge :label="`${workspace.summary.changeRequests} 张变更单`" tone="amber" />
+        </div>
+        <div class="change-request-list">
+          <article v-for="request in workspace.changeRequests" :key="request.code">
+            <div class="change-request-head">
+              <div>
+                <small>{{ request.code }}</small>
+                <strong>{{ request.targetName }}</strong>
+                <span>{{ request.targetKey }} / {{ request.changeType }}</span>
+              </div>
+              <div class="change-request-badges">
+                <StatusBadge :label="request.status" :tone="requestStatusTone(request.status)" />
+                <StatusBadge :label="`${request.riskLevel}风险`" :tone="riskTone(request.riskLevel)" />
+              </div>
+            </div>
+            <div class="value-diff">
+              <span>原值：{{ request.beforeValue }}</span>
+              <span>新值：{{ request.afterValue }}</span>
+            </div>
+            <p>{{ request.reason }}</p>
+            <small>{{ request.applicant }} -> {{ request.approver }} / {{ request.submittedAt }}</small>
+          </article>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>审计日志</h2>
+            <p>所有配置导出、审批和后续修改都必须能关联证据和 traceId。</p>
+          </div>
+          <StatusBadge :label="`${workspace.summary.auditEvents} 条事件`" tone="blue" />
+        </div>
+        <div class="audit-timeline">
+          <article v-for="event in workspace.auditEvents" :key="event.eventId">
+            <time>{{ event.occurredAt }}</time>
+            <div>
+              <strong>{{ event.operation }}</strong>
+              <span>{{ event.targetKey }} / {{ event.operator }} / {{ event.result }}</span>
+              <small>{{ event.evidence }} / {{ event.traceId }}</small>
+            </div>
+          </article>
+        </div>
       </div>
     </section>
 

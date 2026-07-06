@@ -366,6 +366,10 @@ button {
   gap: 18px;
 }
 
+.split-layout > * {
+  min-width: 0;
+}
+
 .split-layout.wide-left {
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
 }
@@ -373,6 +377,7 @@ button {
 .section-block,
 .toolbar-band,
 .panel {
+  min-width: 0;
   border: 1px solid #dde5ee;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.96);
@@ -2370,6 +2375,100 @@ button:hover {
   grid-template-columns: 1fr;
 }
 
+.change-request-list,
+.audit-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.change-request-list article {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff, #fbfdff);
+  padding: 12px;
+}
+
+.change-request-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.change-request-head small {
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.change-request-head strong,
+.change-request-head span {
+  display: block;
+}
+
+.change-request-head span,
+.change-request-list p,
+.change-request-list small,
+.audit-timeline span,
+.audit-timeline small {
+  color: var(--ink-500);
+  line-height: 1.45;
+}
+
+.change-request-list p {
+  margin: 0;
+}
+
+.change-request-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.value-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.value-diff span {
+  border: 1px solid #dbe7f3;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: var(--ink-600);
+  padding: 8px 10px;
+}
+
+.audit-timeline article {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  border-left: 2px solid #cbd5e1;
+  padding: 0 0 14px 14px;
+}
+
+.audit-timeline time {
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.audit-timeline strong,
+.audit-timeline span,
+.audit-timeline small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.change-request-list article,
+.change-request-list article *,
+.audit-timeline article,
+.audit-timeline article * {
+  min-width: 0;
+}
+
 .progress-bar {
   background: #e2e8f0;
 }
@@ -2439,5 +2538,15 @@ button:hover {
 
   .command-main h2 {
     font-size: 24px;
+  }
+
+  .change-request-head,
+  .value-diff,
+  .audit-timeline article {
+    grid-template-columns: 1fr;
+  }
+
+  .change-request-badges {
+    justify-content: flex-start;
   }
 }

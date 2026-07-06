@@ -3,7 +3,9 @@ package com.zhubao.erp.configuration.app;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.BackupPolicy;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.CodeRule;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ComponentBaseline;
+import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ConfigurationAuditEvent;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ConfigurationBaselineSummary;
+import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ConfigurationChangeRequest;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ProcessTemplate;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.RolePermissionBaseline;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.SystemParameter;
@@ -97,6 +99,84 @@ public class ConfigurationBaselineService {
             new BackupPolicy("配置和模板", "每次变更生成版本记录", "变更即备份", "4 小时", "系统管理员")
     );
 
+    private final List<ConfigurationChangeRequest> changeRequests = List.of(
+            new ConfigurationChangeRequest(
+                    "CFG-CR-20260706-001",
+                    "split.weight.tolerance",
+                    "工单拆分重量误差阈值",
+                    "参数调整",
+                    "0.02",
+                    "0.03",
+                    "银链半成品拆分时现场称重波动较大，需要先在试点线验证是否放宽阈值。",
+                    "车间组长 马杰",
+                    "生产负责人",
+                    "待审批",
+                    "高",
+                    "2026-07-06 16:40"
+            ),
+            new ConfigurationChangeRequest(
+                    "CFG-CR-20260706-002",
+                    "video.upload.max.size",
+                    "人工上传视频大小限制",
+                    "参数补全",
+                    "待确认",
+                    "512 MB",
+                    "拆包视频人工上传兜底需要明确上限，避免超大文件影响对象存储。",
+                    "实施顾问",
+                    "系统管理员",
+                    "已通过",
+                    "中",
+                    "2026-07-06 15:12"
+            ),
+            new ConfigurationChangeRequest(
+                    "CFG-CR-20260706-003",
+                    "CC-YYYYMMDD-流水号-客户简称",
+                    "母单编码规则",
+                    "规则变更",
+                    "CC-YYYYMMDD-流水号-客户简称",
+                    "MD-YYYYMMDD-流水号-客户简称",
+                    "与现场单据口径不一致，暂不建议在 M2 后期变更编码体系。",
+                    "业务员",
+                    "系统管理员",
+                    "已驳回",
+                    "高",
+                    "2026-07-06 14:05"
+            )
+    );
+
+    private final List<ConfigurationAuditEvent> auditEvents = List.of(
+            new ConfigurationAuditEvent(
+                    "CFG-AUD-20260706-001",
+                    "video.upload.max.size",
+                    "审批通过",
+                    "系统管理员",
+                    "2026-07-06 15:26",
+                    "成功",
+                    "CFG-CR-20260706-002 / 评审记录截图",
+                    "TRACE-CFG-002"
+            ),
+            new ConfigurationAuditEvent(
+                    "CFG-AUD-20260706-002",
+                    "CC-YYYYMMDD-流水号-客户简称",
+                    "审批驳回",
+                    "系统管理员",
+                    "2026-07-06 14:33",
+                    "成功",
+                    "CFG-CR-20260706-003 / 编码冻结说明",
+                    "TRACE-CFG-003"
+            ),
+            new ConfigurationAuditEvent(
+                    "CFG-AUD-20260706-003",
+                    "configuration.baseline",
+                    "导出基线",
+                    "实施顾问",
+                    "2026-07-06 17:10",
+                    "成功",
+                    "M2.2 配置基线评审包",
+                    "TRACE-CFG-EXPORT-001"
+            )
+    );
+
     public ConfigurationBaselineSummary summary() {
         return new ConfigurationBaselineSummary(
                 systemParameters.size(),
@@ -105,7 +185,9 @@ public class ConfigurationBaselineService {
                 processTemplates.size(),
                 warehouseStates.size(),
                 videoParameters.size(),
-                approvalRequiredItems()
+                approvalRequiredItems(),
+                changeRequests.size(),
+                auditEvents.size()
         );
     }
 
@@ -139,6 +221,14 @@ public class ConfigurationBaselineService {
 
     public List<BackupPolicy> backupPolicies() {
         return backupPolicies;
+    }
+
+    public List<ConfigurationChangeRequest> changeRequests() {
+        return changeRequests;
+    }
+
+    public List<ConfigurationAuditEvent> auditEvents() {
+        return auditEvents;
     }
 
     private int approvalRequiredItems() {

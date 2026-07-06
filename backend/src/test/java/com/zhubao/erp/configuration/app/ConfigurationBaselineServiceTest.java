@@ -16,7 +16,11 @@ class ConfigurationBaselineServiceTest {
         assertThat(service.processTemplates()).hasSize(2);
         assertThat(service.warehouseStates()).hasSize(6);
         assertThat(service.videoParameters()).hasSize(5);
+        assertThat(service.changeRequests()).hasSize(3);
+        assertThat(service.auditEvents()).hasSize(3);
         assertThat(service.summary().approvalRequiredItems()).isGreaterThanOrEqualTo(6);
+        assertThat(service.summary().changeRequests()).isEqualTo(3);
+        assertThat(service.summary().auditEvents()).isEqualTo(3);
         assertThat(service.systemParameters())
                 .anySatisfy(parameter -> {
                     assertThat(parameter.key()).isEqualTo("inventory.negative.allowed");
@@ -27,5 +31,9 @@ class ConfigurationBaselineServiceTest {
                 .anySatisfy(role -> assertThat(role.sensitiveActions()).contains("报工更正"));
         assertThat(service.videoParameters())
                 .anySatisfy(parameter -> assertThat(parameter.fallback()).contains("人工上传"));
+        assertThat(service.changeRequests())
+                .anySatisfy(request -> assertThat(request.code()).isEqualTo("CFG-CR-20260706-001"));
+        assertThat(service.auditEvents())
+                .anySatisfy(event -> assertThat(event.traceId()).isEqualTo("TRACE-CFG-002"));
     }
 }

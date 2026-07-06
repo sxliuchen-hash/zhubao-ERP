@@ -15,6 +15,7 @@
 - M2 核心业务工作台 API 基线，覆盖来料、生产、质检、库存、PWA。
 - M2.1 前端产品化重构第一轮，升级生产追溯指挥台、全局状态、风险信号、业务筛选条和高密度 ERP 表格样式。
 - M2.2 配置基线管理，覆盖系统参数、编码规则、角色权限、工序模板、仓库状态、视频参数、组件版本和备份策略。
+- M2.3 配置变更控制基线，增加变更审批队列、审计日志和 MySQL 变更控制草案。
 
 ## 目录结构
 
@@ -117,6 +118,8 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/configuration/baseline/video-parameters`
 - `GET /api/configuration/baseline/components`
 - `GET /api/configuration/baseline/backup-policies`
+- `GET /api/configuration/baseline/change-requests`
+- `GET /api/configuration/baseline/audit-events`
 
 ## 下一阶段
 
@@ -127,7 +130,7 @@ M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3
 - RuoYi-Vue 具体分支和许可证确认。
 - NVR、标签打印、PWA 扫码、备份恢复的现场 POC 记录。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
-- 将配置基线 API 迁移为 MySQL seed 数据，并补齐变更审批和审计日志。
+- 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实权限。
 
 ## 开发管理文档
 

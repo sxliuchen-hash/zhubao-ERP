@@ -5,7 +5,9 @@ import com.zhubao.erp.configuration.app.ConfigurationBaselineService;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.BackupPolicy;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.CodeRule;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ComponentBaseline;
+import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ConfigurationAuditEvent;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ConfigurationBaselineSummary;
+import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ConfigurationChangeRequest;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.ProcessTemplate;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.RolePermissionBaseline;
 import com.zhubao.erp.configuration.domain.ConfigurationBaselineData.SystemParameter;
@@ -70,5 +72,15 @@ public class ConfigurationBaselineController {
     @GetMapping("/backup-policies")
     public ApiResponse<List<BackupPolicy>> backupPolicies() {
         return ApiResponse.ok(configurationBaselineService.backupPolicies());
+    }
+
+    @GetMapping("/change-requests")
+    public ApiResponse<List<ConfigurationChangeRequest>> changeRequests() {
+        return ApiResponse.ok(configurationBaselineService.changeRequests());
+    }
+
+    @GetMapping("/audit-events")
+    public ApiResponse<List<ConfigurationAuditEvent>> auditEvents() {
+        return ApiResponse.ok(configurationBaselineService.auditEvents());
     }
 }

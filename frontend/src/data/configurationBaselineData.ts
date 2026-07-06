@@ -8,6 +8,8 @@ export interface ConfigurationBaselineSummary {
   warehouseStates: number;
   videoParameters: number;
   approvalRequiredItems: number;
+  changeRequests: number;
+  auditEvents: number;
 }
 
 export interface SystemParameter {
@@ -81,6 +83,32 @@ export interface BackupPolicy {
   owner: string;
 }
 
+export interface ConfigurationChangeRequest {
+  code: string;
+  targetKey: string;
+  targetName: string;
+  changeType: string;
+  beforeValue: string;
+  afterValue: string;
+  reason: string;
+  applicant: string;
+  approver: string;
+  status: string;
+  riskLevel: string;
+  submittedAt: string;
+}
+
+export interface ConfigurationAuditEvent {
+  eventId: string;
+  targetKey: string;
+  operation: string;
+  operator: string;
+  occurredAt: string;
+  result: string;
+  evidence: string;
+  traceId: string;
+}
+
 export interface ConfigurationBaselineWorkspace {
   summary: ConfigurationBaselineSummary;
   systemParameters: SystemParameter[];
@@ -91,6 +119,8 @@ export interface ConfigurationBaselineWorkspace {
   videoParameters: VideoParameter[];
   components: ComponentBaseline[];
   backupPolicies: BackupPolicy[];
+  changeRequests: ConfigurationChangeRequest[];
+  auditEvents: ConfigurationAuditEvent[];
 }
 
 export const configurationToneByLevel: Record<string, Tone> = {
@@ -110,6 +140,8 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
     warehouseStates: 6,
     videoParameters: 5,
     approvalRequiredItems: 8,
+    changeRequests: 3,
+    auditEvents: 3,
   },
   systemParameters: [
     { key: 'system.code.prefix', value: 'JG', category: '编码', level: 'C2', description: '二维码和业务编码系统前缀', changeControl: '管理员变更，记录日志', effectiveScope: '全局' },
@@ -183,5 +215,81 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
     { target: '业务数据库', strategy: '每日全量 + binlog 增量', rpo: '试点 24 小时，正式 15-60 分钟', rto: '试点 1 个工作日，正式 4 小时', owner: '运维' },
     { target: '视频附件', strategy: 'NAS 快照或对象存储生命周期', rpo: '24 小时', rto: '1 个工作日', owner: '运维/库管' },
     { target: '配置和模板', strategy: '每次变更生成版本记录', rpo: '变更即备份', rto: '4 小时', owner: '系统管理员' },
+  ],
+  changeRequests: [
+    {
+      code: 'CFG-CR-20260706-001',
+      targetKey: 'split.weight.tolerance',
+      targetName: '工单拆分重量误差阈值',
+      changeType: '参数调整',
+      beforeValue: '0.02',
+      afterValue: '0.03',
+      reason: '银链半成品拆分时现场称重波动较大，需要先在试点线验证是否放宽阈值。',
+      applicant: '车间组长 马杰',
+      approver: '生产负责人',
+      status: '待审批',
+      riskLevel: '高',
+      submittedAt: '2026-07-06 16:40',
+    },
+    {
+      code: 'CFG-CR-20260706-002',
+      targetKey: 'video.upload.max.size',
+      targetName: '人工上传视频大小限制',
+      changeType: '参数补全',
+      beforeValue: '待确认',
+      afterValue: '512 MB',
+      reason: '拆包视频人工上传兜底需要明确上限，避免超大文件影响对象存储。',
+      applicant: '实施顾问',
+      approver: '系统管理员',
+      status: '已通过',
+      riskLevel: '中',
+      submittedAt: '2026-07-06 15:12',
+    },
+    {
+      code: 'CFG-CR-20260706-003',
+      targetKey: 'CC-YYYYMMDD-流水号-客户简称',
+      targetName: '母单编码规则',
+      changeType: '规则变更',
+      beforeValue: 'CC-YYYYMMDD-流水号-客户简称',
+      afterValue: 'MD-YYYYMMDD-流水号-客户简称',
+      reason: '与现场单据口径不一致，暂不建议在 M2 后期变更编码体系。',
+      applicant: '业务员',
+      approver: '系统管理员',
+      status: '已驳回',
+      riskLevel: '高',
+      submittedAt: '2026-07-06 14:05',
+    },
+  ],
+  auditEvents: [
+    {
+      eventId: 'CFG-AUD-20260706-001',
+      targetKey: 'video.upload.max.size',
+      operation: '审批通过',
+      operator: '系统管理员',
+      occurredAt: '2026-07-06 15:26',
+      result: '成功',
+      evidence: 'CFG-CR-20260706-002 / 评审记录截图',
+      traceId: 'TRACE-CFG-002',
+    },
+    {
+      eventId: 'CFG-AUD-20260706-002',
+      targetKey: 'CC-YYYYMMDD-流水号-客户简称',
+      operation: '审批驳回',
+      operator: '系统管理员',
+      occurredAt: '2026-07-06 14:33',
+      result: '成功',
+      evidence: 'CFG-CR-20260706-003 / 编码冻结说明',
+      traceId: 'TRACE-CFG-003',
+    },
+    {
+      eventId: 'CFG-AUD-20260706-003',
+      targetKey: 'configuration.baseline',
+      operation: '导出基线',
+      operator: '实施顾问',
+      occurredAt: '2026-07-06 17:10',
+      result: '成功',
+      evidence: 'M2.2 配置基线评审包',
+      traceId: 'TRACE-CFG-EXPORT-001',
+    },
   ],
 };

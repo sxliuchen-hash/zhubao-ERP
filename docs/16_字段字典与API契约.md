@@ -29,6 +29,7 @@
 - [ConfigurationBaselineData.java](../backend/src/main/java/com/zhubao/erp/configuration/domain/ConfigurationBaselineData.java)
 - [configurationBaselineApi.ts](../frontend/src/services/configurationBaselineApi.ts)
 - [V4__m2_configuration_baseline_contract.sql](../backend/src/main/resources/db/mysql/V4__m2_configuration_baseline_contract.sql)
+- [V5__m2_configuration_change_control_contract.sql](../backend/src/main/resources/db/mysql/V5__m2_configuration_change_control_contract.sql)
 
 ---
 
@@ -66,6 +67,8 @@
 | `GET /video-parameters` | 配置基线 | 返回视频截取、人工上传和保存策略参数 |
 | `GET /components` | 配置基线 | 返回开源组件版本、许可证、用途和风险 |
 | `GET /backup-policies` | 配置基线 | 返回数据库、附件、配置模板的备份策略 |
+| `GET /change-requests` | 配置基线 | 返回配置变更单、审批状态和风险等级 |
+| `GET /audit-events` | 配置基线 | 返回配置审批、导出和后续修改的审计事件 |
 
 ---
 
@@ -307,6 +310,36 @@ PWA 一期边界：
 | `retention` | 保存周期或保留策略 |
 | `changeControl` | 变更要求 |
 
+### 10.7 `ConfigurationChangeRequest`
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 配置变更单号 |
+| `targetKey` | 被变更的参数、编码规则或配置对象 |
+| `targetName` | 业务名称 |
+| `changeType` | 变更类型，例如参数调整、规则变更 |
+| `beforeValue` | 变更前值 |
+| `afterValue` | 变更后值 |
+| `reason` | 变更原因 |
+| `applicant` | 申请人快照 |
+| `approver` | 审批人或审批角色快照 |
+| `status` | 待审批、已通过、已驳回等 |
+| `riskLevel` | 风险等级 |
+| `submittedAt` | 提交时间 |
+
+### 10.8 `ConfigurationAuditEvent`
+
+| 字段 | 说明 |
+|---|---|
+| `eventId` | 审计事件号 |
+| `targetKey` | 审计对象 |
+| `operation` | 操作：审批通过、审批驳回、导出基线等 |
+| `operator` | 操作人快照 |
+| `occurredAt` | 发生时间 |
+| `result` | 操作结果 |
+| `evidence` | 关联证据 |
+| `traceId` | 审计追踪号 |
+
 配置基线迁移要求：
 
 1. M3 使用 `cfg_*` 表承载配置基线 seed 数据。
@@ -314,3 +347,5 @@ PWA 一期边界：
 3. C1 配置变更必须保留历史，不能直接覆盖旧值。
 4. 工序模板变更只影响新工单，历史工单使用快照字段。
 5. 视频和硬件参数必须支持失败兜底，不允许让硬件集成阻断业务闭环。
+6. 配置变更必须先形成 `ConfigurationChangeRequest`，审批完成后才能写入配置表。
+7. 每一次审批、驳回、导出、修改都必须写入 `ConfigurationAuditEvent` 并关联 `traceId`。

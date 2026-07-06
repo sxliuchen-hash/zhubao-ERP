@@ -14,5 +14,9 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('报工更正');
     expect(wrapper.text()).toContain('PROC-RING-STD');
     expect(wrapper.text()).toContain('video.retry.max');
+    expect(wrapper.text()).toContain('配置变更审批');
+    expect(wrapper.text()).toContain('CFG-CR-20260706-001');
+    expect(wrapper.text()).toContain('审计日志');
+    expect(wrapper.text()).toContain('TRACE-CFG-002');
   });
 });

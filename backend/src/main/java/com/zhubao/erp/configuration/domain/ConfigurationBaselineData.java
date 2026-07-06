@@ -14,7 +14,9 @@ public final class ConfigurationBaselineData {
             int processTemplates,
             int warehouseStates,
             int videoParameters,
-            int approvalRequiredItems
+            int approvalRequiredItems,
+            int changeRequests,
+            int auditEvents
     ) {
     }
 
@@ -94,6 +96,34 @@ public final class ConfigurationBaselineData {
             String rpo,
             String rto,
             String owner
+    ) {
+    }
+
+    public record ConfigurationChangeRequest(
+            String code,
+            String targetKey,
+            String targetName,
+            String changeType,
+            String beforeValue,
+            String afterValue,
+            String reason,
+            String applicant,
+            String approver,
+            String status,
+            String riskLevel,
+            String submittedAt
+    ) {
+    }
+
+    public record ConfigurationAuditEvent(
+            String eventId,
+            String targetKey,
+            String operation,
+            String operator,
+            String occurredAt,
+            String result,
+            String evidence,
+            String traceId
     ) {
     }
 }
