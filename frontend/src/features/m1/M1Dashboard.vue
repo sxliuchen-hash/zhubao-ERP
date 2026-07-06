@@ -179,7 +179,7 @@ const moduleRows = [
       <div class="floor-command-main">
         <div class="console-title-line">
           <span class="eyebrow">SHOP FLOOR COMMAND</span>
-          <StatusBadge label="M3.25 现场作业台" tone="green" />
+          <StatusBadge label="M3.34 作业台优化" tone="green" />
         </div>
         <div class="floor-command-title">
           <h2>来料加工现场总控</h2>
@@ -424,7 +424,7 @@ const moduleRows = [
           <span class="eyebrow">DELIVERY LEDGER</span>
           <h2>模块完成度与真实 API 契约</h2>
         </div>
-        <StatusBadge label="M3.25 UI 重构" tone="green" />
+        <StatusBadge label="M3.34 UI 整改" tone="green" />
       </div>
       <div class="readiness-table-wrap">
         <table class="readiness-table m325-readiness-table">
