@@ -37,6 +37,7 @@
 - [documentManagementApi.ts](../frontend/src/services/documentManagementApi.ts)
 - [V10__m3_document_management_contract.sql](../backend/src/main/resources/db/mysql/V10__m3_document_management_contract.sql)
 - [ApprovalService.java](../backend/src/main/java/com/zhubao/erp/approval/app/ApprovalService.java)
+- [JdbcApprovalTaskRepository.java](../backend/src/main/java/com/zhubao/erp/approval/infra/JdbcApprovalTaskRepository.java)
 - [V11__m3_lightweight_approval_contract.sql](../backend/src/main/resources/db/mysql/V11__m3_lightweight_approval_contract.sql)
 
 ---
@@ -571,7 +572,7 @@
 
 ### 6.13 `ApprovalTask`
 
-M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。它不是完整流程引擎，不处理并行会签、复杂条件路由或正式工资锁账。
+M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3.24 已补 JDBC 仓储，可将任务与审计事件写入 MySQL 合同表。它仍不是完整流程引擎，不处理并行会签、复杂条件路由或正式工资锁账。
 
 | 字段 | 说明 |
 |---|---|
@@ -608,8 +609,21 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。�
 轻量审批约束：
 - `WAITING_APPROVAL` 任务只能处理一次，处理后 `locked=true`。
 - `AUTO_APPROVED` 用于未超标或在规则阈值内的自动通过快照。
-- 当前仓储为内存实现，`V11__m3_lightweight_approval_contract.sql` 只冻结 MySQL 合同表；后续需要补 JDBC 仓储、真实用户、权限和审计日志。
+- 默认仓储为内存实现；设置 `zhubao.approval.repository=jdbc` 或 `ZHUBAO_APPROVAL_REPOSITORY=jdbc` 后启用 `JdbcApprovalTaskRepository`。
+- `V11__m3_lightweight_approval_contract.sql` 冻结 `approval_task` 和 `approval_audit_event` 合同表；M3.24 已补 H2 仓储测试验证任务持久化、审批决策和审计事件写入。
+- 后续仍需接入真实用户、角色权限、审批 UI、复杂流程编排和工资锁账审计。
 - 审批通过不自动写库存台账、不自动发放工资、不自动生成财务凭证。
+
+### 6.15 轻量审批持久化契约
+
+| 项目 | 契约 |
+|---|---|
+| 默认模式 | `zhubao.approval.repository=memory`，继续使用内存仓储，便于无数据库评审 |
+| JDBC 模式 | `zhubao.approval.repository=jdbc`，写入 `approval_task` 和 `approval_audit_event` |
+| MySQL profile | `ZHUBAO_APPROVAL_REPOSITORY=jdbc` |
+| 任务主键 | `approval_code` 唯一，当前复用损耗审批单号 |
+| 审计策略 | 每次 `save` 写入一条 `approval_audit_event`，用于保留创建、自动通过、人工通过或驳回痕迹 |
+| 当前限制 | 只解决固定场景轻量审批持久化；不代表正式权限、复杂审批流、工资锁账或财务凭证完成 |
 
 ---
 
@@ -912,7 +926,7 @@ PWA 一期边界：
 | 轻量审批任务 | `GET /api/approvals/tasks`、`GET /api/approvals/tasks/pending`、`POST /api/approvals/tasks/{approvalCode}/decisions`，用于固定场景待审批、审批通过/驳回和锁定 |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态；轻量审批当前为内存仓储，正式权限、复杂审批流、审批 UI、工资锁账/发放和退货后的售后质检复核仍需继续接入 |
+| 当前限制 | 尚未更新工作台快照状态；轻量审批可切换 JDBC 持久化，但正式权限、复杂审批流、审批 UI、工资锁账/发放和退货后的售后质检复核仍需继续接入 |
 
 这些接口证明一期闭环开始从“展示样例”进入“业务命令”。库存变化必须通过库存服务产生只追加台账；损耗审批、工资试算、称重交接和退货复核这类非库存动作也必须先建独立业务命令，再按职责接入审批服务、工资服务或证据服务。
 

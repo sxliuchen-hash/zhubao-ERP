@@ -39,6 +39,7 @@
 - M3.21 前端评审控制台整改，首页首屏补强“我目前实际做到了什么”“还不具备交付条件”“业务调度台”“已接业务命令”“证据链健康度”和“模块完成度台账”，明确区分已验证能力、样例数据、POC 和待开发缺口。
 - M3.22 轻量审批闭环基线，新增 `ApprovalService`、`/api/approvals/tasks`、`/api/approvals/tasks/pending`、`/api/approvals/tasks/{approvalCode}/decisions` 和 `V11__m3_lightweight_approval_contract.sql`；`loss-approvals` 会生成待审批或自动通过任务，但仍不代表复杂流程引擎、真实权限或正式工资锁账。
 - M3.23 前端作业台视觉整改，首页从“项目评审说明页”改为“白班生产作业台”，首屏集中呈现今日 KPI、阻断优先级、业务调度队列、焦点工单、称重交接、证据链、硬件兜底、开源参考和模块 API 契约。
+- M3.24 轻量审批 JDBC 持久化基线，新增 `JdbcApprovalTaskRepository`、`ZHUBAO_APPROVAL_REPOSITORY` 配置开关和 H2 仓储回归测试，审批任务与审计事件可写入 `approval_task` / `approval_audit_event` 合同表。
 
 ## 目录结构
 
@@ -122,6 +123,16 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 
 业务工作台 JDBC 当前读取的是 `biz_workspace_*` 评审快照和 seed 数据，用于验收与演示；正式交易闭环仍需继续接入来料、生产、质检、出库等真实业务表。
 
+启用 MySQL 轻量审批任务持久化：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_APPROVAL_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+审批 JDBC 当前只覆盖固定场景轻量审批任务和审计事件；真实登录、角色权限、复杂审批流、审批 UI 和工资锁账仍需继续开发。
+
 启动前端：
 
 ```powershell
@@ -188,7 +199,7 @@ pnpm --filter zhubao-erp-frontend dev
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.23 继续向生产现场作业台收敛，首页不再只做项目进度说明，而是承载白班 KPI、业务调度、焦点工单、证据链和软硬件兜底。后端已补入轻量审批任务基线。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.23 继续向生产现场作业台收敛，首页不再只做项目进度说明，而是承载白班 KPI、业务调度、焦点工单、证据链和软硬件兜底。后端已补入轻量审批任务与 JDBC 持久化基线。下一步重点不再是继续堆演示页，而是把真实业务闭环、权限审批、对象存储和软硬件证据补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
@@ -196,7 +207,7 @@ pnpm --filter zhubao-erp-frontend dev
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实权限。
-- 补齐退货后的售后质检复核、正式审批流、工资锁账/发放边界和对象存储，避免当前原型停留在局部台账动作与工资试算快照。
+- 补齐退货后的售后质检复核、真实权限、审批 UI、复杂审批流、工资锁账/发放边界和对象存储，避免当前原型停留在局部台账动作与工资试算快照。
 
 ## 开发管理文档
 

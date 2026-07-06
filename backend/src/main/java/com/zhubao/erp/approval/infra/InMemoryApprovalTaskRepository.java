@@ -2,6 +2,7 @@ package com.zhubao.erp.approval.infra;
 
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.domain.ApprovalTaskRepository;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Repository
+@ConditionalOnProperty(name = "zhubao.approval.repository", havingValue = "memory", matchIfMissing = true)
 public class InMemoryApprovalTaskRepository implements ApprovalTaskRepository {
 
     private final Map<String, ApprovalTask> tasks = new LinkedHashMap<>();

@@ -11,3 +11,5 @@ zhubao:
   business:
     repository: ${ZHUBAO_BUSINESS_REPOSITORY:memory}
     snapshot-code: ${ZHUBAO_BUSINESS_SNAPSHOT_CODE:}
+  approval:
+    repository: ${ZHUBAO_APPROVAL_REPOSITORY:memory}
