@@ -12,6 +12,8 @@ describe('App', () => {
     expect(wrapper.text()).toContain('生产工单');
     expect(wrapper.text()).toContain('质检返工');
     expect(wrapper.text()).toContain('库存追溯');
+    expect(wrapper.text()).toContain('样例库');
+    expect(wrapper.text()).toContain('软硬件联动');
     expect(wrapper.text()).toContain('PWA 作业');
   });
 });

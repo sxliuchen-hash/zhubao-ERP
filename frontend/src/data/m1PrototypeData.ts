@@ -77,6 +77,37 @@ export interface MobileTask {
   status: string;
 }
 
+export interface SampleScenario {
+  id: string;
+  name: string;
+  owner: string;
+  purpose: string;
+  chain: string[];
+  evidence: string[];
+  status: 'ready' | 'needs-data' | 'blocked';
+}
+
+export interface HardwareDevice {
+  code: string;
+  name: string;
+  scene: string;
+  protocol: string;
+  status: 'online' | 'degraded' | 'manual';
+  fallback: string;
+}
+
+export interface IntegrationTask {
+  id: string;
+  title: string;
+  target: string;
+  health: number;
+  lastRun: string;
+  nextAction: string;
+  owner: string;
+}
+
+// These samples are the review baseline for M1. In M3 they should become API seed data
+// so UI tests, demos, and acceptance scripts all run against the same business cases.
 export const metrics: Metric[] = [
   { label: '今日来料', value: '6 单', delta: '2 单待确认客户/物料', tone: 'blue' },
   { label: '在制工单', value: '18 张', delta: '5 张停留超过 4 小时', tone: 'violet' },
@@ -350,6 +381,131 @@ export const mobileTasks: MobileTask[] = [
   },
 ];
 
+export const sampleScenarios: SampleScenario[] = [
+  {
+    id: 'SAMPLE-MAIN-001',
+    name: '客户来料主链路',
+    owner: '业务评审',
+    purpose: '验证从快递收货到追溯查询的端到端样例',
+    chain: ['客户订单', '来料母单', '拆包称重', '子工单', '报工', '质检', '成品入库', '出库追溯'],
+    evidence: ['母单标签', '称重交接', '拆包视频', '库存台账', '质检照片'],
+    status: 'ready',
+  },
+  {
+    id: 'SAMPLE-REWORK-001',
+    name: '质检返工样例',
+    owner: '质检评审',
+    purpose: '验证返工只走一套工单状态机，避免双状态机冲突',
+    chain: ['报工完成', '质检不合格', '生成返工工单', '返工报工', '复检放行'],
+    evidence: ['缺陷照片', '返工原因', '返工工单', '复检记录'],
+    status: 'ready',
+  },
+  {
+    id: 'SAMPLE-LOSS-001',
+    name: '超标损耗审批样例',
+    owner: '车间评审',
+    purpose: '验证损耗归因能追溯到称重交接和工序投入',
+    chain: ['工序投入', '产出称重', '损耗计算', '超标审批', '工资试算扣减'],
+    evidence: ['投入重量', '产出重量', '审批记录', '工资试算快照'],
+    status: 'needs-data',
+  },
+  {
+    id: 'SAMPLE-HW-001',
+    name: '视频与标签兜底样例',
+    owner: '硬件评审',
+    purpose: '验证 NVR 截取失败时可以人工上传，不阻塞业务流转',
+    chain: ['开始拆包', '记录时间段', '视频截取失败', '人工上传', '追溯关联'],
+    evidence: ['NVR 时间段', '失败日志', '人工上传文件', '操作日志'],
+    status: 'ready',
+  },
+];
+
+export const hardwareDevices: HardwareDevice[] = [
+  {
+    code: 'CAM-UNPACK-01',
+    name: '拆包台摄像头',
+    scene: '来料拆包视频证据',
+    protocol: 'NVR 时间段截取 / RTSP 预留',
+    status: 'degraded',
+    fallback: '截取失败后允许人工上传 MP4',
+  },
+  {
+    code: 'PRN-LABEL-01',
+    name: '标签打印机',
+    scene: '母单/子工单标签',
+    protocol: '浏览器打印 / Windows 驱动',
+    status: 'manual',
+    fallback: '使用 PDF 标签模板人工打印',
+  },
+  {
+    code: 'SCAN-PC-01',
+    name: 'PC 扫码枪',
+    scene: '后台收货和标签复核',
+    protocol: 'USB HID 键盘模式',
+    status: 'online',
+    fallback: '手工录入编码并二次确认',
+  },
+  {
+    code: 'PWA-CAM-01',
+    name: '手机摄像头扫码',
+    scene: 'PWA 报工/质检',
+    protocol: 'BarcodeDetector / ZXing 兜底',
+    status: 'degraded',
+    fallback: '扫码失败时手工输入工单码',
+  },
+  {
+    code: 'SCALE-01',
+    name: '电子秤',
+    scene: '称重交接',
+    protocol: '一期人工读数，二期 RS232/USB/TCP',
+    status: 'manual',
+    fallback: '人工录入并拍照留证',
+  },
+];
+
+export const integrationTasks: IntegrationTask[] = [
+  {
+    id: 'INT-VID-001',
+    title: '拆包视频截取任务',
+    target: 'CAM-UNPACK-01 / MD-20260706-004',
+    health: 62,
+    lastRun: '17:08 截取失败',
+    nextAction: '重试一次，仍失败则人工上传',
+    owner: '库管员',
+  },
+  {
+    id: 'INT-LBL-001',
+    title: '母单标签打印验证',
+    target: 'PRN-LABEL-01 / MD-20260706-001',
+    health: 88,
+    lastRun: '16:42 打印成功',
+    nextAction: '补打日志写入审计',
+    owner: '库管员',
+  },
+  {
+    id: 'INT-PWA-001',
+    title: 'PWA 扫码报工验证',
+    target: 'PWA-CAM-01 / ZD-20260706-001',
+    health: 74,
+    lastRun: '15:30 识别成功',
+    nextAction: '补移动端弱光测试',
+    owner: '车间组长',
+  },
+  {
+    id: 'INT-SCALE-001',
+    title: '称重交接录入验证',
+    target: 'SCALE-01 / ZD-20260706-006',
+    health: 55,
+    lastRun: '14:12 人工录入',
+    nextAction: '确认拍照留证和误差参数',
+    owner: '质检员',
+  },
+];
+
 export function getOpenExceptionCount(): number {
   return workQueues.filter((item) => item.severity !== 'normal').length;
+}
+
+export function getHardwareManualFallbackCount(): number {
+  return hardwareDevices.filter((device) => device.status !== 'online').length;
 }

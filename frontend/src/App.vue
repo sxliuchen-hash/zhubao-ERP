@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import AppShell from './components/AppShell.vue';
+import HardwareIntegrationWorkspace from './features/m1/HardwareIntegrationWorkspace.vue';
 import InboundWorkspace from './features/m1/InboundWorkspace.vue';
 import InventoryTraceWorkspace from './features/m1/InventoryTraceWorkspace.vue';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
 import MobileOpsWorkspace from './features/m1/MobileOpsWorkspace.vue';
 import ProductionWorkspace from './features/m1/ProductionWorkspace.vue';
 import QualityWorkspace from './features/m1/QualityWorkspace.vue';
+import SampleLibraryWorkspace from './features/m1/SampleLibraryWorkspace.vue';
 
-type TabKey = 'dashboard' | 'inbound' | 'production' | 'quality' | 'inventory' | 'mobile';
+type TabKey = 'dashboard' | 'inbound' | 'production' | 'quality' | 'inventory' | 'sample' | 'hardware' | 'mobile';
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'dashboard', label: '首页工作台' },
@@ -16,6 +18,8 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'production', label: '生产工单' },
   { key: 'quality', label: '质检返工' },
   { key: 'inventory', label: '库存追溯' },
+  { key: 'sample', label: '样例库' },
+  { key: 'hardware', label: '软硬件联动' },
   { key: 'mobile', label: 'PWA 作业' },
 ];
 
@@ -43,6 +47,8 @@ const activeTitle = computed(() => tabs.find((tab) => tab.key === activeTab.valu
     <ProductionWorkspace v-else-if="activeTab === 'production'" />
     <QualityWorkspace v-else-if="activeTab === 'quality'" />
     <InventoryTraceWorkspace v-else-if="activeTab === 'inventory'" />
+    <SampleLibraryWorkspace v-else-if="activeTab === 'sample'" />
+    <HardwareIntegrationWorkspace v-else-if="activeTab === 'hardware'" />
     <MobileOpsWorkspace v-else />
   </AppShell>
 </template>
