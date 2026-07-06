@@ -7,12 +7,13 @@ describe('App', () => {
     const wrapper = mount(App);
 
     expect(wrapper.text()).toContain('Operations Console');
-    expect(wrapper.text()).toContain('M3.28 / 质检库存作业台');
+    expect(wrapper.text()).toContain('M3.29 / 轻量审批工作台');
     expect(wrapper.text()).toContain('首页工作台');
     expect(wrapper.text()).toContain('来料母单');
     expect(wrapper.text()).toContain('生产工单');
     expect(wrapper.text()).toContain('质检返工');
     expect(wrapper.text()).toContain('库存追溯');
+    expect(wrapper.text()).toContain('审批工作台');
     expect(wrapper.text()).toContain('配置基线');
     expect(wrapper.text()).toContain('文档附件');
     expect(wrapper.text()).toContain('样例库');

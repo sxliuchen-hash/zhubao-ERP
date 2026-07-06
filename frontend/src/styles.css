@@ -9504,3 +9504,70 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* M3.29: lightweight approval workbench. */
+.approval-command-surface {
+  background:
+    linear-gradient(90deg, rgba(161, 98, 7, 0.11), transparent 44%),
+    linear-gradient(180deg, #ffffff, #f8fbfd);
+}
+
+.approval-command-surface .module-command-main {
+  border-left-color: #a16207;
+}
+
+.approval-work-grid {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.approval-task-table {
+  min-width: 1040px;
+}
+
+.approval-task-table th,
+.approval-task-table td {
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+.approval-task-table th {
+  background: #edf3f7;
+  color: #314154;
+  font-size: 11px;
+}
+
+.approval-comment-field {
+  display: grid;
+  gap: 5px;
+}
+
+.approval-comment-field span {
+  color: #526070;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.approval-comment-field textarea {
+  width: 100%;
+  min-height: 74px;
+  resize: vertical;
+  border: 1px solid #b9c7d6;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #172033;
+  font: inherit;
+  line-height: 1.45;
+  padding: 8px;
+}
+
+.operation-feedback.warning {
+  border-color: #f1c36d;
+  background: #fffbeb;
+  color: #7c4a03;
+}
+
+@media (max-width: 1320px) {
+  .approval-work-grid {
+    grid-template-columns: 1fr;
+  }
+}
