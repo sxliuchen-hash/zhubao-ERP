@@ -13,6 +13,7 @@ describe('M1Dashboard', () => {
     expect(wrapper.text()).toContain('还不具备交付条件');
     expect(wrapper.text()).toContain('业务调度台');
     expect(wrapper.text()).toContain('已接业务命令');
+    expect(wrapper.text()).toContain('轻量审批任务');
     expect(wrapper.text()).toContain('证据链健康度');
     expect(wrapper.text()).toContain('现场阻断队列');
     expect(wrapper.text()).toContain('一期业务闭环状态图');

@@ -37,6 +37,7 @@
 - M3.19 损耗审批与工资试算基线，新增 `POST /api/business/operations/loss-approvals`，按投入、产出、合理转移、标准损耗率、计件单价和扣损单价生成审批/工资试算快照；同时将首页首屏修正为表格优先的业务调度台。
 - M3.20 真实业务链路测试基线，新增 `backend/src/test/resources/acceptance/real-flow-scenario-20260706.json` 脱敏验收 fixture，驱动同一客户/母单/工单/物料维度下的生产、质检、返工、复检、出库、退货和损耗试算回归测试，并补强损耗审批样例数据可用性测试。
 - M3.21 前端评审控制台整改，首页首屏补强“我目前实际做到了什么”“还不具备交付条件”“业务调度台”“已接业务命令”“证据链健康度”和“模块完成度台账”，明确区分已验证能力、样例数据、POC 和待开发缺口。
+- M3.22 轻量审批闭环基线，新增 `ApprovalService`、`/api/approvals/tasks`、`/api/approvals/tasks/pending`、`/api/approvals/tasks/{approvalCode}/decisions` 和 `V11__m3_lightweight_approval_contract.sql`；`loss-approvals` 会生成待审批或自动通过任务，但仍不代表复杂流程引擎、真实权限或正式工资锁账。
 
 ## 目录结构
 
@@ -168,6 +169,10 @@ pnpm --filter zhubao-erp-frontend dev
 - `POST /api/business/operations/outbound-shipments`
 - `POST /api/business/operations/customer-returns`
 - `POST /api/business/operations/loss-approvals`
+- `GET /api/approvals/tasks`
+- `GET /api/approvals/tasks/pending`
+- `GET /api/approvals/tasks/{approvalCode}`
+- `POST /api/approvals/tasks/{approvalCode}/decisions`
 - `GET /api/configuration/baseline/summary`
 - `GET /api/configuration/baseline/system-parameters`
 - `GET /api/configuration/baseline/code-rules`
@@ -182,7 +187,7 @@ pnpm --filter zhubao-erp-frontend dev
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.21 调整为更接近生产现场评审和车间调度使用的工业 ERP/MES 控制台。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.22 调整为更接近生产现场评审和车间调度使用的工业 ERP/MES 控制台，后端已补入轻量审批任务基线。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。

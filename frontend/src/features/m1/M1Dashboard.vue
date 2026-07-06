@@ -73,9 +73,9 @@ const projectRealityRows = [
   },
   {
     area: '后端业务闭环',
-    done: '已接来料入库、生产报工、质检冻结、返工派发、返工报工、复检放行、出库、客户退货和损耗审批试算。',
+    done: '已接来料入库、生产报工、质检冻结、返工派发、返工报工、复检放行、出库、客户退货、损耗审批试算和轻量审批任务。',
     evidence: 'Spring Boot API + 库存台账服务',
-    gap: '审批流、权限、售后复核和正式工资锁账还没有完成。',
+    gap: '真实权限、复杂流程编排、售后复核和正式工资锁账还没有完成。',
     tone: 'amber',
   },
   {
@@ -102,7 +102,7 @@ const projectRealityRows = [
 ] as const;
 
 const deliveryGaps = [
-  { title: '真实权限与审批流', detail: '当前只有角色字段和页面占位，还没有登录、角色授权、审批流转和审计锁定。', tone: 'red' },
+  { title: '真实权限与复杂审批流', detail: '轻量审批任务 API 已接，但真实登录、角色授权、流程编排、审批 UI 和审计持久化还没有完成。', tone: 'red' },
   { title: '正式工资发放', detail: '损耗审批只生成工资试算快照，不进入正式工资单、锁账或发放。', tone: 'red' },
   { title: '对象存储与文件签名', detail: '附件元数据、checksum 和预览 URL 已有基线，MinIO/S3 实际落盘未接。', tone: 'amber' },
   { title: '售后复核闭环', detail: '客户退货已能写台账，但退货后的售后质检、返工、报废和客户确认仍需补齐。', tone: 'amber' },
@@ -117,7 +117,7 @@ const commandRows = [
   { scene: '复检放行', api: 'POST /api/business/operations/quality-releases', state: '半成品转成品', tone: 'green' },
   { scene: '成品出库', api: 'POST /api/business/operations/outbound-shipments', state: 'FINISHED 转 SHIPPED', tone: 'green' },
   { scene: '客户退货', api: 'POST /api/business/operations/customer-returns', state: '退货入 RETURN-CHECK', tone: 'amber' },
-  { scene: '损耗审批', api: 'POST /api/business/operations/loss-approvals', state: '工资试算，不锁账', tone: 'amber' },
+  { scene: '损耗审批', api: 'POST /api/business/operations/loss-approvals', state: '工资试算 + 轻量审批', tone: 'amber' },
 ] as const;
 
 const dispatchRows = [
@@ -213,7 +213,7 @@ const readinessRows = [
     <section class="mission-control-v2" aria-label="来料加工生产运营台">
       <div class="mission-primary-panel">
         <div class="console-title-line">
-          <span class="eyebrow">M3.21 Review Console</span>
+          <span class="eyebrow">M3.22 Review Console</span>
           <StatusBadge label="评审原型，距离交付还有差距" tone="amber" />
         </div>
         <h2>来料加工生产运营台</h2>
@@ -572,7 +572,7 @@ const readinessRows = [
         <article class="tone-red">
           <div>
             <strong>超标损耗审批：试算快照，不是正式工资</strong>
-            <span>POST /loss-approvals 可以计算损耗扣减和工资试算，但不代表正式工资发放。</span>
+            <span>POST /loss-approvals 可以计算损耗扣减、生成工资试算和轻量审批任务，但不代表正式工资发放。</span>
           </div>
           <StatusBadge label="未交付" tone="red" />
         </article>

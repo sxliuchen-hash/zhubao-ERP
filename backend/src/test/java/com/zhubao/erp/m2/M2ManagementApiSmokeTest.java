@@ -634,6 +634,42 @@ class M2ManagementApiSmokeTest {
                 "\"formalPayroll\":false",
                 "HO-SMOKE-LOSS-009"
         );
+
+        ResponseEntity<String> tasks = restTemplate.getForEntity("/api/approvals/tasks", String.class);
+        ResponseEntity<String> pending = restTemplate.getForEntity("/api/approvals/tasks/pending", String.class);
+
+        assertThat(tasks.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(tasks.getBody()).contains(
+                "LOSS-SMOKE-20260706-009",
+                "LOSS_APPROVAL",
+                "WAITING_APPROVAL",
+                "trialWage=31.74",
+                "\"formalPayroll\":false"
+        );
+        assertThat(pending.getBody()).contains("LOSS-SMOKE-20260706-009");
+
+        Map<String, Object> decision = new LinkedHashMap<>();
+        decision.put("decision", "APPROVE");
+        decision.put("operator", "workshop-leader-smoke");
+        decision.put("comment", "Evidence checked by smoke test.");
+        decision.put("evidenceCode", "ATT-APPROVAL-SMOKE-009");
+
+        ResponseEntity<String> decided = restTemplate.postForEntity(
+                "/api/approvals/tasks/LOSS-SMOKE-20260706-009/decisions",
+                decision,
+                String.class
+        );
+        ResponseEntity<String> pendingAfterDecision = restTemplate.getForEntity("/api/approvals/tasks/pending", String.class);
+
+        assertThat(decided.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(decided.getBody()).contains(
+                "LOSS-SMOKE-20260706-009",
+                "APPROVED",
+                "workshop-leader-smoke",
+                "ATT-APPROVAL-SMOKE-009",
+                "\"locked\":true"
+        );
+        assertThat(pendingAfterDecision.getBody()).doesNotContain("LOSS-SMOKE-20260706-009");
     }
 
     @Test

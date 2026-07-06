@@ -36,6 +36,8 @@
 - [DocumentManagementService.java](../backend/src/main/java/com/zhubao/erp/document/app/DocumentManagementService.java)
 - [documentManagementApi.ts](../frontend/src/services/documentManagementApi.ts)
 - [V10__m3_document_management_contract.sql](../backend/src/main/resources/db/mysql/V10__m3_document_management_contract.sql)
+- [ApprovalService.java](../backend/src/main/java/com/zhubao/erp/approval/app/ApprovalService.java)
+- [V11__m3_lightweight_approval_contract.sql](../backend/src/main/resources/db/mysql/V11__m3_lightweight_approval_contract.sql)
 
 ---
 
@@ -72,7 +74,19 @@
 | `POST /quality-releases` | 质检返工 | 复检放行，将同一子工单的半成品库存转为成品库存 |
 | `POST /outbound-shipments` | 库存追溯 | 确认成品出库，将同一子工单的成品库存转为已发货库存 |
 | `POST /customer-returns` | 库存追溯 | 客户退货入库，将同一子工单的已发货库存转回退货复核库存 |
-| `POST /loss-approvals` | 质检返工 | 生成损耗审批与工资试算快照，不写库存台账，不代表正式工资发放 |
+| `POST /loss-approvals` | 质检返工 | 生成损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账，不代表正式工资发放 |
+
+审批任务接口前缀：
+```http
+/api/approvals
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /tasks` | 首页/质检返工 | 查询全部轻量审批任务 |
+| `GET /tasks/pending` | 首页/质检返工 | 查询待审批任务 |
+| `GET /tasks/{approvalCode}` | 质检返工 | 查询单个审批任务 |
+| `POST /tasks/{approvalCode}/decisions` | 质检返工 | 审批通过或驳回，并锁定审批快照 |
 
 配置基线接口前缀：
 
@@ -549,9 +563,53 @@
 实现约束：
 
 - 该接口当前不调用 `StockLedgerService`，不改变库存余额，也不追加库存台账。
-- 该接口只证明损耗归因、审批责任和工资试算口径，不代表 Flowable/正式审批流已经接入。
+- 该接口会在 M3.22 生成轻量审批任务，但只证明固定场景审批、审批责任和工资试算口径，不代表 Flowable/正式审批流已经接入。
 - 工序单价、扣损单价、标准损耗率必须作为快照字段保存，后续配置调整不得反向影响历史试算。
 - 正式工资发放、工资锁账、财务凭证和员工薪资明细仍在一期边界外；后续若接入工资模块，必须从该试算快照转入独立工资单状态机。
+
+---
+
+### 6.13 `ApprovalTask`
+
+M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。它不是完整流程引擎，不处理并行会签、复杂条件路由或正式工资锁账。
+
+| 字段 | 说明 |
+|---|---|
+| `approvalCode` | 审批任务编码，当前复用损耗审批单号 |
+| `scene` | 审批场景，当前为 `LOSS_APPROVAL` |
+| `businessCode` | 业务对象编码，例如工单号 |
+| `title` | 审批标题 |
+| `status` | `WAITING_APPROVAL`、`APPROVED`、`REJECTED`、`AUTO_APPROVED` |
+| `applicant` | 提交人快照 |
+| `approver` | 审批责任人快照 |
+| `ownerRole` | 责任角色快照 |
+| `severity` | 前端风险色，不能替代业务状态 |
+| `sourceStatus` | 来源命令返回的审批状态 |
+| `sourceSummary` | 来源试算摘要，保留投入、产出、允许损耗、超标损耗、试算工资等关键口径 |
+| `evidenceCode` | 称重、缺陷照片、交接记录或审批附件编码 |
+| `formalPayroll` | 固定为 `false`，表示该审批任务不等于正式工资发放 |
+| `createdAt` | 创建时间快照 |
+| `decidedAt` | 审批处理时间快照 |
+| `decisionOperator` | 审批操作人 |
+| `decisionComment` | 审批意见 |
+| `locked` | 审批处理后锁定，后续变更必须产生新任务或新审计事件 |
+
+### 6.14 `ApprovalDecisionCommand`
+
+`POST /api/approvals/tasks/{approvalCode}/decisions` 使用该命令模型。
+
+| 字段 | 说明 |
+|---|---|
+| `decision` | `APPROVE` / `APPROVED` / `REJECT` / `REJECTED` |
+| `operator` | 审批操作人快照 |
+| `comment` | 审批意见 |
+| `evidenceCode` | 审批附件或补充证据编码，可覆盖任务原证据编码 |
+
+轻量审批约束：
+- `WAITING_APPROVAL` 任务只能处理一次，处理后 `locked=true`。
+- `AUTO_APPROVED` 用于未超标或在规则阈值内的自动通过快照。
+- 当前仓储为内存实现，`V11__m3_lightweight_approval_contract.sql` 只冻结 MySQL 合同表；后续需要补 JDBC 仓储、真实用户、权限和审计日志。
+- 审批通过不自动写库存台账、不自动发放工资、不自动生成财务凭证。
 
 ---
 
@@ -850,10 +908,11 @@ PWA 一期边界：
 | 复检放行 | `POST /api/business/operations/quality-releases`，`SEMI_FINISHED -> FINISHED` |
 | 成品出库 | `POST /api/business/operations/outbound-shipments`，`FINISHED -> SHIPPED` |
 | 客户退货 | `POST /api/business/operations/customer-returns`，`SHIPPED -> FINISHED` |
-| 损耗审批 | `POST /api/business/operations/loss-approvals`，返回损耗审批与工资试算快照，不写库存台账 |
+| 损耗审批 | `POST /api/business/operations/loss-approvals`，返回损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账 |
+| 轻量审批任务 | `GET /api/approvals/tasks`、`GET /api/approvals/tasks/pending`、`POST /api/approvals/tasks/{approvalCode}/decisions`，用于固定场景待审批、审批通过/驳回和锁定 |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态；损耗审批只有试算命令，正式审批流、工资锁账/发放和退货后的售后质检复核仍需继续接入 |
+| 当前限制 | 尚未更新工作台快照状态；轻量审批当前为内存仓储，正式权限、复杂审批流、审批 UI、工资锁账/发放和退货后的售后质检复核仍需继续接入 |
 
 这些接口证明一期闭环开始从“展示样例”进入“业务命令”。库存变化必须通过库存服务产生只追加台账；损耗审批、工资试算、称重交接和退货复核这类非库存动作也必须先建独立业务命令，再按职责接入审批服务、工资服务或证据服务。
 

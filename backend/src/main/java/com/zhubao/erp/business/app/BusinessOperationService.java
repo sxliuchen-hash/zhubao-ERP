@@ -1,5 +1,6 @@
 package com.zhubao.erp.business.app;
 
+import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
@@ -24,6 +25,7 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -36,9 +38,16 @@ public class BusinessOperationService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final StockLedgerService stockLedgerService;
+    private final ApprovalService approvalService;
 
     public BusinessOperationService(StockLedgerService stockLedgerService) {
+        this(stockLedgerService, null);
+    }
+
+    @Autowired
+    public BusinessOperationService(StockLedgerService stockLedgerService, ApprovalService approvalService) {
         this.stockLedgerService = stockLedgerService;
+        this.approvalService = approvalService;
     }
 
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
@@ -448,7 +457,7 @@ public class BusinessOperationService {
         BigDecimal trialWage = pieceWage.subtract(lossDeduction).max(ZERO).setScale(2, RoundingMode.HALF_UP);
         boolean overLimit = excessLossWeight.compareTo(ZERO) > 0;
 
-        return new LossApprovalResult(
+        LossApprovalResult result = new LossApprovalResult(
                 command.approvalCode(),
                 command.motherOrderCode(),
                 command.workOrderCode(),
@@ -473,6 +482,10 @@ public class BusinessOperationService {
                 command.approver(),
                 command.evidenceCode()
         );
+        if (approvalService != null) {
+            approvalService.createLossApprovalTask(command, result);
+        }
+        return result;
     }
 
     private String buildRemark(ConfirmInboundCommand command) {

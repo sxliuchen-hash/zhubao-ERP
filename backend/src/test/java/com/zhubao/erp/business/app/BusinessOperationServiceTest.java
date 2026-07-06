@@ -1,5 +1,8 @@
 package com.zhubao.erp.business.app;
 
+import com.zhubao.erp.approval.app.ApprovalService;
+import com.zhubao.erp.approval.domain.ApprovalStatus;
+import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.CustomerReturnResult;
@@ -481,6 +484,47 @@ class BusinessOperationServiceTest {
         assertThat(result.trialWage()).isEqualByComparingTo("31.74");
         assertThat(result.formalPayroll()).isFalse();
         assertThat(repository.findAllLedgers()).isEmpty();
+    }
+
+    @Test
+    void approveLossCreatesLightweightApprovalTaskWhenApprovalServiceIsProvided() {
+        InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
+        InMemoryApprovalTaskRepository approvalRepository = new InMemoryApprovalTaskRepository();
+        BusinessOperationService service = new BusinessOperationService(
+                new StockLedgerService(stockRepository),
+                new ApprovalService(approvalRepository)
+        );
+
+        LossApprovalResult result = service.approveLoss(new ApproveLossCommand(
+                "LOSS-20260706-099",
+                "MD-20260706-099",
+                "ZD-20260706-099",
+                1001L,
+                null,
+                "MAT-18K-RING",
+                "polish",
+                "operator-a",
+                "leader-a",
+                bd("121.150"),
+                bd("116.550"),
+                bd("0.000"),
+                bd("2.0"),
+                bd("56"),
+                bd("0.80"),
+                bd("6.00"),
+                "HO-20260706-099",
+                "loss approval task linkage"
+        ));
+
+        assertThat(result.approvalStatus()).isEqualTo("WAITING_APPROVAL");
+        assertThat(stockRepository.findAllLedgers()).isEmpty();
+        assertThat(approvalRepository.findAll()).singleElement().satisfies(task -> {
+            assertThat(task.approvalCode()).isEqualTo("LOSS-20260706-099");
+            assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
+            assertThat(task.businessCode()).isEqualTo("ZD-20260706-099");
+            assertThat(task.formalPayroll()).isFalse();
+            assertThat(task.sourceSummary()).contains("excessLossWeight=2.177", "trialWage=31.74");
+        });
     }
 
     private StockDimension dimension(StockStatus status, String warehouseCode) {
