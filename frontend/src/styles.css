@@ -9571,3 +9571,122 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* M3.30: hardware integration workbench. */
+.hardware-desk > .operations-hero,
+.hardware-desk > .hardware-matrix-layout {
+  display: none;
+}
+
+.hardware-command-surface {
+  background:
+    linear-gradient(90deg, rgba(8, 127, 123, 0.11), transparent 44%),
+    linear-gradient(180deg, #ffffff, #f8fbfd);
+}
+
+.hardware-command-surface .module-command-main {
+  border-left-color: #087f7b;
+}
+
+.hardware-work-grid {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.hardware-device-table {
+  min-width: 1060px;
+}
+
+.hardware-device-table th,
+.hardware-device-table td {
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+.hardware-device-table th {
+  background: #edf3f7;
+  color: #314154;
+  font-size: 11px;
+}
+
+.hardware-poc-list {
+  display: grid;
+  gap: 8px;
+}
+
+.hardware-poc-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dce5ed;
+  border-left: 3px solid var(--tone);
+  border-radius: 4px;
+  background: #fbfdff;
+  padding: 8px;
+}
+
+.hardware-poc-list strong,
+.hardware-poc-list span,
+.hardware-poc-list small {
+  display: block;
+}
+
+.hardware-poc-list span,
+.hardware-poc-list small {
+  margin-top: 2px;
+  color: #52606d;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.compact-integration-list {
+  gap: 8px;
+}
+
+.compact-integration-list article {
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.compact-topology-map {
+  min-height: 0;
+}
+
+/* M3.30: keep every module reachable in the fixed desktop shell. */
+.ops-sidebar {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ops-brand,
+.ops-status-card,
+.ops-health-grid,
+.ops-version-card {
+  flex: 0 0 auto;
+}
+
+.ops-nav {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 1320px) {
+  .hardware-work-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .ops-sidebar {
+    overflow: hidden;
+  }
+
+  .ops-nav {
+    flex: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}
