@@ -1,6 +1,7 @@
 package com.zhubao.erp.document.app;
 
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
+import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,7 +35,8 @@ class DocumentManagementServiceTest {
 
     @Test
     void uploadsAttachmentAndExposesPreviewContent() {
-        DocumentManagementService service = newService();
+        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        DocumentManagementService service = new DocumentManagementService(repository, localStorage());
         byte[] content = "weight photo demo".getBytes();
 
         var uploaded = service.uploadAttachment(
@@ -55,14 +57,20 @@ class DocumentManagementServiceTest {
         assertThat(uploaded.previewUrl()).contains(uploaded.code());
         assertThat(service.previewUrl(uploaded.code()).url()).contains("/content?token=preview-demo");
         assertThat(service.content(uploaded.code()).content()).isEqualTo(content);
+        DocumentManagementService reloadedService = new DocumentManagementService(repository, localStorage());
+        assertThat(reloadedService.content(uploaded.code()).content()).isEqualTo(content);
         assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
         assertThat(service.summary().attachments()).isEqualTo(6);
         assertThat(service.auditEvents()).extracting("action").contains("上传附件");
     }
 
     private DocumentManagementService newService() {
+        return new DocumentManagementService(new InMemoryDocumentManagementRepository(), localStorage());
+    }
+
+    private LocalAttachmentObjectStorage localStorage() {
         AttachmentStorageProperties properties = new AttachmentStorageProperties();
         properties.setLocalRoot(tempDir.toString());
-        return new DocumentManagementService(new LocalAttachmentObjectStorage(properties));
+        return new LocalAttachmentObjectStorage(properties);
     }
 }

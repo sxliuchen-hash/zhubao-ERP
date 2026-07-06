@@ -908,7 +908,7 @@ PWA 一期边界：
 | `fileName` | 上传文件名 |
 | `mediaType` | MIME 类型 |
 | `size` | 文件字节数 |
-| `storageLocation` | 当前存储位置，M3.35 默认 `local://evidence/{documentCode}/{attachmentCode}/{fileName}`，后续迁移为 NAS/S3 签名访问 |
+| `storageLocation` | 当前存储位置，M3.37 默认对象内容仍可为 `local://evidence/{documentCode}/{attachmentCode}/{fileName}`，附件元数据可写入内存或 JDBC 仓储，后续对象内容迁移为 NAS/S3 签名访问 |
 | `checksum` | `sha256` 校验和 |
 | `uploadedAt` | 上传时间 |
 | `previewUrl` | 预览内容地址 |
@@ -925,7 +925,8 @@ PWA 一期边界：
 
 文档附件约束：
 
-- 当前 M3.35 已支持 multipart 上传到后端本地存储适配、checksum、审计事件、预览 URL 和内容读取；默认根目录由 `zhubao.documents.storage.local-root` 指定。
+- 当前 M3.37 已支持 multipart 上传到后端本地存储适配、checksum、审计事件、预览 URL 和内容读取；文档包、附件元数据和审计事件通过 `DocumentManagementRepository` 支持内存/JDBC 切换。
+- `zhubao.documents.repository=jdbc` 时读取/写入 V10 合同表：`doc_package`、`doc_evidence_attachment`、`doc_audit_event`。
 - 后续生产环境必须按部署条件接 NAS/S3 兼容存储，并通过签名 URL 控制预览和下载。
 - 质检、称重、视频、配置审批证据必须能绑定业务对象、校验和、保留策略和审计事件。
 - 审批完成后的配置和质检证据应锁定 checksum，后续修改必须产生新版本或新审计事件。
@@ -934,6 +935,7 @@ PWA 一期边界：
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
+| `zhubao.documents.repository` | `memory` | 文档包、附件元数据和审计事件仓储；可设为 `jdbc` 读取/写入 `doc_*` 合同表 |
 | `zhubao.documents.storage.provider` | `local` | 当前只落地本地文件适配；后续可扩展为 `nas`、`s3` 或其他实现 |
 | `zhubao.documents.storage.local-root` | `target/zhubao-evidence` | 本地附件根目录，测试环境可覆盖为临时目录 |
 

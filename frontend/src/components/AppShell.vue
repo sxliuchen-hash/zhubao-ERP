@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.36 / 现场指挥台产品化</strong>
-        <i>首页已按真实车间调度台重构；附件存储、权限守卫、库存台账、硬件兜底和样例验收仍按模块逐步推进。</i>
+        <strong>M3.37 / 附件元数据持久化</strong>
+        <i>文档附件已从服务内存集合推进到内存/JDBC 仓储可切换；真实登录、菜单权限、NAS/S3 签名访问和现场设备直连仍按模块推进。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -61,7 +61,7 @@ defineProps<{
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>
             <span>验收 fixture</span>
-            <span>附件本地存储</span>
+            <span>附件元数据仓储</span>
             <span>硬件 POC</span>
             <span>工资试算基线</span>
           </div>
@@ -79,7 +79,7 @@ defineProps<{
           </article>
           <article>
             <span>台账</span>
-            <strong>55</strong>
+            <strong>57</strong>
             <small>自动化测试通过</small>
           </article>
         </div>

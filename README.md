@@ -52,6 +52,7 @@
 - M3.34 评审界面产品化整改，针对“页面仍像内部调试台、UI 丑”的反馈，重做全局视觉基线、页头、生产总控区、表格、按钮和状态色；本轮只改善前端呈现，不新增后端业务接口。
 - M3.35 附件存储边界，新增 `AttachmentObjectStorage`、本地文件存储适配和 `zhubao.documents.storage.*` 配置，上传附件从内存缓存推进到 `local://evidence/...`，后续可切 NAS/S3 签名访问。
 - M3.36 现场指挥台产品化整改，针对“只看到简单页面、内容不够、UI 太丑”的反馈，重构首页为主从式 ERP/MES 调度台：现场态势、一期闭环、今日单据池、焦点工单、称重交接、质检门禁、证据链、硬件兜底和开源依据集中呈现；本轮仍不新增后端业务接口。
+- M3.37 附件元数据持久化边界，新增 `DocumentManagementRepository`、内存仓储、JDBC 仓储和 `ZHUBAO_DOCUMENTS_REPOSITORY` 配置；文档包、附件元数据、审计事件可切换到 `doc_*` 合同表，上传内容仍默认走本地对象存储适配。
 
 ## 目录结构
 
@@ -145,6 +146,16 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 
 审批 JDBC 当前只覆盖固定场景轻量审批任务和审计事件；M3.33 已对敏感 POST 接入轻量角色守卫，但真实登录、菜单权限、数据范围过滤、复杂审批流、审批 UI 和工资锁账仍需继续开发。
 
+启用 MySQL 文档附件元数据持久化：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_DOCUMENTS_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+文档附件 JDBC 当前覆盖 `doc_package`、`doc_evidence_attachment`、`doc_audit_event` 三张合同表；附件二进制内容仍由 `zhubao.documents.storage.*` 指定的存储适配处理，生产 NAS/S3 签名访问、预览权限和版本锁定仍需继续开发。
+
 启动前端：
 
 ```powershell
@@ -212,7 +223,7 @@ pnpm --filter zhubao-erp-frontend dev
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.36 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为主从式现场指挥台，来料母单、生产工单、质检返工、库存追溯、轻量审批和软硬件联动已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、硬件兜底和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、附件本地存储适配与 JDBC 持久化基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问和软硬件证据补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.37 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为主从式现场指挥台，来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件和软硬件联动已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、硬件兜底和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、附件本地存储适配、附件元数据 JDBC 仓储与其他持久化基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问和软硬件证据补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
@@ -220,7 +231,7 @@ pnpm --filter zhubao-erp-frontend dev
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实登录、菜单权限和数据范围过滤。
-- 补齐审批 UI、复杂审批流、工资锁账/发放边界、NAS/S3 签名访问和售后结算边界，避免当前原型停留在局部台账动作、附件本地适配与工资试算快照。
+- 补齐审批 UI、复杂审批流、工资锁账/发放边界、NAS/S3 签名访问和售后结算边界，避免当前原型停留在局部台账动作、附件本地适配、附件元数据合同表与工资试算快照。
 
 ## 开发管理文档
 
