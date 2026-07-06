@@ -209,7 +209,7 @@ const readinessRows = [
       <div class="ops-command-copy">
         <span class="eyebrow">Delivery Review</span>
         <h2>当前不是完整交付系统，是可运行评审原型</h2>
-        <p>已完成工程基线、文档包、样例工作台、库存台账、来料入库、生产报工、质检冻结、返工派发、返工报工、文档附件上传和预览 URL 基线；复检放行、出库、审批权限、对象存储和硬件闭环还需要继续开发。</p>
+        <p>已完成工程基线、文档包、样例工作台、库存台账、来料入库、生产报工、质检冻结、返工派发、返工报工、复检放行、成品出库、文档附件上传和预览 URL 基线；退货、审批权限、对象存储和硬件闭环还需要继续开发。</p>
         <div class="command-actions">
           <button class="primary-button" type="button">查看真实闭环</button>
           <button class="secondary-button" type="button">查看待开发缺口</button>
@@ -233,7 +233,7 @@ const readinessRows = [
             <h2>我目前实际做到了什么</h2>
             <p>把“看起来像页面”和“已经能验收的能力”拆开，评审时按这张表判断是否可以进入下一阶段。</p>
           </div>
-          <StatusBadge label="M3.12 基线" tone="blue" />
+          <StatusBadge label="M3.15 基线" tone="blue" />
         </div>
         <div class="review-lane-grid">
           <article v-for="lane in implementationLanes" :key="lane.code" :class="`review-lane tone-${lane.tone}`">

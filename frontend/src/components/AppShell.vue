@@ -10,15 +10,15 @@ defineProps<{
       <div class="brand ops-brand">
         <span class="brand-mark">ZB</span>
         <div>
-          <strong>来料加工 ERP</strong>
-          <span>进销存 · 生产 · 追溯 · 证据链</span>
+          <strong>来料加工生产追溯系统</strong>
+          <span>进销存 · 生产 · 质检 · 证据链</span>
         </div>
       </div>
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.15 / 成品出库台账基线</strong>
-        <i>来料入库、生产报工、质检冻结、返工派发、返工报工、复检放行、成品出库已写真实库存台账；文档附件支持上传、校验和、预览 URL；退货、审批、对象存储仍待开发</i>
+        <strong>M3.15 / 台账闭环扩展中</strong>
+        <i>已接：来料入库、生产报工、质检冻结、返工、复检放行、成品出库、附件上传。待接：退货、审批、对象存储、真实权限。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,15 +54,14 @@ defineProps<{
 
       <header class="workspace-header ops-page-header">
         <div>
-          <span class="eyebrow">Operations Review Console</span>
+          <span class="eyebrow">Operations Console</span>
           <h1>{{ title }}</h1>
-          <p>把客户来料、母单拆分、工序报工、质检返工、库存台账和硬件证据放到同一张可排查、可追责、可验收的业务台面。</p>
+          <p>围绕客户来料、工序报工、质检返工、库存台账和硬件证据组织现场作业。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
-            <span>业务工作台快照</span>
             <span>业务动作写台账</span>
-            <span>文档附件元数据</span>
-            <span>硬件 POC 记录</span>
+            <span>附件元数据</span>
+            <span>硬件 POC</span>
             <span>权限审批待接入</span>
           </div>
         </div>

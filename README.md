@@ -173,9 +173,9 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/configuration/baseline/change-requests`
 - `GET /api/configuration/baseline/audit-events`
 
-## 下一阶段
+## 当前阶段与下一步
 
-M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3 前需要补充：
+当前已进入 M3 一期开发推进中，前端已按 M3.16 调整为更紧凑的工业 ERP 工作台样式。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
@@ -183,6 +183,7 @@ M1 通过后，进入 M2 文档基线冻结和 M3 一期正式开发。进入 M3
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实权限。
+- 补齐退货、损耗审批、工资试算和对象存储，避免当前原型停留在局部台账动作。
 
 ## 开发管理文档
 
