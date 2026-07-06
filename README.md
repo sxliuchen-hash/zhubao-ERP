@@ -32,6 +32,7 @@
 - M3.13 前端评审台视觉整改，补强工业 ERP 工作台样式、模块代码导航、桌面/移动响应式约束和状态标签显示，避免宽表撑破移动端页面。
 - M3.14 复检放行入库业务操作基线，新增 `POST /api/business/operations/quality-releases`，将同一子工单维度下的半成品库存转为成品库存。
 - M3.15 成品出库业务操作基线，新增 `POST /api/business/operations/outbound-shipments`，将同一子工单维度下的成品库存转为已发货库存。
+- M3.17 客户退货入库业务操作基线，新增 `POST /api/business/operations/customer-returns`，将同一子工单维度下的已发货库存转回退货复核库存。
 
 ## 目录结构
 
@@ -161,6 +162,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `POST /api/business/operations/rework-reports`
 - `POST /api/business/operations/quality-releases`
 - `POST /api/business/operations/outbound-shipments`
+- `POST /api/business/operations/customer-returns`
 - `GET /api/configuration/baseline/summary`
 - `GET /api/configuration/baseline/system-parameters`
 - `GET /api/configuration/baseline/code-rules`
@@ -183,7 +185,7 @@ pnpm --filter zhubao-erp-frontend dev
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实权限。
-- 补齐退货、损耗审批、工资试算和对象存储，避免当前原型停留在局部台账动作。
+- 补齐退货后的售后质检复核、损耗审批、工资试算和对象存储，避免当前原型停留在局部台账动作。
 
 ## 开发管理文档
 

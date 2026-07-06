@@ -2,6 +2,8 @@ package com.zhubao.erp.business.web;
 
 import com.zhubao.erp.business.app.BusinessOperationService;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.CustomerReturnCommand;
+import com.zhubao.erp.business.domain.CustomerReturnResult;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
@@ -65,5 +67,10 @@ public class BusinessOperationController {
     @PostMapping("/outbound-shipments")
     public ApiResponse<OutboundShipmentResult> shipFinishedStock(@Valid @RequestBody ShipFinishedStockCommand command) {
         return ApiResponse.ok(businessOperationService.shipFinishedStock(command));
+    }
+
+    @PostMapping("/customer-returns")
+    public ApiResponse<CustomerReturnResult> returnCustomerShipment(@Valid @RequestBody CustomerReturnCommand command) {
+        return ApiResponse.ok(businessOperationService.returnCustomerShipment(command));
     }
 }

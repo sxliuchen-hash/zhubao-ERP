@@ -533,6 +533,69 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void returnsCustomerShipmentThroughBusinessOperationApiAndMovesShippedBackToFinished() {
+        Map<String, Object> shippedDimension = Map.of(
+                "ownerType", "CUSTOMER",
+                "ownerCustomerId", 1002L,
+                "customerId", 1002L,
+                "motherOrderCode", "MD-SMOKE-20260706-008",
+                "workOrderCode", "ZD-SMOKE-20260706-027",
+                "materialCode", "MAT-SILVER-CHAIN",
+                "warehouseCode", "SHIPPED-CUSTOMER",
+                "stockStatus", "SHIPPED"
+        );
+        Map<String, Object> seedShipped = Map.of(
+                "documentType", "outbound_shipment",
+                "documentCode", "OUT-SMOKE-20260706-027",
+                "to", shippedDimension,
+                "quantity", new BigDecimal("6"),
+                "weight", new BigDecimal("13.660"),
+                "remark", "seed shipped stock for customer return smoke test"
+        );
+        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedShipped, String.class);
+
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("returnCode", "RET-SMOKE-20260707-027");
+        request.put("originalShipmentCode", "OUT-SMOKE-20260706-027");
+        request.put("motherOrderCode", "MD-SMOKE-20260706-008");
+        request.put("workOrderCode", "ZD-SMOKE-20260706-027");
+        request.put("customerId", 1002L);
+        request.put("materialCode", "MAT-SILVER-CHAIN");
+        request.put("fromWarehouseCode", "SHIPPED-CUSTOMER");
+        request.put("toWarehouseCode", "RETURN-CHECK");
+        request.put("quantity", new BigDecimal("2"));
+        request.put("weight", new BigDecimal("4.550"));
+        request.put("returnLogisticsNo", "SF-RET-SMOKE-001");
+        request.put("reason", "客户退回复核");
+        request.put("operator", "库管员 何琳");
+        request.put("evidenceCode", "ATT-RET-SMOKE-001");
+        request.put("remark", "customer return smoke test");
+
+        ResponseEntity<String> returned = restTemplate.postForEntity(
+                "/api/business/operations/customer-returns",
+                request,
+                String.class
+        );
+        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+
+        assertThat(returned.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(returned.getBody()).contains(
+                "RET-SMOKE-20260707-027",
+                "OUT-SMOKE-20260706-027",
+                "SHIPPED",
+                "FINISHED",
+                "SF-RET-SMOKE-001",
+                "ATT-RET-SMOKE-001"
+        );
+        assertThat(balances.getBody()).contains(
+                "MD-SMOKE-20260706-008",
+                "ZD-SMOKE-20260706-027",
+                "RETURN-CHECK",
+                "FINISHED"
+        );
+    }
+
+    @Test
     void exposesConfigurationBaselineApis() {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/configuration/baseline/summary", String.class);
         ResponseEntity<String> parameters = restTemplate.getForEntity("/api/configuration/baseline/system-parameters", String.class);

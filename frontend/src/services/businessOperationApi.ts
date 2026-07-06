@@ -223,6 +223,42 @@ export interface OutboundShipmentResult {
   evidenceCode?: string;
 }
 
+export interface CustomerReturnRequest {
+  returnCode: string;
+  originalShipmentCode: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  customerId: number;
+  ownerCustomerId?: number;
+  materialCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  quantity: number;
+  weight: string;
+  returnLogisticsNo: string;
+  reason: string;
+  operator: string;
+  evidenceCode?: string;
+  remark?: string;
+}
+
+export interface CustomerReturnResult {
+  returnCode: string;
+  originalShipmentCode: string;
+  workOrderCode: string;
+  ledgerCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  fromStockStatus: string;
+  toStockStatus: string;
+  quantity: number;
+  weight: number;
+  returnLogisticsNo: string;
+  reason: string;
+  operator: string;
+  evidenceCode?: string;
+}
+
 const customerIds: Record<string, number> = {
   恒信珠宝: 1001,
   雅辰饰品: 1002,
@@ -490,6 +526,38 @@ export async function shipFinishedStock(balance: InventoryBalance): Promise<Outb
   return apiPost<OutboundShipmentRequest, OutboundShipmentResult>(
     '/api/business/operations/outbound-shipments',
     buildOutboundShipmentRequest(balance),
+  );
+}
+
+export function buildCustomerReturnRequest(balance: InventoryBalance): CustomerReturnRequest {
+  const customerId = customerIds[balance.owner] ?? 9000;
+  const workOrderCode = inventoryBatchWorkOrders[balance.batch] ?? balance.batch;
+  const shortCode = balance.batch.replace(/[^0-9]/g, '') || '20260706001';
+
+  return {
+    returnCode: `RET-${shortCode}`,
+    originalShipmentCode: `OUT-${shortCode}`,
+    motherOrderCode: balance.batch.startsWith('MD-') ? balance.batch : (workOrderMotherOrders[workOrderCode] ?? balance.batch),
+    workOrderCode,
+    customerId,
+    ownerCustomerId: customerId,
+    materialCode: materialCodes[balance.material] ?? `MAT-${balance.batch}`,
+    fromWarehouseCode: 'SHIPPED-CUSTOMER',
+    toWarehouseCode: 'RETURN-CHECK',
+    quantity: balance.qty,
+    weight: parseWeight(balance.weight),
+    returnLogisticsNo: `SF-RET-${shortCode}`,
+    reason: '客户退回复核',
+    operator: '库管员 何琳',
+    evidenceCode: `ATT-RET-${shortCode}`,
+    remark: '前端库存追溯主控台客户退货入库',
+  };
+}
+
+export async function returnCustomerShipment(balance: InventoryBalance): Promise<CustomerReturnResult> {
+  return apiPost<CustomerReturnRequest, CustomerReturnResult>(
+    '/api/business/operations/customer-returns',
+    buildCustomerReturnRequest(balance),
   );
 }
 

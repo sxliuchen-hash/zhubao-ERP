@@ -1,6 +1,8 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.CustomerReturnCommand;
+import com.zhubao.erp.business.domain.CustomerReturnResult;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
@@ -363,6 +365,57 @@ public class BusinessOperationService {
         );
     }
 
+    public CustomerReturnResult returnCustomerShipment(CustomerReturnCommand command) {
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        StockDimension fromShipped = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.fromWarehouseCode(),
+                StockStatus.SHIPPED
+        );
+        StockDimension toFinished = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.toWarehouseCode(),
+                StockStatus.FINISHED
+        );
+
+        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+                "customer_return",
+                command.returnCode(),
+                fromShipped,
+                toFinished,
+                command.quantity(),
+                command.weight(),
+                buildRemark(command)
+        ));
+
+        return new CustomerReturnResult(
+                command.returnCode(),
+                command.originalShipmentCode(),
+                command.workOrderCode(),
+                entry.code(),
+                command.fromWarehouseCode(),
+                command.toWarehouseCode(),
+                fromShipped.stockStatus(),
+                toFinished.stockStatus(),
+                entry.quantity(),
+                entry.weight(),
+                command.returnLogisticsNo(),
+                command.reason(),
+                command.operator(),
+                command.evidenceCode()
+        );
+    }
+
     private String buildRemark(ConfirmInboundCommand command) {
         StringBuilder remark = new StringBuilder("确认来料入库；操作人：").append(command.operator());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
@@ -465,6 +518,26 @@ public class BusinessOperationService {
                 .append(command.shipmentCode())
                 .append("；物流单：")
                 .append(command.logisticsNo())
+                .append("；操作人：")
+                .append(command.operator());
+        if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
+            remark.append("；证据：").append(command.evidenceCode());
+        }
+        if (command.remark() != null && !command.remark().isBlank()) {
+            remark.append("；备注：").append(command.remark());
+        }
+        return remark.toString();
+    }
+
+    private String buildRemark(CustomerReturnCommand command) {
+        StringBuilder remark = new StringBuilder("客户退货入库；退货单：")
+                .append(command.returnCode())
+                .append("；原出库单：")
+                .append(command.originalShipmentCode())
+                .append("；退回物流：")
+                .append(command.returnLogisticsNo())
+                .append("；原因：")
+                .append(command.reason())
                 .append("；操作人：")
                 .append(command.operator());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {

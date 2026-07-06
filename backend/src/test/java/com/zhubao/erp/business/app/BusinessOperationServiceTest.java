@@ -1,6 +1,8 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.CustomerReturnCommand;
+import com.zhubao.erp.business.domain.CustomerReturnResult;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
@@ -382,6 +384,61 @@ class BusinessOperationServiceTest {
         assertThat(ledger.documentType()).isEqualTo("outbound_shipment");
         assertThat(ledger.documentCode()).isEqualTo("OUT-20260706-022");
         assertThat(ledger.remark()).contains("SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
+    }
+
+    @Test
+    void returnCustomerShipmentMovesShippedBackToFinishedForSameWorkOrderDimension() {
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        StockLedgerService stockLedgerService = new StockLedgerService(repository);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        StockDimension shipped = dimension(StockStatus.SHIPPED, "SHIPPED-CUSTOMER");
+
+        stockLedgerService.transfer(new StockTransferCommand(
+                "outbound_shipment",
+                "OUT-20260706-022",
+                null,
+                shipped,
+                bd("6"),
+                bd("13.660"),
+                "测试预置已发货库存"
+        ));
+
+        CustomerReturnResult result = service.returnCustomerShipment(new CustomerReturnCommand(
+                "RET-20260707-022",
+                "OUT-20260706-022",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "SHIPPED-CUSTOMER",
+                "RETURN-CHECK",
+                bd("2"),
+                bd("4.550"),
+                "SF-RET-20260707-022",
+                "客户退回复核",
+                "库管员 何琳",
+                "ATT-RET-20260707-022",
+                "客户退货待复核"
+        ));
+
+        StockDimension returnedFinished = dimension(StockStatus.FINISHED, "RETURN-CHECK");
+        StockBalance shippedBalance = repository.findBalance(shipped);
+        StockBalance returnedFinishedBalance = repository.findBalance(returnedFinished);
+        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
+
+        assertThat(result.returnCode()).isEqualTo("RET-20260707-022");
+        assertThat(result.originalShipmentCode()).isEqualTo("OUT-20260706-022");
+        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.SHIPPED);
+        assertThat(result.toStockStatus()).isEqualTo(StockStatus.FINISHED);
+        assertThat(result.returnLogisticsNo()).isEqualTo("SF-RET-20260707-022");
+        assertThat(shippedBalance.quantity()).isEqualByComparingTo("4");
+        assertThat(shippedBalance.weight()).isEqualByComparingTo("9.110");
+        assertThat(returnedFinishedBalance.quantity()).isEqualByComparingTo("2");
+        assertThat(returnedFinishedBalance.weight()).isEqualByComparingTo("4.550");
+        assertThat(ledger.documentType()).isEqualTo("customer_return");
+        assertThat(ledger.documentCode()).isEqualTo("RET-20260707-022");
+        assertThat(ledger.remark()).contains("OUT-20260706-022", "SF-RET-20260707-022", "客户退回复核", "ATT-RET-20260707-022");
     }
 
     private StockDimension dimension(StockStatus status, String warehouseCode) {

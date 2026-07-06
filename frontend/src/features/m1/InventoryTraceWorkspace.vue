@@ -12,7 +12,9 @@ import {
   type InventoryWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
 import {
+  returnCustomerShipment,
   shipFinishedStock,
+  type CustomerReturnResult,
   type OutboundShipmentResult,
 } from '../../services/businessOperationApi';
 
@@ -25,6 +27,9 @@ const workspace = ref<InventoryWorkspaceModel>({
 const shippingFinishedStock = ref(false);
 const outboundShipmentResult = ref<OutboundShipmentResult | null>(null);
 const outboundShipmentError = ref('');
+const returningCustomerStock = ref(false);
+const customerReturnResult = ref<CustomerReturnResult | null>(null);
+const customerReturnError = ref('');
 
 const activeBalance = computed(
   () =>
@@ -49,6 +54,8 @@ async function shipActiveFinishedStock() {
   shippingFinishedStock.value = true;
   outboundShipmentResult.value = null;
   outboundShipmentError.value = '';
+  customerReturnResult.value = null;
+  customerReturnError.value = '';
 
   try {
     outboundShipmentResult.value = await shipFinishedStock(activeBalance.value);
@@ -56,6 +63,22 @@ async function shipActiveFinishedStock() {
     outboundShipmentError.value = error instanceof Error ? error.message : '确认出库失败';
   } finally {
     shippingFinishedStock.value = false;
+  }
+}
+
+async function returnActiveCustomerShipment() {
+  if (!activeBalance.value) return;
+
+  returningCustomerStock.value = true;
+  customerReturnResult.value = null;
+  customerReturnError.value = '';
+
+  try {
+    customerReturnResult.value = await returnCustomerShipment(activeBalance.value);
+  } catch (error) {
+    customerReturnError.value = error instanceof Error ? error.message : '客户退货入库失败';
+  } finally {
+    returningCustomerStock.value = false;
   }
 }
 </script>
@@ -102,6 +125,9 @@ async function shipActiveFinishedStock() {
         <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
           {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
         </button>
+        <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
+          {{ returningCustomerStock ? '正在退货' : '退货入库' }}
+        </button>
         <button class="secondary-button" type="button">证据缺口</button>
       </div>
     </section>
@@ -122,6 +148,9 @@ async function shipActiveFinishedStock() {
             <button class="primary-button" type="button">追溯查询</button>
             <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
               {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
+              {{ returningCustomerStock ? '正在退货' : '退货入库' }}
             </button>
           </div>
         </div>
@@ -178,6 +207,9 @@ async function shipActiveFinishedStock() {
           <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
             {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
           </button>
+          <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
+            {{ returningCustomerStock ? '正在退货' : '退货入库' }}
+          </button>
           <button class="secondary-button" type="button">导出台账</button>
           <button class="secondary-button" type="button">查看证据缺口</button>
         </div>
@@ -190,6 +222,16 @@ async function shipActiveFinishedStock() {
           <strong>确认出库失败</strong>
           <span>{{ outboundShipmentError }}</span>
           <small>请确认该客户成品库存已存在，并已完成出库证据归档。</small>
+        </div>
+        <div v-if="customerReturnResult" class="operation-feedback success">
+          <strong>客户退货已写入台账</strong>
+          <span>{{ customerReturnResult.ledgerCode }} / {{ customerReturnResult.returnCode }}</span>
+          <small>{{ customerReturnResult.fromStockStatus }} -> {{ customerReturnResult.toStockStatus }} / {{ customerReturnResult.returnLogisticsNo }}</small>
+        </div>
+        <div v-else-if="customerReturnError" class="operation-feedback danger">
+          <strong>客户退货入库失败</strong>
+          <span>{{ customerReturnError }}</span>
+          <small>请确认原出库单已形成已发货库存；退回后进入 RETURN-CHECK，等待复核或返工判断。</small>
         </div>
       </aside>
     </section>
@@ -326,6 +368,10 @@ async function shipActiveFinishedStock() {
           <article>
             <strong>出库发货</strong>
             <span>成品确认后通过出库单转为已发货库存状态。</span>
+          </article>
+          <article>
+            <strong>客户退货</strong>
+            <span>从已发货库存反向写入退货复核库，保留原出库单和退回物流证据。</span>
           </article>
         </div>
       </div>
