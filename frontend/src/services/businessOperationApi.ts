@@ -1,4 +1,4 @@
-import type { InboundOrder, InventoryBalance, QualityCase, WorkOrder } from '../data/m1PrototypeData';
+import type { InboundOrder, InventoryBalance, LossApproval, QualityCase, WorkOrder } from '../data/m1PrototypeData';
 import { apiPost } from './apiClient';
 
 export interface ConfirmInboundRequest {
@@ -259,6 +259,53 @@ export interface CustomerReturnResult {
   evidenceCode?: string;
 }
 
+export interface LossApprovalRequest {
+  approvalCode: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  customerId: number;
+  ownerCustomerId?: number;
+  materialCode: string;
+  process: string;
+  operator: string;
+  approver: string;
+  inputWeight: string;
+  outputWeight: string;
+  reasonableTransferWeight: string;
+  standardLossRatePercent: string;
+  acceptedQuantity: number;
+  pieceRate: string;
+  lossDeductionUnitPrice: string;
+  evidenceCode?: string;
+  remark?: string;
+}
+
+export interface LossApprovalResult {
+  approvalCode: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  process: string;
+  inputWeight: number;
+  outputWeight: number;
+  reasonableTransferWeight: number;
+  lossWeight: number;
+  allowedLossWeight: number;
+  excessLossWeight: number;
+  standardLossRatePercent: number;
+  actualLossRatePercent: number;
+  overLimit: boolean;
+  approvalStatus: string;
+  acceptedQuantity: number;
+  pieceRate: number;
+  pieceWage: number;
+  lossDeduction: number;
+  trialWage: number;
+  formalPayroll: boolean;
+  operator: string;
+  approver: string;
+  evidenceCode?: string;
+}
+
 const customerIds: Record<string, number> = {
   恒信珠宝: 1001,
   雅辰饰品: 1002,
@@ -321,6 +368,23 @@ const qualityFreezeWeights: Record<string, string> = {
   'QC-20260706-021': '7.200',
   'QC-20260706-022': '13.660',
   'QC-20260706-023': '1.250',
+};
+
+const lossAcceptedQuantities: Record<string, number> = {
+  'LOSS-20260706-009': 56,
+  'LOSS-20260706-010': 210,
+};
+
+const processPieceRates: Record<string, string> = {
+  抛光: '0.80',
+  焊接: '0.72',
+  镶石: '1.20',
+  返工抛光: '0.00',
+};
+
+const lossWeightFallbacks: Record<string, { inputWeight: string; outputWeight: string }> = {
+  'LOSS-20260706-009': { inputWeight: '121.150', outputWeight: '116.550' },
+  'LOSS-20260706-010': { inputWeight: '684.400', outputWeight: '683.200' },
 };
 
 export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundRequest {
@@ -561,7 +625,59 @@ export async function returnCustomerShipment(balance: InventoryBalance): Promise
   );
 }
 
+export function buildLossApprovalRequest(approval: LossApproval): LossApprovalRequest {
+  const customer = workOrderCustomers[approval.workOrder] ?? '恒信珠宝';
+  const material = workOrderMaterials[approval.workOrder] ?? approval.workOrder;
+  const customerId = customerIds[customer] ?? 9000;
+  const weights = parseLossEvidenceWeights(approval);
+
+  return {
+    approvalCode: approval.code,
+    motherOrderCode: workOrderMotherOrders[approval.workOrder] ?? approval.workOrder,
+    workOrderCode: approval.workOrder,
+    customerId,
+    ownerCustomerId: customerId,
+    materialCode: materialCodes[material] ?? `MAT-${approval.workOrder}`,
+    process: approval.process,
+    operator: approval.workOrder === 'ZD-20260706-001' ? '李华' : '王强',
+    approver: '车间组长 马杰',
+    inputWeight: weights.inputWeight,
+    outputWeight: weights.outputWeight,
+    reasonableTransferWeight: '0.000',
+    standardLossRatePercent: parsePercent(approval.standard),
+    acceptedQuantity: lossAcceptedQuantities[approval.code] ?? 1,
+    pieceRate: processPieceRates[approval.process] ?? '0.80',
+    lossDeductionUnitPrice: '6.00',
+    evidenceCode: weights.evidenceCode,
+    remark: '前端质检作业主控台提交损耗审批和工资试算',
+  };
+}
+
+export async function approveLoss(approval: LossApproval): Promise<LossApprovalResult> {
+  return apiPost<LossApprovalRequest, LossApprovalResult>(
+    '/api/business/operations/loss-approvals',
+    buildLossApprovalRequest(approval),
+  );
+}
+
 function parseWeight(weight: string): string {
   const value = weight.replace(/[^\d.]/g, '');
   return value || '0';
+}
+
+function parsePercent(percent: string): string {
+  const value = percent.replace(/[^\d.]/g, '');
+  return value || '0';
+}
+
+function parseLossEvidenceWeights(approval: LossApproval): { inputWeight: string; outputWeight: string; evidenceCode: string } {
+  const input = approval.evidence.match(/投入\s*([\d.]+)g/);
+  const output = approval.evidence.match(/产出\s*([\d.]+)g/);
+  const fallback = lossWeightFallbacks[approval.code] ?? { inputWeight: '1.000', outputWeight: '1.000' };
+
+  return {
+    inputWeight: input?.[1] ?? fallback.inputWeight,
+    outputWeight: output?.[1] ?? fallback.outputWeight,
+    evidenceCode: approval.evidence.includes('HO-') ? approval.evidence : 'HO-20260706-021',
+  };
 }

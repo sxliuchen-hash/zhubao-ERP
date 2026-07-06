@@ -596,6 +596,47 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void approvesLossThroughBusinessOperationApiAndReturnsWageTrialSnapshot() {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("approvalCode", "LOSS-SMOKE-20260706-009");
+        request.put("motherOrderCode", "MD-SMOKE-20260706-009");
+        request.put("workOrderCode", "ZD-SMOKE-20260706-009");
+        request.put("customerId", 1001L);
+        request.put("materialCode", "MAT-18K-RING");
+        request.put("process", "抛光");
+        request.put("operator", "李华");
+        request.put("approver", "车间组长 马杰");
+        request.put("inputWeight", new BigDecimal("121.150"));
+        request.put("outputWeight", new BigDecimal("116.550"));
+        request.put("reasonableTransferWeight", new BigDecimal("0.000"));
+        request.put("standardLossRatePercent", new BigDecimal("2.0"));
+        request.put("acceptedQuantity", new BigDecimal("56"));
+        request.put("pieceRate", new BigDecimal("0.80"));
+        request.put("lossDeductionUnitPrice", new BigDecimal("6.00"));
+        request.put("evidenceCode", "HO-SMOKE-LOSS-009");
+        request.put("remark", "loss approval smoke test");
+
+        ResponseEntity<String> approved = restTemplate.postForEntity(
+                "/api/business/operations/loss-approvals",
+                request,
+                String.class
+        );
+
+        assertThat(approved.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(approved.getBody()).contains(
+                "LOSS-SMOKE-20260706-009",
+                "\"overLimit\":true",
+                "WAITING_APPROVAL",
+                "\"actualLossRatePercent\":3.80",
+                "\"pieceWage\":44.80",
+                "\"lossDeduction\":13.06",
+                "\"trialWage\":31.74",
+                "\"formalPayroll\":false",
+                "HO-SMOKE-LOSS-009"
+        );
+    }
+
+    @Test
     void exposesConfigurationBaselineApis() {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/configuration/baseline/summary", String.class);
         ResponseEntity<String> parameters = restTemplate.getForEntity("/api/configuration/baseline/system-parameters", String.class);

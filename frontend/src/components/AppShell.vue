@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.17 / 台账闭环扩展中</strong>
-        <i>已接：来料入库、生产报工、质检冻结、返工、复检放行、成品出库、客户退货、附件上传。待接：损耗审批、工资试算、对象存储、真实权限。</i>
+        <strong>M3.19 / 台账闭环扩展中</strong>
+        <i>已接：来料入库、生产报工、质检冻结、返工、复检放行、成品出库、客户退货、损耗审批试算、附件上传。待接：售后复核、对象存储、真实权限。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -62,7 +62,7 @@ defineProps<{
             <span>业务动作写台账</span>
             <span>附件元数据</span>
             <span>硬件 POC</span>
-            <span>损耗审批待接入</span>
+            <span>工资试算基线</span>
           </div>
         </div>
         <div class="header-actions command-actions-panel" aria-label="全局操作">

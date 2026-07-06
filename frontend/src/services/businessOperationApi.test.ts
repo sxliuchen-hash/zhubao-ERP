@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { InboundOrder, InventoryBalance, QualityCase, WorkOrder } from '../data/m1PrototypeData';
+import type { InboundOrder, InventoryBalance, LossApproval, QualityCase, WorkOrder } from '../data/m1PrototypeData';
 import {
+  buildLossApprovalRequest,
   buildConfirmInboundRequest,
   buildCustomerReturnRequest,
   buildOutboundShipmentRequest,
@@ -241,6 +242,39 @@ describe('businessOperationApi', () => {
       reason: '客户退回复核',
       operator: '库管员 何琳',
       evidenceCode: 'ATT-RET-20260706002',
+    });
+  });
+
+  it('builds a loss approval command with wage trial snapshot inputs', () => {
+    const approval: LossApproval = {
+      code: 'LOSS-20260706-009',
+      workOrder: 'ZD-20260706-001',
+      process: '抛光',
+      standard: '2.0%',
+      actual: '3.8%',
+      evidence: '投入 121.15g / 产出 116.55g / 缺陷照片 5 张',
+      action: '待组长审批',
+      tone: 'red',
+    };
+
+    expect(buildLossApprovalRequest(approval)).toMatchObject({
+      approvalCode: 'LOSS-20260706-009',
+      motherOrderCode: 'MD-20260706-001',
+      workOrderCode: 'ZD-20260706-001',
+      customerId: 1001,
+      ownerCustomerId: 1001,
+      materialCode: 'MAT-18K-RING',
+      process: '抛光',
+      operator: '李华',
+      approver: '车间组长 马杰',
+      inputWeight: '121.15',
+      outputWeight: '116.55',
+      reasonableTransferWeight: '0.000',
+      standardLossRatePercent: '2.0',
+      acceptedQuantity: 56,
+      pieceRate: '0.80',
+      lossDeductionUnitPrice: '6.00',
+      evidenceCode: 'HO-20260706-021',
     });
   });
 });

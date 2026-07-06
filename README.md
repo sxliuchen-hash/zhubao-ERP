@@ -34,6 +34,7 @@
 - M3.15 成品出库业务操作基线，新增 `POST /api/business/operations/outbound-shipments`，将同一子工单维度下的成品库存转为已发货库存。
 - M3.17 客户退货入库业务操作基线，新增 `POST /api/business/operations/customer-returns`，将同一子工单维度下的已发货库存转回退货复核库存。
 - M3.18 首页产品级信息架构整改，参考 ERPNext/Odoo/InvenTree 的制造、库存和质量作业结构，将首页首屏重做为生产运营指挥台，补充工位运行、执行质量、风险热区、损耗审批快照和 M3.17 状态同步。
+- M3.19 损耗审批与工资试算基线，新增 `POST /api/business/operations/loss-approvals`，按投入、产出、合理转移、标准损耗率、计件单价和扣损单价生成审批/工资试算快照；同时将首页首屏修正为表格优先的业务调度台。
 
 ## 目录结构
 
@@ -164,6 +165,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `POST /api/business/operations/quality-releases`
 - `POST /api/business/operations/outbound-shipments`
 - `POST /api/business/operations/customer-returns`
+- `POST /api/business/operations/loss-approvals`
 - `GET /api/configuration/baseline/summary`
 - `GET /api/configuration/baseline/system-parameters`
 - `GET /api/configuration/baseline/code-rules`
@@ -178,7 +180,7 @@ pnpm --filter zhubao-erp-frontend dev
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.18 调整为更接近生产现场使用的工业 ERP/MES 指挥台。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.19 调整为更接近生产现场使用的工业 ERP/MES 调度台。下一步重点不再是继续堆演示页，而是把真实业务闭环、持久化、权限审批和软硬件证据补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
@@ -186,7 +188,7 @@ pnpm --filter zhubao-erp-frontend dev
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实权限。
-- 补齐退货后的售后质检复核、损耗审批、工资试算和对象存储，避免当前原型停留在局部台账动作。
+- 补齐退货后的售后质检复核、正式审批流、工资锁账/发放边界和对象存储，避免当前原型停留在局部台账动作与工资试算快照。
 
 ## 开发管理文档
 

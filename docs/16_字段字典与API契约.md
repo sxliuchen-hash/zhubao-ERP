@@ -1,7 +1,7 @@
 # 来料加工进销存与生产管理系统 字段字典与 API 契约
 
 **文档版本**：V1.0  
-**更新日期**：2026-07-06  
+**更新日期**：2026-07-07
 **适用阶段**：M2 API 基线，M3 数据库和前后端联调依据  
 
 ---
@@ -72,6 +72,7 @@
 | `POST /quality-releases` | 质检返工 | 复检放行，将同一子工单的半成品库存转为成品库存 |
 | `POST /outbound-shipments` | 库存追溯 | 确认成品出库，将同一子工单的成品库存转为已发货库存 |
 | `POST /customer-returns` | 库存追溯 | 客户退货入库，将同一子工单的已发货库存转回退货复核库存 |
+| `POST /loss-approvals` | 质检返工 | 生成损耗审批与工资试算快照，不写库存台账，不代表正式工资发放 |
 
 配置基线接口前缀：
 
@@ -492,6 +493,66 @@
 - 若来源半成品库存不足，后端必须拒绝写台账。
 - 复检放行只生成成品库存，不等同于发货或退货；出库仍需独立业务命令。
 
+### 6.11 `ApproveLossCommand`
+
+`POST /api/business/operations/loss-approvals` 使用该命令模型。该接口是 M3.19 损耗审批与工资试算基线，目标是先冻结损耗归因和工资试算口径，不接入正式审批流，不写库存台账。
+
+| 字段 | 说明 |
+|---|---|
+| `approvalCode` | 损耗审批单号，作为审批/试算快照编码 |
+| `motherOrderCode` | 母单号 |
+| `workOrderCode` | 子工单或返工工单号 |
+| `customerId` | 业务客户 ID |
+| `ownerCustomerId` | 库存所有客户 ID，未传时默认仍按业务客户处理 |
+| `materialCode` | 物料编码 |
+| `process` | 工序名称快照 |
+| `operator` | 提交人快照 |
+| `approver` | 当前审批责任人快照 |
+| `inputWeight` | 工序投入重量，必须大于 0，单位按业务配置默认为克 |
+| `outputWeight` | 工序产出重量，必须大于等于 0 |
+| `reasonableTransferWeight` | 合理转移/留样/工序间差异重量，必须大于等于 0 |
+| `standardLossRatePercent` | 标准损耗率百分比，例如 `2.00` |
+| `acceptedQuantity` | 合格计件数量，用于工资试算 |
+| `pieceRate` | 工序计件单价快照 |
+| `lossDeductionUnitPrice` | 超标损耗每克扣款单价快照 |
+| `evidenceCode` | 称重、缺陷照片、交接记录或审批附件编码 |
+| `remark` | 备注 |
+
+### 6.12 `LossApprovalResult`
+
+| 字段 | 说明 |
+|---|---|
+| `approvalCode` | 损耗审批单号 |
+| `motherOrderCode` | 母单号 |
+| `workOrderCode` | 工单号 |
+| `process` | 工序名称快照 |
+| `inputWeight` | 投入重量，按 3 位小数返回 |
+| `outputWeight` | 产出重量，按 3 位小数返回 |
+| `reasonableTransferWeight` | 合理转移重量，按 3 位小数返回 |
+| `lossWeight` | 实际损耗重量，`max(0, inputWeight - outputWeight - reasonableTransferWeight)` |
+| `allowedLossWeight` | 允许损耗重量，`inputWeight * standardLossRatePercent / 100` |
+| `excessLossWeight` | 超标损耗重量，`max(0, lossWeight - allowedLossWeight)` |
+| `standardLossRatePercent` | 标准损耗率百分比，按 2 位小数返回 |
+| `actualLossRatePercent` | 实际损耗率百分比，`lossWeight * 100 / inputWeight` |
+| `overLimit` | 是否存在超标损耗 |
+| `approvalStatus` | 超标时为 `WAITING_APPROVAL`，未超标时为 `AUTO_APPROVED` |
+| `acceptedQuantity` | 合格计件数量，按整数返回 |
+| `pieceRate` | 计件单价快照，按 2 位小数返回 |
+| `pieceWage` | 计件工资，`acceptedQuantity * pieceRate` |
+| `lossDeduction` | 损耗扣款，`min(excessLossWeight * lossDeductionUnitPrice, pieceWage)` |
+| `trialWage` | 工资试算，`max(0, pieceWage - lossDeduction)` |
+| `formalPayroll` | 固定为 `false`，表示不是正式工资发放或锁账结果 |
+| `operator` | 提交人快照 |
+| `approver` | 审批责任人快照 |
+| `evidenceCode` | 证据编码 |
+
+实现约束：
+
+- 该接口当前不调用 `StockLedgerService`，不改变库存余额，也不追加库存台账。
+- 该接口只证明损耗归因、审批责任和工资试算口径，不代表 Flowable/正式审批流已经接入。
+- 工序单价、扣损单价、标准损耗率必须作为快照字段保存，后续配置调整不得反向影响历史试算。
+- 正式工资发放、工资锁账、财务凭证和员工薪资明细仍在一期边界外；后续若接入工资模块，必须从该试算快照转入独立工资单状态机。
+
 ---
 
 ## 7. 库存与追溯字段
@@ -789,11 +850,12 @@ PWA 一期边界：
 | 复检放行 | `POST /api/business/operations/quality-releases`，`SEMI_FINISHED -> FINISHED` |
 | 成品出库 | `POST /api/business/operations/outbound-shipments`，`FINISHED -> SHIPPED` |
 | 客户退货 | `POST /api/business/operations/customer-returns`，`SHIPPED -> FINISHED` |
+| 损耗审批 | `POST /api/business/operations/loss-approvals`，返回损耗审批与工资试算快照，不写库存台账 |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态，损耗审批、工资试算和退货后的售后质检复核仍需继续接入业务命令 |
+| 当前限制 | 尚未更新工作台快照状态；损耗审批只有试算命令，正式审批流、工资锁账/发放和退货后的售后质检复核仍需继续接入 |
 
-这些接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：称重交接、损耗审批、工资试算和退货复核都必须先建业务命令，再调用库存服务或审批服务产生只追加台账。
+这些接口证明一期闭环开始从“展示样例”进入“业务命令”。库存变化必须通过库存服务产生只追加台账；损耗审批、工资试算、称重交接和退货复核这类非库存动作也必须先建独立业务命令，再按职责接入审批服务、工资服务或证据服务。
 
 ---
 

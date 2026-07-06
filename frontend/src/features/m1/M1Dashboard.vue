@@ -6,7 +6,6 @@ import {
   getHardwareManualFallbackCount,
   inboundOrders,
   inventoryBalances,
-  lossApprovals,
   metrics,
   productionHandoffs,
   productionStationLoads,
@@ -54,7 +53,6 @@ function inventoryTone(status: string): Tone {
 
 const activeInbound = inboundOrders[0];
 const activeWorkOrder = workOrders.find((order) => order.status.includes('称重')) ?? workOrders[0];
-const lossWorkOrder = workOrders.find((order) => order.code === 'ZD-20260706-001') ?? workOrders[0];
 const activeQuality = qualityCases[0];
 const activeInventory = inventoryBalances[1] ?? inventoryBalances[0];
 
@@ -155,8 +153,8 @@ const implementationLanes = [
   {
     code: 'API',
     title: '真实业务动作',
-    value: '8 条',
-    detail: '来料确认入库、生产报工、质检冻结、返工派发、返工报工、复检放行、成品出库、客户退货已能写入库存台账。',
+    value: '9 条',
+    detail: '8 条库存写账命令已接入台账；损耗审批已能生成工资试算快照，但不进入正式工资。',
     state: '部分可验',
     tone: 'amber',
   },
@@ -179,7 +177,7 @@ const implementationLanes = [
 ] as const;
 
 const deliveryGaps = [
-  { title: '工资口径 / 损耗审批', detail: '复检放行已写台账，但工资试算、超标损耗审批和审批流仍未闭环。', tone: 'red' },
+  { title: '正式审批 / 工资锁账', detail: '损耗审批和工资试算已有命令基线，但还不是正式审批流、正式工资发放或锁账。', tone: 'red' },
   { title: '售后复核 / 完工归档', detail: '客户退货入库已写台账，但退货后的售后质检复核、返工或报废分流仍未闭环。', tone: 'amber' },
   { title: '权限 / 审批 / 审计', detail: '已有字段和页面占位，未接入真实登录、角色和审批流。', tone: 'amber' },
   { title: '对象存储 / 版本锁定', detail: '附件上传、checksum 和预览 URL 已接，MinIO/S3、签名 URL 和审批锁定仍未完成。', tone: 'blue' },
@@ -197,129 +195,235 @@ const chainStages = [
 const readinessRows = [
   { module: '来料母单', api: '写账 API 已接', ui: '主表 + 详情 + 入库动作', data: '样例 + 内存兜底', status: '可演示验收' },
   { module: '生产工单', api: '报工 API 已接', ui: '派工 + 报工 + 交接', data: '样例 + JDBC 快照', status: '可演示验收' },
-  { module: '质检返工', api: '冻结/返工派发/返工报工/复检放行 API 已接', ui: '质检队列 + 库存动作核验', data: '样例 + 真实台账', status: '待审批与工资口径' },
+  { module: '质检返工', api: '冻结/返工派发/返工报工/复检放行/损耗审批 API 已接', ui: '质检队列 + 库存动作核验 + 工资试算', data: '样例 + 真实台账', status: '待正式审批流' },
   { module: '库存追溯', api: '台账读写、成品出库、客户退货 API 已接', ui: '余额 + 台账 + 出库 + 退货 + 证据', data: '真实台账 + 样例', status: '待售后复核分流' },
   { module: '配置/构型', api: '只读基线 API', ui: '参数 + 权限 + 版本', data: 'seed 数据', status: '待审批写入' },
   { module: '文档附件', api: '文档包/附件/上传/预览 API 已接', ui: '文档包 + 上传测试 + 审计', data: '样例 + 内存上传', status: '待对象存储' },
   { module: '硬件联动', api: 'POC 记录 API', ui: '设备矩阵 + 兜底任务', data: 'POC 样例', status: '待现场复测' },
 ] as const;
 
-const commandFlow = [
-  { label: '收货', count: '6 单', state: '2 单待确认', tone: 'amber' },
-  { label: '在制', count: '18 张', state: '5 张阻断', tone: 'red' },
-  { label: '质检', count: '7 批', state: '2 批返工复检', tone: 'amber' },
-  { label: '成品', count: '4 单', state: '可出库', tone: 'green' },
-  { label: '退货', count: '1 单', state: '待售后复核', tone: 'blue' },
+const dispatchRows = consoleRows.slice(0, 10);
+
+const commandSummaryTiles = [
+  { label: '待收货', value: '6', unit: '单', detail: '2 单需确认客户/物料', tone: 'amber' },
+  { label: '在制工单', value: '18', unit: '张', detail: '5 张停留超过 4 小时', tone: 'red' },
+  { label: '质检队列', value: '7', unit: '批', detail: '2 批返工复检', tone: 'amber' },
+  { label: '可出库', value: '4', unit: '单', detail: '追溯链路可核验', tone: 'green' },
 ] as const;
 
-const shopfloorCells = [
-  {
-    name: '拆包台',
-    node: '来料收货',
-    current: inboundOrders[0].code,
-    load: '3 单排队',
-    risk: '1 个视频截取失败',
-    evidence: '快递单、拆包视频、称重照片',
-    tone: 'amber',
-  },
-  {
-    name: '抛光工位',
-    node: lossWorkOrder.process,
-    current: lossWorkOrder.code,
-    load: '6 张工单',
-    risk: '超标损耗待批',
-    evidence: productionHandoffs[2]?.code ?? '称重待补',
-    tone: 'red',
-  },
-  {
-    name: '镶石工位',
-    node: '生产瓶颈',
-    current: 'ZD-20260706-002',
-    load: '92% 负载',
-    risk: '质检积压影响派工',
-    evidence: '报工、缺陷照片',
-    tone: 'amber',
-  },
-  {
-    name: '成品库',
-    node: '出库追溯',
-    current: 'MD-20260706-002',
-    load: '4 单待发',
-    risk: '退货复核规则待补',
-    evidence: '库存台账、物流单',
-    tone: 'green',
-  },
+const workbenchActionRows = [
+  { scene: '来料入库', command: 'confirm-inbound', api: 'POST /confirm-inbounds', state: '已接台账', tone: 'green' },
+  { scene: '工序报工', command: 'report-production', api: 'POST /production-reports', state: '已接台账', tone: 'green' },
+  { scene: '质检冻结', command: 'freeze-quality-stock', api: 'POST /quality-freezes', state: '已接台账', tone: 'green' },
+  { scene: '损耗审批', command: 'approve-loss', api: 'POST /loss-approvals', state: '工资试算', tone: 'amber' },
 ] as const;
 
-const executionChecklist = [
-  { label: '真实写账', value: '8 条业务命令', detail: '所有正式库存变化必须只追加台账', tone: 'green' },
-  { label: '样例管理', value: '4 类验收样例', detail: '主链路、返工、损耗、硬件兜底样例已集中管理', tone: 'blue' },
-  { label: '现场证据', value: '3 个缺口', detail: '视频截取、称重照片、损耗审批证据仍需补齐', tone: 'amber' },
-  { label: '开发风险', value: '4 项待闭环', detail: '权限、审批、对象存储、售后复核仍不能按交付口径通过', tone: 'red' },
-] as const;
-
-const focusedLossApproval = lossApprovals[0];
 </script>
 
 <template>
-  <div class="page-stack cockpit-page ops-dashboard">
-    <section class="command-intelligence">
-      <div class="command-main">
-        <div class="command-title-row">
-          <span class="eyebrow">Live Shopfloor Command</span>
-          <StatusBadge label="当前不是完整交付系统，是可运行评审原型" tone="amber" />
+  <div class="page-stack cockpit-page ops-dashboard refined-dashboard">
+    <section class="review-console-panel" aria-label="来料加工生产运营指挥台">
+      <div class="review-console-copy">
+        <div class="console-title-line">
+          <span class="eyebrow">M3.19 Review Console</span>
+          <StatusBadge label="评审原型，不是完整交付系统" tone="amber" />
         </div>
         <h2>来料加工生产运营指挥台</h2>
-        <p>首屏直接展示车间正在运行的业务对象、阻断原因、证据缺口和下一动作。已经接入 8 条写账业务命令；损耗审批、工资试算、售后复核、对象存储和真实权限仍按缺口管理。</p>
-
-        <div class="command-flow" aria-label="核心业务链路状态">
-          <article v-for="stage in commandFlow" :key="stage.label" :class="`tone-${stage.tone}`">
-            <span>{{ stage.label }}</span>
-            <strong>{{ stage.count }}</strong>
-            <small>{{ stage.state }}</small>
+        <p>
+          首页按车间真实调度组织：单据队列、阻断原因、证据缺口、库存台账命令和下一动作放在同一个操作面。
+          当前已接 8 条库存写账命令和 1 条损耗工资试算命令；审批流、对象存储、真实权限和售后复核仍按缺口管理。
+        </p>
+        <div class="summary-tile-grid" aria-label="今日运行摘要">
+          <article v-for="tile in commandSummaryTiles" :key="tile.label" :class="`tone-${tile.tone}`">
+            <span>{{ tile.label }}</span>
+            <strong>{{ tile.value }}<small>{{ tile.unit }}</small></strong>
+            <em>{{ tile.detail }}</em>
           </article>
         </div>
       </div>
 
-      <aside class="command-risk-board">
-        <div class="command-risk-head">
-          <span class="eyebrow">Shift Risk</span>
-          <strong>白班现场风险</strong>
+      <aside class="shift-brief-panel" aria-label="白班现场风险">
+        <div class="panel-kicker">
+          <span>白班现场风险</span>
+          <strong>3 项需要处理</strong>
         </div>
         <article v-for="signal in shiftSignals" :key="signal.label" :class="`tone-${signal.tone}`">
           <div>
-            <span>{{ signal.label }}</span>
-            <small>{{ signal.hint }}</small>
+            <strong>{{ signal.label }}</strong>
+            <span>{{ signal.hint }}</span>
           </div>
-          <strong>{{ signal.value }}</strong>
+          <b>{{ signal.value }}</b>
         </article>
       </aside>
     </section>
 
-    <section class="shopfloor-cell-grid" aria-label="工位运行状态">
-      <article v-for="cell in shopfloorCells" :key="cell.name" :class="`shopfloor-cell tone-${cell.tone}`">
-        <div class="cell-head">
-          <span>{{ cell.name }}</span>
-          <StatusBadge :label="cell.node" :tone="cell.tone" />
+    <section class="operator-workbench-grid" aria-label="业务调度台">
+      <div class="dispatch-table-panel">
+        <div class="console-toolbar refined-toolbar">
+          <div>
+            <span class="eyebrow">Live Dispatch</span>
+            <h2>业务调度台</h2>
+            <p>按单据、工序、责任人和阻断原因组织，业务方一眼能看到今天该处理什么。</p>
+          </div>
+          <div class="console-tools">
+            <label>
+              <span>对象</span>
+              <select>
+                <option>全部单据</option>
+                <option>只看来料母单</option>
+                <option>只看生产工单</option>
+                <option>只看质检阻断</option>
+              </select>
+            </label>
+            <label>
+              <span>追溯</span>
+              <input value="MD-20260706-001" aria-label="追溯关键字" />
+            </label>
+            <button class="primary-button" type="button">查询</button>
+          </div>
         </div>
-        <strong>{{ cell.current }}</strong>
-        <dl>
-          <dt>负载</dt>
-          <dd>{{ cell.load }}</dd>
-          <dt>风险</dt>
-          <dd>{{ cell.risk }}</dd>
-          <dt>证据</dt>
-          <dd>{{ cell.evidence }}</dd>
-        </dl>
+
+        <div class="erp-table-wrap refined-table-wrap">
+          <table class="erp-table dispatch-table">
+            <thead>
+              <tr>
+                <th>业务单号</th>
+                <th>对象/客户</th>
+                <th>当前节点</th>
+                <th>责任人</th>
+                <th>状态</th>
+                <th>下一动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in dispatchRows" :key="row.code">
+                <td><strong>{{ row.code }}</strong></td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ row.type }} / {{ row.customer }}</b>
+                    <small>{{ row.material }}</small>
+                  </span>
+                </td>
+                <td>{{ row.node }}</td>
+                <td>{{ row.owner }}</td>
+                <td><StatusBadge :label="row.blocker" :tone="row.tone" /></td>
+                <td><button class="table-action" type="button">{{ row.next }}</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside class="right-command-column">
+        <section class="focus-order-panel">
+          <div class="detail-title">
+            <span>当前焦点工单</span>
+            <strong>{{ activeWorkOrder.code }}</strong>
+            <StatusBadge :label="activeWorkOrder.status" :tone="workOrderTone(activeWorkOrder.status)" />
+          </div>
+          <dl class="detail-grid">
+            <dt>客户</dt>
+            <dd>{{ activeWorkOrder.customer }}</dd>
+            <dt>物料</dt>
+            <dd>{{ activeWorkOrder.material }}</dd>
+            <dt>工序</dt>
+            <dd>{{ activeWorkOrder.process }}</dd>
+            <dt>负责人</dt>
+            <dd>{{ activeWorkOrder.assignee }}</dd>
+            <dt>产出</dt>
+            <dd>{{ activeWorkOrder.finishedQty }}/{{ activeWorkOrder.plannedQty }} 件</dd>
+          </dl>
+          <div class="detail-actions compact-actions">
+            <button class="primary-button" type="button">扫码报工</button>
+            <button class="secondary-button" type="button">称重交接</button>
+          </div>
+        </section>
+
+        <section class="command-api-panel">
+          <div class="panel-kicker">
+            <span>已接业务命令</span>
+            <strong>真实命令 / 样例数据分层</strong>
+          </div>
+          <article v-for="item in workbenchActionRows" :key="item.command" :class="`tone-${item.tone}`">
+            <div>
+              <strong>{{ item.scene }}</strong>
+              <span>{{ item.api }}</span>
+            </div>
+            <StatusBadge :label="item.state" :tone="item.tone" />
+          </article>
+        </section>
+      </aside>
+    </section>
+
+    <section class="compact-process-strip" aria-label="一期核心作业入口">
+      <article v-for="step in controlSteps" :key="step.index" :class="`tone-${step.tone}`">
+        <b>{{ step.index }}</b>
+        <div>
+          <strong>{{ step.title }}</strong>
+          <span>{{ step.detail }}</span>
+        </div>
+        <StatusBadge :label="step.state" :tone="step.tone" />
       </article>
     </section>
 
-    <section class="execution-strip" aria-label="执行质量检查">
-      <article v-for="item in executionChecklist" :key="item.label" :class="`tone-${item.tone}`">
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-        <small>{{ item.detail }}</small>
-      </article>
+    <section class="evidence-risk-grid" aria-label="证据与阻断">
+      <div class="section-block refined-section">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Blocking Queue</span>
+            <h2>现场阻断队列</h2>
+            <p>先处理会影响入库、报工、质检和出库的事项。</p>
+          </div>
+        </div>
+        <div class="work-queue">
+          <article v-for="item in workQueues" :key="item.id" class="queue-row">
+            <StatusBadge :label="severityLabel(item.severity)" :tone="severityTone(item.severity)" />
+            <div>
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.subtitle }}</span>
+            </div>
+            <small>{{ item.owner }} / {{ item.due }}</small>
+          </article>
+        </div>
+      </div>
+
+      <div class="section-block refined-section">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Evidence Health</span>
+            <h2>证据链健康</h2>
+            <p>每个关键动作必须落到附件、视频、称重、台账或审批记录。</p>
+          </div>
+        </div>
+        <div class="evidence-matrix">
+          <article v-for="item in evidenceMatrix" :key="item.label">
+            <div>
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.link }}</span>
+            </div>
+            <StatusBadge :label="item.status" :tone="item.tone" />
+          </article>
+        </div>
+      </div>
+
+      <div class="section-block refined-section">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Approval Dock</span>
+            <h2>审批与兜底</h2>
+            <p>硬件失败、损耗超标、配置变更必须有责任人和时限。</p>
+          </div>
+        </div>
+        <div class="approval-dock">
+          <article v-for="item in approvalDock" :key="item.code">
+            <StatusBadge :label="item.sla" :tone="item.tone" />
+            <div>
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.code }} / {{ item.owner }}</span>
+            </div>
+          </article>
+        </div>
+      </div>
     </section>
 
     <section class="review-ledger-board" aria-label="当前实现进度">
@@ -330,7 +434,7 @@ const focusedLossApproval = lossApprovals[0];
             <h2>我目前实际做到了什么</h2>
             <p>把“看起来像页面”和“已经能验收的能力”拆开，评审时按这张表判断是否可以进入下一阶段。</p>
           </div>
-          <StatusBadge label="M3.17 基线" tone="blue" />
+          <StatusBadge label="M3.19 基线" tone="blue" />
         </div>
         <div class="review-lane-grid">
           <article v-for="lane in implementationLanes" :key="lane.code" :class="`review-lane tone-${lane.tone}`">
@@ -413,168 +517,8 @@ const focusedLossApproval = lossApprovals[0];
       </div>
     </section>
 
-    <section class="ops-layout-grid">
-      <div class="ops-main-panel">
-        <div class="console-toolbar">
-          <div>
-            <span class="eyebrow">Live Operations</span>
-            <h2>生产运营主控台</h2>
-            <p>按单据、工序、责任人和阻断原因组织操作入口，避免只看摘要指标。</p>
-          </div>
-          <div class="console-tools">
-            <label>
-              <span>业务对象</span>
-              <select>
-                <option>全部单据</option>
-                <option>只看来料母单</option>
-                <option>只看生产工单</option>
-                <option>只看质检阻断</option>
-              </select>
-            </label>
-            <label>
-              <span>关键字</span>
-              <input value="MD-20260706-001" aria-label="追溯关键字" />
-            </label>
-            <button class="primary-button" type="button">追溯查询</button>
-          </div>
-        </div>
-
-        <div class="erp-table-wrap">
-          <table class="erp-table">
-            <thead>
-              <tr>
-                <th>业务单号</th>
-                <th>类型</th>
-                <th>客户/物料</th>
-                <th>当前节点</th>
-                <th>责任人</th>
-                <th>阻断/状态</th>
-                <th>下一动作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in consoleRows" :key="row.code">
-                <td><strong>{{ row.code }}</strong></td>
-                <td>{{ row.type }}</td>
-                <td>
-                  <span class="cell-stack">
-                    <b>{{ row.customer }}</b>
-                    <small>{{ row.material }}</small>
-                  </span>
-                </td>
-                <td>{{ row.node }}</td>
-                <td>{{ row.owner }}</td>
-                <td><StatusBadge :label="row.blocker" :tone="row.tone" /></td>
-                <td><button class="table-action" type="button">{{ row.next }}</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <aside class="ops-focus-panel">
-        <div class="detail-title">
-          <span>当前焦点工单</span>
-          <strong>{{ activeWorkOrder.code }}</strong>
-          <StatusBadge :label="activeWorkOrder.status" :tone="workOrderTone(activeWorkOrder.status)" />
-        </div>
-        <dl class="detail-grid">
-          <dt>客户</dt>
-          <dd>{{ activeWorkOrder.customer }}</dd>
-          <dt>物料</dt>
-          <dd>{{ activeWorkOrder.material }}</dd>
-          <dt>当前工序</dt>
-          <dd>{{ activeWorkOrder.process }}</dd>
-          <dt>负责人</dt>
-          <dd>{{ activeWorkOrder.assignee }}</dd>
-          <dt>产出进度</dt>
-          <dd>{{ activeWorkOrder.finishedQty }}/{{ activeWorkOrder.plannedQty }} 件</dd>
-          <dt>库存归属</dt>
-          <dd>客户所有，在制库存</dd>
-        </dl>
-        <div class="detail-actions">
-          <button class="primary-button" type="button">扫码报工</button>
-          <button class="secondary-button" type="button">称重交接</button>
-          <button class="secondary-button" type="button">查看证据</button>
-        </div>
-        <div class="focus-subcard tone-red">
-          <span>损耗审批快照</span>
-          <strong>{{ focusedLossApproval.code }}</strong>
-          <small>{{ focusedLossApproval.workOrder }} / {{ focusedLossApproval.process }} / 标准 {{ focusedLossApproval.standard }} / 实际 {{ focusedLossApproval.actual }}</small>
-        </div>
-      </aside>
-    </section>
-
-    <section class="operations-dock ops-process-dock" aria-label="核心作业入口">
-      <article v-for="step in controlSteps" :key="step.index" :class="`tone-${step.tone}`">
-        <span>{{ step.index }}</span>
-        <div>
-          <strong>{{ step.title }}</strong>
-          <small>{{ step.detail }}</small>
-        </div>
-        <StatusBadge :label="step.state" :tone="step.tone" />
-      </article>
-    </section>
-
     <section class="metric-grid ops-metric-grid" aria-label="今日业务指标">
       <MetricCard v-for="metric in metrics" :key="metric.label" :metric="metric" />
-    </section>
-
-    <section class="ops-three-column">
-      <div class="section-block">
-        <div class="section-heading">
-          <div>
-            <h2>现场待办</h2>
-            <p>按阻断程度排序，先处理会影响入库、报工、质检和出库的事项。</p>
-          </div>
-        </div>
-        <div class="work-queue">
-          <article v-for="item in workQueues" :key="item.id" class="queue-row">
-            <StatusBadge :label="severityLabel(item.severity)" :tone="severityTone(item.severity)" />
-            <div>
-              <strong>{{ item.title }}</strong>
-              <span>{{ item.subtitle }}</span>
-            </div>
-            <small>{{ item.owner }} / {{ item.due }}</small>
-          </article>
-        </div>
-      </div>
-
-      <div class="section-block">
-        <div class="section-heading">
-          <div>
-            <h2>证据链健康</h2>
-            <p>每个关键动作都必须落到附件、视频、称重、台账或审批记录。</p>
-          </div>
-        </div>
-        <div class="evidence-matrix">
-          <article v-for="item in evidenceMatrix" :key="item.label">
-            <div>
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.link }}</span>
-            </div>
-            <StatusBadge :label="item.status" :tone="item.tone" />
-          </article>
-        </div>
-      </div>
-
-      <div class="section-block">
-        <div class="section-heading">
-          <div>
-            <h2>审批与兜底队列</h2>
-            <p>硬件失败、损耗超标、配置变更必须有责任人和时限。</p>
-          </div>
-        </div>
-        <div class="approval-dock">
-          <article v-for="item in approvalDock" :key="item.code">
-            <StatusBadge :label="item.sla" :tone="item.tone" />
-            <div>
-              <strong>{{ item.title }}</strong>
-              <span>{{ item.code }} / {{ item.owner }}</span>
-            </div>
-          </article>
-        </div>
-      </div>
     </section>
 
     <section class="split-layout wide-left">

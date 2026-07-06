@@ -1,11 +1,13 @@
 package com.zhubao.erp.business.app;
 
+import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.CustomerReturnResult;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
+import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.business.domain.OutboundShipmentResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
@@ -24,8 +26,14 @@ import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 @Service
 public class BusinessOperationService {
+
+    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final StockLedgerService stockLedgerService;
 
@@ -412,6 +420,57 @@ public class BusinessOperationService {
                 command.returnLogisticsNo(),
                 command.reason(),
                 command.operator(),
+                command.evidenceCode()
+        );
+    }
+
+    public LossApprovalResult approveLoss(ApproveLossCommand command) {
+        BigDecimal rawLossWeight = command.inputWeight()
+                .subtract(command.outputWeight())
+                .subtract(command.reasonableTransferWeight());
+        BigDecimal lossWeight = rawLossWeight.max(ZERO).setScale(3, RoundingMode.HALF_UP);
+        BigDecimal allowedLossWeight = command.inputWeight()
+                .multiply(command.standardLossRatePercent())
+                .divide(ONE_HUNDRED, 6, RoundingMode.HALF_UP)
+                .setScale(3, RoundingMode.HALF_UP);
+        BigDecimal excessLossWeight = lossWeight.subtract(allowedLossWeight).max(ZERO).setScale(3, RoundingMode.HALF_UP);
+        BigDecimal actualLossRatePercent = lossWeight
+                .multiply(ONE_HUNDRED)
+                .divide(command.inputWeight(), 4, RoundingMode.HALF_UP)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal pieceWage = command.acceptedQuantity()
+                .multiply(command.pieceRate())
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal theoreticalDeduction = excessLossWeight
+                .multiply(command.lossDeductionUnitPrice())
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal lossDeduction = theoreticalDeduction.min(pieceWage).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal trialWage = pieceWage.subtract(lossDeduction).max(ZERO).setScale(2, RoundingMode.HALF_UP);
+        boolean overLimit = excessLossWeight.compareTo(ZERO) > 0;
+
+        return new LossApprovalResult(
+                command.approvalCode(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.process(),
+                command.inputWeight().setScale(3, RoundingMode.HALF_UP),
+                command.outputWeight().setScale(3, RoundingMode.HALF_UP),
+                command.reasonableTransferWeight().setScale(3, RoundingMode.HALF_UP),
+                lossWeight,
+                allowedLossWeight,
+                excessLossWeight,
+                command.standardLossRatePercent().setScale(2, RoundingMode.HALF_UP),
+                actualLossRatePercent,
+                overLimit,
+                overLimit ? "WAITING_APPROVAL" : "AUTO_APPROVED",
+                command.acceptedQuantity().setScale(0, RoundingMode.HALF_UP),
+                command.pieceRate().setScale(2, RoundingMode.HALF_UP),
+                pieceWage,
+                lossDeduction,
+                trialWage,
+                false,
+                command.operator(),
+                command.approver(),
                 command.evidenceCode()
         );
     }

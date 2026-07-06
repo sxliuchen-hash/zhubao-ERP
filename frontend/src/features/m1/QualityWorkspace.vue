@@ -12,10 +12,12 @@ import {
   type QualityWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
 import {
+  approveLoss,
   dispatchRework,
   freezeQualityStock,
   releaseQualityStock,
   reportRework,
+  type LossApprovalResult,
   type QualityReleaseResult,
   type ReworkDispatchResult,
   type ReworkReportResult,
@@ -39,6 +41,9 @@ const reworkReportError = ref('');
 const releasingQualityStock = ref(false);
 const qualityReleaseResult = ref<QualityReleaseResult | null>(null);
 const qualityReleaseError = ref('');
+const approvingLoss = ref(false);
+const lossApprovalResult = ref<LossApprovalResult | null>(null);
+const lossApprovalError = ref('');
 
 const activeCase = computed(
   () =>
@@ -100,18 +105,18 @@ const qualityActionRows: Array<{
   {
     step: '05',
     action: '损耗归因',
-    stockFlow: '差异入损耗审批',
-    api: '待设计 /loss-approvals',
-    evidence: '投入产出重量、责任工序、审批链',
-    state: '待开发',
-    tone: 'amber',
+    stockFlow: '超标损耗 -> 工资试算快照',
+    api: 'POST /loss-approvals',
+    evidence: '投入产出重量、责任工序、审批链、工资试算',
+    state: '已接试算基线',
+    tone: 'green',
   },
 ];
 
 const qualityBoundaryRows = [
-  { label: '真实能力', value: '冻结、返工派发、返工报工、复检放行会调用后端并写库存台账', tone: 'green' },
+  { label: '真实能力', value: '冻结、返工派发、返工报工、复检放行会调用后端并写库存台账；损耗审批会生成工资试算快照', tone: 'green' },
   { label: '样例数据', value: '质检队列、损耗审批和证据列表仍来自评审快照或本地样例', tone: 'amber' },
-  { label: '明显缺口', value: '损耗审批、工资试算、出库动作和真实审批流尚未形成闭环', tone: 'red' },
+  { label: '明显缺口', value: '损耗审批仍是轻量命令，尚未接入正式审批流、正式工资发放和锁账', tone: 'red' },
 ] as const;
 
 onMounted(async () => {
@@ -183,6 +188,22 @@ async function releaseActiveQualityStock() {
     qualityReleaseError.value = error instanceof Error ? error.message : '复检放行失败';
   } finally {
     releasingQualityStock.value = false;
+  }
+}
+
+async function approveActiveLoss() {
+  if (!activeApproval.value) return;
+
+  approvingLoss.value = true;
+  lossApprovalResult.value = null;
+  lossApprovalError.value = '';
+
+  try {
+    lossApprovalResult.value = await approveLoss(activeApproval.value);
+  } catch (error) {
+    lossApprovalError.value = error instanceof Error ? error.message : '提交损耗审批失败';
+  } finally {
+    approvingLoss.value = false;
   }
 }
 </script>
@@ -356,7 +377,9 @@ async function releaseActiveQualityStock() {
           <button class="secondary-button" type="button" :disabled="releasingQualityStock" @click="releaseActiveQualityStock">
             {{ releasingQualityStock ? '正在放行' : '复检放行入库' }}
           </button>
-          <button class="secondary-button" type="button">提交损耗审批</button>
+          <button class="secondary-button" type="button" :disabled="approvingLoss" @click="approveActiveLoss">
+            {{ approvingLoss ? '正在试算' : '提交损耗审批' }}
+          </button>
         </div>
         <div v-if="qualityFreezeResult" class="operation-feedback success">
           <strong>质检冻结已写入台账</strong>
@@ -397,6 +420,20 @@ async function releaseActiveQualityStock() {
           <strong>复检放行失败</strong>
           <span>{{ qualityReleaseError }}</span>
           <small>请确认该工单已有半成品库存，并完成复检结论和放行证据。</small>
+        </div>
+        <div v-if="lossApprovalResult" class="operation-feedback success">
+          <strong>损耗审批已生成工资试算</strong>
+          <span>{{ lossApprovalResult.approvalCode }} / {{ lossApprovalResult.approvalStatus }}</span>
+          <small>
+            损耗 {{ lossApprovalResult.lossWeight }}g，超标 {{ lossApprovalResult.excessLossWeight }}g；
+            计件 {{ lossApprovalResult.pieceWage }}，理论扣减 {{ lossApprovalResult.lossDeduction }}，
+            试算 {{ lossApprovalResult.trialWage }}，不进入正式工资
+          </small>
+        </div>
+        <div v-else-if="lossApprovalError" class="operation-feedback danger">
+          <strong>提交损耗审批失败</strong>
+          <span>{{ lossApprovalError }}</span>
+          <small>请确认投入/产出称重证据、标准损耗率和工序单价快照已经存在。</small>
         </div>
       </aside>
     </section>

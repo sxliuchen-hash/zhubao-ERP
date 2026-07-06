@@ -1,12 +1,14 @@
 package com.zhubao.erp.business.web;
 
 import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.CustomerReturnResult;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
+import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.business.domain.OutboundShipmentResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
@@ -72,5 +74,10 @@ public class BusinessOperationController {
     @PostMapping("/customer-returns")
     public ApiResponse<CustomerReturnResult> returnCustomerShipment(@Valid @RequestBody CustomerReturnCommand command) {
         return ApiResponse.ok(businessOperationService.returnCustomerShipment(command));
+    }
+
+    @PostMapping("/loss-approvals")
+    public ApiResponse<LossApprovalResult> approveLoss(@Valid @RequestBody ApproveLossCommand command) {
+        return ApiResponse.ok(businessOperationService.approveLoss(command));
     }
 }

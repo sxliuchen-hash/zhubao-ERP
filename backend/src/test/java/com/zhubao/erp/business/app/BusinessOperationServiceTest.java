@@ -6,6 +6,8 @@ import com.zhubao.erp.business.domain.CustomerReturnResult;
 import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
+import com.zhubao.erp.business.domain.ApproveLossCommand;
+import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.business.domain.OutboundShipmentResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
@@ -439,6 +441,46 @@ class BusinessOperationServiceTest {
         assertThat(ledger.documentType()).isEqualTo("customer_return");
         assertThat(ledger.documentCode()).isEqualTo("RET-20260707-022");
         assertThat(ledger.remark()).contains("OUT-20260706-022", "SF-RET-20260707-022", "客户退回复核", "ATT-RET-20260707-022");
+    }
+
+    @Test
+    void approveLossCalculatesOverLimitLossAndWageTrialSnapshot() {
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        BusinessOperationService service = new BusinessOperationService(new StockLedgerService(repository));
+
+        LossApprovalResult result = service.approveLoss(new ApproveLossCommand(
+                "LOSS-20260706-009",
+                "MD-20260706-001",
+                "ZD-20260706-001",
+                1001L,
+                null,
+                "MAT-18K-RING",
+                "抛光",
+                "李华",
+                "车间组长 马杰",
+                bd("121.150"),
+                bd("116.550"),
+                bd("0.000"),
+                bd("2.0"),
+                bd("56"),
+                bd("0.80"),
+                bd("6.00"),
+                "HO-20260706-021",
+                "超标损耗审批 smoke"
+        ));
+
+        assertThat(result.approvalCode()).isEqualTo("LOSS-20260706-009");
+        assertThat(result.lossWeight()).isEqualByComparingTo("4.600");
+        assertThat(result.allowedLossWeight()).isEqualByComparingTo("2.423");
+        assertThat(result.excessLossWeight()).isEqualByComparingTo("2.177");
+        assertThat(result.actualLossRatePercent()).isEqualByComparingTo("3.80");
+        assertThat(result.overLimit()).isTrue();
+        assertThat(result.approvalStatus()).isEqualTo("WAITING_APPROVAL");
+        assertThat(result.pieceWage()).isEqualByComparingTo("44.80");
+        assertThat(result.lossDeduction()).isEqualByComparingTo("13.06");
+        assertThat(result.trialWage()).isEqualByComparingTo("31.74");
+        assertThat(result.formalPayroll()).isFalse();
+        assertThat(repository.findAllLedgers()).isEmpty();
     }
 
     private StockDimension dimension(StockStatus status, String warehouseCode) {

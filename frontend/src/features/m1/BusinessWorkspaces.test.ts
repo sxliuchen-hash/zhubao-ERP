@@ -43,6 +43,8 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('复检放行入库');
     expect(wrapper.text()).toContain('POST /rework-reports');
     expect(wrapper.text()).toContain('POST /quality-releases');
+    expect(wrapper.text()).toContain('POST /loss-approvals');
+    expect(wrapper.text()).toContain('工资试算快照');
     expect(wrapper.text()).toContain('复检放行');
     expect(wrapper.text()).toContain('LOSS-20260706-009');
   });
