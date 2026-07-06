@@ -53,4 +53,24 @@ class M2ManagementApiSmokeTest {
         assertThat(mobile.getBody()).contains("DRAFT-QC-003", "离线草稿");
         assertThat(summary.getBody()).contains("\"inboundOrders\":4", "\"activeWorkOrders\":4", "\"mobileTasks\":3");
     }
+
+    @Test
+    void exposesConfigurationBaselineApis() {
+        ResponseEntity<String> summary = restTemplate.getForEntity("/api/configuration/baseline/summary", String.class);
+        ResponseEntity<String> parameters = restTemplate.getForEntity("/api/configuration/baseline/system-parameters", String.class);
+        ResponseEntity<String> codeRules = restTemplate.getForEntity("/api/configuration/baseline/code-rules", String.class);
+        ResponseEntity<String> roles = restTemplate.getForEntity("/api/configuration/baseline/role-permissions", String.class);
+        ResponseEntity<String> processes = restTemplate.getForEntity("/api/configuration/baseline/process-templates", String.class);
+        ResponseEntity<String> warehouses = restTemplate.getForEntity("/api/configuration/baseline/warehouse-states", String.class);
+        ResponseEntity<String> videos = restTemplate.getForEntity("/api/configuration/baseline/video-parameters", String.class);
+
+        assertThat(summary.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(summary.getBody()).contains("\"systemParameters\":7", "\"warehouseStates\":6");
+        assertThat(parameters.getBody()).contains("inventory.negative.allowed", "pay.formal.enabled");
+        assertThat(codeRules.getBody()).contains("CC-YYYYMMDD-流水号-客户简称");
+        assertThat(roles.getBody()).contains("车间组长", "报工更正");
+        assertThat(processes.getBody()).contains("PROC-RING-STD", "工资试算");
+        assertThat(warehouses.getBody()).contains("RAW-CUSTOMER", "客户所有");
+        assertThat(videos.getBody()).contains("video.retry.max", "人工上传");
+    }
 }

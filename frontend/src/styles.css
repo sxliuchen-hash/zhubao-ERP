@@ -2250,6 +2250,126 @@ button:hover {
   line-height: 1.45;
 }
 
+.config-table {
+  display: grid;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.config-row {
+  display: grid;
+  min-width: 980px;
+  grid-template-columns: 1.1fr 0.6fr 0.45fr 1.8fr 1fr;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--line-soft);
+  padding: 11px 12px;
+}
+
+.config-row:first-child {
+  border-top: 0;
+}
+
+.config-head {
+  background: #f3f7fb;
+  color: var(--ink-600);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.config-row span {
+  color: var(--ink-600);
+  line-height: 1.45;
+}
+
+.video-config-table .config-row {
+  grid-template-columns: 1.1fr 0.55fr 1.1fr 1.35fr 0.9fr;
+}
+
+.rule-stack,
+.template-grid,
+.warehouse-grid,
+.role-card-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.role-card-grid {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.rule-stack article,
+.role-card-grid article,
+.template-grid article,
+.warehouse-grid article {
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff, #fbfdff);
+  padding: 12px;
+}
+
+.role-card-head,
+.warehouse-grid article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.rule-stack article div {
+  display: grid;
+  gap: 4px;
+}
+
+.rule-stack span,
+.rule-stack small,
+.role-card-grid span,
+.role-card-grid small,
+.template-grid span,
+.template-grid p,
+.warehouse-grid span,
+.warehouse-grid small {
+  color: var(--ink-500);
+  line-height: 1.45;
+}
+
+.template-grid {
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
+
+.template-grid article small {
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.template-grid article p {
+  margin: 0;
+}
+
+.process-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.process-chain b {
+  border: 1px solid #cfe0f3;
+  border-radius: 999px;
+  background: #f3f8ff;
+  color: #1655a7;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.warehouse-grid {
+  grid-template-columns: 1fr;
+}
+
 .progress-bar {
   background: #e2e8f0;
 }
@@ -2279,6 +2399,11 @@ button:hover {
   .owner-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .role-card-grid,
+  .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -2306,6 +2431,8 @@ button:hover {
 
   .command-kpis,
   .owner-grid,
+  .role-card-grid,
+  .template-grid,
   .sidebar-matrix {
     grid-template-columns: 1fr;
   }

@@ -25,6 +25,10 @@
 - [BusinessWorkspaceSeedData.java](../backend/src/main/java/com/zhubao/erp/business/infra/BusinessWorkspaceSeedData.java)
 - [businessWorkspaceApi.ts](../frontend/src/services/businessWorkspaceApi.ts)
 - [V3__m2_business_workspace_contract.sql](../backend/src/main/resources/db/mysql/V3__m2_business_workspace_contract.sql)
+- [ConfigurationBaselineService.java](../backend/src/main/java/com/zhubao/erp/configuration/app/ConfigurationBaselineService.java)
+- [ConfigurationBaselineData.java](../backend/src/main/java/com/zhubao/erp/configuration/domain/ConfigurationBaselineData.java)
+- [configurationBaselineApi.ts](../frontend/src/services/configurationBaselineApi.ts)
+- [V4__m2_configuration_baseline_contract.sql](../backend/src/main/resources/db/mysql/V4__m2_configuration_baseline_contract.sql)
 
 ---
 
@@ -44,6 +48,24 @@
 | `GET /quality` | 质检返工 | 返回质检指标、质检单、损耗审批 |
 | `GET /inventory` | 库存追溯 | 返回库存余额、台账明细、追溯时间线、证据 |
 | `GET /mobile` | PWA 作业 | 返回移动任务、PWA 能力边界、离线草稿 |
+
+配置基线接口前缀：
+
+```http
+/api/configuration/baseline
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /summary` | 配置基线 | 返回配置项数量和需审批项数量 |
+| `GET /system-parameters` | 配置基线 | 返回系统参数、等级、作用范围、变更控制 |
+| `GET /code-rules` | 配置基线 | 返回业务编码格式、示例和唯一性规则 |
+| `GET /role-permissions` | 配置基线 | 返回角色、数据范围、权限和敏感动作 |
+| `GET /process-templates` | 配置基线 | 返回工序模板、损耗、工资和质检规则 |
+| `GET /warehouse-states` | 配置基线 | 返回仓库状态、客户所有权边界和状态流转 |
+| `GET /video-parameters` | 配置基线 | 返回视频截取、人工上传和保存策略参数 |
+| `GET /components` | 配置基线 | 返回开源组件版本、许可证、用途和风险 |
+| `GET /backup-policies` | 配置基线 | 返回数据库、附件、配置模板的备份策略 |
 
 ---
 
@@ -214,3 +236,81 @@ PWA 一期边界：
 4. 将重量字段拆为数值和单位，禁止长期使用字符串重量参与计算。
 5. 将客户、物料、人员、工序单价、损耗率保存快照字段。
 6. 将工作台 API 改为读取真实业务聚合，不再直接维护独立样例数据。
+
+---
+
+## 10. 配置基线字段
+
+### 10.1 `SystemParameter`
+
+| 字段 | 说明 |
+|---|---|
+| `key` | 参数键，例如 `inventory.negative.allowed` |
+| `value` | 当前基线值 |
+| `category` | 参数分类：编码、称重、损耗、库存等 |
+| `level` | 配置等级：`C1` 到 `C5` |
+| `description` | 参数说明 |
+| `changeControl` | 变更要求，例如需审批、记录日志 |
+| `effectiveScope` | 影响范围 |
+
+### 10.2 `CodeRule`
+
+| 字段 | 说明 |
+|---|---|
+| `objectType` | 编码对象：母单、子工单、库存台账等 |
+| `format` | 编码格式 |
+| `example` | 示例编码 |
+| `uniqueness` | 唯一性规则 |
+| `changePolicy` | 冻结或变更策略 |
+
+### 10.3 `RolePermissionBaseline`
+
+| 字段 | 说明 |
+|---|---|
+| `role` | 角色名称 |
+| `dataScope` | 数据范围 |
+| `permissions` | 基础权限列表 |
+| `sensitiveActions` | 必须审计的敏感动作 |
+
+### 10.4 `ProcessTemplate`
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 工序模板编码 |
+| `name` | 模板名称 |
+| `materialScope` | 适用物料 |
+| `steps` | 工序步骤 |
+| `lossRule` | 损耗规则 |
+| `wageRule` | 计件工资试算规则 |
+| `qualityRule` | 质检规则 |
+| `snapshotFields` | 工单创建时必须快照的字段 |
+
+### 10.5 `WarehouseState`
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 仓库或状态编码 |
+| `name` | 名称 |
+| `ownerBoundary` | 所有权边界，当前重点为客户所有 |
+| `stockStatus` | 库存状态 |
+| `transitionRule` | 状态流转规则 |
+| `negativeAllowed` | 是否允许负库存，一期默认 false |
+
+### 10.6 `VideoParameter`
+
+| 字段 | 说明 |
+|---|---|
+| `key` | 视频参数键 |
+| `value` | 参数值 |
+| `scene` | 应用场景 |
+| `fallback` | 失败兜底方式 |
+| `retention` | 保存周期或保留策略 |
+| `changeControl` | 变更要求 |
+
+配置基线迁移要求：
+
+1. M3 使用 `cfg_*` 表承载配置基线 seed 数据。
+2. 参数编辑必须在权限、审批、审计日志完成后开放。
+3. C1 配置变更必须保留历史，不能直接覆盖旧值。
+4. 工序模板变更只影响新工单，历史工单使用快照字段。
+5. 视频和硬件参数必须支持失败兜底，不允许让硬件集成阻断业务闭环。

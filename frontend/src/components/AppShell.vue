@@ -16,7 +16,7 @@ defineProps<{
       </div>
       <div class="sidebar-status">
         <span>当前基线</span>
-        <strong>M2.1 / 评审工作台</strong>
+        <strong>M2.2 / 评审工作台</strong>
         <i>API 优先，样例兜底，硬件失败可回退</i>
       </div>
       <nav class="nav">
