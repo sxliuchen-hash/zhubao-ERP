@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 public class StockLedgerService {
 
-    private static final DateTimeFormatter CODE_DATE = DateTimeFormatter.ofPattern("yyyyMMdd")
+    private static final DateTimeFormatter CODE_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
             .withZone(ZoneId.systemDefault());
 
     private final AtomicLong sequence = new AtomicLong();
@@ -61,7 +61,7 @@ public class StockLedgerService {
     }
 
     private String nextCode() {
-        return "STK-" + CODE_DATE.format(Instant.now()) + "-" + String.format("%06d", sequence.incrementAndGet());
+        return "STK-" + CODE_TIME.format(Instant.now()) + "-" + String.format("%06d", sequence.incrementAndGet());
     }
 
     private BigDecimal scale(BigDecimal value) {

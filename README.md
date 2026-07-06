@@ -18,6 +18,7 @@
 - M2.3 配置变更控制基线，增加变更审批队列、审计日志和 MySQL 变更控制草案。
 - M2.4 操作型 UI 重构第一轮，将首页升级为生产运营主控台，补充真实业务表格、单据详情、证据链、审批兜底队列和紧凑科技风格外壳。
 - M2.5 核心业务页操作化，将来料、生产、质检、库存追溯页统一升级为主表、详情侧栏、扫码/查询入口和动作按钮的 ERP 操作界面。
+- M3.1 库存台账 JDBC 持久化切入，新增 MySQL profile、JDBC 仓储、库存维度键迁移脚本和 H2 仓储测试，默认仍使用内存仓储便于评审。
 
 ## 目录结构
 
@@ -77,6 +78,16 @@ powershell -ExecutionPolicy Bypass -File scripts/check-m1.ps1
 启动后端：
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+启用 MySQL 库存台账持久化：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_DB_URL="jdbc:mysql://localhost:3306/zhubao_erp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+$env:ZHUBAO_DB_USERNAME="zhubao"
+$env:ZHUBAO_DB_PASSWORD="your-password"
 powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
 ```
 

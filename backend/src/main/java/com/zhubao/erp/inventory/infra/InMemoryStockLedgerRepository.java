@@ -4,6 +4,7 @@ import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @Repository
+@ConditionalOnProperty(name = "zhubao.inventory.repository", havingValue = "memory", matchIfMissing = true)
 public class InMemoryStockLedgerRepository implements StockLedgerRepository {
 
     private final List<StockLedgerEntry> ledgers = new ArrayList<>();

@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${ZHUBAO_DB_URL:jdbc:mysql://localhost:3306/zhubao_erp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${ZHUBAO_DB_USERNAME:zhubao}
+    password: ${ZHUBAO_DB_PASSWORD:}
+
+zhubao:
+  inventory:
+    repository: jdbc

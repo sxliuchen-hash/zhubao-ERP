@@ -208,6 +208,25 @@
 - 所有余额必须能由台账明细汇总解释。
 - 冻结、在制、返工、成品、发货必须是库存状态维度。
 
+### 7.4 M3 库存持久化契约
+
+当前已新增 `JdbcStockLedgerRepository` 作为库存台账第一个 M3 持久化切入点。
+
+| 项目 | 契约 |
+|---|---|
+| 默认模式 | `zhubao.inventory.repository=memory`，不要求数据库，便于评审和演示 |
+| MySQL 模式 | `zhubao.inventory.repository=jdbc`，由 `application-mysql.yml` 和 `ZHUBAO_DB_*` 环境变量提供连接 |
+| 台账表 | `inv_stock_ledger`，只追加库存业务事件 |
+| 余额表 | `inv_stock_balance`，由台账写入同步维护 |
+| 维度键 | `dimension_key`，格式为 `ownerType|ownerCustomerId|customerId|motherOrderCode|workOrderCode|materialCode|warehouseCode|stockStatus` |
+| 迁移脚本 | `V6__m3_inventory_jdbc_repository_contract.sql` |
+
+持久化约束：
+
+- `from` 和 `to` 维度只允许改变仓库和库存状态，不允许在一次库存转移中改变所有权、客户、母单、工单或物料。
+- `dimension_key` 用于规避 MySQL 可空字段参与唯一索引时的重复余额问题。
+- 库存台账号使用日期时间戳 + 序列，避免服务重启后简单日序列重复。
+
 ---
 
 ## 8. PWA 字段
