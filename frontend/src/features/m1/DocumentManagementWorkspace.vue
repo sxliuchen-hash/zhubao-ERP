@@ -12,16 +12,26 @@ import {
   type EvidenceAttachment,
 } from '../../data/documentManagementData';
 import {
+  fetchAttachmentPreviewUrl,
   fetchDocumentAuditEvents,
   fetchDocumentPackages,
   fetchDocumentSummary,
   fetchEvidenceAttachments,
+  uploadEvidenceAttachment,
+  type AttachmentPreviewUrl,
+  type EvidenceAttachmentUploadResult,
 } from '../../services/documentManagementApi';
 
 const summary = ref<DocumentManagementSummary>(fallbackSummary);
 const packages = ref<DocumentPackage[]>(fallbackPackages);
 const attachments = ref<EvidenceAttachment[]>(fallbackAttachments);
 const auditEvents = ref<DocumentAuditEvent[]>(fallbackAuditEvents);
+const uploading = ref(false);
+const uploadResult = ref<EvidenceAttachmentUploadResult | null>(null);
+const uploadError = ref('');
+const previewing = ref(false);
+const previewResult = ref<AttachmentPreviewUrl | null>(null);
+const previewError = ref('');
 
 const activePackage = computed(
   () => packages.value.find((item) => item.status.includes('缺') || item.status.includes('待')) ?? packages.value[0],
@@ -29,6 +39,10 @@ const activePackage = computed(
 
 const activeAttachments = computed(() =>
   attachments.value.filter((item) => item.documentCode === activePackage.value?.code),
+);
+
+const previewTargetCode = computed(
+  () => uploadResult.value?.code ?? activeAttachments.value[0]?.code ?? attachments.value[0]?.code ?? '',
 );
 
 const sourceBasis = [
@@ -54,6 +68,75 @@ onMounted(async () => {
     // Keep local deterministic review samples when the backend is not running.
   }
 });
+
+async function uploadDemoEvidence() {
+  if (!activePackage.value) return;
+
+  uploading.value = true;
+  uploadResult.value = null;
+  uploadError.value = '';
+
+  try {
+    const file = new File(['weight=121.15g;operator=he-lin;scene=document-demo'], 'demo-weight-photo.txt', {
+      type: 'text/plain',
+    });
+    const result = await uploadEvidenceAttachment({
+      documentCode: activePackage.value.code,
+      businessType: activePackage.value.category,
+      businessCode: activePackage.value.businessCode,
+      source: 'PC 文档工作台上传',
+      owner: activePackage.value.owner,
+      fallbackAction: '无',
+      file,
+    });
+    uploadResult.value = result;
+    attachments.value = [
+      {
+        code: result.code,
+        documentCode: result.documentCode,
+        businessType: activePackage.value.category,
+        businessCode: activePackage.value.businessCode,
+        fileName: result.fileName,
+        mediaType: result.mediaType,
+        storageLocation: result.storageLocation,
+        storagePolicy: 'hot 180d -> archive',
+        source: 'PC 文档工作台上传',
+        status: '已上传',
+        owner: activePackage.value.owner,
+        checksum: result.checksum,
+        uploadedAt: result.uploadedAt,
+        fallbackAction: '无',
+        tone: 'green',
+      },
+      ...attachments.value,
+    ];
+    summary.value = {
+      ...summary.value,
+      attachments: summary.value.attachments + 1,
+      auditEvents: summary.value.auditEvents + 1,
+    };
+  } catch (error) {
+    uploadError.value = error instanceof Error ? error.message : '上传附件失败';
+  } finally {
+    uploading.value = false;
+  }
+}
+
+async function createPreviewUrl() {
+  if (!previewTargetCode.value) return;
+
+  previewing.value = true;
+  previewResult.value = null;
+  previewError.value = '';
+
+  try {
+    previewResult.value = await fetchAttachmentPreviewUrl(previewTargetCode.value);
+  } catch (error) {
+    previewError.value = error instanceof Error ? error.message : '生成预览链接失败';
+  } finally {
+    previewing.value = false;
+  }
+}
 </script>
 
 <template>
@@ -88,6 +171,46 @@ onMounted(async () => {
       </article>
     </section>
 
+    <section class="document-upload-console" aria-label="附件上传与预览测试">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Upload & Preview</span>
+          <h2>附件上传与预览测试台</h2>
+          <p>使用后端 multipart API 上传示例称重附件，生成 checksum、审计事件和 15 分钟预览链接；后续替换为 MinIO/S3 或 NAS 存储。</p>
+        </div>
+        <div class="button-row">
+          <button class="primary-button" type="button" :disabled="uploading" @click="uploadDemoEvidence">
+            {{ uploading ? '正在上传' : '上传称重照片' }}
+          </button>
+          <button class="secondary-button" type="button" :disabled="previewing || !previewTargetCode" @click="createPreviewUrl">
+            {{ previewing ? '正在生成' : '生成预览链接' }}
+          </button>
+        </div>
+      </div>
+      <div class="document-upload-result-grid">
+        <article v-if="uploadResult" class="operation-feedback success">
+          <strong>附件上传成功</strong>
+          <span>{{ uploadResult.code }} / {{ uploadResult.fileName }}</span>
+          <small>{{ uploadResult.checksum }}</small>
+        </article>
+        <article v-else-if="uploadError" class="operation-feedback danger">
+          <strong>附件上传失败</strong>
+          <span>{{ uploadError }}</span>
+          <small>请确认后端已启动，或继续使用本地样例兜底评审页面。</small>
+        </article>
+        <article v-if="previewResult" class="operation-feedback success">
+          <strong>预览链接已生成</strong>
+          <span>{{ previewResult.url }}</span>
+          <small>过期时间：{{ previewResult.expiresAt }}</small>
+        </article>
+        <article v-else-if="previewError" class="operation-feedback danger">
+          <strong>生成预览链接失败</strong>
+          <span>{{ previewError }}</span>
+          <small>只有后端已登记的附件才能生成真实预览链接。</small>
+        </article>
+      </div>
+    </section>
+
     <section class="document-layout">
       <div class="document-master">
         <div class="section-heading">
@@ -96,7 +219,7 @@ onMounted(async () => {
             <h2>文档包台账</h2>
             <p>每个业务动作都必须能关联文档包、附件、存储策略和审计事件。</p>
           </div>
-          <StatusBadge label="M3.11 API 基线" tone="blue" />
+          <StatusBadge label="M3.12 上传预览基线" tone="blue" />
         </div>
         <div class="document-table-wrap">
           <table class="document-table">

@@ -4468,6 +4468,30 @@ button:hover {
   padding: 14px;
 }
 
+.document-upload-console {
+  min-width: 0;
+  border: 1px solid #cfdbe7;
+  border-left: 4px solid #0f766e;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.055);
+  padding: 14px;
+}
+
+.document-upload-console .section-heading {
+  margin-bottom: 10px;
+}
+
+.document-upload-result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.document-upload-result-grid .operation-feedback {
+  min-width: 0;
+}
+
 .document-detail {
   display: grid;
   align-content: start;
@@ -4604,11 +4628,784 @@ button:hover {
   .document-layout {
     grid-template-columns: 1fr;
   }
+
+  .document-upload-result-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
   .document-source-grid,
   .document-audit-list article {
     grid-template-columns: 1fr;
+  }
+}
+
+/* M3.13 visual correction: industrial ERP console, denser hierarchy, clearer work status. */
+:root {
+  --erp-ink: #111827;
+  --erp-muted: #5f6b7a;
+  --erp-line: #d7e0ea;
+  --erp-soft-line: #e7edf3;
+  --erp-panel: #ffffff;
+  --erp-panel-soft: #f7f9fc;
+  --erp-bg: #eef3f7;
+  --erp-blue: #2563eb;
+  --erp-teal: #0f766e;
+  --erp-amber: #b7791f;
+  --erp-red: #c2410c;
+  --erp-sidebar: #09111d;
+}
+
+body {
+  color: var(--erp-ink);
+  background: var(--erp-bg);
+}
+
+.ops-shell {
+  grid-template-columns: 272px minmax(0, 1fr);
+  background:
+    linear-gradient(90deg, rgba(9, 17, 29, 0.045), transparent 330px),
+    linear-gradient(rgba(17, 24, 39, 0.032) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(17, 24, 39, 0.028) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--erp-bg);
+}
+
+.ops-sidebar {
+  border-right: 1px solid rgba(148, 163, 184, 0.24);
+  background:
+    linear-gradient(180deg, #08111f 0%, #0d1827 52%, #111827 100%);
+  padding: 14px 12px;
+}
+
+.ops-brand {
+  min-height: 58px;
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+  padding: 4px 6px 14px;
+}
+
+.ops-brand .brand-mark {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(125, 211, 252, 0.38);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.96), rgba(37, 99, 235, 0.92));
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.32);
+  letter-spacing: 0;
+}
+
+.ops-brand strong {
+  color: #f8fafc;
+  letter-spacing: 0;
+}
+
+.ops-brand span:last-child {
+  color: #94a3b8;
+}
+
+.ops-status-card,
+.ops-version-card {
+  border-color: rgba(148, 163, 184, 0.18);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.68);
+  box-shadow: inset 3px 0 0 rgba(45, 212, 191, 0.75);
+}
+
+.ops-status-card span,
+.ops-version-card span {
+  color: #8fb5c7;
+  font-weight: 800;
+}
+
+.ops-status-card strong,
+.ops-version-card strong {
+  color: #f8fafc;
+}
+
+.ops-status-card i {
+  color: #b7c4d4;
+}
+
+.ops-health-grid {
+  gap: 6px;
+  margin: 12px 2px;
+}
+
+.ops-health-grid span {
+  min-height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.52);
+  color: #cbd5e1;
+}
+
+.ops-health-grid b {
+  background: #2dd4bf;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.16);
+}
+
+.ops-nav {
+  gap: 5px;
+}
+
+.ops-nav .nav-button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #c8d2df;
+  padding: 7px 8px;
+}
+
+.ops-nav .nav-button::before {
+  display: none;
+}
+
+.ops-nav .nav-button.active,
+.ops-nav .nav-button:hover {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: rgba(20, 184, 166, 0.12);
+  color: #fff;
+}
+
+.ops-nav .nav-button.active {
+  box-shadow: inset 3px 0 0 #2dd4bf;
+}
+
+.nav-code {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #93c5fd;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.ops-nav .nav-button.active .nav-code,
+.ops-nav .nav-button:hover .nav-code {
+  border-color: rgba(45, 212, 191, 0.48);
+  background: rgba(15, 118, 110, 0.32);
+  color: #ccfbf1;
+}
+
+.ops-nav .nav-button span {
+  min-width: 0;
+}
+
+.ops-nav .nav-button strong,
+.ops-nav .nav-button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-nav .nav-button b {
+  min-width: 22px;
+  height: 22px;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.2);
+  color: #bfdbfe;
+  line-height: 20px;
+  text-align: center;
+}
+
+.ops-workspace {
+  padding: 10px 14px 26px;
+}
+
+.ops-topbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  min-height: 38px;
+  margin: -10px -14px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(238, 243, 247, 0.92);
+  backdrop-filter: blur(10px);
+  padding: 7px 14px;
+}
+
+.context-stack span,
+.sync-stack span {
+  border-color: #d6e0eb;
+  border-radius: 5px;
+  background: #fff;
+  color: #334155;
+  font-weight: 800;
+}
+
+.sync-stack span:last-child {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.ops-page-header {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+  border: 1px solid #cad6e3;
+  border-left: 4px solid var(--erp-teal);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.06), rgba(37, 99, 235, 0.035) 36%, transparent),
+    #fff;
+  padding: 13px 15px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+}
+
+.ops-page-header h1 {
+  margin-top: 3px;
+  color: #0f172a;
+  font-size: 23px;
+}
+
+.ops-page-header p {
+  color: #536171;
+}
+
+.eyebrow {
+  color: #0f766e;
+  letter-spacing: 0;
+}
+
+.ops-scope-ribbon span {
+  border-color: #dbe5ee;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.command-actions-panel {
+  align-content: start;
+  border: 1px solid #dce5ef;
+  border-radius: 7px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.global-search span,
+.console-tools span,
+.module-tools span {
+  color: #526070;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.global-search input,
+.console-tools input,
+.console-tools select,
+.module-tools input,
+.field input,
+.form-grid input,
+.phone-form input {
+  border-color: #becbd9;
+  border-radius: 5px;
+  color: #111827;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+.primary-button,
+.secondary-button,
+.text-button,
+.table-action {
+  border-radius: 5px;
+  font-weight: 900;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
+}
+
+.primary-button {
+  border-color: #1d4ed8;
+  background: #2563eb;
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.18);
+}
+
+.primary-button:hover {
+  background: #1d4ed8;
+}
+
+.secondary-button {
+  border-color: #b8c6d6;
+  background: #fff;
+  color: #1f2937;
+}
+
+.secondary-button:hover,
+.table-action:hover {
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.table-action {
+  border: 1px solid #c7d3e0;
+  background: #fff;
+  color: #334155;
+}
+
+.page-stack {
+  gap: 12px;
+}
+
+.ops-command-center,
+.review-ledger-board,
+.ops-stage-map-panel,
+.readiness-board,
+.ops-main-panel,
+.ops-focus-panel,
+.section-block,
+.toolbar-band,
+.panel,
+.module-master,
+.module-detail,
+.quality-runtime-main,
+.quality-boundary-panel,
+.document-master,
+.document-detail,
+.document-upload-console {
+  border-color: #cdd9e5;
+  border-radius: 7px;
+  background: var(--erp-panel);
+  box-shadow: 0 9px 22px rgba(15, 23, 42, 0.055);
+}
+
+.ops-command-center {
+  border-left: 4px solid #2563eb;
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.07), transparent 38%),
+    #fff;
+}
+
+.ops-command-copy h2,
+.review-ledger-head h2,
+.ops-stage-map-panel h2,
+.readiness-board h2,
+.console-toolbar h2,
+.module-toolbar h2,
+.section-heading h2 {
+  color: #111827;
+  letter-spacing: 0;
+}
+
+.ops-command-copy p,
+.review-ledger-head p,
+.ops-stage-map-panel p,
+.readiness-board p,
+.console-toolbar p,
+.module-toolbar p,
+.section-heading p {
+  color: var(--erp-muted);
+}
+
+.ops-command-kpis article,
+.review-lane,
+.stage-node,
+.gap-stack article,
+.metric-card,
+.queue-row,
+.evidence-matrix article,
+.approval-dock article,
+.station-stack article,
+.document-source-grid article,
+.quality-boundary-list article,
+.ops-card,
+.sample-card,
+.device-card {
+  border-color: var(--erp-soft-line);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.ops-command-kpis article {
+  border-left: 4px solid var(--tone);
+  background: linear-gradient(180deg, #fff, #f8fafc);
+}
+
+.ops-command-kpis span,
+.metric-card span {
+  color: #526070;
+  font-weight: 800;
+}
+
+.ops-command-kpis strong,
+.metric-card strong {
+  color: #0f172a;
+}
+
+.review-ledger-main {
+  background: #fff;
+}
+
+.delivery-gap-panel {
+  background: #f7f9fc;
+}
+
+.review-lane {
+  background: #fbfdff;
+}
+
+.stage-node {
+  background:
+    linear-gradient(180deg, #fff, #f8fafc);
+}
+
+.control-filter-bar,
+.operations-hero,
+.module-ops-board,
+.quality-runtime-board,
+.document-layout,
+.split-layout,
+.ops-layout-grid,
+.ops-three-column {
+  gap: 10px;
+}
+
+.operations-hero {
+  border: 1px solid #cdd9e5;
+  border-left: 4px solid var(--erp-teal);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08), rgba(37, 99, 235, 0.04) 38%, transparent),
+    #fff;
+  color: #111827;
+  box-shadow: 0 9px 22px rgba(15, 23, 42, 0.055);
+}
+
+.operations-hero .hero-copy h2 {
+  color: #111827;
+}
+
+.operations-hero .hero-copy p {
+  color: #526070;
+}
+
+.operations-hero .hero-kpis article {
+  border: 1px solid #dce5ef;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.operations-hero .hero-kpis span {
+  color: #526070;
+}
+
+.control-filter-bar {
+  border: 1px solid #d5e0eb;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.04);
+}
+
+.control-filter-bar div:not(.filter-actions) {
+  border-right-color: #e5edf5;
+}
+
+.module-ops-board {
+  grid-template-columns: minmax(0, 1fr) 330px;
+}
+
+.module-master,
+.module-detail {
+  padding: 12px;
+}
+
+.module-toolbar,
+.console-toolbar {
+  border-bottom: 1px solid #e2eaf2;
+  margin: -2px -2px 10px;
+  padding: 2px 2px 10px;
+}
+
+.module-tools,
+.console-tools {
+  border: 1px solid #dce5ef;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 9px;
+}
+
+.module-table-wrap,
+.erp-table-wrap,
+.readiness-table-wrap,
+.quality-action-table-wrap,
+.document-table-wrap {
+  border-color: #d5e0eb;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.module-table,
+.erp-table,
+.readiness-table,
+.quality-action-table,
+.document-table {
+  font-size: 13px;
+}
+
+.module-table th,
+.erp-table th,
+.readiness-table th,
+.quality-action-table th,
+.document-table th {
+  border-bottom: 1px solid #cbd8e6;
+  background: #edf3f8;
+  color: #475569;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.module-table td,
+.erp-table td,
+.readiness-table td,
+.quality-action-table td,
+.document-table td {
+  border-bottom-color: #e6edf4;
+  color: #334155;
+}
+
+.module-table tbody tr:hover,
+.erp-table tbody tr:hover,
+.readiness-table tbody tr:hover,
+.quality-action-table tbody tr:hover,
+.document-table tbody tr:hover {
+  background: #f3f8fd;
+}
+
+.cell-stack b,
+.cell-stack small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge {
+  min-height: 22px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0;
+  width: max-content;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.tone-blue {
+  --tone: #2563eb;
+  --tone-bg: #eff6ff;
+  --tone-fg: #1d4ed8;
+}
+
+.tone-green {
+  --tone: #0f766e;
+  --tone-bg: #ecfdf5;
+  --tone-fg: #047857;
+}
+
+.tone-amber {
+  --tone: #b7791f;
+  --tone-bg: #fffbeb;
+  --tone-fg: #92400e;
+}
+
+.tone-red {
+  --tone: #c2410c;
+  --tone-bg: #fff7ed;
+  --tone-fg: #9a3412;
+}
+
+.tone-violet {
+  --tone: #475569;
+  --tone-bg: #f1f5f9;
+  --tone-fg: #334155;
+}
+
+.detail-title {
+  border-bottom-color: #e2eaf2;
+}
+
+.detail-title span,
+.detail-grid dt {
+  color: #526070;
+  font-weight: 900;
+}
+
+.detail-title strong,
+.detail-grid dd {
+  color: #111827;
+}
+
+.detail-grid {
+  border: 1px solid #e2eaf2;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.detail-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.operation-feedback {
+  border-radius: 6px;
+}
+
+.progress-bar {
+  background: #d9e3ee;
+}
+
+.progress-bar b {
+  background: linear-gradient(90deg, #0f766e, #2563eb);
+}
+
+.data-table,
+.handoff-table {
+  border-color: #d5e0eb;
+  border-radius: 6px;
+}
+
+.table-head,
+.handoff-head {
+  background: #edf3f8;
+}
+
+.owner-grid article,
+.rule-grid article,
+.evidence-health article,
+.station-grid article {
+  border-color: #dce5ef;
+  border-radius: 6px;
+  background: #fff;
+}
+
+@media (max-width: 1360px) {
+  .module-ops-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .ops-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .ops-topbar {
+    position: static;
+    margin: 0 0 10px;
+  }
+
+  .ops-page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .command-actions-panel,
+  .module-tools,
+  .console-tools {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .ops-workspace {
+    padding: 10px;
+  }
+
+  .ops-nav .nav-button {
+    flex-basis: 172px;
+  }
+
+  .ops-page-header {
+    padding: 11px;
+  }
+
+  .ops-scope-ribbon {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .context-stack,
+  .sync-stack {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .detail-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Keep wide ERP tables contained inside their own scroll areas on mobile. */
+.ops-shell,
+.ops-shell > *,
+.ops-workspace,
+.workspace,
+.page-stack,
+.page-stack > *,
+.ops-command-center,
+.review-ledger-board,
+.ops-stage-map-panel,
+.readiness-board,
+.ops-layout-grid,
+.ops-main-panel,
+.ops-focus-panel,
+.operations-dock,
+.metric-grid,
+.ops-three-column,
+.split-layout,
+.section-block,
+.module-ops-board,
+.module-master,
+.module-detail,
+.quality-runtime-board,
+.quality-runtime-main,
+.quality-boundary-panel,
+.document-layout,
+.document-master,
+.document-detail {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.erp-table-wrap,
+.module-table-wrap,
+.readiness-table-wrap,
+.quality-action-table-wrap,
+.document-table-wrap,
+.data-table,
+.handoff-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 640px) {
+  .ops-shell,
+  .workspace,
+  .ops-workspace {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .page-stack {
+    width: 100%;
   }
 }

@@ -22,4 +22,31 @@ class DocumentManagementServiceTest {
         assertThat(service.summary().manualFallbacks()).isEqualTo(3);
         assertThat(service.auditEvents()).extracting("eventCode").contains("DOC-AUD-004");
     }
+
+    @Test
+    void uploadsAttachmentAndExposesPreviewContent() {
+        DocumentManagementService service = new DocumentManagementService();
+        byte[] content = "weight photo demo".getBytes();
+
+        var uploaded = service.uploadAttachment(
+                "DOC-INBOUND-20260706-001",
+                "称重交接",
+                "HO-20260706-014",
+                "weight-photo.jpg",
+                "image/jpeg",
+                "PC 后台上传",
+                "库管员 何琳",
+                "无",
+                content
+        );
+
+        assertThat(uploaded.code()).startsWith("ATT-UP-");
+        assertThat(uploaded.storageLocation()).contains("memory://evidence/DOC-INBOUND-20260706-001");
+        assertThat(uploaded.checksum()).startsWith("sha256:");
+        assertThat(uploaded.previewUrl()).contains(uploaded.code());
+        assertThat(service.previewUrl(uploaded.code()).url()).contains("/content?token=preview-demo");
+        assertThat(service.content(uploaded.code()).content()).isEqualTo(content);
+        assertThat(service.summary().attachments()).isEqualTo(6);
+        assertThat(service.auditEvents()).extracting("action").contains("上传附件");
+    }
 }

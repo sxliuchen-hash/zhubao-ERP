@@ -7,6 +7,9 @@ describe('DocumentManagementWorkspace', () => {
     const wrapper = mount(DocumentManagementWorkspace);
 
     expect(wrapper.text()).toContain('文档与附件管理工作台');
+    expect(wrapper.text()).toContain('附件上传与预览测试台');
+    expect(wrapper.text()).toContain('上传称重照片');
+    expect(wrapper.text()).toContain('生成预览链接');
     expect(wrapper.text()).toContain('文档包台账');
     expect(wrapper.text()).toContain('DOC-QC-20260706-021');
     expect(wrapper.text()).toContain('附件与证据清单');

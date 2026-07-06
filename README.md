@@ -28,6 +28,8 @@
 - M3.9 返工派发业务操作基线，新增 `POST /api/business/operations/rework-dispatches`，将同一子工单维度下的冻结库存转为返工在制库存。
 - M3.10 返工报工业务操作基线，新增 `POST /api/business/operations/rework-reports`，将同一子工单维度下的返工在制库存转回半成品库存，并在质检页增加真实动作核验区。
 - M3.11 文档与附件管理基线，新增 `/api/documents/*` 元数据 API、前端文档附件工作台和 MySQL 合同脚本，用于管理文档包、证据附件、存储策略和归档审计。
+- M3.12 附件上传与预览基线，新增 multipart 上传、checksum、上传审计、预览 URL 和内容读取接口，前端文档附件页提供上传/预览测试台。
+- M3.13 前端评审台视觉整改，补强工业 ERP 工作台样式、模块代码导航、桌面/移动响应式约束和状态标签显示，避免宽表撑破移动端页面。
 
 ## 目录结构
 
@@ -141,6 +143,9 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/documents/packages`
 - `GET /api/documents/attachments`
 - `GET /api/documents/audit-events`
+- `POST /api/documents/attachments/uploads`
+- `GET /api/documents/attachments/{code}/preview-url`
+- `GET /api/documents/attachments/{code}/content`
 - `GET /api/business/workspaces/summary`
 - `GET /api/business/workspaces/inbound`
 - `GET /api/business/workspaces/production`

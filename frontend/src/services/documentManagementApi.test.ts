@@ -4,6 +4,8 @@ import {
   fetchDocumentPackages,
   fetchDocumentSummary,
   fetchEvidenceAttachments,
+  fetchAttachmentPreviewUrl,
+  uploadEvidenceAttachment,
 } from './documentManagementApi';
 
 describe('documentManagementApi', () => {
@@ -68,7 +70,34 @@ describe('documentManagementApi', () => {
             tone: 'green',
           },
         ],
+        '/api/documents/attachments/ATT-UP-001/preview-url': {
+          code: 'ATT-UP-001',
+          fileName: 'weight-photo.jpg',
+          mediaType: 'image/jpeg',
+          url: '/api/documents/attachments/ATT-UP-001/content?token=preview-demo',
+          expiresAt: '2026-07-07 00:20',
+        },
       };
+      if (url === '/api/documents/attachments/uploads') {
+        return {
+          ok: true,
+          json: async () => ({
+            code: 0,
+            message: 'ok',
+            data: {
+              code: 'ATT-UP-001',
+              documentCode: 'DOC-INBOUND-20260706-001',
+              fileName: 'weight-photo.jpg',
+              mediaType: 'image/jpeg',
+              size: 12,
+              storageLocation: 'memory://evidence/DOC-INBOUND-20260706-001/ATT-UP-001/weight-photo.jpg',
+              checksum: 'sha256:demo',
+              uploadedAt: '2026-07-07 00:05',
+              previewUrl: '/api/documents/attachments/ATT-UP-001/content?token=preview-demo',
+            },
+          }),
+        } as Response;
+      }
 
       return {
         ok: true,
@@ -81,6 +110,19 @@ describe('documentManagementApi', () => {
     await expect(fetchDocumentPackages()).resolves.toHaveLength(1);
     await expect(fetchEvidenceAttachments()).resolves.toHaveLength(1);
     await expect(fetchDocumentAuditEvents()).resolves.toHaveLength(1);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    await expect(
+      uploadEvidenceAttachment({
+        documentCode: 'DOC-INBOUND-20260706-001',
+        businessType: '称重交接',
+        businessCode: 'HO-20260706-014',
+        source: 'PC 后台上传',
+        owner: '库管员 何琳',
+        file: new File(['demo content'], 'weight-photo.jpg', { type: 'image/jpeg' }),
+      }),
+    ).resolves.toMatchObject({ code: 'ATT-UP-001', checksum: 'sha256:demo' });
+    await expect(fetchAttachmentPreviewUrl('ATT-UP-001')).resolves.toMatchObject({
+      url: '/api/documents/attachments/ATT-UP-001/content?token=preview-demo',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 });

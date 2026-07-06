@@ -24,17 +24,17 @@ type TabKey =
   | 'hardware'
   | 'mobile';
 
-const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string }> = [
-  { key: 'dashboard', label: '首页工作台', meta: '全局态势', badge: '3' },
-  { key: 'inbound', label: '来料母单', meta: '收货 / 拆包', badge: '6' },
-  { key: 'production', label: '生产工单', meta: '排产 / 报工', badge: '18' },
-  { key: 'quality', label: '质检返工', meta: '缺陷 / 损耗', badge: '7' },
-  { key: 'inventory', label: '库存追溯', meta: '客户所有权' },
-  { key: 'configuration', label: '配置基线', meta: '参数 / 构型', badge: '8' },
-  { key: 'documents', label: '文档附件', meta: '证据 / 归档', badge: '5' },
-  { key: 'sample', label: '样例库', meta: '验收脚本' },
-  { key: 'hardware', label: '软硬件联动', meta: '设备 / 兜底', badge: '4' },
-  { key: 'mobile', label: 'PWA 作业', meta: '扫码 / 现场' },
+const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; code: string }> = [
+  { key: 'dashboard', label: '首页工作台', meta: '全局态势', badge: '3', code: 'OP' },
+  { key: 'inbound', label: '来料母单', meta: '收货 / 拆包', badge: '6', code: 'IN' },
+  { key: 'production', label: '生产工单', meta: '排产 / 报工', badge: '18', code: 'MO' },
+  { key: 'quality', label: '质检返工', meta: '缺陷 / 损耗', badge: '7', code: 'QC' },
+  { key: 'inventory', label: '库存追溯', meta: '客户所有权', code: 'ST' },
+  { key: 'configuration', label: '配置基线', meta: '参数 / 构型', badge: '8', code: 'CF' },
+  { key: 'documents', label: '文档附件', meta: '证据 / 归档', badge: '5', code: 'EV' },
+  { key: 'sample', label: '样例库', meta: '验收脚本', code: 'SA' },
+  { key: 'hardware', label: '软硬件联动', meta: '设备 / 兜底', badge: '4', code: 'HW' },
+  { key: 'mobile', label: 'PWA 作业', meta: '扫码 / 现场', code: 'PW' },
 ];
 
 const activeTab = ref<TabKey>('dashboard');
@@ -53,6 +53,7 @@ const activeTitle = computed(() => tabs.find((tab) => tab.key === activeTab.valu
         type="button"
         @click="activeTab = tab.key"
       >
+        <i class="nav-code" aria-hidden="true">{{ tab.code }}</i>
         <span>
           <strong>{{ tab.label }}</strong>
           <small>{{ tab.meta }}</small>

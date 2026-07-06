@@ -29,3 +29,15 @@ export async function apiPost<TRequest, TResponse>(path: string, body: TRequest)
   }
   return payload.data;
 }
+
+export async function apiPostForm<TResponse>(path: string, body: FormData): Promise<TResponse> {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    body,
+  });
+  const payload = (await response.json()) as ApiResponse<TResponse>;
+  if (!response.ok || payload.code !== 0) {
+    throw new Error(payload.message || '请求失败');
+  }
+  return payload.data;
+}

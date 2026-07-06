@@ -3,8 +3,14 @@ package com.zhubao.erp.m2;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -58,14 +64,57 @@ class M2ManagementApiSmokeTest {
         assertThat(summary.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(summary.getBody()).contains(
                 "\"packages\":4",
-                "\"attachments\":5",
                 "\"missingEvidence\":3",
                 "\"manualFallbacks\":3",
-                "\"auditEvents\":4"
+                "\"attachments\"",
+                "\"auditEvents\""
         );
         assertThat(packages.getBody()).contains("DOC-QC-20260706-021", "质检返工证据包");
         assertThat(attachments.getBody()).contains("ATT-QC-20260706-021", "QC-20260706-021-defects.zip");
         assertThat(auditEvents.getBody()).contains("DOC-AUD-004", "配置变更单等待审批");
+    }
+
+    @Test
+    void uploadsDocumentAttachmentAndReadsPreviewContent() {
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("documentCode", "DOC-INBOUND-20260706-001");
+        body.add("businessType", "称重交接");
+        body.add("businessCode", "HO-SMOKE-20260706-001");
+        body.add("source", "API smoke 上传");
+        body.add("owner", "库管员 何琳");
+        body.add("fallbackAction", "无");
+        body.add("file", new ByteArrayResource("smoke upload content".getBytes()) {
+            @Override
+            public String getFilename() {
+                return "smoke-weight.txt";
+            }
+        });
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+        ResponseEntity<String> uploaded = restTemplate.postForEntity(
+                "/api/documents/attachments/uploads",
+                new HttpEntity<>(body, headers),
+                String.class
+        );
+
+        assertThat(uploaded.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(uploaded.getBody()).contains("ATT-UP-", "smoke-weight.txt", "sha256:", "preview-demo");
+
+        String uploadedCode = uploaded.getBody().replaceAll(".*\"code\":\"([^\"]+)\".*", "$1");
+        ResponseEntity<String> preview = restTemplate.getForEntity(
+                "/api/documents/attachments/" + uploadedCode + "/preview-url",
+                String.class
+        );
+        ResponseEntity<byte[]> content = restTemplate.getForEntity(
+                "/api/documents/attachments/" + uploadedCode + "/content?token=preview-demo",
+                byte[].class
+        );
+
+        assertThat(preview.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(preview.getBody()).contains(uploadedCode, "/content?token=preview-demo");
+        assertThat(content.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(new String(content.getBody())).isEqualTo("smoke upload content");
     }
 
     @Test
