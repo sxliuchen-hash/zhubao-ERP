@@ -48,6 +48,15 @@ pnpm --filter zhubao-erp-frontend test
 pnpm --filter zhubao-erp-frontend build
 ```
 
+前端连接后端 API：
+
+```powershell
+$env:VITE_API_BASE_URL="http://localhost:8080"
+pnpm --filter zhubao-erp-frontend dev
+```
+
+未设置或后端未启动时，M1/M2 工作台页面会使用本地评审样例兜底。
+
 M0 一键检查：
 
 ```powershell

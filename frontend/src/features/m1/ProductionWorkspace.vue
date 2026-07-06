@@ -1,6 +1,29 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import { productionHandoffs, productionStationLoads, workOrders } from '../../data/m1PrototypeData';
+import {
+  productionHandoffs as fallbackProductionHandoffs,
+  productionStationLoads as fallbackProductionStationLoads,
+  workOrders as fallbackWorkOrders,
+} from '../../data/m1PrototypeData';
+import {
+  fetchProductionWorkspace,
+  type ProductionWorkspaceModel,
+} from '../../services/businessWorkspaceApi';
+
+const workspace = ref<ProductionWorkspaceModel>({
+  stationLoads: fallbackProductionStationLoads,
+  workOrders: fallbackWorkOrders,
+  handoffs: fallbackProductionHandoffs,
+});
+
+onMounted(async () => {
+  try {
+    workspace.value = await fetchProductionWorkspace();
+  } catch {
+    // Keep deterministic local samples available when the backend is not running.
+  }
+});
 </script>
 
 <template>
@@ -14,7 +37,7 @@ import { productionHandoffs, productionStationLoads, workOrders } from '../../da
       <div class="hero-kpis">
         <article>
           <span>在制工单</span>
-          <strong>{{ workOrders.length }}</strong>
+          <strong>{{ workspace.workOrders.length }}</strong>
         </article>
         <article>
           <span>交接阻断</span>
@@ -46,7 +69,7 @@ import { productionHandoffs, productionStationLoads, workOrders } from '../../da
         </div>
       </div>
       <div class="station-grid">
-        <article v-for="station in productionStationLoads" :key="station.station">
+        <article v-for="station in workspace.stationLoads" :key="station.station">
           <div>
             <strong>{{ station.station }}</strong>
             <span>{{ station.bottleneck }}</span>
@@ -74,7 +97,7 @@ import { productionHandoffs, productionStationLoads, workOrders } from '../../da
             <span>产出</span>
             <span>状态</span>
           </div>
-          <div v-for="order in workOrders" :key="order.code" class="table-row">
+          <div v-for="order in workspace.workOrders" :key="order.code" class="table-row">
             <strong>{{ order.code }}</strong>
             <span>{{ order.customer }}</span>
             <span>{{ order.material }}</span>
@@ -146,7 +169,7 @@ import { productionHandoffs, productionStationLoads, workOrders } from '../../da
           <span>损耗</span>
           <span>状态</span>
         </div>
-        <div v-for="handoff in productionHandoffs" :key="handoff.code" class="handoff-row">
+        <div v-for="handoff in workspace.handoffs" :key="handoff.code" class="handoff-row">
           <strong>{{ handoff.code }}</strong>
           <span>{{ handoff.from }}</span>
           <span>{{ handoff.to }}</span>

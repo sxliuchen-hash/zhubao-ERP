@@ -1,6 +1,31 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import { inventoryBalances, inventoryLedgerEntries, traceEvents, traceEvidence } from '../../data/m1PrototypeData';
+import {
+  inventoryBalances as fallbackInventoryBalances,
+  inventoryLedgerEntries as fallbackInventoryLedgerEntries,
+  traceEvents as fallbackTraceEvents,
+  traceEvidence as fallbackTraceEvidence,
+} from '../../data/m1PrototypeData';
+import {
+  fetchInventoryWorkspace,
+  type InventoryWorkspaceModel,
+} from '../../services/businessWorkspaceApi';
+
+const workspace = ref<InventoryWorkspaceModel>({
+  balances: fallbackInventoryBalances,
+  ledgerEntries: fallbackInventoryLedgerEntries,
+  timeline: fallbackTraceEvents,
+  evidence: fallbackTraceEvidence,
+});
+
+onMounted(async () => {
+  try {
+    workspace.value = await fetchInventoryWorkspace();
+  } catch {
+    // Keep deterministic local samples available when the backend is not running.
+  }
+});
 </script>
 
 <template>
@@ -14,11 +39,11 @@ import { inventoryBalances, inventoryLedgerEntries, traceEvents, traceEvidence }
       <div class="hero-kpis">
         <article>
           <span>客户库存批次</span>
-          <strong>{{ inventoryBalances.length }}</strong>
+          <strong>{{ workspace.balances.length }}</strong>
         </article>
         <article>
           <span>台账事件</span>
-          <strong>{{ inventoryLedgerEntries.length }}</strong>
+          <strong>{{ workspace.ledgerEntries.length }}</strong>
         </article>
         <article>
           <span>证据缺口</span>
@@ -56,7 +81,7 @@ import { inventoryBalances, inventoryLedgerEntries, traceEvents, traceEvidence }
             <span>数量/重量</span>
             <span>冻结</span>
           </div>
-          <div v-for="item in inventoryBalances" :key="`${item.owner}-${item.batch}-${item.status}`" class="table-row">
+          <div v-for="item in workspace.balances" :key="`${item.owner}-${item.batch}-${item.status}`" class="table-row">
             <strong>{{ item.owner }}</strong>
             <span>{{ item.batch }}</span>
             <span>{{ item.material }}</span>
@@ -76,7 +101,7 @@ import { inventoryBalances, inventoryLedgerEntries, traceEvents, traceEvidence }
           </div>
         </div>
         <div class="evidence-health">
-          <article v-for="item in traceEvidence" :key="item.label">
+          <article v-for="item in workspace.evidence" :key="item.label">
             <div>
               <strong>{{ item.label }}</strong>
               <span>{{ item.link }}</span>
@@ -104,7 +129,7 @@ import { inventoryBalances, inventoryLedgerEntries, traceEvents, traceEvidence }
           <span>来源单据</span>
           <span>操作人</span>
         </div>
-        <div v-for="entry in inventoryLedgerEntries" :key="entry.bizCode" class="ledger-row">
+        <div v-for="entry in workspace.ledgerEntries" :key="entry.bizCode" class="ledger-row">
           <time>{{ entry.time }}</time>
           <strong>{{ entry.bizCode }}</strong>
           <span>{{ entry.movement }}</span>
@@ -125,7 +150,7 @@ import { inventoryBalances, inventoryLedgerEntries, traceEvents, traceEvidence }
           </div>
         </div>
         <div class="timeline">
-          <article v-for="event in traceEvents" :key="`${event.time}-${event.bizCode}`">
+          <article v-for="event in workspace.timeline" :key="`${event.time}-${event.bizCode}`">
             <time>{{ event.time }}</time>
             <div>
               <strong>{{ event.node }}</strong>

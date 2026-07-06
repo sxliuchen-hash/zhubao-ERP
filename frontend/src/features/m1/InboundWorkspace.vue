@@ -1,6 +1,29 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import { inboundCheckpoints, inboundOrders, inboundRisks } from '../../data/m1PrototypeData';
+import {
+  inboundCheckpoints as fallbackInboundCheckpoints,
+  inboundOrders as fallbackInboundOrders,
+  inboundRisks as fallbackInboundRisks,
+} from '../../data/m1PrototypeData';
+import {
+  fetchInboundWorkspace,
+  type InboundWorkspaceModel,
+} from '../../services/businessWorkspaceApi';
+
+const workspace = ref<InboundWorkspaceModel>({
+  checkpoints: fallbackInboundCheckpoints,
+  orders: fallbackInboundOrders,
+  risks: fallbackInboundRisks,
+});
+
+onMounted(async () => {
+  try {
+    workspace.value = await fetchInboundWorkspace();
+  } catch {
+    // Keep deterministic local samples available when the backend is not running.
+  }
+});
 
 function videoTone(video: string) {
   if (video === '失败') return 'red';
@@ -25,7 +48,7 @@ function statusTone(status: string) {
         <p>把快递收货、拆包称重、客户所有库存、视频证据和标签打印压在同一条入库链路里。</p>
       </div>
       <div class="hero-kpis">
-        <article v-for="item in inboundCheckpoints.slice(0, 3)" :key="item.label">
+        <article v-for="item in workspace.checkpoints.slice(0, 3)" :key="item.label">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
         </article>
@@ -61,7 +84,7 @@ function statusTone(status: string) {
             <span>状态</span>
             <span>视频</span>
           </div>
-          <div v-for="order in inboundOrders" :key="order.code" class="table-row">
+          <div v-for="order in workspace.orders" :key="order.code" class="table-row">
             <strong>{{ order.code }}</strong>
             <span>{{ order.customer }}</span>
             <span>{{ order.courierNo }}</span>
@@ -81,7 +104,7 @@ function statusTone(status: string) {
           </div>
         </div>
         <div class="evidence-health">
-          <article v-for="item in inboundCheckpoints" :key="item.label">
+          <article v-for="item in workspace.checkpoints" :key="item.label">
             <div>
               <strong>{{ item.label }}</strong>
               <span>{{ item.status }}</span>
@@ -155,7 +178,7 @@ function statusTone(status: string) {
         </div>
       </div>
       <div class="ops-card-grid">
-        <article v-for="risk in inboundRisks" :key="risk.code" class="ops-card">
+        <article v-for="risk in workspace.risks" :key="risk.code" class="ops-card">
           <div class="ops-card-head">
             <div>
               <small>{{ risk.code }}</small>

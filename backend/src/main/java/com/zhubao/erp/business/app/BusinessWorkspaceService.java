@@ -27,9 +27,9 @@ public class BusinessWorkspaceService {
     // M2 exposes deterministic business review data; M3 should move this to seed data and repositories.
     private final List<InboundOrder> inboundOrders = List.of(
             new InboundOrder("MD-20260706-001", "恒信珠宝", "18K 金戒托", "SF1048329001", 320, "486.25 g", "待拆包", "待开始", "客户所有"),
-            new InboundOrder("MD-20260706-002", "雅辉饰品", "银链半成品", "YT7740192207", 1200, "2,840.00 g", "已入库", "已关联", "客户所有"),
-            new InboundOrder("MD-20260706-003", "璟瑶工贸", "宝石托盘", "JD9301827446", 540, "718.30 g", "待确认物料", "截取中", "客户所有"),
-            new InboundOrder("MD-20260706-004", "瑞祺珠宝", "PT950 吊坠坯", "DB7730018291", 180, "392.10 g", "异常待处理", "失败", "客户所有")
+            new InboundOrder("MD-20260706-002", "雅辰饰品", "银链半成品", "YT7740192207", 1200, "2,840.00 g", "已入库", "已关联", "客户所有"),
+            new InboundOrder("MD-20260706-003", "璟瑞工贸", "宝石托坯", "JD9301827446", 540, "718.30 g", "待确认物料", "截取中", "客户所有"),
+            new InboundOrder("MD-20260706-004", "瑞禾珠宝", "PT950 吊坠坯", "DB7730018291", 180, "392.10 g", "异常待处理", "失败", "客户所有")
     );
 
     private final List<ReviewStat> inboundCheckpoints = List.of(
@@ -47,8 +47,8 @@ public class BusinessWorkspaceService {
     private final List<WorkOrder> workOrders = List.of(
             new WorkOrder("ZD-20260706-001", "恒信珠宝", "18K 金戒托", "抛光", "李华", 80, 56, "生产中", 70),
             new WorkOrder("ZD-20260706-002", "恒信珠宝", "18K 金戒托", "镶石", "陈敏", 80, 80, "待质检", 100),
-            new WorkOrder("ZD-20260706-006", "雅辉饰品", "银链半成品", "焊接", "王强", 300, 210, "称重待补", 70),
-            new WorkOrder("FG-20260706-002", "瑞祺珠宝", "PT950 吊坠坯", "返工抛光", "赵磊", 24, 12, "返工中", 50)
+            new WorkOrder("ZD-20260706-006", "雅辰饰品", "银链半成品", "焊接", "王强", 300, 210, "称重待补", 70),
+            new WorkOrder("FG-20260706-002", "瑞禾珠宝", "PT950 吊坠坯", "返工抛光", "赵磊", 24, 12, "返工中", 50)
     );
 
     private final List<ReviewStat> stationLoads = List.of(
@@ -60,13 +60,13 @@ public class BusinessWorkspaceService {
 
     private final List<ProductionHandoff> handoffs = List.of(
             new ProductionHandoff("HO-20260706-014", "粗抛 / 李华", "精抛 / 陈敏", "121.15 g", "119.92 g", "1.02%", "可交接", "green"),
-            new ProductionHandoff("HO-20260706-018", "焊接 / 王强", "质检 / 周婷", "684.40 g", "683.20 g", "0.18%", "待补照片", "amber"),
+            new ProductionHandoff("HO-20260706-018", "焊接 / 王强", "质检 / 周娜", "684.40 g", "683.20 g", "0.18%", "待补照片", "amber"),
             new ProductionHandoff("HO-20260706-021", "抛光 / 赵磊", "返工复检 / 刘洋", "52.40 g", "50.41 g", "3.80%", "审批阻断", "red")
     );
 
     private final List<QualityCase> qualityCases = List.of(
-            new QualityCase("QC-20260706-021", "ZD-20260706-002", "镶石", "周婷", "松石 3 件，划痕 2 件", "返工", "待生成返工工单"),
-            new QualityCase("QC-20260706-022", "ZD-20260706-006", "焊接", "周婷", "焊点偏移 6 件", "复检", "待确认称重"),
+            new QualityCase("QC-20260706-021", "ZD-20260706-002", "镶石", "周娜", "松石 3 件，划痕 2 件", "返工", "待生成返工工单"),
+            new QualityCase("QC-20260706-022", "ZD-20260706-006", "焊接", "周娜", "焊点偏移 6 件", "复检", "待确认称重"),
             new QualityCase("QC-20260706-023", "FG-20260706-001", "返工抛光", "刘洋", "返工通过", "放行", "已完成")
     );
 
@@ -85,15 +85,15 @@ public class BusinessWorkspaceService {
     private final List<InventoryBalance> inventoryBalances = List.of(
             new InventoryBalance("恒信珠宝", "MD-20260706-001", "18K 金戒托", "原料库 A-01", "待加工", 240, "365.10 g", "0"),
             new InventoryBalance("恒信珠宝", "ZD-20260706-001", "18K 金戒托", "车间-抛光", "在制", 80, "121.15 g", "0"),
-            new InventoryBalance("雅辉饰品", "MD-20260706-002", "银链半成品", "成品库 F-02", "成品", 620, "1,451.20 g", "200 件"),
-            new InventoryBalance("瑞祺珠宝", "FG-20260706-002", "PT950 吊坠坯", "返工区 R-01", "返工在制", 24, "52.40 g", "0")
+            new InventoryBalance("雅辰饰品", "MD-20260706-002", "银链半成品", "成品库 F-02", "成品", 620, "1,451.20 g", "200 件"),
+            new InventoryBalance("瑞禾珠宝", "FG-20260706-002", "PT950 吊坠坯", "返工区 R-01", "返工在制", 24, "52.40 g", "0")
     );
 
     private final List<InventoryLedgerEntry> inventoryLedgerEntries = List.of(
             new InventoryLedgerEntry("09:05", "LEDGER-20260706-001", "来料入库", "0 件 / 0 g", "320 件 / 486.25 g", "MD-20260706-001", "何琳"),
             new InventoryLedgerEntry("10:20", "LEDGER-20260706-007", "工单领料", "320 件 / 486.25 g", "240 件 / 365.10 g", "ZD-20260706-001", "马杰"),
             new InventoryLedgerEntry("14:30", "LEDGER-20260706-018", "工序产出", "80 件 / 121.15 g", "56 件 / 84.95 g", "BG-20260706-044", "李华"),
-            new InventoryLedgerEntry("15:10", "LEDGER-20260706-022", "质检冻结", "56 件 / 84.95 g", "5 件冻结 / 7.20 g", "QC-20260706-021", "周婷")
+            new InventoryLedgerEntry("15:10", "LEDGER-20260706-022", "质检冻结", "56 件 / 84.95 g", "5 件冻结 / 7.20 g", "QC-20260706-021", "周娜")
     );
 
     private final List<TraceEvent> traceEvents = List.of(
@@ -101,7 +101,7 @@ public class BusinessWorkspaceService {
             new TraceEvent("09:05", "拆包称重", "MD-20260706-001", "库管员 何琳", "拆包视频 05:14"),
             new TraceEvent("10:20", "生成子工单", "ZD-20260706-001", "车间组长 马杰", "母单标签扫描"),
             new TraceEvent("14:30", "工序报工", "BG-20260706-044", "操作工 李华", "称重交接 121.15g"),
-            new TraceEvent("15:10", "质检异常", "QC-20260706-021", "质检员 周婷", "缺陷照片 5 张")
+            new TraceEvent("15:10", "质检异常", "QC-20260706-021", "质检员 周娜", "缺陷照片 5 张")
     );
 
     private final List<ActionItem> traceEvidence = List.of(
@@ -126,7 +126,7 @@ public class BusinessWorkspaceService {
 
     private final List<ActionItem> offlineDrafts = List.of(
             new ActionItem("DRAFT-BG-001", "抛光报工", "恢复网络后需复核工单状态", "李华", "14:28", "amber"),
-            new ActionItem("DRAFT-QC-003", "缺陷拍照", "照片已缓存，质检结果未提交", "周婷", "15:06", "red")
+            new ActionItem("DRAFT-QC-003", "缺陷拍照", "照片已缓存，质检结果未提交", "周娜", "15:06", "red")
     );
 
     public InboundWorkspaceData inbound() {

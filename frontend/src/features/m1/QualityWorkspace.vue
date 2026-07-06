@@ -1,6 +1,29 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import { lossApprovals, qualityCases, qualityMetrics } from '../../data/m1PrototypeData';
+import {
+  lossApprovals as fallbackLossApprovals,
+  qualityCases as fallbackQualityCases,
+  qualityMetrics as fallbackQualityMetrics,
+} from '../../data/m1PrototypeData';
+import {
+  fetchQualityWorkspace,
+  type QualityWorkspaceModel,
+} from '../../services/businessWorkspaceApi';
+
+const workspace = ref<QualityWorkspaceModel>({
+  metrics: fallbackQualityMetrics,
+  cases: fallbackQualityCases,
+  lossApprovals: fallbackLossApprovals,
+});
+
+onMounted(async () => {
+  try {
+    workspace.value = await fetchQualityWorkspace();
+  } catch {
+    // Keep deterministic local samples available when the backend is not running.
+  }
+});
 </script>
 
 <template>
@@ -12,7 +35,7 @@ import { lossApprovals, qualityCases, qualityMetrics } from '../../data/m1Protot
         <p>用缺陷、照片、称重、损耗和返工工单串成一条处理路径，避免返工状态机分叉。</p>
       </div>
       <div class="hero-kpis">
-        <article v-for="metric in qualityMetrics.slice(0, 3)" :key="metric.label">
+        <article v-for="metric in workspace.metrics.slice(0, 3)" :key="metric.label">
           <span>{{ metric.label }}</span>
           <strong>{{ metric.value }}</strong>
         </article>
@@ -39,7 +62,7 @@ import { lossApprovals, qualityCases, qualityMetrics } from '../../data/m1Protot
           </div>
         </div>
         <div class="quality-grid dense">
-          <article v-for="item in qualityCases" :key="item.code" class="quality-item">
+          <article v-for="item in workspace.cases" :key="item.code" class="quality-item">
             <div class="quality-title">
               <strong>{{ item.code }}</strong>
               <StatusBadge :label="item.status" :tone="item.status.includes('完成') ? 'green' : item.status.includes('称重') ? 'red' : 'amber'" />
@@ -72,7 +95,7 @@ import { lossApprovals, qualityCases, qualityMetrics } from '../../data/m1Protot
           </div>
         </div>
         <div class="evidence-health">
-          <article v-for="metric in qualityMetrics" :key="metric.label">
+          <article v-for="metric in workspace.metrics" :key="metric.label">
             <div>
               <strong>{{ metric.label }}</strong>
               <span>{{ metric.detail }}</span>
@@ -92,7 +115,7 @@ import { lossApprovals, qualityCases, qualityMetrics } from '../../data/m1Protot
           </div>
         </div>
         <div class="approval-list">
-          <div v-for="approval in lossApprovals" :key="approval.code">
+          <div v-for="approval in workspace.lossApprovals" :key="approval.code">
             <strong>{{ approval.code }}</strong>
             <span>{{ approval.workOrder }} / {{ approval.process }} / 标准 {{ approval.standard }} / 实际 {{ approval.actual }} / {{ approval.evidence }}</span>
             <StatusBadge :label="approval.action" :tone="approval.tone" />

@@ -6,6 +6,15 @@ export interface ApiResponse<T> {
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
+export async function apiGet<TResponse>(path: string): Promise<TResponse> {
+  const response = await fetch(`${baseUrl}${path}`);
+  const payload = (await response.json()) as ApiResponse<TResponse>;
+  if (!response.ok || payload.code !== 0) {
+    throw new Error(payload.message || '请求失败');
+  }
+  return payload.data;
+}
+
 export async function apiPost<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: 'POST',

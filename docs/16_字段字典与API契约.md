@@ -21,6 +21,7 @@
 
 - [BusinessWorkspaceService.java](../backend/src/main/java/com/zhubao/erp/business/app/BusinessWorkspaceService.java)
 - [BusinessReviewData.java](../backend/src/main/java/com/zhubao/erp/business/domain/BusinessReviewData.java)
+- [businessWorkspaceApi.ts](../frontend/src/services/businessWorkspaceApi.ts)
 - [V3__m2_business_workspace_contract.sql](../backend/src/main/resources/db/mysql/V3__m2_business_workspace_contract.sql)
 
 ---

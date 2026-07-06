@@ -1,7 +1,30 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue';
 import ScanResolver from '../scan/ScanResolver.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import { mobileCapabilities, mobileTasks, offlineDrafts } from '../../data/m1PrototypeData';
+import {
+  mobileCapabilities as fallbackMobileCapabilities,
+  mobileTasks as fallbackMobileTasks,
+  offlineDrafts as fallbackOfflineDrafts,
+} from '../../data/m1PrototypeData';
+import {
+  fetchMobileWorkspace,
+  type MobileWorkspaceModel,
+} from '../../services/businessWorkspaceApi';
+
+const workspace = ref<MobileWorkspaceModel>({
+  tasks: fallbackMobileTasks,
+  capabilities: fallbackMobileCapabilities,
+  offlineDrafts: fallbackOfflineDrafts,
+});
+
+onMounted(async () => {
+  try {
+    workspace.value = await fetchMobileWorkspace();
+  } catch {
+    // Keep deterministic local samples available when the backend is not running.
+  }
+});
 </script>
 
 <template>
@@ -15,15 +38,15 @@ import { mobileCapabilities, mobileTasks, offlineDrafts } from '../../data/m1Pro
       <div class="hero-kpis">
         <article>
           <span>现场任务</span>
-          <strong>{{ mobileTasks.length }}</strong>
+          <strong>{{ workspace.tasks.length }}</strong>
         </article>
         <article>
           <span>离线草稿</span>
-          <strong>{{ offlineDrafts.length }}</strong>
+          <strong>{{ workspace.offlineDrafts.length }}</strong>
         </article>
         <article>
           <span>能力项</span>
-          <strong>{{ mobileCapabilities.length }}</strong>
+          <strong>{{ workspace.capabilities.length }}</strong>
         </article>
       </div>
     </section>
@@ -78,7 +101,7 @@ import { mobileCapabilities, mobileTasks, offlineDrafts } from '../../data/m1Pro
             </div>
           </div>
           <div class="mobile-task-list">
-            <article v-for="task in mobileTasks" :key="task.code">
+            <article v-for="task in workspace.tasks" :key="task.code">
               <div>
                 <strong>{{ task.code }}</strong>
                 <span>{{ task.scene }}</span>
@@ -99,7 +122,7 @@ import { mobileCapabilities, mobileTasks, offlineDrafts } from '../../data/m1Pro
               </div>
             </div>
             <div class="evidence-health">
-              <article v-for="capability in mobileCapabilities" :key="capability.label">
+              <article v-for="capability in workspace.capabilities" :key="capability.label">
                 <div>
                   <strong>{{ capability.label }}</strong>
                   <span>{{ capability.detail }}</span>
@@ -117,7 +140,7 @@ import { mobileCapabilities, mobileTasks, offlineDrafts } from '../../data/m1Pro
               </div>
             </div>
             <div class="draft-list">
-              <article v-for="draft in offlineDrafts" :key="draft.code">
+              <article v-for="draft in workspace.offlineDrafts" :key="draft.code">
                 <div>
                   <strong>{{ draft.code }}</strong>
                   <span>{{ draft.scene }} / {{ draft.savedAt }}</span>
