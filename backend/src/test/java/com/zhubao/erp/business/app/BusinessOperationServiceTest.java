@@ -1,11 +1,13 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
+import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockBalance;
@@ -162,6 +164,60 @@ class BusinessOperationServiceTest {
         assertThat(ledger.documentType()).isEqualTo("quality_freeze");
         assertThat(ledger.documentCode()).isEqualTo("QC-20260706-022");
         assertThat(ledger.remark()).contains("周娜", "焊点偏移 6 件", "PHOTO-QC-20260706-022");
+    }
+
+    @Test
+    void dispatchReworkMovesFrozenToReworkForSameWorkOrderDimension() {
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        StockLedgerService stockLedgerService = new StockLedgerService(repository);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        StockDimension frozen = dimension(StockStatus.FROZEN, "FROZEN-QC");
+
+        stockLedgerService.transfer(new StockTransferCommand(
+                "quality_freeze",
+                "QC-20260706-022",
+                null,
+                frozen,
+                bd("6"),
+                bd("13.660"),
+                "测试预置冻结库存"
+        ));
+
+        ReworkDispatchResult result = service.dispatchRework(new DispatchReworkCommand(
+                "FG-20260706-022",
+                "QC-20260706-022",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "FROZEN-QC",
+                "REWORK-LINE-01",
+                bd("6"),
+                bd("13.660"),
+                "返工焊接",
+                "车间组长 马杰",
+                "焊点偏移返工",
+                "PHOTO-QC-20260706-022",
+                "冻结库存派发返工"
+        ));
+
+        StockDimension rework = dimension(StockStatus.REWORK, "REWORK-LINE-01");
+        StockBalance frozenBalance = repository.findBalance(frozen);
+        StockBalance reworkBalance = repository.findBalance(rework);
+        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
+
+        assertThat(result.reworkOrderCode()).isEqualTo("FG-20260706-022");
+        assertThat(result.qualityCaseCode()).isEqualTo("QC-20260706-022");
+        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.FROZEN);
+        assertThat(result.toStockStatus()).isEqualTo(StockStatus.REWORK);
+        assertThat(frozenBalance.quantity()).isEqualByComparingTo("0");
+        assertThat(frozenBalance.weight()).isEqualByComparingTo("0.000");
+        assertThat(reworkBalance.quantity()).isEqualByComparingTo("6");
+        assertThat(reworkBalance.weight()).isEqualByComparingTo("13.660");
+        assertThat(ledger.documentType()).isEqualTo("rework_dispatch");
+        assertThat(ledger.documentCode()).isEqualTo("FG-20260706-022");
+        assertThat(ledger.remark()).contains("QC-20260706-022", "车间组长 马杰", "焊点偏移返工");
     }
 
     private StockDimension dimension(StockStatus status, String warehouseCode) {

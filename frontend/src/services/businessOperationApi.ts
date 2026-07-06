@@ -88,6 +88,41 @@ export interface QualityFreezeResult {
   evidenceCode?: string;
 }
 
+export interface ReworkDispatchRequest {
+  reworkOrderCode: string;
+  qualityCaseCode: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  customerId: number;
+  ownerCustomerId?: number;
+  materialCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  quantity: number;
+  weight: string;
+  process: string;
+  operator: string;
+  reason: string;
+  evidenceCode?: string;
+  remark?: string;
+}
+
+export interface ReworkDispatchResult {
+  reworkOrderCode: string;
+  qualityCaseCode: string;
+  workOrderCode: string;
+  ledgerCode: string;
+  fromWarehouseCode: string;
+  toWarehouseCode: string;
+  fromStockStatus: string;
+  toStockStatus: string;
+  quantity: number;
+  weight: number;
+  process: string;
+  operator: string;
+  evidenceCode?: string;
+}
+
 const customerIds: Record<string, number> = {
   恒信珠宝: 1001,
   雅辰饰品: 1002,
@@ -223,6 +258,38 @@ export async function freezeQualityStock(qualityCase: QualityCase): Promise<Qual
   return apiPost<QualityFreezeRequest, QualityFreezeResult>(
     '/api/business/operations/quality-freezes',
     buildQualityFreezeRequest(qualityCase),
+  );
+}
+
+export function buildReworkDispatchRequest(qualityCase: QualityCase): ReworkDispatchRequest {
+  const customer = workOrderCustomers[qualityCase.workOrder] ?? '恒信珠宝';
+  const material = workOrderMaterials[qualityCase.workOrder] ?? qualityCase.workOrder;
+  const customerId = customerIds[customer] ?? 9000;
+
+  return {
+    reworkOrderCode: qualityCase.code.replace('QC-', 'FG-'),
+    qualityCaseCode: qualityCase.code,
+    motherOrderCode: workOrderMotherOrders[qualityCase.workOrder] ?? qualityCase.workOrder,
+    workOrderCode: qualityCase.workOrder,
+    customerId,
+    ownerCustomerId: customerId,
+    materialCode: materialCodes[material] ?? `MAT-${qualityCase.workOrder}`,
+    fromWarehouseCode: 'FROZEN-QC',
+    toWarehouseCode: 'REWORK-LINE-01',
+    quantity: qualityFreezeQuantities[qualityCase.code] ?? 1,
+    weight: qualityFreezeWeights[qualityCase.code] ?? '1.000',
+    process: `返工${qualityCase.process}`,
+    operator: '车间组长 马杰',
+    reason: qualityCase.defect,
+    evidenceCode: `PHOTO-${qualityCase.code}`,
+    remark: '前端质检作业主控台生成返工工单',
+  };
+}
+
+export async function dispatchRework(qualityCase: QualityCase): Promise<ReworkDispatchResult> {
+  return apiPost<ReworkDispatchRequest, ReworkDispatchResult>(
+    '/api/business/operations/rework-dispatches',
+    buildReworkDispatchRequest(qualityCase),
   );
 }
 

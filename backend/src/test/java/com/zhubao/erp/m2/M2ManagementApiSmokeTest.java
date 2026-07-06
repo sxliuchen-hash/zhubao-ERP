@@ -221,6 +221,68 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void dispatchesReworkThroughBusinessOperationApiAndMovesFrozenStock() {
+        Map<String, Object> frozenDimension = Map.of(
+                "ownerType", "CUSTOMER",
+                "ownerCustomerId", 1002L,
+                "customerId", 1002L,
+                "motherOrderCode", "MD-SMOKE-20260706-004",
+                "workOrderCode", "ZD-SMOKE-20260706-023",
+                "materialCode", "MAT-SILVER-CHAIN",
+                "warehouseCode", "FROZEN-QC",
+                "stockStatus", "FROZEN"
+        );
+        Map<String, Object> seedFrozen = Map.of(
+                "documentType", "quality_freeze",
+                "documentCode", "QC-SMOKE-20260706-023",
+                "to", frozenDimension,
+                "quantity", new BigDecimal("6"),
+                "weight", new BigDecimal("13.660"),
+                "remark", "seed frozen stock for rework dispatch smoke test"
+        );
+        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedFrozen, String.class);
+
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("reworkOrderCode", "FG-SMOKE-20260706-023");
+        request.put("qualityCaseCode", "QC-SMOKE-20260706-023");
+        request.put("motherOrderCode", "MD-SMOKE-20260706-004");
+        request.put("workOrderCode", "ZD-SMOKE-20260706-023");
+        request.put("customerId", 1002L);
+        request.put("materialCode", "MAT-SILVER-CHAIN");
+        request.put("fromWarehouseCode", "FROZEN-QC");
+        request.put("toWarehouseCode", "REWORK-LINE-01");
+        request.put("quantity", new BigDecimal("6"));
+        request.put("weight", new BigDecimal("13.660"));
+        request.put("process", "返工焊接");
+        request.put("operator", "车间组长 马杰");
+        request.put("reason", "焊点偏移返工");
+        request.put("evidenceCode", "PHOTO-QC-SMOKE-002");
+        request.put("remark", "rework dispatch smoke test");
+
+        ResponseEntity<String> dispatched = restTemplate.postForEntity(
+                "/api/business/operations/rework-dispatches",
+                request,
+                String.class
+        );
+        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+
+        assertThat(dispatched.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(dispatched.getBody()).contains(
+                "FG-SMOKE-20260706-023",
+                "QC-SMOKE-20260706-023",
+                "FROZEN",
+                "REWORK",
+                "PHOTO-QC-SMOKE-002"
+        );
+        assertThat(balances.getBody()).contains(
+                "MD-SMOKE-20260706-004",
+                "ZD-SMOKE-20260706-023",
+                "REWORK-LINE-01",
+                "REWORK"
+        );
+    }
+
+    @Test
     void exposesConfigurationBaselineApis() {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/configuration/baseline/summary", String.class);
         ResponseEntity<String> parameters = restTemplate.getForEntity("/api/configuration/baseline/system-parameters", String.class);

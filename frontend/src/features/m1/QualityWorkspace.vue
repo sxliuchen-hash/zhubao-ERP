@@ -11,7 +11,9 @@ import {
   type QualityWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
 import {
+  dispatchRework,
   freezeQualityStock,
+  type ReworkDispatchResult,
   type QualityFreezeResult,
 } from '../../services/businessOperationApi';
 
@@ -23,6 +25,9 @@ const workspace = ref<QualityWorkspaceModel>({
 const freezingQualityStock = ref(false);
 const qualityFreezeResult = ref<QualityFreezeResult | null>(null);
 const qualityFreezeError = ref('');
+const dispatchingRework = ref(false);
+const reworkDispatchResult = ref<ReworkDispatchResult | null>(null);
+const reworkDispatchError = ref('');
 
 const activeCase = computed(
   () =>
@@ -57,6 +62,22 @@ async function freezeActiveQualityStock() {
     qualityFreezeError.value = error instanceof Error ? error.message : '冻结异常库存失败';
   } finally {
     freezingQualityStock.value = false;
+  }
+}
+
+async function dispatchActiveRework() {
+  if (!activeCase.value) return;
+
+  dispatchingRework.value = true;
+  reworkDispatchResult.value = null;
+  reworkDispatchError.value = '';
+
+  try {
+    reworkDispatchResult.value = await dispatchRework(activeCase.value);
+  } catch (error) {
+    reworkDispatchError.value = error instanceof Error ? error.message : '生成返工工单失败';
+  } finally {
+    dispatchingRework.value = false;
   }
 }
 </script>
@@ -170,7 +191,9 @@ async function freezeActiveQualityStock() {
           <button class="primary-button" type="button" :disabled="freezingQualityStock" @click="freezeActiveQualityStock">
             {{ freezingQualityStock ? '正在冻结' : '冻结异常库存' }}
           </button>
-          <button class="secondary-button" type="button">登记缺陷照片</button>
+          <button class="secondary-button" type="button" :disabled="dispatchingRework" @click="dispatchActiveRework">
+            {{ dispatchingRework ? '正在派发' : '生成返工工单' }}
+          </button>
           <button class="secondary-button" type="button">提交损耗审批</button>
         </div>
         <div v-if="qualityFreezeResult" class="operation-feedback success">
@@ -182,6 +205,16 @@ async function freezeActiveQualityStock() {
           <strong>冻结异常库存失败</strong>
           <span>{{ qualityFreezeError }}</span>
           <small>请确认该工单已有半成品库存，并已完成必要质检证据归档。</small>
+        </div>
+        <div v-if="reworkDispatchResult" class="operation-feedback success">
+          <strong>返工派发已写入台账</strong>
+          <span>{{ reworkDispatchResult.ledgerCode }} / {{ reworkDispatchResult.reworkOrderCode }}</span>
+          <small>{{ reworkDispatchResult.fromStockStatus }} -> {{ reworkDispatchResult.toStockStatus }}</small>
+        </div>
+        <div v-else-if="reworkDispatchError" class="operation-feedback danger">
+          <strong>生成返工工单失败</strong>
+          <span>{{ reworkDispatchError }}</span>
+          <small>请确认该工单已有冻结库存，并保留质检缺陷证据。</small>
         </div>
       </aside>
     </section>

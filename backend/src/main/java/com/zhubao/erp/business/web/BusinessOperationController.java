@@ -2,11 +2,13 @@ package com.zhubao.erp.business.web;
 
 import com.zhubao.erp.business.app.BusinessOperationService;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
+import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,5 +39,10 @@ public class BusinessOperationController {
     @PostMapping("/quality-freezes")
     public ApiResponse<QualityFreezeResult> freezeQualityStock(@Valid @RequestBody FreezeQualityStockCommand command) {
         return ApiResponse.ok(businessOperationService.freezeQualityStock(command));
+    }
+
+    @PostMapping("/rework-dispatches")
+    public ApiResponse<ReworkDispatchResult> dispatchRework(@Valid @RequestBody DispatchReworkCommand command) {
+        return ApiResponse.ok(businessOperationService.dispatchRework(command));
     }
 }

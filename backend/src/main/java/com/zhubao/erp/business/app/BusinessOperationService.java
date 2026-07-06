@@ -1,11 +1,13 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
+import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockDimension;
@@ -156,6 +158,56 @@ public class BusinessOperationService {
         );
     }
 
+    public ReworkDispatchResult dispatchRework(DispatchReworkCommand command) {
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        StockDimension fromFrozen = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.fromWarehouseCode(),
+                StockStatus.FROZEN
+        );
+        StockDimension toRework = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.materialCode(),
+                command.toWarehouseCode(),
+                StockStatus.REWORK
+        );
+
+        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+                "rework_dispatch",
+                command.reworkOrderCode(),
+                fromFrozen,
+                toRework,
+                command.quantity(),
+                command.weight(),
+                buildRemark(command)
+        ));
+
+        return new ReworkDispatchResult(
+                command.reworkOrderCode(),
+                command.qualityCaseCode(),
+                command.workOrderCode(),
+                entry.code(),
+                command.fromWarehouseCode(),
+                command.toWarehouseCode(),
+                fromFrozen.stockStatus(),
+                toRework.stockStatus(),
+                entry.quantity(),
+                entry.weight(),
+                command.process(),
+                command.operator(),
+                command.evidenceCode()
+        );
+    }
+
     private String buildRemark(ConfirmInboundCommand command) {
         StringBuilder remark = new StringBuilder("确认来料入库；操作人：").append(command.operator());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
@@ -188,6 +240,26 @@ public class BusinessOperationService {
                 .append(command.inspector())
                 .append("；缺陷：")
                 .append(command.defect());
+        if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
+            remark.append("；证据：").append(command.evidenceCode());
+        }
+        if (command.remark() != null && !command.remark().isBlank()) {
+            remark.append("；备注：").append(command.remark());
+        }
+        return remark.toString();
+    }
+
+    private String buildRemark(DispatchReworkCommand command) {
+        StringBuilder remark = new StringBuilder("返工派发；质检单：")
+                .append(command.qualityCaseCode())
+                .append("；返工单：")
+                .append(command.reworkOrderCode())
+                .append("；工序：")
+                .append(command.process())
+                .append("；操作人：")
+                .append(command.operator())
+                .append("；原因：")
+                .append(command.reason());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
             remark.append("；证据：").append(command.evidenceCode());
         }
