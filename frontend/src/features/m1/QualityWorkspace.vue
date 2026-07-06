@@ -57,6 +57,71 @@ const activeApproval = computed(
     workspace.value.lossApprovals[0],
 );
 
+const qualityStats = computed(() => [
+  {
+    label: '待处理质检',
+    value: workspace.value.cases.filter((item) => !item.status.includes('完成')).length,
+    unit: '批',
+    detail: '返工/复检/称重待补',
+    tone: 'amber' as Tone,
+  },
+  {
+    label: '返工在链',
+    value: workspace.value.cases.filter((item) => item.action.includes('返工') || item.process.includes('返工')).length,
+    unit: '单',
+    detail: '仍走同一工单状态机',
+    tone: 'violet' as Tone,
+  },
+  {
+    label: '损耗阻断',
+    value: workspace.value.lossApprovals.filter((item) => item.tone === 'red').length,
+    unit: '条',
+    detail: '需审批和工资试算',
+    tone: 'red' as Tone,
+  },
+  {
+    label: '证据缺口',
+    value: workspace.value.metrics.filter((item) => item.tone === 'red' || item.tone === 'amber').length,
+    unit: '项',
+    detail: '照片/称重/复检结论',
+    tone: 'blue' as Tone,
+  },
+]);
+
+const qualityFlow = [
+  { code: 'INSP', name: '质检登记', status: '缺陷和数量留痕', tone: 'blue' },
+  { code: 'FREEZE', name: '冻结库存', status: '异常半成品不可流转', tone: 'red' },
+  { code: 'RWK', name: '返工派发', status: '生成返工工单', tone: 'violet' },
+  { code: 'RPT', name: '返工报工', status: '返工 WIP 回半成品', tone: 'green' },
+  { code: 'PASS', name: '复检放行', status: '合格后入成品/半成品', tone: 'green' },
+] as const;
+
+const qualityPriorityRows = computed(() => [
+  ...workspace.value.lossApprovals.map((item) => ({
+    code: item.code,
+    title: item.action,
+    detail: `${item.workOrder} / ${item.process} / ${item.evidence}`,
+    owner: item.tone === 'red' ? '车间组长' : '操作工',
+    tone: item.tone,
+  })),
+  ...workspace.value.cases
+    .filter((item) => !item.status.includes('完成'))
+    .map((item) => ({
+      code: item.code,
+      title: item.status,
+      detail: `${item.workOrder} / ${item.process} / ${item.defect}`,
+      owner: item.inspector,
+      tone: item.status.includes('称重') ? ('red' as Tone) : ('amber' as Tone),
+    })),
+]);
+
+function qualityCaseTone(status: string, action = ''): Tone {
+  if (status.includes('完成')) return 'green';
+  if (status.includes('称重')) return 'red';
+  if (action.includes('返工')) return 'violet';
+  return 'amber';
+}
+
 const qualityActionRows: Array<{
   step: string;
   action: string;
@@ -209,7 +274,250 @@ async function approveActiveLoss() {
 </script>
 
 <template>
-  <div class="page-stack">
+  <div class="quality-desk page-stack">
+    <section class="module-command-surface quality-command-surface" aria-label="质检返工作业台">
+      <div class="module-command-main">
+        <div class="console-title-line">
+          <span class="eyebrow">QUALITY DESK</span>
+          <StatusBadge label="返工单状态机收敛" tone="violet" />
+        </div>
+        <div class="module-command-title">
+          <h2>质检返工损耗作业台</h2>
+          <div class="module-date-card">
+            <strong>终检</strong>
+            <span>质检 / 返工 / 放行</span>
+          </div>
+        </div>
+
+        <div class="module-stat-grid">
+          <article v-for="item in qualityStats" :key="item.label" :class="`tone-${item.tone}`">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}<small>{{ item.unit }}</small></strong>
+            <em>{{ item.detail }}</em>
+          </article>
+        </div>
+
+        <div class="module-flow-strip" aria-label="质检返工处理链路">
+          <article v-for="step in qualityFlow" :key="step.code" :class="`tone-${step.tone}`">
+            <b>{{ step.code }}</b>
+            <div>
+              <strong>{{ step.name }}</strong>
+              <span>{{ step.status }}</span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <aside class="module-priority-panel">
+        <div>
+          <span class="eyebrow">QC BLOCKERS</span>
+          <strong>质检阻断队列</strong>
+        </div>
+        <article v-for="row in qualityPriorityRows.slice(0, 4)" :key="row.code" :class="`tone-${row.tone}`">
+          <StatusBadge :label="row.title" :tone="row.tone" />
+          <div>
+            <strong>{{ row.code }}</strong>
+            <span>{{ row.detail }}</span>
+            <small>{{ row.owner }}</small>
+          </div>
+        </article>
+      </aside>
+    </section>
+
+    <section class="module-work-grid quality-work-grid" aria-label="质检返工主控台">
+      <div class="module-master-panel">
+        <div class="module-toolbar refined-module-toolbar">
+          <div>
+            <span class="eyebrow">QUALITY CASE POOL</span>
+            <h2>今日质检池</h2>
+          </div>
+          <div class="module-tools">
+            <label>
+              <span>质检扫码</span>
+              <input value="QC-20260706-021" aria-label="质检扫码" />
+            </label>
+            <button class="primary-button" type="button">登记质检</button>
+            <button class="secondary-button" type="button">上传照片</button>
+          </div>
+        </div>
+
+        <div class="module-table-wrap refined-table-wrap">
+          <table class="module-table quality-dispatch-table">
+            <thead>
+              <tr>
+                <th>质检单</th>
+                <th>工单/工序</th>
+                <th>质检员</th>
+                <th>缺陷</th>
+                <th>处理</th>
+                <th>状态</th>
+                <th>动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in workspace.cases" :key="item.code">
+                <td><strong>{{ item.code }}</strong></td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ item.workOrder }}</b>
+                    <small>{{ item.process }}</small>
+                  </span>
+                </td>
+                <td>{{ item.inspector }}</td>
+                <td>{{ item.defect }}</td>
+                <td>{{ item.action }}</td>
+                <td><StatusBadge :label="item.status" :tone="qualityCaseTone(item.status, item.action)" /></td>
+                <td><button class="table-action" type="button">处理</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside v-if="activeCase" class="module-side-panel">
+        <section class="active-object-card tone-violet">
+          <div class="panel-title-row">
+            <span class="eyebrow">ACTIVE QUALITY CASE</span>
+            <StatusBadge :label="activeCase.status" :tone="qualityCaseTone(activeCase.status, activeCase.action)" />
+          </div>
+          <strong>{{ activeCase.code }}</strong>
+          <dl class="detail-grid compact-detail-grid">
+            <dt>工单</dt>
+            <dd>{{ activeCase.workOrder }}</dd>
+            <dt>工序</dt>
+            <dd>{{ activeCase.process }}</dd>
+            <dt>缺陷</dt>
+            <dd>{{ activeCase.defect }}</dd>
+            <dt>损耗审批</dt>
+            <dd>{{ activeApproval?.code ?? '无' }}</dd>
+          </dl>
+          <div class="detail-actions">
+            <button class="primary-button" type="button" :disabled="freezingQualityStock" @click="freezeActiveQualityStock">
+              {{ freezingQualityStock ? '正在冻结' : '冻结异常库存' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="dispatchingRework" @click="dispatchActiveRework">
+              {{ dispatchingRework ? '正在派发' : '生成返工工单' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="reportingRework" @click="reportActiveRework">
+              {{ reportingRework ? '正在报工' : '提交返工报工' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="releasingQualityStock" @click="releaseActiveQualityStock">
+              {{ releasingQualityStock ? '正在放行' : '复检放行入库' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="approvingLoss" @click="approveActiveLoss">
+              {{ approvingLoss ? '正在试算' : '提交损耗审批' }}
+            </button>
+          </div>
+          <div v-if="qualityFreezeResult" class="operation-feedback success">
+            <strong>质检冻结已写入台账</strong>
+            <span>{{ qualityFreezeResult.ledgerCode }} / {{ qualityFreezeResult.qualityCaseCode }}</span>
+          </div>
+          <div v-else-if="qualityFreezeError" class="operation-feedback danger">
+            <strong>冻结异常库存失败</strong>
+            <span>{{ qualityFreezeError }}</span>
+          </div>
+          <div v-if="reworkDispatchResult" class="operation-feedback success">
+            <strong>返工派发已写入台账</strong>
+            <span>{{ reworkDispatchResult.ledgerCode }} / {{ reworkDispatchResult.reworkOrderCode }}</span>
+          </div>
+          <div v-else-if="reworkDispatchError" class="operation-feedback danger">
+            <strong>生成返工工单失败</strong>
+            <span>{{ reworkDispatchError }}</span>
+          </div>
+          <div v-if="reworkReportResult" class="operation-feedback success">
+            <strong>返工报工已写入台账</strong>
+            <span>{{ reworkReportResult.ledgerCode }} / {{ reworkReportResult.reworkOrderCode }}</span>
+          </div>
+          <div v-else-if="reworkReportError" class="operation-feedback danger">
+            <strong>提交返工报工失败</strong>
+            <span>{{ reworkReportError }}</span>
+          </div>
+          <div v-if="qualityReleaseResult" class="operation-feedback success">
+            <strong>复检放行已写入台账</strong>
+            <span>{{ qualityReleaseResult.ledgerCode }} / {{ qualityReleaseResult.qualityCaseCode }}</span>
+          </div>
+          <div v-else-if="qualityReleaseError" class="operation-feedback danger">
+            <strong>复检放行失败</strong>
+            <span>{{ qualityReleaseError }}</span>
+          </div>
+          <div v-if="lossApprovalResult" class="operation-feedback success">
+            <strong>损耗审批已生成工资试算</strong>
+            <span>{{ lossApprovalResult.approvalCode }} / {{ lossApprovalResult.approvalStatus }}</span>
+            <small>试算 {{ lossApprovalResult.trialWage }}，不进入正式工资</small>
+          </div>
+          <div v-else-if="lossApprovalError" class="operation-feedback danger">
+            <strong>提交损耗审批失败</strong>
+            <span>{{ lossApprovalError }}</span>
+          </div>
+        </section>
+
+        <section class="evidence-slot-panel">
+          <div class="panel-title-row">
+            <span class="eyebrow">EVIDENCE</span>
+            <StatusBadge label="照片/称重/结论" tone="blue" />
+          </div>
+          <div class="rule-stack">
+            <article>
+              <strong>质量检查项</strong>
+              <span>缺陷类型、数量、照片和测量值必须和质检单绑定。</span>
+            </article>
+            <article>
+              <strong>返工口径</strong>
+              <span>返工是特殊工单，不创建第二套状态机。</span>
+            </article>
+            <article>
+              <strong>损耗口径</strong>
+              <span>按工序投入重量计算，超标进入轻量审批和工资试算快照。</span>
+            </article>
+          </div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="module-detail-grid quality-detail-grid" aria-label="质检规则和接口契约">
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">API CONTRACT</span>
+          <StatusBadge label="5 个动作" tone="green" />
+        </div>
+        <div class="rule-stack">
+          <article v-for="row in qualityActionRows" :key="row.step">
+            <strong>{{ row.step }} · {{ row.action }}</strong>
+            <span><code>{{ row.stockFlow }}</code> / <code>{{ row.api }}</code> / {{ row.evidence }}</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">METRICS</span>
+          <StatusBadge label="质检指标" tone="blue" />
+        </div>
+        <div class="evidence-health compact-evidence-health">
+          <article v-for="metric in workspace.metrics" :key="metric.label">
+            <div>
+              <strong>{{ metric.label }}</strong>
+              <span>{{ metric.detail }}</span>
+            </div>
+            <StatusBadge :label="metric.value" :tone="metric.tone" />
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">BOUNDARY</span>
+          <StatusBadge label="仍有缺口" tone="amber" />
+        </div>
+        <div class="rule-stack">
+          <article v-for="row in qualityBoundaryRows" :key="row.label" :class="`tone-${row.tone}`">
+            <strong>{{ row.label }}</strong>
+            <span>{{ row.value }}</span>
+          </article>
+        </div>
+      </section>
+    </section>
+
     <section class="operations-hero">
       <div class="hero-copy">
         <span class="eyebrow">Quality Control</span>

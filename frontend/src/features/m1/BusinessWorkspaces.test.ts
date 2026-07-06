@@ -35,10 +35,10 @@ describe('M1 business workspaces', () => {
   it('renders quality metrics and loss approvals', () => {
     const wrapper = mount(QualityWorkspace);
 
-    expect(wrapper.text()).toContain('质检返工处理台');
-    expect(wrapper.text()).toContain('质检返工真实动作核验');
-    expect(wrapper.text()).toContain('质检作业主控台');
-    expect(wrapper.find('table.module-table').exists()).toBe(true);
+    expect(wrapper.text()).toContain('质检返工损耗作业台');
+    expect(wrapper.text()).toContain('质检阻断队列');
+    expect(wrapper.text()).toContain('今日质检池');
+    expect(wrapper.find('table.quality-dispatch-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('质检指标');
     expect(wrapper.text()).toContain('损耗审批');
     expect(wrapper.text()).toContain('冻结异常库存');
@@ -55,9 +55,10 @@ describe('M1 business workspaces', () => {
   it('renders inventory ledger details and trace evidence', () => {
     const wrapper = mount(InventoryTraceWorkspace);
 
-    expect(wrapper.text()).toContain('库存与追溯证据台');
-    expect(wrapper.text()).toContain('库存追溯主控台');
-    expect(wrapper.find('table.module-table').exists()).toBe(true);
+    expect(wrapper.text()).toContain('库存台账追溯作业台');
+    expect(wrapper.text()).toContain('追溯阻断队列');
+    expect(wrapper.text()).toContain('客户库存池');
+    expect(wrapper.find('table.inventory-dispatch-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('确认出库');
     expect(wrapper.text()).toContain('退货入库');
     expect(wrapper.text()).toContain('库存台账明细');

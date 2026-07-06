@@ -6,6 +6,7 @@ import {
   inventoryLedgerEntries as fallbackInventoryLedgerEntries,
   traceEvents as fallbackTraceEvents,
   traceEvidence as fallbackTraceEvidence,
+  type Tone,
 } from '../../data/m1PrototypeData';
 import {
   fetchInventoryWorkspace,
@@ -39,6 +40,71 @@ const activeBalance = computed(
 );
 
 const latestLedger = computed(() => workspace.value.ledgerEntries[0]);
+
+const inventoryStats = computed(() => [
+  {
+    label: '客户批次',
+    value: workspace.value.balances.length,
+    unit: '批',
+    detail: '按客户所有权隔离',
+    tone: 'blue' as const,
+  },
+  {
+    label: '台账事件',
+    value: workspace.value.ledgerEntries.length,
+    unit: '条',
+    detail: '只追加不改余额',
+    tone: 'green' as const,
+  },
+  {
+    label: '冻结库存',
+    value: workspace.value.balances.filter((item) => item.frozen !== '0').length,
+    unit: '批',
+    detail: '质检/退货/异常锁定',
+    tone: 'amber' as const,
+  },
+  {
+    label: '证据缺口',
+    value: workspace.value.evidence.filter((item) => item.tone === 'red' || item.tone === 'amber').length,
+    unit: '项',
+    detail: '附件或硬件证据待补',
+    tone: 'red' as const,
+  },
+]);
+
+const inventoryFlow = [
+  { code: 'OWN', name: '客户所有权', status: '来料和自有库存隔离', tone: 'blue' },
+  { code: 'LOT', name: '批次库存', status: '母单/工单/出库串联', tone: 'green' },
+  { code: 'LEDGER', name: '库存台账', status: '每次变化可解释', tone: 'green' },
+  { code: 'FREEZE', name: '冻结库存', status: '质检异常不可流转', tone: 'amber' },
+  { code: 'RETURN', name: '退货复核', status: '回 RETURN-CHECK', tone: 'red' },
+] as const;
+
+const inventoryAlerts = computed(() => [
+  ...workspace.value.evidence.map((item) => ({
+    code: item.label,
+    title: item.status,
+    detail: item.link,
+    owner: item.status.includes('待') ? '责任人待补' : '系统归档',
+    tone: item.tone,
+  })),
+  ...workspace.value.balances
+    .filter((item) => item.frozen !== '0' || item.status.includes('返工'))
+    .map((item) => ({
+      code: item.batch,
+      title: item.status,
+      detail: `${item.owner} / ${item.material} / 冻结 ${item.frozen}`,
+      owner: item.location,
+      tone: item.status.includes('返工') ? ('violet' as const) : ('amber' as const),
+    })),
+]);
+
+function inventoryBalanceTone(status: string): Tone {
+  if (status.includes('返工')) return 'violet';
+  if (status.includes('在制')) return 'amber';
+  if (status.includes('成品')) return 'green';
+  return 'blue';
+}
 
 onMounted(async () => {
   try {
@@ -84,7 +150,240 @@ async function returnActiveCustomerShipment() {
 </script>
 
 <template>
-  <div class="page-stack">
+  <div class="inventory-trace-desk page-stack">
+    <section class="module-command-surface inventory-command-surface" aria-label="库存追溯作业台">
+      <div class="module-command-main">
+        <div class="console-title-line">
+          <span class="eyebrow">TRACE DESK</span>
+          <StatusBadge label="客户所有权隔离" tone="blue" />
+        </div>
+        <div class="module-command-title">
+          <h2>库存台账追溯作业台</h2>
+          <div class="module-date-card">
+            <strong>库存中心</strong>
+            <span>余额 / 台账 / 证据</span>
+          </div>
+        </div>
+
+        <div class="module-stat-grid">
+          <article v-for="item in inventoryStats" :key="item.label" :class="`tone-${item.tone}`">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}<small>{{ item.unit }}</small></strong>
+            <em>{{ item.detail }}</em>
+          </article>
+        </div>
+
+        <div class="module-flow-strip" aria-label="库存追溯链路">
+          <article v-for="step in inventoryFlow" :key="step.code" :class="`tone-${step.tone}`">
+            <b>{{ step.code }}</b>
+            <div>
+              <strong>{{ step.name }}</strong>
+              <span>{{ step.status }}</span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <aside class="module-priority-panel">
+        <div>
+          <span class="eyebrow">TRACE BLOCKERS</span>
+          <strong>追溯阻断队列</strong>
+        </div>
+        <article v-for="row in inventoryAlerts.slice(0, 4)" :key="row.code" :class="`tone-${row.tone}`">
+          <StatusBadge :label="row.title" :tone="row.tone" />
+          <div>
+            <strong>{{ row.code }}</strong>
+            <span>{{ row.detail }}</span>
+            <small>{{ row.owner }}</small>
+          </div>
+        </article>
+      </aside>
+    </section>
+
+    <section class="module-work-grid inventory-work-grid" aria-label="库存追溯主控台">
+      <div class="module-master-panel">
+        <div class="module-toolbar refined-module-toolbar">
+          <div>
+            <span class="eyebrow">STOCK LEDGER POOL</span>
+            <h2>客户库存池</h2>
+          </div>
+          <div class="module-tools">
+            <label>
+              <span>追溯关键字</span>
+              <input value="ZD-20260706-001" aria-label="库存追溯关键字" />
+            </label>
+            <button class="primary-button" type="button">追溯查询</button>
+            <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
+              {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
+              {{ returningCustomerStock ? '正在退货' : '退货入库' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="module-table-wrap refined-table-wrap">
+          <table class="module-table inventory-dispatch-table">
+            <thead>
+              <tr>
+                <th>客户所有权</th>
+                <th>批次/来源</th>
+                <th>物料</th>
+                <th>库位</th>
+                <th>状态</th>
+                <th>数量重量</th>
+                <th>冻结</th>
+                <th>动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in workspace.balances" :key="`${item.owner}-${item.batch}-${item.status}`">
+                <td><strong>{{ item.owner }}</strong></td>
+                <td>{{ item.batch }}</td>
+                <td>{{ item.material }}</td>
+                <td>{{ item.location }}</td>
+                <td><StatusBadge :label="item.status" :tone="inventoryBalanceTone(item.status)" /></td>
+                <td>{{ item.qty }} 件 / {{ item.weight }}</td>
+                <td>{{ item.frozen }}</td>
+                <td><button class="table-action" type="button">看台账</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside v-if="activeBalance" class="module-side-panel">
+        <section class="active-object-card tone-blue">
+          <div class="panel-title-row">
+            <span class="eyebrow">ACTIVE STOCK</span>
+            <StatusBadge :label="activeBalance.status" :tone="inventoryBalanceTone(activeBalance.status)" />
+          </div>
+          <strong>{{ activeBalance.batch }}</strong>
+          <dl class="detail-grid compact-detail-grid">
+            <dt>客户</dt>
+            <dd>{{ activeBalance.owner }}</dd>
+            <dt>物料</dt>
+            <dd>{{ activeBalance.material }}</dd>
+            <dt>库位</dt>
+            <dd>{{ activeBalance.location }}</dd>
+            <dt>数量重量</dt>
+            <dd>{{ activeBalance.qty }} 件 / {{ activeBalance.weight }}</dd>
+            <dt>冻结</dt>
+            <dd>{{ activeBalance.frozen }}</dd>
+            <dt>最近台账</dt>
+            <dd>{{ latestLedger?.bizCode ?? '暂无' }}</dd>
+          </dl>
+          <div class="detail-actions">
+            <button class="primary-button" type="button">打开追溯链</button>
+            <button class="secondary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
+              {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
+              {{ returningCustomerStock ? '正在退货' : '退货入库' }}
+            </button>
+            <button class="secondary-button" type="button">导出台账</button>
+          </div>
+          <div v-if="outboundShipmentResult" class="operation-feedback success">
+            <strong>成品出库已写入台账</strong>
+            <span>{{ outboundShipmentResult.ledgerCode }} / {{ outboundShipmentResult.shipmentCode }}</span>
+            <small>{{ outboundShipmentResult.fromStockStatus }} -> {{ outboundShipmentResult.toStockStatus }} / {{ outboundShipmentResult.logisticsNo }}</small>
+          </div>
+          <div v-else-if="outboundShipmentError" class="operation-feedback danger">
+            <strong>确认出库失败</strong>
+            <span>{{ outboundShipmentError }}</span>
+          </div>
+          <div v-if="customerReturnResult" class="operation-feedback success">
+            <strong>客户退货已写入台账</strong>
+            <span>{{ customerReturnResult.ledgerCode }} / {{ customerReturnResult.returnCode }}</span>
+            <small>{{ customerReturnResult.fromStockStatus }} -> {{ customerReturnResult.toStockStatus }} / {{ customerReturnResult.returnLogisticsNo }}</small>
+          </div>
+          <div v-else-if="customerReturnError" class="operation-feedback danger">
+            <strong>客户退货入库失败</strong>
+            <span>{{ customerReturnError }}</span>
+          </div>
+        </section>
+
+        <section class="evidence-slot-panel">
+          <div class="panel-title-row">
+            <span class="eyebrow">TRACE EVIDENCE</span>
+            <StatusBadge label="附件/视频/台账" tone="blue" />
+          </div>
+          <div class="evidence-health compact-evidence-health">
+            <article v-for="item in workspace.evidence" :key="item.label">
+              <div>
+                <strong>{{ item.label }}</strong>
+                <span>{{ item.link }}</span>
+              </div>
+              <StatusBadge :label="item.status" :tone="item.tone" />
+            </article>
+          </div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="module-detail-grid inventory-detail-grid" aria-label="库存台账和追溯链">
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">LEDGER</span>
+          <StatusBadge label="只追加" tone="green" />
+        </div>
+        <div class="ledger-table compact-ledger-table">
+          <div class="ledger-row ledger-head">
+            <span>时间</span>
+            <span>台账号</span>
+            <span>动作</span>
+            <span>变化后</span>
+            <span>来源</span>
+          </div>
+          <div v-for="entry in workspace.ledgerEntries" :key="entry.bizCode" class="ledger-row">
+            <time>{{ entry.time }}</time>
+            <strong>{{ entry.bizCode }}</strong>
+            <span>{{ entry.movement }}</span>
+            <span>{{ entry.after }}</span>
+            <span>{{ entry.source }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">TIMELINE</span>
+          <StatusBadge label="全链路" tone="blue" />
+        </div>
+        <div class="timeline compact-timeline">
+          <article v-for="event in workspace.timeline" :key="`${event.time}-${event.bizCode}`">
+            <time>{{ event.time }}</time>
+            <div>
+              <strong>{{ event.node }}</strong>
+              <span>{{ event.bizCode }} / {{ event.operator }}</span>
+              <small>{{ event.evidence }}</small>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">RULES</span>
+          <StatusBadge label="库存原则" tone="amber" />
+        </div>
+        <div class="rule-stack">
+          <article>
+            <strong>客户所有权</strong>
+            <span>客户来料库存与企业自有库存必须严格隔离。</span>
+          </article>
+          <article>
+            <strong>台账优先</strong>
+            <span>余额来自台账汇总，业务页面不直接修改余额。</span>
+          </article>
+          <article>
+            <strong>退货复核</strong>
+            <span>客户退货先回 RETURN-CHECK，再决定放行、返工或报废。</span>
+          </article>
+        </div>
+      </section>
+    </section>
+
     <section class="operations-hero">
       <div class="hero-copy">
         <span class="eyebrow">Trace Control</span>

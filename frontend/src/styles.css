@@ -9411,3 +9411,96 @@ body {
     font-size: 20px;
   }
 }
+
+/* M3.28: quality and inventory pages join the compact operation workbench system. */
+.quality-desk > .operations-hero,
+.quality-desk > .control-filter-bar,
+.quality-desk > .quality-runtime-board,
+.quality-desk > .module-ops-board,
+.inventory-trace-desk > .operations-hero,
+.inventory-trace-desk > .control-filter-bar,
+.inventory-trace-desk > .module-ops-board {
+  display: none;
+}
+
+.quality-command-surface {
+  background:
+    linear-gradient(90deg, rgba(124, 58, 237, 0.1), transparent 44%),
+    linear-gradient(180deg, #ffffff, #f8fbfd);
+}
+
+.quality-command-surface .module-command-main {
+  border-left-color: #7c3aed;
+}
+
+.inventory-command-surface {
+  background:
+    linear-gradient(90deg, rgba(8, 127, 123, 0.1), transparent 44%),
+    linear-gradient(180deg, #ffffff, #f8fbfd);
+}
+
+.inventory-command-surface .module-command-main {
+  border-left-color: #087f7b;
+}
+
+.quality-work-grid,
+.inventory-work-grid {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.quality-dispatch-table {
+  min-width: 920px;
+}
+
+.inventory-dispatch-table {
+  min-width: 1020px;
+}
+
+.quality-dispatch-table th,
+.quality-dispatch-table td,
+.inventory-dispatch-table th,
+.inventory-dispatch-table td {
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+.quality-dispatch-table th,
+.inventory-dispatch-table th {
+  background: #edf3f7;
+  color: #314154;
+  font-size: 11px;
+}
+
+.compact-detail-grid {
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 6px 8px;
+}
+
+.compact-detail-grid dt,
+.compact-detail-grid dd {
+  font-size: 12px;
+}
+
+.compact-ledger-table {
+  overflow-x: auto;
+}
+
+.compact-ledger-table .ledger-row {
+  grid-template-columns: 52px minmax(150px, 1fr) minmax(96px, 0.8fr) minmax(110px, 0.8fr) minmax(130px, 1fr);
+  min-width: 680px;
+}
+
+.compact-timeline {
+  gap: 8px;
+}
+
+.compact-timeline article {
+  padding: 8px 0;
+}
+
+@media (max-width: 1320px) {
+  .quality-work-grid,
+  .inventory-work-grid {
+    grid-template-columns: 1fr;
+  }
+}
