@@ -992,6 +992,41 @@ button {
   color: #b42318;
 }
 
+.operation-feedback {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #d9e4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.operation-feedback strong {
+  color: #172033;
+}
+
+.operation-feedback span,
+.operation-feedback small {
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.operation-feedback.success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.operation-feedback.danger {
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+  transform: none;
+}
+
 @media (max-width: 1180px) {
   .metric-grid,
   .quality-grid,

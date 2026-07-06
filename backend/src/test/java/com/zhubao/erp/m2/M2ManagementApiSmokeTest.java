@@ -6,6 +6,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.ResponseEntity;
 
+import java.math.BigDecimal;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -60,6 +63,42 @@ class M2ManagementApiSmokeTest {
         assertThat(inventory.getBody()).contains("LEDGER-20260706-001", "视频证据");
         assertThat(mobile.getBody()).contains("DRAFT-QC-003", "离线草稿");
         assertThat(summary.getBody()).contains("\"inboundOrders\":4", "\"activeWorkOrders\":4", "\"mobileTasks\":3");
+    }
+
+    @Test
+    void confirmsInboundThroughBusinessOperationApiAndWritesInventoryLedger() {
+        Map<String, Object> request = Map.of(
+                "motherOrderCode", "MD-SMOKE-20260706-001",
+                "customerId", 1001L,
+                "materialCode", "MAT-18K-RING",
+                "warehouseCode", "RAW-CUSTOMER",
+                "quantity", new BigDecimal("12"),
+                "weight", new BigDecimal("18.500"),
+                "operator", "库管员 何琳",
+                "evidenceCode", "SF-SMOKE-001",
+                "remark", "smoke test"
+        );
+
+        ResponseEntity<String> confirmed = restTemplate.postForEntity(
+                "/api/business/operations/inbound-confirmations",
+                request,
+                String.class
+        );
+        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+
+        assertThat(confirmed.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(confirmed.getBody()).contains(
+                "MD-SMOKE-20260706-001",
+                "RAW-CUSTOMER",
+                "RAW_WAITING",
+                "SF-SMOKE-001"
+        );
+        assertThat(balances.getBody()).contains(
+                "MD-SMOKE-20260706-001",
+                "MAT-18K-RING",
+                "RAW-CUSTOMER",
+                "RAW_WAITING"
+        );
     }
 
     @Test

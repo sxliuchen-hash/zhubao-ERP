@@ -10,12 +10,19 @@ import {
   fetchInboundWorkspace,
   type InboundWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
+import {
+  confirmInbound,
+  type InboundConfirmationResult,
+} from '../../services/businessOperationApi';
 
 const workspace = ref<InboundWorkspaceModel>({
   checkpoints: fallbackInboundCheckpoints,
   orders: fallbackInboundOrders,
   risks: fallbackInboundRisks,
 });
+const confirmingInbound = ref(false);
+const confirmationResult = ref<InboundConfirmationResult | null>(null);
+const confirmationError = ref('');
 
 const activeOrder = computed(
   () =>
@@ -46,6 +53,22 @@ function statusTone(status: string) {
   if (status.includes('异常')) return 'red';
   if (status.includes('待')) return 'amber';
   return 'green';
+}
+
+async function confirmActiveInbound() {
+  if (!activeOrder.value) return;
+
+  confirmingInbound.value = true;
+  confirmationResult.value = null;
+  confirmationError.value = '';
+
+  try {
+    confirmationResult.value = await confirmInbound(activeOrder.value);
+  } catch (error) {
+    confirmationError.value = error instanceof Error ? error.message : '确认入库失败';
+  } finally {
+    confirmingInbound.value = false;
+  }
 }
 </script>
 
@@ -155,9 +178,21 @@ function statusTone(status: string) {
           <dd>{{ activeRisk?.title ?? '无阻断' }}</dd>
         </dl>
         <div class="detail-actions">
-          <button class="primary-button" type="button">确认入库</button>
+          <button class="primary-button" type="button" :disabled="confirmingInbound" @click="confirmActiveInbound">
+            {{ confirmingInbound ? '正在入账' : '确认入库' }}
+          </button>
           <button class="secondary-button" type="button">创建视频任务</button>
           <button class="secondary-button" type="button">打印母单标签</button>
+        </div>
+        <div v-if="confirmationResult" class="operation-feedback success">
+          <strong>库存台账已写入</strong>
+          <span>{{ confirmationResult.ledgerCode }} / {{ confirmationResult.motherOrderCode }}</span>
+          <small>{{ confirmationResult.warehouseCode }} · {{ confirmationResult.stockStatus }}</small>
+        </div>
+        <div v-else-if="confirmationError" class="operation-feedback danger">
+          <strong>确认入库失败</strong>
+          <span>{{ confirmationError }}</span>
+          <small>请确认后端 API 已启动，并检查数量、重量和库存维度。</small>
         </div>
       </aside>
     </section>

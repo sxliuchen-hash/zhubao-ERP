@@ -1,0 +1,68 @@
+package com.zhubao.erp.business.app;
+
+import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.InboundConfirmationResult;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.domain.OwnerType;
+import com.zhubao.erp.inventory.domain.StockDimension;
+import com.zhubao.erp.inventory.domain.StockLedgerEntry;
+import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import org.springframework.stereotype.Service;
+
+@Service
+public class BusinessOperationService {
+
+    private final StockLedgerService stockLedgerService;
+
+    public BusinessOperationService(StockLedgerService stockLedgerService) {
+        this.stockLedgerService = stockLedgerService;
+    }
+
+    public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        StockDimension rawCustomerStock = new StockDimension(
+                OwnerType.CUSTOMER,
+                ownerCustomerId,
+                command.customerId(),
+                command.motherOrderCode(),
+                null,
+                command.materialCode(),
+                command.warehouseCode(),
+                StockStatus.RAW_WAITING
+        );
+
+        // Business operations append inventory events; balances stay derived from the ledger repository.
+        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+                "inbound_confirm",
+                command.motherOrderCode(),
+                null,
+                rawCustomerStock,
+                command.quantity(),
+                command.weight(),
+                buildRemark(command)
+        ));
+
+        return new InboundConfirmationResult(
+                command.motherOrderCode(),
+                entry.code(),
+                command.warehouseCode(),
+                rawCustomerStock.stockStatus(),
+                entry.quantity(),
+                entry.weight(),
+                command.operator(),
+                command.evidenceCode()
+        );
+    }
+
+    private String buildRemark(ConfirmInboundCommand command) {
+        StringBuilder remark = new StringBuilder("确认来料入库；操作人：").append(command.operator());
+        if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
+            remark.append("；证据：").append(command.evidenceCode());
+        }
+        if (command.remark() != null && !command.remark().isBlank()) {
+            remark.append("；备注：").append(command.remark());
+        }
+        return remark.toString();
+    }
+}

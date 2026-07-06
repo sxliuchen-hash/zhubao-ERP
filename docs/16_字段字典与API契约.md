@@ -53,6 +53,16 @@
 | `GET /inventory` | 库存追溯 | 返回库存余额、台账明细、追溯时间线、证据 |
 | `GET /mobile` | PWA 作业 | 返回移动任务、PWA 能力边界、离线草稿 |
 
+业务操作接口前缀：
+
+```http
+/api/business/operations
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `POST /inbound-confirmations` | 来料母单 | 确认客户来料入库，写入库存台账和客户所有原料库存余额 |
+
 配置基线接口前缀：
 
 ```http
@@ -124,6 +134,42 @@
 - 客户来料和企业自有库存不能混在同一余额维度里。
 - 确认入库必须写库存台账。
 - 拆包视频失败必须有人工上传兜底。
+
+### 4.2 `ConfirmInboundCommand`
+
+`POST /api/business/operations/inbound-confirmations` 使用该命令模型。该接口是 M3.5 第一条真实业务动作基线，不再只返回工作台样例。
+
+| 字段 | 说明 |
+|---|---|
+| `motherOrderCode` | 母单号，作为库存台账来源单据 |
+| `customerId` | 业务客户 ID |
+| `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
+| `materialCode` | 物料编码 |
+| `warehouseCode` | 入库仓库，来料默认 `RAW-CUSTOMER` |
+| `quantity` | 入库数量，必须大于 0 |
+| `weight` | 入库重量，必须大于 0 |
+| `operator` | 操作人快照 |
+| `evidenceCode` | 快递单、称重记录或视频证据编码 |
+| `remark` | 业务备注 |
+
+返回 `InboundConfirmationResult`：
+
+| 字段 | 说明 |
+|---|---|
+| `motherOrderCode` | 母单号 |
+| `ledgerCode` | 库存台账号，由库存服务生成 |
+| `warehouseCode` | 写入仓库 |
+| `stockStatus` | 写入库存状态，一期为 `RAW_WAITING` |
+| `quantity` | 已入账数量 |
+| `weight` | 已入账重量 |
+| `operator` | 操作人快照 |
+| `evidenceCode` | 证据编码 |
+
+实现约束：
+
+- 接口不得直接改库存余额，必须通过 `StockLedgerService.transfer` 追加台账。
+- `OwnerType` 固定为 `CUSTOMER`，确保客户来料不会进入企业自有库存。
+- `workOrderCode` 为空，表示仍处于母单原料库存，后续子工单拆分再进入在制库存。
 
 ---
 
@@ -293,6 +339,21 @@ PWA 一期边界：
 - `biz_workspace_*` 是评审快照表，不是最终交易表。
 - 页面仍不得直接修改库存余额，正式动作必须继续落到业务命令和库存台账。
 - 后续应将读取来源从评审快照升级为来料、工单、质检、库存和附件的真实聚合查询。
+
+### 9.2 业务操作写台账基线
+
+当前已新增 `BusinessOperationService` 和 `POST /api/business/operations/inbound-confirmations`，用于把来料页面的确认入库动作落到库存台账。
+
+| 项目 | 契约 |
+|---|---|
+| 操作入口 | 来料母单页面 `确认入库` |
+| 后端入口 | `BusinessOperationController.confirmInbound` |
+| 领域命令 | `ConfirmInboundCommand` |
+| 库存动作 | `StockTransferCommand(documentType=inbound_confirm, from=null, to=RAW_WAITING)` |
+| 权属边界 | `OwnerType.CUSTOMER` |
+| 当前限制 | 尚未更新工作台快照状态，后续需从真实业务聚合刷新页面 |
+
+该接口证明一期闭环开始从“展示样例”进入“业务动作写台账”。后续同类操作应按该模式扩展：报工、称重交接、质检冻结、返工、出库都必须先建业务命令，再调用库存服务产生只追加台账。
 
 ---
 

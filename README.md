@@ -21,6 +21,7 @@
 - M3.1 库存台账 JDBC 持久化切入，新增 MySQL profile、JDBC 仓储、库存维度键迁移脚本和 H2 仓储测试，默认仍使用内存仓储便于评审。
 - M3.2 软硬件现场 POC 记录基线，新增硬件 POC API、前端记录区和 MySQL 合同脚本，用于管理验证窗口、证据、阻断项和下一步动作。
 - M3.3 业务工作台 JDBC 读取基线，新增 MySQL 工作台仓储、追溯时间线合同表和评审 seed 数据，可通过环境变量切换工作台 API 数据源。
+- M3.5 来料确认入库业务操作基线，新增 `POST /api/business/operations/inbound-confirmations`，前端来料页可调用真实业务命令写入库存台账。
 
 ## 目录结构
 
@@ -136,6 +137,7 @@ pnpm --filter zhubao-erp-frontend dev
 - `GET /api/business/workspaces/quality`
 - `GET /api/business/workspaces/inventory`
 - `GET /api/business/workspaces/mobile`
+- `POST /api/business/operations/inbound-confirmations`
 - `GET /api/configuration/baseline/summary`
 - `GET /api/configuration/baseline/system-parameters`
 - `GET /api/configuration/baseline/code-rules`
