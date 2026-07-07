@@ -12477,3 +12477,718 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* M3.40: pragmatic ERP/MES visual reset after UI review.
+   Keep the existing functional structure, but remove the demo-board look and
+   make the first screen denser, calmer, and closer to a production console. */
+:root {
+  --m340-bg: #f3f5f8;
+  --m340-panel: #ffffff;
+  --m340-panel-soft: #f8fafc;
+  --m340-ink: #17202b;
+  --m340-muted: #627083;
+  --m340-line: #d9e1ea;
+  --m340-line-strong: #c6d1dc;
+  --m340-blue: #255fd5;
+  --m340-cyan: #0b7f79;
+  --m340-green: #16834a;
+  --m340-amber: #b56b00;
+  --m340-red: #c2412d;
+}
+
+body {
+  background: var(--m340-bg);
+  color: var(--m340-ink);
+}
+
+.ops-shell.review-shell {
+  grid-template-columns: 232px minmax(0, 1fr);
+  background: var(--m340-bg);
+}
+
+.ops-sidebar.review-sidebar {
+  border-right: 1px solid var(--m340-line);
+  background: #ffffff;
+  color: var(--m340-ink);
+  padding: 12px 10px;
+}
+
+.ops-brand {
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid var(--m340-line);
+  padding: 4px 4px 10px;
+}
+
+.ops-brand .brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--m340-cyan);
+  color: #fff;
+  box-shadow: none;
+}
+
+.ops-brand strong {
+  color: var(--m340-ink);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.ops-brand span:last-child {
+  color: var(--m340-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.ops-status-card,
+.ops-version-card,
+.ops-health-grid span {
+  border: 1px solid var(--m340-line);
+  border-radius: 6px;
+  background: var(--m340-panel-soft);
+  color: var(--m340-ink);
+  box-shadow: none;
+}
+
+.ops-status-card {
+  gap: 4px;
+  margin: 10px 0;
+  padding: 9px;
+}
+
+.ops-status-card span,
+.ops-version-card span,
+.ops-health-grid span,
+.ops-status-card i {
+  color: var(--m340-muted);
+  font-size: 10px;
+}
+
+.ops-status-card strong,
+.ops-version-card strong {
+  color: var(--m340-ink);
+  font-size: 12px;
+}
+
+.ops-status-card i {
+  display: block;
+  max-height: 50px;
+  overflow: hidden;
+  line-height: 1.45;
+}
+
+.ops-nav {
+  gap: 4px;
+  margin-top: 6px;
+  padding-right: 1px;
+}
+
+.ops-nav .nav-button {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  min-height: 39px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #334155;
+  padding: 5px 7px;
+}
+
+.ops-nav .nav-button:hover,
+.ops-nav .nav-button.active {
+  border-color: #bcd7f4;
+  background: #eef6ff;
+  color: #12233a;
+}
+
+.ops-nav .nav-button.active {
+  box-shadow: inset 3px 0 0 var(--m340-blue);
+}
+
+.ops-nav .nav-button .nav-code {
+  width: 25px;
+  height: 25px;
+  border-radius: 5px;
+  background: #e7eff8;
+  color: var(--m340-blue);
+  font-size: 10px;
+}
+
+.ops-nav .nav-button strong {
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.ops-nav .nav-button small {
+  margin-top: 1px;
+  color: var(--m340-muted);
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.ops-nav .nav-button b {
+  min-width: 19px;
+  height: 19px;
+  border-radius: 5px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 10px;
+}
+
+.ops-health-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin: 10px 0;
+}
+
+.ops-health-grid span {
+  min-height: 28px;
+  padding: 5px 7px;
+}
+
+.ops-version-card {
+  padding: 9px;
+}
+
+.ops-workspace.review-workspace {
+  padding: 10px 12px 22px;
+}
+
+.ops-topbar.review-topbar,
+.ops-page-header.review-page-header,
+.mission-hero-v2,
+.flow-rail-v2,
+.dispatch-console-v2,
+.focus-card-v2,
+.insight-panel,
+.workstation-panel,
+.module-contract-panel,
+.module-command-surface,
+.module-master-panel,
+.module-side-panel,
+.active-object-card,
+.evidence-slot-panel,
+.module-rule-panel,
+.operations-command-surface,
+.operations-panel {
+  border: 1px solid var(--m340-line);
+  border-radius: 7px;
+  background: var(--m340-panel);
+  box-shadow: none;
+}
+
+.ops-topbar.review-topbar {
+  min-height: 32px;
+  margin-bottom: 8px;
+  padding: 5px 7px;
+}
+
+.context-stack span,
+.sync-stack span {
+  border-color: var(--m340-line);
+  border-radius: 5px;
+  background: var(--m340-panel-soft);
+  color: #243447;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
+.sync-stack span:last-child {
+  color: var(--m340-red);
+}
+
+.ops-page-header.review-page-header {
+  grid-template-columns: minmax(0, 1fr) 252px 238px;
+  gap: 9px;
+  border-left: 4px solid var(--m340-blue);
+  padding: 9px;
+}
+
+.ops-page-header.review-page-header h1 {
+  margin: 2px 0 4px;
+  color: var(--m340-ink);
+  font-size: 21px;
+  line-height: 1.15;
+}
+
+.ops-page-header.review-page-header p {
+  max-width: 960px;
+  color: var(--m340-muted);
+  font-size: 11px;
+  line-height: 1.42;
+}
+
+.ops-scope-ribbon {
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.ops-scope-ribbon span,
+.mission-chip-row span,
+.filter-pill,
+.status-badge,
+.table-action,
+.primary-button,
+.secondary-button {
+  border-radius: 5px;
+}
+
+.ops-scope-ribbon span,
+.mission-chip-row span {
+  border: 1px solid var(--m340-line);
+  background: var(--m340-panel-soft);
+  color: #314256;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
+.ops-command-metrics {
+  gap: 6px;
+}
+
+.ops-command-metrics article {
+  min-height: 54px;
+  border-color: var(--m340-line);
+  background: var(--m340-panel-soft);
+  padding: 6px;
+}
+
+.ops-command-metrics strong {
+  font-size: 19px;
+}
+
+.ops-command-metrics span,
+.ops-command-metrics small {
+  font-size: 10px;
+}
+
+.command-actions-panel {
+  gap: 5px;
+}
+
+.global-search input,
+.module-tools input,
+.floor-filter-row input,
+.form-grid input {
+  border-color: var(--m340-line-strong);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--m340-ink);
+}
+
+.primary-button {
+  border-color: #1d4ed8;
+  background: var(--m340-blue);
+  box-shadow: none;
+}
+
+.secondary-button,
+.table-action,
+.filter-pill {
+  border-color: var(--m340-line-strong);
+  background: #fff;
+  color: #243447;
+}
+
+.table-action {
+  min-height: 27px;
+  padding: 4px 8px;
+}
+
+.page-stack,
+.command-center-v2 {
+  gap: 9px;
+}
+
+.mission-hero-v2 {
+  grid-template-columns: minmax(0, 1fr) 470px;
+  gap: 10px;
+  padding: 12px;
+}
+
+.mission-hero-v2::before {
+  display: none;
+}
+
+.mission-copy {
+  color: var(--m340-ink);
+}
+
+.mission-copy h2,
+.floor-toolbar h2,
+.section-heading h2,
+.module-command-title h2,
+.panel-title-row h2 {
+  color: var(--m340-ink);
+  letter-spacing: 0;
+}
+
+.mission-copy h2 {
+  margin: 2px 0 5px;
+  font-size: 24px;
+}
+
+.mission-copy p {
+  max-width: 900px;
+  color: var(--m340-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mission-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mission-kpi-grid article,
+.module-stat-grid article,
+.operations-hero-grid article,
+.runtime-metric-grid article {
+  min-height: 66px;
+  border: 1px solid var(--m340-line);
+  border-top: 3px solid var(--tone);
+  background: var(--m340-panel-soft);
+  box-shadow: none;
+  padding: 7px;
+}
+
+.mission-kpi-grid strong,
+.module-stat-grid strong,
+.operations-hero-grid strong,
+.runtime-metric-grid strong {
+  color: var(--m340-ink);
+  font-size: 23px;
+}
+
+.mission-kpi-grid span,
+.mission-kpi-grid em,
+.module-stat-grid span,
+.module-stat-grid em,
+.operations-hero-grid span,
+.operations-hero-grid em,
+.runtime-metric-grid span,
+.runtime-metric-grid em {
+  color: var(--m340-muted);
+  font-size: 10px;
+  line-height: 1.32;
+}
+
+.command-grid-v2 {
+  grid-template-areas:
+    "dispatch focus"
+    "flow focus";
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 9px;
+}
+
+.dispatch-console-v2 {
+  grid-area: dispatch;
+}
+
+.flow-rail-v2 {
+  grid-area: flow;
+}
+
+.focus-stack-v2 {
+  grid-area: focus;
+}
+
+.flow-rail-v2,
+.dispatch-console-v2,
+.focus-card-v2,
+.insight-panel,
+.workstation-panel,
+.module-contract-panel {
+  padding: 10px;
+}
+
+.flow-step-list {
+  gap: 6px;
+}
+
+.flow-step-list article,
+.evidence-matrix article,
+.hardware-poc-grid article,
+.source-row-list article,
+.station-card-grid article,
+.module-priority-panel article,
+.rule-stack article,
+.handoff-row,
+.service-status-grid article,
+.backup-status-list article,
+.ops-checklist article {
+  border-color: var(--m340-line);
+  border-radius: 6px;
+  background: var(--m340-panel-soft);
+  box-shadow: none;
+}
+
+.flow-step-list article {
+  grid-template-columns: 36px minmax(0, 1fr);
+  min-height: 44px;
+  padding: 7px;
+}
+
+.flow-step-list b {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+}
+
+.flow-rule-card {
+  border-color: var(--m340-line);
+  border-radius: 6px;
+  background: #fff8e7;
+  color: #5f3e0b;
+  padding: 8px;
+}
+
+.floor-toolbar,
+.module-toolbar {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.floor-toolbar h2,
+.module-toolbar h2,
+.section-heading h2,
+.panel-title-row h2 {
+  margin-bottom: 3px;
+  font-size: 16px;
+}
+
+.floor-filter-row,
+.module-tools {
+  gap: 5px;
+}
+
+.filter-pill {
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.filter-pill.active {
+  border-color: #bcd7f4;
+  background: #eef6ff;
+  color: #1d4ed8;
+}
+
+.erp-table-wrap,
+.module-table-wrap,
+.ops-table-wrap,
+.readiness-table-wrap {
+  border-color: var(--m340-line);
+  border-radius: 6px;
+}
+
+.erp-table,
+.module-table,
+.readiness-table,
+.ops-data-table {
+  font-size: 11px;
+}
+
+.erp-table th,
+.erp-table td,
+.module-table th,
+.module-table td,
+.readiness-table th,
+.readiness-table td,
+.ops-data-table th,
+.ops-data-table td {
+  border-color: #e7edf4;
+  padding: 6px 7px;
+}
+
+.erp-table th,
+.module-table th,
+.readiness-table th,
+.ops-data-table th {
+  background: #edf2f7;
+  color: #334155;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.erp-table tbody tr:nth-child(even) td,
+.module-table tbody tr:nth-child(even) td,
+.readiness-table tbody tr:nth-child(even) td,
+.ops-data-table tbody tr:nth-child(even) td {
+  background: #fafbfd;
+}
+
+.erp-table tbody tr:hover td,
+.module-table tbody tr:hover td,
+.readiness-table tbody tr:hover td {
+  background: #eef6ff;
+}
+
+.focus-stack-v2,
+.evidence-matrix,
+.hardware-poc-grid,
+.source-row-list,
+.station-card-grid,
+.runtime-metric-grid,
+.service-status-grid {
+  gap: 6px;
+}
+
+.focus-card-v2 > strong {
+  color: var(--m340-ink);
+  font-size: 15px;
+}
+
+.detail-grid {
+  gap: 5px 8px;
+}
+
+.detail-grid dt,
+.detail-grid dd,
+.cell-stack small,
+.source-row-list small,
+.hardware-poc-grid span,
+.evidence-matrix span {
+  font-size: 11px;
+}
+
+.ops-insight-grid-v2,
+.lower-grid-v2,
+.module-detail-grid {
+  gap: 9px;
+}
+
+.module-command-surface,
+.operations-command-surface {
+  gap: 9px;
+}
+
+.module-command-main,
+.operations-command-main {
+  border-left: 4px solid var(--m340-blue);
+  background: #fff;
+  padding: 10px;
+}
+
+.module-command-title h2 {
+  font-size: 20px;
+}
+
+.module-priority-panel,
+.operations-focus-panel {
+  border-color: var(--m340-line);
+  background: #1f2937;
+  color: #f8fafc;
+  padding: 10px;
+}
+
+.module-priority-panel article {
+  background: rgba(255, 255, 255, 0.07);
+  color: #eef2f7;
+}
+
+.module-priority-panel article span,
+.module-priority-panel article small,
+.operations-focus-panel p,
+.operations-focus-grid dt {
+  color: #cbd5df;
+}
+
+.module-work-grid {
+  gap: 9px;
+}
+
+.active-object-card,
+.evidence-slot-panel,
+.module-rule-panel {
+  padding: 10px;
+}
+
+.notice-list p {
+  border-left-color: var(--m340-amber);
+  border-radius: 5px;
+  background: #fff8e7;
+  color: #694a14;
+  padding: 8px 9px;
+  font-size: 11px;
+}
+
+.label-preview {
+  border-color: var(--m340-line-strong);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.qr-box {
+  border-color: var(--m340-ink);
+  border-radius: 3px;
+}
+
+.log-stream article {
+  border-color: #243244;
+  border-radius: 6px;
+  background: #111827;
+}
+
+@media (max-width: 1320px) {
+  .ops-page-header.review-page-header,
+  .mission-hero-v2,
+  .module-command-surface,
+  .operations-command-surface {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-kpi-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .command-grid-v2 {
+    grid-template-areas:
+      "dispatch"
+      "focus"
+      "flow";
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .ops-shell.review-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-sidebar.review-sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .ops-nav {
+    grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+  }
+
+  .ops-status-card,
+  .ops-health-grid,
+  .ops-version-card {
+    display: none;
+  }
+
+  .mission-kpi-grid,
+  .module-stat-grid,
+  .operations-hero-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ops-workspace.review-workspace {
+    padding: 8px;
+  }
+
+  .mission-kpi-grid,
+  .module-stat-grid,
+  .operations-hero-grid,
+  .ops-command-metrics {
+    grid-template-columns: 1fr;
+  }
+}
