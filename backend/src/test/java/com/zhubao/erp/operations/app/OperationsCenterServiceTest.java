@@ -43,14 +43,102 @@ class OperationsCenterServiceTest {
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 
-        assertThat(snapshot.backupStatuses()).hasSize(1);
-        OperationsCenterSnapshot.BackupStatus status = snapshot.backupStatuses().get(0);
+        assertThat(snapshot.backupStatuses()).hasSize(2);
+        OperationsCenterSnapshot.BackupStatus status = findBackup(snapshot, "DB-BACKUP-LATEST");
         assertThat(status.code()).isEqualTo("DB-BACKUP-LATEST");
         assertThat(status.status()).isEqualTo("已发现备份");
         assertThat(status.fileSize()).isEqualTo("10 B");
         assertThat(status.checksum()).startsWith("sha256:");
         assertThat(status.checksum()).hasSize(71);
         assertThat(status.detail()).contains("zhubao-20260707.sql").contains("10 B").contains("sha256:");
+
+        OperationsCenterSnapshot.BackupStatus cos = findBackup(snapshot, "COS-BACKUP-DISABLED");
+        assertThat(cos.status()).isEqualTo("未启用");
+        assertThat(cos.tone()).isEqualTo("blue");
+    }
+
+    @Test
+    void reportsCosBackupAsDisabledWithoutBlockingLocalDeployments() {
+        OperationsCenterService service = new OperationsCenterService(
+                new MockEnvironment(),
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                "",
+                "",
+                800,
+                24
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+        OperationsCenterSnapshot.ServiceStatus cosService = findService(snapshot, "COS_BACKUP");
+        OperationsCenterSnapshot.OperationChecklistItem cosChecklist = findChecklist(snapshot, "OPS-CHK-007");
+
+        assertThat(cosService.status()).isEqualTo("DISABLED");
+        assertThat(cosService.tone()).isEqualTo("blue");
+        assertThat(cosService.detail()).contains("本地电脑部署可选").contains("腾讯云部署应启用");
+        assertThat(cosChecklist.status()).isEqualTo("DISABLED");
+        assertThat(cosChecklist.tone()).isEqualTo("blue");
+    }
+
+    @Test
+    void reportsCosBackupConfigurationGapsWhenEnabledButRequiredFieldsAreMissing() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("zhubao.operations.cos.enabled", "true")
+                .withProperty("zhubao.operations.cos.bucket", "zhubao-prod-1250000000");
+
+        OperationsCenterService service = new OperationsCenterService(
+                environment,
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                "",
+                "",
+                800,
+                24
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+        OperationsCenterSnapshot.ServiceStatus cosService = findService(snapshot, "COS_BACKUP");
+        OperationsCenterSnapshot.BackupStatus cosBackup = findBackup(snapshot, "COS-BACKUP-INCOMPLETE");
+
+        assertThat(cosService.status()).isEqualTo("CONFIG_INCOMPLETE");
+        assertThat(cosService.tone()).isEqualTo("amber");
+        assertThat(cosService.detail()).contains("region").contains("prefix").contains("credentials-mode").contains("lifecycle-policy");
+        assertThat(cosBackup.storage()).isEqualTo("cos://配置不完整");
+    }
+
+    @Test
+    void reportsCosBackupAsReadyWhenTencentCloudFieldsAreConfigured() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("zhubao.operations.cos.enabled", "true")
+                .withProperty("zhubao.operations.cos.bucket", "zhubao-prod-1250000000")
+                .withProperty("zhubao.operations.cos.region", "ap-guangzhou")
+                .withProperty("zhubao.operations.cos.prefix", "prod/mysql/")
+                .withProperty("zhubao.operations.cos.credentials-mode", "temporary")
+                .withProperty("zhubao.operations.cos.lifecycle-policy", "180d-retention-versioning");
+
+        OperationsCenterService service = new OperationsCenterService(
+                environment,
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                "",
+                "",
+                800,
+                24
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+        OperationsCenterSnapshot.ServiceStatus cosService = findService(snapshot, "COS_BACKUP");
+        OperationsCenterSnapshot.BackupStatus cosBackup = findBackup(snapshot, "COS-BACKUP-READY");
+
+        assertThat(cosService.status()).isEqualTo("READY");
+        assertThat(cosService.tone()).isEqualTo("green");
+        assertThat(cosService.endpoint()).isEqualTo("cos://zhubao-prod-1250000000/prod/mysql/");
+        assertThat(cosService.detail()).contains("临时密钥/STS").contains("180d-retention-versioning");
+        assertThat(cosBackup.status()).isEqualTo("配置完整");
+        assertThat(cosBackup.checksum()).isEqualTo("沿用本地备份 SHA-256");
     }
 
     @Test
@@ -207,6 +295,13 @@ class OperationsCenterServiceTest {
 
     private OperationsCenterSnapshot.OperationChecklistItem findChecklist(OperationsCenterSnapshot snapshot, String code) {
         return snapshot.checklist().stream()
+                .filter(item -> code.equals(item.code()))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private OperationsCenterSnapshot.BackupStatus findBackup(OperationsCenterSnapshot snapshot, String code) {
+        return snapshot.backupStatuses().stream()
                 .filter(item -> code.equals(item.code()))
                 .findFirst()
                 .orElseThrow();

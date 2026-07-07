@@ -13,7 +13,7 @@ class ConfigurationBaselineServiceTest {
         assertThat(service.systemParameters()).hasSize(7);
         assertThat(service.codeRules()).hasSize(5);
         assertThat(service.rolePermissions()).hasSize(6);
-        assertThat(service.processTemplates()).hasSize(2);
+        assertThat(service.processTemplates()).hasSize(4);
         assertThat(service.warehouseStates()).hasSize(6);
         assertThat(service.videoParameters()).hasSize(5);
         assertThat(service.changeRequests()).hasSize(3);
@@ -29,6 +29,16 @@ class ConfigurationBaselineServiceTest {
                 });
         assertThat(service.rolePermissions())
                 .anySatisfy(role -> assertThat(role.sensitiveActions()).contains("报工更正"));
+        assertThat(service.processTemplates())
+                .anySatisfy(template -> {
+                    assertThat(template.code()).isEqualTo("PROC-ENGRAVE-DAY");
+                    assertThat(template.snapshotFields()).contains("机器编号", "操机签字");
+                });
+        assertThat(service.processTemplates())
+                .anySatisfy(template -> {
+                    assertThat(template.code()).isEqualTo("PROC-POLISH-DAILY");
+                    assertThat(template.snapshotFields()).contains("交单审核");
+                });
         assertThat(service.videoParameters())
                 .anySatisfy(parameter -> assertThat(parameter.fallback()).contains("人工上传"));
         assertThat(service.changeRequests())

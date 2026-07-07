@@ -10,7 +10,8 @@ values
 ('SNAP-20260706-DAY', 'inbound', 'weigh_pending', '待拆包称重', '3 单', '需记录拆包前后重量', 'blue'),
 ('SNAP-20260706-DAY', 'inbound', 'video_integrity', '视频完整率', '92%', '1 个截取任务失败', 'amber'),
 ('SNAP-20260706-DAY', 'inbound', 'label_ready', '标签可打印', '4 张', '含 1 张待补打', 'green'),
-('SNAP-20260706-DAY', 'production', 'polish', '抛光', '6 张 / 78%', '2 张等待称重交接', 'amber'),
+('SNAP-20260706-DAY', 'production', 'engraving', '雕刻', '3 台 / 68%', '1 台缺少操机签字', 'amber'),
+('SNAP-20260706-DAY', 'production', 'polish', '抛光', '6 张 / 78%', '2 张等待交单审核', 'amber'),
 ('SNAP-20260706-DAY', 'production', 'setting', '镶石', '5 张 / 92%', '质检积压，暂缓派新单', 'red'),
 ('SNAP-20260706-DAY', 'production', 'welding', '焊接', '4 张 / 64%', '设备正常，可继续派工', 'green'),
 ('SNAP-20260706-DAY', 'production', 'final_check', '终检', '3 张 / 55%', '等待缺陷照片归档', 'blue'),
@@ -34,19 +35,20 @@ values
 ('SNAP-20260706-DAY', 'mobile', 'DRAFT-BG-001', '抛光报工', '恢复网络后需复核工单状态', '李华', '14:28', 'amber'),
 ('SNAP-20260706-DAY', 'mobile', 'DRAFT-QC-003', '缺陷拍照', '照片已缓存，质检结果未提交', '周娜', '15:06', 'red');
 
-insert into biz_workspace_inbound_order(snapshot_code, mother_order_code, customer_name, material_name, courier_no, quantity, weight_display, order_status, video_status, owner_type)
+insert into biz_workspace_inbound_order(snapshot_code, mother_order_code, customer_name, material_name, inbound_date_display, express_company, courier_no, sender_name, receiver_name, unpack_signer, goods_name, quantity, weight_display, order_status, video_status, owner_type, inbound_remark)
 values
-('SNAP-20260706-DAY', 'MD-20260706-001', '恒信珠宝', '18K 金戒托', 'SF1048329001', 320, '486.25 g', '待拆包', '待开始', '客户所有'),
-('SNAP-20260706-DAY', 'MD-20260706-002', '雅辰饰品', '银链半成品', 'YT7740192207', 1200, '2,840.00 g', '已入库', '已关联', '客户所有'),
-('SNAP-20260706-DAY', 'MD-20260706-003', '璟瑞工贸', '宝石托坯', 'JD9301827446', 540, '718.30 g', '待确认物料', '截取中', '客户所有'),
-('SNAP-20260706-DAY', 'MD-20260706-004', '瑞禾珠宝', 'PT950 吊坠坯', 'DB7730018291', 180, '392.10 g', '异常待处理', '失败', '客户所有');
+('SNAP-20260706-DAY', 'MD-20260706-001', '恒信珠宝', '18K 金戒托', '07-06', '顺丰', 'SF1048329001', '张先生', '何琳', '何琳', '戒托来料', 320, '486.25 g', '待拆包', '待开始', '客户所有', '拆箱签字待复核'),
+('SNAP-20260706-DAY', 'MD-20260706-002', '雅辰饰品', '银链半成品', '07-06', '圆通', 'YT7740192207', '陈女士', '何琳', '何琳', '银链半成品', 1200, '2,840.00 g', '已入库', '已关联', '客户所有', '寄收件人已核对'),
+('SNAP-20260706-DAY', 'MD-20260706-003', '璟瑞工贸', '宝石托坯', '07-06', '京东', 'JD9301827446', '客户仓库', '李敏', '待补签', '宝石托盘', 540, '718.30 g', '待确认物料', '截取中', '客户所有', '货品名称与物料档案待匹配'),
+('SNAP-20260706-DAY', 'MD-20260706-004', '瑞禾珠宝', 'PT950 吊坠坯', '07-06', '德邦', 'DB7730018291', '王先生', '何琳', '何琳', 'PT950 吊坠坯', 180, '392.10 g', '异常待处理', '失败', '客户所有', '视频截取失败，需人工上传');
 
-insert into biz_workspace_work_order(snapshot_code, work_order_code, customer_name, material_name, process_name, assignee_name, planned_quantity, finished_quantity, work_status, progress)
+insert into biz_workspace_work_order(snapshot_code, work_order_code, customer_name, material_name, process_name, process_category, product_category, machine_no, work_item_name, started_at_display, finished_at_display, completion_status, handoff_audit_status, assignee_name, planned_quantity, finished_quantity, work_status, progress)
 values
-('SNAP-20260706-DAY', 'ZD-20260706-001', '恒信珠宝', '18K 金戒托', '抛光', '李华', 80, 56, '生产中', 70),
-('SNAP-20260706-DAY', 'ZD-20260706-002', '恒信珠宝', '18K 金戒托', '镶石', '陈敏', 80, 80, '待质检', 100),
-('SNAP-20260706-DAY', 'ZD-20260706-006', '雅辰饰品', '银链半成品', '焊接', '王强', 300, 210, '称重待补', 70),
-('SNAP-20260706-DAY', 'FG-20260706-002', '瑞禾珠宝', 'PT950 吊坠坯', '返工抛光', '赵磊', 24, 12, '返工中', 50);
+('SNAP-20260706-DAY', 'ZD-20260706-001', '恒信珠宝', '18K 金戒托', '抛光', '人工', '戒托', 'POL-01', '精抛', '13:40', '14:30', '部分完成', '待交单审核', '李华', 80, 56, '生产中', 70),
+('SNAP-20260706-DAY', 'ZD-20260706-002', '恒信珠宝', '18K 金戒托', '镶石', '人工', '戒托', '人工工位', '镶石', '10:10', '11:25', '已完成', '已接收', '陈敏', 80, 80, '待质检', 100),
+('SNAP-20260706-DAY', 'ZD-20260706-006', '雅辰饰品', '银链半成品', '焊接', '人工', '银链', 'WELD-02', '焊接', '15:00', '进行中', '称重待补', '待交单审核', '王强', 300, 210, '称重待补', 70),
+('SNAP-20260706-DAY', 'ZD-20260706-009', '恒信珠宝', '18K 金戒托', '雕刻', '设备', '戒托', 'ENG-03', '雕刻', '09:00', '10:15', '已完成 168 件', '操机签字待补', '周凯', 200, 168, '待交单审核', 84),
+('SNAP-20260706-DAY', 'FG-20260706-002', '瑞禾珠宝', 'PT950 吊坠坯', '返工抛光', '人工', '吊坠坯', 'POL-02', '返工抛光', '15:05', '进行中', '返工中', '待复检', '赵磊', 24, 12, '返工中', 50);
 
 insert into biz_workspace_handoff(snapshot_code, handoff_code, from_node, to_node, input_weight_display, output_weight_display, loss_rate_display, handoff_status, tone)
 values

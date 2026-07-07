@@ -6,6 +6,12 @@ export interface ConfirmInboundRequest {
   customerId: number;
   ownerCustomerId?: number;
   materialCode: string;
+  expressCompany?: string;
+  courierNo?: string;
+  senderName?: string;
+  receiverName?: string;
+  unpackSigner?: string;
+  goodsName?: string;
   warehouseCode: string;
   quantity: number;
   weight: string;
@@ -36,6 +42,14 @@ export interface ProductionReportRequest {
   quantity: number;
   weight: string;
   process: string;
+  processCategory?: string;
+  productCategory?: string;
+  machineNo?: string;
+  workItemName?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  completionStatus?: string;
+  handoffAuditStatus?: string;
   operator: string;
   handoffCode?: string;
   remark?: string;
@@ -200,9 +214,13 @@ export interface OutboundShipmentRequest {
   materialCode: string;
   fromWarehouseCode: string;
   toWarehouseCode: string;
+  deliveryDate?: string;
+  deliveryCategory?: string;
   quantity: number;
   weight: string;
+  expressCompany?: string;
   logisticsNo: string;
+  handler?: string;
   operator: string;
   evidenceCode?: string;
   remark?: string;
@@ -364,6 +382,7 @@ const workOrderMotherOrders: Record<string, string> = {
   'ZD-20260706-001': 'MD-20260706-001',
   'ZD-20260706-002': 'MD-20260706-001',
   'ZD-20260706-006': 'MD-20260706-002',
+  'ZD-20260706-009': 'MD-20260706-001',
   'FG-20260706-001': 'MD-20260706-004',
   'FG-20260706-002': 'MD-20260706-004',
 };
@@ -372,6 +391,7 @@ const workOrderCustomers: Record<string, string> = {
   'ZD-20260706-001': '恒信珠宝',
   'ZD-20260706-002': '恒信珠宝',
   'ZD-20260706-006': '雅辰饰品',
+  'ZD-20260706-009': '恒信珠宝',
   'FG-20260706-001': '瑞禾珠宝',
   'FG-20260706-002': '瑞禾珠宝',
 };
@@ -380,6 +400,7 @@ const workOrderMaterials: Record<string, string> = {
   'ZD-20260706-001': '18K 金戒托',
   'ZD-20260706-002': '18K 金戒托',
   'ZD-20260706-006': '银链半成品',
+  'ZD-20260706-009': '18K 金戒托',
   'FG-20260706-001': 'PT950 吊坠坯',
   'FG-20260706-002': 'PT950 吊坠坯',
 };
@@ -395,6 +416,7 @@ const productionWeights: Record<string, string> = {
   'ZD-20260706-001': '84.950',
   'ZD-20260706-002': '121.150',
   'ZD-20260706-006': '478.240',
+  'ZD-20260706-009': '128.600',
   'FG-20260706-002': '26.200',
 };
 
@@ -417,6 +439,7 @@ const lossAcceptedQuantities: Record<string, number> = {
 
 const processPieceRates: Record<string, string> = {
   抛光: '0.80',
+  雕刻: '0.65',
   焊接: '0.72',
   镶石: '1.20',
   返工抛光: '0.00',
@@ -435,12 +458,18 @@ export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundR
     customerId,
     ownerCustomerId: customerId,
     materialCode: materialCodes[order.material] ?? `MAT-${order.code}`,
+    expressCompany: order.expressCompany,
+    courierNo: order.courierNo,
+    senderName: order.senderName,
+    receiverName: order.receiverName,
+    unpackSigner: order.unpackSigner,
+    goodsName: order.goodsName,
     warehouseCode: 'RAW-CUSTOMER',
     quantity: order.qty,
     weight: parseWeight(order.weight),
     operator: '库管员 何琳',
     evidenceCode: order.courierNo,
-    remark: '前端来料作业主控台确认',
+    remark: order.remark || '前端来料作业主控台确认',
   };
 }
 
@@ -465,6 +494,14 @@ export function buildProductionReportRequest(order: WorkOrder, handoffCode?: str
     quantity: order.finishedQty,
     weight: productionWeights[order.code] ?? String(order.finishedQty),
     process: order.process,
+    processCategory: order.processCategory,
+    productCategory: order.productCategory,
+    machineNo: order.machineNo,
+    workItemName: order.workItemName,
+    startedAt: order.startedAt,
+    finishedAt: order.finishedAt,
+    completionStatus: order.completionStatus,
+    handoffAuditStatus: order.handoffAuditStatus,
     operator: order.assignee,
     handoffCode,
     remark: '前端生产派工主控台报工',
@@ -617,9 +654,13 @@ export function buildOutboundShipmentRequest(balance: InventoryBalance): Outboun
     materialCode: materialCodes[balance.material] ?? `MAT-${balance.batch}`,
     fromWarehouseCode: 'FINISHED-CUSTOMER',
     toWarehouseCode: 'SHIPPED-CUSTOMER',
+    deliveryDate: '2026-07-06',
+    deliveryCategory: balance.status.includes('返工') ? '返修件' : '成品',
     quantity: balance.qty,
     weight: parseWeight(balance.weight),
+    expressCompany: '顺丰',
     logisticsNo: `SF-OUT-${shortCode}`,
+    handler: '何琳',
     operator: '库管员 何琳',
     evidenceCode: `ATT-OUT-${shortCode}`,
     remark: '前端库存追溯主控台确认出库',

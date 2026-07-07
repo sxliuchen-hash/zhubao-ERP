@@ -15,9 +15,13 @@ public record ShipFinishedStockCommand(
         @NotBlank String materialCode,
         @NotBlank String fromWarehouseCode,
         @NotBlank String toWarehouseCode,
+        String deliveryDate,
+        String deliveryCategory,
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal quantity,
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal weight,
+        String expressCompany,
         @NotBlank String logisticsNo,
+        String handler,
         @NotBlank String operator,
         String evidenceCode,
         String remark

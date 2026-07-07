@@ -15,8 +15,19 @@ class BusinessWorkspaceServiceTest {
         );
 
         assertThat(service.summary().inboundOrders()).isEqualTo(4);
-        assertThat(service.summary().activeWorkOrders()).isEqualTo(4);
+        assertThat(service.summary().activeWorkOrders()).isEqualTo(5);
         assertThat(service.summary().pendingQualityCases()).isEqualTo(3);
+        assertThat(service.inbound().orders())
+                .anySatisfy(order -> {
+                    assertThat(order.expressCompany()).isEqualTo("顺丰");
+                    assertThat(order.unpackSigner()).isEqualTo("何琳");
+                });
+        assertThat(service.production().workOrders())
+                .anySatisfy(order -> {
+                    assertThat(order.process()).isEqualTo("雕刻");
+                    assertThat(order.machineNo()).isEqualTo("ENG-03");
+                    assertThat(order.handoffAuditStatus()).contains("操机签字");
+                });
         assertThat(service.inbound().risks())
                 .anySatisfy(risk -> assertThat(risk.title()).contains("拆包视频截取失败"));
         assertThat(service.production().handoffs())

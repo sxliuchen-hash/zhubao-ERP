@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.54 / UI 视觉纠偏</strong>
-        <i>仍处于 M3 增量开发：本轮把全局外壳、首页、主表、详情侧栏和状态色收敛为浅色高密度 ERP/MES 作业台。</i>
+        <strong>M3.56 / 现场字段补齐</strong>
+        <i>仍处于 M3 增量开发：本轮把入库签收、出货登记、抛光日报和雕刻设备统计补入评审基线。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.54 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.56 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">

@@ -21,7 +21,16 @@ class JdbcBusinessWorkspaceRepositoryTest {
         JdbcBusinessWorkspaceRepository repository = new JdbcBusinessWorkspaceRepository(dataSource, "SNAP-20260706-DAY");
 
         assertThat(repository.inbound().orders())
-                .anySatisfy(order -> assertThat(order.code()).isEqualTo("MD-20260706-001"));
+                .anySatisfy(order -> {
+                    assertThat(order.code()).isEqualTo("MD-20260706-001");
+                    assertThat(order.expressCompany()).isEqualTo("顺丰");
+                    assertThat(order.unpackSigner()).isEqualTo("何琳");
+                });
+        assertThat(repository.production().workOrders())
+                .anySatisfy(order -> {
+                    assertThat(order.process()).isEqualTo("雕刻");
+                    assertThat(order.machineNo()).isEqualTo("ENG-03");
+                });
         assertThat(repository.production().handoffs())
                 .anySatisfy(handoff -> assertThat(handoff.code()).isEqualTo("HO-20260706-021"));
         assertThat(repository.quality().lossApprovals())
@@ -42,10 +51,12 @@ class JdbcBusinessWorkspaceRepositoryTest {
                 values ('SNAP-20260707-DAY', '次日白班', date '2026-07-07', '总装一线', '白班')
                 """);
         execute(dataSource, """
-                insert into biz_workspace_inbound_order(snapshot_code, mother_order_code, customer_name, material_name, courier_no,
-                    quantity, weight_display, order_status, video_status, owner_type)
-                values ('SNAP-20260707-DAY', 'MD-20260707-001', '恒信珠宝', '18K 金戒托', 'SF1048329002',
-                    20, '31.20 g', '待拆包', '待开始', '客户所有')
+                insert into biz_workspace_inbound_order(snapshot_code, mother_order_code, customer_name, material_name,
+                    inbound_date_display, express_company, courier_no, sender_name, receiver_name, unpack_signer, goods_name,
+                    quantity, weight_display, order_status, video_status, owner_type, inbound_remark)
+                values ('SNAP-20260707-DAY', 'MD-20260707-001', '恒信珠宝', '18K 金戒托',
+                    '07-07', '顺丰', 'SF1048329002', '张先生', '何琳', '何琳', '戒托来料',
+                    20, '31.20 g', '待拆包', '待开始', '客户所有', '次日样例')
                 """);
 
         JdbcBusinessWorkspaceRepository repository = new JdbcBusinessWorkspaceRepository(dataSource, "");
@@ -107,12 +118,19 @@ class JdbcBusinessWorkspaceRepositoryTest {
                     mother_order_code varchar(80) not null,
                     customer_name varchar(120) not null,
                     material_name varchar(160) not null,
+                    inbound_date_display varchar(40),
+                    express_company varchar(80),
                     courier_no varchar(80) not null,
+                    sender_name varchar(120),
+                    receiver_name varchar(120),
+                    unpack_signer varchar(120),
+                    goods_name varchar(160),
                     quantity int not null,
                     weight_display varchar(80) not null,
                     order_status varchar(40) not null,
                     video_status varchar(40) not null,
-                    owner_type varchar(40) not null
+                    owner_type varchar(40) not null,
+                    inbound_remark varchar(500)
                 )
                 """,
                 """
@@ -123,6 +141,14 @@ class JdbcBusinessWorkspaceRepositoryTest {
                     customer_name varchar(120) not null,
                     material_name varchar(160) not null,
                     process_name varchar(120) not null,
+                    process_category varchar(60),
+                    product_category varchar(120),
+                    machine_no varchar(80),
+                    work_item_name varchar(120),
+                    started_at_display varchar(40),
+                    finished_at_display varchar(40),
+                    completion_status varchar(120),
+                    handoff_audit_status varchar(80),
                     assignee_name varchar(80) not null,
                     planned_quantity int not null,
                     finished_quantity int not null,
@@ -236,7 +262,7 @@ class JdbcBusinessWorkspaceRepositoryTest {
                 insert into biz_workspace_stat(snapshot_code, workspace_code, stat_key, stat_label, stat_value, detail, tone)
                 values
                     ('%s', 'inbound', 'video', '视频完整率', '92%%', '1 个截取任务失败', 'amber'),
-                    ('%s', 'production', 'polish', '抛光', '6 张 / 78%%', '2 张等待称重交接', 'amber'),
+                    ('%s', 'production', 'engraving', '雕刻', '3 台 / 68%%', '1 台缺少操机签字', 'amber'),
                     ('%s', 'quality', 'loss', '损耗阻断', '1 条', '超过工序标准 1.8%%', 'red'),
                     ('%s', 'mobile', 'offline', '离线草稿', '设计中', '弱网时暂存报工和质检', 'amber')
                 """.formatted(snapshotCode, snapshotCode, snapshotCode, snapshotCode));
@@ -248,16 +274,20 @@ class JdbcBusinessWorkspaceRepositoryTest {
                     ('%s', 'mobile', 'DRAFT-QC-003', '缺陷拍照', '照片已缓存，质检结果未提交', '周娜', '15:06', 'red')
                 """.formatted(snapshotCode, snapshotCode, snapshotCode));
         execute(dataSource, """
-                insert into biz_workspace_inbound_order(snapshot_code, mother_order_code, customer_name, material_name, courier_no,
-                    quantity, weight_display, order_status, video_status, owner_type)
-                values ('%s', 'MD-20260706-001', '恒信珠宝', '18K 金戒托', 'SF1048329001',
-                    320, '486.25 g', '待拆包', '待开始', '客户所有')
+                insert into biz_workspace_inbound_order(snapshot_code, mother_order_code, customer_name, material_name,
+                    inbound_date_display, express_company, courier_no, sender_name, receiver_name, unpack_signer, goods_name,
+                    quantity, weight_display, order_status, video_status, owner_type, inbound_remark)
+                values ('%s', 'MD-20260706-001', '恒信珠宝', '18K 金戒托',
+                    '07-06', '顺丰', 'SF1048329001', '张先生', '何琳', '何琳', '戒托来料',
+                    320, '486.25 g', '待拆包', '待开始', '客户所有', '拆箱签字待复核')
                 """.formatted(snapshotCode));
         execute(dataSource, """
                 insert into biz_workspace_work_order(snapshot_code, work_order_code, customer_name, material_name, process_name,
-                    assignee_name, planned_quantity, finished_quantity, work_status, progress)
-                values ('%s', 'ZD-20260706-006', '雅辰饰品', '银链半成品', '焊接',
-                    '王强', 300, 210, '称重待补', 70)
+                    process_category, product_category, machine_no, work_item_name, started_at_display, finished_at_display,
+                    completion_status, handoff_audit_status, assignee_name, planned_quantity, finished_quantity, work_status, progress)
+                values ('%s', 'ZD-20260706-009', '恒信珠宝', '18K 金戒托', '雕刻',
+                    '设备', '戒托', 'ENG-03', '雕刻', '09:00', '10:15',
+                    '已完成 168 件', '操机签字待补', '周凯', 200, 168, '待交单审核', 84)
                 """.formatted(snapshotCode));
         execute(dataSource, """
                 insert into biz_workspace_handoff(snapshot_code, handoff_code, from_node, to_node, input_weight_display,

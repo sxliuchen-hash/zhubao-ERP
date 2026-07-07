@@ -199,11 +199,11 @@ function selectWorkOrder(code: string) {
               <tr>
                 <th>工单</th>
                 <th>客户/物料</th>
-                <th>工序</th>
+                <th>工序/项目</th>
+                <th>机器/品类</th>
                 <th>负责人</th>
                 <th>产出进度</th>
-                <th>状态</th>
-                <th>工资口径</th>
+                <th>状态/审核</th>
                 <th>动作</th>
               </tr>
             </thead>
@@ -222,14 +222,29 @@ function selectWorkOrder(code: string) {
                     <small>{{ order.material }}</small>
                   </span>
                 </td>
-                <td>{{ order.process }}</td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ order.process }}</b>
+                    <small>{{ order.workItemName }} · {{ order.processCategory }}</small>
+                  </span>
+                </td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ order.machineNo }}</b>
+                    <small>{{ order.productCategory }}</small>
+                  </span>
+                </td>
                 <td>{{ order.assignee }}</td>
                 <td>
                   <i class="progress-bar"><b :style="{ width: `${order.progress}%` }" /></i>
                   {{ order.finishedQty }}/{{ order.plannedQty }}
                 </td>
-                <td><StatusBadge :label="order.status" :tone="workOrderTone(order.status)" /></td>
-                <td>{{ order.status.includes('返工') ? '返工默认不计' : '计件试算快照' }}</td>
+                <td>
+                  <span class="cell-stack">
+                    <StatusBadge :label="order.status" :tone="workOrderTone(order.status)" />
+                    <small>{{ order.handoffAuditStatus }}</small>
+                  </span>
+                </td>
                 <td><button class="table-action" type="button" @click.stop="selectWorkOrder(order.code)">进入工序</button></td>
               </tr>
             </tbody>
@@ -251,8 +266,18 @@ function selectWorkOrder(code: string) {
             <dd>{{ activeWorkOrder.material }}</dd>
             <dt>当前工序</dt>
             <dd>{{ activeWorkOrder.process }}</dd>
+            <dt>工作项目</dt>
+            <dd>{{ activeWorkOrder.workItemName }}</dd>
+            <dt>机器/品类</dt>
+            <dd>{{ activeWorkOrder.machineNo }} / {{ activeWorkOrder.productCategory }}</dd>
+            <dt>时间段</dt>
+            <dd>{{ activeWorkOrder.startedAt }} -> {{ activeWorkOrder.finishedAt }}</dd>
+            <dt>完成情况</dt>
+            <dd>{{ activeWorkOrder.completionStatus }}</dd>
             <dt>负责人</dt>
             <dd>{{ activeWorkOrder.assignee }}</dd>
+            <dt>交单审核</dt>
+            <dd>{{ activeWorkOrder.handoffAuditStatus }}</dd>
             <dt>交接阻断</dt>
             <dd>{{ activeHandoff?.code ?? '无' }} / {{ activeHandoff?.status ?? '正常' }}</dd>
             <dt>工资口径</dt>
@@ -356,26 +381,33 @@ function selectWorkOrder(code: string) {
           <li>
             <span>01</span>
             <div>
-              <strong>粗抛</strong>
-              <small>计件 0.80 元/件，记录损耗</small>
+              <strong>雕刻</strong>
+              <small>设备工序，记录机器编号、品类、操机签字</small>
             </div>
           </li>
           <li>
             <span>02</span>
             <div>
-              <strong>精抛</strong>
-              <small>计件 1.10 元/件，需称重交接</small>
+              <strong>粗抛</strong>
+              <small>计件 0.80 元/件，记录工作项目和开始时间</small>
             </div>
           </li>
           <li>
             <span>03</span>
+            <div>
+              <strong>精抛</strong>
+              <small>计件 1.10 元/件，需称重交接和交单审核</small>
+            </div>
+          </li>
+          <li>
+            <span>04</span>
             <div>
               <strong>镶石</strong>
               <small>计件 2.40 元/件，需质检</small>
             </div>
           </li>
           <li>
-            <span>04</span>
+            <span>05</span>
             <div>
               <strong>终检入库</strong>
               <small>质检通过后转成品库存</small>

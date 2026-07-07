@@ -129,8 +129,10 @@ public class JdbcBusinessWorkspaceRepository implements BusinessWorkspaceReposit
 
     private List<InboundOrder> inboundOrders(String snapshotCode) {
         return query("""
-                select mother_order_code, customer_name, material_name, courier_no, quantity,
-                       weight_display, order_status, video_status, owner_type
+                select mother_order_code, customer_name, material_name, inbound_date_display,
+                       express_company, courier_no, sender_name, receiver_name, unpack_signer,
+                       goods_name, quantity, weight_display, order_status, video_status,
+                       owner_type, inbound_remark
                 from biz_workspace_inbound_order
                 where snapshot_code = ?
                 order by id
@@ -138,19 +140,28 @@ public class JdbcBusinessWorkspaceRepository implements BusinessWorkspaceReposit
                 rs.getString("mother_order_code"),
                 rs.getString("customer_name"),
                 rs.getString("material_name"),
+                rs.getString("inbound_date_display"),
+                rs.getString("express_company"),
                 rs.getString("courier_no"),
+                rs.getString("sender_name"),
+                rs.getString("receiver_name"),
+                rs.getString("unpack_signer"),
+                rs.getString("goods_name"),
                 rs.getInt("quantity"),
                 rs.getString("weight_display"),
                 rs.getString("order_status"),
                 rs.getString("video_status"),
-                rs.getString("owner_type")
+                rs.getString("owner_type"),
+                rs.getString("inbound_remark")
         )), snapshotCode);
     }
 
     private List<WorkOrder> workOrders(String snapshotCode) {
         return query("""
-                select work_order_code, customer_name, material_name, process_name, assignee_name,
-                       planned_quantity, finished_quantity, work_status, progress
+                select work_order_code, customer_name, material_name, process_name, process_category,
+                       product_category, machine_no, work_item_name, started_at_display,
+                       finished_at_display, completion_status, handoff_audit_status,
+                       assignee_name, planned_quantity, finished_quantity, work_status, progress
                 from biz_workspace_work_order
                 where snapshot_code = ?
                 order by id
@@ -159,6 +170,14 @@ public class JdbcBusinessWorkspaceRepository implements BusinessWorkspaceReposit
                 rs.getString("customer_name"),
                 rs.getString("material_name"),
                 rs.getString("process_name"),
+                rs.getString("process_category"),
+                rs.getString("product_category"),
+                rs.getString("machine_no"),
+                rs.getString("work_item_name"),
+                rs.getString("started_at_display"),
+                rs.getString("finished_at_display"),
+                rs.getString("completion_status"),
+                rs.getString("handoff_audit_status"),
                 rs.getString("assignee_name"),
                 rs.getInt("planned_quantity"),
                 rs.getInt("finished_quantity"),

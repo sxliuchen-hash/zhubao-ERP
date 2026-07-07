@@ -154,12 +154,12 @@ class M2ManagementApiSmokeTest {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/business/workspaces/summary", String.class);
 
         assertThat(inbound.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(inbound.getBody()).contains("MD-20260706-004", "拆包视频截取失败");
-        assertThat(production.getBody()).contains("HO-20260706-021", "审批阻断");
+        assertThat(inbound.getBody()).contains("MD-20260706-004", "拆包视频截取失败", "拆箱签字");
+        assertThat(production.getBody()).contains("HO-20260706-021", "审批阻断", "雕刻", "ENG-03");
         assertThat(quality.getBody()).contains("LOSS-20260706-009", "损耗阻断");
         assertThat(inventory.getBody()).contains("LEDGER-20260706-001", "视频证据");
         assertThat(mobile.getBody()).contains("DRAFT-QC-003", "离线草稿");
-        assertThat(summary.getBody()).contains("\"inboundOrders\":4", "\"activeWorkOrders\":4", "\"mobileTasks\":3");
+        assertThat(summary.getBody()).contains("\"inboundOrders\":4", "\"activeWorkOrders\":5", "\"mobileTasks\":3");
     }
 
     @Test
@@ -847,7 +847,7 @@ class M2ManagementApiSmokeTest {
         assertThat(parameters.getBody()).contains("inventory.negative.allowed", "pay.formal.enabled");
         assertThat(codeRules.getBody()).contains("CC-YYYYMMDD-流水号-客户简称");
         assertThat(roles.getBody()).contains("车间组长", "报工更正");
-        assertThat(processes.getBody()).contains("PROC-RING-STD", "工资试算");
+        assertThat(processes.getBody()).contains("PROC-RING-STD", "PROC-ENGRAVE-DAY", "PROC-POLISH-DAILY", "工资试算");
         assertThat(warehouses.getBody()).contains("RAW-CUSTOMER", "客户所有");
         assertThat(videos.getBody()).contains("video.retry.max", "人工上传");
         assertThat(changes.getBody()).contains("CFG-CR-20260706-001", "待审批");

@@ -17,12 +17,19 @@ public final class BusinessReviewData {
             String code,
             String customer,
             String material,
+            String inboundDate,
+            String expressCompany,
             String courierNo,
+            String senderName,
+            String receiverName,
+            String unpackSigner,
+            String goodsName,
             int quantity,
             String weight,
             String status,
             String videoStatus,
-            String ownerType
+            String ownerType,
+            String remark
     ) {
     }
 
@@ -31,6 +38,14 @@ public final class BusinessReviewData {
             String customer,
             String material,
             String process,
+            String processCategory,
+            String productCategory,
+            String machineNo,
+            String workItemName,
+            String startedAt,
+            String finishedAt,
+            String completionStatus,
+            String handoffAuditStatus,
             String assignee,
             int plannedQuantity,
             int finishedQuantity,

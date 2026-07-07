@@ -13,6 +13,10 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('inventory.negative.allowed');
     expect(wrapper.text()).toContain('报工更正');
     expect(wrapper.text()).toContain('PROC-RING-STD');
+    expect(wrapper.text()).toContain('PROC-ENGRAVE-DAY');
+    expect(wrapper.text()).toContain('PROC-POLISH-DAILY');
+    expect(wrapper.text()).toContain('机器编号');
+    expect(wrapper.text()).toContain('交单审核');
     expect(wrapper.text()).toContain('video.retry.max');
     expect(wrapper.text()).toContain('配置变更审批');
     expect(wrapper.text()).toContain('CFG-CR-20260706-001');

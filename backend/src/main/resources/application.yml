@@ -28,3 +28,10 @@ zhubao:
     backup-root: ${ZHUBAO_BACKUP_ROOT:}
     log-file: ${ZHUBAO_LOG_FILE:}
     backup-rpo-hours: ${ZHUBAO_BACKUP_RPO_HOURS:24}
+    cos:
+      enabled: ${ZHUBAO_COS_BACKUP_ENABLED:false}
+      bucket: ${ZHUBAO_COS_BACKUP_BUCKET:}
+      region: ${ZHUBAO_COS_BACKUP_REGION:}
+      prefix: ${ZHUBAO_COS_BACKUP_PREFIX:}
+      credentials-mode: ${ZHUBAO_COS_BACKUP_CREDENTIALS_MODE:}
+      lifecycle-policy: ${ZHUBAO_COS_BACKUP_LIFECYCLE_POLICY:}

@@ -20,12 +20,19 @@ export interface InboundOrder {
   code: string;
   customer: string;
   material: string;
+  inboundDate: string;
+  expressCompany: string;
   courierNo: string;
+  senderName: string;
+  receiverName: string;
+  unpackSigner: string;
+  goodsName: string;
   qty: number;
   weight: string;
   status: string;
   video: string;
   owner: string;
+  remark: string;
 }
 
 export interface WorkOrder {
@@ -33,6 +40,14 @@ export interface WorkOrder {
   customer: string;
   material: string;
   process: string;
+  processCategory: string;
+  productCategory: string;
+  machineNo: string;
+  workItemName: string;
+  startedAt: string;
+  finishedAt: string;
+  completionStatus: string;
+  handoffAuditStatus: string;
   assignee: string;
   plannedQty: number;
   finishedQty: number;
@@ -276,45 +291,73 @@ export const inboundOrders: InboundOrder[] = [
     code: 'MD-20260706-001',
     customer: '恒信珠宝',
     material: '18K 金戒托',
+    inboundDate: '07-06',
+    expressCompany: '顺丰',
     courierNo: 'SF1048329001',
+    senderName: '张先生',
+    receiverName: '何琳',
+    unpackSigner: '何琳',
+    goodsName: '戒托来料',
     qty: 320,
     weight: '486.25 g',
     status: '待拆包',
     video: '待开始',
     owner: '客户所有',
+    remark: '拆箱签字待复核',
   },
   {
     code: 'MD-20260706-002',
     customer: '雅辰饰品',
     material: '银链半成品',
+    inboundDate: '07-06',
+    expressCompany: '圆通',
     courierNo: 'YT7740192207',
+    senderName: '陈女士',
+    receiverName: '何琳',
+    unpackSigner: '何琳',
+    goodsName: '银链半成品',
     qty: 1200,
     weight: '2,840.00 g',
     status: '已入库',
     video: '已关联',
     owner: '客户所有',
+    remark: '寄收件人已核对',
   },
   {
     code: 'MD-20260706-003',
     customer: '璟瑞工贸',
     material: '宝石托坯',
+    inboundDate: '07-06',
+    expressCompany: '京东',
     courierNo: 'JD9301827446',
+    senderName: '客户仓库',
+    receiverName: '李敏',
+    unpackSigner: '待补签',
+    goodsName: '宝石托盘',
     qty: 540,
     weight: '718.30 g',
     status: '待确认物料',
     video: '截取中',
     owner: '客户所有',
+    remark: '货品名称与物料档案待匹配',
   },
   {
     code: 'MD-20260706-004',
     customer: '瑞禾珠宝',
     material: 'PT950 吊坠坯',
+    inboundDate: '07-06',
+    expressCompany: '德邦',
     courierNo: 'DB7730018291',
+    senderName: '王先生',
+    receiverName: '何琳',
+    unpackSigner: '何琳',
+    goodsName: 'PT950 吊坠坯',
     qty: 180,
     weight: '392.10 g',
     status: '异常待处理',
     video: '失败',
     owner: '客户所有',
+    remark: '视频截取失败，需人工上传',
   },
 ];
 
@@ -350,6 +393,14 @@ export const workOrders: WorkOrder[] = [
     customer: '恒信珠宝',
     material: '18K 金戒托',
     process: '抛光',
+    processCategory: '人工',
+    productCategory: '戒托',
+    machineNo: 'POL-01',
+    workItemName: '精抛',
+    startedAt: '13:40',
+    finishedAt: '14:30',
+    completionStatus: '部分完成',
+    handoffAuditStatus: '待交单审核',
     assignee: '李华',
     plannedQty: 80,
     finishedQty: 56,
@@ -361,6 +412,14 @@ export const workOrders: WorkOrder[] = [
     customer: '恒信珠宝',
     material: '18K 金戒托',
     process: '镶石',
+    processCategory: '人工',
+    productCategory: '戒托',
+    machineNo: '人工工位',
+    workItemName: '镶石',
+    startedAt: '10:10',
+    finishedAt: '11:25',
+    completionStatus: '已完成',
+    handoffAuditStatus: '已接收',
     assignee: '陈敏',
     plannedQty: 80,
     finishedQty: 80,
@@ -372,6 +431,14 @@ export const workOrders: WorkOrder[] = [
     customer: '雅辰饰品',
     material: '银链半成品',
     process: '焊接',
+    processCategory: '人工',
+    productCategory: '银链',
+    machineNo: 'WELD-02',
+    workItemName: '焊接',
+    startedAt: '15:00',
+    finishedAt: '进行中',
+    completionStatus: '称重待补',
+    handoffAuditStatus: '待交单审核',
     assignee: '王强',
     plannedQty: 300,
     finishedQty: 210,
@@ -379,10 +446,37 @@ export const workOrders: WorkOrder[] = [
     progress: 70,
   },
   {
+    code: 'ZD-20260706-009',
+    customer: '恒信珠宝',
+    material: '18K 金戒托',
+    process: '雕刻',
+    processCategory: '设备',
+    productCategory: '戒托',
+    machineNo: 'ENG-03',
+    workItemName: '雕刻',
+    startedAt: '09:00',
+    finishedAt: '10:15',
+    completionStatus: '已完成 168 件',
+    handoffAuditStatus: '操机签字待补',
+    assignee: '周凯',
+    plannedQty: 200,
+    finishedQty: 168,
+    status: '待交单审核',
+    progress: 84,
+  },
+  {
     code: 'FG-20260706-002',
     customer: '瑞禾珠宝',
     material: 'PT950 吊坠坯',
     process: '返工抛光',
+    processCategory: '人工',
+    productCategory: '吊坠坯',
+    machineNo: 'POL-02',
+    workItemName: '返工抛光',
+    startedAt: '15:05',
+    finishedAt: '进行中',
+    completionStatus: '返工中',
+    handoffAuditStatus: '待复检',
     assignee: '赵磊',
     plannedQty: 24,
     finishedQty: 12,
@@ -392,7 +486,8 @@ export const workOrders: WorkOrder[] = [
 ];
 
 export const productionStationLoads: ProductionStationLoad[] = [
-  { station: '抛光', queue: '6 张', capacity: '78%', bottleneck: '2 张等待称重交接', tone: 'amber' },
+  { station: '雕刻', queue: '3 台', capacity: '68%', bottleneck: '1 台缺少操机签字', tone: 'amber' },
+  { station: '抛光', queue: '6 张', capacity: '78%', bottleneck: '2 张等待交单审核', tone: 'amber' },
   { station: '镶石', queue: '5 张', capacity: '92%', bottleneck: '质检积压，暂缓派新单', tone: 'red' },
   { station: '焊接', queue: '4 张', capacity: '64%', bottleneck: '设备正常，可继续派工', tone: 'green' },
   { station: '终检', queue: '3 张', capacity: '55%', bottleneck: '等待缺陷照片归档', tone: 'blue' },

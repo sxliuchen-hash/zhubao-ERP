@@ -87,8 +87,8 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
   generatedAt: '2026-07-07 08:00:00',
   summary: {
     overallStatus: 'ATTENTION',
-    serviceCount: 5,
-    degradedServices: 4,
+    serviceCount: 6,
+    degradedServices: 5,
     openErrors: 3,
     criticalErrors: 0,
     backupStatus: '需配置',
@@ -144,6 +144,16 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       owner: '运维负责人',
       checkedAt: '2026-07-07 08:00:00',
       tone: 'amber',
+    },
+    {
+      code: 'COS_BACKUP',
+      name: '腾讯云 COS 备份',
+      status: 'DISABLED',
+      endpoint: '未启用',
+      detail: '本地部署可选；腾讯云部署应启用并配置 Bucket、Region、Prefix、凭证模式和生命周期/保留策略。',
+      owner: '运维负责人',
+      checkedAt: '2026-07-07 08:00:00',
+      tone: 'blue',
     },
   ],
   runtimeMetrics: [
@@ -223,6 +233,18 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       detail: '生产环境建议记录 mysqldump 输出、备份大小、checksum 和恢复演练结果。',
       tone: 'amber',
     },
+    {
+      code: 'COS-BACKUP-DISABLED',
+      target: '腾讯云 COS 异地备份',
+      status: '未启用',
+      lastSuccessAt: '由本地备份同步任务记录',
+      nextDueAt: '2026-07-07 23:30:00',
+      storage: '未启用',
+      fileSize: '不适用',
+      checksum: '沿用本地备份 SHA-256',
+      detail: '运维中心只展示 COS 备份配置状态，不保存密钥、不执行上传或删除命令。',
+      tone: 'blue',
+    },
   ],
   checklist: [
     {
@@ -264,6 +286,14 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       evidence: '未配置 zhubao.operations.log-file',
       owner: '运维负责人',
       tone: 'amber',
+    },
+    {
+      code: 'OPS-CHK-007',
+      item: '腾讯云 COS 异地备份',
+      status: 'DISABLED',
+      evidence: '本地部署可选；腾讯云部署应配置 ZHUBAO_COS_BACKUP_*',
+      owner: '运维负责人',
+      tone: 'blue',
     },
   ],
 };

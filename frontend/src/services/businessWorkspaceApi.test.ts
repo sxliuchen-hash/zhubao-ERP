@@ -15,19 +15,33 @@ describe('businessWorkspaceApi mappers', () => {
           code: 'MD-001',
           customer: '恒信珠宝',
           material: '18K 金戒托',
+          inboundDate: '07-06',
+          expressCompany: '顺丰',
           courierNo: 'SF001',
+          senderName: '张先生',
+          receiverName: '何琳',
+          unpackSigner: '何琳',
+          goodsName: '戒托来料',
           quantity: 12,
           weight: '18.20 g',
           status: '待拆包',
           videoStatus: '待开始',
           ownerType: '客户所有',
+          remark: '拆箱签字待复核',
         },
       ],
       risks: [],
     });
 
     expect(model.checkpoints[0].status).toBe('1 个截取任务失败');
-    expect(model.orders[0]).toMatchObject({ qty: 12, video: '待开始', owner: '客户所有' });
+    expect(model.orders[0]).toMatchObject({
+      qty: 12,
+      video: '待开始',
+      owner: '客户所有',
+      expressCompany: '顺丰',
+      unpackSigner: '何琳',
+      goodsName: '戒托来料',
+    });
   });
 
   it('maps production quantities and handoff node names', () => {
@@ -39,6 +53,14 @@ describe('businessWorkspaceApi mappers', () => {
           customer: '恒信珠宝',
           material: '戒托',
           process: '抛光',
+          processCategory: '人工',
+          productCategory: '戒托',
+          machineNo: 'POL-01',
+          workItemName: '精抛',
+          startedAt: '13:40',
+          finishedAt: '14:30',
+          completionStatus: '部分完成',
+          handoffAuditStatus: '待交单审核',
           assignee: '李华',
           plannedQuantity: 80,
           finishedQuantity: 56,
@@ -61,7 +83,13 @@ describe('businessWorkspaceApi mappers', () => {
     });
 
     expect(model.stationLoads[0]).toMatchObject({ station: '抛光', queue: '6 张', capacity: '78%' });
-    expect(model.workOrders[0]).toMatchObject({ plannedQty: 80, finishedQty: 56 });
+    expect(model.workOrders[0]).toMatchObject({
+      plannedQty: 80,
+      finishedQty: 56,
+      machineNo: 'POL-01',
+      workItemName: '精抛',
+      handoffAuditStatus: '待交单审核',
+    });
     expect(model.handoffs[0]).toMatchObject({ from: '粗抛 / 李华', to: '精抛 / 陈敏' });
   });
 

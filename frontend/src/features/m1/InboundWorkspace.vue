@@ -195,12 +195,12 @@ function selectInboundOrder(code: string) {
             <thead>
               <tr>
                 <th>母单</th>
-                <th>客户/物料</th>
-                <th>快递单</th>
+                <th>签收</th>
+                <th>客户/货品</th>
+                <th>快递</th>
+                <th>寄收/签字</th>
                 <th>数量重量</th>
                 <th>入库状态</th>
-                <th>视频证据</th>
-                <th>权属</th>
                 <th>动作</th>
               </tr>
             </thead>
@@ -213,17 +213,22 @@ function selectInboundOrder(code: string) {
                 @click="selectInboundOrder(order.code)"
               >
                 <td><strong>{{ order.code }}</strong></td>
+                <td>{{ order.inboundDate }} / {{ order.expressCompany }}</td>
                 <td>
                   <span class="cell-stack">
                     <b>{{ order.customer }}</b>
-                    <small>{{ order.material }}</small>
+                    <small>{{ order.goodsName || order.material }}</small>
                   </span>
                 </td>
                 <td>{{ order.courierNo }}</td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ order.senderName }} -> {{ order.receiverName }}</b>
+                    <small>拆箱：{{ order.unpackSigner || '待补签' }}</small>
+                  </span>
+                </td>
                 <td>{{ order.qty }} 件 / {{ order.weight }}</td>
                 <td><StatusBadge :label="order.status" :tone="statusTone(order.status)" /></td>
-                <td><StatusBadge :label="order.video" :tone="videoTone(order.video)" /></td>
-                <td>{{ order.owner }}</td>
                 <td><button class="table-action" type="button" @click.stop="selectInboundOrder(order.code)">处理</button></td>
               </tr>
             </tbody>
@@ -243,12 +248,24 @@ function selectInboundOrder(code: string) {
             <dd>{{ activeOrder.customer }}</dd>
             <dt>物料</dt>
             <dd>{{ activeOrder.material }}</dd>
+            <dt>货品名称</dt>
+            <dd>{{ activeOrder.goodsName }}</dd>
+            <dt>快递名称</dt>
+            <dd>{{ activeOrder.expressCompany }}</dd>
             <dt>快递单</dt>
             <dd>{{ activeOrder.courierNo }}</dd>
+            <dt>寄货人</dt>
+            <dd>{{ activeOrder.senderName }}</dd>
+            <dt>收货人</dt>
+            <dd>{{ activeOrder.receiverName }}</dd>
+            <dt>拆箱签字</dt>
+            <dd>{{ activeOrder.unpackSigner }}</dd>
             <dt>权属</dt>
             <dd>{{ activeOrder.owner }}</dd>
             <dt>数量重量</dt>
             <dd>{{ activeOrder.qty }} 件 / {{ activeOrder.weight }}</dd>
+            <dt>备注</dt>
+            <dd>{{ activeOrder.remark }}</dd>
             <dt>风险</dt>
             <dd>{{ activeRisk?.title ?? '无阻断' }}</dd>
           </dl>

@@ -50,6 +50,12 @@ class BusinessOperationServiceTest {
                 1001L,
                 null,
                 "MAT-18K-RING",
+                "顺丰",
+                "SF1048329001",
+                "张先生",
+                "何琳",
+                "何琳",
+                "戒托来料",
                 "RAW-CUSTOMER",
                 bd("320"),
                 bd("486.250"),
@@ -66,7 +72,7 @@ class BusinessOperationServiceTest {
         StockLedgerEntry ledger = repository.findAllLedgers().get(0);
         assertThat(ledger.documentType()).isEqualTo("inbound_confirm");
         assertThat(ledger.documentCode()).isEqualTo("MD-20260706-001");
-        assertThat(ledger.remark()).contains("库管员 何琳", "SF1048329001", "拆包称重确认");
+        assertThat(ledger.remark()).contains("库管员 何琳", "顺丰", "张先生", "拆箱签字", "戒托来料", "SF1048329001", "拆包称重确认");
         assertThat(ledger.to().ownerType()).isEqualTo(OwnerType.CUSTOMER);
         assertThat(ledger.to().ownerCustomerId()).isEqualTo(1001L);
         assertThat(ledger.to().customerId()).isEqualTo(1001L);
@@ -107,6 +113,14 @@ class BusinessOperationServiceTest {
                 bd("210"),
                 bd("478.240"),
                 "焊接",
+                "人工",
+                "银链",
+                "WELD-02",
+                "焊接",
+                "15:00",
+                "进行中",
+                "称重待补",
+                "待交单审核",
                 "王强",
                 "HO-20260706-018",
                 "扫码报工确认"
@@ -126,7 +140,7 @@ class BusinessOperationServiceTest {
         assertThat(semiFinishedBalance.quantity()).isEqualByComparingTo("210");
         assertThat(semiFinishedBalance.weight()).isEqualByComparingTo("478.240");
         assertThat(ledger.documentType()).isEqualTo("production_report");
-        assertThat(ledger.remark()).contains("焊接", "王强", "HO-20260706-018");
+        assertThat(ledger.remark()).contains("焊接", "王强", "WELD-02", "银链", "交单审核", "HO-20260706-018");
     }
 
     @Test
@@ -368,9 +382,13 @@ class BusinessOperationServiceTest {
                 "MAT-SILVER-CHAIN",
                 "FINISHED-CUSTOMER",
                 "SHIPPED-CUSTOMER",
+                "2026-07-06",
+                "成品",
                 bd("6"),
                 bd("13.660"),
+                "顺丰",
                 "SF-OUT-20260706-022",
+                "何琳",
                 "库管员 何琳",
                 "ATT-OUT-20260706-022",
                 "客户成品出库"
@@ -391,7 +409,7 @@ class BusinessOperationServiceTest {
         assertThat(shippedBalance.weight()).isEqualByComparingTo("13.660");
         assertThat(ledger.documentType()).isEqualTo("outbound_shipment");
         assertThat(ledger.documentCode()).isEqualTo("OUT-20260706-022");
-        assertThat(ledger.remark()).contains("SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
+        assertThat(ledger.remark()).contains("2026-07-06", "成品", "顺丰", "何琳", "SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
     }
 
     @Test

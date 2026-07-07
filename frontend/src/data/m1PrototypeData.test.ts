@@ -46,7 +46,8 @@ describe('m1PrototypeData', () => {
   it('keeps M2 workspace review samples centralized', () => {
     expect(inboundCheckpoints.some((item) => item.label === '视频完整率')).toBe(true);
     expect(inboundRisks.every((risk) => risk.owner && risk.action)).toBe(true);
-    expect(productionStationLoads.some((station) => station.bottleneck.includes('称重'))).toBe(true);
+    expect(productionStationLoads.some((station) => station.station === '雕刻' && station.bottleneck.includes('操机签字'))).toBe(true);
+    expect(productionStationLoads.some((station) => station.station === '抛光' && station.bottleneck.includes('交单审核'))).toBe(true);
     expect(productionHandoffs.some((handoff) => handoff.status === '审批阻断')).toBe(true);
     expect(qualityMetrics.some((metric) => metric.label === '损耗阻断')).toBe(true);
     expect(inventoryLedgerEntries.every((entry) => entry.source && entry.operator)).toBe(true);

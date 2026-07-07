@@ -39,12 +39,19 @@ interface InboundOrderDto {
   code: string;
   customer: string;
   material: string;
+  inboundDate?: string;
+  expressCompany?: string;
   courierNo: string;
+  senderName?: string;
+  receiverName?: string;
+  unpackSigner?: string;
+  goodsName?: string;
   quantity: number;
   weight: string;
   status: string;
   videoStatus: string;
   ownerType: string;
+  remark?: string;
 }
 
 interface WorkOrderDto {
@@ -52,6 +59,14 @@ interface WorkOrderDto {
   customer: string;
   material: string;
   process: string;
+  processCategory?: string;
+  productCategory?: string;
+  machineNo?: string;
+  workItemName?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  completionStatus?: string;
+  handoffAuditStatus?: string;
   assignee: string;
   plannedQuantity: number;
   finishedQuantity: number;
@@ -159,12 +174,19 @@ export function mapInboundWorkspace(dto: InboundWorkspaceDto): InboundWorkspaceM
       code: order.code,
       customer: order.customer,
       material: order.material,
+      inboundDate: order.inboundDate ?? '',
+      expressCompany: order.expressCompany ?? '',
       courierNo: order.courierNo,
+      senderName: order.senderName ?? '',
+      receiverName: order.receiverName ?? '',
+      unpackSigner: order.unpackSigner ?? '',
+      goodsName: order.goodsName ?? order.material,
       qty: order.quantity,
       weight: order.weight,
       status: order.status,
       video: order.videoStatus,
       owner: order.ownerType,
+      remark: order.remark ?? '',
     })),
     risks: dto.risks,
   };
@@ -187,6 +209,14 @@ export function mapProductionWorkspace(dto: ProductionWorkspaceDto): ProductionW
       customer: order.customer,
       material: order.material,
       process: order.process,
+      processCategory: order.processCategory ?? '',
+      productCategory: order.productCategory ?? '',
+      machineNo: order.machineNo ?? '',
+      workItemName: order.workItemName ?? order.process,
+      startedAt: order.startedAt ?? '',
+      finishedAt: order.finishedAt ?? '',
+      completionStatus: order.completionStatus ?? order.status,
+      handoffAuditStatus: order.handoffAuditStatus ?? '',
       assignee: order.assignee,
       plannedQty: order.plannedQuantity,
       finishedQty: order.finishedQuantity,

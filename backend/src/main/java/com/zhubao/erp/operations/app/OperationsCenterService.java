@@ -81,13 +81,16 @@ public class OperationsCenterService {
         FrontendProbe frontend = probeFrontend();
         PwaProbe pwa = probePwaAssets();
         LogProbe logs = probeLogs(now);
-        List<OperationsCenterSnapshot.BackupStatus> backups = probeBackups(now);
-        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, pwa, backups, now);
+        List<OperationsCenterSnapshot.BackupStatus> localBackups = probeBackups(now);
+        CosBackupProbe cosBackup = probeCosBackup();
+        List<OperationsCenterSnapshot.BackupStatus> backups = new ArrayList<>(localBackups);
+        backups.add(cosBackupStatus(cosBackup, now));
+        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, pwa, localBackups, cosBackup, now);
         List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now, logs);
 
         long degradedServices = services.stream().filter(service -> !"green".equals(service.tone())).count();
         int criticalErrors = (int) errors.stream().filter(error -> "red".equals(error.tone())).count();
-        String backupStatus = backups.stream().allMatch(backup -> "green".equals(backup.tone())) ? "正常" : "需配置";
+        String backupStatus = backups.stream().allMatch(this::backupToneAcceptable) ? "正常" : "需配置";
         String overallStatus = criticalErrors > 0 || degradedServices > 0 ? "ATTENTION" : "ONLINE";
 
         return new OperationsCenterSnapshot(
@@ -106,7 +109,7 @@ public class OperationsCenterService {
                 errors,
                 logs.entries(),
                 backups,
-                checklist(database, frontend, pwa, logs)
+                checklist(database, frontend, pwa, logs, cosBackup)
         );
     }
 
@@ -114,7 +117,8 @@ public class OperationsCenterService {
             DatabaseProbe database,
             FrontendProbe frontend,
             PwaProbe pwa,
-            List<OperationsCenterSnapshot.BackupStatus> backups,
+            List<OperationsCenterSnapshot.BackupStatus> localBackups,
+            CosBackupProbe cosBackup,
             Instant now
     ) {
         List<OperationsCenterSnapshot.ServiceStatus> services = new ArrayList<>();
@@ -159,7 +163,7 @@ public class OperationsCenterService {
                 checkedAt,
                 database.tone()
         ));
-        String backupTone = backups.stream().allMatch(backup -> "green".equals(backup.tone())) ? "green" : "amber";
+        String backupTone = localBackups.stream().allMatch(this::backupToneAcceptable) ? "green" : "amber";
         services.add(new OperationsCenterSnapshot.ServiceStatus(
                 "BACKUP",
                 "数据库备份",
@@ -169,6 +173,16 @@ public class OperationsCenterService {
                 "运维负责人",
                 checkedAt,
                 backupTone
+        ));
+        services.add(new OperationsCenterSnapshot.ServiceStatus(
+                "COS_BACKUP",
+                "腾讯云 COS 备份",
+                cosBackup.status(),
+                cosBackup.storage(),
+                cosBackup.detail(),
+                "运维负责人",
+                checkedAt,
+                cosBackup.tone()
         ));
         services.add(new OperationsCenterSnapshot.ServiceStatus(
                 "ATTACHMENT",
@@ -539,6 +553,84 @@ public class OperationsCenterService {
         }
     }
 
+    private CosBackupProbe probeCosBackup() {
+        boolean enabled = Boolean.parseBoolean(environment.getProperty("zhubao.operations.cos.enabled", "false"));
+        String bucket = environment.getProperty("zhubao.operations.cos.bucket", "");
+        String region = environment.getProperty("zhubao.operations.cos.region", "");
+        String prefix = environment.getProperty("zhubao.operations.cos.prefix", "");
+        String credentialsMode = environment.getProperty("zhubao.operations.cos.credentials-mode", "");
+        String lifecyclePolicy = environment.getProperty("zhubao.operations.cos.lifecycle-policy", "");
+
+        if (!enabled) {
+            return new CosBackupProbe(
+                    "COS-BACKUP-DISABLED",
+                    "DISABLED",
+                    "未启用",
+                    "腾讯云 COS 异地备份",
+                    "未启用",
+                    "未配置",
+                    "未配置",
+                    "未启用 COS 异地备份。本地电脑部署可选；腾讯云部署应启用并配置 Bucket、Region、Prefix、凭证模式和生命周期/保留策略。",
+                    "blue"
+            );
+        }
+
+        List<String> missing = new ArrayList<>();
+        if (bucket == null || bucket.isBlank()) missing.add("bucket");
+        if (region == null || region.isBlank()) missing.add("region");
+        if (prefix == null || prefix.isBlank()) missing.add("prefix");
+        if (credentialsMode == null || credentialsMode.isBlank()) missing.add("credentials-mode");
+        if (lifecyclePolicy == null || lifecyclePolicy.isBlank()) missing.add("lifecycle-policy");
+
+        if (!missing.isEmpty()) {
+            return new CosBackupProbe(
+                    "COS-BACKUP-INCOMPLETE",
+                    "CONFIG_INCOMPLETE",
+                    "配置待补",
+                    "腾讯云 COS 异地备份",
+                    "cos://配置不完整",
+                    blankToReviewText(credentialsMode, "未配置"),
+                    blankToReviewText(lifecyclePolicy, "未配置"),
+                    "已启用 COS 异地备份，但缺少 " + String.join(", ", missing)
+                            + "。运维中心只展示配置状态，不保存密钥、不执行上传或删除命令。",
+                    "amber"
+            );
+        }
+
+        String normalizedPrefix = prefix.endsWith("/") ? prefix : prefix + "/";
+        String credentialNote = "temporary".equalsIgnoreCase(credentialsMode)
+                ? "临时密钥/STS"
+                : credentialsMode + "（需确认最小权限）";
+        return new CosBackupProbe(
+                "COS-BACKUP-READY",
+                "READY",
+                "配置完整",
+                "腾讯云 COS 异地备份",
+                "cos://" + bucket + "/" + normalizedPrefix,
+                credentialsMode,
+                lifecyclePolicy,
+                "COS Bucket、Region、Prefix、凭证模式和生命周期/保留策略已配置；凭证模式：" + credentialNote
+                        + "；生命周期：" + lifecyclePolicy
+                        + "。页面只读展示 readiness，上传由受控脚本或 coscmd 执行。",
+                "green"
+        );
+    }
+
+    private OperationsCenterSnapshot.BackupStatus cosBackupStatus(CosBackupProbe cosBackup, Instant now) {
+        return new OperationsCenterSnapshot.BackupStatus(
+                cosBackup.code(),
+                cosBackup.target(),
+                cosBackup.label(),
+                "由本地备份同步任务记录",
+                DISPLAY_TIME.format(now.plusSeconds(backupRpoHours * 3600L)),
+                cosBackup.storage(),
+                "不适用",
+                "沿用本地备份 SHA-256",
+                cosBackup.detail(),
+                cosBackup.tone()
+        );
+    }
+
     private List<OperationsCenterSnapshot.ErrorSummary> errorSummaries(Instant now, LogProbe logs) {
         if (!logs.errorSummaries().isEmpty()) {
             return logs.errorSummaries();
@@ -744,7 +836,13 @@ public class OperationsCenterService {
         return summaries;
     }
 
-    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(DatabaseProbe database, FrontendProbe frontend, PwaProbe pwa, LogProbe logs) {
+    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(
+            DatabaseProbe database,
+            FrontendProbe frontend,
+            PwaProbe pwa,
+            LogProbe logs,
+            CosBackupProbe cosBackup
+    ) {
         return List.of(
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-001",
@@ -793,8 +891,20 @@ public class OperationsCenterService {
                         blankToReviewText(backupRoot, "未配置 zhubao.operations.backup-root"),
                         "运维负责人",
                         backupRoot == null || backupRoot.isBlank() ? "amber" : "green"
+                ),
+                new OperationsCenterSnapshot.OperationChecklistItem(
+                        "OPS-CHK-007",
+                        "腾讯云 COS 异地备份",
+                        cosBackup.status(),
+                        cosBackup.detail(),
+                        "运维负责人",
+                        cosBackup.tone()
                 )
         );
+    }
+
+    private boolean backupToneAcceptable(OperationsCenterSnapshot.BackupStatus backup) {
+        return "green".equals(backup.tone()) || "blue".equals(backup.tone());
     }
 
     private boolean isBackupFile(Path path) {
@@ -952,6 +1062,19 @@ public class OperationsCenterService {
             entries = List.copyOf(entries);
             errorSummaries = List.copyOf(errorSummaries);
         }
+    }
+
+    private record CosBackupProbe(
+            String code,
+            String status,
+            String label,
+            String target,
+            String storage,
+            String credentialsMode,
+            String lifecyclePolicy,
+            String detail,
+            String tone
+    ) {
     }
 
     private static final class LogErrorAccumulator {

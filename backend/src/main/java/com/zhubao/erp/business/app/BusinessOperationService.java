@@ -546,6 +546,12 @@ public class BusinessOperationService {
 
     private String buildRemark(ConfirmInboundCommand command) {
         StringBuilder remark = new StringBuilder("确认来料入库；操作人：").append(command.operator());
+        appendField(remark, "快递", command.expressCompany());
+        appendField(remark, "快递单号", command.courierNo());
+        appendField(remark, "寄货人", command.senderName());
+        appendField(remark, "收货人", command.receiverName());
+        appendField(remark, "拆箱签字", command.unpackSigner());
+        appendField(remark, "货品名称", command.goodsName());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
             remark.append("；证据：").append(command.evidenceCode());
         }
@@ -560,6 +566,14 @@ public class BusinessOperationService {
                 .append(command.process())
                 .append("；操作人：")
                 .append(command.operator());
+        appendField(remark, "工序类型", command.processCategory());
+        appendField(remark, "品类", command.productCategory());
+        appendField(remark, "机器编号", command.machineNo());
+        appendField(remark, "工作项目", command.workItemName());
+        appendField(remark, "开始时间", command.startedAt());
+        appendField(remark, "完成时间", command.finishedAt());
+        appendField(remark, "完成情况", command.completionStatus());
+        appendField(remark, "交单审核", command.handoffAuditStatus());
         if (command.handoffCode() != null && !command.handoffCode().isBlank()) {
             remark.append("；交接：").append(command.handoffCode());
         }
@@ -648,6 +662,10 @@ public class BusinessOperationService {
                 .append(command.logisticsNo())
                 .append("；操作人：")
                 .append(command.operator());
+        appendField(remark, "交货日期", command.deliveryDate());
+        appendField(remark, "交货类目", command.deliveryCategory());
+        appendField(remark, "快递", command.expressCompany());
+        appendField(remark, "经办人", command.handler());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
             remark.append("；证据：").append(command.evidenceCode());
         }
@@ -706,5 +724,11 @@ public class BusinessOperationService {
             case SCRAP -> StockStatus.SCRAP;
             case FREEZE -> StockStatus.FROZEN;
         };
+    }
+
+    private void appendField(StringBuilder remark, String label, String value) {
+        if (value != null && !value.isBlank()) {
+            remark.append("；").append(label).append("：").append(value);
+        }
     }
 }

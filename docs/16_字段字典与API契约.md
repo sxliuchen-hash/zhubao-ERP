@@ -177,12 +177,19 @@
 | `code` | 母单号，例如 `MD-20260706-001` |
 | `customer` | 客户名称快照 |
 | `material` | 物料名称快照 |
+| `inboundDate` | 入库日期，来自现场签收入库登记 |
+| `expressCompany` | 快递名称/物流方式 |
 | `courierNo` | 快递单号 |
+| `senderName` | 寄货人姓名快照 |
+| `receiverName` | 收货人姓名快照 |
+| `unpackSigner` | 拆箱签字/确认人 |
+| `goodsName` | 现场货品名称快照，可与物料档案名称不同 |
 | `quantity` | 件数 |
 | `weight` | 重量展示值，M3 应拆成 `netWeight` + `weightUnit` |
 | `status` | 入库状态 |
 | `videoStatus` | 拆包视频状态 |
 | `ownerType` | 库存所有权，目前固定为客户所有 |
+| `remark` | 入库备注 |
 
 必须保留的业务约束：
 
@@ -200,6 +207,12 @@
 | `customerId` | 业务客户 ID |
 | `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
 | `materialCode` | 物料编码 |
+| `expressCompany` | 入库快递名称/物流方式 |
+| `courierNo` | 入库快递单号，必须唯一 |
+| `senderName` | 寄货人姓名快照 |
+| `receiverName` | 收货人姓名快照 |
+| `unpackSigner` | 拆箱签字/确认人，一期保存姓名，二期可关联签名附件 |
+| `goodsName` | 现场货品名称快照 |
 | `warehouseCode` | 入库仓库，来料默认 `RAW-CUSTOMER` |
 | `quantity` | 入库数量，必须大于 0 |
 | `weight` | 入库重量，必须大于 0 |
@@ -238,6 +251,14 @@
 | `customer` | 客户名称快照 |
 | `material` | 物料名称快照 |
 | `process` | 当前工序 |
+| `processCategory` | 工序类别：人工/设备/质检/包装 |
+| `productCategory` | 品类快照，雕刻统计必须填写 |
+| `machineNo` | 机器编号，设备类工序必须填写或标记待匹配 |
+| `workItemName` | 工作项目，如粗抛、精抛、返工抛光、雕刻 |
+| `startedAt` | 本次作业开始时间 |
+| `finishedAt` | 本次作业完成时间 |
+| `completionStatus` | 完成情况 |
+| `handoffAuditStatus` | 交单审核状态 |
 | `assignee` | 负责人快照 |
 | `plannedQuantity` | 计划数量 |
 | `finishedQuantity` | 已完成数量 |
@@ -278,9 +299,23 @@
 | `quantity` | 本次报工产出数量，必须大于 0 |
 | `weight` | 本次报工产出重量，必须大于 0 |
 | `process` | 工序名称快照 |
+| `processCategory` | 工序类别快照 |
+| `productCategory` | 品类快照 |
+| `machineNo` | 机器编号快照 |
+| `workItemName` | 工作项目 |
+| `startedAt` | 本次作业开始时间 |
+| `finishedAt` | 本次作业完成时间 |
+| `completionStatus` | 完成情况 |
+| `handoffAuditStatus` | 交单审核状态，提交后默认 `待审核` |
 | `operator` | 操作人快照 |
 | `handoffCode` | 称重交接记录编码 |
 | `remark` | 业务备注 |
+
+现场表单补充约束：
+
+- 抛光报工必须能保存 `workItemName`、`startedAt`、`finishedAt`、`completionStatus` 和 `handoffAuditStatus`。
+- 雕刻报工必须能保存 `productCategory`、`machineNo` 和操机人快照；未绑定设备档案时允许先保存 `machineNo` 文本，但产能统计标记为待匹配设备。
+- `completionStatus` 不直接等同于工序状态，工序是否流转仍以后端状态机和质检规则为准。
 
 返回 `ProductionReportResult`：
 
@@ -706,9 +741,13 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 | `materialCode` | 物料编码 |
 | `fromWarehouseCode` | 来源成品仓/客户成品区 |
 | `toWarehouseCode` | 目标已发货区或发货状态仓 |
+| `deliveryDate` | 交货日期 |
+| `deliveryCategory` | 交货类目，如成品、返修件、补发件、样品 |
 | `quantity` | 本次出库数量，必须大于 0 |
 | `weight` | 本次出库重量，必须大于 0 |
+| `expressCompany` | 快递公司或物流方式 |
 | `logisticsNo` | 物流单号或客户交接单号 |
+| `handler` | 经办人姓名快照 |
 | `operator` | 出库操作人快照 |
 | `evidenceCode` | 出库照片、物流单、交接单或附件编码 |
 | `remark` | 备注 |
@@ -726,7 +765,10 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 | `toStockStatus` | 目标库存状态，当前为 `SHIPPED` |
 | `quantity` | 已出库数量 |
 | `weight` | 已出库重量 |
+| `deliveryCategory` | 交货类目快照 |
+| `expressCompany` | 快递公司或物流方式 |
 | `logisticsNo` | 物流单号或客户交接单号 |
+| `handler` | 经办人姓名快照 |
 | `operator` | 出库操作人快照 |
 | `evidenceCode` | 证据编码 |
 
@@ -735,6 +777,7 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 - `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
 - 成品出库只允许改变仓库和库存状态，当前基线为 `FINISHED -> SHIPPED`。
 - 若来源成品库存不足，后端必须拒绝写台账。
+- 经办人缺失不得确认出货；快递信息不完整时只能保存草稿，不能转为 `SHIPPED`。
 - 出库不等同于退货；客户退货由 `POST /customer-returns` 独立命令反向写台账。
 
 ### 7.6 `CustomerReturnCommand`

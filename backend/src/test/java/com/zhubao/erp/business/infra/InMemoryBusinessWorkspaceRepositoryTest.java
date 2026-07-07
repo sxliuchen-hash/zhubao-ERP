@@ -13,6 +13,13 @@ class InMemoryBusinessWorkspaceRepositoryTest {
         );
 
         assertThat(repository.inbound().orders()).hasSize(4);
+        assertThat(repository.inbound().orders())
+                .anySatisfy(order -> assertThat(order.unpackSigner()).isEqualTo("何琳"));
+        assertThat(repository.production().workOrders())
+                .anySatisfy(order -> {
+                    assertThat(order.process()).isEqualTo("雕刻");
+                    assertThat(order.machineNo()).isEqualTo("ENG-03");
+                });
         assertThat(repository.production().handoffs())
                 .anySatisfy(handoff -> assertThat(handoff.code()).isEqualTo("HO-20260706-021"));
         assertThat(repository.inventory().evidence())
