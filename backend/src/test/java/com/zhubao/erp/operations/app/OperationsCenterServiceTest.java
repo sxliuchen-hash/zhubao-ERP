@@ -109,6 +109,48 @@ class OperationsCenterServiceTest {
     }
 
     @Test
+    void reportsPwaAssetsOnlineWhenManifestAndServiceWorkerAreReachable() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/manifest.webmanifest", exchange -> {
+            byte[] body = "{\"name\":\"来料加工 ERP\",\"start_url\":\"/\"}".getBytes();
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.createContext("/sw.js", exchange -> {
+            byte[] body = "self.addEventListener('install',()=>{});self.addEventListener('activate',()=>{});".getBytes();
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+
+        try {
+            String probeUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+            OperationsCenterService service = new OperationsCenterService(
+                    new MockEnvironment(),
+                    noDataSourceProvider(),
+                    "http://localhost/",
+                    probeUrl,
+                    "",
+                    "",
+                    800,
+                    24
+            );
+
+            OperationsCenterSnapshot snapshot = service.snapshot();
+            OperationsCenterSnapshot.ServiceStatus pwa = findService(snapshot, "PWA_ASSETS");
+
+            assertThat(pwa.status()).isEqualTo("ONLINE");
+            assertThat(pwa.tone()).isEqualTo("green");
+            assertThat(pwa.detail()).contains("Manifest").contains("Service Worker");
+            assertThat(pwa.endpoint()).contains("manifest.webmanifest").contains("sw.js");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void readsConfiguredLogFileAndAggregatesWarningsAndErrors() throws Exception {
         Path log = tempDir.resolve("zhubao-erp.log");
         Files.writeString(log, String.join("\n",
@@ -142,7 +184,7 @@ class OperationsCenterServiceTest {
                 .extracting(OperationsCenterSnapshot.ErrorSummary::severity)
                 .containsExactly("P2", "P1");
 
-        OperationsCenterSnapshot.OperationChecklistItem logChecklist = findChecklist(snapshot, "OPS-CHK-004");
+        OperationsCenterSnapshot.OperationChecklistItem logChecklist = findChecklist(snapshot, "OPS-CHK-005");
         assertThat(logChecklist.status()).isEqualTo("READ_FILE");
         assertThat(logChecklist.tone()).isEqualTo("green");
         assertThat(logChecklist.evidence()).contains("zhubao-erp.log");

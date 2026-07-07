@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.47 / 运维日志聚合</strong>
-        <i>仍处于 M3 增量开发：核心台账、业务动作、附件、硬件 POC、运维中心和 Docker 交付基线已接入。</i>
+        <strong>M3.49 / 现场控制台视觉重构</strong>
+        <i>仍处于 M3 增量开发：本轮先把首页和运维中心收敛为更接近生产现场的 ERP/MES 控制台。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,9 +54,9 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">Workshop Console</span>
+          <span class="eyebrow">ZB-MES Control Room</span>
           <h1>{{ title }}</h1>
-          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入操作台。</p>
+          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场控制台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>

@@ -2,13 +2,15 @@
 
 **文档版本**：V1.0  
 **更新日期**：2026-07-07  
-**适用阶段**：M3.45 Docker 运维探活配置
+**适用阶段**：M3.49 Docker 运维探活与部署方案补强
 
 ---
 
 ## 1. 目标
 
 本方案用于降低现场部署和运维成本，并避免向客户交付源码。
+
+腾讯云 CVM + COS、本地电脑、本地服务器三类部署运维细节见 [20_腾讯云与本地部署运维方案](./20_腾讯云与本地部署运维方案.md)。
 
 交付原则：
 
@@ -219,7 +221,7 @@ Compose 卷：
 4. 复制或重新配置 `.env`。
 5. 执行 `start.ps1` 或 `start.sh`。
 6. 检查 `docker compose ps`、前端页面、`/api/operations/center` 和 `/actuator/health`。
-7. 在运维中心确认 `前端 PWA` 不再是 `NOT_CONFIGURED`，Docker 默认应通过 `http://frontend/` 探活。
+7. 在运维中心确认 `前端 PWA` 和 `PWA 静态资源` 不再是 `NOT_CONFIGURED`，Docker 默认应通过 `http://frontend/` 探活，并能读取 `manifest.webmanifest` 与 `sw.js`。
 
 回滚流程：
 

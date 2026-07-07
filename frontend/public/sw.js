@@ -1,3 +1,5 @@
+self.__ZHUBAO_SW_VERSION__ = 'm3.48-pwa-assets';
+
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
 });

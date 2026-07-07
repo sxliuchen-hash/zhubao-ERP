@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.DigestInputStream;
@@ -78,9 +79,10 @@ public class OperationsCenterService {
         Instant now = Instant.now();
         DatabaseProbe database = probeDatabase(now);
         FrontendProbe frontend = probeFrontend();
+        PwaProbe pwa = probePwaAssets();
         LogProbe logs = probeLogs(now);
         List<OperationsCenterSnapshot.BackupStatus> backups = probeBackups(now);
-        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, backups, now);
+        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, pwa, backups, now);
         List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now, logs);
 
         long degradedServices = services.stream().filter(service -> !"green".equals(service.tone())).count();
@@ -104,13 +106,14 @@ public class OperationsCenterService {
                 errors,
                 logs.entries(),
                 backups,
-                checklist(database, frontend, logs)
+                checklist(database, frontend, pwa, logs)
         );
     }
 
     private List<OperationsCenterSnapshot.ServiceStatus> serviceStatuses(
             DatabaseProbe database,
             FrontendProbe frontend,
+            PwaProbe pwa,
             List<OperationsCenterSnapshot.BackupStatus> backups,
             Instant now
     ) {
@@ -135,6 +138,16 @@ public class OperationsCenterService {
                 "前端负责人",
                 checkedAt,
                 frontend.tone()
+        ));
+        services.add(new OperationsCenterSnapshot.ServiceStatus(
+                "PWA_ASSETS",
+                "PWA 静态资源",
+                pwa.status(),
+                pwa.endpoint(),
+                pwa.detail(),
+                "前端负责人",
+                checkedAt,
+                pwa.tone()
         ));
         services.add(new OperationsCenterSnapshot.ServiceStatus(
                 "DATABASE",
@@ -336,6 +349,109 @@ public class OperationsCenterService {
                     "red"
             );
         }
+    }
+
+    private PwaProbe probePwaAssets() {
+        if (frontendProbeUrl == null || frontendProbeUrl.isBlank()) {
+            return new PwaProbe(
+                    "NOT_CONFIGURED",
+                    "未配置前端探活地址，无法检查 Manifest 和 Service Worker。",
+                    "zhubao.operations.frontend-probe-url 未配置",
+                    "amber"
+            );
+        }
+
+        URI baseUri;
+        try {
+            baseUri = normalizeBaseUri(frontendProbeUrl);
+        } catch (IllegalArgumentException error) {
+            return new PwaProbe(
+                    "CONFIG_ERROR",
+                    "前端探活地址格式错误：" + truncate(error.getMessage(), 120),
+                    frontendProbeUrl,
+                    "red"
+            );
+        }
+
+        String scheme = baseUri.getScheme();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+            return new PwaProbe(
+                    "CONFIG_ERROR",
+                    "PWA 静态资源探活只支持 HTTP/HTTPS 地址。",
+                    frontendProbeUrl,
+                    "red"
+            );
+        }
+
+        int timeoutMs = Math.max(200, frontendProbeTimeoutMs);
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(timeoutMs))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        URI manifestUri = baseUri.resolve("manifest.webmanifest");
+        URI serviceWorkerUri = baseUri.resolve("sw.js");
+
+        try {
+            AssetProbe manifest = fetchAsset(client, manifestUri, timeoutMs);
+            AssetProbe serviceWorker = fetchAsset(client, serviceWorkerUri, timeoutMs);
+            boolean manifestHealthy = manifest.success()
+                    && manifest.body().contains("\"name\"")
+                    && manifest.body().contains("\"start_url\"");
+            boolean serviceWorkerHealthy = serviceWorker.success()
+                    && serviceWorker.body().contains("addEventListener('install'")
+                    && serviceWorker.body().contains("addEventListener('activate'");
+
+            if (manifestHealthy && serviceWorkerHealthy) {
+                return new PwaProbe(
+                        "ONLINE",
+                        "Manifest 和 Service Worker 可访问，manifest HTTP " + manifest.statusCode()
+                                + "，sw HTTP " + serviceWorker.statusCode() + "。",
+                        manifestUri + " / " + serviceWorkerUri,
+                        "green"
+                );
+            }
+
+            return new PwaProbe(
+                    "DEGRADED",
+                    "PWA 静态资源不完整：manifest HTTP " + manifest.statusCode()
+                            + "，sw HTTP " + serviceWorker.statusCode() + "。",
+                    manifestUri + " / " + serviceWorkerUri,
+                    "amber"
+            );
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return new PwaProbe(
+                    "DOWN",
+                    "PWA 静态资源探活被中断：" + truncate(error.getMessage(), 120),
+                    manifestUri + " / " + serviceWorkerUri,
+                    "red"
+            );
+        } catch (IOException error) {
+            return new PwaProbe(
+                    "DOWN",
+                    error.getClass().getSimpleName() + ": " + truncate(error.getMessage(), 160),
+                    manifestUri + " / " + serviceWorkerUri,
+                    "red"
+            );
+        }
+    }
+
+    private URI normalizeBaseUri(String rawUrl) {
+        String value = rawUrl.endsWith("/") ? rawUrl : rawUrl + "/";
+        return URI.create(value);
+    }
+
+    private AssetProbe fetchAsset(HttpClient client, URI uri, int timeoutMs) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofMillis(timeoutMs))
+                .header("User-Agent", "zhubao-operations-center")
+                .GET()
+                .build();
+        HttpResponse<String> response = client.send(
+                request,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
+        return new AssetProbe(response.statusCode(), response.body());
     }
 
     private List<OperationsCenterSnapshot.BackupStatus> probeBackups(Instant now) {
@@ -628,7 +744,7 @@ public class OperationsCenterService {
         return summaries;
     }
 
-    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(DatabaseProbe database, FrontendProbe frontend, LogProbe logs) {
+    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(DatabaseProbe database, FrontendProbe frontend, PwaProbe pwa, LogProbe logs) {
         return List.of(
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-001",
@@ -656,6 +772,14 @@ public class OperationsCenterService {
                 ),
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-004",
+                        "PWA 静态资源探活",
+                        pwa.status(),
+                        pwa.detail(),
+                        "前端负责人",
+                        pwa.tone()
+                ),
+                new OperationsCenterSnapshot.OperationChecklistItem(
+                        "OPS-CHK-005",
                         "日志来源",
                         logs.status(),
                         logs.detail(),
@@ -663,7 +787,7 @@ public class OperationsCenterService {
                         logs.tone()
                 ),
                 new OperationsCenterSnapshot.OperationChecklistItem(
-                        "OPS-CHK-005",
+                        "OPS-CHK-006",
                         "备份目录",
                         backupRoot == null || backupRoot.isBlank() ? "待配置" : "已配置",
                         blankToReviewText(backupRoot, "未配置 zhubao.operations.backup-root"),
@@ -798,6 +922,23 @@ public class OperationsCenterService {
             String endpoint,
             String tone
     ) {
+    }
+
+    private record PwaProbe(
+            String status,
+            String detail,
+            String endpoint,
+            String tone
+    ) {
+    }
+
+    private record AssetProbe(
+            int statusCode,
+            String body
+    ) {
+        private boolean success() {
+            return statusCode >= 200 && statusCode < 400;
+        }
     }
 
     private record LogProbe(

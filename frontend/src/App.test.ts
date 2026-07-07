@@ -6,8 +6,8 @@ describe('App', () => {
   it('starts on the M1 business workbench and exposes core modules', () => {
     const wrapper = mount(App);
 
-    expect(wrapper.text()).toContain('Workshop Console');
-    expect(wrapper.text()).toContain('M3.47 / 运维日志聚合');
+    expect(wrapper.text()).toContain('ZB-MES Control Room');
+    expect(wrapper.text()).toContain('M3.49 / 现场控制台视觉重构');
     expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
     expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
     expect(wrapper.text()).toContain('首页工作台');

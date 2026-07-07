@@ -1,6 +1,9 @@
 {
   "name": "来料加工 ERP M1",
   "short_name": "ERP M1",
+  "id": "/",
+  "description": "来料加工进销存与生产管理系统 PWA 作业端",
+  "version": "m3.48-pwa-assets",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#eef2f6",
