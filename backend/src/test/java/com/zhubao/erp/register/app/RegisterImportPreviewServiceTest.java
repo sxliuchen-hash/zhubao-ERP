@@ -150,6 +150,47 @@ class RegisterImportPreviewServiceTest {
     }
 
     @Test
+    void previewsPolishingRowsWithoutPaperSequenceWhenDetailFieldsExist() throws IOException {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Sheet1");
+            sheet.createRow(0).createCell(0).setCellValue("工作项目记录单（日）");
+            Row context = sheet.createRow(2);
+            context.createCell(0).setCellValue("姓名：");
+            context.createCell(1).setCellValue("李华");
+            context.createCell(3).setCellValue("日期");
+            context.createCell(5).setCellValue("7月6日");
+            Row header = sheet.createRow(3);
+            header.createCell(0).setCellValue("序号");
+            header.createCell(1).setCellValue("工作项目");
+            header.createCell(2).setCellValue("开始时间");
+            header.createCell(3).setCellValue("完成时间");
+            header.createCell(4).setCellValue("完成情况");
+            header.createCell(5).setCellValue("交单审核");
+            Row data = sheet.createRow(4);
+            data.createCell(1).setCellValue("精抛");
+            data.createCell(2).setCellValue("13:40");
+            data.createCell(3).setCellValue("14:30");
+            data.createCell(4).setCellValue("已完成");
+            data.createCell(5).setCellValue("已接收");
+
+            RegisterImportPreview preview = previewService.preview(
+                    "REG-POLISHING",
+                    "2026-07-07",
+                    "抛光登记表.xlsx",
+                    bytes(workbook)
+            );
+
+            assertThat(preview.totalRows()).isEqualTo(1);
+            RegisterImportPreviewRow row = preview.rows().get(0);
+            assertThat(row.status()).isEqualTo("READY");
+            assertThat(row.sourceLineNo()).isEqualTo(5);
+            assertThat(row.sourceRegisterSequence()).isEmpty();
+            assertThat(row.normalizedFields()).containsEntry("workItemName", "精抛");
+            assertThat(row.normalizedFields()).containsEntry("operator", "李华");
+        }
+    }
+
+    @Test
     void previewsEngravingRowsWithMergedContextInherited() throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Sheet1");

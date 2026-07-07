@@ -28,7 +28,7 @@ class RegisterImportTemplateServiceTest {
         assertThat(templates.get(2).validationRules())
                 .anySatisfy(rule -> assertThat(rule.description()).contains("姓名和日期必须展开"));
         assertThat(templates.get(3).validationRules())
-                .anySatisfy(rule -> assertThat(rule.description()).contains("合并区域继承"));
+                .anySatisfy(rule -> assertThat(rule.description()).contains("上下文继承"));
         assertThat(templates.get(3).fields())
                 .anySatisfy(field -> assertThat(field.targetField()).isEqualTo("machineLineNo"));
     }

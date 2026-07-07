@@ -79,7 +79,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     nextAction: '补 sourceSheetName/importBatchNo 后接入 Excel 上传解析',
     fields: [
       field('序号', 'sourceRegisterSequence', false, '保留纸质序号', '不作业务主键'),
-      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表'),
+      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表', 'RegisterImportPreview'),
       field('入库日期', 'inboundDate', true, '月日补全年份', 'yyyy-MM-dd'),
       field('快递名称', 'expressCompany', true, '原文 trim', '不能为空'),
       field('快递单号', 'courierNo', true, '原文 trim', '全局追溯入口，建议唯一'),
@@ -92,6 +92,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     validationRules: [
       rule('IN-001', 'BLOCK', '快递单号重复时不得确认入库', '转人工复核'),
       rule('IN-002', 'WARN', '纸质月日必须按业务日期补全年份', '导入预览标黄'),
+      rule('IN-003', 'BLOCK', '未确认客户和物料前不得拆分工单', '保存草稿'),
     ],
   },
   {
@@ -105,7 +106,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     nextAction: '补出库单结构化持久化和导入批次表',
     fields: [
       field('序号', 'sourceRegisterSequence', false, '保留纸质序号', '不作业务主键'),
-      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表'),
+      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表', 'RegisterImportPreview'),
       field('日期', 'deliveryDate', true, '月日补全年份', 'yyyy-MM-dd'),
       field('客户', 'customerId/customerNameSnapshot', true, '客户名称匹配主数据', '匹配失败转待确认'),
       field('交货类目', 'deliveryCategory', true, '枚举映射', '成品/返修件/补发件/样品'),
@@ -117,6 +118,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     validationRules: [
       rule('OUT-001', 'BLOCK', '出库数量不得超过客户成品可用库存', '拒绝确认出货'),
       rule('OUT-002', 'BLOCK', '经办人缺失不得确认发货', '保存草稿'),
+      rule('OUT-003', 'WARN', '纸质快递栏原文必须保留', '写入 paperExpressText'),
     ],
   },
   {
@@ -132,7 +134,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
       field('姓名', 'operator', true, '表头继承到明细行', '必须匹配员工或保存姓名快照'),
       field('日期', 'workDate', true, '表头继承到明细行', 'yyyy-MM-dd'),
       field('序号', 'sourceRegisterSequence', false, '保留纸质序号', '不作业务主键'),
-      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表'),
+      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表', 'RegisterImportPreview'),
       field('工作项目', 'workItemName', true, '原文 trim', '粗抛/精抛/返工抛光等'),
       field('开始时间', 'startedAt', false, '与 workDate 组合', '跨班次需人工确认'),
       field('完成时间', 'finishedAt', false, '与 workDate 组合', '进行中可为空'),
@@ -143,6 +145,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     validationRules: [
       rule('POL-001', 'BLOCK', '姓名和日期必须展开到每条工作项目明细', '导入预览阻断'),
       rule('POL-002', 'BLOCK', '未交单审核不得进入下一工序或复检', '保存报工草稿'),
+      rule('POL-003', 'WARN', '完成情况不能直接驱动后端状态机', '需工序状态规则复核'),
     ],
   },
   {
@@ -156,19 +159,20 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     nextAction: '新增设备产量独立落库和机器档案匹配',
     fields: [
       field('序号', 'sourceRegisterSequence', false, '日内分组序号', '不作业务主键'),
-      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表'),
-      field('日期', 'workDate', true, '合并单元格继承', 'yyyy-MM-dd'),
-      field('客户', 'customerId/customerNameSnapshot', true, '合并单元格继承并匹配主数据', '匹配失败转待确认'),
-      field('品类', 'productCategory', true, '合并单元格继承', '产能统计必填'),
-      field('机器行号', 'machineLineNo', false, '保留纸质 1-8 台机器行', '用于回表定位'),
+      field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表', 'RegisterImportPreview'),
+      field('日期', 'workDate', true, '组内上下文继承', 'yyyy-MM-dd'),
+      field('客户', 'customerId/customerNameSnapshot', true, '组内上下文继承并匹配主数据', '匹配失败转待确认'),
+      field('品类', 'productCategory', true, '组内上下文继承', '产能统计必填'),
+      field('机器行号', 'machineLineNo', false, '保留纸质 1-8 台机器行', '用于回表定位', 'RegisterImportPreview'),
       field('机器编号', 'machineNo', true, '1-8 号机器行保留', '未匹配设备档案时保存文本'),
       field('雕刻数量', 'quantity + quantityUnit', true, '默认单位件', '数量必须大于 0'),
       field('操机签字', 'operatorSignatureName', true, '姓名快照', '不能用录入人替代'),
       field('备注', 'remark', false, '原文保留', '设备异常说明'),
     ],
     validationRules: [
-      rule('ENG-001', 'BLOCK', '日期、客户、品类空白格必须从上一组合并区域继承', '导入预览阻断'),
+      rule('ENG-001', 'BLOCK', '日期、客户、品类空白格必须从本组上下文继承', '导入预览阻断'),
       rule('ENG-002', 'BLOCK', '操机签字缺失不得确认设备产量', '保存草稿'),
+      rule('ENG-003', 'WARN', '机器编号未匹配设备档案时标记待匹配', '允许先保存文本'),
     ],
   },
 ];
@@ -194,11 +198,12 @@ function field(
   required: boolean,
   normalizeRule: string,
   validationRule: string,
+  targetObject = '业务命令',
 ): RegisterFieldMapping {
   return {
     sourceColumn,
     targetField,
-    targetObject: '业务命令',
+    targetObject,
     required,
     normalizeRule,
     validationRule,

@@ -166,7 +166,7 @@ public class RegisterImportPreviewService {
                 workDate = normalizeDate(readDateContext(sheet, rowIndex, businessDate), businessDate);
                 continue;
             }
-            if (!isNumericLike(firstCell) || isBlankRow(sheet, rowIndex, 1, 6)) {
+            if (!isPolishingDetailRow(sheet, rowIndex, firstCell)) {
                 continue;
             }
             Map<String, String> fields = baseFields(sheet, "工作项目记录单（日）", rowIndex, firstCell);
@@ -372,6 +372,14 @@ public class RegisterImportPreviewService {
         }
         return isEffectiveBlank(rawCellText(sheet, rowIndex, 5))
                 && isEffectiveBlank(rawCellText(sheet, rowIndex, 7));
+    }
+
+    private boolean isPolishingDetailRow(Sheet sheet, int rowIndex, String firstCell) {
+        if (isBlankRow(sheet, rowIndex, 1, 6)) {
+            return false;
+        }
+        String marker = clean(firstCell);
+        return isNumericLike(marker) || marker.isBlank();
     }
 
     private String readLabelValue(Sheet sheet, int rowIndex, int labelColumn, int firstValueColumn, int lastValueColumn) {

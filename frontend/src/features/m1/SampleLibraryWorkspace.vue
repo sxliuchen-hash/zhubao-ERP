@@ -281,7 +281,7 @@ const registerTemplateRows = computed(() =>
       <div class="sample-command-copy">
         <div class="console-title-line">
           <span class="eyebrow">SAMPLE CONTROL</span>
-          <StatusBadge label="M3.68 真实模板校正" tone="green" />
+          <StatusBadge label="M3.70 登记表结构复核" tone="green" />
         </div>
         <h2>样例验收指挥台</h2>
         <p>
