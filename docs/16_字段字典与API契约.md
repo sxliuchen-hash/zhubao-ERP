@@ -75,7 +75,7 @@
 | `GET /summary` | 样例库/预检操作台 | 返回模板数量、字段数量、必填字段数量和解析器接入状态 |
 | `POST /previews` | 样例库/预检操作台 | multipart 上传 `.xlsx`，按模板解析并返回标准化字段、阻断/警告消息和可确认状态；不写业务台账 |
 
-当前 M3.71 已完成 Excel 上传预览解析、前端问题 CSV 下载和真实空白模板结构复核：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；二次核对已将 `入库登记表.xlsx` 的 `备注 -> remark` 纳入前后端字段模板契约。仍未完成确认导入、结构化导入批次落库和业务单据自动入账。
+当前 M3.73 已完成 Excel 上传预览解析、前端问题 CSV 下载和真实空白模板结构复核：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；二次核对已将 `入库登记表.xlsx` 的 `备注 -> remark` 纳入前后端字段模板契约，并把 4 类模板的 `sourceRegisterType/sourceRegisterLineNo` 纳入字段映射，登记表字段总数由 40 调整为 48。仍未完成确认导入、结构化导入批次落库和业务单据自动入账。
 
 业务操作接口前缀：
 
@@ -143,7 +143,7 @@
 | `sourceLineNo` | Excel 原始行号 |
 | `sourceRegisterSequence` | 纸质表内序号 |
 | `status` | `READY`、`WARNING`、`BLOCKED` |
-| `normalizedFields` | 标准化后的字段 Map，例如 `sourceSheetName`、`inboundDate`、`paperExpressText`、`logisticsNo`、`operator`、`machineLineNo`、`machineNo`、`quantityUnit` |
+| `normalizedFields` | 标准化后的字段 Map，例如 `sourceSheetName`、`sourceRegisterType`、`sourceRegisterLineNo`、`inboundDate`、`paperExpressText`、`logisticsNo`、`operator`、`machineLineNo`、`machineNo`、`quantityUnit` |
 | `messages` | 逐行校验消息 |
 
 `messages[]`：
@@ -175,7 +175,7 @@ CSV 下载只发生在前端浏览器内，来自 `/previews` 返回结果，不
 
 | 字段 | 说明 |
 |---|---|
-| `sourceColumn` | 原始表头字段 |
+| `sourceColumn` | 原始表头字段或系统生成的审计字段，例如 `登记表类型`、`原表行号` |
 | `targetField` | 系统字段或命令字段 |
 | `targetObject` | 目标命令或业务对象 |
 | `required` | 导入确认前是否必填 |

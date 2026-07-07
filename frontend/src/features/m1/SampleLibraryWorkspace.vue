@@ -5,12 +5,16 @@ import {
   acceptanceDataSets,
   hardwarePocRecords,
   openSourceSampleMappings,
+  productionReadinessItems,
   sampleScenarios,
   type Tone,
 } from '../../data/m1PrototypeData';
 import {
+  registerCoverageTone,
+  registerFieldCoverage,
   registerImportSummary,
   registerImportTemplates,
+  registerProcessCoverage,
   registerRuleTone,
   type RegisterImportPreview,
   type RegisterImportPreviewRow,
@@ -58,9 +62,22 @@ function dataSetTone(status: string): Tone {
   return 'amber';
 }
 
+function readinessStatusLabel(status: string) {
+  if (status === 'confirmed') return '已确认';
+  if (status === 'needs-trial') return '需试点';
+  if (status === 'deferred') return '延期';
+  return '待确认';
+}
+
 function parserStatusLabel(status: string) {
   if (status === 'COMMAND_READY') return '预览就绪';
   return '解析器待接入';
+}
+
+function coverageStatusLabel(status: string) {
+  if (status === 'covered') return '已覆盖';
+  if (status === 'partial') return '待结构化';
+  return '未覆盖';
 }
 
 function keyFieldLabel(template: (typeof registerImportTemplates)[number]) {
@@ -266,6 +283,20 @@ const fieldGapRows = computed(() =>
   ),
 );
 
+const readinessSummary = computed(() => ({
+  total: productionReadinessItems.length,
+  p0Pending: productionReadinessItems.filter((item) => item.priority === 'P0' && item.status !== 'confirmed').length,
+  needsTrial: productionReadinessItems.filter((item) => item.status === 'needs-trial').length,
+  confirmed: productionReadinessItems.filter((item) => item.status === 'confirmed').length,
+}));
+
+const registerCoverageSummary = computed(() => ({
+  processCovered: registerProcessCoverage.filter((item) => item.status === 'covered').length,
+  processPartial: registerProcessCoverage.filter((item) => item.status === 'partial').length,
+  fieldsCovered: registerFieldCoverage.filter((item) => item.status === 'covered').length,
+  fieldsPartial: registerFieldCoverage.filter((item) => item.status === 'partial').length,
+}));
+
 const registerTemplateRows = computed(() =>
   registerImportTemplates.map((template) => ({
     ...template,
@@ -281,7 +312,7 @@ const registerTemplateRows = computed(() =>
       <div class="sample-command-copy">
         <div class="console-title-line">
           <span class="eyebrow">SAMPLE CONTROL</span>
-          <StatusBadge label="M3.71 参考表字段补齐" tone="green" />
+          <StatusBadge label="M3.73 登记表覆盖审计" tone="green" />
         </div>
         <h2>样例验收指挥台</h2>
         <p>
@@ -511,6 +542,77 @@ const registerTemplateRows = computed(() =>
       </aside>
     </section>
 
+    <section class="section-block register-audit-panel" aria-label="现场登记表工序与字段覆盖审计">
+      <div class="section-heading compact-heading">
+        <div>
+          <span class="eyebrow">REGISTER COVERAGE</span>
+          <h2>工序与字段覆盖审计</h2>
+          <p>按 2026-07-07 四张参考表复核，把原表内容、系统工序、命令字段和未落结构化项放到同一张表里。</p>
+        </div>
+        <StatusBadge :label="`${registerFieldCoverage.length} 个字段已审计`" tone="green" />
+      </div>
+      <div class="register-audit-kpis" aria-label="登记表覆盖统计">
+        <article>
+          <span>工序已覆盖</span>
+          <strong>{{ registerCoverageSummary.processCovered }}</strong>
+          <small>入库/出货闭环动作</small>
+        </article>
+        <article>
+          <span>工序待结构化</span>
+          <strong>{{ registerCoverageSummary.processPartial }}</strong>
+          <small>抛光日报、雕刻产量</small>
+        </article>
+        <article>
+          <span>字段已覆盖</span>
+          <strong>{{ registerCoverageSummary.fieldsCovered }}</strong>
+          <small>命令/预检可承载</small>
+        </article>
+        <article>
+          <span>字段待结构化</span>
+          <strong>{{ registerCoverageSummary.fieldsPartial }}</strong>
+          <small>审核动作、设备产量</small>
+        </article>
+      </div>
+      <div class="register-process-grid" aria-label="登记表工序覆盖">
+        <article v-for="item in registerProcessCoverage" :key="`${item.sourceFile}-${item.coveredProcess}`">
+          <div>
+            <small>{{ item.sourceFile }}</small>
+            <strong>{{ item.coveredProcess }}</strong>
+          </div>
+          <p>{{ item.sourceContent }}</p>
+          <span>{{ item.systemModule }}</span>
+          <StatusBadge :label="coverageStatusLabel(item.status)" :tone="item.tone" />
+          <em>{{ item.gap }}</em>
+        </article>
+      </div>
+      <div class="erp-table-wrap register-field-audit-wrap">
+        <table class="erp-table register-field-audit-table">
+          <thead>
+            <tr>
+              <th>来源表</th>
+              <th>原表字段</th>
+              <th>系统字段</th>
+              <th>目标对象</th>
+              <th>业务节点</th>
+              <th>剩余缺口</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in registerFieldCoverage" :key="`${item.sourceFile}-${item.sourceColumn}-${item.targetField}`">
+              <td>{{ item.sourceFile }}</td>
+              <td>{{ item.sourceColumn }}</td>
+              <td><code>{{ item.targetField }}</code></td>
+              <td>{{ item.targetObject }}</td>
+              <td>{{ item.processNode }}</td>
+              <td>{{ item.gap }}</td>
+              <td><StatusBadge :label="coverageStatusLabel(item.status)" :tone="registerCoverageTone(item.status)" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="sample-ops-grid" aria-label="样例矩阵与当前样例">
       <div class="sample-table-panel">
         <div class="section-heading compact-heading">
@@ -636,6 +738,75 @@ const registerTemplateRows = computed(() =>
           </article>
         </div>
       </aside>
+    </section>
+
+    <section class="section-block readiness-panel" aria-label="上线待确认门禁">
+      <div class="section-heading compact-heading">
+        <div>
+          <span class="eyebrow">PRODUCTION READINESS</span>
+          <h2>上线待确认门禁</h2>
+          <p>来自 docs/22 的生产上线待确认项，先把 P0 业务规则、主数据、权限、备份恢复和部署形态放到同一张评审表里。</p>
+        </div>
+        <StatusBadge :label="`${readinessSummary.p0Pending} 项 P0 待确认`" tone="red" />
+      </div>
+      <div class="readiness-kpi-strip" aria-label="上线待确认统计">
+        <article>
+          <span>总项数</span>
+          <strong>{{ readinessSummary.total }}</strong>
+          <small>docs/22 可评审项</small>
+        </article>
+        <article>
+          <span>P0 待确认</span>
+          <strong>{{ readinessSummary.p0Pending }}</strong>
+          <small>上线阻断或强门禁</small>
+        </article>
+        <article>
+          <span>需试点</span>
+          <strong>{{ readinessSummary.needsTrial }}</strong>
+          <small>需真实单据跑一轮</small>
+        </article>
+        <article>
+          <span>已确认</span>
+          <strong>{{ readinessSummary.confirmed }}</strong>
+          <small>已落到当前边界</small>
+        </article>
+      </div>
+      <div class="erp-table-wrap readiness-table-wrap">
+        <table class="erp-table readiness-table">
+          <thead>
+            <tr>
+              <th>编号</th>
+              <th>分类</th>
+              <th>待确认项</th>
+              <th>建议默认处理</th>
+              <th>负责人</th>
+              <th>验收证据</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in productionReadinessItems" :key="item.code" class="readiness-row">
+              <td>
+                <span class="cell-stack">
+                  <b>{{ item.code }}</b>
+                  <small>{{ item.priority }}</small>
+                </span>
+              </td>
+              <td>{{ item.category }}</td>
+              <td>
+                <span class="cell-stack">
+                  <b>{{ item.title }}</b>
+                  <small>{{ item.why }}</small>
+                </span>
+              </td>
+              <td>{{ item.defaultAction }}</td>
+              <td>{{ item.owner }}</td>
+              <td>{{ item.evidence }}</td>
+              <td><StatusBadge :label="readinessStatusLabel(item.status)" :tone="item.tone" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="sample-ops-grid acceptance-grid" aria-label="真实验收数据集和现场缺口">

@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.71 / 参考表字段补齐</strong>
-        <i>仍处于 M3 增量开发：本轮按真实 Excel 样表补齐预检解析和问题 CSV，确认入账继续保留人工复核。</i>
+        <strong>M3.73 / 登记表覆盖审计</strong>
+        <i>仍处于 M3 增量开发：本轮按真实 Excel 样表补齐工序与字段覆盖矩阵，确认入账继续保留人工复核。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.71 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.73 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">

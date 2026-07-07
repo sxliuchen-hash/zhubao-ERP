@@ -240,6 +240,19 @@ export interface AcceptanceDataSet {
   status: 'active' | 'needs-field-data' | 'blocked';
 }
 
+export interface ProductionReadinessItem {
+  code: string;
+  category: string;
+  title: string;
+  why: string;
+  defaultAction: string;
+  owner: string;
+  evidence: string;
+  priority: 'P0' | 'P1';
+  status: 'pending' | 'needs-trial' | 'confirmed' | 'deferred';
+  tone: Tone;
+}
+
 // These samples are the review baseline for M1. In M3 they should become API seed data
 // so UI tests, demos, and acceptance scripts all run against the same business cases.
 export const metrics: Metric[] = [
@@ -878,6 +891,129 @@ export const acceptanceDataSets: AcceptanceDataSet[] = [
     evidence: ['POC-VID-20260706-001', 'POC-LBL-20260706-001', 'POC-SCAN-20260706-001', 'POC-SCALE-20260706-001'],
     gaps: ['尚未上传现场真实视频片段', '尚未冻结电子秤接口型号', '尚未完成弱光扫码二轮 POC'],
     status: 'needs-field-data',
+  },
+];
+
+export const productionReadinessItems: ProductionReadinessItem[] = [
+  {
+    code: 'P0-01',
+    category: '所有权',
+    title: '客户来料所有权边界',
+    why: '客户料和自有料混账会导致库存、损耗和赔付无法解释。',
+    defaultAction: '一期所有来料默认客户所有；企业自有料单独仓库和台账维度。',
+    owner: '业务负责人 / 仓库',
+    evidence: '客户来料样例、库存余额截图、台账导出',
+    priority: 'P0',
+    status: 'pending',
+    tone: 'red',
+  },
+  {
+    code: 'P0-02',
+    category: '损耗',
+    title: '损耗计算口径',
+    why: '损耗直接影响审批、责任归因和工资试算。',
+    defaultAction: '按工序投入计算，不用母单总入和最终出货倒推。',
+    owner: '车间主管 / 财务',
+    evidence: '损耗公式签字确认、3 条真实工单试算',
+    priority: 'P0',
+    status: 'pending',
+    tone: 'red',
+  },
+  {
+    code: 'P0-06',
+    category: '返工',
+    title: '返工主状态机',
+    why: '返工单和返工工单双状态机会导致库存重复流转。',
+    defaultAction: '一期返工作为特殊工单类型，关联原工单、原工序和质检记录。',
+    owner: '质检主管 / 技术负责人',
+    evidence: '返工闭环测试用例',
+    priority: 'P0',
+    status: 'needs-trial',
+    tone: 'amber',
+  },
+  {
+    code: 'P0-07',
+    category: '登记表',
+    title: '现场登记表导入边界',
+    why: '纸质/Excel 数据质量不稳定，直接入账风险高。',
+    defaultAction: '一期只开放上传预检和问题 CSV，不自动确认入账。',
+    owner: '仓库 / 车间 / 实施',
+    evidence: '4 张登记表预检结果和修表记录',
+    priority: 'P0',
+    status: 'confirmed',
+    tone: 'green',
+  },
+  {
+    code: 'P0-08',
+    category: '主数据',
+    title: '真实客户、物料、工序主数据',
+    why: '没有真实主数据无法验证匹配、追溯和库存维度。',
+    defaultAction: '提供脱敏客户 5 个、物料 20 个、工序模板 3 套。',
+    owner: '业务负责人 / 实施',
+    evidence: '脱敏主数据表、导入日志',
+    priority: 'P0',
+    status: 'pending',
+    tone: 'red',
+  },
+  {
+    code: 'P0-09',
+    category: '运维',
+    title: '备份和恢复验收',
+    why: '只备份不恢复无法证明上线可恢复。',
+    defaultAction: '上线前做一次非破坏性恢复演练，保留 JSON 记录和 checksum。',
+    owner: 'IT / 实施',
+    evidence: 'verify-restore-*.json、备份 SHA-256',
+    priority: 'P0',
+    status: 'needs-trial',
+    tone: 'amber',
+  },
+  {
+    code: 'P0-10',
+    category: '权限',
+    title: '登录账号和权限边界',
+    why: '演示账号不能用于生产，敏感动作必须受控。',
+    defaultAction: '上线前建立生产用户表、密码哈希、角色、数据范围和登录审计。',
+    owner: 'IT / 管理员',
+    evidence: '账号清单、权限矩阵、登录审计',
+    priority: 'P0',
+    status: 'pending',
+    tone: 'red',
+  },
+  {
+    code: 'BR-LOSS-01',
+    category: '损耗',
+    title: '损耗主口径',
+    why: '重量、件数、金额混用会导致损耗报表和工资试算不可解释。',
+    defaultAction: '贵重物料按重量，普通件按数量，金额只用于试算。',
+    owner: '车间主管 / 财务',
+    evidence: '损耗规则确认表、试算截图',
+    priority: 'P0',
+    status: 'pending',
+    tone: 'red',
+  },
+  {
+    code: 'BR-PROC-02',
+    category: '工序',
+    title: '必须交单审核的工序',
+    why: '未定义审核节点会让抛光、雕刻、返工抛光直接进入下一环节。',
+    defaultAction: '抛光、雕刻、返工抛光先设为必须交单审核。',
+    owner: '车间主管 / 质检',
+    evidence: '工序模板配置、交单审核样例',
+    priority: 'P1',
+    status: 'needs-trial',
+    tone: 'amber',
+  },
+  {
+    code: 'OPS-01',
+    category: '部署',
+    title: '部署形态',
+    why: '腾讯云和本地部署的备份、硬件接入、网络和运维责任不同。',
+    defaultAction: '保留 CVM + Docker Compose + COS 与本地服务器 + Docker Compose 两套交付方案。',
+    owner: 'IT / 实施',
+    evidence: '部署方案签字、资源清单、运行包验收记录',
+    priority: 'P1',
+    status: 'pending',
+    tone: 'amber',
   },
 ];
 

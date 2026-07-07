@@ -22,6 +22,8 @@ class RegisterImportTemplateServiceTest {
         assertThat(templates.get(0).fields())
                 .anySatisfy(field -> assertThat(field.targetField()).isEqualTo("sourceRegisterSequence"))
                 .anySatisfy(field -> assertThat(field.targetField()).isEqualTo("sourceSheetName"))
+                .anySatisfy(field -> assertThat(field.targetField()).isEqualTo("sourceRegisterType"))
+                .anySatisfy(field -> assertThat(field.targetField()).isEqualTo("sourceRegisterLineNo"))
                 .anySatisfy(field -> assertThat(field.targetField()).isEqualTo("quantity + quantityUnit"))
                 .anySatisfy(field -> assertThat(field.targetField()).isEqualTo("remark"));
         assertThat(templates.get(1).fields())
@@ -39,7 +41,7 @@ class RegisterImportTemplateServiceTest {
         RegisterImportTemplateService.RegisterImportSummary summary = service.summary();
 
         assertThat(summary.templates()).isEqualTo(4);
-        assertThat(summary.fields()).isEqualTo(40);
+        assertThat(summary.fields()).isEqualTo(48);
         assertThat(summary.requiredFields()).isGreaterThan(20);
         assertThat(summary.commandReadyTemplates()).isEqualTo(4);
         assertThat(summary.parserStatus()).contains("preview parser ready");

@@ -224,6 +224,103 @@
   font-size: 12px;
 }
 
+.register-audit-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.register-audit-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.register-audit-kpis article {
+  min-height: 66px;
+  border: 1px solid var(--zb-line);
+  border-radius: 7px;
+  background: var(--zb-surface-soft);
+  padding: 9px;
+  display: grid;
+  gap: 4px;
+}
+
+.register-audit-kpis span,
+.register-audit-kpis small,
+.register-process-grid small,
+.register-process-grid em {
+  color: var(--zb-muted);
+  font-size: 12px;
+}
+
+.register-audit-kpis strong {
+  color: var(--zb-text);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.register-process-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.register-process-grid article {
+  min-height: 180px;
+  border: 1px solid var(--zb-line);
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.register-process-grid div {
+  display: grid;
+  gap: 3px;
+}
+
+.register-process-grid strong,
+.register-process-grid p,
+.register-process-grid span {
+  color: var(--zb-text);
+  font-size: 13px;
+}
+
+.register-process-grid p,
+.register-process-grid em {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.register-field-audit-wrap {
+  max-height: 520px;
+  overflow: auto;
+}
+
+.register-field-audit-table {
+  min-width: 1180px;
+}
+
+.register-field-audit-table th,
+.register-field-audit-table td {
+  vertical-align: top;
+}
+
+.register-field-audit-table th:nth-child(5),
+.register-field-audit-table td:nth-child(5),
+.register-field-audit-table th:nth-child(6),
+.register-field-audit-table td:nth-child(6) {
+  min-width: 220px;
+}
+
+.register-field-audit-table code {
+  color: #0f766e;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .register-preview-blockers {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -273,6 +370,8 @@
 @media (max-width: 900px) {
   .register-import-grid,
   .register-kpi-strip,
+  .register-audit-kpis,
+  .register-process-grid,
   .register-preview-controls,
   .register-preview-summary,
   .register-preview-blockers {
@@ -15999,6 +16098,66 @@ input {
   grid-template-columns: minmax(0, 1fr) 360px;
 }
 
+.readiness-panel {
+  border-left: 4px solid #dc2626;
+}
+
+.readiness-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.readiness-kpi-strip article {
+  border: 1px solid var(--m349-line);
+  border-radius: 7px;
+  background: #f8fbfd;
+  padding: 9px;
+}
+
+.readiness-kpi-strip span,
+.readiness-kpi-strip small {
+  display: block;
+  color: var(--m349-muted);
+}
+
+.readiness-kpi-strip strong {
+  display: block;
+  margin: 4px 0 2px;
+  color: var(--m349-ink);
+  font-size: 22px;
+}
+
+.readiness-table-wrap {
+  overflow-x: auto;
+}
+
+.readiness-table {
+  min-width: 1180px;
+}
+
+.readiness-table th,
+.readiness-table td {
+  vertical-align: top;
+}
+
+.readiness-table th:nth-child(3),
+.readiness-table td:nth-child(3) {
+  min-width: 240px;
+}
+
+.readiness-table th:nth-child(4),
+.readiness-table td:nth-child(4),
+.readiness-table th:nth-child(6),
+.readiness-table td:nth-child(6) {
+  min-width: 220px;
+}
+
+.readiness-table td {
+  overflow-wrap: anywhere;
+}
+
 .field-gap-panel {
   border-top: 4px solid #b76b00;
 }
@@ -16228,6 +16387,7 @@ input {
 
   .sample-kpi-grid,
   .reference-card-grid,
+  .readiness-kpi-strip,
   .mapping-ledger-grid,
   .security-limitation-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -16241,6 +16401,7 @@ input {
 @media (max-width: 680px) {
   .sample-kpi-grid,
   .reference-card-grid,
+  .readiness-kpi-strip,
   .mapping-ledger-grid,
   .security-identity-grid,
   .security-permission-list,

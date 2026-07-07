@@ -15,6 +15,7 @@ import {
   mobileCapabilities,
   offlineDrafts,
   openSourceSampleMappings,
+  productionReadinessItems,
   productionHandoffs,
   productionStationLoads,
   qualityMetrics,
@@ -86,5 +87,14 @@ describe('m1PrototypeData', () => {
     expect(realFlow?.covers).toContain('售后复核分流');
     expect(realFlow?.evidence).toContain('HO-20260706-021');
     expect(realFlow?.gaps.length).toBeGreaterThan(0);
+  });
+
+  it('keeps production readiness gates explicit before pilot launch', () => {
+    expect(productionReadinessItems.length).toBeGreaterThanOrEqual(10);
+    expect(productionReadinessItems.some((item) => item.code === 'P0-02' && item.title === '损耗计算口径')).toBe(true);
+    expect(productionReadinessItems.some((item) => item.code === 'P0-09' && item.title.includes('备份'))).toBe(true);
+    expect(productionReadinessItems.some((item) => item.code === 'P0-10' && item.category === '权限')).toBe(true);
+    expect(productionReadinessItems.filter((item) => item.priority === 'P0').length).toBeGreaterThanOrEqual(7);
+    expect(productionReadinessItems.every((item) => item.owner && item.evidence && item.defaultAction)).toBe(true);
   });
 });

@@ -52,6 +52,7 @@ class M2ManagementApiSmokeTest {
         assertThat(templates.getBody()).contains(
                 "REG-INBOUND",
                 "签收入库登记表",
+                "sourceRegisterLineNo",
                 "REG-OUTBOUND",
                 "paperExpressText",
                 "REG-POLISHING",
@@ -61,7 +62,7 @@ class M2ManagementApiSmokeTest {
         );
         assertThat(summary.getBody()).contains(
                 "\"templates\":4",
-                "\"fields\":40",
+                "\"fields\":48",
                 "\"commandReadyTemplates\":4",
                 "preview parser ready"
         );
