@@ -213,8 +213,8 @@ const operatorChecklist = [
     <section class="mission-hero-v2 control-room-strip" aria-label="现场经营态势">
       <div class="mission-copy control-room-copy">
         <div class="console-title-line">
-          <span class="eyebrow">M3.53 OPERATIONS DESK</span>
-          <StatusBadge label="业务操作台整改" tone="green" />
+          <span class="eyebrow">M3.54 OPERATIONS DESK</span>
+          <StatusBadge label="浅色工作台整改" tone="green" />
         </div>
         <h2>来料加工现场作业台</h2>
         <p>首屏聚合调度员要立即处理的对象：当前阻断、今日单据池、焦点工单、证据缺口、库存台账落点和下一动作。</p>
@@ -464,7 +464,7 @@ const operatorChecklist = [
             <span class="eyebrow">DELIVERY LEDGER</span>
             <h2>模块完成度与真实 API 契约</h2>
           </div>
-          <StatusBadge label="M3.53 核心联动" tone="green" />
+          <StatusBadge label="M3.54 视觉纠偏" tone="green" />
         </div>
         <div class="readiness-table-wrap">
           <table class="readiness-table command-readiness-table">
