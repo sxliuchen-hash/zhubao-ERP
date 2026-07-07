@@ -71,6 +71,28 @@ describe('operationsCenterApi', () => {
             detail: '配置备份目录',
             tone: 'amber',
           }],
+          restoreDrillRecords: [{
+            code: 'RESTORE-DRILL-VERIFY-RESTORE-20260707-090000',
+            status: 'passed',
+            checkedAt: '2026-07-07T09:05:30+08:00',
+            backupFile: '/backups/zhubao.sql',
+            backupChecksum: 'sha256:sample',
+            restoreDatabase: 'zhubao_restore_check_20260707_090000',
+            minimumTableCount: 8,
+            restoredTableCount: 12,
+            operator: 'ops-user',
+            durationSeconds: 36,
+            keepDatabase: false,
+            evidenceFile: '/backups/verify-restore-20260707_090000.json',
+            detail: 'Non-destructive restore verification passed.',
+            tone: 'green',
+            checks: [{
+              name: 'table_count',
+              status: 'passed',
+              detail: 'Restored 12 tables.',
+              tone: 'green',
+            }],
+          }],
           checklist: [{
             code: 'OPS-CHK-001',
             item: '后端 API 探活',
@@ -89,6 +111,8 @@ describe('operationsCenterApi', () => {
     expect(snapshot.errorSummaries[0].tone).toBe('amber');
     expect(snapshot.backupStatuses[0].code).toBe('DB-BACKUP-POC');
     expect(snapshot.backupStatuses[0].checksum).toBe('未计算');
+    expect(snapshot.restoreDrillRecords[0].restoreDatabase).toBe('zhubao_restore_check_20260707_090000');
+    expect(snapshot.restoreDrillRecords[0].checks[0].tone).toBe('green');
     expect(fetchMock).toHaveBeenCalledWith('/api/operations/center');
   });
 });

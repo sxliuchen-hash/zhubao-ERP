@@ -7,7 +7,7 @@ describe('OperationsCenterWorkspace', () => {
     const wrapper = mount(OperationsCenterWorkspace);
 
     expect(wrapper.text()).toContain('运维中心');
-    expect(wrapper.text()).toContain('M3.60 恢复演练可见性');
+    expect(wrapper.text()).toContain('M3.61 结构化恢复演练');
     expect(wrapper.text()).toContain('PWA 静态资源');
     expect(wrapper.text()).toContain('腾讯云 COS 备份');
     expect(wrapper.text()).toContain('恢复演练校验');
@@ -16,6 +16,10 @@ describe('OperationsCenterWorkspace', () => {
     expect(wrapper.text()).toContain('报错汇总');
     expect(wrapper.text()).toContain('近期日志');
     expect(wrapper.text()).toContain('数据库备份情况');
+    expect(wrapper.text()).toContain('结构化恢复演练记录');
+    expect(wrapper.text()).toContain('RESTORE-DRILL-VERIFY-RESTORE-20260707-090000');
+    expect(wrapper.text()).toContain('backup_checksum');
+    expect(wrapper.text()).toContain('table_count');
     expect(wrapper.text()).toContain('文件大小');
     expect(wrapper.text()).toContain('SHA-256');
     expect(wrapper.text()).toContain('运维接入清单');

@@ -1,5 +1,7 @@
 package com.zhubao.erp.operations.app;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.operations.domain.OperationsCenterSnapshot;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,8 +29,10 @@ import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -41,6 +45,8 @@ import java.util.stream.Stream;
 
 @Service
 public class OperationsCenterService {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -83,6 +89,7 @@ public class OperationsCenterService {
         LogProbe logs = probeLogs(now);
         List<OperationsCenterSnapshot.BackupStatus> localBackups = probeBackups(now);
         OperationsCenterSnapshot.BackupStatus restoreDrill = probeRestoreDrill(now);
+        List<OperationsCenterSnapshot.RestoreDrillRecord> restoreDrillRecords = restoreDrillRecords(now);
         CosBackupProbe cosBackup = probeCosBackup();
         List<OperationsCenterSnapshot.BackupStatus> backups = new ArrayList<>(localBackups);
         backups.add(restoreDrill);
@@ -113,6 +120,7 @@ public class OperationsCenterService {
                 errors,
                 logs.entries(),
                 backups,
+                restoreDrillRecords,
                 checklist(database, frontend, pwa, logs, cosBackup, restoreDrill)
         );
     }
@@ -591,11 +599,11 @@ public class OperationsCenterService {
             );
         }
 
-        try (Stream<Path> files = Files.list(root)) {
-            Optional<Path> latest = files
-                    .filter(Files::isRegularFile)
-                    .filter(this::isRestoreDrillFile)
-                    .max(Comparator.comparing(this::lastModifiedOrEpoch));
+        try {
+            Optional<Path> latest = latestStructuredRestoreDrillFile(root);
+            if (latest.isEmpty()) {
+                latest = latestRestoreDrillFile(root);
+            }
             if (latest.isEmpty()) {
                 return new OperationsCenterSnapshot.BackupStatus(
                         "RESTORE-DRILL-NONE",
@@ -613,21 +621,26 @@ public class OperationsCenterService {
 
             Path latestFile = latest.get();
             Instant lastModified = lastModifiedOrEpoch(latestFile);
+            Optional<RestoreDrillEvidence> structuredEvidence = readStructuredRestoreDrillEvidence(latestFile);
+            Instant evidenceTime = structuredEvidence.map(RestoreDrillEvidence::checkedAtInstant).orElse(lastModified);
             Instant nextDueAt = lastModified.plusSeconds(maxAgeHours * 3600L);
             boolean stale = nextDueAt.isBefore(now);
             String fileSize = readableSize(sizeOrZero(latestFile));
             String checksum = sha256(latestFile);
+            String detail = structuredEvidence
+                    .map(evidence -> structuredRestoreDrillDetail(evidence.record(), latestFile, fileSize, checksum))
+                    .orElse("最近恢复演练记录：" + latestFile.getFileName() + "，大小 " + fileSize + "，" + checksum
+                            + "；该记录只证明演练证据存在，正式上线仍需核对恢复库表数量和业务抽样。");
             return new OperationsCenterSnapshot.BackupStatus(
                     "RESTORE-DRILL-LATEST",
                     "恢复演练校验",
                     stale ? "演练记录过期" : "已完成演练",
-                    DISPLAY_TIME.format(lastModified),
+                    DISPLAY_TIME.format(evidenceTime),
                     DISPLAY_TIME.format(nextDueAt),
                     latestFile.toString(),
                     fileSize,
                     checksum,
-                    "最近恢复演练记录 " + latestFile.getFileName() + "，大小 " + fileSize + "，" + checksum
-                            + "；该记录只证明演练证据存在，正式上线仍需核对恢复库表数量和业务抽样。",
+                    detail,
                     stale ? "amber" : "green"
             );
         } catch (IOException error) {
@@ -644,6 +657,117 @@ public class OperationsCenterService {
                     "red"
             );
         }
+    }
+
+    private List<OperationsCenterSnapshot.RestoreDrillRecord> restoreDrillRecords(Instant now) {
+        if (backupRoot == null || backupRoot.isBlank()) {
+            return List.of();
+        }
+        Path root = Path.of(backupRoot);
+        if (!Files.exists(root)) {
+            return List.of();
+        }
+
+        try (Stream<Path> files = Files.list(root)) {
+            return files
+                    .filter(Files::isRegularFile)
+                    .filter(this::isStructuredRestoreDrillFile)
+                    .sorted(Comparator.comparing(this::lastModifiedOrEpoch).reversed())
+                    .limit(5)
+                    .map(this::readStructuredRestoreDrillEvidence)
+                    .flatMap(Optional::stream)
+                    .map(RestoreDrillEvidence::record)
+                    .toList();
+        } catch (IOException error) {
+            return List.of(new OperationsCenterSnapshot.RestoreDrillRecord(
+                    "RESTORE-DRILL-READ-ERROR",
+                    "read_error",
+                    DISPLAY_TIME.format(now),
+                    "未读取",
+                    "未读取",
+                    "未读取",
+                    0,
+                    0,
+                    "operations-center",
+                    0,
+                    false,
+                    root.toString(),
+                    "读取恢复演练结构化记录失败：" + truncate(error.getMessage(), 160),
+                    "red",
+                    List.of()
+            ));
+        }
+    }
+
+    private Optional<Path> latestRestoreDrillFile(Path root) throws IOException {
+        try (Stream<Path> files = Files.list(root)) {
+            return files
+                    .filter(Files::isRegularFile)
+                    .filter(this::isRestoreDrillFile)
+                    .max(Comparator.comparing(this::lastModifiedOrEpoch));
+        }
+    }
+
+    private Optional<Path> latestStructuredRestoreDrillFile(Path root) throws IOException {
+        try (Stream<Path> files = Files.list(root)) {
+            return files
+                    .filter(Files::isRegularFile)
+                    .filter(this::isStructuredRestoreDrillFile)
+                    .max(Comparator.comparing(this::lastModifiedOrEpoch));
+        }
+    }
+
+    private Optional<RestoreDrillEvidence> readStructuredRestoreDrillEvidence(Path path) {
+        if (!isStructuredRestoreDrillFile(path)) {
+            return Optional.empty();
+        }
+
+        try {
+            JsonNode root = JSON.readTree(Files.readString(path, StandardCharsets.UTF_8));
+            Instant fallbackTime = lastModifiedOrEpoch(path);
+            String checkedAt = text(root, "checkedAt", DISPLAY_TIME.format(fallbackTime));
+            Instant checkedAtInstant = parseRestoreDrillInstant(checkedAt, fallbackTime);
+            String status = text(root, "status", "unknown");
+            int minimumTableCount = intValue(root, "minimumTableCount", 0);
+            int restoredTableCount = intValue(root, "restoredTableCount", 0);
+            List<OperationsCenterSnapshot.RestoreDrillCheck> checks = restoreDrillChecks(root, minimumTableCount, restoredTableCount);
+            String tone = restoreDrillTone(status, checks);
+            OperationsCenterSnapshot.RestoreDrillRecord record = new OperationsCenterSnapshot.RestoreDrillRecord(
+                    restoreDrillCode(path),
+                    status,
+                    checkedAt,
+                    text(root, "backupFile", "未记录"),
+                    text(root, "backupChecksum", "未记录"),
+                    text(root, "restoreDatabase", "未记录"),
+                    minimumTableCount,
+                    restoredTableCount,
+                    text(root, "operator", "operations-script"),
+                    longValue(root, "durationSeconds", 0),
+                    booleanValue(root, "keepDatabase", false),
+                    path.toString(),
+                    text(root, "detail", "verify-restore 结构化演练记录"),
+                    tone,
+                    checks
+            );
+            return Optional.of(new RestoreDrillEvidence(record, checkedAtInstant));
+        } catch (IOException | RuntimeException error) {
+            return Optional.empty();
+        }
+    }
+
+    private String structuredRestoreDrillDetail(
+            OperationsCenterSnapshot.RestoreDrillRecord record,
+            Path evidenceFile,
+            String fileSize,
+            String checksum
+    ) {
+        return "结构化恢复演练记录：" + evidenceFile.getFileName()
+                + "，恢复库 " + record.restoreDatabase()
+                + "，恢复表 " + record.restoredTableCount() + " 张"
+                + "，最小要求 " + record.minimumTableCount() + " 张"
+                + "，耗时 " + record.durationSeconds() + " 秒"
+                + "，操作者 " + record.operator()
+                + "；证据文件 " + fileSize + "，" + checksum + "。";
     }
 
     private CosBackupProbe probeCosBackup() {
@@ -1033,6 +1157,11 @@ public class OperationsCenterService {
                 || fileName.endsWith(".txt")));
     }
 
+    private boolean isStructuredRestoreDrillFile(Path path) {
+        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return isRestoreDrillFile(path) && fileName.endsWith(".json");
+    }
+
     private int restoreDrillMaxAgeHours() {
         String raw = environment.getProperty("zhubao.operations.restore-drill-max-age-hours", "168");
         try {
@@ -1040,6 +1169,109 @@ public class OperationsCenterService {
         } catch (NumberFormatException error) {
             return 168;
         }
+    }
+
+    private List<OperationsCenterSnapshot.RestoreDrillCheck> restoreDrillChecks(
+            JsonNode root,
+            int minimumTableCount,
+            int restoredTableCount
+    ) {
+        JsonNode checksNode = root.path("checks");
+        List<OperationsCenterSnapshot.RestoreDrillCheck> checks = new ArrayList<>();
+        if (checksNode.isArray()) {
+            for (JsonNode check : checksNode) {
+                String status = text(check, "status", "unknown");
+                checks.add(new OperationsCenterSnapshot.RestoreDrillCheck(
+                        text(check, "name", "unnamed_check"),
+                        status,
+                        text(check, "detail", "未记录"),
+                        restoreDrillTone(status)
+                ));
+            }
+        }
+        if (checks.isEmpty() && restoredTableCount > 0) {
+            String status = restoredTableCount >= minimumTableCount ? "passed" : "failed";
+            checks.add(new OperationsCenterSnapshot.RestoreDrillCheck(
+                    "table_count",
+                    status,
+                    "恢复表数量 " + restoredTableCount + "，最小要求 " + minimumTableCount,
+                    restoreDrillTone(status)
+            ));
+        }
+        return checks;
+    }
+
+    private String restoreDrillTone(String status, List<OperationsCenterSnapshot.RestoreDrillCheck> checks) {
+        if (checks.stream().anyMatch(check -> "red".equals(check.tone()))) {
+            return "red";
+        }
+        if (checks.stream().anyMatch(check -> "amber".equals(check.tone()))) {
+            return "amber";
+        }
+        return restoreDrillTone(status);
+    }
+
+    private String restoreDrillTone(String status) {
+        String normalized = status == null ? "" : status.toLowerCase(Locale.ROOT);
+        if (normalized.contains("pass") || normalized.contains("success") || normalized.contains("ok")) {
+            return "green";
+        }
+        if (normalized.contains("fail") || normalized.contains("error")) {
+            return "red";
+        }
+        return "amber";
+    }
+
+    private String restoreDrillCode(Path path) {
+        String fileName = path.getFileName().toString();
+        String normalized = fileName
+                .replaceFirst("\\.[^.]+$", "")
+                .replaceAll("[^A-Za-z0-9]+", "-")
+                .replaceAll("(^-+|-+$)", "")
+                .toUpperCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            normalized = "STRUCTURED";
+        }
+        return "RESTORE-DRILL-" + truncate(normalized, 80);
+    }
+
+    private Instant parseRestoreDrillInstant(String raw, Instant fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Instant.parse(raw);
+        } catch (DateTimeParseException ignored) {
+            try {
+                return OffsetDateTime.parse(raw).toInstant();
+            } catch (DateTimeParseException ignoredAgain) {
+                return fallback;
+            }
+        }
+    }
+
+    private String text(JsonNode node, String field, String fallback) {
+        JsonNode value = node.path(field);
+        if (value.isMissingNode() || value.isNull()) {
+            return fallback;
+        }
+        String text = value.asText("");
+        return text.isBlank() ? fallback : text;
+    }
+
+    private int intValue(JsonNode node, String field, int fallback) {
+        JsonNode value = node.path(field);
+        return value.isInt() || value.isLong() ? value.asInt() : fallback;
+    }
+
+    private long longValue(JsonNode node, String field, long fallback) {
+        JsonNode value = node.path(field);
+        return value.isIntegralNumber() ? value.asLong() : fallback;
+    }
+
+    private boolean booleanValue(JsonNode node, String field, boolean fallback) {
+        JsonNode value = node.path(field);
+        return value.isBoolean() ? value.asBoolean() : fallback;
     }
 
     private Instant lastModifiedOrEpoch(Path path) {
@@ -1201,6 +1433,12 @@ public class OperationsCenterService {
             String lifecyclePolicy,
             String detail,
             String tone
+    ) {
+    }
+
+    private record RestoreDrillEvidence(
+            OperationsCenterSnapshot.RestoreDrillRecord record,
+            Instant checkedAtInstant
     ) {
     }
 

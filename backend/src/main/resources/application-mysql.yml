@@ -21,6 +21,7 @@ zhubao:
     frontend-probe-timeout-ms: ${ZHUBAO_FRONTEND_PROBE_TIMEOUT_MS:800}
     backup-root: ${ZHUBAO_BACKUP_ROOT:}
     log-file: ${ZHUBAO_LOG_FILE:}
+    restore-drill-max-age-hours: ${ZHUBAO_RESTORE_DRILL_MAX_AGE_HOURS:168}
     cos:
       enabled: ${ZHUBAO_COS_BACKUP_ENABLED:false}
       bucket: ${ZHUBAO_COS_BACKUP_BUCKET:}

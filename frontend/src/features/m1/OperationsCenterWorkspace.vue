@@ -86,7 +86,7 @@ function errorTone(error: ErrorSummary): Tone {
       <div class="operations-command-main">
         <div class="console-title-line">
           <span class="eyebrow">OPERATIONS CENTER</span>
-          <StatusBadge label="M3.60 恢复演练可见性" tone="green" />
+          <StatusBadge label="M3.61 结构化恢复演练" tone="green" />
         </div>
         <div class="operations-title-row">
           <div>
@@ -260,6 +260,57 @@ function errorTone(error: ErrorSummary): Tone {
             </dl>
           </article>
         </div>
+
+        <div class="restore-drill-section">
+          <div class="section-heading compact">
+            <div>
+              <span class="eyebrow">RESTORE DRILL</span>
+              <h3>结构化恢复演练记录</h3>
+            </div>
+            <StatusBadge :label="`${snapshot.restoreDrillRecords.length} 条`" :tone="snapshot.restoreDrillRecords.length > 0 ? 'green' : 'amber'" />
+          </div>
+
+          <div v-if="snapshot.restoreDrillRecords.length > 0" class="restore-drill-records">
+            <article
+              v-for="record in snapshot.restoreDrillRecords"
+              :key="record.code"
+              :class="`tone-${record.tone}`"
+            >
+              <div class="restore-drill-title">
+                <div>
+                  <strong>{{ record.restoreDatabase }}</strong>
+                  <small>{{ record.code }}</small>
+                </div>
+                <StatusBadge :label="record.status" :tone="record.tone" />
+              </div>
+              <dl>
+                <dt>演练时间</dt>
+                <dd>{{ record.checkedAt }}</dd>
+                <dt>恢复表数</dt>
+                <dd>{{ record.restoredTableCount }} / {{ record.minimumTableCount }}</dd>
+                <dt>耗时</dt>
+                <dd>{{ record.durationSeconds }} 秒</dd>
+                <dt>操作者</dt>
+                <dd>{{ record.operator }}</dd>
+                <dt>临时库保留</dt>
+                <dd>{{ record.keepDatabase ? '是' : '否' }}</dd>
+                <dt>备份文件</dt>
+                <dd>{{ record.backupFile }}</dd>
+                <dt>备份 SHA-256</dt>
+                <dd class="checksum-value">{{ record.backupChecksum }}</dd>
+                <dt>证据文件</dt>
+                <dd>{{ record.evidenceFile }}</dd>
+              </dl>
+              <div class="restore-drill-checks">
+                <span v-for="check in record.checks" :key="`${record.code}-${check.name}`" :class="`tone-${check.tone}`">
+                  <b>{{ check.name }}</b>
+                  <em>{{ check.detail }}</em>
+                </span>
+              </div>
+            </article>
+          </div>
+          <p v-else class="restore-drill-empty">尚未发现 `verify-restore-*.json`，运维中心会继续使用旧版标记文件展示演练可见性。</p>
+        </div>
       </div>
 
       <aside class="operations-panel checklist-panel">
@@ -268,7 +319,7 @@ function errorTone(error: ErrorSummary): Tone {
             <span class="eyebrow">RUNBOOK</span>
             <h2>运维接入清单</h2>
           </div>
-          <StatusBadge label="M3.60" tone="green" />
+          <StatusBadge label="M3.61" tone="green" />
         </div>
         <div class="ops-checklist">
           <article v-for="item in snapshot.checklist" :key="item.code" :class="`tone-${item.tone}`">
@@ -290,7 +341,7 @@ function errorTone(error: ErrorSummary): Tone {
       </article>
       <article>
         <strong>下一步</strong>
-        <span>接入真实登录权限、PWA 运行态细节、日志平台、恢复演练记录结构化入库和告警通知。</span>
+        <span>接入真实登录权限、PWA 运行态细节、日志平台、恢复演练记录入库归档和告警通知。</span>
       </article>
     </section>
   </div>

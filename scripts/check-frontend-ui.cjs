@@ -192,8 +192,9 @@ async function main() {
       hasCosBackupStatus: bodyText.includes('COS-BACKUP-DISABLED') || bodyText.includes('COS-BACKUP-READY'),
       hasCosChecklist: bodyText.includes('OPS-CHK-007'),
       hasRestoreDrill: bodyText.includes('恢复演练校验') && bodyText.includes('RESTORE-DRILL'),
+      hasStructuredRestoreDrill: bodyText.includes('结构化恢复演练记录') && bodyText.includes('backup_checksum'),
       hasRestoreChecklist: bodyText.includes('OPS-CHK-008'),
-      hasM360Label: bodyText.includes('M3.60 恢复演练可见性'),
+      hasM361Label: bodyText.includes('M3.61 结构化恢复演练'),
       overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: document.documentElement.clientWidth,
@@ -265,7 +266,7 @@ async function main() {
   if (!configuration.hasSiteProcessTemplates) {
     failures.push(`configuration site process templates missing: ${JSON.stringify(configuration)}`);
   }
-  if (!operations.hasCosService || !operations.hasCosBackupStatus || !operations.hasCosChecklist || !operations.hasRestoreDrill || !operations.hasRestoreChecklist || !operations.hasM360Label) {
+  if (!operations.hasCosService || !operations.hasCosBackupStatus || !operations.hasCosChecklist || !operations.hasRestoreDrill || !operations.hasStructuredRestoreDrill || !operations.hasRestoreChecklist || !operations.hasM361Label) {
     failures.push(`operations backup/restore readiness missing: ${JSON.stringify(operations)}`);
   }
   if (result.console.length > 0) {

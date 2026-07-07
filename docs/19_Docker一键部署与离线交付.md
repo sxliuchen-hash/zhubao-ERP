@@ -1,8 +1,8 @@
 # Docker 一键部署与离线交付
 
-**文档版本**：V1.0  
+**文档版本**：V1.1
 **更新日期**：2026-07-07  
-**适用阶段**：M3.60 Docker 无源码交付、备份和恢复演练可见性基线
+**适用阶段**：M3.61 Docker 无源码交付、备份和结构化恢复演练证据基线
 
 ---
 
@@ -66,7 +66,7 @@
 在开发或交付构建机器上执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61.0
 ```
 
 脚本执行内容：
@@ -85,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 只验证包结构、不构建镜像时可执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61-layout -NoDockerBuild -SkipTests
 ```
 
 ### 3.1 交付包验收门禁
@@ -93,13 +93,13 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 M3.57 起，`scripts/docker-build-package.ps1` 会在生成 `MANIFEST.sha256` 后自动调用 `scripts/verify-runtime-package.ps1`，分别验证运行包目录和 zip。该脚本也可以单独执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.60.0.zip
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.61.0.zip
 ```
 
 只验证 `-NoDockerBuild` 生成的布局包时允许缺少镜像 tar：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.60-layout.zip -AllowMissingImages
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.61-layout.zip -AllowMissingImages
 ```
 
 验收内容：
@@ -251,25 +251,25 @@ COS 上传依赖服务器已安装并配置 `coscmd`，脚本不保存 SecretId/
 Windows：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runtime-backups\zhubao_erp_mysql_20260707-090000.sql
+powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runtime-backups\zhubao_erp_mysql_20260707-090000.sql -Operator ops-user
 ```
 
 Linux：
 
 ```bash
-./verify-restore.sh --backup-file ./runtime-backups/zhubao_erp_mysql_20260707-090000.sql
+./verify-restore.sh --backup-file ./runtime-backups/zhubao_erp_mysql_20260707-090000.sql --operator ops-user
 ```
 
 脚本会先校验旁路 `.sha256`，再把备份导入 `zhubao_restore_check_<timestamp>` 临时数据库，检查至少恢复出 1 张表，默认删除临时库。需要人工查看恢复结果时可使用 `-KeepDatabase` 或 `--keep-database`。
 
-M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的恢复演练标记文件，并在 `数据库备份情况` 中显示 `RESTORE-DRILL-*` 状态，在运维清单中显示 `OPS-CHK-008`。`verify-restore.ps1` / `verify-restore.sh` 校验成功后会自动在备份文件同目录写入 `verify-restore-<timestamp>.log` 和 `.sha256`，并复制到 MySQL 容器 `/backups`，后端通过共享 `backup-data` 卷可读取该标记。
+M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的恢复演练标记文件，并在 `数据库备份情况` 中显示 `RESTORE-DRILL-*` 状态，在运维清单中显示 `OPS-CHK-008`。M3.61 起，`verify-restore.ps1` / `verify-restore.sh` 校验成功后会在备份文件同目录写入 `verify-restore-<timestamp>.log`、`verify-restore-<timestamp>.json` 及各自 `.sha256`，并复制到 MySQL 容器 `/backups`；后端通过共享 `backup-data` 卷优先读取 JSON 结构化记录。
 
-识别规则包括 `verify-restore-*`、`restore-*.log/json/ok` 和 `*.restore-ok`。该状态只证明演练记录存在，正式上线仍要保留恢复库表数量、业务抽样和人工验收结果。
+识别规则包括 `verify-restore-*`、`restore-*.log/json/ok` 和 `*.restore-ok`。JSON 记录会展示备份文件、备份 SHA-256、恢复库、恢复表数量、操作者、耗时和检查项；正式上线仍要补充业务抽样、附件恢复和人工验收结论。
 
 正式生产仍需要补充：
 
 - 将 `backup-mysql.ps1` 或 `backup-mysql.sh` 纳入任务计划/cron。
-- 恢复演练记录结构化入库和告警通知；M3.60 已完成运维中心目录标记展示。
+- 恢复演练记录入库归档和告警通知；M3.61 已完成 JSON 结构化证据展示。
 - 备份保留周期和清理策略。
 - 附件证据目录的 NAS/S3/COS 增量备份。
 
@@ -330,7 +330,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 ## 11. 当前边界
 
-M3.60 Docker 基线已覆盖：
+M3.61 Docker 基线已覆盖：
 
 - 后端 jar 镜像。
 - 前端 dist + Nginx 镜像。
@@ -344,12 +344,13 @@ M3.60 Docker 基线已覆盖：
 - 独立发布包验收脚本，覆盖必需文件、manifest、zip checksum、源码泄漏和 Compose 运行态检查。
 - MySQL 备份脚本，生成 `.sql` 和 `.sha256`，导出到 `runtime-backups/`，可选通过 `coscmd upload` 上传腾讯云 COS。
 - 非破坏性恢复演练脚本，导入临时数据库、检查恢复表数量，并默认删除临时库。
+- 恢复演练 JSON 结构化证据，运维中心只读展示 `restoreDrillRecords`。
 
 尚未完成：
 
 - 生产级数据库迁移工具。
 - 将 MySQL 备份脚本纳入任务计划/cron 和失败告警。
-- 备份恢复演练记录入库、运维中心展示和失败告警。
+- 备份恢复演练记录入库归档和失败告警。
 - HTTPS 证书自动配置。
 - 多租户或多客户隔离部署。
 - NAS/S3 正式对象存储。

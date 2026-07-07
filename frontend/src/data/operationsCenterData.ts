@@ -63,6 +63,31 @@ export interface BackupStatus {
   tone: Tone;
 }
 
+export interface RestoreDrillCheck {
+  name: string;
+  status: string;
+  detail: string;
+  tone: Tone;
+}
+
+export interface RestoreDrillRecord {
+  code: string;
+  status: string;
+  checkedAt: string;
+  backupFile: string;
+  backupChecksum: string;
+  restoreDatabase: string;
+  minimumTableCount: number;
+  restoredTableCount: number;
+  operator: string;
+  durationSeconds: number;
+  keepDatabase: boolean;
+  evidenceFile: string;
+  detail: string;
+  tone: Tone;
+  checks: RestoreDrillCheck[];
+}
+
 export interface OperationChecklistItem {
   code: string;
   item: string;
@@ -80,6 +105,7 @@ export interface OperationsCenterSnapshot {
   errorSummaries: ErrorSummary[];
   recentLogs: RecentLogEntry[];
   backupStatuses: BackupStatus[];
+  restoreDrillRecords: RestoreDrillRecord[];
   checklist: OperationChecklistItem[];
 }
 
@@ -256,6 +282,44 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       checksum: '沿用本地备份 SHA-256',
       detail: '运维中心只展示 COS 备份配置状态，不保存密钥、不执行上传或删除命令。',
       tone: 'blue',
+    },
+  ],
+  restoreDrillRecords: [
+    {
+      code: 'RESTORE-DRILL-VERIFY-RESTORE-20260707-090000',
+      status: 'passed',
+      checkedAt: '2026-07-07T09:05:30+08:00',
+      backupFile: '/backups/zhubao_erp_mysql_20260707-090000.sql',
+      backupChecksum: 'sha256:sample',
+      restoreDatabase: 'zhubao_restore_check_20260707_090000',
+      minimumTableCount: 8,
+      restoredTableCount: 12,
+      operator: 'operations-script',
+      durationSeconds: 36,
+      keepDatabase: false,
+      evidenceFile: '/backups/verify-restore-20260707_090000.json',
+      detail: 'Non-destructive restore verification passed.',
+      tone: 'green',
+      checks: [
+        {
+          name: 'backup_checksum',
+          status: 'passed',
+          detail: 'Backup SHA-256 recorded; sidecar verified when present.',
+          tone: 'green',
+        },
+        {
+          name: 'table_count',
+          status: 'passed',
+          detail: 'Restored 12 tables; minimum required 8.',
+          tone: 'green',
+        },
+        {
+          name: 'temporary_database_cleanup',
+          status: 'passed',
+          detail: 'Temporary restore database removed after verification.',
+          tone: 'green',
+        },
+      ],
     },
   ],
   checklist: [

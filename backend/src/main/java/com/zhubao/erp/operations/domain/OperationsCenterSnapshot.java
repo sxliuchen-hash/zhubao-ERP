@@ -10,6 +10,7 @@ public record OperationsCenterSnapshot(
         List<ErrorSummary> errorSummaries,
         List<RecentLogEntry> recentLogs,
         List<BackupStatus> backupStatuses,
+        List<RestoreDrillRecord> restoreDrillRecords,
         List<OperationChecklistItem> checklist
 ) {
     public OperationsCenterSnapshot {
@@ -18,6 +19,7 @@ public record OperationsCenterSnapshot(
         errorSummaries = List.copyOf(errorSummaries);
         recentLogs = List.copyOf(recentLogs);
         backupStatuses = List.copyOf(backupStatuses);
+        restoreDrillRecords = List.copyOf(restoreDrillRecords);
         checklist = List.copyOf(checklist);
     }
 
@@ -85,6 +87,36 @@ public record OperationsCenterSnapshot(
             String storage,
             String fileSize,
             String checksum,
+            String detail,
+            String tone
+    ) {
+    }
+
+    public record RestoreDrillRecord(
+            String code,
+            String status,
+            String checkedAt,
+            String backupFile,
+            String backupChecksum,
+            String restoreDatabase,
+            int minimumTableCount,
+            int restoredTableCount,
+            String operator,
+            long durationSeconds,
+            boolean keepDatabase,
+            String evidenceFile,
+            String detail,
+            String tone,
+            List<RestoreDrillCheck> checks
+    ) {
+        public RestoreDrillRecord {
+            checks = List.copyOf(checks);
+        }
+    }
+
+    public record RestoreDrillCheck(
+            String name,
+            String status,
             String detail,
             String tone
     ) {

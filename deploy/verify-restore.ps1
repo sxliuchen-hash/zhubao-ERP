@@ -3,6 +3,7 @@ param(
     [string]$EnvFile = ".env",
     [string]$ComposeFile = "docker-compose.yml",
     [string]$RestoreDatabase,
+    [string]$Operator,
     [int]$MinimumTableCount = 1,
     [switch]$KeepDatabase,
     [switch]$Help
@@ -21,9 +22,10 @@ if ($Help) {
     Write-Host "  -EnvFile             Compose env file. Default: .env"
     Write-Host "  -ComposeFile         Compose file. Default: docker-compose.yml"
     Write-Host "  -RestoreDatabase     Optional temporary database name."
+    Write-Host "  -Operator            Optional operator name written to the structured restore drill record."
     Write-Host "  -MinimumTableCount   Minimum restored table count. Default: 1"
     Write-Host "  -KeepDatabase        Keep the temporary database for manual inspection."
-    Write-Host "  On success, writes verify-restore-<timestamp>.log next to the backup file and copies it into Docker /backups for Operations Center visibility."
+    Write-Host "  On success, writes verify-restore-<timestamp>.log/json next to the backup file and copies them into Docker /backups for Operations Center visibility."
     Write-Host "  -Help                Show this help."
     exit 0
 }
@@ -49,10 +51,10 @@ if ($MinimumTableCount -lt 1) {
 
 $backupPath = (Resolve-Path -LiteralPath $BackupFile).Path
 $shaPath = "$backupPath.sha256"
+$backupHash = (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if (Test-Path -LiteralPath $shaPath -PathType Leaf) {
     $expectedHash = ((Get-Content -LiteralPath $shaPath | Select-Object -First 1) -split '\s+')[0].ToLowerInvariant()
-    $actualHash = (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($expectedHash -ne $actualHash) {
+    if ($expectedHash -ne $backupHash) {
         throw "Backup checksum mismatch: $backupPath"
     }
     Write-Host "Backup checksum verified: $backupPath"
@@ -61,6 +63,12 @@ if (Test-Path -LiteralPath $shaPath -PathType Leaf) {
 }
 
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$startedAt = Get-Date
+$operatorName = if ([string]::IsNullOrWhiteSpace($Operator)) {
+    if ([string]::IsNullOrWhiteSpace($env:USERNAME)) { "operations-script" } else { $env:USERNAME }
+} else {
+    $Operator
+}
 $restoreDb = if ([string]::IsNullOrWhiteSpace($RestoreDatabase)) {
     "zhubao_restore_check_$timestamp"
 } else {
@@ -92,14 +100,24 @@ fi
 '@
 
 Write-Host "== Restore backup into temporary database: $restoreDb =="
-& docker compose --env-file $EnvFile -f $ComposeFile exec -T `
+$restoreOutput = & docker compose --env-file $EnvFile -f $ComposeFile exec -T `
     -e "RESTORE_DB=$restoreDb" `
     -e "RESTORE_SQL=$remoteSql" `
     -e "MINIMUM_TABLE_COUNT=$MinimumTableCount" `
     -e "KEEP_DATABASE=$($KeepDatabase.IsPresent.ToString().ToLowerInvariant())" `
-    mysql sh -c $restoreCommand
-if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+    mysql sh -c $restoreCommand 2>&1
+$restoreExitCode = $LASTEXITCODE
+$restoreOutput | ForEach-Object { Write-Host $_ }
+if ($restoreExitCode -ne 0) {
+    exit $restoreExitCode
+}
+
+$restoredTableCount = 0
+foreach ($line in $restoreOutput) {
+    $text = "$line"
+    if ($text -match 'Restored table count:\s*(\d+)') {
+        $restoredTableCount = [int]$Matches[1]
+    }
 }
 
 Write-Host "Restore verification passed: $restoreDb"
@@ -109,19 +127,67 @@ if ($KeepDatabase) {
     Write-Host "Temporary restore database was removed."
 }
 
+$completedAt = Get-Date
+$durationSeconds = [int][Math]::Round(($completedAt - $startedAt).TotalSeconds)
 $markerName = "verify-restore-$timestamp.log"
 $markerLocal = Join-Path -Path (Split-Path -Parent $backupPath) -ChildPath $markerName
 $markerContent = @(
     "status=passed",
-    "checkedAt=$(Get-Date -Format s)",
+    "checkedAt=$($completedAt.ToString('o'))",
     "backupFile=$backupPath",
+    "backupChecksum=sha256:$backupHash",
     "restoreDatabase=$restoreDb",
     "minimumTableCount=$MinimumTableCount",
+    "restoredTableCount=$restoredTableCount",
+    "operator=$operatorName",
+    "durationSeconds=$durationSeconds",
     "keepDatabase=$($KeepDatabase.IsPresent.ToString().ToLowerInvariant())"
 )
 Set-Content -LiteralPath $markerLocal -Value $markerContent -Encoding UTF8
 $markerHash = (Get-FileHash -LiteralPath $markerLocal -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath "$markerLocal.sha256" -Value "$markerHash  $markerName" -Encoding UTF8
+
+$recordName = "verify-restore-$timestamp.json"
+$recordLocal = Join-Path -Path (Split-Path -Parent $backupPath) -ChildPath $recordName
+$cleanupDetail = if ($KeepDatabase) {
+    "Temporary restore database kept for manual inspection."
+} else {
+    "Temporary restore database removed after verification."
+}
+$restoreRecord = [ordered]@{
+    schemaVersion = "ops.restore-drill.v1"
+    status = "passed"
+    checkedAt = $completedAt.ToString("o")
+    backupFile = $backupPath
+    backupChecksum = "sha256:$backupHash"
+    restoreDatabase = $restoreDb
+    minimumTableCount = $MinimumTableCount
+    restoredTableCount = $restoredTableCount
+    operator = $operatorName
+    durationSeconds = $durationSeconds
+    keepDatabase = $KeepDatabase.IsPresent
+    detail = "Non-destructive restore verification passed."
+    checks = @(
+        [ordered]@{
+            name = "backup_checksum"
+            status = "passed"
+            detail = "Backup SHA-256 recorded; sidecar verified when present."
+        },
+        [ordered]@{
+            name = "table_count"
+            status = "passed"
+            detail = "Restored $restoredTableCount tables; minimum required $MinimumTableCount."
+        },
+        [ordered]@{
+            name = "temporary_database_cleanup"
+            status = "passed"
+            detail = $cleanupDetail
+        }
+    )
+}
+$restoreRecord | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $recordLocal -Encoding UTF8
+$recordHash = (Get-FileHash -LiteralPath $recordLocal -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath "$recordLocal.sha256" -Value "$recordHash  $recordName" -Encoding UTF8
 
 Write-Host "== Publish restore drill marker =="
 & docker cp $markerLocal "zhubao-erp-mysql:/backups/$markerName"
@@ -132,5 +198,15 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
+& docker cp $recordLocal "zhubao-erp-mysql:/backups/$recordName"
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+& docker cp "$recordLocal.sha256" "zhubao-erp-mysql:/backups/$recordName.sha256"
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
 Write-Host "Restore drill marker written: $markerLocal"
+Write-Host "Restore drill structured record written: $recordLocal"
 Write-Host "Operations Center marker path: /backups/$markerName"
+Write-Host "Operations Center structured record path: /backups/$recordName"

@@ -98,6 +98,70 @@ class OperationsCenterServiceTest {
     }
 
     @Test
+    void reportsStructuredRestoreDrillRecordWhenJsonVerificationRecordExists() throws Exception {
+        Path backup = tempDir.resolve("zhubao-20260707.sql");
+        Path restore = tempDir.resolve("verify-restore-20260707_090000.json");
+        Files.writeString(backup, "select 1;\n");
+        Files.writeString(restore, """
+                {
+                  "schemaVersion": "ops.restore-drill.v1",
+                  "status": "passed",
+                  "checkedAt": "2026-07-07T09:05:30+08:00",
+                  "backupFile": "/backups/zhubao-20260707.sql",
+                  "backupChecksum": "sha256:backup-sample",
+                  "restoreDatabase": "zhubao_restore_check_20260707_090000",
+                  "minimumTableCount": 8,
+                  "restoredTableCount": 12,
+                  "operator": "ops-user",
+                  "durationSeconds": 36,
+                  "keepDatabase": false,
+                  "detail": "Non-destructive restore verification passed.",
+                  "checks": [
+                    {
+                      "name": "backup_checksum",
+                      "status": "passed",
+                      "detail": "Backup SHA-256 recorded."
+                    },
+                    {
+                      "name": "table_count",
+                      "status": "passed",
+                      "detail": "Restored 12 tables; minimum required 8."
+                    }
+                  ]
+                }
+                """);
+
+        OperationsCenterService service = new OperationsCenterService(
+                new MockEnvironment(),
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                tempDir.toString(),
+                "",
+                800,
+                24
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+
+        OperationsCenterSnapshot.BackupStatus restoreDrill = findBackup(snapshot, "RESTORE-DRILL-LATEST");
+        assertThat(restoreDrill.storage()).contains("verify-restore-20260707_090000.json");
+        assertThat(restoreDrill.detail()).contains("结构化恢复演练记录").contains("恢复表 12 张").contains("ops-user");
+        assertThat(snapshot.restoreDrillRecords()).hasSize(1);
+        OperationsCenterSnapshot.RestoreDrillRecord record = snapshot.restoreDrillRecords().get(0);
+        assertThat(record.status()).isEqualTo("passed");
+        assertThat(record.restoreDatabase()).isEqualTo("zhubao_restore_check_20260707_090000");
+        assertThat(record.minimumTableCount()).isEqualTo(8);
+        assertThat(record.restoredTableCount()).isEqualTo(12);
+        assertThat(record.operator()).isEqualTo("ops-user");
+        assertThat(record.backupChecksum()).isEqualTo("sha256:backup-sample");
+        assertThat(record.tone()).isEqualTo("green");
+        assertThat(record.checks())
+                .extracting(OperationsCenterSnapshot.RestoreDrillCheck::name)
+                .containsExactly("backup_checksum", "table_count");
+    }
+
+    @Test
     void reportsCosBackupAsDisabledWithoutBlockingLocalDeployments() {
         OperationsCenterService service = new OperationsCenterService(
                 new MockEnvironment(),

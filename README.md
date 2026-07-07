@@ -76,6 +76,7 @@
 - M3.58 数据库备份脚本基线，新增 `deploy/backup-mysql.ps1` 和 `deploy/backup-mysql.sh`，运行包内可直接生成 MySQL dump、SHA-256 校验文件、导出到 `runtime-backups/`，并可显式调用 `coscmd upload` 上传到腾讯云 COS。
 - M3.59 非破坏性恢复演练脚本基线，新增 `deploy/verify-restore.ps1` 和 `deploy/verify-restore.sh`，可把备份导入临时数据库、检查恢复表数量并默认删除临时库，不覆盖生产数据库。
 - M3.60 运维中心恢复演练可见性，`/api/operations/center` 新增 `RESTORE-DRILL-*` 备份状态和 `OPS-CHK-008` 清单项，只读扫描备份目录中的 restore/verify-restore 标记文件，展示最近演练时间、文件大小、SHA-256 和过期状态。
+- M3.61 恢复演练结构化证据，`verify-restore.ps1/sh` 成功后同时生成 `verify-restore-<timestamp>.json`，记录备份文件、备份 SHA-256、恢复库、恢复表数量、操作者、耗时和检查项；运维中心新增 `restoreDrillRecords` 只读展示结构化演练记录。
 
 ## 目录结构
 
@@ -205,17 +206,17 @@ pnpm --filter zhubao-erp-frontend dev
 
 Docker 离线运行包：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61.0
 ```
 
 只验证无源码运行包结构、不构建镜像：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61-layout -NoDockerBuild -SkipTests
 ```
 
 单独验收已有运行包目录或 zip：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.60.0.zip
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.61.0.zip
 ```
 
 运行包内生成 MySQL 备份：
@@ -230,7 +231,7 @@ powershell -ExecutionPolicy Bypass -File .\backup-mysql.ps1 -UploadCos -CosPrefi
 
 运行包内验证备份可恢复：
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runtime-backups\zhubao_erp_mysql_20260707-090000.sql
+powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runtime-backups\zhubao_erp_mysql_20260707-090000.sql -Operator ops-user
 ```
 
 ## 当前 API
