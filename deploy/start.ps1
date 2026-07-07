@@ -3,6 +3,30 @@ $ErrorActionPreference = "Stop"
 $deployRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $deployRoot
 
+$manifest = Join-Path $deployRoot "MANIFEST.sha256"
+if (Test-Path -LiteralPath $manifest) {
+    Write-Host "Verifying runtime package manifest..."
+    foreach ($line in Get-Content -LiteralPath $manifest) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+        if ($line -notmatch '^([a-fA-F0-9]{64})\s+(.+)$') {
+            throw "Invalid manifest line: $line"
+        }
+        $expectedHash = $Matches[1].ToLowerInvariant()
+        $relativePath = $Matches[2].Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+        $targetPath = Join-Path $deployRoot $relativePath
+        if (!(Test-Path -LiteralPath $targetPath)) {
+            throw "Manifest file missing: $relativePath"
+        }
+        $actualHash = (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualHash -ne $expectedHash) {
+            throw "Manifest hash mismatch: $relativePath"
+        }
+    }
+    Write-Host "Manifest verification passed."
+}
+
 if (!(Test-Path -LiteralPath ".env")) {
     Copy-Item -LiteralPath ".env.example" -Destination ".env"
     Write-Host "Created .env from .env.example. Review passwords before production use."

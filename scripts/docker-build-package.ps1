@@ -1,5 +1,5 @@
 param(
-    [string]$Version = ("m3.41-" + (Get-Date -Format "yyyyMMddHHmm")),
+    [string]$Version = ("m3.44-" + (Get-Date -Format "yyyyMMddHHmm")),
     [switch]$SkipTests,
     [switch]$NoDockerBuild,
     [switch]$Help
@@ -11,10 +11,10 @@ if ($Help) {
     Write-Host "Build runtime Docker images and a source-free deployment package."
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.41.0"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44.0"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Version       Docker tag and package version. Default: m3.41-yyyyMMddHHmm"
+    Write-Host "  -Version       Docker tag and package version. Default: m3.44-yyyyMMddHHmm"
     Write-Host "  -SkipTests     Package backend without running Maven tests."
     Write-Host "  -NoDockerBuild Prepare package layout without docker build/save."
     Write-Host "  -Help          Show this help."
@@ -39,6 +39,30 @@ function Assert-InsideRepo([string]$path) {
     if (-not $resolved.StartsWith($root)) {
         throw "Refusing to operate outside repository: $resolved"
     }
+}
+
+function Write-ChecksumManifest([string]$targetDir) {
+    $manifestPath = Join-Path $targetDir "MANIFEST.sha256"
+    if (Test-Path -LiteralPath $manifestPath) {
+        Remove-Item -Force -LiteralPath $manifestPath
+    }
+
+    $basePath = (Resolve-Path -LiteralPath $targetDir).Path
+    $entries = Get-ChildItem -LiteralPath $targetDir -File -Recurse |
+        Where-Object { $_.FullName -ne $manifestPath -and $_.Name -ne ".env" } |
+        Sort-Object FullName |
+        ForEach-Object {
+            $relativePath = $_.FullName.Substring($basePath.Length + 1).Replace("\", "/")
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $relativePath"
+        }
+
+    Write-Utf8NoBomLines $manifestPath $entries
+}
+
+function Write-Utf8NoBomLines([string]$path, [string[]]$lines) {
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllLines($path, $lines, $encoding)
 }
 
 Assert-InsideRepo $artifactRoot
@@ -122,6 +146,12 @@ if (-not $NoDockerBuild) {
     Write-Host "== Skip docker build/save =="
 }
 
+Write-Host "== Write package checksum manifest =="
+Write-ChecksumManifest $packageDir
+
 Write-Host "== Create zip package =="
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -Force
+$zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Utf8NoBomLines "$zipPath.sha256" @("$zipHash  $(Split-Path -Leaf $zipPath)")
 Write-Host "Package ready: $zipPath"
+Write-Host "Package checksum: $zipPath.sha256"

@@ -59,6 +59,7 @@
 - M3.41 Docker 离线交付基线，新增后端/前端运行镜像、Docker Compose、离线镜像 tar 打包脚本、客户启动脚本和 [19_Docker一键部署与离线交付.md](./docs/19_Docker一键部署与离线交付.md)，运行包只包含构建产物、镜像、SQL 初始化和部署脚本，不包含源码。
 - M3.42 生产操作台整改，针对“页面简单、内容少、UI 丑”的反馈，把首页首屏重构为流程链路、今日单据池、当前处理单、操作员待办和焦点任务的三栏 ERP/MES 工作台，减少说明性卡片，优先呈现可操作对象和下一动作。
 - M3.43 运维中心备份证据增强，配置 `zhubao.operations.backup-root` 后会扫描最新备份文件并展示文件大小、SHA-256 checksum 和 RPO 状态；未配置目录时继续明确显示“未计算”，不伪装成真实备份。
+- M3.44 Docker 离线包完整性校验，运行包新增 `MANIFEST.sha256`，启动脚本会校验 Compose、SQL、README、启动脚本和镜像 tar；zip 旁路生成 `.sha256`，便于构建后上传到客户服务器前后核对。
 
 ## 目录结构
 
@@ -175,12 +176,12 @@ pnpm --filter zhubao-erp-frontend dev
 
 Docker 离线运行包：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.41.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44.0
 ```
 
 只验证无源码运行包结构、不构建镜像：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.41-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44-layout -NoDockerBuild -SkipTests
 ```
 
 ## 当前 API
@@ -240,7 +241,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.42 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，首屏突出流程链路、今日单据池、当前处理单、操作员待办、焦点任务、证据链和硬件兜底；来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、备份文件大小与 SHA-256 证据、Docker 离线交付基线与其他持久化基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问、软硬件证据和生产运维接入补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.42 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，首屏突出流程链路、今日单据池、当前处理单、操作员待办、焦点任务、证据链和硬件兜底；来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、备份文件大小与 SHA-256 证据、Docker 离线交付与运行包完整性校验基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问、软硬件证据和生产运维接入补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。

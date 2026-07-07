@@ -2,7 +2,7 @@
 
 **文档版本**：V1.0  
 **更新日期**：2026-07-07  
-**适用阶段**：M3.41 Docker 离线交付基线
+**适用阶段**：M3.44 Docker 离线包完整性校验
 
 ---
 
@@ -32,6 +32,7 @@
     start.ps1
     start.sh
     README_DOCKER.md
+    MANIFEST.sha256
     images/
       zhubao-erp-images-<version>.tar
     mysql-init/
@@ -39,6 +40,7 @@
       ...
       V11__m3_lightweight_approval_contract.sql
   zhubao-erp-runtime-<version>.zip
+  zhubao-erp-runtime-<version>.zip.sha256
 ```
 
 运行包不应包含：
@@ -58,7 +60,7 @@
 在开发或交付构建机器上执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.41.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44.0
 ```
 
 脚本执行内容：
@@ -69,14 +71,15 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 4. 使用 `docker/frontend.Dockerfile` 构建 Nginx 前端镜像。
 5. 将两个镜像导出为 `images/zhubao-erp-images-<version>.tar`。
 6. 复制部署脚本、环境变量模板和 MySQL 初始化 SQL。
-7. 生成 zip 运行包。
+7. 生成 `MANIFEST.sha256` 文件级校验清单。
+8. 生成 zip 运行包和 `.zip.sha256` 校验文件。
 
 首次构建需要构建机能访问 Docker Hub 或企业镜像仓库，以拉取 `eclipse-temurin:17-jre-alpine`、`nginx:1.27-alpine` 和 `mysql:8.4`。如果现场网络无法访问外部仓库，需要提前配置镜像加速、企业仓库或预加载基础镜像。
 
 只验证包结构、不构建镜像时可执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.41-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44-layout -NoDockerBuild -SkipTests
 ```
 
 ---
@@ -113,10 +116,13 @@ chmod +x ./start.sh
 
 启动脚本会自动执行：
 
-1. 如果 `.env` 不存在，从 `.env.example` 创建。
-2. 如果 `images/*.tar` 存在，执行 `docker load`。
-3. 执行 `docker compose --env-file .env -f docker-compose.yml up -d`。
-4. 输出容器状态。
+1. 如果存在 `MANIFEST.sha256`，先校验运行包文件完整性。
+2. 如果 `.env` 不存在，从 `.env.example` 创建。
+3. 如果 `images/*.tar` 存在，执行 `docker load`。
+4. 执行 `docker compose --env-file .env -f docker-compose.yml up -d`。
+5. 输出容器状态。
+
+`.env` 是客户现场配置文件，允许修改密码、端口和访问地址，因此不纳入 `MANIFEST.sha256`。`.env.example`、启动脚本、Compose 文件、SQL 初始化脚本、README 和镜像 tar 会纳入校验。
 
 ---
 
@@ -237,7 +243,7 @@ Compose 卷：
 
 ## 11. 当前边界
 
-M3.41 Docker 基线已覆盖：
+M3.44 Docker 基线已覆盖：
 
 - 后端 jar 镜像。
 - 前端 dist + Nginx 镜像。
@@ -246,6 +252,8 @@ M3.41 Docker 基线已覆盖：
 - 镜像 tar 离线加载。
 - 运行包 zip。
 - 客户无源码交付结构。
+- 运行包 `MANIFEST.sha256` 文件级校验。
+- zip 上传包 `.sha256` 校验文件。
 
 尚未完成：
 
