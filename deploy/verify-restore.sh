@@ -22,6 +22,7 @@ Options:
   --restore-database NAME  Optional temporary database name.
   --minimum-table-count N  Minimum restored table count. Default: 1
   --keep-database          Keep the temporary database for manual inspection.
+  On success, writes verify-restore-<timestamp>.log next to the backup file and copies it into Docker /backups for Operations Center visibility.
   -h, --help               Show this help.
 HELP
 }
@@ -148,3 +149,22 @@ if [ "$KEEP_DATABASE" = "true" ]; then
 else
   echo "Temporary restore database was removed."
 fi
+
+marker_name="verify-restore-$timestamp.log"
+marker_dir="$(dirname "$backup_path")"
+marker_path="$marker_dir/$marker_name"
+{
+  echo "status=passed"
+  echo "checkedAt=$(date -Iseconds)"
+  echo "backupFile=$backup_path"
+  echo "restoreDatabase=$RESTORE_DATABASE"
+  echo "minimumTableCount=$MINIMUM_TABLE_COUNT"
+  echo "keepDatabase=$KEEP_DATABASE"
+} > "$marker_path"
+sha256sum "$marker_path" > "$marker_path.sha256"
+
+echo "== Publish restore drill marker =="
+docker cp "$marker_path" "zhubao-erp-mysql:/backups/$marker_name"
+docker cp "$marker_path.sha256" "zhubao-erp-mysql:/backups/$marker_name.sha256"
+echo "Restore drill marker written: $marker_path"
+echo "Operations Center marker path: /backups/$marker_name"

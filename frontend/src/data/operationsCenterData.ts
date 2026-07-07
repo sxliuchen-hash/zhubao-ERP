@@ -234,6 +234,18 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       tone: 'amber',
     },
     {
+      code: 'RESTORE-DRILL-POC',
+      target: '恢复演练校验',
+      status: '未接入真实目录',
+      lastSuccessAt: '评审样例：2026-07-06 23:45:00',
+      nextDueAt: '2026-07-14 23:45:00',
+      storage: 'zhubao.operations.backup-root 未配置',
+      fileSize: '未计算',
+      checksum: '未计算',
+      detail: '运行 verify-restore 后在备份目录留下 restore 标记/日志，运维中心只读展示最近演练结果。',
+      tone: 'amber',
+    },
+    {
       code: 'COS-BACKUP-DISABLED',
       target: '腾讯云 COS 异地备份',
       status: '未启用',
@@ -294,6 +306,14 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       evidence: '本地部署可选；腾讯云部署应配置 ZHUBAO_COS_BACKUP_*',
       owner: '运维负责人',
       tone: 'blue',
+    },
+    {
+      code: 'OPS-CHK-008',
+      item: '数据库恢复演练',
+      status: '未接入真实目录',
+      evidence: '运行 verify-restore 后在备份目录留下 restore 标记/日志',
+      owner: '运维负责人',
+      tone: 'amber',
     },
   ],
 };

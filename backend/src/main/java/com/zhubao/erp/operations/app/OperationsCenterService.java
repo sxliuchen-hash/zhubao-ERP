@@ -82,10 +82,14 @@ public class OperationsCenterService {
         PwaProbe pwa = probePwaAssets();
         LogProbe logs = probeLogs(now);
         List<OperationsCenterSnapshot.BackupStatus> localBackups = probeBackups(now);
+        OperationsCenterSnapshot.BackupStatus restoreDrill = probeRestoreDrill(now);
         CosBackupProbe cosBackup = probeCosBackup();
         List<OperationsCenterSnapshot.BackupStatus> backups = new ArrayList<>(localBackups);
+        backups.add(restoreDrill);
         backups.add(cosBackupStatus(cosBackup, now));
-        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, pwa, localBackups, cosBackup, now);
+        List<OperationsCenterSnapshot.BackupStatus> localBackupEvidence = new ArrayList<>(localBackups);
+        localBackupEvidence.add(restoreDrill);
+        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, pwa, localBackupEvidence, cosBackup, now);
         List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now, logs);
 
         long degradedServices = services.stream().filter(service -> !"green".equals(service.tone())).count();
@@ -109,7 +113,7 @@ public class OperationsCenterService {
                 errors,
                 logs.entries(),
                 backups,
-                checklist(database, frontend, pwa, logs, cosBackup)
+                checklist(database, frontend, pwa, logs, cosBackup, restoreDrill)
         );
     }
 
@@ -553,6 +557,95 @@ public class OperationsCenterService {
         }
     }
 
+    private OperationsCenterSnapshot.BackupStatus probeRestoreDrill(Instant now) {
+        int maxAgeHours = restoreDrillMaxAgeHours();
+        Instant nextDueFromNow = now.plusSeconds(maxAgeHours * 3600L);
+        if (backupRoot == null || backupRoot.isBlank()) {
+            return new OperationsCenterSnapshot.BackupStatus(
+                    "RESTORE-DRILL-POC",
+                    "恢复演练校验",
+                    "未接入真实目录",
+                    "评审样例：2026-07-06 23:45:00",
+                    DISPLAY_TIME.format(nextDueFromNow),
+                    "zhubao.operations.backup-root 未配置",
+                    "未计算",
+                    "未计算",
+                    "运行 deploy/verify-restore.ps1 或 verify-restore.sh 后，在备份目录留下 restore 标记/日志供运维中心只读展示。",
+                    "amber"
+            );
+        }
+
+        Path root = Path.of(backupRoot);
+        if (!Files.exists(root)) {
+            return new OperationsCenterSnapshot.BackupStatus(
+                    "RESTORE-DRILL-MISSING",
+                    "恢复演练校验",
+                    "目录不存在",
+                    "无",
+                    DISPLAY_TIME.format(nextDueFromNow),
+                    root.toString(),
+                    "未计算",
+                    "未计算",
+                    "已配置备份目录但无法读取恢复演练记录，需要检查挂载和权限。",
+                    "red"
+            );
+        }
+
+        try (Stream<Path> files = Files.list(root)) {
+            Optional<Path> latest = files
+                    .filter(Files::isRegularFile)
+                    .filter(this::isRestoreDrillFile)
+                    .max(Comparator.comparing(this::lastModifiedOrEpoch));
+            if (latest.isEmpty()) {
+                return new OperationsCenterSnapshot.BackupStatus(
+                        "RESTORE-DRILL-NONE",
+                        "恢复演练校验",
+                        "未发现演练记录",
+                        "无",
+                        DISPLAY_TIME.format(nextDueFromNow),
+                        root.toString(),
+                        "不适用",
+                        "未计算",
+                        "备份目录存在，但未发现 restore-*.log/json/ok、verify-restore-*.log 或 *.restore-ok 记录。",
+                        "amber"
+                );
+            }
+
+            Path latestFile = latest.get();
+            Instant lastModified = lastModifiedOrEpoch(latestFile);
+            Instant nextDueAt = lastModified.plusSeconds(maxAgeHours * 3600L);
+            boolean stale = nextDueAt.isBefore(now);
+            String fileSize = readableSize(sizeOrZero(latestFile));
+            String checksum = sha256(latestFile);
+            return new OperationsCenterSnapshot.BackupStatus(
+                    "RESTORE-DRILL-LATEST",
+                    "恢复演练校验",
+                    stale ? "演练记录过期" : "已完成演练",
+                    DISPLAY_TIME.format(lastModified),
+                    DISPLAY_TIME.format(nextDueAt),
+                    latestFile.toString(),
+                    fileSize,
+                    checksum,
+                    "最近恢复演练记录 " + latestFile.getFileName() + "，大小 " + fileSize + "，" + checksum
+                            + "；该记录只证明演练证据存在，正式上线仍需核对恢复库表数量和业务抽样。",
+                    stale ? "amber" : "green"
+            );
+        } catch (IOException error) {
+            return new OperationsCenterSnapshot.BackupStatus(
+                    "RESTORE-DRILL-ERROR",
+                    "恢复演练校验",
+                    "读取失败",
+                    "无",
+                    DISPLAY_TIME.format(nextDueFromNow),
+                    root.toString(),
+                    "未计算",
+                    "未计算",
+                    error.getClass().getSimpleName() + ": " + truncate(error.getMessage(), 160),
+                    "red"
+            );
+        }
+    }
+
     private CosBackupProbe probeCosBackup() {
         boolean enabled = Boolean.parseBoolean(environment.getProperty("zhubao.operations.cos.enabled", "false"));
         String bucket = environment.getProperty("zhubao.operations.cos.bucket", "");
@@ -841,7 +934,8 @@ public class OperationsCenterService {
             FrontendProbe frontend,
             PwaProbe pwa,
             LogProbe logs,
-            CosBackupProbe cosBackup
+            CosBackupProbe cosBackup,
+            OperationsCenterSnapshot.BackupStatus restoreDrill
     ) {
         return List.of(
                 new OperationsCenterSnapshot.OperationChecklistItem(
@@ -899,6 +993,14 @@ public class OperationsCenterService {
                         cosBackup.detail(),
                         "运维负责人",
                         cosBackup.tone()
+                ),
+                new OperationsCenterSnapshot.OperationChecklistItem(
+                        "OPS-CHK-008",
+                        "数据库恢复演练",
+                        restoreDrill.status(),
+                        restoreDrill.detail(),
+                        "运维负责人",
+                        restoreDrill.tone()
                 )
         );
     }
@@ -913,6 +1015,31 @@ public class OperationsCenterService {
                 || fileName.endsWith(".dump")
                 || fileName.endsWith(".backup")
                 || fileName.endsWith(".gz");
+    }
+
+    private boolean isRestoreDrillFile(Path path) {
+        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (fileName.endsWith(".sha256")) {
+            return false;
+        }
+        return fileName.endsWith(".restore-ok")
+                || fileName.endsWith(".restore.log")
+                || fileName.endsWith(".restore.json")
+                || fileName.startsWith("verify-restore-")
+                || (fileName.startsWith("restore-")
+                && (fileName.endsWith(".log")
+                || fileName.endsWith(".json")
+                || fileName.endsWith(".ok")
+                || fileName.endsWith(".txt")));
+    }
+
+    private int restoreDrillMaxAgeHours() {
+        String raw = environment.getProperty("zhubao.operations.restore-drill-max-age-hours", "168");
+        try {
+            return Math.max(1, Integer.parseInt(raw));
+        } catch (NumberFormatException error) {
+            return 168;
+        }
     }
 
     private Instant lastModifiedOrEpoch(Path path) {

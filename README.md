@@ -75,6 +75,7 @@
 - M3.57 无源码运行包验收门禁，新增 `scripts/verify-runtime-package.ps1`，打包后自动验证目录和 zip：必需文件、`MANIFEST.sha256` 覆盖、zip `.sha256`、禁止源码/开发缓存、禁止 Compose build 上下文；`.deploy-artifacts/` 作为构建输出不进入 Git。
 - M3.58 数据库备份脚本基线，新增 `deploy/backup-mysql.ps1` 和 `deploy/backup-mysql.sh`，运行包内可直接生成 MySQL dump、SHA-256 校验文件、导出到 `runtime-backups/`，并可显式调用 `coscmd upload` 上传到腾讯云 COS。
 - M3.59 非破坏性恢复演练脚本基线，新增 `deploy/verify-restore.ps1` 和 `deploy/verify-restore.sh`，可把备份导入临时数据库、检查恢复表数量并默认删除临时库，不覆盖生产数据库。
+- M3.60 运维中心恢复演练可见性，`/api/operations/center` 新增 `RESTORE-DRILL-*` 备份状态和 `OPS-CHK-008` 清单项，只读扫描备份目录中的 restore/verify-restore 标记文件，展示最近演练时间、文件大小、SHA-256 和过期状态。
 
 ## 目录结构
 
@@ -204,17 +205,17 @@ pnpm --filter zhubao-erp-frontend dev
 
 Docker 离线运行包：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.59.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60.0
 ```
 
 只验证无源码运行包结构、不构建镜像：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.59-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60-layout -NoDockerBuild -SkipTests
 ```
 
 单独验收已有运行包目录或 zip：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.59.0.zip
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.60.0.zip
 ```
 
 运行包内生成 MySQL 备份：
@@ -290,7 +291,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.56 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，并进一步统一为浅色现场控制台视觉；样例库已从简单展示卡片升级为验收数据指挥台，把公开开源参考、前端样例、后端 fixture、自动化测试、证据编码、验收门禁和现场数据缺口收敛到同一张管理矩阵；来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路。来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、权限上下文展示接口、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、前端 URL 探活、PWA Manifest/Service Worker 探活、真实日志读取与 WARN/ERROR 聚合、备份文件大小与 SHA-256 证据、Docker 离线交付、运行包完整性校验、无源码发布包验收门禁、数据库备份脚本、非破坏性恢复演练脚本和腾讯云 COS 备份上传脚本基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录入库/展示和生产运维接入补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.56 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，并进一步统一为浅色现场控制台视觉；样例库已从简单展示卡片升级为验收数据指挥台，把公开开源参考、前端样例、后端 fixture、自动化测试、证据编码、验收门禁和现场数据缺口收敛到同一张管理矩阵；来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路。来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、权限上下文展示接口、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、前端 URL 探活、PWA Manifest/Service Worker 探活、真实日志读取与 WARN/ERROR 聚合、备份文件大小与 SHA-256 证据、Docker 离线交付、运行包完整性校验、无源码发布包验收门禁、数据库备份脚本、非破坏性恢复演练脚本、恢复演练运维中心可见性和腾讯云 COS 备份上传脚本基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。

@@ -1,5 +1,5 @@
 param(
-    [string]$Version = ("m3.59-" + (Get-Date -Format "yyyyMMddHHmm")),
+    [string]$Version = ("m3.60-" + (Get-Date -Format "yyyyMMddHHmm")),
     [switch]$SkipTests,
     [switch]$NoDockerBuild,
     [switch]$Help
@@ -11,10 +11,10 @@ if ($Help) {
     Write-Host "Build runtime Docker images and a source-free deployment package."
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.59.0"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60.0"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Version       Docker tag and package version. Default: m3.59-yyyyMMddHHmm"
+    Write-Host "  -Version       Docker tag and package version. Default: m3.60-yyyyMMddHHmm"
     Write-Host "  -SkipTests     Package backend without running Maven tests."
     Write-Host "  -NoDockerBuild Prepare package layout without docker build/save."
     Write-Host "  -Help          Show this help."

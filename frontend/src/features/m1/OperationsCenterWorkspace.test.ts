@@ -7,9 +7,10 @@ describe('OperationsCenterWorkspace', () => {
     const wrapper = mount(OperationsCenterWorkspace);
 
     expect(wrapper.text()).toContain('运维中心');
-    expect(wrapper.text()).toContain('M3.55 COS 备份可见性');
+    expect(wrapper.text()).toContain('M3.60 恢复演练可见性');
     expect(wrapper.text()).toContain('PWA 静态资源');
     expect(wrapper.text()).toContain('腾讯云 COS 备份');
+    expect(wrapper.text()).toContain('恢复演练校验');
     expect(wrapper.text()).toContain('前后端/数据库运行情况');
     expect(wrapper.text()).toContain('服务器运行指标');
     expect(wrapper.text()).toContain('报错汇总');
@@ -19,8 +20,10 @@ describe('OperationsCenterWorkspace', () => {
     expect(wrapper.text()).toContain('SHA-256');
     expect(wrapper.text()).toContain('运维接入清单');
     expect(wrapper.text()).toContain('DB-BACKUP-POC');
+    expect(wrapper.text()).toContain('RESTORE-DRILL-POC');
     expect(wrapper.text()).toContain('COS-BACKUP-DISABLED');
     expect(wrapper.text()).toContain('OPS-CHK-007');
+    expect(wrapper.text()).toContain('OPS-CHK-008');
     expect(wrapper.text()).toContain('TRACE-OPS-001');
     expect(wrapper.find('table.ops-data-table').exists()).toBe(true);
   });

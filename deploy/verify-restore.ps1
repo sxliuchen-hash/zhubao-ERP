@@ -23,6 +23,7 @@ if ($Help) {
     Write-Host "  -RestoreDatabase     Optional temporary database name."
     Write-Host "  -MinimumTableCount   Minimum restored table count. Default: 1"
     Write-Host "  -KeepDatabase        Keep the temporary database for manual inspection."
+    Write-Host "  On success, writes verify-restore-<timestamp>.log next to the backup file and copies it into Docker /backups for Operations Center visibility."
     Write-Host "  -Help                Show this help."
     exit 0
 }
@@ -107,3 +108,29 @@ if ($KeepDatabase) {
 } else {
     Write-Host "Temporary restore database was removed."
 }
+
+$markerName = "verify-restore-$timestamp.log"
+$markerLocal = Join-Path -Path (Split-Path -Parent $backupPath) -ChildPath $markerName
+$markerContent = @(
+    "status=passed",
+    "checkedAt=$(Get-Date -Format s)",
+    "backupFile=$backupPath",
+    "restoreDatabase=$restoreDb",
+    "minimumTableCount=$MinimumTableCount",
+    "keepDatabase=$($KeepDatabase.IsPresent.ToString().ToLowerInvariant())"
+)
+Set-Content -LiteralPath $markerLocal -Value $markerContent -Encoding UTF8
+$markerHash = (Get-FileHash -LiteralPath $markerLocal -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath "$markerLocal.sha256" -Value "$markerHash  $markerName" -Encoding UTF8
+
+Write-Host "== Publish restore drill marker =="
+& docker cp $markerLocal "zhubao-erp-mysql:/backups/$markerName"
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+& docker cp "$markerLocal.sha256" "zhubao-erp-mysql:/backups/$markerName.sha256"
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+Write-Host "Restore drill marker written: $markerLocal"
+Write-Host "Operations Center marker path: /backups/$markerName"

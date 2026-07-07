@@ -43,7 +43,7 @@ class OperationsCenterServiceTest {
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 
-        assertThat(snapshot.backupStatuses()).hasSize(2);
+        assertThat(snapshot.backupStatuses()).hasSize(3);
         OperationsCenterSnapshot.BackupStatus status = findBackup(snapshot, "DB-BACKUP-LATEST");
         assertThat(status.code()).isEqualTo("DB-BACKUP-LATEST");
         assertThat(status.status()).isEqualTo("已发现备份");
@@ -55,6 +55,46 @@ class OperationsCenterServiceTest {
         OperationsCenterSnapshot.BackupStatus cos = findBackup(snapshot, "COS-BACKUP-DISABLED");
         assertThat(cos.status()).isEqualTo("未启用");
         assertThat(cos.tone()).isEqualTo("blue");
+
+        OperationsCenterSnapshot.BackupStatus restoreDrill = findBackup(snapshot, "RESTORE-DRILL-NONE");
+        assertThat(restoreDrill.status()).isEqualTo("未发现演练记录");
+        assertThat(restoreDrill.detail()).contains("restore-").contains("verify-restore");
+        assertThat(findChecklist(snapshot, "OPS-CHK-008").status()).isEqualTo("未发现演练记录");
+    }
+
+    @Test
+    void reportsRestoreDrillMarkerWhenBackupDirectoryContainsVerificationRecord() throws Exception {
+        Path backup = tempDir.resolve("zhubao-20260707.sql");
+        Path restore = tempDir.resolve("verify-restore-20260707.log");
+        Files.writeString(backup, "select 1;\n");
+        Files.writeString(restore, "restore ok; tables=12\n");
+        Files.writeString(tempDir.resolve("verify-restore-20260707.log.sha256"), "ignored sidecar\n");
+
+        OperationsCenterService service = new OperationsCenterService(
+                new MockEnvironment(),
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                tempDir.toString(),
+                "",
+                800,
+                24
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+
+        OperationsCenterSnapshot.BackupStatus restoreDrill = findBackup(snapshot, "RESTORE-DRILL-LATEST");
+        assertThat(restoreDrill.status()).isEqualTo("已完成演练");
+        assertThat(restoreDrill.target()).isEqualTo("恢复演练校验");
+        assertThat(restoreDrill.storage()).contains("verify-restore-20260707.log");
+        assertThat(restoreDrill.storage()).doesNotContain(".sha256");
+        assertThat(restoreDrill.fileSize()).isEqualTo("22 B");
+        assertThat(restoreDrill.checksum()).startsWith("sha256:");
+        assertThat(restoreDrill.detail()).contains("最近恢复演练记录").contains("业务抽样");
+
+        OperationsCenterSnapshot.OperationChecklistItem checklist = findChecklist(snapshot, "OPS-CHK-008");
+        assertThat(checklist.status()).isEqualTo("已完成演练");
+        assertThat(checklist.tone()).isEqualTo("green");
     }
 
     @Test

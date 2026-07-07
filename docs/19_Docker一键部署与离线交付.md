@@ -2,7 +2,7 @@
 
 **文档版本**：V1.0  
 **更新日期**：2026-07-07  
-**适用阶段**：M3.59 Docker 无源码交付、备份和恢复演练基线
+**适用阶段**：M3.60 Docker 无源码交付、备份和恢复演练可见性基线
 
 ---
 
@@ -66,7 +66,7 @@
 在开发或交付构建机器上执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.59.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60.0
 ```
 
 脚本执行内容：
@@ -85,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 只验证包结构、不构建镜像时可执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.59-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.60-layout -NoDockerBuild -SkipTests
 ```
 
 ### 3.1 交付包验收门禁
@@ -93,13 +93,13 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 M3.57 起，`scripts/docker-build-package.ps1` 会在生成 `MANIFEST.sha256` 后自动调用 `scripts/verify-runtime-package.ps1`，分别验证运行包目录和 zip。该脚本也可以单独执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.59.0.zip
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.60.0.zip
 ```
 
 只验证 `-NoDockerBuild` 生成的布局包时允许缺少镜像 tar：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.59-layout.zip -AllowMissingImages
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.60-layout.zip -AllowMissingImages
 ```
 
 验收内容：
@@ -262,10 +262,14 @@ Linux：
 
 脚本会先校验旁路 `.sha256`，再把备份导入 `zhubao_restore_check_<timestamp>` 临时数据库，检查至少恢复出 1 张表，默认删除临时库。需要人工查看恢复结果时可使用 `-KeepDatabase` 或 `--keep-database`。
 
+M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的恢复演练标记文件，并在 `数据库备份情况` 中显示 `RESTORE-DRILL-*` 状态，在运维清单中显示 `OPS-CHK-008`。`verify-restore.ps1` / `verify-restore.sh` 校验成功后会自动在备份文件同目录写入 `verify-restore-<timestamp>.log` 和 `.sha256`，并复制到 MySQL 容器 `/backups`，后端通过共享 `backup-data` 卷可读取该标记。
+
+识别规则包括 `verify-restore-*`、`restore-*.log/json/ok` 和 `*.restore-ok`。该状态只证明演练记录存在，正式上线仍要保留恢复库表数量、业务抽样和人工验收结果。
+
 正式生产仍需要补充：
 
 - 将 `backup-mysql.ps1` 或 `backup-mysql.sh` 纳入任务计划/cron。
-- 恢复演练记录入库/展示和告警通知。
+- 恢复演练记录结构化入库和告警通知；M3.60 已完成运维中心目录标记展示。
 - 备份保留周期和清理策略。
 - 附件证据目录的 NAS/S3/COS 增量备份。
 
@@ -326,7 +330,7 @@ Linux：
 
 ## 11. 当前边界
 
-M3.59 Docker 基线已覆盖：
+M3.60 Docker 基线已覆盖：
 
 - 后端 jar 镜像。
 - 前端 dist + Nginx 镜像。
