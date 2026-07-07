@@ -19,3 +19,4 @@ frontend/coverage/
 frontend/.vite/
 
 backend/target/
+deploy/runtime-backups/

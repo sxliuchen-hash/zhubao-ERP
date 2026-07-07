@@ -1,5 +1,5 @@
 param(
-    [string]$Version = ("m3.57-" + (Get-Date -Format "yyyyMMddHHmm")),
+    [string]$Version = ("m3.58-" + (Get-Date -Format "yyyyMMddHHmm")),
     [switch]$SkipTests,
     [switch]$NoDockerBuild,
     [switch]$Help
@@ -11,10 +11,10 @@ if ($Help) {
     Write-Host "Build runtime Docker images and a source-free deployment package."
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.57.0"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.58.0"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Version       Docker tag and package version. Default: m3.57-yyyyMMddHHmm"
+    Write-Host "  -Version       Docker tag and package version. Default: m3.58-yyyyMMddHHmm"
     Write-Host "  -SkipTests     Package backend without running Maven tests."
     Write-Host "  -NoDockerBuild Prepare package layout without docker build/save."
     Write-Host "  -Help          Show this help."
@@ -106,6 +106,8 @@ Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\docker-compose.yml") -Destin
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\.env.example") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\start.ps1") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\start.sh") -Destination $packageDir
+Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\backup-mysql.ps1") -Destination $packageDir
+Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\backup-mysql.sh") -Destination $packageDir
 $dockerReadmeByPrefix = Get-ChildItem -LiteralPath (Join-Path $repoRoot "docs") -Filter "19_Docker*.md" |
     Sort-Object Name |
     Select-Object -First 1

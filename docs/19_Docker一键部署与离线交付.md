@@ -2,7 +2,7 @@
 
 **文档版本**：V1.0  
 **更新日期**：2026-07-07  
-**适用阶段**：M3.57 Docker 无源码交付验收门禁
+**适用阶段**：M3.58 Docker 无源码交付与备份脚本基线
 
 ---
 
@@ -33,6 +33,8 @@
     .env
     start.ps1
     start.sh
+    backup-mysql.ps1
+    backup-mysql.sh
     README_DOCKER.md
     MANIFEST.sha256
     images/
@@ -62,7 +64,7 @@
 在开发或交付构建机器上执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.57.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.58.0
 ```
 
 脚本执行内容：
@@ -81,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 只验证包结构、不构建镜像时可执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.57-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.58-layout -NoDockerBuild -SkipTests
 ```
 
 ### 3.1 交付包验收门禁
@@ -89,20 +91,20 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 M3.57 起，`scripts/docker-build-package.ps1` 会在生成 `MANIFEST.sha256` 后自动调用 `scripts/verify-runtime-package.ps1`，分别验证运行包目录和 zip。该脚本也可以单独执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.57.0.zip
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.58.0.zip
 ```
 
 只验证 `-NoDockerBuild` 生成的布局包时允许缺少镜像 tar：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.57-layout.zip -AllowMissingImages
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.58-layout.zip -AllowMissingImages
 ```
 
 验收内容：
 
 | 检查项 | 规则 |
 |---|---|
-| 必需文件 | 必须包含 `docker-compose.yml`、`.env.example`、`start.ps1`、`start.sh`、`README_DOCKER.md`、`MANIFEST.sha256` |
+| 必需文件 | 必须包含 `docker-compose.yml`、`.env.example`、`start.ps1`、`start.sh`、`backup-mysql.ps1`、`backup-mysql.sh`、`README_DOCKER.md`、`MANIFEST.sha256` |
 | 数据库初始化 | `mysql-init/` 必须包含 SQL 初始化文件 |
 | 镜像 tar | 正式交付包必须包含 `images/*.tar`；仅布局检查可用 `-AllowMissingImages` |
 | manifest | `MANIFEST.sha256` 必须覆盖除 `.env` 和自身以外的所有文件，且 hash 必须匹配 |
@@ -215,13 +217,39 @@ Compose 卷：
 | `backend-logs` | `/logs` | 后端日志文件，运维中心从 `ZHUBAO_LOG_FILE` 只读展示近期日志和 WARN/ERROR 汇总 |
 | `backup-data` | `/backups` | 备份目录和运维中心备份检查目录 |
 
-当前基线只完成备份目录和运维中心备份状态检查。正式生产还需要补充：
+M3.58 起，运行包内提供受控数据库备份脚本，可用于人工执行或纳入 Windows 任务计划/Linux cron：
 
-- MySQL 定时备份任务。
-- 备份文件 checksum。
-- 异地备份或 NAS/S3 归档。
-- 恢复演练记录。
+Windows：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\backup-mysql.ps1
+```
+
+Linux：
+
+```bash
+chmod +x ./backup-mysql.sh
+./backup-mysql.sh
+```
+
+脚本会在 Docker `backup-data` 卷内生成 `/backups/zhubao_erp_mysql_<timestamp>.sql` 和 `.sha256`，同时导出到运行包目录下的 `runtime-backups/`，并校验导出文件 SHA-256。需要上传腾讯云 COS 时显式执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\backup-mysql.ps1 -UploadCos -CosPrefix prod/mysql/
+```
+
+```bash
+./backup-mysql.sh --upload-cos --cos-prefix prod/mysql/
+```
+
+COS 上传依赖服务器已安装并配置 `coscmd`，脚本不保存 SecretId/SecretKey。
+
+正式生产仍需要补充：
+
+- 将 `backup-mysql.ps1` 或 `backup-mysql.sh` 纳入任务计划/cron。
+- 恢复演练记录和告警通知。
 - 备份保留周期和清理策略。
+- 附件证据目录的 NAS/S3/COS 增量备份。
 
 ---
 
@@ -270,6 +298,7 @@ Compose 卷：
 - `GET /actuator/health` 返回可用。
 - `GET /api/operations/center` 返回数据库、后端、日志和备份信息。
 - 运维中心能看到后端日志路径和备份目录状态。
+- `backup-mysql.ps1` 或 `backup-mysql.sh` 至少成功生成一次 `.sql` 和 `.sha256`，并在运维中心看到最新备份状态。
 - 关闭并重启容器后数据不丢失。
 - 不向客户目录交付源码目录和 `.git`。
 - `scripts/verify-runtime-package.ps1` 对最终 zip 验收通过。
@@ -278,7 +307,7 @@ Compose 卷：
 
 ## 11. 当前边界
 
-M3.57 Docker 基线已覆盖：
+M3.58 Docker 基线已覆盖：
 
 - 后端 jar 镜像。
 - 前端 dist + Nginx 镜像。
@@ -290,11 +319,12 @@ M3.57 Docker 基线已覆盖：
 - 运行包 `MANIFEST.sha256` 文件级校验。
 - zip 上传包 `.sha256` 校验文件。
 - 独立发布包验收脚本，覆盖必需文件、manifest、zip checksum、源码泄漏和 Compose 运行态检查。
+- MySQL 备份脚本，生成 `.sql` 和 `.sha256`，导出到 `runtime-backups/`，可选通过 `coscmd upload` 上传腾讯云 COS。
 
 尚未完成：
 
 - 生产级数据库迁移工具。
-- 自动 MySQL 备份任务。
+- 将 MySQL 备份脚本纳入任务计划/cron 和失败告警。
 - 备份恢复演练。
 - HTTPS 证书自动配置。
 - 多租户或多客户隔离部署。
