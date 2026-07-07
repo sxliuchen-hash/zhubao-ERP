@@ -207,6 +207,7 @@
 | `customerId` | 业务客户 ID |
 | `ownerCustomerId` | 库存所有客户 ID，未传时默认等于 `customerId` |
 | `materialCode` | 物料编码 |
+| `inboundDate` | 现场入库日期，建议保存为 `yyyy-MM-dd`；纸质表只有月日时由业务日期补全年份 |
 | `expressCompany` | 入库快递名称/物流方式 |
 | `courierNo` | 入库快递单号，必须唯一 |
 | `senderName` | 寄货人姓名快照 |
@@ -298,6 +299,7 @@
 | `toWarehouseCode` | 目标半成品仓/暂存区 |
 | `quantity` | 本次报工产出数量，必须大于 0 |
 | `weight` | 本次报工产出重量，必须大于 0 |
+| `workDate` | 工序日报日期，建议保存为 `yyyy-MM-dd`；抛光日报和雕刻日统计必须能按该字段过滤 |
 | `process` | 工序名称快照 |
 | `processCategory` | 工序类别快照 |
 | `productCategory` | 品类快照 |
@@ -308,13 +310,15 @@
 | `completionStatus` | 完成情况 |
 | `handoffAuditStatus` | 交单审核状态，提交后默认 `待审核` |
 | `operator` | 操作人快照 |
+| `operatorSignatureName` | 操机签字/确认人姓名快照；雕刻等设备工序必须填写，二期可关联签名附件 |
 | `handoffCode` | 称重交接记录编码 |
 | `remark` | 业务备注 |
 
 现场表单补充约束：
 
 - 抛光报工必须能保存 `workItemName`、`startedAt`、`finishedAt`、`completionStatus` 和 `handoffAuditStatus`。
-- 雕刻报工必须能保存 `productCategory`、`machineNo` 和操机人快照；未绑定设备档案时允许先保存 `machineNo` 文本，但产能统计标记为待匹配设备。
+- 抛光日报必须能保存或推导 `workDate`；仅有开始/完成时间而无业务日期时，跨班次统计会失真。
+- 雕刻报工必须能保存 `productCategory`、`machineNo` 和 `operatorSignatureName`；未绑定设备档案时允许先保存 `machineNo` 文本，但产能统计标记为待匹配设备。
 - `completionStatus` 不直接等同于工序状态，工序是否流转仍以后端状态机和质检规则为准。
 
 返回 `ProductionReportResult`：

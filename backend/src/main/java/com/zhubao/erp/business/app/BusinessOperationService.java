@@ -546,6 +546,7 @@ public class BusinessOperationService {
 
     private String buildRemark(ConfirmInboundCommand command) {
         StringBuilder remark = new StringBuilder("确认来料入库；操作人：").append(command.operator());
+        appendField(remark, "入库日期", command.inboundDate());
         appendField(remark, "快递", command.expressCompany());
         appendField(remark, "快递单号", command.courierNo());
         appendField(remark, "寄货人", command.senderName());
@@ -566,9 +567,11 @@ public class BusinessOperationService {
                 .append(command.process())
                 .append("；操作人：")
                 .append(command.operator());
+        appendField(remark, "工序日期", command.workDate());
         appendField(remark, "工序类型", command.processCategory());
         appendField(remark, "品类", command.productCategory());
         appendField(remark, "机器编号", command.machineNo());
+        appendField(remark, "操机签字", command.operatorSignatureName());
         appendField(remark, "工作项目", command.workItemName());
         appendField(remark, "开始时间", command.startedAt());
         appendField(remark, "完成时间", command.finishedAt());

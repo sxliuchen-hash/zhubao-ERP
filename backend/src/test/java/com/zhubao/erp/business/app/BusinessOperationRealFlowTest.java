@@ -63,6 +63,7 @@ class BusinessOperationRealFlowTest {
                 production.toWarehouseCode(),
                 production.quantity(),
                 production.weight(),
+                "2026-07-06",
                 production.process(),
                 "人工",
                 "戒托",
@@ -73,6 +74,7 @@ class BusinessOperationRealFlowTest {
                 "已完成",
                 "已接收",
                 production.operator(),
+                null,
                 production.handoffCode(),
                 production.remark()
         ));

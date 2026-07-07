@@ -39,6 +39,7 @@ describe('businessOperationApi', () => {
       customerId: 1001,
       ownerCustomerId: 1001,
       materialCode: 'MAT-18K-RING',
+      inboundDate: '2026-07-06',
       expressCompany: '顺丰',
       senderName: '张先生',
       receiverName: '何琳',
@@ -83,6 +84,7 @@ describe('businessOperationApi', () => {
       toWarehouseCode: 'SEMI-FINISHED',
       quantity: 210,
       weight: '478.240',
+      workDate: '2026-07-06',
       process: '焊接',
       processCategory: '人工',
       productCategory: '银链',
@@ -91,6 +93,39 @@ describe('businessOperationApi', () => {
       handoffAuditStatus: '待交单审核',
       operator: '王强',
       handoffCode: 'HO-20260706-018',
+    });
+  });
+
+  it('keeps engraving operator signature separate from generic production fields', () => {
+    const order: WorkOrder = {
+      code: 'ZD-20260706-009',
+      customer: '恒信珠宝',
+      material: '18K 金戒托',
+      process: '雕刻',
+      processCategory: '设备',
+      productCategory: '戒托',
+      machineNo: 'ENG-03',
+      workItemName: '雕刻',
+      startedAt: '09:00',
+      finishedAt: '10:15',
+      completionStatus: '已完成 168 件',
+      handoffAuditStatus: '操机签字待补',
+      assignee: '周凯',
+      plannedQty: 200,
+      finishedQty: 168,
+      status: '待交单审核',
+      progress: 84,
+    };
+
+    expect(buildProductionReportRequest(order)).toMatchObject({
+      workOrderCode: 'ZD-20260706-009',
+      workDate: '2026-07-06',
+      process: '雕刻',
+      processCategory: '设备',
+      productCategory: '戒托',
+      machineNo: 'ENG-03',
+      operator: '周凯',
+      operatorSignatureName: '周凯',
     });
   });
 

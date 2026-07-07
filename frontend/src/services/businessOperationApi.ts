@@ -6,6 +6,7 @@ export interface ConfirmInboundRequest {
   customerId: number;
   ownerCustomerId?: number;
   materialCode: string;
+  inboundDate?: string;
   expressCompany?: string;
   courierNo?: string;
   senderName?: string;
@@ -41,6 +42,7 @@ export interface ProductionReportRequest {
   toWarehouseCode: string;
   quantity: number;
   weight: string;
+  workDate?: string;
   process: string;
   processCategory?: string;
   productCategory?: string;
@@ -51,6 +53,7 @@ export interface ProductionReportRequest {
   completionStatus?: string;
   handoffAuditStatus?: string;
   operator: string;
+  operatorSignatureName?: string;
   handoffCode?: string;
   remark?: string;
 }
@@ -450,6 +453,20 @@ const lossWeightFallbacks: Record<string, { inputWeight: string; outputWeight: s
   'LOSS-20260706-010': { inputWeight: '684.400', outputWeight: '683.200' },
 };
 
+function normalizeBusinessDate(value: string | undefined, fallbackCode?: string): string | undefined {
+  if (value?.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return value;
+  }
+  const codeDate = fallbackCode?.match(/20\d{6}/)?.[0];
+  if (codeDate) {
+    return `${codeDate.slice(0, 4)}-${codeDate.slice(4, 6)}-${codeDate.slice(6, 8)}`;
+  }
+  if (value?.match(/^\d{2}-\d{2}$/)) {
+    return `2026-${value}`;
+  }
+  return value;
+}
+
 export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundRequest {
   const customerId = customerIds[order.customer] ?? 9000;
 
@@ -458,6 +475,7 @@ export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundR
     customerId,
     ownerCustomerId: customerId,
     materialCode: materialCodes[order.material] ?? `MAT-${order.code}`,
+    inboundDate: normalizeBusinessDate(order.inboundDate, order.code),
     expressCompany: order.expressCompany,
     courierNo: order.courierNo,
     senderName: order.senderName,
@@ -493,6 +511,7 @@ export function buildProductionReportRequest(order: WorkOrder, handoffCode?: str
     toWarehouseCode: 'SEMI-FINISHED',
     quantity: order.finishedQty,
     weight: productionWeights[order.code] ?? String(order.finishedQty),
+    workDate: normalizeBusinessDate(undefined, order.code),
     process: order.process,
     processCategory: order.processCategory,
     productCategory: order.productCategory,
@@ -503,6 +522,7 @@ export function buildProductionReportRequest(order: WorkOrder, handoffCode?: str
     completionStatus: order.completionStatus,
     handoffAuditStatus: order.handoffAuditStatus,
     operator: order.assignee,
+    operatorSignatureName: order.process === '雕刻' || order.processCategory === '设备' ? order.assignee : undefined,
     handoffCode,
     remark: '前端生产派工主控台报工',
   };

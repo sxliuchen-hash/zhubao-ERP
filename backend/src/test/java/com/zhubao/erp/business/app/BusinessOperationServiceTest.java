@@ -50,6 +50,7 @@ class BusinessOperationServiceTest {
                 1001L,
                 null,
                 "MAT-18K-RING",
+                "2026-07-06",
                 "顺丰",
                 "SF1048329001",
                 "张先生",
@@ -72,7 +73,7 @@ class BusinessOperationServiceTest {
         StockLedgerEntry ledger = repository.findAllLedgers().get(0);
         assertThat(ledger.documentType()).isEqualTo("inbound_confirm");
         assertThat(ledger.documentCode()).isEqualTo("MD-20260706-001");
-        assertThat(ledger.remark()).contains("库管员 何琳", "顺丰", "张先生", "拆箱签字", "戒托来料", "SF1048329001", "拆包称重确认");
+        assertThat(ledger.remark()).contains("库管员 何琳", "2026-07-06", "顺丰", "张先生", "拆箱签字", "戒托来料", "SF1048329001", "拆包称重确认");
         assertThat(ledger.to().ownerType()).isEqualTo(OwnerType.CUSTOMER);
         assertThat(ledger.to().ownerCustomerId()).isEqualTo(1001L);
         assertThat(ledger.to().customerId()).isEqualTo(1001L);
@@ -112,6 +113,7 @@ class BusinessOperationServiceTest {
                 "SEMI-FINISHED",
                 bd("210"),
                 bd("478.240"),
+                "2026-07-06",
                 "焊接",
                 "人工",
                 "银链",
@@ -122,6 +124,7 @@ class BusinessOperationServiceTest {
                 "称重待补",
                 "待交单审核",
                 "王强",
+                null,
                 "HO-20260706-018",
                 "扫码报工确认"
         ));

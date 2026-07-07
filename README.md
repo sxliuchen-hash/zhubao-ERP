@@ -71,7 +71,7 @@
 - M3.53 核心作业联动整改，生产、质检、库存追溯页主表支持选中联动右侧焦点对象，补齐“扫码进站/工序报工/称重交接/送检入账”“冻结/返工/放行/损耗审批”“客户权属/批次余额/台账明细/证据归档/售后复核”动作链，并把旧评审展示区从浏览器渲染中收起。
 - M3.54 UI 视觉纠偏，针对“页面还是像简单样例、UI 太丑”的反馈，在不新增后端接口的前提下将全局外壳、侧栏、页头、首页、主表、详情侧栏和状态色统一为浅色高密度 ERP/MES 作业台，并保留当前真实边界提示。
 - M3.55 腾讯云 COS 备份可见性，运维中心新增 `COS_BACKUP` 服务状态、`COS-BACKUP-*` 备份状态和 `OPS-CHK-007` 运维清单项，通过 `ZHUBAO_COS_BACKUP_*` 展示 Bucket、Region、Prefix、凭证模式和生命周期/保留策略 readiness，不保存密钥、不从页面执行上传。
-- M3.56 现场登记表字段补齐，基于入库、出货、抛光、雕刻 4 张登记表新增差异分析文档，补齐入库签收、出货登记、抛光日记录、雕刻机器产量字段，并把 `雕刻`、`抛光日报与返工` 写入配置基线和评审 API 样例。
+- M3.56 现场登记表字段补齐，基于入库、出货、抛光、雕刻 4 张登记表新增差异分析文档，补齐入库签收、出货登记、抛光日记录、雕刻机器产量字段，并把 `inboundDate`、`workDate`、`operatorSignatureName` 写入真实业务命令，把 `雕刻`、`抛光日报与返工` 写入配置基线和评审 API 样例。
 - M3.57 无源码运行包验收门禁，新增 `scripts/verify-runtime-package.ps1`，打包后自动验证目录和 zip：必需文件、`MANIFEST.sha256` 覆盖、zip `.sha256`、禁止源码/开发缓存、禁止 Compose build 上下文；`.deploy-artifacts/` 作为构建输出不进入 Git。
 - M3.58 数据库备份脚本基线，新增 `deploy/backup-mysql.ps1` 和 `deploy/backup-mysql.sh`，运行包内可直接生成 MySQL dump、SHA-256 校验文件、导出到 `runtime-backups/`，并可显式调用 `coscmd upload` 上传到腾讯云 COS。
 - M3.59 非破坏性恢复演练脚本基线，新增 `deploy/verify-restore.ps1` 和 `deploy/verify-restore.sh`，可把备份导入临时数据库、检查恢复表数量并默认删除临时库，不覆盖生产数据库。

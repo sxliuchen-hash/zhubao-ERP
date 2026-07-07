@@ -11,6 +11,7 @@ public record ConfirmInboundCommand(
         @NotNull Long customerId,
         Long ownerCustomerId,
         @NotBlank String materialCode,
+        String inboundDate,
         String expressCompany,
         String courierNo,
         String senderName,

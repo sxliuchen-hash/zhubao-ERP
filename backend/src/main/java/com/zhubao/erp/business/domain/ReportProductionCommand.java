@@ -16,6 +16,7 @@ public record ReportProductionCommand(
         @NotBlank String toWarehouseCode,
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal quantity,
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal weight,
+        String workDate,
         @NotBlank String process,
         String processCategory,
         String productCategory,
@@ -26,6 +27,7 @@ public record ReportProductionCommand(
         String completionStatus,
         String handoffAuditStatus,
         @NotBlank String operator,
+        String operatorSignatureName,
         String handoffCode,
         String remark
 ) {
