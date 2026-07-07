@@ -2,7 +2,7 @@
 
 **文档版本**：V1.0  
 **更新日期**：2026-07-07  
-**适用阶段**：M3.44 Docker 离线包完整性校验
+**适用阶段**：M3.45 Docker 运维探活配置
 
 ---
 
@@ -161,6 +161,8 @@ Compose 服务：
 | `ZHUBAO_HTTP_PORT` | `80` | 前端访问端口 |
 | `ZHUBAO_BACKEND_PORT` | `8080` | 后端直连端口 |
 | `ZHUBAO_PUBLIC_URL` | `http://localhost/` | 运维中心展示的前端地址 |
+| `ZHUBAO_FRONTEND_PROBE_URL` | `http://frontend/` | 后端容器内部探测前端 Nginx 的地址 |
+| `ZHUBAO_FRONTEND_PROBE_TIMEOUT_MS` | `800` | 前端探活超时时间，单位毫秒 |
 | `ZHUBAO_DB_NAME` | `zhubao_erp` | 数据库名 |
 | `ZHUBAO_DB_USERNAME` | `zhubao` | 数据库用户 |
 | `ZHUBAO_DB_PASSWORD` | `change-me` | 数据库密码，生产必须修改 |
@@ -216,6 +218,7 @@ Compose 卷：
 4. 复制或重新配置 `.env`。
 5. 执行 `start.ps1` 或 `start.sh`。
 6. 检查 `docker compose ps`、前端页面、`/api/operations/center` 和 `/actuator/health`。
+7. 在运维中心确认 `前端 PWA` 不再是 `NOT_CONFIGURED`，Docker 默认应通过 `http://frontend/` 探活。
 
 回滚流程：
 

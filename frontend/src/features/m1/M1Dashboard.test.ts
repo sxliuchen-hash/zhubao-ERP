@@ -6,8 +6,8 @@ describe('M1Dashboard', () => {
   it('renders a shop-floor ERP/MES workbench instead of a thin review page', () => {
     const wrapper = mount(M1Dashboard);
 
-    expect(wrapper.text()).toContain('M3.42 PRODUCTION DESK');
-    expect(wrapper.text()).toContain('来料加工现场指挥台');
+    expect(wrapper.text()).toContain('M3.46 SHOP FLOOR DESK');
+    expect(wrapper.text()).toContain('来料加工现场作业台');
     expect(wrapper.text()).toContain('当前处理单');
     expect(wrapper.text()).toContain('真实链路');
     expect(wrapper.text()).toContain('今日单据池');

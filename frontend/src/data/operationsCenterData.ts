@@ -87,7 +87,7 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
   generatedAt: '2026-07-07 08:00:00',
   summary: {
     overallStatus: 'ATTENTION',
-    serviceCount: 6,
+    serviceCount: 4,
     degradedServices: 3,
     openErrors: 3,
     criticalErrors: 0,
@@ -108,12 +108,12 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
     {
       code: 'FRONTEND',
       name: '前端 PWA',
-      status: 'REVIEW',
+      status: 'NOT_CONFIGURED',
       endpoint: 'http://localhost:5173/',
-      detail: '前端运行状态按评审环境展示，生产环境需要静态资源版本和探活。',
+      detail: '评审环境默认未配置前端探活；Docker 部署可设置 ZHUBAO_FRONTEND_PROBE_URL=http://frontend/。',
       owner: '前端负责人',
       checkedAt: '2026-07-07 08:00:00',
-      tone: 'blue',
+      tone: 'amber',
     },
     {
       code: 'DATABASE',
@@ -233,6 +233,14 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
     },
     {
       code: 'OPS-CHK-003',
+      item: '前端 URL 探活',
+      status: 'NOT_CONFIGURED',
+      evidence: 'Docker 可配置 ZHUBAO_FRONTEND_PROBE_URL=http://frontend/',
+      owner: '前端负责人',
+      tone: 'amber',
+    },
+    {
+      code: 'OPS-CHK-004',
       item: '日志来源',
       status: '评审样例',
       evidence: '未配置 zhubao.operations.log-file',

@@ -86,7 +86,7 @@ function errorTone(error: ErrorSummary): Tone {
       <div class="operations-command-main">
         <div class="console-title-line">
           <span class="eyebrow">OPERATIONS CENTER</span>
-          <StatusBadge label="M3.39 运维中心基线" tone="green" />
+          <StatusBadge label="M3.45 前端探活" tone="green" />
         </div>
         <div class="operations-title-row">
           <div>
@@ -268,7 +268,7 @@ function errorTone(error: ErrorSummary): Tone {
             <span class="eyebrow">RUNBOOK</span>
             <h2>运维接入清单</h2>
           </div>
-          <StatusBadge label="M3.39" tone="green" />
+          <StatusBadge label="M3.45" tone="green" />
         </div>
         <div class="ops-checklist">
           <article v-for="item in snapshot.checklist" :key="item.code" :class="`tone-${item.tone}`">

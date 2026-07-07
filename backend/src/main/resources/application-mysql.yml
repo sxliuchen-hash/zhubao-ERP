@@ -16,5 +16,8 @@ zhubao:
   documents:
     repository: ${ZHUBAO_DOCUMENTS_REPOSITORY:memory}
   operations:
+    frontend-url: ${ZHUBAO_FRONTEND_URL:http://localhost/}
+    frontend-probe-url: ${ZHUBAO_FRONTEND_PROBE_URL:http://frontend/}
+    frontend-probe-timeout-ms: ${ZHUBAO_FRONTEND_PROBE_TIMEOUT_MS:800}
     backup-root: ${ZHUBAO_BACKUP_ROOT:}
     log-file: ${ZHUBAO_LOG_FILE:}

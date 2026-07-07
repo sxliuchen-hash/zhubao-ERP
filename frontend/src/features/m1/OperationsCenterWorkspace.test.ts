@@ -7,7 +7,7 @@ describe('OperationsCenterWorkspace', () => {
     const wrapper = mount(OperationsCenterWorkspace);
 
     expect(wrapper.text()).toContain('运维中心');
-    expect(wrapper.text()).toContain('M3.39 运维中心基线');
+    expect(wrapper.text()).toContain('M3.45 前端探活');
     expect(wrapper.text()).toContain('前后端/数据库运行情况');
     expect(wrapper.text()).toContain('服务器运行指标');
     expect(wrapper.text()).toContain('报错汇总');

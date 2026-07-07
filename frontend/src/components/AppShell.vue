@@ -10,15 +10,15 @@ defineProps<{
       <div class="brand ops-brand">
         <span class="brand-mark">ZB</span>
         <div>
-          <strong>来料加工进销存与生产管理系统</strong>
-          <span>库存台账 · 生产工单 · 质检返工 · 证据链</span>
+          <strong>来料加工 ERP/MES</strong>
+          <span>库存 · 工单 · 质检 · 追溯</span>
         </div>
       </div>
 
       <div class="sidebar-status ops-status-card">
-        <span>当前开发基线</span>
-        <strong>M3.42 / 生产操作台整改</strong>
-        <i>当前仍是 M3 增量开发：核心台账、业务动作、附件、硬件 POC、运维中心和 Docker 交付基线已接入；真实登录、数据权限、NAS/S3 和现场设备直连继续推进。</i>
+        <span>当前基线</span>
+        <strong>M3.46 / 业务操作台整改</strong>
+        <i>仍处于 M3 增量开发：核心台账、业务动作、附件、硬件 POC、运维中心和 Docker 交付基线已接入。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,9 +54,9 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">Operations Console</span>
+          <span class="eyebrow">Workshop Console</span>
           <h1>{{ title }}</h1>
-          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入操作台，所有动作必须能落到接口、数据表、责任人和验收用例。</p>
+          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入操作台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>

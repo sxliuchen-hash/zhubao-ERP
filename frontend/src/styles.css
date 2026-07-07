@@ -13809,3 +13809,698 @@ body {
     align-items: stretch;
   }
 }
+
+/* M3.46: enterprise ERP/MES visual reset.
+   This layer keeps the existing component contracts but moves the app away
+   from review-board styling toward a dense, repeatable operations workspace. */
+:root {
+  --m346-bg: #f4f6f8;
+  --m346-surface: #ffffff;
+  --m346-soft: #f8fafc;
+  --m346-ink: #172033;
+  --m346-muted: #64748b;
+  --m346-line: #d8e0e8;
+  --m346-line-strong: #b8c3cf;
+  --m346-sidebar: #18212b;
+  --m346-sidebar-active: #223144;
+  --m346-blue: #2563eb;
+  --m346-green: #168255;
+  --m346-amber: #b77904;
+  --m346-red: #c24132;
+  --m346-violet: #6d5bd0;
+}
+
+body {
+  background: var(--m346-bg);
+  color: var(--m346-ink);
+}
+
+.ops-shell.review-shell {
+  grid-template-columns: 232px minmax(0, 1fr);
+  background: var(--m346-bg);
+}
+
+.ops-sidebar.review-sidebar {
+  border-right: 1px solid #111827;
+  background: var(--m346-sidebar);
+  padding: 12px 10px;
+}
+
+.ops-brand {
+  gap: 10px;
+  padding: 6px 6px 12px;
+}
+
+.ops-brand .brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 7px;
+  background: #f8fafc;
+  box-shadow: none;
+  color: #152033;
+  font-size: 12px;
+}
+
+.ops-brand strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.ops-brand span:last-child {
+  color: #a7b3c2;
+  font-size: 11px;
+}
+
+.ops-status-card,
+.ops-version-card,
+.ops-health-grid span {
+  border-color: rgba(203, 213, 225, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.ops-status-card {
+  margin: 10px 2px 12px;
+  padding: 9px;
+}
+
+.ops-status-card span,
+.ops-status-card i,
+.ops-version-card span,
+.ops-health-grid span {
+  color: #a7b3c2;
+}
+
+.ops-status-card strong,
+.ops-version-card strong {
+  color: #f8fafc;
+}
+
+.ops-status-card i {
+  line-height: 1.45;
+}
+
+.ops-nav {
+  gap: 4px;
+}
+
+.ops-nav .nav-button {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #d6dee9;
+  padding: 7px 8px;
+}
+
+.ops-nav .nav-button:hover,
+.ops-nav .nav-button.active {
+  border-color: #334861;
+  background: var(--m346-sidebar-active);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.ops-nav .nav-button.active {
+  border-left-color: #60a5fa;
+}
+
+.ops-nav .nav-button .nav-code {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(203, 213, 225, 0.18);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #93c5fd;
+  font-size: 10px;
+}
+
+.ops-nav .nav-button strong {
+  font-size: 12px;
+}
+
+.ops-nav .nav-button small {
+  color: #9aa8b7;
+  font-size: 10px;
+}
+
+.ops-nav .nav-button b {
+  min-width: 22px;
+  border-radius: 5px;
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.ops-workspace.review-workspace {
+  padding: 12px 14px 28px;
+}
+
+.ops-topbar.review-topbar {
+  min-height: 34px;
+  margin-bottom: 8px;
+  border: 1px solid var(--m346-line);
+  border-radius: 7px;
+  background: var(--m346-surface);
+  padding: 6px 10px;
+  box-shadow: none;
+}
+
+.context-stack span,
+.sync-stack span {
+  border-color: var(--m346-line);
+  border-radius: 5px;
+  background: var(--m346-soft);
+  color: #334155;
+}
+
+.sync-stack span:first-child {
+  border-color: #b7e3ce;
+  background: #eefbf4;
+  color: var(--m346-green);
+}
+
+.sync-stack span:last-child {
+  border-color: #efc3bb;
+  background: #fff2ef;
+  color: var(--m346-red);
+}
+
+.ops-page-header.review-page-header {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  gap: 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--m346-line);
+  border-top: 3px solid var(--m346-blue);
+  border-left: 1px solid var(--m346-line);
+  border-radius: 7px;
+  background: var(--m346-surface);
+  padding: 10px 12px;
+  box-shadow: none;
+}
+
+.ops-page-header.review-page-header h1 {
+  margin: 2px 0 5px;
+  color: var(--m346-ink);
+  font-size: 20px;
+}
+
+.ops-page-header.review-page-header p {
+  max-width: 980px;
+  color: var(--m346-muted);
+  font-size: 12px;
+}
+
+.eyebrow {
+  color: #2f5f9e;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ops-scope-ribbon span,
+.mission-chip-row span {
+  border-color: var(--m346-line);
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.ops-command-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ops-command-metrics article,
+.mission-kpi-grid article,
+.module-stat-grid article,
+.operations-hero-grid article,
+.runtime-metric-grid article {
+  min-height: 58px;
+  border: 1px solid var(--m346-line);
+  border-top: 3px solid var(--tone);
+  border-radius: 6px;
+  background: var(--m346-soft);
+  box-shadow: none;
+  padding: 7px;
+}
+
+.ops-command-metrics strong,
+.mission-kpi-grid strong,
+.module-stat-grid strong,
+.operations-hero-grid strong,
+.runtime-metric-grid strong {
+  color: var(--m346-ink);
+  font-size: 22px;
+}
+
+.ops-command-metrics span,
+.ops-command-metrics small,
+.mission-kpi-grid span,
+.mission-kpi-grid em,
+.module-stat-grid span,
+.module-stat-grid em,
+.operations-hero-grid span,
+.operations-hero-grid em,
+.runtime-metric-grid span,
+.runtime-metric-grid em {
+  color: var(--m346-muted);
+  font-size: 10px;
+  line-height: 1.32;
+}
+
+.command-actions-panel {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) 138px 138px;
+}
+
+.global-search input,
+.module-tools input,
+.floor-filter-row input,
+.form-grid input,
+.phone-form input {
+  min-height: 32px;
+  border-color: var(--m346-line-strong);
+  border-radius: 5px;
+  background: #ffffff;
+}
+
+.primary-button,
+.secondary-button,
+.table-action,
+.filter-pill {
+  min-height: 30px;
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.primary-button {
+  border-color: #1d4ed8;
+  background: var(--m346-blue);
+  box-shadow: none;
+}
+
+.secondary-button,
+.table-action,
+.filter-pill {
+  border-color: var(--m346-line-strong);
+  background: #ffffff;
+  color: #243447;
+}
+
+.secondary-button:hover,
+.table-action:hover,
+.filter-pill:hover,
+.filter-pill.active {
+  border-color: #9ab9e8;
+  background: #eef5ff;
+  color: #1d4ed8;
+}
+
+.page-stack,
+.command-center-v3,
+.module-command-surface,
+.operations-command-surface {
+  gap: 10px;
+}
+
+.control-room-strip.mission-hero-v2 {
+  grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.1fr);
+  gap: 10px;
+  border: 1px solid var(--m346-line);
+  border-left: 4px solid var(--m346-blue);
+  border-radius: 7px;
+  background: var(--m346-surface);
+  box-shadow: none;
+  padding: 10px;
+}
+
+.mission-hero-v2::before {
+  display: none;
+}
+
+.control-room-copy.mission-copy {
+  padding: 6px 8px;
+}
+
+.mission-copy h2 {
+  margin: 2px 0 5px;
+  color: var(--m346-ink);
+  font-size: 22px;
+}
+
+.mission-copy p {
+  max-width: 760px;
+  color: var(--m346-muted);
+  font-size: 12px;
+}
+
+.mission-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.production-desk-grid.command-grid-v2 {
+  grid-template-areas: "flow dispatch active";
+  grid-template-columns: 208px minmax(0, 1fr) 318px;
+  gap: 10px;
+}
+
+.process-rail-card,
+.dispatch-console-v3,
+.active-record-panel,
+.focus-card-v2,
+.insight-panel,
+.workstation-panel,
+.module-contract-panel,
+.operations-panel,
+.operations-focus-panel,
+.operations-command-main,
+.module-command-main,
+.active-object-card,
+.evidence-slot-panel,
+.module-rule-panel {
+  border: 1px solid var(--m346-line);
+  border-radius: 7px;
+  background: var(--m346-surface);
+  box-shadow: none;
+}
+
+.process-rail-card,
+.dispatch-console-v3,
+.active-record-panel,
+.focus-card-v2,
+.insight-panel,
+.workstation-panel,
+.module-contract-panel,
+.operations-panel,
+.operations-focus-panel,
+.operations-command-main,
+.module-command-main {
+  padding: 10px;
+}
+
+.floor-toolbar,
+.module-toolbar,
+.section-heading,
+.panel-title-row,
+.operations-title-row {
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.floor-toolbar h2,
+.module-toolbar h2,
+.section-heading h2,
+.panel-title-row h2,
+.operations-title-row h2 {
+  margin: 0;
+  color: var(--m346-ink);
+  font-size: 15px;
+}
+
+.floor-filter-row,
+.module-tools {
+  gap: 5px;
+}
+
+.flow-step-list {
+  gap: 5px;
+}
+
+.flow-step-list article {
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-height: 42px;
+  border-color: var(--m346-line);
+  border-radius: 6px;
+  background: var(--m346-soft);
+  padding: 6px;
+}
+
+.flow-step-list b {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background: #eef5ff;
+  color: #1d4ed8;
+}
+
+.flow-step-list strong,
+.active-record-code strong,
+.focus-card-v2 > strong,
+.source-row-list strong,
+.hardware-poc-grid strong,
+.evidence-matrix strong,
+.station-card-grid strong {
+  color: var(--m346-ink);
+}
+
+.flow-step-list span,
+.source-row-list span,
+.source-row-list small,
+.hardware-poc-grid span,
+.evidence-matrix span,
+.station-card-grid span,
+.detail-grid dt {
+  color: var(--m346-muted);
+}
+
+.flow-rule-card {
+  border-color: #edd9a5;
+  border-radius: 6px;
+  background: #fff8e8;
+  color: #694a14;
+}
+
+.erp-table-wrap,
+.module-table-wrap,
+.ops-table-wrap,
+.readiness-table-wrap {
+  border-color: var(--m346-line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.erp-table,
+.module-table,
+.readiness-table,
+.ops-data-table {
+  color: var(--m346-ink);
+  font-size: 11px;
+}
+
+.erp-table th,
+.erp-table td,
+.module-table th,
+.module-table td,
+.readiness-table th,
+.readiness-table td,
+.ops-data-table th,
+.ops-data-table td {
+  border-color: #e7edf3;
+  padding: 7px 8px;
+}
+
+.erp-table th,
+.module-table th,
+.readiness-table th,
+.ops-data-table th {
+  background: #eef2f6;
+  color: #334155;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.floor-dispatch-table tbody tr:hover td,
+.module-table tbody tr:hover td,
+.ops-data-table tbody tr:hover td {
+  background: #f1f6ff;
+}
+
+.active-record-code {
+  border-color: var(--m346-line);
+  border-left-color: var(--m346-blue);
+  border-radius: 6px;
+  background: var(--m346-soft);
+}
+
+.active-record-code strong {
+  font-size: 16px;
+}
+
+.detail-grid {
+  gap: 5px 8px;
+}
+
+.detail-grid dt,
+.detail-grid dd,
+.cell-stack small,
+.operator-checklist small {
+  font-size: 11px;
+}
+
+.operator-checklist {
+  gap: 6px;
+}
+
+.operator-checklist article,
+.evidence-matrix article,
+.hardware-poc-grid article,
+.source-row-list article,
+.station-card-grid article,
+.service-status-grid article,
+.backup-status-list article,
+.ops-checklist article {
+  border-color: var(--m346-line);
+  border-radius: 6px;
+  background: var(--m346-soft);
+  box-shadow: none;
+}
+
+.operator-checklist article {
+  border-left: 3px solid var(--tone);
+}
+
+.focus-board-v3.focus-stack-v2 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.focus-board-v3 .focus-card-v2 {
+  border-top: 3px solid var(--tone);
+}
+
+.ops-insight-grid-v2 {
+  grid-template-columns: 1.1fr 0.9fr 1fr;
+  gap: 10px;
+}
+
+.lower-grid-v2,
+.module-work-grid,
+.operations-grid {
+  gap: 10px;
+}
+
+.status-badge {
+  min-height: 22px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  background: #ffffff;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.status-badge.tone-blue {
+  color: var(--m346-blue);
+}
+
+.status-badge.tone-green {
+  color: var(--m346-green);
+}
+
+.status-badge.tone-amber {
+  color: var(--m346-amber);
+}
+
+.status-badge.tone-red {
+  color: var(--m346-red);
+}
+
+.status-badge.tone-violet {
+  color: var(--m346-violet);
+}
+
+.operation-feedback.danger {
+  border-color: #f1b8b0;
+  background: #fff3f1;
+}
+
+.operations-focus-panel,
+.module-priority-panel {
+  border-color: #263244;
+  background: #1f2937;
+  color: #f8fafc;
+}
+
+.operations-focus-panel p,
+.operations-focus-grid dt,
+.module-priority-panel article span,
+.module-priority-panel article small {
+  color: #cbd5e1;
+}
+
+.log-stream article {
+  border-color: #263244;
+  border-radius: 6px;
+  background: #111827;
+}
+
+@media (max-width: 1320px) {
+  .control-room-strip.mission-hero-v2,
+  .ops-page-header.review-page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-kpi-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .production-desk-grid.command-grid-v2 {
+    grid-template-areas:
+      "dispatch active"
+      "flow active";
+    grid-template-columns: minmax(0, 1fr) 318px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .production-desk-grid.command-grid-v2 {
+    grid-template-areas:
+      "dispatch"
+      "active"
+      "flow";
+    grid-template-columns: 1fr;
+  }
+
+  .focus-board-v3.focus-stack-v2,
+  .ops-insight-grid-v2,
+  .operations-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .ops-shell.review-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-sidebar.review-sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .ops-nav {
+    grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  }
+
+  .mission-kpi-grid,
+  .ops-command-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ops-workspace.review-workspace {
+    padding: 8px;
+  }
+
+  .mission-kpi-grid,
+  .ops-command-metrics,
+  .command-actions-panel,
+  .active-action-grid {
+    grid-template-columns: 1fr;
+  }
+}

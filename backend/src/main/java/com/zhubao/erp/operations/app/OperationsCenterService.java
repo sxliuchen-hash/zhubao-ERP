@@ -12,14 +12,19 @@ import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.ThreadMXBean;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -41,31 +46,38 @@ public class OperationsCenterService {
     private final Environment environment;
     private final ObjectProvider<DataSource> dataSources;
     private final String frontendUrl;
+    private final String frontendProbeUrl;
     private final String backupRoot;
     private final String logFile;
+    private final int frontendProbeTimeoutMs;
     private final int backupRpoHours;
 
     public OperationsCenterService(
             Environment environment,
             ObjectProvider<DataSource> dataSources,
             @Value("${zhubao.operations.frontend-url:http://localhost:5173/}") String frontendUrl,
+            @Value("${zhubao.operations.frontend-probe-url:}") String frontendProbeUrl,
             @Value("${zhubao.operations.backup-root:}") String backupRoot,
             @Value("${zhubao.operations.log-file:}") String logFile,
+            @Value("${zhubao.operations.frontend-probe-timeout-ms:800}") int frontendProbeTimeoutMs,
             @Value("${zhubao.operations.backup-rpo-hours:24}") int backupRpoHours
     ) {
         this.environment = environment;
         this.dataSources = dataSources;
         this.frontendUrl = frontendUrl;
+        this.frontendProbeUrl = frontendProbeUrl;
         this.backupRoot = backupRoot;
         this.logFile = logFile;
+        this.frontendProbeTimeoutMs = frontendProbeTimeoutMs;
         this.backupRpoHours = backupRpoHours;
     }
 
     public OperationsCenterSnapshot snapshot() {
         Instant now = Instant.now();
         DatabaseProbe database = probeDatabase(now);
+        FrontendProbe frontend = probeFrontend();
         List<OperationsCenterSnapshot.BackupStatus> backups = probeBackups(now);
-        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, backups, now);
+        List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, backups, now);
         List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now);
 
         long degradedServices = services.stream().filter(service -> !"green".equals(service.tone())).count();
@@ -89,12 +101,13 @@ public class OperationsCenterService {
                 errors,
                 recentLogs(now),
                 backups,
-                checklist(database)
+                checklist(database, frontend)
         );
     }
 
     private List<OperationsCenterSnapshot.ServiceStatus> serviceStatuses(
             DatabaseProbe database,
+            FrontendProbe frontend,
             List<OperationsCenterSnapshot.BackupStatus> backups,
             Instant now
     ) {
@@ -113,12 +126,12 @@ public class OperationsCenterService {
         services.add(new OperationsCenterSnapshot.ServiceStatus(
                 "FRONTEND",
                 "前端 PWA",
-                "REVIEW",
+                frontend.status(),
                 frontendUrl,
-                "当前按配置 URL 展示前端状态，生产环境需接入探活和静态资源版本校验。",
+                frontend.detail(),
                 "前端负责人",
                 checkedAt,
-                "blue"
+                frontend.tone()
         ));
         services.add(new OperationsCenterSnapshot.ServiceStatus(
                 "DATABASE",
@@ -237,6 +250,86 @@ public class OperationsCenterService {
                     "连接失败",
                     error.getClass().getSimpleName() + ": " + truncate(error.getMessage(), 180),
                     "spring.datasource",
+                    "red"
+            );
+        }
+    }
+
+    private FrontendProbe probeFrontend() {
+        if (frontendProbeUrl == null || frontendProbeUrl.isBlank()) {
+            return new FrontendProbe(
+                    "NOT_CONFIGURED",
+                    "未配置前端探活地址，运维中心只能展示前端公开访问地址。",
+                    blankToReviewText(frontendUrl, "未配置 zhubao.operations.frontend-url"),
+                    "amber"
+            );
+        }
+
+        URI uri;
+        try {
+            uri = URI.create(frontendProbeUrl);
+        } catch (IllegalArgumentException error) {
+            return new FrontendProbe(
+                    "CONFIG_ERROR",
+                    "前端探活地址格式错误：" + truncate(error.getMessage(), 120),
+                    frontendProbeUrl,
+                    "red"
+            );
+        }
+
+        String scheme = uri.getScheme();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+            return new FrontendProbe(
+                    "CONFIG_ERROR",
+                    "前端探活只支持 HTTP/HTTPS 地址。",
+                    frontendProbeUrl,
+                    "red"
+            );
+        }
+
+        int timeoutMs = Math.max(200, frontendProbeTimeoutMs);
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(timeoutMs))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofMillis(timeoutMs))
+                .header("User-Agent", "zhubao-operations-center")
+                .GET()
+                .build();
+
+        long start = System.nanoTime();
+        try {
+            HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
+            long elapsedMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
+            int statusCode = response.statusCode();
+            if (statusCode >= 200 && statusCode < 400) {
+                return new FrontendProbe(
+                        "ONLINE",
+                        "前端探活成功，HTTP " + statusCode + "，耗时 " + elapsedMs + " ms。",
+                        frontendProbeUrl,
+                        "green"
+                );
+            }
+            return new FrontendProbe(
+                    statusCode >= 500 ? "DOWN" : "DEGRADED",
+                    "前端探活返回 HTTP " + statusCode + "，耗时 " + elapsedMs + " ms。",
+                    frontendProbeUrl,
+                    statusCode >= 500 ? "red" : "amber"
+            );
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return new FrontendProbe(
+                    "DOWN",
+                    "前端探活被中断：" + truncate(error.getMessage(), 120),
+                    frontendProbeUrl,
+                    "red"
+            );
+        } catch (IOException error) {
+            return new FrontendProbe(
+                    "DOWN",
+                    error.getClass().getSimpleName() + ": " + truncate(error.getMessage(), 160),
+                    frontendProbeUrl,
                     "red"
             );
         }
@@ -430,7 +523,7 @@ public class OperationsCenterService {
         );
     }
 
-    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(DatabaseProbe database) {
+    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(DatabaseProbe database, FrontendProbe frontend) {
         return List.of(
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-001",
@@ -450,6 +543,14 @@ public class OperationsCenterService {
                 ),
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-003",
+                        "前端 URL 探活",
+                        frontend.status(),
+                        frontend.detail(),
+                        "前端负责人",
+                        frontend.tone()
+                ),
+                new OperationsCenterSnapshot.OperationChecklistItem(
+                        "OPS-CHK-004",
                         "日志来源",
                         logFile == null || logFile.isBlank() ? "评审样例" : "读取文件",
                         blankToReviewText(logFile, "未配置 zhubao.operations.log-file"),
@@ -457,7 +558,7 @@ public class OperationsCenterService {
                         logFile == null || logFile.isBlank() ? "amber" : "green"
                 ),
                 new OperationsCenterSnapshot.OperationChecklistItem(
-                        "OPS-CHK-004",
+                        "OPS-CHK-005",
                         "备份目录",
                         backupRoot == null || backupRoot.isBlank() ? "待配置" : "已配置",
                         blankToReviewText(backupRoot, "未配置 zhubao.operations.backup-root"),
@@ -550,6 +651,14 @@ public class OperationsCenterService {
     private record DatabaseProbe(
             String status,
             String label,
+            String detail,
+            String endpoint,
+            String tone
+    ) {
+    }
+
+    private record FrontendProbe(
+            String status,
             String detail,
             String endpoint,
             String tone
