@@ -13,6 +13,8 @@ describe('OperationsCenterWorkspace', () => {
     expect(wrapper.text()).toContain('报错汇总');
     expect(wrapper.text()).toContain('近期日志');
     expect(wrapper.text()).toContain('数据库备份情况');
+    expect(wrapper.text()).toContain('文件大小');
+    expect(wrapper.text()).toContain('SHA-256');
     expect(wrapper.text()).toContain('运维接入清单');
     expect(wrapper.text()).toContain('DB-BACKUP-POC');
     expect(wrapper.text()).toContain('TRACE-OPS-001');

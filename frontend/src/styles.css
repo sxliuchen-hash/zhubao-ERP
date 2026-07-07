@@ -12373,6 +12373,11 @@ body {
   overflow-wrap: anywhere;
 }
 
+.backup-status-list .checksum-value {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+}
+
 .ops-checklist article {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

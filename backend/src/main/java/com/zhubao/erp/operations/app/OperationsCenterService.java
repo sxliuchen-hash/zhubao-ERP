@@ -8,9 +8,13 @@ import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.ThreadMXBean;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -21,6 +25,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -246,6 +251,8 @@ public class OperationsCenterService {
                     "评审样例：2026-07-06 23:30:00",
                     DISPLAY_TIME.format(now.plusSeconds(backupRpoHours * 3600L)),
                     "zhubao.operations.backup-root 未配置",
+                    "未计算",
+                    "未计算",
                     "生产环境建议记录 mysqldump 输出、备份大小、checksum 和恢复演练结果。",
                     "amber"
             ));
@@ -260,6 +267,8 @@ public class OperationsCenterService {
                     "无",
                     DISPLAY_TIME.format(now.plusSeconds(backupRpoHours * 3600L)),
                     root.toString(),
+                    "未计算",
+                    "未计算",
                     "已配置备份目录但当前无法读取，需要运维确认挂载和权限。",
                     "red"
             ));
@@ -278,21 +287,29 @@ public class OperationsCenterService {
                         "无",
                         DISPLAY_TIME.format(now.plusSeconds(backupRpoHours * 3600L)),
                         root.toString(),
+                        "未计算",
+                        "未计算",
                         "目录存在但没有 .sql/.dump/.backup/.gz 文件。",
                         "red"
                 ));
             }
             Path latestFile = latest.get();
             Instant lastModified = lastModifiedOrEpoch(latestFile);
+            Instant nextDueAt = lastModified.plusSeconds(backupRpoHours * 3600L);
+            boolean overdue = nextDueAt.isBefore(now);
+            String fileSize = readableSize(sizeOrZero(latestFile));
+            String checksum = sha256(latestFile);
             return List.of(new OperationsCenterSnapshot.BackupStatus(
                     "DB-BACKUP-LATEST",
                     "MySQL 逻辑备份",
-                    "已发现备份",
+                    overdue ? "超过 RPO" : "已发现备份",
                     DISPLAY_TIME.format(lastModified),
-                    DISPLAY_TIME.format(lastModified.plusSeconds(backupRpoHours * 3600L)),
+                    DISPLAY_TIME.format(nextDueAt),
                     latestFile.toString(),
-                    "最近备份文件 " + latestFile.getFileName(),
-                    "green"
+                    fileSize,
+                    checksum,
+                    "最近备份文件 " + latestFile.getFileName() + "，大小 " + fileSize + "，" + checksum,
+                    overdue ? "amber" : "green"
             ));
         } catch (IOException error) {
             return List.of(new OperationsCenterSnapshot.BackupStatus(
@@ -302,6 +319,8 @@ public class OperationsCenterService {
                     "无",
                     DISPLAY_TIME.format(now.plusSeconds(backupRpoHours * 3600L)),
                     root.toString(),
+                    "未计算",
+                    "未计算",
                     error.getClass().getSimpleName() + ": " + truncate(error.getMessage(), 160),
                     "red"
             ));
@@ -461,6 +480,40 @@ public class OperationsCenterService {
             return Files.getLastModifiedTime(path).toInstant();
         } catch (IOException error) {
             return Instant.EPOCH;
+        }
+    }
+
+    private long sizeOrZero(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException error) {
+            return 0L;
+        }
+    }
+
+    private String readableSize(long bytes) {
+        if (bytes >= 1024L * 1024L) {
+            return String.format(Locale.ROOT, "%.2f MiB", bytes / 1024.0 / 1024.0);
+        }
+        if (bytes >= 1024L) {
+            return String.format(Locale.ROOT, "%.2f KiB", bytes / 1024.0);
+        }
+        return bytes + " B";
+    }
+
+    private String sha256(Path path) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (InputStream input = Files.newInputStream(path);
+                 DigestInputStream digestInput = new DigestInputStream(input, digest)) {
+                byte[] buffer = new byte[8192];
+                while (digestInput.read(buffer) != -1) {
+                    // DigestInputStream updates the MessageDigest while bytes are consumed.
+                }
+            }
+            return "sha256:" + HexFormat.of().formatHex(digest.digest());
+        } catch (IOException | NoSuchAlgorithmException error) {
+            return "sha256:计算失败";
         }
     }
 

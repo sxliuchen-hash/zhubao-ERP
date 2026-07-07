@@ -57,6 +57,8 @@ export interface BackupStatus {
   lastSuccessAt: string;
   nextDueAt: string;
   storage: string;
+  fileSize: string;
+  checksum: string;
   detail: string;
   tone: Tone;
 }
@@ -206,6 +208,8 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       lastSuccessAt: '评审样例：2026-07-06 23:30:00',
       nextDueAt: '2026-07-07 23:30:00',
       storage: 'zhubao.operations.backup-root 未配置',
+      fileSize: '未计算',
+      checksum: '未计算',
       detail: '生产环境建议记录 mysqldump 输出、备份大小、checksum 和恢复演练结果。',
       tone: 'amber',
     },

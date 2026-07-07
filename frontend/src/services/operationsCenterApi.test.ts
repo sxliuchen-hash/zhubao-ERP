@@ -66,6 +66,8 @@ describe('operationsCenterApi', () => {
             lastSuccessAt: '评审样例',
             nextDueAt: '2026-07-07 23:30:00',
             storage: 'not configured',
+            fileSize: '未计算',
+            checksum: '未计算',
             detail: '配置备份目录',
             tone: 'amber',
           }],
@@ -86,6 +88,7 @@ describe('operationsCenterApi', () => {
     expect(snapshot.services[0].tone).toBe('green');
     expect(snapshot.errorSummaries[0].tone).toBe('amber');
     expect(snapshot.backupStatuses[0].code).toBe('DB-BACKUP-POC');
+    expect(snapshot.backupStatuses[0].checksum).toBe('未计算');
     expect(fetchMock).toHaveBeenCalledWith('/api/operations/center');
   });
 });

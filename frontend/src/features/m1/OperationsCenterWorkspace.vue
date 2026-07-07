@@ -251,6 +251,10 @@ function errorTone(error: ErrorSummary): Tone {
               <dd>{{ backup.lastSuccessAt }}</dd>
               <dt>下次应完成</dt>
               <dd>{{ backup.nextDueAt }}</dd>
+              <dt>文件大小</dt>
+              <dd>{{ backup.fileSize }}</dd>
+              <dt>SHA-256</dt>
+              <dd class="checksum-value">{{ backup.checksum }}</dd>
               <dt>说明</dt>
               <dd>{{ backup.detail }}</dd>
             </dl>

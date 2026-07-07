@@ -75,6 +75,8 @@ class M2ManagementApiSmokeTest {
                 "TRACE-OPS-001",
                 "\"backupStatuses\"",
                 "DB-BACKUP-POC",
+                "\"fileSize\"",
+                "\"checksum\"",
                 "\"checklist\""
         );
     }

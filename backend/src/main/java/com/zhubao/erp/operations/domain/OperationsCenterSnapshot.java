@@ -83,6 +83,8 @@ public record OperationsCenterSnapshot(
             String lastSuccessAt,
             String nextDueAt,
             String storage,
+            String fileSize,
+            String checksum,
             String detail,
             String tone
     ) {
