@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.50 / 样例映射与真实验收数据</strong>
-        <i>仍处于 M3 增量开发：本轮把开源参考、样例库和真实验收 fixture 绑定到同一套测试矩阵。</i>
+        <strong>M3.51 / 样例库管理台重构</strong>
+        <i>仍处于 M3 增量开发：本轮把样例矩阵、开源调研、fixture、验收门禁和现场数据缺口收敛到同一张管理台。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
