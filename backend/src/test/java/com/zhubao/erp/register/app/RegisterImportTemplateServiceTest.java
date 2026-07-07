@@ -31,13 +31,13 @@ class RegisterImportTemplateServiceTest {
     }
 
     @Test
-    void summarizesTemplateReadinessBeforeExcelParserIsBuilt() {
+    void summarizesTemplateReadinessWithPreviewParserReady() {
         RegisterImportTemplateService.RegisterImportSummary summary = service.summary();
 
         assertThat(summary.templates()).isEqualTo(4);
         assertThat(summary.fields()).isEqualTo(34);
         assertThat(summary.requiredFields()).isGreaterThan(20);
         assertThat(summary.commandReadyTemplates()).isEqualTo(4);
-        assertThat(summary.parserStatus()).contains("parser pending");
+        assertThat(summary.parserStatus()).contains("preview parser ready");
     }
 }

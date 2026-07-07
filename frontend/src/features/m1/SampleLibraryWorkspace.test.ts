@@ -7,7 +7,7 @@ describe('SampleLibraryWorkspace', () => {
     const wrapper = mount(SampleLibraryWorkspace);
 
     expect(wrapper.text()).toContain('样例验收指挥台');
-    expect(wrapper.text()).toContain('M3.51 管理台重构');
+    expect(wrapper.text()).toContain('M3.66 登记表预览');
     expect(wrapper.text()).toContain('样例矩阵');
     expect(wrapper.text()).toContain('当前主样例');
     expect(wrapper.text()).toContain('开源调研命中');

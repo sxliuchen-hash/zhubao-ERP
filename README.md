@@ -81,6 +81,7 @@
 - M3.63 轻量登录会话基线，新增 `/api/auth/login`、`/session`、`/logout` 和 `/demo-users`，前端 API client 自动携带 Bearer token；配置基线页可登录演示账号并刷新权限上下文，请求头兜底仍保留用于评审和自动化测试。
 - M3.64 现场登记来源审计补齐，入库、生产报工和出货命令新增 `sourceRegisterType`、`sourceRegisterLineNo`、`sourceRegisterSequence`；出货命令新增 `paperExpressText` 保留纸质快递栏原文，台账备注和字段文档同步更新。
 - M3.65 登记表导入模板基线，新增 `/api/register-import/templates` 和 `/summary`，把入库、出货、抛光、雕刻 4 类现场登记表固化为字段映射、命令映射和导入校验规则；样例库新增“现场登记表导入准备度”视图。
+- M3.66 登记表 Excel 上传预览，新增 `/api/register-import/previews`，通过 Apache POI 读取入库、出货、抛光、雕刻 4 类 `.xlsx`，标准化现场字段、继承抛光表头/雕刻合并单元格上下文、拆分纸质快递栏，并输出 READY/WARNING/BLOCKED 预览行；本阶段仍不直接写业务台账。
 
 ## 目录结构
 

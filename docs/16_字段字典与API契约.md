@@ -73,8 +73,9 @@
 |---|---|---|
 | `GET /templates` | 样例库/导入预览 | 返回入库、出货、抛光、雕刻登记表的字段映射、目标命令和校验规则 |
 | `GET /summary` | 样例库/导入预览 | 返回模板数量、字段数量、必填字段数量和解析器接入状态 |
+| `POST /previews` | 样例库/导入预览 | multipart 上传 `.xlsx`，按模板解析并返回标准化字段、阻断/警告消息和可确认状态；不写业务台账 |
 
-当前 M3.65 只冻结模板和规则，不代表已经完成 Excel 文件上传、单元格解析、合并单元格继承或导入批次落库。
+当前 M3.66 已完成 Excel 上传预览解析：支持入库、出货、抛光、雕刻 4 类登记表，能处理抛光表头上下文、雕刻合并单元格继承、数量单位和纸质快递栏拆分。仍未完成确认导入、错误行下载、结构化导入批次落库和业务单据自动入账。
 
 业务操作接口前缀：
 
@@ -107,10 +108,53 @@
 | `businessFlow` | 该表对应的业务链路 |
 | `targetCommand` | 导入预览通过后应生成或补齐的业务命令 |
 | `targetLedgerType` | 最终影响的库存台账来源类型 |
-| `parserStatus` | 当前状态，M3.65 为 `COMMAND_READY`，表示命令映射已就绪但解析器未完成 |
+| `parserStatus` | 当前状态，M3.66 仍为 `COMMAND_READY`，表示命令映射和预览解析已就绪，确认导入尚未开放 |
 | `nextAction` | 后续开发动作 |
 | `fields` | 字段映射列表 |
 | `validationRules` | 导入校验规则列表 |
+
+### 2.2 登记表导入预览字段
+
+`POST /api/register-import/previews` 请求：
+
+| 字段 | 说明 |
+|---|---|
+| `templateCode` | 必填，`REG-INBOUND`、`REG-OUTBOUND`、`REG-POLISHING`、`REG-ENGRAVING` |
+| `businessDate` | 可选，纸质表只有月日时用于补全年份 |
+| `file` | 必填，现场登记表 `.xlsx` 文件 |
+
+返回对象：
+
+| 字段 | 说明 |
+|---|---|
+| `importBatchNo` | 本次预览批次号，当前仅用于预览追踪，尚未落结构化导入批次表 |
+| `templateCode` / `templateName` | 模板编码和模板名称 |
+| `sourceFileName` | 上传文件名 |
+| `totalRows` | 实际解析出的业务行数量，不含空白模板行 |
+| `readyRows` / `warningRows` / `blockedRows` | 可确认、警告、阻断行数量 |
+| `executable` | 是否可进入人工复核或确认导入；只要存在阻断行即为 `false` |
+| `nextAction` | 下一动作提示 |
+| `rows` | 逐行预览结果 |
+
+`rows[]`：
+
+| 字段 | 说明 |
+|---|---|
+| `sourceLineNo` | Excel 原始行号 |
+| `sourceRegisterSequence` | 纸质表内序号 |
+| `status` | `READY`、`WARNING`、`BLOCKED` |
+| `normalizedFields` | 标准化后的字段 Map，例如 `inboundDate`、`paperExpressText`、`logisticsNo`、`operator`、`machineNo`、`quantityUnit` |
+| `messages` | 逐行校验消息 |
+
+`messages[]`：
+
+| 字段 | 说明 |
+|---|---|
+| `ruleCode` | 校验规则编码 |
+| `level` | `BLOCK` 或 `WARN` |
+| `field` | 命中的目标字段 |
+| `message` | 校验说明 |
+| `fallback` | 现场补救动作 |
 
 `RegisterFieldMapping`：
 

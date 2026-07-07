@@ -35,7 +35,7 @@ public class RegisterImportTemplateService {
                 fieldCount,
                 requiredFields,
                 readyTemplates,
-                "Excel parser pending; command mapping ready"
+                "Excel preview parser ready; confirm import pending"
         );
     }
 

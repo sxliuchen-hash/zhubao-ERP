@@ -37,6 +37,36 @@ export interface RegisterImportSummary {
   parserStatus: string;
 }
 
+export interface RegisterImportPreviewMessage {
+  ruleCode: string;
+  level: 'BLOCK' | 'WARN';
+  field: string;
+  message: string;
+  fallback: string;
+}
+
+export interface RegisterImportPreviewRow {
+  sourceLineNo: number;
+  sourceRegisterSequence: string;
+  status: 'READY' | 'WARNING' | 'BLOCKED';
+  normalizedFields: Record<string, string>;
+  messages: RegisterImportPreviewMessage[];
+}
+
+export interface RegisterImportPreview {
+  importBatchNo: string;
+  templateCode: string;
+  templateName: string;
+  sourceFileName: string;
+  totalRows: number;
+  readyRows: number;
+  warningRows: number;
+  blockedRows: number;
+  executable: boolean;
+  nextAction: string;
+  rows: RegisterImportPreviewRow[];
+}
+
 export const registerImportTemplates: RegisterImportTemplate[] = [
   {
     code: 'REG-INBOUND',
@@ -146,7 +176,7 @@ export const registerImportSummary: RegisterImportSummary = {
     0,
   ),
   commandReadyTemplates: registerImportTemplates.filter((template) => template.parserStatus === 'COMMAND_READY').length,
-  parserStatus: 'Excel parser pending; command mapping ready',
+  parserStatus: 'Excel preview parser ready; confirm import pending',
 };
 
 export function registerRuleTone(level: RegisterValidationRule['level']): Tone {

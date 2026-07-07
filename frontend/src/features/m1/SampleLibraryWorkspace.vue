@@ -47,7 +47,7 @@ function dataSetTone(status: string): Tone {
 }
 
 function parserStatusLabel(status: string) {
-  if (status === 'COMMAND_READY') return '命令已对齐';
+  if (status === 'COMMAND_READY') return '预览就绪';
   return '解析器待接入';
 }
 
@@ -187,7 +187,7 @@ const registerTemplateRows = computed(() =>
       <div class="sample-command-copy">
         <div class="console-title-line">
           <span class="eyebrow">SAMPLE CONTROL</span>
-          <StatusBadge label="M3.51 管理台重构" tone="green" />
+          <StatusBadge label="M3.66 登记表预览" tone="green" />
         </div>
         <h2>样例验收指挥台</h2>
         <p>
@@ -217,7 +217,7 @@ const registerTemplateRows = computed(() =>
           <div>
             <span class="eyebrow">REGISTER IMPORT</span>
             <h2>现场登记表导入准备度</h2>
-            <p>把现场 Excel/纸质表先固化成模板、字段映射和阻断规则，再接上传解析器，避免导入逻辑各写各的。</p>
+            <p>把现场 Excel/纸质表固化成模板、字段映射、阻断规则和上传预览解析，先预检再确认入账。</p>
           </div>
           <StatusBadge :label="`${registerImportSummary.templates} 类模板`" tone="green" />
         </div>
@@ -234,7 +234,7 @@ const registerTemplateRows = computed(() =>
           </article>
           <article>
             <span>解析状态</span>
-            <strong>待接入</strong>
+            <strong>上传预览</strong>
             <small>{{ registerImportSummary.parserStatus }}</small>
           </article>
         </div>

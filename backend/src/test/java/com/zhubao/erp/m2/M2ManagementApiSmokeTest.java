@@ -1,6 +1,10 @@
 package com.zhubao.erp.m2;
 
 import org.junit.jupiter.api.Test;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ByteArrayResource;
@@ -13,6 +17,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -57,7 +63,39 @@ class M2ManagementApiSmokeTest {
                 "\"templates\":4",
                 "\"fields\":34",
                 "\"commandReadyTemplates\":4",
-                "parser pending"
+                "preview parser ready"
+        );
+    }
+
+    @Test
+    void uploadsRegisterImportPreviewWithoutWritingBusinessLedger() throws IOException {
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("templateCode", "REG-OUTBOUND");
+        body.add("businessDate", "2026-07-07");
+        body.add("file", new ByteArrayResource(outboundRegisterWorkbook()) {
+            @Override
+            public String getFilename() {
+                return "出货登记表.xlsx";
+            }
+        });
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+        ResponseEntity<String> preview = restTemplate.postForEntity(
+                "/api/register-import/previews",
+                new HttpEntity<>(body, headers),
+                String.class
+        );
+
+        assertThat(preview.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(preview.getBody()).contains(
+                "REG-OUTBOUND",
+                "\"totalRows\":1",
+                "\"readyRows\":1",
+                "\"blockedRows\":0",
+                "\"status\":\"READY\"",
+                "\"paperExpressText\":\"顺丰 SF-OUT-20260706-022\"",
+                "\"logisticsNo\":\"SF-OUT-20260706-022\""
         );
     }
 
@@ -965,5 +1003,33 @@ class M2ManagementApiSmokeTest {
         Matcher matcher = pattern.matcher(body == null ? "" : body);
         assertThat(matcher.find()).as("JSON field %s exists in %s", field, body).isTrue();
         return matcher.group(1);
+    }
+
+    private byte[] outboundRegisterWorkbook() throws IOException {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Sheet1");
+            sheet.createRow(0).createCell(0).setCellValue("交货情况登记表");
+            Row header = sheet.createRow(1);
+            header.createCell(0).setCellValue("序号");
+            header.createCell(1).setCellValue("日期");
+            header.createCell(2).setCellValue("客户");
+            header.createCell(3).setCellValue("交货类目");
+            header.createCell(4).setCellValue("交货数量");
+            header.createCell(5).setCellValue("快递");
+            header.createCell(6).setCellValue("经办人");
+            header.createCell(7).setCellValue("备注");
+            Row data = sheet.createRow(2);
+            data.createCell(0).setCellValue("1");
+            data.createCell(1).setCellValue("7月6日");
+            data.createCell(2).setCellValue("雅辰饰品");
+            data.createCell(3).setCellValue("成品");
+            data.createCell(4).setCellValue("620件");
+            data.createCell(5).setCellValue("顺丰 SF-OUT-20260706-022");
+            data.createCell(6).setCellValue("何琳");
+            data.createCell(7).setCellValue("客户成品出货");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        }
     }
 }
