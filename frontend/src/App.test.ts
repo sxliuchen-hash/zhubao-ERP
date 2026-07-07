@@ -7,7 +7,7 @@ describe('App', () => {
     const wrapper = mount(App);
 
     expect(wrapper.text()).toContain('Workshop Console');
-    expect(wrapper.text()).toContain('M3.46 / 业务操作台整改');
+    expect(wrapper.text()).toContain('M3.47 / 运维日志聚合');
     expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
     expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
     expect(wrapper.text()).toContain('首页工作台');

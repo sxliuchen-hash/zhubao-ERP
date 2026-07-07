@@ -170,6 +170,7 @@ Compose 服务：
 | `ZHUBAO_BUSINESS_REPOSITORY` | `jdbc` | 业务工作台仓储 |
 | `ZHUBAO_APPROVAL_REPOSITORY` | `jdbc` | 审批任务仓储 |
 | `ZHUBAO_DOCUMENTS_REPOSITORY` | `jdbc` | 文档附件元数据仓储 |
+| `ZHUBAO_LOG_FILE` | `/logs/zhubao-erp.log` | 运维中心只读日志来源；Compose 同步设置 `LOGGING_FILE_NAME` |
 
 ---
 
@@ -181,7 +182,7 @@ Compose 卷：
 |---|---|---|
 | `mysql-data` | `/var/lib/mysql` | MySQL 数据文件 |
 | `evidence-data` | `/app/evidence` | 附件、证据文件、本地对象存储 |
-| `backend-logs` | `/logs` | 后端日志文件 |
+| `backend-logs` | `/logs` | 后端日志文件，运维中心从 `ZHUBAO_LOG_FILE` 只读展示近期日志和 WARN/ERROR 汇总 |
 | `backup-data` | `/backups` | 备份目录和运维中心备份检查目录 |
 
 当前基线只完成备份目录和运维中心备份状态检查。正式生产还需要补充：

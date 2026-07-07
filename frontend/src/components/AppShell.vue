@@ -17,7 +17,7 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.46 / 业务操作台整改</strong>
+        <strong>M3.47 / 运维日志聚合</strong>
         <i>仍处于 M3 增量开发：核心台账、业务动作、附件、硬件 POC、运维中心和 Docker 交付基线已接入。</i>
       </div>
 

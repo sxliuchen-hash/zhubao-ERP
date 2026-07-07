@@ -108,6 +108,46 @@ class OperationsCenterServiceTest {
         assertThat(frontend.detail()).contains("未配置前端探活地址");
     }
 
+    @Test
+    void readsConfiguredLogFileAndAggregatesWarningsAndErrors() throws Exception {
+        Path log = tempDir.resolve("zhubao-erp.log");
+        Files.writeString(log, String.join("\n",
+                "2026-07-07 08:00:00 INFO business-operation 生产报工写入库存台账",
+                "2026-07-07 08:01:00 WARN hardware-video NVR 视频截取失败，已转人工上传",
+                "2026-07-07 08:02:00 ERROR database-backup mysqldump failed checksum missing",
+                "2026-07-07 08:03:00 INFO document-storage 附件元数据写入仓储"
+        ));
+
+        OperationsCenterService service = new OperationsCenterService(
+                new MockEnvironment(),
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                "",
+                log.toString(),
+                800,
+                24
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+
+        assertThat(snapshot.recentLogs()).hasSize(4);
+        assertThat(snapshot.recentLogs())
+                .extracting(OperationsCenterSnapshot.RecentLogEntry::source)
+                .contains("视频截取", "数据库备份", "附件对象存储");
+        assertThat(snapshot.errorSummaries())
+                .extracting(OperationsCenterSnapshot.ErrorSummary::module)
+                .containsExactly("视频截取", "数据库备份");
+        assertThat(snapshot.errorSummaries())
+                .extracting(OperationsCenterSnapshot.ErrorSummary::severity)
+                .containsExactly("P2", "P1");
+
+        OperationsCenterSnapshot.OperationChecklistItem logChecklist = findChecklist(snapshot, "OPS-CHK-004");
+        assertThat(logChecklist.status()).isEqualTo("READ_FILE");
+        assertThat(logChecklist.tone()).isEqualTo("green");
+        assertThat(logChecklist.evidence()).contains("zhubao-erp.log");
+    }
+
     @SuppressWarnings("unchecked")
     private ObjectProvider<DataSource> noDataSourceProvider() {
         ObjectProvider<DataSource> dataSources = mock(ObjectProvider.class);
@@ -119,6 +159,13 @@ class OperationsCenterServiceTest {
         List<OperationsCenterSnapshot.ServiceStatus> services = snapshot.services();
         return services.stream()
                 .filter(service -> code.equals(service.code()))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private OperationsCenterSnapshot.OperationChecklistItem findChecklist(OperationsCenterSnapshot snapshot, String code) {
+        return snapshot.checklist().stream()
+                .filter(item -> code.equals(item.code()))
                 .findFirst()
                 .orElseThrow();
     }

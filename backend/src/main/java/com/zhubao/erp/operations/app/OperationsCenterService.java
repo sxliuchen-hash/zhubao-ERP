@@ -31,8 +31,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -76,9 +78,10 @@ public class OperationsCenterService {
         Instant now = Instant.now();
         DatabaseProbe database = probeDatabase(now);
         FrontendProbe frontend = probeFrontend();
+        LogProbe logs = probeLogs(now);
         List<OperationsCenterSnapshot.BackupStatus> backups = probeBackups(now);
         List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, backups, now);
-        List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now);
+        List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now, logs);
 
         long degradedServices = services.stream().filter(service -> !"green".equals(service.tone())).count();
         int criticalErrors = (int) errors.stream().filter(error -> "red".equals(error.tone())).count();
@@ -99,9 +102,9 @@ public class OperationsCenterService {
                 services,
                 runtimeMetrics(),
                 errors,
-                recentLogs(now),
+                logs.entries(),
                 backups,
-                checklist(database, frontend)
+                checklist(database, frontend, logs)
         );
     }
 
@@ -420,7 +423,26 @@ public class OperationsCenterService {
         }
     }
 
-    private List<OperationsCenterSnapshot.ErrorSummary> errorSummaries(Instant now) {
+    private List<OperationsCenterSnapshot.ErrorSummary> errorSummaries(Instant now, LogProbe logs) {
+        if (!logs.errorSummaries().isEmpty()) {
+            return logs.errorSummaries();
+        }
+        if ("READ_FILE".equals(logs.status())) {
+            return List.of();
+        }
+        if ("MISSING".equals(logs.status()) || "READ_ERROR".equals(logs.status()) || "CONFIG_ERROR".equals(logs.status())) {
+            return List.of(new OperationsCenterSnapshot.ErrorSummary(
+                    "ERR-LOG-001",
+                    "日志来源",
+                    "P1",
+                    1,
+                    DISPLAY_TIME.format(now),
+                    "运维负责人",
+                    logs.detail(),
+                    "amber"
+            ));
+        }
+
         return List.of(
                 new OperationsCenterSnapshot.ErrorSummary(
                         "ERR-NVR-001",
@@ -455,38 +477,93 @@ public class OperationsCenterService {
         );
     }
 
-    private List<OperationsCenterSnapshot.RecentLogEntry> recentLogs(Instant now) {
+    private LogProbe probeLogs(Instant now) {
         Path path = logFile == null || logFile.isBlank() ? null : Path.of(logFile);
-        if (path != null && Files.exists(path)) {
-            try {
-                // POC 阶段只读取末尾少量行，生产环境应改为日志采集系统或只读日志文件适配器。
-                List<String> lines = Files.readAllLines(path);
-                int start = Math.max(0, lines.size() - 6);
-                List<OperationsCenterSnapshot.RecentLogEntry> entries = new ArrayList<>();
-                for (int index = start; index < lines.size(); index++) {
-                    String line = lines.get(index);
-                    entries.add(new OperationsCenterSnapshot.RecentLogEntry(
-                            DISPLAY_TIME.format(now.minusSeconds((long) (lines.size() - index) * 60)),
-                            detectLevel(line),
-                            path.getFileName().toString(),
-                            truncate(line, 220),
-                            "LOG-" + (index + 1),
-                            toneForLogLevel(detectLevel(line))
-                    ));
-                }
-                return entries;
-            } catch (IOException error) {
-                return List.of(new OperationsCenterSnapshot.RecentLogEntry(
-                        DISPLAY_TIME.format(now),
-                        "WARN",
-                        "operations-center",
-                        "读取日志文件失败：" + truncate(error.getMessage(), 160),
-                        "LOG-READ-FAIL",
-                        "amber"
-                ));
-            }
+        if (path == null) {
+            return new LogProbe(
+                    "REVIEW_SAMPLE",
+                    "未配置 zhubao.operations.log-file，当前显示评审样例日志。",
+                    "amber",
+                    fallbackLogs(now),
+                    List.of()
+            );
+        }
+        if (!Files.exists(path)) {
+            return new LogProbe(
+                    "MISSING",
+                    "日志文件不存在：" + path,
+                    "red",
+                    List.of(new OperationsCenterSnapshot.RecentLogEntry(
+                            DISPLAY_TIME.format(now),
+                            "WARN",
+                            "operations-center",
+                            "日志文件不存在：" + path,
+                            "LOG-MISSING",
+                            "amber"
+                    )),
+                    List.of()
+            );
+        }
+        if (!Files.isRegularFile(path)) {
+            return new LogProbe(
+                    "CONFIG_ERROR",
+                    "日志路径不是文件：" + path,
+                    "red",
+                    List.of(new OperationsCenterSnapshot.RecentLogEntry(
+                            DISPLAY_TIME.format(now),
+                            "WARN",
+                            "operations-center",
+                            "日志路径不是文件：" + path,
+                            "LOG-NOT-FILE",
+                            "amber"
+                    )),
+                    List.of()
+            );
         }
 
+        try {
+            // POC 阶段只展示尾部少量行，生产环境应改为日志采集系统或高性能只读日志适配器。
+            List<String> lines = Files.readAllLines(path);
+            int start = Math.max(0, lines.size() - 8);
+            List<OperationsCenterSnapshot.RecentLogEntry> entries = new ArrayList<>();
+            for (int index = start; index < lines.size(); index++) {
+                String line = lines.get(index);
+                String level = detectLevel(line);
+                entries.add(new OperationsCenterSnapshot.RecentLogEntry(
+                        DISPLAY_TIME.format(now.minusSeconds((long) (lines.size() - index) * 60)),
+                        level,
+                        detectLogSource(line),
+                        truncate(line, 220),
+                        "LOG-" + (index + 1),
+                        toneForLogLevel(level)
+                ));
+            }
+            return new LogProbe(
+                    "READ_FILE",
+                    "已读取日志文件：" + path.getFileName(),
+                    "green",
+                    entries,
+                    summarizeLogErrors(entries, now)
+            );
+        } catch (IOException error) {
+            return new LogProbe(
+                    "READ_ERROR",
+                    "读取日志文件失败：" + truncate(error.getMessage(), 160),
+                    "red",
+                    List.of(new OperationsCenterSnapshot.RecentLogEntry(
+                            DISPLAY_TIME.format(now),
+                            "WARN",
+                            "operations-center",
+                            "读取日志文件失败：" + truncate(error.getMessage(), 160),
+                            "LOG-READ-FAIL",
+                            "amber"
+                    )),
+                    List.of()
+            );
+        }
+    }
+
+    private List<OperationsCenterSnapshot.RecentLogEntry> fallbackLogs(Instant now) {
         return List.of(
                 new OperationsCenterSnapshot.RecentLogEntry(
                         DISPLAY_TIME.format(now.minusSeconds(420)),
@@ -523,7 +600,35 @@ public class OperationsCenterService {
         );
     }
 
-    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(DatabaseProbe database, FrontendProbe frontend) {
+    private List<OperationsCenterSnapshot.ErrorSummary> summarizeLogErrors(
+            List<OperationsCenterSnapshot.RecentLogEntry> entries,
+            Instant now
+    ) {
+        Map<String, LogErrorAccumulator> grouped = new LinkedHashMap<>();
+        for (OperationsCenterSnapshot.RecentLogEntry entry : entries) {
+            if (!"ERROR".equals(entry.level()) && !"WARN".equals(entry.level())) {
+                continue;
+            }
+            grouped.computeIfAbsent(entry.source(), LogErrorAccumulator::new).add(entry);
+        }
+        List<OperationsCenterSnapshot.ErrorSummary> summaries = new ArrayList<>();
+        int index = 1;
+        for (LogErrorAccumulator accumulator : grouped.values()) {
+            summaries.add(new OperationsCenterSnapshot.ErrorSummary(
+                    "LOG-" + String.format(Locale.ROOT, "%03d", index++),
+                    accumulator.module(),
+                    accumulator.hasError() ? "P1" : "P2",
+                    accumulator.count(),
+                    DISPLAY_TIME.format(now),
+                    ownerForLogSource(accumulator.module()),
+                    truncate(accumulator.latestMessage(), 180),
+                    accumulator.hasError() ? "red" : "amber"
+            ));
+        }
+        return summaries;
+    }
+
+    private List<OperationsCenterSnapshot.OperationChecklistItem> checklist(DatabaseProbe database, FrontendProbe frontend, LogProbe logs) {
         return List.of(
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-001",
@@ -552,10 +657,10 @@ public class OperationsCenterService {
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-004",
                         "日志来源",
-                        logFile == null || logFile.isBlank() ? "评审样例" : "读取文件",
-                        blankToReviewText(logFile, "未配置 zhubao.operations.log-file"),
+                        logs.status(),
+                        logs.detail(),
                         "运维负责人",
-                        logFile == null || logFile.isBlank() ? "amber" : "green"
+                        logs.tone()
                 ),
                 new OperationsCenterSnapshot.OperationChecklistItem(
                         "OPS-CHK-005",
@@ -626,6 +731,36 @@ public class OperationsCenterService {
         return "INFO";
     }
 
+    private String detectLogSource(String line) {
+        String lower = line.toLowerCase(Locale.ROOT);
+        if (lower.contains("nvr") || lower.contains("ffmpeg") || lower.contains("hardware") || lower.contains("video")) {
+            return "视频截取";
+        }
+        if (lower.contains("backup") || lower.contains("mysqldump") || lower.contains("checksum") || lower.contains("备份")) {
+            return "数据库备份";
+        }
+        if (lower.contains("auth") || lower.contains("permission") || lower.contains("login") || lower.contains("权限")) {
+            return "登录权限";
+        }
+        if (lower.contains("jdbc") || lower.contains("mysql") || lower.contains("database") || lower.contains("sql")) {
+            return "数据库连接";
+        }
+        if (lower.contains("document") || lower.contains("attachment") || lower.contains("storage")) {
+            return "附件对象存储";
+        }
+        return "应用日志";
+    }
+
+    private String ownerForLogSource(String source) {
+        return switch (source) {
+            case "视频截取" -> "现场实施负责人";
+            case "数据库备份", "数据库连接" -> "运维负责人";
+            case "登录权限" -> "平台负责人";
+            case "附件对象存储" -> "后端负责人";
+            default -> "运维负责人";
+        };
+    }
+
     private String toneForLogLevel(String level) {
         if ("ERROR".equals(level)) return "red";
         if ("WARN".equals(level)) return "amber";
@@ -663,5 +798,51 @@ public class OperationsCenterService {
             String endpoint,
             String tone
     ) {
+    }
+
+    private record LogProbe(
+            String status,
+            String detail,
+            String tone,
+            List<OperationsCenterSnapshot.RecentLogEntry> entries,
+            List<OperationsCenterSnapshot.ErrorSummary> errorSummaries
+    ) {
+        private LogProbe {
+            entries = List.copyOf(entries);
+            errorSummaries = List.copyOf(errorSummaries);
+        }
+    }
+
+    private static final class LogErrorAccumulator {
+        private final String module;
+        private int count;
+        private boolean hasError;
+        private String latestMessage = "";
+
+        private LogErrorAccumulator(String module) {
+            this.module = module;
+        }
+
+        private void add(OperationsCenterSnapshot.RecentLogEntry entry) {
+            count++;
+            hasError = hasError || "ERROR".equals(entry.level());
+            latestMessage = entry.message();
+        }
+
+        private String module() {
+            return module;
+        }
+
+        private int count() {
+            return count;
+        }
+
+        private boolean hasError() {
+            return hasError;
+        }
+
+        private String latestMessage() {
+            return latestMessage;
+        }
     }
 }

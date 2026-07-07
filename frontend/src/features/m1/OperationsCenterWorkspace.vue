@@ -86,7 +86,7 @@ function errorTone(error: ErrorSummary): Tone {
       <div class="operations-command-main">
         <div class="console-title-line">
           <span class="eyebrow">OPERATIONS CENTER</span>
-          <StatusBadge label="M3.45 前端探活" tone="green" />
+          <StatusBadge label="M3.47 日志聚合" tone="green" />
         </div>
         <div class="operations-title-row">
           <div>
@@ -268,7 +268,7 @@ function errorTone(error: ErrorSummary): Tone {
             <span class="eyebrow">RUNBOOK</span>
             <h2>运维接入清单</h2>
           </div>
-          <StatusBadge label="M3.45" tone="green" />
+          <StatusBadge label="M3.47" tone="green" />
         </div>
         <div class="ops-checklist">
           <article v-for="item in snapshot.checklist" :key="item.code" :class="`tone-${item.tone}`">
@@ -290,7 +290,7 @@ function errorTone(error: ErrorSummary): Tone {
       </article>
       <article>
         <strong>下一步</strong>
-        <span>接入真实登录权限、前端探活、日志文件或日志平台、MySQL 备份目录、恢复演练记录和告警通知。</span>
+        <span>接入真实登录权限、PWA 静态资源版本、日志平台、MySQL 备份恢复演练记录和告警通知。</span>
       </article>
     </section>
   </div>
