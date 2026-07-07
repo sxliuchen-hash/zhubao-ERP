@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.49 / 现场控制台视觉重构</strong>
-        <i>仍处于 M3 增量开发：本轮先把首页和运维中心收敛为更接近生产现场的 ERP/MES 控制台。</i>
+        <strong>M3.50 / 样例映射与真实验收数据</strong>
+        <i>仍处于 M3 增量开发：本轮把开源参考、样例库和真实验收 fixture 绑定到同一套测试矩阵。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">

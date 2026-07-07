@@ -204,6 +204,27 @@ export interface OfflineDraft {
   tone: Tone;
 }
 
+export interface OpenSourceSampleMapping {
+  source: string;
+  referenceUrl: string;
+  reusablePattern: string;
+  mappedScenarioId: string;
+  mappedModule: string;
+  acceptanceRule: string;
+  status: 'applied' | 'watching' | 'reserved';
+}
+
+export interface AcceptanceDataSet {
+  code: string;
+  fixture: string;
+  scenarioId: string;
+  automatedTest: string;
+  covers: string[];
+  evidence: string[];
+  gaps: string[];
+  status: 'active' | 'needs-field-data' | 'blocked';
+}
+
 // These samples are the review baseline for M1. In M3 they should become API seed data
 // so UI tests, demos, and acceptance scripts all run against the same business cases.
 export const metrics: Metric[] = [
@@ -681,6 +702,87 @@ export const sampleScenarios: SampleScenario[] = [
     chain: ['开始拆包', '记录时间段', '视频截取失败', '人工上传', '追溯关联'],
     evidence: ['NVR 时间段', '失败日志', '人工上传文件', '操作日志'],
     status: 'ready',
+  },
+];
+
+export const openSourceSampleMappings: OpenSourceSampleMapping[] = [
+  {
+    source: 'ERPNext Work Order / Job Card',
+    referenceUrl: 'https://docs.frappe.io/erpnext/user/manual/en/job-card',
+    reusablePattern: '工单按工序拆成 Job Card，记录工作站、操作员、数量、时间和 WIP 移动。',
+    mappedScenarioId: 'SAMPLE-MAIN-001',
+    mappedModule: '生产工单 / 工序报工',
+    acceptanceRule: '每一次报工必须落库存台账或证据事件，不能只改页面状态。',
+    status: 'applied',
+  },
+  {
+    source: 'Odoo Manufacturing Quality Checks',
+    referenceUrl: 'https://www.odoo.com/documentation/19.0/applications/inventory_and_mrp/quality/quality_management/quality_checks.html',
+    reusablePattern: '质量检查点绑定制造流转，现场按 Pass/Fail、拍照、测量等检查类型执行。',
+    mappedScenarioId: 'SAMPLE-REWORK-001',
+    mappedModule: '质检返工 / 复检放行',
+    acceptanceRule: '质检样例必须包含缺陷、处理动作、返工或复检结果以及附件证据。',
+    status: 'applied',
+  },
+  {
+    source: 'InvenTree Build Orders / Stock',
+    referenceUrl: 'https://docs.inventree.org/en/stable/manufacturing/build/',
+    reusablePattern: '构建单分配、消耗库存并产生成品库存，库存批次和库位保持可追溯。',
+    mappedScenarioId: 'SAMPLE-MAIN-001',
+    mappedModule: '库存追溯 / 客户所有权',
+    acceptanceRule: '客户所有权、批次、库位、库存状态必须随真实链路连续校验。',
+    status: 'applied',
+  },
+  {
+    source: 'Odoo Shop Floor',
+    referenceUrl: 'https://www.odoo.com/documentation/19.0/applications/inventory_and_mrp/manufacturing/shop_floor.html',
+    reusablePattern: '现场作业界面优先呈现工位、下一动作、阻断原因和质量检查。',
+    mappedScenarioId: 'SAMPLE-HW-001',
+    mappedModule: '首页工作台 / PWA 作业',
+    acceptanceRule: '首页和移动端样例必须先展示待处理对象、责任人和下一动作。',
+    status: 'watching',
+  },
+];
+
+export const acceptanceDataSets: AcceptanceDataSet[] = [
+  {
+    code: 'REAL-FLOW-20260706-001',
+    fixture: 'backend/src/test/resources/acceptance/real-flow-scenario-20260706.json',
+    scenarioId: 'SAMPLE-MAIN-001',
+    automatedTest: 'BusinessOperationRealFlowTest',
+    covers: [
+      '客户所有权库存维度',
+      '生产报工',
+      '质检冻结',
+      '返工派发',
+      '复检放行',
+      '成品出库',
+      '客户退货',
+      '售后复核分流',
+      '损耗审批工资试算',
+    ],
+    evidence: [
+      'HO-20260706-021',
+      'PHOTO-QC-20260706-021',
+      'ATT-OUT-20260706-021',
+      'PHOTO-ASR-20260707-021',
+    ],
+    gaps: [
+      '仍为单份脱敏 JSON fixture',
+      '尚未覆盖批量导入真实单据',
+      '尚未绑定真实登录操作人',
+    ],
+    status: 'active',
+  },
+  {
+    code: 'FIELD-HW-POC-20260706',
+    fixture: 'frontend/src/data/m1PrototypeData.ts#hardwarePocRecords',
+    scenarioId: 'SAMPLE-HW-001',
+    automatedTest: 'm1PrototypeData.test.ts / HardwareIntegrationWorkspace.test.ts',
+    covers: ['NVR 截取失败兜底', '标签打印补打', 'PWA 弱光扫码失败样本', '称重人工录入'],
+    evidence: ['POC-VID-20260706-001', 'POC-LBL-20260706-001', 'POC-SCAN-20260706-001', 'POC-SCALE-20260706-001'],
+    gaps: ['尚未上传现场真实视频片段', '尚未冻结电子秤接口型号', '尚未完成弱光扫码二轮 POC'],
+    status: 'needs-field-data',
   },
 ];
 

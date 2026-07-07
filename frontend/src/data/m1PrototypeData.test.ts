@@ -3,6 +3,7 @@ import {
   getHardwareManualFallbackCount,
   getHardwarePocBlockedCount,
   getOpenExceptionCount,
+  acceptanceDataSets,
   hardwareDevices,
   hardwarePocRecords,
   inboundCheckpoints,
@@ -13,6 +14,7 @@ import {
   lossApprovals,
   mobileCapabilities,
   offlineDrafts,
+  openSourceSampleMappings,
   productionHandoffs,
   productionStationLoads,
   qualityMetrics,
@@ -65,5 +67,23 @@ describe('m1PrototypeData', () => {
     expect(missingWeightLoss?.actual).toBe('待确认');
     expect(missingWeightLoss?.evidence).toContain('缺少产出称重照片');
     expect(missingWeightLoss?.tone).toBe('amber');
+  });
+
+  it('binds sample scenarios to open-source references and real acceptance fixtures', () => {
+    expect(openSourceSampleMappings).toHaveLength(4);
+    expect(openSourceSampleMappings.every((mapping) => mapping.referenceUrl.startsWith('https://'))).toBe(true);
+    expect(openSourceSampleMappings.every((mapping) => sampleScenarios.some((scenario) => scenario.id === mapping.mappedScenarioId))).toBe(true);
+    expect(openSourceSampleMappings.some((mapping) => mapping.source.includes('ERPNext'))).toBe(true);
+    expect(openSourceSampleMappings.some((mapping) => mapping.source.includes('Odoo'))).toBe(true);
+    expect(openSourceSampleMappings.some((mapping) => mapping.source.includes('InvenTree'))).toBe(true);
+
+    const realFlow = acceptanceDataSets.find((dataset) => dataset.code === 'REAL-FLOW-20260706-001');
+    expect(realFlow).toBeDefined();
+    expect(realFlow?.fixture).toContain('real-flow-scenario-20260706.json');
+    expect(realFlow?.automatedTest).toBe('BusinessOperationRealFlowTest');
+    expect(realFlow?.covers).toContain('客户所有权库存维度');
+    expect(realFlow?.covers).toContain('售后复核分流');
+    expect(realFlow?.evidence).toContain('HO-20260706-021');
+    expect(realFlow?.gaps.length).toBeGreaterThan(0);
   });
 });
