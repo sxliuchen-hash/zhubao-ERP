@@ -1,8 +1,8 @@
 # Docker 一键部署与离线交付
 
-**文档版本**：V1.1
+**文档版本**：V1.2
 **更新日期**：2026-07-07  
-**适用阶段**：M3.61 Docker 无源码交付、备份和结构化恢复演练证据基线
+**适用阶段**：M3.62 Docker 无源码交付、备份和运维告警汇总基线
 
 ---
 
@@ -66,7 +66,7 @@
 在开发或交付构建机器上执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.62.0
 ```
 
 脚本执行内容：
@@ -85,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 只验证包结构、不构建镜像时可执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.62-layout -NoDockerBuild -SkipTests
 ```
 
 ### 3.1 交付包验收门禁
@@ -93,13 +93,13 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 M3.57 起，`scripts/docker-build-package.ps1` 会在生成 `MANIFEST.sha256` 后自动调用 `scripts/verify-runtime-package.ps1`，分别验证运行包目录和 zip。该脚本也可以单独执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.61.0.zip
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.62.0.zip
 ```
 
 只验证 `-NoDockerBuild` 生成的布局包时允许缺少镜像 tar：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.61-layout.zip -AllowMissingImages
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.62-layout.zip -AllowMissingImages
 ```
 
 验收内容：
@@ -269,7 +269,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 正式生产仍需要补充：
 
 - 将 `backup-mysql.ps1` 或 `backup-mysql.sh` 纳入任务计划/cron。
-- 恢复演练记录入库归档和告警通知；M3.61 已完成 JSON 结构化证据展示。
+- 恢复演练记录入库归档、告警持久化和通知通道；M3.62 已完成 JSON 结构化证据展示和快照告警汇总。
 - 备份保留周期和清理策略。
 - 附件证据目录的 NAS/S3/COS 增量备份。
 
@@ -330,7 +330,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 ## 11. 当前边界
 
-M3.61 Docker 基线已覆盖：
+M3.62 Docker 基线已覆盖：
 
 - 后端 jar 镜像。
 - 前端 dist + Nginx 镜像。
@@ -345,12 +345,13 @@ M3.61 Docker 基线已覆盖：
 - MySQL 备份脚本，生成 `.sql` 和 `.sha256`，导出到 `runtime-backups/`，可选通过 `coscmd upload` 上传腾讯云 COS。
 - 非破坏性恢复演练脚本，导入临时数据库、检查恢复表数量，并默认删除临时库。
 - 恢复演练 JSON 结构化证据，运维中心只读展示 `restoreDrillRecords`。
+- 运维告警汇总，运维中心只读展示 `alerts` 和 summary 告警数量。
 
 尚未完成：
 
 - 生产级数据库迁移工具。
 - 将 MySQL 备份脚本纳入任务计划/cron 和失败告警。
-- 备份恢复演练记录入库归档和失败告警。
+- 备份恢复演练记录入库归档、告警持久化和通知通道。
 - HTTPS 证书自动配置。
 - 多租户或多客户隔离部署。
 - NAS/S3 正式对象存储。

@@ -6,6 +6,8 @@ export interface OperationsCenterSummary {
   degradedServices: number;
   openErrors: number;
   criticalErrors: number;
+  openAlerts: number;
+  criticalAlerts: number;
   backupStatus: string;
   uptimeMinutes: number;
 }
@@ -97,6 +99,19 @@ export interface OperationChecklistItem {
   tone: Tone;
 }
 
+export interface OperationAlert {
+  code: string;
+  title: string;
+  severity: string;
+  source: string;
+  status: string;
+  owner: string;
+  raisedAt: string;
+  nextAction: string;
+  evidence: string;
+  tone: Tone;
+}
+
 export interface OperationsCenterSnapshot {
   generatedAt: string;
   summary: OperationsCenterSummary;
@@ -106,6 +121,7 @@ export interface OperationsCenterSnapshot {
   recentLogs: RecentLogEntry[];
   backupStatuses: BackupStatus[];
   restoreDrillRecords: RestoreDrillRecord[];
+  alerts: OperationAlert[];
   checklist: OperationChecklistItem[];
 }
 
@@ -117,6 +133,8 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
     degradedServices: 5,
     openErrors: 3,
     criticalErrors: 0,
+    openAlerts: 6,
+    criticalAlerts: 0,
     backupStatus: '需配置',
     uptimeMinutes: 128,
   },
@@ -320,6 +338,44 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
           tone: 'green',
         },
       ],
+    },
+  ],
+  alerts: [
+    {
+      code: 'OPS-ALERT-SVC-FRONTEND',
+      title: '前端 PWA 状态需关注',
+      severity: 'P2',
+      source: 'SERVICE',
+      status: 'OPEN',
+      owner: '前端负责人',
+      raisedAt: '2026-07-07 08:00:00',
+      nextAction: '检查 ZHUBAO_FRONTEND_URL 与 ZHUBAO_FRONTEND_PROBE_URL，确认前端容器或站点可访问。',
+      evidence: '评审环境默认未配置前端探活。',
+      tone: 'amber',
+    },
+    {
+      code: 'OPS-ALERT-BACKUP-DB-BACKUP-POC',
+      title: 'MySQL 逻辑备份需处理',
+      severity: 'P2',
+      source: 'BACKUP',
+      status: 'OPEN',
+      owner: '运维负责人',
+      raisedAt: '2026-07-07 08:00:00',
+      nextAction: '执行 backup-mysql 脚本生成最新 dump 和 .sha256，并确认备份目录可被后端只读扫描。',
+      evidence: '生产环境建议记录 mysqldump 输出、备份大小、checksum 和恢复演练结果。',
+      tone: 'amber',
+    },
+    {
+      code: 'OPS-ALERT-LOG-ERR-NVR-001',
+      title: '视频截取日志异常',
+      severity: 'P1',
+      source: 'LOG',
+      status: 'OPEN',
+      owner: '现场实施负责人',
+      raisedAt: '2026-07-07 07:20:00',
+      nextAction: '检查 NVR 通道映射，失败允许人工上传视频片段。',
+      evidence: '最近 1 次，来源 视频截取',
+      tone: 'amber',
     },
   ],
   checklist: [

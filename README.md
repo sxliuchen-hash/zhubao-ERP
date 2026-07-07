@@ -77,6 +77,7 @@
 - M3.59 非破坏性恢复演练脚本基线，新增 `deploy/verify-restore.ps1` 和 `deploy/verify-restore.sh`，可把备份导入临时数据库、检查恢复表数量并默认删除临时库，不覆盖生产数据库。
 - M3.60 运维中心恢复演练可见性，`/api/operations/center` 新增 `RESTORE-DRILL-*` 备份状态和 `OPS-CHK-008` 清单项，只读扫描备份目录中的 restore/verify-restore 标记文件，展示最近演练时间、文件大小、SHA-256 和过期状态。
 - M3.61 恢复演练结构化证据，`verify-restore.ps1/sh` 成功后同时生成 `verify-restore-<timestamp>.json`，记录备份文件、备份 SHA-256、恢复库、恢复表数量、操作者、耗时和检查项；运维中心新增 `restoreDrillRecords` 只读展示结构化演练记录。
+- M3.62 运维告警汇总，`/api/operations/center` 新增 `alerts` 和 summary 告警数量，按服务状态、备份/恢复演练、COS 配置和日志 WARN/ERROR 派生只读告警；前端运维中心新增告警汇总面板。
 
 ## 目录结构
 
@@ -206,17 +207,17 @@ pnpm --filter zhubao-erp-frontend dev
 
 Docker 离线运行包：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.62.0
 ```
 
 只验证无源码运行包结构、不构建镜像：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.61-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.62-layout -NoDockerBuild -SkipTests
 ```
 
 单独验收已有运行包目录或 zip：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.61.0.zip
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.62.0.zip
 ```
 
 运行包内生成 MySQL 备份：

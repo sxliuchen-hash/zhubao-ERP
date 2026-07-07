@@ -22,6 +22,10 @@ const activeError = computed(
   () => snapshot.value.errorSummaries.find((error) => error.tone === 'red' || error.tone === 'amber') ?? snapshot.value.errorSummaries[0],
 );
 
+const activeAlert = computed(
+  () => snapshot.value.alerts.find((alert) => alert.tone === 'red' || alert.tone === 'amber') ?? snapshot.value.alerts[0],
+);
+
 const heroStats = computed(() => [
   {
     label: '服务',
@@ -36,6 +40,13 @@ const heroStats = computed(() => [
     unit: '条',
     detail: `${snapshot.value.summary.criticalErrors} 条 P0/P1`,
     tone: snapshot.value.summary.criticalErrors > 0 ? 'red' as Tone : 'amber' as Tone,
+  },
+  {
+    label: '告警',
+    value: snapshot.value.summary.openAlerts,
+    unit: '项',
+    detail: `${snapshot.value.summary.criticalAlerts} 项 P1`,
+    tone: snapshot.value.summary.criticalAlerts > 0 ? 'red' as Tone : snapshot.value.summary.openAlerts > 0 ? 'amber' as Tone : 'green' as Tone,
   },
   {
     label: '备份',
@@ -86,7 +97,7 @@ function errorTone(error: ErrorSummary): Tone {
       <div class="operations-command-main">
         <div class="console-title-line">
           <span class="eyebrow">OPERATIONS CENTER</span>
-          <StatusBadge label="M3.61 结构化恢复演练" tone="green" />
+          <StatusBadge label="M3.62 运维告警汇总" tone="green" />
         </div>
         <div class="operations-title-row">
           <div>
@@ -114,13 +125,13 @@ function errorTone(error: ErrorSummary): Tone {
           <StatusBadge v-if="activeService" :label="activeService.status" :tone="serviceTone(activeService)" />
         </div>
         <p>{{ activeService?.detail }}</p>
-        <dl v-if="activeError" class="operations-focus-grid">
-          <dt>当前错误</dt>
-          <dd>{{ activeError.module }} / {{ activeError.severity }}</dd>
+        <dl v-if="activeAlert || activeError" class="operations-focus-grid">
+          <dt>当前告警</dt>
+          <dd>{{ activeAlert?.title ?? `${activeError.module} / ${activeError.severity}` }}</dd>
           <dt>责任人</dt>
-          <dd>{{ activeError.owner }}</dd>
+          <dd>{{ activeAlert?.owner ?? activeError.owner }}</dd>
           <dt>动作</dt>
-          <dd>{{ activeError.nextAction }}</dd>
+          <dd>{{ activeAlert?.nextAction ?? activeError.nextAction }}</dd>
         </dl>
       </aside>
     </section>
@@ -130,7 +141,54 @@ function errorTone(error: ErrorSummary): Tone {
       <span>{{ loadingError }}</span>
     </p>
 
-    <section class="operations-grid" aria-label="运行状态和服务器指标">
+    <section class="operations-grid alerts" aria-label="告警汇总和运行状态">
+      <div class="operations-panel alert-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">ALERTS</span>
+            <h2>告警汇总</h2>
+          </div>
+          <StatusBadge :label="`${snapshot.summary.openAlerts} 项`" :tone="snapshot.summary.criticalAlerts > 0 ? 'red' : snapshot.summary.openAlerts > 0 ? 'amber' : 'green'" />
+        </div>
+        <div class="ops-alert-list">
+          <article v-for="alert in snapshot.alerts" :key="alert.code" :class="`tone-${alert.tone}`">
+            <div>
+              <strong>{{ alert.title }}</strong>
+              <small>{{ alert.code }} / {{ alert.source }} / {{ alert.status }}</small>
+            </div>
+            <StatusBadge :label="alert.severity" :tone="alert.tone" />
+            <dl>
+              <dt>责任人</dt>
+              <dd>{{ alert.owner }}</dd>
+              <dt>触发时间</dt>
+              <dd>{{ alert.raisedAt }}</dd>
+              <dt>证据</dt>
+              <dd>{{ alert.evidence }}</dd>
+              <dt>下一步</dt>
+              <dd>{{ alert.nextAction }}</dd>
+            </dl>
+          </article>
+        </div>
+      </div>
+
+      <aside class="operations-panel metric-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">SERVER METRICS</span>
+            <h2>服务器运行指标</h2>
+          </div>
+        </div>
+        <div class="runtime-metric-grid">
+          <article v-for="metric in snapshot.runtimeMetrics" :key="metric.code" :class="`tone-${metric.tone}`">
+            <span>{{ metric.label }}</span>
+            <strong>{{ metric.value }}<small>{{ metric.unit }}</small></strong>
+            <em>{{ metric.detail }}</em>
+          </article>
+        </div>
+      </aside>
+    </section>
+
+    <section class="operations-grid" aria-label="运行状态">
       <div class="operations-panel service-panel">
         <div class="section-heading">
           <div>
@@ -151,22 +209,6 @@ function errorTone(error: ErrorSummary): Tone {
           </article>
         </div>
       </div>
-
-      <aside class="operations-panel metric-panel">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">SERVER METRICS</span>
-            <h2>服务器运行指标</h2>
-          </div>
-        </div>
-        <div class="runtime-metric-grid">
-          <article v-for="metric in snapshot.runtimeMetrics" :key="metric.code" :class="`tone-${metric.tone}`">
-            <span>{{ metric.label }}</span>
-            <strong>{{ metric.value }}<small>{{ metric.unit }}</small></strong>
-            <em>{{ metric.detail }}</em>
-          </article>
-        </div>
-      </aside>
     </section>
 
     <section class="operations-grid lower" aria-label="报错、日志和备份">
@@ -319,7 +361,7 @@ function errorTone(error: ErrorSummary): Tone {
             <span class="eyebrow">RUNBOOK</span>
             <h2>运维接入清单</h2>
           </div>
-          <StatusBadge label="M3.61" tone="green" />
+          <StatusBadge label="M3.62" tone="green" />
         </div>
         <div class="ops-checklist">
           <article v-for="item in snapshot.checklist" :key="item.code" :class="`tone-${item.tone}`">

@@ -12093,7 +12093,7 @@ body {
 
 .operations-hero-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -12205,6 +12205,14 @@ body {
   grid-template-columns: minmax(0, 1fr) 380px;
 }
 
+.operations-grid.alerts {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.operations-grid:not(.alerts, .lower, .backup) .service-panel {
+  grid-column: 1 / -1;
+}
+
 .operations-panel {
   min-width: 0;
   padding: 12px;
@@ -12291,9 +12299,54 @@ body {
 
 .log-stream,
 .backup-status-list,
+.ops-alert-list,
 .ops-checklist {
   display: grid;
   gap: 8px;
+}
+
+.ops-alert-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  border: 1px solid var(--ops2-line);
+  border-left: 3px solid var(--tone);
+  border-radius: 7px;
+  background: #fbfdfe;
+  padding: 10px;
+}
+
+.ops-alert-list article strong,
+.ops-alert-list article small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ops-alert-list article small {
+  color: var(--ops2-muted);
+  font-size: 11px;
+}
+
+.ops-alert-list dl {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.ops-alert-list dt {
+  color: var(--ops2-muted);
+  font-size: 12px;
+}
+
+.ops-alert-list dd {
+  margin: 0;
+  color: #243443;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .log-stream article {
@@ -12591,6 +12644,8 @@ body {
 
   .backup-status-list article,
   .backup-status-list dl,
+  .ops-alert-list article,
+  .ops-alert-list dl,
   .restore-drill-records dl,
   .restore-drill-checks,
   .ops-checklist article {

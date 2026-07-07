@@ -382,6 +382,36 @@ class OperationsCenterServiceTest {
         assertThat(logChecklist.evidence()).contains("zhubao-erp.log");
     }
 
+    @Test
+    void reportsOperationAlertsFromDegradedServicesBackupsAndLogErrors() throws Exception {
+        Path log = tempDir.resolve("zhubao-erp.log");
+        Files.writeString(log, String.join("\n",
+                "2026-07-07 08:00:00 WARN hardware-video NVR 视频截取失败",
+                "2026-07-07 08:01:00 ERROR database-backup mysqldump failed checksum missing"
+        ));
+
+        OperationsCenterService service = new OperationsCenterService(
+                new MockEnvironment(),
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                tempDir.toString(),
+                log.toString(),
+                800,
+                24
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+
+        assertThat(snapshot.summary().openAlerts()).isGreaterThanOrEqualTo(4);
+        assertThat(snapshot.alerts())
+                .extracting(OperationsCenterSnapshot.OperationAlert::source)
+                .contains("SERVICE", "BACKUP", "LOG");
+        assertThat(findAlert(snapshot, "OPS-ALERT-SVC-FRONTEND").nextAction()).contains("ZHUBAO_FRONTEND");
+        assertThat(findAlert(snapshot, "OPS-ALERT-BACKUP-DB-BACKUP-EMPTY").nextAction()).contains("backup-mysql");
+        assertThat(findAlert(snapshot, "OPS-ALERT-LOG-LOG-002").severity()).isEqualTo("P1");
+    }
+
     @SuppressWarnings("unchecked")
     private ObjectProvider<DataSource> noDataSourceProvider() {
         ObjectProvider<DataSource> dataSources = mock(ObjectProvider.class);
@@ -406,6 +436,13 @@ class OperationsCenterServiceTest {
 
     private OperationsCenterSnapshot.BackupStatus findBackup(OperationsCenterSnapshot snapshot, String code) {
         return snapshot.backupStatuses().stream()
+                .filter(item -> code.equals(item.code()))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private OperationsCenterSnapshot.OperationAlert findAlert(OperationsCenterSnapshot snapshot, String code) {
+        return snapshot.alerts().stream()
                 .filter(item -> code.equals(item.code()))
                 .findFirst()
                 .orElseThrow();

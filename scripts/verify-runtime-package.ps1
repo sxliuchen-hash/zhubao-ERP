@@ -10,7 +10,7 @@ if ($Help) {
     Write-Host "Verify a source-free zhubao ERP runtime package directory or zip."
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.61.zip"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.62.zip"
     Write-Host ""
     Write-Host "Options:"
     Write-Host "  -PackagePath         Runtime package directory or .zip path."

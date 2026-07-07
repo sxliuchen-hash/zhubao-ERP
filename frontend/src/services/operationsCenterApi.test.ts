@@ -20,6 +20,8 @@ describe('operationsCenterApi', () => {
             degradedServices: 1,
             openErrors: 1,
             criticalErrors: 0,
+            openAlerts: 1,
+            criticalAlerts: 0,
             backupStatus: '需配置',
             uptimeMinutes: 12,
           },
@@ -93,6 +95,18 @@ describe('operationsCenterApi', () => {
               tone: 'green',
             }],
           }],
+          alerts: [{
+            code: 'OPS-ALERT-BACKUP-DB-BACKUP-POC',
+            title: 'MySQL 逻辑备份需处理',
+            severity: 'P2',
+            source: 'BACKUP',
+            status: 'OPEN',
+            owner: '运维负责人',
+            raisedAt: '2026-07-07 08:00:00',
+            nextAction: '执行 backup-mysql 脚本。',
+            evidence: '未发现备份目录。',
+            tone: 'amber',
+          }],
           checklist: [{
             code: 'OPS-CHK-001',
             item: '后端 API 探活',
@@ -113,6 +127,8 @@ describe('operationsCenterApi', () => {
     expect(snapshot.backupStatuses[0].checksum).toBe('未计算');
     expect(snapshot.restoreDrillRecords[0].restoreDatabase).toBe('zhubao_restore_check_20260707_090000');
     expect(snapshot.restoreDrillRecords[0].checks[0].tone).toBe('green');
+    expect(snapshot.alerts[0].code).toBe('OPS-ALERT-BACKUP-DB-BACKUP-POC');
+    expect(snapshot.alerts[0].tone).toBe('amber');
     expect(fetchMock).toHaveBeenCalledWith('/api/operations/center');
   });
 });

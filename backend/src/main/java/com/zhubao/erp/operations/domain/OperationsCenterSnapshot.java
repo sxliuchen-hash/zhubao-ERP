@@ -11,6 +11,7 @@ public record OperationsCenterSnapshot(
         List<RecentLogEntry> recentLogs,
         List<BackupStatus> backupStatuses,
         List<RestoreDrillRecord> restoreDrillRecords,
+        List<OperationAlert> alerts,
         List<OperationChecklistItem> checklist
 ) {
     public OperationsCenterSnapshot {
@@ -20,6 +21,7 @@ public record OperationsCenterSnapshot(
         recentLogs = List.copyOf(recentLogs);
         backupStatuses = List.copyOf(backupStatuses);
         restoreDrillRecords = List.copyOf(restoreDrillRecords);
+        alerts = List.copyOf(alerts);
         checklist = List.copyOf(checklist);
     }
 
@@ -29,6 +31,8 @@ public record OperationsCenterSnapshot(
             int degradedServices,
             int openErrors,
             int criticalErrors,
+            int openAlerts,
+            int criticalAlerts,
             String backupStatus,
             long uptimeMinutes
     ) {
@@ -118,6 +122,20 @@ public record OperationsCenterSnapshot(
             String name,
             String status,
             String detail,
+            String tone
+    ) {
+    }
+
+    public record OperationAlert(
+            String code,
+            String title,
+            String severity,
+            String source,
+            String status,
+            String owner,
+            String raisedAt,
+            String nextAction,
+            String evidence,
             String tone
     ) {
     }

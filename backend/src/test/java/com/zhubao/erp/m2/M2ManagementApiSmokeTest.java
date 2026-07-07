@@ -78,6 +78,8 @@ class M2ManagementApiSmokeTest {
                 "RESTORE-DRILL-POC",
                 "\"fileSize\"",
                 "\"checksum\"",
+                "\"alerts\"",
+                "OPS-ALERT",
                 "\"checklist\"",
                 "OPS-CHK-008"
         );

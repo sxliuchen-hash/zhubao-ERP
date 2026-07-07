@@ -98,11 +98,13 @@ public class OperationsCenterService {
         localBackupEvidence.add(restoreDrill);
         List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, pwa, localBackupEvidence, cosBackup, now);
         List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now, logs);
+        List<OperationsCenterSnapshot.OperationAlert> alerts = operationAlerts(now, services, errors, backups);
 
         long degradedServices = services.stream().filter(service -> !"green".equals(service.tone())).count();
         int criticalErrors = (int) errors.stream().filter(error -> "red".equals(error.tone())).count();
+        int criticalAlerts = (int) alerts.stream().filter(alert -> "red".equals(alert.tone())).count();
         String backupStatus = backups.stream().allMatch(this::backupToneAcceptable) ? "正常" : "需配置";
-        String overallStatus = criticalErrors > 0 || degradedServices > 0 ? "ATTENTION" : "ONLINE";
+        String overallStatus = criticalAlerts > 0 || criticalErrors > 0 || degradedServices > 0 ? "ATTENTION" : "ONLINE";
 
         return new OperationsCenterSnapshot(
                 DISPLAY_TIME.format(now),
@@ -112,6 +114,8 @@ public class OperationsCenterService {
                         (int) degradedServices,
                         errors.stream().mapToInt(OperationsCenterSnapshot.ErrorSummary::count).sum(),
                         criticalErrors,
+                        alerts.size(),
+                        criticalAlerts,
                         backupStatus,
                         ManagementFactory.getRuntimeMXBean().getUptime() / 60_000
                 ),
@@ -121,6 +125,7 @@ public class OperationsCenterService {
                 logs.entries(),
                 backups,
                 restoreDrillRecords,
+                alerts,
                 checklist(database, frontend, pwa, logs, cosBackup, restoreDrill)
         );
     }
@@ -900,6 +905,95 @@ public class OperationsCenterService {
                         "blue"
                 )
         );
+    }
+
+    private List<OperationsCenterSnapshot.OperationAlert> operationAlerts(
+            Instant now,
+            List<OperationsCenterSnapshot.ServiceStatus> services,
+            List<OperationsCenterSnapshot.ErrorSummary> errors,
+            List<OperationsCenterSnapshot.BackupStatus> backups
+    ) {
+        Map<String, OperationsCenterSnapshot.OperationAlert> alerts = new LinkedHashMap<>();
+
+        for (OperationsCenterSnapshot.ServiceStatus service : services) {
+            if ("green".equals(service.tone()) || "blue".equals(service.tone())) {
+                continue;
+            }
+            String severity = "red".equals(service.tone()) ? "P1" : "P2";
+            alerts.put("OPS-ALERT-SVC-" + service.code(), new OperationsCenterSnapshot.OperationAlert(
+                    "OPS-ALERT-SVC-" + service.code(),
+                    service.name() + "状态需关注",
+                    severity,
+                    "SERVICE",
+                    "OPEN",
+                    service.owner(),
+                    service.checkedAt(),
+                    serviceAlertAction(service),
+                    service.detail(),
+                    service.tone()
+            ));
+        }
+
+        for (OperationsCenterSnapshot.BackupStatus backup : backups) {
+            if (backupToneAcceptable(backup)) {
+                continue;
+            }
+            String severity = "red".equals(backup.tone()) ? "P1" : "P2";
+            alerts.put("OPS-ALERT-BACKUP-" + backup.code(), new OperationsCenterSnapshot.OperationAlert(
+                    "OPS-ALERT-BACKUP-" + backup.code(),
+                    backup.target() + "需处理",
+                    severity,
+                    "BACKUP",
+                    "OPEN",
+                    "运维负责人",
+                    DISPLAY_TIME.format(now),
+                    backupAlertAction(backup),
+                    backup.detail(),
+                    backup.tone()
+            ));
+        }
+
+        for (OperationsCenterSnapshot.ErrorSummary error : errors) {
+            if ("green".equals(error.tone()) || "blue".equals(error.tone())) {
+                continue;
+            }
+            alerts.put("OPS-ALERT-LOG-" + error.code(), new OperationsCenterSnapshot.OperationAlert(
+                    "OPS-ALERT-LOG-" + error.code(),
+                    error.module() + "日志异常",
+                    error.severity(),
+                    "LOG",
+                    "OPEN",
+                    error.owner(),
+                    error.latest(),
+                    error.nextAction(),
+                    "最近 " + error.count() + " 次，来源 " + error.module(),
+                    error.tone()
+            ));
+        }
+
+        return List.copyOf(alerts.values());
+    }
+
+    private String serviceAlertAction(OperationsCenterSnapshot.ServiceStatus service) {
+        return switch (service.code()) {
+            case "FRONTEND" -> "检查 ZHUBAO_FRONTEND_URL 与 ZHUBAO_FRONTEND_PROBE_URL，确认前端容器或站点可访问。";
+            case "PWA_ASSETS" -> "检查 manifest.webmanifest、sw.js 和前端静态资源发布目录。";
+            case "DATABASE" -> "检查 MySQL profile、数据源配置、网络连通性和账号权限。";
+            case "BACKUP" -> "检查 ZHUBAO_BACKUP_ROOT、备份卷挂载、最新 dump、SHA-256 和恢复演练记录。";
+            case "COS_BACKUP" -> "检查 ZHUBAO_COS_BACKUP_* 配置、Bucket、Region、Prefix、凭证模式和生命周期策略。";
+            case "HARDWARE" -> "检查扫码、NVR、标签打印、电子秤 POC 记录和人工兜底流程。";
+            default -> "按服务详情定位配置、连通性或运行状态。";
+        };
+    }
+
+    private String backupAlertAction(OperationsCenterSnapshot.BackupStatus backup) {
+        if (backup.code().startsWith("RESTORE-DRILL")) {
+            return "执行 verify-restore 脚本生成恢复演练 JSON 证据，必要时保留临时库做人工抽样。";
+        }
+        if (backup.code().startsWith("COS-BACKUP")) {
+            return "补齐腾讯云 COS 备份配置并确认本地备份同步任务。";
+        }
+        return "执行 backup-mysql 脚本生成最新 dump 和 .sha256，并确认备份目录可被后端只读扫描。";
     }
 
     private LogProbe probeLogs(Instant now) {
