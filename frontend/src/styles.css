@@ -208,6 +208,22 @@
   overflow-wrap: anywhere;
 }
 
+.register-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--zb-line);
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.register-preview-actions span {
+  color: var(--zb-muted);
+  font-size: 12px;
+}
+
 .register-preview-blockers {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -261,6 +277,11 @@
   .register-preview-summary,
   .register-preview-blockers {
     grid-template-columns: 1fr;
+  }
+
+  .register-preview-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

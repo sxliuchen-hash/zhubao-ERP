@@ -51,6 +51,7 @@ public class RegisterImportTemplateService {
                 "补 sourceSheetName/importBatchNo 后接入 Excel 上传解析",
                 List.of(
                         field("序号", "sourceRegisterSequence", "ConfirmInboundCommand", false, "保留纸质序号", "不作业务主键"),
+                        field("工作表名", "sourceSheetName", "RegisterImportPreview", false, "取 Excel 工作表名称", "用于定位原始工作表"),
                         field("入库日期", "inboundDate", "ConfirmInboundCommand", true, "月日补全年份", "yyyy-MM-dd"),
                         field("快递名称", "expressCompany", "ConfirmInboundCommand", true, "原文 trim", "不能为空"),
                         field("快递单号", "courierNo", "ConfirmInboundCommand", true, "原文 trim", "全局追溯入口，建议唯一"),
@@ -80,6 +81,7 @@ public class RegisterImportTemplateService {
                 "补出库单结构化持久化和导入批次表",
                 List.of(
                         field("序号", "sourceRegisterSequence", "ShipFinishedStockCommand", false, "保留纸质序号", "不作业务主键"),
+                        field("工作表名", "sourceSheetName", "RegisterImportPreview", false, "取 Excel 工作表名称", "用于定位原始工作表"),
                         field("日期", "deliveryDate", "ShipFinishedStockCommand", true, "月日补全年份", "yyyy-MM-dd"),
                         field("客户", "customerId/customerNameSnapshot", "ShipFinishedStockCommand", true, "客户名称匹配主数据", "匹配失败转待确认"),
                         field("交货类目", "deliveryCategory", "ShipFinishedStockCommand", true, "枚举映射", "成品/返修件/补发件/样品"),
@@ -110,6 +112,7 @@ public class RegisterImportTemplateService {
                         field("姓名", "operator", "ReportProductionCommand", true, "表头继承到明细行", "必须匹配员工或保存姓名快照"),
                         field("日期", "workDate", "ReportProductionCommand", true, "表头继承到明细行", "yyyy-MM-dd"),
                         field("序号", "sourceRegisterSequence", "ReportProductionCommand", false, "保留纸质序号", "不作业务主键"),
+                        field("工作表名", "sourceSheetName", "RegisterImportPreview", false, "取 Excel 工作表名称", "用于定位原始工作表"),
                         field("工作项目", "workItemName", "ReportProductionCommand", true, "原文 trim", "粗抛/精抛/返工抛光等"),
                         field("开始时间", "startedAt", "ReportProductionCommand", false, "与 workDate 组合", "跨班次需人工确认"),
                         field("完成时间", "finishedAt", "ReportProductionCommand", false, "与 workDate 组合", "进行中可为空"),
@@ -137,9 +140,11 @@ public class RegisterImportTemplateService {
                 "新增设备产量独立落库和机器档案匹配",
                 List.of(
                         field("序号", "sourceRegisterSequence", "ReportProductionCommand", false, "日内分组序号", "不作业务主键"),
+                        field("工作表名", "sourceSheetName", "RegisterImportPreview", false, "取 Excel 工作表名称", "用于定位原始工作表"),
                         field("日期", "workDate", "ReportProductionCommand", true, "合并单元格继承", "yyyy-MM-dd"),
                         field("客户", "customerId/customerNameSnapshot", "ReportProductionCommand", true, "合并单元格继承并匹配主数据", "匹配失败转待确认"),
                         field("品类", "productCategory", "ReportProductionCommand", true, "合并单元格继承", "产能统计必填"),
+                        field("机器行号", "machineLineNo", "RegisterImportPreview", false, "保留纸质 1-8 台机器行", "用于回表定位"),
                         field("机器编号", "machineNo", "ReportProductionCommand", true, "1-8 号机器行保留", "未匹配设备档案时保存文本"),
                         field("雕刻数量", "quantity + quantityUnit", "ReportProductionCommand", true, "默认单位件", "数量必须大于 0"),
                         field("操机签字", "operatorSignatureName", "ReportProductionCommand", true, "姓名快照", "不能用录入人替代"),

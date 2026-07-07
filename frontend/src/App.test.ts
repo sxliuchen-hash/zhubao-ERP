@@ -6,8 +6,8 @@ describe('App', () => {
   it('starts on the M1 business workbench and exposes core modules', () => {
     const wrapper = mount(App);
 
-    expect(wrapper.text()).toContain('M3.67 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.67 / 登记表预检操作台');
+    expect(wrapper.text()).toContain('M3.68 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.68 / 登记表真实模板校正');
     expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
     expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
     expect(wrapper.text()).toContain('首页工作台');

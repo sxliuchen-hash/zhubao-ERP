@@ -32,6 +32,7 @@ import java.util.regex.Pattern;
 public class RegisterImportPreviewService {
 
     private static final DateTimeFormatter BATCH_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final Pattern FULL_DATE_PATTERN = Pattern.compile("(\\d{4})\\D+(\\d{1,2})\\D+(\\d{1,2})");
     private static final Pattern MONTH_DAY_PATTERN = Pattern.compile("(\\d{1,2})\\D+(\\d{1,2})");
     private static final Pattern QUANTITY_PATTERN = Pattern.compile("([0-9]+(?:\\.[0-9]+)?)(.*)");
 
@@ -100,7 +101,7 @@ public class RegisterImportPreviewService {
             if (isBlankRow(sheet, rowIndex, 1, 9)) {
                 continue;
             }
-            Map<String, String> fields = baseFields("签收入库登记表", rowIndex, cellText(sheet, rowIndex, 0));
+            Map<String, String> fields = baseFields(sheet, "签收入库登记表", rowIndex, cellText(sheet, rowIndex, 0));
             fields.put("inboundDate", normalizeDate(cellText(sheet, rowIndex, 1), businessDate));
             fields.put("expressCompany", cellText(sheet, rowIndex, 2));
             fields.put("courierNo", cellText(sheet, rowIndex, 3));
@@ -130,7 +131,7 @@ public class RegisterImportPreviewService {
                 continue;
             }
             String paperExpressText = cellText(sheet, rowIndex, 5);
-            Map<String, String> fields = baseFields("交货情况登记表", rowIndex, cellText(sheet, rowIndex, 0));
+            Map<String, String> fields = baseFields(sheet, "交货情况登记表", rowIndex, cellText(sheet, rowIndex, 0));
             fields.put("deliveryDate", normalizeDate(cellText(sheet, rowIndex, 1), businessDate));
             fields.put("customerNameSnapshot", cellText(sheet, rowIndex, 2));
             fields.put("deliveryCategory", cellText(sheet, rowIndex, 3));
@@ -161,14 +162,14 @@ public class RegisterImportPreviewService {
         for (int rowIndex = 0; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
             String firstCell = cellText(sheet, rowIndex, 0);
             if (firstCell.startsWith("姓名")) {
-                operator = cellText(sheet, rowIndex, 1);
-                workDate = normalizeDate(cellText(sheet, rowIndex, 3), businessDate);
+                operator = readLabelValue(sheet, rowIndex, 0, 1, 2);
+                workDate = normalizeDate(readDateContext(sheet, rowIndex, businessDate), businessDate);
                 continue;
             }
             if (!isNumericLike(firstCell) || isBlankRow(sheet, rowIndex, 1, 6)) {
                 continue;
             }
-            Map<String, String> fields = baseFields("工作项目记录单（日）", rowIndex, firstCell);
+            Map<String, String> fields = baseFields(sheet, "工作项目记录单（日）", rowIndex, firstCell);
             fields.put("operator", operator);
             fields.put("workDate", workDate);
             fields.put("workItemName", cellText(sheet, rowIndex, 1));
@@ -191,17 +192,36 @@ public class RegisterImportPreviewService {
 
     private List<RegisterImportPreviewRow> parseEngraving(Sheet sheet, String businessDate) {
         List<RegisterImportPreviewRow> rows = new ArrayList<>();
+        String currentSequence = "";
+        String currentWorkDate = "";
+        String currentCustomer = "";
+        String currentCategory = "";
+        String currentSignature = "";
         for (int rowIndex = 3; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-            if (isBlankRow(sheet, rowIndex, 4, 7)) {
+            String sequence = cellText(sheet, rowIndex, 0);
+            if (!sequence.isBlank() && !sequence.equals(currentSequence)) {
+                currentSequence = sequence;
+                currentWorkDate = "";
+                currentCustomer = "";
+                currentCategory = "";
+                currentSignature = "";
+            }
+            currentWorkDate = firstPresent(normalizeDate(cellText(sheet, rowIndex, 1), businessDate), currentWorkDate);
+            currentCustomer = firstPresent(cellText(sheet, rowIndex, 2), currentCustomer);
+            currentCategory = firstPresent(cellText(sheet, rowIndex, 3), currentCategory);
+            currentSignature = firstPresent(cellText(sheet, rowIndex, 6), currentSignature);
+            if (isBlankEngravingMachineRow(sheet, rowIndex)) {
                 continue;
             }
-            Map<String, String> fields = baseFields("雕刻机统计单（日）", rowIndex, cellText(sheet, rowIndex, 0));
-            fields.put("workDate", normalizeDate(cellText(sheet, rowIndex, 1), businessDate));
-            fields.put("customerNameSnapshot", cellText(sheet, rowIndex, 2));
-            fields.put("productCategory", cellText(sheet, rowIndex, 3));
+
+            Map<String, String> fields = baseFields(sheet, "雕刻机统计单（日）", rowIndex, currentSequence);
+            fields.put("workDate", currentWorkDate);
+            fields.put("customerNameSnapshot", currentCustomer);
+            fields.put("productCategory", currentCategory);
+            fields.put("machineLineNo", cellText(sheet, rowIndex, 4));
             fields.put("machineNo", cellText(sheet, rowIndex, 4));
             addQuantity(fields, cellText(sheet, rowIndex, 5));
-            fields.put("operatorSignatureName", cellText(sheet, rowIndex, 6));
+            fields.put("operatorSignatureName", currentSignature);
             fields.put("remark", cellText(sheet, rowIndex, 7));
 
             List<RegisterImportPreviewMessage> messages = new ArrayList<>();
@@ -216,8 +236,9 @@ public class RegisterImportPreviewService {
         return rows;
     }
 
-    private Map<String, String> baseFields(String registerType, int rowIndex, String sequence) {
+    private Map<String, String> baseFields(Sheet sheet, String registerType, int rowIndex, String sequence) {
         Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("sourceSheetName", sheet.getSheetName());
         fields.put("sourceRegisterType", registerType);
         fields.put("sourceRegisterLineNo", String.valueOf(rowIndex + 1));
         fields.put("sourceRegisterSequence", sequence);
@@ -275,12 +296,20 @@ public class RegisterImportPreviewService {
 
     private String normalizeDate(String raw, String businessDate) {
         String value = clean(raw);
-        if (value.isBlank()) {
+        if (value.isBlank() || isDatePlaceholder(value)) {
             return "";
         }
         if (value.matches("\\d{4}-\\d{1,2}-\\d{1,2}")) {
             String[] parts = value.split("-");
             return "%s-%02d-%02d".formatted(parts[0], Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+        }
+        Matcher fullDateMatcher = FULL_DATE_PATTERN.matcher(value);
+        if (fullDateMatcher.find()) {
+            return "%s-%02d-%02d".formatted(
+                    fullDateMatcher.group(1),
+                    Integer.parseInt(fullDateMatcher.group(2)),
+                    Integer.parseInt(fullDateMatcher.group(3))
+            );
         }
         Matcher matcher = MONTH_DAY_PATTERN.matcher(value);
         if (matcher.find()) {
@@ -329,11 +358,74 @@ public class RegisterImportPreviewService {
 
     private boolean isBlankRow(Sheet sheet, int rowIndex, int startColumn, int endColumn) {
         for (int column = startColumn; column <= endColumn; column++) {
-            if (!cellText(sheet, rowIndex, column).isBlank()) {
+            if (!isEffectiveBlank(cellText(sheet, rowIndex, column))) {
                 return false;
             }
         }
         return true;
+    }
+
+    private boolean isBlankEngravingMachineRow(Sheet sheet, int rowIndex) {
+        String machineNo = rawCellText(sheet, rowIndex, 4);
+        if (machineNo.isBlank()) {
+            return isBlankRow(sheet, rowIndex, 0, 7);
+        }
+        return isEffectiveBlank(rawCellText(sheet, rowIndex, 5))
+                && isEffectiveBlank(rawCellText(sheet, rowIndex, 7));
+    }
+
+    private String readLabelValue(Sheet sheet, int rowIndex, int labelColumn, int firstValueColumn, int lastValueColumn) {
+        String inline = valueAfterLabel(cellText(sheet, rowIndex, labelColumn), "姓名");
+        if (!inline.isBlank()) {
+            return inline;
+        }
+        for (int column = firstValueColumn; column <= lastValueColumn; column++) {
+            String value = cellText(sheet, rowIndex, column);
+            if (!isEffectiveBlank(value)) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String readDateContext(Sheet sheet, int rowIndex, String businessDate) {
+        for (int column = 3; column <= 6; column++) {
+            String value = cellText(sheet, rowIndex, column);
+            String inline = valueAfterLabel(value, "日期");
+            String normalized = normalizeDate(inline.isBlank() ? value : inline, businessDate);
+            if (!normalized.isBlank()) {
+                return normalized;
+            }
+        }
+        return "";
+    }
+
+    private String valueAfterLabel(String value, String label) {
+        String cleaned = clean(value);
+        if (!cleaned.startsWith(label)) {
+            return "";
+        }
+        return clean(cleaned.substring(label.length()).replaceFirst("^[：:]", ""));
+    }
+
+    private String firstPresent(String value, String fallback) {
+        return isEffectiveBlank(value) ? fallback : value;
+    }
+
+    private boolean isEffectiveBlank(String value) {
+        String cleaned = clean(value);
+        return cleaned.isBlank() || isDatePlaceholder(cleaned);
+    }
+
+    private boolean isDatePlaceholder(String value) {
+        String compact = clean(value).replaceAll("\\s+", "");
+        if (compact.matches(".*\\d.*")) {
+            return false;
+        }
+        return compact.equals("月日")
+                || compact.equals("日期")
+                || compact.equals("入库日期")
+                || compact.equals("交货日期");
     }
 
     private boolean isNumericLike(String value) {
@@ -349,6 +441,12 @@ public class RegisterImportPreviewService {
                 return clean(formatter.formatCellValue(mergedCell));
             }
         }
+        return clean(cell == null ? "" : formatter.formatCellValue(cell));
+    }
+
+    private String rawCellText(Sheet sheet, int rowIndex, int columnIndex) {
+        Row row = sheet.getRow(rowIndex);
+        Cell cell = row == null ? null : row.getCell(columnIndex);
         return clean(cell == null ? "" : formatter.formatCellValue(cell));
     }
 

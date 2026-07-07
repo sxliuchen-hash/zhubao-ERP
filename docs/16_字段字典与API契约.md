@@ -75,7 +75,7 @@
 | `GET /summary` | 样例库/预检操作台 | 返回模板数量、字段数量、必填字段数量和解析器接入状态 |
 | `POST /previews` | 样例库/预检操作台 | multipart 上传 `.xlsx`，按模板解析并返回标准化字段、阻断/警告消息和可确认状态；不写业务台账 |
 
-当前 M3.66 已完成 Excel 上传预览解析：支持入库、出货、抛光、雕刻 4 类登记表，能处理抛光表头上下文、雕刻合并单元格继承、数量单位和纸质快递栏拆分。仍未完成确认导入、错误行下载、结构化导入批次落库和业务单据自动入账。
+当前 M3.68 已完成 Excel 上传预览解析和前端问题 CSV 下载：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光表头上下文、雕刻 1-8 号机器组内继承、数量单位和纸质快递栏拆分。仍未完成确认导入、结构化导入批次落库和业务单据自动入账。
 
 业务操作接口前缀：
 
@@ -143,7 +143,7 @@
 | `sourceLineNo` | Excel 原始行号 |
 | `sourceRegisterSequence` | 纸质表内序号 |
 | `status` | `READY`、`WARNING`、`BLOCKED` |
-| `normalizedFields` | 标准化后的字段 Map，例如 `inboundDate`、`paperExpressText`、`logisticsNo`、`operator`、`machineNo`、`quantityUnit` |
+| `normalizedFields` | 标准化后的字段 Map，例如 `sourceSheetName`、`inboundDate`、`paperExpressText`、`logisticsNo`、`operator`、`machineLineNo`、`machineNo`、`quantityUnit` |
 | `messages` | 逐行校验消息 |
 
 `messages[]`：
@@ -155,6 +155,21 @@
 | `field` | 命中的目标字段 |
 | `message` | 校验说明 |
 | `fallback` | 现场补救动作 |
+
+前端问题 CSV 下载字段：
+
+| 字段 | 说明 |
+|---|---|
+| `importBatchNo` | 本次预检批次号 |
+| `templateCode` / `templateName` | 登记表模板 |
+| `sourceFileName` / `sourceSheetName` | 上传文件名和 Excel 工作表名 |
+| `sourceLineNo` / `sourceRegisterSequence` | Excel 原始行号和纸质序号 |
+| `status` | 行状态 |
+| `ruleCode` / `level` / `field` | 命中的校验规则 |
+| `message` / `fallback` | 现场修表说明和兜底动作 |
+| `normalizedFields` | 该行全部标准化字段 JSON，便于和原表回查 |
+
+CSV 下载只发生在前端浏览器内，来自 `/previews` 返回结果，不是新的后端导出接口；当前仍不写入库存台账或业务单据。
 
 `RegisterFieldMapping`：
 

@@ -61,7 +61,7 @@ class M2ManagementApiSmokeTest {
         );
         assertThat(summary.getBody()).contains(
                 "\"templates\":4",
-                "\"fields\":34",
+                "\"fields\":39",
                 "\"commandReadyTemplates\":4",
                 "preview parser ready"
         );

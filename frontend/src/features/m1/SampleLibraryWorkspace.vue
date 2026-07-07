@@ -16,6 +16,11 @@ import {
   type RegisterImportPreviewRow,
 } from '../../data/registerImportTemplates';
 import { previewRegisterImport } from '../../services/registerImportApi';
+import {
+  buildRegisterPreviewIssueCsv,
+  registerPreviewIssueCount,
+  registerPreviewIssueFileName,
+} from './registerPreviewExport';
 
 function scenarioTone(status: string): Tone {
   if (status === 'ready') return 'green';
@@ -81,10 +86,12 @@ function onRegisterFileChange(event: Event) {
   selectedRegisterFile.value = input.files?.[0] ?? null;
   registerPreview.value = null;
   registerPreviewError.value = '';
+  registerPreviewDownloadError.value = '';
 }
 
 async function submitRegisterPreview() {
   registerPreviewError.value = '';
+  registerPreviewDownloadError.value = '';
   if (!selectedRegisterFile.value) {
     registerPreviewError.value = '请选择现场登记表 Excel 文件';
     return;
@@ -115,12 +122,14 @@ const selectedRegisterFile = ref<File | null>(null);
 const registerPreview = ref<RegisterImportPreview | null>(null);
 const registerPreviewLoading = ref(false);
 const registerPreviewError = ref('');
+const registerPreviewDownloadError = ref('');
 
 const selectedRegisterTemplate = computed(() =>
   registerImportTemplates.find((template) => template.code === selectedRegisterTemplateCode.value) ?? activeRegisterTemplate,
 );
 
 const registerPreviewRows = computed(() => registerPreview.value?.rows.slice(0, 6) ?? []);
+const registerPreviewIssues = computed(() => registerPreviewIssueCount(registerPreview.value));
 const registerPreviewBlockers = computed(() =>
   registerPreview.value?.rows.flatMap((row) =>
     row.messages.map((message) => ({
@@ -130,6 +139,23 @@ const registerPreviewBlockers = computed(() =>
     })),
   ).slice(0, 6) ?? [],
 );
+
+function downloadRegisterPreviewIssues() {
+  registerPreviewDownloadError.value = '';
+  if (!registerPreview.value || registerPreviewIssues.value === 0) {
+    registerPreviewDownloadError.value = '当前预检没有阻断或警告行';
+    return;
+  }
+
+  const csv = `\uFEFF${buildRegisterPreviewIssueCsv(registerPreview.value)}`;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = registerPreviewIssueFileName(registerPreview.value);
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 const sampleKpis = computed(() => [
   {
@@ -255,7 +281,7 @@ const registerTemplateRows = computed(() =>
       <div class="sample-command-copy">
         <div class="console-title-line">
           <span class="eyebrow">SAMPLE CONTROL</span>
-          <StatusBadge label="M3.67 预检操作台" tone="green" />
+          <StatusBadge label="M3.68 真实模板校正" tone="green" />
         </div>
         <h2>样例验收指挥台</h2>
         <p>
@@ -398,6 +424,20 @@ const registerTemplateRows = computed(() =>
               <small>阻断行</small>
             </article>
           </div>
+          <div class="register-preview-actions">
+            <button
+              class="secondary-button"
+              type="button"
+              :disabled="registerPreviewIssues === 0"
+              @click="downloadRegisterPreviewIssues"
+            >
+              下载阻断/警告 CSV
+            </button>
+            <span>{{ registerPreviewIssues }} 条需处理消息</span>
+          </div>
+          <p v-if="registerPreviewDownloadError" class="register-preview-error">
+            {{ registerPreviewDownloadError }}
+          </p>
           <div v-if="registerPreviewBlockers.length" class="register-preview-blockers">
             <article v-for="item in registerPreviewBlockers" :key="item.key">
               <b>{{ item.message.ruleCode }}</b>
