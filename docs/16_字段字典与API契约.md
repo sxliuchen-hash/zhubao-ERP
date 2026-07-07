@@ -1198,3 +1198,73 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 - 尚未按客户、部门、班组做数据范围过滤。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
+
+---
+
+## 13. M3.52 当前权限上下文接口
+
+`GET /api/security/current-context` 用于把当前评审环境里的请求头身份、角色、数据范围和可执行敏感动作显式暴露给前端配置基线页。该接口只做展示和评审校准，不代表真实登录、菜单权限和数据范围过滤已经完成。
+
+### 13.1 请求头
+
+沿用 M3.33 轻量权限守卫请求头：
+
+| Header | 说明 |
+|---|---|
+| `X-Zhubao-Operator` | 操作人快照 |
+| `X-Zhubao-Role` | 当前角色编码 |
+| `X-Zhubao-Data-Scope` | 当前数据范围编码 |
+
+### 13.2 返回字段
+
+| 字段 | 说明 |
+|---|---|
+| `operator` | 当前操作人快照 |
+| `role` | 角色编码，例如 `ADMIN`、`WAREHOUSE_KEEPER` |
+| `roleLabel` | 角色中文名 |
+| `dataScope` | 数据范围编码，例如 `ALL`、`TEAM`、`CUSTOMER_RANGE` |
+| `dataScopeLabel` | 数据范围中文名 |
+| `dataBoundary` | 当前数据范围在真实登录接入后的业务边界说明 |
+| `headerBased` | 是否来自请求头；当前固定为 `true` |
+| `allowedPermissions` | 当前角色可执行的敏感动作权限列表 |
+| `sensitiveActionCodes` | 仅权限编码列表，便于前端做快速展示或按钮边界提示 |
+| `limitationNotes` | 当前认证、数据范围、菜单权限和审批锁账限制 |
+| `headerContract` | 请求头契约，包含操作人、角色、数据范围三个 Header 名称 |
+
+### 13.3 示例
+
+```json
+{
+  "success": true,
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "operator": "库管员 何琳",
+    "role": "WAREHOUSE_KEEPER",
+    "roleLabel": "库管员",
+    "dataScope": "TEAM",
+    "dataScopeLabel": "本班组/工位",
+    "dataBoundary": "后续真实登录接入后，只应读取同班组、同工位或当前负责队列内的业务对象。",
+    "headerBased": true,
+    "allowedPermissions": [
+      { "code": "BUSINESS_INBOUND_CONFIRM", "label": "来料确认入库" }
+    ],
+    "sensitiveActionCodes": ["BUSINESS_INBOUND_CONFIRM"],
+    "limitationNotes": [
+      "当前身份来自请求头，尚未接入真实登录、JWT、Session 或 SSO。"
+    ],
+    "headerContract": {
+      "operatorHeader": "X-Zhubao-Operator",
+      "roleHeader": "X-Zhubao-Role",
+      "dataScopeHeader": "X-Zhubao-Data-Scope"
+    }
+  }
+}
+```
+
+### 13.4 当前限制
+
+- GET 工作台接口尚未按 `dataScope` 做真实过滤，配置基线页必须明确提示该限制。
+- 菜单和按钮权限尚未由后端菜单树驱动，前端导航仍是静态模块入口。
+- 当前接口不返回密码、令牌、会话、客户范围清单或任何可用于生产鉴权的凭据。
+- 后续接入真实登录后，此接口应改为读取认证上下文，而不是允许前端自行传入角色。

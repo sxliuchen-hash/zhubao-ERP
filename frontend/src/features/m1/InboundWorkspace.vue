@@ -24,9 +24,11 @@ const workspace = ref<InboundWorkspaceModel>({
 const confirmingInbound = ref(false);
 const confirmationResult = ref<InboundConfirmationResult | null>(null);
 const confirmationError = ref('');
+const selectedOrderCode = ref('');
 
 const activeOrder = computed(
   () =>
+    workspace.value.orders.find((order) => order.code === selectedOrderCode.value) ??
     workspace.value.orders.find((order) => order.status.includes('异常') || order.video === '失败') ??
     workspace.value.orders[0],
 );
@@ -77,8 +79,10 @@ const inboundFlow = [
 onMounted(async () => {
   try {
     workspace.value = await fetchInboundWorkspace();
+    selectedOrderCode.value = activeOrder.value?.code ?? '';
   } catch {
     // Keep deterministic local samples available when the backend is not running.
+    selectedOrderCode.value = activeOrder.value?.code ?? '';
   }
 });
 
@@ -109,6 +113,12 @@ async function confirmActiveInbound() {
   } finally {
     confirmingInbound.value = false;
   }
+}
+
+function selectInboundOrder(code: string) {
+  selectedOrderCode.value = code;
+  confirmationResult.value = null;
+  confirmationError.value = '';
 }
 </script>
 
@@ -195,7 +205,13 @@ async function confirmActiveInbound() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="order in workspace.orders" :key="order.code">
+              <tr
+                v-for="order in workspace.orders"
+                :key="order.code"
+                :class="{ 'is-selected': activeOrder?.code === order.code }"
+                :aria-selected="activeOrder?.code === order.code"
+                @click="selectInboundOrder(order.code)"
+              >
                 <td><strong>{{ order.code }}</strong></td>
                 <td>
                   <span class="cell-stack">
@@ -208,7 +224,7 @@ async function confirmActiveInbound() {
                 <td><StatusBadge :label="order.status" :tone="statusTone(order.status)" /></td>
                 <td><StatusBadge :label="order.video" :tone="videoTone(order.video)" /></td>
                 <td>{{ order.owner }}</td>
-                <td><button class="table-action" type="button">处理</button></td>
+                <td><button class="table-action" type="button" @click.stop="selectInboundOrder(order.code)">处理</button></td>
               </tr>
             </tbody>
           </table>
@@ -242,6 +258,23 @@ async function confirmActiveInbound() {
             </button>
             <button class="secondary-button" type="button">视频任务</button>
             <button class="secondary-button" type="button">打印标签</button>
+          </div>
+          <div class="inbound-action-trace" aria-label="当前处理动作链">
+            <article>
+              <span>01</span>
+              <strong>复核权属</strong>
+              <small>{{ activeOrder.owner }} / 不混入企业自有库存</small>
+            </article>
+            <article>
+              <span>02</span>
+              <strong>核对证据</strong>
+              <small>快递、称重、视频、标签缺一项需记录兜底原因</small>
+            </article>
+            <article>
+              <span>03</span>
+              <strong>写入台账</strong>
+              <small>确认后生成客户所有原料库存台账和余额快照</small>
+            </article>
           </div>
           <div v-if="confirmationResult" class="operation-feedback success">
             <strong>库存台账已写入</strong>

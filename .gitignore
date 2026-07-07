@@ -1,4 +1,7 @@
 .tools/
+.cache/
+.playwright-cli/
+output/
 .npm-cache/
 .pnpm-store/
 node_modules/

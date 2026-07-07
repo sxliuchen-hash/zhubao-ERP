@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.51 / 样例库管理台重构</strong>
-        <i>仍处于 M3 增量开发：本轮把样例矩阵、开源调研、fixture、验收门禁和现场数据缺口收敛到同一张管理台。</i>
+        <strong>M3.52 / 业务操作台整改</strong>
+        <i>仍处于 M3 增量开发：本轮收紧全局页头和来料作业台，补充权限/数据范围可见边界，继续向真实 ERP/MES 操作界面收敛。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,9 +54,9 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">ZB-MES Control Room</span>
+          <span class="eyebrow">M3.52 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
-          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场控制台。</p>
+          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>
@@ -64,6 +64,7 @@ defineProps<{
             <span>附件元数据仓储</span>
             <span>硬件 POC</span>
             <span>运维中心</span>
+            <span>权限上下文</span>
             <span>工资试算基线</span>
           </div>
         </div>

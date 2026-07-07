@@ -40,6 +40,17 @@ function riskTone(riskLevel: string): Tone {
   if (riskLevel === '中') return 'amber';
   return 'green';
 }
+
+function dataScopeTone(dataScope: string): Tone {
+  if (dataScope === 'ALL') return 'violet';
+  if (dataScope === 'SELF') return 'green';
+  if (dataScope === 'TEAM') return 'blue';
+  return 'amber';
+}
+
+function permissionTone(index: number): Tone {
+  return ['blue', 'green', 'amber', 'violet'][index % 4] as Tone;
+}
 </script>
 
 <template>
@@ -86,6 +97,71 @@ function riskTone(riskLevel: string): Tone {
       <div class="filter-actions">
         <button class="secondary-button" type="button">只看 C1</button>
         <button class="secondary-button" type="button">导出基线</button>
+      </div>
+    </section>
+
+    <section class="security-context-panel" aria-label="当前权限与数据范围边界">
+      <div class="security-context-main">
+        <div class="section-heading compact-heading">
+          <div>
+            <span class="eyebrow">SECURITY CONTEXT</span>
+            <h2>当前权限 / 数据范围边界</h2>
+            <p>这不是正式登录系统，而是 M3 轻量请求头守卫的可视化基线，用于评审敏感动作、数据范围和后续真实登录接入缺口。</p>
+          </div>
+          <StatusBadge :label="workspace.securityContext.headerBased ? '请求头上下文' : '真实登录上下文'" tone="amber" />
+        </div>
+
+        <div class="security-identity-grid">
+          <article>
+            <span>操作人</span>
+            <strong>{{ workspace.securityContext.operator }}</strong>
+            <small>{{ workspace.securityContext.headerContract.operatorHeader }}</small>
+          </article>
+          <article>
+            <span>角色</span>
+            <strong>{{ workspace.securityContext.roleLabel }}</strong>
+            <small>{{ workspace.securityContext.role }}</small>
+          </article>
+          <article>
+            <span>数据范围</span>
+            <strong>{{ workspace.securityContext.dataScopeLabel }}</strong>
+            <StatusBadge :label="workspace.securityContext.dataScope" :tone="dataScopeTone(workspace.securityContext.dataScope)" />
+          </article>
+        </div>
+
+        <div class="security-boundary-note">
+          <strong>数据边界说明</strong>
+          <span>{{ workspace.securityContext.dataBoundary }}</span>
+        </div>
+      </div>
+
+      <aside class="security-context-side">
+        <div>
+          <span class="eyebrow">ALLOWED ACTIONS</span>
+          <h3>敏感动作白名单</h3>
+        </div>
+        <div class="security-permission-list">
+          <article
+            v-for="(permission, index) in workspace.securityContext.allowedPermissions"
+            :key="permission.code"
+            :class="`tone-${permissionTone(index)}`"
+          >
+            <strong>{{ permission.label }}</strong>
+            <span>{{ permission.code }}</span>
+          </article>
+        </div>
+        <div class="security-header-contract">
+          <strong>请求头契约</strong>
+          <span>{{ workspace.securityContext.headerContract.roleHeader }}</span>
+          <span>{{ workspace.securityContext.headerContract.dataScopeHeader }}</span>
+        </div>
+      </aside>
+
+      <div class="security-limitation-row">
+        <article v-for="note in workspace.securityContext.limitationNotes" :key="note">
+          <b />
+          <span>{{ note }}</span>
+        </article>
       </div>
     </section>
 

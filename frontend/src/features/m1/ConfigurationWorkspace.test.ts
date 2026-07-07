@@ -18,5 +18,11 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('CFG-CR-20260706-001');
     expect(wrapper.text()).toContain('审计日志');
     expect(wrapper.text()).toContain('TRACE-CFG-002');
+    expect(wrapper.text()).toContain('当前权限 / 数据范围边界');
+    expect(wrapper.text()).toContain('请求头上下文');
+    expect(wrapper.text()).toContain('X-Zhubao-Role');
+    expect(wrapper.text()).toContain('X-Zhubao-Data-Scope');
+    expect(wrapper.text()).toContain('尚未接入真实登录');
+    expect(wrapper.text()).toContain('BUSINESS_LOSS_APPROVAL');
   });
 });

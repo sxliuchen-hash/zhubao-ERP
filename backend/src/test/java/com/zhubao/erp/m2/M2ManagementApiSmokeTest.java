@@ -799,6 +799,38 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void exposesSecurityCurrentContextFromRequestHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Zhubao-Operator", "warehouse-smoke");
+        headers.set("X-Zhubao-Role", "WAREHOUSE_KEEPER");
+        headers.set("X-Zhubao-Data-Scope", "TEAM");
+
+        ResponseEntity<String> context = restTemplate.exchange(
+                "/api/security/current-context",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(context.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(context.getBody()).contains(
+                "warehouse-smoke",
+                "\"role\":\"WAREHOUSE_KEEPER\"",
+                "\"roleLabel\":\"库管员\"",
+                "\"dataScope\":\"TEAM\"",
+                "\"dataScopeLabel\":\"本班组/工位\"",
+                "\"headerBased\":true",
+                "\"operatorHeader\":\"X-Zhubao-Operator\"",
+                "\"roleHeader\":\"X-Zhubao-Role\"",
+                "\"dataScopeHeader\":\"X-Zhubao-Data-Scope\"",
+                "\"code\":\"BUSINESS_INBOUND_CONFIRM\"",
+                "\"code\":\"BUSINESS_OUTBOUND_SHIPMENT\"",
+                "GET 工作台数据尚未按 dataScope 做真实过滤"
+        );
+        assertThat(context.getBody()).doesNotContain("\"code\":\"BUSINESS_LOSS_APPROVAL\"");
+    }
+
+    @Test
     void exposesConfigurationBaselineApis() {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/configuration/baseline/summary", String.class);
         ResponseEntity<String> parameters = restTemplate.getForEntity("/api/configuration/baseline/system-parameters", String.class);

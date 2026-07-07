@@ -10,6 +10,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class PermissionGuard {
@@ -47,6 +48,17 @@ public class PermissionGuard {
 
     public Map<PermissionCode, Set<RoleCode>> roleMatrix() {
         return Map.copyOf(roleMatrix);
+    }
+
+    public Set<PermissionCode> allowedPermissionsFor(RoleCode role) {
+        if (role == RoleCode.ADMIN) {
+            return EnumSet.allOf(PermissionCode.class);
+        }
+        return roleMatrix.entrySet()
+                .stream()
+                .filter(entry -> entry.getValue().contains(role))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(PermissionCode.class)));
     }
 
     private void allow(PermissionCode permission, RoleCode firstRole, RoleCode... otherRoles) {

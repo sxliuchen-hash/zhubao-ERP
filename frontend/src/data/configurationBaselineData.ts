@@ -109,6 +109,31 @@ export interface ConfigurationAuditEvent {
   traceId: string;
 }
 
+export interface PermissionGrant {
+  code: string;
+  label: string;
+}
+
+export interface SecurityHeaderContract {
+  operatorHeader: string;
+  roleHeader: string;
+  dataScopeHeader: string;
+}
+
+export interface SecurityCurrentContext {
+  operator: string;
+  role: string;
+  roleLabel: string;
+  dataScope: string;
+  dataScopeLabel: string;
+  dataBoundary: string;
+  headerBased: boolean;
+  allowedPermissions: PermissionGrant[];
+  sensitiveActionCodes: string[];
+  limitationNotes: string[];
+  headerContract: SecurityHeaderContract;
+}
+
 export interface ConfigurationBaselineWorkspace {
   summary: ConfigurationBaselineSummary;
   systemParameters: SystemParameter[];
@@ -121,6 +146,7 @@ export interface ConfigurationBaselineWorkspace {
   backupPolicies: BackupPolicy[];
   changeRequests: ConfigurationChangeRequest[];
   auditEvents: ConfigurationAuditEvent[];
+  securityContext: SecurityCurrentContext;
 }
 
 export const configurationToneByLevel: Record<string, Tone> = {
@@ -292,4 +318,40 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
       traceId: 'TRACE-CFG-EXPORT-001',
     },
   ],
+  securityContext: {
+    operator: 'system-review',
+    role: 'ADMIN',
+    roleLabel: '系统管理员',
+    dataScope: 'ALL',
+    dataScopeLabel: '全部数据',
+    dataBoundary: '当前评审默认全局可见；正式上线必须由真实角色、菜单权限和审计日志共同约束。',
+    headerBased: true,
+    allowedPermissions: [
+      { code: 'BUSINESS_INBOUND_CONFIRM', label: '来料确认入库' },
+      { code: 'BUSINESS_PRODUCTION_REPORT', label: '生产报工' },
+      { code: 'BUSINESS_QUALITY_FREEZE', label: '质检冻结库存' },
+      { code: 'BUSINESS_OUTBOUND_SHIPMENT', label: '成品出库' },
+      { code: 'BUSINESS_LOSS_APPROVAL', label: '损耗审批试算' },
+      { code: 'DOCUMENT_ATTACHMENT_UPLOAD', label: '证据附件上传' },
+    ],
+    sensitiveActionCodes: [
+      'BUSINESS_INBOUND_CONFIRM',
+      'BUSINESS_PRODUCTION_REPORT',
+      'BUSINESS_QUALITY_FREEZE',
+      'BUSINESS_OUTBOUND_SHIPMENT',
+      'BUSINESS_LOSS_APPROVAL',
+      'DOCUMENT_ATTACHMENT_UPLOAD',
+    ],
+    limitationNotes: [
+      '当前身份来自请求头，尚未接入真实登录、JWT、Session 或 SSO。',
+      '当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。',
+      '当前菜单权限仍由前端导航展示控制，尚未接入后端菜单树和按钮级授权。',
+      '敏感 POST 已接入轻量角色守卫，但复杂审批流和工资锁账仍未完成。',
+    ],
+    headerContract: {
+      operatorHeader: 'X-Zhubao-Operator',
+      roleHeader: 'X-Zhubao-Role',
+      dataScopeHeader: 'X-Zhubao-Data-Scope',
+    },
+  },
 };

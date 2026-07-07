@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import AppShell from './components/AppShell.vue';
 import ApprovalWorkspace from './features/m1/ApprovalWorkspace.vue';
 import ConfigurationWorkspace from './features/m1/ConfigurationWorkspace.vue';
@@ -45,6 +45,10 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; co
 
 const activeTab = ref<TabKey>('dashboard');
 const activeTitle = computed(() => tabs.find((tab) => tab.key === activeTab.value)?.label ?? '首页工作台');
+
+watch(activeTab, () => {
+  void nextTick(() => window.scrollTo(0, 0));
+});
 </script>
 
 <template>

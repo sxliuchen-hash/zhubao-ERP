@@ -8,6 +8,7 @@ import type {
   ConfigurationChangeRequest,
   ProcessTemplate,
   RolePermissionBaseline,
+  SecurityCurrentContext,
   SystemParameter,
   VideoParameter,
   WarehouseState,
@@ -29,6 +30,7 @@ export async function fetchConfigurationBaselineWorkspace(): Promise<Configurati
     backupPolicies,
     changeRequests,
     auditEvents,
+    securityContext,
   ] = await Promise.all([
     apiGet<ConfigurationBaselineSummary>(`${baselinePath}/summary`),
     apiGet<SystemParameter[]>(`${baselinePath}/system-parameters`),
@@ -41,6 +43,7 @@ export async function fetchConfigurationBaselineWorkspace(): Promise<Configurati
     apiGet<BackupPolicy[]>(`${baselinePath}/backup-policies`),
     apiGet<ConfigurationChangeRequest[]>(`${baselinePath}/change-requests`),
     apiGet<ConfigurationAuditEvent[]>(`${baselinePath}/audit-events`),
+    apiGet<SecurityCurrentContext>('/api/security/current-context'),
   ]);
 
   return {
@@ -55,5 +58,6 @@ export async function fetchConfigurationBaselineWorkspace(): Promise<Configurati
     backupPolicies,
     changeRequests,
     auditEvents,
+    securityContext,
   };
 }

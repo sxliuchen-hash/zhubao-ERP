@@ -67,6 +67,7 @@
 - M3.49 现场控制台视觉重构，针对“页面内容少、UI 太丑”的反馈，在不新增后端业务接口的前提下统一全局外壳、首页三栏作业台、单据池、当前处理单和运维中心的控制台视觉层，让浏览器首屏更接近生产现场 ERP/MES 工作台。
 - M3.50 样例映射与真实验收数据基线，将 ERPNext、Odoo、InvenTree 的公开业务对象参考映射到前端样例库，并把 `REAL-FLOW-20260706-001` fixture、自动化测试、证据编码和当前缺口集中展示；新增后端 fixture 合同测试，避免真实链路样例和自动化测试脱节。
 - M3.51 样例库管理台重构，针对“样例库页面内容薄、像简单卡片”的反馈，将 `SA 样例库` 升级为验收数据指挥台，集中展示样例矩阵、当前主样例、开源调研命中、fixture/自动化测试门禁、真实数据集和现场数据缺口队列。
+- M3.52 权限上下文与业务操作台整改，新增 `GET /api/security/current-context` 展示请求头身份、角色、数据范围、敏感动作权限和当前限制；配置基线页展示“当前权限 / 数据范围边界”。前端外壳继续收紧为高密度 ERP/MES 操作台，来料母单主表支持选中联动详情和处理链路，减少评审大屏感。
 
 ## 目录结构
 
@@ -102,6 +103,14 @@ pnpm --filter zhubao-erp-frontend test
 pnpm --filter zhubao-erp-frontend build
 ```
 
+前端 UI 冒烟检查会读取首页、来料母单和配置基线页，生成 `output/playwright/m352-*.png` 截图和 `m352-ui-check.json` 指标。首次运行如本地没有 Playwright 包，可先执行一次 `npx --yes --package playwright playwright --version` 让 npm 缓存包落地：
+
+```powershell
+$env:npm_config_cache=".\.npm-cache"
+$env:LOCALAPPDATA="$PWD\.cache\localappdata"
+node scripts\check-frontend-ui.cjs http://localhost:5173/
+```
+
 前端连接后端 API：
 
 ```powershell
@@ -109,7 +118,12 @@ $env:VITE_API_BASE_URL="http://localhost:8080"
 pnpm --filter zhubao-erp-frontend dev
 ```
 
-未设置或后端未启动时，M1/M2 工作台页面会使用本地评审样例兜底。
+未设置 `VITE_API_BASE_URL` 且未设置 `VITE_ENABLE_API=true` 时，前端会直接使用本地评审样例兜底，不再主动请求 `/api/*`，避免前端单独运行时产生大量 404 控制台噪音。需要走 Vite 同源代理到 `localhost:8080` 时，可设置：
+
+```powershell
+$env:VITE_ENABLE_API="true"
+pnpm --filter zhubao-erp-frontend dev
+```
 
 M0 一键检查：
 
@@ -214,6 +228,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 - `GET /api/documents/attachments/{code}/preview-url`
 - `GET /api/documents/attachments/{code}/content`
 - `GET /api/operations/center`
+- `GET /api/security/current-context`
 - `GET /api/business/workspaces/summary`
 - `GET /api/business/workspaces/inbound`
 - `GET /api/business/workspaces/production`
@@ -248,7 +263,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.51 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，并进一步统一为现场控制台视觉；样例库已从简单展示卡片升级为验收数据指挥台，把公开开源参考、前端样例、后端 fixture、自动化测试、证据编码、验收门禁和现场数据缺口收敛到同一张管理矩阵。来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、前端 URL 探活、PWA Manifest/Service Worker 探活、真实日志读取与 WARN/ERROR 聚合、备份文件大小与 SHA-256 证据、Docker 离线交付与运行包完整性校验基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问、软硬件证据和生产运维接入补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.52 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，并进一步统一为现场控制台视觉；样例库已从简单展示卡片升级为验收数据指挥台，把公开开源参考、前端样例、后端 fixture、自动化测试、证据编码、验收门禁和现场数据缺口收敛到同一张管理矩阵；来料母单主表已具备选中联动详情和处理链路。来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、权限上下文展示接口、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、前端 URL 探活、PWA Manifest/Service Worker 探活、真实日志读取与 WARN/ERROR 聚合、备份文件大小与 SHA-256 证据、Docker 离线交付与运行包完整性校验基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问、软硬件证据和生产运维接入补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
