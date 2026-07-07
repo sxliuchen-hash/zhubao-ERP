@@ -7,17 +7,94 @@ import {
   type ConfigurationBaselineWorkspace,
 } from '../../data/configurationBaselineData';
 import type { Tone } from '../../data/m1PrototypeData';
+import {
+  fetchAuthDemoUsers,
+  fetchAuthSession,
+  loginAuthSession,
+  logoutAuthSession,
+  type AuthSession,
+} from '../../services/authApi';
 import { fetchConfigurationBaselineWorkspace } from '../../services/configurationBaselineApi';
 
 const workspace = ref<ConfigurationBaselineWorkspace>(configurationBaselineFallback);
+const authSession = ref<AuthSession | null>(null);
+const authDemoUsers = ref<string[]>(['leader', 'operator', 'warehouse', 'qc', 'admin']);
+const authUsername = ref('leader');
+const authPassword = ref('leader123');
+const authBusy = ref(false);
+const authMessage = ref('');
 
 onMounted(async () => {
+  await refreshWorkspace();
+  await restoreAuthSession();
+  await loadDemoUsers();
+});
+
+async function refreshWorkspace() {
   try {
     workspace.value = await fetchConfigurationBaselineWorkspace();
   } catch {
     // Keep the review baseline visible when the backend is not running.
   }
-});
+}
+
+async function restoreAuthSession() {
+  try {
+    const session = await fetchAuthSession();
+    if (session) {
+      authSession.value = session;
+      await refreshWorkspace();
+    }
+  } catch {
+    authSession.value = null;
+  }
+}
+
+async function loadDemoUsers() {
+  try {
+    authDemoUsers.value = await fetchAuthDemoUsers();
+  } catch {
+    // Demo user list is optional when the frontend is running without the backend.
+  }
+}
+
+function demoPassword(username: string): string {
+  return `${username}123`;
+}
+
+function syncDemoPassword() {
+  authPassword.value = demoPassword(authUsername.value);
+}
+
+async function handleLogin() {
+  authBusy.value = true;
+  authMessage.value = '';
+  try {
+    authSession.value = await loginAuthSession({
+      username: authUsername.value,
+      password: authPassword.value,
+    });
+    authMessage.value = `已登录：${authSession.value.roleLabel}`;
+    await refreshWorkspace();
+  } catch (error) {
+    authMessage.value = error instanceof Error ? error.message : '登录失败';
+  } finally {
+    authBusy.value = false;
+  }
+}
+
+async function handleLogout() {
+  authBusy.value = true;
+  authMessage.value = '';
+  try {
+    await logoutAuthSession();
+    authSession.value = null;
+    authMessage.value = '已退出登录会话';
+    await refreshWorkspace();
+  } finally {
+    authBusy.value = false;
+  }
+}
 
 function levelTone(level: string): Tone {
   return configurationToneByLevel[level] ?? 'gray';
@@ -106,10 +183,35 @@ function permissionTone(index: number): Tone {
           <div>
             <span class="eyebrow">SECURITY CONTEXT</span>
             <h2>当前权限 / 数据范围边界</h2>
-            <p>这不是正式登录系统，而是 M3 轻量请求头守卫的可视化基线，用于评审敏感动作、数据范围和后续真实登录接入缺口。</p>
+            <p>M3 轻量登录会话优先，请求头上下文保留为评审和自动化测试兜底。</p>
           </div>
           <StatusBadge :label="workspace.securityContext.headerBased ? '请求头上下文' : '真实登录上下文'" tone="amber" />
         </div>
+
+        <form class="auth-session-strip" aria-label="轻量登录会话" @submit.prevent="handleLogin">
+          <div>
+            <span>登录会话</span>
+            <strong>{{ authSession ? `${authSession.operator} / ${authSession.roleLabel}` : '未登录，使用请求头兜底' }}</strong>
+            <small>{{ authSession ? `过期时间 ${authSession.expiresAt}` : 'Bearer token 会自动写入后续 API 请求' }}</small>
+          </div>
+          <label>
+            <span>演示账号</span>
+            <select v-model="authUsername" :disabled="authBusy" @change="syncDemoPassword">
+              <option v-for="username in authDemoUsers" :key="username" :value="username">{{ username }}</option>
+            </select>
+          </label>
+          <label>
+            <span>密码</span>
+            <input v-model="authPassword" :disabled="authBusy" type="password" autocomplete="current-password" />
+          </label>
+          <div class="auth-session-actions">
+            <button class="primary-button" type="submit" :disabled="authBusy">
+              {{ authBusy ? '处理中' : '登录' }}
+            </button>
+            <button class="secondary-button" type="button" :disabled="authBusy || !authSession" @click="handleLogout">退出</button>
+          </div>
+          <small v-if="authMessage" class="auth-session-message">{{ authMessage }}</small>
+        </form>
 
         <div class="security-identity-grid">
           <article>

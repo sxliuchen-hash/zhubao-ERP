@@ -16,11 +16,22 @@ public class OperatorContextResolver {
     public static final String ROLE_HEADER = "X-Zhubao-Role";
     public static final String DATA_SCOPE_HEADER = "X-Zhubao-Data-Scope";
 
+    private final AuthSessionService authSessionService;
+
+    public OperatorContextResolver(AuthSessionService authSessionService) {
+        this.authSessionService = authSessionService;
+    }
+
     public OperatorContext resolve(HttpServletRequest request) {
+        String authorization = request.getHeader(AuthSessionService.AUTHORIZATION_HEADER);
+        return authSessionService.operatorContext(authorization).orElseGet(() -> resolveHeaders(request));
+    }
+
+    private OperatorContext resolveHeaders(HttpServletRequest request) {
         String operator = headerOrDefault(request, OPERATOR_HEADER, "system-review");
         RoleCode role = parseRole(headerOrDefault(request, ROLE_HEADER, RoleCode.ADMIN.name()));
         DataScope dataScope = parseDataScope(headerOrDefault(request, DATA_SCOPE_HEADER, DataScope.ALL.name()));
-        return new OperatorContext(operator, role, dataScope);
+        return new OperatorContext(operator, role, dataScope, true, "");
     }
 
     private String headerOrDefault(HttpServletRequest request, String name, String fallback) {

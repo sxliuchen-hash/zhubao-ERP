@@ -553,6 +553,8 @@ public class BusinessOperationService {
         appendField(remark, "收货人", command.receiverName());
         appendField(remark, "拆箱签字", command.unpackSigner());
         appendField(remark, "货品名称", command.goodsName());
+        appendField(remark, "数量单位", command.quantityUnit());
+        appendRegisterSource(remark, command.sourceRegisterType(), command.sourceRegisterLineNo(), command.sourceRegisterSequence());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
             remark.append("；证据：").append(command.evidenceCode());
         }
@@ -570,6 +572,7 @@ public class BusinessOperationService {
         appendField(remark, "工序日期", command.workDate());
         appendField(remark, "工序类型", command.processCategory());
         appendField(remark, "品类", command.productCategory());
+        appendField(remark, "数量单位", command.quantityUnit());
         appendField(remark, "机器编号", command.machineNo());
         appendField(remark, "操机签字", command.operatorSignatureName());
         appendField(remark, "工作项目", command.workItemName());
@@ -577,6 +580,7 @@ public class BusinessOperationService {
         appendField(remark, "完成时间", command.finishedAt());
         appendField(remark, "完成情况", command.completionStatus());
         appendField(remark, "交单审核", command.handoffAuditStatus());
+        appendRegisterSource(remark, command.sourceRegisterType(), command.sourceRegisterLineNo(), command.sourceRegisterSequence());
         if (command.handoffCode() != null && !command.handoffCode().isBlank()) {
             remark.append("；交接：").append(command.handoffCode());
         }
@@ -667,8 +671,11 @@ public class BusinessOperationService {
                 .append(command.operator());
         appendField(remark, "交货日期", command.deliveryDate());
         appendField(remark, "交货类目", command.deliveryCategory());
+        appendField(remark, "数量单位", command.quantityUnit());
         appendField(remark, "快递", command.expressCompany());
+        appendField(remark, "纸质快递栏", command.paperExpressText());
         appendField(remark, "经办人", command.handler());
+        appendRegisterSource(remark, command.sourceRegisterType(), command.sourceRegisterLineNo(), command.sourceRegisterSequence());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
             remark.append("；证据：").append(command.evidenceCode());
         }
@@ -733,5 +740,13 @@ public class BusinessOperationService {
         if (value != null && !value.isBlank()) {
             remark.append("；").append(label).append("：").append(value);
         }
+    }
+
+    private void appendRegisterSource(StringBuilder remark, String type, Integer lineNo, String sequence) {
+        appendField(remark, "来源登记表", type);
+        if (lineNo != null) {
+            remark.append("；原表行号：").append(lineNo);
+        }
+        appendField(remark, "纸质序号", sequence);
     }
 }

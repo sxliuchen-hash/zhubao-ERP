@@ -23,6 +23,8 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('审计日志');
     expect(wrapper.text()).toContain('TRACE-CFG-002');
     expect(wrapper.text()).toContain('当前权限 / 数据范围边界');
+    expect(wrapper.text()).toContain('登录会话');
+    expect(wrapper.text()).toContain('未登录，使用请求头兜底');
     expect(wrapper.text()).toContain('请求头上下文');
     expect(wrapper.text()).toContain('X-Zhubao-Role');
     expect(wrapper.text()).toContain('X-Zhubao-Data-Scope');

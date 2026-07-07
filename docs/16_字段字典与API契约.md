@@ -185,6 +185,7 @@
 | `unpackSigner` | 拆箱签字/确认人 |
 | `goodsName` | 现场货品名称快照，可与物料档案名称不同 |
 | `quantity` | 件数 |
+| `quantityUnit` | 数量单位，默认 `件`，可按物料配置为 `颗/条/批` 等 |
 | `weight` | 重量展示值，M3 应拆成 `netWeight` + `weightUnit` |
 | `status` | 入库状态 |
 | `videoStatus` | 拆包视频状态 |
@@ -196,6 +197,7 @@
 - 客户来料和企业自有库存不能混在同一余额维度里。
 - 确认入库必须写库存台账。
 - 拆包视频失败必须有人工上传兜底。
+- 入库数量必须有单位口径；前端可以展示 `320 件`，后端字段必须拆成 `quantity` + `quantityUnit`。
 
 ### 4.2 `ConfirmInboundCommand`
 
@@ -214,8 +216,12 @@
 | `receiverName` | 收货人姓名快照 |
 | `unpackSigner` | 拆箱签字/确认人，一期保存姓名，二期可关联签名附件 |
 | `goodsName` | 现场货品名称快照 |
+| `sourceRegisterType` | 来源登记表名称或类型，如 `签收入库登记表` |
+| `sourceRegisterLineNo` | 原始登记表行号，批量导入或纸质转录时使用；已补入命令并写入台账备注 |
+| `sourceRegisterSequence` | 纸质表内序号，如入库登记表的 `序号` |
 | `warehouseCode` | 入库仓库，来料默认 `RAW-CUSTOMER` |
 | `quantity` | 入库数量，必须大于 0 |
+| `quantityUnit` | 入库数量单位，已补入命令，默认 `件` |
 | `weight` | 入库重量，必须大于 0 |
 | `operator` | 操作人快照 |
 | `evidenceCode` | 快递单、称重记录或视频证据编码 |
@@ -262,6 +268,7 @@
 | `handoffAuditStatus` | 交单审核状态 |
 | `assignee` | 负责人快照 |
 | `plannedQuantity` | 计划数量 |
+| `quantityUnit` | 数量单位，默认 `件` |
 | `finishedQuantity` | 已完成数量 |
 | `status` | 工单状态 |
 | `progress` | 前端进度百分比 |
@@ -298,6 +305,7 @@
 | `fromWarehouseCode` | 来源在制仓/工位 |
 | `toWarehouseCode` | 目标半成品仓/暂存区 |
 | `quantity` | 本次报工产出数量，必须大于 0 |
+| `quantityUnit` | 本次报工数量单位，已补入命令，默认 `件` |
 | `weight` | 本次报工产出重量，必须大于 0 |
 | `workDate` | 工序日报日期，建议保存为 `yyyy-MM-dd`；抛光日报和雕刻日统计必须能按该字段过滤 |
 | `process` | 工序名称快照 |
@@ -309,6 +317,9 @@
 | `finishedAt` | 本次作业完成时间 |
 | `completionStatus` | 完成情况 |
 | `handoffAuditStatus` | 交单审核状态，提交后默认 `待审核` |
+| `sourceRegisterType` | 来源登记表名称或类型，如 `工作项目记录单（日）`、`雕刻机统计单（日）` |
+| `sourceRegisterLineNo` | 原始抛光日报/雕刻统计行号，批量导入时使用；已补入命令并写入台账备注 |
+| `sourceRegisterSequence` | 纸质表内序号；雕刻表可表示同一日期/客户/品类分组序号 |
 | `operator` | 操作人快照 |
 | `operatorSignatureName` | 操机签字/确认人姓名快照；雕刻等设备工序必须填写，二期可关联签名附件 |
 | `handoffCode` | 称重交接记录编码 |
@@ -320,6 +331,9 @@
 - 抛光日报必须能保存或推导 `workDate`；仅有开始/完成时间而无业务日期时，跨班次统计会失真。
 - 雕刻报工必须能保存 `productCategory`、`machineNo` 和 `operatorSignatureName`；未绑定设备档案时允许先保存 `machineNo` 文本，但产能统计标记为待匹配设备。
 - `completionStatus` 不直接等同于工序状态，工序是否流转仍以后端状态机和质检规则为准。
+- 抛光登记表的 `姓名`、`日期` 是表头级字段，导入或录入时必须展开到每条工作项目明细。
+- 雕刻登记表可按机器行继承上一组日期、客户和品类，导入时不得把空白单元格直接视作缺失业务字段。
+- 报工数量必须有单位口径；计件工资和产能统计默认按 `件`，但应允许工序模板覆盖。
 
 返回 `ProductionReportResult`：
 
@@ -748,9 +762,14 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 | `deliveryDate` | 交货日期 |
 | `deliveryCategory` | 交货类目，如成品、返修件、补发件、样品 |
 | `quantity` | 本次出库数量，必须大于 0 |
+| `quantityUnit` | 本次出库数量单位，已补入命令，必须与库存明细单位一致 |
 | `weight` | 本次出库重量，必须大于 0 |
 | `expressCompany` | 快递公司或物流方式 |
 | `logisticsNo` | 物流单号或客户交接单号 |
+| `paperExpressText` | 纸质出货表原始“快递”栏内容，批量导入时保留；已补入命令并写入台账备注 |
+| `sourceRegisterType` | 来源登记表名称或类型，如 `交货情况登记表` |
+| `sourceRegisterLineNo` | 原始出货登记行号，批量导入时使用；已补入命令并写入台账备注 |
+| `sourceRegisterSequence` | 纸质表内序号 |
 | `handler` | 经办人姓名快照 |
 | `operator` | 出库操作人快照 |
 | `evidenceCode` | 出库照片、物流单、交接单或附件编码 |
@@ -783,6 +802,7 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 - 若来源成品库存不足，后端必须拒绝写台账。
 - 经办人缺失不得确认出货；快递信息不完整时只能保存草稿，不能转为 `SHIPPED`。
 - 出库不等同于退货；客户退货由 `POST /customer-returns` 独立命令反向写台账。
+- 出货登记中的 `快递` 可能混写公司和单号，导入时先保留 `paperExpressText`，再拆分 `expressCompany/logisticsNo`。
 
 ### 7.6 `CustomerReturnCommand`
 
@@ -1241,28 +1261,85 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 
 ### 12.4 当前限制
 
-- 尚未接入真实登录、密码、会话、JWT 或 SSO。
+- M3.63 已接入演示账号和内存会话 token，但尚未接入生产用户表、密码哈希、JWT/SSO、会话续期和完整审计。
 - 尚未按客户、部门、班组做数据范围过滤。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
 
 ---
 
-## 13. M3.52 当前权限上下文接口
+## 13. M3.63 轻量登录会话 API
 
-`GET /api/security/current-context` 用于把当前评审环境里的请求头身份、角色、数据范围和可执行敏感动作显式暴露给前端配置基线页。该接口只做展示和评审校准，不代表真实登录、菜单权限和数据范围过滤已经完成。
+M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。这仍是演示账号和内存会话，不等于生产用户中心。
 
-### 13.1 请求头
+### 13.1 `POST /api/auth/login`
 
-沿用 M3.33 轻量权限守卫请求头：
+请求：
+
+| 字段 | 说明 |
+|---|---|
+| `username` | 演示账号用户名 |
+| `password` | 演示账号密码 |
+
+默认演示账号：
+
+| 用户名 | 密码 | 角色 | 数据范围 |
+|---|---|---|---|
+| `admin` | `admin123` | `ADMIN` | `ALL` |
+| `leader` | `leader123` | `WORKSHOP_LEADER` | `TEAM` |
+| `qc` | `qc123` | `QUALITY_INSPECTOR` | `DEPARTMENT` |
+| `warehouse` | `warehouse123` | `WAREHOUSE_KEEPER` | `DEPARTMENT` |
+| `operator` | `operator123` | `OPERATOR` | `SELF` |
+
+返回 `AuthSession`：
+
+| 字段 | 说明 |
+|---|---|
+| `token` | Bearer token，前端保存到 `localStorage` 并自动附加到后续 API 请求 |
+| `username` | 登录用户名 |
+| `operator` | 操作人快照 |
+| `role` / `roleLabel` | 角色编码和中文名 |
+| `dataScope` / `dataScopeLabel` | 数据范围编码和中文名 |
+| `expiresAt` | 会话过期时间展示值 |
+| `demoAccount` | 是否演示账号，当前固定为 `true` |
+| `menuCodes` | 菜单编码基线，后续接正式菜单树 |
+
+### 13.2 其他认证接口
+
+| API | 说明 |
+|---|---|
+| `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话 |
+| `POST /api/auth/logout` | 注销当前 token；前端无论后端是否可达都清理本地 token |
+| `GET /api/auth/demo-users` | 返回可用于评审的演示账号列表 |
+
+### 13.3 当前限制
+
+- token 保存在内存，服务重启即失效。
+- 密码为演示明文配置，不用于生产。
+- 尚未接入用户表、密码哈希、登录失败锁定、刷新 token、菜单树持久化和登录审计。
+- `dataScope` 当前只进入上下文展示和后续设计约束，GET 工作台数据尚未按范围过滤。
+
+---
+
+## 14. M3.52/M3.63 当前权限上下文接口
+
+`GET /api/security/current-context` 用于把当前身份、角色、数据范围和可执行敏感动作显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；无 token 时继续使用请求头兜底，兼容评审脚本和自动化测试。
+
+### 14.1 请求头
+
+认证优先级：
+
+1. `Authorization: Bearer <token>`。
+2. M3.33 轻量权限守卫请求头兜底。
 
 | Header | 说明 |
 |---|---|
+| `Authorization` | 登录会话 token，格式 `Bearer <token>` |
 | `X-Zhubao-Operator` | 操作人快照 |
 | `X-Zhubao-Role` | 当前角色编码 |
 | `X-Zhubao-Data-Scope` | 当前数据范围编码 |
 
-### 13.2 返回字段
+### 14.2 返回字段
 
 | 字段 | 说明 |
 |---|---|
@@ -1272,13 +1349,13 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 | `dataScope` | 数据范围编码，例如 `ALL`、`TEAM`、`CUSTOMER_RANGE` |
 | `dataScopeLabel` | 数据范围中文名 |
 | `dataBoundary` | 当前数据范围在真实登录接入后的业务边界说明 |
-| `headerBased` | 是否来自请求头；当前固定为 `true` |
+| `headerBased` | 是否来自请求头；登录会话为 `false`，请求头兜底为 `true` |
 | `allowedPermissions` | 当前角色可执行的敏感动作权限列表 |
 | `sensitiveActionCodes` | 仅权限编码列表，便于前端做快速展示或按钮边界提示 |
 | `limitationNotes` | 当前认证、数据范围、菜单权限和审批锁账限制 |
 | `headerContract` | 请求头契约，包含操作人、角色、数据范围三个 Header 名称 |
 
-### 13.3 示例
+### 14.3 示例
 
 ```json
 {
@@ -1298,7 +1375,7 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
     ],
     "sensitiveActionCodes": ["BUSINESS_INBOUND_CONFIRM"],
     "limitationNotes": [
-      "当前身份来自请求头，尚未接入真实登录、JWT、Session 或 SSO。"
+      "当前身份来自请求头，可用于评审和自动化测试兜底。"
     ],
     "headerContract": {
       "operatorHeader": "X-Zhubao-Operator",
@@ -1309,9 +1386,9 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 }
 ```
 
-### 13.4 当前限制
+### 14.4 当前限制
 
 - GET 工作台接口尚未按 `dataScope` 做真实过滤，配置基线页必须明确提示该限制。
 - 菜单和按钮权限尚未由后端菜单树驱动，前端导航仍是静态模块入口。
-- 当前接口不返回密码、令牌、会话、客户范围清单或任何可用于生产鉴权的凭据。
-- 后续接入真实登录后，此接口应改为读取认证上下文，而不是允许前端自行传入角色。
+- 当前接口不返回密码、客户范围清单或任何生产鉴权密钥。
+- 后续接入正式用户中心后，应移除匿名管理员请求头兜底或仅在测试环境启用。

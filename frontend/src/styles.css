@@ -15803,6 +15803,59 @@ input {
   border-left: 4px solid #2563eb;
 }
 
+.auth-session-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(130px, 0.6fr) minmax(130px, 0.6fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin: 10px 0;
+  border: 1px solid var(--m349-line);
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.auth-session-strip > div,
+.auth-session-strip label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.auth-session-strip span,
+.auth-session-strip small {
+  color: var(--m349-muted);
+  font-size: 11px;
+}
+
+.auth-session-strip strong {
+  overflow-wrap: anywhere;
+  color: var(--m349-ink);
+  font-size: 13px;
+}
+
+.auth-session-strip select,
+.auth-session-strip input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--m349-line);
+  border-radius: 6px;
+  background: #f8fbfd;
+  color: var(--m349-ink);
+  padding: 0 10px;
+}
+
+.auth-session-actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.auth-session-message {
+  grid-column: 1 / -1;
+  color: #334155;
+}
+
 .security-context-side {
   display: grid;
   gap: 9px;
@@ -15898,6 +15951,10 @@ input {
   .security-limitation-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .auth-session-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 680px) {
@@ -15906,7 +15963,8 @@ input {
   .mapping-ledger-grid,
   .security-identity-grid,
   .security-permission-list,
-  .security-limitation-row {
+  .security-limitation-row,
+  .auth-session-strip {
     grid-template-columns: 1fr;
   }
 

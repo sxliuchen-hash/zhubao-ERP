@@ -78,6 +78,8 @@
 - M3.60 运维中心恢复演练可见性，`/api/operations/center` 新增 `RESTORE-DRILL-*` 备份状态和 `OPS-CHK-008` 清单项，只读扫描备份目录中的 restore/verify-restore 标记文件，展示最近演练时间、文件大小、SHA-256 和过期状态。
 - M3.61 恢复演练结构化证据，`verify-restore.ps1/sh` 成功后同时生成 `verify-restore-<timestamp>.json`，记录备份文件、备份 SHA-256、恢复库、恢复表数量、操作者、耗时和检查项；运维中心新增 `restoreDrillRecords` 只读展示结构化演练记录。
 - M3.62 运维告警汇总，`/api/operations/center` 新增 `alerts` 和 summary 告警数量，按服务状态、备份/恢复演练、COS 配置和日志 WARN/ERROR 派生只读告警；前端运维中心新增告警汇总面板。
+- M3.63 轻量登录会话基线，新增 `/api/auth/login`、`/session`、`/logout` 和 `/demo-users`，前端 API client 自动携带 Bearer token；配置基线页可登录演示账号并刷新权限上下文，请求头兜底仍保留用于评审和自动化测试。
+- M3.64 现场登记来源审计补齐，入库、生产报工和出货命令新增 `sourceRegisterType`、`sourceRegisterLineNo`、`sourceRegisterSequence`；出货命令新增 `paperExpressText` 保留纸质快递栏原文，台账备注和字段文档同步更新。
 
 ## 目录结构
 
@@ -258,6 +260,10 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/documents/attachments/{code}/preview-url`
 - `GET /api/documents/attachments/{code}/content`
 - `GET /api/operations/center`
+- `POST /api/auth/login`
+- `GET /api/auth/session`
+- `POST /api/auth/logout`
+- `GET /api/auth/demo-users`
 - `GET /api/security/current-context`
 - `GET /api/business/workspaces/summary`
 - `GET /api/business/workspaces/inbound`
@@ -293,7 +299,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.56 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，并进一步统一为浅色现场控制台视觉；样例库已从简单展示卡片升级为验收数据指挥台，把公开开源参考、前端样例、后端 fixture、自动化测试、证据编码、验收门禁和现场数据缺口收敛到同一张管理矩阵；来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路。来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、权限上下文展示接口、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、前端 URL 探活、PWA Manifest/Service Worker 探活、真实日志读取与 WARN/ERROR 聚合、备份文件大小与 SHA-256 证据、Docker 离线交付、运行包完整性校验、无源码发布包验收门禁、数据库备份脚本、非破坏性恢复演练脚本、恢复演练运维中心可见性和腾讯云 COS 备份上传脚本基线。下一步重点不再是继续堆演示页，而是把真实登录权限、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入补齐：
+当前已进入 M3 一期开发推进中，前端已按 M3.63 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，并进一步统一为浅色现场控制台视觉；样例库已从简单展示卡片升级为验收数据指挥台，把公开开源参考、前端样例、后端 fixture、自动化测试、证据编码、验收门禁和现场数据缺口收敛到同一张管理矩阵；来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路。来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、轻量登录会话、权限上下文展示接口、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、前端 URL 探活、PWA Manifest/Service Worker 探活、真实日志读取与 WARN/ERROR 聚合、备份文件大小与 SHA-256 证据、Docker 离线交付、运行包完整性校验、无源码发布包验收门禁、数据库备份脚本、非破坏性恢复演练脚本、恢复演练运维中心可见性和腾讯云 COS 备份上传脚本基线。下一步重点不再是继续堆演示页，而是把生产用户表、密码哈希、菜单树、数据范围过滤、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入补齐：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。

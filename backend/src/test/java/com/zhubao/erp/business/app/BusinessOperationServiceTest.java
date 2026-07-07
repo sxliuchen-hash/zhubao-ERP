@@ -57,8 +57,12 @@ class BusinessOperationServiceTest {
                 "何琳",
                 "何琳",
                 "戒托来料",
+                "签收入库登记表",
+                4,
+                "1",
                 "RAW-CUSTOMER",
                 bd("320"),
+                "件",
                 bd("486.250"),
                 "库管员 何琳",
                 "SF1048329001",
@@ -73,7 +77,7 @@ class BusinessOperationServiceTest {
         StockLedgerEntry ledger = repository.findAllLedgers().get(0);
         assertThat(ledger.documentType()).isEqualTo("inbound_confirm");
         assertThat(ledger.documentCode()).isEqualTo("MD-20260706-001");
-        assertThat(ledger.remark()).contains("库管员 何琳", "2026-07-06", "顺丰", "张先生", "拆箱签字", "戒托来料", "SF1048329001", "拆包称重确认");
+        assertThat(ledger.remark()).contains("库管员 何琳", "2026-07-06", "顺丰", "张先生", "拆箱签字", "戒托来料", "数量单位", "件", "来源登记表", "签收入库登记表", "原表行号", "4", "纸质序号", "1", "SF1048329001", "拆包称重确认");
         assertThat(ledger.to().ownerType()).isEqualTo(OwnerType.CUSTOMER);
         assertThat(ledger.to().ownerCustomerId()).isEqualTo(1001L);
         assertThat(ledger.to().customerId()).isEqualTo(1001L);
@@ -112,6 +116,7 @@ class BusinessOperationServiceTest {
                 "WIP-LINE-01",
                 "SEMI-FINISHED",
                 bd("210"),
+                "件",
                 bd("478.240"),
                 "2026-07-06",
                 "焊接",
@@ -123,6 +128,9 @@ class BusinessOperationServiceTest {
                 "进行中",
                 "称重待补",
                 "待交单审核",
+                "工作项目记录单（日）",
+                12,
+                "1",
                 "王强",
                 null,
                 "HO-20260706-018",
@@ -143,7 +151,7 @@ class BusinessOperationServiceTest {
         assertThat(semiFinishedBalance.quantity()).isEqualByComparingTo("210");
         assertThat(semiFinishedBalance.weight()).isEqualByComparingTo("478.240");
         assertThat(ledger.documentType()).isEqualTo("production_report");
-        assertThat(ledger.remark()).contains("焊接", "王强", "WELD-02", "银链", "交单审核", "HO-20260706-018");
+        assertThat(ledger.remark()).contains("焊接", "王强", "WELD-02", "银链", "数量单位", "件", "交单审核", "来源登记表", "工作项目记录单（日）", "原表行号", "12", "纸质序号", "1", "HO-20260706-018");
     }
 
     @Test
@@ -388,9 +396,14 @@ class BusinessOperationServiceTest {
                 "2026-07-06",
                 "成品",
                 bd("6"),
+                "件",
                 bd("13.660"),
                 "顺丰",
                 "SF-OUT-20260706-022",
+                "顺丰 SF-OUT-20260706-022",
+                "交货情况登记表",
+                3,
+                "1",
                 "何琳",
                 "库管员 何琳",
                 "ATT-OUT-20260706-022",
@@ -412,7 +425,7 @@ class BusinessOperationServiceTest {
         assertThat(shippedBalance.weight()).isEqualByComparingTo("13.660");
         assertThat(ledger.documentType()).isEqualTo("outbound_shipment");
         assertThat(ledger.documentCode()).isEqualTo("OUT-20260706-022");
-        assertThat(ledger.remark()).contains("2026-07-06", "成品", "顺丰", "何琳", "SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
+        assertThat(ledger.remark()).contains("2026-07-06", "成品", "数量单位", "件", "顺丰", "纸质快递栏", "顺丰 SF-OUT-20260706-022", "何琳", "来源登记表", "交货情况登记表", "原表行号", "3", "纸质序号", "1", "SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
     }
 
     @Test

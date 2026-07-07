@@ -16,6 +16,8 @@ import org.springframework.util.MultiValueMap;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -835,6 +837,82 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void authenticatesDemoUserAndUsesBearerTokenForPermissionGuard() {
+        Map<String, Object> loginRequest = new LinkedHashMap<>();
+        loginRequest.put("username", "leader");
+        loginRequest.put("password", "leader123");
+
+        ResponseEntity<String> login = restTemplate.postForEntity("/api/auth/login", loginRequest, String.class);
+
+        assertThat(login.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(login.getBody()).contains(
+                "\"username\":\"leader\"",
+                "\"operator\":\"车间组长 马杰\"",
+                "\"role\":\"WORKSHOP_LEADER\"",
+                "\"dataScope\":\"TEAM\"",
+                "\"demoAccount\":true",
+                "\"menuCodes\""
+        );
+
+        String token = jsonString(login.getBody(), "token");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+
+        ResponseEntity<String> context = restTemplate.exchange(
+                "/api/security/current-context",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(context.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(context.getBody()).contains(
+                "\"operator\":\"车间组长 马杰\"",
+                "\"role\":\"WORKSHOP_LEADER\"",
+                "\"dataScope\":\"TEAM\"",
+                "\"headerBased\":false",
+                "登录会话 token",
+                "\"code\":\"BUSINESS_LOSS_APPROVAL\""
+        );
+
+        Map<String, Object> operatorLoginRequest = new LinkedHashMap<>();
+        operatorLoginRequest.put("username", "operator");
+        operatorLoginRequest.put("password", "operator123");
+        ResponseEntity<String> operatorLogin = restTemplate.postForEntity("/api/auth/login", operatorLoginRequest, String.class);
+        HttpHeaders operatorHeaders = new HttpHeaders();
+        operatorHeaders.setBearerAuth(jsonString(operatorLogin.getBody(), "token"));
+
+        Map<String, Object> lossRequest = new LinkedHashMap<>();
+        lossRequest.put("approvalCode", "LOSS-DENY-TOKEN-20260707-001");
+        lossRequest.put("motherOrderCode", "MD-SMOKE-20260706-009");
+        lossRequest.put("workOrderCode", "ZD-SMOKE-20260706-009");
+        lossRequest.put("customerId", 1001L);
+        lossRequest.put("materialCode", "MAT-18K-RING");
+        lossRequest.put("process", "抛光");
+        lossRequest.put("operator", "操作工 王强");
+        lossRequest.put("approver", "操作工 王强");
+        lossRequest.put("inputWeight", new BigDecimal("100.000"));
+        lossRequest.put("outputWeight", new BigDecimal("96.000"));
+        lossRequest.put("reasonableTransferWeight", new BigDecimal("1.000"));
+        lossRequest.put("standardLossRatePercent", new BigDecimal("2.0"));
+        lossRequest.put("acceptedQuantity", new BigDecimal("56"));
+        lossRequest.put("pieceRate", new BigDecimal("0.80"));
+        lossRequest.put("lossDeductionUnitPrice", new BigDecimal("6.00"));
+        lossRequest.put("evidenceCode", "EVD-DENY-TOKEN-001");
+        lossRequest.put("remark", "permission deny token smoke");
+
+        ResponseEntity<String> denied = restTemplate.exchange(
+                "/api/business/operations/loss-approvals",
+                HttpMethod.POST,
+                new HttpEntity<>(lossRequest, operatorHeaders),
+                String.class
+        );
+
+        assertThat(denied.getStatusCode().value()).isEqualTo(403);
+        assertThat(denied.getBody()).contains("40301", "OPERATOR", "损耗审批试算");
+    }
+
+    @Test
     void exposesConfigurationBaselineApis() {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/configuration/baseline/summary", String.class);
         ResponseEntity<String> parameters = restTemplate.getForEntity("/api/configuration/baseline/system-parameters", String.class);
@@ -856,5 +934,12 @@ class M2ManagementApiSmokeTest {
         assertThat(videos.getBody()).contains("video.retry.max", "人工上传");
         assertThat(changes.getBody()).contains("CFG-CR-20260706-001", "待审批");
         assertThat(audits.getBody()).contains("CFG-AUD-20260706-001", "TRACE-CFG-002");
+    }
+
+    private String jsonString(String body, String field) {
+        Pattern pattern = Pattern.compile("\"" + Pattern.quote(field) + "\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher matcher = pattern.matcher(body == null ? "" : body);
+        assertThat(matcher.find()).as("JSON field %s exists in %s", field, body).isTrue();
+        return matcher.group(1);
     }
 }

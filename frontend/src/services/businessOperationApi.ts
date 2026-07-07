@@ -13,8 +13,12 @@ export interface ConfirmInboundRequest {
   receiverName?: string;
   unpackSigner?: string;
   goodsName?: string;
+  sourceRegisterType?: string;
+  sourceRegisterLineNo?: number;
+  sourceRegisterSequence?: string;
   warehouseCode: string;
   quantity: number;
+  quantityUnit?: string;
   weight: string;
   operator: string;
   evidenceCode?: string;
@@ -41,6 +45,7 @@ export interface ProductionReportRequest {
   fromWarehouseCode: string;
   toWarehouseCode: string;
   quantity: number;
+  quantityUnit?: string;
   weight: string;
   workDate?: string;
   process: string;
@@ -52,6 +57,9 @@ export interface ProductionReportRequest {
   finishedAt?: string;
   completionStatus?: string;
   handoffAuditStatus?: string;
+  sourceRegisterType?: string;
+  sourceRegisterLineNo?: number;
+  sourceRegisterSequence?: string;
   operator: string;
   operatorSignatureName?: string;
   handoffCode?: string;
@@ -220,9 +228,14 @@ export interface OutboundShipmentRequest {
   deliveryDate?: string;
   deliveryCategory?: string;
   quantity: number;
+  quantityUnit?: string;
   weight: string;
   expressCompany?: string;
   logisticsNo: string;
+  paperExpressText?: string;
+  sourceRegisterType?: string;
+  sourceRegisterLineNo?: number;
+  sourceRegisterSequence?: string;
   handler?: string;
   operator: string;
   evidenceCode?: string;
@@ -482,8 +495,12 @@ export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundR
     receiverName: order.receiverName,
     unpackSigner: order.unpackSigner,
     goodsName: order.goodsName,
+    sourceRegisterType: '签收入库登记表',
+    sourceRegisterLineNo: 4,
+    sourceRegisterSequence: '1',
     warehouseCode: 'RAW-CUSTOMER',
     quantity: order.qty,
+    quantityUnit: '件',
     weight: parseWeight(order.weight),
     operator: '库管员 何琳',
     evidenceCode: order.courierNo,
@@ -510,6 +527,7 @@ export function buildProductionReportRequest(order: WorkOrder, handoffCode?: str
     fromWarehouseCode: 'WIP-LINE-01',
     toWarehouseCode: 'SEMI-FINISHED',
     quantity: order.finishedQty,
+    quantityUnit: '件',
     weight: productionWeights[order.code] ?? String(order.finishedQty),
     workDate: normalizeBusinessDate(undefined, order.code),
     process: order.process,
@@ -521,6 +539,9 @@ export function buildProductionReportRequest(order: WorkOrder, handoffCode?: str
     finishedAt: order.finishedAt,
     completionStatus: order.completionStatus,
     handoffAuditStatus: order.handoffAuditStatus,
+    sourceRegisterType: order.process === '雕刻' ? '雕刻机统计单（日）' : '工作项目记录单（日）',
+    sourceRegisterLineNo: order.process === '雕刻' ? 6 : 12,
+    sourceRegisterSequence: '1',
     operator: order.assignee,
     operatorSignatureName: order.process === '雕刻' || order.processCategory === '设备' ? order.assignee : undefined,
     handoffCode,
@@ -677,9 +698,14 @@ export function buildOutboundShipmentRequest(balance: InventoryBalance): Outboun
     deliveryDate: '2026-07-06',
     deliveryCategory: balance.status.includes('返工') ? '返修件' : '成品',
     quantity: balance.qty,
+    quantityUnit: '件',
     weight: parseWeight(balance.weight),
     expressCompany: '顺丰',
     logisticsNo: `SF-OUT-${shortCode}`,
+    paperExpressText: `顺丰 SF-OUT-${shortCode}`,
+    sourceRegisterType: '交货情况登记表',
+    sourceRegisterLineNo: 3,
+    sourceRegisterSequence: '1',
     handler: '何琳',
     operator: '库管员 何琳',
     evidenceCode: `ATT-OUT-${shortCode}`,
