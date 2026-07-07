@@ -1,4 +1,5 @@
 .tools/
+.deploy-artifacts/
 .cache/
 .playwright-cli/
 output/

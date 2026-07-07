@@ -1,5 +1,5 @@
 param(
-    [string]$Version = ("m3.44-" + (Get-Date -Format "yyyyMMddHHmm")),
+    [string]$Version = ("m3.57-" + (Get-Date -Format "yyyyMMddHHmm")),
     [switch]$SkipTests,
     [switch]$NoDockerBuild,
     [switch]$Help
@@ -11,10 +11,10 @@ if ($Help) {
     Write-Host "Build runtime Docker images and a source-free deployment package."
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44.0"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.57.0"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Version       Docker tag and package version. Default: m3.44-yyyyMMddHHmm"
+    Write-Host "  -Version       Docker tag and package version. Default: m3.57-yyyyMMddHHmm"
     Write-Host "  -SkipTests     Package backend without running Maven tests."
     Write-Host "  -NoDockerBuild Prepare package layout without docker build/save."
     Write-Host "  -Help          Show this help."
@@ -149,9 +149,34 @@ if (-not $NoDockerBuild) {
 Write-Host "== Write package checksum manifest =="
 Write-ChecksumManifest $packageDir
 
+Write-Host "== Verify runtime package layout =="
+$verifyArgs = @{
+    PackagePath = $packageDir
+}
+if ($NoDockerBuild) {
+    $verifyArgs.AllowMissingImages = $true
+}
+& (Join-Path $repoRoot "scripts\verify-runtime-package.ps1") @verifyArgs
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
 Write-Host "== Create zip package =="
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -Force
 $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Utf8NoBomLines "$zipPath.sha256" @("$zipHash  $(Split-Path -Leaf $zipPath)")
+
+Write-Host "== Verify runtime zip package =="
+$zipVerifyArgs = @{
+    PackagePath = $zipPath
+}
+if ($NoDockerBuild) {
+    $zipVerifyArgs.AllowMissingImages = $true
+}
+& (Join-Path $repoRoot "scripts\verify-runtime-package.ps1") @zipVerifyArgs
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
 Write-Host "Package ready: $zipPath"
 Write-Host "Package checksum: $zipPath.sha256"

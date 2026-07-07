@@ -2,7 +2,7 @@
 
 **文档版本**：V1.0  
 **更新日期**：2026-07-07  
-**适用阶段**：M3.49 Docker 运维探活与部署方案补强
+**适用阶段**：M3.57 Docker 无源码交付验收门禁
 
 ---
 
@@ -62,7 +62,7 @@
 在开发或交付构建机器上执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44.0
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.57.0
 ```
 
 脚本执行内容：
@@ -81,8 +81,36 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 只验证包结构、不构建镜像时可执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.44-layout -NoDockerBuild -SkipTests
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.57-layout -NoDockerBuild -SkipTests
 ```
+
+### 3.1 交付包验收门禁
+
+M3.57 起，`scripts/docker-build-package.ps1` 会在生成 `MANIFEST.sha256` 后自动调用 `scripts/verify-runtime-package.ps1`，分别验证运行包目录和 zip。该脚本也可以单独执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.57.0.zip
+```
+
+只验证 `-NoDockerBuild` 生成的布局包时允许缺少镜像 tar：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.57-layout.zip -AllowMissingImages
+```
+
+验收内容：
+
+| 检查项 | 规则 |
+|---|---|
+| 必需文件 | 必须包含 `docker-compose.yml`、`.env.example`、`start.ps1`、`start.sh`、`README_DOCKER.md`、`MANIFEST.sha256` |
+| 数据库初始化 | `mysql-init/` 必须包含 SQL 初始化文件 |
+| 镜像 tar | 正式交付包必须包含 `images/*.tar`；仅布局检查可用 `-AllowMissingImages` |
+| manifest | `MANIFEST.sha256` 必须覆盖除 `.env` 和自身以外的所有文件，且 hash 必须匹配 |
+| zip checksum | 如存在 `.zip.sha256`，文件名和 hash 必须匹配 zip |
+| 源码泄漏 | 禁止出现 `.git`、`backend/src`、`frontend/src`、`node_modules`、`.pnpm-store`、`.npm-cache`、`.tools`、`backend/target`、`frontend/dist` |
+| Compose 运行态 | 运行包内 `docker-compose.yml` 禁止出现 `build:`、父目录引用或源码路径 |
+
+`.deploy-artifacts/` 是构建输出目录，已加入 `.gitignore`，不进入版本库。
 
 ---
 
@@ -244,12 +272,13 @@ Compose 卷：
 - 运维中心能看到后端日志路径和备份目录状态。
 - 关闭并重启容器后数据不丢失。
 - 不向客户目录交付源码目录和 `.git`。
+- `scripts/verify-runtime-package.ps1` 对最终 zip 验收通过。
 
 ---
 
 ## 11. 当前边界
 
-M3.44 Docker 基线已覆盖：
+M3.57 Docker 基线已覆盖：
 
 - 后端 jar 镜像。
 - 前端 dist + Nginx 镜像。
@@ -260,6 +289,7 @@ M3.44 Docker 基线已覆盖：
 - 客户无源码交付结构。
 - 运行包 `MANIFEST.sha256` 文件级校验。
 - zip 上传包 `.sha256` 校验文件。
+- 独立发布包验收脚本，覆盖必需文件、manifest、zip checksum、源码泄漏和 Compose 运行态检查。
 
 尚未完成：
 
