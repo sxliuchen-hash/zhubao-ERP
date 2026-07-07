@@ -80,6 +80,7 @@
 - M3.62 运维告警汇总，`/api/operations/center` 新增 `alerts` 和 summary 告警数量，按服务状态、备份/恢复演练、COS 配置和日志 WARN/ERROR 派生只读告警；前端运维中心新增告警汇总面板。
 - M3.63 轻量登录会话基线，新增 `/api/auth/login`、`/session`、`/logout` 和 `/demo-users`，前端 API client 自动携带 Bearer token；配置基线页可登录演示账号并刷新权限上下文，请求头兜底仍保留用于评审和自动化测试。
 - M3.64 现场登记来源审计补齐，入库、生产报工和出货命令新增 `sourceRegisterType`、`sourceRegisterLineNo`、`sourceRegisterSequence`；出货命令新增 `paperExpressText` 保留纸质快递栏原文，台账备注和字段文档同步更新。
+- M3.65 登记表导入模板基线，新增 `/api/register-import/templates` 和 `/summary`，把入库、出货、抛光、雕刻 4 类现场登记表固化为字段映射、命令映射和导入校验规则；样例库新增“现场登记表导入准备度”视图。
 
 ## 目录结构
 

@@ -8,6 +8,7 @@ import {
   sampleScenarios,
   type Tone,
 } from '../../data/m1PrototypeData';
+import { registerImportSummary, registerImportTemplates, registerRuleTone } from '../../data/registerImportTemplates';
 
 function scenarioTone(status: string): Tone {
   if (status === 'ready') return 'green';
@@ -45,8 +46,22 @@ function dataSetTone(status: string): Tone {
   return 'amber';
 }
 
+function parserStatusLabel(status: string) {
+  if (status === 'COMMAND_READY') return '命令已对齐';
+  return '解析器待接入';
+}
+
+function keyFieldLabel(template: (typeof registerImportTemplates)[number]) {
+  return template.fields.find((field) =>
+    field.targetField.includes('paperExpressText')
+    || field.targetField.includes('operatorSignatureName')
+    || field.targetField.includes('handoffAuditStatus')
+  )?.targetField ?? template.fields[0]?.targetField ?? '待映射';
+}
+
 const activeScenario = sampleScenarios[0];
 const activeDataSet = acceptanceDataSets.find((dataset) => dataset.scenarioId === activeScenario.id);
+const activeRegisterTemplate = registerImportTemplates[0];
 
 const sampleKpis = computed(() => [
   {
@@ -83,6 +98,13 @@ const sampleKpis = computed(() => [
     unit: '项',
     detail: `${hardwarePocRecords.filter((record) => record.tone === 'red').length} 项阻断`,
     tone: 'red' as Tone,
+  },
+  {
+    label: '登记模板',
+    value: registerImportSummary.templates,
+    unit: '类',
+    detail: `${registerImportSummary.commandReadyTemplates} 类命令已对齐`,
+    tone: 'green' as Tone,
   },
 ]);
 
@@ -149,6 +171,14 @@ const fieldGapRows = computed(() =>
     })),
   ),
 );
+
+const registerTemplateRows = computed(() =>
+  registerImportTemplates.map((template) => ({
+    ...template,
+    requiredFields: template.fields.filter((field) => field.required).length,
+    blockerRules: template.validationRules.filter((rule) => rule.level === 'BLOCK').length,
+  })),
+);
 </script>
 
 <template>
@@ -179,6 +209,108 @@ const fieldGapRows = computed(() =>
           <em>{{ item.detail }}</em>
         </article>
       </div>
+    </section>
+
+    <section class="sample-ops-grid register-import-grid" aria-label="现场登记表导入准备度">
+      <div class="sample-table-panel register-import-panel">
+        <div class="section-heading compact-heading">
+          <div>
+            <span class="eyebrow">REGISTER IMPORT</span>
+            <h2>现场登记表导入准备度</h2>
+            <p>把现场 Excel/纸质表先固化成模板、字段映射和阻断规则，再接上传解析器，避免导入逻辑各写各的。</p>
+          </div>
+          <StatusBadge :label="`${registerImportSummary.templates} 类模板`" tone="green" />
+        </div>
+        <div class="register-kpi-strip" aria-label="登记表导入指标">
+          <article>
+            <span>映射字段</span>
+            <strong>{{ registerImportSummary.fields }}</strong>
+            <small>{{ registerImportSummary.requiredFields }} 个必填</small>
+          </article>
+          <article>
+            <span>命令对齐</span>
+            <strong>{{ registerImportSummary.commandReadyTemplates }}</strong>
+            <small>入库/报工/出货</small>
+          </article>
+          <article>
+            <span>解析状态</span>
+            <strong>待接入</strong>
+            <small>{{ registerImportSummary.parserStatus }}</small>
+          </article>
+        </div>
+        <div class="erp-table-wrap sample-matrix-wrap">
+          <table class="erp-table register-template-table">
+            <thead>
+              <tr>
+                <th>模板</th>
+                <th>来源文件</th>
+                <th>业务链路</th>
+                <th>目标命令</th>
+                <th>字段</th>
+                <th>阻断规则</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="template in registerTemplateRows" :key="template.code" class="register-template-row">
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ template.code }}</b>
+                    <small>{{ template.name }}</small>
+                  </span>
+                </td>
+                <td>{{ template.sourceFile }}</td>
+                <td>{{ template.businessFlow }}</td>
+                <td>{{ template.targetCommand }}</td>
+                <td>
+                  <span class="cell-stack">
+                    <b>{{ template.fields.length }} 项 / {{ template.requiredFields }} 必填</b>
+                    <small>{{ keyFieldLabel(template) }}</small>
+                  </span>
+                </td>
+                <td>{{ template.blockerRules }} 条</td>
+                <td><StatusBadge :label="parserStatusLabel(template.parserStatus)" tone="green" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside class="register-detail-panel">
+        <div class="section-heading compact-heading">
+          <div>
+            <span class="eyebrow">ACTIVE TEMPLATE</span>
+            <h2>{{ activeRegisterTemplate.name }}</h2>
+          </div>
+          <StatusBadge label="命令已对齐" tone="green" />
+        </div>
+        <dl class="detail-grid">
+          <dt>目标命令</dt>
+          <dd>{{ activeRegisterTemplate.targetCommand }}</dd>
+          <dt>台账类型</dt>
+          <dd>{{ activeRegisterTemplate.targetLedgerType }}</dd>
+          <dt>下一动作</dt>
+          <dd>{{ activeRegisterTemplate.nextAction }}</dd>
+        </dl>
+        <div class="register-field-list" aria-label="字段映射">
+          <article v-for="field in activeRegisterTemplate.fields.slice(0, 7)" :key="field.sourceColumn">
+            <strong>{{ field.sourceColumn }}</strong>
+            <span>{{ field.targetField }}</span>
+            <small>{{ field.normalizeRule }}</small>
+          </article>
+        </div>
+        <div class="register-rule-list" aria-label="导入校验规则">
+          <article
+            v-for="rule in activeRegisterTemplate.validationRules"
+            :key="rule.code"
+            :class="`tone-${registerRuleTone(rule.level)}`"
+          >
+            <b>{{ rule.code }}</b>
+            <span>{{ rule.description }}</span>
+            <small>{{ rule.fallback }}</small>
+          </article>
+        </div>
+      </aside>
     </section>
 
     <section class="sample-ops-grid" aria-label="样例矩阵与当前样例">

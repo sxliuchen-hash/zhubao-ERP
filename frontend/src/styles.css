@@ -5,6 +5,102 @@
     Inter, "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+.register-import-grid {
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr);
+}
+
+.register-import-panel,
+.register-detail-panel {
+  border: 1px solid var(--zb-line);
+  border-radius: 8px;
+  background: var(--zb-surface);
+  box-shadow: none;
+}
+
+.register-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.register-kpi-strip article {
+  min-height: 64px;
+  border: 1px solid var(--zb-line);
+  border-radius: 7px;
+  background: var(--zb-surface-soft);
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.register-kpi-strip span,
+.register-kpi-strip small,
+.register-field-list small,
+.register-rule-list small {
+  color: var(--zb-muted);
+  font-size: 12px;
+}
+
+.register-kpi-strip strong {
+  color: var(--zb-text);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.register-detail-panel {
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.register-template-table th,
+.register-template-table td {
+  vertical-align: top;
+}
+
+.register-field-list,
+.register-rule-list {
+  display: grid;
+  gap: 8px;
+}
+
+.register-field-list article,
+.register-rule-list article {
+  border: 1px solid var(--zb-line);
+  border-radius: 7px;
+  background: var(--zb-surface-soft);
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.register-field-list strong,
+.register-rule-list b,
+.register-field-list span,
+.register-rule-list span {
+  color: var(--zb-text);
+  font-size: 13px;
+}
+
+.register-rule-list .tone-red {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fff7f7;
+}
+
+.register-rule-list .tone-amber {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: #fffbeb;
+}
+
+@media (max-width: 900px) {
+  .register-import-grid,
+  .register-kpi-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

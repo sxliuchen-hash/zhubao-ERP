@@ -38,6 +38,30 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void exposesRegisterImportTemplateApis() {
+        ResponseEntity<String> templates = restTemplate.getForEntity("/api/register-import/templates", String.class);
+        ResponseEntity<String> summary = restTemplate.getForEntity("/api/register-import/summary", String.class);
+
+        assertThat(templates.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(templates.getBody()).contains(
+                "REG-INBOUND",
+                "签收入库登记表",
+                "REG-OUTBOUND",
+                "paperExpressText",
+                "REG-POLISHING",
+                "姓名和日期必须展开",
+                "REG-ENGRAVING",
+                "合并区域继承"
+        );
+        assertThat(summary.getBody()).contains(
+                "\"templates\":4",
+                "\"fields\":34",
+                "\"commandReadyTemplates\":4",
+                "parser pending"
+        );
+    }
+
+    @Test
     void exposesHardwareIntegrationApis() {
         ResponseEntity<String> devices = restTemplate.getForEntity("/api/hardware/devices", String.class);
         ResponseEntity<String> tasks = restTemplate.getForEntity("/api/hardware/integration-tasks", String.class);

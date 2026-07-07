@@ -41,6 +41,8 @@
 - [V11__m3_lightweight_approval_contract.sql](../backend/src/main/resources/db/mysql/V11__m3_lightweight_approval_contract.sql)
 - [OperationsCenterService.java](../backend/src/main/java/com/zhubao/erp/operations/app/OperationsCenterService.java)
 - [operationsCenterApi.ts](../frontend/src/services/operationsCenterApi.ts)
+- [RegisterImportTemplateService.java](../backend/src/main/java/com/zhubao/erp/register/app/RegisterImportTemplateService.java)
+- [registerImportApi.ts](../frontend/src/services/registerImportApi.ts)
 
 ---
 
@@ -61,6 +63,19 @@
 | `GET /inventory` | 库存追溯 | 返回库存余额、台账明细、追溯时间线、证据 |
 | `GET /mobile` | PWA 作业 | 返回移动任务、PWA 能力边界、离线草稿 |
 
+登记表导入模板接口前缀：
+
+```http
+/api/register-import
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /templates` | 样例库/导入预览 | 返回入库、出货、抛光、雕刻登记表的字段映射、目标命令和校验规则 |
+| `GET /summary` | 样例库/导入预览 | 返回模板数量、字段数量、必填字段数量和解析器接入状态 |
+
+当前 M3.65 只冻结模板和规则，不代表已经完成 Excel 文件上传、单元格解析、合并单元格继承或导入批次落库。
+
 业务操作接口前缀：
 
 ```http
@@ -79,6 +94,43 @@
 | `POST /customer-returns` | 库存追溯 | 客户退货入库，将同一子工单的已发货库存转回退货复核库存 |
 | `POST /after-sales-reviews` | 库存追溯 | 售后复核分流，将退货复核库存转为成品、返工、报废或冻结库存 |
 | `POST /loss-approvals` | 质检返工 | 生成损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账，不代表正式工资发放 |
+
+### 2.1 登记表导入模板字段
+
+`RegisterImportTemplate` 用于约束后续 Excel 导入器，不直接写业务数据。
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 模板编码，如 `REG-INBOUND`、`REG-OUTBOUND` |
+| `name` | 登记表名称 |
+| `sourceFile` | 当前参考文件名 |
+| `businessFlow` | 该表对应的业务链路 |
+| `targetCommand` | 导入预览通过后应生成或补齐的业务命令 |
+| `targetLedgerType` | 最终影响的库存台账来源类型 |
+| `parserStatus` | 当前状态，M3.65 为 `COMMAND_READY`，表示命令映射已就绪但解析器未完成 |
+| `nextAction` | 后续开发动作 |
+| `fields` | 字段映射列表 |
+| `validationRules` | 导入校验规则列表 |
+
+`RegisterFieldMapping`：
+
+| 字段 | 说明 |
+|---|---|
+| `sourceColumn` | 原始表头字段 |
+| `targetField` | 系统字段或命令字段 |
+| `targetObject` | 目标命令或业务对象 |
+| `required` | 导入确认前是否必填 |
+| `normalizeRule` | 标准化规则，例如表头继承、日期补全年份、快递栏拆分 |
+| `validationRule` | 校验规则说明 |
+
+`RegisterValidationRule`：
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 校验规则编码 |
+| `level` | `BLOCK` 或 `WARN` |
+| `description` | 规则说明 |
+| `fallback` | 失败兜底动作 |
 
 审批任务接口前缀：
 ```http
