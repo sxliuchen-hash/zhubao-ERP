@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.52 / 业务操作台整改</strong>
-        <i>仍处于 M3 增量开发：本轮收紧全局页头和来料作业台，补充权限/数据范围可见边界，继续向真实 ERP/MES 操作界面收敛。</i>
+        <strong>M3.53 / 核心作业联动</strong>
+        <i>仍处于 M3 增量开发：本轮把生产、质检、库存追溯页收敛为主表选中、右侧焦点对象、动作链和证据台账联动的作业台。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.52 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.53 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">

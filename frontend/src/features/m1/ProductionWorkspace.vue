@@ -24,9 +24,11 @@ const workspace = ref<ProductionWorkspaceModel>({
 const reportingProduction = ref(false);
 const productionReportResult = ref<ProductionReportResult | null>(null);
 const productionReportError = ref('');
+const selectedWorkOrderCode = ref('');
 
 const activeWorkOrder = computed(
   () =>
+    workspace.value.workOrders.find((order) => order.code === selectedWorkOrderCode.value) ??
     workspace.value.workOrders.find((order) => order.status.includes('称重')) ??
     workspace.value.workOrders.find((order) => order.status.includes('待')) ??
     workspace.value.workOrders[0],
@@ -77,11 +79,20 @@ const dispatchLanes = [
   { code: 'QC', name: '送检', status: '进入质检队列', tone: 'amber' },
 ] as const;
 
+const productionActionTrace = [
+  { step: '01', title: '扫码进站', detail: '绑定工单、人员、工序和工位，进入可报工状态。' },
+  { step: '02', title: '工序报工', detail: '提交完成数量、产出重量和计件工资试算快照。' },
+  { step: '03', title: '称重交接', detail: '关键工序补齐投入/产出重量，异常时阻断下工序。' },
+  { step: '04', title: '送检入账', detail: '报工结果写库存台账，待检批次进入质检队列。' },
+];
+
 onMounted(async () => {
   try {
     workspace.value = await fetchProductionWorkspace();
   } catch {
     // Keep deterministic local samples available when the backend is not running.
+  } finally {
+    selectedWorkOrderCode.value = activeWorkOrder.value?.code ?? '';
   }
 });
 
@@ -106,6 +117,12 @@ async function reportActiveProduction() {
   } finally {
     reportingProduction.value = false;
   }
+}
+
+function selectWorkOrder(code: string) {
+  selectedWorkOrderCode.value = code;
+  productionReportResult.value = null;
+  productionReportError.value = '';
 }
 </script>
 
@@ -191,7 +208,13 @@ async function reportActiveProduction() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="order in workspace.workOrders" :key="order.code">
+              <tr
+                v-for="order in workspace.workOrders"
+                :key="order.code"
+                :class="{ 'is-selected': activeWorkOrder?.code === order.code }"
+                :aria-selected="activeWorkOrder?.code === order.code"
+                @click="selectWorkOrder(order.code)"
+              >
                 <td><strong>{{ order.code }}</strong></td>
                 <td>
                   <span class="cell-stack">
@@ -207,7 +230,7 @@ async function reportActiveProduction() {
                 </td>
                 <td><StatusBadge :label="order.status" :tone="workOrderTone(order.status)" /></td>
                 <td>{{ order.status.includes('返工') ? '返工默认不计' : '计件试算快照' }}</td>
-                <td><button class="table-action" type="button">进入工序</button></td>
+                <td><button class="table-action" type="button" @click.stop="selectWorkOrder(order.code)">进入工序</button></td>
               </tr>
             </tbody>
           </table>
@@ -245,6 +268,13 @@ async function reportActiveProduction() {
             </button>
             <button class="secondary-button" type="button">称重交接</button>
             <button class="secondary-button" type="button">打印标签</button>
+          </div>
+          <div class="operation-action-trace" aria-label="当前工单动作链">
+            <article v-for="item in productionActionTrace" :key="item.step">
+              <span>{{ item.step }}</span>
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.detail }}</small>
+            </article>
           </div>
           <div v-if="productionReportResult" class="operation-feedback success">
             <strong>生产报工已写入台账</strong>

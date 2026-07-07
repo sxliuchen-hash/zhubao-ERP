@@ -36,15 +36,21 @@ const customerReturnError = ref('');
 const reviewingAfterSalesReturn = ref(false);
 const afterSalesReviewResult = ref<AfterSalesReviewResult | null>(null);
 const afterSalesReviewError = ref('');
+const selectedBalanceKey = ref('');
 
 const activeBalance = computed(
   () =>
+    workspace.value.balances.find((item) => balanceKey(item) === selectedBalanceKey.value) ??
     workspace.value.balances.find((item) => item.status.includes('成品')) ??
     workspace.value.balances.find((item) => item.status.includes('在制') || item.frozen !== '0') ??
     workspace.value.balances[0],
 );
 
-const latestLedger = computed(() => workspace.value.ledgerEntries[0]);
+const latestLedger = computed(
+  () =>
+    workspace.value.ledgerEntries.find((entry) => entry.source === activeBalance.value?.batch) ??
+    workspace.value.ledgerEntries[0],
+);
 
 const inventoryStats = computed(() => [
   {
@@ -104,6 +110,20 @@ const inventoryAlerts = computed(() => [
     })),
 ]);
 
+const inventoryActionTrace = [
+  { step: '01', title: '客户权属', detail: '库存查询先按客户所有权隔离，避免来料与自有库存混用。' },
+  { step: '02', title: '批次余额', detail: '按母单、子工单、库存状态和冻结量定位当前余额。' },
+  { step: '03', title: '台账明细', detail: '每一次数量/重量变化必须能回到业务单据。' },
+  { step: '04', title: '证据归档', detail: '称重、照片、视频、审计日志作为追溯证据。' },
+  { step: '05', title: '售后复核', detail: '退货先入 RETURN-CHECK，再分流返工、放行、冻结或报废。' },
+];
+
+const showLegacyReviewSections = false;
+
+function balanceKey(item: { owner: string; batch: string; status: string }) {
+  return `${item.owner}::${item.batch}::${item.status}`;
+}
+
 function inventoryBalanceTone(status: string): Tone {
   if (status.includes('返工')) return 'violet';
   if (status.includes('在制')) return 'amber';
@@ -116,6 +136,8 @@ onMounted(async () => {
     workspace.value = await fetchInventoryWorkspace();
   } catch {
     // Keep deterministic local samples available when the backend is not running.
+  } finally {
+    selectedBalanceKey.value = activeBalance.value ? balanceKey(activeBalance.value) : '';
   }
 });
 
@@ -171,6 +193,16 @@ async function reviewActiveAfterSalesReturn() {
   } finally {
     reviewingAfterSalesReturn.value = false;
   }
+}
+
+function selectBalance(item: { owner: string; batch: string; status: string }) {
+  selectedBalanceKey.value = balanceKey(item);
+  outboundShipmentResult.value = null;
+  outboundShipmentError.value = '';
+  customerReturnResult.value = null;
+  customerReturnError.value = '';
+  afterSalesReviewResult.value = null;
+  afterSalesReviewError.value = '';
 }
 </script>
 
@@ -265,7 +297,13 @@ async function reviewActiveAfterSalesReturn() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in workspace.balances" :key="`${item.owner}-${item.batch}-${item.status}`">
+              <tr
+                v-for="item in workspace.balances"
+                :key="`${item.owner}-${item.batch}-${item.status}`"
+                :class="{ 'is-selected': activeBalance && balanceKey(activeBalance) === balanceKey(item) }"
+                :aria-selected="activeBalance && balanceKey(activeBalance) === balanceKey(item)"
+                @click="selectBalance(item)"
+              >
                 <td><strong>{{ item.owner }}</strong></td>
                 <td>{{ item.batch }}</td>
                 <td>{{ item.material }}</td>
@@ -273,7 +311,7 @@ async function reviewActiveAfterSalesReturn() {
                 <td><StatusBadge :label="item.status" :tone="inventoryBalanceTone(item.status)" /></td>
                 <td>{{ item.qty }} 件 / {{ item.weight }}</td>
                 <td>{{ item.frozen }}</td>
-                <td><button class="table-action" type="button">看台账</button></td>
+                <td><button class="table-action" type="button" @click.stop="selectBalance(item)">看台账</button></td>
               </tr>
             </tbody>
           </table>
@@ -314,6 +352,13 @@ async function reviewActiveAfterSalesReturn() {
             </button>
             <button class="secondary-button" type="button">导出台账</button>
           </div>
+          <div class="operation-action-trace" aria-label="当前库存追溯动作链">
+            <article v-for="item in inventoryActionTrace" :key="item.step">
+              <span>{{ item.step }}</span>
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.detail }}</small>
+            </article>
+          </div>
           <div v-if="outboundShipmentResult" class="operation-feedback success">
             <strong>成品出库已写入台账</strong>
             <span>{{ outboundShipmentResult.ledgerCode }} / {{ outboundShipmentResult.shipmentCode }}</span>
@@ -349,6 +394,7 @@ async function reviewActiveAfterSalesReturn() {
             <span class="eyebrow">TRACE EVIDENCE</span>
             <StatusBadge label="附件/视频/台账" tone="blue" />
           </div>
+          <h2 class="compact-panel-title">追溯证据</h2>
           <div class="evidence-health compact-evidence-health">
             <article v-for="item in workspace.evidence" :key="item.label">
               <div>
@@ -368,6 +414,7 @@ async function reviewActiveAfterSalesReturn() {
           <span class="eyebrow">LEDGER</span>
           <StatusBadge label="只追加" tone="green" />
         </div>
+        <h2 class="compact-panel-title">库存台账明细</h2>
         <div class="ledger-table compact-ledger-table">
           <div class="ledger-row ledger-head">
             <span>时间</span>
@@ -425,6 +472,7 @@ async function reviewActiveAfterSalesReturn() {
       </section>
     </section>
 
+    <template v-if="showLegacyReviewSections">
     <section class="operations-hero">
       <div class="hero-copy">
         <span class="eyebrow">Trace Control</span>
@@ -716,5 +764,6 @@ async function reviewActiveAfterSalesReturn() {
         </div>
       </div>
     </section>
+    </template>
   </div>
 </template>

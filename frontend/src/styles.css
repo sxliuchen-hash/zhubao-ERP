@@ -16055,17 +16055,22 @@ input {
   box-shadow: inset 4px 0 0 #0f8ea3;
 }
 
-.inbound-dispatch-table tbody tr {
+.inbound-dispatch-table tbody tr,
+.production-dispatch-table tbody tr,
+.quality-dispatch-table tbody tr,
+.inventory-dispatch-table tbody tr {
   cursor: pointer;
 }
 
-.inbound-action-trace {
+.inbound-action-trace,
+.operation-action-trace {
   display: grid;
   gap: 7px;
   margin-top: 10px;
 }
 
-.inbound-action-trace article {
+.inbound-action-trace article,
+.operation-action-trace article {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 2px 8px;
@@ -16075,7 +16080,8 @@ input {
   padding: 8px;
 }
 
-.inbound-action-trace article span {
+.inbound-action-trace article span,
+.operation-action-trace article span {
   grid-row: 1 / 3;
   display: grid;
   width: 24px;
@@ -16087,13 +16093,30 @@ input {
   font-weight: 800;
 }
 
-.inbound-action-trace article strong {
+.inbound-action-trace article strong,
+.operation-action-trace article strong {
   color: #172033;
 }
 
-.inbound-action-trace article small {
+.inbound-action-trace article small,
+.operation-action-trace article small {
   color: #64748b;
   line-height: 1.35;
+}
+
+.operation-action-trace article {
+  border-left: 3px solid #0f8ea3;
+}
+
+.compact-panel-title {
+  margin: 2px 0 9px;
+  color: #172033;
+  font-size: 15px;
+}
+
+.module-side-panel > section {
+  align-content: start;
+  align-items: start;
 }
 
 @media (max-width: 1320px) {

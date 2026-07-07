@@ -213,7 +213,7 @@ const operatorChecklist = [
     <section class="mission-hero-v2 control-room-strip" aria-label="现场经营态势">
       <div class="mission-copy control-room-copy">
         <div class="console-title-line">
-          <span class="eyebrow">M3.52 OPERATIONS DESK</span>
+          <span class="eyebrow">M3.53 OPERATIONS DESK</span>
           <StatusBadge label="业务操作台整改" tone="green" />
         </div>
         <h2>来料加工现场作业台</h2>
@@ -464,7 +464,7 @@ const operatorChecklist = [
             <span class="eyebrow">DELIVERY LEDGER</span>
             <h2>模块完成度与真实 API 契约</h2>
           </div>
-          <StatusBadge label="M3.52 UI 整改" tone="green" />
+          <StatusBadge label="M3.53 核心联动" tone="green" />
         </div>
         <div class="readiness-table-wrap">
           <table class="readiness-table command-readiness-table">

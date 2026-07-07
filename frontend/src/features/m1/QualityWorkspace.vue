@@ -44,15 +44,18 @@ const qualityReleaseError = ref('');
 const approvingLoss = ref(false);
 const lossApprovalResult = ref<LossApprovalResult | null>(null);
 const lossApprovalError = ref('');
+const selectedQualityCaseCode = ref('');
 
 const activeCase = computed(
   () =>
+    workspace.value.cases.find((item) => item.code === selectedQualityCaseCode.value) ??
     workspace.value.cases.find((item) => item.status.includes('待') || item.action.includes('返工')) ??
     workspace.value.cases[0],
 );
 
 const activeApproval = computed(
   () =>
+    workspace.value.lossApprovals.find((item) => item.workOrder === activeCase.value?.workOrder) ??
     workspace.value.lossApprovals.find((item) => item.action.includes('待')) ??
     workspace.value.lossApprovals[0],
 );
@@ -184,11 +187,23 @@ const qualityBoundaryRows = [
   { label: '明显缺口', value: '损耗审批仍是轻量命令，尚未接入正式审批流、正式工资发放和锁账', tone: 'red' },
 ] as const;
 
+const qualityActionTrace = [
+  { step: '01', title: '冻结异常库存', detail: '不合格半成品先冻结，避免继续流转。' },
+  { step: '02', title: '返工派发', detail: '返工仍是同一工单状态机下的特殊工单。' },
+  { step: '03', title: '返工报工', detail: '返工产出回半成品库存，并关联缺陷证据。' },
+  { step: '04', title: '复检放行', detail: '复检通过后转成品或半成品，失败继续返工。' },
+  { step: '05', title: '损耗审批', detail: '超标损耗生成审批任务和工资试算快照。' },
+];
+
+const showLegacyReviewSections = false;
+
 onMounted(async () => {
   try {
     workspace.value = await fetchQualityWorkspace();
   } catch {
     // Keep deterministic local samples available when the backend is not running.
+  } finally {
+    selectedQualityCaseCode.value = activeCase.value?.code ?? '';
   }
 });
 
@@ -270,6 +285,20 @@ async function approveActiveLoss() {
   } finally {
     approvingLoss.value = false;
   }
+}
+
+function selectQualityCase(code: string) {
+  selectedQualityCaseCode.value = code;
+  qualityFreezeResult.value = null;
+  qualityFreezeError.value = '';
+  reworkDispatchResult.value = null;
+  reworkDispatchError.value = '';
+  reworkReportResult.value = null;
+  reworkReportError.value = '';
+  qualityReleaseResult.value = null;
+  qualityReleaseError.value = '';
+  lossApprovalResult.value = null;
+  lossApprovalError.value = '';
 }
 </script>
 
@@ -355,7 +384,13 @@ async function approveActiveLoss() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in workspace.cases" :key="item.code">
+              <tr
+                v-for="item in workspace.cases"
+                :key="item.code"
+                :class="{ 'is-selected': activeCase?.code === item.code }"
+                :aria-selected="activeCase?.code === item.code"
+                @click="selectQualityCase(item.code)"
+              >
                 <td><strong>{{ item.code }}</strong></td>
                 <td>
                   <span class="cell-stack">
@@ -367,7 +402,7 @@ async function approveActiveLoss() {
                 <td>{{ item.defect }}</td>
                 <td>{{ item.action }}</td>
                 <td><StatusBadge :label="item.status" :tone="qualityCaseTone(item.status, item.action)" /></td>
-                <td><button class="table-action" type="button">处理</button></td>
+                <td><button class="table-action" type="button" @click.stop="selectQualityCase(item.code)">处理</button></td>
               </tr>
             </tbody>
           </table>
@@ -407,6 +442,13 @@ async function approveActiveLoss() {
             <button class="secondary-button" type="button" :disabled="approvingLoss" @click="approveActiveLoss">
               {{ approvingLoss ? '正在试算' : '提交损耗审批' }}
             </button>
+          </div>
+          <div class="operation-action-trace" aria-label="当前质检动作链">
+            <article v-for="item in qualityActionTrace" :key="item.step">
+              <span>{{ item.step }}</span>
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.detail }}</small>
+            </article>
           </div>
           <div v-if="qualityFreezeResult" class="operation-feedback success">
             <strong>质检冻结已写入台账</strong>
@@ -518,6 +560,7 @@ async function approveActiveLoss() {
       </section>
     </section>
 
+    <template v-if="showLegacyReviewSections">
     <section class="operations-hero">
       <div class="hero-copy">
         <span class="eyebrow">Quality Control</span>
@@ -843,5 +886,6 @@ async function approveActiveLoss() {
         </div>
       </div>
     </section>
+    </template>
   </div>
 </template>

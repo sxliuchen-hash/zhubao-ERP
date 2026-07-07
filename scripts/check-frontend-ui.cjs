@@ -67,7 +67,7 @@ async function main() {
   await page.waitForTimeout(500);
 
   const dashboard = await inspectLayout(page);
-  await page.screenshot({ path: path.join(outputDir, 'm352-dashboard.png'), fullPage: false });
+  await page.screenshot({ path: path.join(outputDir, 'm353-dashboard.png'), fullPage: false });
 
   await page.click('button[data-tab="inbound"]');
   await page.waitForTimeout(300);
@@ -87,7 +87,71 @@ async function main() {
       clientWidth: document.documentElement.clientWidth,
     };
   });
-  await page.screenshot({ path: path.join(outputDir, 'm352-inbound.png'), fullPage: false });
+  await page.screenshot({ path: path.join(outputDir, 'm353-inbound.png'), fullPage: false });
+
+  await page.click('button[data-tab="production"]');
+  await page.waitForTimeout(300);
+  await page.click("table.production-dispatch-table tbody tr:has-text('ZD-20260706-001')");
+  await page.waitForTimeout(200);
+
+  const production = await page.evaluate(() => {
+    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+
+    return {
+      title: text(document.querySelector('h1')),
+      selectedRows: document.querySelectorAll('table.production-dispatch-table tbody tr.is-selected').length,
+      activeCode: text(document.querySelector('.active-object-card > strong')),
+      actionTrace: Array.from(document.querySelectorAll('.operation-action-trace strong')).map(text),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    };
+  });
+  await page.screenshot({ path: path.join(outputDir, 'm353-production.png'), fullPage: false });
+
+  await page.click('button[data-tab="quality"]');
+  await page.waitForTimeout(300);
+  await page.click("table.quality-dispatch-table tbody tr:has-text('QC-20260706-022')");
+  await page.waitForTimeout(200);
+
+  const quality = await page.evaluate(() => {
+    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+
+    return {
+      title: text(document.querySelector('h1')),
+      selectedRows: document.querySelectorAll('table.quality-dispatch-table tbody tr.is-selected').length,
+      activeCode: text(document.querySelector('.active-object-card > strong')),
+      actionTrace: Array.from(document.querySelectorAll('.operation-action-trace strong')).map(text),
+      hasLegacyRuntimeBoard: Boolean(document.querySelector('.quality-runtime-board')),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    };
+  });
+  await page.screenshot({ path: path.join(outputDir, 'm353-quality.png'), fullPage: false });
+
+  await page.click('button[data-tab="inventory"]');
+  await page.waitForTimeout(300);
+  await page.click("table.inventory-dispatch-table tbody tr:has-text('ZD-20260706-001')");
+  await page.waitForTimeout(200);
+
+  const inventory = await page.evaluate(() => {
+    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+
+    return {
+      title: text(document.querySelector('h1')),
+      selectedRows: document.querySelectorAll('table.inventory-dispatch-table tbody tr.is-selected').length,
+      activeCode: text(document.querySelector('.active-object-card > strong')),
+      actionTrace: Array.from(document.querySelectorAll('.operation-action-trace strong')).map(text),
+      hasLedgerTitle: text(document.body).includes('库存台账明细'),
+      hasTraceEvidenceTitle: text(document.body).includes('追溯证据'),
+      hasLegacyOpsBoard: Boolean(document.querySelector('.inventory-trace-desk > .module-ops-board')),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    };
+  });
+  await page.screenshot({ path: path.join(outputDir, 'm353-inventory.png'), fullPage: false });
 
   await page.click('button[data-tab="configuration"]');
   await page.waitForTimeout(300);
@@ -105,18 +169,68 @@ async function main() {
       clientWidth: document.documentElement.clientWidth,
     };
   });
-  await page.screenshot({ path: path.join(outputDir, 'm352-configuration.png'), fullPage: false });
+  await page.screenshot({ path: path.join(outputDir, 'm353-configuration.png'), fullPage: false });
 
   await browser.close();
 
   const result = {
     dashboard,
     inbound,
+    production,
+    quality,
+    inventory,
     configuration,
     console: messages.filter((message) => ['error', 'warning'].includes(message.type)),
   };
 
-  fs.writeFileSync(path.join(outputDir, 'm352-ui-check.json'), `${JSON.stringify(result, null, 2)}\n`);
+  const failures = [];
+  for (const [name, section] of Object.entries({ dashboard, inbound, production, quality, inventory, configuration })) {
+    if (section.overflow) {
+      failures.push(`${name} has horizontal overflow: ${section.scrollWidth} > ${section.clientWidth}`);
+    }
+  }
+  if (inbound.selectedRows !== 1 || inbound.activeCode !== 'MD-20260706-003') {
+    failures.push(`inbound selection mismatch: ${JSON.stringify(inbound)}`);
+  }
+  if (production.selectedRows !== 1 || production.activeCode !== 'ZD-20260706-001') {
+    failures.push(`production selection mismatch: ${JSON.stringify(production)}`);
+  }
+  if (!production.actionTrace.includes('扫码进站') || !production.actionTrace.includes('送检入账')) {
+    failures.push(`production action trace incomplete: ${production.actionTrace.join(', ')}`);
+  }
+  if (quality.selectedRows !== 1 || quality.activeCode !== 'QC-20260706-022') {
+    failures.push(`quality selection mismatch: ${JSON.stringify(quality)}`);
+  }
+  if (!quality.actionTrace.includes('冻结异常库存') || !quality.actionTrace.includes('损耗审批')) {
+    failures.push(`quality action trace incomplete: ${quality.actionTrace.join(', ')}`);
+  }
+  if (quality.hasLegacyRuntimeBoard) {
+    failures.push('quality legacy runtime board is still rendered');
+  }
+  if (inventory.selectedRows !== 1 || inventory.activeCode !== 'ZD-20260706-001') {
+    failures.push(`inventory selection mismatch: ${JSON.stringify(inventory)}`);
+  }
+  if (!inventory.actionTrace.includes('客户权属') || !inventory.actionTrace.includes('售后复核')) {
+    failures.push(`inventory action trace incomplete: ${inventory.actionTrace.join(', ')}`);
+  }
+  if (!inventory.hasLedgerTitle || !inventory.hasTraceEvidenceTitle) {
+    failures.push(`inventory missing trace anchors: ${JSON.stringify(inventory)}`);
+  }
+  if (inventory.hasLegacyOpsBoard) {
+    failures.push('inventory legacy operations board is still rendered');
+  }
+  if (!configuration.hasSecurityPanel || !configuration.hasHeaders) {
+    failures.push(`configuration security context missing: ${JSON.stringify(configuration)}`);
+  }
+  if (result.console.length > 0) {
+    failures.push(`console warnings/errors: ${JSON.stringify(result.console)}`);
+  }
+
+  fs.writeFileSync(path.join(outputDir, 'm353-ui-check.json'), `${JSON.stringify(result, null, 2)}\n`);
+  if (failures.length > 0) {
+    console.error(JSON.stringify({ result, failures }, null, 2));
+    process.exit(1);
+  }
   console.log(JSON.stringify(result, null, 2));
 }
 

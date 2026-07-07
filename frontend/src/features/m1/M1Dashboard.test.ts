@@ -6,7 +6,7 @@ describe('M1Dashboard', () => {
   it('renders a shop-floor ERP/MES workbench instead of a thin review page', () => {
     const wrapper = mount(M1Dashboard);
 
-    expect(wrapper.text()).toContain('M3.52 OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.53 OPERATIONS DESK');
     expect(wrapper.text()).toContain('来料加工现场作业台');
     expect(wrapper.text()).toContain('当前处理单');
     expect(wrapper.text()).toContain('真实链路');
@@ -22,7 +22,7 @@ describe('M1Dashboard', () => {
     expect(wrapper.text()).toContain('InvenTree Stock / Build Orders');
     expect(wrapper.text()).toContain('工位运行状态');
     expect(wrapper.text()).toContain('模块完成度与真实 API 契约');
-    expect(wrapper.text()).toContain('M3.52 UI 整改');
+    expect(wrapper.text()).toContain('M3.53 核心联动');
     expect(wrapper.text()).toContain('来料待处理');
     expect(wrapper.text()).toContain('loss-approvals');
     expect(wrapper.text()).toContain('工资试算');
