@@ -1,13 +1,18 @@
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { describe, expect, it, vi } from 'vitest';
 import SampleLibraryWorkspace from './SampleLibraryWorkspace.vue';
+import { previewRegisterImport } from '../../services/registerImportApi';
+
+vi.mock('../../services/registerImportApi', () => ({
+  previewRegisterImport: vi.fn(),
+}));
 
 describe('SampleLibraryWorkspace', () => {
   it('renders the sample library as an acceptance-data workbench', () => {
     const wrapper = mount(SampleLibraryWorkspace);
 
     expect(wrapper.text()).toContain('样例验收指挥台');
-    expect(wrapper.text()).toContain('M3.66 登记表预览');
+    expect(wrapper.text()).toContain('M3.67 预检操作台');
     expect(wrapper.text()).toContain('样例矩阵');
     expect(wrapper.text()).toContain('当前主样例');
     expect(wrapper.text()).toContain('开源调研命中');
@@ -27,7 +32,54 @@ describe('SampleLibraryWorkspace', () => {
     expect(wrapper.text()).toContain('InvenTree Build Orders');
     expect(wrapper.text()).toContain('REG-OUTBOUND');
     expect(wrapper.text()).toContain('paperExpressText');
+    expect(wrapper.text()).toContain('登记表上传预检');
+    expect(wrapper.text()).toContain('上传预检');
     expect(wrapper.text()).toContain('REAL-FLOW-20260706-001');
     expect(wrapper.text()).toContain('BusinessOperationRealFlowTest');
+  });
+
+  it('runs a register import preview and renders normalized rows', async () => {
+    vi.mocked(previewRegisterImport).mockResolvedValueOnce({
+      importBatchNo: 'IMP-REG-OUTBOUND-20260707190000',
+      templateCode: 'REG-OUTBOUND',
+      templateName: '交货情况登记表',
+      sourceFileName: '出货登记表.xlsx',
+      totalRows: 1,
+      readyRows: 1,
+      warningRows: 0,
+      blockedRows: 0,
+      executable: true,
+      nextAction: '可进入人工复核或确认导入',
+      rows: [{
+        sourceLineNo: 3,
+        sourceRegisterSequence: '1',
+        status: 'READY',
+        normalizedFields: {
+          paperExpressText: '顺丰 SF-OUT-20260706-022',
+          logisticsNo: 'SF-OUT-20260706-022',
+        },
+        messages: [],
+      }],
+    });
+
+    const wrapper = mount(SampleLibraryWorkspace);
+    await wrapper.find('select').setValue('REG-OUTBOUND');
+    const fileInput = wrapper.find('input[type="file"]');
+    const file = new File(['xlsx'], '出货登记表.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    Object.defineProperty(fileInput.element, 'files', { value: [file] });
+    await fileInput.trigger('change');
+    await wrapper.find('form.register-preview-console').trigger('submit');
+    await flushPromises();
+
+    expect(previewRegisterImport).toHaveBeenCalledWith(expect.objectContaining({
+      templateCode: 'REG-OUTBOUND',
+      file,
+      fileName: '出货登记表.xlsx',
+    }));
+    expect(wrapper.text()).toContain('IMP-REG-OUTBOUND-20260707190000');
+    expect(wrapper.text()).toContain('SF-OUT-20260706-022');
+    expect(wrapper.findAll('.register-preview-table tbody tr')).toHaveLength(1);
   });
 });

@@ -82,6 +82,7 @@
 - M3.64 现场登记来源审计补齐，入库、生产报工和出货命令新增 `sourceRegisterType`、`sourceRegisterLineNo`、`sourceRegisterSequence`；出货命令新增 `paperExpressText` 保留纸质快递栏原文，台账备注和字段文档同步更新。
 - M3.65 登记表导入模板基线，新增 `/api/register-import/templates` 和 `/summary`，把入库、出货、抛光、雕刻 4 类现场登记表固化为字段映射、命令映射和导入校验规则；样例库新增“现场登记表导入准备度”视图。
 - M3.66 登记表 Excel 上传预览，新增 `/api/register-import/previews`，通过 Apache POI 读取入库、出货、抛光、雕刻 4 类 `.xlsx`，标准化现场字段、继承抛光表头/雕刻合并单元格上下文、拆分纸质快递栏，并输出 READY/WARNING/BLOCKED 预览行；本阶段仍不直接写业务台账。
+- M3.67 登记表预检操作台，样例库新增模板选择、业务日期、Excel 文件选择、上传预检、预览批次统计、阻断消息和标准化字段表；前端已接 `/api/register-import/previews`，继续保持“预检不入账”的安全边界。
 
 ## 目录结构
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   acceptanceDataSets,
@@ -8,7 +8,14 @@ import {
   sampleScenarios,
   type Tone,
 } from '../../data/m1PrototypeData';
-import { registerImportSummary, registerImportTemplates, registerRuleTone } from '../../data/registerImportTemplates';
+import {
+  registerImportSummary,
+  registerImportTemplates,
+  registerRuleTone,
+  type RegisterImportPreview,
+  type RegisterImportPreviewRow,
+} from '../../data/registerImportTemplates';
+import { previewRegisterImport } from '../../services/registerImportApi';
 
 function scenarioTone(status: string): Tone {
   if (status === 'ready') return 'green';
@@ -59,9 +66,70 @@ function keyFieldLabel(template: (typeof registerImportTemplates)[number]) {
   )?.targetField ?? template.fields[0]?.targetField ?? '待映射';
 }
 
+function previewStatusTone(status: RegisterImportPreviewRow['status']): Tone {
+  if (status === 'READY') return 'green';
+  if (status === 'WARNING') return 'amber';
+  return 'red';
+}
+
+function previewFieldEntries(row: RegisterImportPreviewRow) {
+  return Object.entries(row.normalizedFields).slice(0, 6);
+}
+
+function onRegisterFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  selectedRegisterFile.value = input.files?.[0] ?? null;
+  registerPreview.value = null;
+  registerPreviewError.value = '';
+}
+
+async function submitRegisterPreview() {
+  registerPreviewError.value = '';
+  if (!selectedRegisterFile.value) {
+    registerPreviewError.value = '请选择现场登记表 Excel 文件';
+    return;
+  }
+
+  registerPreviewLoading.value = true;
+  try {
+    registerPreview.value = await previewRegisterImport({
+      templateCode: selectedRegisterTemplateCode.value,
+      businessDate: registerBusinessDate.value,
+      file: selectedRegisterFile.value,
+      fileName: selectedRegisterFile.value.name,
+    });
+  } catch (error) {
+    registerPreview.value = null;
+    registerPreviewError.value = error instanceof Error ? error.message : '登记表预览失败';
+  } finally {
+    registerPreviewLoading.value = false;
+  }
+}
+
 const activeScenario = sampleScenarios[0];
 const activeDataSet = acceptanceDataSets.find((dataset) => dataset.scenarioId === activeScenario.id);
 const activeRegisterTemplate = registerImportTemplates[0];
+const selectedRegisterTemplateCode = ref(activeRegisterTemplate.code);
+const registerBusinessDate = ref(new Date().toISOString().slice(0, 10));
+const selectedRegisterFile = ref<File | null>(null);
+const registerPreview = ref<RegisterImportPreview | null>(null);
+const registerPreviewLoading = ref(false);
+const registerPreviewError = ref('');
+
+const selectedRegisterTemplate = computed(() =>
+  registerImportTemplates.find((template) => template.code === selectedRegisterTemplateCode.value) ?? activeRegisterTemplate,
+);
+
+const registerPreviewRows = computed(() => registerPreview.value?.rows.slice(0, 6) ?? []);
+const registerPreviewBlockers = computed(() =>
+  registerPreview.value?.rows.flatMap((row) =>
+    row.messages.map((message) => ({
+      key: `${row.sourceLineNo}-${message.ruleCode}-${message.field}`,
+      row,
+      message,
+    })),
+  ).slice(0, 6) ?? [],
+);
 
 const sampleKpis = computed(() => [
   {
@@ -187,7 +255,7 @@ const registerTemplateRows = computed(() =>
       <div class="sample-command-copy">
         <div class="console-title-line">
           <span class="eyebrow">SAMPLE CONTROL</span>
-          <StatusBadge label="M3.66 登记表预览" tone="green" />
+          <StatusBadge label="M3.67 预检操作台" tone="green" />
         </div>
         <h2>样例验收指挥台</h2>
         <p>
@@ -274,6 +342,96 @@ const registerTemplateRows = computed(() =>
             </tbody>
           </table>
         </div>
+        <form class="register-preview-console" aria-label="登记表上传预检" @submit.prevent="submitRegisterPreview">
+          <div class="register-preview-title">
+            <span class="eyebrow">UPLOAD PREVIEW</span>
+            <strong>登记表上传预检</strong>
+          </div>
+          <div class="register-preview-controls">
+            <label>
+              <span>登记模板</span>
+              <select v-model="selectedRegisterTemplateCode">
+                <option v-for="template in registerImportTemplates" :key="template.code" :value="template.code">
+                  {{ template.code }} / {{ template.name }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>业务日期</span>
+              <input v-model="registerBusinessDate" type="date">
+            </label>
+            <label>
+              <span>Excel 文件</span>
+              <input type="file" accept=".xlsx" @change="onRegisterFileChange">
+            </label>
+            <button class="primary-button" type="submit" :disabled="registerPreviewLoading">
+              {{ registerPreviewLoading ? '预检中' : '上传预检' }}
+            </button>
+          </div>
+          <div class="register-preview-current">
+            <span>{{ selectedRegisterTemplate.sourceFile }}</span>
+            <strong>{{ selectedRegisterTemplate.targetCommand }}</strong>
+            <small>{{ selectedRegisterFile?.name ?? '未选择文件' }}</small>
+          </div>
+          <p v-if="registerPreviewError" class="register-preview-error">{{ registerPreviewError }}</p>
+        </form>
+        <section v-if="registerPreview" class="register-preview-result" aria-label="登记表预检结果">
+          <div class="register-preview-summary">
+            <article>
+              <span>预览批次</span>
+              <strong>{{ registerPreview.importBatchNo }}</strong>
+              <small>{{ registerPreview.sourceFileName }}</small>
+            </article>
+            <article>
+              <span>解析行数</span>
+              <strong>{{ registerPreview.totalRows }}</strong>
+              <small>{{ registerPreview.nextAction }}</small>
+            </article>
+            <article>
+              <span>READY</span>
+              <strong>{{ registerPreview.readyRows }}</strong>
+              <small>可复核行</small>
+            </article>
+            <article>
+              <span>BLOCKED</span>
+              <strong>{{ registerPreview.blockedRows }}</strong>
+              <small>阻断行</small>
+            </article>
+          </div>
+          <div v-if="registerPreviewBlockers.length" class="register-preview-blockers">
+            <article v-for="item in registerPreviewBlockers" :key="item.key">
+              <b>{{ item.message.ruleCode }}</b>
+              <span>第 {{ item.row.sourceLineNo }} 行 / {{ item.message.field }} / {{ item.message.message }}</span>
+              <small>{{ item.message.fallback }}</small>
+            </article>
+          </div>
+          <div class="erp-table-wrap register-preview-table-wrap">
+            <table class="erp-table register-preview-table">
+              <thead>
+                <tr>
+                  <th>原行</th>
+                  <th>序号</th>
+                  <th>状态</th>
+                  <th>标准化字段</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in registerPreviewRows" :key="`${row.sourceLineNo}-${row.sourceRegisterSequence}`">
+                  <td>{{ row.sourceLineNo }}</td>
+                  <td>{{ row.sourceRegisterSequence }}</td>
+                  <td><StatusBadge :label="row.status" :tone="previewStatusTone(row.status)" /></td>
+                  <td>
+                    <span class="register-field-chips">
+                      <small v-for="[field, value] in previewFieldEntries(row)" :key="field">
+                        <b>{{ field }}</b>{{ value || '-' }}
+                      </small>
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <aside class="register-detail-panel">
