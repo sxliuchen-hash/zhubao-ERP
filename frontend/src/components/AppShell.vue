@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.38 / 作业界面整改</strong>
-        <i>当前仍是评审与 POC 基线：库存、业务动作、审批、附件和硬件 POC 已形成接口边界；真实登录、菜单权限、NAS/S3 签名访问和现场设备直连继续拆分推进。</i>
+        <strong>M3.39 / 运维中心基线</strong>
+        <i>当前仍是评审与 POC 基线：库存、业务动作、审批、附件、硬件 POC 和运维中心已形成接口边界；真实登录、菜单权限、NAS/S3 签名访问和现场设备直连继续拆分推进。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -63,6 +63,7 @@ defineProps<{
             <span>验收 fixture</span>
             <span>附件元数据仓储</span>
             <span>硬件 POC</span>
+            <span>运维中心</span>
             <span>工资试算基线</span>
           </div>
         </div>

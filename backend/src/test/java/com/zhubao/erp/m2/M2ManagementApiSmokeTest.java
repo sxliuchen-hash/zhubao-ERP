@@ -56,6 +56,30 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void exposesOperationsCenterApis() {
+        ResponseEntity<String> center = restTemplate.getForEntity("/api/operations/center", String.class);
+
+        assertThat(center.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(center.getBody()).contains(
+                "\"overallStatus\"",
+                "\"services\"",
+                "后端 API",
+                "前端 PWA",
+                "数据库连接",
+                "数据库备份",
+                "\"runtimeMetrics\"",
+                "JVM 内存",
+                "\"errorSummaries\"",
+                "视频截取",
+                "\"recentLogs\"",
+                "TRACE-OPS-001",
+                "\"backupStatuses\"",
+                "DB-BACKUP-POC",
+                "\"checklist\""
+        );
+    }
+
+    @Test
     void exposesDocumentManagementApis() {
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/documents/summary", String.class);
         ResponseEntity<String> packages = restTemplate.getForEntity("/api/documents/packages", String.class);

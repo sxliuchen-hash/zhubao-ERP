@@ -39,6 +39,8 @@
 - [ApprovalService.java](../backend/src/main/java/com/zhubao/erp/approval/app/ApprovalService.java)
 - [JdbcApprovalTaskRepository.java](../backend/src/main/java/com/zhubao/erp/approval/infra/JdbcApprovalTaskRepository.java)
 - [V11__m3_lightweight_approval_contract.sql](../backend/src/main/resources/db/mysql/V11__m3_lightweight_approval_contract.sql)
+- [OperationsCenterService.java](../backend/src/main/java/com/zhubao/erp/operations/app/OperationsCenterService.java)
+- [operationsCenterApi.ts](../frontend/src/services/operationsCenterApi.ts)
 
 ---
 
@@ -138,6 +140,16 @@
 | `POST /attachments/uploads` | 文档附件 | multipart 上传附件，生成附件元数据、checksum、审计事件和预览 URL |
 | `GET /attachments/{code}/preview-url` | 文档附件 | 返回附件预览 URL 和过期时间 |
 | `GET /attachments/{code}/content` | 文档附件 | 读取已上传到当前存储适配器的附件内容，后续生产环境替换为 NAS/S3 签名 URL |
+
+运维中心接口前缀：
+
+```http
+/api/operations
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /center` | 运维中心 | 返回服务状态、服务器指标、报错汇总、近期日志、数据库备份状态和运维接入清单 |
 
 ---
 

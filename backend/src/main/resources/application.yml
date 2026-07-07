@@ -21,3 +21,8 @@ zhubao:
     storage:
       provider: local
       local-root: target/zhubao-evidence
+  operations:
+    frontend-url: ${ZHUBAO_FRONTEND_URL:http://localhost:5173/}
+    backup-root: ${ZHUBAO_BACKUP_ROOT:}
+    log-file: ${ZHUBAO_LOG_FILE:}
+    backup-rpo-hours: ${ZHUBAO_BACKUP_RPO_HOURS:24}

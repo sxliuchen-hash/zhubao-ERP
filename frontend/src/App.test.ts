@@ -7,7 +7,7 @@ describe('App', () => {
     const wrapper = mount(App);
 
     expect(wrapper.text()).toContain('Operations Console');
-    expect(wrapper.text()).toContain('M3.38 / 作业界面整改');
+    expect(wrapper.text()).toContain('M3.39 / 运维中心基线');
     expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
     expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
     expect(wrapper.text()).toContain('首页工作台');
@@ -20,6 +20,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('文档附件');
     expect(wrapper.text()).toContain('样例库');
     expect(wrapper.text()).toContain('软硬件联动');
+    expect(wrapper.text()).toContain('运维中心');
     expect(wrapper.text()).toContain('PWA 作业');
   });
 });

@@ -12039,3 +12039,441 @@ body {
     font-size: 19px;
   }
 }
+
+/* M3.39: operations center for runtime, logs, errors and backups. */
+.operations-center-page {
+  --ops2-panel: #ffffff;
+  --ops2-soft: #f7fafb;
+  --ops2-line: #d6e0e8;
+  --ops2-ink: #111827;
+  --ops2-muted: #5f6d7a;
+  --ops2-cyan: #0e8f8a;
+  gap: 10px;
+}
+
+.operations-command-surface {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 10px;
+  border: 1px solid var(--ops2-line);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(14, 143, 138, 0.08), transparent 42%),
+    var(--ops2-panel);
+  box-shadow: 0 14px 30px rgba(17, 24, 39, 0.06);
+}
+
+.operations-command-main {
+  display: grid;
+  gap: 10px;
+  border-left: 4px solid var(--ops2-cyan);
+  padding: 12px;
+}
+
+.operations-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.operations-title-row h2 {
+  margin: 0 0 4px;
+  color: var(--ops2-ink);
+  font-size: 24px;
+}
+
+.operations-title-row p {
+  max-width: 820px;
+  margin: 0;
+  color: var(--ops2-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.operations-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.operations-hero-grid article,
+.runtime-metric-grid article {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  min-height: 76px;
+  border: 1px solid var(--ops2-line);
+  border-top: 3px solid var(--tone);
+  border-radius: 7px;
+  background: var(--ops2-soft);
+  padding: 9px;
+}
+
+.operations-hero-grid span,
+.operations-hero-grid em,
+.runtime-metric-grid span,
+.runtime-metric-grid em {
+  overflow: hidden;
+  color: var(--ops2-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+
+.operations-hero-grid strong,
+.runtime-metric-grid strong {
+  color: var(--ops2-ink);
+  font-size: 26px;
+  line-height: 1.12;
+}
+
+.operations-hero-grid small,
+.runtime-metric-grid small {
+  margin-left: 3px;
+  color: var(--ops2-muted);
+  font-size: 12px;
+}
+
+.operations-focus-panel,
+.operations-panel,
+.operations-source-note article {
+  border: 1px solid var(--ops2-line);
+  border-radius: 8px;
+  background: var(--ops2-panel);
+}
+
+.operations-focus-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border-left: 0;
+  background: #101820;
+  color: #f8fafc;
+  padding: 12px;
+}
+
+.operations-focus-panel > div {
+  display: grid;
+  gap: 6px;
+}
+
+.operations-focus-panel strong {
+  font-size: 19px;
+}
+
+.operations-focus-panel p {
+  margin: 0;
+  color: #cbd5df;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.operations-focus-grid {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 7px 10px;
+  margin: 0;
+  border: 1px solid rgba(203, 213, 225, 0.16);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 10px;
+}
+
+.operations-focus-grid dt {
+  color: #92a7b7;
+}
+
+.operations-focus-grid dd {
+  margin: 0;
+  color: #f8fafc;
+}
+
+.operations-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 10px;
+  align-items: start;
+}
+
+.operations-grid.lower {
+  grid-template-columns: minmax(0, 1fr) 410px;
+}
+
+.operations-grid.backup {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.operations-panel {
+  min-width: 0;
+  padding: 12px;
+  box-shadow: 0 12px 26px rgba(17, 24, 39, 0.05);
+}
+
+.service-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.service-status-grid article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  min-width: 0;
+  border: 1px solid var(--ops2-line);
+  border-left: 3px solid var(--tone);
+  border-radius: 7px;
+  background: var(--ops2-soft);
+  padding: 9px;
+}
+
+.service-status-grid article strong,
+.service-status-grid article span,
+.service-status-grid article small,
+.service-status-grid article em {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.service-status-grid article span,
+.service-status-grid article small,
+.service-status-grid article em {
+  color: var(--ops2-muted);
+  font-size: 11px;
+  line-height: 1.38;
+}
+
+.service-status-grid article small,
+.service-status-grid article em {
+  grid-column: 1 / -1;
+}
+
+.runtime-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ops-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ops2-line);
+  border-radius: 7px;
+}
+
+.ops-data-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ops-data-table th,
+.ops-data-table td {
+  border-bottom: 1px solid #e3ebf0;
+  padding: 8px 9px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ops-data-table th {
+  background: #edf3f6;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ops-data-table tbody tr:nth-child(even) td {
+  background: #fafcfd;
+}
+
+.log-stream,
+.backup-status-list,
+.ops-checklist {
+  display: grid;
+  gap: 8px;
+}
+
+.log-stream article {
+  display: grid;
+  grid-template-columns: 116px auto minmax(0, 1fr);
+  gap: 5px 8px;
+  align-items: center;
+  border: 1px solid var(--ops2-line);
+  border-left: 3px solid var(--tone);
+  border-radius: 7px;
+  background: #0f1720;
+  color: #e5edf4;
+  padding: 8px;
+}
+
+.log-stream time,
+.log-stream small {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.log-stream strong {
+  color: #f8fafc;
+  font-size: 12px;
+}
+
+.log-stream span {
+  grid-column: 1 / -1;
+  color: #cbd5df;
+  font-size: 12px;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.backup-status-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  border: 1px solid var(--ops2-line);
+  border-left: 3px solid var(--tone);
+  border-radius: 7px;
+  background: var(--ops2-soft);
+  padding: 10px;
+}
+
+.backup-status-list article strong,
+.backup-status-list article span,
+.backup-status-list article small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.backup-status-list article span,
+.backup-status-list article small {
+  color: var(--ops2-muted);
+  font-size: 12px;
+}
+
+.backup-status-list dl {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.backup-status-list dt {
+  color: var(--ops2-muted);
+  font-size: 12px;
+}
+
+.backup-status-list dd {
+  margin: 0;
+  color: #243443;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.ops-checklist article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  border: 1px solid var(--ops2-line);
+  border-left: 3px solid var(--tone);
+  border-radius: 7px;
+  background: var(--ops2-soft);
+  padding: 8px;
+}
+
+.ops-checklist strong,
+.ops-checklist span,
+.ops-checklist small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ops-checklist span,
+.ops-checklist small {
+  color: var(--ops2-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.operations-source-note {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.operations-source-note article {
+  display: grid;
+  gap: 5px;
+  border-left: 3px solid var(--ops2-cyan);
+  background: var(--ops2-soft);
+  padding: 10px;
+}
+
+.operations-source-note span {
+  color: var(--ops2-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1320px) {
+  .operations-command-surface,
+  .operations-grid,
+  .operations-grid.lower,
+  .operations-grid.backup {
+    grid-template-columns: 1fr;
+  }
+
+  .operations-focus-panel {
+    border-left: 1px solid var(--ops2-line);
+  }
+}
+
+@media (max-width: 760px) {
+  .operations-title-row,
+  .operations-source-note {
+    grid-template-columns: 1fr;
+  }
+
+  .operations-title-row {
+    display: grid;
+  }
+
+  .operations-hero-grid,
+  .service-status-grid,
+  .runtime-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .operations-hero-grid article,
+  .runtime-metric-grid article {
+    min-height: 62px;
+    padding: 7px;
+  }
+
+  .operations-hero-grid strong,
+  .runtime-metric-grid strong {
+    font-size: 21px;
+  }
+}
+
+@media (max-width: 520px) {
+  .operations-hero-grid,
+  .service-status-grid,
+  .runtime-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .log-stream article {
+    grid-template-columns: 1fr auto;
+  }
+
+  .backup-status-list article,
+  .backup-status-list dl,
+  .ops-checklist article {
+    grid-template-columns: 1fr;
+  }
+}

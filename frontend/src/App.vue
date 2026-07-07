@@ -9,6 +9,7 @@ import InboundWorkspace from './features/m1/InboundWorkspace.vue';
 import InventoryTraceWorkspace from './features/m1/InventoryTraceWorkspace.vue';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
 import MobileOpsWorkspace from './features/m1/MobileOpsWorkspace.vue';
+import OperationsCenterWorkspace from './features/m1/OperationsCenterWorkspace.vue';
 import ProductionWorkspace from './features/m1/ProductionWorkspace.vue';
 import QualityWorkspace from './features/m1/QualityWorkspace.vue';
 import SampleLibraryWorkspace from './features/m1/SampleLibraryWorkspace.vue';
@@ -24,6 +25,7 @@ type TabKey =
   | 'documents'
   | 'sample'
   | 'hardware'
+  | 'operations'
   | 'mobile';
 
 const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; code: string }> = [
@@ -37,6 +39,7 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; co
   { key: 'documents', label: '文档附件', meta: '证据 / 归档', badge: '5', code: 'EV' },
   { key: 'sample', label: '样例库', meta: '验收脚本', code: 'SA' },
   { key: 'hardware', label: '软硬件联动', meta: '设备 / 兜底', badge: '4', code: 'HW' },
+  { key: 'operations', label: '运维中心', meta: '日志 / 指标', badge: '3', code: 'OC' },
   { key: 'mobile', label: 'PWA 作业', meta: '扫码 / 现场', code: 'PW' },
 ];
 
@@ -75,6 +78,7 @@ const activeTitle = computed(() => tabs.find((tab) => tab.key === activeTab.valu
     <DocumentManagementWorkspace v-else-if="activeTab === 'documents'" />
     <SampleLibraryWorkspace v-else-if="activeTab === 'sample'" />
     <HardwareIntegrationWorkspace v-else-if="activeTab === 'hardware'" />
+    <OperationsCenterWorkspace v-else-if="activeTab === 'operations'" />
     <MobileOpsWorkspace v-else />
   </AppShell>
 </template>

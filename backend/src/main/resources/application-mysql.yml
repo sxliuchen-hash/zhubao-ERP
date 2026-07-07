@@ -15,3 +15,6 @@ zhubao:
     repository: ${ZHUBAO_APPROVAL_REPOSITORY:memory}
   documents:
     repository: ${ZHUBAO_DOCUMENTS_REPOSITORY:memory}
+  operations:
+    backup-root: ${ZHUBAO_BACKUP_ROOT:}
+    log-file: ${ZHUBAO_LOG_FILE:}
