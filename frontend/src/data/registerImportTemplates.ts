@@ -88,6 +88,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
       field('拆箱签字', 'unpackSigner', true, '姓名快照', '一期保存姓名，二期接签名附件'),
       field('货品名称', 'goodsName', true, '现场名称快照', '必须映射物料档案'),
       field('数量', 'quantity + quantityUnit', true, '数量默认单位件', '数量必须大于 0'),
+      field('备注', 'remark', false, '原文保留', '异常说明或现场补充信息'),
     ],
     validationRules: [
       rule('IN-001', 'BLOCK', '快递单号重复时不得确认入库', '转人工复核'),

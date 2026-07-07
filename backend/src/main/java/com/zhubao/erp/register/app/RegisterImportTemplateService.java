@@ -59,7 +59,8 @@ public class RegisterImportTemplateService {
                         field("收货人姓名", "receiverName", "ConfirmInboundCommand", false, "姓名快照", "可为空但应提示补全"),
                         field("拆箱签字", "unpackSigner", "ConfirmInboundCommand", true, "姓名快照", "一期保存姓名，二期接签名附件"),
                         field("货品名称", "goodsName", "ConfirmInboundCommand", true, "现场名称快照", "必须映射物料档案"),
-                        field("数量", "quantity + quantityUnit", "ConfirmInboundCommand", true, "数量默认单位件", "数量必须大于 0")
+                        field("数量", "quantity + quantityUnit", "ConfirmInboundCommand", true, "数量默认单位件", "数量必须大于 0"),
+                        field("备注", "remark", "ConfirmInboundCommand", false, "原文保留", "异常说明或现场补充信息")
                 ),
                 List.of(
                         rule("IN-001", "BLOCK", "快递单号重复时不得确认入库", "转人工复核"),

@@ -57,11 +57,11 @@ class M2ManagementApiSmokeTest {
                 "REG-POLISHING",
                 "姓名和日期必须展开",
                 "REG-ENGRAVING",
-                "合并区域继承"
+                "本组上下文继承"
         );
         assertThat(summary.getBody()).contains(
                 "\"templates\":4",
-                "\"fields\":39",
+                "\"fields\":40",
                 "\"commandReadyTemplates\":4",
                 "preview parser ready"
         );

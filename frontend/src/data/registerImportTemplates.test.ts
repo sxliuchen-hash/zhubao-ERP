@@ -4,7 +4,7 @@ import { registerImportSummary, registerImportTemplates } from './registerImport
 describe('registerImportTemplates', () => {
   it('keeps front-end register templates aligned with the backend review contract', () => {
     expect(registerImportTemplates).toHaveLength(4);
-    expect(registerImportSummary.fields).toBe(39);
+    expect(registerImportSummary.fields).toBe(40);
 
     const inbound = registerImportTemplates.find((template) => template.code === 'REG-INBOUND');
     const outbound = registerImportTemplates.find((template) => template.code === 'REG-OUTBOUND');
@@ -12,6 +12,7 @@ describe('registerImportTemplates', () => {
     const engraving = registerImportTemplates.find((template) => template.code === 'REG-ENGRAVING');
 
     expect(inbound?.validationRules.map((rule) => rule.code)).toContain('IN-003');
+    expect(inbound?.fields.find((field) => field.targetField === 'remark')?.sourceColumn).toBe('备注');
     expect(outbound?.validationRules.map((rule) => rule.code)).toContain('OUT-003');
     expect(polishing?.validationRules.map((rule) => rule.code)).toContain('POL-003');
     expect(engraving?.validationRules.map((rule) => rule.code)).toContain('ENG-003');
