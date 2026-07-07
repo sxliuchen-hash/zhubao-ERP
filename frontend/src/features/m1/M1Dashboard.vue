@@ -54,6 +54,8 @@ function inventoryTone(status: string): Tone {
 const activeWorkOrder = workOrders.find((order) => order.status.includes('称重')) ?? workOrders[0];
 const activeQuality = qualityCases[0];
 const activeHandoff = productionHandoffs.find((handoff) => handoff.tone === 'red') ?? productionHandoffs[0];
+const activeInbound = inboundOrders[0];
+const activeInventory = inventoryBalances[0];
 
 const commandStats = [
   { label: '来料待处理', value: 6, unit: '单', detail: '2 单需确认物料/客户', tone: 'amber' },
@@ -198,25 +200,28 @@ const moduleRows = [
   { module: '文档附件', api: 'documents / uploads', state: '本地存储适配可用', next: 'NAS/S3 签名 URL', tone: 'green' },
   { module: '硬件联动', api: 'hardware / poc-records', state: 'POC 记录可管理', next: '现场复测与型号冻结', tone: 'red' },
 ] as const;
+
+const operatorChecklist = [
+  { label: '补称重证据', value: activeHandoff.code, detail: '补录投入/产出照片并关联视频时间段', tone: 'red' },
+  { label: '处理视频失败', value: 'INT-VID-001', detail: '后台重试失败后走人工上传兜底', tone: 'amber' },
+  { label: '锁定审批口径', value: 'LOSS-20260706-009', detail: '超标损耗只做试算，不做正式工资发放', tone: 'blue' },
+] as const;
 </script>
 
 <template>
-  <div class="command-center-v2 page-stack">
-    <section class="mission-hero-v2" aria-label="现场经营态势">
-      <div class="mission-copy">
+  <div class="command-center-v3 page-stack">
+    <section class="mission-hero-v2 control-room-strip" aria-label="现场经营态势">
+      <div class="mission-copy control-room-copy">
         <div class="console-title-line">
-          <span class="eyebrow">M3.36 SHOP FLOOR COMMAND</span>
-          <StatusBadge label="现场指挥台产品化" tone="green" />
+          <span class="eyebrow">M3.42 PRODUCTION DESK</span>
+          <StatusBadge label="生产操作台整改" tone="green" />
         </div>
         <h2>来料加工现场指挥台</h2>
-        <p>
-          把客户来料、称重交接、工序报工、质检返工、库存台账和视频证据放在同一个操作视图里，
-          页面优先回答“谁被阻断、卡在哪、下一步做什么、数据会写到哪里”。
-        </p>
+        <p>首屏只保留调度员最需要判断的内容：当前阻断、今日单据池、焦点工单、证据缺口、台账落点和下一动作。</p>
         <div class="mission-chip-row" aria-label="一期业务边界">
-          <span>客户所有库存隔离</span>
-          <span>库存台账可解释</span>
-          <span>WIP 在制可追溯</span>
+          <span>客户库存隔离</span>
+          <span>台账可解释</span>
+          <span>WIP 可追溯</span>
           <span>返工单一状态机</span>
           <span>视频失败可兜底</span>
         </div>
@@ -231,8 +236,8 @@ const moduleRows = [
       </div>
     </section>
 
-    <section class="command-grid-v2" aria-label="业务链路、单据调度和焦点处理">
-      <aside class="flow-rail-v2">
+    <section class="production-desk-grid command-grid-v2" aria-label="业务链路、单据调度和焦点处理">
+      <aside class="process-rail-card flow-rail-v2">
         <div class="panel-title-row">
           <div>
             <span class="eyebrow">PROCESS</span>
@@ -250,12 +255,12 @@ const moduleRows = [
           </article>
         </div>
         <div class="flow-rule-card">
-          <strong>现场设计原则</strong>
-          <span>任何数量、重量、状态变化都必须落到台账、证据或审批事件，不能只停留在前端状态。</span>
+          <strong>台账原则</strong>
+          <span>数量、重量、状态变化必须落到台账、证据或审批事件。</span>
         </div>
       </aside>
 
-      <div class="dispatch-console-v2">
+      <main class="dispatch-console-v3 dispatch-console-v2">
         <div class="floor-toolbar">
           <div>
             <span class="eyebrow">LIVE DISPATCH</span>
@@ -305,29 +310,69 @@ const moduleRows = [
             </tbody>
           </table>
         </div>
-      </div>
+      </main>
 
-      <aside class="focus-stack-v2">
-        <section
-          v-for="card in focusCards"
-          :key="card.code"
-          class="focus-card-v2"
-          :class="`tone-${card.tone}`"
-        >
-          <div class="panel-title-row">
-            <span class="eyebrow">{{ card.label }}</span>
-            <StatusBadge :label="card.status" :tone="card.tone" />
+      <aside class="active-record-panel">
+        <div class="panel-title-row">
+          <div>
+            <span class="eyebrow">ACTIVE RECORD</span>
+            <h2>当前处理单</h2>
           </div>
-          <strong>{{ card.code }}</strong>
-          <dl class="detail-grid">
-            <template v-for="line in card.lines" :key="`${card.code}-${line[0]}`">
-              <dt>{{ line[0] }}</dt>
-              <dd>{{ line[1] }}</dd>
-            </template>
-          </dl>
-          <button class="table-action" type="button">{{ card.action }}</button>
-        </section>
+          <StatusBadge :label="activeWorkOrder.status" :tone="workOrderTone(activeWorkOrder.status)" />
+        </div>
+        <div class="active-record-code">
+          <strong>{{ activeWorkOrder.code }}</strong>
+          <span>{{ activeWorkOrder.customer }} / {{ activeWorkOrder.material }}</span>
+        </div>
+        <dl class="detail-grid active-record-grid">
+          <dt>母单</dt>
+          <dd>{{ activeInbound.code }}</dd>
+          <dt>工序</dt>
+          <dd>{{ activeWorkOrder.process }}</dd>
+          <dt>负责人</dt>
+          <dd>{{ activeWorkOrder.assignee }}</dd>
+          <dt>进度</dt>
+          <dd>{{ activeWorkOrder.finishedQty }}/{{ activeWorkOrder.plannedQty }} 件</dd>
+          <dt>库存批次</dt>
+          <dd>{{ activeInventory.batch }}</dd>
+          <dt>证据</dt>
+          <dd>{{ activeHandoff.status }}</dd>
+        </dl>
+        <div class="operator-checklist" aria-label="操作员待办">
+          <article v-for="item in operatorChecklist" :key="item.label" :class="`tone-${item.tone}`">
+            <strong>{{ item.label }}</strong>
+            <span>{{ item.value }}</span>
+            <small>{{ item.detail }}</small>
+          </article>
+        </div>
+        <div class="active-action-grid">
+          <button class="primary-button" type="button">补称重</button>
+          <button class="secondary-button" type="button">生成返工</button>
+          <button class="secondary-button" type="button">查看台账</button>
+        </div>
       </aside>
+    </section>
+
+    <section class="focus-stack-v2 focus-board-v3" aria-label="焦点任务">
+      <section
+        v-for="card in focusCards"
+        :key="card.code"
+        class="focus-card-v2"
+        :class="`tone-${card.tone}`"
+      >
+        <div class="panel-title-row">
+          <span class="eyebrow">{{ card.label }}</span>
+          <StatusBadge :label="card.status" :tone="card.tone" />
+        </div>
+        <strong>{{ card.code }}</strong>
+        <dl class="detail-grid">
+          <template v-for="line in card.lines" :key="`${card.code}-${line[0]}`">
+            <dt>{{ line[0] }}</dt>
+            <dd>{{ line[1] }}</dd>
+          </template>
+        </dl>
+        <button class="table-action" type="button">{{ card.action }}</button>
+      </section>
     </section>
 
     <section class="ops-insight-grid-v2" aria-label="证据链、开源依据和模块缺口">

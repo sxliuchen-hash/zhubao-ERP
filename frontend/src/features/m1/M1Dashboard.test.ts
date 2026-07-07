@@ -6,8 +6,9 @@ describe('M1Dashboard', () => {
   it('renders a shop-floor ERP/MES workbench instead of a thin review page', () => {
     const wrapper = mount(M1Dashboard);
 
-    expect(wrapper.text()).toContain('M3.36 SHOP FLOOR COMMAND');
+    expect(wrapper.text()).toContain('M3.42 PRODUCTION DESK');
     expect(wrapper.text()).toContain('来料加工现场指挥台');
+    expect(wrapper.text()).toContain('当前处理单');
     expect(wrapper.text()).toContain('真实链路');
     expect(wrapper.text()).toContain('今日单据池');
     expect(wrapper.text()).toContain('焦点工单');
@@ -26,6 +27,8 @@ describe('M1Dashboard', () => {
     expect(wrapper.text()).toContain('工资试算');
     expect(wrapper.text()).toContain('售后复核');
     expect(wrapper.find('table.floor-dispatch-table').exists()).toBe(true);
+    expect(wrapper.find('.active-record-panel').exists()).toBe(true);
+    expect(wrapper.find('.operator-checklist').exists()).toBe(true);
     expect(wrapper.findAll('.flow-step-list article')).toHaveLength(6);
     expect(wrapper.findAll('.mission-kpi-grid article')).toHaveLength(5);
     expect(wrapper.findAll('.focus-card-v2')).toHaveLength(3);

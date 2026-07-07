@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前开发基线</span>
-        <strong>M3.39 / 运维中心基线</strong>
-        <i>当前仍是评审与 POC 基线：库存、业务动作、审批、附件、硬件 POC 和运维中心已形成接口边界；真实登录、菜单权限、NAS/S3 签名访问和现场设备直连继续拆分推进。</i>
+        <strong>M3.42 / 生产操作台整改</strong>
+        <i>当前仍是 M3 增量开发：核心台账、业务动作、附件、硬件 POC、运维中心和 Docker 交付基线已接入；真实登录、数据权限、NAS/S3 和现场设备直连继续推进。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -56,7 +56,7 @@ defineProps<{
         <div>
           <span class="eyebrow">Operations Console</span>
           <h1>{{ title }}</h1>
-          <p>当前界面用于评审真实业务闭环和 POC 边界：白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底必须能对应到接口、数据表、责任人和验收用例。</p>
+          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入操作台，所有动作必须能落到接口、数据表、责任人和验收用例。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>

@@ -13192,3 +13192,615 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* M3.42: production desk refinement.
+   The UI now prioritizes dense dispatch work, active record handling, and
+   evidence/risk closure over review-style explanation blocks. */
+:root {
+  --m342-bg: #edf2f3;
+  --m342-panel: #ffffff;
+  --m342-panel-soft: #f7fafb;
+  --m342-sidebar: #0e1917;
+  --m342-sidebar-2: #14231f;
+  --m342-ink: #12201d;
+  --m342-muted: #5f6f72;
+  --m342-line: #d7e0e2;
+  --m342-line-strong: #b8c7ca;
+  --m342-teal: #0f8f82;
+  --m342-blue: #2362d5;
+  --m342-green: #12804c;
+  --m342-amber: #b77904;
+  --m342-red: #c0392b;
+}
+
+body {
+  background: var(--m342-bg);
+  color: var(--m342-ink);
+}
+
+.ops-shell.review-shell {
+  grid-template-columns: 224px minmax(0, 1fr);
+  background: var(--m342-bg);
+}
+
+.ops-sidebar.review-sidebar {
+  border-right: 1px solid #20342f;
+  background:
+    linear-gradient(180deg, var(--m342-sidebar) 0%, var(--m342-sidebar-2) 58%, #18201f 100%);
+  color: #e8f2ef;
+  padding: 12px 10px;
+}
+
+.ops-brand {
+  border-bottom-color: rgba(255, 255, 255, 0.11);
+}
+
+.ops-brand .brand-mark {
+  background: #12a594;
+  color: #ffffff;
+}
+
+.ops-brand strong {
+  color: #ffffff;
+}
+
+.ops-brand span:last-child,
+.ops-status-card span,
+.ops-status-card i,
+.ops-version-card span,
+.ops-health-grid span {
+  color: #a9c0bb;
+}
+
+.ops-status-card,
+.ops-version-card,
+.ops-health-grid span {
+  border-color: rgba(180, 215, 208, 0.2);
+  background: rgba(255, 255, 255, 0.055);
+  color: #e8f2ef;
+}
+
+.ops-status-card strong,
+.ops-version-card strong {
+  color: #ffffff;
+}
+
+.ops-nav .nav-button {
+  color: #c7d8d4;
+}
+
+.ops-nav .nav-button:hover,
+.ops-nav .nav-button.active {
+  border-color: rgba(72, 211, 190, 0.34);
+  background: rgba(28, 166, 146, 0.17);
+  color: #ffffff;
+}
+
+.ops-nav .nav-button.active {
+  box-shadow: inset 3px 0 0 #35d0ba;
+}
+
+.ops-nav .nav-button .nav-code {
+  background: rgba(255, 255, 255, 0.09);
+  color: #64e6d6;
+}
+
+.ops-nav .nav-button small {
+  color: #90aaa5;
+}
+
+.ops-nav .nav-button b {
+  background: rgba(35, 98, 213, 0.22);
+  color: #d8e7ff;
+}
+
+.ops-workspace.review-workspace {
+  padding: 10px 12px 24px;
+}
+
+.ops-topbar.review-topbar,
+.ops-page-header.review-page-header,
+.mission-hero-v2,
+.process-rail-card,
+.dispatch-console-v3,
+.active-record-panel,
+.focus-card-v2,
+.insight-panel,
+.workstation-panel,
+.module-contract-panel {
+  border: 1px solid var(--m342-line);
+  border-radius: 8px;
+  background: var(--m342-panel);
+  box-shadow: 0 10px 26px rgba(17, 29, 34, 0.06);
+}
+
+.ops-topbar.review-topbar {
+  min-height: 30px;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+}
+
+.context-stack span,
+.sync-stack span {
+  border-color: var(--m342-line);
+  background: #ffffff;
+  color: #213331;
+}
+
+.sync-stack span:first-child {
+  border-color: #aee8d6;
+  background: #ecfdf6;
+  color: var(--m342-green);
+}
+
+.sync-stack span:last-child {
+  border-color: #f4c7bd;
+  background: #fff2ef;
+  color: var(--m342-red);
+}
+
+.ops-page-header.review-page-header {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 8px;
+  border-left: 4px solid var(--m342-teal);
+  padding: 8px 10px;
+}
+
+.ops-page-header.review-page-header h1 {
+  font-size: 20px;
+}
+
+.ops-page-header.review-page-header p {
+  max-width: 980px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ops-scope-ribbon {
+  margin-top: 5px;
+}
+
+.ops-scope-ribbon span,
+.mission-chip-row span {
+  border-color: var(--m342-line);
+  background: var(--m342-panel-soft);
+  color: #304342;
+}
+
+.ops-command-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ops-command-metrics article {
+  min-height: 50px;
+  border-color: var(--m342-line);
+  background: var(--m342-panel-soft);
+}
+
+.command-actions-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 148px 148px;
+  gap: 6px;
+}
+
+.review-page-header .command-actions-panel.global-search,
+.review-page-header .global-search {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: none;
+}
+
+.review-page-header .global-search input {
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
+}
+
+.review-page-header .global-search span {
+  display: block !important;
+  grid-column: 1;
+}
+
+.global-search span,
+.floor-filter-row label span {
+  color: var(--m342-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.global-search input,
+.floor-filter-row input {
+  border-color: var(--m342-line-strong);
+  background: #ffffff;
+}
+
+.command-center-v3 {
+  display: grid;
+  grid-auto-flow: row;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 8px;
+}
+
+.command-center-v3 > .control-room-strip,
+.command-center-v3 > .production-desk-grid,
+.command-center-v3 > .focus-board-v3,
+.command-center-v3 > .ops-insight-grid-v2,
+.command-center-v3 > .lower-grid-v2 {
+  grid-area: auto !important;
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  width: 100%;
+}
+
+.control-room-strip.mission-hero-v2 {
+  grid-template-columns: minmax(0, 1fr) 560px;
+  align-items: stretch;
+  min-height: 0;
+  padding: 10px;
+}
+
+.control-room-copy.mission-copy {
+  align-content: start;
+  min-height: 0;
+  padding: 10px;
+}
+
+.control-room-copy h2 {
+  margin: 2px 0 5px;
+  font-size: 22px;
+}
+
+.control-room-copy p {
+  max-width: 780px;
+  font-size: 12px;
+}
+
+.mission-chip-row {
+  margin-top: 7px;
+}
+
+.mission-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mission-kpi-grid article {
+  min-height: 62px;
+  border-color: var(--m342-line);
+  border-top: 3px solid var(--tone);
+  background: linear-gradient(180deg, #ffffff 0%, var(--m342-panel-soft) 100%);
+  padding: 7px;
+}
+
+.mission-kpi-grid strong {
+  color: var(--m342-ink);
+  font-size: 22px;
+}
+
+.production-desk-grid.command-grid-v2 {
+  display: grid;
+  grid-template-areas: "flow dispatch active";
+  grid-template-columns: 188px minmax(0, 1fr) 304px;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.process-rail-card {
+  grid-area: flow;
+  padding: 9px;
+}
+
+.dispatch-console-v3 {
+  grid-area: dispatch;
+  padding: 9px;
+  min-width: 0;
+}
+
+.active-record-panel {
+  grid-area: active;
+  padding: 9px;
+  min-width: 0;
+}
+
+.flow-step-list {
+  gap: 5px;
+}
+
+.flow-step-list article {
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-height: 42px;
+  border-color: var(--m342-line);
+  background: var(--m342-panel-soft);
+  padding: 6px;
+}
+
+.flow-step-list b {
+  width: 26px;
+  height: 26px;
+}
+
+.flow-rule-card {
+  border-color: #efd597;
+  background: #fff8e7;
+  color: #674513;
+  padding: 7px;
+}
+
+.floor-toolbar {
+  align-items: center;
+  margin-bottom: 7px;
+}
+
+.floor-toolbar h2,
+.section-heading h2,
+.panel-title-row h2 {
+  font-size: 16px;
+}
+
+.floor-filter-row {
+  gap: 5px;
+}
+
+.filter-pill,
+.table-action,
+.primary-button,
+.secondary-button,
+.status-badge {
+  border-radius: 6px;
+}
+
+.filter-pill {
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.filter-pill.active {
+  border-color: #a6d4ef;
+  background: #edf9ff;
+  color: #0f5a93;
+}
+
+.erp-table-wrap.command-table-wrap {
+  max-height: 470px;
+  border-color: var(--m342-line);
+}
+
+.floor-dispatch-table {
+  min-width: 880px;
+}
+
+.floor-dispatch-table th,
+.floor-dispatch-table td {
+  padding: 7px 8px;
+}
+
+.floor-dispatch-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #e9f0f2;
+  color: #2d3d3d;
+}
+
+.floor-dispatch-table tbody tr:hover td {
+  background: #eef9f7;
+}
+
+.cell-stack b {
+  color: var(--m342-ink);
+}
+
+.cell-stack small {
+  color: var(--m342-muted);
+}
+
+.active-record-code {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0;
+  border: 1px solid var(--m342-line);
+  border-left: 4px solid var(--m342-teal);
+  border-radius: 7px;
+  background: #f8fbfb;
+  padding: 8px;
+}
+
+.active-record-code strong {
+  color: var(--m342-ink);
+  font-size: 17px;
+}
+
+.active-record-code span {
+  color: var(--m342-muted);
+  font-size: 12px;
+}
+
+.active-record-grid {
+  margin-bottom: 8px;
+}
+
+.operator-checklist {
+  display: grid;
+  gap: 6px;
+}
+
+.operator-checklist article {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--m342-line);
+  border-left: 4px solid var(--tone);
+  border-radius: 7px;
+  background: var(--m342-panel-soft);
+  padding: 7px;
+}
+
+.operator-checklist strong {
+  color: var(--m342-ink);
+  font-size: 12px;
+}
+
+.operator-checklist span {
+  color: #2e4242;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.operator-checklist small {
+  color: var(--m342-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.active-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.active-action-grid .secondary-button:last-child {
+  grid-column: 1 / -1;
+}
+
+.primary-button {
+  border-color: #0f786e;
+  background: linear-gradient(180deg, #1ba996, #0f766e);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.secondary-button,
+.table-action {
+  border-color: var(--m342-line-strong);
+  background: #ffffff;
+  color: #233635;
+}
+
+.table-action:hover,
+.secondary-button:hover {
+  border-color: #7bbfb4;
+  background: #eefaf8;
+}
+
+.focus-board-v3.focus-stack-v2 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.focus-board-v3 .focus-card-v2 {
+  border-top: 3px solid var(--tone);
+  padding: 9px;
+}
+
+.focus-card-v2 > strong {
+  color: var(--m342-ink);
+}
+
+.ops-insight-grid-v2 {
+  grid-template-columns: 1.15fr 0.9fr 1fr;
+  gap: 8px;
+}
+
+.lower-grid-v2 {
+  gap: 8px;
+}
+
+.evidence-matrix article,
+.hardware-poc-grid article,
+.source-row-list article,
+.station-card-grid article {
+  border-color: var(--m342-line);
+  background: var(--m342-panel-soft);
+}
+
+.status-badge {
+  border: 1px solid currentColor;
+  background: #ffffff;
+  font-weight: 800;
+}
+
+.status-badge.tone-green {
+  color: var(--m342-green);
+}
+
+.status-badge.tone-amber {
+  color: var(--m342-amber);
+}
+
+.status-badge.tone-red {
+  color: var(--m342-red);
+}
+
+.status-badge.tone-blue {
+  color: var(--m342-blue);
+}
+
+.status-badge.tone-violet {
+  color: #7253c4;
+}
+
+@media (max-width: 1320px) {
+  .control-room-strip.mission-hero-v2 {
+    grid-template-columns: 1fr;
+  }
+
+  .production-desk-grid.command-grid-v2 {
+    grid-template-areas:
+      "dispatch active"
+      "flow active";
+    grid-template-columns: minmax(0, 1fr) 304px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .ops-page-header.review-page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .command-actions-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .production-desk-grid.command-grid-v2 {
+    grid-template-areas:
+      "dispatch"
+      "active"
+      "flow";
+    grid-template-columns: 1fr;
+  }
+
+  .focus-board-v3.focus-stack-v2,
+  .ops-insight-grid-v2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .ops-sidebar.review-sidebar {
+    background: var(--m342-sidebar);
+  }
+
+  .ops-nav {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .mission-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .mission-kpi-grid,
+  .active-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .floor-filter-row {
+    align-items: stretch;
+  }
+}
