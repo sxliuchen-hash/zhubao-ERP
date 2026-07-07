@@ -1,0 +1,68 @@
+name: zhubao-erp
+
+services:
+  mysql:
+    image: ${ZHUBAO_MYSQL_IMAGE:-mysql:8.4}
+    container_name: zhubao-erp-mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+    environment:
+      MYSQL_DATABASE: ${ZHUBAO_DB_NAME:-zhubao_erp}
+      MYSQL_USER: ${ZHUBAO_DB_USERNAME:-zhubao}
+      MYSQL_PASSWORD: ${ZHUBAO_DB_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${ZHUBAO_DB_ROOT_PASSWORD:-change-root-me}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro
+      - backup-data:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    image: ${ZHUBAO_BACKEND_IMAGE:-zhubao-erp-backend}:${ZHUBAO_IMAGE_TAG:-local}
+    container_name: zhubao-erp-backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      SERVER_PORT: 8080
+      ZHUBAO_DB_URL: jdbc:mysql://mysql:3306/${ZHUBAO_DB_NAME:-zhubao_erp}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      ZHUBAO_DB_USERNAME: ${ZHUBAO_DB_USERNAME:-zhubao}
+      ZHUBAO_DB_PASSWORD: ${ZHUBAO_DB_PASSWORD:-change-me}
+      ZHUBAO_BUSINESS_REPOSITORY: ${ZHUBAO_BUSINESS_REPOSITORY:-jdbc}
+      ZHUBAO_APPROVAL_REPOSITORY: ${ZHUBAO_APPROVAL_REPOSITORY:-jdbc}
+      ZHUBAO_DOCUMENTS_REPOSITORY: ${ZHUBAO_DOCUMENTS_REPOSITORY:-jdbc}
+      ZHUBAO_DOCUMENTS_STORAGE_LOCAL_ROOT: /app/evidence
+      ZHUBAO_FRONTEND_URL: ${ZHUBAO_PUBLIC_URL:-http://localhost:${ZHUBAO_HTTP_PORT:-80}/}
+      ZHUBAO_BACKUP_ROOT: /backups
+      ZHUBAO_LOG_FILE: /logs/zhubao-erp.log
+      LOGGING_FILE_NAME: /logs/zhubao-erp.log
+    volumes:
+      - evidence-data:/app/evidence
+      - backend-logs:/logs
+      - backup-data:/backups
+    ports:
+      - "${ZHUBAO_BACKEND_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  frontend:
+    image: ${ZHUBAO_FRONTEND_IMAGE:-zhubao-erp-frontend}:${ZHUBAO_IMAGE_TAG:-local}
+    container_name: zhubao-erp-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${ZHUBAO_HTTP_PORT:-80}:80"
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  evidence-data:
+  backend-logs:
+  backup-data:

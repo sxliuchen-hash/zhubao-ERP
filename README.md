@@ -56,6 +56,7 @@
 - M3.38 作业界面整改，针对“当前页面简单、内容少、UI 丑”的反馈，压缩 760px 窄视口全局导航和页头，文档附件页新增当前文档包、待补证据、仓储边界运营板，避免首屏只停留在摘要卡片。
 - M3.39 运维中心基线，新增 `/api/operations/center` 和 `OC 运维中心` 页面，覆盖日志、服务器运行指标、报错汇总、数据库备份、数据库/前端/后端运行状态和运维接入清单。
 - M3.40 评审 UI 纠偏，针对“只看到简单页面、没有内容、UI 太丑”的反馈，先承认当前前端仍是评审/POC 可视化而非完整生产系统；本轮把全局外壳从暗色演示板改为浅色 ERP/MES 操作台，压缩侧栏、页头、卡片和表格高度，让首页首屏优先呈现今日单据池、焦点工单和异常处理。
+- M3.41 Docker 离线交付基线，新增后端/前端运行镜像、Docker Compose、离线镜像 tar 打包脚本、客户启动脚本和 [19_Docker一键部署与离线交付.md](./docs/19_Docker一键部署与离线交付.md)，运行包只包含构建产物、镜像、SQL 初始化和部署脚本，不包含源码。
 
 ## 目录结构
 
@@ -169,6 +170,16 @@ pnpm --filter zhubao-erp-frontend dev
 
 - 后端 API：`http://localhost:8080`
 - 前端：`http://localhost:5173`
+
+Docker 离线运行包：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.41.0
+```
+
+只验证无源码运行包结构、不构建镜像：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.41-layout -NoDockerBuild -SkipTests
+```
 
 ## 当前 API
 
