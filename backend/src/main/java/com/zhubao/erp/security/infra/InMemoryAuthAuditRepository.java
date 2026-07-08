@@ -1,6 +1,7 @@
 package com.zhubao.erp.security.infra;
 
 import com.zhubao.erp.security.domain.AuthAuditEvent;
+import com.zhubao.erp.security.domain.AuthAuditIntegrity;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -19,11 +20,16 @@ public class InMemoryAuthAuditRepository implements AuthAuditRepository {
 
     @Override
     public AuthAuditEvent save(AuthAuditEvent event) {
-        events.addFirst(event);
+        AuthAuditEvent previous = events.peekFirst();
+        AuthAuditEvent sealed = AuthAuditIntegrity.seal(
+                event,
+                previous == null ? "" : previous.eventHash()
+        );
+        events.addFirst(sealed);
         while (events.size() > MAX_AUDIT_EVENTS) {
             events.removeLast();
         }
-        return event;
+        return sealed;
     }
 
     @Override

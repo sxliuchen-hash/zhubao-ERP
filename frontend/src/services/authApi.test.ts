@@ -3,6 +3,7 @@ import { clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
 import {
   authSessionChangedEvent,
   changeOwnPassword,
+  fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
   fetchAuthAccounts,
   fetchAuthSession,
@@ -99,13 +100,33 @@ describe('authApi', () => {
       reason: '演示账号登录成功',
       occurredAt: '2026-07-08 10:00:00',
       sessionTokenSuffix: 'abc123',
+      previousEventHash: '',
+      eventHash: 'a'.repeat(64),
     }]));
 
     const events = await fetchAuthAuditEvents();
 
     expect(events[0].eventType).toBe('LOGIN');
     expect(events[0].sessionTokenSuffix).toBe('abc123');
+    expect(events[0].eventHash).toHaveLength(64);
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/audit-events');
+  });
+
+  it('fetches authentication audit integrity summary', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response({
+      checkedEvents: 3,
+      verified: true,
+      latestEventId: 'AUTH-AUD-0003',
+      latestEventHash: 'b'.repeat(64),
+      brokenEventId: '',
+      message: '最近认证审计摘要链校验通过',
+    }));
+
+    const summary = await fetchAuthAuditIntegrity();
+
+    expect(summary.verified).toBe(true);
+    expect(summary.latestEventHash).toHaveLength(64);
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/audit-integrity');
   });
 
   it('fetches account management summaries with bearer token', async () => {

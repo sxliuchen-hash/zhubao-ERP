@@ -6,6 +6,7 @@ import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
+import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccountStatusCommand;
@@ -85,6 +86,11 @@ public class AuthController {
     @GetMapping("/audit-events")
     public ApiResponse<List<AuthAuditEvent>> auditEvents() {
         return ApiResponse.ok(authSessionService.auditEvents(20));
+    }
+
+    @GetMapping("/audit-integrity")
+    public ApiResponse<AuthAuditIntegritySummary> auditIntegrity() {
+        return ApiResponse.ok(authSessionService.auditIntegrity(20));
     }
 
     @GetMapping("/accounts")

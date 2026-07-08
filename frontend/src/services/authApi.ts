@@ -48,6 +48,17 @@ export interface AuthAuditEvent {
   reason: string;
   occurredAt: string;
   sessionTokenSuffix: string;
+  previousEventHash: string;
+  eventHash: string;
+}
+
+export interface AuthAuditIntegritySummary {
+  checkedEvents: number;
+  verified: boolean;
+  latestEventId: string;
+  latestEventHash: string;
+  brokenEventId: string;
+  message: string;
 }
 
 export interface AuthUserAccountSummary {
@@ -130,6 +141,10 @@ export async function fetchAuthDemoUsers(): Promise<string[]> {
 
 export async function fetchAuthAuditEvents(): Promise<AuthAuditEvent[]> {
   return apiGet<AuthAuditEvent[]>('/api/auth/audit-events');
+}
+
+export async function fetchAuthAuditIntegrity(): Promise<AuthAuditIntegritySummary> {
+  return apiGet<AuthAuditIntegritySummary>('/api/auth/audit-integrity');
 }
 
 export async function fetchAuthAccounts(): Promise<AuthUserAccountSummary[]> {

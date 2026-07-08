@@ -3,6 +3,8 @@ package com.zhubao.erp.security.app;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
+import com.zhubao.erp.security.domain.AuthAuditIntegrity;
+import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -264,6 +266,48 @@ public class AuthSessionService {
 
     public List<AuthAuditEvent> auditEvents(int limit) {
         return authAuditRepository.findRecent(limit);
+    }
+
+    public AuthAuditIntegritySummary auditIntegrity(int limit) {
+        List<AuthAuditEvent> events = authAuditRepository.findRecent(limit);
+        if (events.isEmpty()) {
+            return new AuthAuditIntegritySummary(0, true, "", "", "", "暂无认证审计事件");
+        }
+        for (int index = 0; index < events.size(); index++) {
+            AuthAuditEvent current = events.get(index);
+            if (!AuthAuditIntegrity.matches(current)) {
+                return new AuthAuditIntegritySummary(
+                        events.size(),
+                        false,
+                        events.get(0).eventId(),
+                        events.get(0).eventHash(),
+                        current.eventId(),
+                        "审计事件摘要不匹配"
+                );
+            }
+            if (index + 1 < events.size()) {
+                AuthAuditEvent previous = events.get(index + 1);
+                if (!AuthAuditIntegrity.normalize(current.previousEventHash()).equals(AuthAuditIntegrity.normalize(previous.eventHash()))) {
+                    return new AuthAuditIntegritySummary(
+                            events.size(),
+                            false,
+                            events.get(0).eventId(),
+                            events.get(0).eventHash(),
+                            current.eventId(),
+                            "审计事件前序摘要不连续"
+                    );
+                }
+            }
+        }
+        AuthAuditEvent latest = events.get(0);
+        return new AuthAuditIntegritySummary(
+                events.size(),
+                true,
+                latest.eventId(),
+                latest.eventHash(),
+                "",
+                "最近认证审计摘要链校验通过"
+        );
     }
 
     private Optional<SessionEntry> resolve(String rawAuthorizationHeader) {

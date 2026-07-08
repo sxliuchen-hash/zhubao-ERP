@@ -34,6 +34,10 @@ class JdbcAuthAuditRepositoryTest {
         assertThat(repository.findRecent(10))
                 .extracting(AuthAuditEvent::eventId)
                 .containsExactly("AUTH-AUD-JDBC-002", "AUTH-AUD-JDBC-001");
+        assertThat(repository.findRecent(10))
+                .allSatisfy(event -> assertThat(event.eventHash()).hasSize(64));
+        assertThat(repository.findRecent(10).get(0).previousEventHash())
+                .isEqualTo(repository.findRecent(10).get(1).eventHash());
     }
 
     @Test
@@ -46,6 +50,8 @@ class JdbcAuthAuditRepositoryTest {
                     assertThat(event.username()).isEqualTo("warehouse");
                     assertThat(event.sessionTokenSuffix()).isEqualTo("tok123");
                     assertThat(event.sessionTokenSuffix()).doesNotContain("Bearer");
+                    assertThat(event.previousEventHash()).isEmpty();
+                    assertThat(event.eventHash()).hasSize(64);
                 });
     }
 
@@ -84,6 +90,8 @@ class JdbcAuthAuditRepositoryTest {
                         reason varchar(255) not null,
                         occurred_at varchar(64) not null,
                         session_token_suffix varchar(16),
+                        previous_event_hash varchar(64) not null default '',
+                        event_hash varchar(64) not null default '',
                         unique key uk_auth_audit_event_id (event_id)
                     )
                     """);

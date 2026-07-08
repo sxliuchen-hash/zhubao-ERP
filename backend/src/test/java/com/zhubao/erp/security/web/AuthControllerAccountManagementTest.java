@@ -1,6 +1,7 @@
 package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.app.AuthSessionService;
@@ -124,6 +125,18 @@ class AuthControllerAccountManagementTest {
         ))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("自助改密需要登录会话");
+    }
+
+    @Test
+    void exposesAuthAuditIntegritySummary() {
+        Fixture fixture = fixture();
+        fixture.controller().login(new AuthLoginCommand("leader", "leader123"));
+
+        ApiResponse<AuthAuditIntegritySummary> summary = fixture.controller().auditIntegrity();
+
+        assertThat(summary.data().verified()).isTrue();
+        assertThat(summary.data().checkedEvents()).isGreaterThanOrEqualTo(1);
+        assertThat(summary.data().latestEventHash()).hasSize(64);
     }
 
     private Fixture fixture() {

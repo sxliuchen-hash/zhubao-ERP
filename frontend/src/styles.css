@@ -16837,6 +16837,16 @@ input {
   padding: 7px;
 }
 
+.security-audit-integrity {
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(15, 159, 132, 0.35);
+  border-left: 3px solid #13b89a;
+  border-radius: 6px;
+  background: rgba(19, 184, 154, 0.12);
+  padding: 7px;
+}
+
 .security-menu-contract b,
 .security-audit-contract b,
 .security-account-contract b {

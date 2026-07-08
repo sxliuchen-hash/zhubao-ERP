@@ -82,6 +82,17 @@ class AuthSessionServiceTest {
                 .extracting("eventType")
                 .contains("LOGIN", "SESSION_READ", "LOGOUT");
         assertThat(service.auditEvents(10))
+                .allSatisfy(event -> assertThat(event.eventHash()).hasSize(64));
+        assertThat(service.auditEvents(10).get(0).previousEventHash())
+                .isEqualTo(service.auditEvents(10).get(1).eventHash());
+        assertThat(service.auditIntegrity(10))
+                .satisfies(summary -> {
+                    assertThat(summary.verified()).isTrue();
+                    assertThat(summary.checkedEvents()).isGreaterThanOrEqualTo(3);
+                    assertThat(summary.latestEventHash()).hasSize(64);
+                    assertThat(summary.brokenEventId()).isEmpty();
+                });
+        assertThat(service.auditEvents(10))
                 .anySatisfy(event -> {
                     assertThat(event.eventType()).isEqualTo("LOGIN");
                     assertThat(event.username()).isEqualTo("warehouse");

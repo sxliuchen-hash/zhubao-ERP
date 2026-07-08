@@ -34,6 +34,8 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('REGISTER_IMPORT_REVIEW');
     expect(wrapper.text()).toContain('后端菜单树返回');
     expect(wrapper.text()).toContain('登录审计');
+    expect(wrapper.text()).toContain('完整性摘要');
+    expect(wrapper.text()).toContain('摘要链通过');
     expect(wrapper.text()).toContain('AUTH-AUD-DEMO-001');
     expect(wrapper.text()).toContain('BUSINESS_LOSS_APPROVAL');
     expect(wrapper.text()).toContain('账号管理边界');

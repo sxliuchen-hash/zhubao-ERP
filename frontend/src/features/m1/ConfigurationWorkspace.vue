@@ -10,6 +10,7 @@ import {
 import type { Tone } from '../../data/m1PrototypeData';
 import {
   changeOwnPassword,
+  fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
   fetchAuthAccounts,
   fetchAuthDemoUsers,
@@ -17,6 +18,7 @@ import {
   loginAuthSession,
   logoutAuthSession,
   type AuthAuditEvent,
+  type AuthAuditIntegritySummary,
   type AuthSession,
   type AuthUserAccountSummary,
 } from '../../services/authApi';
@@ -46,8 +48,18 @@ const authAuditEvents = ref<AuthAuditEvent[]>([
     reason: '演示账号登录成功',
     occurredAt: '2026-07-08 10:00:00',
     sessionTokenSuffix: 'demo01',
+    previousEventHash: '',
+    eventHash: 'local-demo-integrity-hash',
   },
 ]);
+const authAuditIntegrity = ref<AuthAuditIntegritySummary>({
+  checkedEvents: 1,
+  verified: true,
+  latestEventId: 'AUTH-AUD-DEMO-001',
+  latestEventHash: 'local-demo-integrity-hash',
+  brokenEventId: '',
+  message: '本地审计样例，后端启动后返回真实摘要链',
+});
 
 onMounted(async () => {
   await refreshWorkspace();
@@ -55,6 +67,7 @@ onMounted(async () => {
   await loadDemoUsers();
   await loadAuthAccounts();
   await loadAuthAuditEvents();
+  await loadAuthAuditIntegrity();
 });
 
 async function refreshWorkspace() {
@@ -93,6 +106,14 @@ async function loadAuthAuditEvents() {
   }
 }
 
+async function loadAuthAuditIntegrity() {
+  try {
+    authAuditIntegrity.value = await fetchAuthAuditIntegrity();
+  } catch {
+    // Keep local audit integrity sample visible when the backend is not running.
+  }
+}
+
 async function loadAuthAccounts() {
   try {
     authAccounts.value = await fetchAuthAccounts();
@@ -121,6 +142,7 @@ async function handleLogin() {
     await refreshWorkspace();
     await loadAuthAccounts();
     await loadAuthAuditEvents();
+    await loadAuthAuditIntegrity();
   } catch (error) {
     authMessage.value = error instanceof Error ? error.message : '登录失败';
   } finally {
@@ -138,6 +160,7 @@ async function handleLogout() {
     await refreshWorkspace();
     await loadAuthAccounts();
     await loadAuthAuditEvents();
+    await loadAuthAuditIntegrity();
   } finally {
     authBusy.value = false;
   }
@@ -166,6 +189,7 @@ async function handleChangePassword() {
     await refreshWorkspace();
     await loadAuthAccounts();
     await loadAuthAuditEvents();
+    await loadAuthAuditIntegrity();
   } catch (error) {
     passwordMessage.value = error instanceof Error ? error.message : '自助改密失败';
   } finally {
@@ -406,10 +430,23 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
         </div>
         <div class="security-audit-contract">
           <strong>登录审计</strong>
+          <div class="security-audit-integrity">
+            <span>完整性摘要</span>
+            <b>{{ authAuditIntegrity.verified ? '摘要链通过' : '摘要链异常' }}</b>
+            <small>
+              {{ authAuditIntegrity.message }} · 检查 {{ authAuditIntegrity.checkedEvents }} 条
+              · 最新 {{ authAuditIntegrity.latestEventId || 'none' }}
+              · hash *{{ authAuditIntegrity.latestEventHash ? authAuditIntegrity.latestEventHash.slice(-8) : 'none' }}
+            </small>
+          </div>
           <article v-for="event in authAuditEvents.slice(0, 4)" :key="event.eventId">
             <b>{{ event.eventType }} / {{ event.result }}</b>
             <span>{{ event.eventId }} · {{ event.username || 'unknown' }} / {{ event.role || '未识别角色' }}</span>
-            <small>{{ event.reason }} · {{ event.occurredAt }} · token *{{ event.sessionTokenSuffix || 'none' }}</small>
+            <small>
+              {{ event.reason }} · {{ event.occurredAt }}
+              · token *{{ event.sessionTokenSuffix || 'none' }}
+              · hash *{{ event.eventHash ? event.eventHash.slice(-8) : 'none' }}
+            </small>
           </article>
         </div>
         <div class="security-account-contract">
