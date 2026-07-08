@@ -4,6 +4,7 @@ import {
   authSessionChangedEvent,
   changeOwnPassword,
   draftAuthAccountPreApproval,
+  fetchAuthAccountPreApprovalApplications,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
   fetchAuthAccountPreApprovalReadiness,
@@ -11,6 +12,7 @@ import {
   fetchAuthSession,
   loginAuthSession,
   logoutAuthSession,
+  submitAuthAccountPreApprovalApplication,
   unlockAuthAccount,
   updateAuthAccountStatus,
   upsertAuthAccount,
@@ -181,6 +183,67 @@ describe('authApi', () => {
       method: 'POST',
       headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
       body: expect.stringContaining('"actionType":"CREATE_ACCOUNT"'),
+    }));
+  });
+
+  it('wraps account pre-approval application list and submission requests', async () => {
+    setAuthToken('admin-token');
+    const application = {
+      applicationCode: 'AUTH-PRE-APP-202607090001-0001',
+      draftCode: 'AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER',
+      readinessCode: 'AUTH-PRE-CREATE-001',
+      actionType: '创建生产账号',
+      targetUsername: 'planner',
+      applicant: '系统管理员',
+      applicantRole: 'ADMIN',
+      targetOperator: '计划员 陈敏',
+      targetRole: 'SALES',
+      targetDataScope: 'CUSTOMER_RANGE',
+      targetCustomerScope: ['恒信珠宝'],
+      targetEnabled: true,
+      demoAccount: false,
+      reason: '新增业务账号前置审批申请',
+      requiredEvidence: ['账号申请单'],
+      providedEvidence: ['账号申请单：AUTH-REQ-001'],
+      missingEvidence: ['直属负责人审批'],
+      missingCapabilities: ['阻断式审批状态'],
+      approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
+      blockingStatus: '缺少前置材料',
+      applicationStatus: 'WAITING_EVIDENCE',
+      readyForBlockingApproval: false,
+      sourceSummary: 'applicationBoundary=stored pre-approval application',
+      nextAction: '补齐前置材料：直属负责人审批',
+      riskLevel: '高',
+      tone: 'red',
+      submittedAt: '2026-07-09 09:00:00',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response([application]))
+      .mockResolvedValueOnce(response(application));
+
+    const applications = await fetchAuthAccountPreApprovalApplications();
+    const submitted = await submitAuthAccountPreApprovalApplication({
+      actionType: 'CREATE_ACCOUNT',
+      targetUsername: 'planner',
+      targetOperator: '计划员 陈敏',
+      targetRole: 'SALES',
+      targetDataScope: 'CUSTOMER_RANGE',
+      targetCustomerScope: ['恒信珠宝'],
+      targetEnabled: true,
+      demoAccount: false,
+      reason: '新增业务账号前置审批申请',
+      providedEvidence: ['账号申请单：AUTH-REQ-001'],
+    });
+
+    expect(applications[0].applicationStatus).toBe('WAITING_EVIDENCE');
+    expect(submitted.applicationCode).toBe('AUTH-PRE-APP-202607090001-0001');
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts/pre-approval-applications', expect.objectContaining({
+      headers: { Authorization: 'Bearer admin-token' },
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/auth/accounts/pre-approval-applications', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
+      body: expect.stringContaining('"reason":"新增业务账号前置审批申请"'),
     }));
   });
 

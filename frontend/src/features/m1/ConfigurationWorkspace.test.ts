@@ -53,6 +53,9 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER');
     expect(wrapper.text()).toContain('仅草稿评估');
     expect(wrapper.text()).toContain('直属负责人审批');
+    expect(wrapper.text()).toContain('前置审批申请单');
+    expect(wrapper.text()).toContain('AUTH-PRE-APP-202607090001-0001');
+    expect(wrapper.text()).toContain('WAITING_EVIDENCE');
     expect(wrapper.text()).toContain('前置审批就绪度');
     expect(wrapper.text()).toContain('AUTH-PRE-CREATE-001');
     expect(wrapper.text()).toContain('前置申请单号');

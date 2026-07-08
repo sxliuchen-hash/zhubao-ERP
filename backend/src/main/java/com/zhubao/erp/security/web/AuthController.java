@@ -5,6 +5,8 @@ import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
@@ -114,6 +116,22 @@ public class AuthController {
             HttpServletRequest request
     ) {
         return ApiResponse.ok(accountManagementService.preApprovalDraft(command, manageAccountOperator(request)));
+    }
+
+    @GetMapping("/accounts/pre-approval-applications")
+    public ApiResponse<List<AuthAccountPreApprovalApplication>> accountPreApprovalApplications(
+            HttpServletRequest request
+    ) {
+        manageAccountOperator(request);
+        return ApiResponse.ok(accountManagementService.preApprovalApplications());
+    }
+
+    @PostMapping("/accounts/pre-approval-applications")
+    public ApiResponse<AuthAccountPreApprovalApplication> submitAccountPreApprovalApplication(
+            @Valid @RequestBody AuthAccountPreApprovalApplicationCommand command,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(accountManagementService.submitPreApprovalApplication(command, manageAccountOperator(request)));
     }
 
     @PostMapping("/accounts")

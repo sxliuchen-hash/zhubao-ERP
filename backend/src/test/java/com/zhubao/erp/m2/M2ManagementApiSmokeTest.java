@@ -1151,6 +1151,18 @@ class M2ManagementApiSmokeTest {
                 new HttpEntity<>(draftRequest, headers),
                 String.class
         );
+        ResponseEntity<String> application = restTemplate.exchange(
+                "/api/auth/accounts/pre-approval-applications",
+                HttpMethod.POST,
+                new HttpEntity<>(draftRequest, headers),
+                String.class
+        );
+        ResponseEntity<String> applications = restTemplate.exchange(
+                "/api/auth/accounts/pre-approval-applications",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
         ResponseEntity<String> tasks = restTemplate.getForEntity("/api/approvals/tasks", String.class);
 
         assertThat(created.getStatusCode().is2xxSuccessful()).isTrue();
@@ -1175,6 +1187,20 @@ class M2ManagementApiSmokeTest {
                 "直属负责人审批",
                 "阻断式审批状态",
                 "pre-action draft only"
+        );
+        assertThat(application.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(application.getBody()).contains(
+                "\"applicationCode\":\"AUTH-PRE-APP-",
+                "\"draftCode\":\"AUTH-PRE-DRAFT-CREATE_ACCOUNT-APPROVAL-SMOKE\"",
+                "\"applicationStatus\":\"WAITING_EVIDENCE\"",
+                "stored pre-approval application",
+                "not yet an enforcing IAM workflow"
+        );
+        assertThat(applications.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(applications.getBody()).contains(
+                "AUTH-PRE-APP-",
+                "\"targetUsername\":\"approval-smoke\"",
+                "\"applicationStatus\":\"WAITING_EVIDENCE\""
         );
         assertThat(tasks.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(tasks.getBody()).contains(

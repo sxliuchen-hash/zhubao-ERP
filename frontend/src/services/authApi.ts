@@ -128,6 +128,49 @@ export interface AuthAccountPreApprovalDraft {
   tone: string;
 }
 
+export interface AuthAccountPreApprovalApplicationRequest {
+  actionType: string;
+  targetUsername: string;
+  targetOperator?: string;
+  targetRole?: string;
+  targetDataScope?: string;
+  targetCustomerScope?: string[];
+  targetEnabled?: boolean;
+  demoAccount?: boolean;
+  reason: string;
+  providedEvidence?: string[];
+}
+
+export interface AuthAccountPreApprovalApplication {
+  applicationCode: string;
+  draftCode: string;
+  readinessCode: string;
+  actionType: string;
+  targetUsername: string;
+  applicant: string;
+  applicantRole: string;
+  targetOperator: string;
+  targetRole: string;
+  targetDataScope: string;
+  targetCustomerScope: string[];
+  targetEnabled: boolean | null;
+  demoAccount: boolean | null;
+  reason: string;
+  requiredEvidence: string[];
+  providedEvidence: string[];
+  missingEvidence: string[];
+  missingCapabilities: string[];
+  approverRoles: string[];
+  blockingStatus: string;
+  applicationStatus: string;
+  readyForBlockingApproval: boolean;
+  sourceSummary: string;
+  nextAction: string;
+  riskLevel: string;
+  tone: string;
+  submittedAt: string;
+}
+
 export interface ManageAuthUserAccountRequest {
   username: string;
   password?: string;
@@ -211,6 +254,19 @@ export async function draftAuthAccountPreApproval(
 ): Promise<AuthAccountPreApprovalDraft> {
   return apiPost<AuthAccountPreApprovalDraftRequest, AuthAccountPreApprovalDraft>(
     '/api/auth/accounts/pre-approval-drafts',
+    request,
+  );
+}
+
+export async function fetchAuthAccountPreApprovalApplications(): Promise<AuthAccountPreApprovalApplication[]> {
+  return apiGet<AuthAccountPreApprovalApplication[]>('/api/auth/accounts/pre-approval-applications');
+}
+
+export async function submitAuthAccountPreApprovalApplication(
+  request: AuthAccountPreApprovalApplicationRequest,
+): Promise<AuthAccountPreApprovalApplication> {
+  return apiPost<AuthAccountPreApprovalApplicationRequest, AuthAccountPreApprovalApplication>(
+    '/api/auth/accounts/pre-approval-applications',
     request,
   );
 }

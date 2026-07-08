@@ -5,6 +5,8 @@ import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
@@ -17,6 +19,7 @@ import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.security.infra.InMemoryAuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
@@ -276,6 +279,45 @@ class AuthUserAccountManagementServiceTest {
     }
 
     @Test
+    void preApprovalApplicationPersistsDraftEvaluationWithoutWritingAccountOrApprovalTask() {
+        Fixture fixture = fixture();
+
+        AuthAccountPreApprovalApplication application = fixture.managementService().submitPreApprovalApplication(
+                new AuthAccountPreApprovalApplicationCommand(
+                        "CREATE_ACCOUNT",
+                        "Planner",
+                        "计划员 陈敏",
+                        "SALES",
+                        "CUSTOMER_RANGE",
+                        List.of("恒信珠宝", "雅辰饰品"),
+                        true,
+                        false,
+                        "新增业务账号前置审批申请",
+                        List.of("账号申请单：AUTH-REQ-001")
+                ),
+                admin
+        );
+
+        assertThat(application.applicationCode()).startsWith("AUTH-PRE-APP-");
+        assertThat(application.draftCode()).isEqualTo("AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER");
+        assertThat(application.applicationStatus()).isEqualTo("WAITING_EVIDENCE");
+        assertThat(application.blockingStatus()).isEqualTo("缺少前置材料");
+        assertThat(application.targetUsername()).isEqualTo("planner");
+        assertThat(application.targetCustomerScope()).containsExactly("恒信珠宝", "雅辰饰品");
+        assertThat(application.missingEvidence()).contains("直属负责人审批", "系统管理员复核");
+        assertThat(application.sourceSummary()).contains(
+                "applicationStatus=WAITING_EVIDENCE",
+                "stored pre-approval application",
+                "not yet an enforcing IAM workflow"
+        );
+        assertThat(fixture.managementService().preApprovalApplications())
+                .extracting(AuthAccountPreApprovalApplication::applicationCode)
+                .containsExactly(application.applicationCode());
+        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
+    }
+
+    @Test
     void rejectsWeakPasswordThroughManagementBoundary() {
         Fixture fixture = fixture();
 
@@ -414,6 +456,8 @@ class AuthUserAccountManagementServiceTest {
         InMemoryAuthAuditRepository auditRepository = new InMemoryAuthAuditRepository();
         InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
         InMemoryApprovalTaskRepository approvalRepository = new InMemoryApprovalTaskRepository();
+        InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
+                new InMemoryAuthAccountPreApprovalApplicationRepository();
         ApprovalService approvalService = new ApprovalService(approvalRepository);
         AuthUserAccountManagementService managementService = new AuthUserAccountManagementService(
                 accountRepository,
@@ -421,7 +465,8 @@ class AuthUserAccountManagementServiceTest {
                 passwordPolicy,
                 passwordExpiryPolicy,
                 auditRepository,
-                approvalService
+                approvalService,
+                preApprovalApplicationRepository
         );
         AuthSessionService sessionService = new AuthSessionService(
                 navigationMenuService,
@@ -431,13 +476,21 @@ class AuthUserAccountManagementServiceTest {
                 passwordExpiryPolicy,
                 passwordPolicy
         );
-        return new Fixture(accountRepository, auditRepository, approvalRepository, managementService, sessionService);
+        return new Fixture(
+                accountRepository,
+                auditRepository,
+                approvalRepository,
+                preApprovalApplicationRepository,
+                managementService,
+                sessionService
+        );
     }
 
     private record Fixture(
             AuthUserAccountRepository accountRepository,
             InMemoryAuthAuditRepository auditRepository,
             InMemoryApprovalTaskRepository approvalRepository,
+            InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
             AuthUserAccountManagementService managementService,
             AuthSessionService sessionService
     ) {

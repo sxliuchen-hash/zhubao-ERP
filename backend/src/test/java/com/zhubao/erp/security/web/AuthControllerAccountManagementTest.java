@@ -1,6 +1,8 @@
 package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
@@ -23,6 +25,7 @@ import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.security.infra.InMemoryAuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
@@ -74,6 +77,24 @@ class AuthControllerAccountManagementTest {
     }
 
     @Test
+    void preApprovalApplicationRequiresManagementPermission() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.OPERATOR);
+
+        assertThatThrownBy(() -> fixture.controller().submitAccountPreApprovalApplication(
+                preApprovalApplicationCommand(),
+                request
+        ))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR")
+                .hasMessageContaining("登录账号管理");
+        assertThatThrownBy(() -> fixture.controller().accountPreApprovalApplications(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR")
+                .hasMessageContaining("登录账号管理");
+    }
+
+    @Test
     void accountListDoesNotUseAnonymousAdminFallback() {
         Fixture fixture = fixture();
 
@@ -113,6 +134,25 @@ class AuthControllerAccountManagementTest {
         assertThat(draft.data().blockingStatus()).isEqualTo("缺少前置材料");
         assertThat(draft.data().missingEvidence()).contains("直属负责人审批");
         assertThat(draft.data().missingCapabilities()).contains("阻断式审批状态");
+    }
+
+    @Test
+    void submitsPreApprovalApplicationThroughControllerBoundary() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.ADMIN);
+
+        ApiResponse<AuthAccountPreApprovalApplication> submitted =
+                fixture.controller().submitAccountPreApprovalApplication(preApprovalApplicationCommand(), request);
+        ApiResponse<List<AuthAccountPreApprovalApplication>> applications =
+                fixture.controller().accountPreApprovalApplications(request);
+
+        assertThat(submitted.data().applicationCode()).startsWith("AUTH-PRE-APP-");
+        assertThat(submitted.data().applicationStatus()).isEqualTo("WAITING_EVIDENCE");
+        assertThat(submitted.data().targetUsername()).isEqualTo("planner");
+        assertThat(submitted.data().sourceSummary()).contains("stored pre-approval application");
+        assertThat(applications.data())
+                .extracting(AuthAccountPreApprovalApplication::applicationCode)
+                .containsExactly(submitted.data().applicationCode());
     }
 
     @Test
@@ -199,6 +239,8 @@ class AuthControllerAccountManagementTest {
     private Fixture fixture() {
         InMemoryAuthAuditRepository auditRepository = new InMemoryAuthAuditRepository();
         InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
+                new InMemoryAuthAccountPreApprovalApplicationRepository();
         AuthSessionService authSessionService = new AuthSessionService(
                 new NavigationMenuService(),
                 auditRepository,
@@ -212,7 +254,9 @@ class AuthControllerAccountManagementTest {
                 passwordHasher,
                 passwordPolicy,
                 passwordExpiryPolicy,
-                auditRepository
+                auditRepository,
+                null,
+                preApprovalApplicationRepository
         );
         OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService, true);
         AuthController controller = new AuthController(
@@ -243,6 +287,21 @@ class AuthControllerAccountManagementTest {
                 true,
                 false,
                 "新增业务账号",
+                List.of("账号申请单：AUTH-REQ-001")
+        );
+    }
+
+    private AuthAccountPreApprovalApplicationCommand preApprovalApplicationCommand() {
+        return new AuthAccountPreApprovalApplicationCommand(
+                "CREATE_ACCOUNT",
+                "planner",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                "新增业务账号前置审批申请",
                 List.of("账号申请单：AUTH-REQ-001")
         );
     }

@@ -16652,6 +16652,7 @@ input {
 .security-audit-contract,
 .security-account-contract,
 .security-pre-approval-draft,
+.security-pre-approval-applications,
 .security-pre-approval-contract,
 .security-limitation-row article {
   border: 1px solid var(--m349-line);
@@ -16677,6 +16678,8 @@ input {
 .security-account-contract small,
 .security-pre-approval-draft span,
 .security-pre-approval-draft small,
+.security-pre-approval-applications span,
+.security-pre-approval-applications small,
 .security-pre-approval-contract span,
 .security-pre-approval-contract small,
 .security-limitation-row span,
@@ -16825,6 +16828,7 @@ input {
 .security-audit-contract,
 .security-account-contract,
 .security-pre-approval-draft,
+.security-pre-approval-applications,
 .security-pre-approval-contract {
   display: grid;
   gap: 7px;
@@ -16838,6 +16842,7 @@ input {
 .security-audit-contract article,
 .security-account-contract article,
 .security-pre-approval-draft article,
+.security-pre-approval-applications article,
 .security-pre-approval-contract article {
   display: grid;
   gap: 3px;
@@ -16861,6 +16866,7 @@ input {
 .security-audit-contract b,
 .security-account-contract b,
 .security-pre-approval-draft b,
+.security-pre-approval-applications b,
 .security-pre-approval-contract b {
   color: #ffffff;
   font-size: 12px;
@@ -16874,6 +16880,8 @@ input {
 .security-account-contract small,
 .security-pre-approval-draft span,
 .security-pre-approval-draft small,
+.security-pre-approval-applications span,
+.security-pre-approval-applications small,
 .security-pre-approval-contract span,
 .security-pre-approval-contract small,
 .security-header-contract span {
@@ -16884,6 +16892,7 @@ input {
 
 .security-account-contract article,
 .security-pre-approval-draft article,
+.security-pre-approval-applications article,
 .security-pre-approval-contract article {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
@@ -16891,6 +16900,7 @@ input {
 
 .security-account-contract article > div,
 .security-pre-approval-draft article > div,
+.security-pre-approval-applications article > div,
 .security-pre-approval-contract article > div {
   display: grid;
   min-width: 0;

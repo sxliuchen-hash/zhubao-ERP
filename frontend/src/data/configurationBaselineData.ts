@@ -1,5 +1,6 @@
 import type { Tone } from './m1PrototypeData';
 import type {
+  AuthAccountPreApprovalApplication,
   AuthAccountPreApprovalDraft,
   AuthAccountPreApprovalReadiness,
   AuthUserAccountSummary,
@@ -341,6 +342,38 @@ export const authAccountPreApprovalDraftFallback: AuthAccountPreApprovalDraft = 
   riskLevel: '高',
   tone: 'red',
 };
+
+export const authAccountPreApprovalApplicationFallback: AuthAccountPreApprovalApplication[] = [
+  {
+    applicationCode: 'AUTH-PRE-APP-202607090001-0001',
+    draftCode: 'AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER',
+    readinessCode: 'AUTH-PRE-CREATE-001',
+    actionType: '创建生产账号',
+    targetUsername: 'planner',
+    applicant: '系统管理员',
+    applicantRole: 'ADMIN',
+    targetOperator: '计划员 陈敏',
+    targetRole: 'SALES',
+    targetDataScope: 'CUSTOMER_RANGE',
+    targetCustomerScope: ['恒信珠宝', '雅辰饰品'],
+    targetEnabled: true,
+    demoAccount: false,
+    reason: '新增业务账号前置审批申请',
+    requiredEvidence: ['账号申请单', '直属负责人审批', '系统管理员复核', '角色与数据范围说明', '初始密码交付确认'],
+    providedEvidence: ['账号申请单：AUTH-REQ-001'],
+    missingEvidence: ['直属负责人审批', '系统管理员复核', '角色与数据范围说明', '初始密码交付确认'],
+    missingCapabilities: ['阻断式审批状态', '正式电子签字', '审批后自动放行'],
+    approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
+    blockingStatus: '缺少前置材料',
+    applicationStatus: 'WAITING_EVIDENCE',
+    readyForBlockingApproval: false,
+    sourceSummary: 'applicationBoundary=stored pre-approval application, not yet an enforcing IAM workflow',
+    nextAction: '补齐前置材料：直属负责人审批 / 系统管理员复核 / 角色与数据范围说明 / 初始密码交付确认',
+    riskLevel: '高',
+    tone: 'red',
+    submittedAt: '2026-07-09 09:00:00',
+  },
+];
 
 export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
   summary: {

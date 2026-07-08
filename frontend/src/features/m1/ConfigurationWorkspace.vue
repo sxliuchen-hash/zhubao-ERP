@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
+  authAccountPreApprovalApplicationFallback,
   authAccountPreApprovalDraftFallback,
   authAccountPreApprovalReadinessFallback,
   authAccountSummaryFallback,
@@ -13,6 +14,7 @@ import type { Tone } from '../../data/m1PrototypeData';
 import {
   changeOwnPassword,
   draftAuthAccountPreApproval,
+  fetchAuthAccountPreApprovalApplications,
   fetchAuthAccountPreApprovalReadiness,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
@@ -21,6 +23,7 @@ import {
   fetchAuthSession,
   loginAuthSession,
   logoutAuthSession,
+  type AuthAccountPreApprovalApplication,
   type AuthAccountPreApprovalDraft,
   type AuthAuditEvent,
   type AuthAuditIntegritySummary,
@@ -44,6 +47,7 @@ const passwordBusy = ref(false);
 const passwordMessage = ref('');
 const authAccounts = ref<AuthUserAccountSummary[]>(authAccountSummaryFallback);
 const authPreApprovalDraft = ref<AuthAccountPreApprovalDraft>(authAccountPreApprovalDraftFallback);
+const authPreApprovalApplications = ref<AuthAccountPreApprovalApplication[]>(authAccountPreApprovalApplicationFallback);
 const authPreApprovalReadiness = ref<AuthAccountPreApprovalReadiness[]>(authAccountPreApprovalReadinessFallback);
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
@@ -75,6 +79,7 @@ onMounted(async () => {
   await loadDemoUsers();
   await loadAuthAccounts();
   await loadAuthPreApprovalDraft();
+  await loadAuthPreApprovalApplications();
   await loadAuthPreApprovalReadiness();
   await loadAuthAuditEvents();
   await loadAuthAuditIntegrity();
@@ -159,6 +164,15 @@ async function loadAuthPreApprovalDraft() {
   }
 }
 
+async function loadAuthPreApprovalApplications() {
+  try {
+    const applications = await fetchAuthAccountPreApprovalApplications();
+    authPreApprovalApplications.value = applications.length ? applications : authAccountPreApprovalApplicationFallback;
+  } catch {
+    // Keep local pre-approval application samples visible when the backend is not running.
+  }
+}
+
 function demoPassword(username: string): string {
   return `${username}123`;
 }
@@ -179,6 +193,7 @@ async function handleLogin() {
     await refreshWorkspace();
     await loadAuthAccounts();
     await loadAuthPreApprovalDraft();
+    await loadAuthPreApprovalApplications();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -199,6 +214,7 @@ async function handleLogout() {
     await refreshWorkspace();
     await loadAuthAccounts();
     await loadAuthPreApprovalDraft();
+    await loadAuthPreApprovalApplications();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -230,6 +246,7 @@ async function handleChangePassword() {
     await refreshWorkspace();
     await loadAuthAccounts();
     await loadAuthPreApprovalDraft();
+    await loadAuthPreApprovalApplications();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -548,6 +565,22 @@ function readinessTone(tone: string): Tone {
             <StatusBadge
               :label="authPreApprovalDraft.readyForBlockingApproval ? '可进入审批' : '仅草稿评估'"
               :tone="authPreApprovalDraft.readyForBlockingApproval ? 'green' : readinessTone(authPreApprovalDraft.tone)"
+            />
+          </article>
+        </div>
+        <div class="security-pre-approval-applications">
+          <strong>前置审批申请单</strong>
+          <article v-for="application in authPreApprovalApplications" :key="application.applicationCode">
+            <div>
+              <b>{{ application.applicationCode }} / {{ application.actionType }}</b>
+              <span>{{ application.applicationStatus }} · {{ application.targetUsername }} · {{ application.submittedAt }}</span>
+              <small>目标：{{ application.targetOperator || '未填' }} / {{ application.targetRole || '未填' }} / {{ application.targetDataScope || '未填' }}</small>
+              <small>待补材料：{{ application.missingEvidence.join(' / ') || '无' }}</small>
+              <small>系统缺口：{{ application.missingCapabilities.join(' / ') || '无' }}</small>
+            </div>
+            <StatusBadge
+              :label="application.readyForBlockingApproval ? '可进入审批' : application.applicationStatus"
+              :tone="application.readyForBlockingApproval ? 'green' : readinessTone(application.tone)"
             />
           </article>
         </div>

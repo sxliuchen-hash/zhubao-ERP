@@ -2,6 +2,9 @@ package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
@@ -30,14 +34,19 @@ public class AuthUserAccountManagementService {
     private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter APPLICATION_CODE_TIME = DateTimeFormatter
+            .ofPattern("yyyyMMddHHmmss")
+            .withZone(ZoneId.systemDefault());
 
     private final AtomicLong auditSequence = new AtomicLong();
+    private final AtomicLong applicationSequence = new AtomicLong();
     private final AuthUserAccountRepository accountRepository;
     private final PasswordHasher passwordHasher;
     private final PasswordPolicy passwordPolicy;
     private final PasswordExpiryPolicy passwordExpiryPolicy;
     private final AuthAuditRepository authAuditRepository;
     private final ApprovalService approvalService;
+    private final AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository;
 
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
@@ -46,7 +55,18 @@ public class AuthUserAccountManagementService {
             PasswordExpiryPolicy passwordExpiryPolicy,
             AuthAuditRepository authAuditRepository
     ) {
-        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, null);
+        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, null, null);
+    }
+
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService
+    ) {
+        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, approvalService, null);
     }
 
     @Autowired
@@ -56,7 +76,8 @@ public class AuthUserAccountManagementService {
             PasswordPolicy passwordPolicy,
             PasswordExpiryPolicy passwordExpiryPolicy,
             AuthAuditRepository authAuditRepository,
-            ApprovalService approvalService
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository
     ) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
@@ -64,6 +85,7 @@ public class AuthUserAccountManagementService {
         this.passwordExpiryPolicy = passwordExpiryPolicy;
         this.authAuditRepository = authAuditRepository;
         this.approvalService = approvalService;
+        this.preApprovalApplicationRepository = preApprovalApplicationRepository;
     }
 
     public List<AuthUserAccountSummary> accounts() {
@@ -174,6 +196,55 @@ public class AuthUserAccountManagementService {
                 readiness.riskLevel(),
                 readiness.tone()
         );
+    }
+
+    public List<AuthAccountPreApprovalApplication> preApprovalApplications() {
+        if (preApprovalApplicationRepository == null) {
+            return List.of();
+        }
+        return preApprovalApplicationRepository.findAll().stream()
+                .sorted(Comparator.comparing(AuthAccountPreApprovalApplication::submittedAt).reversed())
+                .toList();
+    }
+
+    public AuthAccountPreApprovalApplication submitPreApprovalApplication(
+            AuthAccountPreApprovalApplicationCommand command,
+            OperatorContext operatorContext
+    ) {
+        AuthAccountPreApprovalDraft draft = preApprovalDraft(command.toDraftCommand(), operatorContext);
+        String applicationStatus = applicationStatus(draft);
+        AuthAccountPreApprovalApplication application = new AuthAccountPreApprovalApplication(
+                nextPreApprovalApplicationCode(),
+                draft.draftCode(),
+                draft.readinessCode(),
+                draft.actionType(),
+                draft.targetUsername(),
+                draft.applicant(),
+                draft.applicantRole(),
+                blankToDefault(command.targetOperator(), ""),
+                blankToDefault(command.targetRole(), ""),
+                blankToDefault(command.targetDataScope(), ""),
+                normalizeList(command.targetCustomerScope()),
+                command.targetEnabled(),
+                command.demoAccount(),
+                blankToDefault(command.reason(), ""),
+                draft.requiredEvidence(),
+                draft.providedEvidence(),
+                draft.missingEvidence(),
+                draft.missingCapabilities(),
+                draft.approverRoles(),
+                draft.blockingStatus(),
+                applicationStatus,
+                draft.readyForBlockingApproval(),
+                draft.sourceSummary()
+                        + "; applicationStatus=" + applicationStatus
+                        + "; applicationBoundary=stored pre-approval application, not yet an enforcing IAM workflow",
+                applicationNextAction(draft, applicationStatus),
+                draft.riskLevel(),
+                draft.tone(),
+                DISPLAY_TIME.format(Instant.now())
+        );
+        return requirePreApprovalApplicationRepository().save(application);
     }
 
     public AuthUserAccountSummary upsert(ManageAuthUserAccountCommand command, OperatorContext operatorContext) {
@@ -351,6 +422,31 @@ public class AuthUserAccountManagementService {
                 || normalizedProvided.contains(normalizedRequired);
     }
 
+    private String applicationStatus(AuthAccountPreApprovalDraft draft) {
+        if (!draft.missingEvidence().isEmpty()) {
+            return "WAITING_EVIDENCE";
+        }
+        if (!draft.missingCapabilities().isEmpty()) {
+            return "WAITING_SYSTEM_CAPABILITY";
+        }
+        return "READY_FOR_BLOCKING_APPROVAL";
+    }
+
+    private String applicationNextAction(AuthAccountPreApprovalDraft draft, String applicationStatus) {
+        return switch (applicationStatus) {
+            case "WAITING_EVIDENCE" -> draft.nextAction();
+            case "WAITING_SYSTEM_CAPABILITY" -> "补齐系统能力：" + String.join(" / ", draft.missingCapabilities());
+            default -> "提交审批人复核并冻结账号动作放行条件";
+        };
+    }
+
+    private AuthAccountPreApprovalApplicationRepository requirePreApprovalApplicationRepository() {
+        if (preApprovalApplicationRepository == null) {
+            throw new BusinessException("账号前置审批申请单仓储未配置");
+        }
+        return preApprovalApplicationRepository;
+    }
+
     private PreApprovalAction parsePreApprovalAction(String rawAction) {
         String normalized = normalizeEnum(rawAction);
         for (PreApprovalAction action : PreApprovalAction.values()) {
@@ -382,6 +478,11 @@ public class AuthUserAccountManagementService {
 
     private String blankToDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private String nextPreApprovalApplicationCode() {
+        return "AUTH-PRE-APP-" + APPLICATION_CODE_TIME.format(Instant.now())
+                + "-" + String.format("%04d", applicationSequence.incrementAndGet());
     }
 
     private String reasonSuffix(String reason) {
