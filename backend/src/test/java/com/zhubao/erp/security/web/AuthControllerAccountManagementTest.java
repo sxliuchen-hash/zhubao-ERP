@@ -368,6 +368,7 @@ class AuthControllerAccountManagementTest {
                 "允许账号动作进入放行校验",
                 "中",
                 "green",
+                "",
                 "2026-07-09 10:00:00"
         );
     }

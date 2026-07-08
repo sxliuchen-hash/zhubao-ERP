@@ -371,6 +371,7 @@ export const authAccountPreApprovalApplicationFallback: AuthAccountPreApprovalAp
     nextAction: '补齐前置材料：直属负责人审批 / 系统管理员复核 / 角色与数据范围说明 / 初始密码交付确认',
     riskLevel: '高',
     tone: 'red',
+    approvalTaskCode: 'AUTH-PRE-TASK-202607090001-0001',
     submittedAt: '2026-07-09 09:00:00',
   },
 ];

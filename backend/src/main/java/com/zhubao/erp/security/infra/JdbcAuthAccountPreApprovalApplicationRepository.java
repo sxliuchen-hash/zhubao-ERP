@@ -78,9 +78,9 @@ public class JdbcAuthAccountPreApprovalApplicationRepository
                     application_code, draft_code, readiness_code, action_type, target_username, applicant,
                     applicant_role, target_operator, target_role, target_data_scope, target_customer_scope,
                     target_enabled, demo_account, reason, required_evidence, provided_evidence, missing_evidence,
-                    missing_capabilities, approver_roles, blocking_status, application_status,
+                    missing_capabilities, approver_roles, blocking_status, application_status, approval_task_code,
                     ready_for_blocking_approval, source_summary, next_action, risk_level, tone, submitted_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -115,6 +115,7 @@ public class JdbcAuthAccountPreApprovalApplicationRepository
                        approver_roles = ?,
                        blocking_status = ?,
                        application_status = ?,
+                       approval_task_code = ?,
                        ready_for_blocking_approval = ?,
                        source_summary = ?,
                        next_action = ?,
@@ -155,12 +156,13 @@ public class JdbcAuthAccountPreApprovalApplicationRepository
         statement.setString(19, serialize(application.approverRoles()));
         statement.setString(20, application.blockingStatus());
         statement.setString(21, application.applicationStatus());
-        statement.setBoolean(22, application.readyForBlockingApproval());
-        statement.setString(23, application.sourceSummary());
-        statement.setString(24, application.nextAction());
-        statement.setString(25, application.riskLevel());
-        statement.setString(26, application.tone());
-        statement.setString(27, application.submittedAt());
+        statement.setString(22, application.approvalTaskCode());
+        statement.setBoolean(23, application.readyForBlockingApproval());
+        statement.setString(24, application.sourceSummary());
+        statement.setString(25, application.nextAction());
+        statement.setString(26, application.riskLevel());
+        statement.setString(27, application.tone());
+        statement.setString(28, application.submittedAt());
     }
 
     private void bindUpdate(PreparedStatement statement, AuthAccountPreApprovalApplication application) throws SQLException {
@@ -184,13 +186,14 @@ public class JdbcAuthAccountPreApprovalApplicationRepository
         statement.setString(18, serialize(application.approverRoles()));
         statement.setString(19, application.blockingStatus());
         statement.setString(20, application.applicationStatus());
-        statement.setBoolean(21, application.readyForBlockingApproval());
-        statement.setString(22, application.sourceSummary());
-        statement.setString(23, application.nextAction());
-        statement.setString(24, application.riskLevel());
-        statement.setString(25, application.tone());
-        statement.setString(26, application.submittedAt());
-        statement.setString(27, application.applicationCode());
+        statement.setString(21, application.approvalTaskCode());
+        statement.setBoolean(22, application.readyForBlockingApproval());
+        statement.setString(23, application.sourceSummary());
+        statement.setString(24, application.nextAction());
+        statement.setString(25, application.riskLevel());
+        statement.setString(26, application.tone());
+        statement.setString(27, application.submittedAt());
+        statement.setString(28, application.applicationCode());
     }
 
     private AuthAccountPreApprovalApplication map(ResultSet rs) throws SQLException {
@@ -221,6 +224,7 @@ public class JdbcAuthAccountPreApprovalApplicationRepository
                 rs.getString("next_action"),
                 rs.getString("risk_level"),
                 rs.getString("tone"),
+                rs.getString("approval_task_code"),
                 rs.getString("submitted_at")
         );
     }
@@ -231,7 +235,8 @@ public class JdbcAuthAccountPreApprovalApplicationRepository
                        applicant_role, target_operator, target_role, target_data_scope, target_customer_scope,
                        target_enabled, demo_account, reason, required_evidence, provided_evidence, missing_evidence,
                        missing_capabilities, approver_roles, blocking_status, application_status,
-                       ready_for_blocking_approval, source_summary, next_action, risk_level, tone, submitted_at
+                       approval_task_code, ready_for_blocking_approval, source_summary, next_action, risk_level, tone,
+                       submitted_at
                 """;
     }
 

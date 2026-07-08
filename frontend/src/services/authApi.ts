@@ -168,6 +168,7 @@ export interface AuthAccountPreApprovalApplication {
   nextAction: string;
   riskLevel: string;
   tone: string;
+  approvalTaskCode: string;
   submittedAt: string;
 }
 

@@ -17,8 +17,8 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.112 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.112 / 账号动作强制申请单');
+    expect(wrapper.text()).toContain('M3.113 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.113 / 申请单审批任务');
     expect(wrapper.text()).toContain('复核补录');
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('授权导航过滤');

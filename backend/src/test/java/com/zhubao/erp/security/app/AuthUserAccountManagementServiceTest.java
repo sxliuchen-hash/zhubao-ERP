@@ -295,7 +295,7 @@ class AuthUserAccountManagementServiceTest {
     }
 
     @Test
-    void preApprovalApplicationPersistsDraftEvaluationWithoutWritingAccountOrApprovalTask() {
+    void preApprovalApplicationPersistsDraftEvaluationAndCreatesHandoffTask() {
         Fixture fixture = fixture();
 
         AuthAccountPreApprovalApplication application = fixture.managementService().submitPreApprovalApplication(
@@ -324,13 +324,30 @@ class AuthUserAccountManagementServiceTest {
         assertThat(application.sourceSummary()).contains(
                 "applicationStatus=WAITING_EVIDENCE",
                 "stored pre-approval application",
-                "not yet an enforcing IAM workflow"
+                "not yet an enforcing IAM workflow",
+                "approvalTaskCode=AUTH-PRE-TASK-"
         );
+        assertThat(application.approvalTaskCode()).startsWith("AUTH-PRE-TASK-");
         assertThat(fixture.managementService().preApprovalApplications())
                 .extracting(AuthAccountPreApprovalApplication::applicationCode)
                 .containsExactly(application.applicationCode());
         assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
-        assertThat(fixture.approvalRepository().findAll()).isEmpty();
+        assertThat(fixture.approvalRepository().findAll())
+                .singleElement()
+                .satisfies(task -> {
+                    assertThat(task.approvalCode()).isEqualTo(application.approvalTaskCode());
+                    assertThat(task.scene()).isEqualTo("ACCOUNT_PRE_APPROVAL");
+                    assertThat(task.businessCode()).isEqualTo(application.applicationCode());
+                    assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
+                    assertThat(task.sourceStatus()).isEqualTo("WAITING_EVIDENCE");
+                    assertThat(task.evidenceCode()).isEqualTo(application.applicationCode());
+                    assertThat(task.sourceSummary()).contains(
+                            "applicationCode=" + application.applicationCode(),
+                            "targetUsername=planner",
+                            "missingEvidence=",
+                            "not final IAM approval"
+                    );
+                });
     }
 
     @Test
@@ -653,6 +670,7 @@ class AuthUserAccountManagementServiceTest {
                 readyForBlockingApproval ? "允许账号动作进入放行校验" : "补齐前置材料",
                 readyForBlockingApproval ? "中" : "高",
                 readyForBlockingApproval ? "green" : "red",
+                "",
                 "2026-07-09 10:00:00"
         );
     }

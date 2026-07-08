@@ -216,6 +216,7 @@ describe('authApi', () => {
       nextAction: '补齐前置材料：直属负责人审批',
       riskLevel: '高',
       tone: 'red',
+      approvalTaskCode: 'AUTH-PRE-TASK-202607090001-0001',
       submittedAt: '2026-07-09 09:00:00',
     };
     const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -237,6 +238,7 @@ describe('authApi', () => {
     });
 
     expect(applications[0].applicationStatus).toBe('WAITING_EVIDENCE');
+    expect(applications[0].approvalTaskCode).toBe('AUTH-PRE-TASK-202607090001-0001');
     expect(submitted.applicationCode).toBe('AUTH-PRE-APP-202607090001-0001');
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts/pre-approval-applications', expect.objectContaining({
       headers: { Authorization: 'Bearer admin-token' },

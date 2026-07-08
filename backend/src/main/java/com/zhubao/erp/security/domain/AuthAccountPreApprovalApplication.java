@@ -29,6 +29,7 @@ public record AuthAccountPreApprovalApplication(
         String nextAction,
         String riskLevel,
         String tone,
+        String approvalTaskCode,
         String submittedAt
 ) {
 }

@@ -1,5 +1,6 @@
 package com.zhubao.erp.approval.app;
 
+import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
 import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
@@ -10,6 +11,7 @@ import com.zhubao.erp.common.error.BusinessException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -84,6 +86,48 @@ class ApprovalServiceTest {
                 "not a blocking IAM workflow"
         );
         assertThat(service.findPending()).contains(task);
+    }
+
+    @Test
+    void createsWaitingAccountPreApprovalHandoffTask() {
+        ApprovalTask task = service.createAccountPreApprovalTask(new AccountPreApprovalTaskCommand(
+                "AUTH-PRE-APP-UNIT-001",
+                "AUTH-PRE-CREATE-001",
+                "CREATE_ACCOUNT",
+                "planner",
+                "admin",
+                "ADMIN",
+                "Planner Chen",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("Customer-A", "Customer-B"),
+                "WAITING_EVIDENCE",
+                "missing evidence",
+                false,
+                List.of("manager approval"),
+                List.of("formal e-signature"),
+                List.of("GENERAL_MANAGER", "ADMIN"),
+                "HIGH",
+                "source=pre-approval application"
+        ));
+
+        assertThat(task.approvalCode()).startsWith("AUTH-PRE-TASK-");
+        assertThat(task.scene()).isEqualTo("ACCOUNT_PRE_APPROVAL");
+        assertThat(task.businessCode()).isEqualTo("AUTH-PRE-APP-UNIT-001");
+        assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
+        assertThat(task.applicant()).isEqualTo("admin");
+        assertThat(task.approver()).isEqualTo("GENERAL_MANAGER|ADMIN");
+        assertThat(task.ownerRole()).isEqualTo("GENERAL_MANAGER");
+        assertThat(task.sourceStatus()).isEqualTo("WAITING_EVIDENCE");
+        assertThat(task.evidenceCode()).isEqualTo("AUTH-PRE-APP-UNIT-001");
+        assertThat(task.sourceSummary()).contains(
+                "applicationCode=AUTH-PRE-APP-UNIT-001",
+                "targetUsername=planner",
+                "targetCustomerScope=Customer-A|Customer-B",
+                "missingEvidence=manager approval",
+                "missingCapabilities=formal e-signature",
+                "not final IAM approval"
+        );
     }
 
     @Test

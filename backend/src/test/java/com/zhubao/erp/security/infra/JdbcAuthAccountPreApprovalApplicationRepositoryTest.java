@@ -53,6 +53,7 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                     assertThat(application.missingEvidence()).containsExactly("直属负责人审批", "系统管理员复核");
                     assertThat(application.missingCapabilities()).contains("阻断式审批状态");
                     assertThat(application.approverRoles()).containsExactly("GENERAL_MANAGER", "ADMIN");
+                    assertThat(application.approvalTaskCode()).isEqualTo("AUTH-PRE-TASK-202607090001-0001");
                     assertThat(application.readyForBlockingApproval()).isFalse();
                     assertThat(application.sourceSummary()).contains("stored pre-approval application");
                     assertThat(application.submittedAt()).isEqualTo("2026-07-09 09:00:00");
@@ -96,6 +97,7 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                 .get()
                 .satisfies(application -> {
                     assertThat(application.applicationStatus()).isEqualTo("READY_FOR_BLOCKING_APPROVAL");
+                    assertThat(application.approvalTaskCode()).isEqualTo("AUTH-PRE-TASK-202607090001-0001");
                     assertThat(application.missingEvidence()).isEmpty();
                     assertThat(application.missingCapabilities()).isEmpty();
                     assertThat(application.readyForBlockingApproval()).isTrue();
@@ -137,6 +139,7 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                 readyForBlockingApproval ? "提交审批人复核并冻结账号动作放行条件" : "补齐前置材料",
                 "高",
                 readyForBlockingApproval ? "green" : "red",
+                "AUTH-PRE-TASK-202607090001-0001",
                 "2026-07-09 09:00:00"
         );
     }
@@ -168,6 +171,7 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                         approver_roles varchar(512) not null default '',
                         blocking_status varchar(64) not null,
                         application_status varchar(64) not null,
+                        approval_task_code varchar(64) not null default '',
                         ready_for_blocking_approval boolean not null default false,
                         source_summary text not null,
                         next_action varchar(512) not null default '',

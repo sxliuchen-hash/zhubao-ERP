@@ -1,5 +1,6 @@
 package com.zhubao.erp.approval.app;
 
+import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
 import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
@@ -22,6 +23,7 @@ public class ApprovalService {
 
     private final ApprovalTaskRepository repository;
     private final AtomicLong accountApprovalSequence = new AtomicLong();
+    private final AtomicLong accountPreApprovalSequence = new AtomicLong();
 
     public ApprovalService(ApprovalTaskRepository repository) {
         this.repository = repository;
@@ -88,6 +90,32 @@ public class ApprovalService {
                         demoAccount
                 ),
                 "",
+                false,
+                createdAt,
+                null,
+                null,
+                null,
+                false
+        );
+        return repository.save(task);
+    }
+
+    public ApprovalTask createAccountPreApprovalTask(AccountPreApprovalTaskCommand command) {
+        String createdAt = now();
+        String ownerRole = firstOrDefault(command.approverRoles(), "GENERAL_MANAGER");
+        ApprovalTask task = new ApprovalTask(
+                nextAccountPreApprovalCode(),
+                "ACCOUNT_PRE_APPROVAL",
+                command.applicationCode(),
+                "Account pre-approval review / " + command.targetUsername(),
+                ApprovalStatus.WAITING_APPROVAL,
+                blankToDefault(command.applicant(), "SYSTEM"),
+                joinList(command.approverRoles()).isBlank() ? ownerRole : joinList(command.approverRoles()),
+                ownerRole,
+                preApprovalSeverity(command),
+                command.applicationStatus(),
+                buildAccountPreApprovalSummary(command),
+                command.applicationCode(),
                 false,
                 createdAt,
                 null,
@@ -191,9 +219,58 @@ public class ApprovalService {
                 + "; boundary=post-action approval summary, not a blocking IAM workflow";
     }
 
+    private String buildAccountPreApprovalSummary(AccountPreApprovalTaskCommand command) {
+        return "applicationCode=" + blankToDefault(command.applicationCode(), "")
+                + "; readinessCode=" + blankToDefault(command.readinessCode(), "")
+                + "; actionType=" + blankToDefault(command.actionType(), "")
+                + "; targetUsername=" + blankToDefault(command.targetUsername(), "")
+                + "; applicantRole=" + blankToDefault(command.applicantRole(), "UNKNOWN")
+                + "; targetOperator=" + blankToDefault(command.targetOperator(), "")
+                + "; targetRole=" + blankToDefault(command.targetRole(), "UNKNOWN")
+                + "; targetDataScope=" + blankToDefault(command.targetDataScope(), "UNKNOWN")
+                + "; targetCustomerScope=" + joinList(command.targetCustomerScope())
+                + "; applicationStatus=" + blankToDefault(command.applicationStatus(), "UNKNOWN")
+                + "; blockingStatus=" + blankToDefault(command.blockingStatus(), "")
+                + "; readyForBlockingApproval=" + command.readyForBlockingApproval()
+                + "; missingEvidence=" + joinList(command.missingEvidence())
+                + "; missingCapabilities=" + joinList(command.missingCapabilities())
+                + "; sourceSummary=" + blankToDefault(command.sourceSummary(), "")
+                + "; boundary=pre-approval handoff task, not final IAM approval";
+    }
+
+    private String preApprovalSeverity(AccountPreApprovalTaskCommand command) {
+        if (command.readyForBlockingApproval()) {
+            return "amber";
+        }
+        String riskLevel = blankToDefault(command.riskLevel(), "");
+        if (riskLevel.contains("高") || "HIGH".equalsIgnoreCase(riskLevel)) {
+            return "red";
+        }
+        return "amber";
+    }
+
     private String nextAccountApprovalCode() {
         return "AUTH-ACC-APP-" + OffsetDateTime.now().format(ACCOUNT_APPROVAL_CODE_TIME)
                 + "-" + String.format("%04d", accountApprovalSequence.incrementAndGet());
+    }
+
+    private String nextAccountPreApprovalCode() {
+        return "AUTH-PRE-TASK-" + OffsetDateTime.now().format(ACCOUNT_APPROVAL_CODE_TIME)
+                + "-" + String.format("%04d", accountPreApprovalSequence.incrementAndGet());
+    }
+
+    private String firstOrDefault(List<String> values, String fallback) {
+        if (values == null || values.isEmpty() || values.get(0) == null || values.get(0).isBlank()) {
+            return fallback;
+        }
+        return values.get(0).trim();
+    }
+
+    private String joinList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        return String.join("|", values);
     }
 
     private String blankToDefault(String value, String fallback) {

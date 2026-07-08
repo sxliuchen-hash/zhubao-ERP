@@ -1,6 +1,8 @@
 package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.approval.app.ApprovalService;
+import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
+import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
@@ -269,9 +271,11 @@ public class AuthUserAccountManagementService {
                 applicationNextAction(draft, applicationStatus),
                 draft.riskLevel(),
                 draft.tone(),
+                "",
                 DISPLAY_TIME.format(Instant.now())
         );
-        return requirePreApprovalApplicationRepository().save(application);
+        ApprovalTask task = createPreApprovalTask(application);
+        return requirePreApprovalApplicationRepository().save(withPreApprovalTask(application, task));
     }
 
     public AuthUserAccountSummary upsert(ManageAuthUserAccountCommand command, OperatorContext operatorContext) {
@@ -502,6 +506,71 @@ public class AuthUserAccountManagementService {
             case "WAITING_SYSTEM_CAPABILITY" -> "补齐系统能力：" + String.join(" / ", draft.missingCapabilities());
             default -> "提交审批人复核并冻结账号动作放行条件";
         };
+    }
+
+    private ApprovalTask createPreApprovalTask(AuthAccountPreApprovalApplication application) {
+        if (approvalService == null) {
+            return null;
+        }
+        return approvalService.createAccountPreApprovalTask(new AccountPreApprovalTaskCommand(
+                application.applicationCode(),
+                application.readinessCode(),
+                application.actionType(),
+                application.targetUsername(),
+                application.applicant(),
+                application.applicantRole(),
+                application.targetOperator(),
+                application.targetRole(),
+                application.targetDataScope(),
+                application.targetCustomerScope(),
+                application.applicationStatus(),
+                application.blockingStatus(),
+                application.readyForBlockingApproval(),
+                application.missingEvidence(),
+                application.missingCapabilities(),
+                application.approverRoles(),
+                application.riskLevel(),
+                application.sourceSummary()
+        ));
+    }
+
+    private AuthAccountPreApprovalApplication withPreApprovalTask(
+            AuthAccountPreApprovalApplication application,
+            ApprovalTask task
+    ) {
+        if (task == null) {
+            return application;
+        }
+        return new AuthAccountPreApprovalApplication(
+                application.applicationCode(),
+                application.draftCode(),
+                application.readinessCode(),
+                application.actionType(),
+                application.targetUsername(),
+                application.applicant(),
+                application.applicantRole(),
+                application.targetOperator(),
+                application.targetRole(),
+                application.targetDataScope(),
+                application.targetCustomerScope(),
+                application.targetEnabled(),
+                application.demoAccount(),
+                application.reason(),
+                application.requiredEvidence(),
+                application.providedEvidence(),
+                application.missingEvidence(),
+                application.missingCapabilities(),
+                application.approverRoles(),
+                application.blockingStatus(),
+                application.applicationStatus(),
+                application.readyForBlockingApproval(),
+                application.sourceSummary() + "; approvalTaskCode=" + task.approvalCode(),
+                "Generated lightweight approval task: " + task.approvalCode() + "; " + application.nextAction(),
+                application.riskLevel(),
+                application.tone(),
+                task.approvalCode(),
+                application.submittedAt()
+        );
     }
 
     private AuthAccountPreApprovalApplication validatePreApprovalApplication(

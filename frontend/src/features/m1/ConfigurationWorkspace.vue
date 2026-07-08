@@ -574,6 +574,7 @@ function readinessTone(tone: string): Tone {
             <div>
               <b>{{ application.applicationCode }} / {{ application.actionType }}</b>
               <span>{{ application.applicationStatus }} · {{ application.targetUsername }} · {{ application.submittedAt }}</span>
+              <small>审批任务：{{ application.approvalTaskCode || '未生成' }}</small>
               <small>目标：{{ application.targetOperator || '未填' }} / {{ application.targetRole || '未填' }} / {{ application.targetDataScope || '未填' }}</small>
               <small>待补材料：{{ application.missingEvidence.join(' / ') || '无' }}</small>
               <small>系统缺口：{{ application.missingCapabilities.join(' / ') || '无' }}</small>
