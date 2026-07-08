@@ -9,6 +9,7 @@ import {
 } from '../../data/configurationBaselineData';
 import type { Tone } from '../../data/m1PrototypeData';
 import {
+  changeOwnPassword,
   fetchAuthAuditEvents,
   fetchAuthAccounts,
   fetchAuthDemoUsers,
@@ -28,6 +29,11 @@ const authUsername = ref('leader');
 const authPassword = ref('leader123');
 const authBusy = ref(false);
 const authMessage = ref('');
+const passwordCurrent = ref('');
+const passwordNew = ref('');
+const passwordConfirm = ref('');
+const passwordBusy = ref(false);
+const passwordMessage = ref('');
 const authAccounts = ref<AuthUserAccountSummary[]>(authAccountSummaryFallback);
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
@@ -134,6 +140,36 @@ async function handleLogout() {
     await loadAuthAuditEvents();
   } finally {
     authBusy.value = false;
+  }
+}
+
+async function handleChangePassword() {
+  passwordBusy.value = true;
+  passwordMessage.value = '';
+  try {
+    if (!authSession.value) {
+      passwordMessage.value = '请先登录后再自助改密';
+      return;
+    }
+    if (passwordNew.value !== passwordConfirm.value) {
+      passwordMessage.value = '两次新密码不一致';
+      return;
+    }
+    authSession.value = await changeOwnPassword({
+      currentPassword: passwordCurrent.value,
+      newPassword: passwordNew.value,
+    });
+    passwordCurrent.value = '';
+    passwordNew.value = '';
+    passwordConfirm.value = '';
+    passwordMessage.value = `自助改密成功，密码到期 ${authSession.value.passwordExpiresAt}`;
+    await refreshWorkspace();
+    await loadAuthAccounts();
+    await loadAuthAuditEvents();
+  } catch (error) {
+    passwordMessage.value = error instanceof Error ? error.message : '自助改密失败';
+  } finally {
+    passwordBusy.value = false;
   }
 }
 
@@ -273,6 +309,47 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
             <button class="secondary-button" type="button" :disabled="authBusy || !authSession" @click="handleLogout">退出</button>
           </div>
           <small v-if="authMessage" class="auth-session-message">{{ authMessage }}</small>
+        </form>
+
+        <form class="auth-password-strip" aria-label="自助改密续期" @submit.prevent="handleChangePassword">
+          <div>
+            <span>自助改密 / 续期</span>
+            <strong>{{ authSession ? '登录态内刷新 passwordChangedAt' : '需先建立登录会话' }}</strong>
+            <small>仅接受 Bearer token，不使用请求头角色兜底；新密码沿用生产密码策略。</small>
+          </div>
+          <label>
+            <span>当前密码</span>
+            <input
+              v-model="passwordCurrent"
+              :disabled="passwordBusy || !authSession"
+              type="password"
+              autocomplete="current-password"
+            />
+          </label>
+          <label>
+            <span>新密码</span>
+            <input
+              v-model="passwordNew"
+              :disabled="passwordBusy || !authSession"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <label>
+            <span>确认新密码</span>
+            <input
+              v-model="passwordConfirm"
+              :disabled="passwordBusy || !authSession"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <div class="auth-session-actions">
+            <button class="primary-button" type="submit" :disabled="passwordBusy || !authSession">
+              {{ passwordBusy ? '处理中' : '更新密码' }}
+            </button>
+          </div>
+          <small v-if="passwordMessage" class="auth-session-message">{{ passwordMessage }}</small>
         </form>
 
         <div class="security-identity-grid">

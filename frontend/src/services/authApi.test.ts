@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
 import {
   authSessionChangedEvent,
+  changeOwnPassword,
   fetchAuthAuditEvents,
   fetchAuthAccounts,
   fetchAuthSession,
@@ -152,6 +153,35 @@ describe('authApi', () => {
       method: 'POST',
       body: expect.stringContaining('现场核实本人'),
     }));
+  });
+
+  it('changes the current user password with bearer token and broadcasts the refreshed session', async () => {
+    setAuthToken('token-demo');
+    const refreshedSession = {
+      ...authSession,
+      passwordChangedAt: '2026-07-08 11:30:00',
+      passwordExpiresAt: '2026-10-06 11:30:00',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response(refreshedSession));
+    const authListener = vi.fn();
+    window.addEventListener(authSessionChangedEvent, authListener);
+
+    const session = await changeOwnPassword({
+      currentPassword: 'leader123',
+      newPassword: 'Secure-2026-Leader!',
+    });
+
+    expect(session.passwordChangedAt).toBe('2026-07-08 11:30:00');
+    expect(getAuthToken()).toBe('token-demo');
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/password', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ Authorization: 'Bearer token-demo' }),
+      body: expect.stringContaining('"newPassword":"Secure-2026-Leader!"'),
+    }));
+    expect(authListener).toHaveBeenCalledWith(expect.objectContaining({
+      detail: { session: refreshedSession },
+    }));
+    window.removeEventListener(authSessionChangedEvent, authListener);
   });
 });
 

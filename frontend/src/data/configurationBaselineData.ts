@@ -479,7 +479,7 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
       },
     ],
     limitationNotes: [
-      '当前身份优先来自登录会话；M3.91 已接入账号仓储、PBKDF2 密码哈希、5 次失败锁定、账号启停、管理员解锁、生产密码策略和密码过期边界，生产仍需替换初始评审账号和接入 SSO/JWT。',
+      '当前身份优先来自登录会话；M3.92 已接入账号仓储、PBKDF2 密码哈希、5 次失败锁定、账号启停、管理员解锁、生产密码策略、密码过期边界和登录态自助改密续期，生产仍需替换初始评审账号和接入 SSO/JWT。',
       '当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。',
       '当前菜单权限已由后端菜单树返回，前端登录会话会按 menuCodes/menuTree 过滤侧栏；请求头兜底仍展示评审全量导航。',
       '敏感 POST 和账号管理接口已接入轻量角色守卫，但复杂审批流、账号审批和工资锁账仍未完成。',

@@ -16702,27 +16702,46 @@ input {
   padding: 10px;
 }
 
+.auth-password-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(118px, 0.55fr)) auto;
+  gap: 8px;
+  align-items: end;
+  margin: 0 0 10px;
+  border: 1px solid var(--m349-line);
+  border-left: 4px solid #0ea5b7;
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 10px;
+}
+
 .auth-session-strip > div,
-.auth-session-strip label {
+.auth-session-strip label,
+.auth-password-strip > div,
+.auth-password-strip label {
   display: grid;
   gap: 5px;
   min-width: 0;
 }
 
 .auth-session-strip span,
-.auth-session-strip small {
+.auth-session-strip small,
+.auth-password-strip span,
+.auth-password-strip small {
   color: var(--m349-muted);
   font-size: 11px;
 }
 
-.auth-session-strip strong {
+.auth-session-strip strong,
+.auth-password-strip strong {
   overflow-wrap: anywhere;
   color: var(--m349-ink);
   font-size: 13px;
 }
 
 .auth-session-strip select,
-.auth-session-strip input {
+.auth-session-strip input,
+.auth-password-strip input {
   width: 100%;
   min-height: 34px;
   border: 1px solid var(--m349-line);
@@ -16888,7 +16907,8 @@ input {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .auth-session-strip {
+  .auth-session-strip,
+  .auth-password-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -16901,7 +16921,8 @@ input {
   .security-identity-grid,
   .security-permission-list,
   .security-limitation-row,
-  .auth-session-strip {
+  .auth-session-strip,
+  .auth-password-strip {
     grid-template-columns: 1fr;
   }
 

@@ -33,6 +33,11 @@ export interface AuthLoginRequest {
   password: string;
 }
 
+export interface ChangeOwnPasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface AuthAuditEvent {
   eventId: string;
   eventType: string;
@@ -110,6 +115,13 @@ export async function logoutAuthSession(): Promise<void> {
     clearAuthToken();
     notifyAuthSessionChanged(null);
   }
+}
+
+export async function changeOwnPassword(request: ChangeOwnPasswordRequest): Promise<AuthSession> {
+  const session = await apiPost<ChangeOwnPasswordRequest, AuthSession>('/api/auth/password', request);
+  setAuthToken(session.token);
+  notifyAuthSessionChanged(session);
+  return session;
 }
 
 export async function fetchAuthDemoUsers(): Promise<string[]> {

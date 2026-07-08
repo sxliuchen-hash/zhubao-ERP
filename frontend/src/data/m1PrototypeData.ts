@@ -754,7 +754,7 @@ export const mobileCapabilities: MobileCapability[] = [
   { label: '扫码识别', status: '可用', detail: 'BarcodeDetector 优先，ZXing 兜底，失败可手输编码。', tone: 'green' },
   { label: '离线草稿', status: '设计中', detail: '弱网时暂存报工和质检，恢复网络后补提交。', tone: 'amber' },
   { label: '拍照留证', status: '一期必做', detail: '缺陷、称重、人工视频兜底都需要附件。', tone: 'blue' },
-  { label: '权限边界', status: '推进中', detail: 'M3.91 已有账号仓储、密码哈希、失败锁定、启停解锁、密码策略、密码过期边界、菜单树和敏感 POST 守卫，数据范围过滤仍待接入。', tone: 'amber' },
+  { label: '权限边界', status: '推进中', detail: 'M3.92 已有账号仓储、密码哈希、失败锁定、启停解锁、密码策略、密码过期、自助改密续期、菜单树和敏感 POST 守卫，数据范围过滤仍待接入。', tone: 'amber' },
 ];
 
 export const offlineDrafts: OfflineDraft[] = [
@@ -972,7 +972,7 @@ export const productionReadinessItems: ProductionReadinessItem[] = [
     category: '权限',
     title: '登录账号和权限边界',
     why: '演示账号不能用于生产，敏感动作必须受控。',
-    defaultAction: 'M3.91 已建立账号表、PBKDF2 密码哈希、失败锁定、启停、管理员解锁、密码策略和密码过期边界；上线前替换初始评审账号并补数据范围过滤、SSO/JWT 和审计保全。',
+    defaultAction: 'M3.92 已建立账号表、PBKDF2 密码哈希、失败锁定、启停、管理员解锁、密码策略、密码过期边界和登录态自助改密续期；上线前替换初始评审账号并补数据范围过滤、SSO/JWT 和审计保全。',
     owner: 'IT / 管理员',
     evidence: '账号清单、权限矩阵、登录审计',
     priority: 'P0',

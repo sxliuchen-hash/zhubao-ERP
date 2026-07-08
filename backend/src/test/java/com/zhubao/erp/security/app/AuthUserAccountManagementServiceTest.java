@@ -275,7 +275,8 @@ class AuthUserAccountManagementServiceTest {
                 auditRepository,
                 accountRepository,
                 passwordHasher,
-                passwordExpiryPolicy
+                passwordExpiryPolicy,
+                passwordPolicy
         );
         return new Fixture(accountRepository, auditRepository, managementService, sessionService);
     }

@@ -1,11 +1,13 @@
 package com.zhubao.erp.security.app;
 
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -42,19 +44,22 @@ public class AuthSessionService {
     private final AuthUserAccountRepository userAccountRepository;
     private final PasswordHasher passwordHasher;
     private final PasswordExpiryPolicy passwordExpiryPolicy;
+    private final PasswordPolicy passwordPolicy;
 
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
             AuthAuditRepository authAuditRepository,
             AuthUserAccountRepository userAccountRepository,
             PasswordHasher passwordHasher,
-            PasswordExpiryPolicy passwordExpiryPolicy
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            PasswordPolicy passwordPolicy
     ) {
         this.navigationMenuService = navigationMenuService;
         this.authAuditRepository = authAuditRepository;
         this.userAccountRepository = userAccountRepository;
         this.passwordHasher = passwordHasher;
         this.passwordExpiryPolicy = passwordExpiryPolicy;
+        this.passwordPolicy = passwordPolicy;
     }
 
     public AuthSession login(AuthLoginCommand command) {
@@ -137,6 +142,101 @@ public class AuthSessionService {
                         false,
                         entry.token()
                 ));
+    }
+
+    public AuthSession changeOwnPassword(String rawAuthorizationHeader, ChangeOwnPasswordCommand command) {
+        SessionEntry entry = resolve(rawAuthorizationHeader)
+                .orElseThrow(() -> new PermissionDeniedException("自助改密需要登录会话"));
+        AuthUserAccount currentAccount = userAccountRepository.findByUsername(entry.user().username())
+                .orElseThrow(() -> new PermissionDeniedException("登录账号不存在或已停用"));
+        Instant now = Instant.now();
+        if (!currentAccount.enabled()) {
+            recordAudit(
+                    "PASSWORD_CHANGE",
+                    currentAccount.username(),
+                    currentAccount.operator(),
+                    currentAccount.role().name(),
+                    "DENIED",
+                    "账号已停用，拒绝自助改密",
+                    entry.token()
+            );
+            throw new PermissionDeniedException("登录账号已停用");
+        }
+        if (isLocked(currentAccount, now)) {
+            recordAudit(
+                    "PASSWORD_CHANGE",
+                    currentAccount.username(),
+                    currentAccount.operator(),
+                    currentAccount.role().name(),
+                    "DENIED",
+                    "账号已临时锁定，拒绝自助改密",
+                    entry.token()
+            );
+            throw new PermissionDeniedException("账号已锁定，请稍后再试");
+        }
+        if (!passwordHasher.matches(command.currentPassword(), currentAccount.passwordHash())) {
+            recordAudit(
+                    "PASSWORD_CHANGE",
+                    currentAccount.username(),
+                    currentAccount.operator(),
+                    currentAccount.role().name(),
+                    "DENIED",
+                    "当前密码错误",
+                    entry.token()
+            );
+            throw new PermissionDeniedException("当前密码错误");
+        }
+        if (passwordHasher.matches(command.newPassword(), currentAccount.passwordHash())) {
+            recordAudit(
+                    "PASSWORD_CHANGE",
+                    currentAccount.username(),
+                    currentAccount.operator(),
+                    currentAccount.role().name(),
+                    "DENIED",
+                    "新密码不能与当前密码相同",
+                    entry.token()
+            );
+            throw new BusinessException("新密码不能与当前密码相同");
+        }
+        try {
+            passwordPolicy.assertAcceptable(command.newPassword(), currentAccount.username());
+        } catch (BusinessException ex) {
+            recordAudit(
+                    "PASSWORD_CHANGE",
+                    currentAccount.username(),
+                    currentAccount.operator(),
+                    currentAccount.role().name(),
+                    "DENIED",
+                    "新密码不符合策略：" + ex.getMessage(),
+                    entry.token()
+            );
+            throw ex;
+        }
+
+        AuthUserAccount updated = userAccountRepository.save(new AuthUserAccount(
+                currentAccount.username(),
+                passwordHasher.hash(command.newPassword()),
+                currentAccount.operator(),
+                currentAccount.role(),
+                currentAccount.dataScope(),
+                currentAccount.enabled(),
+                currentAccount.demoAccount(),
+                now,
+                0,
+                null
+        ));
+        SessionEntry updatedEntry = new SessionEntry(entry.token(), updated, entry.expiresAt());
+        sessions.put(entry.token(), updatedEntry);
+        recordAudit(
+                "PASSWORD_CHANGE",
+                updated.username(),
+                updated.operator(),
+                updated.role().name(),
+                "SUCCESS",
+                "用户自助修改密码并刷新 passwordChangedAt",
+                entry.token()
+        );
+        return toSession(updatedEntry);
     }
 
     public void logout(String rawAuthorizationHeader) {

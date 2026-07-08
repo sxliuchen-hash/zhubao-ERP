@@ -11,6 +11,7 @@ import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccountStatusCommand;
 import com.zhubao.erp.security.domain.AuthUserAccountSummary;
 import com.zhubao.erp.security.domain.AuthUserAccountUnlockCommand;
+import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
@@ -63,6 +64,17 @@ public class AuthController {
     public ApiResponse<Void> logout(HttpServletRequest request) {
         authSessionService.logout(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER));
         return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/password")
+    public ApiResponse<AuthSession> changeOwnPassword(
+            @Valid @RequestBody ChangeOwnPasswordCommand command,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(authSessionService.changeOwnPassword(
+                request.getHeader(AuthSessionService.AUTHORIZATION_HEADER),
+                command
+        ));
     }
 
     @GetMapping("/demo-users")

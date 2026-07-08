@@ -1,6 +1,8 @@
 package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.security.domain.AuthLoginCommand;
+import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.NavigationMenuService;
@@ -12,6 +14,7 @@ import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccountStatusCommand;
 import com.zhubao.erp.security.domain.AuthUserAccountSummary;
 import com.zhubao.erp.security.domain.AuthUserAccountUnlockCommand;
+import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -90,6 +93,39 @@ class AuthControllerAccountManagementTest {
                 .contains("planner");
     }
 
+    @Test
+    void changesOwnPasswordThroughBearerOnlyBoundary() {
+        Fixture fixture = fixture();
+        AuthSession session = fixture.controller().login(new AuthLoginCommand("leader", "leader123")).data();
+        MockHttpServletRequest bearerRequest = new MockHttpServletRequest();
+        bearerRequest.addHeader(AuthSessionService.AUTHORIZATION_HEADER, "Bearer " + session.token());
+
+        ApiResponse<AuthSession> changed = fixture.controller().changeOwnPassword(
+                new ChangeOwnPasswordCommand("leader123", "Secure-2026-Leader!"),
+                bearerRequest
+        );
+
+        assertThat(changed.data().token()).isEqualTo(session.token());
+        assertThat(changed.data().passwordExpired()).isFalse();
+        assertThatThrownBy(() -> fixture.controller().login(new AuthLoginCommand("leader", "leader123")))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("用户名或密码错误");
+        assertThat(fixture.controller().login(new AuthLoginCommand("leader", "Secure-2026-Leader!")).data().username())
+                .isEqualTo("leader");
+    }
+
+    @Test
+    void ownPasswordChangeDoesNotAcceptReviewRoleHeaderFallback() {
+        Fixture fixture = fixture();
+
+        assertThatThrownBy(() -> fixture.controller().changeOwnPassword(
+                new ChangeOwnPasswordCommand("leader123", "Secure-2026-Leader!"),
+                request(RoleCode.ADMIN)
+        ))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("自助改密需要登录会话");
+    }
+
     private Fixture fixture() {
         InMemoryAuthAuditRepository auditRepository = new InMemoryAuthAuditRepository();
         InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
@@ -98,7 +134,8 @@ class AuthControllerAccountManagementTest {
                 auditRepository,
                 accountRepository,
                 passwordHasher,
-                passwordExpiryPolicy
+                passwordExpiryPolicy,
+                passwordPolicy
         );
         AuthUserAccountManagementService accountManagementService = new AuthUserAccountManagementService(
                 accountRepository,
