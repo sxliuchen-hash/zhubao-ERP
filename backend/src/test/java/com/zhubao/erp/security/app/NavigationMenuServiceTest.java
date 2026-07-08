@@ -27,4 +27,13 @@ class NavigationMenuServiceTest {
         assertThat(service.menuCodesFor(RoleCode.OPERATOR))
                 .containsExactly("dashboard", "production", "mobile");
     }
+
+    @Test
+    void exposesAuthAccountManagementButtonOnConfigurationMenu() {
+        assertThat(service.menuTreeFor(RoleCode.ADMIN))
+                .anySatisfy(item -> {
+                    assertThat(item.code()).isEqualTo("configuration");
+                    assertThat(item.buttonCodes()).contains("AUTH_ACCOUNT_MANAGE");
+                });
+    }
 }

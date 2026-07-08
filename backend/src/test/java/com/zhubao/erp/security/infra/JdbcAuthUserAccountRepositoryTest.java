@@ -68,6 +68,42 @@ class JdbcAuthUserAccountRepositoryTest {
     }
 
     @Test
+    void supportsManagementListStatusUpdateAndUnlock() {
+        repository.save(account("warehouse", "库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT, true));
+        repository.save(new AuthUserAccount(
+                "leader",
+                passwordHasher.hash("leader-pass"),
+                "车间组长",
+                RoleCode.WORKSHOP_LEADER,
+                DataScope.TEAM,
+                true,
+                false,
+                5,
+                Instant.now().plusSeconds(900)
+        ));
+
+        assertThat(repository.findAll())
+                .extracting(AuthUserAccount::username)
+                .containsExactly("leader", "warehouse");
+
+        repository.updateEnabled("leader", false);
+
+        assertThat(repository.findByUsername("leader"))
+                .get()
+                .extracting(AuthUserAccount::enabled)
+                .isEqualTo(false);
+
+        repository.unlock("leader");
+
+        assertThat(repository.findByUsername("leader"))
+                .get()
+                .satisfies(account -> {
+                    assertThat(account.failedLoginCount()).isZero();
+                    assertThat(account.lockedUntil()).isNull();
+                });
+    }
+
+    @Test
     void recordsLoginFailureLockoutAndClearsOnSuccess() {
         repository.save(account("leader", "车间组长", RoleCode.WORKSHOP_LEADER, DataScope.TEAM, true));
         Instant lockedUntil = Instant.now().plusSeconds(900);

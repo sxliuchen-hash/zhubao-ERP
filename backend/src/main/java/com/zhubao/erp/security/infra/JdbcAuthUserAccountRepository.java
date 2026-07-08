@@ -40,8 +40,9 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     private AuthUserAccount insert(AuthUserAccount account) {
         String sql = """
                 insert into auth_user_account (
-                    username, password_hash, operator, role_code, data_scope, enabled, demo_account
-                ) values (?, ?, ?, ?, ?, ?, ?)
+                    username, password_hash, operator, role_code, data_scope, enabled, demo_account,
+                    failed_login_count, locked_until
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -52,6 +53,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setString(5, account.dataScope().name());
             statement.setBoolean(6, account.enabled());
             statement.setBoolean(7, account.demoAccount());
+            statement.setInt(8, account.failedLoginCount());
+            setInstant(statement, 9, account.lockedUntil());
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -88,6 +91,27 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to update auth user account", ex);
         }
+    }
+
+    @Override
+    public List<AuthUserAccount> findAll() {
+        String sql = """
+                select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
+                       failed_login_count, locked_until
+                  from auth_user_account
+                 order by username
+                """;
+        List<AuthUserAccount> accounts = new ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rs = statement.executeQuery()) {
+            while (rs.next()) {
+                accounts.add(map(rs));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load auth user accounts", ex);
+        }
+        return accounts;
     }
 
     @Override
@@ -131,6 +155,40 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             throw new IllegalStateException("Failed to load auth user accounts", ex);
         }
         return usernames;
+    }
+
+    @Override
+    public void updateEnabled(String username, boolean enabled) {
+        String sql = """
+                update auth_user_account
+                   set enabled = ?
+                 where username = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBoolean(1, enabled);
+            statement.setString(2, normalize(username));
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to update auth user account status", ex);
+        }
+    }
+
+    @Override
+    public void unlock(String username) {
+        String sql = """
+                update auth_user_account
+                   set failed_login_count = 0,
+                       locked_until = null
+                 where username = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, normalize(username));
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to unlock auth user account", ex);
+        }
     }
 
     @Override

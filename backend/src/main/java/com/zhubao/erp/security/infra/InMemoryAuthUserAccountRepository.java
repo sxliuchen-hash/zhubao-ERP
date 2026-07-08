@@ -37,6 +37,13 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
     }
 
     @Override
+    public List<AuthUserAccount> findAll() {
+        return accounts.values().stream()
+                .sorted(Comparator.comparing(AuthUserAccount::username))
+                .toList();
+    }
+
+    @Override
     public Optional<AuthUserAccount> findByUsername(String username) {
         return Optional.ofNullable(accounts.get(normalize(username)));
     }
@@ -48,6 +55,36 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 .map(AuthUserAccount::username)
                 .sorted(Comparator.naturalOrder())
                 .toList();
+    }
+
+    @Override
+    public void updateEnabled(String username, boolean enabled) {
+        accounts.computeIfPresent(normalize(username), (key, account) -> new AuthUserAccount(
+                account.username(),
+                account.passwordHash(),
+                account.operator(),
+                account.role(),
+                account.dataScope(),
+                enabled,
+                account.demoAccount(),
+                account.failedLoginCount(),
+                account.lockedUntil()
+        ));
+    }
+
+    @Override
+    public void unlock(String username) {
+        accounts.computeIfPresent(normalize(username), (key, account) -> new AuthUserAccount(
+                account.username(),
+                account.passwordHash(),
+                account.operator(),
+                account.role(),
+                account.dataScope(),
+                account.enabled(),
+                account.demoAccount(),
+                0,
+                null
+        ));
     }
 
     @Override

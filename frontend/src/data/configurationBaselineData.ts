@@ -1,4 +1,5 @@
 import type { Tone } from './m1PrototypeData';
+import type { AuthUserAccountSummary } from '../services/authApi';
 
 export interface ConfigurationBaselineSummary {
   systemParameters: number;
@@ -167,6 +168,74 @@ export const configurationToneByLevel: Record<string, Tone> = {
   C4: 'violet',
   C5: 'gray',
 };
+
+export const authAccountSummaryFallback: AuthUserAccountSummary[] = [
+  {
+    username: 'admin',
+    operator: '系统管理员',
+    role: 'ADMIN',
+    roleLabel: '系统管理员',
+    dataScope: 'ALL',
+    dataScopeLabel: '全部数据',
+    enabled: true,
+    demoAccount: true,
+    failedLoginCount: 0,
+    lockedUntil: '',
+    locked: false,
+  },
+  {
+    username: 'leader',
+    operator: '车间组长 马杰',
+    role: 'WORKSHOP_LEADER',
+    roleLabel: '车间组长',
+    dataScope: 'TEAM',
+    dataScopeLabel: '本班组/工位',
+    enabled: true,
+    demoAccount: true,
+    failedLoginCount: 0,
+    lockedUntil: '',
+    locked: false,
+  },
+  {
+    username: 'warehouse',
+    operator: '库管员 何琳',
+    role: 'WAREHOUSE_KEEPER',
+    roleLabel: '库管员',
+    dataScope: 'DEPARTMENT',
+    dataScopeLabel: '本部门',
+    enabled: true,
+    demoAccount: true,
+    failedLoginCount: 1,
+    lockedUntil: '',
+    locked: false,
+  },
+  {
+    username: 'operator',
+    operator: '操作工 王强',
+    role: 'OPERATOR',
+    roleLabel: '操作工',
+    dataScope: 'SELF',
+    dataScopeLabel: '本人任务',
+    enabled: true,
+    demoAccount: true,
+    failedLoginCount: 0,
+    lockedUntil: '',
+    locked: false,
+  },
+  {
+    username: 'planner',
+    operator: '计划员 陈敏',
+    role: 'SALES',
+    roleLabel: '业务员',
+    dataScope: 'CUSTOMER_RANGE',
+    dataScopeLabel: '授权客户范围',
+    enabled: false,
+    demoAccount: false,
+    failedLoginCount: 0,
+    lockedUntil: '',
+    locked: false,
+  },
+];
 
 export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
   summary: {
@@ -358,6 +427,7 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
     dataBoundary: '当前评审默认全局可见；正式上线必须由真实角色、菜单权限和审计日志共同约束。',
     headerBased: true,
     allowedPermissions: [
+      { code: 'AUTH_ACCOUNT_MANAGE', label: '登录账号管理' },
       { code: 'BUSINESS_INBOUND_CONFIRM', label: '来料确认入库' },
       { code: 'BUSINESS_PRODUCTION_REPORT', label: '生产报工' },
       { code: 'BUSINESS_QUALITY_FREEZE', label: '质检冻结库存' },
@@ -366,6 +436,7 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
       { code: 'DOCUMENT_ATTACHMENT_UPLOAD', label: '证据附件上传' },
     ],
     sensitiveActionCodes: [
+      'AUTH_ACCOUNT_MANAGE',
       'BUSINESS_INBOUND_CONFIRM',
       'BUSINESS_PRODUCTION_REPORT',
       'BUSINESS_QUALITY_FREEZE',
@@ -388,15 +459,15 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
         label: '配置基线',
         module: '参数 / 构型',
         route: '/configuration',
-        buttonCodes: [],
+        buttonCodes: ['AUTH_ACCOUNT_MANAGE'],
         children: [],
       },
     ],
     limitationNotes: [
-      '当前身份优先来自登录会话；M3.88 已接入账号仓储、PBKDF2 密码哈希和 5 次失败后 15 分钟锁定，生产仍需替换初始评审账号和接入 SSO/JWT。',
+      '当前身份优先来自登录会话；M3.89 已接入账号仓储、PBKDF2 密码哈希、5 次失败锁定、账号启停和管理员解锁边界，生产仍需替换初始评审账号和接入 SSO/JWT。',
       '当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。',
       '当前菜单权限已由后端菜单树返回，前端登录会话会按 menuCodes/menuTree 过滤侧栏；请求头兜底仍展示评审全量导航。',
-      '敏感 POST 已接入轻量角色守卫，但复杂审批流和工资锁账仍未完成。',
+      '敏感 POST 和账号管理接口已接入轻量角色守卫，但复杂审批流、账号审批和工资锁账仍未完成。',
     ],
     headerContract: {
       operatorHeader: 'X-Zhubao-Operator',

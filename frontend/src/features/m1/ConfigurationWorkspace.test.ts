@@ -34,5 +34,10 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('AUTH-AUD-DEMO-001');
     expect(wrapper.text()).toContain('BUSINESS_LOSS_APPROVAL');
+    expect(wrapper.text()).toContain('账号管理边界');
+    expect(wrapper.text()).toContain('AUTH_ACCOUNT_MANAGE');
+    expect(wrapper.text()).toContain('admin / 系统管理员');
+    expect(wrapper.text()).toContain('planner / 计划员 陈敏');
+    expect(wrapper.text()).toContain('生产账号');
   });
 });

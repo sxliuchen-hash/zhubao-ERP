@@ -36,7 +36,9 @@ public class NavigationMenuService {
                     PermissionCode.APPROVAL_DECISION.name(),
                     PermissionCode.BUSINESS_LOSS_APPROVAL.name()
             )),
-            menu("configuration", "配置基线", "参数 / 构型", "/configuration", List.of()),
+            menu("configuration", "配置基线", "参数 / 构型", "/configuration", List.of(
+                    PermissionCode.AUTH_ACCOUNT_MANAGE.name()
+            )),
             menu("documents", "文档附件", "证据 / 归档", "/documents", List.of(
                     PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD.name()
             )),

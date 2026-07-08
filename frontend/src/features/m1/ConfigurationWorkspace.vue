@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
+  authAccountSummaryFallback,
   configurationBaselineFallback,
   configurationToneByLevel,
   type ConfigurationBaselineWorkspace,
@@ -9,12 +10,14 @@ import {
 import type { Tone } from '../../data/m1PrototypeData';
 import {
   fetchAuthAuditEvents,
+  fetchAuthAccounts,
   fetchAuthDemoUsers,
   fetchAuthSession,
   loginAuthSession,
   logoutAuthSession,
   type AuthAuditEvent,
   type AuthSession,
+  type AuthUserAccountSummary,
 } from '../../services/authApi';
 import { fetchConfigurationBaselineWorkspace } from '../../services/configurationBaselineApi';
 
@@ -25,6 +28,7 @@ const authUsername = ref('leader');
 const authPassword = ref('leader123');
 const authBusy = ref(false);
 const authMessage = ref('');
+const authAccounts = ref<AuthUserAccountSummary[]>(authAccountSummaryFallback);
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
     eventId: 'AUTH-AUD-DEMO-001',
@@ -43,6 +47,7 @@ onMounted(async () => {
   await refreshWorkspace();
   await restoreAuthSession();
   await loadDemoUsers();
+  await loadAuthAccounts();
   await loadAuthAuditEvents();
 });
 
@@ -82,6 +87,14 @@ async function loadAuthAuditEvents() {
   }
 }
 
+async function loadAuthAccounts() {
+  try {
+    authAccounts.value = await fetchAuthAccounts();
+  } catch {
+    // Keep local account boundary samples visible when the backend is not running.
+  }
+}
+
 function demoPassword(username: string): string {
   return `${username}123`;
 }
@@ -100,6 +113,7 @@ async function handleLogin() {
     });
     authMessage.value = `已登录：${authSession.value.roleLabel}`;
     await refreshWorkspace();
+    await loadAuthAccounts();
     await loadAuthAuditEvents();
   } catch (error) {
     authMessage.value = error instanceof Error ? error.message : '登录失败';
@@ -116,6 +130,7 @@ async function handleLogout() {
     authSession.value = null;
     authMessage.value = '已退出登录会话';
     await refreshWorkspace();
+    await loadAuthAccounts();
     await loadAuthAuditEvents();
   } finally {
     authBusy.value = false;
@@ -153,6 +168,19 @@ function dataScopeTone(dataScope: string): Tone {
 
 function permissionTone(index: number): Tone {
   return ['blue', 'green', 'amber', 'violet'][index % 4] as Tone;
+}
+
+function accountStatusLabel(account: AuthUserAccountSummary): string {
+  if (!account.enabled) return '停用';
+  if (account.locked) return '锁定';
+  return '启用';
+}
+
+function accountStatusTone(account: AuthUserAccountSummary): Tone {
+  if (!account.enabled) return 'gray';
+  if (account.locked) return 'red';
+  if (account.failedLoginCount > 0) return 'amber';
+  return 'green';
 }
 </script>
 
@@ -297,6 +325,20 @@ function permissionTone(index: number): Tone {
             <b>{{ event.eventType }} / {{ event.result }}</b>
             <span>{{ event.eventId }} · {{ event.username || 'unknown' }} / {{ event.role || '未识别角色' }}</span>
             <small>{{ event.reason }} · {{ event.occurredAt }} · token *{{ event.sessionTokenSuffix || 'none' }}</small>
+          </article>
+        </div>
+        <div class="security-account-contract">
+          <strong>账号管理边界</strong>
+          <article v-for="account in authAccounts" :key="account.username">
+            <div>
+              <b>{{ account.username }} / {{ account.operator }}</b>
+              <span>{{ account.roleLabel }} · {{ account.dataScopeLabel }}</span>
+              <small>
+                {{ account.demoAccount ? '评审 seed' : '生产账号' }} · 失败 {{ account.failedLoginCount }} 次
+                <template v-if="account.lockedUntil"> · 锁定至 {{ account.lockedUntil }}</template>
+              </small>
+            </div>
+            <StatusBadge :label="accountStatusLabel(account)" :tone="accountStatusTone(account)" />
           </article>
         </div>
       </aside>

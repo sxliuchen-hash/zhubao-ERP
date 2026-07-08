@@ -44,7 +44,7 @@ class PermissionGuardTest {
                         PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD,
                         PermissionCode.VIDEO_TASK_OPERATE
                 )
-                .doesNotContain(PermissionCode.BUSINESS_LOSS_APPROVAL);
+                .doesNotContain(PermissionCode.BUSINESS_LOSS_APPROVAL, PermissionCode.AUTH_ACCOUNT_MANAGE);
     }
 
     @Test
@@ -53,5 +53,21 @@ class PermissionGuardTest {
 
         assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.MACHINE_OUTPUT_SUBMIT, operator))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void limitsAuthAccountManagementToAdminAndGeneralManager() {
+        OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
+        OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
+        OperatorContext finance = new OperatorContext("财务统计", RoleCode.FINANCE_STATISTICIAN, DataScope.DEPARTMENT);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, admin))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, generalManager))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, finance))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("FINANCE_STATISTICIAN")
+                .hasMessageContaining("登录账号管理");
     }
 }

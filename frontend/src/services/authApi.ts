@@ -42,6 +42,39 @@ export interface AuthAuditEvent {
   sessionTokenSuffix: string;
 }
 
+export interface AuthUserAccountSummary {
+  username: string;
+  operator: string;
+  role: string;
+  roleLabel: string;
+  dataScope: string;
+  dataScopeLabel: string;
+  enabled: boolean;
+  demoAccount: boolean;
+  failedLoginCount: number;
+  lockedUntil: string;
+  locked: boolean;
+}
+
+export interface ManageAuthUserAccountRequest {
+  username: string;
+  password?: string;
+  operator: string;
+  role: string;
+  dataScope: string;
+  enabled: boolean;
+  demoAccount: boolean;
+}
+
+export interface AuthUserAccountStatusRequest {
+  enabled: boolean;
+  reason?: string;
+}
+
+export interface AuthUserAccountUnlockRequest {
+  reason?: string;
+}
+
 export interface AuthSessionChangedDetail {
   session: AuthSession | null;
 }
@@ -79,6 +112,34 @@ export async function fetchAuthDemoUsers(): Promise<string[]> {
 
 export async function fetchAuthAuditEvents(): Promise<AuthAuditEvent[]> {
   return apiGet<AuthAuditEvent[]>('/api/auth/audit-events');
+}
+
+export async function fetchAuthAccounts(): Promise<AuthUserAccountSummary[]> {
+  return apiGet<AuthUserAccountSummary[]>('/api/auth/accounts');
+}
+
+export async function upsertAuthAccount(request: ManageAuthUserAccountRequest): Promise<AuthUserAccountSummary> {
+  return apiPost<ManageAuthUserAccountRequest, AuthUserAccountSummary>('/api/auth/accounts', request);
+}
+
+export async function updateAuthAccountStatus(
+  username: string,
+  request: AuthUserAccountStatusRequest,
+): Promise<AuthUserAccountSummary> {
+  return apiPost<AuthUserAccountStatusRequest, AuthUserAccountSummary>(
+    `/api/auth/accounts/${encodeURIComponent(username)}/status`,
+    request,
+  );
+}
+
+export async function unlockAuthAccount(
+  username: string,
+  request: AuthUserAccountUnlockRequest,
+): Promise<AuthUserAccountSummary> {
+  return apiPost<AuthUserAccountUnlockRequest, AuthUserAccountSummary>(
+    `/api/auth/accounts/${encodeURIComponent(username)}/unlock`,
+    request,
+  );
 }
 
 function notifyAuthSessionChanged(session: AuthSession | null): void {

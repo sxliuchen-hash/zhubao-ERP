@@ -3,9 +3,13 @@ import { clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
 import {
   authSessionChangedEvent,
   fetchAuthAuditEvents,
+  fetchAuthAccounts,
   fetchAuthSession,
   loginAuthSession,
   logoutAuthSession,
+  unlockAuthAccount,
+  updateAuthAccountStatus,
+  upsertAuthAccount,
 } from './authApi';
 
 const authSession = {
@@ -99,7 +103,68 @@ describe('authApi', () => {
     expect(events[0].sessionTokenSuffix).toBe('abc123');
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/audit-events');
   });
+
+  it('fetches account management summaries with bearer token', async () => {
+    setAuthToken('admin-token');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response([authAccount]));
+
+    const accounts = await fetchAuthAccounts();
+
+    expect(accounts[0].username).toBe('planner');
+    expect(accounts[0].failedLoginCount).toBe(2);
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/accounts', expect.objectContaining({
+      headers: { Authorization: 'Bearer admin-token' },
+    }));
+  });
+
+  it('wraps account upsert status and unlock requests', async () => {
+    setAuthToken('admin-token');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(authAccount))
+      .mockResolvedValueOnce(response({ ...authAccount, enabled: false }))
+      .mockResolvedValueOnce(response({ ...authAccount, failedLoginCount: 0, lockedUntil: '', locked: false }));
+
+    await upsertAuthAccount({
+      username: 'planner',
+      password: 'planner-pass',
+      operator: '计划员 陈敏',
+      role: 'SALES',
+      dataScope: 'CUSTOMER_RANGE',
+      enabled: true,
+      demoAccount: false,
+    });
+    await updateAuthAccountStatus('planner', { enabled: false, reason: '离职交接' });
+    await unlockAuthAccount('planner', { reason: '现场核实本人' });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
+      body: expect.stringContaining('"username":"planner"'),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/auth/accounts/planner/status', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('"enabled":false'),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/auth/accounts/planner/unlock', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('现场核实本人'),
+    }));
+  });
 });
+
+const authAccount = {
+  username: 'planner',
+  operator: '计划员 陈敏',
+  role: 'SALES',
+  roleLabel: '业务员',
+  dataScope: 'CUSTOMER_RANGE',
+  dataScopeLabel: '授权客户范围',
+  enabled: true,
+  demoAccount: false,
+  failedLoginCount: 2,
+  lockedUntil: '',
+  locked: false,
+};
 
 function response<T>(data: T): Response {
   return {

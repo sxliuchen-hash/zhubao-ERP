@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.88 / 登录失败锁定边界</strong>
-        <i>仍处于 M3 增量开发：本轮把登录账号推进到内存/JDBC 仓储、PBKDF2 密码哈希和失败锁定，同时继续保留低成本硬件和人工兜底字段。</i>
+        <strong>M3.89 / 账号管理解锁边界</strong>
+        <i>仍处于 M3 增量开发：本轮在账号仓储、PBKDF2 密码哈希和失败锁定基础上补账号启停、管理员解锁和管理审计边界，同时继续保留低成本硬件和人工兜底字段。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.88 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.89 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
@@ -67,6 +67,7 @@ defineProps<{
             <span>登录会话</span>
             <span>账号密码哈希</span>
             <span>失败登录锁定</span>
+            <span>账号启停解锁</span>
             <span>登记表模板</span>
             <span>设备产量汇总</span>
             <span>业务单据快照</span>
