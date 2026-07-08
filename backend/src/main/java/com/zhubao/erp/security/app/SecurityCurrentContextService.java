@@ -14,9 +14,14 @@ import java.util.List;
 public class SecurityCurrentContextService {
 
     private final PermissionGuard permissionGuard;
+    private final NavigationMenuService navigationMenuService;
 
-    public SecurityCurrentContextService(PermissionGuard permissionGuard) {
+    public SecurityCurrentContextService(
+            PermissionGuard permissionGuard,
+            NavigationMenuService navigationMenuService
+    ) {
         this.permissionGuard = permissionGuard;
+        this.navigationMenuService = navigationMenuService;
     }
 
     public SecurityCurrentContext build(OperatorContext operatorContext) {
@@ -37,6 +42,8 @@ public class SecurityCurrentContextService {
                 operatorContext.headerBased(),
                 grants,
                 grants.stream().map(SecurityCurrentContext.PermissionGrant::code).toList(),
+                navigationMenuService.menuCodesFor(operatorContext.role()),
+                navigationMenuService.menuTreeFor(operatorContext.role()),
                 limitationNotes(operatorContext.headerBased()),
                 new SecurityCurrentContext.HeaderContract(
                         OperatorContextResolver.OPERATOR_HEADER,
@@ -85,7 +92,7 @@ public class SecurityCurrentContextService {
             return List.of(
                     "当前身份来自请求头，可用于评审和自动化测试兜底。",
                     "当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。",
-                    "当前菜单权限仍由前端导航展示控制，尚未接入后端菜单树和按钮级授权。",
+                    "当前菜单权限已由后端菜单树返回，前端登录会话会按 menuCodes/menuTree 过滤侧栏；请求头兜底仍展示评审全量导航。",
                     "敏感 POST 已接入轻量角色守卫，但复杂审批流和工资锁账仍未完成。"
             );
         }
@@ -93,7 +100,7 @@ public class SecurityCurrentContextService {
                 "当前身份来自登录会话 token，已覆盖敏感 POST 权限守卫。",
                 "当前登录仍为 M3 演示账号和内存会话，正式上线必须接入用户表、密码哈希、过期续期和审计日志。",
                 "当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。",
-                "菜单权限已返回菜单编码基线，前端导航过滤和后端菜单树仍需继续固化。"
+                "菜单权限已返回后端菜单树和按钮权限基线，前端侧栏已按登录会话菜单编码过滤；生产菜单持久化仍需继续固化。"
         );
     }
 }

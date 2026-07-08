@@ -15,6 +15,10 @@ import {
   reportProduction,
   type ProductionReportResult,
 } from '../../services/businessOperationApi';
+import {
+  fetchMachineOutputSummary,
+  type MachineOutputSummary,
+} from '../../services/machineOutputApi';
 
 const workspace = ref<ProductionWorkspaceModel>({
   stationLoads: fallbackProductionStationLoads,
@@ -25,6 +29,17 @@ const reportingProduction = ref(false);
 const productionReportResult = ref<ProductionReportResult | null>(null);
 const productionReportError = ref('');
 const selectedWorkOrderCode = ref('');
+const machineOutputSummary = ref<MachineOutputSummary>({
+  totalRecords: 0,
+  totalQuantity: 0,
+  quantityUnit: '件',
+  byMachine: [],
+  byWorkDate: [],
+  unmatchedMachineRecords: 0,
+  signatureMissingRecords: 0,
+});
+const machineOutputSummaryLoading = ref(false);
+const machineOutputSummaryError = ref('');
 
 const activeWorkOrder = computed(
   () =>
@@ -86,7 +101,18 @@ const productionActionTrace = [
   { step: '04', title: '送检入账', detail: '报工结果写库存台账，待检批次进入质检队列。' },
 ];
 
-onMounted(async () => {
+const machineOutputTopMachines = computed(() => machineOutputSummary.value.byMachine.slice(0, 4));
+const machineOutputWorkDates = computed(() => machineOutputSummary.value.byWorkDate.slice(0, 3));
+const machineOutputTotalText = computed(
+  () => `${machineOutputSummary.value.totalQuantity}${machineOutputSummary.value.quantityUnit}`,
+);
+
+onMounted(() => {
+  void loadProductionWorkspace();
+  void loadMachineOutputSummary();
+});
+
+async function loadProductionWorkspace() {
   try {
     workspace.value = await fetchProductionWorkspace();
   } catch {
@@ -94,7 +120,19 @@ onMounted(async () => {
   } finally {
     selectedWorkOrderCode.value = activeWorkOrder.value?.code ?? '';
   }
-});
+}
+
+async function loadMachineOutputSummary() {
+  machineOutputSummaryLoading.value = true;
+  machineOutputSummaryError.value = '';
+  try {
+    machineOutputSummary.value = await fetchMachineOutputSummary(100);
+  } catch (error) {
+    machineOutputSummaryError.value = error instanceof Error ? error.message : '设备产量汇总读取失败';
+  } finally {
+    machineOutputSummaryLoading.value = false;
+  }
+}
 
 function workOrderTone(status: string): Tone {
   if (status.includes('称重')) return 'red';
@@ -123,6 +161,10 @@ function selectWorkOrder(code: string) {
   selectedWorkOrderCode.value = code;
   productionReportResult.value = null;
   productionReportError.value = '';
+}
+
+function outputQuantityText(quantity: number | string) {
+  return `${quantity}${machineOutputSummary.value.quantityUnit}`;
 }
 </script>
 
@@ -365,6 +407,62 @@ function selectWorkOrder(code: string) {
             <span>{{ handoff.outputWeight }}</span>
             <span>{{ handoff.lossRate }}</span>
             <StatusBadge :label="handoff.status" :tone="handoff.tone" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block module-rule-panel machine-output-summary-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">MACHINE OUTPUT</span>
+            <h2>设备产量汇总</h2>
+            <p>雕刻登记表入账后的设备产量记录，按最近批次进入生产统计口径。</p>
+          </div>
+          <StatusBadge :label="machineOutputSummaryLoading ? '读取中' : `${machineOutputSummary.totalRecords} 条`" tone="green" />
+        </div>
+
+        <div class="machine-output-summary-grid">
+          <article>
+            <span>最近产量</span>
+            <strong>{{ machineOutputSummaryLoading ? '读取中' : machineOutputTotalText }}</strong>
+          </article>
+          <article>
+            <span>机器档案待匹配</span>
+            <strong>{{ machineOutputSummary.unmatchedMachineRecords }}</strong>
+          </article>
+          <article>
+            <span>签名附件待补</span>
+            <strong>{{ machineOutputSummary.signatureMissingRecords }}</strong>
+          </article>
+        </div>
+
+        <div v-if="machineOutputSummaryError" class="operation-feedback danger">
+          <strong>设备产量汇总读取失败</strong>
+          <span>{{ machineOutputSummaryError }}</span>
+        </div>
+
+        <div v-else class="machine-output-split">
+          <div>
+            <strong>按机器</strong>
+            <div class="rule-stack machine-output-list" v-if="machineOutputTopMachines.length">
+              <article v-for="item in machineOutputTopMachines" :key="item.machineNoSnapshot">
+                <span>{{ item.machineNoSnapshot }}</span>
+                <b>{{ outputQuantityText(item.quantity) }}</b>
+                <small>{{ item.records }} 条记录</small>
+              </article>
+            </div>
+            <small v-else>暂无设备产量记录</small>
+          </div>
+          <div>
+            <strong>按日期</strong>
+            <div class="rule-stack machine-output-list" v-if="machineOutputWorkDates.length">
+              <article v-for="item in machineOutputWorkDates" :key="item.workDate">
+                <span>{{ item.workDate }}</span>
+                <b>{{ outputQuantityText(item.quantity) }}</b>
+                <small>{{ item.records }} 条记录</small>
+              </article>
+            </div>
+            <small v-else>暂无日期汇总</small>
           </div>
         </div>
       </div>

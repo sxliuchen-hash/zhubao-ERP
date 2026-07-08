@@ -1,6 +1,8 @@
 package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.security.domain.AuthLoginCommand;
+import com.zhubao.erp.security.domain.AuthAuditEvent;
+import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -19,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class AuthSessionService {
@@ -29,7 +32,6 @@ public class AuthSessionService {
             .withZone(ZoneId.systemDefault());
     private static final Duration SESSION_TTL = Duration.ofHours(8);
     private static final SecureRandom RANDOM = new SecureRandom();
-
     private final Map<String, DemoUser> demoUsers = Map.of(
             "admin", new DemoUser("admin", "admin123", "系统管理员", RoleCode.ADMIN, DataScope.ALL),
             "leader", new DemoUser("leader", "leader123", "车间组长 马杰", RoleCode.WORKSHOP_LEADER, DataScope.TEAM),
@@ -38,10 +40,23 @@ public class AuthSessionService {
             "operator", new DemoUser("operator", "operator123", "操作工 王强", RoleCode.OPERATOR, DataScope.SELF)
     );
     private final Map<String, SessionEntry> sessions = new ConcurrentHashMap<>();
+    private final AtomicLong auditSequence = new AtomicLong();
+    private final NavigationMenuService navigationMenuService;
+    private final AuthAuditRepository authAuditRepository;
+
+    public AuthSessionService(
+            NavigationMenuService navigationMenuService,
+            AuthAuditRepository authAuditRepository
+    ) {
+        this.navigationMenuService = navigationMenuService;
+        this.authAuditRepository = authAuditRepository;
+    }
 
     public AuthSession login(AuthLoginCommand command) {
-        DemoUser user = demoUsers.get(normalize(command.username()));
+        String username = normalize(command.username());
+        DemoUser user = demoUsers.get(username);
         if (user == null || !user.password().equals(command.password())) {
+            recordAudit("LOGIN", username, "", "", "DENIED", "用户名或密码错误", "");
             throw new PermissionDeniedException("用户名或密码错误");
         }
 
@@ -49,11 +64,22 @@ public class AuthSessionService {
         Instant expiresAt = Instant.now().plus(SESSION_TTL);
         SessionEntry entry = new SessionEntry(token, user, expiresAt);
         sessions.put(token, entry);
+        recordAudit("LOGIN", user.username(), user.operator(), user.role().name(), "SUCCESS", "演示账号登录成功", token);
         return toSession(entry);
     }
 
     public Optional<AuthSession> session(String rawAuthorizationHeader) {
-        return resolve(rawAuthorizationHeader).map(this::toSession);
+        Optional<SessionEntry> entry = resolve(rawAuthorizationHeader);
+        entry.ifPresent(value -> recordAudit(
+                "SESSION_READ",
+                value.user().username(),
+                value.user().operator(),
+                value.user().role().name(),
+                "SUCCESS",
+                "读取当前登录会话",
+                value.token()
+        ));
+        return entry.map(this::toSession);
     }
 
     public Optional<OperatorContext> operatorContext(String rawAuthorizationHeader) {
@@ -68,11 +94,30 @@ public class AuthSessionService {
     }
 
     public void logout(String rawAuthorizationHeader) {
-        bearerToken(rawAuthorizationHeader).ifPresent(sessions::remove);
+        bearerToken(rawAuthorizationHeader).ifPresent(token -> {
+            SessionEntry removed = sessions.remove(token);
+            if (removed == null) {
+                recordAudit("LOGOUT", "", "", "", "DENIED", "登录会话不存在或已退出", token);
+                return;
+            }
+            recordAudit(
+                    "LOGOUT",
+                    removed.user().username(),
+                    removed.user().operator(),
+                    removed.user().role().name(),
+                    "SUCCESS",
+                    "退出登录会话",
+                    token
+            );
+        });
     }
 
     public List<String> demoUsernames() {
         return demoUsers.keySet().stream().sorted().toList();
+    }
+
+    public List<AuthAuditEvent> auditEvents(int limit) {
+        return authAuditRepository.findRecent(limit);
     }
 
     private Optional<SessionEntry> resolve(String rawAuthorizationHeader) {
@@ -82,10 +127,20 @@ public class AuthSessionService {
         }
         SessionEntry entry = sessions.get(token.get());
         if (entry == null) {
+            recordAudit("SESSION_RESOLVE", "", "", "", "DENIED", "登录会话不存在或已退出", token.get());
             throw new PermissionDeniedException("登录会话不存在或已退出");
         }
         if (entry.expiresAt().isBefore(Instant.now())) {
             sessions.remove(entry.token());
+            recordAudit(
+                    "SESSION_RESOLVE",
+                    entry.user().username(),
+                    entry.user().operator(),
+                    entry.user().role().name(),
+                    "DENIED",
+                    "登录会话已过期",
+                    entry.token()
+            );
             throw new PermissionDeniedException("登录会话已过期");
         }
         return Optional.of(entry);
@@ -103,7 +158,8 @@ public class AuthSessionService {
                 dataScopeLabel(user.dataScope()),
                 DISPLAY_TIME.format(entry.expiresAt()),
                 true,
-                menuCodes(user.role())
+                navigationMenuService.menuCodesFor(user.role()),
+                navigationMenuService.menuTreeFor(user.role())
         );
     }
 
@@ -125,25 +181,39 @@ public class AuthSessionService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private String normalize(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    private void recordAudit(
+            String eventType,
+            String username,
+            String operator,
+            String role,
+            String result,
+            String reason,
+            String token
+    ) {
+        authAuditRepository.save(new AuthAuditEvent(
+                "AUTH-AUD-" + DISPLAY_TIME.format(Instant.now()).replace(" ", "-").replace(":", "") + "-"
+                        + String.format("%04d", auditSequence.incrementAndGet()),
+                eventType,
+                username,
+                operator,
+                role,
+                result,
+                reason,
+                DISPLAY_TIME.format(Instant.now()),
+                tokenSuffix(token)
+        ));
     }
 
-    private List<String> menuCodes(RoleCode role) {
-        if (role == RoleCode.ADMIN || role == RoleCode.GENERAL_MANAGER) {
-            return List.of("dashboard", "inbound", "production", "quality", "inventory", "approval",
-                    "hardware", "documents", "samples", "configuration", "operations");
+    private String tokenSuffix(String token) {
+        if (token == null || token.isBlank()) {
+            return "";
         }
-        return switch (role) {
-            case SALES -> List.of("dashboard", "inbound", "inventory", "documents");
-            case RECEIVER -> List.of("dashboard", "inbound", "documents", "hardware");
-            case WORKSHOP_LEADER -> List.of("dashboard", "production", "quality", "approval", "hardware", "operations");
-            case OPERATOR -> List.of("dashboard", "production", "mobile");
-            case QUALITY_INSPECTOR -> List.of("dashboard", "quality", "inventory", "documents");
-            case WAREHOUSE_KEEPER -> List.of("dashboard", "inbound", "inventory", "documents", "operations");
-            case FINANCE_STATISTICIAN -> List.of("dashboard", "approval", "configuration");
-            default -> List.of("dashboard");
-        };
+        int start = Math.max(0, token.length() - 6);
+        return token.substring(start);
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private String roleLabel(RoleCode role) {

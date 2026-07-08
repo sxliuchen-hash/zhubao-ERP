@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -69,7 +70,7 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
-    void uploadsRegisterImportPreviewWithoutWritingBusinessLedger() throws IOException {
+    void uploadsRegisterImportPreviewAndConfirmsStructuredBatch() throws IOException {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("templateCode", "REG-OUTBOUND");
         body.add("businessDate", "2026-07-07");
@@ -98,6 +99,81 @@ class M2ManagementApiSmokeTest {
                 "\"paperExpressText\":\"顺丰 SF-OUT-20260706-022\"",
                 "\"logisticsNo\":\"SF-OUT-20260706-022\""
         );
+
+        String importBatchNo = jsonString(preview.getBody(), "importBatchNo");
+        Map<String, Object> confirmation = new LinkedHashMap<>();
+        confirmation.put("operator", "何琳");
+        confirmation.put("confirmRemark", "Smoke 确认导入仅落结构化批次，不直接写库存台账");
+        confirmation.put("preview", outboundReadyPreview(importBatchNo));
+
+        ResponseEntity<String> confirmed = restTemplate.postForEntity(
+                "/api/register-import/batches/confirm",
+                confirmation,
+                String.class
+        );
+        ResponseEntity<String> loaded = restTemplate.getForEntity(
+                "/api/register-import/batches/" + importBatchNo,
+                String.class
+        );
+        ResponseEntity<String> postingPlan = restTemplate.getForEntity(
+                "/api/register-import/batches/" + importBatchNo + "/posting-plan",
+                String.class
+        );
+        Map<String, Object> corrections = new LinkedHashMap<>();
+        corrections.put("operator", "何琳");
+        corrections.put("correctionRemark", "Smoke 补录客户、母单、工单、物料和重量");
+        corrections.put("fields", Map.of(
+                "shipmentCode", "OUT-SMOKE-REG-001",
+                "motherOrderCode", "MD-SMOKE-REG-001",
+                "workOrderCode", "ZD-SMOKE-REG-001",
+                "customerId", "1001",
+                "materialCode", "MAT-18K-RING",
+                "weight", "9.200"
+        ));
+        ResponseEntity<String> corrected = restTemplate.postForEntity(
+                "/api/register-import/batches/" + importBatchNo + "/rows/3/corrections",
+                corrections,
+                String.class
+        );
+        ResponseEntity<String> readyPlan = restTemplate.getForEntity(
+                "/api/register-import/batches/" + importBatchNo + "/posting-plan",
+                String.class
+        );
+
+        assertThat(confirmed.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(confirmed.getBody()).contains(
+                importBatchNo,
+                "\"status\":\"CONFIRMED\"",
+                "\"targetCommand\":\"ShipFinishedStockCommand\"",
+                "结构化导入批次",
+                "\"sourceRegisterLineNo\":\"3\""
+        );
+        assertThat(loaded.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(loaded.getBody()).contains(importBatchNo, "\"confirmedBy\":\"何琳\"");
+        assertThat(postingPlan.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(postingPlan.getBody()).contains(
+                importBatchNo,
+                "\"targetCommand\":\"ShipFinishedStockCommand\"",
+                "\"status\":\"BLOCKED\"",
+                "\"field\":\"shipmentCode\"",
+                "\"field\":\"motherOrderCode\"",
+                "补齐业务主数据"
+        );
+        assertThat(corrected.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(corrected.getBody()).contains(
+                "\"shipmentCode\":\"OUT-SMOKE-REG-001\"",
+                "\"motherOrderCode\":\"MD-SMOKE-REG-001\"",
+                "\"materialCode\":\"MAT-18K-RING\"",
+                "复核补录"
+        );
+        assertThat(readyPlan.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(readyPlan.getBody()).contains(
+                importBatchNo,
+                "\"status\":\"READY\"",
+                "\"readyDrafts\":1",
+                "\"blockedDrafts\":0",
+                "\"shipmentCode\":\"OUT-SMOKE-REG-001\""
+        );
     }
 
     @Test
@@ -117,6 +193,69 @@ class M2ManagementApiSmokeTest {
                 "\"averageHealth\":70",
                 "\"pocRecords\":4",
                 "\"pocBlocked\":1"
+        );
+    }
+
+    @Test
+    void submitsAndQueriesMachineOutputRecords() {
+        Map<String, Object> command = new LinkedHashMap<>();
+        command.put("code", "MOR-SMOKE-20260708-001");
+        command.put("workDate", "2026-07-08");
+        command.put("customerId", 1001);
+        command.put("customerNameSnapshot", "恒信珠宝");
+        command.put("productCategory", "戒托");
+        command.put("machineNoSnapshot", "ENG-03");
+        command.put("workOrderCode", "WO-MACHINE-SMOKE-001");
+        command.put("workReportCode", "WR-MACHINE-SMOKE-001");
+        command.put("outputQuantity", new BigDecimal("18"));
+        command.put("quantityUnit", "件");
+        command.put("operatorSignatureName", "周凯");
+        command.put("sourceRegisterType", "雕刻机统计单（日）");
+        command.put("sourceLineNo", 6);
+        command.put("machineLineNo", "3");
+        command.put("sourceSequenceNo", "1");
+        command.put("importBatchNo", "IMP-REG-ENGRAVING-SMOKE");
+        command.put("ledgerCode", "STK-MACHINE-SMOKE-001");
+        command.put("operator", "车间组长 李华");
+
+        ResponseEntity<String> submitted = restTemplate.postForEntity(
+                "/api/machine-outputs",
+                command,
+                String.class
+        );
+        ResponseEntity<String> recent = restTemplate.getForEntity(
+                "/api/machine-outputs?limit=5",
+                String.class
+        );
+        ResponseEntity<String> byBatch = restTemplate.getForEntity(
+                "/api/machine-outputs/import-batches/IMP-REG-ENGRAVING-SMOKE",
+                String.class
+        );
+        ResponseEntity<String> summary = restTemplate.getForEntity(
+                "/api/machine-outputs/summary?limit=10",
+                String.class
+        );
+
+        assertThat(submitted.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(submitted.getBody()).contains(
+                "MOR-SMOKE-20260708-001",
+                "\"machineNoSnapshot\":\"ENG-03\"",
+                "\"operatorSignatureName\":\"周凯\""
+        );
+        assertThat(recent.getBody()).contains("MOR-SMOKE-20260708-001");
+        assertThat(byBatch.getBody()).contains(
+                "MOR-SMOKE-20260708-001",
+                "\"importBatchNo\":\"IMP-REG-ENGRAVING-SMOKE\""
+        );
+        assertThat(summary.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(summary.getBody()).contains(
+                "\"totalRecords\":1",
+                "\"totalQuantity\":18",
+                "\"quantityUnit\":\"件\"",
+                "\"machineNoSnapshot\":\"ENG-03\"",
+                "\"workDate\":\"2026-07-08\"",
+                "\"unmatchedMachineRecords\":1",
+                "\"signatureMissingRecords\":1"
         );
     }
 
@@ -251,6 +390,10 @@ class M2ManagementApiSmokeTest {
                 String.class
         );
         ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> structuredMotherOrder = restTemplate.getForEntity(
+                "/api/business/documents/mother-orders/MD-SMOKE-20260706-001",
+                String.class
+        );
 
         assertThat(confirmed.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(confirmed.getBody()).contains(
@@ -264,6 +407,14 @@ class M2ManagementApiSmokeTest {
                 "MAT-18K-RING",
                 "RAW-CUSTOMER",
                 "RAW_WAITING"
+        );
+        assertThat(structuredMotherOrder.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(structuredMotherOrder.getBody()).contains(
+                "MD-SMOKE-20260706-001",
+                "\"materialCode\":\"MAT-18K-RING\"",
+                "\"stockStatus\":\"RAW_WAITING\"",
+                "\"status\":\"INBOUND_CONFIRMED\"",
+                "\"ledgerCode\""
         );
     }
 
@@ -611,6 +762,10 @@ class M2ManagementApiSmokeTest {
                 String.class
         );
         ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> structuredOutboundOrder = restTemplate.getForEntity(
+                "/api/business/documents/outbound-orders/OUT-SMOKE-20260706-026",
+                String.class
+        );
 
         assertThat(shipped.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(shipped.getBody()).contains(
@@ -625,6 +780,15 @@ class M2ManagementApiSmokeTest {
                 "ZD-SMOKE-20260706-026",
                 "SHIPPED-CUSTOMER",
                 "SHIPPED"
+        );
+        assertThat(structuredOutboundOrder.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(structuredOutboundOrder.getBody()).contains(
+                "OUT-SMOKE-20260706-026",
+                "\"motherOrderCode\":\"MD-SMOKE-20260706-007\"",
+                "\"workOrderCode\":\"ZD-SMOKE-20260706-026\"",
+                "\"logisticsNo\":\"SF-OUT-SMOKE-001\"",
+                "\"status\":\"SHIPPED\"",
+                "\"ledgerCode\""
         );
     }
 
@@ -865,6 +1029,7 @@ class M2ManagementApiSmokeTest {
 
         assertThat(denied.getStatusCode().value()).isEqualTo(403);
         assertThat(denied.getBody()).contains("40301", "OPERATOR", "损耗审批试算");
+
     }
 
     @Test
@@ -888,6 +1053,10 @@ class M2ManagementApiSmokeTest {
                 "\"roleLabel\":\"库管员\"",
                 "\"dataScope\":\"TEAM\"",
                 "\"dataScopeLabel\":\"本班组/工位\"",
+                "\"menuCodes\"",
+                "\"menuTree\"",
+                "\"code\":\"sample\"",
+                "\"buttonCodes\"",
                 "\"headerBased\":true",
                 "\"operatorHeader\":\"X-Zhubao-Operator\"",
                 "\"roleHeader\":\"X-Zhubao-Role\"",
@@ -897,6 +1066,20 @@ class M2ManagementApiSmokeTest {
                 "GET 工作台数据尚未按 dataScope 做真实过滤"
         );
         assertThat(context.getBody()).doesNotContain("\"code\":\"BUSINESS_LOSS_APPROVAL\"");
+
+        ResponseEntity<String> menuTree = restTemplate.exchange(
+                "/api/security/menu-tree",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
+        assertThat(menuTree.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(menuTree.getBody()).contains(
+                "\"code\":\"sample\"",
+                "REGISTER_IMPORT_REVIEW",
+                "\"code\":\"operations\""
+        );
+        assertThat(menuTree.getBody()).doesNotContain("\"code\":\"configuration\"");
     }
 
     @Test
@@ -914,7 +1097,10 @@ class M2ManagementApiSmokeTest {
                 "\"role\":\"WORKSHOP_LEADER\"",
                 "\"dataScope\":\"TEAM\"",
                 "\"demoAccount\":true",
-                "\"menuCodes\""
+                "\"menuCodes\"",
+                "\"menuTree\"",
+                "\"code\":\"sample\"",
+                "REGISTER_IMPORT_POSTING"
         );
 
         String token = jsonString(login.getBody(), "token");
@@ -935,7 +1121,9 @@ class M2ManagementApiSmokeTest {
                 "\"dataScope\":\"TEAM\"",
                 "\"headerBased\":false",
                 "登录会话 token",
-                "\"code\":\"BUSINESS_LOSS_APPROVAL\""
+                "\"code\":\"BUSINESS_LOSS_APPROVAL\"",
+                "\"menuTree\"",
+                "\"code\":\"approvals\""
         );
 
         Map<String, Object> operatorLoginRequest = new LinkedHashMap<>();
@@ -973,6 +1161,17 @@ class M2ManagementApiSmokeTest {
 
         assertThat(denied.getStatusCode().value()).isEqualTo(403);
         assertThat(denied.getBody()).contains("40301", "OPERATOR", "损耗审批试算");
+
+        ResponseEntity<String> auditEvents = restTemplate.getForEntity("/api/auth/audit-events", String.class);
+        assertThat(auditEvents.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(auditEvents.getBody()).contains(
+                "\"eventType\":\"LOGIN\"",
+                "\"username\":\"leader\"",
+                "\"operator\":\"车间组长 马杰\"",
+                "\"result\":\"SUCCESS\"",
+                "\"sessionTokenSuffix\""
+        );
+        assertThat(auditEvents.getBody()).doesNotContain(token);
     }
 
     @Test
@@ -1004,6 +1203,44 @@ class M2ManagementApiSmokeTest {
         Matcher matcher = pattern.matcher(body == null ? "" : body);
         assertThat(matcher.find()).as("JSON field %s exists in %s", field, body).isTrue();
         return matcher.group(1);
+    }
+
+    private Map<String, Object> outboundReadyPreview(String importBatchNo) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("sourceSheetName", "Sheet1");
+        fields.put("sourceRegisterType", "交货情况登记表");
+        fields.put("sourceRegisterLineNo", "3");
+        fields.put("sourceRegisterSequence", "1");
+        fields.put("deliveryDate", "2026-07-06");
+        fields.put("customerNameSnapshot", "雅辰饰品");
+        fields.put("deliveryCategory", "成品");
+        fields.put("quantity", "620");
+        fields.put("quantityUnit", "件");
+        fields.put("paperExpressText", "顺丰 SF-OUT-20260706-022");
+        fields.put("expressCompany", "顺丰");
+        fields.put("logisticsNo", "SF-OUT-20260706-022");
+        fields.put("handler", "何琳");
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("sourceLineNo", 3);
+        row.put("sourceRegisterSequence", "1");
+        row.put("status", "READY");
+        row.put("normalizedFields", fields);
+        row.put("messages", List.of());
+
+        Map<String, Object> preview = new LinkedHashMap<>();
+        preview.put("importBatchNo", importBatchNo);
+        preview.put("templateCode", "REG-OUTBOUND");
+        preview.put("templateName", "交货情况登记表");
+        preview.put("sourceFileName", "出货登记表.xlsx");
+        preview.put("totalRows", 1);
+        preview.put("readyRows", 1);
+        preview.put("warningRows", 0);
+        preview.put("blockedRows", 0);
+        preview.put("executable", true);
+        preview.put("nextAction", "可进入人工复核或确认导入");
+        preview.put("rows", List.of(row));
+        return preview;
     }
 
     private byte[] outboundRegisterWorkbook() throws IOException {

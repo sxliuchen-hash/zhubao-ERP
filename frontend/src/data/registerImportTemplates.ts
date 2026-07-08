@@ -67,6 +67,92 @@ export interface RegisterImportPreview {
   rows: RegisterImportPreviewRow[];
 }
 
+export interface RegisterImportBatchRow {
+  importBatchNo: string;
+  sourceLineNo: number;
+  sourceRegisterSequence: string;
+  status: 'READY' | 'WARNING' | 'BLOCKED' | 'POSTED';
+  normalizedFields: Record<string, string>;
+  messages: RegisterImportPreviewMessage[];
+}
+
+export interface RegisterImportBatch {
+  importBatchNo: string;
+  templateCode: string;
+  templateName: string;
+  sourceFileName: string;
+  targetCommand: string;
+  totalRows: number;
+  readyRows: number;
+  warningRows: number;
+  blockedRows: number;
+  executable: boolean;
+  status: 'CONFIRMED' | 'POSTED' | 'REJECTED';
+  confirmedBy: string;
+  confirmedAt: string;
+  confirmRemark: string;
+  nextAction: string;
+  rows: RegisterImportBatchRow[];
+}
+
+export interface RegisterImportPostingIssue {
+  field: string;
+  level: 'BLOCK' | 'WARN';
+  message: string;
+  fallback: string;
+}
+
+export interface RegisterImportPostingDraft {
+  importBatchNo: string;
+  sourceLineNo: number;
+  sourceRegisterSequence: string;
+  targetCommand: string;
+  status: 'READY' | 'WARNING' | 'BLOCKED' | 'POSTED';
+  mappedFields: Record<string, string>;
+  missingFields: RegisterImportPostingIssue[];
+  warningMessages: RegisterImportPreviewMessage[];
+}
+
+export interface RegisterImportPostingPlan {
+  importBatchNo: string;
+  templateCode: string;
+  templateName: string;
+  targetCommand: string;
+  status: 'READY' | 'WARNING' | 'BLOCKED' | 'POSTED';
+  totalRows: number;
+  readyDrafts: number;
+  warningDrafts: number;
+  blockedDrafts: number;
+  nextAction: string;
+  drafts: RegisterImportPostingDraft[];
+}
+
+export interface RegisterImportPostingExecutionItem {
+  sourceLineNo: number;
+  sourceRegisterSequence: string;
+  targetCommand: string;
+  status: 'POSTED' | 'SKIPPED';
+  businessCode: string;
+  ledgerCode: string;
+  message: string;
+}
+
+export interface RegisterImportPostingExecutionResult {
+  importBatchNo: string;
+  templateCode: string;
+  templateName: string;
+  status: 'POSTED' | 'PARTIAL' | 'REJECTED';
+  totalDrafts: number;
+  postedDrafts: number;
+  skippedDrafts: number;
+  blockedDrafts: number;
+  warningDrafts: number;
+  operator: string;
+  postedAt: string;
+  nextAction: string;
+  items: RegisterImportPostingExecutionItem[];
+}
+
 export interface RegisterProcessCoverage {
   sourceFile: string;
   sourceContent: string;
@@ -97,7 +183,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     targetCommand: 'ConfirmInboundCommand',
     targetLedgerType: 'inbound_confirm',
     parserStatus: 'COMMAND_READY',
-    nextAction: '补 sourceSheetName/importBatchNo 后接入 Excel 上传解析',
+    nextAction: '确认导入先落结构化批次，再接客户/物料入账映射',
     fields: [
       field('序号', 'sourceRegisterSequence', false, '保留纸质序号', '不作业务主键'),
       field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表', 'RegisterImportPreview'),
@@ -106,8 +192,8 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
       field('入库日期', 'inboundDate', true, '月日补全年份', 'yyyy-MM-dd'),
       field('快递名称', 'expressCompany', true, '原文 trim', '不能为空'),
       field('快递单号', 'courierNo', true, '原文 trim', '全局追溯入口，建议唯一'),
-      field('寄货人姓名', 'senderName', false, '姓名快照', '可为空但应提示补全'),
-      field('收货人姓名', 'receiverName', false, '姓名快照', '可为空但应提示补全'),
+      field('寄货人/姓名', 'senderName', false, '姓名快照', '可为空但应提示补全'),
+      field('收货人/姓名', 'receiverName', false, '姓名快照', '可为空但应提示补全'),
       field('拆箱签字', 'unpackSigner', true, '姓名快照', '一期保存姓名，二期接签名附件'),
       field('货品名称', 'goodsName', true, '现场名称快照', '必须映射物料档案'),
       field('数量', 'quantity + quantityUnit', true, '数量默认单位件', '数量必须大于 0'),
@@ -127,7 +213,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     targetCommand: 'ShipFinishedStockCommand',
     targetLedgerType: 'outbound_shipment',
     parserStatus: 'COMMAND_READY',
-    nextAction: '补出库单结构化持久化和导入批次表',
+    nextAction: '确认导入先落结构化批次，再接出库单持久化',
     fields: [
       field('序号', 'sourceRegisterSequence', false, '保留纸质序号', '不作业务主键'),
       field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表', 'RegisterImportPreview'),
@@ -155,7 +241,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     targetCommand: 'ReportProductionCommand',
     targetLedgerType: 'production_report',
     parserStatus: 'COMMAND_READY',
-    nextAction: '补日报导入预览和交单审核动作',
+    nextAction: '确认导入先落结构化批次，再接交单审核动作',
     fields: [
       field('姓名', 'operator', true, '表头继承到明细行', '必须匹配员工或保存姓名快照'),
       field('日期', 'workDate', true, '表头继承到明细行', 'yyyy-MM-dd'),
@@ -184,7 +270,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
     targetCommand: 'ReportProductionCommand / biz_machine_output_record',
     targetLedgerType: 'production_report',
     parserStatus: 'COMMAND_READY',
-    nextAction: '新增设备产量独立落库和机器档案匹配',
+    nextAction: '确认导入先落结构化批次，再接设备产量独立落库',
     fields: [
       field('序号', 'sourceRegisterSequence', false, '日内分组序号', '不作业务主键'),
       field('工作表名', 'sourceSheetName', false, '取 Excel 工作表名称', '用于定位原始工作表', 'RegisterImportPreview'),
@@ -193,7 +279,7 @@ export const registerImportTemplates: RegisterImportTemplate[] = [
       field('日期', 'workDate', true, '组内上下文继承', 'yyyy-MM-dd'),
       field('客户', 'customerId/customerNameSnapshot', true, '组内上下文继承并匹配主数据', '匹配失败转待确认'),
       field('品类', 'productCategory', true, '组内上下文继承', '产能统计必填'),
-      field('机器行号', 'machineLineNo', false, '保留纸质 1-8 台机器行', '用于回表定位', 'RegisterImportPreview'),
+      field('机器编号行号', 'machineLineNo', false, '保留纸质 1-8 台机器行', '用于回表定位', 'RegisterImportPreview'),
       field('机器编号', 'machineNo', true, '1-8 号机器行保留', '未匹配设备档案时保存文本'),
       field('雕刻数量', 'quantity + quantityUnit', true, '默认单位件', '数量必须大于 0'),
       field('操机签字', 'operatorSignatureName', true, '姓名快照', '不能用录入人替代'),
@@ -215,8 +301,139 @@ export const registerImportSummary: RegisterImportSummary = {
     0,
   ),
   commandReadyTemplates: registerImportTemplates.filter((template) => template.parserStatus === 'COMMAND_READY').length,
-  parserStatus: 'Excel preview parser ready; confirm import pending',
+  parserStatus: 'Excel preview parser ready; structured batch confirm ready; explicit business posting command ready',
 };
+
+export const registerImportReviewBatches: RegisterImportBatch[] = [
+  {
+    importBatchNo: 'IMP-REG-INBOUND-20260707193000',
+    templateCode: 'REG-INBOUND',
+    templateName: '签收入库登记表',
+    sourceFileName: '入库登记表.xlsx',
+    targetCommand: 'ConfirmInboundCommand',
+    totalRows: 2,
+    readyRows: 2,
+    warningRows: 0,
+    blockedRows: 0,
+    executable: true,
+    status: 'CONFIRMED',
+    confirmedBy: '样例库复核员',
+    confirmedAt: '2026-07-07T19:30:00',
+    confirmRemark: '结构化批次确认，等待客户/物料匹配后入账',
+    nextAction: '待映射为母单/签收入库业务命令',
+    rows: [
+      {
+        importBatchNo: 'IMP-REG-INBOUND-20260707193000',
+        sourceLineNo: 4,
+        sourceRegisterSequence: '1',
+        status: 'READY',
+        normalizedFields: {
+          sourceSheetName: '签收入库登记表',
+          sourceRegisterType: '签收入库登记表',
+          sourceRegisterLineNo: '4',
+          inboundDate: '2026-07-07',
+          courierNo: 'SF-IN-20260707-001',
+          goodsName: '客户来料配件',
+          quantity: '320',
+          quantityUnit: '件',
+        },
+        messages: [],
+      },
+      {
+        importBatchNo: 'IMP-REG-INBOUND-20260707193000',
+        sourceLineNo: 5,
+        sourceRegisterSequence: '2',
+        status: 'READY',
+        normalizedFields: {
+          sourceSheetName: '签收入库登记表',
+          sourceRegisterType: '签收入库登记表',
+          sourceRegisterLineNo: '5',
+          inboundDate: '2026-07-07',
+          courierNo: 'YT-IN-20260707-002',
+          goodsName: '复检返修件',
+          quantity: '48',
+          quantityUnit: '件',
+        },
+        messages: [],
+      },
+    ],
+  },
+  {
+    importBatchNo: 'IMP-REG-OUTBOUND-20260707195000',
+    templateCode: 'REG-OUTBOUND',
+    templateName: '交货情况登记表',
+    sourceFileName: '出货登记表.xlsx',
+    targetCommand: 'ShipFinishedStockCommand',
+    totalRows: 1,
+    readyRows: 0,
+    warningRows: 1,
+    blockedRows: 0,
+    executable: true,
+    status: 'CONFIRMED',
+    confirmedBy: '样例库复核员',
+    confirmedAt: '2026-07-07T19:50:00',
+    confirmRemark: '快递原文已保留，入账前需复核出库单客户和成品库存',
+    nextAction: '待映射为出库单和成品出库命令',
+    rows: [
+      {
+        importBatchNo: 'IMP-REG-OUTBOUND-20260707195000',
+        sourceLineNo: 6,
+        sourceRegisterSequence: '1',
+        status: 'WARNING',
+        normalizedFields: {
+          sourceSheetName: '交货情况登记表',
+          sourceRegisterType: '交货情况登记表',
+          sourceRegisterLineNo: '6',
+          deliveryDate: '2026-07-07',
+          customerNameSnapshot: 'CUST-REVIEW-01',
+          deliveryCategory: '成品',
+          quantity: '120',
+          quantityUnit: '件',
+          paperExpressText: '顺丰 SF-OUT-20260707-022',
+          logisticsNo: 'SF-OUT-20260707-022',
+        },
+        messages: [
+          {
+            ruleCode: 'OUT-STOCK-MATCH',
+            level: 'WARN',
+            field: 'customerNameSnapshot',
+            message: '客户名称来自登记表快照，入账前需匹配客户主数据',
+            fallback: '导入复核页选择客户档案后再生成出库单',
+          },
+        ],
+      },
+    ],
+  },
+];
+
+export function buildRegisterImportPostingPlan(batch: RegisterImportBatch): RegisterImportPostingPlan {
+  const drafts = batch.rows.map((row) => buildRegisterImportPostingDraft(batch, row));
+  const blockedDrafts = drafts.filter((draft) => draft.status === 'BLOCKED').length;
+  const warningDrafts = drafts.filter((draft) => draft.status === 'WARNING').length;
+  const readyDrafts = drafts.filter((draft) => draft.status === 'READY').length;
+  const postedDrafts = drafts.filter((draft) => draft.status === 'POSTED').length;
+  const status = postedDrafts === drafts.length && drafts.length > 0
+    ? 'POSTED'
+    : blockedDrafts > 0 ? 'BLOCKED' : warningDrafts > 0 ? 'WARNING' : 'READY';
+
+  return {
+    importBatchNo: batch.importBatchNo,
+    templateCode: batch.templateCode,
+    templateName: batch.templateName,
+    targetCommand: postingTargetCommand(batch),
+    status,
+    totalRows: batch.totalRows,
+    readyDrafts,
+    warningDrafts,
+    blockedDrafts,
+    nextAction: status === 'POSTED'
+      ? '该登记表批次已完成显式入账，重复执行会被拒绝'
+      : status === 'BLOCKED'
+        ? '先补齐业务主数据、母单/工单、物料、仓库和称重字段，再允许生成业务单据'
+        : '可进入业务命令生成，但入账仍必须通过后端业务服务和库存台账',
+    drafts,
+  };
+}
 
 export const registerProcessCoverage: RegisterProcessCoverage[] = [
   {
@@ -234,7 +451,7 @@ export const registerProcessCoverage: RegisterProcessCoverage[] = [
     coveredProcess: '打包出货 / 已发货库存',
     systemModule: '库存追溯 / ShipFinishedStockCommand',
     status: 'covered',
-    gap: '出库单结构化持久化和确认导入仍未开放。',
+    gap: '确认导入已落结构化批次，出库单结构化持久化仍待推进。',
     tone: 'green',
   },
   {
@@ -252,7 +469,7 @@ export const registerProcessCoverage: RegisterProcessCoverage[] = [
     coveredProcess: '雕刻设备产量 / 交单审核',
     systemModule: '生产工单 / ReportProductionCommand / biz_machine_output_record',
     status: 'partial',
-    gap: '雕刻已纳入工序模板，独立设备产量表和机器档案匹配仍待开发。',
+    gap: '雕刻已纳入工序模板，M3.79 已接 biz_machine_output_record；机器档案匹配和签名附件仍待深化。',
     tone: 'amber',
   },
 ];
@@ -339,7 +556,7 @@ function fieldCoverageGap(templateCode: string, targetField: string): string {
   }
   if (templateCode === 'REG-ENGRAVING') {
     return ['machineLineNo', 'machineNo', 'operatorSignatureName', 'quantity + quantityUnit'].includes(targetField)
-      ? '字段已覆盖，独立设备产量表、签名附件和机器档案匹配仍待推进。'
+      ? '字段已覆盖，M3.79 已接独立设备产量表；签名附件和机器档案匹配仍待推进。'
       : '字段已覆盖，客户/品类仍需匹配真实主数据。';
   }
   return '已覆盖。';
@@ -349,4 +566,128 @@ function fieldCoverageTone(status: RegisterFieldCoverage['status']): Tone {
   if (status === 'covered') return 'green';
   if (status === 'partial') return 'amber';
   return 'red';
+}
+
+function buildRegisterImportPostingDraft(
+  batch: RegisterImportBatch,
+  row: RegisterImportBatchRow,
+): RegisterImportPostingDraft {
+  const mappedFields = mappedPostingFields(batch, row.normalizedFields);
+  const missingFields = missingPostingFields(batch.templateCode, mappedFields);
+  const warningMessages = row.messages.filter((message) => message.level === 'WARN');
+  const status = row.status === 'POSTED'
+    ? 'POSTED'
+    : missingFields.length > 0 ? 'BLOCKED' : warningMessages.length > 0 ? 'WARNING' : 'READY';
+
+  return {
+    importBatchNo: batch.importBatchNo,
+    sourceLineNo: row.sourceLineNo,
+    sourceRegisterSequence: row.sourceRegisterSequence,
+    targetCommand: postingTargetCommand(batch),
+    status,
+    mappedFields,
+    missingFields,
+    warningMessages,
+  };
+}
+
+function mappedPostingFields(template: RegisterImportBatch, fields: Record<string, string>): Record<string, string> {
+  const mapped: Record<string, string> = {
+    importBatchNo: template.importBatchNo,
+    sourceSheetName: fields.sourceSheetName ?? '',
+    sourceRegisterType: fields.sourceRegisterType ?? '',
+    sourceRegisterLineNo: fields.sourceRegisterLineNo ?? '',
+    sourceRegisterSequence: fields.sourceRegisterSequence ?? '',
+  };
+
+  if (template.templateCode === 'REG-INBOUND') {
+    return {
+      ...mapped,
+      motherOrderCode: fields.motherOrderCode ?? '',
+      customerId: fields.customerId ?? '',
+      ownerCustomerId: fields.ownerCustomerId ?? '',
+      materialCode: fields.materialCode ?? '',
+      warehouseCode: fields.warehouseCode || 'RAW-CUSTOMER',
+      inboundDate: fields.inboundDate ?? '',
+      expressCompany: fields.expressCompany ?? '',
+      courierNo: fields.courierNo ?? '',
+      goodsName: fields.goodsName ?? '',
+      quantity: fields.quantity ?? '',
+      quantityUnit: fields.quantityUnit || '件',
+      weight: fields.weight ?? '',
+      operator: fields.operator || template.confirmedBy,
+      evidenceCode: fields.evidenceCode ?? '',
+    };
+  }
+
+  if (template.templateCode === 'REG-OUTBOUND') {
+    return {
+      ...mapped,
+      shipmentCode: fields.shipmentCode ?? '',
+      motherOrderCode: fields.motherOrderCode ?? '',
+      workOrderCode: fields.workOrderCode ?? '',
+      customerId: fields.customerId ?? '',
+      ownerCustomerId: fields.ownerCustomerId ?? '',
+      materialCode: fields.materialCode ?? '',
+      fromWarehouseCode: fields.fromWarehouseCode || 'FINISHED',
+      toWarehouseCode: fields.toWarehouseCode || 'SHIPPED',
+      deliveryDate: fields.deliveryDate ?? '',
+      deliveryCategory: fields.deliveryCategory ?? '',
+      quantity: fields.quantity ?? '',
+      quantityUnit: fields.quantityUnit || '件',
+      weight: fields.weight ?? '',
+      expressCompany: fields.expressCompany ?? '',
+      logisticsNo: fields.logisticsNo ?? '',
+      paperExpressText: fields.paperExpressText ?? '',
+      handler: fields.handler ?? '',
+      operator: fields.operator || template.confirmedBy,
+    };
+  }
+
+  return {
+    ...mapped,
+    motherOrderCode: fields.motherOrderCode ?? '',
+    workOrderCode: fields.workOrderCode ?? '',
+    customerId: fields.customerId ?? '',
+    ownerCustomerId: fields.ownerCustomerId ?? '',
+    materialCode: fields.materialCode ?? '',
+    fromWarehouseCode: fields.fromWarehouseCode ?? '',
+    toWarehouseCode: fields.toWarehouseCode ?? '',
+    quantity: fields.quantity ?? '',
+    quantityUnit: fields.quantityUnit || '件',
+    weight: fields.weight ?? '',
+    workDate: fields.workDate ?? '',
+    process: template.templateCode === 'REG-ENGRAVING' ? (fields.process || '雕刻') : (fields.process || fields.workItemName || ''),
+    productCategory: fields.productCategory ?? '',
+    machineLineNo: fields.machineLineNo ?? '',
+    machineNo: fields.machineNo ?? '',
+    workItemName: fields.workItemName ?? '',
+    handoffAuditStatus: fields.handoffAuditStatus ?? '',
+    operator: fields.operator || template.confirmedBy,
+    operatorSignatureName: fields.operatorSignatureName ?? '',
+  };
+}
+
+function missingPostingFields(templateCode: string, fields: Record<string, string>): RegisterImportPostingIssue[] {
+  const required = templateCode === 'REG-INBOUND'
+    ? ['motherOrderCode', 'customerId', 'materialCode', 'quantity', 'weight']
+    : templateCode === 'REG-OUTBOUND'
+      ? ['shipmentCode', 'motherOrderCode', 'workOrderCode', 'customerId', 'materialCode', 'quantity', 'weight', 'logisticsNo']
+      : ['motherOrderCode', 'workOrderCode', 'customerId', 'materialCode', 'fromWarehouseCode', 'toWarehouseCode', 'quantity', 'weight', 'process'];
+  const engravingRequired = templateCode === 'REG-ENGRAVING' ? ['machineNo', 'operatorSignatureName'] : [];
+
+  return [...required, ...engravingRequired]
+    .filter((fieldName) => !fields[fieldName])
+    .map((fieldName) => ({
+      field: fieldName,
+      level: 'BLOCK',
+      message: `${fieldName} 缺失，不能生成正式业务入账命令`,
+      fallback: '在导入复核页补齐或匹配主数据后重试',
+    }));
+}
+
+function postingTargetCommand(batch: RegisterImportBatch): string {
+  return batch.templateCode === 'REG-ENGRAVING'
+    ? 'MachineOutputRecordDraft / ReportProductionCommand'
+    : batch.targetCommand;
 }

@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.73 / 登记表覆盖审计</strong>
-        <i>仍处于 M3 增量开发：本轮按真实 Excel 样表补齐工序与字段覆盖矩阵，确认入账继续保留人工复核。</i>
+        <strong>M3.86 / 授权导航过滤</strong>
+        <i>仍处于 M3 增量开发：本轮让前端侧栏实际消费后端菜单树和会话菜单编码，同时继续保留低成本硬件和人工兜底字段。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.73 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.86 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
@@ -66,6 +66,11 @@ defineProps<{
             <span>运维中心</span>
             <span>登录会话</span>
             <span>登记表模板</span>
+            <span>设备产量汇总</span>
+            <span>业务单据快照</span>
+            <span>复核补录</span>
+            <span>登录审计</span>
+            <span>授权导航过滤</span>
             <span>工资试算基线</span>
           </div>
         </div>

@@ -120,6 +120,15 @@ export interface SecurityHeaderContract {
   dataScopeHeader: string;
 }
 
+export interface NavigationMenuItem {
+  code: string;
+  label: string;
+  module: string;
+  route: string;
+  buttonCodes: string[];
+  children: NavigationMenuItem[];
+}
+
 export interface SecurityCurrentContext {
   operator: string;
   role: string;
@@ -130,6 +139,8 @@ export interface SecurityCurrentContext {
   headerBased: boolean;
   allowedPermissions: PermissionGrant[];
   sensitiveActionCodes: string[];
+  menuCodes: string[];
+  menuTree: NavigationMenuItem[];
   limitationNotes: string[];
   headerContract: SecurityHeaderContract;
 }
@@ -362,10 +373,29 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
       'BUSINESS_LOSS_APPROVAL',
       'DOCUMENT_ATTACHMENT_UPLOAD',
     ],
+    menuCodes: ['dashboard', 'inbound', 'production', 'quality', 'inventory', 'approvals', 'configuration', 'documents', 'sample', 'hardware', 'operations', 'mobile'],
+    menuTree: [
+      {
+        code: 'sample',
+        label: '样例库',
+        module: '验收脚本',
+        route: '/sample',
+        buttonCodes: ['REGISTER_IMPORT_REVIEW', 'REGISTER_IMPORT_POSTING'],
+        children: [],
+      },
+      {
+        code: 'configuration',
+        label: '配置基线',
+        module: '参数 / 构型',
+        route: '/configuration',
+        buttonCodes: [],
+        children: [],
+      },
+    ],
     limitationNotes: [
-      '当前身份来自请求头，尚未接入真实登录、JWT、Session 或 SSO。',
+      '当前身份来自请求头兜底；M3 轻量登录、菜单树和登录审计已接入，生产仍需用户表、密码哈希和 SSO/JWT。',
       '当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。',
-      '当前菜单权限仍由前端导航展示控制，尚未接入后端菜单树和按钮级授权。',
+      '当前菜单权限已由后端菜单树返回，前端登录会话会按 menuCodes/menuTree 过滤侧栏；请求头兜底仍展示评审全量导航。',
       '敏感 POST 已接入轻量角色守卫，但复杂审批流和工资锁账仍未完成。',
     ],
     headerContract: {

@@ -2,6 +2,7 @@ package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.security.app.AuthSessionService;
+import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.error.PermissionDeniedException;
@@ -46,5 +47,10 @@ public class AuthController {
     @GetMapping("/demo-users")
     public ApiResponse<List<String>> demoUsers() {
         return ApiResponse.ok(authSessionService.demoUsernames());
+    }
+
+    @GetMapping("/audit-events")
+    public ApiResponse<List<AuthAuditEvent>> auditEvents() {
+        return ApiResponse.ok(authSessionService.auditEvents(20));
     }
 }

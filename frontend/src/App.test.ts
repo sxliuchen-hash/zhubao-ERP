@@ -1,13 +1,27 @@
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
+import { authSessionChangedEvent, fetchAuthSession, type AuthSession } from './services/authApi';
+
+vi.mock('./services/authApi', () => ({
+  authSessionChangedEvent: 'zhubao-auth-session-changed',
+  fetchAuthSession: vi.fn(),
+}));
 
 describe('App', () => {
-  it('starts on the M1 business workbench and exposes core modules', () => {
-    const wrapper = mount(App);
+  beforeEach(() => {
+    vi.mocked(fetchAuthSession).mockResolvedValue(null);
+  });
 
-    expect(wrapper.text()).toContain('M3.73 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.73 / 登记表覆盖审计');
+  it('starts on the M1 business workbench and exposes core modules', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('M3.86 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.86 / 授权导航过滤');
+    expect(wrapper.text()).toContain('复核补录');
+    expect(wrapper.text()).toContain('登录审计');
+    expect(wrapper.text()).toContain('授权导航过滤');
     expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
     expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
     expect(wrapper.text()).toContain('首页工作台');
@@ -23,4 +37,60 @@ describe('App', () => {
     expect(wrapper.text()).toContain('运维中心');
     expect(wrapper.text()).toContain('PWA 作业');
   });
+
+  it('filters sidebar navigation from the authenticated menu contract', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'production', 'mobile']));
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.findAll('.nav-button').map((button) => button.attributes('data-tab'))).toEqual([
+      'dashboard',
+      'production',
+      'mobile',
+    ]);
+    expect(wrapper.find('.ops-nav').text()).toContain('生产工单');
+    expect(wrapper.find('.ops-nav').text()).not.toContain('来料母单');
+    expect(wrapper.find('.ops-nav').text()).not.toContain('配置基线');
+
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, {
+      detail: { session: sessionWithMenus(['dashboard', 'quality']) },
+    }));
+    await flushPromises();
+
+    expect(wrapper.findAll('.nav-button').map((button) => button.attributes('data-tab'))).toEqual([
+      'dashboard',
+      'quality',
+    ]);
+
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, {
+      detail: { session: null },
+    }));
+    await flushPromises();
+
+    expect(wrapper.findAll('.nav-button')).toHaveLength(12);
+  });
 });
+
+function sessionWithMenus(menuCodes: string[]): AuthSession {
+  return {
+    token: 'token-demo',
+    username: 'operator',
+    operator: '操作工 王强',
+    role: 'OPERATOR',
+    roleLabel: '操作工',
+    dataScope: 'SELF',
+    dataScopeLabel: '本人任务',
+    expiresAt: '2026-07-08 20:00:00',
+    demoAccount: true,
+    menuCodes,
+    menuTree: menuCodes.map((code) => ({
+      code,
+      label: code,
+      module: code,
+      route: `/${code}`,
+      buttonCodes: [],
+      children: [],
+    })),
+  };
+}

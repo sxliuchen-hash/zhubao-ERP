@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AppShell from './components/AppShell.vue';
 import ApprovalWorkspace from './features/m1/ApprovalWorkspace.vue';
 import ConfigurationWorkspace from './features/m1/ConfigurationWorkspace.vue';
@@ -13,6 +13,13 @@ import OperationsCenterWorkspace from './features/m1/OperationsCenterWorkspace.v
 import ProductionWorkspace from './features/m1/ProductionWorkspace.vue';
 import QualityWorkspace from './features/m1/QualityWorkspace.vue';
 import SampleLibraryWorkspace from './features/m1/SampleLibraryWorkspace.vue';
+import {
+  authSessionChangedEvent,
+  fetchAuthSession,
+  type AuthSession,
+  type AuthSessionChangedDetail,
+  type NavigationMenuItem,
+} from './services/authApi';
 
 type TabKey =
   | 'dashboard'
@@ -44,24 +51,87 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; co
 ];
 
 const activeTab = ref<TabKey>('dashboard');
-const activeTitle = computed(() => tabs.find((tab) => tab.key === activeTab.value)?.label ?? '首页工作台');
+const authSession = ref<AuthSession | null>(null);
+const tabKeySet = new Set<TabKey>(tabs.map((tab) => tab.key));
+const authorizedMenuCodes = computed(() => {
+  if (!authSession.value) {
+    return null;
+  }
+  return new Set([
+    ...authSession.value.menuCodes,
+    ...flattenMenuCodes(authSession.value.menuTree),
+  ].filter(isTabKey));
+});
+const visibleTabs = computed(() => {
+  if (!authorizedMenuCodes.value || authorizedMenuCodes.value.size === 0) {
+    return tabs;
+  }
+  const filteredTabs = tabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
+  return filteredTabs.length ? filteredTabs : tabs.filter((tab) => tab.key === 'dashboard');
+});
+const activeTitle = computed(() => (
+  visibleTabs.value.find((tab) => tab.key === activeTab.value)?.label
+  ?? visibleTabs.value[0]?.label
+  ?? '首页工作台'
+));
 
 watch(activeTab, () => {
   void nextTick(() => window.scrollTo(0, 0));
 });
+
+watch(visibleTabs, (nextTabs) => {
+  if (!nextTabs.some((tab) => tab.key === activeTab.value)) {
+    activeTab.value = nextTabs[0]?.key ?? 'dashboard';
+  }
+}, { immediate: true });
+
+onMounted(() => {
+  globalThis.addEventListener?.(authSessionChangedEvent, handleAuthSessionChanged as EventListener);
+  void restoreAuthSessionForNavigation();
+});
+
+onBeforeUnmount(() => {
+  globalThis.removeEventListener?.(authSessionChangedEvent, handleAuthSessionChanged as EventListener);
+});
+
+async function restoreAuthSessionForNavigation() {
+  try {
+    authSession.value = await fetchAuthSession();
+  } catch {
+    authSession.value = null;
+  }
+}
+
+function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) {
+  authSession.value = event.detail.session;
+}
+
+function activateTab(tab: TabKey) {
+  if (visibleTabs.value.some((item) => item.key === tab)) {
+    activeTab.value = tab;
+  }
+}
+
+function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
+  return items.flatMap((item) => [item.code, ...flattenMenuCodes(item.children)]);
+}
+
+function isTabKey(value: string): value is TabKey {
+  return tabKeySet.has(value as TabKey);
+}
 </script>
 
 <template>
   <AppShell :title="activeTitle">
     <template #nav>
       <button
-        v-for="tab in tabs"
+        v-for="tab in visibleTabs"
         :key="tab.key"
         class="nav-button"
         :data-tab="tab.key"
         :class="{ active: activeTab === tab.key }"
         type="button"
-        @click="activeTab = tab.key"
+        @click="activateTab(tab.key)"
       >
         <i class="nav-code" aria-hidden="true">{{ tab.code }}</i>
         <span>

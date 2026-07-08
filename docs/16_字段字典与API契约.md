@@ -1,7 +1,7 @@
 # 来料加工进销存与生产管理系统 字段字典与 API 契约
 
-**文档版本**：V1.0  
-**更新日期**：2026-07-07
+**文档版本**：V1.1
+**更新日期**：2026-07-08
 **适用阶段**：M2 API 基线，M3 数据库和前后端联调依据  
 
 ---
@@ -42,7 +42,17 @@
 - [OperationsCenterService.java](../backend/src/main/java/com/zhubao/erp/operations/app/OperationsCenterService.java)
 - [operationsCenterApi.ts](../frontend/src/services/operationsCenterApi.ts)
 - [RegisterImportTemplateService.java](../backend/src/main/java/com/zhubao/erp/register/app/RegisterImportTemplateService.java)
+- [RegisterImportConfirmationService.java](../backend/src/main/java/com/zhubao/erp/register/app/RegisterImportConfirmationService.java)
+- [RegisterImportPostingPlanService.java](../backend/src/main/java/com/zhubao/erp/register/app/RegisterImportPostingPlanService.java)
+- [RegisterImportController.java](../backend/src/main/java/com/zhubao/erp/register/web/RegisterImportController.java)
 - [registerImportApi.ts](../frontend/src/services/registerImportApi.ts)
+- [V12__m3_register_import_batch_contract.sql](../backend/src/main/resources/db/mysql/V12__m3_register_import_batch_contract.sql)
+- [BusinessDocumentService.java](../backend/src/main/java/com/zhubao/erp/business/app/BusinessDocumentService.java)
+- [BusinessDocumentController.java](../backend/src/main/java/com/zhubao/erp/business/web/BusinessDocumentController.java)
+- [V14__m3_business_document_contract.sql](../backend/src/main/resources/db/mysql/V14__m3_business_document_contract.sql)
+- [NavigationMenuService.java](../backend/src/main/java/com/zhubao/erp/security/app/NavigationMenuService.java)
+- [SecurityContextController.java](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)
+- [authApi.ts](../frontend/src/services/authApi.ts)
 
 ---
 
@@ -74,8 +84,14 @@
 | `GET /templates` | 样例库/预检操作台 | 返回入库、出货、抛光、雕刻登记表的字段映射、目标命令和校验规则 |
 | `GET /summary` | 样例库/预检操作台 | 返回模板数量、字段数量、必填字段数量和解析器接入状态 |
 | `POST /previews` | 样例库/预检操作台 | multipart 上传 `.xlsx`，按模板解析并返回标准化字段、阻断/警告消息和可确认状态；不写业务台账 |
+| `POST /batches/confirm` | 样例库/预检操作台 | 接收已通过预检的 `RegisterImportPreview`，保存结构化导入批次、行级标准化字段和校验消息；不写库存台账 |
+| `GET /batches` | 样例库/导入复核 | 查询最近结构化导入批次 |
+| `GET /batches/{importBatchNo}` | 样例库/导入复核 | 按批次号查询批次头、行和消息 |
+| `GET /batches/{importBatchNo}/posting-plan` | 样例库/入账映射计划 | 只读生成目标命令草稿、已映射字段、缺失字段和警告；不写库存台账或业务单据 |
+| `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
+| `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.73 已完成 Excel 上传预览解析、前端问题 CSV 下载和真实空白模板结构复核：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；二次核对已将 `入库登记表.xlsx` 的 `备注 -> remark` 纳入前后端字段模板契约，并把 4 类模板的 `sourceRegisterType/sourceRegisterLineNo` 纳入字段映射，登记表字段总数由 40 调整为 48。仍未完成确认导入、结构化导入批次落库和业务单据自动入账。
+当前 M3.82 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口和基础业务单据结构化持久化切片：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.82 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}` 和 `GET /business/documents/outbound-orders/{code}` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计以及入账后的母单/出库单结构化快照。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
 
 业务操作接口前缀：
 
@@ -96,6 +112,61 @@
 | `POST /after-sales-reviews` | 库存追溯 | 售后复核分流，将退货复核库存转为成品、返工、报废或冻结库存 |
 | `POST /loss-approvals` | 质检返工 | 生成损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账，不代表正式工资发放 |
 
+业务单据查询接口前缀：
+
+```http
+/api/business/documents
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /mother-orders/{code}` | 来料母单 / 登记表入账结果 / 追溯 | 查询入库业务动作保存的结构化母单快照，包含入库登记字段、库存台账号和来源登记表字段 |
+| `GET /outbound-orders/{code}` | 出库追溯 / 登记表入账结果 | 查询成品出库业务动作保存的结构化出库单快照，包含出货登记字段、物流字段、库存台账号和来源登记表字段 |
+
+设备产量接口前缀：
+
+```http
+/api/machine-outputs
+```
+
+| 接口 | 页面 | 用途 |
+|---|---|---|
+| `GET /machine-outputs?limit=20` | 生产统计 / 样例库 | 查询最近设备产量记录，默认最多 20 条 |
+| `GET /machine-outputs/summary?limit=100` | 生产派工 / 生产统计 | 汇总最近设备产量记录，返回总记录数、总产量、按机器/日期分组、机器档案待匹配数和签名附件待补数 |
+| `GET /machine-outputs/import-batches/{importBatchNo}` | 样例库/登记表入账结果 | 查询某个登记表导入批次生成的设备产量记录 |
+| `POST /machine-outputs` | 生产统计 / 设备产量补录 | 手工或低成本设备适配提交设备产量记录，受 `MACHINE_OUTPUT_SUBMIT` 权限控制 |
+
+`SubmitMachineOutputCommand`：
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 可选；为空时后端生成 `MOR-` 编号 |
+| `workDate` | 必填，设备产量日期 |
+| `customerId` / `customerNameSnapshot` | 可选客户 ID 和客户快照 |
+| `productCategory` | 必填，品类 |
+| `machineId` / `machineNoSnapshot` | 设备档案 ID 可空，机器编号快照必填 |
+| `workOrderCode` / `workReportCode` | 可选工单/报工快照；登记表显式入账会写工单号 |
+| `outputQuantity` / `quantityUnit` | 必填产量和单位，单位为空默认 `件` |
+| `operatorEmployeeId` / `operatorSignatureName` | 操机员工 ID 可空，操机签字快照必填 |
+| `signatureMediaId` | 可选，后续接手写签名附件 |
+| `sourceRegisterType` / `sourceLineNo` / `machineLineNo` / `sourceSequenceNo` | 原始登记来源、Excel 行号、1-8 号机器行和纸质序号 |
+| `importBatchNo` / `ledgerCode` | 可选导入批次号和库存台账号；`REG-ENGRAVING` 入账时自动写入 |
+| `status` | 可选，默认 `SUBMITTED` |
+| `remark` / `operator` | 备注和录入人 |
+
+`MachineOutputRecord` 返回上述字段并补充 `createdBy`、`createdAt`。M3.79 中 `REG-ENGRAVING` 的 `POST /register-import/.../posting-commands` 会先经 `BusinessOperationService.reportProduction` 写库存台账，再保存同批次 `MachineOutputRecord`；这解决“雕刻产量只在台账备注里”的缺口。M3.80 新增的 `MachineOutputSummary` 面向生产统计页，先基于最近记录聚合，后续可替换为 SQL 聚合或独立报表表。
+
+`MachineOutputSummary`：
+
+| 字段 | 说明 |
+|---|---|
+| `totalRecords` | 本次汇总纳入的设备产量记录数 |
+| `totalQuantity` / `quantityUnit` | 汇总产量和单位；单位不一致时返回 `混合` |
+| `byMachine[]` | 按 `machineNoSnapshot` 分组的产量和记录数，供生产页查看机器产能 |
+| `byWorkDate[]` | 按 `workDate` 分组的产量和记录数，供日报入口使用 |
+| `unmatchedMachineRecords` | `machineId` 为空的记录数，表示还未匹配机器档案 |
+| `signatureMissingRecords` | `signatureMediaId` 为空的记录数，表示仍需补手写签名或附件 |
+
 ### 2.1 登记表导入模板字段
 
 `RegisterImportTemplate` 用于约束后续 Excel 导入器，不直接写业务数据。
@@ -108,7 +179,7 @@
 | `businessFlow` | 该表对应的业务链路 |
 | `targetCommand` | 导入预览通过后应生成或补齐的业务命令 |
 | `targetLedgerType` | 最终影响的库存台账来源类型 |
-| `parserStatus` | 当前状态，M3.66 仍为 `COMMAND_READY`，表示命令映射和预览解析已就绪，确认导入尚未开放 |
+| `parserStatus` | 当前状态为 `COMMAND_READY`，表示命令映射、预览解析和结构化批次确认已就绪；业务单据自动入账仍待映射 |
 | `nextAction` | 后续开发动作 |
 | `fields` | 字段映射列表 |
 | `validationRules` | 导入校验规则列表 |
@@ -127,7 +198,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `importBatchNo` | 本次预览批次号，当前仅用于预览追踪，尚未落结构化导入批次表 |
+| `importBatchNo` | 本次预览批次号；确认导入后作为 `register_import_batch.import_batch_no` 和 `register_import_row.import_batch_no` |
 | `templateCode` / `templateName` | 模板编码和模板名称 |
 | `sourceFileName` | 上传文件名 |
 | `totalRows` | 实际解析出的业务行数量，不含空白模板行 |
@@ -169,7 +240,165 @@
 | `message` / `fallback` | 现场修表说明和兜底动作 |
 | `normalizedFields` | 该行全部标准化字段 JSON，便于和原表回查 |
 
-CSV 下载只发生在前端浏览器内，来自 `/previews` 返回结果，不是新的后端导出接口；当前仍不写入库存台账或业务单据。
+CSV 下载只发生在前端浏览器内，来自 `/previews` 返回结果，不是新的后端导出接口；确认导入后会保存结构化批次，但当前仍不写入库存台账或业务单据。
+
+### 2.3 登记表结构化导入批次
+
+`POST /api/register-import/batches/confirm` 请求：
+
+| 字段 | 说明 |
+|---|---|
+| `preview` | 必填，来自 `/previews` 的完整 `RegisterImportPreview` |
+| `operator` | 复核确认人；为空时后端使用 `登记表复核员` |
+| `confirmRemark` | 复核备注；为空时后端写入“不直接写业务台账”的默认说明 |
+
+确认规则：
+
+- `preview.executable` 必须为 `true`。
+- `blockedRows` 必须为 `0`。
+- `rows` 不能为空。
+- 同一个 `importBatchNo` 不允许重复确认。
+- `WARNING` 行可以确认，但必须保留行级 `messages`，供导入复核页面二次审查。
+
+返回对象 `RegisterImportBatch`：
+
+| 字段 | 说明 |
+|---|---|
+| `importBatchNo` | 结构化导入批次号 |
+| `templateCode` / `templateName` | 登记表模板 |
+| `sourceFileName` | 上传文件名 |
+| `targetCommand` | 后续业务入账映射目标，例如 `ShipFinishedStockCommand` |
+| `totalRows` / `readyRows` / `warningRows` / `blockedRows` | 预检统计快照 |
+| `status` | `CONFIRMED`、`POSTED` 或 `REJECTED`；`POSTED` 表示显式入账命令已执行 |
+| `confirmedBy` / `confirmedAt` | 复核人和确认时间 |
+| `confirmRemark` | 复核备注 |
+| `nextAction` | 下一动作；确认后为“待业务单据入账映射”，入账后提示重复执行将被拒绝 |
+| `rows` | 结构化导入行，包含 `sourceLineNo`、`sourceRegisterSequence`、`normalizedFields` 和 `messages` |
+
+MySQL 持久化表：
+
+| 表 | 用途 |
+|---|---|
+| `register_import_batch` | 批次头、模板、来源文件、统计、确认人和状态 |
+| `register_import_row` | 行级原表行号、纸质序号、状态、标准化字段 JSON 和消息 JSON |
+
+M3.76 前端复核台约束：
+
+- `GET /api/register-import/batches?limit=10` 用于显示最近确认批次，后端返回批次头和行级快照；`limit` 在服务端限制为 1-50。
+- `GET /api/register-import/batches/{importBatchNo}` 用于点击批次后读取单批次详情，展示 `rows[].normalizedFields` 和 `rows[].messages`。
+- 前端在后端 API 不可用时保留本地评审批次兜底，并明确标注数据来源；该兜底只用于评审界面，不代表已写入 MySQL。
+- `status=CONFIRMED` 在页面显示为“待入账映射”，不得被解释为已经生成母单、报工、设备产量或出库单。
+- `status=POSTED` 在页面显示为“已入业务单据”，重复调用显式入账命令必须被后端拒绝。
+- 入账映射必须走 `POST /posting-commands` 独立命令，不能在批次查询或 posting plan 接口中隐式写库存台账。
+- M3.82 的复核补录只允许更新未入账批次行的 `normalizedFields`；`importBatchNo`、`sourceRegisterLineNo`、`sourceRegisterSequence` 等来源审计字段禁止通过补录接口覆盖。
+
+### 2.4 登记表入账映射计划
+
+`GET /api/register-import/batches/{importBatchNo}/posting-plan` 返回对象 `RegisterImportPostingPlan`：
+
+| 字段 | 说明 |
+|---|---|
+| `importBatchNo` | 结构化导入批次号 |
+| `templateCode` / `templateName` | 登记表模板 |
+| `targetCommand` | 目标命令草稿类型；雕刻为 `MachineOutputRecordDraft / ReportProductionCommand` |
+| `status` | `READY`、`WARNING`、`BLOCKED`、`POSTED` |
+| `totalRows` / `readyDrafts` / `warningDrafts` / `blockedDrafts` | 批次行数和草稿状态统计 |
+| `nextAction` | 下一步处理说明 |
+| `drafts` | 行级入账草稿 |
+
+`drafts[]`：
+
+| 字段 | 说明 |
+|---|---|
+| `sourceLineNo` / `sourceRegisterSequence` | Excel 原始行号和纸质序号 |
+| `targetCommand` | 该行建议生成的目标命令 |
+| `status` | 行级 `READY`、`WARNING`、`BLOCKED`、`POSTED` |
+| `mappedFields` | 已从登记表行映射出的命令字段草稿 |
+| `missingFields` | 缺失字段列表，例如母单、工单、客户、物料、仓库、重量或物流单号 |
+| `warningMessages` | 继承确认批次行级 `WARN` 消息 |
+
+`missingFields[]`：
+
+| 字段 | 说明 |
+|---|---|
+| `field` | 缺失字段名 |
+| `level` | 当前为 `BLOCK` |
+| `message` | 缺失原因 |
+| `fallback` | 复核页补救动作 |
+
+只读约束：
+
+- posting plan 只读取已确认批次，不修改 `register_import_batch/register_import_row`。
+- posting plan 不调用库存台账服务，不写 `inv_stock_ledger` 或 `inv_stock_balance`。
+- posting plan 不生成 `biz_mother_order`、`biz_work_report`、`biz_machine_output_record`、`biz_outbound_order` 等业务单据。
+- 正式入账只能通过 2.6 的显式业务命令执行，并继续复用后端库存台账服务和权限守卫。
+
+### 2.5 登记表复核补录命令
+
+`POST /api/register-import/batches/{importBatchNo}/rows/{sourceLineNo}/corrections` 请求对象 `CorrectRegisterImportRowCommand`：
+
+| 字段 | 说明 |
+|---|---|
+| `fields` | 必填；待补录字段键值，例如 `shipmentCode`、`motherOrderCode`、`workOrderCode`、`customerId`、`materialCode`、`weight` |
+| `operator` | 可选；复核补录人，为空时使用默认登记表复核员 |
+| `correctionRemark` | 可选；补录说明，写入批次 `nextAction` 便于复核台展示 |
+
+执行规则：
+
+- 只允许对 `CONFIRMED` 且行状态非 `POSTED` 的批次行补录。
+- 补录动作只合并更新 `register_import_row.normalized_fields_json`，并更新批次 `next_action`。
+- 不调用 `StockLedgerService`，不写 `inv_stock_ledger/inv_stock_balance`，不生成母单、出库单、报工或设备产量记录。
+- `importBatchNo`、`sourceRegisterLineNo`、`sourceRegisterSequence` 等来源审计字段禁止覆盖。
+- 补录后应重新读取 `GET /posting-plan`，由 posting plan 判断该行是否从 `BLOCKED` 变为 `READY` 或 `WARNING`。
+- 权限码为 `REGISTER_IMPORT_REVIEW`，当前允许 `RECEIVER`、`WAREHOUSE_KEEPER`、`WORKSHOP_LEADER` 以及默认管理角色执行。
+
+返回对象为更新后的 `RegisterImportBatch`。
+
+### 2.6 登记表显式入账命令
+
+`POST /api/register-import/batches/{importBatchNo}/posting-commands` 请求对象 `PostRegisterImportBatchCommand`：
+
+| 字段 | 说明 |
+|---|---|
+| `allowWarnings` | 可选；当 posting plan 为 `WARNING` 时必须显式传 `true`，否则后端拒绝入账 |
+| `operator` | 可选；入账执行人，为空时使用批次确认人 |
+| `postingRemark` | 可选；追加进入业务命令备注，并和登记表批次号、原始行号一起写入台账备注 |
+
+执行规则：
+
+- 先读取 `RegisterImportPostingPlan`，存在 `blockedDrafts > 0` 时拒绝。
+- `warningDrafts > 0` 且 `allowWarnings` 不是 `true` 时拒绝。
+- 批次或行状态为 `POSTED` 时拒绝重复执行。
+- `REG-INBOUND` 转换为 `ConfirmInboundCommand`。
+- `REG-OUTBOUND` 转换为 `ShipFinishedStockCommand`。
+- `REG-POLISHING` 转换为 `ReportProductionCommand`；`REG-ENGRAVING` 会先执行 `ReportProductionCommand` 写库存台账，再同步生成 `biz_machine_output_record`。
+- 所有库存变化必须经 `BusinessOperationService` 进入 `StockLedgerService`，不得直接改余额表。
+- 成功后行状态更新为 `POSTED`；全部行完成后批次状态更新为 `POSTED`。
+- 权限码为 `REGISTER_IMPORT_POSTING`，当前允许 `RECEIVER`、`WAREHOUSE_KEEPER`、`WORKSHOP_LEADER` 以及默认管理角色执行。
+
+返回对象 `RegisterImportPostingExecutionResult`：
+
+| 字段 | 说明 |
+|---|---|
+| `importBatchNo` | 入账批次号 |
+| `templateCode` / `templateName` | 登记表模板 |
+| `status` | 当前为 `POSTED`；预留 `PARTIAL`、`REJECTED` |
+| `totalDrafts` / `postedDrafts` / `skippedDrafts` | 草稿总数、已入账行数和跳过行数 |
+| `blockedDrafts` / `warningDrafts` | 执行时的阻断/警告统计快照 |
+| `operator` / `postedAt` | 执行人和执行时间 |
+| `nextAction` | 后续提示，成功时说明库存变化已进入库存台账 |
+| `items` | 行级执行结果 |
+
+`items[]`：
+
+| 字段 | 说明 |
+|---|---|
+| `sourceLineNo` / `sourceRegisterSequence` | Excel 原始行号和纸质序号 |
+| `targetCommand` | 实际调用的业务命令 |
+| `status` | 当前为 `POSTED`；预留 `SKIPPED` |
+| `businessCode` | 后端业务服务返回的母单号、工单号、出库单号等 |
+| `ledgerCode` | `StockLedgerService` 返回的库存台账号 |
+| `message` | 执行说明 |
 
 `RegisterFieldMapping`：
 
@@ -1175,12 +1404,31 @@ PWA 一期边界：
 | 客户退货 | `POST /api/business/operations/customer-returns`，`SHIPPED -> FINISHED` |
 | 售后复核 | `POST /api/business/operations/after-sales-reviews`，`FINISHED@RETURN-CHECK -> FINISHED/REWORK/SCRAP/FROZEN` |
 | 损耗审批 | `POST /api/business/operations/loss-approvals`，返回损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账 |
+| 结构化母单 | `POST /api/business/operations/inbound-confirmations` 在库存台账成功后写 `biz_mother_order/biz_mother_order_item`；重复母单号先拒绝 |
+| 结构化出库单 | `POST /api/business/operations/outbound-shipments` 在库存台账成功后写 `biz_outbound_order/biz_outbound_order_item`；重复出库单号先拒绝 |
+| 单据查询 | `GET /api/business/documents/mother-orders/{code}`、`GET /api/business/documents/outbound-orders/{code}` |
 | 轻量审批任务 | `GET /api/approvals/tasks`、`GET /api/approvals/tasks/pending`、`POST /api/approvals/tasks/{approvalCode}/decisions`，用于固定场景待审批、审批通过/驳回和锁定 |
 | 后端入口 | `BusinessOperationController` |
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
-| 当前限制 | 尚未更新工作台快照状态；轻量审批可切换 JDBC 持久化，但正式权限、复杂审批流、审批 UI、工资锁账/发放、售后结算和对象存储仍需继续接入 |
+| 当前限制 | 母单/出库单已具备基础结构化快照和明细行，但尚未完成主数据匹配、完整状态流转、补录 UI、追溯聚合和单据更正；轻量审批可切换 JDBC 持久化，但正式权限、复杂审批流、审批 UI、工资锁账/发放、售后结算和对象存储仍需继续接入 |
 
 这些接口证明一期闭环开始从“展示样例”进入“业务命令”。库存变化必须通过库存服务产生只追加台账；损耗审批、工资试算、称重交接和退货复核这类非库存动作也必须先建独立业务命令，再按职责接入审批服务、工资服务或证据服务。
+
+### 10.3 业务单据结构化持久化切片
+
+M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库从“仅库存台账备注可追溯”推进到基础业务单据结构化快照：
+
+| 项目 | 契约 |
+|---|---|
+| 默认模式 | `zhubao.business-document.repository=memory`，无数据库评审时使用内存仓储 |
+| JDBC 模式 | `zhubao.business-document.repository=jdbc`，读取/写入 `biz_mother_order`、`biz_mother_order_item`、`biz_outbound_order`、`biz_outbound_order_item` |
+| MySQL profile | `ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY=jdbc`，默认随 `mysql` profile 启用 |
+| 入库落库时机 | `BusinessOperationService.confirmInbound` 完成 `StockLedgerService.transfer` 后保存母单快照和一条物料明细 |
+| 出库落库时机 | `BusinessOperationService.shipFinishedStock` 完成 `StockLedgerService.transfer` 后保存出库单快照和一条出库明细 |
+| 防重复 | 调用库存台账前先检查母单号/出库单号是否已存在，存在则拒绝，避免重复库存入账 |
+| 查询接口 | `GET /api/business/documents/mother-orders/{code}`、`GET /api/business/documents/outbound-orders/{code}` |
+
+当前该切片优先解决登记表显式入账后的结构化追溯和测试证据；尚未覆盖拆单、工单生命周期、出库冻结、单据更正、主数据自动匹配和前端补录界面。
 
 ---
 
@@ -1321,7 +1569,7 @@ PWA 一期边界：
 
 ## 12. M3.33 轻量权限守卫契约
 
-当前版本尚未接入完整登录、菜单权限和数据范围过滤，但敏感 POST 已接入后端轻量角色守卫，避免评审原型继续处于“所有人都能提交关键动作”的状态。
+当前版本尚未接入生产登录和数据范围过滤，但敏感 POST 已接入后端轻量角色守卫，菜单树已返回到前端并在登录会话下驱动侧栏过滤，避免评审原型继续处于“所有人都能提交关键动作”的状态。
 
 ### 12.1 请求头
 
@@ -1372,7 +1620,7 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 
 ### 12.4 当前限制
 
-- M3.63 已接入演示账号和内存会话 token，但尚未接入生产用户表、密码哈希、JWT/SSO、会话续期和完整审计。
+- M3.63 已接入演示账号和内存会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，但尚未接入生产用户表、密码哈希、JWT/SSO、会话续期和审计防篡改。
 - 尚未按客户、部门、班组做数据范围过滤。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
@@ -1413,7 +1661,8 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 | `dataScope` / `dataScopeLabel` | 数据范围编码和中文名 |
 | `expiresAt` | 会话过期时间展示值 |
 | `demoAccount` | 是否演示账号，当前固定为 `true` |
-| `menuCodes` | 菜单编码基线，后续接正式菜单树 |
+| `menuCodes` | 当前角色可见菜单编码，使用前端模块 tab key，如 `dashboard`、`inbound`、`approvals`、`sample` |
+| `menuTree` | 当前角色可见菜单树，元素结构见 13.4；包含菜单编码、名称、模块说明、路由和按钮权限编码 |
 
 ### 13.2 其他认证接口
 
@@ -1422,19 +1671,80 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 | `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话 |
 | `POST /api/auth/logout` | 注销当前 token；前端无论后端是否可达都清理本地 token |
 | `GET /api/auth/demo-users` | 返回可用于评审的演示账号列表 |
+| `GET /api/auth/audit-events` | 返回最近登录会话审计事件，当前最多保留 50 条内存事件 |
 
-### 13.3 当前限制
+### 13.3 登录会话审计
+
+M3.84 新增 `AuthAuditEvent`，用于记录登录成功、登录失败、会话读取、退出和无效 token 解析。当前为内存队列，重启后丢失；后续应迁移到生产登录审计表。
+
+`AuthAuditEvent`：
+
+| 字段 | 说明 |
+|---|---|
+| `eventId` | 审计事件号，当前格式为 `AUTH-AUD-...` |
+| `eventType` | 事件类型：`LOGIN`、`SESSION_READ`、`LOGOUT`、`SESSION_RESOLVE` |
+| `username` | 登录用户名；未知 token 可为空 |
+| `operator` | 操作人快照；失败登录或未知 token 可为空 |
+| `role` | 角色编码；失败登录或未知 token 可为空 |
+| `result` | `SUCCESS` 或 `DENIED` |
+| `reason` | 审计原因，例如登录成功、用户名或密码错误、会话不存在 |
+| `occurredAt` | 审计发生时间展示值 |
+| `sessionTokenSuffix` | token 尾号，只用于排查；不得返回完整 token 或密码 |
+
+M3.85 新增 `AuthAuditRepository` 仓储边界：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `zhubao.auth.audit.repository` | `memory` | 登录审计仓储；可设为 `jdbc` 写入 `auth_audit_event` |
+| `ZHUBAO_AUTH_AUDIT_REPOSITORY` | `jdbc` in mysql profile | MySQL profile 下的环境变量开关 |
+
+`V15__m3_auth_audit_contract.sql` 冻结 `auth_audit_event` 合同表，字段包括 `event_id`、`event_type`、`username`、`operator`、`role`、`result`、`reason`、`occurred_at` 和 `session_token_suffix`。该表不保存密码、完整 token 或客户端密钥。
+
+### 13.4 菜单树接口
+
+`GET /api/security/menu-tree` 返回当前角色可见菜单树。认证优先级与 `GET /api/security/current-context` 一致：优先读取 Bearer token，无 token 时使用 `X-Zhubao-*` 请求头兜底。
+
+`NavigationMenuItem`：
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 菜单编码，当前与前端 `App.vue` tab key 对齐 |
+| `label` | 菜单中文名 |
+| `module` | 菜单业务分组说明 |
+| `route` | 预留路由标识，当前仍用于契约展示 |
+| `buttonCodes` | 该菜单关联的敏感按钮权限编码，如 `REGISTER_IMPORT_REVIEW`、`BUSINESS_INBOUND_CONFIRM` |
+| `children` | 子菜单列表；当前 M3.83 先返回一层菜单，保留树形结构 |
+
+M3.83 当前角色菜单编码基线：
+
+| 角色 | 可见菜单 |
+|---|---|
+| `ADMIN` / `GENERAL_MANAGER` | `dashboard`、`inbound`、`production`、`quality`、`inventory`、`approvals`、`configuration`、`documents`、`sample`、`hardware`、`operations`、`mobile` |
+| `SALES` | `dashboard`、`inbound`、`inventory`、`documents`、`sample` |
+| `RECEIVER` | `dashboard`、`inbound`、`documents`、`hardware`、`mobile` |
+| `WORKSHOP_LEADER` | `dashboard`、`production`、`quality`、`approvals`、`sample`、`hardware`、`operations`、`mobile` |
+| `OPERATOR` | `dashboard`、`production`、`mobile` |
+| `QUALITY_INSPECTOR` | `dashboard`、`quality`、`inventory`、`documents`、`mobile` |
+| `WAREHOUSE_KEEPER` | `dashboard`、`inbound`、`inventory`、`documents`、`sample`、`hardware`、`operations`、`mobile` |
+| `FINANCE_STATISTICIAN` | `dashboard`、`approvals`、`configuration` |
+
+菜单树当前先作为后端可验证契约和配置基线页展示依据，不强制过滤前端静态导航，避免评审路径被误关。
+
+### 13.5 当前限制
 
 - token 保存在内存，服务重启即失效。
 - 密码为演示明文配置，不用于生产。
-- 尚未接入用户表、密码哈希、登录失败锁定、刷新 token、菜单树持久化和登录审计。
+- 尚未接入用户表、密码哈希、登录失败锁定、刷新 token、菜单树持久化和不可篡改审计策略。
+- M3.83 菜单树仍是后端内存基线服务，不等于生产用户表、角色表、菜单表或按钮表。
+- M3.85 登录审计可切换内存/JDBC 仓储，但仍不等于生产安全日志平台、归档保全或审计防篡改。
+- M3.86 前端侧栏会按登录会话 `menuCodes/menuTree` 做导航过滤；未登录、请求头兜底或 API 不可用时仍保留全量评审导航，不等于生产级菜单授权完成。
 - `dataScope` 当前只进入上下文展示和后续设计约束，GET 工作台数据尚未按范围过滤。
 
 ---
 
-## 14. M3.52/M3.63 当前权限上下文接口
+## 14. M3.52/M3.63/M3.83/M3.86 当前权限上下文接口
 
-`GET /api/security/current-context` 用于把当前身份、角色、数据范围和可执行敏感动作显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；无 token 时继续使用请求头兜底，兼容评审脚本和自动化测试。
+`GET /api/security/current-context` 用于把当前身份、角色、数据范围、可执行敏感动作和授权菜单树显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；无 token 时继续使用请求头兜底，兼容评审脚本和自动化测试。M3.83 起该接口同步返回 `menuCodes` 和 `menuTree`。M3.86 起前端 `App` 会恢复登录会话并按 `menuCodes/menuTree` 过滤侧栏模块，登录/退出通过 `zhubao-auth-session-changed` 事件即时刷新导航。
 
 ### 14.1 请求头
 
@@ -1463,6 +1773,8 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 | `headerBased` | 是否来自请求头；登录会话为 `false`，请求头兜底为 `true` |
 | `allowedPermissions` | 当前角色可执行的敏感动作权限列表 |
 | `sensitiveActionCodes` | 仅权限编码列表，便于前端做快速展示或按钮边界提示 |
+| `menuCodes` | 当前角色可见菜单编码列表 |
+| `menuTree` | 当前角色可见菜单树，元素结构同 13.4 `NavigationMenuItem` |
 | `limitationNotes` | 当前认证、数据范围、菜单权限和审批锁账限制 |
 | `headerContract` | 请求头契约，包含操作人、角色、数据范围三个 Header 名称 |
 
@@ -1485,6 +1797,17 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
       { "code": "BUSINESS_INBOUND_CONFIRM", "label": "来料确认入库" }
     ],
     "sensitiveActionCodes": ["BUSINESS_INBOUND_CONFIRM"],
+    "menuCodes": ["dashboard", "inbound", "inventory", "documents", "sample", "hardware", "operations", "mobile"],
+    "menuTree": [
+      {
+        "code": "inbound",
+        "label": "来料母单",
+        "module": "收货 / 拆包",
+        "route": "/inbound",
+        "buttonCodes": ["BUSINESS_INBOUND_CONFIRM", "DOCUMENT_ATTACHMENT_UPLOAD"],
+        "children": []
+      }
+    ],
     "limitationNotes": [
       "当前身份来自请求头，可用于评审和自动化测试兜底。"
     ],
@@ -1500,6 +1823,7 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 ### 14.4 当前限制
 
 - GET 工作台接口尚未按 `dataScope` 做真实过滤，配置基线页必须明确提示该限制。
-- 菜单和按钮权限尚未由后端菜单树驱动，前端导航仍是静态模块入口。
+- 菜单和按钮权限已由后端返回 M3.83 内存基线菜单树；M3.86 前端登录会话导航已按 `menuCodes/menuTree` 过滤，但未登录和请求头兜底仍展示全量评审导航。
+- 尚未建立生产持久化菜单表、角色菜单关联表和按钮权限配置表。
 - 当前接口不返回密码、客户范围清单或任何生产鉴权密钥。
 - 后续接入正式用户中心后，应移除匿名管理员请求头兜底或仅在测试环境启用。

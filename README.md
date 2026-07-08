@@ -89,6 +89,19 @@
 - M3.71 参考登记表字段二次核对，对照入库、出货、抛光、雕刻 4 张参考表确认一期工序已覆盖这些现场动作，并补齐 `入库登记表.xlsx` 的 `备注 -> remark` 字段模板契约，登记表字段总数调整为 40。
 - M3.72 上线待确认门禁可视化，将 `docs/22_真实数据与上线待确认清单.md` 的 P0/P1 确认项落到 `SA 样例库`，集中展示损耗计算口径、客户所有权、真实主数据、备份恢复、账号权限和部署形态的负责人、默认处理和验收证据。
 - M3.73 登记表覆盖审计，重新对照 `入库登记表.xlsx`、`出货登记表.xlsx`、`抛光登记表.xlsx`、`雕刻登记表.xlsx`，确认没有新增生产工序缺口；补齐 4 类模板的 `sourceRegisterType/sourceRegisterLineNo` 审计字段，字段总数 40 -> 48，并在 `SA 样例库` 增加工序与字段覆盖矩阵。
+- M3.74 登记表确认批次，新增 `/api/register-import/batches/confirm`、批次查询接口、内存/JDBC 双仓储和 `register_import_batch/register_import_row` MySQL 迁移；前端 `SA 样例库` 在预检通过后可确认结构化导入批次，仍不直接写库存台账或业务单据。
+- M3.75 参考登记表字段命名复核，重新读取微信来源的入库、出货、抛光、雕刻 4 张 Excel，确认没有新增工序和新增业务字段；校准入库表 `寄货人/姓名`、`收货人/姓名` 与雕刻 `机器编号行号` 模板契约，并补覆盖测试防止后续漏列。
+- M3.76 登记表确认批次复核台，`SA 样例库` 新增最近确认批次、批次详情、行级标准化字段、警告消息和“待入账映射”状态展示；前端可读取 `/api/register-import/batches` 和 `/batches/{importBatchNo}`，后端不可用时保留本地评审样例兜底，仍不直接写库存台账或业务单据。
+- M3.77 登记表入账映射计划，新增 `/api/register-import/batches/{importBatchNo}/posting-plan`，对已确认批次只读生成目标命令草稿、已映射字段、缺失字段和警告；前端 `SA 样例库` 展示后端映射计划，仍不生成业务单据或写库存台账。
+- M3.78 登记表显式入账命令，新增 `POST /api/register-import/batches/{importBatchNo}/posting-commands`，将通过映射计划的批次行转换为 `ConfirmInboundCommand`、`ReportProductionCommand` 或 `ShipFinishedStockCommand` 并复用后端业务服务写库存台账；阻断行拒绝、警告行需 `allowWarnings`、已入账批次拒绝重复执行。
+- M3.79 雕刻设备产量独立落库，新增 `biz_machine_output_record` 迁移、内存/JDBC 仓储、`/api/machine-outputs` 提交与查询接口；`REG-ENGRAVING` 显式入账在写库存台账后同步生成设备产量记录，保留机器编号、机器行号、操机签字、批次号和台账号。
+- M3.80 设备产量生产统计入口，新增 `GET /api/machine-outputs/summary`，按最近设备产量记录汇总总产量、按机器和按日期分组，并在生产派工报工作业台展示机器档案待匹配和签名附件待补数量。
+- M3.81 真实母单/出库单结构化持久化切片，新增 `biz_mother_order`、`biz_mother_order_item`、`biz_outbound_order`、`biz_outbound_order_item` 迁移、内存/JDBC 仓储和只读查询接口；来料确认入库和成品出库仍先经 `StockLedgerService` 写库存台账，成功后保存结构化单据快照并拒绝重复单号；前端 `SA 样例库` 已在显式入账后拉取并展示结构化母单/出库单快照。
+- M3.82 登记表复核补录入口，新增 `POST /api/register-import/batches/{importBatchNo}/rows/{sourceLineNo}/corrections` 和 `REGISTER_IMPORT_REVIEW` 权限，允许在确认批次行上补齐母单、工单、客户、物料、重量等入账映射字段；该动作只更新行级标准化字段并刷新 posting plan，不写库存台账或业务单据。
+- M3.83 权限菜单树基线，新增后端 `NavigationMenuService`、`NavigationMenuItem` 和 `GET /api/security/menu-tree`，登录会话与当前权限上下文返回角色可见菜单树、菜单编码和按钮权限编码；前端配置基线页展示“授权菜单树”，用于对齐后续生产菜单表、按钮权限和导航过滤。
+- M3.84 登录会话审计基线，新增 `AuthAuditEvent` 和 `GET /api/auth/audit-events`，记录登录成功、登录失败、会话读取、退出和无效 token 解析；审计事件只保留 token 尾号，不暴露完整 token 或密码，前端配置基线页展示最近登录审计。
+- M3.85 登录审计持久化边界，新增 `AuthAuditRepository`、内存/JDBC 仓储、`ZHUBAO_AUTH_AUDIT_REPOSITORY` 配置开关和 `V15__m3_auth_audit_contract.sql`；MySQL profile 默认写入 `auth_audit_event`，前端接口不变。
+- M3.86 授权导航过滤基线，前端 `App` 会恢复当前登录会话并按后端返回的 `menuCodes/menuTree` 过滤侧栏模块；`authApi` 登录/退出会广播会话变化，配置页登录后导航即时收敛，未登录或 API 不可用时仍保留全量评审导航兜底。
 
 ## 目录结构
 
@@ -195,6 +208,16 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 
 审批 JDBC 当前只覆盖固定场景轻量审批任务和审计事件；M3.33 已对敏感 POST 接入轻量角色守卫，但真实登录、菜单权限、数据范围过滤、复杂审批流、审批 UI 和工资锁账仍需继续开发。
 
+启用 MySQL 登录审计持久化：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_AUTH_AUDIT_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+登录审计 JDBC 当前覆盖 `auth_audit_event`，记录登录成功、失败、会话读取、退出和无效 token 解析，只保存 token 尾号；前端登录会话已按后端菜单编码过滤侧栏模块。生产账号、密码哈希、SSO/JWT、生产菜单持久化、数据范围过滤、审计不可篡改策略和安全日志平台仍需继续接入。
+
 启用 MySQL 文档附件元数据持久化：
 
 ```powershell
@@ -273,7 +296,9 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/auth/session`
 - `POST /api/auth/logout`
 - `GET /api/auth/demo-users`
+- `GET /api/auth/audit-events`
 - `GET /api/security/current-context`
+- `GET /api/security/menu-tree`
 - `GET /api/business/workspaces/summary`
 - `GET /api/business/workspaces/inbound`
 - `GET /api/business/workspaces/production`
@@ -290,6 +315,8 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `POST /api/business/operations/customer-returns`
 - `POST /api/business/operations/after-sales-reviews`
 - `POST /api/business/operations/loss-approvals`
+- `GET /api/business/documents/mother-orders/{code}`
+- `GET /api/business/documents/outbound-orders/{code}`
 - `GET /api/approvals/tasks`
 - `GET /api/approvals/tasks/pending`
 - `GET /api/approvals/tasks/{approvalCode}`
@@ -305,17 +332,33 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/configuration/baseline/backup-policies`
 - `GET /api/configuration/baseline/change-requests`
 - `GET /api/configuration/baseline/audit-events`
+- `GET /api/register-import/templates`
+- `GET /api/register-import/summary`
+- `POST /api/register-import/previews`
+- `POST /api/register-import/batches/confirm`
+- `GET /api/register-import/batches`
+- `GET /api/register-import/batches/{importBatchNo}`
+- `GET /api/register-import/batches/{importBatchNo}/posting-plan`
+- `POST /api/register-import/batches/{importBatchNo}/rows/{sourceLineNo}/corrections`
+- `POST /api/register-import/batches/{importBatchNo}/posting-commands`
+- `GET /api/machine-outputs`
+- `GET /api/machine-outputs/summary`
+- `GET /api/machine-outputs/import-batches/{importBatchNo}`
+- `POST /api/machine-outputs`
 
 ## 当前阶段与下一步
 
-当前已进入 M3 一期开发推进中，前端已按 M3.63 继续向生产现场作业台和高密度 ERP/MES 操作界面收敛，首页已从评审展示板重构为三栏生产操作台，并进一步统一为浅色现场控制台视觉；样例库已从简单展示卡片升级为验收数据指挥台，把公开开源参考、前端样例、后端 fixture、自动化测试、证据编码、验收门禁和现场数据缺口收敛到同一张管理矩阵；来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路。来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。来料母单、生产工单、质检返工、库存追溯、轻量审批、文档附件、软硬件联动和运维中心已经从说明/列表页改为现场操作台，承载业务指标、一期链路、今日单据池、焦点对象、证据链、运行指标、日志、备份和真实 API 动作。后端已补入轻量审批任务、硬件联动 API、售后复核分流、轻量权限守卫、轻量登录会话、权限上下文展示接口、附件本地存储适配、附件元数据 JDBC 仓储、运维中心聚合 API、前端 URL 探活、PWA Manifest/Service Worker 探活、真实日志读取与 WARN/ERROR 聚合、备份文件大小与 SHA-256 证据、Docker 离线交付、运行包完整性校验、无源码发布包验收门禁、数据库备份脚本、非破坏性恢复演练脚本、恢复演练运维中心可见性和腾讯云 COS 备份上传脚本基线。下一步重点不再是继续堆演示页，而是把生产用户表、密码哈希、菜单树、数据范围过滤、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入补齐：
+当前已进入 M3 一期开发推进中，前端继续向生产现场作业台和高密度 ERP/MES 操作界面收敛；样例库已升级为验收数据指挥台，把开源参考、前端样例、后端 fixture、自动化测试、证据编码、上线门禁、真实数据缺口和登记表导入准备度收敛到同一张管理矩阵。来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路；来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。
+
+截至 M3.86，现场登记表链路已完成入库、出货、抛光、雕刻 4 类 Excel 上传预检、问题 CSV、真实模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口，以及来料母单/出库单的基础结构化持久化切片。系统已能把通过预检的登记表保存为 `register_import_batch/register_import_row` 批次和行级 JSON，前端可展示最近确认批次、行级标准化字段、警告消息、posting plan 的命令草稿、缺失字段和警告，并可对后端 posting plan 中的阻断字段进行行级补录；补录只更新标准化字段，不写库存台账或业务单据。非阻断行必须通过独立 POST 命令交给后端业务服务入账；`REG-ENGRAVING` 会额外生成 `biz_machine_output_record`，生产页可通过 `GET /api/machine-outputs/summary` 查看最近设备产量的总量、机器分组、日期分组、机器档案待匹配和签名附件待补数量；`REG-INBOUND` / `REG-OUTBOUND` 显式入账复用入库/出库业务动作，在库存台账成功后保存 `biz_mother_order` / `biz_outbound_order` 快照，`SA 样例库` 会继续调用业务单据查询接口展示快照字段、状态、来源登记表行和台账号。库存变化仍统一经过 `StockLedgerService`，重复入账会被 `POSTED` 状态拒绝。权限侧已补后端授权菜单树、按钮权限编码、登录会话审计、登录审计 JDBC 持久化边界和前端登录会话导航过滤，登录会话、当前权限上下文、`GET /api/security/menu-tree` 和 `GET /api/auth/audit-events` 可返回角色可见菜单与最近登录审计；但生产用户表、密码哈希、生产持久化菜单表、审计不可篡改策略和 GET 数据范围过滤仍未完成。下一步重点不再是继续堆演示页，而是补齐机器档案匹配、签名附件、完整母单/出库生命周期、生产用户表、密码哈希、数据范围过滤、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
 - RuoYi-Vue 具体分支和许可证确认。
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
-- 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实登录、菜单权限和数据范围过滤。
+- 将 M3.81/M3.82 已落的真实母单、出库单和登记表行级补录继续推进到主数据自动匹配、状态流转、批量复核、追溯聚合；补齐机器档案匹配、签名附件和更完整的设备产能统计报表。
+- 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实登录、生产菜单表、数据范围过滤和审计保全。
 - 补齐审批 UI、复杂审批流、工资锁账/发放边界、NAS/S3 签名访问和售后结算边界，避免当前原型停留在局部台账动作、附件本地适配、附件元数据合同表与工资试算快照。
 - 接入日志平台或高性能只读日志适配器、PWA 运行态细节、数据库备份目录、checksum 和恢复演练记录，避免运维中心停留在评审样例。
 
@@ -331,3 +374,4 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - [Docker 一键部署与离线交付](docs/19_Docker一键部署与离线交付.md)
 - [腾讯云与本地部署运维方案](docs/20_腾讯云与本地部署运维方案.md)
 - [真实数据与上线待确认清单](docs/22_真实数据与上线待确认清单.md)
+- [客户交付版本记录](docs/23_客户交付版本记录.md)

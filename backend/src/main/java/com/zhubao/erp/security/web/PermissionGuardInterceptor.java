@@ -30,11 +30,14 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/business/operations/customer-returns", PermissionCode.BUSINESS_CUSTOMER_RETURN),
             Map.entry("/api/business/operations/after-sales-reviews", PermissionCode.BUSINESS_AFTER_SALES_REVIEW),
             Map.entry("/api/business/operations/loss-approvals", PermissionCode.BUSINESS_LOSS_APPROVAL),
+            Map.entry("/api/machine-outputs", PermissionCode.MACHINE_OUTPUT_SUBMIT),
             Map.entry("/api/documents/attachments/uploads", PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD),
             Map.entry("/api/video-clip-tasks", PermissionCode.VIDEO_TASK_OPERATE)
     );
     private final Pattern approvalDecisionPath = Pattern.compile("^/api/approvals/tasks/[^/]+/decisions$");
     private final Pattern videoTaskOperationPath = Pattern.compile("^/api/video-clip-tasks/[^/]+/(retry|manual-upload)$");
+    private final Pattern registerImportReviewPath = Pattern.compile("^/api/register-import/batches/[^/]+/rows/\\d+/corrections$");
+    private final Pattern registerImportPostingPath = Pattern.compile("^/api/register-import/batches/[^/]+/posting-commands$");
 
     public PermissionGuardInterceptor(
             OperatorContextResolver operatorContextResolver,
@@ -64,6 +67,12 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         }
         if (approvalDecisionPath.matcher(path).matches()) {
             return PermissionCode.APPROVAL_DECISION;
+        }
+        if (registerImportReviewPath.matcher(path).matches()) {
+            return PermissionCode.REGISTER_IMPORT_REVIEW;
+        }
+        if (registerImportPostingPath.matcher(path).matches()) {
+            return PermissionCode.REGISTER_IMPORT_POSTING;
         }
         if (videoTaskOperationPath.matcher(path).matches()) {
             return PermissionCode.VIDEO_TASK_OPERATE;

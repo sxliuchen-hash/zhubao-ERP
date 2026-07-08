@@ -24,6 +24,8 @@ import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.business.domain.ShipFinishedStockCommand;
+import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockBalance;
@@ -37,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BusinessOperationServiceTest {
 
@@ -88,6 +91,79 @@ class BusinessOperationServiceTest {
         assertThat(balance.dimension().stockStatus()).isEqualTo(StockStatus.RAW_WAITING);
         assertThat(balance.quantity()).isEqualByComparingTo("320");
         assertThat(balance.weight()).isEqualByComparingTo("486.250");
+    }
+
+    @Test
+    void confirmInboundPersistsStructuredMotherOrderWhenDocumentRepositoryIsProvided() {
+        InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
+        InMemoryBusinessDocumentRepository documentRepository = new InMemoryBusinessDocumentRepository();
+        BusinessOperationService service = new BusinessOperationService(
+                new StockLedgerService(stockRepository),
+                null,
+                documentRepository
+        );
+
+        InboundConfirmationResult result = service.confirmInbound(new ConfirmInboundCommand(
+                "MD-DOC-20260708-001",
+                1001L,
+                null,
+                "MAT-18K-RING",
+                "2026-07-08",
+                "顺丰",
+                "SF-DOC-001",
+                "张先生",
+                "何琳",
+                "何琳",
+                "戒托来料",
+                "签收入库登记表",
+                5,
+                "2",
+                "RAW-CUSTOMER",
+                bd("12"),
+                "件",
+                bd("18.500"),
+                "库管员 何琳",
+                "ATT-IN-DOC-001",
+                "结构化母单测试"
+        ));
+
+        assertThat(documentRepository.findMotherOrderByCode("MD-DOC-20260708-001"))
+                .hasValueSatisfying(record -> {
+                    assertThat(record.ledgerCode()).isEqualTo(result.ledgerCode());
+                    assertThat(record.customerOwned()).isTrue();
+                    assertThat(record.stockStatus()).isEqualTo("RAW_WAITING");
+                    assertThat(record.quantity()).isEqualByComparingTo("12");
+                    assertThat(record.weight()).isEqualByComparingTo("18.500");
+                    assertThat(record.sourceRegisterType()).isEqualTo("签收入库登记表");
+                    assertThat(record.sourceRegisterLineNo()).isEqualTo(5);
+                });
+        assertThat(stockRepository.findAllLedgers()).hasSize(1);
+
+        assertThatThrownBy(() -> service.confirmInbound(new ConfirmInboundCommand(
+                "MD-DOC-20260708-001",
+                1001L,
+                null,
+                "MAT-18K-RING",
+                "2026-07-08",
+                "顺丰",
+                "SF-DOC-001",
+                "张先生",
+                "何琳",
+                "何琳",
+                "戒托来料",
+                "签收入库登记表",
+                5,
+                "2",
+                "RAW-CUSTOMER",
+                bd("12"),
+                "件",
+                bd("18.500"),
+                "库管员 何琳",
+                "ATT-IN-DOC-001",
+                "重复结构化母单测试"
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("结构化母单已存在");
+        assertThat(stockRepository.findAllLedgers()).hasSize(1);
     }
 
     @Test
@@ -426,6 +502,90 @@ class BusinessOperationServiceTest {
         assertThat(ledger.documentType()).isEqualTo("outbound_shipment");
         assertThat(ledger.documentCode()).isEqualTo("OUT-20260706-022");
         assertThat(ledger.remark()).contains("2026-07-06", "成品", "数量单位", "件", "顺丰", "纸质快递栏", "顺丰 SF-OUT-20260706-022", "何琳", "来源登记表", "交货情况登记表", "原表行号", "3", "纸质序号", "1", "SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
+    }
+
+    @Test
+    void shipFinishedStockPersistsStructuredOutboundOrderWhenDocumentRepositoryIsProvided() {
+        InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
+        InMemoryBusinessDocumentRepository documentRepository = new InMemoryBusinessDocumentRepository();
+        StockLedgerService stockLedgerService = new StockLedgerService(stockRepository);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, documentRepository);
+        StockDimension finished = dimension(StockStatus.FINISHED, "FINISHED-CUSTOMER");
+
+        stockLedgerService.transfer(new StockTransferCommand(
+                "quality_release",
+                "QC-DOC-20260708-001",
+                null,
+                finished,
+                bd("6"),
+                bd("13.660"),
+                "测试预置成品库存"
+        ));
+
+        OutboundShipmentResult result = service.shipFinishedStock(new ShipFinishedStockCommand(
+                "OUT-DOC-20260708-001",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "FINISHED-CUSTOMER",
+                "SHIPPED-CUSTOMER",
+                "2026-07-08",
+                "成品",
+                bd("6"),
+                "件",
+                bd("13.660"),
+                "顺丰",
+                "SF-OUT-DOC-001",
+                "顺丰 SF-OUT-DOC-001",
+                "交货情况登记表",
+                7,
+                "3",
+                "何琳",
+                "库管员 何琳",
+                "ATT-OUT-DOC-001",
+                "结构化出库单测试"
+        ));
+
+        assertThat(documentRepository.findOutboundOrderByCode("OUT-DOC-20260708-001"))
+                .hasValueSatisfying(record -> {
+                    assertThat(record.ledgerCode()).isEqualTo(result.ledgerCode());
+                    assertThat(record.motherOrderCode()).isEqualTo("MD-20260706-002");
+                    assertThat(record.workOrderCode()).isEqualTo("ZD-20260706-006");
+                    assertThat(record.status()).isEqualTo("SHIPPED");
+                    assertThat(record.logisticsNo()).isEqualTo("SF-OUT-DOC-001");
+                    assertThat(record.sourceRegisterLineNo()).isEqualTo(7);
+                });
+        assertThat(stockRepository.findAllLedgers()).hasSize(2);
+
+        assertThatThrownBy(() -> service.shipFinishedStock(new ShipFinishedStockCommand(
+                "OUT-DOC-20260708-001",
+                "MD-20260706-002",
+                "ZD-20260706-006",
+                1002L,
+                null,
+                "MAT-SILVER-CHAIN",
+                "FINISHED-CUSTOMER",
+                "SHIPPED-CUSTOMER",
+                "2026-07-08",
+                "成品",
+                bd("1"),
+                "件",
+                bd("1.000"),
+                "顺丰",
+                "SF-OUT-DOC-001",
+                "顺丰 SF-OUT-DOC-001",
+                "交货情况登记表",
+                7,
+                "3",
+                "何琳",
+                "库管员 何琳",
+                "ATT-OUT-DOC-001",
+                "重复结构化出库单测试"
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("结构化出库单已存在");
+        assertThat(stockRepository.findAllLedgers()).hasSize(2);
     }
 
     @Test

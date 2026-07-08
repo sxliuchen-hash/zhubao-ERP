@@ -21,6 +21,15 @@ zhubao:
     storage:
       provider: local
       local-root: target/zhubao-evidence
+  register-import:
+    repository: memory
+  machine-output:
+    repository: memory
+  business-document:
+    repository: memory
+  auth:
+    audit:
+      repository: memory
   operations:
     frontend-url: ${ZHUBAO_FRONTEND_URL:http://localhost:5173/}
     frontend-probe-url: ${ZHUBAO_FRONTEND_PROBE_URL:}

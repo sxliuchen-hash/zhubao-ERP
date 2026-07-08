@@ -5,6 +5,7 @@ import com.zhubao.erp.business.domain.AfterSalesReviewCommand;
 import com.zhubao.erp.business.domain.AfterSalesReviewDisposition;
 import com.zhubao.erp.business.domain.AfterSalesReviewResult;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
+import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.CustomerReturnResult;
@@ -12,7 +13,9 @@ import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.LossApprovalResult;
+import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OutboundShipmentResult;
+import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
@@ -22,6 +25,7 @@ import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.business.domain.ShipFinishedStockCommand;
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockDimension;
@@ -33,27 +37,41 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Service
 public class BusinessOperationService {
 
+    private static final DateTimeFormatter RECORD_TIME = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final StockLedgerService stockLedgerService;
     private final ApprovalService approvalService;
+    private final BusinessDocumentRepository businessDocumentRepository;
 
     public BusinessOperationService(StockLedgerService stockLedgerService) {
-        this(stockLedgerService, null);
+        this(stockLedgerService, null, null);
+    }
+
+    public BusinessOperationService(StockLedgerService stockLedgerService, ApprovalService approvalService) {
+        this(stockLedgerService, approvalService, null);
     }
 
     @Autowired
-    public BusinessOperationService(StockLedgerService stockLedgerService, ApprovalService approvalService) {
+    public BusinessOperationService(
+            StockLedgerService stockLedgerService,
+            ApprovalService approvalService,
+            BusinessDocumentRepository businessDocumentRepository
+    ) {
         this.stockLedgerService = stockLedgerService;
         this.approvalService = approvalService;
+        this.businessDocumentRepository = businessDocumentRepository;
     }
 
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
+        assertMotherOrderAvailable(command.motherOrderCode());
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension rawCustomerStock = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -77,7 +95,7 @@ public class BusinessOperationService {
                 buildRemark(command)
         ));
 
-        return new InboundConfirmationResult(
+        InboundConfirmationResult result = new InboundConfirmationResult(
                 command.motherOrderCode(),
                 entry.code(),
                 command.warehouseCode(),
@@ -87,6 +105,8 @@ public class BusinessOperationService {
                 command.operator(),
                 command.evidenceCode()
         );
+        saveMotherOrder(command, rawCustomerStock, entry);
+        return result;
     }
 
     public ProductionReportResult reportProduction(ReportProductionCommand command) {
@@ -337,6 +357,7 @@ public class BusinessOperationService {
     }
 
     public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command) {
+        assertOutboundOrderAvailable(command.shipmentCode());
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFinished = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -369,7 +390,7 @@ public class BusinessOperationService {
                 buildRemark(command)
         ));
 
-        return new OutboundShipmentResult(
+        OutboundShipmentResult result = new OutboundShipmentResult(
                 command.shipmentCode(),
                 command.workOrderCode(),
                 entry.code(),
@@ -383,6 +404,8 @@ public class BusinessOperationService {
                 command.operator(),
                 command.evidenceCode()
         );
+        saveOutboundOrder(command, entry);
+        return result;
     }
 
     public CustomerReturnResult returnCustomerShipment(CustomerReturnCommand command) {
@@ -562,6 +585,102 @@ public class BusinessOperationService {
             remark.append("；备注：").append(command.remark());
         }
         return remark.toString();
+    }
+
+    private void assertMotherOrderAvailable(String code) {
+        if (businessDocumentRepository != null && businessDocumentRepository.motherOrderExists(code)) {
+            throw new BusinessException("结构化母单已存在，不能重复确认入库：" + code);
+        }
+    }
+
+    private void assertOutboundOrderAvailable(String code) {
+        if (businessDocumentRepository != null && businessDocumentRepository.outboundOrderExists(code)) {
+            throw new BusinessException("结构化出库单已存在，不能重复确认出库：" + code);
+        }
+    }
+
+    private void saveMotherOrder(
+            ConfirmInboundCommand command,
+            StockDimension stockDimension,
+            StockLedgerEntry entry
+    ) {
+        if (businessDocumentRepository == null) {
+            return;
+        }
+        businessDocumentRepository.saveMotherOrder(new MotherOrderRecord(
+                command.motherOrderCode(),
+                command.customerId(),
+                stockDimension.ownerCustomerId(),
+                command.materialCode(),
+                blankToEmpty(command.inboundDate()),
+                blankToEmpty(command.expressCompany()),
+                blankToEmpty(command.courierNo()),
+                blankToEmpty(command.senderName()),
+                blankToEmpty(command.receiverName()),
+                blankToEmpty(command.unpackSigner()),
+                blankToEmpty(command.goodsName()),
+                stockDimension.ownerType().name(),
+                stockDimension.ownerType() == OwnerType.CUSTOMER,
+                command.warehouseCode(),
+                entry.quantity(),
+                blankToDefault(command.quantityUnit(), "件"),
+                entry.weight(),
+                stockDimension.stockStatus().name(),
+                entry.code(),
+                blankToEmpty(command.sourceRegisterType()),
+                command.sourceRegisterLineNo(),
+                blankToEmpty(command.sourceRegisterSequence()),
+                command.operator(),
+                blankToEmpty(command.evidenceCode()),
+                blankToEmpty(command.remark()),
+                "INBOUND_CONFIRMED",
+                RECORD_TIME.format(LocalDateTime.now())
+        ));
+    }
+
+    private void saveOutboundOrder(ShipFinishedStockCommand command, StockLedgerEntry entry) {
+        if (businessDocumentRepository == null) {
+            return;
+        }
+        businessDocumentRepository.saveOutboundOrder(new OutboundOrderRecord(
+                command.shipmentCode(),
+                command.motherOrderCode(),
+                command.workOrderCode(),
+                command.customerId(),
+                command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId(),
+                command.materialCode(),
+                command.fromWarehouseCode(),
+                command.toWarehouseCode(),
+                blankToEmpty(command.deliveryDate()),
+                blankToEmpty(command.deliveryCategory()),
+                entry.quantity(),
+                blankToDefault(command.quantityUnit(), "件"),
+                entry.weight(),
+                blankToEmpty(command.expressCompany()),
+                command.logisticsNo(),
+                blankToEmpty(command.paperExpressText()),
+                blankToEmpty(command.handler()),
+                blankToEmpty(command.sourceRegisterType()),
+                command.sourceRegisterLineNo(),
+                blankToEmpty(command.sourceRegisterSequence()),
+                command.operator(),
+                blankToEmpty(command.evidenceCode()),
+                blankToEmpty(command.remark()),
+                "SHIPPED",
+                entry.code(),
+                RECORD_TIME.format(LocalDateTime.now())
+        ));
+    }
+
+    private String blankToEmpty(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String blankToDefault(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value.trim();
     }
 
     private String buildRemark(ReportProductionCommand command) {

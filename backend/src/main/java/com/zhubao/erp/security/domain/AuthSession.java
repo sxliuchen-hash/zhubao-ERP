@@ -12,9 +12,11 @@ public record AuthSession(
         String dataScopeLabel,
         String expiresAt,
         boolean demoAccount,
-        List<String> menuCodes
+        List<String> menuCodes,
+        List<NavigationMenuItem> menuTree
 ) {
     public AuthSession {
         menuCodes = List.copyOf(menuCodes);
+        menuTree = List.copyOf(menuTree);
     }
 }

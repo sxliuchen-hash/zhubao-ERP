@@ -40,9 +40,18 @@ class PermissionGuardTest {
                         PermissionCode.BUSINESS_INBOUND_CONFIRM,
                         PermissionCode.BUSINESS_OUTBOUND_SHIPMENT,
                         PermissionCode.BUSINESS_CUSTOMER_RETURN,
+                        PermissionCode.REGISTER_IMPORT_REVIEW,
                         PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD,
                         PermissionCode.VIDEO_TASK_OPERATE
                 )
                 .doesNotContain(PermissionCode.BUSINESS_LOSS_APPROVAL);
+    }
+
+    @Test
+    void allowsOperatorToSubmitMachineOutput() {
+        OperatorContext operator = new OperatorContext("雕刻操作工 周凯", RoleCode.OPERATOR, DataScope.SELF);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.MACHINE_OUTPUT_SUBMIT, operator))
+                .doesNotThrowAnyException();
     }
 }

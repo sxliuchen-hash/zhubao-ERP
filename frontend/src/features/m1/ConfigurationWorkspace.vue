@@ -8,10 +8,12 @@ import {
 } from '../../data/configurationBaselineData';
 import type { Tone } from '../../data/m1PrototypeData';
 import {
+  fetchAuthAuditEvents,
   fetchAuthDemoUsers,
   fetchAuthSession,
   loginAuthSession,
   logoutAuthSession,
+  type AuthAuditEvent,
   type AuthSession,
 } from '../../services/authApi';
 import { fetchConfigurationBaselineWorkspace } from '../../services/configurationBaselineApi';
@@ -23,11 +25,25 @@ const authUsername = ref('leader');
 const authPassword = ref('leader123');
 const authBusy = ref(false);
 const authMessage = ref('');
+const authAuditEvents = ref<AuthAuditEvent[]>([
+  {
+    eventId: 'AUTH-AUD-DEMO-001',
+    eventType: 'LOGIN',
+    username: 'leader',
+    operator: '车间组长 马杰',
+    role: 'WORKSHOP_LEADER',
+    result: 'SUCCESS',
+    reason: '演示账号登录成功',
+    occurredAt: '2026-07-08 10:00:00',
+    sessionTokenSuffix: 'demo01',
+  },
+]);
 
 onMounted(async () => {
   await refreshWorkspace();
   await restoreAuthSession();
   await loadDemoUsers();
+  await loadAuthAuditEvents();
 });
 
 async function refreshWorkspace() {
@@ -58,6 +74,14 @@ async function loadDemoUsers() {
   }
 }
 
+async function loadAuthAuditEvents() {
+  try {
+    authAuditEvents.value = await fetchAuthAuditEvents();
+  } catch {
+    // Keep local audit sample visible when the backend is not running.
+  }
+}
+
 function demoPassword(username: string): string {
   return `${username}123`;
 }
@@ -76,6 +100,7 @@ async function handleLogin() {
     });
     authMessage.value = `已登录：${authSession.value.roleLabel}`;
     await refreshWorkspace();
+    await loadAuthAuditEvents();
   } catch (error) {
     authMessage.value = error instanceof Error ? error.message : '登录失败';
   } finally {
@@ -91,6 +116,7 @@ async function handleLogout() {
     authSession.value = null;
     authMessage.value = '已退出登录会话';
     await refreshWorkspace();
+    await loadAuthAuditEvents();
   } finally {
     authBusy.value = false;
   }
@@ -256,6 +282,22 @@ function permissionTone(index: number): Tone {
           <strong>请求头契约</strong>
           <span>{{ workspace.securityContext.headerContract.roleHeader }}</span>
           <span>{{ workspace.securityContext.headerContract.dataScopeHeader }}</span>
+        </div>
+        <div class="security-menu-contract">
+          <strong>授权菜单树</strong>
+          <article v-for="menu in workspace.securityContext.menuTree" :key="menu.code">
+            <b>{{ menu.label }}</b>
+            <span>{{ menu.code }} / {{ menu.module }}</span>
+            <small>{{ menu.buttonCodes.length ? menu.buttonCodes.join(' / ') : '只读菜单' }}</small>
+          </article>
+        </div>
+        <div class="security-audit-contract">
+          <strong>登录审计</strong>
+          <article v-for="event in authAuditEvents.slice(0, 4)" :key="event.eventId">
+            <b>{{ event.eventType }} / {{ event.result }}</b>
+            <span>{{ event.eventId }} · {{ event.username || 'unknown' }} / {{ event.role || '未识别角色' }}</span>
+            <small>{{ event.reason }} · {{ event.occurredAt }} · token *{{ event.sessionTokenSuffix || 'none' }}</small>
+          </article>
         </div>
       </aside>
 

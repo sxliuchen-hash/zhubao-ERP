@@ -12,6 +12,8 @@ public record SecurityCurrentContext(
         boolean headerBased,
         List<PermissionGrant> allowedPermissions,
         List<String> sensitiveActionCodes,
+        List<String> menuCodes,
+        List<NavigationMenuItem> menuTree,
         List<String> limitationNotes,
         HeaderContract headerContract
 ) {
