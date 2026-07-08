@@ -130,6 +130,33 @@ describe('hardwareIntegrationApi', () => {
           code: 0,
           message: 'ok',
           data: [{
+            executionCode: 'HW-EXEC-SCALE-001',
+            reviewCode: 'HW-REV-SCALE-001',
+            deviceCode: 'SCALE-01',
+            deviceName: '电子秤',
+            protocolType: 'RS232 / USB / TCP reserved + manual reading',
+            executionStatus: '阻断',
+            executedAt: '2026-07-10 15:35',
+            executedBy: '质检员',
+            deviceModelSnapshot: '电子秤型号和接口类型待冻结',
+            modelFreezeStatus: '未冻结',
+            acceptedParameters: ['unit', 'precision'],
+            failedParameters: ['interfaceType', 'baudRate'],
+            evidenceCode: 'HW-PROTO-SCALE-001',
+            evidenceStatus: '原始报文缺失',
+            resultSummary: '现场仍只能人工读数拍照',
+            nextAction: '补接口照片和原始报文',
+            riskLevel: '高',
+            tone: 'red',
+          }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: [{
             code: 'POC-VID-001',
             deviceCode: 'CAM-UNPACK-01',
             scene: '拆包台视频截取',
@@ -185,9 +212,11 @@ describe('hardwareIntegrationApi', () => {
     expect(model.protocolSamples[0].deviceCode).toBe('SCALE-01');
     expect(model.protocolSamples[0].samplePayload).toContain('ST,GS');
     expect(model.protocolReviews[0].pendingParameters).toContain('baudRate');
+    expect(model.protocolExecutions[0].executionStatus).toBe('阻断');
+    expect(model.protocolExecutions[0].failedParameters).toContain('baudRate');
     expect(model.pocRecords[0].tone).toBe('amber');
     expect(model.pocEvidence[0].attachmentCodes).toContain('ATT-HW-001');
     expect(model.summary.averageHealth).toBe(62);
-    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(fetchMock).toHaveBeenCalledTimes(9);
   });
 });

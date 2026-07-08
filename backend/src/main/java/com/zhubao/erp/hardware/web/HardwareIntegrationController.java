@@ -6,6 +6,7 @@ import com.zhubao.erp.hardware.domain.HardwareAdapterPlan;
 import com.zhubao.erp.hardware.domain.HardwareDevice;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
+import com.zhubao.erp.hardware.domain.HardwareProtocolExecutionResult;
 import com.zhubao.erp.hardware.domain.HardwareProtocolReviewItem;
 import com.zhubao.erp.hardware.domain.HardwareProtocolSample;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
@@ -48,6 +49,11 @@ public class HardwareIntegrationController {
     @GetMapping("/protocol-reviews")
     public ApiResponse<List<HardwareProtocolReviewItem>> protocolReviews() {
         return ApiResponse.ok(hardwareIntegrationService.findProtocolReviews());
+    }
+
+    @GetMapping("/protocol-executions")
+    public ApiResponse<List<HardwareProtocolExecutionResult>> protocolExecutions() {
+        return ApiResponse.ok(hardwareIntegrationService.findProtocolExecutions());
     }
 
     @GetMapping("/poc-records")

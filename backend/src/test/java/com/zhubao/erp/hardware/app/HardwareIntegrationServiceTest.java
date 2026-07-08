@@ -53,6 +53,16 @@ class HardwareIntegrationServiceTest {
                     assertThat(review.blocker()).contains("RS232/USB/TCP");
                     assertThat(review.tone()).isEqualTo("red");
                 });
+        assertThat(service.findProtocolExecutions()).hasSize(5);
+        assertThat(service.findProtocolExecutions())
+                .anySatisfy(execution -> {
+                    assertThat(execution.deviceCode()).isEqualTo("SCALE-01");
+                    assertThat(execution.executionStatus()).isEqualTo("阻断");
+                    assertThat(execution.modelFreezeStatus()).isEqualTo("未冻结");
+                    assertThat(execution.failedParameters()).contains("interfaceType", "baudRate");
+                    assertThat(execution.evidenceStatus()).contains("原始报文缺失");
+                    assertThat(execution.tone()).isEqualTo("red");
+                });
         assertThat(service.findPocRecords()).hasSize(4);
         assertThat(service.blockedPocCount()).isEqualTo(1);
         assertThat(service.findPocRecords())

@@ -88,24 +88,47 @@ export interface HardwareProtocolReviewItem {
   tone: Tone;
 }
 
+export interface HardwareProtocolExecutionResult {
+  executionCode: string;
+  reviewCode: string;
+  deviceCode: string;
+  deviceName: string;
+  protocolType: string;
+  executionStatus: string;
+  executedAt: string;
+  executedBy: string;
+  deviceModelSnapshot: string;
+  modelFreezeStatus: string;
+  acceptedParameters: string[];
+  failedParameters: string[];
+  evidenceCode: string;
+  evidenceStatus: string;
+  resultSummary: string;
+  nextAction: string;
+  riskLevel: string;
+  tone: Tone;
+}
+
 export interface HardwareWorkspaceModel {
   devices: HardwareDevice[];
   tasks: IntegrationTask[];
   adapterPlans: HardwareAdapterPlan[];
   protocolSamples: HardwareProtocolSample[];
   protocolReviews: HardwareProtocolReviewItem[];
+  protocolExecutions: HardwareProtocolExecutionResult[];
   pocRecords: HardwarePocRecord[];
   pocEvidence: HardwarePocEvidenceSummary[];
   summary: HardwareSummaryDto;
 }
 
 export async function fetchHardwareWorkspace(): Promise<HardwareWorkspaceModel> {
-  const [devices, tasks, adapterPlans, protocolSamples, protocolReviews, pocRecords, pocEvidence, summary] = await Promise.all([
+  const [devices, tasks, adapterPlans, protocolSamples, protocolReviews, protocolExecutions, pocRecords, pocEvidence, summary] = await Promise.all([
     apiGet<HardwareDeviceDto[]>('/api/hardware/devices'),
     apiGet<IntegrationTask[]>('/api/hardware/integration-tasks'),
     apiGet<HardwareAdapterPlan[]>('/api/hardware/adapter-plans'),
     apiGet<HardwareProtocolSample[]>('/api/hardware/protocol-samples'),
     apiGet<HardwareProtocolReviewItem[]>('/api/hardware/protocol-reviews'),
+    apiGet<HardwareProtocolExecutionResult[]>('/api/hardware/protocol-executions'),
     apiGet<HardwarePocRecordDto[]>('/api/hardware/poc-records'),
     apiGet<HardwarePocEvidenceSummary[]>('/api/hardware/poc-evidence'),
     apiGet<HardwareSummaryDto>('/api/hardware/summary'),
@@ -117,6 +140,7 @@ export async function fetchHardwareWorkspace(): Promise<HardwareWorkspaceModel> 
     adapterPlans,
     protocolSamples,
     protocolReviews,
+    protocolExecutions,
     pocRecords: pocRecords.map(mapPocRecord),
     pocEvidence,
     summary,

@@ -8,6 +8,7 @@ import com.zhubao.erp.hardware.domain.HardwareDeviceStatus;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
 import com.zhubao.erp.hardware.domain.HardwarePocRecordRepository;
+import com.zhubao.erp.hardware.domain.HardwareProtocolExecutionResult;
 import com.zhubao.erp.hardware.domain.HardwareProtocolReviewItem;
 import com.zhubao.erp.hardware.domain.HardwareProtocolSample;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
@@ -327,6 +328,109 @@ public class HardwareIntegrationService {
             )
     );
 
+    private final List<HardwareProtocolExecutionResult> protocolExecutions = List.of(
+            new HardwareProtocolExecutionResult(
+                    "HW-EXEC-CAM-20260710-001",
+                    "HW-REV-CAM-20260710-001",
+                    "CAM-UNPACK-01",
+                    "拆包台摄像头",
+                    "RTSP / ONVIF / FFmpeg",
+                    "待执行",
+                    "",
+                    "实施顾问",
+                    "NVR 型号待登记",
+                    "未冻结",
+                    List.of("startTime", "endTime", "ffmpegCommand"),
+                    List.of("nvrIp", "channel", "timeSyncOffset"),
+                    "HW-PROTO-CAM-20260706-001",
+                    "待补现场截图/日志",
+                    "尚未完成现场 NVR 取流和校时复核，继续按人工上传 MP4 兜底。",
+                    "执行 NVR 通道读取、记录 NTP 偏差并补传 FFmpeg dry-run 日志",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolExecutionResult(
+                    "HW-EXEC-PRN-20260710-001",
+                    "HW-REV-PRN-20260710-001",
+                    "PRN-LABEL-01",
+                    "标签打印机",
+                    "Windows driver / Browser print / PDF",
+                    "有条件通过",
+                    "2026-07-10 10:22",
+                    "库管员",
+                    "ZDesigner ZD888 203dpi / Windows driver",
+                    "型号待复核签字",
+                    List.of("labelSize", "dpi", "templateCode"),
+                    List.of("printerName"),
+                    "HW-PROTO-PRN-20260706-001",
+                    "标签样张待补 checksum",
+                    "浏览器打印 PDF 标签可用，默认打印机名称和补打权限仍需冻结。",
+                    "补默认打印机名称、驱动版本和标签样张 checksum",
+                    "低",
+                    "blue"
+            ),
+            new HardwareProtocolExecutionResult(
+                    "HW-EXEC-SCAN-20260710-001",
+                    "HW-REV-SCAN-20260710-001",
+                    "SCAN-PC-01",
+                    "PC 扫码枪",
+                    "USB HID",
+                    "通过",
+                    "2026-07-10 10:45",
+                    "库管员",
+                    "Honeywell USB HID compatible scanner",
+                    "已冻结",
+                    List.of("barcodeFormat", "prefix", "suffix", "scanDistance", "keyboardLayout"),
+                    List.of(),
+                    "HW-PROTO-SCAN-20260706-001",
+                    "扫码录屏已关联",
+                    "USB HID 输入稳定，条码前后缀和键盘布局已冻结。",
+                    "保留误扫样本和手工确认记录，后续只做型号替换回归",
+                    "低",
+                    "green"
+            ),
+            new HardwareProtocolExecutionResult(
+                    "HW-EXEC-PWA-20260710-001",
+                    "HW-REV-PWA-20260710-001",
+                    "PWA-CAM-01",
+                    "手机摄像头扫码",
+                    "BarcodeDetector / ZXing fallback",
+                    "待复测",
+                    "",
+                    "车间组长",
+                    "Android 低端机型待登记",
+                    "未冻结",
+                    List.of("browser", "androidVersion"),
+                    List.of("lighting", "decodeMs"),
+                    "HW-PROTO-PWA-20260706-001",
+                    "弱光截图待补",
+                    "普通光照下可扫码，弱光和反光场景尚未完成执行结果留痕。",
+                    "补弱光/反光样本、识别耗时和 ZXing 兜底截图",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolExecutionResult(
+                    "HW-EXEC-SCALE-20260710-001",
+                    "HW-REV-SCALE-20260710-001",
+                    "SCALE-01",
+                    "电子秤",
+                    "RS232 / USB / TCP reserved + manual reading",
+                    "阻断",
+                    "2026-07-10 15:35",
+                    "质检员",
+                    "电子秤型号和接口类型待冻结",
+                    "未冻结",
+                    List.of("unit", "precision"),
+                    List.of("interfaceType", "baudRate", "dataBits", "parity", "tcpHost"),
+                    "HW-PROTO-SCALE-20260706-001",
+                    "原始报文缺失",
+                    "现场仍只能人工读数拍照，RS232/USB/TCP 接口类型和波特率未确认。",
+                    "继续人工读数入账并补接口照片、铭牌、校准周期和原始报文",
+                    "高",
+                    "red"
+            )
+    );
+
     public List<HardwareDevice> findDevices() {
         return devices;
     }
@@ -345,6 +449,10 @@ public class HardwareIntegrationService {
 
     public List<HardwareProtocolReviewItem> findProtocolReviews() {
         return protocolReviews;
+    }
+
+    public List<HardwareProtocolExecutionResult> findProtocolExecutions() {
+        return protocolExecutions;
     }
 
     public List<HardwarePocRecord> findPocRecords() {

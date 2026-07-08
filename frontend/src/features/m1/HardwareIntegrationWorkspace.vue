@@ -15,6 +15,7 @@ import {
   fetchHardwareWorkspace,
   type HardwareAdapterPlan,
   type HardwarePocEvidenceSummary,
+  type HardwareProtocolExecutionResult,
   type HardwareProtocolReviewItem,
   type HardwareProtocolSample,
   type HardwareWorkspaceModel,
@@ -26,6 +27,7 @@ const workspace = ref<HardwareWorkspaceModel>({
   adapterPlans: fallbackHardwareAdapterPlans(),
   protocolSamples: fallbackHardwareProtocolSamples(),
   protocolReviews: fallbackHardwareProtocolReviews(),
+  protocolExecutions: fallbackHardwareProtocolExecutions(),
   pocRecords: fallbackHardwarePocRecords,
   pocEvidence: fallbackHardwarePocEvidence(),
   summary: {
@@ -54,6 +56,7 @@ const hardwareDevices = computed(() => workspace.value.devices);
 const hardwareAdapterPlans = computed(() => workspace.value.adapterPlans);
 const hardwareProtocolSamples = computed(() => workspace.value.protocolSamples);
 const hardwareProtocolReviews = computed(() => workspace.value.protocolReviews);
+const hardwareProtocolExecutions = computed(() => workspace.value.protocolExecutions);
 const hardwarePocRecords = computed(() => workspace.value.pocRecords);
 const hardwarePocEvidence = computed(() => workspace.value.pocEvidence);
 const integrationTasks = computed(() => workspace.value.tasks);
@@ -363,6 +366,111 @@ function fallbackHardwareProtocolReviews(): HardwareProtocolReviewItem[] {
   ];
 }
 
+function fallbackHardwareProtocolExecutions(): HardwareProtocolExecutionResult[] {
+  return [
+    {
+      executionCode: 'HW-EXEC-CAM-20260710-001',
+      reviewCode: 'HW-REV-CAM-20260710-001',
+      deviceCode: 'CAM-UNPACK-01',
+      deviceName: '拆包台摄像头',
+      protocolType: 'RTSP / ONVIF / FFmpeg',
+      executionStatus: '待执行',
+      executedAt: '',
+      executedBy: '实施顾问',
+      deviceModelSnapshot: 'NVR 型号待登记',
+      modelFreezeStatus: '未冻结',
+      acceptedParameters: ['startTime', 'endTime', 'ffmpegCommand'],
+      failedParameters: ['nvrIp', 'channel', 'timeSyncOffset'],
+      evidenceCode: 'HW-PROTO-CAM-20260706-001',
+      evidenceStatus: '待补现场截图/日志',
+      resultSummary: '尚未完成现场 NVR 取流和校时复核，继续按人工上传 MP4 兜底。',
+      nextAction: '执行 NVR 通道读取、记录 NTP 偏差并补传 FFmpeg dry-run 日志',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      executionCode: 'HW-EXEC-PRN-20260710-001',
+      reviewCode: 'HW-REV-PRN-20260710-001',
+      deviceCode: 'PRN-LABEL-01',
+      deviceName: '标签打印机',
+      protocolType: 'Windows driver / Browser print / PDF',
+      executionStatus: '有条件通过',
+      executedAt: '2026-07-10 10:22',
+      executedBy: '库管员',
+      deviceModelSnapshot: 'ZDesigner ZD888 203dpi / Windows driver',
+      modelFreezeStatus: '型号待复核签字',
+      acceptedParameters: ['labelSize', 'dpi', 'templateCode'],
+      failedParameters: ['printerName'],
+      evidenceCode: 'HW-PROTO-PRN-20260706-001',
+      evidenceStatus: '标签样张待补 checksum',
+      resultSummary: '浏览器打印 PDF 标签可用，默认打印机名称和补打权限仍需冻结。',
+      nextAction: '补默认打印机名称、驱动版本和标签样张 checksum',
+      riskLevel: '低',
+      tone: 'blue',
+    },
+    {
+      executionCode: 'HW-EXEC-SCAN-20260710-001',
+      reviewCode: 'HW-REV-SCAN-20260710-001',
+      deviceCode: 'SCAN-PC-01',
+      deviceName: 'PC 扫码枪',
+      protocolType: 'USB HID',
+      executionStatus: '通过',
+      executedAt: '2026-07-10 10:45',
+      executedBy: '库管员',
+      deviceModelSnapshot: 'Honeywell USB HID compatible scanner',
+      modelFreezeStatus: '已冻结',
+      acceptedParameters: ['barcodeFormat', 'prefix', 'suffix', 'scanDistance', 'keyboardLayout'],
+      failedParameters: [],
+      evidenceCode: 'HW-PROTO-SCAN-20260706-001',
+      evidenceStatus: '扫码录屏已关联',
+      resultSummary: 'USB HID 输入稳定，条码前后缀和键盘布局已冻结。',
+      nextAction: '保留误扫样本和手工确认记录，后续只做型号替换回归',
+      riskLevel: '低',
+      tone: 'green',
+    },
+    {
+      executionCode: 'HW-EXEC-PWA-20260710-001',
+      reviewCode: 'HW-REV-PWA-20260710-001',
+      deviceCode: 'PWA-CAM-01',
+      deviceName: '手机摄像头扫码',
+      protocolType: 'BarcodeDetector / ZXing fallback',
+      executionStatus: '待复测',
+      executedAt: '',
+      executedBy: '车间组长',
+      deviceModelSnapshot: 'Android 低端机型待登记',
+      modelFreezeStatus: '未冻结',
+      acceptedParameters: ['browser', 'androidVersion'],
+      failedParameters: ['lighting', 'decodeMs'],
+      evidenceCode: 'HW-PROTO-PWA-20260706-001',
+      evidenceStatus: '弱光截图待补',
+      resultSummary: '普通光照下可扫码，弱光和反光场景尚未完成执行结果留痕。',
+      nextAction: '补弱光/反光样本、识别耗时和 ZXing 兜底截图',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      executionCode: 'HW-EXEC-SCALE-20260710-001',
+      reviewCode: 'HW-REV-SCALE-20260710-001',
+      deviceCode: 'SCALE-01',
+      deviceName: '电子秤',
+      protocolType: 'RS232 / USB / TCP reserved + manual reading',
+      executionStatus: '阻断',
+      executedAt: '2026-07-10 15:35',
+      executedBy: '质检员',
+      deviceModelSnapshot: '电子秤型号和接口类型待冻结',
+      modelFreezeStatus: '未冻结',
+      acceptedParameters: ['unit', 'precision'],
+      failedParameters: ['interfaceType', 'baudRate', 'dataBits', 'parity', 'tcpHost'],
+      evidenceCode: 'HW-PROTO-SCALE-20260706-001',
+      evidenceStatus: '原始报文缺失',
+      resultSummary: '现场仍只能人工读数拍照，RS232/USB/TCP 接口类型和波特率未确认。',
+      nextAction: '继续人工读数入账并补接口照片、铭牌、校准周期和原始报文',
+      riskLevel: '高',
+      tone: 'red',
+    },
+  ];
+}
+
 function evidenceRequirementFor(deviceCode: string): string {
   if (deviceCode.startsWith('CAM')) return '拆包视频、NVR 通道、截取时间段、附件 checksum';
   if (deviceCode.startsWith('PRN')) return '标签样张、补打日志、母单/子工单编码';
@@ -642,6 +750,31 @@ function nextIntegrationActionFor(deviceCode: string): string {
               已确认 {{ review.confirmedParameters.join('、') || '无' }}；
               待复核 {{ review.pendingParameters.join('、') || '无' }}；
               {{ review.blocker }}；{{ review.nextAction }}
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">PROTOCOL EXECUTION</span>
+          <StatusBadge label="复测结果" tone="amber" />
+        </div>
+        <div class="integration-list compact-integration-list">
+          <article v-for="execution in hardwareProtocolExecutions" :key="execution.executionCode">
+            <div class="integration-main">
+              <strong>{{ execution.deviceName }} / {{ execution.executionStatus }}</strong>
+              <span>{{ execution.deviceModelSnapshot }} / {{ execution.modelFreezeStatus }}</span>
+              <small>
+                {{ execution.executionCode }} / {{ execution.executedAt || '待执行' }} /
+                {{ execution.executedBy }} / {{ execution.evidenceStatus }}
+              </small>
+            </div>
+            <StatusBadge :label="`风险 ${execution.riskLevel}`" :tone="execution.tone" />
+            <p>
+              通过 {{ execution.acceptedParameters.join('、') || '无' }}；
+              未通过 {{ execution.failedParameters.join('、') || '无' }}；
+              {{ execution.resultSummary }}；{{ execution.nextAction }}
             </p>
           </article>
         </div>

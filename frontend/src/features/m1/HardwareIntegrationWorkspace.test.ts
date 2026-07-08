@@ -21,6 +21,10 @@ describe('HardwareIntegrationWorkspace', () => {
     expect(wrapper.text()).toContain('复测留痕');
     expect(wrapper.text()).toContain('PROTOCOL REVIEW');
     expect(wrapper.text()).toContain('参数复核');
+    expect(wrapper.text()).toContain('PROTOCOL EXECUTION');
+    expect(wrapper.text()).toContain('复测结果');
+    expect(wrapper.text()).toContain('原始报文缺失');
+    expect(wrapper.text()).toContain('未冻结');
     expect(wrapper.text()).toContain('电子秤型号和接口类型待冻结');
     expect(wrapper.text()).toContain('baudRate');
     expect(wrapper.text()).toContain('RS232');
