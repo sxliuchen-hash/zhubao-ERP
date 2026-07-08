@@ -262,6 +262,32 @@ public class AuthSessionService {
         });
     }
 
+    public int revokeSessionsForUsername(String username, String reason) {
+        String normalizedUsername = normalize(username);
+        if (normalizedUsername.isBlank()) {
+            return 0;
+        }
+        List<SessionEntry> revoked = sessions.values().stream()
+                .filter(entry -> normalize(entry.user().username()).equals(normalizedUsername))
+                .toList();
+        int revokedCount = 0;
+        for (SessionEntry entry : revoked) {
+            if (sessions.remove(entry.token(), entry)) {
+                recordAudit(
+                        "SESSION_REVOKED",
+                        entry.user().username(),
+                        entry.user().operator(),
+                        entry.user().role().name(),
+                        "SUCCESS",
+                        reason == null || reason.isBlank() ? "Account session revoked" : reason.trim(),
+                        entry.token()
+                );
+                revokedCount++;
+            }
+        }
+        return revokedCount;
+    }
+
     public List<String> demoUsernames() {
         return userAccountRepository.findActiveUsernames();
     }

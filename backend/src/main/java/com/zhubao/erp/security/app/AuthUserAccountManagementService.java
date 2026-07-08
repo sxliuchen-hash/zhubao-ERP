@@ -52,6 +52,7 @@ public class AuthUserAccountManagementService {
     private final AuthAuditRepository authAuditRepository;
     private final ApprovalService approvalService;
     private final AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository;
+    private final AuthSessionService authSessionService;
     private final boolean enforcePreApprovalForAccountActions;
 
     public AuthUserAccountManagementService(
@@ -61,7 +62,7 @@ public class AuthUserAccountManagementService {
             PasswordExpiryPolicy passwordExpiryPolicy,
             AuthAuditRepository authAuditRepository
     ) {
-        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, null, null);
+        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, null, null, null);
     }
 
     public AuthUserAccountManagementService(
@@ -72,7 +73,7 @@ public class AuthUserAccountManagementService {
             AuthAuditRepository authAuditRepository,
             ApprovalService approvalService
     ) {
-        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, approvalService, null);
+        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, approvalService, null, null);
     }
 
     public AuthUserAccountManagementService(
@@ -92,6 +93,52 @@ public class AuthUserAccountManagementService {
                 authAuditRepository,
                 approvalService,
                 preApprovalApplicationRepository,
+                null
+        );
+    }
+
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            boolean enforcePreApprovalForAccountActions
+    ) {
+        this(
+                accountRepository,
+                passwordHasher,
+                passwordPolicy,
+                passwordExpiryPolicy,
+                authAuditRepository,
+                approvalService,
+                preApprovalApplicationRepository,
+                null,
+                enforcePreApprovalForAccountActions
+        );
+    }
+
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            AuthSessionService authSessionService
+    ) {
+        this(
+                accountRepository,
+                passwordHasher,
+                passwordPolicy,
+                passwordExpiryPolicy,
+                authAuditRepository,
+                approvalService,
+                preApprovalApplicationRepository,
+                authSessionService,
                 false
         );
     }
@@ -105,6 +152,7 @@ public class AuthUserAccountManagementService {
             AuthAuditRepository authAuditRepository,
             ApprovalService approvalService,
             AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            AuthSessionService authSessionService,
             @Value("${zhubao.auth.pre-approval.enforce-account-actions:false}")
             boolean enforcePreApprovalForAccountActions
     ) {
@@ -115,6 +163,7 @@ public class AuthUserAccountManagementService {
         this.authAuditRepository = authAuditRepository;
         this.approvalService = approvalService;
         this.preApprovalApplicationRepository = preApprovalApplicationRepository;
+        this.authSessionService = authSessionService;
         this.enforcePreApprovalForAccountActions = enforcePreApprovalForAccountActions;
     }
 
@@ -175,11 +224,11 @@ public class AuthUserAccountManagementService {
                         "停用、启用或解锁会直接影响现场登录能力",
                         "弱前置校验",
                         List.of("启停/解锁原因", "影响岗位", "交接状态", "管理员复核"),
-                        List.of("岗位交接附件", "解锁本人确认", "停用后会话吊销"),
+                        List.of("岗位交接附件", "解锁本人确认"),
                         List.of("ADMIN", "GENERAL_MANAGER"),
-                        "当前启停/解锁会写审计并生成事后复核任务",
-                        "试点允许管理员处理，生产需补停用会话吊销",
-                        "补会话吊销、岗位交接附件和解锁本人确认",
+                        "当前启停/解锁会写审计并生成事后复核任务；停用账号会吊销现有 Bearer 会话并写 SESSION_REVOKED",
+                        "试点允许管理员处理，生产需补岗位交接附件和解锁本人确认",
+                        "补岗位交接附件和解锁本人确认",
                         "中",
                         "amber"
                 )
@@ -340,9 +389,11 @@ public class AuthUserAccountManagementService {
         );
         accountRepository.updateEnabled(account.username(), enabled);
         AuthUserAccount updated = requireAccount(account.username());
+        int revokedSessions = revokeSessionsIfDisabled(updated, enabled, operatorContext);
         String action = (enabled ? "启用账号" : "停用账号")
                 + reasonSuffix(reason)
-                + preApprovalApplicationSuffix(preApprovalApplication);
+                + preApprovalApplicationSuffix(preApprovalApplication)
+                + revokedSessionsSuffix(enabled, revokedSessions);
         recordManagementAudit(account.username(), operatorContext, action);
         recordApprovalSummary(updated, operatorContext, action);
         return summary(updated, Instant.now());
@@ -656,6 +707,20 @@ public class AuthUserAccountManagementService {
 
     private String preApprovalApplicationSuffix(AuthAccountPreApprovalApplication application) {
         return application == null ? "" : "；前置申请单：" + application.applicationCode();
+    }
+
+    private int revokeSessionsIfDisabled(AuthUserAccount account, boolean enabled, OperatorContext operatorContext) {
+        if (enabled || authSessionService == null) {
+            return 0;
+        }
+        return authSessionService.revokeSessionsForUsername(
+                account.username(),
+                "Account disabled by " + operatorContext.operator() + "; account=" + account.username()
+        );
+    }
+
+    private String revokedSessionsSuffix(boolean enabled, int revokedSessions) {
+        return enabled || authSessionService == null ? "" : "; revokedSessions=" + revokedSessions;
     }
 
     private AuthAccountPreApprovalApplicationRepository requirePreApprovalApplicationRepository() {

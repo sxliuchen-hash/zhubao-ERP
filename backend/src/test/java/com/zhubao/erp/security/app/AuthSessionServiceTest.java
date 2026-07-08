@@ -71,6 +71,34 @@ class AuthSessionServiceTest {
     }
 
     @Test
+    void revokesAllSessionsForUsername() {
+        AuthSessionService service = service();
+        AuthSession first = service.login(new AuthLoginCommand("operator", "operator123"));
+        AuthSession second = service.login(new AuthLoginCommand("operator", "operator123"));
+        AuthSession leader = service.login(new AuthLoginCommand("leader", "leader123"));
+
+        int revoked = service.revokeSessionsForUsername("operator", "account disabled");
+
+        assertThat(revoked).isEqualTo(2);
+        assertThatThrownBy(() -> service.session("Bearer " + first.token()))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("登录会话不存在或已退出");
+        assertThatThrownBy(() -> service.session("Bearer " + second.token()))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("登录会话不存在或已退出");
+        assertThat(service.session("Bearer " + leader.token())).isPresent();
+        assertThat(service.auditEvents(10))
+                .filteredOn(event -> event.eventType().equals("SESSION_REVOKED"))
+                .hasSize(2)
+                .allSatisfy(event -> {
+                    assertThat(event.username()).isEqualTo("operator");
+                    assertThat(event.result()).isEqualTo("SUCCESS");
+                    assertThat(event.reason()).isEqualTo("account disabled");
+                    assertThat(event.sessionTokenSuffix()).isNotEmpty();
+                });
+    }
+
+    @Test
     void recordsLoginSessionAndLogoutAuditEventsWithoutExposingFullToken() {
         AuthSessionService service = service();
 

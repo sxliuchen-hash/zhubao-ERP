@@ -571,6 +571,53 @@ class AuthUserAccountManagementServiceTest {
         assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!")))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("用户名或密码错误");
+        assertThat(fixture.auditRepository().findRecent(20))
+                .anySatisfy(event -> assertThat(event.reason())
+                        .contains("停用账号", "revokedSessions=0"));
+        assertThat(fixture.approvalRepository().findAll())
+                .anySatisfy(task -> assertThat(task.sourceSummary())
+                        .contains("action=停用账号", "revokedSessions=0"));
+    }
+
+    @Test
+    void disablingAccountRevokesExistingBearerSessions() {
+        Fixture fixture = fixture();
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                true,
+                false
+        ), admin);
+        AuthSession first = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
+        AuthSession second = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
+        AuthSession leader = fixture.sessionService().login(new AuthLoginCommand("leader", "leader123"));
+
+        fixture.managementService().updateEnabled("planner", false, "离职交接", admin);
+
+        assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + first.token()))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("登录会话不存在或已退出");
+        assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + second.token()))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("登录会话不存在或已退出");
+        assertThat(fixture.sessionService().session("Bearer " + leader.token())).isPresent();
+        assertThat(fixture.auditRepository().findRecent(20))
+                .filteredOn(event -> event.eventType().equals("SESSION_REVOKED"))
+                .hasSize(2)
+                .allSatisfy(event -> {
+                    assertThat(event.username()).isEqualTo("planner");
+                    assertThat(event.reason()).contains("Account disabled by", "account=planner");
+                    assertThat(event.sessionTokenSuffix()).isNotEmpty();
+                });
+        assertThat(fixture.auditRepository().findRecent(20))
+                .anySatisfy(event -> assertThat(event.reason())
+                        .contains("停用账号", "revokedSessions=2"));
+        assertThat(fixture.approvalRepository().findAll())
+                .anySatisfy(task -> assertThat(task.sourceSummary())
+                        .contains("action=停用账号", "revokedSessions=2"));
     }
 
     @Test
@@ -792,6 +839,14 @@ class AuthUserAccountManagementServiceTest {
         InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
                 new InMemoryAuthAccountPreApprovalApplicationRepository();
         ApprovalService approvalService = new ApprovalService(approvalRepository);
+        AuthSessionService sessionService = new AuthSessionService(
+                navigationMenuService,
+                auditRepository,
+                accountRepository,
+                passwordHasher,
+                passwordExpiryPolicy,
+                passwordPolicy
+        );
         AuthUserAccountManagementService managementService = new AuthUserAccountManagementService(
                 accountRepository,
                 passwordHasher,
@@ -800,15 +855,8 @@ class AuthUserAccountManagementServiceTest {
                 auditRepository,
                 approvalService,
                 preApprovalApplicationRepository,
+                sessionService,
                 enforcePreApprovalForAccountActions
-        );
-        AuthSessionService sessionService = new AuthSessionService(
-                navigationMenuService,
-                auditRepository,
-                accountRepository,
-                passwordHasher,
-                passwordExpiryPolicy,
-                passwordPolicy
         );
         return new Fixture(
                 accountRepository,
