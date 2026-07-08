@@ -6,6 +6,7 @@ import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.NavigationMenuService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PasswordHasher;
+import com.zhubao.erp.security.app.PasswordExpiryPolicy;
 import com.zhubao.erp.security.app.PasswordPolicy;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccountStatusCommand;
@@ -30,6 +31,7 @@ class AuthControllerAccountManagementTest {
 
     private final PasswordHasher passwordHasher = new PasswordHasher();
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();
+    private final PasswordExpiryPolicy passwordExpiryPolicy = new PasswordExpiryPolicy();
 
     @Test
     void accountListRequiresManagementPermission() {
@@ -95,12 +97,14 @@ class AuthControllerAccountManagementTest {
                 new NavigationMenuService(),
                 auditRepository,
                 accountRepository,
-                passwordHasher
+                passwordHasher,
+                passwordExpiryPolicy
         );
         AuthUserAccountManagementService accountManagementService = new AuthUserAccountManagementService(
                 accountRepository,
                 passwordHasher,
                 passwordPolicy,
+                passwordExpiryPolicy,
                 auditRepository
         );
         OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService);

@@ -67,6 +67,7 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.dataScope(),
                 enabled,
                 account.demoAccount(),
+                account.passwordChangedAt(),
                 account.failedLoginCount(),
                 account.lockedUntil()
         ));
@@ -82,6 +83,7 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.dataScope(),
                 account.enabled(),
                 account.demoAccount(),
+                account.passwordChangedAt(),
                 0,
                 null
         ));
@@ -97,6 +99,7 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.dataScope(),
                 account.enabled(),
                 account.demoAccount(),
+                account.passwordChangedAt(),
                 failedLoginCount,
                 lockedUntil
         ));
@@ -112,6 +115,7 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.dataScope(),
                 account.enabled(),
                 account.demoAccount(),
+                account.passwordChangedAt(),
                 0,
                 null
         ));

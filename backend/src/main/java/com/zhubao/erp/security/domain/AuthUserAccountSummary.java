@@ -9,6 +9,9 @@ public record AuthUserAccountSummary(
         String dataScopeLabel,
         boolean enabled,
         boolean demoAccount,
+        String passwordChangedAt,
+        String passwordExpiresAt,
+        boolean passwordExpired,
         int failedLoginCount,
         String lockedUntil,
         boolean locked

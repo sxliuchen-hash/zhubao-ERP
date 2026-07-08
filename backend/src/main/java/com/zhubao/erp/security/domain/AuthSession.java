@@ -12,6 +12,9 @@ public record AuthSession(
         String dataScopeLabel,
         String expiresAt,
         boolean demoAccount,
+        String passwordChangedAt,
+        String passwordExpiresAt,
+        boolean passwordExpired,
         List<String> menuCodes,
         List<NavigationMenuItem> menuTree
 ) {

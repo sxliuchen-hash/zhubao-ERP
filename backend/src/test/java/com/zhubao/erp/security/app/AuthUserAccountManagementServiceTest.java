@@ -14,6 +14,7 @@ import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +24,7 @@ class AuthUserAccountManagementServiceTest {
 
     private final PasswordHasher passwordHasher = new PasswordHasher();
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();
+    private final PasswordExpiryPolicy passwordExpiryPolicy = new PasswordExpiryPolicy();
     private final NavigationMenuService navigationMenuService = new NavigationMenuService();
     private final OperatorContext admin = new OperatorContext(
             "系统管理员",
@@ -67,6 +69,7 @@ class AuthUserAccountManagementServiceTest {
                 false
         ), admin);
         String originalHash = fixture.accountRepository().findByUsername("planner").orElseThrow().passwordHash();
+        Instant originalPasswordChangedAt = fixture.accountRepository().findByUsername("planner").orElseThrow().passwordChangedAt();
 
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
@@ -80,6 +83,7 @@ class AuthUserAccountManagementServiceTest {
 
         AuthUserAccount updated = fixture.accountRepository().findByUsername("planner").orElseThrow();
         assertThat(updated.passwordHash()).isEqualTo(originalHash);
+        assertThat(updated.passwordChangedAt()).isEqualTo(originalPasswordChangedAt);
         assertThat(updated.operator()).isEqualTo("计划员 陈敏-调整");
         assertThat(updated.role()).isEqualTo(RoleCode.WAREHOUSE_KEEPER);
         assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!")).role())
@@ -98,6 +102,20 @@ class AuthUserAccountManagementServiceTest {
                 true,
                 false
         ), admin);
+        Instant oldPasswordChangedAt = Instant.now().minus(Duration.ofDays(91));
+        AuthUserAccount oldAccount = fixture.accountRepository().findByUsername("planner").orElseThrow();
+        fixture.accountRepository().save(new AuthUserAccount(
+                oldAccount.username(),
+                oldAccount.passwordHash(),
+                oldAccount.operator(),
+                oldAccount.role(),
+                oldAccount.dataScope(),
+                oldAccount.enabled(),
+                oldAccount.demoAccount(),
+                oldPasswordChangedAt,
+                oldAccount.failedLoginCount(),
+                oldAccount.lockedUntil()
+        ));
         fixture.accountRepository().recordLoginFailure("planner", 5, Instant.now().plusSeconds(900));
 
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
@@ -113,11 +131,39 @@ class AuthUserAccountManagementServiceTest {
         AuthUserAccount account = fixture.accountRepository().findByUsername("planner").orElseThrow();
         assertThat(account.failedLoginCount()).isZero();
         assertThat(account.lockedUntil()).isNull();
+        assertThat(account.passwordChangedAt()).isAfter(oldPasswordChangedAt);
         assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Old!")))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("用户名或密码错误");
         assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-New!")).username())
                 .isEqualTo("planner");
+    }
+
+    @Test
+    void accountSummaryExposesPasswordExpiryState() {
+        Fixture fixture = fixture();
+        Instant oldPasswordChangedAt = Instant.now().minus(Duration.ofDays(91));
+        fixture.accountRepository().save(new AuthUserAccount(
+                "planner",
+                passwordHasher.hash("Secure-2026-Old!"),
+                "计划员 陈敏",
+                RoleCode.SALES,
+                DataScope.CUSTOMER_RANGE,
+                true,
+                false,
+                oldPasswordChangedAt,
+                0,
+                null
+        ));
+
+        assertThat(fixture.managementService().accounts())
+                .filteredOn(account -> account.username().equals("planner"))
+                .singleElement()
+                .satisfies(account -> {
+                    assertThat(account.passwordChangedAt()).isNotBlank();
+                    assertThat(account.passwordExpiresAt()).isNotBlank();
+                    assertThat(account.passwordExpired()).isTrue();
+                });
     }
 
     @Test
@@ -221,13 +267,15 @@ class AuthUserAccountManagementServiceTest {
                 accountRepository,
                 passwordHasher,
                 passwordPolicy,
+                passwordExpiryPolicy,
                 auditRepository
         );
         AuthSessionService sessionService = new AuthSessionService(
                 navigationMenuService,
                 auditRepository,
                 accountRepository,
-                passwordHasher
+                passwordHasher,
+                passwordExpiryPolicy
         );
         return new Fixture(accountRepository, auditRepository, managementService, sessionService);
     }

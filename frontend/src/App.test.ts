@@ -17,8 +17,8 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.90 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.90 / 生产密码策略边界');
+    expect(wrapper.text()).toContain('M3.91 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.91 / 密码过期续期边界');
     expect(wrapper.text()).toContain('复核补录');
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('授权导航过滤');
@@ -87,6 +87,9 @@ function sessionWithMenus(menuCodes: string[]): AuthSession {
     dataScopeLabel: '本人任务',
     expiresAt: '2026-07-08 20:00:00',
     demoAccount: true,
+    passwordChangedAt: '2026-07-08 09:00:00',
+    passwordExpiresAt: '2026-10-06 09:00:00',
+    passwordExpired: false,
     menuCodes,
     menuTree: menuCodes.map((code) => ({
       code,

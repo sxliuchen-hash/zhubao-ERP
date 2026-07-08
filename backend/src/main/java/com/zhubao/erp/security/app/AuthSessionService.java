@@ -41,17 +41,20 @@ public class AuthSessionService {
     private final AuthAuditRepository authAuditRepository;
     private final AuthUserAccountRepository userAccountRepository;
     private final PasswordHasher passwordHasher;
+    private final PasswordExpiryPolicy passwordExpiryPolicy;
 
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
             AuthAuditRepository authAuditRepository,
             AuthUserAccountRepository userAccountRepository,
-            PasswordHasher passwordHasher
+            PasswordHasher passwordHasher,
+            PasswordExpiryPolicy passwordExpiryPolicy
     ) {
         this.navigationMenuService = navigationMenuService;
         this.authAuditRepository = authAuditRepository;
         this.userAccountRepository = userAccountRepository;
         this.passwordHasher = passwordHasher;
+        this.passwordExpiryPolicy = passwordExpiryPolicy;
     }
 
     public AuthSession login(AuthLoginCommand command) {
@@ -70,6 +73,11 @@ public class AuthSessionService {
         if (!passwordHasher.matches(command.password(), account.get().passwordHash())) {
             recordFailedLogin(account.get(), now);
             throw new PermissionDeniedException("用户名或密码错误");
+        }
+        if (passwordExpiryPolicy.isExpired(account.get(), now)) {
+            String reason = "密码已超过 " + passwordExpiryPolicy.maxAgeDays() + " 天有效期，请重置密码";
+            recordAudit("LOGIN", account.get().username(), account.get().operator(), account.get().role().name(), "DENIED", reason, "");
+            throw new PermissionDeniedException("密码已过期，请联系管理员重置密码");
         }
 
         String token = newToken();
@@ -196,6 +204,9 @@ public class AuthSessionService {
                 dataScopeLabel(user.dataScope()),
                 DISPLAY_TIME.format(entry.expiresAt()),
                 user.demoAccount(),
+                displayInstant(user.passwordChangedAt()),
+                DISPLAY_TIME.format(passwordExpiryPolicy.expiresAt(user)),
+                passwordExpiryPolicy.isExpired(user, Instant.now()),
                 navigationMenuService.menuCodesFor(user.role()),
                 navigationMenuService.menuTreeFor(user.role())
         );
@@ -248,6 +259,10 @@ public class AuthSessionService {
         }
         int start = Math.max(0, token.length() - 6);
         return token.substring(start);
+    }
+
+    private String displayInstant(Instant value) {
+        return value == null ? "" : DISPLAY_TIME.format(value);
     }
 
     private String normalize(String value) {

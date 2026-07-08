@@ -41,8 +41,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 insert into auth_user_account (
                     username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                    failed_login_count, locked_until
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    password_changed_at, failed_login_count, locked_until
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -53,8 +53,9 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setString(5, account.dataScope().name());
             statement.setBoolean(6, account.enabled());
             statement.setBoolean(7, account.demoAccount());
-            statement.setInt(8, account.failedLoginCount());
-            setInstant(statement, 9, account.lockedUntil());
+            setInstant(statement, 8, account.passwordChangedAt());
+            statement.setInt(9, account.failedLoginCount());
+            setInstant(statement, 10, account.lockedUntil());
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -71,6 +72,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                        data_scope = ?,
                        enabled = ?,
                        demo_account = ?,
+                       password_changed_at = ?,
                        failed_login_count = ?,
                        locked_until = ?
                  where username = ?
@@ -83,9 +85,10 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setString(4, account.dataScope().name());
             statement.setBoolean(5, account.enabled());
             statement.setBoolean(6, account.demoAccount());
-            statement.setInt(7, account.failedLoginCount());
-            setInstant(statement, 8, account.lockedUntil());
-            statement.setString(9, normalize(account.username()));
+            setInstant(statement, 7, account.passwordChangedAt());
+            statement.setInt(8, account.failedLoginCount());
+            setInstant(statement, 9, account.lockedUntil());
+            statement.setString(10, normalize(account.username()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -97,7 +100,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public List<AuthUserAccount> findAll() {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       failed_login_count, locked_until
+                       password_changed_at, failed_login_count, locked_until
                   from auth_user_account
                  order by username
                 """;
@@ -118,7 +121,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public Optional<AuthUserAccount> findByUsername(String username) {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       failed_login_count, locked_until
+                       password_changed_at, failed_login_count, locked_until
                   from auth_user_account
                  where username = ?
                 """;
@@ -238,6 +241,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 DataScope.valueOf(rs.getString("data_scope")),
                 rs.getBoolean("enabled"),
                 rs.getBoolean("demo_account"),
+                readInstant(rs, "password_changed_at"),
                 rs.getInt("failed_login_count"),
                 readInstant(rs, "locked_until")
         );

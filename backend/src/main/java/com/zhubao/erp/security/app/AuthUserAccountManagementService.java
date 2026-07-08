@@ -30,17 +30,20 @@ public class AuthUserAccountManagementService {
     private final AuthUserAccountRepository accountRepository;
     private final PasswordHasher passwordHasher;
     private final PasswordPolicy passwordPolicy;
+    private final PasswordExpiryPolicy passwordExpiryPolicy;
     private final AuthAuditRepository authAuditRepository;
 
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
             PasswordHasher passwordHasher,
             PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
             AuthAuditRepository authAuditRepository
     ) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
         this.passwordPolicy = passwordPolicy;
+        this.passwordExpiryPolicy = passwordExpiryPolicy;
         this.authAuditRepository = authAuditRepository;
     }
 
@@ -64,6 +67,7 @@ public class AuthUserAccountManagementService {
             passwordPolicy.assertAcceptable(command.password(), username);
         }
         String passwordHash = passwordProvided ? passwordHasher.hash(command.password()) : existing.passwordHash();
+        Instant passwordChangedAt = passwordProvided ? Instant.now() : existing.passwordChangedAt();
         int failedLoginCount = existing == null || passwordProvided ? 0 : existing.failedLoginCount();
         Instant lockedUntil = existing == null || passwordProvided ? null : existing.lockedUntil();
         AuthUserAccount saved = accountRepository.save(new AuthUserAccount(
@@ -74,6 +78,7 @@ public class AuthUserAccountManagementService {
                 dataScope,
                 command.enabled(),
                 command.demoAccount(),
+                passwordChangedAt,
                 failedLoginCount,
                 lockedUntil
         ));
@@ -114,6 +119,9 @@ public class AuthUserAccountManagementService {
                 dataScopeLabel(account.dataScope()),
                 account.enabled(),
                 account.demoAccount(),
+                displayInstant(account.passwordChangedAt()),
+                DISPLAY_TIME.format(passwordExpiryPolicy.expiresAt(account)),
+                passwordExpiryPolicy.isExpired(account, now),
                 account.failedLoginCount(),
                 account.lockedUntil() == null ? "" : DISPLAY_TIME.format(account.lockedUntil()),
                 locked
@@ -161,6 +169,10 @@ public class AuthUserAccountManagementService {
 
     private String reasonSuffix(String reason) {
         return reason == null || reason.isBlank() ? "" : "；原因：" + reason.trim();
+    }
+
+    private String displayInstant(Instant value) {
+        return value == null ? "" : DISPLAY_TIME.format(value);
     }
 
     private String tokenSuffix(String token) {

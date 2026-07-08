@@ -44,6 +44,7 @@ class JdbcAuthUserAccountRepositoryTest {
                     assertThat(account.dataScope()).isEqualTo(DataScope.CUSTOMER_RANGE);
                     assertThat(account.enabled()).isTrue();
                     assertThat(account.demoAccount()).isFalse();
+                    assertThat(account.passwordChangedAt()).isNotNull();
                     assertThat(passwordHasher.matches("planner-pass", account.passwordHash())).isTrue();
                 });
 
@@ -70,6 +71,7 @@ class JdbcAuthUserAccountRepositoryTest {
     @Test
     void supportsManagementListStatusUpdateAndUnlock() {
         repository.save(account("warehouse", "库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT, true));
+        Instant passwordChangedAt = Instant.parse("2026-01-01T00:00:00Z");
         repository.save(new AuthUserAccount(
                 "leader",
                 passwordHasher.hash("leader-pass"),
@@ -78,6 +80,7 @@ class JdbcAuthUserAccountRepositoryTest {
                 DataScope.TEAM,
                 true,
                 false,
+                passwordChangedAt,
                 5,
                 Instant.now().plusSeconds(900)
         ));
@@ -100,6 +103,7 @@ class JdbcAuthUserAccountRepositoryTest {
                 .satisfies(account -> {
                     assertThat(account.failedLoginCount()).isZero();
                     assertThat(account.lockedUntil()).isNull();
+                    assertThat(account.passwordChangedAt()).isEqualTo(passwordChangedAt);
                 });
     }
 
@@ -158,6 +162,7 @@ class JdbcAuthUserAccountRepositoryTest {
                         data_scope varchar(64) not null,
                         enabled boolean not null default true,
                         demo_account boolean not null default false,
+                        password_changed_at timestamp default current_timestamp,
                         failed_login_count int not null default 0,
                         locked_until timestamp null,
                         last_login_at timestamp null,

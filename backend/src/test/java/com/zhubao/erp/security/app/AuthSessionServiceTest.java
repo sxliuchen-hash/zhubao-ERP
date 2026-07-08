@@ -19,6 +19,7 @@ class AuthSessionServiceTest {
 
     private final NavigationMenuService navigationMenuService = new NavigationMenuService();
     private final PasswordHasher passwordHasher = new PasswordHasher();
+    private final PasswordExpiryPolicy passwordExpiryPolicy = new PasswordExpiryPolicy();
 
     @Test
     void logsInDemoUserAndResolvesOperatorContextFromBearerToken() {
@@ -138,6 +139,39 @@ class AuthSessionServiceTest {
     }
 
     @Test
+    void rejectsExpiredProductionPasswordAfterPasswordMatches() {
+        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        userRepository.save(new AuthUserAccount(
+                "planner",
+                passwordHasher.hash("Secure-2026-Expired!"),
+                "计划员 陈敏",
+                RoleCode.SALES,
+                DataScope.CUSTOMER_RANGE,
+                true,
+                false,
+                java.time.Instant.now().minus(java.time.Duration.ofDays(91)),
+                0,
+                null
+        ));
+        AuthSessionService service = service(userRepository);
+
+        assertThatThrownBy(() -> service.login(new AuthLoginCommand("planner", "Secure-2026-Expired!")))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("密码已过期");
+        assertThat(userRepository.findByUsername("planner"))
+                .get()
+                .extracting(AuthUserAccount::failedLoginCount)
+                .isEqualTo(0);
+        assertThat(service.auditEvents(5))
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("LOGIN");
+                    assertThat(event.username()).isEqualTo("planner");
+                    assertThat(event.result()).isEqualTo("DENIED");
+                    assertThat(event.reason()).contains("密码已超过 90 天有效期");
+                });
+    }
+
+    @Test
     void rejectsDisabledUserAccount() {
         InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
         userRepository.save(new AuthUserAccount(
@@ -215,7 +249,8 @@ class AuthSessionServiceTest {
                 navigationMenuService,
                 new InMemoryAuthAuditRepository(),
                 userRepository,
-                passwordHasher
+                passwordHasher,
+                passwordExpiryPolicy
         );
     }
 }

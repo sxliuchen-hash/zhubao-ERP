@@ -12,6 +12,9 @@ export interface AuthSession {
   dataScopeLabel: string;
   expiresAt: string;
   demoAccount: boolean;
+  passwordChangedAt: string;
+  passwordExpiresAt: string;
+  passwordExpired: boolean;
   menuCodes: string[];
   menuTree: NavigationMenuItem[];
 }
@@ -51,6 +54,9 @@ export interface AuthUserAccountSummary {
   dataScopeLabel: string;
   enabled: boolean;
   demoAccount: boolean;
+  passwordChangedAt: string;
+  passwordExpiresAt: string;
+  passwordExpired: boolean;
   failedLoginCount: number;
   lockedUntil: string;
   locked: boolean;

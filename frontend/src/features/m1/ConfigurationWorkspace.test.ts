@@ -39,5 +39,6 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('admin / 系统管理员');
     expect(wrapper.text()).toContain('planner / 计划员 陈敏');
     expect(wrapper.text()).toContain('生产账号');
+    expect(wrapper.text()).toContain('密码已过期');
   });
 });
