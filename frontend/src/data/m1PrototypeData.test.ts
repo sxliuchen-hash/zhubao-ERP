@@ -94,6 +94,7 @@ describe('m1PrototypeData', () => {
     expect(productionReadinessItems.some((item) => item.code === 'P0-02' && item.title === '损耗计算口径')).toBe(true);
     expect(productionReadinessItems.some((item) => item.code === 'P0-09' && item.title.includes('备份'))).toBe(true);
     expect(productionReadinessItems.some((item) => item.code === 'P0-10' && item.category === '权限')).toBe(true);
+    expect(productionReadinessItems.some((item) => item.code === 'P1-HW-POC-01' && item.defaultAction.includes('hw_poc_record'))).toBe(true);
     expect(productionReadinessItems.filter((item) => item.priority === 'P0').length).toBeGreaterThanOrEqual(7);
     expect(productionReadinessItems.every((item) => item.owner && item.evidence && item.defaultAction)).toBe(true);
   });

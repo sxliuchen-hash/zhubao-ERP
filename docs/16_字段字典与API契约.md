@@ -91,7 +91,7 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.93 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.93 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password` 和 `GET /auth/audit-integrity` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、账号改密/到期/过期状态，并在登录态内完成自助改密续期和查看认证审计完整性摘要。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
+当前 M3.94 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.94 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/poc-records`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password` 和 `GET /auth/audit-integrity` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件 POC 记录、账号改密/到期/过期状态，并在登录态内完成自助改密续期和查看认证审计完整性摘要。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
 
 业务操作接口前缀：
 
@@ -1454,6 +1454,8 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 - 结果为阻断时必须有人工兜底或明确排期。
 - POC 记录必须能关联设备、业务场景和证据附件。
 - 电子秤、NVR、PWA 扫码、标签打印至少各保留一条现场验证记录。
+- M3.94 起 `GET /api/hardware/poc-records` 读取 `HardwarePocRecordRepository`，接口响应字段不变；本地默认 `memory`，MySQL profile 默认 `jdbc`，seed 脚本为 `V19__m3_hardware_poc_record_seed.sql`。
+- `zhubao.hardware.poc.repository` / `ZHUBAO_HARDWARE_POC_REPOSITORY` 只控制 POC 记录仓储来源，不代表硬件 SDK、NVR 协议、打印驱动、扫码识别或电子秤采集已完成强集成。
 
 ---
 

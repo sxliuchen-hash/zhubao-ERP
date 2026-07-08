@@ -21,6 +21,9 @@ zhubao:
     repository: ${ZHUBAO_MACHINE_OUTPUT_REPOSITORY:jdbc}
   business-document:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
+  hardware:
+    poc:
+      repository: ${ZHUBAO_HARDWARE_POC_REPOSITORY:jdbc}
   auth:
     users:
       repository: ${ZHUBAO_AUTH_USERS_REPOSITORY:jdbc}

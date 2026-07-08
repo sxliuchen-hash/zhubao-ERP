@@ -9,6 +9,9 @@ describe('HardwareIntegrationWorkspace', () => {
     expect(wrapper.text()).toContain('软硬件联动作业台');
     expect(wrapper.text()).toContain('联动阻断队列');
     expect(wrapper.text()).toContain('设备兼容池');
+    expect(wrapper.text()).toContain('POC 仓储可切换');
+    expect(wrapper.text()).toContain('zhubao.hardware.poc.repository');
+    expect(wrapper.text()).toContain('/api/hardware/poc-records 接口不变');
     expect(wrapper.find('table.hardware-device-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('POC RECORDS');
     expect(wrapper.text()).toContain('POC-SCAN-20260706-001');

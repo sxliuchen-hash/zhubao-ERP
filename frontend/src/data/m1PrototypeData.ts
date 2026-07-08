@@ -754,7 +754,7 @@ export const mobileCapabilities: MobileCapability[] = [
   { label: '扫码识别', status: '可用', detail: 'BarcodeDetector 优先，ZXing 兜底，失败可手输编码。', tone: 'green' },
   { label: '离线草稿', status: '设计中', detail: '弱网时暂存报工和质检，恢复网络后补提交。', tone: 'amber' },
   { label: '拍照留证', status: '一期必做', detail: '缺陷、称重、人工视频兜底都需要附件。', tone: 'blue' },
-  { label: '权限边界', status: '推进中', detail: 'M3.93 已有账号仓储、密码哈希、失败锁定、启停解锁、密码策略、密码过期、自助改密续期、认证审计摘要链、菜单树和敏感 POST 守卫，数据范围过滤仍待接入。', tone: 'amber' },
+  { label: '权限边界', status: '推进中', detail: 'M3.93 已有账号仓储、密码哈希、失败锁定、启停解锁、密码策略、密码过期、自助改密续期、认证审计摘要链、菜单树和敏感 POST 守卫，数据范围过滤仍待接入；M3.94 补硬件 POC 仓储边界。', tone: 'amber' },
 ];
 
 export const offlineDrafts: OfflineDraft[] = [
@@ -978,6 +978,18 @@ export const productionReadinessItems: ProductionReadinessItem[] = [
     priority: 'P0',
     status: 'pending',
     tone: 'red',
+  },
+  {
+    code: 'P1-HW-POC-01',
+    category: '软硬件',
+    title: '硬件 POC 记录证据闭环',
+    why: 'POC 记录已可落库，但缺少现场附件和复测结果会让硬件适配结论不可追溯。',
+    defaultAction: 'M3.94 已支持 hw_poc_record 内存/JDBC 仓储切换；下一步补 POC 附件、真实设备型号、复测结论和负责人闭环。',
+    owner: '实施 / IT / 车间',
+    evidence: 'V19 seed、/api/hardware/poc-records、现场附件',
+    priority: 'P1',
+    status: 'needs-trial',
+    tone: 'amber',
   },
   {
     code: 'BR-LOSS-01',

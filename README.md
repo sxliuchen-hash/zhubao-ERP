@@ -109,6 +109,7 @@
 - M3.91 密码过期/续期边界，新增 `PasswordExpiryPolicy`，生产账号密码 90 天过期，登录过期账号会拒绝并写入 `LOGIN DENIED` 审计；管理员创建或重置密码会刷新 `passwordChangedAt`，登录会话和账号摘要返回改密时间、到期时间和过期状态；评审 seed 账号仅作为评审用途保留豁免，不作为生产上线豁免。
 - M3.92 登录态自助改密/续期边界，新增 `POST /api/auth/password`，只接受 `Authorization: Bearer <token>` 登录会话，不使用请求头角色兜底；校验当前密码、新密码策略和新旧密码不同，成功后刷新 `passwordChangedAt/passwordExpiresAt/passwordExpired`、清零失败锁定、更新当前内存会话账号摘要并写入 `PASSWORD_CHANGE` 审计。该边界不代表生产账号审批、SSO/JWT、生产菜单持久化、GET 数据范围过滤、审计防篡改或安全日志平台完成。
 - M3.93 认证审计完整性摘要边界，认证审计事件新增 `previousEventHash/eventHash`，内存/JDBC 审计仓储写入时生成 SHA-256 摘要链，新增 `GET /api/auth/audit-integrity` 返回最近事件链校验摘要，前端配置基线页展示“完整性摘要”和哈希尾号；该边界可用于发现审计链断裂或事件字段被改动，但仍不代表生产级不可篡改审计、安全日志平台或归档保全完成。
+- M3.94 硬件 POC 记录仓储可切换边界，新增 `HardwarePocRecordRepository`、内存/JDBC 仓储、`zhubao.hardware.poc.repository` / `ZHUBAO_HARDWARE_POC_REPOSITORY` 配置和 `V19__m3_hardware_poc_record_seed.sql`；`GET /api/hardware/poc-records` 接口保持不变，本地默认内存，MySQL profile 默认 JDBC。该边界只推进 POC 记录持久化，不代表硬件 SDK 强集成完成。
 
 ## 目录结构
 
@@ -204,6 +205,16 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 ```
 
 业务工作台 JDBC 当前读取的是 `biz_workspace_*` 评审快照和 seed 数据，用于验收与演示；正式交易闭环仍需继续接入来料、生产、质检、出库等真实业务表。
+
+启用 MySQL 硬件 POC 记录仓储：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_HARDWARE_POC_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+硬件 POC JDBC 当前覆盖 `hw_poc_record`，用于持久化现场验证窗口、结果、证据摘要、阻断项、责任人和下一步动作；`V19__m3_hardware_poc_record_seed.sql` 会写入 NVR 视频、标签打印、PWA 弱光扫码和电子秤人工读数 4 条基线记录。该边界不改变 `/api/hardware/poc-records` 契约，也不代表 NVR、打印机、扫码设备或电子秤已经完成厂商 SDK/协议直连。
 
 启用 MySQL 轻量审批任务持久化：
 
@@ -367,7 +378,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 
 当前已进入 M3 一期开发推进中，前端继续向生产现场作业台和高密度 ERP/MES 操作界面收敛；样例库已升级为验收数据指挥台，把开源参考、前端样例、后端 fixture、自动化测试、证据编码、上线门禁、真实数据缺口和登记表导入准备度收敛到同一张管理矩阵。来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路；来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。
 
-截至 M3.93，现场登记表链路已完成入库、出货、抛光、雕刻 4 类 Excel 上传预检、问题 CSV、真实模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口，以及来料母单/出库单的基础结构化持久化切片。系统已能把通过预检的登记表保存为 `register_import_batch/register_import_row` 批次和行级 JSON，前端可展示最近确认批次、行级标准化字段、警告消息、posting plan 的命令草稿、缺失字段和警告，并可对后端 posting plan 中的阻断字段进行行级补录；补录只更新标准化字段，不写库存台账或业务单据。非阻断行必须通过独立 POST 命令交给后端业务服务入账；`REG-ENGRAVING` 会额外生成 `biz_machine_output_record`，生产页可通过 `GET /api/machine-outputs/summary` 查看最近设备产量的总量、机器分组、日期分组、机器档案待匹配和签名附件待补数量；`REG-INBOUND` / `REG-OUTBOUND` 显式入账复用入库/出库业务动作，在库存台账成功后保存 `biz_mother_order` / `biz_outbound_order` 快照，`SA 样例库` 会继续调用业务单据查询接口展示快照字段、状态、来源登记表行和台账号。库存变化仍统一经过 `StockLedgerService`，重复入账会被 `POSTED` 状态拒绝。权限侧已补后端授权菜单树、按钮权限编码、登录会话审计、登录审计 JDBC 持久化边界、前端登录会话导航过滤、`auth_user_account` 账号表、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界；登录会话、当前权限上下文、`GET /api/security/menu-tree`、`GET /api/auth/audit-events`、`GET /api/auth/audit-integrity` 和 `GET /api/auth/accounts` 可返回角色可见菜单、最近登录审计、审计链完整性摘要、账号状态摘要、改密时间、到期时间和过期状态，`POST /api/auth/password` 可在已登录 Bearer 会话内校验当前密码并刷新改密时间；但生产账号审批、生产持久化菜单表、真正不可篡改审计、SSO/JWT、安全日志平台和 GET 数据范围过滤仍未完成。下一步重点不再是继续堆演示页，而是补齐机器档案匹配、签名附件、完整母单/出库生命周期、生产账号审批、数据范围过滤、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入：
+截至 M3.94，现场登记表链路已完成入库、出货、抛光、雕刻 4 类 Excel 上传预检、问题 CSV、真实模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口，以及来料母单/出库单的基础结构化持久化切片。系统已能把通过预检的登记表保存为 `register_import_batch/register_import_row` 批次和行级 JSON，前端可展示最近确认批次、行级标准化字段、警告消息、posting plan 的命令草稿、缺失字段和警告，并可对后端 posting plan 中的阻断字段进行行级补录；补录只更新标准化字段，不写库存台账或业务单据。非阻断行必须通过独立 POST 命令交给后端业务服务入账；`REG-ENGRAVING` 会额外生成 `biz_machine_output_record`，生产页可通过 `GET /api/machine-outputs/summary` 查看最近设备产量的总量、机器分组、日期分组、机器档案待匹配和签名附件待补数量；`REG-INBOUND` / `REG-OUTBOUND` 显式入账复用入库/出库业务动作，在库存台账成功后保存 `biz_mother_order` / `biz_outbound_order` 快照，`SA 样例库` 会继续调用业务单据查询接口展示快照字段、状态、来源登记表行和台账号。库存变化仍统一经过 `StockLedgerService`，重复入账会被 `POSTED` 状态拒绝。权限侧已补后端授权菜单树、按钮权限编码、登录会话审计、登录审计 JDBC 持久化边界、前端登录会话导航过滤、`auth_user_account` 账号表、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界；登录会话、当前权限上下文、`GET /api/security/menu-tree`、`GET /api/auth/audit-events`、`GET /api/auth/audit-integrity` 和 `GET /api/auth/accounts` 可返回角色可见菜单、最近登录审计、审计链完整性摘要、账号状态摘要、改密时间、到期时间和过期状态，`POST /api/auth/password` 可在已登录 Bearer 会话内校验当前密码并刷新改密时间。软硬件侧已将硬件 POC 记录从服务内样例推进到内存/JDBC 仓储可切换，MySQL profile 默认读取 `hw_poc_record`，但仍只代表现场 POC 记录持久化边界，不代表硬件 SDK 强集成完成。生产账号审批、生产持久化菜单表、真正不可篡改审计、SSO/JWT、安全日志平台、GET 数据范围过滤和现场附件关联仍未完成。下一步重点不再是继续堆演示页，而是补齐机器档案匹配、签名附件、完整母单/出库生命周期、生产账号审批、数据范围过滤、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。

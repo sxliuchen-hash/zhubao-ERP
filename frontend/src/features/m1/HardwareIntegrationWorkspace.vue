@@ -170,6 +170,14 @@ function getHardwarePocBlockedCount(): number {
             </div>
           </article>
         </div>
+
+        <div class="ops-scope-ribbon" aria-label="硬件 POC 仓储边界">
+          <span>POC 仓储可切换</span>
+          <span>zhubao.hardware.poc.repository</span>
+          <span>本地默认 memory</span>
+          <span>MySQL 默认 jdbc</span>
+          <span>/api/hardware/poc-records 接口不变</span>
+        </div>
       </div>
 
       <aside class="module-priority-panel">

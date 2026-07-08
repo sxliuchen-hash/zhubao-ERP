@@ -1,6 +1,7 @@
 package com.zhubao.erp.hardware.app;
 
 import com.zhubao.erp.hardware.domain.HardwareDeviceStatus;
+import com.zhubao.erp.hardware.infra.InMemoryHardwarePocRecordRepository;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -9,7 +10,7 @@ class HardwareIntegrationServiceTest {
 
     @Test
     void exposesHardwareFallbackAndHealthBaseline() {
-        HardwareIntegrationService service = new HardwareIntegrationService();
+        HardwareIntegrationService service = new HardwareIntegrationService(new InMemoryHardwarePocRecordRepository());
 
         assertThat(service.findDevices()).hasSize(5);
         assertThat(service.fallbackRequiredCount()).isEqualTo(4);
