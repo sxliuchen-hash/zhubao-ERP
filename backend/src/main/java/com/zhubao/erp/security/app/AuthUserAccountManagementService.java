@@ -29,15 +29,18 @@ public class AuthUserAccountManagementService {
     private final AtomicLong auditSequence = new AtomicLong();
     private final AuthUserAccountRepository accountRepository;
     private final PasswordHasher passwordHasher;
+    private final PasswordPolicy passwordPolicy;
     private final AuthAuditRepository authAuditRepository;
 
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
             PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
             AuthAuditRepository authAuditRepository
     ) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
+        this.passwordPolicy = passwordPolicy;
         this.authAuditRepository = authAuditRepository;
     }
 
@@ -56,6 +59,9 @@ public class AuthUserAccountManagementService {
         boolean passwordProvided = command.password() != null && !command.password().isBlank();
         if (existing == null && !passwordProvided) {
             throw new BusinessException("新建账号必须提供初始密码");
+        }
+        if (passwordProvided) {
+            passwordPolicy.assertAcceptable(command.password(), username);
         }
         String passwordHash = passwordProvided ? passwordHasher.hash(command.password()) : existing.passwordHash();
         int failedLoginCount = existing == null || passwordProvided ? 0 : existing.failedLoginCount();

@@ -6,6 +6,7 @@ import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.NavigationMenuService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PasswordHasher;
+import com.zhubao.erp.security.app.PasswordPolicy;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccountStatusCommand;
 import com.zhubao.erp.security.domain.AuthUserAccountSummary;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AuthControllerAccountManagementTest {
 
     private final PasswordHasher passwordHasher = new PasswordHasher();
+    private final PasswordPolicy passwordPolicy = new PasswordPolicy();
 
     @Test
     void accountListRequiresManagementPermission() {
@@ -57,7 +59,7 @@ class AuthControllerAccountManagementTest {
 
         ApiResponse<AuthUserAccountSummary> created = fixture.controller().upsertAccount(new ManageAuthUserAccountCommand(
                 "planner",
-                "planner-strong-pass",
+                "Secure-2026-Plan!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -98,6 +100,7 @@ class AuthControllerAccountManagementTest {
         AuthUserAccountManagementService accountManagementService = new AuthUserAccountManagementService(
                 accountRepository,
                 passwordHasher,
+                passwordPolicy,
                 auditRepository
         );
         OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService);

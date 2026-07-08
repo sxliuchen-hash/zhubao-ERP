@@ -126,7 +126,7 @@ describe('authApi', () => {
 
     await upsertAuthAccount({
       username: 'planner',
-      password: 'planner-pass',
+      password: 'Secure-2026-Plan!',
       operator: '计划员 陈敏',
       role: 'SALES',
       dataScope: 'CUSTOMER_RANGE',

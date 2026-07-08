@@ -1,5 +1,6 @@
 package com.zhubao.erp.security.app;
 
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -21,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AuthUserAccountManagementServiceTest {
 
     private final PasswordHasher passwordHasher = new PasswordHasher();
+    private final PasswordPolicy passwordPolicy = new PasswordPolicy();
     private final NavigationMenuService navigationMenuService = new NavigationMenuService();
     private final OperatorContext admin = new OperatorContext(
             "系统管理员",
@@ -36,7 +38,7 @@ class AuthUserAccountManagementServiceTest {
 
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "Planner",
-                "planner-strong-pass",
+                "Secure-2026-Plan!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -44,7 +46,7 @@ class AuthUserAccountManagementServiceTest {
                 false
         ), admin);
 
-        AuthSession session = fixture.sessionService().login(new AuthLoginCommand("planner", "planner-strong-pass"));
+        AuthSession session = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
 
         assertThat(session.username()).isEqualTo("planner");
         assertThat(session.operator()).isEqualTo("计划员 陈敏");
@@ -57,7 +59,7 @@ class AuthUserAccountManagementServiceTest {
         Fixture fixture = fixture();
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
-                "planner-strong-pass",
+                "Secure-2026-Plan!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -80,7 +82,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(updated.passwordHash()).isEqualTo(originalHash);
         assertThat(updated.operator()).isEqualTo("计划员 陈敏-调整");
         assertThat(updated.role()).isEqualTo(RoleCode.WAREHOUSE_KEEPER);
-        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "planner-strong-pass")).role())
+        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!")).role())
                 .isEqualTo("WAREHOUSE_KEEPER");
     }
 
@@ -89,7 +91,7 @@ class AuthUserAccountManagementServiceTest {
         Fixture fixture = fixture();
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
-                "planner-old-pass",
+                "Secure-2026-Old!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -100,7 +102,7 @@ class AuthUserAccountManagementServiceTest {
 
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
-                "planner-new-pass",
+                "Secure-2026-New!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -111,11 +113,29 @@ class AuthUserAccountManagementServiceTest {
         AuthUserAccount account = fixture.accountRepository().findByUsername("planner").orElseThrow();
         assertThat(account.failedLoginCount()).isZero();
         assertThat(account.lockedUntil()).isNull();
-        assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "planner-old-pass")))
+        assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Old!")))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("用户名或密码错误");
-        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "planner-new-pass")).username())
+        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-New!")).username())
                 .isEqualTo("planner");
+    }
+
+    @Test
+    void rejectsWeakPasswordThroughManagementBoundary() {
+        Fixture fixture = fixture();
+
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "admin123",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                true,
+                false
+        ), admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("常见弱口令");
+        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
     }
 
     @Test
@@ -123,7 +143,7 @@ class AuthUserAccountManagementServiceTest {
         Fixture fixture = fixture();
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
-                "planner-strong-pass",
+                "Secure-2026-Plan!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -136,7 +156,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(fixture.accountRepository().findByUsername("planner")).get()
                 .extracting(AuthUserAccount::enabled)
                 .isEqualTo(false);
-        assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "planner-strong-pass")))
+        assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!")))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("用户名或密码错误");
     }
@@ -146,7 +166,7 @@ class AuthUserAccountManagementServiceTest {
         Fixture fixture = fixture();
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
-                "planner-strong-pass",
+                "Secure-2026-Plan!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -160,7 +180,7 @@ class AuthUserAccountManagementServiceTest {
         AuthUserAccount account = fixture.accountRepository().findByUsername("planner").orElseThrow();
         assertThat(account.failedLoginCount()).isZero();
         assertThat(account.lockedUntil()).isNull();
-        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "planner-strong-pass")).username())
+        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!")).username())
                 .isEqualTo("planner");
     }
 
@@ -170,7 +190,7 @@ class AuthUserAccountManagementServiceTest {
 
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
-                "planner-strong-pass",
+                "Secure-2026-Plan!",
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
@@ -200,6 +220,7 @@ class AuthUserAccountManagementServiceTest {
         AuthUserAccountManagementService managementService = new AuthUserAccountManagementService(
                 accountRepository,
                 passwordHasher,
+                passwordPolicy,
                 auditRepository
         );
         AuthSessionService sessionService = new AuthSessionService(
