@@ -1064,6 +1064,46 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void accountManagementApiCreatesApprovalSummaryTask() {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("username", "approval-smoke");
+        request.put("password", "Secure-2026-Approval!");
+        request.put("operator", "审批边界测试账号");
+        request.put("role", "SALES");
+        request.put("dataScope", "CUSTOMER_RANGE");
+        request.put("enabled", true);
+        request.put("demoAccount", false);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Zhubao-Role", "ADMIN");
+        headers.set("X-Zhubao-Operator", "系统管理员");
+
+        ResponseEntity<String> created = restTemplate.exchange(
+                "/api/auth/accounts",
+                HttpMethod.POST,
+                new HttpEntity<>(request, headers),
+                String.class
+        );
+        ResponseEntity<String> tasks = restTemplate.getForEntity("/api/approvals/tasks", String.class);
+
+        assertThat(created.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(created.getBody()).contains(
+                "\"username\":\"approval-smoke\"",
+                "\"role\":\"SALES\"",
+                "\"dataScope\":\"CUSTOMER_RANGE\"",
+                "\"demoAccount\":false"
+        );
+        assertThat(tasks.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(tasks.getBody()).contains(
+                "ACCOUNT_MANAGEMENT",
+                "\"businessCode\":\"approval-smoke\"",
+                "action=创建账号",
+                "targetRole=SALES",
+                "targetDataScope=CUSTOMER_RANGE",
+                "not a blocking IAM workflow"
+        );
+    }
+
+    @Test
     void deniesSensitiveBusinessOperationForRoleOutsidePermissionBoundary() {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("approvalCode", "LOSS-DENY-20260706-001");

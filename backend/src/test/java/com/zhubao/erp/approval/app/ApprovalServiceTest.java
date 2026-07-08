@@ -49,6 +49,42 @@ class ApprovalServiceTest {
     }
 
     @Test
+    void createsWaitingAccountManagementApprovalSummary() {
+        ApprovalTask task = service.createAccountManagementApprovalTask(
+                "planner",
+                "创建账号",
+                "系统管理员",
+                "ADMIN",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                true,
+                false
+        );
+
+        assertThat(task.approvalCode()).startsWith("AUTH-ACC-APP-");
+        assertThat(task.scene()).isEqualTo("ACCOUNT_MANAGEMENT");
+        assertThat(task.businessCode()).isEqualTo("planner");
+        assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
+        assertThat(task.applicant()).isEqualTo("系统管理员");
+        assertThat(task.approver()).isEqualTo("总经理 / IT 管理员");
+        assertThat(task.ownerRole()).isEqualTo("GENERAL_MANAGER");
+        assertThat(task.formalPayroll()).isFalse();
+        assertThat(task.locked()).isFalse();
+        assertThat(task.sourceSummary()).contains(
+                "action=创建账号",
+                "applicantRole=ADMIN",
+                "targetOperator=计划员 陈敏",
+                "targetRole=SALES",
+                "targetDataScope=CUSTOMER_RANGE",
+                "enabled=true",
+                "demoAccount=false",
+                "not a blocking IAM workflow"
+        );
+        assertThat(service.findPending()).contains(task);
+    }
+
+    @Test
     void decidesWaitingApprovalOnceAndLocksAuditSnapshot() {
         service.createLossApprovalTask(lossCommand(), lossResult(true));
 

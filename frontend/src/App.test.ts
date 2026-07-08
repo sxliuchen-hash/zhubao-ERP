@@ -17,11 +17,12 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.96 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.96 / 业务工作台数据范围过滤');
+    expect(wrapper.text()).toContain('M3.97 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.97 / 生产账号审批摘要');
     expect(wrapper.text()).toContain('复核补录');
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('授权导航过滤');
+    expect(wrapper.text()).toContain('账号审批摘要');
     expect(wrapper.text()).toContain('账号密码哈希');
     expect(wrapper.text()).toContain('失败登录锁定');
     expect(wrapper.text()).toContain('账号启停解锁');

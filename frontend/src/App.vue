@@ -41,7 +41,7 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; co
   { key: 'production', label: '生产工单', meta: '排产 / 报工', badge: '18', code: 'MO' },
   { key: 'quality', label: '质检返工', meta: '缺陷 / 损耗', badge: '7', code: 'QC' },
   { key: 'inventory', label: '库存追溯', meta: '客户所有权', code: 'ST' },
-  { key: 'approvals', label: '审批工作台', meta: '损耗 / 异常', badge: '2', code: 'AP' },
+  { key: 'approvals', label: '审批工作台', meta: '损耗 / 账号 / 异常', badge: '3', code: 'AP' },
   { key: 'configuration', label: '配置基线', meta: '参数 / 构型', badge: '8', code: 'CF' },
   { key: 'documents', label: '文档附件', meta: '证据 / 归档', badge: '5', code: 'EV' },
   { key: 'sample', label: '样例库', meta: '验收脚本', code: 'SA' },

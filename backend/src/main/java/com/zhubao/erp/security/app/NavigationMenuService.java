@@ -32,7 +32,7 @@ public class NavigationMenuService {
                     PermissionCode.BUSINESS_OUTBOUND_SHIPMENT.name(),
                     PermissionCode.BUSINESS_CUSTOMER_RETURN.name()
             )),
-            menu("approvals", "审批工作台", "损耗 / 异常", "/approvals", List.of(
+            menu("approvals", "审批工作台", "损耗 / 账号 / 异常", "/approvals", List.of(
                     PermissionCode.APPROVAL_DECISION.name(),
                     PermissionCode.BUSINESS_LOSS_APPROVAL.name()
             )),

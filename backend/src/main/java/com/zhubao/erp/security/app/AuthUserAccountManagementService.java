@@ -1,5 +1,6 @@
 package com.zhubao.erp.security.app;
 
+import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
@@ -10,6 +11,7 @@ import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -32,6 +34,7 @@ public class AuthUserAccountManagementService {
     private final PasswordPolicy passwordPolicy;
     private final PasswordExpiryPolicy passwordExpiryPolicy;
     private final AuthAuditRepository authAuditRepository;
+    private final ApprovalService approvalService;
 
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
@@ -40,11 +43,24 @@ public class AuthUserAccountManagementService {
             PasswordExpiryPolicy passwordExpiryPolicy,
             AuthAuditRepository authAuditRepository
     ) {
+        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, null);
+    }
+
+    @Autowired
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService
+    ) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
         this.passwordPolicy = passwordPolicy;
         this.passwordExpiryPolicy = passwordExpiryPolicy;
         this.authAuditRepository = authAuditRepository;
+        this.approvalService = approvalService;
     }
 
     public List<AuthUserAccountSummary> accounts() {
@@ -84,6 +100,7 @@ public class AuthUserAccountManagementService {
         ));
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
         recordManagementAudit(username, operatorContext, action);
+        recordApprovalSummary(saved, operatorContext, action);
         return summary(saved, Instant.now());
     }
 
@@ -91,7 +108,9 @@ public class AuthUserAccountManagementService {
         AuthUserAccount account = requireAccount(username);
         accountRepository.updateEnabled(account.username(), enabled);
         AuthUserAccount updated = requireAccount(account.username());
-        recordManagementAudit(account.username(), operatorContext, (enabled ? "启用账号" : "停用账号") + reasonSuffix(reason));
+        String action = (enabled ? "启用账号" : "停用账号") + reasonSuffix(reason);
+        recordManagementAudit(account.username(), operatorContext, action);
+        recordApprovalSummary(updated, operatorContext, action);
         return summary(updated, Instant.now());
     }
 
@@ -99,7 +118,9 @@ public class AuthUserAccountManagementService {
         AuthUserAccount account = requireAccount(username);
         accountRepository.unlock(account.username());
         AuthUserAccount updated = requireAccount(account.username());
-        recordManagementAudit(account.username(), operatorContext, "管理员解锁账号" + reasonSuffix(reason));
+        String action = "管理员解锁账号" + reasonSuffix(reason);
+        recordManagementAudit(account.username(), operatorContext, action);
+        recordApprovalSummary(updated, operatorContext, action);
         return summary(updated, Instant.now());
     }
 
@@ -141,6 +162,23 @@ public class AuthUserAccountManagementService {
                 DISPLAY_TIME.format(Instant.now()),
                 tokenSuffix(operatorContext.sessionToken())
         ));
+    }
+
+    private void recordApprovalSummary(AuthUserAccount account, OperatorContext operatorContext, String action) {
+        if (approvalService == null) {
+            return;
+        }
+        approvalService.createAccountManagementApprovalTask(
+                account.username(),
+                action,
+                operatorContext.operator(),
+                operatorContext.role().name(),
+                account.operator(),
+                account.role().name(),
+                account.dataScope().name(),
+                account.enabled(),
+                account.demoAccount()
+        );
     }
 
     private RoleCode parseRole(String rawRole) {

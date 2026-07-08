@@ -1,5 +1,9 @@
 package com.zhubao.erp.security.app;
 
+import com.zhubao.erp.approval.app.ApprovalService;
+import com.zhubao.erp.approval.domain.ApprovalStatus;
+import com.zhubao.erp.approval.domain.ApprovalTask;
+import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
@@ -16,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -260,15 +265,58 @@ class AuthUserAccountManagementServiceTest {
                 });
     }
 
+    @Test
+    void writesAccountManagementApprovalSummaries() {
+        Fixture fixture = fixture();
+
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                true,
+                false
+        ), admin);
+        fixture.managementService().updateEnabled("planner", false, "权限回收", admin);
+        fixture.managementService().unlock("planner", "误锁恢复", admin);
+
+        List<ApprovalTask> tasks = fixture.approvalRepository().findAll();
+        assertThat(tasks).hasSize(3);
+        assertThat(tasks).allSatisfy(task -> {
+            assertThat(task.approvalCode()).startsWith("AUTH-ACC-APP-");
+            assertThat(task.scene()).isEqualTo("ACCOUNT_MANAGEMENT");
+            assertThat(task.businessCode()).isEqualTo("planner");
+            assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
+            assertThat(task.applicant()).isEqualTo("系统管理员");
+            assertThat(task.ownerRole()).isEqualTo("GENERAL_MANAGER");
+            assertThat(task.formalPayroll()).isFalse();
+            assertThat(task.locked()).isFalse();
+            assertThat(task.sourceSummary()).contains(
+                    "targetOperator=计划员 陈敏",
+                    "targetRole=SALES",
+                    "targetDataScope=CUSTOMER_RANGE",
+                    "demoAccount=false",
+                    "not a blocking IAM workflow"
+            );
+        });
+        assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=创建账号"));
+        assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=停用账号；原因：权限回收"));
+        assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=管理员解锁账号；原因：误锁恢复"));
+    }
+
     private Fixture fixture() {
         InMemoryAuthAuditRepository auditRepository = new InMemoryAuthAuditRepository();
         InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryApprovalTaskRepository approvalRepository = new InMemoryApprovalTaskRepository();
+        ApprovalService approvalService = new ApprovalService(approvalRepository);
         AuthUserAccountManagementService managementService = new AuthUserAccountManagementService(
                 accountRepository,
                 passwordHasher,
                 passwordPolicy,
                 passwordExpiryPolicy,
-                auditRepository
+                auditRepository,
+                approvalService
         );
         AuthSessionService sessionService = new AuthSessionService(
                 navigationMenuService,
@@ -278,12 +326,13 @@ class AuthUserAccountManagementServiceTest {
                 passwordExpiryPolicy,
                 passwordPolicy
         );
-        return new Fixture(accountRepository, auditRepository, managementService, sessionService);
+        return new Fixture(accountRepository, auditRepository, approvalRepository, managementService, sessionService);
     }
 
     private record Fixture(
             AuthUserAccountRepository accountRepository,
             InMemoryAuthAuditRepository auditRepository,
+            InMemoryApprovalTaskRepository approvalRepository,
             AuthUserAccountManagementService managementService,
             AuthSessionService sessionService
     ) {

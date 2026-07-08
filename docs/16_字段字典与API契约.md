@@ -91,9 +91,11 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.96 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.96 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password` 和 `GET /auth/audit-integrity` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期状态，并在登录态内完成自助改密续期和查看认证审计完整性摘要；`GET /business/workspaces/*` 会按当前 `dataScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
+当前 M3.97 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链和账号管理审批摘要边界：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.97 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期状态、认证审计完整性摘要和账号变更复核任务；`GET /business/workspaces/*` 会按当前 `dataScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。账号管理审批任务是事后复核摘要，不阻断账号动作，不代表完整 IAM 或生产账号前置审批。
 
 业务操作接口前缀：
+
+M3.97 补充：账号管理动作成功后会写入 `ACCOUNT_MANAGEMENT` 轻量审批摘要任务，可通过 `GET /api/approvals/tasks` 进入后续复核；该任务是事后摘要，不阻断账号创建/更新、启停或管理员解锁，也不代表完整 IAM、生产账号前置审批、SSO/JWT、组织客户授权表或复杂审批流完成。
 
 ```http
 /api/business/operations
@@ -427,10 +429,10 @@ M3.76 前端复核台约束：
 
 | 接口 | 页面 | 用途 |
 |---|---|---|
-| `GET /tasks` | 首页/质检返工 | 查询全部轻量审批任务 |
-| `GET /tasks/pending` | 首页/质检返工 | 查询待审批任务 |
-| `GET /tasks/{approvalCode}` | 质检返工 | 查询单个审批任务 |
-| `POST /tasks/{approvalCode}/decisions` | 质检返工 | 审批通过或驳回，并锁定审批快照 |
+| `GET /tasks` | 首页/审批工作台/账号管理/质检返工 | 查询全部轻量审批任务 |
+| `GET /tasks/pending` | 首页/审批工作台/账号管理/质检返工 | 查询待审批任务 |
+| `GET /tasks/{approvalCode}` | 审批工作台/质检返工 | 查询单个审批任务 |
+| `POST /tasks/{approvalCode}/decisions` | 审批工作台/质检返工 | 审批通过或驳回，并锁定审批快照 |
 
 配置基线接口前缀：
 
@@ -979,13 +981,13 @@ M3.76 前端复核台约束：
 
 ### 6.13 `ApprovalTask`
 
-M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3.24 已补 JDBC 仓储，可将任务与审计事件写入 MySQL 合同表。它仍不是完整流程引擎，不处理并行会签、复杂条件路由或正式工资锁账。
+M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3.24 已补 JDBC 仓储，可将任务与审计事件写入 MySQL 合同表。M3.97 起账号创建/更新、启停和管理员解锁成功后也会生成 `ACCOUNT_MANAGEMENT` 事后复核摘要任务。它仍不是完整流程引擎，不处理并行会签、复杂条件路由、正式工资锁账或生产账号前置审批。
 
 | 字段 | 说明 |
 |---|---|
-| `approvalCode` | 审批任务编码，当前复用损耗审批单号 |
-| `scene` | 审批场景，当前为 `LOSS_APPROVAL` |
-| `businessCode` | 业务对象编码，例如工单号 |
+| `approvalCode` | 审批任务编码；损耗审批复用损耗审批单号，账号管理摘要使用 `AUTH-ACC-APP-<yyyyMMddHHmmssSSS>-0001` 序列 |
+| `scene` | 审批场景，当前为 `LOSS_APPROVAL` 或 `ACCOUNT_MANAGEMENT` |
+| `businessCode` | 业务对象编码；损耗审批为工单号，账号管理为 `username` |
 | `title` | 审批标题 |
 | `status` | `WAITING_APPROVAL`、`APPROVED`、`REJECTED`、`AUTO_APPROVED` |
 | `applicant` | 提交人快照 |
@@ -993,14 +995,25 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 | `ownerRole` | 责任角色快照 |
 | `severity` | 前端风险色，不能替代业务状态 |
 | `sourceStatus` | 来源命令返回的审批状态 |
-| `sourceSummary` | 来源试算摘要，保留投入、产出、允许损耗、超标损耗、试算工资等关键口径 |
-| `evidenceCode` | 称重、缺陷照片、交接记录或审批附件编码 |
+| `sourceSummary` | 来源摘要；损耗审批保留投入、产出、允许损耗、超标损耗、试算工资等关键口径，账号管理保留 action、applicantRole、targetOperator、targetRole、targetDataScope、enabled、demoAccount 和 boundary |
+| `evidenceCode` | 称重、缺陷照片、交接记录或审批附件编码；账号管理摘要当前为空 |
 | `formalPayroll` | 固定为 `false`，表示该审批任务不等于正式工资发放 |
 | `createdAt` | 创建时间快照 |
 | `decidedAt` | 审批处理时间快照 |
 | `decisionOperator` | 审批操作人 |
 | `decisionComment` | 审批意见 |
 | `locked` | 审批处理后锁定，后续变更必须产生新任务或新审计事件 |
+
+`ACCOUNT_MANAGEMENT` 任务场景约束：
+
+| 字段 | 账号管理摘要取值 |
+|---|---|
+| `scene` | `ACCOUNT_MANAGEMENT` |
+| `businessCode` | 目标账号 `username` |
+| `sourceStatus` | `WAITING_ACCOUNT_REVIEW` |
+| `sourceSummary` | `action=...; applicantRole=...; targetOperator=...; targetRole=...; targetDataScope=...; enabled=...; demoAccount=...; boundary=post-action approval summary, not a blocking IAM workflow` |
+
+该任务只用于账号动作成功后的事后复核，不阻断账号创建/更新、启停或管理员解锁，不替代完整 IAM、生产账号前置审批、SSO/JWT、组织客户授权表或复杂审批流。
 
 ### 6.14 `ApprovalDecisionCommand`
 
@@ -1018,8 +1031,9 @@ M3.22 新增轻量审批任务基线，当前用于承载超标损耗审批。M3
 - `AUTO_APPROVED` 用于未超标或在规则阈值内的自动通过快照。
 - 默认仓储为内存实现；设置 `zhubao.approval.repository=jdbc` 或 `ZHUBAO_APPROVAL_REPOSITORY=jdbc` 后启用 `JdbcApprovalTaskRepository`。
 - `V11__m3_lightweight_approval_contract.sql` 冻结 `approval_task` 和 `approval_audit_event` 合同表；M3.24 已补 H2 仓储测试验证任务持久化、审批决策和审计事件写入。
-- 后续仍需接入真实用户、角色权限、审批 UI、复杂流程编排和工资锁账审计。
+- 后续仍需接入真实用户、角色权限、审批 UI、复杂流程编排、工资锁账审计和生产账号前置审批。
 - 审批通过不自动写库存台账、不自动发放工资、不自动生成财务凭证。
+- 账号管理摘要任务不自动回滚或拦截账号动作，只提供后续复核入口。
 
 ### 6.15 轻量审批持久化契约
 
@@ -1644,16 +1658,16 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 
 ### 12.4 当前限制
 
-- M3.63 已接入登录会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，M3.87 已接入账号仓储和 PBKDF2 密码哈希边界，M3.88 已接入失败次数与临时锁定，M3.89 已接入账号启停和管理员解锁管理边界，M3.90 已接入创建/重置密码策略校验，M3.91 已接入 90 天密码过期检测和管理员重置刷新边界，M3.92 已接入登录态自助改密/续期边界，M3.93 已接入认证审计摘要链边界；生产账号审批、JWT/SSO、正式会话续期和生产不可篡改审计仍未完成。
+- M3.63 已接入登录会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，M3.87 已接入账号仓储和 PBKDF2 密码哈希边界，M3.88 已接入失败次数与临时锁定，M3.89 已接入账号启停和管理员解锁管理边界，M3.90 已接入创建/重置密码策略校验，M3.91 已接入 90 天密码过期检测和管理员重置刷新边界，M3.92 已接入登录态自助改密/续期边界，M3.93 已接入认证审计摘要链边界，M3.97 已接入账号管理审批摘要边界；生产账号前置审批、完整 IAM、JWT/SSO、正式会话续期和生产不可篡改审计仍未完成。
 - M3.96 已对业务工作台 GET 接入 `SELF`、`TEAM`、`DEPARTMENT`、`CUSTOMER_RANGE` 首版过滤；完整组织树、客户授权表、跨对象关系推导和全系统行级权限仍未完成。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
 
 ---
 
-## 13. M3.63/M3.87/M3.88/M3.89/M3.90/M3.91/M3.92/M3.93 轻量登录会话 API 与账号仓储
+## 13. M3.63/M3.87-M3.93/M3.97 轻量登录会话 API 与账号仓储
 
-M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。M3.87 将账号读取和密码校验从硬编码演示账号推进到 `AuthUserAccountRepository` 与 PBKDF2 密码哈希；M3.88 在同一仓储边界上记录失败次数和临时锁定；M3.89 新增账号管理、启停和管理员解锁边界；M3.90 新增生产账号密码策略校验；M3.91 新增生产账号 90 天密码过期检测、登录拒绝审计和管理员重置刷新 `passwordChangedAt`；M3.92 新增 Bearer 登录会话内的自助改密/续期边界；M3.93 新增认证审计事件摘要链和最近事件完整性校验摘要。默认 seed 仍是评审账号，尚不等于完整生产用户中心。
+M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。M3.87 将账号读取和密码校验从硬编码演示账号推进到 `AuthUserAccountRepository` 与 PBKDF2 密码哈希；M3.88 在同一仓储边界上记录失败次数和临时锁定；M3.89 新增账号管理、启停和管理员解锁边界；M3.90 新增生产账号密码策略校验；M3.91 新增生产账号 90 天密码过期检测、登录拒绝审计和管理员重置刷新 `passwordChangedAt`；M3.92 新增 Bearer 登录会话内的自助改密/续期边界；M3.93 新增认证审计事件摘要链和最近事件完整性校验摘要；M3.97 新增账号管理动作成功后的 `ACCOUNT_MANAGEMENT` 事后审批摘要任务。默认 seed 仍是评审账号，账号审批摘要不等于完整生产用户中心或生产账号前置审批。
 
 ### 13.1 `POST /api/auth/login`
 
@@ -1792,7 +1806,7 @@ M3.87 新增 `AuthUserAccountRepository` 仓储边界：
 | `last_login_at` | 最近成功登录时间 |
 | `last_failed_login_at` | 最近失败登录时间 |
 
-M3.91 起 `password_changed_at` 用于 90 天密码过期检测和管理员重置刷新边界；M3.92 起自助改密成功也会刷新该字段。当前表仍未覆盖生产账号初始化审批、SSO/JWT 或菜单持久化。
+M3.91 起 `password_changed_at` 用于 90 天密码过期检测和管理员重置刷新边界；M3.92 起自助改密成功也会刷新该字段。M3.97 起账号管理动作会生成账号审批摘要任务，但当前表仍未覆盖生产账号初始化前置审批、SSO/JWT 或菜单持久化。
 
 `V18__m3_auth_audit_integrity_contract.sql` 在 `auth_audit_event` 上新增：
 
@@ -1803,7 +1817,7 @@ M3.91 起 `password_changed_at` 用于 90 天密码过期检测和管理员重�
 
 ### 13.4 账号管理接口
 
-M3.89 新增账号管理服务边界，面向管理员和总经理开放。账号管理接口要求 Bearer 会话或显式评审角色头，不使用现有请求头兜底里的匿名默认管理员；M3.90 起创建账号或重置密码必须先通过生产密码策略；M3.91 起创建账号或重置密码会刷新 `passwordChangedAt`，账号摘要会暴露密码到期状态；M3.92 起用户也可在 Bearer 会话内自助改密刷新 `passwordChangedAt`。该接口用于验证生产账号创建/更新、启停、解锁、密码策略、密码过期检测和管理审计的最小合同，不代表完整 IAM、账号审批、SSO/JWT 或安全日志平台完成。
+M3.89 新增账号管理服务边界，面向管理员和总经理开放。账号管理接口要求 Bearer 会话或显式评审角色头，不使用现有请求头兜底里的匿名默认管理员；M3.90 起创建账号或重置密码必须先通过生产密码策略；M3.91 起创建账号或重置密码会刷新 `passwordChangedAt`，账号摘要会暴露密码到期状态；M3.92 起用户也可在 Bearer 会话内自助改密刷新 `passwordChangedAt`；M3.97 起创建/更新、启停和管理员解锁成功后会生成 `ACCOUNT_MANAGEMENT` 轻量审批摘要任务。该接口用于验证生产账号创建/更新、启停、解锁、密码策略、密码过期检测、管理审计和事后复核摘要的最小合同，不代表完整 IAM、生产账号前置审批、SSO/JWT 或安全日志平台完成。
 
 | API | 权限 | 说明 |
 |---|---|---|
@@ -1875,7 +1889,7 @@ M3.91 密码过期边界：
 | `lockedUntil` | 锁定到期展示值；未锁定为空字符串 |
 | `locked` | 当前是否仍在锁定时间内 |
 
-管理动作会写入 `AuthAuditEvent`，`eventType` 为 `ACCOUNT_MANAGEMENT`，`eventId` 前缀为 `AUTH-ACC-`，`sessionTokenSuffix` 只保留管理员 token 尾号。
+管理动作会写入 `AuthAuditEvent`，`eventType` 为 `ACCOUNT_MANAGEMENT`，`eventId` 前缀为 `AUTH-ACC-`，`sessionTokenSuffix` 只保留管理员 token 尾号。M3.97 起同一成功动作还会写入 `ApprovalTask` 事后复核摘要，`scene=ACCOUNT_MANAGEMENT`、`businessCode=username`、`sourceStatus=WAITING_ACCOUNT_REVIEW`，`sourceSummary` 包含 action、applicantRole、targetOperator、targetRole、targetDataScope、enabled、demoAccount 和 boundary。
 
 ### 13.5 菜单树接口
 
@@ -1910,8 +1924,8 @@ M3.83 当前角色菜单编码基线：
 ### 13.6 当前限制
 
 - token 保存在内存，服务重启即失效。
-- M3.93 已接入账号仓储、PBKDF2 密码哈希、失败锁定、账号启停、管理员解锁、密码策略、90 天密码过期检测、登录态自助改密/续期和认证审计摘要链边界，但默认 seed 仍是评审账号，不用于生产。
-- 尚未接入生产账号审批、正式刷新 token、SSO/JWT、菜单树持久化和不可篡改审计策略。
+- M3.97 已接入账号仓储、PBKDF2 密码哈希、失败锁定、账号启停、管理员解锁、密码策略、90 天密码过期检测、登录态自助改密/续期、认证审计摘要链和账号管理审批摘要边界，但默认 seed 仍是评审账号，不用于生产。
+- 尚未接入生产账号前置审批、完整 IAM、正式刷新 token、SSO/JWT、菜单树持久化和不可篡改审计策略。
 - M3.83 菜单树仍是后端内存基线服务，不等于生产角色表、菜单表或按钮表。
 - M3.93 登录审计可切换内存/JDBC 仓储并生成摘要链，但仍不等于生产安全日志平台、归档保全或真正不可篡改审计。
 - M3.86 前端侧栏会按登录会话 `menuCodes/menuTree` 做导航过滤；未登录、请求头兜底或 API 不可用时仍保留全量评审导航，不等于生产级菜单授权完成。
@@ -2005,6 +2019,6 @@ M3.83 当前角色菜单编码基线：
 - 业务工作台 GET 已按 `dataScope` 做首版过滤，配置基线页必须继续提示完整组织树、客户授权表和深层行级权限仍未完成。
 - 菜单和按钮权限已由后端返回 M3.83 内存基线菜单树；M3.86 前端登录会话导航已按 `menuCodes/menuTree` 过滤，但未登录和请求头兜底仍展示全量评审导航。
 - 尚未建立生产持久化菜单表、角色菜单关联表和按钮权限配置表。
-- M3.93 已建立账号仓储、密码哈希、失败锁定、账号启停、管理员解锁、密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界，但生产账号审批、SSO/JWT、真正不可篡改审计和完整安全日志平台仍待接入。
+- M3.97 已建立账号仓储、密码哈希、失败锁定、账号启停、管理员解锁、密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链和账号管理审批摘要边界，但生产账号前置审批、完整 IAM、SSO/JWT、真正不可篡改审计和完整安全日志平台仍待接入。
 - 当前接口不返回密码或任何生产鉴权密钥；`customerScope` 只回显本次请求头或后续账号授权表解析出的客户/业务对象范围。
 - 后续接入正式用户中心后，应移除匿名管理员请求头兜底或仅在测试环境启用。
