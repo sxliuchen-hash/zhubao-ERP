@@ -28,6 +28,8 @@ zhubao:
   business-document:
     repository: memory
   auth:
+    users:
+      repository: memory
     audit:
       repository: memory
   operations:

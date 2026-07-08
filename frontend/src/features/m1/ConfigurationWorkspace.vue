@@ -211,7 +211,7 @@ function permissionTone(index: number): Tone {
             <h2>当前权限 / 数据范围边界</h2>
             <p>M3 轻量登录会话优先，请求头上下文保留为评审和自动化测试兜底。</p>
           </div>
-          <StatusBadge :label="workspace.securityContext.headerBased ? '请求头上下文' : '真实登录上下文'" tone="amber" />
+          <StatusBadge :label="workspace.securityContext.headerBased ? '请求头上下文' : '登录会话上下文'" tone="amber" />
         </div>
 
         <form class="auth-session-strip" aria-label="轻量登录会话" @submit.prevent="handleLogin">

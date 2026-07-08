@@ -91,7 +91,7 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.82 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口和基础业务单据结构化持久化切片：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.82 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}` 和 `GET /business/documents/outbound-orders/{code}` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计以及入账后的母单/出库单结构化快照。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
+当前 M3.88 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片，以及账号仓储、PBKDF2 密码哈希和登录失败锁定边界：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.82 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}` 和 `GET /business/documents/outbound-orders/{code}` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计以及入账后的母单/出库单结构化快照。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
 
 业务操作接口前缀：
 
@@ -1620,16 +1620,16 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 
 ### 12.4 当前限制
 
-- M3.63 已接入演示账号和内存会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，但尚未接入生产用户表、密码哈希、JWT/SSO、会话续期和审计防篡改。
+- M3.63 已接入登录会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，M3.87 已接入账号仓储和 PBKDF2 密码哈希边界，M3.88 已接入失败次数与临时锁定；生产账号初始化/停用/解锁、JWT/SSO、会话续期和审计防篡改仍未完成。
 - 尚未按客户、部门、班组做数据范围过滤。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
 
 ---
 
-## 13. M3.63 轻量登录会话 API
+## 13. M3.63/M3.87/M3.88 轻量登录会话 API 与账号仓储
 
-M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。这仍是演示账号和内存会话，不等于生产用户中心。
+M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。M3.87 将账号读取和密码校验从硬编码演示账号推进到 `AuthUserAccountRepository` 与 PBKDF2 密码哈希；M3.88 在同一仓储边界上记录失败次数和临时锁定。默认 seed 仍是评审账号，尚不等于完整生产用户中心。
 
 ### 13.1 `POST /api/auth/login`
 
@@ -1637,10 +1637,10 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 
 | 字段 | 说明 |
 |---|---|
-| `username` | 演示账号用户名 |
-| `password` | 演示账号密码 |
+| `username` | 登录账号用户名，后端会归一化为小写查找 |
+| `password` | 明文登录密码，仅用于本次校验，不进入响应或审计日志 |
 
-默认演示账号：
+默认评审 seed 账号：
 
 | 用户名 | 密码 | 角色 | 数据范围 |
 |---|---|---|---|
@@ -1649,6 +1649,15 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 | `qc` | `qc123` | `QUALITY_INSPECTOR` | `DEPARTMENT` |
 | `warehouse` | `warehouse123` | `WAREHOUSE_KEEPER` | `DEPARTMENT` |
 | `operator` | `operator123` | `OPERATOR` | `SELF` |
+
+本地默认使用内存账号仓储，启动时以 `PasswordHasher.hash()` 生成 PBKDF2 哈希；MySQL profile 默认使用 `auth_user_account` 表，`V16__m3_auth_user_account_contract.sql` 写入同一组评审 seed 账号及其 PBKDF2 哈希。上线前必须替换密码、停用或删除评审账号。
+
+登录失败锁定规则：
+
+- 已启用账号连续密码错误达到 5 次后，锁定 15 分钟。
+- 锁定期间即使密码正确也返回 `403`，消息为“账号已锁定，请稍后再试”。
+- 成功登录会清零失败次数和锁定到期时间。
+- 未知账号和停用账号仍返回通用“用户名或密码错误”，避免通过错误提示枚举账号。
 
 返回 `AuthSession`：
 
@@ -1660,7 +1669,7 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 | `role` / `roleLabel` | 角色编码和中文名 |
 | `dataScope` / `dataScopeLabel` | 数据范围编码和中文名 |
 | `expiresAt` | 会话过期时间展示值 |
-| `demoAccount` | 是否演示账号，当前固定为 `true` |
+| `demoAccount` | 是否评审/演示账号，来自账号仓储记录；生产账号应为 `false` |
 | `menuCodes` | 当前角色可见菜单编码，使用前端模块 tab key，如 `dashboard`、`inbound`、`approvals`、`sample` |
 | `menuTree` | 当前角色可见菜单树，元素结构见 13.4；包含菜单编码、名称、模块说明、路由和按钮权限编码 |
 
@@ -1675,7 +1684,7 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 
 ### 13.3 登录会话审计
 
-M3.84 新增 `AuthAuditEvent`，用于记录登录成功、登录失败、会话读取、退出和无效 token 解析。当前为内存队列，重启后丢失；后续应迁移到生产登录审计表。
+M3.84 新增 `AuthAuditEvent`，用于记录登录成功、登录失败、会话读取、退出和无效 token 解析。默认本地为内存队列，重启后丢失；M3.85 起可通过 JDBC 仓储写入 `auth_audit_event`，但仍不等于审计防篡改或安全日志平台。
 
 `AuthAuditEvent`：
 
@@ -1699,6 +1708,26 @@ M3.85 新增 `AuthAuditRepository` 仓储边界：
 | `ZHUBAO_AUTH_AUDIT_REPOSITORY` | `jdbc` in mysql profile | MySQL profile 下的环境变量开关 |
 
 `V15__m3_auth_audit_contract.sql` 冻结 `auth_audit_event` 合同表，字段包括 `event_id`、`event_type`、`username`、`operator`、`role`、`result`、`reason`、`occurred_at` 和 `session_token_suffix`。该表不保存密码、完整 token 或客户端密钥。
+
+M3.87 新增 `AuthUserAccountRepository` 仓储边界：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `zhubao.auth.users.repository` | `memory` | 登录账号仓储；本地默认内存 seed |
+| `ZHUBAO_AUTH_USERS_REPOSITORY` | `jdbc` in mysql profile | MySQL profile 下的环境变量开关 |
+
+`V16__m3_auth_user_account_contract.sql` 冻结 `auth_user_account` 基础合同表，字段包括 `username`、`password_hash`、`operator`、`role_code`、`data_scope`、`enabled`、`demo_account`、`password_changed_at`、`created_time` 和 `updated_time`。`password_hash` 格式为 `pbkdf2_sha256$iterations$salt$hash`，当前由 `PasswordHasher` 使用 `PBKDF2WithHmacSHA256` 校验。
+
+`V17__m3_auth_user_login_lockout_contract.sql` 在 `auth_user_account` 上新增：
+
+| 字段 | 说明 |
+|---|---|
+| `failed_login_count` | 连续失败登录次数，成功登录后清零 |
+| `locked_until` | 临时锁定到期时间；为空表示未锁定 |
+| `last_login_at` | 最近成功登录时间 |
+| `last_failed_login_at` | 最近失败登录时间 |
+
+当前表仍未覆盖密码轮换策略、生产账号初始化审批、管理员解锁、SSO/JWT 或菜单持久化。
 
 ### 13.4 菜单树接口
 
@@ -1728,23 +1757,23 @@ M3.83 当前角色菜单编码基线：
 | `WAREHOUSE_KEEPER` | `dashboard`、`inbound`、`inventory`、`documents`、`sample`、`hardware`、`operations`、`mobile` |
 | `FINANCE_STATISTICIAN` | `dashboard`、`approvals`、`configuration` |
 
-菜单树当前先作为后端可验证契约和配置基线页展示依据，不强制过滤前端静态导航，避免评审路径被误关。
+菜单树当前先作为后端可验证契约和配置基线页展示依据；M3.86 起前端登录会话会按 `menuCodes/menuTree` 过滤侧栏导航，未登录、请求头兜底或 API 不可用时仍保留全量评审导航。
 
 ### 13.5 当前限制
 
 - token 保存在内存，服务重启即失效。
-- 密码为演示明文配置，不用于生产。
-- 尚未接入用户表、密码哈希、登录失败锁定、刷新 token、菜单树持久化和不可篡改审计策略。
-- M3.83 菜单树仍是后端内存基线服务，不等于生产用户表、角色表、菜单表或按钮表。
+- M3.88 已接入账号仓储、PBKDF2 密码哈希和失败锁定边界，但默认 seed 仍是评审账号，不用于生产。
+- 尚未接入生产账号初始化/停用/管理员解锁流程、刷新 token、SSO/JWT、菜单树持久化和不可篡改审计策略。
+- M3.83 菜单树仍是后端内存基线服务，不等于生产角色表、菜单表或按钮表。
 - M3.85 登录审计可切换内存/JDBC 仓储，但仍不等于生产安全日志平台、归档保全或审计防篡改。
 - M3.86 前端侧栏会按登录会话 `menuCodes/menuTree` 做导航过滤；未登录、请求头兜底或 API 不可用时仍保留全量评审导航，不等于生产级菜单授权完成。
 - `dataScope` 当前只进入上下文展示和后续设计约束，GET 工作台数据尚未按范围过滤。
 
 ---
 
-## 14. M3.52/M3.63/M3.83/M3.86 当前权限上下文接口
+## 14. M3.52/M3.63/M3.83/M3.86/M3.87/M3.88 当前权限上下文接口
 
-`GET /api/security/current-context` 用于把当前身份、角色、数据范围、可执行敏感动作和授权菜单树显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；无 token 时继续使用请求头兜底，兼容评审脚本和自动化测试。M3.83 起该接口同步返回 `menuCodes` 和 `menuTree`。M3.86 起前端 `App` 会恢复登录会话并按 `menuCodes/menuTree` 过滤侧栏模块，登录/退出通过 `zhubao-auth-session-changed` 事件即时刷新导航。
+`GET /api/security/current-context` 用于把当前身份、角色、数据范围、可执行敏感动作和授权菜单树显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；无 token 时继续使用请求头兜底，兼容评审脚本和自动化测试。M3.83 起该接口同步返回 `menuCodes` 和 `menuTree`。M3.86 起前端 `App` 会恢复登录会话并按 `menuCodes/menuTree` 过滤侧栏模块，登录/退出通过 `zhubao-auth-session-changed` 事件即时刷新导航。M3.87 起登录会话身份来自账号仓储和密码哈希校验结果；M3.88 起登录失败锁定也由账号仓储维护。
 
 ### 14.1 请求头
 
@@ -1825,5 +1854,6 @@ M3.83 当前角色菜单编码基线：
 - GET 工作台接口尚未按 `dataScope` 做真实过滤，配置基线页必须明确提示该限制。
 - 菜单和按钮权限已由后端返回 M3.83 内存基线菜单树；M3.86 前端登录会话导航已按 `menuCodes/menuTree` 过滤，但未登录和请求头兜底仍展示全量评审导航。
 - 尚未建立生产持久化菜单表、角色菜单关联表和按钮权限配置表。
+- M3.88 已建立账号仓储、密码哈希和失败锁定边界，但生产账号初始化、停用、管理员解锁和 SSO/JWT 仍待接入。
 - 当前接口不返回密码、客户范围清单或任何生产鉴权密钥。
 - 后续接入正式用户中心后，应移除匿名管理员请求头兜底或仅在测试环境启用。

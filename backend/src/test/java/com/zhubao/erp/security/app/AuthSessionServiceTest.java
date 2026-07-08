@@ -2,10 +2,14 @@ package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
+import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AuthSessionServiceTest {
 
     private final NavigationMenuService navigationMenuService = new NavigationMenuService();
+    private final PasswordHasher passwordHasher = new PasswordHasher();
 
     @Test
     void logsInDemoUserAndResolvesOperatorContextFromBearerToken() {
@@ -109,7 +114,108 @@ class AuthSessionServiceTest {
         assertThat(service.demoUsernames()).containsExactly("admin", "leader", "operator", "qc", "warehouse");
     }
 
+    @Test
+    void logsInRepositoryBackedProductionAccountWithPasswordHash() {
+        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        userRepository.save(new AuthUserAccount(
+                "planner",
+                passwordHasher.hash("planner-strong-pass"),
+                "计划员 陈敏",
+                RoleCode.SALES,
+                DataScope.CUSTOMER_RANGE,
+                true,
+                false
+        ));
+        AuthSessionService service = service(userRepository);
+
+        AuthSession session = service.login(new AuthLoginCommand("planner", "planner-strong-pass"));
+
+        assertThat(session.username()).isEqualTo("planner");
+        assertThat(session.operator()).isEqualTo("计划员 陈敏");
+        assertThat(session.role()).isEqualTo("SALES");
+        assertThat(session.demoAccount()).isFalse();
+        assertThat(session.menuCodes()).contains("inbound", "inventory", "sample");
+    }
+
+    @Test
+    void rejectsDisabledUserAccount() {
+        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        userRepository.save(new AuthUserAccount(
+                "disabled",
+                passwordHasher.hash("disabled-pass"),
+                "停用账号",
+                RoleCode.OPERATOR,
+                DataScope.SELF,
+                false,
+                false
+        ));
+        AuthSessionService service = service(userRepository);
+
+        assertThatThrownBy(() -> service.login(new AuthLoginCommand("disabled", "disabled-pass")))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("用户名或密码错误");
+    }
+
+    @Test
+    void locksAccountAfterRepeatedFailedLoginsAndRecordsAuditReason() {
+        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        AuthSessionService service = service(userRepository);
+
+        for (int i = 0; i < 5; i++) {
+            assertThatThrownBy(() -> service.login(new AuthLoginCommand("leader", "bad-password")))
+                    .isInstanceOf(PermissionDeniedException.class)
+                    .hasMessageContaining("用户名或密码错误");
+        }
+
+        assertThat(userRepository.findByUsername("leader"))
+                .get()
+                .satisfies(account -> {
+                    assertThat(account.failedLoginCount()).isEqualTo(5);
+                    assertThat(account.lockedUntil()).isNotNull();
+                });
+        assertThatThrownBy(() -> service.login(new AuthLoginCommand("leader", "leader123")))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("账号已锁定");
+        assertThat(service.auditEvents(10))
+                .anySatisfy(event -> {
+                    assertThat(event.eventType()).isEqualTo("LOGIN");
+                    assertThat(event.username()).isEqualTo("leader");
+                    assertThat(event.result()).isEqualTo("DENIED");
+                    assertThat(event.reason()).contains("账号已临时锁定");
+                });
+    }
+
+    @Test
+    void successfulLoginClearsFailedLoginCounter() {
+        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        AuthSessionService service = service(userRepository);
+
+        assertThatThrownBy(() -> service.login(new AuthLoginCommand("qc", "bad-password")))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThat(userRepository.findByUsername("qc")).get()
+                .extracting(AuthUserAccount::failedLoginCount)
+                .isEqualTo(1);
+
+        service.login(new AuthLoginCommand("qc", "qc123"));
+
+        assertThat(userRepository.findByUsername("qc"))
+                .get()
+                .satisfies(account -> {
+                    assertThat(account.failedLoginCount()).isZero();
+                    assertThat(account.lockedUntil()).isNull();
+                });
+    }
+
     private AuthSessionService service() {
-        return new AuthSessionService(navigationMenuService, new InMemoryAuthAuditRepository());
+        return service(new InMemoryAuthUserAccountRepository(passwordHasher));
+    }
+
+    private AuthSessionService service(AuthUserAccountRepository userRepository) {
+        return new AuthSessionService(
+                navigationMenuService,
+                new InMemoryAuthAuditRepository(),
+                userRepository,
+                passwordHasher
+        );
     }
 }

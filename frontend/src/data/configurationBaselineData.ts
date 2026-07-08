@@ -393,7 +393,7 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
       },
     ],
     limitationNotes: [
-      '当前身份来自请求头兜底；M3 轻量登录、菜单树和登录审计已接入，生产仍需用户表、密码哈希和 SSO/JWT。',
+      '当前身份优先来自登录会话；M3.88 已接入账号仓储、PBKDF2 密码哈希和 5 次失败后 15 分钟锁定，生产仍需替换初始评审账号和接入 SSO/JWT。',
       '当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。',
       '当前菜单权限已由后端菜单树返回，前端登录会话会按 menuCodes/menuTree 过滤侧栏；请求头兜底仍展示评审全量导航。',
       '敏感 POST 已接入轻量角色守卫，但复杂审批流和工资锁账仍未完成。',

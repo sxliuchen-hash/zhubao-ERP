@@ -22,6 +22,8 @@ zhubao:
   business-document:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
   auth:
+    users:
+      repository: ${ZHUBAO_AUTH_USERS_REPOSITORY:jdbc}
     audit:
       repository: ${ZHUBAO_AUTH_AUDIT_REPOSITORY:jdbc}
   operations:

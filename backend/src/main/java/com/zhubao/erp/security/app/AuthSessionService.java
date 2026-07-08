@@ -4,6 +4,8 @@ import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthSession;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -18,7 +20,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -31,41 +32,78 @@ public class AuthSessionService {
             .ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.systemDefault());
     private static final Duration SESSION_TTL = Duration.ofHours(8);
+    private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(15);
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
     private static final SecureRandom RANDOM = new SecureRandom();
-    private final Map<String, DemoUser> demoUsers = Map.of(
-            "admin", new DemoUser("admin", "admin123", "系统管理员", RoleCode.ADMIN, DataScope.ALL),
-            "leader", new DemoUser("leader", "leader123", "车间组长 马杰", RoleCode.WORKSHOP_LEADER, DataScope.TEAM),
-            "qc", new DemoUser("qc", "qc123", "质检员 周娜", RoleCode.QUALITY_INSPECTOR, DataScope.DEPARTMENT),
-            "warehouse", new DemoUser("warehouse", "warehouse123", "库管员 何琳", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT),
-            "operator", new DemoUser("operator", "operator123", "操作工 王强", RoleCode.OPERATOR, DataScope.SELF)
-    );
-    private final Map<String, SessionEntry> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, SessionEntry> sessions = new ConcurrentHashMap<>();
     private final AtomicLong auditSequence = new AtomicLong();
     private final NavigationMenuService navigationMenuService;
     private final AuthAuditRepository authAuditRepository;
+    private final AuthUserAccountRepository userAccountRepository;
+    private final PasswordHasher passwordHasher;
 
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
-            AuthAuditRepository authAuditRepository
+            AuthAuditRepository authAuditRepository,
+            AuthUserAccountRepository userAccountRepository,
+            PasswordHasher passwordHasher
     ) {
         this.navigationMenuService = navigationMenuService;
         this.authAuditRepository = authAuditRepository;
+        this.userAccountRepository = userAccountRepository;
+        this.passwordHasher = passwordHasher;
     }
 
     public AuthSession login(AuthLoginCommand command) {
         String username = normalize(command.username());
-        DemoUser user = demoUsers.get(username);
-        if (user == null || !user.password().equals(command.password())) {
+        Optional<AuthUserAccount> account = userAccountRepository.findByUsername(username);
+        Instant now = Instant.now();
+        if (account.isPresent() && account.get().enabled() && isLocked(account.get(), now)) {
+            String reason = "账号已临时锁定至 " + DISPLAY_TIME.format(account.get().lockedUntil());
+            recordAudit("LOGIN", username, account.get().operator(), account.get().role().name(), "DENIED", reason, "");
+            throw new PermissionDeniedException("账号已锁定，请稍后再试");
+        }
+        if (account.isEmpty() || !account.get().enabled()) {
             recordAudit("LOGIN", username, "", "", "DENIED", "用户名或密码错误", "");
+            throw new PermissionDeniedException("用户名或密码错误");
+        }
+        if (!passwordHasher.matches(command.password(), account.get().passwordHash())) {
+            recordFailedLogin(account.get(), now);
             throw new PermissionDeniedException("用户名或密码错误");
         }
 
         String token = newToken();
-        Instant expiresAt = Instant.now().plus(SESSION_TTL);
-        SessionEntry entry = new SessionEntry(token, user, expiresAt);
+        Instant expiresAt = now.plus(SESSION_TTL);
+        SessionEntry entry = new SessionEntry(token, account.get(), expiresAt);
         sessions.put(token, entry);
-        recordAudit("LOGIN", user.username(), user.operator(), user.role().name(), "SUCCESS", "演示账号登录成功", token);
+        userAccountRepository.recordLoginSuccess(account.get().username());
+        recordAudit(
+                "LOGIN",
+                account.get().username(),
+                account.get().operator(),
+                account.get().role().name(),
+                "SUCCESS",
+                account.get().demoAccount() ? "评审账号登录成功" : "生产账号登录成功",
+                token
+        );
         return toSession(entry);
+    }
+
+    private void recordFailedLogin(AuthUserAccount account, Instant now) {
+        int currentFailures = account.lockedUntil() != null && account.lockedUntil().isBefore(now)
+                ? 0
+                : account.failedLoginCount();
+        int nextFailures = currentFailures + 1;
+        Instant lockedUntil = nextFailures >= MAX_FAILED_LOGIN_ATTEMPTS ? now.plus(LOCKOUT_DURATION) : null;
+        userAccountRepository.recordLoginFailure(account.username(), nextFailures, lockedUntil);
+        String reason = lockedUntil == null
+                ? "用户名或密码错误，失败次数 " + nextFailures + "/" + MAX_FAILED_LOGIN_ATTEMPTS
+                : "用户名或密码错误，账号已临时锁定至 " + DISPLAY_TIME.format(lockedUntil);
+        recordAudit("LOGIN", account.username(), account.operator(), account.role().name(), "DENIED", reason, "");
+    }
+
+    private boolean isLocked(AuthUserAccount account, Instant now) {
+        return account.lockedUntil() != null && account.lockedUntil().isAfter(now);
     }
 
     public Optional<AuthSession> session(String rawAuthorizationHeader) {
@@ -113,7 +151,7 @@ public class AuthSessionService {
     }
 
     public List<String> demoUsernames() {
-        return demoUsers.keySet().stream().sorted().toList();
+        return userAccountRepository.findActiveUsernames();
     }
 
     public List<AuthAuditEvent> auditEvents(int limit) {
@@ -147,7 +185,7 @@ public class AuthSessionService {
     }
 
     private AuthSession toSession(SessionEntry entry) {
-        DemoUser user = entry.user();
+        AuthUserAccount user = entry.user();
         return new AuthSession(
                 entry.token(),
                 user.username(),
@@ -157,7 +195,7 @@ public class AuthSessionService {
                 user.dataScope().name(),
                 dataScopeLabel(user.dataScope()),
                 DISPLAY_TIME.format(entry.expiresAt()),
-                true,
+                user.demoAccount(),
                 navigationMenuService.menuCodesFor(user.role()),
                 navigationMenuService.menuTreeFor(user.role())
         );
@@ -240,18 +278,9 @@ public class AuthSessionService {
         };
     }
 
-    private record DemoUser(
-            String username,
-            String password,
-            String operator,
-            RoleCode role,
-            DataScope dataScope
-    ) {
-    }
-
     private record SessionEntry(
             String token,
-            DemoUser user,
+            AuthUserAccount user,
             Instant expiresAt
     ) {
     }

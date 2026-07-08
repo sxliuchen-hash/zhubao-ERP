@@ -204,6 +204,8 @@ Compose 服务：
 | `ZHUBAO_BUSINESS_REPOSITORY` | `jdbc` | 业务工作台仓储 |
 | `ZHUBAO_APPROVAL_REPOSITORY` | `jdbc` | 审批任务仓储 |
 | `ZHUBAO_DOCUMENTS_REPOSITORY` | `jdbc` | 文档附件元数据仓储 |
+| `ZHUBAO_AUTH_USERS_REPOSITORY` | `jdbc` | 登录账号仓储；Compose 默认写入 `auth_user_account` |
+| `ZHUBAO_AUTH_AUDIT_REPOSITORY` | `jdbc` | 登录审计仓储；Compose 默认写入 `auth_audit_event` |
 | `ZHUBAO_LOG_FILE` | `/logs/zhubao-erp.log` | 运维中心只读日志来源；Compose 同步设置 `LOGGING_FILE_NAME` |
 
 ---

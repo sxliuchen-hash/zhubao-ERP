@@ -102,6 +102,8 @@
 - M3.84 登录会话审计基线，新增 `AuthAuditEvent` 和 `GET /api/auth/audit-events`，记录登录成功、登录失败、会话读取、退出和无效 token 解析；审计事件只保留 token 尾号，不暴露完整 token 或密码，前端配置基线页展示最近登录审计。
 - M3.85 登录审计持久化边界，新增 `AuthAuditRepository`、内存/JDBC 仓储、`ZHUBAO_AUTH_AUDIT_REPOSITORY` 配置开关和 `V15__m3_auth_audit_contract.sql`；MySQL profile 默认写入 `auth_audit_event`，前端接口不变。
 - M3.86 授权导航过滤基线，前端 `App` 会恢复当前登录会话并按后端返回的 `menuCodes/menuTree` 过滤侧栏模块；`authApi` 登录/退出会广播会话变化，配置页登录后导航即时收敛，未登录或 API 不可用时仍保留全量评审导航兜底。
+- M3.87 生产账号表与密码哈希边界，新增 `AuthUserAccountRepository`、内存/JDBC 账号仓储、`PasswordHasher`、`ZHUBAO_AUTH_USERS_REPOSITORY` 配置开关和 `V16__m3_auth_user_account_contract.sql`；登录流程改为从账号仓储读取 PBKDF2 密码哈希，Docker/MySQL 默认启用 JDBC 账号表。
+- M3.88 登录失败锁定边界，账号仓储新增失败次数、锁定到期、最近登录和最近失败字段；登录失败 5 次后锁定 15 分钟，成功登录会清零失败计数，并通过 `V17__m3_auth_user_login_lockout_contract.sql` 固化 MySQL 合同。
 
 ## 目录结构
 
@@ -206,7 +208,17 @@ $env:ZHUBAO_APPROVAL_REPOSITORY="jdbc"
 powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
 ```
 
-审批 JDBC 当前只覆盖固定场景轻量审批任务和审计事件；M3.33 已对敏感 POST 接入轻量角色守卫，但真实登录、菜单权限、数据范围过滤、复杂审批流、审批 UI 和工资锁账仍需继续开发。
+审批 JDBC 当前只覆盖固定场景轻量审批任务和审计事件；M3.33 已对敏感 POST 接入轻量角色守卫，M3.88 已补账号仓储、密码哈希和登录失败锁定边界，但生产账号初始化/解锁策略、持久化菜单、数据范围过滤、复杂审批流、审批 UI 和工资锁账仍需继续开发。
+
+启用 MySQL 登录账号仓储：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_AUTH_USERS_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+账号 JDBC 当前覆盖 `auth_user_account`，保存 `username`、`password_hash`、操作人快照、角色、数据范围、启停状态、`demo_account`、失败登录次数、锁定到期时间、最近登录和最近失败时间；默认初始化账号仍是评审用账号，生产上线前必须替换密码、停用或删除演示账号，并继续接入 SSO/JWT、审计防篡改、数据范围过滤和正式账号初始化/解锁流程。
 
 启用 MySQL 登录审计持久化：
 
@@ -216,7 +228,7 @@ $env:ZHUBAO_AUTH_AUDIT_REPOSITORY="jdbc"
 powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
 ```
 
-登录审计 JDBC 当前覆盖 `auth_audit_event`，记录登录成功、失败、会话读取、退出和无效 token 解析，只保存 token 尾号；前端登录会话已按后端菜单编码过滤侧栏模块。生产账号、密码哈希、SSO/JWT、生产菜单持久化、数据范围过滤、审计不可篡改策略和安全日志平台仍需继续接入。
+登录审计 JDBC 当前覆盖 `auth_audit_event`，记录登录成功、失败、锁定拒绝、会话读取、退出和无效 token 解析，只保存 token 尾号；前端登录会话已按后端菜单编码过滤侧栏模块。M3.88 已补账号表、PBKDF2 密码哈希和失败锁定边界，但 SSO/JWT、生产菜单持久化、数据范围过滤、审计不可篡改策略和安全日志平台仍需继续接入。
 
 启用 MySQL 文档附件元数据持久化：
 
@@ -350,7 +362,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 
 当前已进入 M3 一期开发推进中，前端继续向生产现场作业台和高密度 ERP/MES 操作界面收敛；样例库已升级为验收数据指挥台，把开源参考、前端样例、后端 fixture、自动化测试、证据编码、上线门禁、真实数据缺口和登记表导入准备度收敛到同一张管理矩阵。来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路；来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。
 
-截至 M3.86，现场登记表链路已完成入库、出货、抛光、雕刻 4 类 Excel 上传预检、问题 CSV、真实模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口，以及来料母单/出库单的基础结构化持久化切片。系统已能把通过预检的登记表保存为 `register_import_batch/register_import_row` 批次和行级 JSON，前端可展示最近确认批次、行级标准化字段、警告消息、posting plan 的命令草稿、缺失字段和警告，并可对后端 posting plan 中的阻断字段进行行级补录；补录只更新标准化字段，不写库存台账或业务单据。非阻断行必须通过独立 POST 命令交给后端业务服务入账；`REG-ENGRAVING` 会额外生成 `biz_machine_output_record`，生产页可通过 `GET /api/machine-outputs/summary` 查看最近设备产量的总量、机器分组、日期分组、机器档案待匹配和签名附件待补数量；`REG-INBOUND` / `REG-OUTBOUND` 显式入账复用入库/出库业务动作，在库存台账成功后保存 `biz_mother_order` / `biz_outbound_order` 快照，`SA 样例库` 会继续调用业务单据查询接口展示快照字段、状态、来源登记表行和台账号。库存变化仍统一经过 `StockLedgerService`，重复入账会被 `POSTED` 状态拒绝。权限侧已补后端授权菜单树、按钮权限编码、登录会话审计、登录审计 JDBC 持久化边界和前端登录会话导航过滤，登录会话、当前权限上下文、`GET /api/security/menu-tree` 和 `GET /api/auth/audit-events` 可返回角色可见菜单与最近登录审计；但生产用户表、密码哈希、生产持久化菜单表、审计不可篡改策略和 GET 数据范围过滤仍未完成。下一步重点不再是继续堆演示页，而是补齐机器档案匹配、签名附件、完整母单/出库生命周期、生产用户表、密码哈希、数据范围过滤、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入：
+截至 M3.88，现场登记表链路已完成入库、出货、抛光、雕刻 4 类 Excel 上传预检、问题 CSV、真实模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口，以及来料母单/出库单的基础结构化持久化切片。系统已能把通过预检的登记表保存为 `register_import_batch/register_import_row` 批次和行级 JSON，前端可展示最近确认批次、行级标准化字段、警告消息、posting plan 的命令草稿、缺失字段和警告，并可对后端 posting plan 中的阻断字段进行行级补录；补录只更新标准化字段，不写库存台账或业务单据。非阻断行必须通过独立 POST 命令交给后端业务服务入账；`REG-ENGRAVING` 会额外生成 `biz_machine_output_record`，生产页可通过 `GET /api/machine-outputs/summary` 查看最近设备产量的总量、机器分组、日期分组、机器档案待匹配和签名附件待补数量；`REG-INBOUND` / `REG-OUTBOUND` 显式入账复用入库/出库业务动作，在库存台账成功后保存 `biz_mother_order` / `biz_outbound_order` 快照，`SA 样例库` 会继续调用业务单据查询接口展示快照字段、状态、来源登记表行和台账号。库存变化仍统一经过 `StockLedgerService`，重复入账会被 `POSTED` 状态拒绝。权限侧已补后端授权菜单树、按钮权限编码、登录会话审计、登录审计 JDBC 持久化边界、前端登录会话导航过滤、`auth_user_account` 账号表、PBKDF2 密码哈希和登录失败锁定边界；登录会话、当前权限上下文、`GET /api/security/menu-tree` 和 `GET /api/auth/audit-events` 可返回角色可见菜单与最近登录审计；但生产账号初始化/解锁流程、生产持久化菜单表、审计不可篡改策略和 GET 数据范围过滤仍未完成。下一步重点不再是继续堆演示页，而是补齐机器档案匹配、签名附件、完整母单/出库生命周期、生产账号初始化与停用流程、数据范围过滤、NAS/S3 签名访问、软硬件证据、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
@@ -358,7 +370,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - NVR、标签打印、PWA 扫码、备份恢复的现场附件关联和真实设备复测。
 - 将 M2 工作台样例 API 迁移为 MySQL seed 数据和真实业务聚合。
 - 将 M3.81/M3.82 已落的真实母单、出库单和登记表行级补录继续推进到主数据自动匹配、状态流转、批量复核、追溯聚合；补齐机器档案匹配、签名附件和更完整的设备产能统计报表。
-- 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并接入真实登录、生产菜单表、数据范围过滤和审计保全。
+- 将配置基线、配置变更单和审计日志迁移为 MySQL seed 数据，并在 M3.88 账号仓储和失败锁定边界之上接入生产菜单表、数据范围过滤、正式解锁策略和审计保全。
 - 补齐审批 UI、复杂审批流、工资锁账/发放边界、NAS/S3 签名访问和售后结算边界，避免当前原型停留在局部台账动作、附件本地适配、附件元数据合同表与工资试算快照。
 - 接入日志平台或高性能只读日志适配器、PWA 运行态细节、数据库备份目录、checksum 和恢复演练记录，避免运维中心停留在评审样例。
 
