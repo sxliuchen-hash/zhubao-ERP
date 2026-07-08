@@ -15,6 +15,9 @@ describe('HardwareIntegrationWorkspace', () => {
     expect(wrapper.find('table.hardware-device-table').exists()).toBe(true);
     expect(wrapper.text()).toContain('POC RECORDS');
     expect(wrapper.text()).toContain('POC EVIDENCE');
+    expect(wrapper.text()).toContain('ADAPTER PLANS');
+    expect(wrapper.text()).toContain('低成本优先');
+    expect(wrapper.text()).toContain('串口/TCP');
     expect(wrapper.text()).toContain('POC-SCAN-20260706-001');
     expect(wrapper.text()).toContain('ATT-HW-20260706-001');
     expect(wrapper.text()).toContain('拆包台摄像头');

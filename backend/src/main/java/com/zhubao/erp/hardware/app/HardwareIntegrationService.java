@@ -2,6 +2,7 @@ package com.zhubao.erp.hardware.app;
 
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.hardware.domain.HardwareAdapterPlan;
 import com.zhubao.erp.hardware.domain.HardwareDevice;
 import com.zhubao.erp.hardware.domain.HardwareDeviceStatus;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
@@ -110,12 +111,74 @@ public class HardwareIntegrationService {
             )
     );
 
+    private final List<HardwareAdapterPlan> adapterPlans = List.of(
+            new HardwareAdapterPlan(
+                    "CAM-UNPACK-01",
+                    "拆包台摄像头",
+                    "一期",
+                    "按 NVR 时间段人工/半自动截取，保留 RTSP/FFmpeg 接口参数",
+                    "截取失败后上传 MP4 到文档附件并关联硬件 POC",
+                    "拆包视频、NVR 通道、截取时间段、上传附件 checksum",
+                    "补齐现场 NVR 品牌、通道号、时间同步和失败日志样本",
+                    "中",
+                    "amber"
+            ),
+            new HardwareAdapterPlan(
+                    "PRN-LABEL-01",
+                    "标签打印机",
+                    "一期",
+                    "浏览器打印或 Windows 驱动打印 PDF 标签",
+                    "导出 PDF 标签模板后人工打印并记录补打原因",
+                    "标签样张、补打日志、母单/子工单编码",
+                    "冻结标签尺寸、纸张规格和补打权限",
+                    "低",
+                    "blue"
+            ),
+            new HardwareAdapterPlan(
+                    "SCAN-PC-01",
+                    "PC 扫码枪",
+                    "一期",
+                    "USB HID 键盘模式直接输入业务编码",
+                    "手工录入编码并二次确认",
+                    "扫码样本、错误码、手工确认人和时间",
+                    "确认条码格式、扫码距离和弱网/弱光场景",
+                    "低",
+                    "green"
+            ),
+            new HardwareAdapterPlan(
+                    "PWA-CAM-01",
+                    "手机摄像头扫码",
+                    "一期",
+                    "BarcodeDetector 优先，后续可接 ZXing 兜底",
+                    "手工输入工单码并保留现场任务记录",
+                    "扫码截图、识别耗时、失败原因和手工输入记录",
+                    "补弱光、反光和低端安卓机型复测样本",
+                    "中",
+                    "amber"
+            ),
+            new HardwareAdapterPlan(
+                    "SCALE-01",
+                    "电子秤",
+                    "一期",
+                    "人工读数录入并拍照留证，二期预留 RS232/USB/TCP",
+                    "称重照片和人工复核记录作为入账证据",
+                    "称重照片、重量值、误差说明、操作人和复核人",
+                    "确认接口类型、精度、校准周期和串口/TCP 采集样本",
+                    "高",
+                    "red"
+            )
+    );
+
     public List<HardwareDevice> findDevices() {
         return devices;
     }
 
     public List<IntegrationTask> findTasks() {
         return tasks;
+    }
+
+    public List<HardwareAdapterPlan> findAdapterPlans() {
+        return adapterPlans;
     }
 
     public List<HardwarePocRecord> findPocRecords() {

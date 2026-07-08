@@ -13,6 +13,7 @@ import {
 import { evidenceAttachments } from '../../data/documentManagementData';
 import {
   fetchHardwareWorkspace,
+  type HardwareAdapterPlan,
   type HardwarePocEvidenceSummary,
   type HardwareWorkspaceModel,
 } from '../../services/hardwareIntegrationApi';
@@ -20,6 +21,7 @@ import {
 const workspace = ref<HardwareWorkspaceModel>({
   devices: fallbackHardwareDevices,
   tasks: fallbackIntegrationTasks,
+  adapterPlans: fallbackHardwareAdapterPlans(),
   pocRecords: fallbackHardwarePocRecords,
   pocEvidence: fallbackHardwarePocEvidence(),
   summary: {
@@ -45,6 +47,7 @@ const activeTask = computed(
 );
 
 const hardwareDevices = computed(() => workspace.value.devices);
+const hardwareAdapterPlans = computed(() => workspace.value.adapterPlans);
 const hardwarePocRecords = computed(() => workspace.value.pocRecords);
 const hardwarePocEvidence = computed(() => workspace.value.pocEvidence);
 const integrationTasks = computed(() => workspace.value.tasks);
@@ -178,6 +181,36 @@ function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
       tone: latest.tone,
     };
   });
+}
+
+function fallbackHardwareAdapterPlans(): HardwareAdapterPlan[] {
+  return fallbackHardwareDevices.map((device) => ({
+    deviceCode: device.code,
+    deviceName: device.name,
+    phase: '一期',
+    primaryAdapter: device.protocol,
+    fallbackAdapter: device.fallback,
+    evidenceRequirement: evidenceRequirementFor(device.code),
+    nextIntegrationAction: nextIntegrationActionFor(device.code),
+    riskLevel: device.status === 'manual' ? '高' : device.status === 'degraded' ? '中' : '低',
+    tone: device.status === 'manual' ? 'red' : device.status === 'degraded' ? 'amber' : 'green',
+  }));
+}
+
+function evidenceRequirementFor(deviceCode: string): string {
+  if (deviceCode.startsWith('CAM')) return '拆包视频、NVR 通道、截取时间段、附件 checksum';
+  if (deviceCode.startsWith('PRN')) return '标签样张、补打日志、母单/子工单编码';
+  if (deviceCode.startsWith('SCAN')) return '扫码样本、错误码、手工确认人和时间';
+  if (deviceCode.startsWith('PWA')) return '扫码截图、识别耗时、失败原因和手工输入记录';
+  return '称重照片、重量值、误差说明、操作人和复核人';
+}
+
+function nextIntegrationActionFor(deviceCode: string): string {
+  if (deviceCode.startsWith('CAM')) return '补齐现场 NVR 品牌、通道号、时间同步和失败日志样本';
+  if (deviceCode.startsWith('PRN')) return '冻结标签尺寸、纸张规格和补打权限';
+  if (deviceCode.startsWith('SCAN')) return '确认条码格式、扫码距离和弱网场景';
+  if (deviceCode.startsWith('PWA')) return '补弱光、反光和低端安卓机型复测样本';
+  return '确认接口类型、精度、校准周期和串口/TCP 采集样本';
 }
 </script>
 
@@ -386,6 +419,24 @@ function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
               <i><b :style="{ width: `${evidence.missingEvidence > 0 ? 35 : 100}%` }" /></i>
             </div>
             <p>{{ evidence.nextAction }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">ADAPTER PLANS</span>
+          <StatusBadge label="低成本优先" tone="blue" />
+        </div>
+        <div class="integration-list compact-integration-list">
+          <article v-for="plan in hardwareAdapterPlans" :key="plan.deviceCode">
+            <div class="integration-main">
+              <strong>{{ plan.deviceName }} / {{ plan.phase }}</strong>
+              <span>{{ plan.primaryAdapter }}</span>
+              <small>{{ plan.fallbackAdapter }}</small>
+            </div>
+            <StatusBadge :label="`风险 ${plan.riskLevel}`" :tone="plan.tone" />
+            <p>{{ plan.evidenceRequirement }}；{{ plan.nextIntegrationAction }}</p>
           </article>
         </div>
       </section>

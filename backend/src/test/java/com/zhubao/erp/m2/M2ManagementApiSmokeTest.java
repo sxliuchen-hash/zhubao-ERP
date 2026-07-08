@@ -180,6 +180,7 @@ class M2ManagementApiSmokeTest {
     void exposesHardwareIntegrationApis() {
         ResponseEntity<String> devices = restTemplate.getForEntity("/api/hardware/devices", String.class);
         ResponseEntity<String> tasks = restTemplate.getForEntity("/api/hardware/integration-tasks", String.class);
+        ResponseEntity<String> adapterPlans = restTemplate.getForEntity("/api/hardware/adapter-plans", String.class);
         ResponseEntity<String> pocRecords = restTemplate.getForEntity("/api/hardware/poc-records", String.class);
         ResponseEntity<String> pocEvidence = restTemplate.getForEntity("/api/hardware/poc-evidence", String.class);
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/hardware/summary", String.class);
@@ -187,6 +188,13 @@ class M2ManagementApiSmokeTest {
         assertThat(devices.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(devices.getBody()).contains("CAM-UNPACK-01", "SCALE-01");
         assertThat(tasks.getBody()).contains("INT-VID-001", "人工上传");
+        assertThat(adapterPlans.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(adapterPlans.getBody()).contains(
+                "SCALE-01",
+                "人工读数录入",
+                "串口/TCP",
+                "称重照片"
+        );
         assertThat(pocRecords.getBody()).contains("POC-SCAN-20260706-001", "弱光扫码");
         assertThat(pocEvidence.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(pocEvidence.getBody()).contains(

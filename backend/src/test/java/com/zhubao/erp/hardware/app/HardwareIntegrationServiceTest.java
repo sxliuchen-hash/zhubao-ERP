@@ -26,6 +26,15 @@ class HardwareIntegrationServiceTest {
                 });
         assertThat(service.findTasks())
                 .anySatisfy(task -> assertThat(task.nextAction()).contains("人工上传"));
+        assertThat(service.findAdapterPlans()).hasSize(5);
+        assertThat(service.findAdapterPlans())
+                .anySatisfy(plan -> {
+                    assertThat(plan.deviceCode()).isEqualTo("SCALE-01");
+                    assertThat(plan.primaryAdapter()).contains("人工读数");
+                    assertThat(plan.fallbackAdapter()).contains("称重照片");
+                    assertThat(plan.nextIntegrationAction()).contains("串口/TCP");
+                    assertThat(plan.tone()).isEqualTo("red");
+                });
         assertThat(service.findPocRecords()).hasSize(4);
         assertThat(service.blockedPocCount()).isEqualTo(1);
         assertThat(service.findPocRecords())

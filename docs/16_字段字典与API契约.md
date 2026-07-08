@@ -92,7 +92,7 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.100 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界和客户范围可视化：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.100 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity`、`GET /security/current-context` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期状态、账号客户范围、当前权限上下文客户范围展示、认证审计完整性摘要和账号变更复核任务；`GET /business/workspaces/*` 会按当前 `dataScope` 和 `customerScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。账号管理审批任务是事后复核摘要，不阻断账号动作，不代表完整 IAM 或生产账号前置审批。
+当前 M3.102 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、硬件低成本适配计划、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界和客户范围可视化：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.102 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/adapter-plans`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity`、`GET /security/current-context` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件低成本适配计划、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期状态、账号客户范围、当前权限上下文客户范围展示、认证审计完整性摘要和账号变更复核任务；`GET /business/workspaces/*` 会按当前 `dataScope` 和 `customerScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。账号管理审批任务是事后复核摘要，不阻断账号动作，不代表完整 IAM 或生产账号前置审批。
 
 业务操作接口前缀：
 
@@ -469,6 +469,7 @@ M3.76 前端复核台约束：
 |---|---|---|
 | `GET /devices` | 软硬件联动 | 返回设备兼容矩阵 |
 | `GET /integration-tasks` | 软硬件联动 | 返回硬件调用任务和健康度 |
+| `GET /adapter-plans` | 软硬件联动 | 返回摄像头、标签打印、扫码、PWA 摄像头和电子秤的一期低成本适配计划、失败兜底、证据要求和复测动作 |
 | `GET /poc-records` | 软硬件联动 | 返回现场 POC 验证记录 |
 | `GET /poc-evidence` | 软硬件联动 | 返回 POC 记录与附件证据的只读关联摘要 |
 | `GET /summary` | 软硬件联动 | 返回设备、兜底、健康度和 POC 阻断汇总 |
@@ -1486,6 +1487,22 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 
 `GET /api/hardware/poc-evidence` 只读聚合 `HardwarePocRecord` 和 `EvidenceAttachment`，关联条件为 `EvidenceAttachment.businessType = 硬件 POC` 且 `EvidenceAttachment.businessCode = HardwarePocRecord.code`；该接口不执行上传、归档、复测确认或设备直连动作。
 
+### 11.3 `HardwareAdapterPlan`
+
+| 字段 | 说明 |
+|---|---|
+| `deviceCode` | 设备编码，对应设备兼容矩阵中的编码，例如 `SCALE-01` |
+| `deviceName` | 设备名称快照 |
+| `phase` | 接入阶段，当前为一期低成本适配 |
+| `primaryAdapter` | 一期优先适配方式，例如浏览器/驱动打印、USB HID、人工读数或 NVR 时间段截取 |
+| `fallbackAdapter` | 主适配失败时的人工兜底方式 |
+| `evidenceRequirement` | 现场必须保留的证据，例如视频、标签样张、扫码截图、称重照片、checksum 或补打日志 |
+| `nextIntegrationAction` | 下一步复测、参数冻结、协议样本采集或权限补齐动作 |
+| `riskLevel` | 当前风险等级：`低`、`中`、`高` |
+| `tone` | 前端状态色：`green`、`blue`、`amber`、`red` 等 |
+
+`GET /api/hardware/adapter-plans` 返回只读适配计划，用于在不采购高成本专用硬件、不承诺厂商 SDK 强集成的前提下，先冻结摄像头、标签打印、PC 扫码、PWA 摄像头和电子秤的一期主适配、失败兜底和证据要求。该接口不执行硬件采集、打印、扫码、称重、视频截取或附件上传动作。
+
 硬件 POC 约束：
 
 - 没有 POC 记录的硬件能力不能承诺为一期强集成。
@@ -1494,6 +1511,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 - 电子秤、NVR、PWA 扫码、标签打印至少各保留一条现场验证记录。
 - M3.94 起 `GET /api/hardware/poc-records` 读取 `HardwarePocRecordRepository`，接口响应字段不变；本地默认 `memory`，MySQL profile 默认 `jdbc`，seed 脚本为 `V19__m3_hardware_poc_record_seed.sql`。
 - M3.95 起 `GET /api/hardware/poc-evidence` 读取附件元数据做只读证据关联，未关联附件的 POC 明确返回待补证据。
+- M3.102 起 `GET /api/hardware/adapter-plans` 返回五类低成本硬件适配计划，用于指导现场复测和接口预留，不代表设备协议直连完成。
 - `zhubao.hardware.poc.repository` / `ZHUBAO_HARDWARE_POC_REPOSITORY` 只控制 POC 记录仓储来源，不代表硬件 SDK、NVR 协议、打印驱动、扫码识别或电子秤采集已完成强集成。
 
 ---

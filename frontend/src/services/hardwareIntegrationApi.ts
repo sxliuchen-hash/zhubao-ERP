@@ -30,6 +30,18 @@ interface HardwareSummaryDto {
   pocBlocked: number;
 }
 
+export interface HardwareAdapterPlan {
+  deviceCode: string;
+  deviceName: string;
+  phase: string;
+  primaryAdapter: string;
+  fallbackAdapter: string;
+  evidenceRequirement: string;
+  nextIntegrationAction: string;
+  riskLevel: string;
+  tone: Tone;
+}
+
 export interface HardwarePocEvidenceSummary {
   pocCode: string;
   scene: string;
@@ -47,15 +59,17 @@ export interface HardwarePocEvidenceSummary {
 export interface HardwareWorkspaceModel {
   devices: HardwareDevice[];
   tasks: IntegrationTask[];
+  adapterPlans: HardwareAdapterPlan[];
   pocRecords: HardwarePocRecord[];
   pocEvidence: HardwarePocEvidenceSummary[];
   summary: HardwareSummaryDto;
 }
 
 export async function fetchHardwareWorkspace(): Promise<HardwareWorkspaceModel> {
-  const [devices, tasks, pocRecords, pocEvidence, summary] = await Promise.all([
+  const [devices, tasks, adapterPlans, pocRecords, pocEvidence, summary] = await Promise.all([
     apiGet<HardwareDeviceDto[]>('/api/hardware/devices'),
     apiGet<IntegrationTask[]>('/api/hardware/integration-tasks'),
+    apiGet<HardwareAdapterPlan[]>('/api/hardware/adapter-plans'),
     apiGet<HardwarePocRecordDto[]>('/api/hardware/poc-records'),
     apiGet<HardwarePocEvidenceSummary[]>('/api/hardware/poc-evidence'),
     apiGet<HardwareSummaryDto>('/api/hardware/summary'),
@@ -64,6 +78,7 @@ export async function fetchHardwareWorkspace(): Promise<HardwareWorkspaceModel> 
   return {
     devices: devices.map(mapDevice),
     tasks,
+    adapterPlans,
     pocRecords: pocRecords.map(mapPocRecord),
     pocEvidence,
     summary,

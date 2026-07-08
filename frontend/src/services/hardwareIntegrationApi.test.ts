@@ -68,6 +68,24 @@ describe('hardwareIntegrationApi', () => {
           code: 0,
           message: 'ok',
           data: [{
+            deviceCode: 'SCALE-01',
+            deviceName: '电子秤',
+            phase: '一期',
+            primaryAdapter: '人工读数录入',
+            fallbackAdapter: '称重照片',
+            evidenceRequirement: '称重照片、重量值',
+            nextIntegrationAction: '确认串口/TCP 采集样本',
+            riskLevel: '高',
+            tone: 'red',
+          }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: [{
             code: 'POC-VID-001',
             deviceCode: 'CAM-UNPACK-01',
             scene: '拆包台视频截取',
@@ -119,9 +137,10 @@ describe('hardwareIntegrationApi', () => {
 
     expect(model.devices[0].status).toBe('degraded');
     expect(model.tasks[0].id).toBe('INT-VID-001');
+    expect(model.adapterPlans[0].deviceCode).toBe('SCALE-01');
     expect(model.pocRecords[0].tone).toBe('amber');
     expect(model.pocEvidence[0].attachmentCodes).toContain('ATT-HW-001');
     expect(model.summary.averageHealth).toBe(62);
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 });

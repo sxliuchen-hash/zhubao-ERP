@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.100 / 账号客户范围可视化</strong>
-        <i>仍处于 M3 增量开发：本轮把账号客户范围展示到权限上下文、样例门禁和运维提示，继续推进生产 IAM 边界。</i>
+        <strong>M3.102 / 硬件低成本适配计划</strong>
+        <i>仍处于 M3 增量开发：本轮把摄像头、标签打印、扫码、PWA 摄像头和电子秤的低成本适配计划固化为 API 契约，继续推进真实设备复测和证据闭环。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,9 +54,9 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.100 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.102 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
-          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
+          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底和低成本适配计划统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>
@@ -65,6 +65,7 @@ defineProps<{
             <span>硬件 POC</span>
             <span>硬件 POC 仓储</span>
             <span>POC 证据关联</span>
+            <span>低成本硬件适配</span>
             <span>运维中心</span>
             <span>登录会话</span>
             <span>账号密码哈希</span>

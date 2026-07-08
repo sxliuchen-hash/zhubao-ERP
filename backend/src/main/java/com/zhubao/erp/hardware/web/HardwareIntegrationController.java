@@ -2,6 +2,7 @@ package com.zhubao.erp.hardware.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.hardware.app.HardwareIntegrationService;
+import com.zhubao.erp.hardware.domain.HardwareAdapterPlan;
 import com.zhubao.erp.hardware.domain.HardwareDevice;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
@@ -30,6 +31,11 @@ public class HardwareIntegrationController {
     @GetMapping("/integration-tasks")
     public ApiResponse<List<IntegrationTask>> integrationTasks() {
         return ApiResponse.ok(hardwareIntegrationService.findTasks());
+    }
+
+    @GetMapping("/adapter-plans")
+    public ApiResponse<List<HardwareAdapterPlan>> adapterPlans() {
+        return ApiResponse.ok(hardwareIntegrationService.findAdapterPlans());
     }
 
     @GetMapping("/poc-records")
