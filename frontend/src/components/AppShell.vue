@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.97 / 生产账号审批摘要</strong>
-        <i>仍处于 M3 增量开发：本轮将账号管理动作接入轻量审批摘要，继续保留评审请求头和登录会话边界。</i>
+        <strong>M3.100 / 账号客户范围可视化</strong>
+        <i>仍处于 M3 增量开发：本轮把账号客户范围展示到权限上下文、样例门禁和运维提示，继续推进生产 IAM 边界。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.97 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.100 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
@@ -82,6 +82,7 @@ defineProps<{
             <span>授权导航过滤</span>
             <span>数据范围过滤</span>
             <span>账号审批摘要</span>
+            <span>账号客户范围</span>
             <span>工资试算基线</span>
           </div>
         </div>

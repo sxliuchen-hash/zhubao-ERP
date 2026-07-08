@@ -23,6 +23,9 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('审计日志');
     expect(wrapper.text()).toContain('TRACE-CFG-002');
     expect(wrapper.text()).toContain('当前权限 / 数据范围边界');
+    expect(wrapper.text()).toContain('客户范围');
+    expect(wrapper.text()).toContain('未配置账号客户范围');
+    expect(wrapper.text()).toContain('Bearer customerScope');
     expect(wrapper.text()).toContain('登录会话');
     expect(wrapper.text()).toContain('自助改密 / 续期');
     expect(wrapper.text()).toContain('仅接受 Bearer token');
@@ -43,6 +46,7 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('AUTH_ACCOUNT_MANAGE');
     expect(wrapper.text()).toContain('admin / 系统管理员');
     expect(wrapper.text()).toContain('planner / 计划员 陈敏');
+    expect(wrapper.text()).toContain('客户 恒信珠宝、雅辰饰品');
     expect(wrapper.text()).toContain('生产账号');
     expect(wrapper.text()).toContain('密码已过期');
   });

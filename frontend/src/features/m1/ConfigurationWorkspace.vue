@@ -392,6 +392,17 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
             <strong>{{ workspace.securityContext.dataScopeLabel }}</strong>
             <StatusBadge :label="workspace.securityContext.dataScope" :tone="dataScopeTone(workspace.securityContext.dataScope)" />
           </article>
+          <article>
+            <span>客户范围</span>
+            <strong>
+              {{
+                workspace.securityContext.customerScope.length
+                  ? workspace.securityContext.customerScope.join('、')
+                  : '未配置账号客户范围'
+              }}
+            </strong>
+            <small>{{ workspace.securityContext.headerContract.customerScopeHeader }} / Bearer customerScope</small>
+          </article>
         </div>
 
         <div class="security-boundary-note">

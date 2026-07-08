@@ -234,7 +234,7 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       count: 1,
       latest: '2026-07-07 06:00:00',
       owner: '平台负责人',
-      nextAction: '接入 SSO/JWT、生产菜单持久化和组织客户授权表。',
+      nextAction: 'M3.100 已可视化账号客户范围；继续接入 SSO/JWT、生产菜单持久化和完整组织客户授权表。',
       tone: 'blue',
     },
   ],
