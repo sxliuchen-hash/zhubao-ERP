@@ -217,7 +217,7 @@ class AuthUserAccountManagementServiceTest {
                     assertThat(item.tone()).isEqualTo("red");
                     assertThat(item.riskLevel()).isEqualTo("高");
                     assertThat(item.enforcementStatus()).isEqualTo("申请单号可校验，默认不强制");
-                    assertThat(item.missingCapabilities()).contains("全局强制申请单号", "阻断式审批状态");
+                    assertThat(item.missingCapabilities()).contains("全局强制申请单号", "审批通过态强制校验");
                 });
         assertThat(readiness)
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-ROLE-001"))
@@ -235,9 +235,10 @@ class AuthUserAccountManagementServiceTest {
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
                 .singleElement()
                 .satisfies(item -> {
-                    assertThat(item.enforcementStatus()).isEqualTo("申请单号强制校验已开启");
+                    assertThat(item.enforcementStatus()).isEqualTo("申请单号和审批通过态强制校验已开启");
                     assertThat(item.missingCapabilities()).doesNotContain("全局强制申请单号");
-                    assertThat(item.missingCapabilities()).contains("阻断式审批状态", "正式电子签字");
+                    assertThat(item.missingCapabilities()).doesNotContain("审批通过态强制校验");
+                    assertThat(item.missingCapabilities()).contains("正式电子签字");
                 });
     }
 
@@ -264,7 +265,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(draft.readyForBlockingApproval()).isFalse();
         assertThat(draft.providedEvidence()).containsExactly("账号申请单：AUTH-REQ-001");
         assertThat(draft.missingEvidence()).contains("直属负责人审批", "系统管理员复核");
-        assertThat(draft.missingCapabilities()).contains("全局强制申请单号", "阻断式审批状态");
+        assertThat(draft.missingCapabilities()).contains("全局强制申请单号", "审批通过态强制校验");
         assertThat(draft.sourceSummary()).contains(
                 "action=创建生产账号",
                 "targetUsername=planner",
@@ -413,9 +414,15 @@ class AuthUserAccountManagementServiceTest {
                 "AUTH-PRE-APP-READY-ENFORCED-001",
                 "AUTH-PRE-CREATE-001",
                 "创建生产账号",
-                "planner"
+                "planner",
+                "AUTH-PRE-TASK-APPROVED-001"
         );
         fixture.preApprovalApplicationRepository().save(application);
+        fixture.approvalRepository().save(preApprovalTask(
+                application.approvalTaskCode(),
+                application.applicationCode(),
+                ApprovalStatus.APPROVED
+        ));
 
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
                 "planner",
@@ -433,6 +440,69 @@ class AuthUserAccountManagementServiceTest {
         assertThat(fixture.auditRepository().findRecent(10))
                 .anySatisfy(event -> assertThat(event.reason())
                         .contains("前置申请单：AUTH-PRE-APP-READY-ENFORCED-001"));
+    }
+
+    @Test
+    void enforcingPreApprovalApplicationCodeRejectsWaitingApprovalTask() {
+        Fixture fixture = fixture(true);
+        AuthAccountPreApprovalApplication application = readyPreApprovalApplication(
+                "AUTH-PRE-APP-READY-WAITING-TASK-001",
+                "AUTH-PRE-CREATE-001",
+                "创建生产账号",
+                "planner",
+                "AUTH-PRE-TASK-WAITING-001"
+        );
+        fixture.preApprovalApplicationRepository().save(application);
+        fixture.approvalRepository().save(preApprovalTask(
+                application.approvalTaskCode(),
+                application.applicationCode(),
+                ApprovalStatus.WAITING_APPROVAL
+        ));
+
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                application.applicationCode()
+        ), admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Account pre-approval task is not approved")
+                .hasMessageContaining("WAITING_APPROVAL");
+        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
+        assertThat(fixture.auditRepository().findRecent(10)).isEmpty();
+    }
+
+    @Test
+    void enforcingPreApprovalApplicationCodeRejectsApplicationWithoutApprovalTask() {
+        Fixture fixture = fixture(true);
+        AuthAccountPreApprovalApplication application = readyPreApprovalApplication(
+                "AUTH-PRE-APP-READY-NO-TASK-001",
+                "AUTH-PRE-CREATE-001",
+                "创建生产账号",
+                "planner"
+        );
+        fixture.preApprovalApplicationRepository().save(application);
+
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                application.applicationCode()
+        ), admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("has no approval task");
+        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
+        assertThat(fixture.auditRepository().findRecent(10)).isEmpty();
     }
 
     @Test
@@ -603,6 +673,16 @@ class AuthUserAccountManagementServiceTest {
             String actionType,
             String targetUsername
     ) {
+        return readyPreApprovalApplication(applicationCode, readinessCode, actionType, targetUsername, "");
+    }
+
+    private AuthAccountPreApprovalApplication readyPreApprovalApplication(
+            String applicationCode,
+            String readinessCode,
+            String actionType,
+            String targetUsername,
+            String approvalTaskCode
+    ) {
         return preApprovalApplication(
                 applicationCode,
                 readinessCode,
@@ -611,7 +691,8 @@ class AuthUserAccountManagementServiceTest {
                 List.of(),
                 List.of(),
                 "READY_FOR_BLOCKING_APPROVAL",
-                true
+                true,
+                approvalTaskCode
         );
     }
 
@@ -627,9 +708,10 @@ class AuthUserAccountManagementServiceTest {
                 actionType,
                 targetUsername,
                 List.of("直属负责人审批"),
-                List.of("阻断式审批状态"),
+                List.of("审批通过态强制校验"),
                 "WAITING_EVIDENCE",
-                false
+                false,
+                ""
         );
     }
 
@@ -641,7 +723,8 @@ class AuthUserAccountManagementServiceTest {
             List<String> missingEvidence,
             List<String> missingCapabilities,
             String applicationStatus,
-            boolean readyForBlockingApproval
+            boolean readyForBlockingApproval,
+            String approvalTaskCode
     ) {
         return new AuthAccountPreApprovalApplication(
                 applicationCode,
@@ -670,8 +753,31 @@ class AuthUserAccountManagementServiceTest {
                 readyForBlockingApproval ? "允许账号动作进入放行校验" : "补齐前置材料",
                 readyForBlockingApproval ? "中" : "高",
                 readyForBlockingApproval ? "green" : "red",
-                "",
+                approvalTaskCode,
                 "2026-07-09 10:00:00"
+        );
+    }
+
+    private ApprovalTask preApprovalTask(String approvalCode, String applicationCode, ApprovalStatus status) {
+        return new ApprovalTask(
+                approvalCode,
+                "ACCOUNT_PRE_APPROVAL",
+                applicationCode,
+                "Account pre-approval review / planner",
+                status,
+                "system-admin",
+                "GENERAL_MANAGER|ADMIN",
+                "GENERAL_MANAGER",
+                status == ApprovalStatus.APPROVED ? "green" : "amber",
+                "READY_FOR_BLOCKING_APPROVAL",
+                "applicationCode=" + applicationCode,
+                applicationCode,
+                false,
+                "2026-07-09T10:00:00+08:00",
+                status == ApprovalStatus.APPROVED ? "2026-07-09T10:10:00+08:00" : null,
+                status == ApprovalStatus.APPROVED ? "general-manager" : null,
+                status == ApprovalStatus.APPROVED ? "approved for account action" : null,
+                status == ApprovalStatus.APPROVED
         );
     }
 

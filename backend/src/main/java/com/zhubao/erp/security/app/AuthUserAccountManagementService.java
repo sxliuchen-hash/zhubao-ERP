@@ -2,6 +2,7 @@ package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
+import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
@@ -130,13 +131,13 @@ public class AuthUserAccountManagementService {
                         "AUTH-PRE-CREATE-001",
                         "创建生产账号",
                         "新增非 demo 账号或授予敏感角色前必须先完成申请与审批",
-                        enforcePreApprovalForAccountActions ? "申请单号强制校验已开启" : "申请单号可校验，默认不强制",
+                        enforcePreApprovalForAccountActions ? "申请单号和审批通过态强制校验已开启" : "申请单号可校验，默认不强制",
                         List.of("账号申请单", "直属负责人审批", "系统管理员复核", "角色与数据范围说明", "初始密码交付确认"),
-                        preApprovalMissingCapabilities("阻断式审批状态", "正式电子签字", "审批后自动放行"),
+                        preApprovalMissingCapabilities("审批通过态强制校验", "正式电子签字", "审批后自动放行"),
                         List.of("GENERAL_MANAGER", "ADMIN"),
-                        "当前可保存并校验前置申请单号，同时写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务",
+                        "当前可保存前置申请单、生成 ACCOUNT_PRE_APPROVAL 任务，并在强制模式校验任务 APPROVED 后放行账号动作",
                         "生产上线前禁止直接创建生产账号",
-                        "补强制阻断开关、审批通过态和账号创建命令放行",
+                        "补正式电子签字、审批后自动放行和完整 IAM 账号生命周期",
                         "高",
                         "red"
                 ),
@@ -599,7 +600,33 @@ public class AuthUserAccountManagementService {
                 || !application.readyForBlockingApproval()) {
             throw new BusinessException("账号前置审批申请单尚未具备账号动作放行条件：" + normalizedCode);
         }
+        if (enforcePreApprovalForAccountActions) {
+            requireApprovedPreApprovalTask(application);
+        }
         return application;
+    }
+
+    private void requireApprovedPreApprovalTask(AuthAccountPreApprovalApplication application) {
+        String approvalTaskCode = blankToDefault(application.approvalTaskCode(), "");
+        if (approvalTaskCode.isBlank()) {
+            throw new BusinessException("Account pre-approval application has no approval task: "
+                    + application.applicationCode());
+        }
+        if (approvalService == null) {
+            throw new BusinessException("Approval service is not configured for account pre-approval enforcement");
+        }
+        ApprovalTask task = approvalService.findByCode(approvalTaskCode);
+        if (!"ACCOUNT_PRE_APPROVAL".equals(task.scene())) {
+            throw new BusinessException("Approval task is not an account pre-approval task: " + approvalTaskCode);
+        }
+        if (!blankToDefault(task.businessCode(), "").equals(blankToDefault(application.applicationCode(), ""))) {
+            throw new BusinessException("Approval task business code does not match application: "
+                    + approvalTaskCode + " / " + application.applicationCode());
+        }
+        if (task.status() != ApprovalStatus.APPROVED) {
+            throw new BusinessException("Account pre-approval task is not approved: "
+                    + approvalTaskCode + " status=" + task.status());
+        }
     }
 
     private PreApprovalAction preApprovalActionForUpsert(
@@ -640,7 +667,9 @@ public class AuthUserAccountManagementService {
 
     private List<String> preApprovalMissingCapabilities(String... capabilities) {
         if (enforcePreApprovalForAccountActions) {
-            return List.of(capabilities);
+            return List.of(capabilities).stream()
+                    .filter(capability -> !"审批通过态强制校验".equals(capability))
+                    .toList();
         }
         ArrayList<String> result = new ArrayList<>();
         result.add("全局强制申请单号");

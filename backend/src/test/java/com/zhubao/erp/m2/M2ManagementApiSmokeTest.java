@@ -1177,15 +1177,15 @@ class M2ManagementApiSmokeTest {
         assertThat(readiness.getBody()).contains(
                 "AUTH-PRE-CREATE-001",
                 "仅事后审批摘要",
-                "前置申请单号",
-                "阻断式审批状态"
+                "ACCOUNT_PRE_APPROVAL",
+                "审批通过态强制校验"
         );
         assertThat(draft.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(draft.getBody()).contains(
                 "AUTH-PRE-DRAFT-CREATE_ACCOUNT-APPROVAL-SMOKE",
                 "缺少前置材料",
                 "直属负责人审批",
-                "阻断式审批状态",
+                "审批通过态强制校验",
                 "pre-action draft only"
         );
         assertThat(application.getStatusCode().is2xxSuccessful()).isTrue();

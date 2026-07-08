@@ -60,7 +60,7 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('前置审批就绪度');
     expect(wrapper.text()).toContain('AUTH-PRE-CREATE-001');
     expect(wrapper.text()).toContain('生产配置可强制申请单号');
-    expect(wrapper.text()).toContain('阻断式审批状态');
+    expect(wrapper.text()).toContain('审批通过态强制校验');
     expect(wrapper.text()).toContain('客户授权表');
   });
 });

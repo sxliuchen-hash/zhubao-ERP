@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.113 / 申请单审批任务</strong>
-        <i>仍处于 M3 增量开发：本轮补齐账号管理动作前置申请单号强制开关，生产配置可默认阻断无申请单动作。</i>
+        <strong>M3.114 / 审批通过态校验</strong>
+        <i>仍处于 M3 增量开发：本轮补齐账号动作在生产强制模式下对申请单审批任务 APPROVED 的放行校验。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.113 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.114 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底、低成本适配计划、协议样本、参数复核、复测结果、签字闭环和账号前置审批缺口统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
@@ -93,7 +93,7 @@ defineProps<{
             <span>前置申请单</span>
             <span>申请单 JDBC</span>
             <span>强制申请单号</span>
-            <span>申请单审批任务</span>
+            <span>审批通过态校验</span>
             <span>工资试算基线</span>
           </div>
         </div>

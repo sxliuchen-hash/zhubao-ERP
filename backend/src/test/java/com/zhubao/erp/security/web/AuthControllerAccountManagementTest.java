@@ -119,7 +119,7 @@ class AuthControllerAccountManagementTest {
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
                 .singleElement()
                 .satisfies(item -> assertThat(item.missingCapabilities())
-                        .contains("全局强制申请单号", "阻断式审批状态"));
+                        .contains("全局强制申请单号", "审批通过态强制校验"));
     }
 
     @Test
@@ -133,7 +133,7 @@ class AuthControllerAccountManagementTest {
         assertThat(draft.data().draftCode()).isEqualTo("AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER");
         assertThat(draft.data().blockingStatus()).isEqualTo("缺少前置材料");
         assertThat(draft.data().missingEvidence()).contains("直属负责人审批");
-        assertThat(draft.data().missingCapabilities()).contains("阻断式审批状态");
+        assertThat(draft.data().missingCapabilities()).contains("审批通过态强制校验");
     }
 
     @Test

@@ -34,7 +34,7 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                 "planner",
                 "WAITING_EVIDENCE",
                 List.of("直属负责人审批", "系统管理员复核"),
-                List.of("阻断式审批状态", "正式电子签字"),
+                List.of("审批通过态强制校验", "正式电子签字"),
                 false
         ));
 
@@ -51,7 +51,7 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                     assertThat(application.requiredEvidence()).contains("账号申请单", "直属负责人审批");
                     assertThat(application.providedEvidence()).containsExactly("账号申请单：AUTH-REQ-001");
                     assertThat(application.missingEvidence()).containsExactly("直属负责人审批", "系统管理员复核");
-                    assertThat(application.missingCapabilities()).contains("阻断式审批状态");
+                    assertThat(application.missingCapabilities()).contains("审批通过态强制校验");
                     assertThat(application.approverRoles()).containsExactly("GENERAL_MANAGER", "ADMIN");
                     assertThat(application.approvalTaskCode()).isEqualTo("AUTH-PRE-TASK-202607090001-0001");
                     assertThat(application.readyForBlockingApproval()).isFalse();
@@ -67,7 +67,7 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                 "planner",
                 "WAITING_EVIDENCE",
                 List.of("直属负责人审批"),
-                List.of("阻断式审批状态"),
+                List.of("审批通过态强制校验"),
                 false
         ));
         repository.save(application(
