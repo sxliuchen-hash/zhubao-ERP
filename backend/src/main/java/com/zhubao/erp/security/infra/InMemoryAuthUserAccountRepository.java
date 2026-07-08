@@ -70,7 +70,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangedAt(),
                 account.failedLoginCount(),
                 account.lockedUntil(),
-                account.customerScope()
+                account.customerScope(),
+                account.passwordChangeRequired()
         ));
     }
 
@@ -87,7 +88,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangedAt(),
                 0,
                 null,
-                account.customerScope()
+                account.customerScope(),
+                account.passwordChangeRequired()
         ));
     }
 
@@ -104,7 +106,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangedAt(),
                 failedLoginCount,
                 lockedUntil,
-                account.customerScope()
+                account.customerScope(),
+                account.passwordChangeRequired()
         ));
     }
 
@@ -121,7 +124,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangedAt(),
                 0,
                 null,
-                account.customerScope()
+                account.customerScope(),
+                account.passwordChangeRequired()
         ));
     }
 

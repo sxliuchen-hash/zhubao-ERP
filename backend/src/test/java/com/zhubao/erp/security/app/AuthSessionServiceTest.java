@@ -180,6 +180,46 @@ class AuthSessionServiceTest {
     }
 
     @Test
+    void temporaryPasswordSessionMustChangePasswordBeforeResolvingOperatorContext() {
+        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        userRepository.save(new AuthUserAccount(
+                "planner",
+                passwordHasher.hash("Secure-2026-Temp!"),
+                "计划员 陈敏",
+                RoleCode.SALES,
+                DataScope.CUSTOMER_RANGE,
+                true,
+                false,
+                java.time.Instant.now(),
+                0,
+                null,
+                java.util.List.of("恒信珠宝"),
+                true
+        ));
+        AuthSessionService service = service(userRepository);
+
+        AuthSession session = service.login(new AuthLoginCommand("planner", "Secure-2026-Temp!"));
+
+        assertThat(session.passwordChangeRequired()).isTrue();
+        assertThat(service.session("Bearer " + session.token())).isPresent();
+        assertThatThrownBy(() -> service.operatorContext("Bearer " + session.token()))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("临时密码会话必须先完成自助改密");
+
+        AuthSession changed = service.changeOwnPassword(
+                "Bearer " + session.token(),
+                new ChangeOwnPasswordCommand("Secure-2026-Temp!", "Secure-2026-New!")
+        );
+
+        assertThat(changed.passwordChangeRequired()).isFalse();
+        assertThat(userRepository.findByUsername("planner"))
+                .get()
+                .extracting(AuthUserAccount::passwordChangeRequired)
+                .isEqualTo(false);
+        assertThat(service.operatorContext("Bearer " + changed.token())).isPresent();
+    }
+
+    @Test
     void rejectsExpiredProductionPasswordAfterPasswordMatches() {
         InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
         userRepository.save(new AuthUserAccount(

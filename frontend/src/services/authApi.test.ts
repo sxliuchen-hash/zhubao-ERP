@@ -31,6 +31,7 @@ const authSession = {
   passwordChangedAt: '2026-07-08 09:00:00',
   passwordExpiresAt: '2026-10-06 09:00:00',
   passwordExpired: false,
+  passwordChangeRequired: false,
   customerScope: [],
   menuCodes: ['dashboard', 'production', 'quality', 'approvals'],
   menuTree: [{
@@ -305,6 +306,7 @@ describe('authApi', () => {
       ...authSession,
       passwordChangedAt: '2026-07-08 11:30:00',
       passwordExpiresAt: '2026-10-06 11:30:00',
+      passwordChangeRequired: false,
     };
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response(refreshedSession));
     const authListener = vi.fn();
@@ -342,6 +344,7 @@ const authAccount = {
   passwordChangedAt: '2026-07-08 09:00:00',
   passwordExpiresAt: '2026-10-06 09:00:00',
   passwordExpired: false,
+  passwordChangeRequired: true,
   failedLoginCount: 2,
   lockedUntil: '',
   locked: false,

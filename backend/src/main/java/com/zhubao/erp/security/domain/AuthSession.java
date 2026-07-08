@@ -15,6 +15,7 @@ public record AuthSession(
         String passwordChangedAt,
         String passwordExpiresAt,
         boolean passwordExpired,
+        boolean passwordChangeRequired,
         List<String> customerScope,
         List<String> menuCodes,
         List<NavigationMenuItem> menuTree

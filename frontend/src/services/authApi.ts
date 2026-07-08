@@ -15,6 +15,7 @@ export interface AuthSession {
   passwordChangedAt: string;
   passwordExpiresAt: string;
   passwordExpired: boolean;
+  passwordChangeRequired: boolean;
   customerScope: string[];
   menuCodes: string[];
   menuTree: NavigationMenuItem[];
@@ -75,6 +76,7 @@ export interface AuthUserAccountSummary {
   passwordChangedAt: string;
   passwordExpiresAt: string;
   passwordExpired: boolean;
+  passwordChangeRequired: boolean;
   failedLoginCount: number;
   lockedUntil: string;
   locked: boolean;

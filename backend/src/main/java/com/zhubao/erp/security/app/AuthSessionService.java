@@ -98,7 +98,8 @@ public class AuthSessionService {
                 account.get().operator(),
                 account.get().role().name(),
                 "SUCCESS",
-                account.get().demoAccount() ? "评审账号登录成功" : "生产账号登录成功",
+                (account.get().demoAccount() ? "评审账号登录成功" : "生产账号登录成功")
+                        + (account.get().passwordChangeRequired() ? "；必须先完成自助改密" : ""),
                 token
         );
         return toSession(entry);
@@ -136,15 +137,29 @@ public class AuthSessionService {
     }
 
     public Optional<OperatorContext> operatorContext(String rawAuthorizationHeader) {
-        return resolve(rawAuthorizationHeader)
-                .map(entry -> new OperatorContext(
-                        entry.user().operator(),
-                        entry.user().role(),
-                        entry.user().dataScope(),
-                        false,
-                        entry.token(),
-                        entry.user().customerScope()
-                ));
+        Optional<SessionEntry> entry = resolve(rawAuthorizationHeader);
+        entry.ifPresent(value -> {
+            if (value.user().passwordChangeRequired()) {
+                recordAudit(
+                        "SESSION_RESOLVE",
+                        value.user().username(),
+                        value.user().operator(),
+                        value.user().role().name(),
+                        "DENIED",
+                        "临时密码会话必须先完成自助改密",
+                        value.token()
+                );
+                throw new PermissionDeniedException("临时密码会话必须先完成自助改密");
+            }
+        });
+        return entry.map(value -> new OperatorContext(
+                value.user().operator(),
+                value.user().role(),
+                value.user().dataScope(),
+                false,
+                value.token(),
+                value.user().customerScope()
+        ));
     }
 
     public AuthSession changeOwnPassword(String rawAuthorizationHeader, ChangeOwnPasswordCommand command) {
@@ -227,7 +242,8 @@ public class AuthSessionService {
                 now,
                 0,
                 null,
-                currentAccount.customerScope()
+                currentAccount.customerScope(),
+                false
         ));
         SessionEntry updatedEntry = new SessionEntry(entry.token(), updated, entry.expiresAt());
         sessions.put(entry.token(), updatedEntry);
@@ -379,6 +395,7 @@ public class AuthSessionService {
                 displayInstant(user.passwordChangedAt()),
                 DISPLAY_TIME.format(passwordExpiryPolicy.expiresAt(user)),
                 passwordExpiryPolicy.isExpired(user, Instant.now()),
+                user.passwordChangeRequired(),
                 user.customerScope(),
                 navigationMenuService.menuCodesFor(user.role()),
                 navigationMenuService.menuTreeFor(user.role())

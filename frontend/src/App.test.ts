@@ -17,8 +17,8 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.115 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.115 / 停用会话吊销');
+    expect(wrapper.text()).toContain('M3.116 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.116 / 强制首次改密');
     expect(wrapper.text()).toContain('复核补录');
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('授权导航过滤');
@@ -107,6 +107,7 @@ function sessionWithMenus(menuCodes: string[]): AuthSession {
     passwordChangedAt: '2026-07-08 09:00:00',
     passwordExpiresAt: '2026-10-06 09:00:00',
     passwordExpired: false,
+    passwordChangeRequired: false,
     customerScope: [],
     menuCodes,
     menuTree: menuCodes.map((code) => ({

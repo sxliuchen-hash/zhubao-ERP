@@ -47,6 +47,7 @@ class JdbcAuthUserAccountRepositoryTest {
                     assertThat(account.enabled()).isTrue();
                     assertThat(account.demoAccount()).isFalse();
                     assertThat(account.passwordChangedAt()).isNotNull();
+                    assertThat(account.passwordChangeRequired()).isFalse();
                     assertThat(passwordHasher.matches("planner-pass", account.passwordHash())).isTrue();
                 });
 
@@ -58,6 +59,31 @@ class JdbcAuthUserAccountRepositoryTest {
                     assertThat(account.operator()).isEqualTo("计划员 陈敏-停用");
                     assertThat(account.role()).isEqualTo(RoleCode.OPERATOR);
                     assertThat(account.enabled()).isFalse();
+                });
+    }
+
+    @Test
+    void persistsPasswordChangeRequiredFlag() {
+        repository.save(new AuthUserAccount(
+                "temp",
+                passwordHasher.hash("temp-pass"),
+                "临时密码账号",
+                RoleCode.SALES,
+                DataScope.CUSTOMER_RANGE,
+                true,
+                false,
+                Instant.parse("2026-07-09T00:00:00Z"),
+                0,
+                null,
+                List.of("恒信珠宝"),
+                true
+        ));
+
+        assertThat(repository.findByUsername("temp"))
+                .get()
+                .satisfies(account -> {
+                    assertThat(account.passwordChangeRequired()).isTrue();
+                    assertThat(account.customerScope()).containsExactly("恒信珠宝");
                 });
     }
 
@@ -167,6 +193,7 @@ class JdbcAuthUserAccountRepositoryTest {
                         enabled boolean not null default true,
                         demo_account boolean not null default false,
                         password_changed_at timestamp default current_timestamp,
+                        password_change_required boolean not null default false,
                         failed_login_count int not null default 0,
                         locked_until timestamp null,
                         last_login_at timestamp null,

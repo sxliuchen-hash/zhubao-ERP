@@ -14,6 +14,7 @@ import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -83,9 +84,14 @@ class AuthUserAccountManagementServiceTest {
         ), admin);
 
         AuthSession session = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
-        OperatorContext context = fixture.sessionService().operatorContext("Bearer " + session.token()).orElseThrow();
+        assertThat(session.passwordChangeRequired()).isTrue();
+        AuthSession changed = fixture.sessionService().changeOwnPassword(
+                "Bearer " + session.token(),
+                new ChangeOwnPasswordCommand("Secure-2026-Plan!", "Secure-2026-New!")
+        );
+        OperatorContext context = fixture.sessionService().operatorContext("Bearer " + changed.token()).orElseThrow();
 
-        assertThat(session.customerScope()).containsExactly("恒信珠宝", "雅辰饰品");
+        assertThat(changed.customerScope()).containsExactly("恒信珠宝", "雅辰饰品");
         assertThat(context.customerScope()).containsExactly("恒信珠宝", "雅辰饰品");
         assertThat(fixture.managementService().accounts())
                 .filteredOn(account -> account.username().equals("planner"))
@@ -169,11 +175,25 @@ class AuthUserAccountManagementServiceTest {
         assertThat(account.failedLoginCount()).isZero();
         assertThat(account.lockedUntil()).isNull();
         assertThat(account.passwordChangedAt()).isAfter(oldPasswordChangedAt);
+        assertThat(account.passwordChangeRequired()).isTrue();
+        assertThat(fixture.managementService().accounts())
+                .filteredOn(summary -> summary.username().equals("planner"))
+                .singleElement()
+                .satisfies(summary -> assertThat(summary.passwordChangeRequired()).isTrue());
+        assertThat(fixture.auditRepository().findRecent(20))
+                .anySatisfy(event -> assertThat(event.reason())
+                        .contains("更新账号并重置密码", "passwordChangeRequired=true"));
+        assertThat(fixture.approvalRepository().findAll())
+                .anySatisfy(task -> assertThat(task.sourceSummary())
+                        .contains("action=更新账号并重置密码", "passwordChangeRequired=true"));
         assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Old!")))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("用户名或密码错误");
-        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-New!")).username())
-                .isEqualTo("planner");
+        assertThat(fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-New!")))
+                .satisfies(session -> {
+                    assertThat(session.username()).isEqualTo("planner");
+                    assertThat(session.passwordChangeRequired()).isTrue();
+                });
     }
 
     @Test

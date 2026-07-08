@@ -15,6 +15,7 @@ public record AuthUserAccountSummary(
         String passwordChangedAt,
         String passwordExpiresAt,
         boolean passwordExpired,
+        boolean passwordChangeRequired,
         int failedLoginCount,
         String lockedUntil,
         boolean locked

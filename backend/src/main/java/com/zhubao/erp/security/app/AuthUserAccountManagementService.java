@@ -210,11 +210,11 @@ public class AuthUserAccountManagementService {
                         "管理员重置生产账号密码前必须核实本人或离线交接场景",
                         "弱前置校验",
                         List.of("重置原因", "本人核验方式", "临时密码交付记录", "密码过期策略确认"),
-                        List.of("本人核验附件", "临时密码一次性通道", "强制首次登录改密"),
+                        List.of("本人核验附件", "临时密码一次性通道"),
                         List.of("ADMIN", "账号负责人"),
-                        "当前会刷新 passwordChangedAt、清零失败锁定并写 ACCOUNT_MANAGEMENT 审计",
+                        "当前会刷新 passwordChangedAt、清零失败锁定、标记强制首次登录改密并写 ACCOUNT_MANAGEMENT 审计",
                         "允许管理员重置，但必须保留 reason 和审计记录",
-                        "补本人核验附件和首次登录强制改密标记",
+                        "补本人核验附件和临时密码一次性通道",
                         "中",
                         "amber"
                 ),
@@ -350,6 +350,7 @@ public class AuthUserAccountManagementService {
         Instant passwordChangedAt = passwordProvided ? Instant.now() : existing.passwordChangedAt();
         int failedLoginCount = existing == null || passwordProvided ? 0 : existing.failedLoginCount();
         Instant lockedUntil = existing == null || passwordProvided ? null : existing.lockedUntil();
+        boolean passwordChangeRequired = passwordProvided ? !command.demoAccount() : existing.passwordChangeRequired();
         AuthUserAccount saved = accountRepository.save(new AuthUserAccount(
                 username,
                 passwordHash,
@@ -361,10 +362,13 @@ public class AuthUserAccountManagementService {
                 passwordChangedAt,
                 failedLoginCount,
                 lockedUntil,
-                customerScope
+                customerScope,
+                passwordChangeRequired
         ));
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
-        String auditedAction = action + preApprovalApplicationSuffix(preApprovalApplication);
+        String auditedAction = action
+                + preApprovalApplicationSuffix(preApprovalApplication)
+                + passwordChangeRequiredSuffix(passwordProvided, passwordChangeRequired);
         recordManagementAudit(username, operatorContext, auditedAction);
         recordApprovalSummary(saved, operatorContext, auditedAction);
         return summary(saved, Instant.now());
@@ -443,6 +447,7 @@ public class AuthUserAccountManagementService {
                 displayInstant(account.passwordChangedAt()),
                 DISPLAY_TIME.format(passwordExpiryPolicy.expiresAt(account)),
                 passwordExpiryPolicy.isExpired(account, now),
+                account.passwordChangeRequired(),
                 account.failedLoginCount(),
                 account.lockedUntil() == null ? "" : DISPLAY_TIME.format(account.lockedUntil()),
                 locked
@@ -721,6 +726,10 @@ public class AuthUserAccountManagementService {
 
     private String revokedSessionsSuffix(boolean enabled, int revokedSessions) {
         return enabled || authSessionService == null ? "" : "; revokedSessions=" + revokedSessions;
+    }
+
+    private String passwordChangeRequiredSuffix(boolean passwordProvided, boolean passwordChangeRequired) {
+        return passwordProvided ? "; passwordChangeRequired=" + passwordChangeRequired : "";
     }
 
     private AuthAccountPreApprovalApplicationRepository requirePreApprovalApplicationRepository() {

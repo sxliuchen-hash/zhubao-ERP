@@ -292,6 +292,7 @@ function permissionTone(index: number): Tone {
 
 function accountStatusLabel(account: AuthUserAccountSummary): string {
   if (!account.enabled) return '停用';
+  if (account.passwordChangeRequired) return '需首次改密';
   if (account.passwordExpired) return '密码过期';
   if (account.locked) return '锁定';
   return '启用';
@@ -299,6 +300,7 @@ function accountStatusLabel(account: AuthUserAccountSummary): string {
 
 function accountStatusTone(account: AuthUserAccountSummary): Tone {
   if (!account.enabled) return 'gray';
+  if (account.passwordChangeRequired) return 'amber';
   if (account.passwordExpired) return 'red';
   if (account.locked) return 'red';
   if (account.failedLoginCount > 0) return 'amber';
@@ -378,7 +380,7 @@ function readinessTone(tone: string): Tone {
             <small>
               {{
                 authSession
-                  ? `会话 ${authSession.expiresAt} / 密码到期 ${authSession.passwordExpiresAt || '未记录'}`
+                  ? `会话 ${authSession.expiresAt} / 密码到期 ${authSession.passwordExpiresAt || '未记录'}${authSession.passwordChangeRequired ? ' / 需先自助改密' : ''}`
                   : 'Bearer token 会自动写入后续 API 请求'
               }}
             </small>
@@ -545,6 +547,7 @@ function readinessTone(tone: string): Tone {
                 <template v-if="account.lockedUntil"> · 锁定至 {{ account.lockedUntil }}</template>
                 <template v-if="account.passwordChangedAt"> · 改密 {{ account.passwordChangedAt }}</template>
                 <template v-if="account.passwordExpiresAt"> · 到期 {{ account.passwordExpiresAt }}</template>
+                <template v-if="account.passwordChangeRequired"> · 需首次改密</template>
                 <template v-if="account.passwordExpired"> · 密码已过期</template>
               </small>
             </div>

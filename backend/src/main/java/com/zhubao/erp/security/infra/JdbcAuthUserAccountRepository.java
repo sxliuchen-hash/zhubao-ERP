@@ -42,8 +42,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 insert into auth_user_account (
                     username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                    password_changed_at, failed_login_count, locked_until, customer_scope
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -58,6 +58,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setInt(9, account.failedLoginCount());
             setInstant(statement, 10, account.lockedUntil());
             statement.setString(11, serializeCustomerScope(account.customerScope()));
+            statement.setBoolean(12, account.passwordChangeRequired());
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -77,7 +78,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                        password_changed_at = ?,
                        failed_login_count = ?,
                        locked_until = ?,
-                       customer_scope = ?
+                       customer_scope = ?,
+                       password_change_required = ?
                  where username = ?
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -92,7 +94,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setInt(8, account.failedLoginCount());
             setInstant(statement, 9, account.lockedUntil());
             statement.setString(10, serializeCustomerScope(account.customerScope()));
-            statement.setString(11, normalize(account.username()));
+            statement.setBoolean(11, account.passwordChangeRequired());
+            statement.setString(12, normalize(account.username()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -104,7 +107,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public List<AuthUserAccount> findAll() {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       password_changed_at, failed_login_count, locked_until, customer_scope
+                       password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required
                   from auth_user_account
                  order by username
                 """;
@@ -125,7 +128,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public Optional<AuthUserAccount> findByUsername(String username) {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       password_changed_at, failed_login_count, locked_until, customer_scope
+                       password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required
                   from auth_user_account
                  where username = ?
                 """;
@@ -248,7 +251,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 readInstant(rs, "password_changed_at"),
                 rs.getInt("failed_login_count"),
                 readInstant(rs, "locked_until"),
-                parseCustomerScope(rs.getString("customer_scope"))
+                parseCustomerScope(rs.getString("customer_scope")),
+                rs.getBoolean("password_change_required")
         );
     }
 
