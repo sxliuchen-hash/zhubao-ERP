@@ -15,6 +15,7 @@ import {
   fetchHardwareWorkspace,
   type HardwareAdapterPlan,
   type HardwarePocEvidenceSummary,
+  type HardwareProtocolSample,
   type HardwareWorkspaceModel,
 } from '../../services/hardwareIntegrationApi';
 
@@ -22,6 +23,7 @@ const workspace = ref<HardwareWorkspaceModel>({
   devices: fallbackHardwareDevices,
   tasks: fallbackIntegrationTasks,
   adapterPlans: fallbackHardwareAdapterPlans(),
+  protocolSamples: fallbackHardwareProtocolSamples(),
   pocRecords: fallbackHardwarePocRecords,
   pocEvidence: fallbackHardwarePocEvidence(),
   summary: {
@@ -48,6 +50,7 @@ const activeTask = computed(
 
 const hardwareDevices = computed(() => workspace.value.devices);
 const hardwareAdapterPlans = computed(() => workspace.value.adapterPlans);
+const hardwareProtocolSamples = computed(() => workspace.value.protocolSamples);
 const hardwarePocRecords = computed(() => workspace.value.pocRecords);
 const hardwarePocEvidence = computed(() => workspace.value.pocEvidence);
 const integrationTasks = computed(() => workspace.value.tasks);
@@ -195,6 +198,76 @@ function fallbackHardwareAdapterPlans(): HardwareAdapterPlan[] {
     riskLevel: device.status === 'manual' ? '高' : device.status === 'degraded' ? '中' : '低',
     tone: device.status === 'manual' ? 'red' : device.status === 'degraded' ? 'amber' : 'green',
   }));
+}
+
+function fallbackHardwareProtocolSamples(): HardwareProtocolSample[] {
+  return [
+    {
+      deviceCode: 'CAM-UNPACK-01',
+      deviceName: '拆包台摄像头',
+      protocolType: 'RTSP / ONVIF / FFmpeg',
+      sampleStatus: '待复测',
+      requiredParameters: ['nvrIp', 'channel', 'startTime', 'endTime', 'timeSyncOffset', 'ffmpegCommand'],
+      samplePayload: 'rtsp://nvr.local/ch01?start=20260706T084000&end=20260706T091000',
+      evidenceCode: 'HW-PROTO-CAM-20260706-001',
+      captureMethod: 'NVR 时间段回放截图 + FFmpeg dry-run 日志',
+      nextReviewAction: '补齐 NVR 品牌、通道号、NTP 校时偏差和截取失败日志样本',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      deviceCode: 'PRN-LABEL-01',
+      deviceName: '标签打印机',
+      protocolType: 'Windows driver / Browser print / PDF',
+      sampleStatus: '样本已冻结',
+      requiredParameters: ['labelSize', 'dpi', 'printerName', 'templateCode'],
+      samplePayload: 'PDF-LABEL-MD-20260706-001',
+      evidenceCode: 'HW-PROTO-PRN-20260706-001',
+      captureMethod: '浏览器打印预览截图 + PDF 标签模板 checksum',
+      nextReviewAction: '确认标签纸规格、DPI、打印机名称和补打权限',
+      riskLevel: '低',
+      tone: 'blue',
+    },
+    {
+      deviceCode: 'SCAN-PC-01',
+      deviceName: 'PC 扫码枪',
+      protocolType: 'USB HID',
+      sampleStatus: '样本已冻结',
+      requiredParameters: ['barcodeFormat', 'prefix', 'suffix', 'scanDistance', 'keyboardLayout'],
+      samplePayload: 'WO|ZD-20260706-001|PROC=POLISH',
+      evidenceCode: 'HW-PROTO-SCAN-20260706-001',
+      captureMethod: '扫码输入录屏 + 原始条码照片',
+      nextReviewAction: '确认条码格式、前后缀、键盘布局和弱网场景',
+      riskLevel: '低',
+      tone: 'green',
+    },
+    {
+      deviceCode: 'PWA-CAM-01',
+      deviceName: '手机摄像头扫码',
+      protocolType: 'BarcodeDetector / ZXing fallback',
+      sampleStatus: '待复测',
+      requiredParameters: ['browser', 'androidVersion', 'lighting', 'decodeMs'],
+      samplePayload: 'PWA-SCAN-SCREENSHOT-001',
+      evidenceCode: 'HW-PROTO-PWA-20260706-001',
+      captureMethod: '弱光扫码截图 + 识别耗时日志',
+      nextReviewAction: '补齐弱光、反光、低端安卓机型和 ZXing 兜底样本',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      deviceCode: 'SCALE-01',
+      deviceName: '电子秤',
+      protocolType: 'RS232 / USB / TCP reserved + manual reading',
+      sampleStatus: '接口待确认',
+      requiredParameters: ['interfaceType', 'baudRate', 'dataBits', 'parity', 'tcpHost', 'unit', 'precision'],
+      samplePayload: 'ST,GS,+000123.45,g',
+      evidenceCode: 'HW-PROTO-SCALE-20260706-001',
+      captureMethod: '人工读数照片 + 串口/TCP 报文样本占位',
+      nextReviewAction: '确认 RS232/USB/TCP 接口类型、波特率、精度、校准周期和原始报文',
+      riskLevel: '高',
+      tone: 'red',
+    },
+  ];
 }
 
 function evidenceRequirementFor(deviceCode: string): string {
@@ -437,6 +510,24 @@ function nextIntegrationActionFor(deviceCode: string): string {
             </div>
             <StatusBadge :label="`风险 ${plan.riskLevel}`" :tone="plan.tone" />
             <p>{{ plan.evidenceRequirement }}；{{ plan.nextIntegrationAction }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">PROTOCOL SAMPLES</span>
+          <StatusBadge label="复测留痕" tone="amber" />
+        </div>
+        <div class="integration-list compact-integration-list">
+          <article v-for="sample in hardwareProtocolSamples" :key="sample.evidenceCode">
+            <div class="integration-main">
+              <strong>{{ sample.deviceName }} / {{ sample.protocolType }}</strong>
+              <span>{{ sample.sampleStatus }} / {{ sample.samplePayload }}</span>
+              <small>{{ sample.evidenceCode }} / {{ sample.captureMethod }}</small>
+            </div>
+            <StatusBadge :label="`风险 ${sample.riskLevel}`" :tone="sample.tone" />
+            <p>{{ sample.requiredParameters.join('、') }}；{{ sample.nextReviewAction }}</p>
           </article>
         </div>
       </section>

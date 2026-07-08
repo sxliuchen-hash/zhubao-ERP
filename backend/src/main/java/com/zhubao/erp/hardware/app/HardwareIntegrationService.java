@@ -8,6 +8,7 @@ import com.zhubao.erp.hardware.domain.HardwareDeviceStatus;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
 import com.zhubao.erp.hardware.domain.HardwarePocRecordRepository;
+import com.zhubao.erp.hardware.domain.HardwareProtocolSample;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
 import org.springframework.stereotype.Service;
 
@@ -169,6 +170,74 @@ public class HardwareIntegrationService {
             )
     );
 
+    private final List<HardwareProtocolSample> protocolSamples = List.of(
+            new HardwareProtocolSample(
+                    "CAM-UNPACK-01",
+                    "拆包台摄像头",
+                    "RTSP / ONVIF / FFmpeg",
+                    "待复测",
+                    List.of("nvrIp", "channel", "startTime", "endTime", "timeSyncOffset", "ffmpegCommand"),
+                    "rtsp://nvr.local/ch01?start=20260706T084000&end=20260706T091000",
+                    "HW-PROTO-CAM-20260706-001",
+                    "NVR 时间段回放截图 + FFmpeg dry-run 日志",
+                    "补齐 NVR 品牌、通道号、NTP 校时偏差和截取失败日志样本",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolSample(
+                    "PRN-LABEL-01",
+                    "标签打印机",
+                    "Windows driver / Browser print / PDF",
+                    "样本已冻结",
+                    List.of("labelSize", "dpi", "printerName", "templateCode"),
+                    "PDF-LABEL-MD-20260706-001",
+                    "HW-PROTO-PRN-20260706-001",
+                    "浏览器打印预览截图 + PDF 标签模板 checksum",
+                    "确认标签纸规格、DPI、打印机名称和补打权限",
+                    "低",
+                    "blue"
+            ),
+            new HardwareProtocolSample(
+                    "SCAN-PC-01",
+                    "PC 扫码枪",
+                    "USB HID",
+                    "样本已冻结",
+                    List.of("barcodeFormat", "prefix", "suffix", "scanDistance", "keyboardLayout"),
+                    "WO|ZD-20260706-001|PROC=POLISH",
+                    "HW-PROTO-SCAN-20260706-001",
+                    "扫码输入录屏 + 原始条码照片",
+                    "确认条码格式、前后缀、键盘布局和弱网场景",
+                    "低",
+                    "green"
+            ),
+            new HardwareProtocolSample(
+                    "PWA-CAM-01",
+                    "手机摄像头扫码",
+                    "BarcodeDetector / ZXing fallback",
+                    "待复测",
+                    List.of("browser", "androidVersion", "lighting", "decodeMs"),
+                    "PWA-SCAN-SCREENSHOT-001",
+                    "HW-PROTO-PWA-20260706-001",
+                    "弱光扫码截图 + 识别耗时日志",
+                    "补齐弱光、反光、低端安卓机型和 ZXing 兜底样本",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolSample(
+                    "SCALE-01",
+                    "电子秤",
+                    "RS232 / USB / TCP reserved + manual reading",
+                    "接口待确认",
+                    List.of("interfaceType", "baudRate", "dataBits", "parity", "tcpHost", "unit", "precision"),
+                    "ST,GS,+000123.45,g",
+                    "HW-PROTO-SCALE-20260706-001",
+                    "人工读数照片 + 串口/TCP 报文样本占位",
+                    "确认 RS232/USB/TCP 接口类型、波特率、精度、校准周期和原始报文",
+                    "高",
+                    "red"
+            )
+    );
+
     public List<HardwareDevice> findDevices() {
         return devices;
     }
@@ -179,6 +248,10 @@ public class HardwareIntegrationService {
 
     public List<HardwareAdapterPlan> findAdapterPlans() {
         return adapterPlans;
+    }
+
+    public List<HardwareProtocolSample> findProtocolSamples() {
+        return protocolSamples;
     }
 
     public List<HardwarePocRecord> findPocRecords() {

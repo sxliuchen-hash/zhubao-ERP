@@ -35,6 +35,15 @@ class HardwareIntegrationServiceTest {
                     assertThat(plan.nextIntegrationAction()).contains("串口/TCP");
                     assertThat(plan.tone()).isEqualTo("red");
                 });
+        assertThat(service.findProtocolSamples()).hasSize(5);
+        assertThat(service.findProtocolSamples())
+                .anySatisfy(sample -> {
+                    assertThat(sample.deviceCode()).isEqualTo("SCALE-01");
+                    assertThat(sample.protocolType()).contains("RS232", "USB", "TCP");
+                    assertThat(sample.requiredParameters()).contains("baudRate");
+                    assertThat(sample.samplePayload()).contains("ST,GS");
+                    assertThat(sample.tone()).isEqualTo("red");
+                });
         assertThat(service.findPocRecords()).hasSize(4);
         assertThat(service.blockedPocCount()).isEqualTo(1);
         assertThat(service.findPocRecords())

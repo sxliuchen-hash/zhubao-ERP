@@ -86,6 +86,26 @@ describe('hardwareIntegrationApi', () => {
           code: 0,
           message: 'ok',
           data: [{
+            deviceCode: 'SCALE-01',
+            deviceName: '电子秤',
+            protocolType: 'RS232 / USB / TCP reserved + manual reading',
+            sampleStatus: '接口待确认',
+            requiredParameters: ['interfaceType', 'baudRate', 'dataBits'],
+            samplePayload: 'ST,GS,+000123.45,g',
+            evidenceCode: 'HW-PROTO-SCALE-001',
+            captureMethod: '人工读数照片 + 串口/TCP 报文样本占位',
+            nextReviewAction: '确认接口类型和波特率',
+            riskLevel: '高',
+            tone: 'red',
+          }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: [{
             code: 'POC-VID-001',
             deviceCode: 'CAM-UNPACK-01',
             scene: '拆包台视频截取',
@@ -138,9 +158,11 @@ describe('hardwareIntegrationApi', () => {
     expect(model.devices[0].status).toBe('degraded');
     expect(model.tasks[0].id).toBe('INT-VID-001');
     expect(model.adapterPlans[0].deviceCode).toBe('SCALE-01');
+    expect(model.protocolSamples[0].deviceCode).toBe('SCALE-01');
+    expect(model.protocolSamples[0].samplePayload).toContain('ST,GS');
     expect(model.pocRecords[0].tone).toBe('amber');
     expect(model.pocEvidence[0].attachmentCodes).toContain('ATT-HW-001');
     expect(model.summary.averageHealth).toBe(62);
-    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
   });
 });

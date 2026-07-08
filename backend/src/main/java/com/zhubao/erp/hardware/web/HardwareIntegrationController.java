@@ -6,6 +6,7 @@ import com.zhubao.erp.hardware.domain.HardwareAdapterPlan;
 import com.zhubao.erp.hardware.domain.HardwareDevice;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
+import com.zhubao.erp.hardware.domain.HardwareProtocolSample;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,6 +37,11 @@ public class HardwareIntegrationController {
     @GetMapping("/adapter-plans")
     public ApiResponse<List<HardwareAdapterPlan>> adapterPlans() {
         return ApiResponse.ok(hardwareIntegrationService.findAdapterPlans());
+    }
+
+    @GetMapping("/protocol-samples")
+    public ApiResponse<List<HardwareProtocolSample>> protocolSamples() {
+        return ApiResponse.ok(hardwareIntegrationService.findProtocolSamples());
     }
 
     @GetMapping("/poc-records")

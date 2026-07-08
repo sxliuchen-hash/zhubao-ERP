@@ -17,6 +17,10 @@ describe('HardwareIntegrationWorkspace', () => {
     expect(wrapper.text()).toContain('POC EVIDENCE');
     expect(wrapper.text()).toContain('ADAPTER PLANS');
     expect(wrapper.text()).toContain('低成本优先');
+    expect(wrapper.text()).toContain('PROTOCOL SAMPLES');
+    expect(wrapper.text()).toContain('复测留痕');
+    expect(wrapper.text()).toContain('RS232');
+    expect(wrapper.text()).toContain('ST,GS');
     expect(wrapper.text()).toContain('串口/TCP');
     expect(wrapper.text()).toContain('POC-SCAN-20260706-001');
     expect(wrapper.text()).toContain('ATT-HW-20260706-001');
