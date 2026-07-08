@@ -33,6 +33,7 @@ zhubao:
       repository: ${ZHUBAO_AUTH_AUDIT_REPOSITORY:jdbc}
     pre-approval:
       repository: ${ZHUBAO_AUTH_PRE_APPROVAL_REPOSITORY:jdbc}
+      enforce-account-actions: ${ZHUBAO_AUTH_PRE_APPROVAL_ENFORCE_ACCOUNT_ACTIONS:true}
   operations:
     frontend-url: ${ZHUBAO_FRONTEND_URL:http://localhost/}
     frontend-probe-url: ${ZHUBAO_FRONTEND_PROBE_URL:http://frontend/}

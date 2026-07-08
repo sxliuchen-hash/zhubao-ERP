@@ -226,6 +226,22 @@ class AuthUserAccountManagementServiceTest {
     }
 
     @Test
+    void preApprovalReadinessReflectsEnforcedApplicationCodeSwitch() {
+        Fixture fixture = fixture(true);
+
+        List<AuthAccountPreApprovalReadiness> readiness = fixture.managementService().preApprovalReadiness();
+
+        assertThat(readiness)
+                .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.enforcementStatus()).isEqualTo("申请单号强制校验已开启");
+                    assertThat(item.missingCapabilities()).doesNotContain("全局强制申请单号");
+                    assertThat(item.missingCapabilities()).contains("阻断式审批状态", "正式电子签字");
+                });
+    }
+
+    @Test
     void preApprovalDraftEvaluatesMissingEvidenceWithoutWritingApprovalTask() {
         Fixture fixture = fixture();
 
@@ -348,6 +364,58 @@ class AuthUserAccountManagementServiceTest {
                 .singleElement()
                 .satisfies(task -> assertThat(task.sourceSummary())
                         .contains("action=创建账号；前置申请单：AUTH-PRE-APP-READY-001"));
+    }
+
+    @Test
+    void enforcingPreApprovalApplicationCodeRejectsAccountActionWithoutCode() {
+        Fixture fixture = fixture(true);
+
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false
+        ), admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("前置审批强制开关")
+                .hasMessageContaining("AUTH-PRE-CREATE-001")
+                .hasMessageContaining("planner");
+        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
+        assertThat(fixture.auditRepository().findRecent(10)).isEmpty();
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
+    }
+
+    @Test
+    void enforcingPreApprovalApplicationCodeAllowsReadyApplication() {
+        Fixture fixture = fixture(true);
+        AuthAccountPreApprovalApplication application = readyPreApprovalApplication(
+                "AUTH-PRE-APP-READY-ENFORCED-001",
+                "AUTH-PRE-CREATE-001",
+                "创建生产账号",
+                "planner"
+        );
+        fixture.preApprovalApplicationRepository().save(application);
+
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                application.applicationCode()
+        ), admin);
+
+        assertThat(fixture.accountRepository().findByUsername("planner")).isPresent();
+        assertThat(fixture.auditRepository().findRecent(10))
+                .anySatisfy(event -> assertThat(event.reason())
+                        .contains("前置申请单：AUTH-PRE-APP-READY-ENFORCED-001"));
     }
 
     @Test
@@ -590,6 +658,10 @@ class AuthUserAccountManagementServiceTest {
     }
 
     private Fixture fixture() {
+        return fixture(false);
+    }
+
+    private Fixture fixture(boolean enforcePreApprovalForAccountActions) {
         InMemoryAuthAuditRepository auditRepository = new InMemoryAuthAuditRepository();
         InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
         InMemoryApprovalTaskRepository approvalRepository = new InMemoryApprovalTaskRepository();
@@ -603,7 +675,8 @@ class AuthUserAccountManagementServiceTest {
                 passwordExpiryPolicy,
                 auditRepository,
                 approvalService,
-                preApprovalApplicationRepository
+                preApprovalApplicationRepository,
+                enforcePreApprovalForAccountActions
         );
         AuthSessionService sessionService = new AuthSessionService(
                 navigationMenuService,

@@ -18,11 +18,13 @@ import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -47,6 +49,7 @@ public class AuthUserAccountManagementService {
     private final AuthAuditRepository authAuditRepository;
     private final ApprovalService approvalService;
     private final AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository;
+    private final boolean enforcePreApprovalForAccountActions;
 
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
@@ -69,7 +72,6 @@ public class AuthUserAccountManagementService {
         this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, approvalService, null);
     }
 
-    @Autowired
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
             PasswordHasher passwordHasher,
@@ -79,6 +81,30 @@ public class AuthUserAccountManagementService {
             ApprovalService approvalService,
             AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository
     ) {
+        this(
+                accountRepository,
+                passwordHasher,
+                passwordPolicy,
+                passwordExpiryPolicy,
+                authAuditRepository,
+                approvalService,
+                preApprovalApplicationRepository,
+                false
+        );
+    }
+
+    @Autowired
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            @Value("${zhubao.auth.pre-approval.enforce-account-actions:false}")
+            boolean enforcePreApprovalForAccountActions
+    ) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
         this.passwordPolicy = passwordPolicy;
@@ -86,6 +112,7 @@ public class AuthUserAccountManagementService {
         this.authAuditRepository = authAuditRepository;
         this.approvalService = approvalService;
         this.preApprovalApplicationRepository = preApprovalApplicationRepository;
+        this.enforcePreApprovalForAccountActions = enforcePreApprovalForAccountActions;
     }
 
     public List<AuthUserAccountSummary> accounts() {
@@ -101,9 +128,9 @@ public class AuthUserAccountManagementService {
                         "AUTH-PRE-CREATE-001",
                         "创建生产账号",
                         "新增非 demo 账号或授予敏感角色前必须先完成申请与审批",
-                        "申请单号可校验，默认不强制",
+                        enforcePreApprovalForAccountActions ? "申请单号强制校验已开启" : "申请单号可校验，默认不强制",
                         List.of("账号申请单", "直属负责人审批", "系统管理员复核", "角色与数据范围说明", "初始密码交付确认"),
-                        List.of("全局强制申请单号", "阻断式审批状态", "正式电子签字", "审批后自动放行"),
+                        preApprovalMissingCapabilities("阻断式审批状态", "正式电子签字", "审批后自动放行"),
                         List.of("GENERAL_MANAGER", "ADMIN"),
                         "当前可保存并校验前置申请单号，同时写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务",
                         "生产上线前禁止直接创建生产账号",
@@ -484,6 +511,10 @@ public class AuthUserAccountManagementService {
     ) {
         String normalizedCode = blankToDefault(applicationCode, "");
         if (normalizedCode.isBlank()) {
+            if (enforcePreApprovalForAccountActions) {
+                throw new BusinessException("账号动作已启用前置审批强制开关，必须提供申请单号："
+                        + expectedAction.readinessCode + " / " + normalize(targetUsername));
+            }
             return null;
         }
         AuthAccountPreApprovalApplication application = requirePreApprovalApplicationRepository()
@@ -536,6 +567,16 @@ public class AuthUserAccountManagementService {
             throw new BusinessException("账号前置审批申请单仓储未配置");
         }
         return preApprovalApplicationRepository;
+    }
+
+    private List<String> preApprovalMissingCapabilities(String... capabilities) {
+        if (enforcePreApprovalForAccountActions) {
+            return List.of(capabilities);
+        }
+        ArrayList<String> result = new ArrayList<>();
+        result.add("全局强制申请单号");
+        result.addAll(List.of(capabilities));
+        return List.copyOf(result);
     }
 
     private PreApprovalAction parsePreApprovalAction(String rawAction) {
