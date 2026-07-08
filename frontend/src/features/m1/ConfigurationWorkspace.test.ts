@@ -58,7 +58,7 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('WAITING_EVIDENCE');
     expect(wrapper.text()).toContain('前置审批就绪度');
     expect(wrapper.text()).toContain('AUTH-PRE-CREATE-001');
-    expect(wrapper.text()).toContain('前置申请单号');
+    expect(wrapper.text()).toContain('全局强制申请单号');
     expect(wrapper.text()).toContain('阻断式审批状态');
     expect(wrapper.text()).toContain('客户授权表');
   });

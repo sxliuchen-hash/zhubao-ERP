@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.110 / 申请单 JDBC 持久化</strong>
-        <i>仍处于 M3 增量开发：本轮把账号前置审批申请单从内存仓储推进到 MySQL 可切换 JDBC 合同表。</i>
+        <strong>M3.111 / 账号动作申请单校验</strong>
+        <i>仍处于 M3 增量开发：本轮让账号管理动作可携带前置申请单号，并校验目标账号、动作类型和放行状态。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.110 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.111 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底、低成本适配计划、协议样本、参数复核、复测结果、签字闭环和账号前置审批缺口统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
@@ -92,6 +92,7 @@ defineProps<{
             <span>审批草稿评估</span>
             <span>前置申请单</span>
             <span>申请单 JDBC</span>
+            <span>申请单校验</span>
             <span>工资试算基线</span>
           </div>
         </div>

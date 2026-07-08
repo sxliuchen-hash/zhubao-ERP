@@ -119,7 +119,7 @@ class AuthControllerAccountManagementTest {
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
                 .singleElement()
                 .satisfies(item -> assertThat(item.missingCapabilities())
-                        .contains("前置申请单号", "阻断式审批状态"));
+                        .contains("全局强制申请单号", "阻断式审批状态"));
     }
 
     @Test
@@ -189,6 +189,35 @@ class AuthControllerAccountManagementTest {
         assertThat(accounts.data())
                 .extracting(AuthUserAccountSummary::username)
                 .contains("planner");
+    }
+
+    @Test
+    void bindsPreApprovalApplicationCodeThroughStatusControllerBoundary() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.ADMIN);
+        fixture.controller().upsertAccount(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                true,
+                false
+        ), request);
+        fixture.preApprovalApplicationRepository().save(readyPreApprovalApplication(
+                "AUTH-PRE-APP-READY-STATUS-001",
+                "AUTH-PRE-STATUS-001",
+                "账号启停/解锁",
+                "planner"
+        ));
+
+        ApiResponse<AuthUserAccountSummary> disabled = fixture.controller().updateAccountStatus(
+                "planner",
+                new AuthUserAccountStatusCommand(false, "权限回收", "AUTH-PRE-APP-READY-STATUS-001"),
+                request
+        );
+
+        assertThat(disabled.data().enabled()).isFalse();
     }
 
     @Test
@@ -265,7 +294,7 @@ class AuthControllerAccountManagementTest {
                 operatorContextResolver,
                 new PermissionGuard()
         );
-        return new Fixture(controller, accountRepository);
+        return new Fixture(controller, accountRepository, preApprovalApplicationRepository);
     }
 
     private MockHttpServletRequest request(RoleCode role) {
@@ -306,9 +335,47 @@ class AuthControllerAccountManagementTest {
         );
     }
 
+    private AuthAccountPreApprovalApplication readyPreApprovalApplication(
+            String applicationCode,
+            String readinessCode,
+            String actionType,
+            String targetUsername
+    ) {
+        return new AuthAccountPreApprovalApplication(
+                applicationCode,
+                "AUTH-PRE-DRAFT-" + readinessCode + "-" + targetUsername.toUpperCase(),
+                readinessCode,
+                actionType,
+                targetUsername,
+                "系统管理员",
+                "ADMIN",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                "账号动作前置审批放行校验",
+                List.of("账号申请单", "直属负责人审批", "系统管理员复核"),
+                List.of("账号申请单：AUTH-REQ-READY", "直属负责人审批", "系统管理员复核"),
+                List.of(),
+                List.of(),
+                List.of("GENERAL_MANAGER", "ADMIN"),
+                "可进入阻断式审批",
+                "READY_FOR_BLOCKING_APPROVAL",
+                true,
+                "applicationBoundary=validated pre-approval application for account action",
+                "允许账号动作进入放行校验",
+                "中",
+                "green",
+                "2026-07-09 10:00:00"
+        );
+    }
+
     private record Fixture(
             AuthController controller,
-            InMemoryAuthUserAccountRepository accountRepository
+            InMemoryAuthUserAccountRepository accountRepository,
+            InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository
     ) {
     }
 }

@@ -216,8 +216,8 @@ class AuthUserAccountManagementServiceTest {
                 .satisfies(item -> {
                     assertThat(item.tone()).isEqualTo("red");
                     assertThat(item.riskLevel()).isEqualTo("高");
-                    assertThat(item.enforcementStatus()).isEqualTo("仅事后审批摘要");
-                    assertThat(item.missingCapabilities()).contains("前置申请单号", "阻断式审批状态");
+                    assertThat(item.enforcementStatus()).isEqualTo("申请单号可校验，默认不强制");
+                    assertThat(item.missingCapabilities()).contains("全局强制申请单号", "阻断式审批状态");
                 });
         assertThat(readiness)
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-ROLE-001"))
@@ -248,7 +248,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(draft.readyForBlockingApproval()).isFalse();
         assertThat(draft.providedEvidence()).containsExactly("账号申请单：AUTH-REQ-001");
         assertThat(draft.missingEvidence()).contains("直属负责人审批", "系统管理员复核");
-        assertThat(draft.missingCapabilities()).contains("前置申请单号", "阻断式审批状态");
+        assertThat(draft.missingCapabilities()).contains("全局强制申请单号", "阻断式审批状态");
         assertThat(draft.sourceSummary()).contains(
                 "action=创建生产账号",
                 "targetUsername=planner",
@@ -315,6 +315,66 @@ class AuthUserAccountManagementServiceTest {
                 .containsExactly(application.applicationCode());
         assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
         assertThat(fixture.approvalRepository().findAll()).isEmpty();
+    }
+
+    @Test
+    void bindsReadyPreApprovalApplicationToAccountCreationAuditAndSummary() {
+        Fixture fixture = fixture();
+        AuthAccountPreApprovalApplication application = readyPreApprovalApplication(
+                "AUTH-PRE-APP-READY-001",
+                "AUTH-PRE-CREATE-001",
+                "创建生产账号",
+                "planner"
+        );
+        fixture.preApprovalApplicationRepository().save(application);
+
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                application.applicationCode()
+        ), admin);
+
+        assertThat(fixture.accountRepository().findByUsername("planner")).isPresent();
+        assertThat(fixture.auditRepository().findRecent(10))
+                .anySatisfy(event -> assertThat(event.reason())
+                        .contains("创建账号", "前置申请单：AUTH-PRE-APP-READY-001"));
+        assertThat(fixture.approvalRepository().findAll())
+                .singleElement()
+                .satisfies(task -> assertThat(task.sourceSummary())
+                        .contains("action=创建账号；前置申请单：AUTH-PRE-APP-READY-001"));
+    }
+
+    @Test
+    void rejectsPreApprovalApplicationThatIsNotReadyForAccountAction() {
+        Fixture fixture = fixture();
+        AuthAccountPreApprovalApplication application = waitingPreApprovalApplication(
+                "AUTH-PRE-APP-WAITING-001",
+                "AUTH-PRE-CREATE-001",
+                "创建生产账号",
+                "planner"
+        );
+        fixture.preApprovalApplicationRepository().save(application);
+
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                application.applicationCode()
+        ), admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未具备账号动作放行条件");
+        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
     }
 
     @Test
@@ -450,6 +510,83 @@ class AuthUserAccountManagementServiceTest {
         assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=创建账号"));
         assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=停用账号；原因：权限回收"));
         assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=管理员解锁账号；原因：误锁恢复"));
+    }
+
+    private AuthAccountPreApprovalApplication readyPreApprovalApplication(
+            String applicationCode,
+            String readinessCode,
+            String actionType,
+            String targetUsername
+    ) {
+        return preApprovalApplication(
+                applicationCode,
+                readinessCode,
+                actionType,
+                targetUsername,
+                List.of(),
+                List.of(),
+                "READY_FOR_BLOCKING_APPROVAL",
+                true
+        );
+    }
+
+    private AuthAccountPreApprovalApplication waitingPreApprovalApplication(
+            String applicationCode,
+            String readinessCode,
+            String actionType,
+            String targetUsername
+    ) {
+        return preApprovalApplication(
+                applicationCode,
+                readinessCode,
+                actionType,
+                targetUsername,
+                List.of("直属负责人审批"),
+                List.of("阻断式审批状态"),
+                "WAITING_EVIDENCE",
+                false
+        );
+    }
+
+    private AuthAccountPreApprovalApplication preApprovalApplication(
+            String applicationCode,
+            String readinessCode,
+            String actionType,
+            String targetUsername,
+            List<String> missingEvidence,
+            List<String> missingCapabilities,
+            String applicationStatus,
+            boolean readyForBlockingApproval
+    ) {
+        return new AuthAccountPreApprovalApplication(
+                applicationCode,
+                "AUTH-PRE-DRAFT-" + readinessCode + "-" + targetUsername.toUpperCase(),
+                readinessCode,
+                actionType,
+                targetUsername,
+                "系统管理员",
+                "ADMIN",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                "账号动作前置审批放行校验",
+                List.of("账号申请单", "直属负责人审批", "系统管理员复核"),
+                List.of("账号申请单：AUTH-REQ-READY", "直属负责人审批", "系统管理员复核"),
+                missingEvidence,
+                missingCapabilities,
+                List.of("GENERAL_MANAGER", "ADMIN"),
+                readyForBlockingApproval ? "可进入阻断式审批" : "缺少前置材料",
+                applicationStatus,
+                readyForBlockingApproval,
+                "applicationBoundary=validated pre-approval application for account action",
+                readyForBlockingApproval ? "允许账号动作进入放行校验" : "补齐前置材料",
+                readyForBlockingApproval ? "中" : "高",
+                readyForBlockingApproval ? "green" : "red",
+                "2026-07-09 10:00:00"
+        );
     }
 
     private Fixture fixture() {

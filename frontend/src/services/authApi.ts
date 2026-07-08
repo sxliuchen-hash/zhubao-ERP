@@ -180,15 +180,18 @@ export interface ManageAuthUserAccountRequest {
   customerScope?: string[];
   enabled: boolean;
   demoAccount: boolean;
+  preApprovalApplicationCode?: string;
 }
 
 export interface AuthUserAccountStatusRequest {
   enabled: boolean;
   reason?: string;
+  preApprovalApplicationCode?: string;
 }
 
 export interface AuthUserAccountUnlockRequest {
   reason?: string;
+  preApprovalApplicationCode?: string;
 }
 
 export interface AuthSessionChangedDetail {

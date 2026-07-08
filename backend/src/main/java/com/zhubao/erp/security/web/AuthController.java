@@ -152,6 +152,7 @@ public class AuthController {
                 username,
                 command.enabled(),
                 command.reason(),
+                command.preApprovalApplicationCode(),
                 manageAccountOperator(request)
         ));
     }
@@ -165,6 +166,7 @@ public class AuthController {
         return ApiResponse.ok(accountManagementService.unlock(
                 username,
                 command.reason(),
+                command.preApprovalApplicationCode(),
                 manageAccountOperator(request)
         ));
     }

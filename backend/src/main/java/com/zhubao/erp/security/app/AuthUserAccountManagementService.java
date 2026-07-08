@@ -101,13 +101,13 @@ public class AuthUserAccountManagementService {
                         "AUTH-PRE-CREATE-001",
                         "创建生产账号",
                         "新增非 demo 账号或授予敏感角色前必须先完成申请与审批",
-                        "仅事后审批摘要",
+                        "申请单号可校验，默认不强制",
                         List.of("账号申请单", "直属负责人审批", "系统管理员复核", "角色与数据范围说明", "初始密码交付确认"),
-                        List.of("前置申请单号", "阻断式审批状态", "正式电子签字", "审批后自动放行"),
+                        List.of("全局强制申请单号", "阻断式审批状态", "正式电子签字", "审批后自动放行"),
                         List.of("GENERAL_MANAGER", "ADMIN"),
-                        "当前仅写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务",
+                        "当前可保存并校验前置申请单号，同时写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务",
                         "生产上线前禁止直接创建生产账号",
-                        "新增前置审批单、审批通过态和账号创建命令绑定",
+                        "补强制阻断开关、审批通过态和账号创建命令放行",
                         "高",
                         "red"
                 ),
@@ -254,6 +254,11 @@ public class AuthUserAccountManagementService {
         AuthUserAccount existing = accountRepository.findByUsername(username).orElse(null);
         List<String> customerScope = customerScopeFor(dataScope, command.customerScope(), existing);
         boolean passwordProvided = command.password() != null && !command.password().isBlank();
+        AuthAccountPreApprovalApplication preApprovalApplication = validatePreApprovalApplication(
+                command.preApprovalApplicationCode(),
+                preApprovalActionForUpsert(existing, passwordProvided, role, dataScope, customerScope, command.enabled()),
+                username
+        );
         if (existing == null && !passwordProvided) {
             throw new BusinessException("新建账号必须提供初始密码");
         }
@@ -278,26 +283,58 @@ public class AuthUserAccountManagementService {
                 customerScope
         ));
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
-        recordManagementAudit(username, operatorContext, action);
-        recordApprovalSummary(saved, operatorContext, action);
+        String auditedAction = action + preApprovalApplicationSuffix(preApprovalApplication);
+        recordManagementAudit(username, operatorContext, auditedAction);
+        recordApprovalSummary(saved, operatorContext, auditedAction);
         return summary(saved, Instant.now());
     }
 
     public AuthUserAccountSummary updateEnabled(String username, boolean enabled, String reason, OperatorContext operatorContext) {
+        return updateEnabled(username, enabled, reason, null, operatorContext);
+    }
+
+    public AuthUserAccountSummary updateEnabled(
+            String username,
+            boolean enabled,
+            String reason,
+            String preApprovalApplicationCode,
+            OperatorContext operatorContext
+    ) {
         AuthUserAccount account = requireAccount(username);
+        AuthAccountPreApprovalApplication preApprovalApplication = validatePreApprovalApplication(
+                preApprovalApplicationCode,
+                PreApprovalAction.CHANGE_STATUS,
+                account.username()
+        );
         accountRepository.updateEnabled(account.username(), enabled);
         AuthUserAccount updated = requireAccount(account.username());
-        String action = (enabled ? "启用账号" : "停用账号") + reasonSuffix(reason);
+        String action = (enabled ? "启用账号" : "停用账号")
+                + reasonSuffix(reason)
+                + preApprovalApplicationSuffix(preApprovalApplication);
         recordManagementAudit(account.username(), operatorContext, action);
         recordApprovalSummary(updated, operatorContext, action);
         return summary(updated, Instant.now());
     }
 
     public AuthUserAccountSummary unlock(String username, String reason, OperatorContext operatorContext) {
+        return unlock(username, reason, null, operatorContext);
+    }
+
+    public AuthUserAccountSummary unlock(
+            String username,
+            String reason,
+            String preApprovalApplicationCode,
+            OperatorContext operatorContext
+    ) {
         AuthUserAccount account = requireAccount(username);
+        AuthAccountPreApprovalApplication preApprovalApplication = validatePreApprovalApplication(
+                preApprovalApplicationCode,
+                PreApprovalAction.CHANGE_STATUS,
+                account.username()
+        );
         accountRepository.unlock(account.username());
         AuthUserAccount updated = requireAccount(account.username());
-        String action = "管理员解锁账号" + reasonSuffix(reason);
+        String action = "管理员解锁账号" + reasonSuffix(reason) + preApprovalApplicationSuffix(preApprovalApplication);
         recordManagementAudit(account.username(), operatorContext, action);
         recordApprovalSummary(updated, operatorContext, action);
         return summary(updated, Instant.now());
@@ -438,6 +475,60 @@ public class AuthUserAccountManagementService {
             case "WAITING_SYSTEM_CAPABILITY" -> "补齐系统能力：" + String.join(" / ", draft.missingCapabilities());
             default -> "提交审批人复核并冻结账号动作放行条件";
         };
+    }
+
+    private AuthAccountPreApprovalApplication validatePreApprovalApplication(
+            String applicationCode,
+            PreApprovalAction expectedAction,
+            String targetUsername
+    ) {
+        String normalizedCode = blankToDefault(applicationCode, "");
+        if (normalizedCode.isBlank()) {
+            return null;
+        }
+        AuthAccountPreApprovalApplication application = requirePreApprovalApplicationRepository()
+                .findByCode(normalizedCode)
+                .orElseThrow(() -> new BusinessException("账号前置审批申请单不存在：" + normalizedCode));
+        if (!normalize(application.targetUsername()).equals(normalize(targetUsername))) {
+            throw new BusinessException("账号前置审批申请单目标账号不匹配：" + normalizedCode);
+        }
+        if (!expectedAction.readinessCode.equals(application.readinessCode())) {
+            throw new BusinessException("账号前置审批申请单动作类型不匹配：" + normalizedCode);
+        }
+        if (!"READY_FOR_BLOCKING_APPROVAL".equals(application.applicationStatus())
+                || !application.readyForBlockingApproval()) {
+            throw new BusinessException("账号前置审批申请单尚未具备账号动作放行条件：" + normalizedCode);
+        }
+        return application;
+    }
+
+    private PreApprovalAction preApprovalActionForUpsert(
+            AuthUserAccount existing,
+            boolean passwordProvided,
+            RoleCode requestedRole,
+            DataScope requestedDataScope,
+            List<String> requestedCustomerScope,
+            boolean requestedEnabled
+    ) {
+        if (existing == null) {
+            return PreApprovalAction.CREATE_ACCOUNT;
+        }
+        if (passwordProvided) {
+            return PreApprovalAction.RESET_PASSWORD;
+        }
+        if (existing.enabled() != requestedEnabled) {
+            return PreApprovalAction.CHANGE_STATUS;
+        }
+        if (existing.role() != requestedRole
+                || existing.dataScope() != requestedDataScope
+                || !existing.customerScope().equals(requestedCustomerScope)) {
+            return PreApprovalAction.CHANGE_ROLE_SCOPE;
+        }
+        return PreApprovalAction.CHANGE_ROLE_SCOPE;
+    }
+
+    private String preApprovalApplicationSuffix(AuthAccountPreApprovalApplication application) {
+        return application == null ? "" : "；前置申请单：" + application.applicationCode();
     }
 
     private AuthAccountPreApprovalApplicationRepository requirePreApprovalApplicationRepository() {

@@ -17,8 +17,8 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.110 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.110 / 申请单 JDBC 持久化');
+    expect(wrapper.text()).toContain('M3.111 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.111 / 账号动作申请单校验');
     expect(wrapper.text()).toContain('复核补录');
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('授权导航过滤');
@@ -28,6 +28,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('审批草稿评估');
     expect(wrapper.text()).toContain('前置申请单');
     expect(wrapper.text()).toContain('申请单 JDBC');
+    expect(wrapper.text()).toContain('申请单校验');
     expect(wrapper.text()).toContain('账号密码哈希');
     expect(wrapper.text()).toContain('失败登录锁定');
     expect(wrapper.text()).toContain('账号启停解锁');

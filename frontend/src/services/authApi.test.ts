@@ -154,7 +154,7 @@ describe('authApi', () => {
     const readiness = await fetchAuthAccountPreApprovalReadiness();
 
     expect(readiness[0].readinessCode).toBe('AUTH-PRE-CREATE-001');
-    expect(readiness[0].missingCapabilities).toContain('前置申请单号');
+    expect(readiness[0].missingCapabilities).toContain('全局强制申请单号');
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/accounts/pre-approval-readiness', expect.objectContaining({
       headers: { Authorization: 'Bearer admin-token' },
     }));
@@ -263,9 +263,17 @@ describe('authApi', () => {
       customerScope: ['恒信珠宝', '雅辰饰品'],
       enabled: true,
       demoAccount: false,
+      preApprovalApplicationCode: 'AUTH-PRE-APP-READY-001',
     });
-    await updateAuthAccountStatus('planner', { enabled: false, reason: '离职交接' });
-    await unlockAuthAccount('planner', { reason: '现场核实本人' });
+    await updateAuthAccountStatus('planner', {
+      enabled: false,
+      reason: '离职交接',
+      preApprovalApplicationCode: 'AUTH-PRE-APP-READY-STATUS-001',
+    });
+    await unlockAuthAccount('planner', {
+      reason: '现场核实本人',
+      preApprovalApplicationCode: 'AUTH-PRE-APP-READY-UNLOCK-001',
+    });
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts', expect.objectContaining({
       method: 'POST',
@@ -275,13 +283,16 @@ describe('authApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts', expect.objectContaining({
       body: expect.stringContaining('"customerScope":["恒信珠宝","雅辰饰品"]'),
     }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts', expect.objectContaining({
+      body: expect.stringContaining('"preApprovalApplicationCode":"AUTH-PRE-APP-READY-001"'),
+    }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/auth/accounts/planner/status', expect.objectContaining({
       method: 'POST',
-      body: expect.stringContaining('"enabled":false'),
+      body: expect.stringContaining('"preApprovalApplicationCode":"AUTH-PRE-APP-READY-STATUS-001"'),
     }));
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/auth/accounts/planner/unlock', expect.objectContaining({
       method: 'POST',
-      body: expect.stringContaining('现场核实本人'),
+      body: expect.stringContaining('"preApprovalApplicationCode":"AUTH-PRE-APP-READY-UNLOCK-001"'),
     }));
   });
 
@@ -337,13 +348,13 @@ const authPreApprovalReadiness = {
   readinessCode: 'AUTH-PRE-CREATE-001',
   actionType: '创建生产账号',
   scenario: '新增非 demo 账号或授予敏感角色前必须先完成申请与审批',
-  enforcementStatus: '仅事后审批摘要',
+  enforcementStatus: '申请单号可校验，默认不强制',
   requiredBeforeAction: ['账号申请单', '直属负责人审批'],
-  missingCapabilities: ['前置申请单号', '阻断式审批状态'],
+  missingCapabilities: ['全局强制申请单号', '阻断式审批状态'],
   approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
-  auditEvidence: '当前仅写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务',
+  auditEvidence: '当前可保存并校验前置申请单号，同时写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务',
   rolloutGate: '生产上线前禁止直接创建生产账号',
-  nextAction: '新增前置审批单、审批通过态和账号创建命令绑定',
+  nextAction: '补强制阻断开关、审批通过态和账号创建命令放行',
   riskLevel: '高',
   tone: 'red',
 };
@@ -358,7 +369,7 @@ const authPreApprovalDraft = {
   requiredEvidence: ['账号申请单', '直属负责人审批'],
   providedEvidence: ['账号申请单：AUTH-REQ-001'],
   missingEvidence: ['直属负责人审批'],
-  missingCapabilities: ['前置申请单号', '阻断式审批状态'],
+  missingCapabilities: ['全局强制申请单号', '阻断式审批状态'],
   approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
   blockingStatus: '缺少前置材料',
   readyForBlockingApproval: false,

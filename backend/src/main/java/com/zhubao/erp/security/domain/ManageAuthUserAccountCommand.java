@@ -12,8 +12,22 @@ public record ManageAuthUserAccountCommand(
         @NotBlank String dataScope,
         List<String> customerScope,
         boolean enabled,
-        boolean demoAccount
+        boolean demoAccount,
+        String preApprovalApplicationCode
 ) {
+    public ManageAuthUserAccountCommand(
+            String username,
+            String password,
+            String operator,
+            String role,
+            String dataScope,
+            List<String> customerScope,
+            boolean enabled,
+            boolean demoAccount
+    ) {
+        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, null);
+    }
+
     public ManageAuthUserAccountCommand(
             String username,
             String password,
@@ -23,6 +37,6 @@ public record ManageAuthUserAccountCommand(
             boolean enabled,
             boolean demoAccount
     ) {
-        this(username, password, operator, role, dataScope, null, enabled, demoAccount);
+        this(username, password, operator, role, dataScope, null, enabled, demoAccount, null);
     }
 }
