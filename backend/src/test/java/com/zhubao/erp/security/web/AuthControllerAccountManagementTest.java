@@ -1,6 +1,8 @@
 package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
@@ -61,6 +63,17 @@ class AuthControllerAccountManagementTest {
     }
 
     @Test
+    void preApprovalDraftRequiresManagementPermission() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.OPERATOR);
+
+        assertThatThrownBy(() -> fixture.controller().draftAccountPreApproval(preApprovalDraftCommand(), request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR")
+                .hasMessageContaining("登录账号管理");
+    }
+
+    @Test
     void accountListDoesNotUseAnonymousAdminFallback() {
         Fixture fixture = fixture();
 
@@ -86,6 +99,20 @@ class AuthControllerAccountManagementTest {
                 .singleElement()
                 .satisfies(item -> assertThat(item.missingCapabilities())
                         .contains("前置申请单号", "阻断式审批状态"));
+    }
+
+    @Test
+    void evaluatesPreApprovalDraftThroughControllerBoundary() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.ADMIN);
+
+        ApiResponse<AuthAccountPreApprovalDraft> draft =
+                fixture.controller().draftAccountPreApproval(preApprovalDraftCommand(), request);
+
+        assertThat(draft.data().draftCode()).isEqualTo("AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER");
+        assertThat(draft.data().blockingStatus()).isEqualTo("缺少前置材料");
+        assertThat(draft.data().missingEvidence()).contains("直属负责人审批");
+        assertThat(draft.data().missingCapabilities()).contains("阻断式审批状态");
     }
 
     @Test
@@ -203,6 +230,21 @@ class AuthControllerAccountManagementTest {
         request.addHeader(OperatorContextResolver.ROLE_HEADER, role.name());
         request.addHeader(OperatorContextResolver.DATA_SCOPE_HEADER, DataScope.ALL.name());
         return request;
+    }
+
+    private AuthAccountPreApprovalDraftCommand preApprovalDraftCommand() {
+        return new AuthAccountPreApprovalDraftCommand(
+                "CREATE_ACCOUNT",
+                "planner",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false,
+                "新增业务账号",
+                List.of("账号申请单：AUTH-REQ-001")
+        );
     }
 
     private record Fixture(

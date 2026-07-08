@@ -5,6 +5,8 @@ import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
@@ -218,6 +220,59 @@ class AuthUserAccountManagementServiceTest {
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-ROLE-001"))
                 .singleElement()
                 .satisfies(item -> assertThat(item.missingCapabilities()).contains("客户授权表"));
+    }
+
+    @Test
+    void preApprovalDraftEvaluatesMissingEvidenceWithoutWritingApprovalTask() {
+        Fixture fixture = fixture();
+
+        AuthAccountPreApprovalDraft draft = fixture.managementService().preApprovalDraft(new AuthAccountPreApprovalDraftCommand(
+                "CREATE_ACCOUNT",
+                "Planner",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝", "雅辰饰品"),
+                true,
+                false,
+                "新增业务账号",
+                List.of("账号申请单：AUTH-REQ-001")
+        ), admin);
+
+        assertThat(draft.draftCode()).isEqualTo("AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER");
+        assertThat(draft.readinessCode()).isEqualTo("AUTH-PRE-CREATE-001");
+        assertThat(draft.blockingStatus()).isEqualTo("缺少前置材料");
+        assertThat(draft.readyForBlockingApproval()).isFalse();
+        assertThat(draft.providedEvidence()).containsExactly("账号申请单：AUTH-REQ-001");
+        assertThat(draft.missingEvidence()).contains("直属负责人审批", "系统管理员复核");
+        assertThat(draft.missingCapabilities()).contains("前置申请单号", "阻断式审批状态");
+        assertThat(draft.sourceSummary()).contains(
+                "action=创建生产账号",
+                "targetUsername=planner",
+                "targetCustomerScope=恒信珠宝|雅辰饰品",
+                "pre-action draft only"
+        );
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
+    }
+
+    @Test
+    void preApprovalDraftRejectsUnknownActionType() {
+        Fixture fixture = fixture();
+
+        assertThatThrownBy(() -> fixture.managementService().preApprovalDraft(new AuthAccountPreApprovalDraftCommand(
+                "DELETE_ACCOUNT",
+                "planner",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of(),
+                true,
+                false,
+                "未知动作",
+                List.of()
+        ), admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未知账号前置审批动作");
     }
 
     @Test

@@ -17,14 +17,15 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.107 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.107 / 账号前置审批就绪度');
+    expect(wrapper.text()).toContain('M3.108 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.108 / 账号前置审批草稿评估');
     expect(wrapper.text()).toContain('复核补录');
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('授权导航过滤');
     expect(wrapper.text()).toContain('账号审批摘要');
     expect(wrapper.text()).toContain('账号客户范围');
     expect(wrapper.text()).toContain('账号前置审批');
+    expect(wrapper.text()).toContain('审批草稿评估');
     expect(wrapper.text()).toContain('账号密码哈希');
     expect(wrapper.text()).toContain('失败登录锁定');
     expect(wrapper.text()).toContain('账号启停解锁');

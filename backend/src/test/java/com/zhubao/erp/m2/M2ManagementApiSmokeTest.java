@@ -1134,6 +1134,23 @@ class M2ManagementApiSmokeTest {
                 new HttpEntity<>(headers),
                 String.class
         );
+        Map<String, Object> draftRequest = new LinkedHashMap<>();
+        draftRequest.put("actionType", "CREATE_ACCOUNT");
+        draftRequest.put("targetUsername", "approval-smoke");
+        draftRequest.put("targetOperator", "审批边界测试账号");
+        draftRequest.put("targetRole", "SALES");
+        draftRequest.put("targetDataScope", "CUSTOMER_RANGE");
+        draftRequest.put("targetCustomerScope", List.of("恒信珠宝", "雅辰饰品"));
+        draftRequest.put("targetEnabled", true);
+        draftRequest.put("demoAccount", false);
+        draftRequest.put("reason", "账号上线前置审批草稿");
+        draftRequest.put("providedEvidence", List.of("账号申请单：AUTH-REQ-SMOKE-001"));
+        ResponseEntity<String> draft = restTemplate.exchange(
+                "/api/auth/accounts/pre-approval-drafts",
+                HttpMethod.POST,
+                new HttpEntity<>(draftRequest, headers),
+                String.class
+        );
         ResponseEntity<String> tasks = restTemplate.getForEntity("/api/approvals/tasks", String.class);
 
         assertThat(created.getStatusCode().is2xxSuccessful()).isTrue();
@@ -1150,6 +1167,14 @@ class M2ManagementApiSmokeTest {
                 "仅事后审批摘要",
                 "前置申请单号",
                 "阻断式审批状态"
+        );
+        assertThat(draft.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(draft.getBody()).contains(
+                "AUTH-PRE-DRAFT-CREATE_ACCOUNT-APPROVAL-SMOKE",
+                "缺少前置材料",
+                "直属负责人审批",
+                "阻断式审批状态",
+                "pre-action draft only"
         );
         assertThat(tasks.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(tasks.getBody()).contains(

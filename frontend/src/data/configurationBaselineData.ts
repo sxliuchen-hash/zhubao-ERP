@@ -1,5 +1,9 @@
 import type { Tone } from './m1PrototypeData';
-import type { AuthAccountPreApprovalReadiness, AuthUserAccountSummary } from '../services/authApi';
+import type {
+  AuthAccountPreApprovalDraft,
+  AuthAccountPreApprovalReadiness,
+  AuthUserAccountSummary,
+} from '../services/authApi';
 
 export interface ConfigurationBaselineSummary {
   systemParameters: number;
@@ -317,6 +321,26 @@ export const authAccountPreApprovalReadinessFallback: AuthAccountPreApprovalRead
     tone: 'amber',
   },
 ];
+
+export const authAccountPreApprovalDraftFallback: AuthAccountPreApprovalDraft = {
+  draftCode: 'AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER',
+  readinessCode: 'AUTH-PRE-CREATE-001',
+  actionType: '创建生产账号',
+  targetUsername: 'planner',
+  applicant: '系统管理员',
+  applicantRole: 'ADMIN',
+  requiredEvidence: ['账号申请单', '直属负责人审批', '系统管理员复核', '角色与数据范围说明', '初始密码交付确认'],
+  providedEvidence: ['账号申请单：AUTH-REQ-001'],
+  missingEvidence: ['直属负责人审批', '系统管理员复核', '角色与数据范围说明', '初始密码交付确认'],
+  missingCapabilities: ['前置申请单号', '阻断式审批状态', '正式电子签字', '审批后自动放行'],
+  approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
+  blockingStatus: '缺少前置材料',
+  readyForBlockingApproval: false,
+  sourceSummary: 'action=创建生产账号; targetUsername=planner; boundary=pre-action draft only, not a blocking IAM workflow',
+  nextAction: '补齐前置材料：直属负责人审批 / 系统管理员复核 / 角色与数据范围说明 / 初始密码交付确认',
+  riskLevel: '高',
+  tone: 'red',
+};
 
 export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
   summary: {

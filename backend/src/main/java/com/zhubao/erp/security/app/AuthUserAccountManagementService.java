@@ -2,6 +2,8 @@ package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
@@ -129,6 +131,48 @@ public class AuthUserAccountManagementService {
                         "中",
                         "amber"
                 )
+        );
+    }
+
+    public AuthAccountPreApprovalDraft preApprovalDraft(
+            AuthAccountPreApprovalDraftCommand command,
+            OperatorContext operatorContext
+    ) {
+        PreApprovalAction action = parsePreApprovalAction(command.actionType());
+        AuthAccountPreApprovalReadiness readiness = preApprovalReadiness().stream()
+                .filter(item -> item.readinessCode().equals(action.readinessCode))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("未知账号前置审批动作：" + command.actionType()));
+        String username = normalize(command.targetUsername());
+        List<String> providedEvidence = normalizeList(command.providedEvidence());
+        List<String> missingEvidence = readiness.requiredBeforeAction().stream()
+                .filter(required -> providedEvidence.stream().noneMatch(provided -> evidenceMatches(required, provided)))
+                .toList();
+        boolean readyForBlockingApproval = missingEvidence.isEmpty() && readiness.missingCapabilities().isEmpty();
+        String blockingStatus = readyForBlockingApproval
+                ? "可进入阻断式审批"
+                : missingEvidence.isEmpty() ? "系统缺阻断式审批能力" : "缺少前置材料";
+        String nextAction = missingEvidence.isEmpty()
+                ? readiness.nextAction()
+                : "补齐前置材料：" + String.join(" / ", missingEvidence);
+        return new AuthAccountPreApprovalDraft(
+                "AUTH-PRE-DRAFT-" + action.name() + "-" + username.toUpperCase(Locale.ROOT),
+                readiness.readinessCode(),
+                action.actionType,
+                username,
+                operatorContext.operator(),
+                operatorContext.role().name(),
+                readiness.requiredBeforeAction(),
+                providedEvidence,
+                missingEvidence,
+                readiness.missingCapabilities(),
+                readiness.approverRoles(),
+                blockingStatus,
+                readyForBlockingApproval,
+                buildPreApprovalDraftSummary(command, action, username),
+                nextAction,
+                readiness.riskLevel(),
+                readiness.tone()
         );
     }
 
@@ -289,6 +333,57 @@ public class AuthUserAccountManagementService {
         return value == null ? "" : value.trim().replace('-', '_').toUpperCase(Locale.ROOT);
     }
 
+    private List<String> normalizeList(List<String> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream()
+                .map(value -> value == null ? "" : value.trim())
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private boolean evidenceMatches(String required, String provided) {
+        String normalizedRequired = required.trim();
+        String normalizedProvided = provided.trim();
+        return normalizedProvided.equals(normalizedRequired)
+                || normalizedProvided.contains(normalizedRequired);
+    }
+
+    private PreApprovalAction parsePreApprovalAction(String rawAction) {
+        String normalized = normalizeEnum(rawAction);
+        for (PreApprovalAction action : PreApprovalAction.values()) {
+            if (normalized.equals(action.name())
+                    || normalized.equals(normalizeEnum(action.readinessCode))
+                    || normalized.equals(normalizeEnum(action.actionType))) {
+                return action;
+            }
+        }
+        throw new BusinessException("未知账号前置审批动作：" + rawAction);
+    }
+
+    private String buildPreApprovalDraftSummary(
+            AuthAccountPreApprovalDraftCommand command,
+            PreApprovalAction action,
+            String username
+    ) {
+        return "action=" + action.actionType
+                + "; targetUsername=" + username
+                + "; targetOperator=" + blankToDefault(command.targetOperator(), "")
+                + "; targetRole=" + blankToDefault(command.targetRole(), "")
+                + "; targetDataScope=" + blankToDefault(command.targetDataScope(), "")
+                + "; targetCustomerScope=" + String.join("|", normalizeList(command.targetCustomerScope()))
+                + "; targetEnabled=" + (command.targetEnabled() == null ? "" : command.targetEnabled())
+                + "; demoAccount=" + (command.demoAccount() == null ? "" : command.demoAccount())
+                + "; reason=" + blankToDefault(command.reason(), "")
+                + "; boundary=pre-action draft only, not a blocking IAM workflow";
+    }
+
+    private String blankToDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
     private String reasonSuffix(String reason) {
         return reason == null || reason.isBlank() ? "" : "；原因：" + reason.trim();
     }
@@ -327,5 +422,20 @@ public class AuthUserAccountManagementService {
             case CUSTOMER_RANGE -> "授权客户范围";
             case ALL -> "全部数据";
         };
+    }
+
+    private enum PreApprovalAction {
+        CREATE_ACCOUNT("AUTH-PRE-CREATE-001", "创建生产账号"),
+        CHANGE_ROLE_SCOPE("AUTH-PRE-ROLE-001", "变更角色/数据范围"),
+        RESET_PASSWORD("AUTH-PRE-PASSWORD-001", "管理员重置密码"),
+        CHANGE_STATUS("AUTH-PRE-STATUS-001", "账号启停/解锁");
+
+        private final String readinessCode;
+        private final String actionType;
+
+        PreApprovalAction(String readinessCode, String actionType) {
+            this.readinessCode = readinessCode;
+            this.actionType = actionType;
+        }
     }
 }

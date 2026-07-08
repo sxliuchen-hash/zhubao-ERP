@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
+  authAccountPreApprovalDraftFallback,
   authAccountPreApprovalReadinessFallback,
   authAccountSummaryFallback,
   configurationBaselineFallback,
@@ -11,6 +12,7 @@ import {
 import type { Tone } from '../../data/m1PrototypeData';
 import {
   changeOwnPassword,
+  draftAuthAccountPreApproval,
   fetchAuthAccountPreApprovalReadiness,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
@@ -19,6 +21,7 @@ import {
   fetchAuthSession,
   loginAuthSession,
   logoutAuthSession,
+  type AuthAccountPreApprovalDraft,
   type AuthAuditEvent,
   type AuthAuditIntegritySummary,
   type AuthAccountPreApprovalReadiness,
@@ -40,6 +43,7 @@ const passwordConfirm = ref('');
 const passwordBusy = ref(false);
 const passwordMessage = ref('');
 const authAccounts = ref<AuthUserAccountSummary[]>(authAccountSummaryFallback);
+const authPreApprovalDraft = ref<AuthAccountPreApprovalDraft>(authAccountPreApprovalDraftFallback);
 const authPreApprovalReadiness = ref<AuthAccountPreApprovalReadiness[]>(authAccountPreApprovalReadinessFallback);
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
@@ -70,6 +74,7 @@ onMounted(async () => {
   await restoreAuthSession();
   await loadDemoUsers();
   await loadAuthAccounts();
+  await loadAuthPreApprovalDraft();
   await loadAuthPreApprovalReadiness();
   await loadAuthAuditEvents();
   await loadAuthAuditIntegrity();
@@ -135,6 +140,25 @@ async function loadAuthPreApprovalReadiness() {
   }
 }
 
+async function loadAuthPreApprovalDraft() {
+  try {
+    authPreApprovalDraft.value = await draftAuthAccountPreApproval({
+      actionType: 'CREATE_ACCOUNT',
+      targetUsername: 'planner',
+      targetOperator: '计划员 陈敏',
+      targetRole: 'SALES',
+      targetDataScope: 'CUSTOMER_RANGE',
+      targetCustomerScope: ['恒信珠宝', '雅辰饰品'],
+      targetEnabled: true,
+      demoAccount: false,
+      reason: '新增业务账号前置审批草稿',
+      providedEvidence: ['账号申请单：AUTH-REQ-001'],
+    });
+  } catch {
+    // Keep local draft sample visible when the backend is not running or the current user lacks account management permission.
+  }
+}
+
 function demoPassword(username: string): string {
   return `${username}123`;
 }
@@ -154,6 +178,7 @@ async function handleLogin() {
     authMessage.value = `已登录：${authSession.value.roleLabel}`;
     await refreshWorkspace();
     await loadAuthAccounts();
+    await loadAuthPreApprovalDraft();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -173,6 +198,7 @@ async function handleLogout() {
     authMessage.value = '已退出登录会话';
     await refreshWorkspace();
     await loadAuthAccounts();
+    await loadAuthPreApprovalDraft();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -203,6 +229,7 @@ async function handleChangePassword() {
     passwordMessage.value = `自助改密成功，密码到期 ${authSession.value.passwordExpiresAt}`;
     await refreshWorkspace();
     await loadAuthAccounts();
+    await loadAuthPreApprovalDraft();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -505,6 +532,23 @@ function readinessTone(tone: string): Tone {
               </small>
             </div>
             <StatusBadge :label="accountStatusLabel(account)" :tone="accountStatusTone(account)" />
+          </article>
+        </div>
+        <div class="security-pre-approval-draft">
+          <strong>前置审批草稿评估</strong>
+          <article>
+            <div>
+              <b>{{ authPreApprovalDraft.draftCode }} / {{ authPreApprovalDraft.actionType }}</b>
+              <span>{{ authPreApprovalDraft.blockingStatus }} · {{ authPreApprovalDraft.targetUsername }}</span>
+              <small>已收材料：{{ authPreApprovalDraft.providedEvidence.join(' / ') || '无' }}</small>
+              <small>待补材料：{{ authPreApprovalDraft.missingEvidence.join(' / ') || '无' }}</small>
+              <small>系统缺口：{{ authPreApprovalDraft.missingCapabilities.join(' / ') || '无' }}</small>
+              <small>{{ authPreApprovalDraft.nextAction }}</small>
+            </div>
+            <StatusBadge
+              :label="authPreApprovalDraft.readyForBlockingApproval ? '可进入审批' : '仅草稿评估'"
+              :tone="authPreApprovalDraft.readyForBlockingApproval ? 'green' : readinessTone(authPreApprovalDraft.tone)"
+            />
           </article>
         </div>
         <div class="security-pre-approval-contract">

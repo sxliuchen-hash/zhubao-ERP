@@ -5,6 +5,8 @@ import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
@@ -104,6 +106,14 @@ public class AuthController {
     public ApiResponse<List<AuthAccountPreApprovalReadiness>> accountPreApprovalReadiness(HttpServletRequest request) {
         manageAccountOperator(request);
         return ApiResponse.ok(accountManagementService.preApprovalReadiness());
+    }
+
+    @PostMapping("/accounts/pre-approval-drafts")
+    public ApiResponse<AuthAccountPreApprovalDraft> draftAccountPreApproval(
+            @Valid @RequestBody AuthAccountPreApprovalDraftCommand command,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(accountManagementService.preApprovalDraft(command, manageAccountOperator(request)));
     }
 
     @PostMapping("/accounts")

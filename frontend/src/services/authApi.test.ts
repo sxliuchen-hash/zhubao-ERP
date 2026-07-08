@@ -3,6 +3,7 @@ import { clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
 import {
   authSessionChangedEvent,
   changeOwnPassword,
+  draftAuthAccountPreApproval,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
   fetchAuthAccountPreApprovalReadiness,
@@ -157,6 +158,32 @@ describe('authApi', () => {
     }));
   });
 
+  it('drafts account pre-approval evaluation with bearer token', async () => {
+    setAuthToken('admin-token');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response(authPreApprovalDraft));
+
+    const draft = await draftAuthAccountPreApproval({
+      actionType: 'CREATE_ACCOUNT',
+      targetUsername: 'planner',
+      targetOperator: '计划员 陈敏',
+      targetRole: 'SALES',
+      targetDataScope: 'CUSTOMER_RANGE',
+      targetCustomerScope: ['恒信珠宝'],
+      targetEnabled: true,
+      demoAccount: false,
+      reason: '新增业务账号',
+      providedEvidence: ['账号申请单：AUTH-REQ-001'],
+    });
+
+    expect(draft.draftCode).toBe('AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER');
+    expect(draft.missingEvidence).toContain('直属负责人审批');
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/accounts/pre-approval-drafts', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
+      body: expect.stringContaining('"actionType":"CREATE_ACCOUNT"'),
+    }));
+  });
+
   it('wraps account upsert status and unlock requests', async () => {
     setAuthToken('admin-token');
     const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -254,6 +281,26 @@ const authPreApprovalReadiness = {
   auditEvidence: '当前仅写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务',
   rolloutGate: '生产上线前禁止直接创建生产账号',
   nextAction: '新增前置审批单、审批通过态和账号创建命令绑定',
+  riskLevel: '高',
+  tone: 'red',
+};
+
+const authPreApprovalDraft = {
+  draftCode: 'AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER',
+  readinessCode: 'AUTH-PRE-CREATE-001',
+  actionType: '创建生产账号',
+  targetUsername: 'planner',
+  applicant: '系统管理员',
+  applicantRole: 'ADMIN',
+  requiredEvidence: ['账号申请单', '直属负责人审批'],
+  providedEvidence: ['账号申请单：AUTH-REQ-001'],
+  missingEvidence: ['直属负责人审批'],
+  missingCapabilities: ['前置申请单号', '阻断式审批状态'],
+  approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
+  blockingStatus: '缺少前置材料',
+  readyForBlockingApproval: false,
+  sourceSummary: 'action=创建生产账号; boundary=pre-action draft only, not a blocking IAM workflow',
+  nextAction: '补齐前置材料：直属负责人审批',
   riskLevel: '高',
   tone: 'red',
 };

@@ -95,6 +95,39 @@ export interface AuthAccountPreApprovalReadiness {
   tone: string;
 }
 
+export interface AuthAccountPreApprovalDraftRequest {
+  actionType: string;
+  targetUsername: string;
+  targetOperator?: string;
+  targetRole?: string;
+  targetDataScope?: string;
+  targetCustomerScope?: string[];
+  targetEnabled?: boolean;
+  demoAccount?: boolean;
+  reason: string;
+  providedEvidence?: string[];
+}
+
+export interface AuthAccountPreApprovalDraft {
+  draftCode: string;
+  readinessCode: string;
+  actionType: string;
+  targetUsername: string;
+  applicant: string;
+  applicantRole: string;
+  requiredEvidence: string[];
+  providedEvidence: string[];
+  missingEvidence: string[];
+  missingCapabilities: string[];
+  approverRoles: string[];
+  blockingStatus: string;
+  readyForBlockingApproval: boolean;
+  sourceSummary: string;
+  nextAction: string;
+  riskLevel: string;
+  tone: string;
+}
+
 export interface ManageAuthUserAccountRequest {
   username: string;
   password?: string;
@@ -171,6 +204,15 @@ export async function fetchAuthAccounts(): Promise<AuthUserAccountSummary[]> {
 
 export async function fetchAuthAccountPreApprovalReadiness(): Promise<AuthAccountPreApprovalReadiness[]> {
   return apiGet<AuthAccountPreApprovalReadiness[]>('/api/auth/accounts/pre-approval-readiness');
+}
+
+export async function draftAuthAccountPreApproval(
+  request: AuthAccountPreApprovalDraftRequest,
+): Promise<AuthAccountPreApprovalDraft> {
+  return apiPost<AuthAccountPreApprovalDraftRequest, AuthAccountPreApprovalDraft>(
+    '/api/auth/accounts/pre-approval-drafts',
+    request,
+  );
 }
 
 export async function upsertAuthAccount(request: ManageAuthUserAccountRequest): Promise<AuthUserAccountSummary> {
