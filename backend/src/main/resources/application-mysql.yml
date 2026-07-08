@@ -6,6 +6,8 @@ spring:
     password: ${ZHUBAO_DB_PASSWORD:}
 
 zhubao:
+  security:
+    allow-header-context: ${ZHUBAO_ALLOW_HEADER_CONTEXT:false}
   inventory:
     repository: jdbc
   business:

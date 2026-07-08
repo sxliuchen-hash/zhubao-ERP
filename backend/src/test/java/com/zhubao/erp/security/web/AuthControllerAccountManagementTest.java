@@ -157,7 +157,7 @@ class AuthControllerAccountManagementTest {
                 passwordExpiryPolicy,
                 auditRepository
         );
-        OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService);
+        OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService, true);
         AuthController controller = new AuthController(
                 authSessionService,
                 accountManagementService,

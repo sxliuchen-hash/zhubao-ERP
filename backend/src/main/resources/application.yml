@@ -27,6 +27,8 @@ zhubao:
     repository: memory
   business-document:
     repository: memory
+  security:
+    allow-header-context: true
   hardware:
     poc:
       repository: memory

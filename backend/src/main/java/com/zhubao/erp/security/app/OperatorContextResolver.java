@@ -5,6 +5,7 @@ import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -20,14 +21,24 @@ public class OperatorContextResolver {
     public static final String CUSTOMER_SCOPE_HEADER = "X-Zhubao-Customer-Scope";
 
     private final AuthSessionService authSessionService;
+    private final boolean allowHeaderContext;
 
-    public OperatorContextResolver(AuthSessionService authSessionService) {
+    public OperatorContextResolver(
+            AuthSessionService authSessionService,
+            @Value("${zhubao.security.allow-header-context:true}") boolean allowHeaderContext
+    ) {
         this.authSessionService = authSessionService;
+        this.allowHeaderContext = allowHeaderContext;
     }
 
     public OperatorContext resolve(HttpServletRequest request) {
         String authorization = request.getHeader(AuthSessionService.AUTHORIZATION_HEADER);
-        return authSessionService.operatorContext(authorization).orElseGet(() -> resolveHeaders(request));
+        return authSessionService.operatorContext(authorization).orElseGet(() -> {
+            if (!allowHeaderContext) {
+                throw new PermissionDeniedException("请求头身份兜底已关闭，请使用登录会话");
+            }
+            return resolveHeaders(request);
+        });
     }
 
     private OperatorContext resolveHeaders(HttpServletRequest request) {
