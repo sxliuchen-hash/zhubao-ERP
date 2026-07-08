@@ -58,6 +58,7 @@ class ApprovalServiceTest {
                 "计划员 陈敏",
                 "SALES",
                 "CUSTOMER_RANGE",
+                "恒信珠宝|雅辰饰品",
                 true,
                 false
         );
@@ -77,6 +78,7 @@ class ApprovalServiceTest {
                 "targetOperator=计划员 陈敏",
                 "targetRole=SALES",
                 "targetDataScope=CUSTOMER_RANGE",
+                "targetCustomerScope=恒信珠宝|雅辰饰品",
                 "enabled=true",
                 "demoAccount=false",
                 "not a blocking IAM workflow"

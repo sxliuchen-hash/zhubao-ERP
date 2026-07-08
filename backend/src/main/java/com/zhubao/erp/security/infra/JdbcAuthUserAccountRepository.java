@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -41,8 +42,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 insert into auth_user_account (
                     username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                    password_changed_at, failed_login_count, locked_until
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    password_changed_at, failed_login_count, locked_until, customer_scope
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -56,6 +57,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             setInstant(statement, 8, account.passwordChangedAt());
             statement.setInt(9, account.failedLoginCount());
             setInstant(statement, 10, account.lockedUntil());
+            statement.setString(11, serializeCustomerScope(account.customerScope()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -74,7 +76,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                        demo_account = ?,
                        password_changed_at = ?,
                        failed_login_count = ?,
-                       locked_until = ?
+                       locked_until = ?,
+                       customer_scope = ?
                  where username = ?
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -88,7 +91,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             setInstant(statement, 7, account.passwordChangedAt());
             statement.setInt(8, account.failedLoginCount());
             setInstant(statement, 9, account.lockedUntil());
-            statement.setString(10, normalize(account.username()));
+            statement.setString(10, serializeCustomerScope(account.customerScope()));
+            statement.setString(11, normalize(account.username()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -100,7 +104,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public List<AuthUserAccount> findAll() {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       password_changed_at, failed_login_count, locked_until
+                       password_changed_at, failed_login_count, locked_until, customer_scope
                   from auth_user_account
                  order by username
                 """;
@@ -121,7 +125,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public Optional<AuthUserAccount> findByUsername(String username) {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       password_changed_at, failed_login_count, locked_until
+                       password_changed_at, failed_login_count, locked_until, customer_scope
                   from auth_user_account
                  where username = ?
                 """;
@@ -243,7 +247,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 rs.getBoolean("demo_account"),
                 readInstant(rs, "password_changed_at"),
                 rs.getInt("failed_login_count"),
-                readInstant(rs, "locked_until")
+                readInstant(rs, "locked_until"),
+                parseCustomerScope(rs.getString("customer_scope"))
         );
     }
 
@@ -258,6 +263,21 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             return;
         }
         statement.setTimestamp(index, Timestamp.from(value));
+    }
+
+    private String serializeCustomerScope(List<String> customerScope) {
+        return customerScope == null ? "" : String.join("|", customerScope);
+    }
+
+    private List<String> parseCustomerScope(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split("[|,，;；]"))
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .distinct()
+                .toList();
     }
 
     private String normalize(String value) {

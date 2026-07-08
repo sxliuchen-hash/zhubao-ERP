@@ -1,6 +1,7 @@
 package com.zhubao.erp.security.domain;
 
 import java.time.Instant;
+import java.util.List;
 
 public record AuthUserAccount(
         String username,
@@ -12,8 +13,13 @@ public record AuthUserAccount(
         boolean demoAccount,
         Instant passwordChangedAt,
         int failedLoginCount,
-        Instant lockedUntil
+        Instant lockedUntil,
+        List<String> customerScope
 ) {
+    public AuthUserAccount {
+        customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
+    }
+
     public AuthUserAccount(
             String username,
             String passwordHash,
@@ -23,7 +29,20 @@ public record AuthUserAccount(
             boolean enabled,
             boolean demoAccount
     ) {
-        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), 0, null);
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), 0, null, List.of());
+    }
+
+    public AuthUserAccount(
+            String username,
+            String passwordHash,
+            String operator,
+            RoleCode role,
+            DataScope dataScope,
+            boolean enabled,
+            boolean demoAccount,
+            List<String> customerScope
+    ) {
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), 0, null, customerScope);
     }
 
     public AuthUserAccount(
@@ -37,6 +56,21 @@ public record AuthUserAccount(
             int failedLoginCount,
             Instant lockedUntil
     ) {
-        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), failedLoginCount, lockedUntil);
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), failedLoginCount, lockedUntil, List.of());
+    }
+
+    public AuthUserAccount(
+            String username,
+            String passwordHash,
+            String operator,
+            RoleCode role,
+            DataScope dataScope,
+            boolean enabled,
+            boolean demoAccount,
+            Instant passwordChangedAt,
+            int failedLoginCount,
+            Instant lockedUntil
+    ) {
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, passwordChangedAt, failedLoginCount, lockedUntil, List.of());
     }
 }

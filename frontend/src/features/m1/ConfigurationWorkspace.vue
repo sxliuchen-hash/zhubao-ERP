@@ -463,6 +463,7 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
               <span>{{ account.roleLabel }} · {{ account.dataScopeLabel }}</span>
               <small>
                 {{ account.demoAccount ? '评审 seed' : '生产账号' }} · 失败 {{ account.failedLoginCount }} 次
+                <template v-if="account.customerScope.length"> · 客户 {{ account.customerScope.join('、') }}</template>
                 <template v-if="account.lockedUntil"> · 锁定至 {{ account.lockedUntil }}</template>
                 <template v-if="account.passwordChangedAt"> · 改密 {{ account.passwordChangedAt }}</template>
                 <template v-if="account.passwordExpiresAt"> · 到期 {{ account.passwordExpiresAt }}</template>

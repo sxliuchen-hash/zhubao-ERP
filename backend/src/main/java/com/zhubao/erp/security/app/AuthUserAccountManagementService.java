@@ -75,6 +75,7 @@ public class AuthUserAccountManagementService {
         RoleCode role = parseRole(command.role());
         DataScope dataScope = parseDataScope(command.dataScope());
         AuthUserAccount existing = accountRepository.findByUsername(username).orElse(null);
+        List<String> customerScope = customerScopeFor(dataScope, command.customerScope(), existing);
         boolean passwordProvided = command.password() != null && !command.password().isBlank();
         if (existing == null && !passwordProvided) {
             throw new BusinessException("新建账号必须提供初始密码");
@@ -96,7 +97,8 @@ public class AuthUserAccountManagementService {
                 command.demoAccount(),
                 passwordChangedAt,
                 failedLoginCount,
-                lockedUntil
+                lockedUntil,
+                customerScope
         ));
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
         recordManagementAudit(username, operatorContext, action);
@@ -138,6 +140,7 @@ public class AuthUserAccountManagementService {
                 roleLabel(account.role()),
                 account.dataScope().name(),
                 dataScopeLabel(account.dataScope()),
+                account.customerScope(),
                 account.enabled(),
                 account.demoAccount(),
                 displayInstant(account.passwordChangedAt()),
@@ -176,6 +179,7 @@ public class AuthUserAccountManagementService {
                 account.operator(),
                 account.role().name(),
                 account.dataScope().name(),
+                String.join("|", account.customerScope()),
                 account.enabled(),
                 account.demoAccount()
         );
@@ -195,6 +199,24 @@ public class AuthUserAccountManagementService {
         } catch (IllegalArgumentException ex) {
             throw new BusinessException("未知数据范围：" + rawScope);
         }
+    }
+
+    private List<String> customerScopeFor(
+            DataScope dataScope,
+            List<String> requestedScope,
+            AuthUserAccount existing
+    ) {
+        if (dataScope != DataScope.CUSTOMER_RANGE) {
+            return List.of();
+        }
+        if (requestedScope == null) {
+            return existing == null ? List.of() : existing.customerScope();
+        }
+        return requestedScope.stream()
+                .map(value -> value == null ? "" : value.trim())
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
     }
 
     private String normalize(String value) {

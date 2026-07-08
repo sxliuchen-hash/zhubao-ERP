@@ -84,7 +84,7 @@ public class SecurityCurrentContextService {
             case SELF -> "业务工作台 GET 已按当前操作人文本匹配本人任务、审批和本人报工记录。";
             case TEAM -> "业务工作台 GET 已按当前角色职责关键词收敛到同班组、同工位或当前负责队列内的业务对象。";
             case DEPARTMENT -> "业务工作台 GET 已按当前角色部门职责关键词收敛到本部门业务对象和部门内审批任务。";
-            case CUSTOMER_RANGE -> "业务工作台 GET 已按客户范围请求头收敛到被授权客户、母单、工单和库存批次。";
+            case CUSTOMER_RANGE -> "业务工作台 GET 已按登录账号或请求头中的客户范围收敛到被授权客户、母单、工单和库存批次。";
             case ALL -> "当前评审默认全局可见；正式上线必须由真实角色、菜单权限和审计日志共同约束。";
         };
     }

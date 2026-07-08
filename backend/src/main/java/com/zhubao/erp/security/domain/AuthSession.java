@@ -15,10 +15,12 @@ public record AuthSession(
         String passwordChangedAt,
         String passwordExpiresAt,
         boolean passwordExpired,
+        List<String> customerScope,
         List<String> menuCodes,
         List<NavigationMenuItem> menuTree
 ) {
     public AuthSession {
+        customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
         menuCodes = List.copyOf(menuCodes);
         menuTree = List.copyOf(menuTree);
     }

@@ -27,6 +27,7 @@ const authSession = {
   passwordChangedAt: '2026-07-08 09:00:00',
   passwordExpiresAt: '2026-10-06 09:00:00',
   passwordExpired: false,
+  customerScope: [],
   menuCodes: ['dashboard', 'production', 'quality', 'approvals'],
   menuTree: [{
     code: 'production',
@@ -155,6 +156,7 @@ describe('authApi', () => {
       operator: '计划员 陈敏',
       role: 'SALES',
       dataScope: 'CUSTOMER_RANGE',
+      customerScope: ['恒信珠宝', '雅辰饰品'],
       enabled: true,
       demoAccount: false,
     });
@@ -165,6 +167,9 @@ describe('authApi', () => {
       method: 'POST',
       headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
       body: expect.stringContaining('"username":"planner"'),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts', expect.objectContaining({
+      body: expect.stringContaining('"customerScope":["恒信珠宝","雅辰饰品"]'),
     }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/auth/accounts/planner/status', expect.objectContaining({
       method: 'POST',
@@ -213,6 +218,7 @@ const authAccount = {
   roleLabel: '业务员',
   dataScope: 'CUSTOMER_RANGE',
   dataScopeLabel: '授权客户范围',
+  customerScope: ['恒信珠宝', '雅辰饰品'],
   enabled: true,
   demoAccount: false,
   passwordChangedAt: '2026-07-08 09:00:00',

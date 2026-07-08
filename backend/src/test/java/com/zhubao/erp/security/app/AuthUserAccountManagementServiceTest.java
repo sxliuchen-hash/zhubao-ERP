@@ -62,6 +62,32 @@ class AuthUserAccountManagementServiceTest {
     }
 
     @Test
+    void createsCustomerScopedAccountForBearerDataScope() {
+        Fixture fixture = fixture();
+
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "Planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝", "雅辰饰品", "恒信珠宝"),
+                true,
+                false
+        ), admin);
+
+        AuthSession session = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
+        OperatorContext context = fixture.sessionService().operatorContext("Bearer " + session.token()).orElseThrow();
+
+        assertThat(session.customerScope()).containsExactly("恒信珠宝", "雅辰饰品");
+        assertThat(context.customerScope()).containsExactly("恒信珠宝", "雅辰饰品");
+        assertThat(fixture.managementService().accounts())
+                .filteredOn(account -> account.username().equals("planner"))
+                .singleElement()
+                .satisfies(account -> assertThat(account.customerScope()).containsExactly("恒信珠宝", "雅辰饰品"));
+    }
+
+    @Test
     void updatesAccountWithoutPasswordKeepsExistingPasswordHash() {
         Fixture fixture = fixture();
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
@@ -296,6 +322,7 @@ class AuthUserAccountManagementServiceTest {
                     "targetOperator=计划员 陈敏",
                     "targetRole=SALES",
                     "targetDataScope=CUSTOMER_RANGE",
+                    "targetCustomerScope=",
                     "demoAccount=false",
                     "not a blocking IAM workflow"
             );

@@ -61,6 +61,7 @@ public class ApprovalService {
             String targetOperator,
             String targetRole,
             String targetDataScope,
+            String targetCustomerScope,
             boolean targetEnabled,
             boolean demoAccount
     ) {
@@ -82,6 +83,7 @@ public class ApprovalService {
                         targetOperator,
                         targetRole,
                         targetDataScope,
+                        targetCustomerScope,
                         targetEnabled,
                         demoAccount
                 ),
@@ -174,6 +176,7 @@ public class ApprovalService {
             String targetOperator,
             String targetRole,
             String targetDataScope,
+            String targetCustomerScope,
             boolean targetEnabled,
             boolean demoAccount
     ) {
@@ -182,6 +185,7 @@ public class ApprovalService {
                 + "; targetOperator=" + blankToDefault(targetOperator, "")
                 + "; targetRole=" + blankToDefault(targetRole, "UNKNOWN")
                 + "; targetDataScope=" + blankToDefault(targetDataScope, "UNKNOWN")
+                + "; targetCustomerScope=" + blankToDefault(targetCustomerScope, "")
                 + "; enabled=" + targetEnabled
                 + "; demoAccount=" + demoAccount
                 + "; boundary=post-action approval summary, not a blocking IAM workflow";

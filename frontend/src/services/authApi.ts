@@ -15,6 +15,7 @@ export interface AuthSession {
   passwordChangedAt: string;
   passwordExpiresAt: string;
   passwordExpired: boolean;
+  customerScope: string[];
   menuCodes: string[];
   menuTree: NavigationMenuItem[];
 }
@@ -68,6 +69,7 @@ export interface AuthUserAccountSummary {
   roleLabel: string;
   dataScope: string;
   dataScopeLabel: string;
+  customerScope: string[];
   enabled: boolean;
   demoAccount: boolean;
   passwordChangedAt: string;
@@ -84,6 +86,7 @@ export interface ManageAuthUserAccountRequest {
   operator: string;
   role: string;
   dataScope: string;
+  customerScope?: string[];
   enabled: boolean;
   demoAccount: boolean;
 }

@@ -95,4 +95,31 @@ class BusinessWorkspaceServiceTest {
         assertThat(service.summary(customerScope).inboundOrders()).isEqualTo(1);
         assertThat(service.summary(customerScope).activeWorkOrders()).isEqualTo(3);
     }
+
+    @Test
+    void filtersCustomerScopedWorkspaceDataByBearerAccountScope() {
+        BusinessWorkspaceService service = new BusinessWorkspaceService(
+                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData())
+        );
+        OperatorContext customerScope = new OperatorContext(
+                "计划员 陈敏",
+                RoleCode.SALES,
+                DataScope.CUSTOMER_RANGE,
+                false,
+                "planner-token",
+                List.of("雅辰饰品")
+        );
+
+        assertThat(service.inbound(customerScope).orders())
+                .extracting("code")
+                .containsExactly("MD-20260706-002");
+        assertThat(service.production(customerScope).workOrders())
+                .extracting("code")
+                .containsExactly("ZD-20260706-006");
+        assertThat(service.inventory(customerScope).balances())
+                .extracting("batch")
+                .containsExactly("MD-20260706-002");
+        assertThat(service.summary(customerScope).inboundOrders()).isEqualTo(1);
+        assertThat(service.summary(customerScope).activeWorkOrders()).isEqualTo(1);
+    }
 }

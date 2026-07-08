@@ -1071,6 +1071,7 @@ class M2ManagementApiSmokeTest {
         request.put("operator", "审批边界测试账号");
         request.put("role", "SALES");
         request.put("dataScope", "CUSTOMER_RANGE");
+        request.put("customerScope", List.of("恒信珠宝", "雅辰饰品"));
         request.put("enabled", true);
         request.put("demoAccount", false);
         HttpHeaders headers = new HttpHeaders();
@@ -1090,6 +1091,7 @@ class M2ManagementApiSmokeTest {
                 "\"username\":\"approval-smoke\"",
                 "\"role\":\"SALES\"",
                 "\"dataScope\":\"CUSTOMER_RANGE\"",
+                "\"customerScope\":[\"恒信珠宝\",\"雅辰饰品\"]",
                 "\"demoAccount\":false"
         );
         assertThat(tasks.getStatusCode().is2xxSuccessful()).isTrue();
@@ -1099,6 +1101,7 @@ class M2ManagementApiSmokeTest {
                 "action=创建账号",
                 "targetRole=SALES",
                 "targetDataScope=CUSTOMER_RANGE",
+                "targetCustomerScope=恒信珠宝|雅辰饰品",
                 "not a blocking IAM workflow"
         );
     }

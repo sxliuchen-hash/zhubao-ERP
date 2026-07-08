@@ -96,6 +96,7 @@ function sessionWithMenus(menuCodes: string[]): AuthSession {
     passwordChangedAt: '2026-07-08 09:00:00',
     passwordExpiresAt: '2026-10-06 09:00:00',
     passwordExpired: false,
+    customerScope: [],
     menuCodes,
     menuTree: menuCodes.map((code) => ({
       code,

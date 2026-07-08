@@ -142,7 +142,8 @@ public class AuthSessionService {
                         entry.user().role(),
                         entry.user().dataScope(),
                         false,
-                        entry.token()
+                        entry.token(),
+                        entry.user().customerScope()
                 ));
     }
 
@@ -225,7 +226,8 @@ public class AuthSessionService {
                 currentAccount.demoAccount(),
                 now,
                 0,
-                null
+                null,
+                currentAccount.customerScope()
         ));
         SessionEntry updatedEntry = new SessionEntry(entry.token(), updated, entry.expiresAt());
         sessions.put(entry.token(), updatedEntry);
@@ -351,6 +353,7 @@ public class AuthSessionService {
                 displayInstant(user.passwordChangedAt()),
                 DISPLAY_TIME.format(passwordExpiryPolicy.expiresAt(user)),
                 passwordExpiryPolicy.isExpired(user, Instant.now()),
+                user.customerScope(),
                 navigationMenuService.menuCodesFor(user.role()),
                 navigationMenuService.menuTreeFor(user.role())
         );

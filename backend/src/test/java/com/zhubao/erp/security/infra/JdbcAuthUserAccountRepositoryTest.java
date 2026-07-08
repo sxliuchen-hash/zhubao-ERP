@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,6 +43,7 @@ class JdbcAuthUserAccountRepositoryTest {
                     assertThat(account.operator()).isEqualTo("计划员 陈敏");
                     assertThat(account.role()).isEqualTo(RoleCode.SALES);
                     assertThat(account.dataScope()).isEqualTo(DataScope.CUSTOMER_RANGE);
+                    assertThat(account.customerScope()).containsExactly("恒信珠宝", "雅辰饰品");
                     assertThat(account.enabled()).isTrue();
                     assertThat(account.demoAccount()).isFalse();
                     assertThat(account.passwordChangedAt()).isNotNull();
@@ -145,7 +147,8 @@ class JdbcAuthUserAccountRepositoryTest {
                 role,
                 dataScope,
                 enabled,
-                false
+                false,
+                dataScope == DataScope.CUSTOMER_RANGE ? List.of("恒信珠宝", "雅辰饰品") : List.of()
         );
     }
 
@@ -160,6 +163,7 @@ class JdbcAuthUserAccountRepositoryTest {
                         operator varchar(128) not null,
                         role_code varchar(64) not null,
                         data_scope varchar(64) not null,
+                        customer_scope varchar(512) not null default '',
                         enabled boolean not null default true,
                         demo_account boolean not null default false,
                         password_changed_at timestamp default current_timestamp,
