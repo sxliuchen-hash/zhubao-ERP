@@ -5,6 +5,7 @@ import {
   changeOwnPassword,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
+  fetchAuthAccountPreApprovalReadiness,
   fetchAuthAccounts,
   fetchAuthSession,
   loginAuthSession,
@@ -143,6 +144,19 @@ describe('authApi', () => {
     }));
   });
 
+  it('fetches account pre-approval readiness with bearer token', async () => {
+    setAuthToken('admin-token');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response([authPreApprovalReadiness]));
+
+    const readiness = await fetchAuthAccountPreApprovalReadiness();
+
+    expect(readiness[0].readinessCode).toBe('AUTH-PRE-CREATE-001');
+    expect(readiness[0].missingCapabilities).toContain('前置申请单号');
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/accounts/pre-approval-readiness', expect.objectContaining({
+      headers: { Authorization: 'Bearer admin-token' },
+    }));
+  });
+
   it('wraps account upsert status and unlock requests', async () => {
     setAuthToken('admin-token');
     const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -227,6 +241,21 @@ const authAccount = {
   failedLoginCount: 2,
   lockedUntil: '',
   locked: false,
+};
+
+const authPreApprovalReadiness = {
+  readinessCode: 'AUTH-PRE-CREATE-001',
+  actionType: '创建生产账号',
+  scenario: '新增非 demo 账号或授予敏感角色前必须先完成申请与审批',
+  enforcementStatus: '仅事后审批摘要',
+  requiredBeforeAction: ['账号申请单', '直属负责人审批'],
+  missingCapabilities: ['前置申请单号', '阻断式审批状态'],
+  approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
+  auditEvidence: '当前仅写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务',
+  rolloutGate: '生产上线前禁止直接创建生产账号',
+  nextAction: '新增前置审批单、审批通过态和账号创建命令绑定',
+  riskLevel: '高',
+  tone: 'red',
 };
 
 function response<T>(data: T): Response {

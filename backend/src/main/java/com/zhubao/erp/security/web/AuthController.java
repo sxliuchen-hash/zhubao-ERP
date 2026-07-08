@@ -7,6 +7,7 @@ import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccountStatusCommand;
@@ -97,6 +98,12 @@ public class AuthController {
     public ApiResponse<List<AuthUserAccountSummary>> accounts(HttpServletRequest request) {
         manageAccountOperator(request);
         return ApiResponse.ok(accountManagementService.accounts());
+    }
+
+    @GetMapping("/accounts/pre-approval-readiness")
+    public ApiResponse<List<AuthAccountPreApprovalReadiness>> accountPreApprovalReadiness(HttpServletRequest request) {
+        manageAccountOperator(request);
+        return ApiResponse.ok(accountManagementService.preApprovalReadiness());
     }
 
     @PostMapping("/accounts")

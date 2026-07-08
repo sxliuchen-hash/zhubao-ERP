@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
+  authAccountPreApprovalReadinessFallback,
   authAccountSummaryFallback,
   configurationBaselineFallback,
   configurationToneByLevel,
@@ -10,6 +11,7 @@ import {
 import type { Tone } from '../../data/m1PrototypeData';
 import {
   changeOwnPassword,
+  fetchAuthAccountPreApprovalReadiness,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
   fetchAuthAccounts,
@@ -19,6 +21,7 @@ import {
   logoutAuthSession,
   type AuthAuditEvent,
   type AuthAuditIntegritySummary,
+  type AuthAccountPreApprovalReadiness,
   type AuthSession,
   type AuthUserAccountSummary,
 } from '../../services/authApi';
@@ -37,6 +40,7 @@ const passwordConfirm = ref('');
 const passwordBusy = ref(false);
 const passwordMessage = ref('');
 const authAccounts = ref<AuthUserAccountSummary[]>(authAccountSummaryFallback);
+const authPreApprovalReadiness = ref<AuthAccountPreApprovalReadiness[]>(authAccountPreApprovalReadinessFallback);
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
     eventId: 'AUTH-AUD-DEMO-001',
@@ -66,6 +70,7 @@ onMounted(async () => {
   await restoreAuthSession();
   await loadDemoUsers();
   await loadAuthAccounts();
+  await loadAuthPreApprovalReadiness();
   await loadAuthAuditEvents();
   await loadAuthAuditIntegrity();
 });
@@ -122,6 +127,14 @@ async function loadAuthAccounts() {
   }
 }
 
+async function loadAuthPreApprovalReadiness() {
+  try {
+    authPreApprovalReadiness.value = await fetchAuthAccountPreApprovalReadiness();
+  } catch {
+    // Keep local pre-approval readiness samples visible when the backend is not running.
+  }
+}
+
 function demoPassword(username: string): string {
   return `${username}123`;
 }
@@ -141,6 +154,7 @@ async function handleLogin() {
     authMessage.value = `已登录：${authSession.value.roleLabel}`;
     await refreshWorkspace();
     await loadAuthAccounts();
+    await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
   } catch (error) {
@@ -159,6 +173,7 @@ async function handleLogout() {
     authMessage.value = '已退出登录会话';
     await refreshWorkspace();
     await loadAuthAccounts();
+    await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
   } finally {
@@ -188,6 +203,7 @@ async function handleChangePassword() {
     passwordMessage.value = `自助改密成功，密码到期 ${authSession.value.passwordExpiresAt}`;
     await refreshWorkspace();
     await loadAuthAccounts();
+    await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
   } catch (error) {
@@ -243,6 +259,13 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
   if (account.locked) return 'red';
   if (account.failedLoginCount > 0) return 'amber';
   return 'green';
+}
+
+function readinessTone(tone: string): Tone {
+  if (tone === 'red') return 'red';
+  if (tone === 'amber') return 'amber';
+  if (tone === 'green') return 'green';
+  return 'blue';
 }
 </script>
 
@@ -482,6 +505,19 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
               </small>
             </div>
             <StatusBadge :label="accountStatusLabel(account)" :tone="accountStatusTone(account)" />
+          </article>
+        </div>
+        <div class="security-pre-approval-contract">
+          <strong>前置审批就绪度</strong>
+          <article v-for="item in authPreApprovalReadiness" :key="item.readinessCode">
+            <div>
+              <b>{{ item.readinessCode }} / {{ item.actionType }}</b>
+              <span>{{ item.enforcementStatus }} · {{ item.scenario }}</span>
+              <small>缺口：{{ item.missingCapabilities.join(' / ') }}</small>
+              <small>前置材料：{{ item.requiredBeforeAction.join(' / ') }}</small>
+              <small>上线门禁：{{ item.rolloutGate }}</small>
+            </div>
+            <StatusBadge :label="`${item.riskLevel}风险`" :tone="readinessTone(item.tone)" />
           </article>
         </div>
       </aside>

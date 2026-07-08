@@ -1,5 +1,5 @@
 import type { Tone } from './m1PrototypeData';
-import type { AuthUserAccountSummary } from '../services/authApi';
+import type { AuthAccountPreApprovalReadiness, AuthUserAccountSummary } from '../services/authApi';
 
 export interface ConfigurationBaselineSummary {
   systemParameters: number;
@@ -256,6 +256,65 @@ export const authAccountSummaryFallback: AuthUserAccountSummary[] = [
     failedLoginCount: 0,
     lockedUntil: '',
     locked: false,
+  },
+];
+
+export const authAccountPreApprovalReadinessFallback: AuthAccountPreApprovalReadiness[] = [
+  {
+    readinessCode: 'AUTH-PRE-CREATE-001',
+    actionType: '创建生产账号',
+    scenario: '新增非 demo 账号或授予敏感角色前必须先完成申请与审批',
+    enforcementStatus: '仅事后审批摘要',
+    requiredBeforeAction: ['账号申请单', '直属负责人审批', '系统管理员复核', '角色与数据范围说明', '初始密码交付确认'],
+    missingCapabilities: ['前置申请单号', '阻断式审批状态', '正式电子签字', '审批后自动放行'],
+    approverRoles: ['GENERAL_MANAGER', 'ADMIN'],
+    auditEvidence: '当前仅写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务',
+    rolloutGate: '生产上线前禁止直接创建生产账号',
+    nextAction: '新增前置审批单、审批通过态和账号创建命令绑定',
+    riskLevel: '高',
+    tone: 'red',
+  },
+  {
+    readinessCode: 'AUTH-PRE-ROLE-001',
+    actionType: '变更角色/数据范围',
+    scenario: '调整角色、dataScope 或 customerScope 会改变可见客户和敏感动作',
+    enforcementStatus: '仅事后审批摘要',
+    requiredBeforeAction: ['变更原因', '原角色/新角色对比', '客户范围清单', '业务负责人确认', '回收计划'],
+    missingCapabilities: ['客户授权表', '审批前差异比对', '变更前冻结快照', '审批拒绝回滚'],
+    approverRoles: ['GENERAL_MANAGER', 'ADMIN', '业务负责人'],
+    auditEvidence: '账号审计会记录目标角色、数据范围和客户范围',
+    rolloutGate: '生产上线前仅允许评审环境通过账号管理直接调整',
+    nextAction: '补组织客户授权表和审批前差异校验',
+    riskLevel: '高',
+    tone: 'red',
+  },
+  {
+    readinessCode: 'AUTH-PRE-PASSWORD-001',
+    actionType: '管理员重置密码',
+    scenario: '管理员重置生产账号密码前必须核实本人或离线交接场景',
+    enforcementStatus: '弱前置校验',
+    requiredBeforeAction: ['重置原因', '本人核验方式', '临时密码交付记录', '密码过期策略确认'],
+    missingCapabilities: ['本人核验附件', '临时密码一次性通道', '强制首次登录改密'],
+    approverRoles: ['ADMIN', '账号负责人'],
+    auditEvidence: '当前会刷新 passwordChangedAt、清零失败锁定并写 ACCOUNT_MANAGEMENT 审计',
+    rolloutGate: '允许管理员重置，但必须保留 reason 和审计记录',
+    nextAction: '补本人核验附件和首次登录强制改密标记',
+    riskLevel: '中',
+    tone: 'amber',
+  },
+  {
+    readinessCode: 'AUTH-PRE-STATUS-001',
+    actionType: '账号启停/解锁',
+    scenario: '停用、启用或解锁会直接影响现场登录能力',
+    enforcementStatus: '弱前置校验',
+    requiredBeforeAction: ['启停/解锁原因', '影响岗位', '交接状态', '管理员复核'],
+    missingCapabilities: ['岗位交接附件', '解锁本人确认', '停用后会话吊销'],
+    approverRoles: ['ADMIN', 'GENERAL_MANAGER'],
+    auditEvidence: '当前启停/解锁会写审计并生成事后复核任务',
+    rolloutGate: '试点允许管理员处理，生产需补停用会话吊销',
+    nextAction: '补会话吊销、岗位交接附件和解锁本人确认',
+    riskLevel: '中',
+    tone: 'amber',
   },
 ];
 

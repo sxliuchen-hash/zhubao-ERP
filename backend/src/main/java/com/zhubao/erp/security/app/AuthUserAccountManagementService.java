@@ -2,6 +2,7 @@ package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -68,6 +69,67 @@ public class AuthUserAccountManagementService {
         return accountRepository.findAll().stream()
                 .map(account -> summary(account, now))
                 .toList();
+    }
+
+    public List<AuthAccountPreApprovalReadiness> preApprovalReadiness() {
+        return List.of(
+                new AuthAccountPreApprovalReadiness(
+                        "AUTH-PRE-CREATE-001",
+                        "创建生产账号",
+                        "新增非 demo 账号或授予敏感角色前必须先完成申请与审批",
+                        "仅事后审批摘要",
+                        List.of("账号申请单", "直属负责人审批", "系统管理员复核", "角色与数据范围说明", "初始密码交付确认"),
+                        List.of("前置申请单号", "阻断式审批状态", "正式电子签字", "审批后自动放行"),
+                        List.of("GENERAL_MANAGER", "ADMIN"),
+                        "当前仅写 ACCOUNT_MANAGEMENT 审计和 ACCOUNT_MANAGEMENT 轻量审批任务",
+                        "生产上线前禁止直接创建生产账号",
+                        "新增前置审批单、审批通过态和账号创建命令绑定",
+                        "高",
+                        "red"
+                ),
+                new AuthAccountPreApprovalReadiness(
+                        "AUTH-PRE-ROLE-001",
+                        "变更角色/数据范围",
+                        "调整角色、dataScope 或 customerScope 会改变可见客户和敏感动作",
+                        "仅事后审批摘要",
+                        List.of("变更原因", "原角色/新角色对比", "客户范围清单", "业务负责人确认", "回收计划"),
+                        List.of("客户授权表", "审批前差异比对", "变更前冻结快照", "审批拒绝回滚"),
+                        List.of("GENERAL_MANAGER", "ADMIN", "业务负责人"),
+                        "账号审计会记录目标角色、数据范围和客户范围",
+                        "生产上线前仅允许评审环境通过账号管理直接调整",
+                        "补组织客户授权表和审批前差异校验",
+                        "高",
+                        "red"
+                ),
+                new AuthAccountPreApprovalReadiness(
+                        "AUTH-PRE-PASSWORD-001",
+                        "管理员重置密码",
+                        "管理员重置生产账号密码前必须核实本人或离线交接场景",
+                        "弱前置校验",
+                        List.of("重置原因", "本人核验方式", "临时密码交付记录", "密码过期策略确认"),
+                        List.of("本人核验附件", "临时密码一次性通道", "强制首次登录改密"),
+                        List.of("ADMIN", "账号负责人"),
+                        "当前会刷新 passwordChangedAt、清零失败锁定并写 ACCOUNT_MANAGEMENT 审计",
+                        "允许管理员重置，但必须保留 reason 和审计记录",
+                        "补本人核验附件和首次登录强制改密标记",
+                        "中",
+                        "amber"
+                ),
+                new AuthAccountPreApprovalReadiness(
+                        "AUTH-PRE-STATUS-001",
+                        "账号启停/解锁",
+                        "停用、启用或解锁会直接影响现场登录能力",
+                        "弱前置校验",
+                        List.of("启停/解锁原因", "影响岗位", "交接状态", "管理员复核"),
+                        List.of("岗位交接附件", "解锁本人确认", "停用后会话吊销"),
+                        List.of("ADMIN", "GENERAL_MANAGER"),
+                        "当前启停/解锁会写审计并生成事后复核任务",
+                        "试点允许管理员处理，生产需补停用会话吊销",
+                        "补会话吊销、岗位交接附件和解锁本人确认",
+                        "中",
+                        "amber"
+                )
+        );
     }
 
     public AuthUserAccountSummary upsert(ManageAuthUserAccountCommand command, OperatorContext operatorContext) {

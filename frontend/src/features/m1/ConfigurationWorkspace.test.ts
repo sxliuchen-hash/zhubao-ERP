@@ -49,5 +49,10 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('客户 恒信珠宝、雅辰饰品');
     expect(wrapper.text()).toContain('生产账号');
     expect(wrapper.text()).toContain('密码已过期');
+    expect(wrapper.text()).toContain('前置审批就绪度');
+    expect(wrapper.text()).toContain('AUTH-PRE-CREATE-001');
+    expect(wrapper.text()).toContain('前置申请单号');
+    expect(wrapper.text()).toContain('阻断式审批状态');
+    expect(wrapper.text()).toContain('客户授权表');
   });
 });

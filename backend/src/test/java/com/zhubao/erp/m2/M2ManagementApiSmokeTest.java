@@ -1128,6 +1128,12 @@ class M2ManagementApiSmokeTest {
                 new HttpEntity<>(request, headers),
                 String.class
         );
+        ResponseEntity<String> readiness = restTemplate.exchange(
+                "/api/auth/accounts/pre-approval-readiness",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
         ResponseEntity<String> tasks = restTemplate.getForEntity("/api/approvals/tasks", String.class);
 
         assertThat(created.getStatusCode().is2xxSuccessful()).isTrue();
@@ -1137,6 +1143,13 @@ class M2ManagementApiSmokeTest {
                 "\"dataScope\":\"CUSTOMER_RANGE\"",
                 "\"customerScope\":[\"恒信珠宝\",\"雅辰饰品\"]",
                 "\"demoAccount\":false"
+        );
+        assertThat(readiness.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(readiness.getBody()).contains(
+                "AUTH-PRE-CREATE-001",
+                "仅事后审批摘要",
+                "前置申请单号",
+                "阻断式审批状态"
         );
         assertThat(tasks.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(tasks.getBody()).contains(

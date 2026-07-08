@@ -1,6 +1,7 @@
 package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
@@ -49,6 +50,17 @@ class AuthControllerAccountManagementTest {
     }
 
     @Test
+    void preApprovalReadinessRequiresManagementPermission() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.OPERATOR);
+
+        assertThatThrownBy(() -> fixture.controller().accountPreApprovalReadiness(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR")
+                .hasMessageContaining("登录账号管理");
+    }
+
+    @Test
     void accountListDoesNotUseAnonymousAdminFallback() {
         Fixture fixture = fixture();
 
@@ -56,6 +68,24 @@ class AuthControllerAccountManagementTest {
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("登录会话")
                 .hasMessageContaining("显式评审角色");
+    }
+
+    @Test
+    void exposesPreApprovalReadinessThroughControllerBoundary() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.ADMIN);
+
+        ApiResponse<List<AuthAccountPreApprovalReadiness>> readiness =
+                fixture.controller().accountPreApprovalReadiness(request);
+
+        assertThat(readiness.data())
+                .extracting(AuthAccountPreApprovalReadiness::readinessCode)
+                .contains("AUTH-PRE-CREATE-001", "AUTH-PRE-ROLE-001");
+        assertThat(readiness.data())
+                .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
+                .singleElement()
+                .satisfies(item -> assertThat(item.missingCapabilities())
+                        .contains("前置申请单号", "阻断式审批状态"));
     }
 
     @Test

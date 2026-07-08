@@ -16651,6 +16651,7 @@ input {
 .security-menu-contract,
 .security-audit-contract,
 .security-account-contract,
+.security-pre-approval-contract,
 .security-limitation-row article {
   border: 1px solid var(--m349-line);
   border-radius: 7px;
@@ -16673,6 +16674,8 @@ input {
 .security-audit-contract small,
 .security-account-contract span,
 .security-account-contract small,
+.security-pre-approval-contract span,
+.security-pre-approval-contract small,
 .security-limitation-row span,
 .security-permission-list span {
   color: var(--m349-muted);
@@ -16817,7 +16820,8 @@ input {
 
 .security-menu-contract,
 .security-audit-contract,
-.security-account-contract {
+.security-account-contract,
+.security-pre-approval-contract {
   display: grid;
   gap: 7px;
   border-color: rgba(178, 221, 232, 0.18);
@@ -16828,7 +16832,8 @@ input {
 
 .security-menu-contract article,
 .security-audit-contract article,
-.security-account-contract article {
+.security-account-contract article,
+.security-pre-approval-contract article {
   display: grid;
   gap: 3px;
   border: 1px solid rgba(178, 221, 232, 0.16);
@@ -16849,7 +16854,8 @@ input {
 
 .security-menu-contract b,
 .security-audit-contract b,
-.security-account-contract b {
+.security-account-contract b,
+.security-pre-approval-contract b {
   color: #ffffff;
   font-size: 12px;
 }
@@ -16860,18 +16866,22 @@ input {
 .security-audit-contract small,
 .security-account-contract span,
 .security-account-contract small,
+.security-pre-approval-contract span,
+.security-pre-approval-contract small,
 .security-header-contract span {
   color: #cbd8e5;
   font-size: 10px;
   overflow-wrap: anywhere;
 }
 
-.security-account-contract article {
+.security-account-contract article,
+.security-pre-approval-contract article {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
 }
 
-.security-account-contract article > div {
+.security-account-contract article > div,
+.security-pre-approval-contract article > div {
   display: grid;
   min-width: 0;
   gap: 3px;

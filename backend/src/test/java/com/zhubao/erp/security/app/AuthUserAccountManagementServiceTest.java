@@ -5,6 +5,7 @@ import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -195,6 +196,28 @@ class AuthUserAccountManagementServiceTest {
                     assertThat(account.passwordExpiresAt()).isNotBlank();
                     assertThat(account.passwordExpired()).isTrue();
                 });
+    }
+
+    @Test
+    void preApprovalReadinessExposesMissingBlockingApprovalCapabilities() {
+        Fixture fixture = fixture();
+
+        List<AuthAccountPreApprovalReadiness> readiness = fixture.managementService().preApprovalReadiness();
+
+        assertThat(readiness).hasSize(4);
+        assertThat(readiness)
+                .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.tone()).isEqualTo("red");
+                    assertThat(item.riskLevel()).isEqualTo("高");
+                    assertThat(item.enforcementStatus()).isEqualTo("仅事后审批摘要");
+                    assertThat(item.missingCapabilities()).contains("前置申请单号", "阻断式审批状态");
+                });
+        assertThat(readiness)
+                .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-ROLE-001"))
+                .singleElement()
+                .satisfies(item -> assertThat(item.missingCapabilities()).contains("客户授权表"));
     }
 
     @Test

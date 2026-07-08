@@ -80,6 +80,21 @@ export interface AuthUserAccountSummary {
   locked: boolean;
 }
 
+export interface AuthAccountPreApprovalReadiness {
+  readinessCode: string;
+  actionType: string;
+  scenario: string;
+  enforcementStatus: string;
+  requiredBeforeAction: string[];
+  missingCapabilities: string[];
+  approverRoles: string[];
+  auditEvidence: string;
+  rolloutGate: string;
+  nextAction: string;
+  riskLevel: string;
+  tone: string;
+}
+
 export interface ManageAuthUserAccountRequest {
   username: string;
   password?: string;
@@ -152,6 +167,10 @@ export async function fetchAuthAuditIntegrity(): Promise<AuthAuditIntegritySumma
 
 export async function fetchAuthAccounts(): Promise<AuthUserAccountSummary[]> {
   return apiGet<AuthUserAccountSummary[]>('/api/auth/accounts');
+}
+
+export async function fetchAuthAccountPreApprovalReadiness(): Promise<AuthAccountPreApprovalReadiness[]> {
+  return apiGet<AuthAccountPreApprovalReadiness[]>('/api/auth/accounts/pre-approval-readiness');
 }
 
 export async function upsertAuthAccount(request: ManageAuthUserAccountRequest): Promise<AuthUserAccountSummary> {
