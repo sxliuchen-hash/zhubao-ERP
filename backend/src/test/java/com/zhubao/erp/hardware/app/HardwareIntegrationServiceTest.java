@@ -1,5 +1,6 @@
 package com.zhubao.erp.hardware.app;
 
+import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.hardware.domain.HardwareDeviceStatus;
 import com.zhubao.erp.hardware.infra.InMemoryHardwarePocRecordRepository;
 import org.junit.jupiter.api.Test;
@@ -10,7 +11,10 @@ class HardwareIntegrationServiceTest {
 
     @Test
     void exposesHardwareFallbackAndHealthBaseline() {
-        HardwareIntegrationService service = new HardwareIntegrationService(new InMemoryHardwarePocRecordRepository());
+        HardwareIntegrationService service = new HardwareIntegrationService(
+                new InMemoryHardwarePocRecordRepository(),
+                new InMemoryDocumentManagementRepository()
+        );
 
         assertThat(service.findDevices()).hasSize(5);
         assertThat(service.fallbackRequiredCount()).isEqualTo(4);
@@ -28,6 +32,19 @@ class HardwareIntegrationServiceTest {
                 .anySatisfy(record -> {
                     assertThat(record.code()).isEqualTo("POC-SCAN-20260706-001");
                     assertThat(record.nextAction()).contains("弱光 POC");
+                });
+        assertThat(service.findPocEvidence()).hasSize(4);
+        assertThat(service.findPocEvidence())
+                .anySatisfy(evidence -> {
+                    assertThat(evidence.pocCode()).isEqualTo("POC-SCAN-20260706-001");
+                    assertThat(evidence.documentCode()).isEqualTo("DOC-HW-POC-20260706-001");
+                    assertThat(evidence.attachmentCodes()).contains("ATT-HW-20260706-001");
+                    assertThat(evidence.status()).isEqualTo("已关联证据");
+                })
+                .anySatisfy(evidence -> {
+                    assertThat(evidence.pocCode()).isEqualTo("POC-VID-20260706-001");
+                    assertThat(evidence.status()).isEqualTo("待补证据");
+                    assertThat(evidence.missingEvidence()).isEqualTo(1);
                 });
     }
 }

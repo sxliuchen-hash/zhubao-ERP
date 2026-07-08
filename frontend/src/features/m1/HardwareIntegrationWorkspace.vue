@@ -10,12 +10,18 @@ import {
   type IntegrationTask,
   type Tone,
 } from '../../data/m1PrototypeData';
-import { fetchHardwareWorkspace, type HardwareWorkspaceModel } from '../../services/hardwareIntegrationApi';
+import { evidenceAttachments } from '../../data/documentManagementData';
+import {
+  fetchHardwareWorkspace,
+  type HardwarePocEvidenceSummary,
+  type HardwareWorkspaceModel,
+} from '../../services/hardwareIntegrationApi';
 
 const workspace = ref<HardwareWorkspaceModel>({
   devices: fallbackHardwareDevices,
   tasks: fallbackIntegrationTasks,
   pocRecords: fallbackHardwarePocRecords,
+  pocEvidence: fallbackHardwarePocEvidence(),
   summary: {
     totalDevices: fallbackHardwareDevices.length,
     fallbackRequired: fallbackHardwareDevices.filter((device) => device.status !== 'online').length,
@@ -40,6 +46,7 @@ const activeTask = computed(
 
 const hardwareDevices = computed(() => workspace.value.devices);
 const hardwarePocRecords = computed(() => workspace.value.pocRecords);
+const hardwarePocEvidence = computed(() => workspace.value.pocEvidence);
 const integrationTasks = computed(() => workspace.value.tasks);
 
 const hardwareStats = computed(() => [
@@ -134,6 +141,43 @@ function taskTone(task: IntegrationTask): Tone {
 
 function getHardwarePocBlockedCount(): number {
   return workspace.value.summary.pocBlocked;
+}
+
+function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
+  return fallbackHardwarePocRecords.map((record) => {
+    const attachments = evidenceAttachments.filter(
+      (attachment) => attachment.businessType === '硬件 POC' && attachment.businessCode === record.code,
+    );
+    if (attachments.length === 0) {
+      return {
+        pocCode: record.code,
+        scene: record.scene,
+        result: record.result,
+        documentCode: '',
+        attachmentCount: 0,
+        missingEvidence: 1,
+        attachmentCodes: [],
+        latestUploadedAt: '',
+        status: '待补证据',
+        nextAction: '补传现场 POC 原始照片、视频或日志',
+        tone: 'red',
+      };
+    }
+    const latest = attachments[attachments.length - 1];
+    return {
+      pocCode: record.code,
+      scene: record.scene,
+      result: record.result,
+      documentCode: latest.documentCode,
+      attachmentCount: attachments.length,
+      missingEvidence: attachments.filter((attachment) => attachment.status.includes('缺失')).length,
+      attachmentCodes: attachments.map((attachment) => attachment.code),
+      latestUploadedAt: latest.uploadedAt,
+      status: '已关联证据',
+      nextAction: latest.fallbackAction,
+      tone: latest.tone,
+    };
+  });
 }
 </script>
 
@@ -321,6 +365,27 @@ function getHardwarePocBlockedCount(): number {
               <span>{{ task.health }}%</span>
               <i><b :style="{ width: `${task.health}%` }" /></i>
             </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">POC EVIDENCE</span>
+          <StatusBadge label="只读关联" tone="amber" />
+        </div>
+        <div class="integration-list compact-integration-list">
+          <article v-for="evidence in hardwarePocEvidence" :key="evidence.pocCode">
+            <div class="integration-main">
+              <strong>{{ evidence.pocCode }}</strong>
+              <span>{{ evidence.status }} / {{ evidence.documentCode || '未建证据包' }}</span>
+              <small>{{ evidence.attachmentCodes.join('、') || '待补现场附件' }}</small>
+            </div>
+            <div class="health-meter">
+              <span>{{ evidence.attachmentCount }} 件</span>
+              <i><b :style="{ width: `${evidence.missingEvidence > 0 ? 35 : 100}%` }" /></i>
+            </div>
+            <p>{{ evidence.nextAction }}</p>
           </article>
         </div>
       </section>

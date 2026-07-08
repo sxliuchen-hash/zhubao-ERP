@@ -85,6 +85,26 @@ describe('hardwareIntegrationApi', () => {
         json: async () => ({
           code: 0,
           message: 'ok',
+          data: [{
+            pocCode: 'POC-VID-001',
+            scene: '拆包台视频截取',
+            result: '有条件通过',
+            documentCode: 'DOC-HW-POC-001',
+            attachmentCount: 1,
+            missingEvidence: 0,
+            attachmentCodes: ['ATT-HW-001'],
+            latestUploadedAt: '2026-07-06 17:08',
+            status: '已关联证据',
+            nextAction: '继续复测',
+            tone: 'amber',
+          }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
           data: {
             totalDevices: 1,
             fallbackRequired: 1,
@@ -100,7 +120,8 @@ describe('hardwareIntegrationApi', () => {
     expect(model.devices[0].status).toBe('degraded');
     expect(model.tasks[0].id).toBe('INT-VID-001');
     expect(model.pocRecords[0].tone).toBe('amber');
+    expect(model.pocEvidence[0].attachmentCodes).toContain('ATT-HW-001');
     expect(model.summary.averageHealth).toBe(62);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 });

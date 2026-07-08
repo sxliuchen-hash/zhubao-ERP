@@ -3,6 +3,7 @@ package com.zhubao.erp.hardware.web;
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.hardware.app.HardwareIntegrationService;
 import com.zhubao.erp.hardware.domain.HardwareDevice;
+import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +35,11 @@ public class HardwareIntegrationController {
     @GetMapping("/poc-records")
     public ApiResponse<List<HardwarePocRecord>> pocRecords() {
         return ApiResponse.ok(hardwareIntegrationService.findPocRecords());
+    }
+
+    @GetMapping("/poc-evidence")
+    public ApiResponse<List<HardwarePocEvidenceSummary>> pocEvidence() {
+        return ApiResponse.ok(hardwareIntegrationService.findPocEvidence());
     }
 
     @GetMapping("/summary")
