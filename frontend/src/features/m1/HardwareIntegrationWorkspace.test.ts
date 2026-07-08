@@ -19,6 +19,10 @@ describe('HardwareIntegrationWorkspace', () => {
     expect(wrapper.text()).toContain('低成本优先');
     expect(wrapper.text()).toContain('PROTOCOL SAMPLES');
     expect(wrapper.text()).toContain('复测留痕');
+    expect(wrapper.text()).toContain('PROTOCOL REVIEW');
+    expect(wrapper.text()).toContain('参数复核');
+    expect(wrapper.text()).toContain('电子秤型号和接口类型待冻结');
+    expect(wrapper.text()).toContain('baudRate');
     expect(wrapper.text()).toContain('RS232');
     expect(wrapper.text()).toContain('ST,GS');
     expect(wrapper.text()).toContain('串口/TCP');

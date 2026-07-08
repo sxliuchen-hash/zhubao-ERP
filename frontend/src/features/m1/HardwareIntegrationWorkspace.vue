@@ -15,6 +15,7 @@ import {
   fetchHardwareWorkspace,
   type HardwareAdapterPlan,
   type HardwarePocEvidenceSummary,
+  type HardwareProtocolReviewItem,
   type HardwareProtocolSample,
   type HardwareWorkspaceModel,
 } from '../../services/hardwareIntegrationApi';
@@ -24,6 +25,7 @@ const workspace = ref<HardwareWorkspaceModel>({
   tasks: fallbackIntegrationTasks,
   adapterPlans: fallbackHardwareAdapterPlans(),
   protocolSamples: fallbackHardwareProtocolSamples(),
+  protocolReviews: fallbackHardwareProtocolReviews(),
   pocRecords: fallbackHardwarePocRecords,
   pocEvidence: fallbackHardwarePocEvidence(),
   summary: {
@@ -51,6 +53,7 @@ const activeTask = computed(
 const hardwareDevices = computed(() => workspace.value.devices);
 const hardwareAdapterPlans = computed(() => workspace.value.adapterPlans);
 const hardwareProtocolSamples = computed(() => workspace.value.protocolSamples);
+const hardwareProtocolReviews = computed(() => workspace.value.protocolReviews);
 const hardwarePocRecords = computed(() => workspace.value.pocRecords);
 const hardwarePocEvidence = computed(() => workspace.value.pocEvidence);
 const integrationTasks = computed(() => workspace.value.tasks);
@@ -264,6 +267,96 @@ function fallbackHardwareProtocolSamples(): HardwareProtocolSample[] {
       evidenceCode: 'HW-PROTO-SCALE-20260706-001',
       captureMethod: '人工读数照片 + 串口/TCP 报文样本占位',
       nextReviewAction: '确认 RS232/USB/TCP 接口类型、波特率、精度、校准周期和原始报文',
+      riskLevel: '高',
+      tone: 'red',
+    },
+  ];
+}
+
+function fallbackHardwareProtocolReviews(): HardwareProtocolReviewItem[] {
+  return [
+    {
+      reviewCode: 'HW-REV-CAM-20260710-001',
+      deviceCode: 'CAM-UNPACK-01',
+      deviceName: '拆包台摄像头',
+      protocolType: 'RTSP / ONVIF / FFmpeg',
+      reviewStatus: '待现场复核',
+      deviceModelStatus: 'NVR 品牌/通道待冻结',
+      confirmedParameters: ['startTime', 'endTime', 'ffmpegCommand'],
+      pendingParameters: ['nvrIp', 'channel', 'timeSyncOffset'],
+      evidenceCode: 'HW-PROTO-CAM-20260706-001',
+      owner: '实施顾问',
+      reviewWindow: '2026-07-10 09:00-10:00',
+      blocker: 'NTP 校时偏差未复核',
+      nextAction: '现场读取 NVR 品牌、通道号和 NTP 偏差后更新 POC 证据',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      reviewCode: 'HW-REV-PRN-20260710-001',
+      deviceCode: 'PRN-LABEL-01',
+      deviceName: '标签打印机',
+      protocolType: 'Windows driver / Browser print / PDF',
+      reviewStatus: '参数基本冻结',
+      deviceModelStatus: 'Windows 默认打印机待绑定',
+      confirmedParameters: ['labelSize', 'dpi', 'templateCode'],
+      pendingParameters: ['printerName'],
+      evidenceCode: 'HW-PROTO-PRN-20260706-001',
+      owner: '库管员',
+      reviewWindow: '2026-07-10 10:00-10:30',
+      blocker: '现场默认打印机名称未冻结',
+      nextAction: '确认打印机名称、驱动版本和补打权限后补标签样张',
+      riskLevel: '低',
+      tone: 'blue',
+    },
+    {
+      reviewCode: 'HW-REV-SCAN-20260710-001',
+      deviceCode: 'SCAN-PC-01',
+      deviceName: 'PC 扫码枪',
+      protocolType: 'USB HID',
+      reviewStatus: '参数已冻结',
+      deviceModelStatus: 'USB HID 通用扫码枪',
+      confirmedParameters: ['barcodeFormat', 'prefix', 'suffix', 'scanDistance', 'keyboardLayout'],
+      pendingParameters: [],
+      evidenceCode: 'HW-PROTO-SCAN-20260706-001',
+      owner: '库管员',
+      reviewWindow: '2026-07-10 10:30-11:00',
+      blocker: '无',
+      nextAction: '保持扫码样本、误扫样本和手工确认记录',
+      riskLevel: '低',
+      tone: 'green',
+    },
+    {
+      reviewCode: 'HW-REV-PWA-20260710-001',
+      deviceCode: 'PWA-CAM-01',
+      deviceName: '手机摄像头扫码',
+      protocolType: 'BarcodeDetector / ZXing fallback',
+      reviewStatus: '待弱光复核',
+      deviceModelStatus: '低端安卓机型待冻结',
+      confirmedParameters: ['browser', 'androidVersion'],
+      pendingParameters: ['lighting', 'decodeMs'],
+      evidenceCode: 'HW-PROTO-PWA-20260706-001',
+      owner: '车间组长',
+      reviewWindow: '2026-07-10 14:00-14:40',
+      blocker: '弱光和反光场景样本不足',
+      nextAction: '补弱光、反光和低端安卓扫码耗时样本',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      reviewCode: 'HW-REV-SCALE-20260710-001',
+      deviceCode: 'SCALE-01',
+      deviceName: '电子秤',
+      protocolType: 'RS232 / USB / TCP reserved + manual reading',
+      reviewStatus: '接口待确认',
+      deviceModelStatus: '电子秤型号和接口类型待冻结',
+      confirmedParameters: ['unit', 'precision'],
+      pendingParameters: ['interfaceType', 'baudRate', 'dataBits', 'parity', 'tcpHost'],
+      evidenceCode: 'HW-PROTO-SCALE-20260706-001',
+      owner: '质检员',
+      reviewWindow: '2026-07-10 15:00-15:40',
+      blocker: 'RS232/USB/TCP 接口类型未确认',
+      nextAction: '确认接口类型、波特率、校准周期并保留原始报文照片',
       riskLevel: '高',
       tone: 'red',
     },
@@ -528,6 +621,28 @@ function nextIntegrationActionFor(deviceCode: string): string {
             </div>
             <StatusBadge :label="`风险 ${sample.riskLevel}`" :tone="sample.tone" />
             <p>{{ sample.requiredParameters.join('、') }}；{{ sample.nextReviewAction }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">PROTOCOL REVIEW</span>
+          <StatusBadge label="参数复核" tone="red" />
+        </div>
+        <div class="integration-list compact-integration-list">
+          <article v-for="review in hardwareProtocolReviews" :key="review.reviewCode">
+            <div class="integration-main">
+              <strong>{{ review.deviceName }} / {{ review.reviewStatus }}</strong>
+              <span>{{ review.deviceModelStatus }} / {{ review.reviewWindow }}</span>
+              <small>{{ review.reviewCode }} / {{ review.owner }} / {{ review.evidenceCode }}</small>
+            </div>
+            <StatusBadge :label="`风险 ${review.riskLevel}`" :tone="review.tone" />
+            <p>
+              已确认 {{ review.confirmedParameters.join('、') || '无' }}；
+              待复核 {{ review.pendingParameters.join('、') || '无' }}；
+              {{ review.blocker }}；{{ review.nextAction }}
+            </p>
           </article>
         </div>
       </section>

@@ -182,6 +182,7 @@ class M2ManagementApiSmokeTest {
         ResponseEntity<String> tasks = restTemplate.getForEntity("/api/hardware/integration-tasks", String.class);
         ResponseEntity<String> adapterPlans = restTemplate.getForEntity("/api/hardware/adapter-plans", String.class);
         ResponseEntity<String> protocolSamples = restTemplate.getForEntity("/api/hardware/protocol-samples", String.class);
+        ResponseEntity<String> protocolReviews = restTemplate.getForEntity("/api/hardware/protocol-reviews", String.class);
         ResponseEntity<String> pocRecords = restTemplate.getForEntity("/api/hardware/poc-records", String.class);
         ResponseEntity<String> pocEvidence = restTemplate.getForEntity("/api/hardware/poc-evidence", String.class);
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/hardware/summary", String.class);
@@ -202,6 +203,14 @@ class M2ManagementApiSmokeTest {
                 "RS232",
                 "ST,GS",
                 "baudRate"
+        );
+        assertThat(protocolReviews.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(protocolReviews.getBody()).contains(
+                "SCALE-01",
+                "HW-REV-SCALE-20260710-001",
+                "电子秤型号和接口类型待冻结",
+                "baudRate",
+                "RS232/USB/TCP"
         );
         assertThat(pocRecords.getBody()).contains("POC-SCAN-20260706-001", "弱光扫码");
         assertThat(pocEvidence.getStatusCode().is2xxSuccessful()).isTrue();

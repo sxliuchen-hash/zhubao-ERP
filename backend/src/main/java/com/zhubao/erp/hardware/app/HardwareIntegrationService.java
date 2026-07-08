@@ -8,6 +8,7 @@ import com.zhubao.erp.hardware.domain.HardwareDeviceStatus;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
 import com.zhubao.erp.hardware.domain.HardwarePocRecordRepository;
+import com.zhubao.erp.hardware.domain.HardwareProtocolReviewItem;
 import com.zhubao.erp.hardware.domain.HardwareProtocolSample;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
 import org.springframework.stereotype.Service;
@@ -238,6 +239,94 @@ public class HardwareIntegrationService {
             )
     );
 
+    private final List<HardwareProtocolReviewItem> protocolReviews = List.of(
+            new HardwareProtocolReviewItem(
+                    "HW-REV-CAM-20260710-001",
+                    "CAM-UNPACK-01",
+                    "拆包台摄像头",
+                    "RTSP / ONVIF / FFmpeg",
+                    "待现场复核",
+                    "NVR 品牌/通道待冻结",
+                    List.of("startTime", "endTime", "ffmpegCommand"),
+                    List.of("nvrIp", "channel", "timeSyncOffset"),
+                    "HW-PROTO-CAM-20260706-001",
+                    "实施顾问",
+                    "2026-07-10 09:00-10:00",
+                    "NTP 校时偏差未复核",
+                    "现场读取 NVR 品牌、通道号和 NTP 偏差后更新 POC 证据",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolReviewItem(
+                    "HW-REV-PRN-20260710-001",
+                    "PRN-LABEL-01",
+                    "标签打印机",
+                    "Windows driver / Browser print / PDF",
+                    "参数基本冻结",
+                    "Windows 默认打印机待绑定",
+                    List.of("labelSize", "dpi", "templateCode"),
+                    List.of("printerName"),
+                    "HW-PROTO-PRN-20260706-001",
+                    "库管员",
+                    "2026-07-10 10:00-10:30",
+                    "现场默认打印机名称未冻结",
+                    "确认打印机名称、驱动版本和补打权限后补标签样张",
+                    "低",
+                    "blue"
+            ),
+            new HardwareProtocolReviewItem(
+                    "HW-REV-SCAN-20260710-001",
+                    "SCAN-PC-01",
+                    "PC 扫码枪",
+                    "USB HID",
+                    "参数已冻结",
+                    "USB HID 通用扫码枪",
+                    List.of("barcodeFormat", "prefix", "suffix", "scanDistance", "keyboardLayout"),
+                    List.of(),
+                    "HW-PROTO-SCAN-20260706-001",
+                    "库管员",
+                    "2026-07-10 10:30-11:00",
+                    "无",
+                    "保持扫码样本、误扫样本和手工确认记录",
+                    "低",
+                    "green"
+            ),
+            new HardwareProtocolReviewItem(
+                    "HW-REV-PWA-20260710-001",
+                    "PWA-CAM-01",
+                    "手机摄像头扫码",
+                    "BarcodeDetector / ZXing fallback",
+                    "待弱光复核",
+                    "低端安卓机型待冻结",
+                    List.of("browser", "androidVersion"),
+                    List.of("lighting", "decodeMs"),
+                    "HW-PROTO-PWA-20260706-001",
+                    "车间组长",
+                    "2026-07-10 14:00-14:40",
+                    "弱光和反光场景样本不足",
+                    "补弱光、反光和低端安卓扫码耗时样本",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolReviewItem(
+                    "HW-REV-SCALE-20260710-001",
+                    "SCALE-01",
+                    "电子秤",
+                    "RS232 / USB / TCP reserved + manual reading",
+                    "接口待确认",
+                    "电子秤型号和接口类型待冻结",
+                    List.of("unit", "precision"),
+                    List.of("interfaceType", "baudRate", "dataBits", "parity", "tcpHost"),
+                    "HW-PROTO-SCALE-20260706-001",
+                    "质检员",
+                    "2026-07-10 15:00-15:40",
+                    "RS232/USB/TCP 接口类型未确认",
+                    "确认接口类型、波特率、校准周期并保留原始报文照片",
+                    "高",
+                    "red"
+            )
+    );
+
     public List<HardwareDevice> findDevices() {
         return devices;
     }
@@ -252,6 +341,10 @@ public class HardwareIntegrationService {
 
     public List<HardwareProtocolSample> findProtocolSamples() {
         return protocolSamples;
+    }
+
+    public List<HardwareProtocolReviewItem> findProtocolReviews() {
+        return protocolReviews;
     }
 
     public List<HardwarePocRecord> findPocRecords() {

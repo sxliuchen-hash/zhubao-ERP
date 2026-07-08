@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.103 / 硬件协议样本清单</strong>
-        <i>仍处于 M3 增量开发：本轮把摄像头、标签打印、扫码、PWA 摄像头和电子秤的协议参数、样本载荷和复测留痕固化为 API 契约。</i>
+        <strong>M3.104 / 硬件协议参数复核</strong>
+        <i>仍处于 M3 增量开发：本轮把摄像头、标签打印、扫码、PWA 摄像头和电子秤的协议参数复核、型号冻结状态和责任人固化为 API 契约。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,9 +54,9 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.103 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.104 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
-          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底、低成本适配计划和协议样本统一进入现场作业台。</p>
+          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底、低成本适配计划、协议样本和参数复核统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>
@@ -67,6 +67,7 @@ defineProps<{
             <span>POC 证据关联</span>
             <span>低成本硬件适配</span>
             <span>硬件协议样本</span>
+            <span>硬件参数复核</span>
             <span>运维中心</span>
             <span>登录会话</span>
             <span>账号密码哈希</span>

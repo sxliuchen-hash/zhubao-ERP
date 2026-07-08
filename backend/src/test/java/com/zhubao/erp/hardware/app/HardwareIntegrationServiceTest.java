@@ -44,6 +44,15 @@ class HardwareIntegrationServiceTest {
                     assertThat(sample.samplePayload()).contains("ST,GS");
                     assertThat(sample.tone()).isEqualTo("red");
                 });
+        assertThat(service.findProtocolReviews()).hasSize(5);
+        assertThat(service.findProtocolReviews())
+                .anySatisfy(review -> {
+                    assertThat(review.deviceCode()).isEqualTo("SCALE-01");
+                    assertThat(review.deviceModelStatus()).contains("待冻结");
+                    assertThat(review.pendingParameters()).contains("interfaceType", "baudRate", "dataBits");
+                    assertThat(review.blocker()).contains("RS232/USB/TCP");
+                    assertThat(review.tone()).isEqualTo("red");
+                });
         assertThat(service.findPocRecords()).hasSize(4);
         assertThat(service.blockedPocCount()).isEqualTo(1);
         assertThat(service.findPocRecords())

@@ -6,6 +6,7 @@ import com.zhubao.erp.hardware.domain.HardwareAdapterPlan;
 import com.zhubao.erp.hardware.domain.HardwareDevice;
 import com.zhubao.erp.hardware.domain.HardwarePocEvidenceSummary;
 import com.zhubao.erp.hardware.domain.HardwarePocRecord;
+import com.zhubao.erp.hardware.domain.HardwareProtocolReviewItem;
 import com.zhubao.erp.hardware.domain.HardwareProtocolSample;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,6 +43,11 @@ public class HardwareIntegrationController {
     @GetMapping("/protocol-samples")
     public ApiResponse<List<HardwareProtocolSample>> protocolSamples() {
         return ApiResponse.ok(hardwareIntegrationService.findProtocolSamples());
+    }
+
+    @GetMapping("/protocol-reviews")
+    public ApiResponse<List<HardwareProtocolReviewItem>> protocolReviews() {
+        return ApiResponse.ok(hardwareIntegrationService.findProtocolReviews());
     }
 
     @GetMapping("/poc-records")

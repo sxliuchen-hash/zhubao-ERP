@@ -119,6 +119,7 @@
 - M3.101 文档权限口径收敛，配置构型、字段/API 契约和上线待确认清单同步到 M3.100 客户范围可视化口径，继续保留生产账号前置审批、完整 IAM、生产菜单持久化、组织客户授权表、SSO/JWT 和审计保全缺口。
 - M3.102 硬件低成本适配计划，新增 `HardwareAdapterPlan` 和 `GET /api/hardware/adapter-plans`，把拆包摄像头、标签打印机、PC 扫码枪、PWA 摄像头和电子秤的一期主适配、失败兜底、证据要求、下一步复测动作和风险等级固化为只读契约；前端软硬件联动作业台新增 `ADAPTER PLANS / 低成本优先` 区域。该边界仍不代表厂商 SDK/协议直连、现场复测留痕或附件归档闭环完成。
 - M3.103 硬件协议样本清单，新增 `HardwareProtocolSample` 和 `GET /api/hardware/protocol-samples`，把 NVR/RTSP、标签打印、USB HID、PWA 扫码和电子秤 RS232/USB/TCP 预留的参数、样本载荷、采集方式、证据编码和复测动作固化为只读契约；前端软硬件联动作业台新增 `PROTOCOL SAMPLES / 复测留痕` 区域。该边界仍不代表厂商 SDK/协议直连或现场复测完成。
+- M3.104 硬件协议参数复核，新增 `HardwareProtocolReviewItem` 和 `GET /api/hardware/protocol-reviews`，把 NVR、标签打印、PC/PWA 扫码和电子秤的已确认参数、待复核参数、型号冻结状态、责任人、复核窗口、阻断项和下一步动作固化为只读契约；前端软硬件联动作业台新增 `PROTOCOL REVIEW / 参数复核` 区域。该边界仍不执行真实硬件采集或复测结论确认。
 
 ## 目录结构
 
@@ -321,6 +322,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/hardware/integration-tasks`
 - `GET /api/hardware/adapter-plans`
 - `GET /api/hardware/protocol-samples`
+- `GET /api/hardware/protocol-reviews`
 - `GET /api/hardware/poc-records`
 - `GET /api/hardware/poc-evidence`
 - `GET /api/hardware/summary`
@@ -390,7 +392,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 
 当前已进入 M3 一期开发推进中，前端继续向生产现场作业台和高密度 ERP/MES 操作界面收敛；样例库已升级为验收数据指挥台，把开源参考、前端样例、后端 fixture、自动化测试、证据编码、上线门禁、真实数据缺口和登记表导入准备度收敛到同一张管理矩阵。来料、生产、质检、库存追溯主表已具备选中联动详情和处理链路；来料母单已补入现场签收入库字段，生产工单已补入抛光日报和雕刻设备统计字段，配置基线已纳入雕刻与抛光日报模板。
 
-截至 M3.103，现场登记表链路已完成入库、出货、抛光、雕刻 4 类 Excel 上传预检、问题 CSV、真实模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口，以及来料母单/出库单的基础结构化持久化切片。系统已能把通过预检的登记表保存为 `register_import_batch/register_import_row` 批次和行级 JSON，前端可展示最近确认批次、行级标准化字段、警告消息、posting plan 的命令草稿、缺失字段和警告，并可对后端 posting plan 中的阻断字段进行行级补录；补录只更新标准化字段，不写库存台账或业务单据。非阻断行必须通过独立 POST 命令交给后端业务服务入账；`REG-ENGRAVING` 会额外生成 `biz_machine_output_record`，生产页可通过 `GET /api/machine-outputs/summary` 查看最近设备产量的总量、机器分组、日期分组、机器档案待匹配和签名附件待补数量；`REG-INBOUND` / `REG-OUTBOUND` 显式入账复用入库/出库业务动作，在库存台账成功后保存 `biz_mother_order` / `biz_outbound_order` 快照，`SA 样例库` 会继续调用业务单据查询接口展示快照字段、状态、来源登记表行和台账号。库存变化仍统一经过 `StockLedgerService`，重复入账会被 `POSTED` 状态拒绝。权限侧已补后端授权菜单树、按钮权限编码、登录会话审计、登录审计 JDBC 持久化边界、前端登录会话导航过滤、`auth_user_account` 账号表、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链、业务工作台 GET 首版数据范围过滤、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界和客户范围可视化；登录会话、当前权限上下文、`GET /api/security/menu-tree`、`GET /api/auth/audit-events`、`GET /api/auth/audit-integrity`、`GET /api/auth/accounts` 和 `GET /api/approvals/tasks` 可返回角色可见菜单、最近登录审计、审计链完整性摘要、账号状态摘要、账号客户范围、改密时间、到期时间、过期状态和账号变更复核任务，`POST /api/auth/password` 可在已登录 Bearer 会话内校验当前密码并刷新改密时间。软硬件侧已将硬件 POC 记录从服务内样例推进到内存/JDBC 仓储可切换，MySQL profile 默认读取 `hw_poc_record`，新增 `GET /api/hardware/poc-evidence` 只读聚合 POC 记录与附件证据，M3.102 新增 `GET /api/hardware/adapter-plans` 返回五类低成本适配计划，M3.103 新增 `GET /api/hardware/protocol-samples` 返回 NVR/RTSP、标签打印、USB HID、PWA 扫码和电子秤 RS232/USB/TCP 预留的协议参数、样本载荷、证据编码和复测动作；该边界仍不代表附件上传闭环、现场复测留痕、硬件 SDK 强集成或厂商协议直连完成。生产账号前置审批、生产持久化菜单表、真正不可篡改审计、SSO/JWT、安全日志平台、完整组织客户授权表和现场附件归档闭环仍未完成。下一步重点不再是继续堆演示页，而是补齐机器档案匹配、签名附件、完整母单/出库生命周期、生产账号前置审批、完整组织客户授权表、NAS/S3 签名访问、软硬件原始证据补传、低成本适配计划复测留痕、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入：
+截至 M3.104，现场登记表链路已完成入库、出货、抛光、雕刻 4 类 Excel 上传预检、问题 CSV、真实模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口，以及来料母单/出库单的基础结构化持久化切片。系统已能把通过预检的登记表保存为 `register_import_batch/register_import_row` 批次和行级 JSON，前端可展示最近确认批次、行级标准化字段、警告消息、posting plan 的命令草稿、缺失字段和警告，并可对后端 posting plan 中的阻断字段进行行级补录；补录只更新标准化字段，不写库存台账或业务单据。非阻断行必须通过独立 POST 命令交给后端业务服务入账；`REG-ENGRAVING` 会额外生成 `biz_machine_output_record`，生产页可通过 `GET /api/machine-outputs/summary` 查看最近设备产量的总量、机器分组、日期分组、机器档案待匹配和签名附件待补数量；`REG-INBOUND` / `REG-OUTBOUND` 显式入账复用入库/出库业务动作，在库存台账成功后保存 `biz_mother_order` / `biz_outbound_order` 快照，`SA 样例库` 会继续调用业务单据查询接口展示快照字段、状态、来源登记表行和台账号。库存变化仍统一经过 `StockLedgerService`，重复入账会被 `POSTED` 状态拒绝。权限侧已补后端授权菜单树、按钮权限编码、登录会话审计、登录审计 JDBC 持久化边界、前端登录会话导航过滤、`auth_user_account` 账号表、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链、业务工作台 GET 首版数据范围过滤、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界和客户范围可视化；登录会话、当前权限上下文、`GET /api/security/menu-tree`、`GET /api/auth/audit-events`、`GET /api/auth/audit-integrity`、`GET /api/auth/accounts` 和 `GET /api/approvals/tasks` 可返回角色可见菜单、最近登录审计、审计链完整性摘要、账号状态摘要、账号客户范围、改密时间、到期时间、过期状态和账号变更复核任务，`POST /api/auth/password` 可在已登录 Bearer 会话内校验当前密码并刷新改密时间。软硬件侧已将硬件 POC 记录从服务内样例推进到内存/JDBC 仓储可切换，MySQL profile 默认读取 `hw_poc_record`，新增 `GET /api/hardware/poc-evidence` 只读聚合 POC 记录与附件证据，M3.102 新增 `GET /api/hardware/adapter-plans` 返回五类低成本适配计划，M3.103 新增 `GET /api/hardware/protocol-samples` 返回协议参数和样本载荷，M3.104 新增 `GET /api/hardware/protocol-reviews` 返回已确认参数、待复核参数、型号冻结状态、责任人、复核窗口和阻断项；该边界仍不代表附件上传闭环、现场复测留痕、硬件 SDK 强集成或厂商协议直连完成。生产账号前置审批、生产持久化菜单表、真正不可篡改审计、SSO/JWT、安全日志平台、完整组织客户授权表和现场附件归档闭环仍未完成。下一步重点不再是继续堆演示页，而是补齐机器档案匹配、签名附件、完整母单/出库生命周期、生产账号前置审批、完整组织客户授权表、NAS/S3 签名访问、软硬件原始证据补传、低成本适配计划复测留痕、备份计划任务、恢复演练记录结构化入库/告警和生产运维接入：
 
 - MySQL DDL 完整版和迁移策略。
 - API 字段字典。
