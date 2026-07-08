@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.95 / 硬件 POC 证据关联</strong>
-        <i>仍处于 M3 增量开发：本轮将硬件 POC 记录与附件证据做只读关联，继续保留低成本硬件和人工兜底字段。</i>
+        <strong>M3.96 / 业务工作台数据范围过滤</strong>
+        <i>仍处于 M3 增量开发：本轮将业务工作台 GET 接入 dataScope 首版过滤，继续保留评审请求头和登录会话边界。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,7 +54,7 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.95 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.96 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
           <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据和硬件兜底统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
@@ -80,6 +80,7 @@ defineProps<{
             <span>复核补录</span>
             <span>登录审计</span>
             <span>授权导航过滤</span>
+            <span>数据范围过滤</span>
             <span>工资试算基线</span>
           </div>
         </div>

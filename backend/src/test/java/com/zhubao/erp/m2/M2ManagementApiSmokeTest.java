@@ -381,6 +381,63 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
+    void filtersBusinessWorkspaceApisByDataScopeHeaders() {
+        HttpHeaders selfHeaders = new HttpHeaders();
+        selfHeaders.set("X-Zhubao-Operator", "warehouse-review");
+        selfHeaders.set("X-Zhubao-Role", "WAREHOUSE_KEEPER");
+        selfHeaders.set("X-Zhubao-Data-Scope", "TEAM");
+
+        ResponseEntity<String> selfInbound = restTemplate.exchange(
+                "/api/business/workspaces/inbound",
+                HttpMethod.GET,
+                new HttpEntity<>(selfHeaders),
+                String.class
+        );
+        ResponseEntity<String> selfSummary = restTemplate.exchange(
+                "/api/business/workspaces/summary",
+                HttpMethod.GET,
+                new HttpEntity<>(selfHeaders),
+                String.class
+        );
+
+        assertThat(selfInbound.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(selfInbound.getBody()).contains("MD-20260706-001", "MD-20260706-004");
+        assertThat(selfInbound.getBody()).doesNotContain("MD-20260706-003", "璟瑞工贸");
+        assertThat(selfSummary.getBody()).contains(
+                "\"inboundOrders\":3",
+                "\"activeWorkOrders\":0",
+                "\"inventoryLedgerEntries\":1",
+                "\"mobileTasks\":0"
+        );
+
+        HttpHeaders customerHeaders = new HttpHeaders();
+        customerHeaders.set("X-Zhubao-Operator", "sales-review");
+        customerHeaders.set("X-Zhubao-Role", "SALES");
+        customerHeaders.set("X-Zhubao-Data-Scope", "CUSTOMER_RANGE");
+        customerHeaders.set("X-Zhubao-Customer-Scope", "ZD-20260706-001;ZD-20260706-002;ZD-20260706-009");
+
+        ResponseEntity<String> customerProduction = restTemplate.exchange(
+                "/api/business/workspaces/production",
+                HttpMethod.GET,
+                new HttpEntity<>(customerHeaders),
+                String.class
+        );
+        ResponseEntity<String> customerSummary = restTemplate.exchange(
+                "/api/business/workspaces/summary",
+                HttpMethod.GET,
+                new HttpEntity<>(customerHeaders),
+                String.class
+        );
+
+        assertThat(customerProduction.getBody()).contains("ZD-20260706-001", "ZD-20260706-009");
+        assertThat(customerProduction.getBody()).doesNotContain("ZD-20260706-006", "雅辰饰品");
+        assertThat(customerSummary.getBody()).contains(
+                "\"inboundOrders\":0",
+                "\"activeWorkOrders\":3"
+        );
+    }
+
+    @Test
     void confirmsInboundThroughBusinessOperationApiAndWritesInventoryLedger() {
         Map<String, Object> request = Map.of(
                 "motherOrderCode", "MD-SMOKE-20260706-001",
@@ -1071,9 +1128,10 @@ class M2ManagementApiSmokeTest {
                 "\"operatorHeader\":\"X-Zhubao-Operator\"",
                 "\"roleHeader\":\"X-Zhubao-Role\"",
                 "\"dataScopeHeader\":\"X-Zhubao-Data-Scope\"",
+                "\"customerScopeHeader\":\"X-Zhubao-Customer-Scope\"",
                 "\"code\":\"BUSINESS_INBOUND_CONFIRM\"",
                 "\"code\":\"BUSINESS_OUTBOUND_SHIPMENT\"",
-                "GET 工作台数据尚未按 dataScope 做真实过滤"
+                "业务工作台 GET 已接入首版 dataScope 过滤"
         );
         assertThat(context.getBody()).doesNotContain("\"code\":\"BUSINESS_LOSS_APPROVAL\"");
 

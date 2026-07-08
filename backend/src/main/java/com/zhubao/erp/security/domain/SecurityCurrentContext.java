@@ -9,6 +9,7 @@ public record SecurityCurrentContext(
         String dataScope,
         String dataScopeLabel,
         String dataBoundary,
+        List<String> customerScope,
         boolean headerBased,
         List<PermissionGrant> allowedPermissions,
         List<String> sensitiveActionCodes,
@@ -27,7 +28,8 @@ public record SecurityCurrentContext(
     public record HeaderContract(
             String operatorHeader,
             String roleHeader,
-            String dataScopeHeader
+            String dataScopeHeader,
+            String customerScopeHeader
     ) {
     }
 }

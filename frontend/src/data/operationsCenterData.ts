@@ -234,7 +234,7 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       count: 1,
       latest: '2026-07-07 06:00:00',
       owner: '平台负责人',
-      nextAction: '接入真实登录、菜单权限和数据范围过滤。',
+      nextAction: '接入 SSO/JWT、生产菜单持久化和组织客户授权表。',
       tone: 'blue',
     },
   ],

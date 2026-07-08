@@ -39,6 +39,7 @@ public class SecurityCurrentContextService {
                 operatorContext.dataScope().name(),
                 dataScopeLabel(operatorContext.dataScope()),
                 dataBoundary(operatorContext.dataScope()),
+                operatorContext.customerScope(),
                 operatorContext.headerBased(),
                 grants,
                 grants.stream().map(SecurityCurrentContext.PermissionGrant::code).toList(),
@@ -48,7 +49,8 @@ public class SecurityCurrentContextService {
                 new SecurityCurrentContext.HeaderContract(
                         OperatorContextResolver.OPERATOR_HEADER,
                         OperatorContextResolver.ROLE_HEADER,
-                        OperatorContextResolver.DATA_SCOPE_HEADER
+                        OperatorContextResolver.DATA_SCOPE_HEADER,
+                        OperatorContextResolver.CUSTOMER_SCOPE_HEADER
                 )
         );
     }
@@ -79,10 +81,10 @@ public class SecurityCurrentContextService {
 
     private String dataBoundary(DataScope dataScope) {
         return switch (dataScope) {
-            case SELF -> "后续真实登录接入后，只应读取当前操作人的任务、审批和本人报工记录。";
-            case TEAM -> "后续真实登录接入后，只应读取同班组、同工位或当前负责队列内的业务对象。";
-            case DEPARTMENT -> "后续真实登录接入后，只应读取本部门业务对象和部门内审批任务。";
-            case CUSTOMER_RANGE -> "后续真实登录接入后，只应读取被授权客户、母单、工单和库存批次。";
+            case SELF -> "业务工作台 GET 已按当前操作人文本匹配本人任务、审批和本人报工记录。";
+            case TEAM -> "业务工作台 GET 已按当前角色职责关键词收敛到同班组、同工位或当前负责队列内的业务对象。";
+            case DEPARTMENT -> "业务工作台 GET 已按当前角色部门职责关键词收敛到本部门业务对象和部门内审批任务。";
+            case CUSTOMER_RANGE -> "业务工作台 GET 已按客户范围请求头收敛到被授权客户、母单、工单和库存批次。";
             case ALL -> "当前评审默认全局可见；正式上线必须由真实角色、菜单权限和审计日志共同约束。";
         };
     }
@@ -91,7 +93,7 @@ public class SecurityCurrentContextService {
         if (headerBased) {
             return List.of(
                     "当前身份来自请求头，可用于评审和自动化测试兜底。",
-                    "当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。",
+                    "业务工作台 GET 已接入首版 dataScope 过滤；跨对象客户授权表和深层行级权限仍需继续固化。",
                     "当前菜单权限已由后端菜单树返回，前端登录会话会按 menuCodes/menuTree 过滤侧栏；请求头兜底仍展示评审全量导航。",
                     "敏感 POST 已接入轻量角色守卫，但复杂审批流和工资锁账仍未完成。"
             );
@@ -99,7 +101,7 @@ public class SecurityCurrentContextService {
         return List.of(
                 "当前身份来自登录会话 token，已覆盖敏感 POST 权限守卫。",
                 "M3.92 已接入账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期边界和登录态自助改密续期，当前默认 seed 仍为评审账号；正式上线必须接入生产账号审批、SSO/JWT 和审计保全。",
-                "当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。",
+                "业务工作台 GET 已接入首版 dataScope 过滤；登录账号的客户授权表、组织树和深层行级权限仍需继续固化。",
                 "菜单权限已返回后端菜单树和按钮权限基线，前端侧栏已按登录会话菜单编码过滤；生产菜单持久化仍需继续固化。"
         );
     }

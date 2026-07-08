@@ -119,6 +119,7 @@ export interface SecurityHeaderContract {
   operatorHeader: string;
   roleHeader: string;
   dataScopeHeader: string;
+  customerScopeHeader: string;
 }
 
 export interface NavigationMenuItem {
@@ -137,6 +138,7 @@ export interface SecurityCurrentContext {
   dataScope: string;
   dataScopeLabel: string;
   dataBoundary: string;
+  customerScope: string[];
   headerBased: boolean;
   allowedPermissions: PermissionGrant[];
   sensitiveActionCodes: string[];
@@ -479,15 +481,17 @@ export const configurationBaselineFallback: ConfigurationBaselineWorkspace = {
       },
     ],
     limitationNotes: [
-      '当前身份优先来自登录会话；M3.93 已接入账号仓储、PBKDF2 密码哈希、5 次失败锁定、账号启停、管理员解锁、生产密码策略、密码过期边界、登录态自助改密续期和认证审计摘要链，M3.94 已补硬件 POC 仓储可切换；生产仍需替换初始评审账号和接入 SSO/JWT。',
-      '当前数据范围只做解析与展示，GET 工作台数据尚未按 dataScope 做真实过滤。',
+      '当前身份优先来自登录会话；M3.96 已接入账号仓储、PBKDF2 密码哈希、5 次失败锁定、账号启停、管理员解锁、生产密码策略、密码过期边界、登录态自助改密续期、认证审计摘要链和业务工作台 GET 首版数据范围过滤；生产仍需替换初始评审账号和接入 SSO/JWT。',
+      '业务工作台 GET 已接入首版 dataScope 过滤；跨对象客户授权表和深层行级权限仍需继续固化。',
       '当前菜单权限已由后端菜单树返回，前端登录会话会按 menuCodes/menuTree 过滤侧栏；请求头兜底仍展示评审全量导航。',
       '敏感 POST 和账号管理接口已接入轻量角色守卫，但复杂审批流、账号审批和工资锁账仍未完成。',
     ],
+    customerScope: [],
     headerContract: {
       operatorHeader: 'X-Zhubao-Operator',
       roleHeader: 'X-Zhubao-Role',
       dataScopeHeader: 'X-Zhubao-Data-Scope',
+      customerScopeHeader: 'X-Zhubao-Customer-Scope',
     },
   },
 };

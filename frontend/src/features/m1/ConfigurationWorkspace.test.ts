@@ -30,6 +30,7 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('请求头上下文');
     expect(wrapper.text()).toContain('X-Zhubao-Role');
     expect(wrapper.text()).toContain('X-Zhubao-Data-Scope');
+    expect(wrapper.text()).toContain('X-Zhubao-Customer-Scope');
     expect(wrapper.text()).toContain('授权菜单树');
     expect(wrapper.text()).toContain('REGISTER_IMPORT_REVIEW');
     expect(wrapper.text()).toContain('后端菜单树返回');

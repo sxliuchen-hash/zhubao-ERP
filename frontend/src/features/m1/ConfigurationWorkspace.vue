@@ -396,7 +396,12 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
 
         <div class="security-boundary-note">
           <strong>数据边界说明</strong>
-          <span>{{ workspace.securityContext.dataBoundary }}</span>
+          <span>
+            {{ workspace.securityContext.dataBoundary }}
+            <template v-if="workspace.securityContext.customerScope.length">
+              / {{ workspace.securityContext.customerScope.join('、') }}
+            </template>
+          </span>
         </div>
       </div>
 
@@ -419,6 +424,7 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
           <strong>请求头契约</strong>
           <span>{{ workspace.securityContext.headerContract.roleHeader }}</span>
           <span>{{ workspace.securityContext.headerContract.dataScopeHeader }}</span>
+          <span>{{ workspace.securityContext.headerContract.customerScopeHeader }}</span>
         </div>
         <div class="security-menu-contract">
           <strong>授权菜单树</strong>

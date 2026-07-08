@@ -7,6 +7,8 @@ import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 @Component
@@ -15,6 +17,7 @@ public class OperatorContextResolver {
     public static final String OPERATOR_HEADER = "X-Zhubao-Operator";
     public static final String ROLE_HEADER = "X-Zhubao-Role";
     public static final String DATA_SCOPE_HEADER = "X-Zhubao-Data-Scope";
+    public static final String CUSTOMER_SCOPE_HEADER = "X-Zhubao-Customer-Scope";
 
     private final AuthSessionService authSessionService;
 
@@ -31,7 +34,8 @@ public class OperatorContextResolver {
         String operator = headerOrDefault(request, OPERATOR_HEADER, "system-review");
         RoleCode role = parseRole(headerOrDefault(request, ROLE_HEADER, RoleCode.ADMIN.name()));
         DataScope dataScope = parseDataScope(headerOrDefault(request, DATA_SCOPE_HEADER, DataScope.ALL.name()));
-        return new OperatorContext(operator, role, dataScope, true, "");
+        List<String> customerScope = parseListHeader(request.getHeader(CUSTOMER_SCOPE_HEADER));
+        return new OperatorContext(operator, role, dataScope, true, "", customerScope);
     }
 
     private String headerOrDefault(HttpServletRequest request, String name, String fallback) {
@@ -57,5 +61,16 @@ public class OperatorContextResolver {
 
     private String normalize(String value) {
         return value.trim().replace('-', '_').toUpperCase(Locale.ROOT);
+    }
+
+    private List<String> parseListHeader(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split("[,，;；|]"))
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .distinct()
+                .toList();
     }
 }

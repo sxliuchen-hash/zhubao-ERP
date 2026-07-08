@@ -17,8 +17,8 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.95 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.95 / 硬件 POC 证据关联');
+    expect(wrapper.text()).toContain('M3.96 ERP/MES OPERATIONS DESK');
+    expect(wrapper.text()).toContain('M3.96 / 业务工作台数据范围过滤');
     expect(wrapper.text()).toContain('复核补录');
     expect(wrapper.text()).toContain('登录审计');
     expect(wrapper.text()).toContain('授权导航过滤');
@@ -30,6 +30,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('审计摘要链');
     expect(wrapper.text()).toContain('硬件 POC 仓储');
     expect(wrapper.text()).toContain('POC 证据关联');
+    expect(wrapper.text()).toContain('数据范围过滤');
     expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
     expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
     expect(wrapper.text()).toContain('首页工作台');

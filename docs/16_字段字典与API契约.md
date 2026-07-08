@@ -91,7 +91,7 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.95 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.95 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password` 和 `GET /auth/audit-integrity` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期状态，并在登录态内完成自助改密续期和查看认证审计完整性摘要。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
+当前 M3.96 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.96 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`POST /auth/login`、`POST /auth/password` 和 `GET /auth/audit-integrity` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期状态，并在登录态内完成自助改密续期和查看认证审计完整性摘要；`GET /business/workspaces/*` 会按当前 `dataScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。
 
 业务操作接口前缀：
 
@@ -1591,7 +1591,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 
 ## 12. M3.33 轻量权限守卫契约
 
-当前版本尚未接入生产登录和数据范围过滤，但敏感 POST 已接入后端轻量角色守卫，菜单树已返回到前端并在登录会话下驱动侧栏过滤，避免评审原型继续处于“所有人都能提交关键动作”的状态。
+当前版本尚未接入生产 SSO/JWT、组织树和客户授权表，但敏感 POST 已接入后端轻量角色守卫，业务工作台 GET 已按 `dataScope` 做首版过滤，菜单树已返回到前端并在登录会话下驱动侧栏过滤，避免评审原型继续处于“所有人都能提交关键动作、所有人都看全量工作台”的状态。
 
 ### 12.1 请求头
 
@@ -1599,7 +1599,8 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 |---|---|---|---|
 | `X-Zhubao-Operator` | 操作人快照，用于后续审计上下文 | `system-review` | `车间组长 马杰` |
 | `X-Zhubao-Role` | 当前操作角色 | `ADMIN` | `WORKSHOP_LEADER` |
-| `X-Zhubao-Data-Scope` | 数据范围提示，当前只解析不做数据过滤 | `ALL` | `TEAM` |
+| `X-Zhubao-Data-Scope` | 数据范围编码，业务工作台 GET 会按该值做首版过滤 | `ALL` | `TEAM` |
+| `X-Zhubao-Customer-Scope` | 客户范围或业务对象编码范围，`CUSTOMER_RANGE` 时用于收敛工作台数据 | 空 | `ZD-20260706-001;ZD-20260706-002` |
 
 说明：
 - 默认 `ADMIN` 是为了兼容现有评审脚本和自动化测试，不代表生产环境允许匿名管理员。
@@ -1644,7 +1645,7 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 ### 12.4 当前限制
 
 - M3.63 已接入登录会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，M3.87 已接入账号仓储和 PBKDF2 密码哈希边界，M3.88 已接入失败次数与临时锁定，M3.89 已接入账号启停和管理员解锁管理边界，M3.90 已接入创建/重置密码策略校验，M3.91 已接入 90 天密码过期检测和管理员重置刷新边界，M3.92 已接入登录态自助改密/续期边界，M3.93 已接入认证审计摘要链边界；生产账号审批、JWT/SSO、正式会话续期和生产不可篡改审计仍未完成。
-- 尚未按客户、部门、班组做数据范围过滤。
+- M3.96 已对业务工作台 GET 接入 `SELF`、`TEAM`、`DEPARTMENT`、`CUSTOMER_RANGE` 首版过滤；完整组织树、客户授权表、跨对象关系推导和全系统行级权限仍未完成。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
 
@@ -1914,7 +1915,7 @@ M3.83 当前角色菜单编码基线：
 - M3.83 菜单树仍是后端内存基线服务，不等于生产角色表、菜单表或按钮表。
 - M3.93 登录审计可切换内存/JDBC 仓储并生成摘要链，但仍不等于生产安全日志平台、归档保全或真正不可篡改审计。
 - M3.86 前端侧栏会按登录会话 `menuCodes/menuTree` 做导航过滤；未登录、请求头兜底或 API 不可用时仍保留全量评审导航，不等于生产级菜单授权完成。
-- `dataScope` 当前只进入上下文展示和后续设计约束，GET 工作台数据尚未按范围过滤。
+- `dataScope` 已进入业务工作台 GET 首版过滤，完整组织树、客户授权表、跨对象关系推导和全系统行级权限仍待固化。
 
 ---
 
@@ -1946,13 +1947,14 @@ M3.83 当前角色菜单编码基线：
 | `dataScope` | 数据范围编码，例如 `ALL`、`TEAM`、`CUSTOMER_RANGE` |
 | `dataScopeLabel` | 数据范围中文名 |
 | `dataBoundary` | 当前数据范围在真实登录接入后的业务边界说明 |
+| `customerScope` | `CUSTOMER_RANGE` 使用的客户范围或业务对象编码范围；Bearer 账号暂未接客户授权表时为空 |
 | `headerBased` | 是否来自请求头；登录会话为 `false`，请求头兜底为 `true` |
 | `allowedPermissions` | 当前角色可执行的敏感动作权限列表 |
 | `sensitiveActionCodes` | 仅权限编码列表，便于前端做快速展示或按钮边界提示 |
 | `menuCodes` | 当前角色可见菜单编码列表 |
 | `menuTree` | 当前角色可见菜单树，元素结构同 13.5 `NavigationMenuItem` |
 | `limitationNotes` | 当前认证、数据范围、菜单权限和审批锁账限制 |
-| `headerContract` | 请求头契约，包含操作人、角色、数据范围三个 Header 名称 |
+| `headerContract` | 请求头契约，包含操作人、角色、数据范围和客户范围 Header 名称 |
 
 ### 14.3 示例
 
@@ -1967,7 +1969,8 @@ M3.83 当前角色菜单编码基线：
     "roleLabel": "库管员",
     "dataScope": "TEAM",
     "dataScopeLabel": "本班组/工位",
-    "dataBoundary": "后续真实登录接入后，只应读取同班组、同工位或当前负责队列内的业务对象。",
+    "dataBoundary": "业务工作台 GET 已按当前角色职责关键词收敛到同班组、同工位或当前负责队列内的业务对象。",
+    "customerScope": [],
     "headerBased": true,
     "allowedPermissions": [
       { "code": "BUSINESS_INBOUND_CONFIRM", "label": "来料确认入库" }
@@ -1990,7 +1993,8 @@ M3.83 当前角色菜单编码基线：
     "headerContract": {
       "operatorHeader": "X-Zhubao-Operator",
       "roleHeader": "X-Zhubao-Role",
-      "dataScopeHeader": "X-Zhubao-Data-Scope"
+      "dataScopeHeader": "X-Zhubao-Data-Scope",
+      "customerScopeHeader": "X-Zhubao-Customer-Scope"
     }
   }
 }
@@ -1998,9 +2002,9 @@ M3.83 当前角色菜单编码基线：
 
 ### 14.4 当前限制
 
-- GET 工作台接口尚未按 `dataScope` 做真实过滤，配置基线页必须明确提示该限制。
+- 业务工作台 GET 已按 `dataScope` 做首版过滤，配置基线页必须继续提示完整组织树、客户授权表和深层行级权限仍未完成。
 - 菜单和按钮权限已由后端返回 M3.83 内存基线菜单树；M3.86 前端登录会话导航已按 `menuCodes/menuTree` 过滤，但未登录和请求头兜底仍展示全量评审导航。
 - 尚未建立生产持久化菜单表、角色菜单关联表和按钮权限配置表。
 - M3.93 已建立账号仓储、密码哈希、失败锁定、账号启停、管理员解锁、密码策略、密码过期检测、登录态自助改密/续期和认证审计摘要链边界，但生产账号审批、SSO/JWT、真正不可篡改审计和完整安全日志平台仍待接入。
-- 当前接口不返回密码、客户范围清单或任何生产鉴权密钥。
+- 当前接口不返回密码或任何生产鉴权密钥；`customerScope` 只回显本次请求头或后续账号授权表解析出的客户/业务对象范围。
 - 后续接入正式用户中心后，应移除匿名管理员请求头兜底或仅在测试环境启用。
