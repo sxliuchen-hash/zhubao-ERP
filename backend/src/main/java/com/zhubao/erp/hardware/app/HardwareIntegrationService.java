@@ -11,6 +11,7 @@ import com.zhubao.erp.hardware.domain.HardwarePocRecordRepository;
 import com.zhubao.erp.hardware.domain.HardwareProtocolExecutionResult;
 import com.zhubao.erp.hardware.domain.HardwareProtocolReviewItem;
 import com.zhubao.erp.hardware.domain.HardwareProtocolSample;
+import com.zhubao.erp.hardware.domain.HardwareProtocolSignoffReadiness;
 import com.zhubao.erp.hardware.domain.IntegrationTask;
 import org.springframework.stereotype.Service;
 
@@ -431,6 +432,99 @@ public class HardwareIntegrationService {
             )
     );
 
+    private final List<HardwareProtocolSignoffReadiness> protocolSignoffs = List.of(
+            new HardwareProtocolSignoffReadiness(
+                    "HW-SIGN-CAM-20260710-001",
+                    "HW-EXEC-CAM-20260710-001",
+                    "CAM-UNPACK-01",
+                    "拆包台摄像头",
+                    "待补证据",
+                    List.of("NVR 通道截图", "FFmpeg dry-run 日志", "NTP 偏差记录", "人工上传 MP4 兜底记录"),
+                    List.of("NVR 通道截图", "FFmpeg dry-run 日志", "NTP 偏差记录"),
+                    List.of("实施顾问", "库管员"),
+                    "",
+                    "",
+                    "暂不冻结",
+                    "仅允许人工上传 MP4 兜底",
+                    "视频链路还缺 NVR 通道、校时和截取日志，不能作为一期自动截取能力签字。",
+                    "补齐 NVR 通道截图、FFmpeg dry-run 日志和 NTP 偏差记录后再发起签字",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolSignoffReadiness(
+                    "HW-SIGN-PRN-20260710-001",
+                    "HW-EXEC-PRN-20260710-001",
+                    "PRN-LABEL-01",
+                    "标签打印机",
+                    "待签字",
+                    List.of("标签样张", "PDF checksum", "默认打印机名称", "驱动版本截图"),
+                    List.of("PDF checksum", "默认打印机名称"),
+                    List.of("库管员", "实施顾问"),
+                    "",
+                    "",
+                    "待复核签字",
+                    "允许 PDF 标签兜底上线",
+                    "标签打印可低成本上线，但默认打印机和 checksum 未闭环。",
+                    "补默认打印机名称、PDF checksum 后由库管员和实施顾问签字",
+                    "低",
+                    "blue"
+            ),
+            new HardwareProtocolSignoffReadiness(
+                    "HW-SIGN-SCAN-20260710-001",
+                    "HW-EXEC-SCAN-20260710-001",
+                    "SCAN-PC-01",
+                    "PC 扫码枪",
+                    "已签字",
+                    List.of("扫码录屏", "原始条码照片", "误扫确认记录"),
+                    List.of(),
+                    List.of("库管员", "实施顾问"),
+                    "库管员 / 实施顾问",
+                    "2026-07-10 11:05",
+                    "已冻结",
+                    "允许一期上线",
+                    "USB HID 扫码输入、条码前后缀和键盘布局已完成证据与签字闭环。",
+                    "后续只在替换扫码枪型号时做回归复测",
+                    "低",
+                    "green"
+            ),
+            new HardwareProtocolSignoffReadiness(
+                    "HW-SIGN-PWA-20260710-001",
+                    "HW-EXEC-PWA-20260710-001",
+                    "PWA-CAM-01",
+                    "手机摄像头扫码",
+                    "待补样本",
+                    List.of("普通光截图", "弱光截图", "反光样本", "识别耗时日志", "ZXing 兜底截图"),
+                    List.of("弱光截图", "反光样本", "识别耗时日志"),
+                    List.of("车间组长", "实施顾问"),
+                    "",
+                    "",
+                    "暂不冻结",
+                    "允许 PC 扫码枪优先，PWA 作为人工兜底",
+                    "PWA 普通光可用，但弱光、反光和低端机型样本不足。",
+                    "补弱光/反光样本和识别耗时日志后再冻结低端安卓机型",
+                    "中",
+                    "amber"
+            ),
+            new HardwareProtocolSignoffReadiness(
+                    "HW-SIGN-SCALE-20260710-001",
+                    "HW-EXEC-SCALE-20260710-001",
+                    "SCALE-01",
+                    "电子秤",
+                    "阻断",
+                    List.of("接口照片", "铭牌照片", "原始报文", "校准记录", "人工读数照片"),
+                    List.of("接口照片", "铭牌照片", "原始报文", "校准记录"),
+                    List.of("质检员", "实施顾问", "车间主管"),
+                    "",
+                    "",
+                    "禁止冻结",
+                    "仅允许人工读数兜底",
+                    "电子秤接口类型、波特率和原始报文缺失，不能签字为自动采集能力。",
+                    "继续人工读数入账，补接口照片、铭牌、校准记录和原始报文后重新复测",
+                    "高",
+                    "red"
+            )
+    );
+
     public List<HardwareDevice> findDevices() {
         return devices;
     }
@@ -453,6 +547,10 @@ public class HardwareIntegrationService {
 
     public List<HardwareProtocolExecutionResult> findProtocolExecutions() {
         return protocolExecutions;
+    }
+
+    public List<HardwareProtocolSignoffReadiness> findProtocolSignoffs() {
+        return protocolSignoffs;
     }
 
     public List<HardwarePocRecord> findPocRecords() {

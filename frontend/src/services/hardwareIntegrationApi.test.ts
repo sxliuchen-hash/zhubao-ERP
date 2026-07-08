@@ -157,6 +157,31 @@ describe('hardwareIntegrationApi', () => {
           code: 0,
           message: 'ok',
           data: [{
+            signoffCode: 'HW-SIGN-SCALE-001',
+            executionCode: 'HW-EXEC-SCALE-001',
+            deviceCode: 'SCALE-01',
+            deviceName: '电子秤',
+            signoffStatus: '阻断',
+            requiredAttachments: ['接口照片', '铭牌照片', '原始报文', '校准记录'],
+            missingAttachments: ['接口照片', '原始报文'],
+            signerRoles: ['质检员', '实施顾问'],
+            signedBy: '',
+            signedAt: '',
+            modelFreezeDecision: '禁止冻结',
+            rolloutGate: '仅允许人工读数兜底',
+            closureSummary: '电子秤接口类型和原始报文缺失',
+            nextAction: '补接口照片和原始报文',
+            riskLevel: '高',
+            tone: 'red',
+          }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: [{
             code: 'POC-VID-001',
             deviceCode: 'CAM-UNPACK-01',
             scene: '拆包台视频截取',
@@ -214,9 +239,11 @@ describe('hardwareIntegrationApi', () => {
     expect(model.protocolReviews[0].pendingParameters).toContain('baudRate');
     expect(model.protocolExecutions[0].executionStatus).toBe('阻断');
     expect(model.protocolExecutions[0].failedParameters).toContain('baudRate');
+    expect(model.protocolSignoffs[0].modelFreezeDecision).toBe('禁止冻结');
+    expect(model.protocolSignoffs[0].missingAttachments).toContain('原始报文');
     expect(model.pocRecords[0].tone).toBe('amber');
     expect(model.pocEvidence[0].attachmentCodes).toContain('ATT-HW-001');
     expect(model.summary.averageHealth).toBe(62);
-    expect(fetchMock).toHaveBeenCalledTimes(9);
+    expect(fetchMock).toHaveBeenCalledTimes(10);
   });
 });

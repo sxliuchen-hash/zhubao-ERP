@@ -17,8 +17,8 @@ defineProps<{
 
       <div class="sidebar-status ops-status-card">
         <span>当前基线</span>
-        <strong>M3.105 / 硬件复测执行结果</strong>
-        <i>仍处于 M3 增量开发：本轮把摄像头、标签打印、扫码、PWA 摄像头和电子秤的复测执行结果、型号冻结状态和证据状态固化为 API 契约。</i>
+        <strong>M3.106 / 硬件签字闭环就绪度</strong>
+        <i>仍处于 M3 增量开发：本轮把摄像头、标签打印、扫码、PWA 摄像头和电子秤的签字状态、附件缺口、型号冻结决策和上线门禁固化为 API 契约。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
@@ -54,9 +54,9 @@ defineProps<{
 
       <header class="workspace-header ops-page-header review-page-header">
         <div>
-          <span class="eyebrow">M3.105 ERP/MES OPERATIONS DESK</span>
+          <span class="eyebrow">M3.106 ERP/MES OPERATIONS DESK</span>
           <h1>{{ title }}</h1>
-          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底、低成本适配计划、协议样本、参数复核和复测结果统一进入现场作业台。</p>
+          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底、低成本适配计划、协议样本、参数复核、复测结果和签字闭环统一进入现场作业台。</p>
           <div class="ops-scope-ribbon" aria-label="当前实现边界">
             <span>库存台账 JDBC</span>
             <span>业务动作写台账</span>
@@ -69,6 +69,7 @@ defineProps<{
             <span>硬件协议样本</span>
             <span>硬件参数复核</span>
             <span>硬件复测结果</span>
+            <span>硬件签字闭环</span>
             <span>运维中心</span>
             <span>登录会话</span>
             <span>账号密码哈希</span>

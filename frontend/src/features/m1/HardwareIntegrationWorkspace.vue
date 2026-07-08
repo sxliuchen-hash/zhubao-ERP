@@ -18,6 +18,7 @@ import {
   type HardwareProtocolExecutionResult,
   type HardwareProtocolReviewItem,
   type HardwareProtocolSample,
+  type HardwareProtocolSignoffReadiness,
   type HardwareWorkspaceModel,
 } from '../../services/hardwareIntegrationApi';
 
@@ -28,6 +29,7 @@ const workspace = ref<HardwareWorkspaceModel>({
   protocolSamples: fallbackHardwareProtocolSamples(),
   protocolReviews: fallbackHardwareProtocolReviews(),
   protocolExecutions: fallbackHardwareProtocolExecutions(),
+  protocolSignoffs: fallbackHardwareProtocolSignoffs(),
   pocRecords: fallbackHardwarePocRecords,
   pocEvidence: fallbackHardwarePocEvidence(),
   summary: {
@@ -57,6 +59,7 @@ const hardwareAdapterPlans = computed(() => workspace.value.adapterPlans);
 const hardwareProtocolSamples = computed(() => workspace.value.protocolSamples);
 const hardwareProtocolReviews = computed(() => workspace.value.protocolReviews);
 const hardwareProtocolExecutions = computed(() => workspace.value.protocolExecutions);
+const hardwareProtocolSignoffs = computed(() => workspace.value.protocolSignoffs);
 const hardwarePocRecords = computed(() => workspace.value.pocRecords);
 const hardwarePocEvidence = computed(() => workspace.value.pocEvidence);
 const integrationTasks = computed(() => workspace.value.tasks);
@@ -471,6 +474,101 @@ function fallbackHardwareProtocolExecutions(): HardwareProtocolExecutionResult[]
   ];
 }
 
+function fallbackHardwareProtocolSignoffs(): HardwareProtocolSignoffReadiness[] {
+  return [
+    {
+      signoffCode: 'HW-SIGN-CAM-20260710-001',
+      executionCode: 'HW-EXEC-CAM-20260710-001',
+      deviceCode: 'CAM-UNPACK-01',
+      deviceName: '拆包台摄像头',
+      signoffStatus: '待补证据',
+      requiredAttachments: ['NVR 通道截图', 'FFmpeg dry-run 日志', 'NTP 偏差记录', '人工上传 MP4 兜底记录'],
+      missingAttachments: ['NVR 通道截图', 'FFmpeg dry-run 日志', 'NTP 偏差记录'],
+      signerRoles: ['实施顾问', '库管员'],
+      signedBy: '',
+      signedAt: '',
+      modelFreezeDecision: '暂不冻结',
+      rolloutGate: '仅允许人工上传 MP4 兜底',
+      closureSummary: '视频链路还缺 NVR 通道、校时和截取日志，不能作为一期自动截取能力签字。',
+      nextAction: '补齐 NVR 通道截图、FFmpeg dry-run 日志和 NTP 偏差记录后再发起签字',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      signoffCode: 'HW-SIGN-PRN-20260710-001',
+      executionCode: 'HW-EXEC-PRN-20260710-001',
+      deviceCode: 'PRN-LABEL-01',
+      deviceName: '标签打印机',
+      signoffStatus: '待签字',
+      requiredAttachments: ['标签样张', 'PDF checksum', '默认打印机名称', '驱动版本截图'],
+      missingAttachments: ['PDF checksum', '默认打印机名称'],
+      signerRoles: ['库管员', '实施顾问'],
+      signedBy: '',
+      signedAt: '',
+      modelFreezeDecision: '待复核签字',
+      rolloutGate: '允许 PDF 标签兜底上线',
+      closureSummary: '标签打印可低成本上线，但默认打印机和 checksum 未闭环。',
+      nextAction: '补默认打印机名称、PDF checksum 后由库管员和实施顾问签字',
+      riskLevel: '低',
+      tone: 'blue',
+    },
+    {
+      signoffCode: 'HW-SIGN-SCAN-20260710-001',
+      executionCode: 'HW-EXEC-SCAN-20260710-001',
+      deviceCode: 'SCAN-PC-01',
+      deviceName: 'PC 扫码枪',
+      signoffStatus: '已签字',
+      requiredAttachments: ['扫码录屏', '原始条码照片', '误扫确认记录'],
+      missingAttachments: [],
+      signerRoles: ['库管员', '实施顾问'],
+      signedBy: '库管员 / 实施顾问',
+      signedAt: '2026-07-10 11:05',
+      modelFreezeDecision: '已冻结',
+      rolloutGate: '允许一期上线',
+      closureSummary: 'USB HID 扫码输入、条码前后缀和键盘布局已完成证据与签字闭环。',
+      nextAction: '后续只在替换扫码枪型号时做回归复测',
+      riskLevel: '低',
+      tone: 'green',
+    },
+    {
+      signoffCode: 'HW-SIGN-PWA-20260710-001',
+      executionCode: 'HW-EXEC-PWA-20260710-001',
+      deviceCode: 'PWA-CAM-01',
+      deviceName: '手机摄像头扫码',
+      signoffStatus: '待补样本',
+      requiredAttachments: ['普通光截图', '弱光截图', '反光样本', '识别耗时日志', 'ZXing 兜底截图'],
+      missingAttachments: ['弱光截图', '反光样本', '识别耗时日志'],
+      signerRoles: ['车间组长', '实施顾问'],
+      signedBy: '',
+      signedAt: '',
+      modelFreezeDecision: '暂不冻结',
+      rolloutGate: '允许 PC 扫码枪优先，PWA 作为人工兜底',
+      closureSummary: 'PWA 普通光可用，但弱光、反光和低端机型样本不足。',
+      nextAction: '补弱光/反光样本和识别耗时日志后再冻结低端安卓机型',
+      riskLevel: '中',
+      tone: 'amber',
+    },
+    {
+      signoffCode: 'HW-SIGN-SCALE-20260710-001',
+      executionCode: 'HW-EXEC-SCALE-20260710-001',
+      deviceCode: 'SCALE-01',
+      deviceName: '电子秤',
+      signoffStatus: '阻断',
+      requiredAttachments: ['接口照片', '铭牌照片', '原始报文', '校准记录', '人工读数照片'],
+      missingAttachments: ['接口照片', '铭牌照片', '原始报文', '校准记录'],
+      signerRoles: ['质检员', '实施顾问', '车间主管'],
+      signedBy: '',
+      signedAt: '',
+      modelFreezeDecision: '禁止冻结',
+      rolloutGate: '仅允许人工读数兜底',
+      closureSummary: '电子秤接口类型、波特率和原始报文缺失，不能签字为自动采集能力。',
+      nextAction: '继续人工读数入账，补接口照片、铭牌、校准记录和原始报文后重新复测',
+      riskLevel: '高',
+      tone: 'red',
+    },
+  ];
+}
+
 function evidenceRequirementFor(deviceCode: string): string {
   if (deviceCode.startsWith('CAM')) return '拆包视频、NVR 通道、截取时间段、附件 checksum';
   if (deviceCode.startsWith('PRN')) return '标签样张、补打日志、母单/子工单编码';
@@ -775,6 +873,31 @@ function nextIntegrationActionFor(deviceCode: string): string {
               通过 {{ execution.acceptedParameters.join('、') || '无' }}；
               未通过 {{ execution.failedParameters.join('、') || '无' }}；
               {{ execution.resultSummary }}；{{ execution.nextAction }}
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="module-rule-panel">
+        <div class="panel-title-row">
+          <span class="eyebrow">SIGNOFF READINESS</span>
+          <StatusBadge label="签字闭环" tone="red" />
+        </div>
+        <div class="integration-list compact-integration-list">
+          <article v-for="signoff in hardwareProtocolSignoffs" :key="signoff.signoffCode">
+            <div class="integration-main">
+              <strong>{{ signoff.deviceName }} / {{ signoff.signoffStatus }}</strong>
+              <span>{{ signoff.modelFreezeDecision }} / {{ signoff.rolloutGate }}</span>
+              <small>
+                {{ signoff.signoffCode }} / {{ signoff.signedAt || '未签字' }} /
+                {{ signoff.signedBy || signoff.signerRoles.join('、') }}
+              </small>
+            </div>
+            <StatusBadge :label="`缺 ${signoff.missingAttachments.length}`" :tone="signoff.tone" />
+            <p>
+              必备 {{ signoff.requiredAttachments.join('、') || '无' }}；
+              缺口 {{ signoff.missingAttachments.join('、') || '无' }}；
+              {{ signoff.closureSummary }}；{{ signoff.nextAction }}
             </p>
           </article>
         </div>

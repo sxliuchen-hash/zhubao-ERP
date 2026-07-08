@@ -184,6 +184,7 @@ class M2ManagementApiSmokeTest {
         ResponseEntity<String> protocolSamples = restTemplate.getForEntity("/api/hardware/protocol-samples", String.class);
         ResponseEntity<String> protocolReviews = restTemplate.getForEntity("/api/hardware/protocol-reviews", String.class);
         ResponseEntity<String> protocolExecutions = restTemplate.getForEntity("/api/hardware/protocol-executions", String.class);
+        ResponseEntity<String> protocolSignoffs = restTemplate.getForEntity("/api/hardware/protocol-signoffs", String.class);
         ResponseEntity<String> pocRecords = restTemplate.getForEntity("/api/hardware/poc-records", String.class);
         ResponseEntity<String> pocEvidence = restTemplate.getForEntity("/api/hardware/poc-evidence", String.class);
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/hardware/summary", String.class);
@@ -220,6 +221,15 @@ class M2ManagementApiSmokeTest {
                 "\"executionStatus\":\"阻断\"",
                 "\"modelFreezeStatus\":\"未冻结\"",
                 "原始报文缺失"
+        );
+        assertThat(protocolSignoffs.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(protocolSignoffs.getBody()).contains(
+                "SCALE-01",
+                "HW-SIGN-SCALE-20260710-001",
+                "\"signoffStatus\":\"阻断\"",
+                "\"modelFreezeDecision\":\"禁止冻结\"",
+                "仅允许人工读数兜底",
+                "原始报文"
         );
         assertThat(pocRecords.getBody()).contains("POC-SCAN-20260706-001", "弱光扫码");
         assertThat(pocEvidence.getStatusCode().is2xxSuccessful()).isTrue();

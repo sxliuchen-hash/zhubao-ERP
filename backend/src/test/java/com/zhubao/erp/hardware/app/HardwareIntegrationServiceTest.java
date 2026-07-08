@@ -63,6 +63,22 @@ class HardwareIntegrationServiceTest {
                     assertThat(execution.evidenceStatus()).contains("原始报文缺失");
                     assertThat(execution.tone()).isEqualTo("red");
                 });
+        assertThat(service.findProtocolSignoffs()).hasSize(5);
+        assertThat(service.findProtocolSignoffs())
+                .anySatisfy(signoff -> {
+                    assertThat(signoff.deviceCode()).isEqualTo("SCALE-01");
+                    assertThat(signoff.signoffStatus()).isEqualTo("阻断");
+                    assertThat(signoff.missingAttachments()).contains("接口照片", "原始报文");
+                    assertThat(signoff.modelFreezeDecision()).isEqualTo("禁止冻结");
+                    assertThat(signoff.rolloutGate()).contains("人工读数兜底");
+                    assertThat(signoff.tone()).isEqualTo("red");
+                })
+                .anySatisfy(signoff -> {
+                    assertThat(signoff.deviceCode()).isEqualTo("SCAN-PC-01");
+                    assertThat(signoff.signoffStatus()).isEqualTo("已签字");
+                    assertThat(signoff.missingAttachments()).isEmpty();
+                    assertThat(signoff.modelFreezeDecision()).isEqualTo("已冻结");
+                });
         assertThat(service.findPocRecords()).hasSize(4);
         assertThat(service.blockedPocCount()).isEqualTo(1);
         assertThat(service.findPocRecords())
