@@ -15,10 +15,12 @@ public record AuthUserAccount(
         int failedLoginCount,
         Instant lockedUntil,
         List<String> customerScope,
-        boolean passwordChangeRequired
+        boolean passwordChangeRequired,
+        boolean temporaryPasswordConsumed
 ) {
     public AuthUserAccount {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
+        temporaryPasswordConsumed = passwordChangeRequired && temporaryPasswordConsumed;
     }
 
     public AuthUserAccount(
@@ -30,7 +32,7 @@ public record AuthUserAccount(
             boolean enabled,
             boolean demoAccount
     ) {
-        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), 0, null, List.of(), false);
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), 0, null, List.of(), false, false);
     }
 
     public AuthUserAccount(
@@ -43,7 +45,7 @@ public record AuthUserAccount(
             boolean demoAccount,
             List<String> customerScope
     ) {
-        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), 0, null, customerScope, false);
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), 0, null, customerScope, false, false);
     }
 
     public AuthUserAccount(
@@ -57,7 +59,7 @@ public record AuthUserAccount(
             int failedLoginCount,
             Instant lockedUntil
     ) {
-        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), failedLoginCount, lockedUntil, List.of(), false);
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, Instant.now(), failedLoginCount, lockedUntil, List.of(), false, false);
     }
 
     public AuthUserAccount(
@@ -72,7 +74,7 @@ public record AuthUserAccount(
             int failedLoginCount,
             Instant lockedUntil
     ) {
-        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, passwordChangedAt, failedLoginCount, lockedUntil, List.of(), false);
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, passwordChangedAt, failedLoginCount, lockedUntil, List.of(), false, false);
     }
 
     public AuthUserAccount(
@@ -88,6 +90,37 @@ public record AuthUserAccount(
             Instant lockedUntil,
             List<String> customerScope
     ) {
-        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, passwordChangedAt, failedLoginCount, lockedUntil, customerScope, false);
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, passwordChangedAt, failedLoginCount, lockedUntil, customerScope, false, false);
+    }
+
+    public AuthUserAccount(
+            String username,
+            String passwordHash,
+            String operator,
+            RoleCode role,
+            DataScope dataScope,
+            boolean enabled,
+            boolean demoAccount,
+            Instant passwordChangedAt,
+            int failedLoginCount,
+            Instant lockedUntil,
+            List<String> customerScope,
+            boolean passwordChangeRequired
+    ) {
+        this(
+                username,
+                passwordHash,
+                operator,
+                role,
+                dataScope,
+                enabled,
+                demoAccount,
+                passwordChangedAt,
+                failedLoginCount,
+                lockedUntil,
+                customerScope,
+                passwordChangeRequired,
+                false
+        );
     }
 }

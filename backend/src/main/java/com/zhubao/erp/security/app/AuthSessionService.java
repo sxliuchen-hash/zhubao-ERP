@@ -81,10 +81,21 @@ public class AuthSessionService {
             recordFailedLogin(account.get(), now);
             throw new PermissionDeniedException("用户名或密码错误");
         }
+        if (account.get().passwordChangeRequired() && account.get().temporaryPasswordConsumed()) {
+            String reason = "临时密码已使用，请使用首次登录会话自助改密或联系管理员重置密码";
+            recordAudit("LOGIN", account.get().username(), account.get().operator(), account.get().role().name(), "DENIED", reason, "");
+            throw new PermissionDeniedException("临时密码已使用，请使用首次登录会话自助改密");
+        }
         if (passwordExpiryPolicy.isExpired(account.get(), now)) {
             String reason = "密码已超过 " + passwordExpiryPolicy.maxAgeDays() + " 天有效期，请重置密码";
             recordAudit("LOGIN", account.get().username(), account.get().operator(), account.get().role().name(), "DENIED", reason, "");
             throw new PermissionDeniedException("密码已过期，请联系管理员重置密码");
+        }
+        if (account.get().passwordChangeRequired()
+                && !userAccountRepository.consumeTemporaryPassword(account.get().username())) {
+            String reason = "临时密码已被其他会话使用，请使用首次登录会话自助改密或联系管理员重置密码";
+            recordAudit("LOGIN", account.get().username(), account.get().operator(), account.get().role().name(), "DENIED", reason, "");
+            throw new PermissionDeniedException("临时密码已使用，请使用首次登录会话自助改密");
         }
 
         String token = newToken();
@@ -99,7 +110,7 @@ public class AuthSessionService {
                 account.get().role().name(),
                 "SUCCESS",
                 (account.get().demoAccount() ? "评审账号登录成功" : "生产账号登录成功")
-                        + (account.get().passwordChangeRequired() ? "；必须先完成自助改密" : ""),
+                        + (account.get().passwordChangeRequired() ? "；临时密码已消费，必须先完成自助改密" : ""),
                 token
         );
         return toSession(entry);
@@ -243,6 +254,7 @@ public class AuthSessionService {
                 0,
                 null,
                 currentAccount.customerScope(),
+                false,
                 false
         ));
         SessionEntry updatedEntry = new SessionEntry(entry.token(), updated, entry.expiresAt());

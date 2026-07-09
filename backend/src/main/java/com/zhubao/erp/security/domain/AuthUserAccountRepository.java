@@ -21,4 +21,6 @@ public interface AuthUserAccountRepository {
     void recordLoginFailure(String username, int failedLoginCount, Instant lockedUntil);
 
     void recordLoginSuccess(String username);
+
+    boolean consumeTemporaryPassword(String username);
 }

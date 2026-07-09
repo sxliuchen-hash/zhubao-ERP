@@ -83,7 +83,17 @@ class JdbcAuthUserAccountRepositoryTest {
                 .get()
                 .satisfies(account -> {
                     assertThat(account.passwordChangeRequired()).isTrue();
+                    assertThat(account.temporaryPasswordConsumed()).isFalse();
                     assertThat(account.customerScope()).containsExactly("恒信珠宝");
+                });
+
+        assertThat(repository.consumeTemporaryPassword("temp")).isTrue();
+        assertThat(repository.consumeTemporaryPassword("temp")).isFalse();
+        assertThat(repository.findByUsername("temp"))
+                .get()
+                .satisfies(account -> {
+                    assertThat(account.passwordChangeRequired()).isTrue();
+                    assertThat(account.temporaryPasswordConsumed()).isTrue();
                 });
     }
 
@@ -194,6 +204,7 @@ class JdbcAuthUserAccountRepositoryTest {
                         demo_account boolean not null default false,
                         password_changed_at timestamp default current_timestamp,
                         password_change_required boolean not null default false,
+                        temporary_password_consumed boolean not null default false,
                         failed_login_count int not null default 0,
                         locked_until timestamp null,
                         last_login_at timestamp null,

@@ -176,6 +176,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(account.lockedUntil()).isNull();
         assertThat(account.passwordChangedAt()).isAfter(oldPasswordChangedAt);
         assertThat(account.passwordChangeRequired()).isTrue();
+        assertThat(account.temporaryPasswordConsumed()).isFalse();
         assertThat(fixture.managementService().accounts())
                 .filteredOn(summary -> summary.username().equals("planner"))
                 .singleElement()
@@ -243,6 +244,14 @@ class AuthUserAccountManagementServiceTest {
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-ROLE-001"))
                 .singleElement()
                 .satisfies(item -> assertThat(item.missingCapabilities()).contains("客户授权表"));
+        assertThat(readiness)
+                .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-PASSWORD-001"))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.missingCapabilities()).containsExactly("本人核验附件");
+                    assertThat(item.nextAction()).isEqualTo("补本人核验附件");
+                    assertThat(item.auditEvidence()).contains("消费首次临时密码登录通道");
+                });
     }
 
     @Test
@@ -612,12 +621,16 @@ class AuthUserAccountManagementServiceTest {
                 false
         ), admin);
         AuthSession first = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
-        AuthSession second = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
+        AuthSession changed = fixture.sessionService().changeOwnPassword(
+                "Bearer " + first.token(),
+                new ChangeOwnPasswordCommand("Secure-2026-Plan!", "Secure-2026-Plan-New!")
+        );
+        AuthSession second = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan-New!"));
         AuthSession leader = fixture.sessionService().login(new AuthLoginCommand("leader", "leader123"));
 
         fixture.managementService().updateEnabled("planner", false, "离职交接", admin);
 
-        assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + first.token()))
+        assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + changed.token()))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("登录会话不存在或已退出");
         assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + second.token()))

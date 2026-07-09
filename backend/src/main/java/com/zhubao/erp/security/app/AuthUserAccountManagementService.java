@@ -210,11 +210,11 @@ public class AuthUserAccountManagementService {
                         "管理员重置生产账号密码前必须核实本人或离线交接场景",
                         "弱前置校验",
                         List.of("重置原因", "本人核验方式", "临时密码交付记录", "密码过期策略确认"),
-                        List.of("本人核验附件", "临时密码一次性通道"),
+                        List.of("本人核验附件"),
                         List.of("ADMIN", "账号负责人"),
-                        "当前会刷新 passwordChangedAt、清零失败锁定、标记强制首次登录改密并写 ACCOUNT_MANAGEMENT 审计",
+                        "当前会刷新 passwordChangedAt、清零失败锁定、标记强制首次登录改密、消费首次临时密码登录通道并写 ACCOUNT_MANAGEMENT 审计",
                         "允许管理员重置，但必须保留 reason 和审计记录",
-                        "补本人核验附件和临时密码一次性通道",
+                        "补本人核验附件",
                         "中",
                         "amber"
                 ),
@@ -351,6 +351,7 @@ public class AuthUserAccountManagementService {
         int failedLoginCount = existing == null || passwordProvided ? 0 : existing.failedLoginCount();
         Instant lockedUntil = existing == null || passwordProvided ? null : existing.lockedUntil();
         boolean passwordChangeRequired = passwordProvided ? !command.demoAccount() : existing.passwordChangeRequired();
+        boolean temporaryPasswordConsumed = passwordProvided ? false : existing.temporaryPasswordConsumed();
         AuthUserAccount saved = accountRepository.save(new AuthUserAccount(
                 username,
                 passwordHash,
@@ -363,7 +364,8 @@ public class AuthUserAccountManagementService {
                 failedLoginCount,
                 lockedUntil,
                 customerScope,
-                passwordChangeRequired
+                passwordChangeRequired,
+                temporaryPasswordConsumed
         ));
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
         String auditedAction = action

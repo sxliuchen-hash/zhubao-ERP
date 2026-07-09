@@ -42,8 +42,9 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 insert into auth_user_account (
                     username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                    password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
+                    temporary_password_consumed
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -59,6 +60,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             setInstant(statement, 10, account.lockedUntil());
             statement.setString(11, serializeCustomerScope(account.customerScope()));
             statement.setBoolean(12, account.passwordChangeRequired());
+            statement.setBoolean(13, account.temporaryPasswordConsumed());
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -79,7 +81,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                        failed_login_count = ?,
                        locked_until = ?,
                        customer_scope = ?,
-                       password_change_required = ?
+                       password_change_required = ?,
+                       temporary_password_consumed = ?
                  where username = ?
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -95,7 +98,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             setInstant(statement, 9, account.lockedUntil());
             statement.setString(10, serializeCustomerScope(account.customerScope()));
             statement.setBoolean(11, account.passwordChangeRequired());
-            statement.setString(12, normalize(account.username()));
+            statement.setBoolean(12, account.temporaryPasswordConsumed());
+            statement.setString(13, normalize(account.username()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -107,7 +111,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public List<AuthUserAccount> findAll() {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required
+                       password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
+                       temporary_password_consumed
                   from auth_user_account
                  order by username
                 """;
@@ -128,7 +133,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     public Optional<AuthUserAccount> findByUsername(String username) {
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
-                       password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required
+                       password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
+                       temporary_password_consumed
                   from auth_user_account
                  where username = ?
                 """;
@@ -239,6 +245,24 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         }
     }
 
+    @Override
+    public boolean consumeTemporaryPassword(String username) {
+        String sql = """
+                update auth_user_account
+                   set temporary_password_consumed = true
+                 where username = ?
+                   and password_change_required = true
+                   and temporary_password_consumed = false
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, normalize(username));
+            return statement.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to consume auth user temporary password", ex);
+        }
+    }
+
     private AuthUserAccount map(ResultSet rs) throws SQLException {
         return new AuthUserAccount(
                 rs.getString("username"),
@@ -252,7 +276,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 rs.getInt("failed_login_count"),
                 readInstant(rs, "locked_until"),
                 parseCustomerScope(rs.getString("customer_scope")),
-                rs.getBoolean("password_change_required")
+                rs.getBoolean("password_change_required"),
+                rs.getBoolean("temporary_password_consumed")
         );
     }
 

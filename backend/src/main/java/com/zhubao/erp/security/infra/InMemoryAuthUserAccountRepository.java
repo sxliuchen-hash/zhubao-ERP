@@ -15,6 +15,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.auth.users.repository", havingValue = "memory", matchIfMissing = true)
@@ -71,7 +72,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.failedLoginCount(),
                 account.lockedUntil(),
                 account.customerScope(),
-                account.passwordChangeRequired()
+                account.passwordChangeRequired(),
+                account.temporaryPasswordConsumed()
         ));
     }
 
@@ -89,7 +91,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 0,
                 null,
                 account.customerScope(),
-                account.passwordChangeRequired()
+                account.passwordChangeRequired(),
+                account.temporaryPasswordConsumed()
         ));
     }
 
@@ -107,7 +110,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 failedLoginCount,
                 lockedUntil,
                 account.customerScope(),
-                account.passwordChangeRequired()
+                account.passwordChangeRequired(),
+                account.temporaryPasswordConsumed()
         ));
     }
 
@@ -125,8 +129,36 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 0,
                 null,
                 account.customerScope(),
-                account.passwordChangeRequired()
+                account.passwordChangeRequired(),
+                account.temporaryPasswordConsumed()
         ));
+    }
+
+    @Override
+    public boolean consumeTemporaryPassword(String username) {
+        AtomicBoolean consumed = new AtomicBoolean(false);
+        accounts.computeIfPresent(normalize(username), (key, account) -> {
+            if (!account.passwordChangeRequired() || account.temporaryPasswordConsumed()) {
+                return account;
+            }
+            consumed.set(true);
+            return new AuthUserAccount(
+                    account.username(),
+                    account.passwordHash(),
+                    account.operator(),
+                    account.role(),
+                    account.dataScope(),
+                    account.enabled(),
+                    account.demoAccount(),
+                    account.passwordChangedAt(),
+                    account.failedLoginCount(),
+                    account.lockedUntil(),
+                    account.customerScope(),
+                    true,
+                    true
+            );
+        });
+        return consumed.get();
     }
 
     private AuthUserAccount demo(

@@ -202,6 +202,20 @@ class AuthSessionServiceTest {
 
         assertThat(session.passwordChangeRequired()).isTrue();
         assertThat(service.session("Bearer " + session.token())).isPresent();
+        assertThat(userRepository.findByUsername("planner"))
+                .get()
+                .satisfies(account -> {
+                    assertThat(account.passwordChangeRequired()).isTrue();
+                    assertThat(account.temporaryPasswordConsumed()).isTrue();
+                    assertThat(account.failedLoginCount()).isZero();
+                });
+        assertThatThrownBy(() -> service.login(new AuthLoginCommand("planner", "Secure-2026-Temp!")))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("临时密码已使用");
+        assertThat(userRepository.findByUsername("planner"))
+                .get()
+                .extracting(AuthUserAccount::failedLoginCount)
+                .isEqualTo(0);
         assertThatThrownBy(() -> service.operatorContext("Bearer " + session.token()))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("临时密码会话必须先完成自助改密");
@@ -214,9 +228,13 @@ class AuthSessionServiceTest {
         assertThat(changed.passwordChangeRequired()).isFalse();
         assertThat(userRepository.findByUsername("planner"))
                 .get()
-                .extracting(AuthUserAccount::passwordChangeRequired)
-                .isEqualTo(false);
+                .satisfies(account -> {
+                    assertThat(account.passwordChangeRequired()).isFalse();
+                    assertThat(account.temporaryPasswordConsumed()).isFalse();
+                });
         assertThat(service.operatorContext("Bearer " + changed.token())).isPresent();
+        assertThat(service.login(new AuthLoginCommand("planner", "Secure-2026-New!")).passwordChangeRequired())
+                .isFalse();
     }
 
     @Test

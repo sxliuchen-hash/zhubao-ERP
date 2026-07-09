@@ -93,7 +93,7 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.116 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果清单、硬件签字闭环就绪度清单、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、管理员新建/重置非 demo 密码后强制首次登录改密、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、账号动作申请单号强制开关、账号前置审批任务交接和账号动作审批通过态强制校验、账号停用会话吊销：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.116 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/adapter-plans`、`GET /hardware/protocol-samples`、`GET /hardware/protocol-reviews`、`GET /hardware/protocol-executions`、`GET /hardware/protocol-signoffs`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`GET /auth/accounts/pre-approval-readiness`、`POST /auth/accounts/pre-approval-drafts`、`GET/POST /auth/accounts/pre-approval-applications`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity`、`GET /security/current-context` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果、硬件签字闭环就绪度、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期/强制改密状态、账号客户范围、账号前置审批缺口、申请草稿待补材料、前置审批申请单、申请单绑定的轻量审批任务号、生产强制模式审批通过态门禁、当前权限上下文客户范围展示、认证审计完整性摘要、停用会话吊销审计和账号变更复核任务；`GET /business/workspaces/*` 会按当前 `dataScope` 和 `customerScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。账号管理审批任务、账号前置审批就绪度清单、草稿评估、申请单仓储、申请单号校验、生产配置强制申请单号开关、申请单审批任务交接、审批通过态强制校验、停用会话吊销和强制首次改密是治理契约，不代表完整 IAM、正式电子签字或完整组织客户授权表。
+当前 M3.117 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果清单、硬件签字闭环就绪度清单、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、管理员新建/重置非 demo 密码后强制首次登录改密、临时密码一次性消费、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、账号动作申请单号强制开关、账号前置审批任务交接和账号动作审批通过态强制校验、账号停用会话吊销：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.117 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /hardware/adapter-plans`、`GET /hardware/protocol-samples`、`GET /hardware/protocol-reviews`、`GET /hardware/protocol-executions`、`GET /hardware/protocol-signoffs`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`GET /auth/accounts/pre-approval-readiness`、`POST /auth/accounts/pre-approval-drafts`、`GET/POST /auth/accounts/pre-approval-applications`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity`、`GET /security/current-context` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果、硬件签字闭环就绪度、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期/强制改密状态、账号客户范围、账号前置审批缺口、申请草稿待补材料、前置审批申请单、申请单绑定的轻量审批任务号、生产强制模式审批通过态门禁、当前权限上下文客户范围展示、认证审计完整性摘要、停用会话吊销审计和账号变更复核任务；临时密码一次性消费是后端内部安全状态，不新增前端公开字段。`GET /business/workspaces/*` 会按当前 `dataScope` 和 `customerScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。账号管理审批任务、账号前置审批就绪度清单、草稿评估、申请单仓储、申请单号校验、生产配置强制申请单号开关、申请单审批任务交接、审批通过态强制校验、停用会话吊销、强制首次改密和临时密码一次性消费是治理契约，不代表完整 IAM、正式电子签字或完整组织客户授权表。
 
 业务操作接口前缀：
 
@@ -115,6 +115,8 @@ M3.114 补充：`zhubao.auth.pre-approval.enforce-account-actions=true` 时，�
 M3.115 补充：停用账号成功后会按 username 吊销现有内存 Bearer 会话，写入 `SESSION_REVOKED` 认证审计，账号管理审计和 `ACCOUNT_MANAGEMENT` 复核摘要会追加 `revokedSessions=N`；启用账号不会吊销会话。该边界只覆盖当前轻量内存 token，不代表完整 IAM、SSO/JWT、分布式会话或正式电子签字完成。
 
 M3.116 补充：管理员创建或重置非 demo 账号密码后会保存 `passwordChangeRequired=true`，登录成功返回临时 Bearer 会话并在 `AuthSession`、`AuthUserAccountSummary` 中回显；该会话可调用 `POST /api/auth/password` 完成自助改密，但 `operatorContext()` 会拒绝解析为业务操作身份。自助改密成功后清除 `passwordChangeRequired`、刷新密码时间并继续复用原 token。该边界不代表一次性临时密码通道、完整 IAM、SSO/JWT 或正式电子签字完成。
+
+M3.117 补充：`AuthUserAccount` 和 `auth_user_account` 新增内部字段 `temporaryPasswordConsumed` / `temporary_password_consumed`。管理员创建或重置非 demo 密码时该字段重置为 `false`；首次临时密码登录通过密码校验后会原子消费为 `true` 并返回 Bearer 会话；后续再次使用同一临时密码登录会被拒绝，且不增加失败登录次数或触发锁定。原 Bearer 会话仍可调用 `POST /api/auth/password`，自助改密成功后清除 `passwordChangeRequired` 和 `temporary_password_consumed`。该字段不进入 `AuthSession` 或 `AuthUserAccountSummary` 响应，前端仍通过 `passwordChangeRequired` 展示“需首次改密”。
 
 ```http
 /api/business/operations
@@ -1791,16 +1793,16 @@ HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角�
 
 ### 12.4 当前限制
 
-- M3.63 已接入登录会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，M3.87 已接入账号仓储和 PBKDF2 密码哈希边界，M3.88 已接入失败次数与临时锁定，M3.89 已接入账号启停和管理员解锁管理边界，M3.90 已接入创建/重置密码策略校验，M3.91 已接入 90 天密码过期检测和管理员重置刷新边界，M3.92 已接入登录态自助改密/续期边界，M3.93 已接入认证审计摘要链边界，M3.97 已接入账号管理审批摘要边界，M3.98 已接入请求头身份兜底配置开关，M3.99 已接入账号客户范围边界，M3.100 已接入客户范围可视化，M3.107 已接入账号前置审批就绪度只读契约，M3.108 已接入账号前置审批草稿评估契约，M3.109 已接入账号前置审批申请单边界，M3.110 已接入账号前置审批申请单 JDBC 持久化边界，M3.111 已接入账号动作申请单号校验边界，M3.112 已接入账号动作申请单号强制开关，M3.113 已接入账号前置审批任务交接，M3.114 已接入账号动作审批通过态强制校验，M3.115 已接入账号停用会话吊销，M3.116 已接入管理员新建/重置密码强制首次改密；正式电子签字、完整 IAM、JWT/SSO、正式会话续期和生产不可篡改审计仍未完成。
+- M3.63 已接入登录会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，M3.87 已接入账号仓储和 PBKDF2 密码哈希边界，M3.88 已接入失败次数与临时锁定，M3.89 已接入账号启停和管理员解锁管理边界，M3.90 已接入创建/重置密码策略校验，M3.91 已接入 90 天密码过期检测和管理员重置刷新边界，M3.92 已接入登录态自助改密/续期边界，M3.93 已接入认证审计摘要链边界，M3.97 已接入账号管理审批摘要边界，M3.98 已接入请求头身份兜底配置开关，M3.99 已接入账号客户范围边界，M3.100 已接入客户范围可视化，M3.107 已接入账号前置审批就绪度只读契约，M3.108 已接入账号前置审批草稿评估契约，M3.109 已接入账号前置审批申请单边界，M3.110 已接入账号前置审批申请单 JDBC 持久化边界，M3.111 已接入账号动作申请单号校验边界，M3.112 已接入账号动作申请单号强制开关，M3.113 已接入账号前置审批任务交接，M3.114 已接入账号动作审批通过态强制校验，M3.115 已接入账号停用会话吊销，M3.116 已接入管理员新建/重置密码强制首次改密，M3.117 已接入临时密码一次性消费；正式电子签字、完整 IAM、JWT/SSO、正式会话续期和生产不可篡改审计仍未完成。
 - M3.96 已对业务工作台 GET 接入 `SELF`、`TEAM`、`DEPARTMENT`、`CUSTOMER_RANGE` 首版过滤，M3.99 已让 Bearer `CUSTOMER_RANGE` 从账号 `customerScope` 读取客户范围；完整组织树、完整组织客户授权表、跨对象关系推导和全系统行级权限仍未完成。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
 
 ---
 
-## 13. M3.63/M3.87-M3.93/M3.97-M3.100/M3.107-M3.116 轻量登录会话 API 与账号仓储
+## 13. M3.63/M3.87-M3.93/M3.97-M3.100/M3.107-M3.117 轻量登录会话 API 与账号仓储
 
-M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。M3.87 将账号读取和密码校验从硬编码演示账号推进到 `AuthUserAccountRepository` 与 PBKDF2 密码哈希；M3.88 在同一仓储边界上记录失败次数和临时锁定；M3.89 新增账号管理、启停和管理员解锁边界；M3.90 新增生产账号密码策略校验；M3.91 新增生产账号 90 天密码过期检测、登录拒绝审计和管理员重置刷新 `passwordChangedAt`；M3.92 新增 Bearer 登录会话内的自助改密/续期边界；M3.93 新增认证审计事件摘要链和最近事件完整性校验摘要；M3.97 新增账号管理动作成功后的 `ACCOUNT_MANAGEMENT` 事后审批摘要任务；M3.98 新增请求头身份兜底开关，MySQL profile 默认要求 Bearer 登录会话；M3.99 新增账号客户范围，`CUSTOMER_RANGE` Bearer 会话从账号 `customerScope` 提供客户范围；M3.100 将该客户范围显式呈现在当前权限上下文、配置基线账号卡、全局基线和上线门禁提示中；M3.107 新增账号前置审批就绪度只读清单；M3.108 新增账号前置审批草稿评估；M3.109 新增账号前置审批申请单边界；M3.110 新增申请单 JDBC 持久化边界；M3.111 新增账号动作申请单号显式校验边界；M3.112 新增账号动作申请单号强制开关；M3.113 新增账号前置审批任务交接；M3.114 新增强制模式下账号动作审批通过态校验；M3.115 新增停用账号后吊销现有 Bearer 会话并记录 `SESSION_REVOKED`；M3.116 新增管理员新建/重置非 demo 密码后的强制首次登录改密状态和临时密码会话业务上下文拒绝。默认 seed 仍是评审账号，账号审批摘要、账号客户范围、客户范围可视化、前置审批就绪度、草稿评估、申请单仓储、申请单号校验、强制申请单号开关、申请单审批任务、审批通过态校验、停用会话吊销和强制首次改密不等于完整生产用户中心、正式电子签字或完整组织客户授权表。
+M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。M3.87 将账号读取和密码校验从硬编码演示账号推进到 `AuthUserAccountRepository` 与 PBKDF2 密码哈希；M3.88 在同一仓储边界上记录失败次数和临时锁定；M3.89 新增账号管理、启停和管理员解锁边界；M3.90 新增生产账号密码策略校验；M3.91 新增生产账号 90 天密码过期检测、登录拒绝审计和管理员重置刷新 `passwordChangedAt`；M3.92 新增 Bearer 登录会话内的自助改密/续期边界；M3.93 新增认证审计事件摘要链和最近事件完整性校验摘要；M3.97 新增账号管理动作成功后的 `ACCOUNT_MANAGEMENT` 事后审批摘要任务；M3.98 新增请求头身份兜底开关，MySQL profile 默认要求 Bearer 登录会话；M3.99 新增账号客户范围，`CUSTOMER_RANGE` Bearer 会话从账号 `customerScope` 提供客户范围；M3.100 将该客户范围显式呈现在当前权限上下文、配置基线账号卡、全局基线和上线门禁提示中；M3.107 新增账号前置审批就绪度只读清单；M3.108 新增账号前置审批草稿评估；M3.109 新增账号前置审批申请单边界；M3.110 新增申请单 JDBC 持久化边界；M3.111 新增账号动作申请单号显式校验边界；M3.112 新增账号动作申请单号强制开关；M3.113 新增账号前置审批任务交接；M3.114 新增强制模式下账号动作审批通过态校验；M3.115 新增停用账号后吊销现有 Bearer 会话并记录 `SESSION_REVOKED`；M3.116 新增管理员新建/重置非 demo 密码后的强制首次登录改密状态和临时密码会话业务上下文拒绝；M3.117 新增临时密码首次成功登录后的一次性消费状态。默认 seed 仍是评审账号，账号审批摘要、账号客户范围、客户范围可视化、前置审批就绪度、草稿评估、申请单仓储、申请单号校验、强制申请单号开关、申请单审批任务、审批通过态校验、停用会话吊销、强制首次改密和临时密码一次性消费不等于完整生产用户中心、正式电子签字或完整组织客户授权表。
 
 ### 13.1 `POST /api/auth/login`
 
@@ -1852,7 +1854,7 @@ M3.91 密码过期规则：
 | `passwordChangedAt` | 密码最近变更时间展示值；未知为空字符串 |
 | `passwordExpiresAt` | 密码到期时间展示值；`passwordChangedAt` 为空时返回 epoch 对应展示值 |
 | `passwordExpired` | 当前会话账号密码是否已过期；过期生产账号通常无法新建会话，仅用于边界展示和评审 seed 判定 |
-| `passwordChangeRequired` | M3.116 当前会话是否必须先完成自助改密；为 `true` 时 token 可用于 `POST /api/auth/password`，但不能解析为业务操作上下文 |
+| `passwordChangeRequired` | M3.116/M3.117 当前会话是否必须先完成自助改密；为 `true` 时 token 可用于 `POST /api/auth/password`，但不能解析为业务操作上下文；临时密码是否已消费不暴露给前端 |
 | `customerScope` | M3.99 账号客户范围；`dataScope=CUSTOMER_RANGE` 时由账号仓储带出并供业务工作台 GET 过滤使用 |
 | `menuCodes` | 当前角色可见菜单编码，使用前端模块 tab key，如 `dashboard`、`inbound`、`approvals`、`sample` |
 | `menuTree` | 当前角色可见菜单树，元素结构见 13.5；包含菜单编码、名称、模块说明、路由和按钮权限编码 |
@@ -1863,7 +1865,7 @@ M3.91 密码过期规则：
 |---|---|
 | `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话 |
 | `POST /api/auth/logout` | 注销当前 token；前端无论后端是否可达都清理本地 token |
-| `POST /api/auth/password` | M3.92 自助改密/续期；M3.116 起成功后清除强制首次改密标记；只接受 Bearer 登录会话，不使用请求头角色兜底 |
+| `POST /api/auth/password` | M3.92 自助改密/续期；M3.117 起成功后清除强制首次改密标记和临时密码消费标记；只接受 Bearer 登录会话，不使用请求头角色兜底 |
 | `GET /api/auth/demo-users` | 返回可用于评审的演示账号列表 |
 | `GET /api/auth/audit-events` | 返回最近登录会话审计事件，当前最多保留 50 条内存事件 |
 | `GET /api/auth/audit-integrity` | M3.93 返回最近认证审计事件摘要链校验结果 |
@@ -1879,7 +1881,7 @@ M3.91 密码过期规则：
 
 - 返回刷新后的 `AuthSession`，token 保持不变。
 - 更新账号 `passwordChangedAt`，账号摘要和会话中的 `passwordExpiresAt/passwordExpired` 随之刷新。
-- M3.116 起清除账号 `passwordChangeRequired` 标记，临时密码会话改密后可重新解析为业务操作上下文。
+- M3.117 起清除账号 `passwordChangeRequired` 和 `temporary_password_consumed` 标记，临时密码会话改密后可重新解析为业务操作上下文。
 - 清零该账号失败登录次数和锁定到期时间。
 - 写入 `PASSWORD_CHANGE` / `SUCCESS` 审计事件，审计中只保留 token 尾号。
 - 该接口不纳入 `PermissionGuardInterceptor` 请求头兜底，由 `AuthSessionService` 内部 Bearer session 校验；无 Bearer token、当前密码错误、新密码与旧密码相同或不符合策略时返回拒绝或业务错误。
@@ -1956,6 +1958,12 @@ M3.91 起 `password_changed_at` 用于 90 天密码过期检测和管理员重�
 |---|---|
 | `password_change_required` | M3.116 强制首次登录改密状态；管理员新建/重置非 demo 账号密码后写 `true`，登录会话和账号摘要返回 `passwordChangeRequired=true`，自助改密成功后清除 |
 
+`V24__m3_auth_temporary_password_once.sql` 在 `auth_user_account` 上新增：
+
+| 字段 | 说明 |
+|---|---|
+| `temporary_password_consumed` | M3.117 临时密码一次性消费状态；仅当 `password_change_required=true` 时有意义，首次临时密码登录成功前从 `false` 原子更新为 `true`，重复使用同一临时密码登录会被拒绝，自助改密成功后清除为 `false`；该字段不进入前端公开响应 |
+
 `V18__m3_auth_audit_integrity_contract.sql` 在 `auth_audit_event` 上新增：
 
 | 字段 | 说明 |
@@ -1965,7 +1973,7 @@ M3.91 起 `password_changed_at` 用于 90 天密码过期检测和管理员重�
 
 ### 13.4 账号管理接口
 
-M3.89 新增账号管理服务边界，面向管理员和总经理开放。账号管理接口要求 Bearer 会话或显式评审角色头，不使用现有请求头兜底里的匿名默认管理员；M3.90 起创建账号或重置密码必须先通过生产密码策略；M3.91 起创建账号或重置密码会刷新 `passwordChangedAt`，账号摘要会暴露密码到期状态；M3.92 起用户也可在 Bearer 会话内自助改密刷新 `passwordChangedAt`；M3.97 起创建/更新、启停和管理员解锁成功后会生成 `ACCOUNT_MANAGEMENT` 轻量审批摘要任务；M3.99 起 `CUSTOMER_RANGE` 账号可保存客户范围并在 Bearer 会话中带出；M3.107 起新增账号前置审批就绪度只读清单；M3.108 起新增账号前置审批草稿评估；M3.109 起新增账号前置审批申请单提交与查询；M3.110 起申请单可通过 JDBC 仓储持久化和重载；M3.111 起账号管理、启停和解锁命令可显式携带 `preApprovalApplicationCode` 做申请单放行校验；M3.112 起可通过配置强制账号动作携带申请单号；M3.113 起申请单提交会生成 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`；M3.114 起强制开关开启时账号动作还会校验绑定任务为 `APPROVED`；M3.115 起停用账号会吊销该 username 现有 Bearer 会话并写 `SESSION_REVOKED`；M3.116 起管理员新建/重置非 demo 密码会标记 `passwordChangeRequired=true`，临时密码会话只能先自助改密。该接口用于验证生产账号创建/更新、启停、停用会话吊销、解锁、密码策略、密码过期检测、强制首次登录改密、管理审计、事后复核摘要、账号客户范围、前置审批缺口、申请草稿材料缺口、申请单状态、申请单号校验、强制申请单号开关、申请单审批任务交接和审批通过态门禁的最小合同，不代表完整 IAM、正式电子签字、完整组织客户授权表、SSO/JWT 或安全日志平台完成。
+M3.89 新增账号管理服务边界，面向管理员和总经理开放。账号管理接口要求 Bearer 会话或显式评审角色头，不使用现有请求头兜底里的匿名默认管理员；M3.90 起创建账号或重置密码必须先通过生产密码策略；M3.91 起创建账号或重置密码会刷新 `passwordChangedAt`，账号摘要会暴露密码到期状态；M3.92 起用户也可在 Bearer 会话内自助改密刷新 `passwordChangedAt`；M3.97 起创建/更新、启停和管理员解锁成功后会生成 `ACCOUNT_MANAGEMENT` 轻量审批摘要任务；M3.99 起 `CUSTOMER_RANGE` 账号可保存客户范围并在 Bearer 会话中带出；M3.107 起新增账号前置审批就绪度只读清单；M3.108 起新增账号前置审批草稿评估；M3.109 起新增账号前置审批申请单提交与查询；M3.110 起申请单可通过 JDBC 仓储持久化和重载；M3.111 起账号管理、启停和解锁命令可显式携带 `preApprovalApplicationCode` 做申请单放行校验；M3.112 起可通过配置强制账号动作携带申请单号；M3.113 起申请单提交会生成 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`；M3.114 起强制开关开启时账号动作还会校验绑定任务为 `APPROVED`；M3.115 起停用账号会吊销该 username 现有 Bearer 会话并写 `SESSION_REVOKED`；M3.116 起管理员新建/重置非 demo 密码会标记 `passwordChangeRequired=true`，临时密码会话只能先自助改密；M3.117 起首次临时密码登录后会消费内部通道，后续同一临时密码不能再次登录。该接口用于验证生产账号创建/更新、启停、停用会话吊销、解锁、密码策略、密码过期检测、强制首次登录改密、临时密码一次性消费、管理审计、事后复核摘要、账号客户范围、前置审批缺口、申请草稿材料缺口、申请单状态、申请单号校验、强制申请单号开关、申请单审批任务交接和审批通过态门禁的最小合同，不代表完整 IAM、正式电子签字、完整组织客户授权表、SSO/JWT 或安全日志平台完成。
 
 | API | 权限 | 说明 |
 |---|---|---|
@@ -1974,7 +1982,7 @@ M3.89 新增账号管理服务边界，面向管理员和总经理开放。账�
 | `POST /api/auth/accounts/pre-approval-drafts` | `AUTH_ACCOUNT_MANAGE` | M3.108 评估账号前置审批申请草稿；返回已收材料、待补材料、系统缺失能力和阻断状态，不写账号、不创建审批任务 |
 | `GET /api/auth/accounts/pre-approval-applications` | `AUTH_ACCOUNT_MANAGE` | M3.109 返回已提交的账号前置审批申请单；M3.110 起可切换 JDBC 仓储，按提交时间倒序 |
 | `POST /api/auth/accounts/pre-approval-applications` | `AUTH_ACCOUNT_MANAGE` | M3.109 将草稿评估结果保存为申请单；M3.110 起可切换 JDBC 仓储持久化；M3.113 起生成 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`；不写账号、不阻断账号动作 |
-| `POST /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 新建或更新账号；新建必须提供密码，更新不传密码时保留原密码哈希，传密码时需通过密码策略并重置失败次数和锁定状态；M3.111 起传入 `preApprovalApplicationCode` 时校验申请单放行状态，M3.112 起强制开关开启时该字段必填，M3.114 起强制模式还要求绑定审批任务为 `APPROVED`，M3.116 起提供密码且 `demoAccount=false` 会要求目标账号首次登录先自助改密 |
+| `POST /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 新建或更新账号；新建必须提供密码，更新不传密码时保留原密码哈希，传密码时需通过密码策略并重置失败次数和锁定状态；M3.111 起传入 `preApprovalApplicationCode` 时校验申请单放行状态，M3.112 起强制开关开启时该字段必填，M3.114 起强制模式还要求绑定审批任务为 `APPROVED`，M3.117 起提供密码且 `demoAccount=false` 会要求目标账号首次登录先自助改密，并重置临时密码消费状态 |
 | `POST /api/auth/accounts/{username}/status` | `AUTH_ACCOUNT_MANAGE` | 启用或停用账号，停用后登录仍返回通用“用户名或密码错误”；M3.111 起传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，M3.112 起强制开关开启时该字段必填，M3.114 起强制模式还要求绑定审批任务为 `APPROVED`，M3.115 起 `enabled=false` 会吊销目标账号现有 Bearer 会话并记录 `SESSION_REVOKED` |
 | `POST /api/auth/accounts/{username}/unlock` | `AUTH_ACCOUNT_MANAGE` | 管理员清零失败次数并解除临时锁定；M3.111 起传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，M3.112 起强制开关开启时该字段必填，M3.114 起强制模式还要求绑定审批任务为 `APPROVED` |
 
@@ -1983,7 +1991,7 @@ M3.89 新增账号管理服务边界，面向管理员和总经理开放。账�
 | 字段 | 说明 |
 |---|---|
 | `username` | 登录用户名，后端归一化为小写 |
-| `password` | 新建账号必填；更新账号可不传，不返回给前端；提供时必须通过 M3.90 密码策略；提供时 M3.91 会刷新 `passwordChangedAt` 并清除失败锁定，M3.116 起非 demo 账号还会设置 `passwordChangeRequired=true` |
+| `password` | 新建账号必填；更新账号可不传，不返回给前端；提供时必须通过 M3.90 密码策略；提供时 M3.91 会刷新 `passwordChangedAt` 并清除失败锁定，M3.117 起非 demo 账号还会设置 `passwordChangeRequired=true` 且 `temporary_password_consumed=false` |
 | `operator` | 操作人姓名或岗位快照 |
 | `role` | `RoleCode` 编码 |
 | `dataScope` | `DataScope` 编码 |
@@ -2042,7 +2050,7 @@ M3.91 密码过期边界：
 | `passwordChangedAt` | 密码最近变更时间展示值；未知为空字符串 |
 | `passwordExpiresAt` | 密码到期时间展示值 |
 | `passwordExpired` | 当前账号密码是否已过期 |
-| `passwordChangeRequired` | M3.116 是否必须先完成首次自助改密；管理员新建/重置非 demo 密码后为 `true`，自助改密成功后为 `false` |
+| `passwordChangeRequired` | M3.116/M3.117 是否必须先完成首次自助改密；管理员新建/重置非 demo 密码后为 `true`，自助改密成功后为 `false` |
 | `failedLoginCount` | 当前连续失败次数 |
 | `lockedUntil` | 锁定到期展示值；未锁定为空字符串 |
 | `locked` | 当前是否仍在锁定时间内 |
@@ -2169,7 +2177,7 @@ M3.111 申请单号校验规则：
 | 变更角色 / 数据范围 / 客户范围 | `AUTH-PRE-ROLE-001` | 同上 |
 | 启用 / 停用 / 管理解锁 | `AUTH-PRE-STATUS-001` | 同上 |
 
-M3.112 起该校验可通过 `zhubao.auth.pre-approval.enforce-account-actions` 强制执行；本地评审默认关闭时未传入仍保留 M3.89-M3.110 的账号管理路径和事后复核摘要，MySQL profile 默认开启时未传入会拒绝账号动作。M3.113 已生成 `ACCOUNT_PRE_APPROVAL` 任务并回写 `approvalTaskCode`；M3.114 起强制模式还要求该任务为 `APPROVED`，否则账号动作在写库和审计前被拒绝。M3.115 起账号停用成功后会追加会话吊销和 `revokedSessions=N` 摘要。M3.116 起账号创建/重置密码摘要会追加 `passwordChangeRequired=true/false`。后续仍要补全本人核验附件、临时密码一次性通道、正式电子签字、审批后自动放行和完整 IAM。
+M3.112 起该校验可通过 `zhubao.auth.pre-approval.enforce-account-actions` 强制执行；本地评审默认关闭时未传入仍保留 M3.89-M3.110 的账号管理路径和事后复核摘要，MySQL profile 默认开启时未传入会拒绝账号动作。M3.113 已生成 `ACCOUNT_PRE_APPROVAL` 任务并回写 `approvalTaskCode`；M3.114 起强制模式还要求该任务为 `APPROVED`，否则账号动作在写库和审计前被拒绝。M3.115 起账号停用成功后会追加会话吊销和 `revokedSessions=N` 摘要。M3.116 起账号创建/重置密码摘要会追加 `passwordChangeRequired=true/false`，M3.117 起临时密码首次成功登录后会消费内部通道。后续仍要补全本人核验附件、正式电子签字、审批后自动放行和完整 IAM。
 
 ### 13.5 菜单树接口
 
@@ -2204,8 +2212,8 @@ M3.83 当前角色菜单编码基线：
 ### 13.6 当前限制
 
 - token 保存在内存，服务重启即失效。
-- M3.116 已接入账号仓储、PBKDF2 密码哈希、失败锁定、账号启停、停用会话吊销、管理员解锁、强制首次登录改密、密码策略、90 天密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读清单、账号前置审批草稿评估、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、强制申请单号开关、申请单审批任务交接和审批通过态强制校验，但默认 seed 仍是评审账号，不用于生产。
-- 申请单仓储、申请单号校验、强制申请单号开关、`ACCOUNT_PRE_APPROVAL` 轻量审批任务、强制模式审批通过态校验、停用会话吊销和强制首次改密当前不执行电子签字；会话吊销仅覆盖本服务内存 Bearer token，仍需接入完整 IAM、正式刷新 token、SSO/JWT、菜单树持久化、完整组织客户授权表、临时密码一次性通道和不可篡改审计策略。
+- M3.117 已接入账号仓储、PBKDF2 密码哈希、失败锁定、账号启停、停用会话吊销、管理员解锁、强制首次登录改密、临时密码一次性消费、密码策略、90 天密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读清单、账号前置审批草稿评估、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、强制申请单号开关、申请单审批任务交接和审批通过态强制校验，但默认 seed 仍是评审账号，不用于生产。
+- 申请单仓储、申请单号校验、强制申请单号开关、`ACCOUNT_PRE_APPROVAL` 轻量审批任务、强制模式审批通过态校验、停用会话吊销、强制首次改密和临时密码一次性消费当前不执行电子签字；会话吊销仅覆盖本服务内存 Bearer token，仍需接入完整 IAM、正式刷新 token、SSO/JWT、菜单树持久化、完整组织客户授权表和不可篡改审计策略。
 - M3.83 菜单树仍是后端内存基线服务，不等于生产角色表、菜单表或按钮表。
 - M3.93 登录审计可切换内存/JDBC 仓储并生成摘要链，但仍不等于生产安全日志平台、归档保全或真正不可篡改审计。
 - M3.86 前端侧栏会按登录会话 `menuCodes/menuTree` 做导航过滤；未登录、请求头兜底或 API 不可用时仍保留全量评审导航，不等于生产级菜单授权完成。
@@ -2215,7 +2223,7 @@ M3.83 当前角色菜单编码基线：
 
 ## 14. M3.52/M3.63/M3.83/M3.86-M3.92/M3.98-M3.100 当前权限上下文接口
 
-`GET /api/security/current-context` 用于把当前身份、角色、数据范围、客户范围、可执行敏感动作和授权菜单树显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；M3.98 起无 token 时是否继续使用请求头兜底由 `zhubao.security.allow-header-context` 控制，本地默认开启以兼容评审脚本和自动化测试，MySQL profile 默认关闭。M3.83 起该接口同步返回 `menuCodes` 和 `menuTree`。M3.86 起前端 `App` 会恢复登录会话并按 `menuCodes/menuTree` 过滤侧栏模块，登录/退出/自助改密通过 `zhubao-auth-session-changed` 事件即时刷新导航和会话摘要。M3.87 起登录会话身份来自账号仓储和密码哈希校验结果；M3.88 起登录失败锁定也由账号仓储维护；M3.89 起配置菜单暴露 `AUTH_ACCOUNT_MANAGE` 按钮权限编码，配置基线页展示只读账号状态摘要；M3.90 起账号管理创建/重置密码受 `PasswordPolicy` 约束；M3.91 起登录会话和账号摘要暴露密码改密/到期/过期边界；M3.92 起自助改密成功后刷新当前会话摘要；M3.99 起 Bearer `CUSTOMER_RANGE` 上下文会返回账号 `customerScope`；M3.100 起配置页固定展示客户范围状态，并在限制说明中区分 Bearer 账号范围和请求头评审兜底范围；M3.116 起强制改密会话不能解析为当前权限上下文，必须先完成自助改密。
+`GET /api/security/current-context` 用于把当前身份、角色、数据范围、客户范围、可执行敏感动作和授权菜单树显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；M3.98 起无 token 时是否继续使用请求头兜底由 `zhubao.security.allow-header-context` 控制，本地默认开启以兼容评审脚本和自动化测试，MySQL profile 默认关闭。M3.83 起该接口同步返回 `menuCodes` 和 `menuTree`。M3.86 起前端 `App` 会恢复登录会话并按 `menuCodes/menuTree` 过滤侧栏模块，登录/退出/自助改密通过 `zhubao-auth-session-changed` 事件即时刷新导航和会话摘要。M3.87 起登录会话身份来自账号仓储和密码哈希校验结果；M3.88 起登录失败锁定也由账号仓储维护；M3.89 起配置菜单暴露 `AUTH_ACCOUNT_MANAGE` 按钮权限编码，配置基线页展示只读账号状态摘要；M3.90 起账号管理创建/重置密码受 `PasswordPolicy` 约束；M3.91 起登录会话和账号摘要暴露密码改密/到期/过期边界；M3.92 起自助改密成功后刷新当前会话摘要；M3.99 起 Bearer `CUSTOMER_RANGE` 上下文会返回账号 `customerScope`；M3.100 起配置页固定展示客户范围状态，并在限制说明中区分 Bearer 账号范围和请求头评审兜底范围；M3.116 起强制改密会话不能解析为当前权限上下文，必须先完成自助改密；M3.117 起重复使用已消费临时密码不能再创建新会话。
 
 ### 14.1 请求头
 
@@ -2301,6 +2309,6 @@ M3.83 当前角色菜单编码基线：
 - 业务工作台 GET 已按 `dataScope` 和 M3.99 账号 `customerScope` 做首版过滤，M3.100 配置基线页已固定展示客户范围状态；仍必须继续提示完整组织树、完整组织客户授权表和深层行级权限未完成。
 - 菜单和按钮权限已由后端返回 M3.83 内存基线菜单树；M3.86 前端登录会话导航已按 `menuCodes/menuTree` 过滤，但未登录和请求头兜底仍展示全量评审导航。
 - 尚未建立生产持久化菜单表、角色菜单关联表和按钮权限配置表。
-- M3.116 已建立账号仓储、密码哈希、失败锁定、账号启停、停用会话吊销、管理员解锁、强制首次登录改密、密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、强制申请单号开关、申请单审批任务交接和审批通过态强制校验，但正式电子签字、完整 IAM、SSO/JWT、真正不可篡改审计和完整安全日志平台仍待接入。
+- M3.117 已建立账号仓储、密码哈希、失败锁定、账号启停、停用会话吊销、管理员解锁、强制首次登录改密、临时密码一次性消费、密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、强制申请单号开关、申请单审批任务交接和审批通过态强制校验，但正式电子签字、完整 IAM、SSO/JWT、真正不可篡改审计和完整安全日志平台仍待接入。
 - 当前接口不返回密码或任何生产鉴权密钥；`customerScope` 只回显 Bearer 账号或本次请求头兜底解析出的客户/业务对象范围，完整组织客户授权表尚未完成。
 - 后续接入正式用户中心后，应保持生产关闭匿名管理员请求头兜底，只在测试环境显式启用。
