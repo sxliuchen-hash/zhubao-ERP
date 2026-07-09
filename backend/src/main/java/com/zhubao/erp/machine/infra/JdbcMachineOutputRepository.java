@@ -89,6 +89,25 @@ public class JdbcMachineOutputRepository implements MachineOutputRepository {
         }
     }
 
+    @Override
+    public int bindMachineId(String machineNoSnapshot, Long machineId) {
+        // 仅更新同编号且 machine_id 为空的记录，避免覆盖历史绑定
+        String sql = "update biz_machine_output_record set machine_id = ? "
+                + "where machine_no_snapshot = ? and machine_id is null";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            if (machineId == null) {
+                statement.setNull(1, Types.BIGINT);
+            } else {
+                statement.setLong(1, machineId);
+            }
+            statement.setString(2, machineNoSnapshot);
+            return statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to bind machine id for: " + machineNoSnapshot, ex);
+        }
+    }
+
     private List<MachineOutputRecord> list(PreparedStatement statement) throws SQLException {
         try (ResultSet rs = statement.executeQuery()) {
             List<MachineOutputRecord> records = new ArrayList<>();

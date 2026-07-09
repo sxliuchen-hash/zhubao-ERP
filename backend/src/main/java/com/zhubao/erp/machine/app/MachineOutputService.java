@@ -1,6 +1,8 @@
 package com.zhubao.erp.machine.app;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.machine.domain.BindMachineOutputCommand;
+import com.zhubao.erp.machine.domain.MachineOutputBindingResult;
 import com.zhubao.erp.machine.domain.MachineOutputMachineMatchSuggestion;
 import com.zhubao.erp.machine.domain.MachineOutputMachineSummary;
 import com.zhubao.erp.machine.domain.MachineOutputRecord;
@@ -112,6 +114,33 @@ public class MachineOutputService {
             throw new BusinessException("缺少导入批次号");
         }
         return repository.findByImportBatchNo(importBatchNo.trim());
+    }
+
+    /**
+     * 将现场机器编号的未绑定设备产量记录绑定到机器档案 ID。
+     *
+     * <p>承接 M3.121 的匹配建议：复核候选机器档案 ID 后调用本方法完成人工绑定，仅影响同编号且
+     * 尚未绑定的记录，不覆盖历史绑定。</p>
+     */
+    public MachineOutputBindingResult bindMachine(BindMachineOutputCommand command) {
+        if (command == null) {
+            throw new BusinessException("设备产量绑定命令不能为空");
+        }
+        require(command.machineNoSnapshot(), "machineNoSnapshot");
+        if (command.machineId() == null || command.machineId() <= 0) {
+            throw new BusinessException("machineId 必须为正整数");
+        }
+        String machineNo = command.machineNoSnapshot().trim();
+        int bound = repository.bindMachineId(machineNo, command.machineId());
+        if (bound == 0) {
+            throw new BusinessException("没有可绑定的记录：机器编号 " + machineNo + " 不存在未绑定记录");
+        }
+        return new MachineOutputBindingResult(
+                machineNo,
+                command.machineId(),
+                bound,
+                blankToDefault(command.operator(), "机器绑定复核员")
+        );
     }
 
     private void validate(SubmitMachineOutputCommand command) {

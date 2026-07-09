@@ -1,6 +1,7 @@
 package com.zhubao.erp.machine.app;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.machine.domain.BindMachineOutputCommand;
 import com.zhubao.erp.machine.domain.MachineOutputSummary;
 import com.zhubao.erp.machine.domain.SubmitMachineOutputCommand;
 import com.zhubao.erp.machine.infra.InMemoryMachineOutputRepository;
@@ -130,6 +131,38 @@ class MachineOutputServiceTest {
         assertThat(needsMasterData.candidateMachineIds()).isEmpty();
         assertThat(needsMasterData.readiness()).isEqualTo("NEEDS_MASTER_DATA");
         assertThat(needsMasterData.unmatchedRecords()).isEqualTo(1);
+    }
+
+    @Test
+    void 绑定未绑定记录到机器档案并跳过已绑定记录() {
+        // 同编号：一条已绑定(9001)、一条未绑定；绑定应只影响未绑定记录
+        service.submit(command("MOR-BIND-001", "2026-07-08", 9001L, "ENG-03", "X", "12", "1"));
+        service.submit(command("MOR-BIND-002", "2026-07-08", null, "ENG-03", "X", "8", "2"));
+
+        var result = service.bindMachine(new BindMachineOutputCommand("ENG-03", 9001L, "车间组长 李华"));
+
+        assertThat(result.boundRecords()).isEqualTo(1);
+        assertThat(result.machineNoSnapshot()).isEqualTo("ENG-03");
+        assertThat(result.machineId()).isEqualTo(9001L);
+        // 绑定后该编号已无未绑定记录，匹配建议不再返回 ENG-03
+        assertThat(service.machineMatchSuggestions(10))
+                .noneMatch(suggestion -> suggestion.machineNoSnapshot().equals("ENG-03"));
+    }
+
+    @Test
+    void 无未绑定记录时绑定被拒绝() {
+        service.submit(command("MOR-BIND-003", "2026-07-08", 9001L, "ENG-05", "X", "12", "1"));
+
+        assertThatThrownBy(() -> service.bindMachine(new BindMachineOutputCommand("ENG-05", 9001L, "李华")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("没有可绑定的记录");
+    }
+
+    @Test
+    void 绑定命令校验机器档案ID() {
+        assertThatThrownBy(() -> service.bindMachine(new BindMachineOutputCommand("ENG-03", 0L, "李华")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("machineId");
     }
 
     private SubmitMachineOutputCommand command(

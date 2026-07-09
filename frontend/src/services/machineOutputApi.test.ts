@@ -149,4 +149,24 @@ describe('machineOutputApi', () => {
       operatorSignatureName: '周凯',
     });
   });
+
+  it('绑定未绑定设备产量记录到机器档案', async () => {
+    const { bindMachineOutput } = await import('./machineOutputApi');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        code: 0,
+        message: 'ok',
+        data: { machineNoSnapshot: 'ENG-03', machineId: 9001, boundRecords: 2, operator: '车间组长 李华' },
+      }),
+    } as Response);
+
+    const result = await bindMachineOutput({ machineNoSnapshot: 'ENG-03', machineId: 9001, operator: '车间组长 李华' });
+
+    expect(result.boundRecords).toBe(2);
+    const [path, options] = fetchMock.mock.calls[0];
+    expect(path).toContain('/api/machine-outputs/machine-bindings');
+    expect(options?.method).toBe('POST');
+    expect(JSON.parse(options?.body as string)).toMatchObject({ machineNoSnapshot: 'ENG-03', machineId: 9001 });
+  });
 });

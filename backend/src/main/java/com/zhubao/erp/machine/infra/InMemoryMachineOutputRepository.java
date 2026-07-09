@@ -43,4 +43,30 @@ public class InMemoryMachineOutputRepository implements MachineOutputRepository 
                 .sorted(Comparator.comparing(MachineOutputRecord::sourceLineNo, Comparator.nullsLast(Integer::compareTo)))
                 .toList();
     }
+
+    @Override
+    public int bindMachineId(String machineNoSnapshot, Long machineId) {
+        int bound = 0;
+        for (MachineOutputRecord record : records.values()) {
+            // 仅绑定同编号且尚未绑定机器档案 ID 的记录，避免覆盖历史绑定
+            if (machineNoSnapshot.equals(record.machineNoSnapshot()) && record.machineId() == null) {
+                records.put(record.code(), withMachineId(record, machineId));
+                bound++;
+            }
+        }
+        return bound;
+    }
+
+    // 记录不可变，绑定机器档案 ID 时重建一条记录替换原记录
+    private MachineOutputRecord withMachineId(MachineOutputRecord record, Long machineId) {
+        return new MachineOutputRecord(
+                record.code(), record.workDate(), record.customerId(), record.customerNameSnapshot(),
+                record.productCategory(), machineId, record.machineNoSnapshot(), record.workOrderCode(),
+                record.workProcessId(), record.workReportCode(), record.outputQuantity(), record.quantityUnit(),
+                record.operatorEmployeeId(), record.operatorSignatureName(), record.signatureMediaId(),
+                record.sourceRegisterType(), record.sourceLineNo(), record.machineLineNo(),
+                record.sourceSequenceNo(), record.importBatchNo(), record.ledgerCode(), record.status(),
+                record.remark(), record.createdBy(), record.createdAt()
+        );
+    }
 }

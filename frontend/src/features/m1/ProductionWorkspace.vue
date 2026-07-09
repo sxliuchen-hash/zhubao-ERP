@@ -16,6 +16,7 @@ import {
   type ProductionReportResult,
 } from '../../services/businessOperationApi';
 import {
+  bindMachineOutput,
   fetchMachineOutputMachineMatchSuggestions,
   fetchMachineOutputSummary,
   type MachineOutputMachineMatchSuggestion,
@@ -137,6 +138,25 @@ async function loadMachineOutputSummary() {
     machineOutputSummaryError.value = error instanceof Error ? error.message : '设备产量汇总读取失败';
   } finally {
     machineOutputSummaryLoading.value = false;
+  }
+}
+
+const machineBindMessage = ref('');
+
+// 将某机器编号的未绑定记录绑定到候选机器档案 ID（仅 READY_TO_BIND 且候选唯一时可用）
+async function bindMachineMatch(item: MachineOutputMachineMatchSuggestion) {
+  machineBindMessage.value = '';
+  const machineId = item.candidateMachineIds[0];
+  if (machineId == null) {
+    machineBindMessage.value = `${item.machineNoSnapshot} 无候选机器档案，请先建档`;
+    return;
+  }
+  try {
+    const result = await bindMachineOutput({ machineNoSnapshot: item.machineNoSnapshot, machineId });
+    machineBindMessage.value = `已将 ${result.machineNoSnapshot} 的 ${result.boundRecords} 条记录绑定到机器档案 ${result.machineId}`;
+    await loadMachineMatchSuggestions();
+  } catch (error) {
+    machineBindMessage.value = error instanceof Error ? error.message : '机器档案绑定失败';
   }
 }
 
@@ -515,9 +535,18 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
                 候选 {{ item.candidateMachineIds.length ? item.candidateMachineIds.join(', ') : '待建档' }}
               </small>
               <small>{{ item.suggestedAction }}</small>
+              <button
+                v-if="item.readiness === 'READY_TO_BIND'"
+                class="table-action"
+                type="button"
+                @click="bindMachineMatch(item)"
+              >
+                绑定到机器档案 {{ item.candidateMachineIds[0] }}
+              </button>
             </article>
           </div>
           <small v-else>暂无待匹配机器档案。</small>
+          <p v-if="machineBindMessage" class="operation-feedback">{{ machineBindMessage }}</p>
         </div>
       </div>
 

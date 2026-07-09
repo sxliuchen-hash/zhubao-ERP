@@ -2,6 +2,8 @@ package com.zhubao.erp.machine.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.machine.app.MachineOutputService;
+import com.zhubao.erp.machine.domain.BindMachineOutputCommand;
+import com.zhubao.erp.machine.domain.MachineOutputBindingResult;
 import com.zhubao.erp.machine.domain.MachineOutputMachineMatchSuggestion;
 import com.zhubao.erp.machine.domain.MachineOutputRecord;
 import com.zhubao.erp.machine.domain.MachineOutputSummary;
@@ -52,5 +54,10 @@ public class MachineOutputController {
     @PostMapping
     public ApiResponse<MachineOutputRecord> submit(@Valid @RequestBody SubmitMachineOutputCommand command) {
         return ApiResponse.ok(service.submit(command));
+    }
+
+    @PostMapping("/machine-bindings")
+    public ApiResponse<MachineOutputBindingResult> bindMachine(@Valid @RequestBody BindMachineOutputCommand command) {
+        return ApiResponse.ok(service.bindMachine(command));
     }
 }

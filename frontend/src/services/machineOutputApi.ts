@@ -116,3 +116,26 @@ export async function fetchMachineOutputsByImportBatch(importBatchNo: string): P
 export async function submitMachineOutput(request: SubmitMachineOutputRequest): Promise<MachineOutputRecord> {
   return apiPost<SubmitMachineOutputRequest, MachineOutputRecord>('/api/machine-outputs', request);
 }
+
+export interface BindMachineOutputRequest {
+  machineNoSnapshot: string;
+  machineId: number;
+  operator?: string;
+}
+
+export interface MachineOutputBindingResult {
+  machineNoSnapshot: string;
+  machineId: number;
+  boundRecords: number;
+  operator: string;
+}
+
+// 将现场机器编号的未绑定设备产量记录绑定到机器档案 ID（需要 MACHINE_OUTPUT_SUBMIT 权限）
+export async function bindMachineOutput(
+  request: BindMachineOutputRequest,
+): Promise<MachineOutputBindingResult> {
+  return apiPost<BindMachineOutputRequest, MachineOutputBindingResult>(
+    '/api/machine-outputs/machine-bindings',
+    request,
+  );
+}
