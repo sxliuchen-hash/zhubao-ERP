@@ -1,5 +1,6 @@
 package com.zhubao.erp.document.app;
 
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
@@ -9,8 +10,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DocumentManagementServiceTest {
 
@@ -56,8 +61,28 @@ class DocumentManagementServiceTest {
         assertThat(uploaded.storageLocation()).contains("local://evidence/DOC-INBOUND-20260706-001");
         assertThat(uploaded.checksum()).startsWith("sha256:");
         assertThat(uploaded.previewUrl()).contains(uploaded.code());
-        assertThat(service.previewUrl(uploaded.code()).url()).contains("/content?token=preview-demo");
-        assertThat(service.content(uploaded.code()).content()).isEqualTo(content);
+        assertThat(uploaded.previewUrl())
+                .contains("/content?expiresAt=")
+                .contains("&token=")
+                .doesNotContain("preview-demo");
+        var previewUrl = service.previewUrl(uploaded.code());
+        assertThat(previewUrl.url())
+                .contains("/content?expiresAt=")
+                .contains("&token=")
+                .doesNotContain("preview-demo");
+        long expiresAt = expiresAt(previewUrl.url());
+        String token = token(previewUrl.url());
+        assertThat(service.previewContent(uploaded.code(), expiresAt, token).content()).isEqualTo(content);
+        assertThatThrownBy(() -> service.previewContent(uploaded.code(), expiresAt, "invalid-token"))
+                .isInstanceOf(BusinessException.class);
+        DocumentManagementService expiredPreviewService = new DocumentManagementService(
+                repository,
+                localStorage(),
+                new DocumentPreviewTokenProperties(),
+                Clock.fixed(Instant.ofEpochSecond(expiresAt + 1), ZoneId.systemDefault())
+        );
+        assertThatThrownBy(() -> expiredPreviewService.previewContent(uploaded.code(), expiresAt, token))
+                .isInstanceOf(BusinessException.class);
         DocumentManagementService reloadedService = new DocumentManagementService(repository, localStorage());
         assertThat(reloadedService.content(uploaded.code()).content()).isEqualTo(content);
         assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
@@ -116,5 +141,13 @@ class DocumentManagementServiceTest {
         AttachmentStorageProperties properties = new AttachmentStorageProperties();
         properties.setLocalRoot(tempDir.toString());
         return new LocalAttachmentObjectStorage(properties);
+    }
+
+    private long expiresAt(String previewUrl) {
+        return Long.parseLong(previewUrl.replaceAll(".*[?&]expiresAt=([0-9]+).*", "$1"));
+    }
+
+    private String token(String previewUrl) {
+        return previewUrl.replaceAll(".*[?&]token=([^&]+).*", "$1");
     }
 }

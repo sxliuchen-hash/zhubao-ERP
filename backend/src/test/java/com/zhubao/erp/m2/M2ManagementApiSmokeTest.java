@@ -388,20 +388,22 @@ class M2ManagementApiSmokeTest {
         );
 
         assertThat(uploaded.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(uploaded.getBody()).contains("ATT-UP-", "smoke-weight.txt", "sha256:", "preview-demo");
+        assertThat(uploaded.getBody())
+                .contains("ATT-UP-", "smoke-weight.txt", "sha256:", "expiresAt=", "token=")
+                .doesNotContain("preview-demo");
 
         String uploadedCode = uploaded.getBody().replaceAll(".*\"code\":\"([^\"]+)\".*", "$1");
         ResponseEntity<String> preview = restTemplate.getForEntity(
                 "/api/documents/attachments/" + uploadedCode + "/preview-url",
                 String.class
         );
-        ResponseEntity<byte[]> content = restTemplate.getForEntity(
-                "/api/documents/attachments/" + uploadedCode + "/content?token=preview-demo",
-                byte[].class
-        );
 
         assertThat(preview.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(preview.getBody()).contains(uploadedCode, "/content?token=preview-demo");
+        assertThat(preview.getBody())
+                .contains(uploadedCode, "/content?expiresAt=", "token=")
+                .doesNotContain("preview-demo");
+        String previewUrl = preview.getBody().replaceAll(".*\"url\":\"([^\"]+)\".*", "$1");
+        ResponseEntity<byte[]> content = restTemplate.getForEntity(previewUrl, byte[].class);
         assertThat(content.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(new String(content.getBody())).isEqualTo("smoke upload content");
     }

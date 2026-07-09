@@ -82,8 +82,12 @@ public class DocumentManagementController {
     }
 
     @GetMapping("/attachments/{code}/content")
-    public ResponseEntity<byte[]> content(@PathVariable String code) {
-        AttachmentContent content = documentManagementService.content(code);
+    public ResponseEntity<byte[]> content(
+            @PathVariable String code,
+            @RequestParam long expiresAt,
+            @RequestParam String token
+    ) {
+        AttachmentContent content = documentManagementService.previewContent(code, expiresAt, token);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(content.mediaType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + content.fileName() + "\"")

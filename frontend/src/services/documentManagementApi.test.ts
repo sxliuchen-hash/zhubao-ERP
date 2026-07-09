@@ -74,7 +74,7 @@ describe('documentManagementApi', () => {
           code: 'ATT-UP-001',
           fileName: 'weight-photo.jpg',
           mediaType: 'image/jpeg',
-          url: '/api/documents/attachments/ATT-UP-001/content?token=preview-demo',
+          url: '/api/documents/attachments/ATT-UP-001/content?expiresAt=1783374000&token=signed-preview-token',
           expiresAt: '2026-07-07 00:20',
         },
       };
@@ -93,7 +93,7 @@ describe('documentManagementApi', () => {
               storageLocation: 'local://evidence/DOC-INBOUND-20260706-001/ATT-UP-001/weight-photo.jpg',
               checksum: 'sha256:demo',
               uploadedAt: '2026-07-07 00:05',
-              previewUrl: '/api/documents/attachments/ATT-UP-001/content?token=preview-demo',
+              previewUrl: '/api/documents/attachments/ATT-UP-001/content?expiresAt=1783374000&token=signed-preview-token',
             },
           }),
         } as Response;
@@ -121,7 +121,7 @@ describe('documentManagementApi', () => {
       }),
     ).resolves.toMatchObject({ code: 'ATT-UP-001', checksum: 'sha256:demo' });
     await expect(fetchAttachmentPreviewUrl('ATT-UP-001')).resolves.toMatchObject({
-      url: '/api/documents/attachments/ATT-UP-001/content?token=preview-demo',
+      url: '/api/documents/attachments/ATT-UP-001/content?expiresAt=1783374000&token=signed-preview-token',
     });
     expect(fetchMock).toHaveBeenCalledTimes(6);
   });

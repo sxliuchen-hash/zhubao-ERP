@@ -11,10 +11,20 @@ import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.StoredAttachmentObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,9 +35,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class DocumentManagementService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final String SIGNING_ALGORITHM = "HmacSHA256";
+    private static final Base64.Encoder TOKEN_ENCODER = Base64.getUrlEncoder().withoutPadding();
 
     private final DocumentManagementRepository repository;
     private final AttachmentObjectStorage attachmentObjectStorage;
+    private final DocumentPreviewTokenProperties previewTokenProperties;
+    private final Clock clock;
     private final AtomicInteger uploadSequence = new AtomicInteger(1);
     private final Map<String, String> uploadedStorageKeys = new ConcurrentHashMap<>();
 
@@ -35,8 +49,28 @@ public class DocumentManagementService {
             DocumentManagementRepository repository,
             AttachmentObjectStorage attachmentObjectStorage
     ) {
+        this(repository, attachmentObjectStorage, new DocumentPreviewTokenProperties(), Clock.systemDefaultZone());
+    }
+
+    @Autowired
+    public DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties
+    ) {
+        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone());
+    }
+
+    DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties,
+            Clock clock
+    ) {
         this.repository = repository;
         this.attachmentObjectStorage = attachmentObjectStorage;
+        this.previewTokenProperties = previewTokenProperties == null ? new DocumentPreviewTokenProperties() : previewTokenProperties;
+        this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
     public DocumentManagementSummary summary() {
@@ -152,13 +186,19 @@ public class DocumentManagementService {
     public AttachmentPreviewUrl previewUrl(String code) {
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        PreviewToken previewToken = newPreviewToken(attachment.code());
         return new AttachmentPreviewUrl(
                 attachment.code(),
                 attachment.fileName(),
                 attachment.mediaType(),
-                previewContentUrl(attachment.code()),
-                LocalDateTime.now().plusMinutes(15).format(DATE_TIME_FORMATTER)
+                previewContentUrl(attachment.code(), previewToken),
+                displayExpiresAt(previewToken.expiresAtEpoch())
         );
+    }
+
+    public AttachmentContent previewContent(String code, long expiresAt, String token) {
+        validatePreviewToken(code, expiresAt, token);
+        return content(code);
     }
 
     public AttachmentContent content(String code) {
@@ -196,7 +236,58 @@ public class DocumentManagementService {
     }
 
     private String previewContentUrl(String code) {
-        return "/api/documents/attachments/" + code + "/content?token=preview-demo";
+        return previewContentUrl(code, newPreviewToken(code));
+    }
+
+    private String previewContentUrl(String code, PreviewToken previewToken) {
+        return "/api/documents/attachments/" + code
+                + "/content?expiresAt=" + previewToken.expiresAtEpoch()
+                + "&token=" + previewToken.signature();
+    }
+
+    private PreviewToken newPreviewToken(String code) {
+        long expiresAtEpoch = Instant.now(clock)
+                .plus(previewTokenProperties.ttl())
+                .getEpochSecond();
+        return new PreviewToken(expiresAtEpoch, signPreviewToken(code, expiresAtEpoch));
+    }
+
+    private void validatePreviewToken(String code, long expiresAtEpoch, String token) {
+        if (expiresAtEpoch <= Instant.now(clock).getEpochSecond()) {
+            throw new BusinessException("附件预览链接已过期");
+        }
+        if (token == null || token.isBlank()) {
+            throw new BusinessException("附件预览令牌不能为空");
+        }
+        String expected = signPreviewToken(code, expiresAtEpoch);
+        if (!MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                token.getBytes(StandardCharsets.UTF_8)
+        )) {
+            throw new BusinessException("附件预览令牌无效");
+        }
+    }
+
+    private String signPreviewToken(String code, long expiresAtEpoch) {
+        try {
+            Mac mac = Mac.getInstance(SIGNING_ALGORITHM);
+            mac.init(new SecretKeySpec(
+                    previewTokenProperties.signingSecret().getBytes(StandardCharsets.UTF_8),
+                    SIGNING_ALGORITHM
+            ));
+            String payload = code + ":" + expiresAtEpoch;
+            return TOKEN_ENCODER.encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Failed to sign attachment preview token", ex);
+        }
+    }
+
+    private String displayExpiresAt(long expiresAtEpoch) {
+        ZoneId zone = clock.getZone() == null ? ZoneId.systemDefault() : clock.getZone();
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(expiresAtEpoch), zone).format(DATE_TIME_FORMATTER);
+    }
+
+    private record PreviewToken(long expiresAtEpoch, String signature) {
     }
 
     private String sanitizeFileName(String fileName) {
