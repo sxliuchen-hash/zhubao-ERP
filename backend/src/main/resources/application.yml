@@ -30,6 +30,9 @@ zhubao:
   gateway:
     repository: memory
     demo-device-key: ${ZHUBAO_GATEWAY_DEMO_DEVICE_KEY:zhubao-device-demo}
+    rate-limit:
+      max-readings: ${ZHUBAO_GATEWAY_RATE_LIMIT_MAX:120}
+      window-seconds: ${ZHUBAO_GATEWAY_RATE_LIMIT_WINDOW_SECONDS:60}
   security:
     allow-header-context: true
   hardware:

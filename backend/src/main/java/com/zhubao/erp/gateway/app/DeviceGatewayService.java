@@ -15,6 +15,7 @@ import com.zhubao.erp.gateway.domain.ReadingConsumptionIntent;
 import com.zhubao.erp.gateway.domain.ReadingConsumptionRepository;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
+import com.zhubao.erp.gateway.error.GatewayRateLimitException;
 import com.zhubao.erp.security.app.PasswordHasher;
 import com.zhubao.erp.security.domain.OperatorContext;
 import org.springframework.stereotype.Service;
@@ -43,19 +44,22 @@ public class DeviceGatewayService {
     private final ReadingConsumptionRepository consumptionRepository;
     private final DeviceReadingNormalizer normalizer;
     private final PasswordHasher passwordHasher;
+    private final GatewayRateLimiter rateLimiter;
 
     public DeviceGatewayService(
             GatewayDeviceRepository deviceRepository,
             DeviceReadingRepository readingRepository,
             ReadingConsumptionRepository consumptionRepository,
             DeviceReadingNormalizer normalizer,
-            PasswordHasher passwordHasher
+            PasswordHasher passwordHasher,
+            GatewayRateLimiter rateLimiter
     ) {
         this.deviceRepository = deviceRepository;
         this.readingRepository = readingRepository;
         this.consumptionRepository = consumptionRepository;
         this.normalizer = normalizer;
         this.passwordHasher = passwordHasher;
+        this.rateLimiter = rateLimiter;
     }
 
     public DeviceReading ingest(SubmitDeviceReadingCommand command) {
@@ -63,6 +67,11 @@ public class DeviceGatewayService {
             throw new BusinessException("设备读数命令不能为空");
         }
         GatewayDevice device = authenticate(command.deviceCode(), command.deviceKey());
+        if (!rateLimiter.tryAcquire(device.deviceCode())) {
+            throw new GatewayRateLimitException(
+                    "设备 " + device.deviceCode() + " 读数频率超过限制（窗口内上限 "
+                            + rateLimiter.maxReadings() + " 条），请检查桥接程序或密钥是否异常");
+        }
         DeviceReadingType type = DeviceReadingType.fromString(command.readingType());
         if (type == null) {
             throw new BusinessException("不支持的读数类型：" + command.readingType());

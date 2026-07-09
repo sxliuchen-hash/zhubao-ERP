@@ -6,6 +6,7 @@ import com.zhubao.erp.gateway.domain.DeviceReading;
 import com.zhubao.erp.gateway.domain.DeviceReadingStatus;
 import com.zhubao.erp.gateway.domain.ReadingConsumption;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
+import com.zhubao.erp.gateway.error.GatewayRateLimitException;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.infra.InMemoryDeviceReadingRepository;
 import com.zhubao.erp.gateway.infra.InMemoryGatewayDeviceRepository;
@@ -38,7 +39,8 @@ class DeviceGatewayServiceTest {
         InMemoryReadingConsumptionRepository consumptionRepository = new InMemoryReadingConsumptionRepository();
         service = new DeviceGatewayService(
                 deviceRepository, readingRepository, consumptionRepository,
-                new DeviceReadingNormalizer(), passwordHasher);
+                new DeviceReadingNormalizer(), passwordHasher,
+                new GatewayRateLimiter(1000, 60));
     }
 
     private static final OperatorContext OPERATOR =
@@ -165,6 +167,30 @@ class DeviceGatewayServiceTest {
                 new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已被消费");
+    }
+
+    @Test
+    void enforcesRateLimitPerDevice() {
+        PasswordHasher passwordHasher = new PasswordHasher();
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("zhubao.gateway.demo-device-key", DEVICE_KEY);
+        DeviceGatewayService limitedService = new DeviceGatewayService(
+                new InMemoryGatewayDeviceRepository(passwordHasher, environment),
+                new InMemoryDeviceReadingRepository(),
+                new InMemoryReadingConsumptionRepository(),
+                new DeviceReadingNormalizer(),
+                passwordHasher,
+                new GatewayRateLimiter(2, 60));
+
+        limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
+        limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.7g"));
+
+        assertThatThrownBy(() -> limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.8g")))
+                .isInstanceOf(GatewayRateLimitException.class)
+                .hasMessageContaining("频率超过限制");
+
+        // A different device is not affected by another device's quota.
+        assertThat(limitedService.ingest(command("SCAN-PC-01", "SCAN_EVENT", "ZD-1")).status()).isNotNull();
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.zhubao.erp.common.error;
 
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
+import com.zhubao.erp.gateway.error.GatewayRateLimitException;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,12 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ApiResponse<Void> handleDeviceAuthenticationException(DeviceAuthenticationException ex) {
         return ApiResponse.error(40101, ex.getMessage());
+    }
+
+    @ExceptionHandler(GatewayRateLimitException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    public ApiResponse<Void> handleGatewayRateLimitException(GatewayRateLimitException ex) {
+        return ApiResponse.error(42901, ex.getMessage());
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})
