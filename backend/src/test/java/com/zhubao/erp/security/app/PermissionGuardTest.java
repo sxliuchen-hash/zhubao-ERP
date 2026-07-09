@@ -71,6 +71,18 @@ class PermissionGuardTest {
     }
 
     @Test
+    void limitsGatewayDeviceManagementToAdminAndGeneralManager() {
+        OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
+        OperatorContext operator = new OperatorContext("操作工 王强", RoleCode.OPERATOR, DataScope.SELF);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_DEVICE_MANAGE, admin))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_DEVICE_MANAGE, operator))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("设备网关管理");
+    }
+
+    @Test
     void limitsAuthAccountManagementToAdminAndGeneralManager() {
         OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);

@@ -17,7 +17,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OperatorContextResolverTest {
 
-    private final NavigationMenuService navigationMenuService = new NavigationMenuService();
+    private final NavigationMenuService navigationMenuService =
+            new NavigationMenuService(new com.zhubao.erp.security.infra.InMemoryNavigationMenuRepository());
     private final PasswordHasher passwordHasher = new PasswordHasher();
     private final PasswordExpiryPolicy passwordExpiryPolicy = new PasswordExpiryPolicy();
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();

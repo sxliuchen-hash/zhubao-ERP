@@ -370,7 +370,7 @@ class AuthControllerAccountManagementTest {
                 localStorage()
         );
         AuthSessionService authSessionService = new AuthSessionService(
-                new NavigationMenuService(),
+                new NavigationMenuService(new com.zhubao.erp.security.infra.InMemoryNavigationMenuRepository()),
                 auditRepository,
                 accountRepository,
                 passwordHasher,
