@@ -36,6 +36,12 @@ import {
   type AuthUserAccountSummary,
 } from '../../services/authApi';
 import { fetchConfigurationBaselineWorkspace } from '../../services/configurationBaselineApi';
+import {
+  fetchCustomerAuthorizations,
+  grantCustomerAuthorization,
+  revokeCustomerAuthorization,
+  type CustomerAuthorization,
+} from '../../services/customerAuthorizationApi';
 
 const workspace = ref<ConfigurationBaselineWorkspace>(configurationBaselineFallback);
 const authSession = ref<AuthSession | null>(null);
@@ -58,6 +64,11 @@ const authPreApprovalEvidenceFile = ref<File | null>(null);
 const authPreApprovalEvidenceBusy = ref(false);
 const authPreApprovalEvidenceMessage = ref('');
 const authPreApprovalReadiness = ref<AuthAccountPreApprovalReadiness[]>(authAccountPreApprovalReadinessFallback);
+// 客户授权管理：CUSTOMER_RANGE 账号可见客户范围的授权表操作
+const customerAuthorizations = ref<CustomerAuthorization[]>([]);
+const customerAuthForm = ref({ username: '', customerCode: '', customerName: '' });
+const customerAuthBusy = ref(false);
+const customerAuthMessage = ref('');
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
     eventId: 'AUTH-AUD-DEMO-001',
@@ -93,6 +104,7 @@ onMounted(async () => {
   await loadAuthPreApprovalReadiness();
   await loadAuthAuditEvents();
   await loadAuthAuditIntegrity();
+  await loadCustomerAuthorizations();
 });
 
 async function refreshWorkspace() {
@@ -143,7 +155,56 @@ async function loadAuthAccounts() {
   try {
     authAccounts.value = await fetchAuthAccounts();
   } catch {
-    // Keep local account boundary samples visible when the backend is not running.
+    // 后端未运行时保留本地账号边界样例
+  }
+}
+
+// 加载客户授权记录（后端不可用时保持空列表，不阻断页面）
+async function loadCustomerAuthorizations() {
+  try {
+    customerAuthorizations.value = await fetchCustomerAuthorizations();
+  } catch {
+    // 后端未运行时客户授权列表为空
+  }
+}
+
+// 授权某账号访问指定客户（需要总经理/管理员权限）
+async function grantCustomerAuth() {
+  customerAuthMessage.value = '';
+  if (!customerAuthForm.value.username.trim() || !customerAuthForm.value.customerCode.trim()) {
+    customerAuthMessage.value = '请填写账号和客户编码';
+    return;
+  }
+  customerAuthBusy.value = true;
+  try {
+    await grantCustomerAuthorization({
+      username: customerAuthForm.value.username.trim(),
+      customerCode: customerAuthForm.value.customerCode.trim(),
+      customerName: customerAuthForm.value.customerName.trim() || undefined,
+    });
+    customerAuthMessage.value = `已授权 ${customerAuthForm.value.username} 访问 ${customerAuthForm.value.customerCode}`;
+    await loadCustomerAuthorizations();
+  } catch (error) {
+    customerAuthMessage.value = error instanceof Error ? error.message : '授权失败（需要总经理/管理员权限）';
+  } finally {
+    customerAuthBusy.value = false;
+  }
+}
+
+// 撤销某账号对指定客户的授权
+async function revokeCustomerAuth(authorization: CustomerAuthorization) {
+  customerAuthMessage.value = '';
+  try {
+    const result = await revokeCustomerAuthorization({
+      username: authorization.username,
+      customerCode: authorization.customerCode,
+    });
+    customerAuthMessage.value = result.removed
+      ? `已撤销 ${authorization.username} 对 ${authorization.customerCode} 的授权`
+      : '未找到对应授权记录';
+    await loadCustomerAuthorizations();
+  } catch (error) {
+    customerAuthMessage.value = error instanceof Error ? error.message : '撤销失败';
   }
 }
 
@@ -623,6 +684,42 @@ function readinessTone(tone: string): Tone {
             </div>
             <StatusBadge :label="accountStatusLabel(account)" :tone="accountStatusTone(account)" />
           </article>
+        </div>
+        <div class="security-customer-auth">
+          <strong>客户授权管理（CUSTOMER_RANGE）</strong>
+          <p class="customer-auth-hint">
+            授权表 sys_customer_authorization 是 CUSTOMER_RANGE 账号可见客户范围的权威来源；
+            账号管理设置客户范围时会自动同步，此处也可手工授权/撤销。需要总经理/管理员权限。
+          </p>
+          <form class="customer-auth-form" @submit.prevent="grantCustomerAuth">
+            <label>
+              <span>账号</span>
+              <input v-model="customerAuthForm.username" placeholder="如 sales01" aria-label="授权账号" />
+            </label>
+            <label>
+              <span>客户编码</span>
+              <input v-model="customerAuthForm.customerCode" placeholder="如 CUST-1001" aria-label="客户编码" />
+            </label>
+            <label>
+              <span>客户名称</span>
+              <input v-model="customerAuthForm.customerName" placeholder="可选" aria-label="客户名称" />
+            </label>
+            <button class="primary-button" type="submit" :disabled="customerAuthBusy">
+              {{ customerAuthBusy ? '授权中…' : '授权客户' }}
+            </button>
+          </form>
+          <p v-if="customerAuthMessage" class="customer-auth-message">{{ customerAuthMessage }}</p>
+          <article v-for="auth in customerAuthorizations" :key="`${auth.username}|${auth.customerCode}`">
+            <div>
+              <b>{{ auth.username }} → {{ auth.customerCode }}</b>
+              <span>{{ auth.customerName || '未填客户名称' }}</span>
+              <small>授权人 {{ auth.grantedBy || '未记录' }} · {{ auth.grantedAt || '未记录时间' }}</small>
+            </div>
+            <button class="table-action" type="button" @click="revokeCustomerAuth(auth)">撤销</button>
+          </article>
+          <p v-if="customerAuthorizations.length === 0" class="empty-hint">
+            暂无客户授权记录（后端未连接或尚未授权）。
+          </p>
         </div>
         <div class="security-pre-approval-draft">
           <strong>前置审批草稿评估</strong>
