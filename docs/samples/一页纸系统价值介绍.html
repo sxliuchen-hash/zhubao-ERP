@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>一页纸系统价值介绍 - 珠宝来料加工系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 20px; }
+  .page { max-width: 860px; margin: 0 auto; background: #fff; border-radius: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.12); overflow: hidden; }
+  .hero { background: linear-gradient(135deg, #1f2733, #2b4a6f); color: #fff; padding: 26px 28px; }
+  .hero h1 { font-size: 24px; margin-bottom: 6px; }
+  .hero p { font-size: 14px; opacity: .9; }
+  .body { padding: 22px 28px; }
+
+  .pain { background: #fdeef0; border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+  .pain h3 { font-size: 14px; color: #c0334a; margin-bottom: 8px; }
+  .pain li { list-style: none; font-size: 13px; color: #7a3540; padding: 3px 0; }
+
+  .value-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .value { border: 1px solid #e2e7ec; border-radius: 10px; padding: 14px 16px; }
+  .value .icon { font-size: 22px; }
+  .value h4 { font-size: 15px; margin: 6px 0 4px; }
+  .value p { font-size: 12.5px; color: #46505c; line-height: 1.6; }
+
+  .flow { margin-top: 20px; background: #f4f6f9; border-radius: 10px; padding: 14px 16px; }
+  .flow h3 { font-size: 14px; margin-bottom: 8px; }
+  .flow .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+  .flow .s { background: #fff; border: 1px solid #d0d6dd; border-radius: 6px; padding: 5px 9px; font-weight: 600; }
+  .flow .arr { color: #9aa4b0; }
+
+  .foot { margin-top: 20px; padding-top: 14px; border-top: 1px dashed #d0d6dd; font-size: 13px; color: #46505c; }
+  .foot b { color: #1f2733; }
+  .tag { display:inline-block;background:#e4f5ea;color:#1f8b4c;font-size:11px;font-weight:bold;padding:2px 8px;border-radius:5px; }
+  @media print { body{background:#fff;padding:0;} }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <h1>来料加工数字化管理系统</h1>
+      <p>告别脑子记、Excel 算，用扫码和标签，把每一批料管得清清楚楚</p>
+    </div>
+    <div class="body">
+      <div class="pain">
+        <h3>现在的烦恼，是不是这样？</h3>
+        <li>· 客户来料靠脑子和 Excel 记，问一批货做到哪了，得挨个问人</li>
+        <li>· 贵重料损耗多少说不清，出了差错找不到是哪道工序、哪个人</li>
+        <li>· 计件工资靠人工核算，容易漏算错算，返工扣减没依据</li>
+        <li>· 账实对不上，来料、半成品、成品、返工品混在一起</li>
+      </div>
+
+      <div class="value-grid">
+        <div class="value">
+          <div class="icon">🔍</div>
+          <h4>一条料的一生，扫码就能查</h4>
+          <p>每批来料一个唯一母单号，贴周转盒上。扫码就看到从收货、拆包、加工到出货的完整经过，谁做的、做了多少、损耗多少，一目了然。</p>
+        </div>
+        <div class="value">
+          <div class="icon">⚖</div>
+          <h4>损耗按工序算，超标自动提醒</h4>
+          <p>每道工序投入产出自动算损耗，超过标准自动提醒走审批，责任可追到工序、员工。损耗有据可查，不再是糊涂账。</p>
+        </div>
+        <div class="value">
+          <div class="icon">📱</div>
+          <h4>工人手机扫码报工，3 步搞定</h4>
+          <p>不用学复杂系统，扫子工单码自动带出当前工序，填数量重量提交即可。一期先用手机，扫码枪到货再接。</p>
+        </div>
+        <div class="value">
+          <div class="icon">💰</div>
+          <h4>计件工资自动试算，有据可依</h4>
+          <p>按报工记录和单价自动算工资，返工不计、损耗可查。一期只试算参考，您觉得准了再启用正式结算，稳妥落地。</p>
+        </div>
+      </div>
+
+      <div class="flow">
+        <h3>一期跑通这条主线（替代手工台账）</h3>
+        <div class="steps">
+          <span class="s">来料签收</span><span class="arr">→</span>
+          <span class="s">拆包称重</span><span class="arr">→</span>
+          <span class="s">拆分工单</span><span class="arr">→</span>
+          <span class="s">扫码报工</span><span class="arr">→</span>
+          <span class="s">质检返工</span><span class="arr">→</span>
+          <span class="s">成品出库</span><span class="arr">→</span>
+          <span class="s">全程追溯</span>
+        </div>
+      </div>
+
+      <div class="foot">
+        <p><b>怎么开始：</b>先在<b>一条产线、几名工人、1-2 类产品</b>上试点 2-4 周，跑顺了再全厂推广。系统装在<b>厂里电脑</b>上、局域网就能用，数据每天自动<b>备份到云端</b>，不怕丢。</p>
+        <p style="margin-top:8px;"><span class="tag">先试点，再推广</span> <span class="tag" style="background:#e8f0fb;color:#3b6fb0;">投入小、见效快</span> <span class="tag" style="background:#fdf0d5;color:#a86a12;">数据安全</span></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

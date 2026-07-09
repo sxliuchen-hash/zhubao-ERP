@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>损耗与工资试算样张 - 珠宝来料加工系统</title>
+<style>
+  /* 统一样张风格：主色 #1f2733，强调 #3b6fb0，绿 #2f9e57，黄 #d99a2b，红 #c85a6a */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 20px; }
+  h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+  .note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 18px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.1); overflow: hidden; margin-bottom: 16px; }
+  .card-head { background: #1f2733; color: #fff; padding: 12px 18px; font-size: 15px; font-weight: bold; }
+  .card-body { padding: 16px 18px; }
+
+  .calc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .calc .row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed #eef1f4; }
+  .calc .row .n { color: #6b7684; }
+  .calc .row .v { font-weight: bold; }
+  .result { margin-top: 14px; padding: 12px 14px; border-radius: 10px; }
+  .result.ok { background: #e4f5ea; }
+  .result.warn { background: #fdf0d5; }
+  .result .big { font-size: 20px; font-weight: bold; }
+  .result .sub { font-size: 12px; color: #46505c; margin-top: 2px; }
+
+  .formula { background: #f4f6f9; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #46505c; line-height: 1.8; margin-top: 12px; }
+  .formula code { background: #fff; padding: 1px 5px; border-radius: 4px; color: #3b6fb0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #e2e7ec; padding: 6px 8px; text-align: left; }
+  th { background: #f4f6f9; color: #46505c; }
+  .tag { display:inline-block;font-size:11px;font-weight:bold;padding:1px 7px;border-radius:4px; }
+  .g{background:#e4f5ea;color:#1f8b4c;} .a{background:#fdf0d5;color:#a86a12;}
+  .safe-banner { background:#e8f0fb;border:1px solid #b8d0ee;border-radius:8px;padding:10px 14px;font-size:13px;color:#2b5486;margin-bottom:16px; }
+  @media print { body{background:#fff;padding:0;} .note{display:none;} }
+</style>
+</head>
+<body>
+  <h1>损耗与工资试算效果样张</h1>
+  <p class="note">系统按工序自动算损耗、判断是否超标、试算计件工资。让老板"损耗有据、工资有据"，员工"心里有数"。</p>
+
+  <div class="wrap">
+    <div class="safe-banner">
+      🛡 <b>请放心</b>：一期工资<b>只试算参考、不真实发放、不真实扣款</b>；损耗<b>只记录和提醒</b>，超标走审批，不自动扣钱。等您觉得数准了，二期再启用正式结算。
+    </div>
+
+    <!-- 损耗试算 -->
+    <div class="card">
+      <div class="card-head">① 损耗试算（以抛光工序为例）</div>
+      <div class="card-body">
+        <div class="calc">
+          <div class="row"><span class="n">投入重量</span><span class="v">100.00 克</span></div>
+          <div class="row"><span class="n">产出重量</span><span class="v">96.00 克</span></div>
+          <div class="row"><span class="n">合理转移（留样/返修）</span><span class="v">1.00 克</span></div>
+          <div class="row"><span class="n">标准损耗率</span><span class="v">2.0%</span></div>
+        </div>
+        <div class="result warn">
+          <div class="big">实际损耗 3.00 克（3.0%）· 超标 0.98 克</div>
+          <div class="sub">标准允许 2.00 克，超出部分自动触发审批，责任归因待主管确认</div>
+        </div>
+        <div class="formula">
+          计算口径（客户可确认调整）：<br/>
+          本工序损耗 = 投入 − 产出 − 合理转移 = <code>100 − 96 − 1 = 3.00 克</code><br/>
+          允许损耗 = 投入 × 标准损耗率 = <code>100 × 2% = 2.00 克</code><br/>
+          超标损耗 = 实际 − 允许 = <code>3.00 − 2.00 = 0.98 克</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- 工资试算 -->
+    <div class="card">
+      <div class="card-head">② 计件工资试算（王强 · 2026-07-09）</div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th>工序</th><th>合格数量</th><th>计件单价</th><th>正常计件</th><th>返工</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>雕刻</td><td>320 件</td><td>¥0.30</td><td>¥96.00</td><td>—</td><td><span class="tag g">正常</span></td></tr>
+            <tr><td>抛光</td><td>240 件</td><td>¥0.25</td><td>¥60.00</td><td>8 件</td><td><span class="tag a">返工不计工资</span></td></tr>
+          </tbody>
+        </table>
+        <div class="result ok">
+          <div class="big">今日试算合计：¥156.00</div>
+          <div class="sub">返工 8 件不计工资，仅记录；理论扣损金额 ¥0（一期不扣）。以上为试算，不作为发放依据。</div>
+        </div>
+        <div class="formula">
+          单工序工资 = 合格数量 × 工序计件单价快照；返工报工不计工资；单价按工序实例创建时快照，后续调价不影响历史工单。
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
