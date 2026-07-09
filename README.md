@@ -172,6 +172,30 @@ scripts/   本地开发和验证脚本
 
 ## 常用命令
 
+一键启动前后端本地开发环境（推荐）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1
+```
+
+或直接双击项目根目录的 `dev-up.cmd`。该脚本会：
+
+- 启动后端 Spring Boot（端口 8080，首次自动下载内置 Maven）。
+- 启动前端 Vite（端口 5173，首次自动 `pnpm install`）。
+- 前端已配置 `/api` 代理到后端 8080，启动后自动打开浏览器 `http://localhost:5173`。
+
+默认在两个独立 PowerShell 窗口分别启动前后端，便于分别看日志、关窗口即停。常用开关：
+
+```powershell
+# 仅启动后端 / 仅启动前端
+powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -BackendOnly
+powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -FrontendOnly
+# 在当前窗口以后台作业方式启动（日志混合，Ctrl+C 一并停止）
+powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -SameWindow
+# 启动后不自动打开浏览器
+powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -NoBrowser
+```
+
 后端测试：
 
 ```powershell
