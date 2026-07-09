@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>老板首页看板样张 - 珠宝来料加工系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 20px; }
+  h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+  .note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 18px; }
+  .board { max-width: 960px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.1); overflow: hidden; }
+  .top { background: #1f2733; color: #fff; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+  .top .title { font-size: 16px; font-weight: bold; }
+  .top .who { font-size: 12px; opacity: .8; }
+  .body { padding: 18px 20px; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .kpi { border-radius: 10px; padding: 12px 14px; color: #fff; }
+  .kpi .v { font-size: 26px; font-weight: bold; }
+  .kpi .l { font-size: 12px; opacity: .9; margin-top: 2px; }
+  .k1 { background: #3b6fb0; } .k2 { background: #2f9e57; } .k3 { background: #d99a2b; } .k4 { background: #c85a6a; }
+
+  .cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+  .panel { border: 1px solid #e2e7ec; border-radius: 10px; padding: 12px 14px; }
+  .panel h3 { font-size: 14px; margin-bottom: 8px; padding-left: 6px; border-left: 3px solid #3b6fb0; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border-bottom: 1px solid #eef1f4; padding: 6px 6px; text-align: left; }
+  th { color: #6b7684; font-weight: 600; }
+  .tag { display: inline-block; font-size: 11px; font-weight: bold; padding: 1px 7px; border-radius: 4px; }
+  .g { background: #e4f5ea; color: #1f8b4c; } .a { background: #fdf0d5; color: #a86a12; } .r { background: #fde8ea; color: #c0334a; }
+  .alert { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 8px; }
+  .alert.r { background: #fde8ea; color: #c0334a; } .alert.a { background: #fdf0d5; color: #a86a12; }
+  @media print { body { background:#fff; padding:0; } .note { display:none; } }
+</style>
+</head>
+<body>
+  <h1>老板首页看板样张</h1>
+  <p class="note">老板/管理者打开系统第一眼看到的：今天收发多少、在制多少、有没有异常要处理，一屏看全，不用问人。</p>
+
+  <div class="board">
+    <div class="top">
+      <div class="title">生产运营总控台 · 2026-07-09</div>
+      <div class="who">王总（总经理）· 全部数据</div>
+    </div>
+    <div class="body">
+      <div class="kpi-grid">
+        <div class="kpi k1"><div class="v">6 单</div><div class="l">今日来料入库</div></div>
+        <div class="kpi k2"><div class="v">4 单</div><div class="l">今日出货发货</div></div>
+        <div class="kpi k3"><div class="v">18</div><div class="l">在制工单</div></div>
+        <div class="kpi k4"><div class="v">3</div><div class="l">待处理异常</div></div>
+      </div>
+
+      <div class="cols">
+        <div class="panel">
+          <h3>今日单据池</h3>
+          <table>
+            <thead><tr><th>单号</th><th>客户</th><th>环节</th><th>状态</th></tr></thead>
+            <tbody>
+              <tr><td>CC-...001</td><td>恒信珠宝</td><td>抛光</td><td><span class="tag a">加工中</span></td></tr>
+              <tr><td>CC-...002</td><td>雅辰饰品</td><td>雕刻</td><td><span class="tag a">加工中</span></td></tr>
+              <tr><td>CC-...003</td><td>海蓝首饰</td><td>质检</td><td><span class="tag g">待质检</span></td></tr>
+              <tr><td>CK-...001</td><td>恒信珠宝</td><td>出货</td><td><span class="tag g">已发货</span></td></tr>
+              <tr><td>CC-...004</td><td>雅辰饰品</td><td>拆包</td><td><span class="tag a">待入库</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h3>需要老板关注的异常</h3>
+          <div class="alert r">⚠ 损耗超标：CC-...002 抛光损耗 3.1%，超标准 2%，待审批</div>
+          <div class="alert a">⚠ 返工：CC-...003 有 8 件返工（表面划痕）</div>
+          <div class="alert a">⚠ 交期临近：CC-...005 距交货 2 天，进度 60%</div>
+
+          <h3 style="margin-top:14px;">今日概览</h3>
+          <table>
+            <tbody>
+              <tr><td>入库重量</td><td><b>128.6 克</b></td></tr>
+              <tr><td>出货重量</td><td><b>96.2 克</b></td></tr>
+              <tr><td>今日损耗合计</td><td><b>1.8 克</b>（其中超标 0.6 克）</td></tr>
+              <tr><td>工资试算（今日）</td><td><b>¥ 1,240</b>（仅试算，不发放）</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px;">效果样张，真实数据由系统按当天实际业务自动汇总。</p>
+</body>
+</html>

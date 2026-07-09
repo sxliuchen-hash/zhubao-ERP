@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>各角色界面一览 - 珠宝来料加工系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 24px; }
+  h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+  .note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 20px; }
+  .grid { max-width: 980px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .role { background: #fff; border-radius: 10px; box-shadow: 0 3px 10px rgba(0,0,0,.08); overflow: hidden; }
+  .role-head { padding: 10px 12px; color: #fff; }
+  .role-head .r { font-size: 14px; font-weight: bold; }
+  .role-head .d { font-size: 11px; opacity: .85; }
+  .role-body { padding: 10px 12px; }
+  .role-body li { list-style: none; font-size: 12px; padding: 5px 0; border-bottom: 1px dashed #eef1f4; display: flex; justify-content: space-between; }
+  .role-body li .n { color: #46505c; }
+  .role-body li .b { font-weight: bold; }
+  .scope { font-size: 11px; color: #6b7684; margin-top: 8px; }
+  .c1{background:#1f2733;} .c2{background:#3b6fb0;} .c3{background:#2f9e57;} .c4{background:#d99a2b;} .c5{background:#c85a6a;} .c6{background:#6b46b0;}
+  @media print { body{background:#fff;padding:0;} .note{display:none;} }
+</style>
+</head>
+<body>
+  <h1>各角色界面一览（每个岗位看到的不一样）</h1>
+  <p class="note">系统按岗位分工，每个人打开只看到跟自己有关的活和数据，不会看到无关的东西，也不会看错。</p>
+
+  <div class="grid">
+    <div class="role">
+      <div class="role-head c1"><div class="r">老板 / 总经理</div><div class="d">经营全局</div></div>
+      <div class="role-body">
+        <li><span class="n">今日收发货</span><span class="b">6 入 / 4 出</span></li>
+        <li><span class="n">在制工单</span><span class="b">18</span></li>
+        <li><span class="n">待审批（损耗超标等）</span><span class="b">3</span></li>
+        <li><span class="n">损耗异常</span><span class="b">1</span></li>
+        <li><span class="n">延期风险订单</span><span class="b">1</span></li>
+        <div class="scope">数据范围：全部</div>
+      </div>
+    </div>
+
+    <div class="role">
+      <div class="role-head c2"><div class="r">收货员</div><div class="d">来料签收</div></div>
+      <div class="role-body">
+        <li><span class="n">待入库</span><span class="b">4</span></li>
+        <li><span class="n">待补资料</span><span class="b">1</span></li>
+        <li><span class="n">待称重</span><span class="b">2</span></li>
+        <li><span class="n">母单标签待打印</span><span class="b">3</span></li>
+        <div class="scope">数据范围：入库相关</div>
+      </div>
+    </div>
+
+    <div class="role">
+      <div class="role-head c3"><div class="r">车间组长</div><div class="d">排产派工</div></div>
+      <div class="role-body">
+        <li><span class="n">待拆分母单</span><span class="b">2</span></li>
+        <li><span class="n">待派工</span><span class="b">5</span></li>
+        <li><span class="n">加工中</span><span class="b">12</span></li>
+        <li><span class="n">返工中</span><span class="b">2</span></li>
+        <div class="scope">数据范围：本班组</div>
+      </div>
+    </div>
+
+    <div class="role">
+      <div class="role-head c4"><div class="r">操作工（手机）</div><div class="d">扫码报工</div></div>
+      <div class="role-body">
+        <li><span class="n">我的待办工序</span><span class="b">3</span></li>
+        <li><span class="n">今日完成</span><span class="b">356 件</span></li>
+        <li><span class="n">我的返工任务</span><span class="b">1</span></li>
+        <li><span class="n">工资试算（今日）</span><span class="b">¥ 156</span></li>
+        <div class="scope">数据范围：仅本人</div>
+      </div>
+    </div>
+
+    <div class="role">
+      <div class="role-head c5"><div class="r">质检员</div><div class="d">质检返工</div></div>
+      <div class="role-body">
+        <li><span class="n">待质检</span><span class="b">6</span></li>
+        <li><span class="n">今日合格</span><span class="b">280 件</span></li>
+        <li><span class="n">今日返工</span><span class="b">8 件</span></li>
+        <li><span class="n">今日报废</span><span class="b">0</span></li>
+        <div class="scope">数据范围：质检相关</div>
+      </div>
+    </div>
+
+    <div class="role">
+      <div class="role-head c6"><div class="r">库管员</div><div class="d">出货发货</div></div>
+      <div class="role-body">
+        <li><span class="n">待打包出货单</span><span class="b">3</span></li>
+        <li><span class="n">待发货</span><span class="b">2</span></li>
+        <li><span class="n">库存异常</span><span class="b">0</span></li>
+        <li><span class="n">出货标签待打印</span><span class="b">2</span></li>
+        <div class="scope">数据范围：库存和出货</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:16px;">效果样张，具体菜单和权限由系统按角色配置，每个岗位登录只看到自己该管的。</p>
+</body>
+</html>

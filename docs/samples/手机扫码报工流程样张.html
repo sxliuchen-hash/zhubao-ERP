@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>手机扫码报工流程 - 珠宝来料加工系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 24px; }
+  h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+  .note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 22px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; align-items: center; }
+  .step-wrap { text-align: center; }
+  .step-no { font-size: 13px; color: #3b6fb0; font-weight: bold; margin-bottom: 6px; }
+  .phone { width: 230px; }
+  .phone-frame { border: 8px solid #1f2733; border-radius: 26px; overflow: hidden; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  .phone-top { background: #1f2733; height: 18px; }
+  .screen { padding: 14px; min-height: 300px; }
+  .s-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; }
+  .scan-area { border: 2px dashed #3b6fb0; border-radius: 10px; height: 120px; display: flex; align-items: center; justify-content: center; color: #3b6fb0; font-size: 13px; margin-bottom: 10px; background: #f2f6fc; }
+  .task { border: 1px solid #e2e7ec; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 8px; }
+  .task b { display:block; }
+  .field { font-size: 12px; margin: 8px 0; }
+  .field label { display:block; color:#6b7684; margin-bottom:3px; }
+  .field .box { border:1px solid #d0d6dd; border-radius:6px; padding:6px 8px; background:#fff; }
+  .btn { background:#3b6fb0; color:#fff; text-align:center; padding:9px; border-radius:8px; font-size:13px; font-weight:bold; margin-top:8px; }
+  .ok { text-align:center; padding:16px 0; }
+  .ok .check { width:56px;height:56px;border-radius:50%;background:#2f9e57;color:#fff;font-size:30px;line-height:56px;margin:0 auto 10px; }
+  .ok .msg { font-size:14px;font-weight:bold;color:#1f8b4c; }
+  .ok .sub { font-size:12px;color:#6b7684;margin-top:6px; }
+  .arrow { font-size:28px; color:#9aa4b0; }
+  .cap { font-size:12px; color:#6b7684; margin-top:8px; }
+  .tips { max-width:760px;margin:24px auto 0;background:#fff;border-radius:10px;padding:14px 18px;font-size:13px; }
+  .tips li { margin:5px 0; }
+  @media print { body{background:#fff;padding:0;} .note{display:none;} }
+</style>
+</head>
+<body>
+  <h1>手机扫码报工流程（工人怎么用）</h1>
+  <p class="note">工人不用学复杂系统，手机扫一下码，3 步就报完工。一期先用手机扫码，扫码枪到货后再接。</p>
+
+  <div class="flow">
+    <div class="step-wrap">
+      <div class="step-no">第 1 步 · 扫码</div>
+      <div class="phone"><div class="phone-frame"><div class="phone-top"></div><div class="screen">
+        <div class="s-title">扫子工单二维码</div>
+        <div class="scan-area">📷 对准标签二维码</div>
+        <div class="task" style="color:#6b7684;">扫描后自动识别是哪个活，无需手动查找</div>
+      </div></div></div>
+      <p class="cap">对着周转盒上的标签扫一下</p>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="step-wrap">
+      <div class="step-no">第 2 步 · 填数量</div>
+      <div class="phone"><div class="phone-frame"><div class="phone-top"></div><div class="screen">
+        <div class="s-title">ZD-...-001 · 抛光</div>
+        <div class="task"><b>恒信珠宝 · 18K 金戒托</b>应做 120 件</div>
+        <div class="field"><label>完成数量</label><div class="box">118</div></div>
+        <div class="field"><label>产出重量(克)</label><div class="box">13.10</div></div>
+        <div class="field"><label>损耗(自动算)</label><div class="box" style="color:#a86a12;">0.15 克</div></div>
+        <div class="btn">提交报工</div>
+      </div></div></div>
+      <p class="cap">系统自动带出当前工序，只填数量和重量</p>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="step-wrap">
+      <div class="step-no">第 3 步 · 完成</div>
+      <div class="phone"><div class="phone-frame"><div class="phone-top"></div><div class="screen">
+        <div class="ok">
+          <div class="check">✓</div>
+          <div class="msg">报工成功</div>
+          <div class="sub">抛光 118 件已记录<br/>自动流转到下一道：质检</div>
+        </div>
+        <div class="task" style="margin-top:10px;">今日我的完成：3 个工单 · 356 件</div>
+      </div></div></div>
+      <p class="cap">提交即完成，自动进下一工序</p>
+    </div>
+  </div>
+
+  <div class="tips">
+    <b>为什么工人愿意用：</b>
+    <ul>
+      <li>✅ 扫码自动定位任务，不用记单号、不用翻本子</li>
+      <li>✅ 当前工序系统自动带出，只填数量重量，3 步搞定</li>
+      <li>✅ 扫错码、非本人任务会提示，不会报错工</li>
+      <li>✅ 能看到自己今天做了多少（计件工资试算，心里有数）</li>
+      <li>✅ 网络不好时提示重试，不会重复报</li>
+    </ul>
+  </div>
+</body>
+</html>
