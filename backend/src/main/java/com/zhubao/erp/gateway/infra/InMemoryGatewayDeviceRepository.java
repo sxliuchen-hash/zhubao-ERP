@@ -79,6 +79,12 @@ public class InMemoryGatewayDeviceRepository implements GatewayDeviceRepository 
     }
 
     @Override
+    public GatewayDevice save(GatewayDevice device) {
+        devices.put(device.deviceCode(), device);
+        return device;
+    }
+
+    @Override
     public Optional<GatewayDevice> findByCode(String deviceCode) {
         return Optional.ofNullable(devices.get(deviceCode));
     }

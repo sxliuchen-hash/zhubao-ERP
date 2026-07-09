@@ -28,6 +28,9 @@ import {
   fetchRecentConsumptions,
   fetchRecentReadings,
   ingestDeviceReading,
+  registerGatewayDevice,
+  rotateGatewayDeviceKey,
+  setGatewayDeviceEnabled,
   type ConsumeReadingRequest,
   type DeviceReading,
   type DeviceReadingType,
@@ -209,6 +212,64 @@ async function consumeGatewayReading(reading: DeviceReading) {
     await refreshGateway();
   } catch (error) {
     gatewayFeedback.value = error instanceof Error ? error.message : '读数消费失败';
+  }
+}
+
+const deviceForm = ref({
+  deviceCode: '',
+  deviceName: '',
+  acceptedType: 'SCALE_WEIGHT' as DeviceReadingType,
+  deviceKey: '',
+  location: '',
+  fallbackNote: '',
+});
+const deviceAdminFeedback = ref('');
+
+async function registerDevice() {
+  deviceAdminFeedback.value = '';
+  if (!deviceForm.value.deviceCode.trim() || !deviceForm.value.deviceName.trim()) {
+    deviceAdminFeedback.value = '请填写设备编码和名称';
+    return;
+  }
+  try {
+    const device = await registerGatewayDevice({
+      deviceCode: deviceForm.value.deviceCode.trim(),
+      deviceName: deviceForm.value.deviceName.trim(),
+      acceptedTypes: [deviceForm.value.acceptedType, 'HEARTBEAT'],
+      deviceKey: deviceForm.value.deviceKey.trim() || undefined,
+      location: deviceForm.value.location.trim() || undefined,
+      fallbackNote: deviceForm.value.fallbackNote.trim() || undefined,
+    });
+    deviceAdminFeedback.value = `设备 ${device.deviceCode} 已保存`;
+    await refreshGateway();
+  } catch (error) {
+    deviceAdminFeedback.value = error instanceof Error ? error.message : '设备保存失败（需要管理员权限）';
+  }
+}
+
+async function toggleDevice(device: GatewayDeviceView) {
+  deviceAdminFeedback.value = '';
+  try {
+    await setGatewayDeviceEnabled(device.deviceCode, !device.enabled);
+    deviceAdminFeedback.value = `设备 ${device.deviceCode} 已${device.enabled ? '停用' : '启用'}`;
+    await refreshGateway();
+  } catch (error) {
+    deviceAdminFeedback.value = error instanceof Error ? error.message : '设备状态更新失败';
+  }
+}
+
+async function rotateDeviceKey(device: GatewayDeviceView) {
+  deviceAdminFeedback.value = '';
+  const newKey = typeof window !== 'undefined' ? window.prompt(`为 ${device.deviceCode} 输入新设备密钥`) : '';
+  if (!newKey || !newKey.trim()) {
+    return;
+  }
+  try {
+    await rotateGatewayDeviceKey(device.deviceCode, newKey.trim());
+    deviceAdminFeedback.value = `设备 ${device.deviceCode} 密钥已轮换`;
+    await refreshGateway();
+  } catch (error) {
+    deviceAdminFeedback.value = error instanceof Error ? error.message : '密钥轮换失败';
   }
 }
 
@@ -1307,8 +1368,9 @@ function nextIntegrationActionFor(deviceCode: string): string {
           <div class="section-heading">
             <div>
               <h3>已注册设备</h3>
-              <p>凭密钥推送读数，停用设备立即拒绝接入。</p>
+              <p>凭密钥推送读数，停用设备立即拒绝接入。设备管理需管理员权限。</p>
             </div>
+            <StatusBadge label="ADMIN 管理" tone="violet" />
           </div>
           <div class="integration-list compact-integration-list">
             <article v-for="device in gatewayDevices" :key="device.deviceCode">
@@ -1319,8 +1381,49 @@ function nextIntegrationActionFor(deviceCode: string): string {
               </div>
               <StatusBadge :label="device.enabled ? '启用' : '停用'" :tone="device.enabled ? 'green' : 'gray'" />
               <p>近期读数 {{ device.recentReadings }} 条 / {{ device.lastReadingAt || '暂无' }}</p>
+              <div class="device-admin-actions">
+                <button class="table-action" type="button" @click="toggleDevice(device)">
+                  {{ device.enabled ? '停用' : '启用' }}
+                </button>
+                <button class="table-action" type="button" @click="rotateDeviceKey(device)">轮换密钥</button>
+              </div>
             </article>
             <p v-if="gatewayDevices.length === 0" class="empty-hint">暂无注册设备或后端未连接。</p>
+          </div>
+
+          <form class="gateway-form" @submit.prevent="registerDevice">
+            <label>
+              <span>新设备编码</span>
+              <input v-model="deviceForm.deviceCode" placeholder="如 SCALE-02" aria-label="新设备编码" />
+            </label>
+            <label>
+              <span>设备名称</span>
+              <input v-model="deviceForm.deviceName" placeholder="如 二号称重台" aria-label="设备名称" />
+            </label>
+            <label>
+              <span>主读数类型</span>
+              <select v-model="deviceForm.acceptedType" aria-label="主读数类型">
+                <option v-for="option in readingTypeOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>设备密钥</span>
+              <input v-model="deviceForm.deviceKey" type="password" placeholder="新建必填" aria-label="设备密钥" />
+            </label>
+            <label>
+              <span>部署位置</span>
+              <input v-model="deviceForm.location" placeholder="可选" aria-label="部署位置" />
+            </label>
+            <label>
+              <span>失败兜底</span>
+              <input v-model="deviceForm.fallbackNote" placeholder="可选" aria-label="失败兜底" />
+            </label>
+            <button class="primary-button" type="submit">注册 / 更新设备</button>
+          </form>
+          <div v-if="deviceAdminFeedback" class="operation-feedback">
+            <span>{{ deviceAdminFeedback }}</span>
           </div>
         </div>
       </div>

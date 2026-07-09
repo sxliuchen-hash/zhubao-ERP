@@ -32,6 +32,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/business/operations/loss-approvals", PermissionCode.BUSINESS_LOSS_APPROVAL),
             Map.entry("/api/machine-outputs", PermissionCode.MACHINE_OUTPUT_SUBMIT),
             Map.entry("/api/hardware/gateway/consumptions", PermissionCode.GATEWAY_READING_CONSUME),
+            Map.entry("/api/hardware/gateway/devices", PermissionCode.GATEWAY_DEVICE_MANAGE),
             Map.entry("/api/auth/accounts", PermissionCode.AUTH_ACCOUNT_MANAGE),
             Map.entry("/api/documents/attachments/uploads", PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD),
             Map.entry("/api/video-clip-tasks", PermissionCode.VIDEO_TASK_OPERATE)
@@ -41,6 +42,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
     private final Pattern registerImportReviewPath = Pattern.compile("^/api/register-import/batches/[^/]+/rows/\\d+/corrections$");
     private final Pattern registerImportPostingPath = Pattern.compile("^/api/register-import/batches/[^/]+/posting-commands$");
     private final Pattern authAccountStatusPath = Pattern.compile("^/api/auth/accounts/[^/]+/(status|unlock)$");
+    private final Pattern gatewayDeviceManagePath = Pattern.compile("^/api/hardware/gateway/devices/[^/]+/(status|rotate-key)$");
 
     public PermissionGuardInterceptor(
             OperatorContextResolver operatorContextResolver,
@@ -79,6 +81,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         }
         if (authAccountStatusPath.matcher(path).matches()) {
             return PermissionCode.AUTH_ACCOUNT_MANAGE;
+        }
+        if (gatewayDeviceManagePath.matcher(path).matches()) {
+            return PermissionCode.GATEWAY_DEVICE_MANAGE;
         }
         if (videoTaskOperationPath.matcher(path).matches()) {
             return PermissionCode.VIDEO_TASK_OPERATE;

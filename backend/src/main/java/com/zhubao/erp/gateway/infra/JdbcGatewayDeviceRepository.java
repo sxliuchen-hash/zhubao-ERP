@@ -61,6 +61,15 @@ public class JdbcGatewayDeviceRepository implements GatewayDeviceRepository {
                 "拆包台", "截取失败时人工上传 MP4 兜底", now));
     }
 
+    @Override
+    public GatewayDevice save(GatewayDevice device) {
+        if (findByCode(device.deviceCode()).isPresent()) {
+            return update(device);
+        }
+        insert(device);
+        return device;
+    }
+
     private void insert(GatewayDevice device) {
         String sql = """
                 insert into hw_gateway_device (
@@ -80,7 +89,30 @@ public class JdbcGatewayDeviceRepository implements GatewayDeviceRepository {
             statement.setString(8, device.createdAt());
             statement.executeUpdate();
         } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to seed gateway device: " + device.deviceCode(), ex);
+            throw new IllegalStateException("Failed to save gateway device: " + device.deviceCode(), ex);
+        }
+    }
+
+    private GatewayDevice update(GatewayDevice device) {
+        String sql = """
+                update hw_gateway_device
+                   set device_name = ?, accepted_types = ?, device_key_hash = ?, enabled = ?,
+                       location = ?, fallback_note = ?
+                 where device_code = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, device.deviceName());
+            statement.setString(2, serializeTypes(device.acceptedTypes()));
+            statement.setString(3, device.deviceKeyHash());
+            statement.setBoolean(4, device.enabled());
+            statement.setString(5, device.location());
+            statement.setString(6, device.fallbackNote());
+            statement.setString(7, device.deviceCode());
+            statement.executeUpdate();
+            return device;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to update gateway device: " + device.deviceCode(), ex);
         }
     }
 

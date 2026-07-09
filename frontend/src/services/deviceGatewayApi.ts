@@ -103,8 +103,44 @@ export async function fetchReadingsByDevice(deviceCode: string, limit = 50): Pro
   );
 }
 
+export interface RegisterGatewayDeviceRequest {
+  deviceCode: string;
+  deviceName: string;
+  acceptedTypes: DeviceReadingType[];
+  deviceKey?: string;
+  enabled?: boolean;
+  location?: string;
+  fallbackNote?: string;
+}
+
 export async function fetchGatewayDevices(): Promise<GatewayDeviceView[]> {
   return apiGet<GatewayDeviceView[]>('/api/hardware/gateway/devices');
+}
+
+export async function registerGatewayDevice(
+  request: RegisterGatewayDeviceRequest,
+): Promise<GatewayDeviceView> {
+  return apiPost<RegisterGatewayDeviceRequest, GatewayDeviceView>('/api/hardware/gateway/devices', request);
+}
+
+export async function setGatewayDeviceEnabled(
+  deviceCode: string,
+  enabled: boolean,
+): Promise<GatewayDeviceView> {
+  return apiPost<{ enabled: boolean }, GatewayDeviceView>(
+    `/api/hardware/gateway/devices/${encodeURIComponent(deviceCode)}/status`,
+    { enabled },
+  );
+}
+
+export async function rotateGatewayDeviceKey(
+  deviceCode: string,
+  deviceKey: string,
+): Promise<GatewayDeviceView> {
+  return apiPost<{ deviceKey: string }, GatewayDeviceView>(
+    `/api/hardware/gateway/devices/${encodeURIComponent(deviceCode)}/rotate-key`,
+    { deviceKey },
+  );
 }
 
 export async function fetchGatewaySummary(): Promise<GatewayIngestionSummary> {

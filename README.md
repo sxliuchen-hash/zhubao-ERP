@@ -140,6 +140,7 @@
 - M3.122 硬件设备网关与读数接入基线，新增 `gateway` 模块、设备密钥鉴权、`DeviceReadingNormalizer` 归一化器、内存/JDBC 双仓储、`V25__m3_hardware_gateway_contract.sql` 和 `POST /api/hardware/gateway/readings`、`GET /api/hardware/gateway/readings`、`GET /api/hardware/gateway/devices`、`GET /api/hardware/gateway/devices/{deviceCode}/readings`、`GET /api/hardware/gateway/summary`。低成本硬件（串口转 HTTP 桥、ESP32、浏览器桥、扫码枪中继）无需厂商 SDK，凭 PBKDF2 哈希设备密钥即可推送称重、扫码、打印回执、视频截取标记和心跳读数；读数经归一化后按 READY/WARNING/BLOCKED 分级并保留原始报文供人工兜底，软硬件联动作业台新增“设备网关读数接入”面板。该边界打通设备到系统的标准化接入通道，不代表厂商 SDK/协议直连、真实设备型号冻结或读数自动写业务台账完成。
 - M3.123 设备读数消费闭环，新增 `GATEWAY_READING_CONSUME` 权限、`ReadingConsumption` 可追责桥接记录、内存/JDBC 双仓储、`V26__m3_hardware_gateway_consumption_contract.sql` 和 `POST /api/hardware/gateway/consumptions`、`GET /api/hardware/gateway/consumptions`。操作工/车间组长/质检员/库管员/收货员凭登录会话或评审角色头把 READY/WARNING 读数消费为称重交接、扫码报工、打印确认、视频关联意图，BLOCKED 读数只能忽略(DISMISS)，同一读数拒绝重复消费；消费记录操作人、角色、业务对象和时间，软硬件联动作业台读数表新增消费动作和消费记录表。该边界把设备遥测桥接到可追责的人工业务动作，消费本身不写库存台账，仍需继续把称重/扫码消费联动到真实业务命令。
 - M3.124 设备网关限流防滥用，新增 `GatewayRateLimiter` 滑动窗口限流器和 `GatewayRateLimitException`（映射 HTTP 429）。设备读数接入端点凭设备密钥鉴权而非人工 RBAC，因此单独按设备做滚动窗口限流（默认 60 秒内 120 条，可经 `ZHUBAO_GATEWAY_RATE_LIMIT_MAX` / `ZHUBAO_GATEWAY_RATE_LIMIT_WINDOW_SECONDS` 配置），避免桥接程序配置异常或密钥泄漏导致读数洪泛，各设备配额相互独立。该边界补齐设备侧接入的滥用防护，不代表签名防重放、mTLS 或完整设备身份体系完成。
+- M3.125 设备网关设备管理，新增 `GATEWAY_DEVICE_MANAGE` 权限（仅 ADMIN/总经理）、`RegisterGatewayDeviceCommand` 和 `POST /api/hardware/gateway/devices`、`POST /api/hardware/gateway/devices/{deviceCode}/status`、`POST /api/hardware/gateway/devices/{deviceCode}/rotate-key`。管理员可注册/更新设备、启停设备、轮换设备密钥（PBKDF2 重新哈希，旧密钥立即失效），设备从只读 seed 推进到可运营；停用设备立即拒绝读数接入，更新时空密钥保留原哈希。前端软硬件联动作业台新增设备注册表单和启停/轮换密钥动作。该边界补齐设备生命周期运营，不代表签名防重放、mTLS 或完整设备身份体系完成。
 
 ## 目录结构
 
@@ -365,6 +366,9 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/hardware/gateway/summary`
 - `POST /api/hardware/gateway/consumptions`
 - `GET /api/hardware/gateway/consumptions`
+- `POST /api/hardware/gateway/devices`
+- `POST /api/hardware/gateway/devices/{deviceCode}/status`
+- `POST /api/hardware/gateway/devices/{deviceCode}/rotate-key`
 - `GET /api/documents/summary`
 - `GET /api/documents/packages`
 - `GET /api/documents/attachments`

@@ -13,6 +13,7 @@ import com.zhubao.erp.gateway.domain.GatewayIngestionSummary;
 import com.zhubao.erp.gateway.domain.ReadingConsumption;
 import com.zhubao.erp.gateway.domain.ReadingConsumptionIntent;
 import com.zhubao.erp.gateway.domain.ReadingConsumptionRepository;
+import com.zhubao.erp.gateway.domain.RegisterGatewayDeviceCommand;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.gateway.error.GatewayRateLimitException;
@@ -159,6 +160,84 @@ public class DeviceGatewayService {
 
     public List<ReadingConsumption> recentConsumptions(int limit) {
         return consumptionRepository.findRecent(clampLimit(limit));
+    }
+
+    /**
+     * Register a new gateway device or update an existing one. On create the device key is required;
+     * on update a blank key keeps the current hash. Returns the safe view (never the key hash).
+     */
+    public GatewayDeviceView registerDevice(RegisterGatewayDeviceCommand command) {
+        if (command == null) {
+            throw new BusinessException("设备注册命令不能为空");
+        }
+        String deviceCode = command.deviceCode().trim();
+        List<DeviceReadingType> acceptedTypes = parseTypes(command.acceptedTypes());
+        if (acceptedTypes.isEmpty()) {
+            throw new BusinessException("至少选择一种读数类型");
+        }
+        var existing = deviceRepository.findByCode(deviceCode);
+        String keyHash;
+        String createdAt;
+        if (existing.isPresent()) {
+            keyHash = command.deviceKey() == null || command.deviceKey().isBlank()
+                    ? existing.get().deviceKeyHash()
+                    : passwordHasher.hash(command.deviceKey().trim());
+            createdAt = existing.get().createdAt();
+        } else {
+            if (command.deviceKey() == null || command.deviceKey().isBlank()) {
+                throw new BusinessException("新建设备必须提供设备密钥");
+            }
+            keyHash = passwordHasher.hash(command.deviceKey().trim());
+            createdAt = TIME_FORMATTER.format(LocalDateTime.now());
+        }
+        GatewayDevice device = new GatewayDevice(
+                deviceCode,
+                command.deviceName().trim(),
+                acceptedTypes,
+                keyHash,
+                command.enabled() == null || command.enabled(),
+                blankToEmpty(command.location()),
+                blankToEmpty(command.fallbackNote()),
+                createdAt
+        );
+        GatewayDevice saved = deviceRepository.save(device);
+        return toView(saved, readingRepository.findRecent(RECENT_WINDOW));
+    }
+
+    public GatewayDeviceView setDeviceEnabled(String deviceCode, boolean enabled) {
+        GatewayDevice device = requireDevice(deviceCode);
+        GatewayDevice saved = deviceRepository.save(new GatewayDevice(
+                device.deviceCode(), device.deviceName(), device.acceptedTypes(), device.deviceKeyHash(),
+                enabled, device.location(), device.fallbackNote(), device.createdAt()));
+        return toView(saved, readingRepository.findRecent(RECENT_WINDOW));
+    }
+
+    public GatewayDeviceView rotateDeviceKey(String deviceCode, String newDeviceKey) {
+        if (newDeviceKey == null || newDeviceKey.isBlank()) {
+            throw new BusinessException("新设备密钥不能为空");
+        }
+        GatewayDevice device = requireDevice(deviceCode);
+        GatewayDevice saved = deviceRepository.save(new GatewayDevice(
+                device.deviceCode(), device.deviceName(), device.acceptedTypes(),
+                passwordHasher.hash(newDeviceKey.trim()), device.enabled(),
+                device.location(), device.fallbackNote(), device.createdAt()));
+        return toView(saved, readingRepository.findRecent(RECENT_WINDOW));
+    }
+
+    private GatewayDevice requireDevice(String deviceCode) {
+        if (deviceCode == null || deviceCode.isBlank()) {
+            throw new BusinessException("缺少设备编码");
+        }
+        return deviceRepository.findByCode(deviceCode.trim())
+                .orElseThrow(() -> new BusinessException("未注册的设备：" + deviceCode));
+    }
+
+    private List<DeviceReadingType> parseTypes(List<String> rawTypes) {
+        return rawTypes.stream()
+                .map(DeviceReadingType::fromString)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     public List<GatewayDeviceView> devices() {

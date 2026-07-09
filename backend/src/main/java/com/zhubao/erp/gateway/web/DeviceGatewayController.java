@@ -7,6 +7,7 @@ import com.zhubao.erp.gateway.domain.DeviceReading;
 import com.zhubao.erp.gateway.domain.GatewayDeviceView;
 import com.zhubao.erp.gateway.domain.GatewayIngestionSummary;
 import com.zhubao.erp.gateway.domain.ReadingConsumption;
+import com.zhubao.erp.gateway.domain.RegisterGatewayDeviceCommand;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import jakarta.servlet.http.HttpServletRequest;
@@ -82,5 +83,32 @@ public class DeviceGatewayController {
     @GetMapping("/consumptions")
     public ApiResponse<List<ReadingConsumption>> recentConsumptions(@RequestParam(defaultValue = "50") int limit) {
         return ApiResponse.ok(service.recentConsumptions(limit));
+    }
+
+    @PostMapping("/devices")
+    public ApiResponse<GatewayDeviceView> registerDevice(@Valid @RequestBody RegisterGatewayDeviceCommand command) {
+        return ApiResponse.ok(service.registerDevice(command));
+    }
+
+    @PostMapping("/devices/{deviceCode}/status")
+    public ApiResponse<GatewayDeviceView> setStatus(
+            @PathVariable String deviceCode,
+            @RequestBody DeviceStatusRequest request
+    ) {
+        return ApiResponse.ok(service.setDeviceEnabled(deviceCode, request.enabled()));
+    }
+
+    @PostMapping("/devices/{deviceCode}/rotate-key")
+    public ApiResponse<GatewayDeviceView> rotateKey(
+            @PathVariable String deviceCode,
+            @RequestBody RotateKeyRequest request
+    ) {
+        return ApiResponse.ok(service.rotateDeviceKey(deviceCode, request.deviceKey()));
+    }
+
+    public record DeviceStatusRequest(boolean enabled) {
+    }
+
+    public record RotateKeyRequest(String deviceKey) {
     }
 }

@@ -5,6 +5,7 @@ import com.zhubao.erp.gateway.domain.ConsumeReadingCommand;
 import com.zhubao.erp.gateway.domain.DeviceReading;
 import com.zhubao.erp.gateway.domain.DeviceReadingStatus;
 import com.zhubao.erp.gateway.domain.ReadingConsumption;
+import com.zhubao.erp.gateway.domain.RegisterGatewayDeviceCommand;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.gateway.error.GatewayRateLimitException;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
@@ -167,6 +168,57 @@ class DeviceGatewayServiceTest {
                 new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已被消费");
+    }
+
+    @Test
+    void registersNewDeviceAndAcceptsItsReadings() {
+        service.registerDevice(new RegisterGatewayDeviceCommand(
+                "SCALE-99", "二号称重台", java.util.List.of("SCALE_WEIGHT"), "new-scale-key", true, "二号台", "人工兜底"));
+
+        DeviceReading reading = service.ingest(new SubmitDeviceReadingCommand(
+                "SCALE-99", "new-scale-key", "SCALE_WEIGHT", "55.5g", "", "", ""));
+        assertThat(reading.status()).isEqualTo(DeviceReadingStatus.READY);
+        assertThat(service.devices()).anyMatch(device -> device.deviceCode().equals("SCALE-99"));
+    }
+
+    @Test
+    void requiresKeyWhenCreatingDevice() {
+        assertThatThrownBy(() -> service.registerDevice(new RegisterGatewayDeviceCommand(
+                "SCALE-98", "三号台", java.util.List.of("SCALE_WEIGHT"), "", true, "", "")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须提供设备密钥");
+    }
+
+    @Test
+    void disabledDeviceRejectsReadings() {
+        service.setDeviceEnabled("SCALE-01", false);
+        assertThatThrownBy(() -> service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g")))
+                .isInstanceOf(DeviceAuthenticationException.class)
+                .hasMessageContaining("已停用");
+    }
+
+    @Test
+    void rotatingKeyInvalidatesOldKey() {
+        service.rotateDeviceKey("SCALE-01", "rotated-key-value");
+
+        assertThatThrownBy(() -> service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g")))
+                .isInstanceOf(DeviceAuthenticationException.class);
+        DeviceReading reading = service.ingest(new SubmitDeviceReadingCommand(
+                "SCALE-01", "rotated-key-value", "SCALE_WEIGHT", "88.6g", "", "", ""));
+        assertThat(reading.status()).isEqualTo(DeviceReadingStatus.READY);
+    }
+
+    @Test
+    void updatingDeviceKeepsKeyWhenBlank() {
+        service.registerDevice(new RegisterGatewayDeviceCommand(
+                "SCALE-01", "称重台改名", java.util.List.of("SCALE_WEIGHT", "HEARTBEAT"), "", true, "打包台", "兜底"));
+
+        // Original demo key still works because a blank key preserves the hash.
+        DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
+        assertThat(reading.status()).isEqualTo(DeviceReadingStatus.READY);
+        assertThat(service.devices())
+                .filteredOn(device -> device.deviceCode().equals("SCALE-01"))
+                .allMatch(device -> device.deviceName().equals("称重台改名"));
     }
 
     @Test

@@ -155,4 +155,45 @@ describe('deviceGatewayApi', () => {
     expect(options?.method).toBe('POST');
     expect(fetchMock.mock.calls[1][0]).toContain('/api/hardware/gateway/consumptions?limit=10');
   });
+
+  it('registers, toggles and rotates gateway devices', async () => {
+    const view = {
+      deviceCode: 'SCALE-99',
+      deviceName: '二号称重台',
+      acceptedTypes: ['SCALE_WEIGHT'],
+      enabled: true,
+      location: '二号台',
+      fallbackNote: '人工兜底',
+      recentReadings: 0,
+      lastReadingAt: '',
+    };
+    const okResponse = (data: unknown) => ({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data }),
+    } as Response);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(okResponse(view))
+      .mockResolvedValueOnce(okResponse({ ...view, enabled: false }))
+      .mockResolvedValueOnce(okResponse(view));
+
+    const { registerGatewayDevice, setGatewayDeviceEnabled, rotateGatewayDeviceKey } = await import(
+      './deviceGatewayApi'
+    );
+
+    const registered = await registerGatewayDevice({
+      deviceCode: 'SCALE-99',
+      deviceName: '二号称重台',
+      acceptedTypes: ['SCALE_WEIGHT'],
+      deviceKey: 'new-key',
+    });
+    const disabled = await setGatewayDeviceEnabled('SCALE-99', false);
+    const rotated = await rotateGatewayDeviceKey('SCALE-99', 'rotated-key');
+
+    expect(registered.deviceCode).toBe('SCALE-99');
+    expect(disabled.enabled).toBe(false);
+    expect(rotated.deviceCode).toBe('SCALE-99');
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/hardware/gateway/devices');
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/hardware/gateway/devices/SCALE-99/status');
+    expect(fetchMock.mock.calls[2][0]).toContain('/api/hardware/gateway/devices/SCALE-99/rotate-key');
+  });
 });
