@@ -15,6 +15,7 @@ public enum PermissionCode {
     REGISTER_IMPORT_REVIEW("登记表复核补录"),
     REGISTER_IMPORT_POSTING("登记表批次入账"),
     MACHINE_OUTPUT_SUBMIT("设备产量提交"),
+    GATEWAY_READING_CONSUME("设备读数消费"),
     AUTH_ACCOUNT_MANAGE("登录账号管理"),
     APPROVAL_DECISION("审批任务决策"),
     DOCUMENT_ATTACHMENT_UPLOAD("证据附件上传"),

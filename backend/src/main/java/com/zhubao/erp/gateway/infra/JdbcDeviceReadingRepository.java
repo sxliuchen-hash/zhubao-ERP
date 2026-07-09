@@ -14,6 +14,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.gateway.repository", havingValue = "jdbc")
@@ -53,6 +54,23 @@ public class JdbcDeviceReadingRepository implements DeviceReadingRepository {
             return reading;
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to save device reading: " + reading.readingCode(), ex);
+        }
+    }
+
+    @Override
+    public Optional<DeviceReading> findByCode(String readingCode) {
+        String sql = selectSql() + " where reading_code = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, readingCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(mapReading(rs));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load device reading: " + readingCode, ex);
         }
     }
 

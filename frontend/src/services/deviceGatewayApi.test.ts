@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  consumeReading,
   fetchGatewayDevices,
   fetchGatewaySummary,
+  fetchRecentConsumptions,
   fetchRecentReadings,
   ingestDeviceReading,
 } from './deviceGatewayApi';
@@ -104,5 +106,53 @@ describe('deviceGatewayApi', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/api/hardware/gateway/devices');
     expect(fetchMock.mock.calls[1][0]).toContain('/api/hardware/gateway/readings?limit=10');
     expect(fetchMock.mock.calls[2][0]).toContain('/api/hardware/gateway/summary');
+  });
+
+  it('consumes a reading and lists recent consumptions', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: {
+            consumptionCode: 'RC-DR-SCALE-01-1',
+            readingCode: 'DR-SCALE-01-1',
+            deviceCode: 'SCALE-01',
+            readingType: 'SCALE_WEIGHT',
+            intent: 'WEIGH_HANDOVER',
+            normalizedValue: '123.45',
+            normalizedUnit: 'g',
+            normalizedCode: '',
+            businessRefType: '子工单',
+            businessRefCode: 'ZD-20260706-001',
+            operator: '周凯',
+            role: 'OPERATOR',
+            note: '打包称重',
+            consumedAt: '2026-07-09T10:05:00',
+          },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 0, message: 'ok', data: [] }),
+      } as Response);
+
+    const consumption = await consumeReading({
+      readingCode: 'DR-SCALE-01-1',
+      intent: 'WEIGH_HANDOVER',
+      businessRefType: '子工单',
+      businessRefCode: 'ZD-20260706-001',
+      note: '打包称重',
+    });
+    const recent = await fetchRecentConsumptions(10);
+
+    expect(consumption.intent).toBe('WEIGH_HANDOVER');
+    expect(consumption.operator).toBe('周凯');
+    expect(recent).toEqual([]);
+    const [path, options] = fetchMock.mock.calls[0];
+    expect(path).toContain('/api/hardware/gateway/consumptions');
+    expect(options?.method).toBe('POST');
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/hardware/gateway/consumptions?limit=10');
   });
 });

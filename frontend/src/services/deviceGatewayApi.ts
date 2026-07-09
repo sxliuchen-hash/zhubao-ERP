@@ -55,6 +55,38 @@ export interface SubmitDeviceReadingRequest {
   capturedAt?: string;
 }
 
+export type ReadingConsumptionIntent =
+  | 'WEIGH_HANDOVER'
+  | 'SCAN_TO_REPORT'
+  | 'PRINT_CONFIRM'
+  | 'VIDEO_LINK'
+  | 'DISMISS';
+
+export interface ReadingConsumption {
+  consumptionCode: string;
+  readingCode: string;
+  deviceCode: string;
+  readingType: DeviceReadingType;
+  intent: ReadingConsumptionIntent;
+  normalizedValue: string;
+  normalizedUnit: string;
+  normalizedCode: string;
+  businessRefType: string;
+  businessRefCode: string;
+  operator: string;
+  role: string;
+  note: string;
+  consumedAt: string;
+}
+
+export interface ConsumeReadingRequest {
+  readingCode: string;
+  intent: ReadingConsumptionIntent;
+  businessRefType?: string;
+  businessRefCode?: string;
+  note?: string;
+}
+
 export async function ingestDeviceReading(
   request: SubmitDeviceReadingRequest,
 ): Promise<DeviceReading> {
@@ -77,4 +109,12 @@ export async function fetchGatewayDevices(): Promise<GatewayDeviceView[]> {
 
 export async function fetchGatewaySummary(): Promise<GatewayIngestionSummary> {
   return apiGet<GatewayIngestionSummary>('/api/hardware/gateway/summary');
+}
+
+export async function consumeReading(request: ConsumeReadingRequest): Promise<ReadingConsumption> {
+  return apiPost<ConsumeReadingRequest, ReadingConsumption>('/api/hardware/gateway/consumptions', request);
+}
+
+export async function fetchRecentConsumptions(limit = 50): Promise<ReadingConsumption[]> {
+  return apiGet<ReadingConsumption[]>(`/api/hardware/gateway/consumptions?limit=${limit}`);
 }

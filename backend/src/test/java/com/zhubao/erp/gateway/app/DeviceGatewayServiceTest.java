@@ -1,13 +1,19 @@
 package com.zhubao.erp.gateway.app;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.gateway.domain.ConsumeReadingCommand;
 import com.zhubao.erp.gateway.domain.DeviceReading;
 import com.zhubao.erp.gateway.domain.DeviceReadingStatus;
+import com.zhubao.erp.gateway.domain.ReadingConsumption;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.infra.InMemoryDeviceReadingRepository;
 import com.zhubao.erp.gateway.infra.InMemoryGatewayDeviceRepository;
+import com.zhubao.erp.gateway.infra.InMemoryReadingConsumptionRepository;
 import com.zhubao.erp.security.app.PasswordHasher;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.RoleCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
@@ -29,9 +35,14 @@ class DeviceGatewayServiceTest {
         InMemoryGatewayDeviceRepository deviceRepository =
                 new InMemoryGatewayDeviceRepository(passwordHasher, environment);
         InMemoryDeviceReadingRepository readingRepository = new InMemoryDeviceReadingRepository();
+        InMemoryReadingConsumptionRepository consumptionRepository = new InMemoryReadingConsumptionRepository();
         service = new DeviceGatewayService(
-                deviceRepository, readingRepository, new DeviceReadingNormalizer(), passwordHasher);
+                deviceRepository, readingRepository, consumptionRepository,
+                new DeviceReadingNormalizer(), passwordHasher);
     }
+
+    private static final OperatorContext OPERATOR =
+            new OperatorContext("周凯", RoleCode.OPERATOR, DataScope.SELF);
 
     @Test
     void ingestsAuthenticatedScaleReading() {
@@ -95,6 +106,76 @@ class DeviceGatewayServiceTest {
         assertThat(service.readingsByDevice("SCAN-PC-01", 10)).hasSize(1);
         assertThat(service.readingsByDevice("SCAN-PC-01", 10).get(0).normalizedCode())
                 .isEqualTo("ZD-20260706-001");
+    }
+
+    @Test
+    void consumesReadyScaleReadingIntoWeighHandover() {
+        DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "ST,GS,+000123.45,g"));
+
+        ReadingConsumption consumption = service.consume(
+                new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "子工单", "ZD-20260706-001", "打包称重"),
+                OPERATOR);
+
+        assertThat(consumption.consumptionCode()).isEqualTo("RC-" + reading.readingCode());
+        assertThat(consumption.operator()).isEqualTo("周凯");
+        assertThat(consumption.role()).isEqualTo("OPERATOR");
+        assertThat(consumption.businessRefCode()).isEqualTo("ZD-20260706-001");
+        assertThat(service.recentConsumptions(10)).hasSize(1);
+    }
+
+    @Test
+    void rejectsIntentThatDoesNotMatchReadingType() {
+        DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
+
+        assertThatThrownBy(() -> service.consume(
+                new ConsumeReadingCommand(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只能用于");
+    }
+
+    @Test
+    void rejectsConsumingUnknownReading() {
+        assertThatThrownBy(() -> service.consume(
+                new ConsumeReadingCommand("DR-NOPE", "DISMISS", "", "", ""), OPERATOR))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未找到读数");
+    }
+
+    @Test
+    void blockedReadingCanOnlyBeDismissed() {
+        DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "garbled"));
+        assertThat(reading.status()).isEqualTo(DeviceReadingStatus.BLOCKED);
+
+        assertThatThrownBy(() -> service.consume(
+                new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只能忽略");
+
+        ReadingConsumption dismissed = service.consume(
+                new ConsumeReadingCommand(reading.readingCode(), "DISMISS", "", "", "无效报文"), OPERATOR);
+        assertThat(dismissed.intent().name()).isEqualTo("DISMISS");
+    }
+
+    @Test
+    void rejectsDoubleConsumption() {
+        DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
+        service.consume(new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR);
+
+        assertThatThrownBy(() -> service.consume(
+                new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已被消费");
+    }
+
+    @Test
+    void fallsBackToReadingBusinessRefWhenCommandOmitsIt() {
+        DeviceReading reading = service.ingest(new SubmitDeviceReadingCommand(
+                "SCAN-PC-01", DEVICE_KEY, "SCAN_EVENT", "WO|ZD-20260706-009|PROC=POLISH", "子工单", "ZD-20260706-009", ""));
+
+        ReadingConsumption consumption = service.consume(
+                new ConsumeReadingCommand(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR);
+
+        assertThat(consumption.businessRefCode()).isEqualTo("ZD-20260706-009");
     }
 
     private SubmitDeviceReadingCommand command(String deviceCode, String type, String payload) {

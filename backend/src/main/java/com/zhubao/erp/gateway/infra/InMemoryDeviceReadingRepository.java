@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 @Repository
@@ -26,6 +27,13 @@ public class InMemoryDeviceReadingRepository implements DeviceReadingRepository 
             readings.pollLast();
         }
         return reading;
+    }
+
+    @Override
+    public Optional<DeviceReading> findByCode(String readingCode) {
+        return readings.stream()
+                .filter(reading -> reading.readingCode().equals(readingCode))
+                .findFirst();
     }
 
     @Override

@@ -138,6 +138,7 @@
 - M3.120 附件预览短期签名令牌，新增 `zhubao.documents.preview.secret` / `ttl-minutes` 配置，`GET /api/documents/attachments/{code}/preview-url` 生成包含 `expiresAt` 与 HMAC token 的 15 分钟预览 URL，`GET /api/documents/attachments/{code}/content` 必须校验 token、附件编码和过期时间后才读取本地对象内容；移除固定 `preview-demo`。该边界补齐本地附件预览权限第一步，不代表 NAS/S3/COS 对象存储切换、版本锁定或正式审计保全完成。
 - M3.121 设备产量机器档案匹配建议，新增 `GET /api/machine-outputs/machine-match-suggestions`，按最近设备产量记录的现场机器编号聚合未绑定 `machineId` 的记录，并在已有同编号已绑定记录时返回候选机器档案 ID；生产派工报工作业台新增“机器档案匹配建议”只读清单。该边界只提供人工复核前的匹配建议，不自动改写历史产量记录，不代表完整机器主数据、批量绑定命令、签名附件或设备 SDK 直连完成。
 - M3.122 硬件设备网关与读数接入基线，新增 `gateway` 模块、设备密钥鉴权、`DeviceReadingNormalizer` 归一化器、内存/JDBC 双仓储、`V25__m3_hardware_gateway_contract.sql` 和 `POST /api/hardware/gateway/readings`、`GET /api/hardware/gateway/readings`、`GET /api/hardware/gateway/devices`、`GET /api/hardware/gateway/devices/{deviceCode}/readings`、`GET /api/hardware/gateway/summary`。低成本硬件（串口转 HTTP 桥、ESP32、浏览器桥、扫码枪中继）无需厂商 SDK，凭 PBKDF2 哈希设备密钥即可推送称重、扫码、打印回执、视频截取标记和心跳读数；读数经归一化后按 READY/WARNING/BLOCKED 分级并保留原始报文供人工兜底，软硬件联动作业台新增“设备网关读数接入”面板。该边界打通设备到系统的标准化接入通道，不代表厂商 SDK/协议直连、真实设备型号冻结或读数自动写业务台账完成。
+- M3.123 设备读数消费闭环，新增 `GATEWAY_READING_CONSUME` 权限、`ReadingConsumption` 可追责桥接记录、内存/JDBC 双仓储、`V26__m3_hardware_gateway_consumption_contract.sql` 和 `POST /api/hardware/gateway/consumptions`、`GET /api/hardware/gateway/consumptions`。操作工/车间组长/质检员/库管员/收货员凭登录会话或评审角色头把 READY/WARNING 读数消费为称重交接、扫码报工、打印确认、视频关联意图，BLOCKED 读数只能忽略(DISMISS)，同一读数拒绝重复消费；消费记录操作人、角色、业务对象和时间，软硬件联动作业台读数表新增消费动作和消费记录表。该边界把设备遥测桥接到可追责的人工业务动作，消费本身不写库存台账，仍需继续把称重/扫码消费联动到真实业务命令。
 
 ## 目录结构
 
@@ -361,6 +362,8 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/hardware/gateway/devices`
 - `GET /api/hardware/gateway/devices/{deviceCode}/readings`
 - `GET /api/hardware/gateway/summary`
+- `POST /api/hardware/gateway/consumptions`
+- `GET /api/hardware/gateway/consumptions`
 - `GET /api/documents/summary`
 - `GET /api/documents/packages`
 - `GET /api/documents/attachments`

@@ -22,14 +22,19 @@ import {
   type HardwareWorkspaceModel,
 } from '../../services/hardwareIntegrationApi';
 import {
+  consumeReading,
   fetchGatewayDevices,
   fetchGatewaySummary,
+  fetchRecentConsumptions,
   fetchRecentReadings,
   ingestDeviceReading,
+  type ConsumeReadingRequest,
   type DeviceReading,
   type DeviceReadingType,
   type GatewayDeviceView,
   type GatewayIngestionSummary,
+  type ReadingConsumption,
+  type ReadingConsumptionIntent,
 } from '../../services/deviceGatewayApi';
 
 const workspace = ref<HardwareWorkspaceModel>({
@@ -164,6 +169,49 @@ const readingTypeOptions: Array<{ value: DeviceReadingType; label: string }> = [
   { value: 'HEARTBEAT', label: '设备心跳' },
 ];
 
+const gatewayConsumptions = ref<ReadingConsumption[]>([]);
+const gatewayConsumedCodes = computed(
+  () => new Set(gatewayConsumptions.value.map((consumption) => consumption.readingCode)),
+);
+
+const intentByType: Record<DeviceReadingType, ReadingConsumptionIntent> = {
+  SCALE_WEIGHT: 'WEIGH_HANDOVER',
+  SCAN_EVENT: 'SCAN_TO_REPORT',
+  PRINT_ACK: 'PRINT_CONFIRM',
+  VIDEO_CLIP_MARK: 'VIDEO_LINK',
+  HEARTBEAT: 'DISMISS',
+};
+
+const intentLabels: Record<ReadingConsumptionIntent, string> = {
+  WEIGH_HANDOVER: '称重交接',
+  SCAN_TO_REPORT: '扫码报工',
+  PRINT_CONFIRM: '打印确认',
+  VIDEO_LINK: '视频关联',
+  DISMISS: '忽略',
+};
+
+function defaultIntentFor(reading: DeviceReading): ReadingConsumptionIntent {
+  if (reading.status === 'BLOCKED') return 'DISMISS';
+  return intentByType[reading.readingType];
+}
+
+async function consumeGatewayReading(reading: DeviceReading) {
+  gatewayFeedback.value = '';
+  const request: ConsumeReadingRequest = {
+    readingCode: reading.readingCode,
+    intent: defaultIntentFor(reading),
+    businessRefType: reading.businessRefType || undefined,
+    businessRefCode: reading.businessRefCode || undefined,
+  };
+  try {
+    const consumption = await consumeReading(request);
+    gatewayFeedback.value = `读数 ${consumption.readingCode} 已消费为「${intentLabels[consumption.intent]}」，操作人 ${consumption.operator}`;
+    await refreshGateway();
+  } catch (error) {
+    gatewayFeedback.value = error instanceof Error ? error.message : '读数消费失败';
+  }
+}
+
 function gatewayStatusTone(status: string): Tone {
   if (status === 'READY') return 'green';
   if (status === 'WARNING') return 'amber';
@@ -172,14 +220,16 @@ function gatewayStatusTone(status: string): Tone {
 
 async function refreshGateway() {
   try {
-    const [devices, readings, summary] = await Promise.all([
+    const [devices, readings, summary, consumptions] = await Promise.all([
       fetchGatewayDevices(),
       fetchRecentReadings(20),
       fetchGatewaySummary(),
+      fetchRecentConsumptions(20),
     ]);
     gatewayDevices.value = devices;
     gatewayReadings.value = readings;
     gatewaySummary.value = summary;
+    gatewayConsumptions.value = consumptions;
     gatewayError.value = '';
   } catch (error) {
     gatewayError.value =
@@ -1286,6 +1336,7 @@ function nextIntegrationActionFor(deviceCode: string): string {
               <th>状态</th>
               <th>原始报文</th>
               <th>接收时间</th>
+              <th>消费</th>
             </tr>
           </thead>
           <tbody>
@@ -1297,12 +1348,62 @@ function nextIntegrationActionFor(deviceCode: string): string {
               <td><StatusBadge :label="reading.status" :tone="gatewayStatusTone(reading.status)" /></td>
               <td>{{ reading.rawPayload }}</td>
               <td>{{ reading.receivedAt }}</td>
+              <td>
+                <StatusBadge v-if="gatewayConsumedCodes.has(reading.readingCode)" label="已消费" tone="gray" />
+                <button
+                  v-else
+                  class="table-action"
+                  type="button"
+                  @click="consumeGatewayReading(reading)"
+                >
+                  {{ intentLabels[defaultIntentFor(reading)] }}
+                </button>
+              </td>
             </tr>
             <tr v-if="gatewayReadings.length === 0">
-              <td colspan="7" class="empty-hint">暂无读数记录。连接后端并推送读数后展示。</td>
+              <td colspan="8" class="empty-hint">暂无读数记录。连接后端并推送读数后展示。</td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="section-block">
+        <div class="section-heading">
+          <div>
+            <h3>读数消费记录</h3>
+            <p>消费是可追责的人工动作：记录谁把设备读数转成业务信号，用于与业务台账对账。消费本身不写库存台账。</p>
+          </div>
+          <StatusBadge label="RBAC 守卫 / 一次消费" tone="green" />
+        </div>
+        <div class="module-table-wrap refined-table-wrap">
+          <table class="module-table">
+            <thead>
+              <tr>
+                <th>消费编码</th>
+                <th>读数</th>
+                <th>意图</th>
+                <th>归一化</th>
+                <th>业务对象</th>
+                <th>操作人</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="consumption in gatewayConsumptions" :key="consumption.consumptionCode">
+                <td><b>{{ consumption.consumptionCode }}</b></td>
+                <td>{{ consumption.readingCode }}</td>
+                <td><StatusBadge :label="intentLabels[consumption.intent]" tone="blue" /></td>
+                <td>{{ consumption.normalizedValue }}{{ consumption.normalizedUnit }} {{ consumption.normalizedCode }}</td>
+                <td>{{ consumption.businessRefType }} {{ consumption.businessRefCode }}</td>
+                <td>{{ consumption.operator }} / {{ consumption.role }}</td>
+                <td>{{ consumption.consumedAt }}</td>
+              </tr>
+              <tr v-if="gatewayConsumptions.length === 0">
+                <td colspan="7" class="empty-hint">暂无消费记录。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </div>

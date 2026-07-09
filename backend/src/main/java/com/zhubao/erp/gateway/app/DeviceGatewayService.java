@@ -1,6 +1,7 @@
 package com.zhubao.erp.gateway.app;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.gateway.domain.ConsumeReadingCommand;
 import com.zhubao.erp.gateway.domain.DeviceReading;
 import com.zhubao.erp.gateway.domain.DeviceReadingRepository;
 import com.zhubao.erp.gateway.domain.DeviceReadingStatus;
@@ -9,9 +10,13 @@ import com.zhubao.erp.gateway.domain.GatewayDevice;
 import com.zhubao.erp.gateway.domain.GatewayDeviceRepository;
 import com.zhubao.erp.gateway.domain.GatewayDeviceView;
 import com.zhubao.erp.gateway.domain.GatewayIngestionSummary;
+import com.zhubao.erp.gateway.domain.ReadingConsumption;
+import com.zhubao.erp.gateway.domain.ReadingConsumptionIntent;
+import com.zhubao.erp.gateway.domain.ReadingConsumptionRepository;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.security.app.PasswordHasher;
+import com.zhubao.erp.security.domain.OperatorContext;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -35,17 +40,20 @@ public class DeviceGatewayService {
 
     private final GatewayDeviceRepository deviceRepository;
     private final DeviceReadingRepository readingRepository;
+    private final ReadingConsumptionRepository consumptionRepository;
     private final DeviceReadingNormalizer normalizer;
     private final PasswordHasher passwordHasher;
 
     public DeviceGatewayService(
             GatewayDeviceRepository deviceRepository,
             DeviceReadingRepository readingRepository,
+            ReadingConsumptionRepository consumptionRepository,
             DeviceReadingNormalizer normalizer,
             PasswordHasher passwordHasher
     ) {
         this.deviceRepository = deviceRepository;
         this.readingRepository = readingRepository;
+        this.consumptionRepository = consumptionRepository;
         this.normalizer = normalizer;
         this.passwordHasher = passwordHasher;
     }
@@ -93,6 +101,55 @@ public class DeviceGatewayService {
             throw new BusinessException("缺少设备编码");
         }
         return readingRepository.findByDeviceCode(deviceCode.trim(), clampLimit(limit));
+    }
+
+    /**
+     * Consume a device reading into an accountable business intent. RBAC is enforced at the
+     * interceptor; the resolved operator context is passed in so the consumption is attributed.
+     */
+    public ReadingConsumption consume(ConsumeReadingCommand command, OperatorContext operatorContext) {
+        if (command == null) {
+            throw new BusinessException("读数消费命令不能为空");
+        }
+        DeviceReading reading = readingRepository.findByCode(command.readingCode().trim())
+                .orElseThrow(() -> new BusinessException("未找到读数：" + command.readingCode()));
+        ReadingConsumptionIntent intent = ReadingConsumptionIntent.fromString(command.intent());
+        if (intent == null) {
+            throw new BusinessException("不支持的消费意图：" + command.intent());
+        }
+        if (intent.requiredType() != null && intent.requiredType() != reading.readingType()) {
+            throw new BusinessException(
+                    "意图 " + intent.name() + " 只能用于 " + intent.requiredType().name() + " 读数");
+        }
+        if (reading.status() == DeviceReadingStatus.BLOCKED && intent != ReadingConsumptionIntent.DISMISS) {
+            throw new BusinessException("BLOCKED 读数只能忽略(DISMISS)，无法作为业务信号消费");
+        }
+        consumptionRepository.findByReadingCode(reading.readingCode()).ifPresent(existing -> {
+            throw new BusinessException("读数已被消费：" + existing.consumptionCode());
+        });
+
+        String now = TIME_FORMATTER.format(LocalDateTime.now());
+        ReadingConsumption consumption = new ReadingConsumption(
+                "RC-" + reading.readingCode(),
+                reading.readingCode(),
+                reading.deviceCode(),
+                reading.readingType(),
+                intent,
+                reading.normalizedValue(),
+                reading.normalizedUnit(),
+                reading.normalizedCode(),
+                blankToDefault(command.businessRefType(), reading.businessRefType()),
+                blankToDefault(command.businessRefCode(), reading.businessRefCode()),
+                operatorContext.operator(),
+                operatorContext.role().name(),
+                blankToEmpty(command.note()),
+                now
+        );
+        return consumptionRepository.save(consumption);
+    }
+
+    public List<ReadingConsumption> recentConsumptions(int limit) {
+        return consumptionRepository.findRecent(clampLimit(limit));
     }
 
     public List<GatewayDeviceView> devices() {
