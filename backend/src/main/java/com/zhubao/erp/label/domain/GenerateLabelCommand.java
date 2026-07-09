@@ -12,7 +12,8 @@ public record GenerateLabelCommand(
         @NotBlank String primaryCode,
         List<LabelField> fields,
         String footerLeft,
-        String footerRight
+        String footerRight,
+        String templateCode
 ) {
     public GenerateLabelCommand {
         fields = fields == null ? List.of() : List.copyOf(fields);

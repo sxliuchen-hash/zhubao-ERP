@@ -27,6 +27,8 @@ zhubao:
     repository: ${ZHUBAO_MACHINE_OUTPUT_REPOSITORY:jdbc}
   machine-profile:
     repository: ${ZHUBAO_MACHINE_PROFILE_REPOSITORY:jdbc}
+  label-template:
+    repository: ${ZHUBAO_LABEL_TEMPLATE_REPOSITORY:jdbc}
   business-document:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
   gateway:

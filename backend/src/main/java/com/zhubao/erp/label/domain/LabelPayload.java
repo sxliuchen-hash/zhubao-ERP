@@ -16,9 +16,13 @@ public record LabelPayload(
         List<LabelField> fields,
         String footerLeft,
         String footerRight,
-        String printedAt
+        String printedAt,
+        String brandTitle,
+        String templateCode,
+        LabelPrinterSetting printerSetting
 ) {
     public LabelPayload {
         fields = fields == null ? List.of() : List.copyOf(fields);
+        printerSetting = printerSetting == null ? LabelPrinterSetting.defaultSetting() : printerSetting;
     }
 }
