@@ -23,6 +23,9 @@ zhubao:
     repository: ${ZHUBAO_MACHINE_OUTPUT_REPOSITORY:jdbc}
   business-document:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
+  gateway:
+    repository: ${ZHUBAO_GATEWAY_REPOSITORY:jdbc}
+    demo-device-key: ${ZHUBAO_GATEWAY_DEMO_DEVICE_KEY:zhubao-device-demo}
   hardware:
     poc:
       repository: ${ZHUBAO_HARDWARE_POC_REPOSITORY:jdbc}

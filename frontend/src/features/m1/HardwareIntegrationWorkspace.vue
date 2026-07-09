@@ -21,6 +21,16 @@ import {
   type HardwareProtocolSignoffReadiness,
   type HardwareWorkspaceModel,
 } from '../../services/hardwareIntegrationApi';
+import {
+  fetchGatewayDevices,
+  fetchGatewaySummary,
+  fetchRecentReadings,
+  ingestDeviceReading,
+  type DeviceReading,
+  type DeviceReadingType,
+  type GatewayDeviceView,
+  type GatewayIngestionSummary,
+} from '../../services/deviceGatewayApi';
 
 const workspace = ref<HardwareWorkspaceModel>({
   devices: fallbackHardwareDevices,
@@ -124,12 +134,91 @@ const hardwareBlockers = computed(() => [
     })),
 ]);
 
+const gatewayDevices = ref<GatewayDeviceView[]>([]);
+const gatewayReadings = ref<DeviceReading[]>([]);
+const gatewaySummary = ref<GatewayIngestionSummary>({
+  totalDevices: 0,
+  enabledDevices: 0,
+  recentReadings: 0,
+  readyReadings: 0,
+  warningReadings: 0,
+  blockedReadings: 0,
+});
+const gatewayError = ref('');
+const gatewayForm = ref({
+  deviceCode: 'SCALE-01',
+  deviceKey: '',
+  readingType: 'SCALE_WEIGHT' as DeviceReadingType,
+  rawPayload: 'ST,GS,+000123.45,g',
+  businessRefType: '',
+  businessRefCode: '',
+});
+const gatewayFeedback = ref('');
+const gatewaySubmitting = ref(false);
+
+const readingTypeOptions: Array<{ value: DeviceReadingType; label: string }> = [
+  { value: 'SCALE_WEIGHT', label: '电子秤称重' },
+  { value: 'SCAN_EVENT', label: '扫码事件' },
+  { value: 'PRINT_ACK', label: '标签打印回执' },
+  { value: 'VIDEO_CLIP_MARK', label: '视频截取标记' },
+  { value: 'HEARTBEAT', label: '设备心跳' },
+];
+
+function gatewayStatusTone(status: string): Tone {
+  if (status === 'READY') return 'green';
+  if (status === 'WARNING') return 'amber';
+  return 'red';
+}
+
+async function refreshGateway() {
+  try {
+    const [devices, readings, summary] = await Promise.all([
+      fetchGatewayDevices(),
+      fetchRecentReadings(20),
+      fetchGatewaySummary(),
+    ]);
+    gatewayDevices.value = devices;
+    gatewayReadings.value = readings;
+    gatewaySummary.value = summary;
+    gatewayError.value = '';
+  } catch (error) {
+    gatewayError.value =
+      error instanceof Error ? error.message : '设备网关接口不可用，读数接入需连接后端 API';
+  }
+}
+
+async function submitGatewayReading() {
+  gatewayFeedback.value = '';
+  if (!gatewayForm.value.deviceKey.trim()) {
+    gatewayFeedback.value = '请填写设备密钥（评审默认 zhubao-device-demo）';
+    return;
+  }
+  gatewaySubmitting.value = true;
+  try {
+    const reading = await ingestDeviceReading({
+      deviceCode: gatewayForm.value.deviceCode.trim(),
+      deviceKey: gatewayForm.value.deviceKey.trim(),
+      readingType: gatewayForm.value.readingType,
+      rawPayload: gatewayForm.value.rawPayload,
+      businessRefType: gatewayForm.value.businessRefType.trim() || undefined,
+      businessRefCode: gatewayForm.value.businessRefCode.trim() || undefined,
+    });
+    gatewayFeedback.value = `读数 ${reading.readingCode} 已接入：${reading.status} ${reading.message}`;
+    await refreshGateway();
+  } catch (error) {
+    gatewayFeedback.value = error instanceof Error ? error.message : '读数接入失败';
+  } finally {
+    gatewaySubmitting.value = false;
+  }
+}
+
 onMounted(async () => {
   try {
     workspace.value = await fetchHardwareWorkspace();
   } catch (error) {
     loadingError.value = error instanceof Error ? error.message : '硬件接口不可用，已使用本地样例';
   }
+  await refreshGateway();
 });
 
 function deviceTone(status: string): Tone {
@@ -1074,6 +1163,146 @@ function nextIntegrationActionFor(deviceCode: string): string {
           <span>标签打印</span>
           <span>扫码枪/电子秤</span>
         </div>
+      </div>
+    </section>
+
+    <section class="section-block" aria-label="设备网关读数接入">
+      <div class="section-heading">
+        <div>
+          <h2>设备网关读数接入</h2>
+          <p>
+            低成本硬件（串口转 HTTP 桥、ESP32、浏览器桥、扫码枪中继）无需厂商 SDK，凭设备密钥即可推送标准化读数。
+            读数经归一化后按 READY / WARNING / BLOCKED 分级，原始报文保留供人工兜底。
+          </p>
+        </div>
+        <StatusBadge label="设备密钥鉴权 / 非人工登录" tone="violet" />
+      </div>
+
+      <div v-if="gatewayError" class="operation-feedback warning">
+        <strong>设备网关接口不可用</strong>
+        <span>{{ gatewayError }}</span>
+        <small>读数接入需连接后端 /api/hardware/gateway/*，评审默认设备密钥为 zhubao-device-demo。</small>
+      </div>
+
+      <div class="module-stat-grid">
+        <article class="tone-blue">
+          <span>注册设备</span>
+          <strong>{{ gatewaySummary.totalDevices }}<small>个</small></strong>
+          <em>启用 {{ gatewaySummary.enabledDevices }}</em>
+        </article>
+        <article class="tone-green">
+          <span>READY 读数</span>
+          <strong>{{ gatewaySummary.readyReadings }}<small>条</small></strong>
+          <em>可直接消费</em>
+        </article>
+        <article class="tone-amber">
+          <span>WARNING</span>
+          <strong>{{ gatewaySummary.warningReadings }}<small>条</small></strong>
+          <em>需人工确认</em>
+        </article>
+        <article class="tone-red">
+          <span>BLOCKED</span>
+          <strong>{{ gatewaySummary.blockedReadings }}<small>条</small></strong>
+          <em>保留原始报文</em>
+        </article>
+      </div>
+
+      <div class="split-layout wide-left">
+        <div class="section-block">
+          <div class="section-heading">
+            <div>
+              <h3>模拟设备推送</h3>
+              <p>用于评审现场读数接入链路：选择设备、读数类型和原始报文即可提交。</p>
+            </div>
+          </div>
+          <form class="gateway-form" @submit.prevent="submitGatewayReading">
+            <label>
+              <span>设备编码</span>
+              <input v-model="gatewayForm.deviceCode" aria-label="设备编码" />
+            </label>
+            <label>
+              <span>设备密钥</span>
+              <input v-model="gatewayForm.deviceKey" type="password" placeholder="zhubao-device-demo" aria-label="设备密钥" />
+            </label>
+            <label>
+              <span>读数类型</span>
+              <select v-model="gatewayForm.readingType" aria-label="读数类型">
+                <option v-for="option in readingTypeOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>原始报文</span>
+              <input v-model="gatewayForm.rawPayload" aria-label="原始报文" />
+            </label>
+            <label>
+              <span>业务对象类型</span>
+              <input v-model="gatewayForm.businessRefType" placeholder="可选，如 子工单" aria-label="业务对象类型" />
+            </label>
+            <label>
+              <span>业务对象编码</span>
+              <input v-model="gatewayForm.businessRefCode" placeholder="可选，如 ZD-20260706-001" aria-label="业务对象编码" />
+            </label>
+            <button class="primary-button" type="submit" :disabled="gatewaySubmitting">
+              {{ gatewaySubmitting ? '接入中…' : '推送读数' }}
+            </button>
+          </form>
+          <div v-if="gatewayFeedback" class="operation-feedback">
+            <span>{{ gatewayFeedback }}</span>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-heading">
+            <div>
+              <h3>已注册设备</h3>
+              <p>凭密钥推送读数，停用设备立即拒绝接入。</p>
+            </div>
+          </div>
+          <div class="integration-list compact-integration-list">
+            <article v-for="device in gatewayDevices" :key="device.deviceCode">
+              <div class="integration-main">
+                <strong>{{ device.deviceCode }} / {{ device.deviceName }}</strong>
+                <span>{{ device.acceptedTypes.join('、') }}</span>
+                <small>{{ device.location }} / {{ device.fallbackNote }}</small>
+              </div>
+              <StatusBadge :label="device.enabled ? '启用' : '停用'" :tone="device.enabled ? 'green' : 'gray'" />
+              <p>近期读数 {{ device.recentReadings }} 条 / {{ device.lastReadingAt || '暂无' }}</p>
+            </article>
+            <p v-if="gatewayDevices.length === 0" class="empty-hint">暂无注册设备或后端未连接。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="module-table-wrap refined-table-wrap">
+        <table class="module-table">
+          <thead>
+            <tr>
+              <th>读数编码</th>
+              <th>设备</th>
+              <th>类型</th>
+              <th>归一化</th>
+              <th>状态</th>
+              <th>原始报文</th>
+              <th>接收时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="reading in gatewayReadings" :key="reading.readingCode">
+              <td><b>{{ reading.readingCode }}</b></td>
+              <td>{{ reading.deviceCode }}</td>
+              <td>{{ reading.readingType }}</td>
+              <td>{{ reading.normalizedValue }}{{ reading.normalizedUnit }} {{ reading.normalizedCode }}</td>
+              <td><StatusBadge :label="reading.status" :tone="gatewayStatusTone(reading.status)" /></td>
+              <td>{{ reading.rawPayload }}</td>
+              <td>{{ reading.receivedAt }}</td>
+            </tr>
+            <tr v-if="gatewayReadings.length === 0">
+              <td colspan="7" class="empty-hint">暂无读数记录。连接后端并推送读数后展示。</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
   </div>

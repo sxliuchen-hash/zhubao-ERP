@@ -1,6 +1,7 @@
 package com.zhubao.erp.common.error;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,12 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public ApiResponse<Void> handlePermissionDeniedException(PermissionDeniedException ex) {
         return ApiResponse.error(ex.code(), ex.getMessage());
+    }
+
+    @ExceptionHandler(DeviceAuthenticationException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ApiResponse<Void> handleDeviceAuthenticationException(DeviceAuthenticationException ex) {
+        return ApiResponse.error(40101, ex.getMessage());
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})

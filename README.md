@@ -137,6 +137,7 @@
 - M3.119 账号前置审批证据上传入口，新增 `POST /api/auth/accounts/pre-approval-evidence/uploads` multipart 接口，管理员在 `AUTH_ACCOUNT_MANAGE` 权限下上传申请单证据附件时会自动创建/更新 `DOC-<applicationCode>` 证据包，并写入 `businessType=账号前置审批`、`businessCode=<applicationCode>`、`documentCode=DOC-<applicationCode>` 的附件元数据；前端配置基线页“前置审批证据”区域新增申请单选择和附件上传表单。该边界是账号前置审批附件上传闭环第一步，不代表正式电子签字、审批 UI、生产归档策略/签名访问或完整 IAM 完成。
 - M3.120 附件预览短期签名令牌，新增 `zhubao.documents.preview.secret` / `ttl-minutes` 配置，`GET /api/documents/attachments/{code}/preview-url` 生成包含 `expiresAt` 与 HMAC token 的 15 分钟预览 URL，`GET /api/documents/attachments/{code}/content` 必须校验 token、附件编码和过期时间后才读取本地对象内容；移除固定 `preview-demo`。该边界补齐本地附件预览权限第一步，不代表 NAS/S3/COS 对象存储切换、版本锁定或正式审计保全完成。
 - M3.121 设备产量机器档案匹配建议，新增 `GET /api/machine-outputs/machine-match-suggestions`，按最近设备产量记录的现场机器编号聚合未绑定 `machineId` 的记录，并在已有同编号已绑定记录时返回候选机器档案 ID；生产派工报工作业台新增“机器档案匹配建议”只读清单。该边界只提供人工复核前的匹配建议，不自动改写历史产量记录，不代表完整机器主数据、批量绑定命令、签名附件或设备 SDK 直连完成。
+- M3.122 硬件设备网关与读数接入基线，新增 `gateway` 模块、设备密钥鉴权、`DeviceReadingNormalizer` 归一化器、内存/JDBC 双仓储、`V25__m3_hardware_gateway_contract.sql` 和 `POST /api/hardware/gateway/readings`、`GET /api/hardware/gateway/readings`、`GET /api/hardware/gateway/devices`、`GET /api/hardware/gateway/devices/{deviceCode}/readings`、`GET /api/hardware/gateway/summary`。低成本硬件（串口转 HTTP 桥、ESP32、浏览器桥、扫码枪中继）无需厂商 SDK，凭 PBKDF2 哈希设备密钥即可推送称重、扫码、打印回执、视频截取标记和心跳读数；读数经归一化后按 READY/WARNING/BLOCKED 分级并保留原始报文供人工兜底，软硬件联动作业台新增“设备网关读数接入”面板。该边界打通设备到系统的标准化接入通道，不代表厂商 SDK/协议直连、真实设备型号冻结或读数自动写业务台账完成。
 
 ## 目录结构
 
@@ -283,6 +284,16 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 
 文档附件 JDBC 当前覆盖 `doc_package`、`doc_evidence_attachment`、`doc_audit_event` 三张合同表；附件二进制内容仍由 `zhubao.documents.storage.*` 指定的存储适配处理；M3.120 已为本地内容读取补短期 HMAC 预览令牌和过期时间校验，生产 NAS/S3/COS 对象存储切换、版本锁定和正式审计保全仍需继续开发。
 
+启用 MySQL 硬件设备网关持久化：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_GATEWAY_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+设备网关 JDBC 覆盖 `hw_gateway_device` 和 `hw_gateway_reading`：注册设备保存设备名、可接受读数类型和 PBKDF2 哈希后的设备密钥，读数保存归一化值、单位、编码、READY/WARNING/BLOCKED 状态和原始报文。低成本硬件通过 `POST /api/hardware/gateway/readings` 凭设备密钥推送标准化读数，评审默认设备密钥由 `ZHUBAO_GATEWAY_DEMO_DEVICE_KEY` 提供（默认 `zhubao-device-demo`），生产上线前必须替换、停用或删除评审设备并轮换密钥。该边界打通设备到系统的接入通道，不代表厂商 SDK/协议直连、真实设备型号冻结或读数自动写业务台账完成。
+
 启动前端：
 
 ```powershell
@@ -345,6 +356,11 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/hardware/poc-records`
 - `GET /api/hardware/poc-evidence`
 - `GET /api/hardware/summary`
+- `POST /api/hardware/gateway/readings`
+- `GET /api/hardware/gateway/readings`
+- `GET /api/hardware/gateway/devices`
+- `GET /api/hardware/gateway/devices/{deviceCode}/readings`
+- `GET /api/hardware/gateway/summary`
 - `GET /api/documents/summary`
 - `GET /api/documents/packages`
 - `GET /api/documents/attachments`

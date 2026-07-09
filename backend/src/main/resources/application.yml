@@ -27,6 +27,9 @@ zhubao:
     repository: memory
   business-document:
     repository: memory
+  gateway:
+    repository: memory
+    demo-device-key: ${ZHUBAO_GATEWAY_DEMO_DEVICE_KEY:zhubao-device-demo}
   security:
     allow-header-context: true
   hardware:
