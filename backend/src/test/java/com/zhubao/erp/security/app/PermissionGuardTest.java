@@ -56,6 +56,45 @@ class PermissionGuardTest {
     }
 
     @Test
+    void allowsShopFloorRolesToConsumeGatewayReadings() {
+        OperatorContext operator = new OperatorContext("操作工 王强", RoleCode.OPERATOR, DataScope.SELF);
+        OperatorContext qc = new OperatorContext("质检员 陈曦", RoleCode.QUALITY_INSPECTOR, DataScope.TEAM);
+        OperatorContext sales = new OperatorContext("业务专员 林岚", RoleCode.SALES, DataScope.CUSTOMER_RANGE);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_READING_CONSUME, operator))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_READING_CONSUME, qc))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_READING_CONSUME, sales))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("SALES");
+    }
+
+    @Test
+    void limitsGatewayDeviceManagementToAdminAndGeneralManager() {
+        OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
+        OperatorContext operator = new OperatorContext("操作工 王强", RoleCode.OPERATOR, DataScope.SELF);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_DEVICE_MANAGE, admin))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_DEVICE_MANAGE, operator))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("设备网关管理");
+    }
+
+    @Test
+    void limitsCustomerAuthorizationManagementToAdminAndGeneralManager() {
+        OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
+        OperatorContext sales = new OperatorContext("业务专员 林岚", RoleCode.SALES, DataScope.CUSTOMER_RANGE);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, generalManager))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, sales))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("客户授权管理");
+    }
+
+    @Test
     void limitsAuthAccountManagementToAdminAndGeneralManager() {
         OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);

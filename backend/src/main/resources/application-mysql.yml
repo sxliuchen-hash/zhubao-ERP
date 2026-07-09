@@ -8,6 +8,10 @@ spring:
 zhubao:
   security:
     allow-header-context: ${ZHUBAO_ALLOW_HEADER_CONTEXT:false}
+    menu:
+      repository: ${ZHUBAO_MENU_REPOSITORY:jdbc}
+    customer-authorization:
+      repository: ${ZHUBAO_CUSTOMER_AUTHORIZATION_REPOSITORY:jdbc}
   inventory:
     repository: jdbc
   business:
@@ -23,6 +27,15 @@ zhubao:
     repository: ${ZHUBAO_MACHINE_OUTPUT_REPOSITORY:jdbc}
   business-document:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
+  gateway:
+    repository: ${ZHUBAO_GATEWAY_REPOSITORY:jdbc}
+    demo-device-key: ${ZHUBAO_GATEWAY_DEMO_DEVICE_KEY:zhubao-device-demo}
+    rate-limit:
+      max-readings: ${ZHUBAO_GATEWAY_RATE_LIMIT_MAX:120}
+      window-seconds: ${ZHUBAO_GATEWAY_RATE_LIMIT_WINDOW_SECONDS:60}
+    replay:
+      enabled: ${ZHUBAO_GATEWAY_REPLAY_ENABLED:true}
+      window-seconds: ${ZHUBAO_GATEWAY_REPLAY_WINDOW_SECONDS:300}
   hardware:
     poc:
       repository: ${ZHUBAO_HARDWARE_POC_REPOSITORY:jdbc}

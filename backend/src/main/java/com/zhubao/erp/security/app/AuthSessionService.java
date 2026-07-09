@@ -47,6 +47,7 @@ public class AuthSessionService {
     private final PasswordHasher passwordHasher;
     private final PasswordExpiryPolicy passwordExpiryPolicy;
     private final PasswordPolicy passwordPolicy;
+    private final CustomerAuthorizationService customerAuthorizationService;
 
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
@@ -56,12 +57,27 @@ public class AuthSessionService {
             PasswordExpiryPolicy passwordExpiryPolicy,
             PasswordPolicy passwordPolicy
     ) {
+        this(navigationMenuService, authAuditRepository, userAccountRepository,
+                passwordHasher, passwordExpiryPolicy, passwordPolicy, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthSessionService(
+            NavigationMenuService navigationMenuService,
+            AuthAuditRepository authAuditRepository,
+            AuthUserAccountRepository userAccountRepository,
+            PasswordHasher passwordHasher,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            PasswordPolicy passwordPolicy,
+            CustomerAuthorizationService customerAuthorizationService
+    ) {
         this.navigationMenuService = navigationMenuService;
         this.authAuditRepository = authAuditRepository;
         this.userAccountRepository = userAccountRepository;
         this.passwordHasher = passwordHasher;
         this.passwordExpiryPolicy = passwordExpiryPolicy;
         this.passwordPolicy = passwordPolicy;
+        this.customerAuthorizationService = customerAuthorizationService;
     }
 
     public AuthSession login(AuthLoginCommand command) {
@@ -169,8 +185,15 @@ public class AuthSessionService {
                 value.user().dataScope(),
                 false,
                 value.token(),
-                value.user().customerScope()
+                effectiveCustomerScope(value.user())
         ));
+    }
+
+    private List<String> effectiveCustomerScope(AuthUserAccount user) {
+        if (user.dataScope() != DataScope.CUSTOMER_RANGE || customerAuthorizationService == null) {
+            return user.customerScope();
+        }
+        return customerAuthorizationService.effectiveCustomerScope(user.username(), user.customerScope());
     }
 
     public AuthSession changeOwnPassword(String rawAuthorizationHeader, ChangeOwnPasswordCommand command) {

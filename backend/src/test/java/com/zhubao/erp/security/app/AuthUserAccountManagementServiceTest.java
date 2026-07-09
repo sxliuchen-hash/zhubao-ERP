@@ -45,7 +45,8 @@ class AuthUserAccountManagementServiceTest {
     private final PasswordHasher passwordHasher = new PasswordHasher();
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();
     private final PasswordExpiryPolicy passwordExpiryPolicy = new PasswordExpiryPolicy();
-    private final NavigationMenuService navigationMenuService = new NavigationMenuService();
+    private final NavigationMenuService navigationMenuService =
+            new NavigationMenuService(new com.zhubao.erp.security.infra.InMemoryNavigationMenuRepository());
     @TempDir
     Path tempDir;
     private final OperatorContext admin = new OperatorContext(

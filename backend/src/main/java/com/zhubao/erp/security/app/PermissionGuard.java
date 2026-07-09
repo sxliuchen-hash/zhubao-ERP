@@ -32,7 +32,10 @@ public class PermissionGuard {
         allow(PermissionCode.REGISTER_IMPORT_REVIEW, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.REGISTER_IMPORT_POSTING, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.MACHINE_OUTPUT_SUBMIT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
+        allow(PermissionCode.GATEWAY_READING_CONSUME, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER, RoleCode.QUALITY_INSPECTOR, RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER);
+        allow(PermissionCode.GATEWAY_DEVICE_MANAGE, RoleCode.ADMIN);
         allow(PermissionCode.AUTH_ACCOUNT_MANAGE, RoleCode.GENERAL_MANAGER);
+        allow(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, RoleCode.GENERAL_MANAGER);
         allow(PermissionCode.APPROVAL_DECISION, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.VIDEO_TASK_OPERATE, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);

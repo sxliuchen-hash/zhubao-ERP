@@ -1,13 +1,14 @@
 package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.infra.InMemoryNavigationMenuRepository;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class NavigationMenuServiceTest {
 
-    private final NavigationMenuService service = new NavigationMenuService();
+    private final NavigationMenuService service = new NavigationMenuService(new InMemoryNavigationMenuRepository());
 
     @Test
     void returnsRoleScopedMenuTreeAndButtonPermissions() {

@@ -1503,4 +1503,73 @@ class M2ManagementApiSmokeTest {
             return out.toByteArray();
         }
     }
+
+    @Test
+    void ingestsGatewayReadingAndConsumesItThroughRbac() {
+        // 1. Device pushes a scale reading with its device key (no human login required).
+        Map<String, Object> ingest = new LinkedHashMap<>();
+        ingest.put("deviceCode", "SCALE-01");
+        ingest.put("deviceKey", "zhubao-device-demo");
+        ingest.put("readingType", "SCALE_WEIGHT");
+        ingest.put("rawPayload", "ST,GS,+000188.60,g");
+        ingest.put("businessRefType", "子工单");
+        ingest.put("businessRefCode", "ZD-20260706-001");
+
+        ResponseEntity<String> reading = restTemplate.postForEntity(
+                "/api/hardware/gateway/readings", ingest, String.class);
+        assertThat(reading.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(reading.getBody()).contains(
+                "\"status\":\"READY\"",
+                "\"normalizedValue\":\"188.60\"",
+                "\"normalizedUnit\":\"g\"");
+        String readingCode = jsonString(reading.getBody(), "readingCode");
+
+        // 2. An authorized shop-floor role consumes the reading into a weigh handover.
+        //    (Device-key auth failure returning 401 is covered at the service layer, since
+        //     TestRestTemplate's default client cannot cleanly read a 401 body in streaming mode.)
+        Map<String, Object> consume = new LinkedHashMap<>();
+        consume.put("readingCode", readingCode);
+        consume.put("intent", "WEIGH_HANDOVER");
+        HttpHeaders operatorHeaders = new HttpHeaders();
+        operatorHeaders.set("X-Zhubao-Role", "OPERATOR");
+        operatorHeaders.set("X-Zhubao-Operator", "操作工 王强");
+        operatorHeaders.set("X-Zhubao-Data-Scope", "SELF");
+
+        ResponseEntity<String> consumed = restTemplate.exchange(
+                "/api/hardware/gateway/consumptions",
+                HttpMethod.POST,
+                new HttpEntity<>(consume, operatorHeaders),
+                String.class);
+        assertThat(consumed.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(consumed.getBody()).contains(
+                "\"intent\":\"WEIGH_HANDOVER\"",
+                "\"role\":\"OPERATOR\"",
+                "\"readingCode\":\"" + readingCode + "\"");
+
+        // 4. Device management requires ADMIN; an operator is denied.
+        Map<String, Object> register = new LinkedHashMap<>();
+        register.put("deviceCode", "SCALE-SMOKE-02");
+        register.put("deviceName", "冒烟称重台");
+        register.put("acceptedTypes", List.of("SCALE_WEIGHT"));
+        register.put("deviceKey", "smoke-scale-key-1");
+        ResponseEntity<String> deniedManage = restTemplate.exchange(
+                "/api/hardware/gateway/devices",
+                HttpMethod.POST,
+                new HttpEntity<>(register, operatorHeaders),
+                String.class);
+        assertThat(deniedManage.getStatusCode().value()).isEqualTo(403);
+        assertThat(deniedManage.getBody()).contains("40301", "设备网关管理");
+
+        // 5. An admin can register the device.
+        HttpHeaders adminHeaders = new HttpHeaders();
+        adminHeaders.set("X-Zhubao-Role", "ADMIN");
+        adminHeaders.set("X-Zhubao-Operator", "系统管理员");
+        ResponseEntity<String> registered = restTemplate.exchange(
+                "/api/hardware/gateway/devices",
+                HttpMethod.POST,
+                new HttpEntity<>(register, adminHeaders),
+                String.class);
+        assertThat(registered.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(registered.getBody()).contains("SCALE-SMOKE-02", "冒烟称重台");
+    }
 }
