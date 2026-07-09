@@ -7,6 +7,7 @@ import DocumentManagementWorkspace from './features/m1/DocumentManagementWorkspa
 import HardwareIntegrationWorkspace from './features/m1/HardwareIntegrationWorkspace.vue';
 import InboundWorkspace from './features/m1/InboundWorkspace.vue';
 import InventoryTraceWorkspace from './features/m1/InventoryTraceWorkspace.vue';
+import LabelWorkspace from './features/m1/LabelWorkspace.vue';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
 import MobileOpsWorkspace from './features/m1/MobileOpsWorkspace.vue';
 import OperationsCenterWorkspace from './features/m1/OperationsCenterWorkspace.vue';
@@ -31,6 +32,7 @@ type TabKey =
   | 'configuration'
   | 'documents'
   | 'sample'
+  | 'label'
   | 'hardware'
   | 'operations'
   | 'mobile';
@@ -45,6 +47,7 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; co
   { key: 'configuration', label: '配置基线', meta: '参数 / 构型', badge: '8', code: 'CF' },
   { key: 'documents', label: '文档附件', meta: '证据 / 归档', badge: '5', code: 'EV' },
   { key: 'sample', label: '样例库', meta: '验收脚本', code: 'SA' },
+  { key: 'label', label: '标签打印', meta: '母单 / 周转盒', code: 'LB' },
   { key: 'hardware', label: '软硬件联动', meta: '设备 / 兜底', badge: '4', code: 'HW' },
   { key: 'operations', label: '运维中心', meta: '日志 / 指标', badge: '3', code: 'OC' },
   { key: 'mobile', label: 'PWA 作业', meta: '扫码 / 现场', code: 'PW' },
@@ -151,6 +154,7 @@ function isTabKey(value: string): value is TabKey {
     <ConfigurationWorkspace v-else-if="activeTab === 'configuration'" />
     <DocumentManagementWorkspace v-else-if="activeTab === 'documents'" />
     <SampleLibraryWorkspace v-else-if="activeTab === 'sample'" />
+    <LabelWorkspace v-else-if="activeTab === 'label'" />
     <HardwareIntegrationWorkspace v-else-if="activeTab === 'hardware'" />
     <OperationsCenterWorkspace v-else-if="activeTab === 'operations'" />
     <MobileOpsWorkspace v-else />

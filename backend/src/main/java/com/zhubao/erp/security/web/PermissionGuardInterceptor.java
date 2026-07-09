@@ -39,7 +39,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/security/customer-authorizations/revocations", PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE),
             Map.entry("/api/auth/accounts", PermissionCode.AUTH_ACCOUNT_MANAGE),
             Map.entry("/api/documents/attachments/uploads", PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD),
-            Map.entry("/api/video-clip-tasks", PermissionCode.VIDEO_TASK_OPERATE)
+            Map.entry("/api/video-clip-tasks", PermissionCode.VIDEO_TASK_OPERATE),
+            Map.entry("/api/label/generate", PermissionCode.LABEL_PRINT)
     );
     private final Pattern approvalDecisionPath = Pattern.compile("^/api/approvals/tasks/[^/]+/decisions$");
     private final Pattern videoTaskOperationPath = Pattern.compile("^/api/video-clip-tasks/[^/]+/(retry|manual-upload)$");

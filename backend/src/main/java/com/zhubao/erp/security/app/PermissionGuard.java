@@ -39,6 +39,7 @@ public class PermissionGuard {
         allow(PermissionCode.APPROVAL_DECISION, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.VIDEO_TASK_OPERATE, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
+        allow(PermissionCode.LABEL_PRINT, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER, RoleCode.OPERATOR);
     }
 
     public void assertAllowed(PermissionCode permission, OperatorContext operatorContext) {

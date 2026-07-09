@@ -21,7 +21,8 @@ public enum PermissionCode {
     CUSTOMER_AUTHORIZATION_MANAGE("客户授权管理"),
     APPROVAL_DECISION("审批任务决策"),
     DOCUMENT_ATTACHMENT_UPLOAD("证据附件上传"),
-    VIDEO_TASK_OPERATE("视频任务操作");
+    VIDEO_TASK_OPERATE("视频任务操作"),
+    LABEL_PRINT("标签打印");
 
     private final String label;
 
