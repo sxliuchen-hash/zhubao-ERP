@@ -5,11 +5,14 @@ import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.document.domain.DocumentManagementRepository;
+import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalEvidenceSummary;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
@@ -53,6 +56,7 @@ public class AuthUserAccountManagementService {
     private final ApprovalService approvalService;
     private final AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository;
     private final AuthSessionService authSessionService;
+    private final DocumentManagementRepository documentManagementRepository;
     private final boolean enforcePreApprovalForAccountActions;
 
     public AuthUserAccountManagementService(
@@ -62,7 +66,7 @@ public class AuthUserAccountManagementService {
             PasswordExpiryPolicy passwordExpiryPolicy,
             AuthAuditRepository authAuditRepository
     ) {
-        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, null, null, null);
+        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, null, null, null, null);
     }
 
     public AuthUserAccountManagementService(
@@ -73,7 +77,7 @@ public class AuthUserAccountManagementService {
             AuthAuditRepository authAuditRepository,
             ApprovalService approvalService
     ) {
-        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, approvalService, null, null);
+        this(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, authAuditRepository, approvalService, null, null, null);
     }
 
     public AuthUserAccountManagementService(
@@ -93,6 +97,7 @@ public class AuthUserAccountManagementService {
                 authAuditRepository,
                 approvalService,
                 preApprovalApplicationRepository,
+                null,
                 null
         );
     }
@@ -115,6 +120,7 @@ public class AuthUserAccountManagementService {
                 authAuditRepository,
                 approvalService,
                 preApprovalApplicationRepository,
+                null,
                 null,
                 enforcePreApprovalForAccountActions
         );
@@ -139,6 +145,32 @@ public class AuthUserAccountManagementService {
                 approvalService,
                 preApprovalApplicationRepository,
                 authSessionService,
+                null,
+                false
+        );
+    }
+
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            AuthSessionService authSessionService,
+            DocumentManagementRepository documentManagementRepository
+    ) {
+        this(
+                accountRepository,
+                passwordHasher,
+                passwordPolicy,
+                passwordExpiryPolicy,
+                authAuditRepository,
+                approvalService,
+                preApprovalApplicationRepository,
+                authSessionService,
+                documentManagementRepository,
                 false
         );
     }
@@ -153,6 +185,7 @@ public class AuthUserAccountManagementService {
             ApprovalService approvalService,
             AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
             AuthSessionService authSessionService,
+            DocumentManagementRepository documentManagementRepository,
             @Value("${zhubao.auth.pre-approval.enforce-account-actions:false}")
             boolean enforcePreApprovalForAccountActions
     ) {
@@ -164,6 +197,7 @@ public class AuthUserAccountManagementService {
         this.approvalService = approvalService;
         this.preApprovalApplicationRepository = preApprovalApplicationRepository;
         this.authSessionService = authSessionService;
+        this.documentManagementRepository = documentManagementRepository;
         this.enforcePreApprovalForAccountActions = enforcePreApprovalForAccountActions;
     }
 
@@ -283,6 +317,17 @@ public class AuthUserAccountManagementService {
         }
         return preApprovalApplicationRepository.findAll().stream()
                 .sorted(Comparator.comparing(AuthAccountPreApprovalApplication::submittedAt).reversed())
+                .toList();
+    }
+
+    public List<AuthAccountPreApprovalEvidenceSummary> preApprovalEvidence() {
+        List<EvidenceAttachment> accountPreApprovalAttachments = documentManagementRepository == null
+                ? List.of()
+                : documentManagementRepository.attachments().stream()
+                .filter(attachment -> "账号前置审批".equals(attachment.businessType()))
+                .toList();
+        return preApprovalApplications().stream()
+                .map(application -> summarizePreApprovalEvidence(application, accountPreApprovalAttachments))
                 .toList();
     }
 
@@ -565,6 +610,80 @@ public class AuthUserAccountManagementService {
             case "WAITING_SYSTEM_CAPABILITY" -> "补齐系统能力：" + String.join(" / ", draft.missingCapabilities());
             default -> "提交审批人复核并冻结账号动作放行条件";
         };
+    }
+
+    private AuthAccountPreApprovalEvidenceSummary summarizePreApprovalEvidence(
+            AuthAccountPreApprovalApplication application,
+            List<EvidenceAttachment> accountPreApprovalAttachments
+    ) {
+        String requiredEvidence = requiredEvidenceForApplication(application);
+        List<EvidenceAttachment> matchedAttachments = accountPreApprovalAttachments.stream()
+                .filter(attachment -> application.applicationCode().equals(attachment.businessCode()))
+                .toList();
+        if (matchedAttachments.isEmpty()) {
+            return new AuthAccountPreApprovalEvidenceSummary(
+                    application.applicationCode(),
+                    application.readinessCode(),
+                    application.actionType(),
+                    application.targetUsername(),
+                    requiredEvidence,
+                    "",
+                    0,
+                    1,
+                    List.of(),
+                    "",
+                    "待补" + requiredEvidence,
+                    "上传或绑定 " + requiredEvidence + "，businessType=账号前置审批，businessCode="
+                            + application.applicationCode(),
+                    "red"
+            );
+        }
+
+        int missingEvidence = (int) matchedAttachments.stream()
+                .filter(this::missingEvidenceAttachment)
+                .count();
+        EvidenceAttachment latest = matchedAttachments.stream()
+                .max(Comparator.comparing(EvidenceAttachment::uploadedAt))
+                .orElse(matchedAttachments.get(0));
+        String nextAction = matchedAttachments.stream()
+                .map(EvidenceAttachment::fallbackAction)
+                .filter(action -> action != null && !action.isBlank() && !"无".equals(action))
+                .findFirst()
+                .orElse("保留账号前置审批附件并等待审批复核");
+
+        return new AuthAccountPreApprovalEvidenceSummary(
+                application.applicationCode(),
+                application.readinessCode(),
+                application.actionType(),
+                application.targetUsername(),
+                requiredEvidence,
+                latest.documentCode(),
+                matchedAttachments.size(),
+                missingEvidence,
+                matchedAttachments.stream().map(EvidenceAttachment::code).toList(),
+                latest.uploadedAt(),
+                missingEvidence > 0 ? "证据待补" : "已关联证据",
+                nextAction,
+                missingEvidence > 0 ? "amber" : latest.tone()
+        );
+    }
+
+    private String requiredEvidenceForApplication(AuthAccountPreApprovalApplication application) {
+        if ("AUTH-PRE-PASSWORD-001".equals(application.readinessCode())) {
+            return "本人核验附件";
+        }
+        if ("AUTH-PRE-STATUS-001".equals(application.readinessCode())) {
+            return "岗位交接或本人确认附件";
+        }
+        return "账号前置审批附件";
+    }
+
+    private boolean missingEvidenceAttachment(EvidenceAttachment attachment) {
+        return attachment.status().contains("缺失")
+                || attachment.status().contains("待上传")
+                || attachment.storageLocation().contains("待上传")
+                || attachment.storageLocation().contains("待归档")
+                || attachment.checksum().contains("待生成");
     }
 
     private ApprovalTask createPreApprovalTask(AuthAccountPreApprovalApplication application) {

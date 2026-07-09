@@ -5,6 +5,7 @@ import {
   changeOwnPassword,
   draftAuthAccountPreApproval,
   fetchAuthAccountPreApprovalApplications,
+  fetchAuthAccountPreApprovalEvidence,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
   fetchAuthAccountPreApprovalReadiness,
@@ -248,6 +249,33 @@ describe('authApi', () => {
       method: 'POST',
       headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
       body: expect.stringContaining('"reason":"新增业务账号前置审批申请"'),
+    }));
+  });
+
+  it('fetches account pre-approval evidence with bearer token', async () => {
+    setAuthToken('admin-token');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response([{
+      applicationCode: 'AUTH-PRE-APP-PASSWORD-001',
+      readinessCode: 'AUTH-PRE-PASSWORD-001',
+      actionType: '管理员重置密码',
+      targetUsername: 'planner',
+      requiredEvidence: '本人核验附件',
+      documentCode: 'DOC-AUTH-PRE-PASSWORD-001',
+      attachmentCount: 1,
+      missingEvidence: 0,
+      attachmentCodes: ['ATT-AUTH-PRE-PASSWORD-001'],
+      latestUploadedAt: '2026-07-09 11:00:00',
+      status: '已关联证据',
+      nextAction: '保留账号前置审批附件并等待审批复核',
+      tone: 'green',
+    }]));
+
+    const evidence = await fetchAuthAccountPreApprovalEvidence();
+
+    expect(evidence[0].requiredEvidence).toBe('本人核验附件');
+    expect(evidence[0].attachmentCodes).toContain('ATT-AUTH-PRE-PASSWORD-001');
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/accounts/pre-approval-evidence', expect.objectContaining({
+      headers: { Authorization: 'Bearer admin-token' },
     }));
   });
 

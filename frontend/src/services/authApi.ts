@@ -174,6 +174,22 @@ export interface AuthAccountPreApprovalApplication {
   submittedAt: string;
 }
 
+export interface AuthAccountPreApprovalEvidenceSummary {
+  applicationCode: string;
+  readinessCode: string;
+  actionType: string;
+  targetUsername: string;
+  requiredEvidence: string;
+  documentCode: string;
+  attachmentCount: number;
+  missingEvidence: number;
+  attachmentCodes: string[];
+  latestUploadedAt: string;
+  status: string;
+  nextAction: string;
+  tone: string;
+}
+
 export interface ManageAuthUserAccountRequest {
   username: string;
   password?: string;
@@ -266,6 +282,10 @@ export async function draftAuthAccountPreApproval(
 
 export async function fetchAuthAccountPreApprovalApplications(): Promise<AuthAccountPreApprovalApplication[]> {
   return apiGet<AuthAccountPreApprovalApplication[]>('/api/auth/accounts/pre-approval-applications');
+}
+
+export async function fetchAuthAccountPreApprovalEvidence(): Promise<AuthAccountPreApprovalEvidenceSummary[]> {
+  return apiGet<AuthAccountPreApprovalEvidenceSummary[]>('/api/auth/accounts/pre-approval-evidence');
 }
 
 export async function submitAuthAccountPreApprovalApplication(

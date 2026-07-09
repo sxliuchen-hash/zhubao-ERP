@@ -9,6 +9,7 @@ import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalEvidenceSummary;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
@@ -124,6 +125,14 @@ public class AuthController {
     ) {
         manageAccountOperator(request);
         return ApiResponse.ok(accountManagementService.preApprovalApplications());
+    }
+
+    @GetMapping("/accounts/pre-approval-evidence")
+    public ApiResponse<List<AuthAccountPreApprovalEvidenceSummary>> accountPreApprovalEvidence(
+            HttpServletRequest request
+    ) {
+        manageAccountOperator(request);
+        return ApiResponse.ok(accountManagementService.preApprovalEvidence());
     }
 
     @PostMapping("/accounts/pre-approval-applications")

@@ -5,10 +5,13 @@ import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalEvidenceSummary;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
@@ -377,6 +380,58 @@ class AuthUserAccountManagementServiceTest {
                             "missingEvidence=",
                             "not final IAM approval"
                     );
+                });
+    }
+
+    @Test
+    void preApprovalEvidenceSummarizesIdentityVerificationAttachments() {
+        Fixture fixture = fixture();
+        AuthAccountPreApprovalApplication application = readyPreApprovalApplication(
+                "AUTH-PRE-APP-PASSWORD-001",
+                "AUTH-PRE-PASSWORD-001",
+                "管理员重置密码",
+                "planner"
+        );
+        fixture.preApprovalApplicationRepository().save(application);
+
+        assertThat(fixture.managementService().preApprovalEvidence())
+                .singleElement()
+                .satisfies(summary -> {
+                    assertThat(summary.applicationCode()).isEqualTo("AUTH-PRE-APP-PASSWORD-001");
+                    assertThat(summary.requiredEvidence()).isEqualTo("本人核验附件");
+                    assertThat(summary.attachmentCount()).isZero();
+                    assertThat(summary.missingEvidence()).isEqualTo(1);
+                    assertThat(summary.status()).isEqualTo("待补本人核验附件");
+                    assertThat(summary.nextAction()).contains("businessType=账号前置审批");
+                });
+
+        fixture.documentRepository().saveAttachment(new EvidenceAttachment(
+                "ATT-AUTH-PRE-PASSWORD-001",
+                "DOC-AUTH-PRE-PASSWORD-001",
+                "账号前置审批",
+                application.applicationCode(),
+                "planner-identity-check.pdf",
+                "application/pdf",
+                "local://evidence/auth-pre-approval/AUTH-PRE-APP-PASSWORD-001/planner-identity-check.pdf",
+                "audit long-term",
+                "PC 后台上传",
+                "已上传",
+                "系统管理员",
+                "sha256:identity-check",
+                "2026-07-09 11:00",
+                "无",
+                "green"
+        ));
+
+        assertThat(fixture.managementService().preApprovalEvidence())
+                .singleElement()
+                .satisfies(summary -> {
+                    assertThat(summary.documentCode()).isEqualTo("DOC-AUTH-PRE-PASSWORD-001");
+                    assertThat(summary.attachmentCount()).isEqualTo(1);
+                    assertThat(summary.missingEvidence()).isZero();
+                    assertThat(summary.attachmentCodes()).containsExactly("ATT-AUTH-PRE-PASSWORD-001");
+                    assertThat(summary.status()).isEqualTo("已关联证据");
+                    assertThat(summary.tone()).isEqualTo("green");
                 });
     }
 
@@ -871,6 +926,7 @@ class AuthUserAccountManagementServiceTest {
         InMemoryApprovalTaskRepository approvalRepository = new InMemoryApprovalTaskRepository();
         InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
                 new InMemoryAuthAccountPreApprovalApplicationRepository();
+        InMemoryDocumentManagementRepository documentRepository = new InMemoryDocumentManagementRepository();
         ApprovalService approvalService = new ApprovalService(approvalRepository);
         AuthSessionService sessionService = new AuthSessionService(
                 navigationMenuService,
@@ -889,6 +945,7 @@ class AuthUserAccountManagementServiceTest {
                 approvalService,
                 preApprovalApplicationRepository,
                 sessionService,
+                documentRepository,
                 enforcePreApprovalForAccountActions
         );
         return new Fixture(
@@ -896,6 +953,7 @@ class AuthUserAccountManagementServiceTest {
                 auditRepository,
                 approvalRepository,
                 preApprovalApplicationRepository,
+                documentRepository,
                 managementService,
                 sessionService
         );
@@ -906,6 +964,7 @@ class AuthUserAccountManagementServiceTest {
             InMemoryAuthAuditRepository auditRepository,
             InMemoryApprovalTaskRepository approvalRepository,
             InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            InMemoryDocumentManagementRepository documentRepository,
             AuthUserAccountManagementService managementService,
             AuthSessionService sessionService
     ) {

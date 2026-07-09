@@ -1,10 +1,13 @@
 package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
+import com.zhubao.erp.security.domain.AuthAccountPreApprovalEvidenceSummary;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
@@ -92,6 +95,10 @@ class AuthControllerAccountManagementTest {
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("OPERATOR")
                 .hasMessageContaining("登录账号管理");
+        assertThatThrownBy(() -> fixture.controller().accountPreApprovalEvidence(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR")
+                .hasMessageContaining("登录账号管理");
     }
 
     @Test
@@ -153,6 +160,44 @@ class AuthControllerAccountManagementTest {
         assertThat(applications.data())
                 .extracting(AuthAccountPreApprovalApplication::applicationCode)
                 .containsExactly(submitted.data().applicationCode());
+    }
+
+    @Test
+    void exposesPreApprovalEvidenceThroughControllerBoundary() {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.ADMIN);
+        AuthAccountPreApprovalApplication application = fixture.controller()
+                .submitAccountPreApprovalApplication(preApprovalApplicationCommand(), request)
+                .data();
+        fixture.documentRepository().saveAttachment(new EvidenceAttachment(
+                "ATT-AUTH-PRE-001",
+                "DOC-AUTH-PRE-001",
+                "账号前置审批",
+                application.applicationCode(),
+                "planner-pre-approval.pdf",
+                "application/pdf",
+                "local://evidence/auth-pre-approval/planner-pre-approval.pdf",
+                "audit long-term",
+                "PC 后台上传",
+                "已上传",
+                "系统管理员",
+                "sha256:pre-approval",
+                "2026-07-09 11:20",
+                "无",
+                "green"
+        ));
+
+        ApiResponse<List<AuthAccountPreApprovalEvidenceSummary>> evidence =
+                fixture.controller().accountPreApprovalEvidence(request);
+
+        assertThat(evidence.data())
+                .singleElement()
+                .satisfies(summary -> {
+                    assertThat(summary.applicationCode()).isEqualTo(application.applicationCode());
+                    assertThat(summary.attachmentCodes()).containsExactly("ATT-AUTH-PRE-001");
+                    assertThat(summary.status()).isEqualTo("已关联证据");
+                    assertThat(summary.documentCode()).isEqualTo("DOC-AUTH-PRE-001");
+                });
     }
 
     @Test
@@ -270,6 +315,7 @@ class AuthControllerAccountManagementTest {
         InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
         InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
                 new InMemoryAuthAccountPreApprovalApplicationRepository();
+        InMemoryDocumentManagementRepository documentRepository = new InMemoryDocumentManagementRepository();
         AuthSessionService authSessionService = new AuthSessionService(
                 new NavigationMenuService(),
                 auditRepository,
@@ -285,7 +331,9 @@ class AuthControllerAccountManagementTest {
                 passwordExpiryPolicy,
                 auditRepository,
                 null,
-                preApprovalApplicationRepository
+                preApprovalApplicationRepository,
+                null,
+                documentRepository
         );
         OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService, true);
         AuthController controller = new AuthController(
@@ -294,7 +342,7 @@ class AuthControllerAccountManagementTest {
                 operatorContextResolver,
                 new PermissionGuard()
         );
-        return new Fixture(controller, accountRepository, preApprovalApplicationRepository);
+        return new Fixture(controller, accountRepository, preApprovalApplicationRepository, documentRepository);
     }
 
     private MockHttpServletRequest request(RoleCode role) {
@@ -376,7 +424,8 @@ class AuthControllerAccountManagementTest {
     private record Fixture(
             AuthController controller,
             InMemoryAuthUserAccountRepository accountRepository,
-            InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository
+            InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            InMemoryDocumentManagementRepository documentRepository
     ) {
     }
 }

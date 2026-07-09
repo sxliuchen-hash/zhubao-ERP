@@ -4,6 +4,7 @@ import StatusBadge from '../../components/StatusBadge.vue';
 import {
   authAccountPreApprovalApplicationFallback,
   authAccountPreApprovalDraftFallback,
+  authAccountPreApprovalEvidenceFallback,
   authAccountPreApprovalReadinessFallback,
   authAccountSummaryFallback,
   configurationBaselineFallback,
@@ -15,6 +16,7 @@ import {
   changeOwnPassword,
   draftAuthAccountPreApproval,
   fetchAuthAccountPreApprovalApplications,
+  fetchAuthAccountPreApprovalEvidence,
   fetchAuthAccountPreApprovalReadiness,
   fetchAuthAuditIntegrity,
   fetchAuthAuditEvents,
@@ -25,6 +27,7 @@ import {
   logoutAuthSession,
   type AuthAccountPreApprovalApplication,
   type AuthAccountPreApprovalDraft,
+  type AuthAccountPreApprovalEvidenceSummary,
   type AuthAuditEvent,
   type AuthAuditIntegritySummary,
   type AuthAccountPreApprovalReadiness,
@@ -48,6 +51,7 @@ const passwordMessage = ref('');
 const authAccounts = ref<AuthUserAccountSummary[]>(authAccountSummaryFallback);
 const authPreApprovalDraft = ref<AuthAccountPreApprovalDraft>(authAccountPreApprovalDraftFallback);
 const authPreApprovalApplications = ref<AuthAccountPreApprovalApplication[]>(authAccountPreApprovalApplicationFallback);
+const authPreApprovalEvidence = ref<AuthAccountPreApprovalEvidenceSummary[]>(authAccountPreApprovalEvidenceFallback);
 const authPreApprovalReadiness = ref<AuthAccountPreApprovalReadiness[]>(authAccountPreApprovalReadinessFallback);
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
@@ -80,6 +84,7 @@ onMounted(async () => {
   await loadAuthAccounts();
   await loadAuthPreApprovalDraft();
   await loadAuthPreApprovalApplications();
+  await loadAuthPreApprovalEvidence();
   await loadAuthPreApprovalReadiness();
   await loadAuthAuditEvents();
   await loadAuthAuditIntegrity();
@@ -173,6 +178,15 @@ async function loadAuthPreApprovalApplications() {
   }
 }
 
+async function loadAuthPreApprovalEvidence() {
+  try {
+    const evidence = await fetchAuthAccountPreApprovalEvidence();
+    authPreApprovalEvidence.value = evidence.length ? evidence : authAccountPreApprovalEvidenceFallback;
+  } catch {
+    // Keep local pre-approval evidence samples visible when the backend is not running.
+  }
+}
+
 function demoPassword(username: string): string {
   return `${username}123`;
 }
@@ -194,6 +208,7 @@ async function handleLogin() {
     await loadAuthAccounts();
     await loadAuthPreApprovalDraft();
     await loadAuthPreApprovalApplications();
+    await loadAuthPreApprovalEvidence();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -215,6 +230,7 @@ async function handleLogout() {
     await loadAuthAccounts();
     await loadAuthPreApprovalDraft();
     await loadAuthPreApprovalApplications();
+    await loadAuthPreApprovalEvidence();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -247,6 +263,7 @@ async function handleChangePassword() {
     await loadAuthAccounts();
     await loadAuthPreApprovalDraft();
     await loadAuthPreApprovalApplications();
+    await loadAuthPreApprovalEvidence();
     await loadAuthPreApprovalReadiness();
     await loadAuthAuditEvents();
     await loadAuthAuditIntegrity();
@@ -585,6 +602,22 @@ function readinessTone(tone: string): Tone {
             <StatusBadge
               :label="application.readyForBlockingApproval ? '可进入审批' : application.applicationStatus"
               :tone="application.readyForBlockingApproval ? 'green' : readinessTone(application.tone)"
+            />
+          </article>
+        </div>
+        <div class="security-pre-approval-evidence">
+          <strong>前置审批证据</strong>
+          <article v-for="evidence in authPreApprovalEvidence" :key="`${evidence.applicationCode}-${evidence.documentCode}`">
+            <div>
+              <b>{{ evidence.applicationCode }} / {{ evidence.requiredEvidence }}</b>
+              <span>{{ evidence.status }} · {{ evidence.actionType }} · {{ evidence.targetUsername }}</span>
+              <small>附件：{{ evidence.attachmentCodes.join(' / ') || '无' }}</small>
+              <small>文档：{{ evidence.documentCode || '未关联' }} · 上传 {{ evidence.latestUploadedAt || '待上传' }}</small>
+              <small>{{ evidence.nextAction }}</small>
+            </div>
+            <StatusBadge
+              :label="evidence.missingEvidence > 0 ? `待补 ${evidence.missingEvidence}` : `附件 ${evidence.attachmentCount}`"
+              :tone="readinessTone(evidence.tone)"
             />
           </article>
         </div>

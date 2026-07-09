@@ -2,6 +2,7 @@ import type { Tone } from './m1PrototypeData';
 import type {
   AuthAccountPreApprovalApplication,
   AuthAccountPreApprovalDraft,
+  AuthAccountPreApprovalEvidenceSummary,
   AuthAccountPreApprovalReadiness,
   AuthUserAccountSummary,
 } from '../services/authApi';
@@ -378,6 +379,24 @@ export const authAccountPreApprovalApplicationFallback: AuthAccountPreApprovalAp
     tone: 'red',
     approvalTaskCode: 'AUTH-PRE-TASK-202607090001-0001',
     submittedAt: '2026-07-09 09:00:00',
+  },
+];
+
+export const authAccountPreApprovalEvidenceFallback: AuthAccountPreApprovalEvidenceSummary[] = [
+  {
+    applicationCode: 'AUTH-PRE-APP-202607090001-0001',
+    readinessCode: 'AUTH-PRE-PASSWORD-001',
+    actionType: '管理员重置密码',
+    targetUsername: 'planner',
+    requiredEvidence: '本人核验附件',
+    documentCode: 'DOC-AUTH-PRE-PASSWORD-001',
+    attachmentCount: 1,
+    missingEvidence: 0,
+    attachmentCodes: ['ATT-AUTH-PRE-PASSWORD-001'],
+    latestUploadedAt: '2026-07-09 11:00:00',
+    status: '已关联证据',
+    nextAction: '保留账号前置审批附件并等待审批复核',
+    tone: 'green',
   },
 ];
 
