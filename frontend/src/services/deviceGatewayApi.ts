@@ -76,6 +76,7 @@ export interface ReadingConsumption {
   operator: string;
   role: string;
   note: string;
+  ledgerCode: string;
   consumedAt: string;
 }
 
@@ -85,6 +86,15 @@ export interface ConsumeReadingRequest {
   businessRefType?: string;
   businessRefCode?: string;
   note?: string;
+  postingCustomerId?: number;
+  postingOwnerCustomerId?: number;
+  postingMotherOrderCode?: string;
+  postingWorkOrderCode?: string;
+  postingMaterialCode?: string;
+  postingFromWarehouseCode?: string;
+  postingToWarehouseCode?: string;
+  postingQuantity?: number | string;
+  postingProcess?: string;
 }
 
 export async function ingestDeviceReading(

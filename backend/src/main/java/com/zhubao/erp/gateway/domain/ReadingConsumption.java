@@ -18,6 +18,11 @@ public record ReadingConsumption(
         String operator,
         String role,
         String note,
+        String ledgerCode,
         String consumedAt
 ) {
+    /** Whether this consumption drove a real business command (non-blank ledger code). */
+    public boolean posted() {
+        return ledgerCode != null && !ledgerCode.isBlank();
+    }
 }

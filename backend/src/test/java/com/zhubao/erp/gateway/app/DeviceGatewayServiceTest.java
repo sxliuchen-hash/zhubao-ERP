@@ -12,6 +12,13 @@ import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.infra.InMemoryDeviceReadingRepository;
 import com.zhubao.erp.gateway.infra.InMemoryGatewayDeviceRepository;
 import com.zhubao.erp.gateway.infra.InMemoryReadingConsumptionRepository;
+import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.domain.OwnerType;
+import com.zhubao.erp.inventory.domain.StockDimension;
+import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.security.app.PasswordHasher;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -19,6 +26,8 @@ import com.zhubao.erp.security.domain.RoleCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
+
+import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,11 +47,16 @@ class DeviceGatewayServiceTest {
                 new InMemoryGatewayDeviceRepository(passwordHasher, environment);
         InMemoryDeviceReadingRepository readingRepository = new InMemoryDeviceReadingRepository();
         InMemoryReadingConsumptionRepository consumptionRepository = new InMemoryReadingConsumptionRepository();
+        stockLedgerService = new StockLedgerService(new InMemoryStockLedgerRepository());
+        businessOperationService = new BusinessOperationService(stockLedgerService);
         service = new DeviceGatewayService(
                 deviceRepository, readingRepository, consumptionRepository,
                 new DeviceReadingNormalizer(), passwordHasher,
-                new GatewayRateLimiter(1000, 60));
+                new GatewayRateLimiter(1000, 60), businessOperationService);
     }
+
+    private StockLedgerService stockLedgerService;
+    private BusinessOperationService businessOperationService;
 
     private static final OperatorContext OPERATOR =
             new OperatorContext("周凯", RoleCode.OPERATOR, DataScope.SELF);
@@ -116,7 +130,7 @@ class DeviceGatewayServiceTest {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "ST,GS,+000123.45,g"));
 
         ReadingConsumption consumption = service.consume(
-                new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "子工单", "ZD-20260706-001", "打包称重"),
+                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "子工单", "ZD-20260706-001", "打包称重"),
                 OPERATOR);
 
         assertThat(consumption.consumptionCode()).isEqualTo("RC-" + reading.readingCode());
@@ -131,7 +145,7 @@ class DeviceGatewayServiceTest {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
 
         assertThatThrownBy(() -> service.consume(
-                new ConsumeReadingCommand(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR))
+                bridgeConsume(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("只能用于");
     }
@@ -139,7 +153,7 @@ class DeviceGatewayServiceTest {
     @Test
     void rejectsConsumingUnknownReading() {
         assertThatThrownBy(() -> service.consume(
-                new ConsumeReadingCommand("DR-NOPE", "DISMISS", "", "", ""), OPERATOR))
+                bridgeConsume("DR-NOPE", "DISMISS", "", "", ""), OPERATOR))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("未找到读数");
     }
@@ -150,22 +164,22 @@ class DeviceGatewayServiceTest {
         assertThat(reading.status()).isEqualTo(DeviceReadingStatus.BLOCKED);
 
         assertThatThrownBy(() -> service.consume(
-                new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
+                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("只能忽略");
 
         ReadingConsumption dismissed = service.consume(
-                new ConsumeReadingCommand(reading.readingCode(), "DISMISS", "", "", "无效报文"), OPERATOR);
+                bridgeConsume(reading.readingCode(), "DISMISS", "", "", "无效报文"), OPERATOR);
         assertThat(dismissed.intent().name()).isEqualTo("DISMISS");
     }
 
     @Test
     void rejectsDoubleConsumption() {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
-        service.consume(new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR);
+        service.consume(bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR);
 
         assertThatThrownBy(() -> service.consume(
-                new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
+                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已被消费");
     }
@@ -232,7 +246,8 @@ class DeviceGatewayServiceTest {
                 new InMemoryReadingConsumptionRepository(),
                 new DeviceReadingNormalizer(),
                 passwordHasher,
-                new GatewayRateLimiter(2, 60));
+                new GatewayRateLimiter(2, 60),
+                new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository())));
 
         limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
         limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.7g"));
@@ -251,12 +266,62 @@ class DeviceGatewayServiceTest {
                 "SCAN-PC-01", DEVICE_KEY, "SCAN_EVENT", "WO|ZD-20260706-009|PROC=POLISH", "子工单", "ZD-20260706-009", ""));
 
         ReadingConsumption consumption = service.consume(
-                new ConsumeReadingCommand(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR);
+                bridgeConsume(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR);
 
         assertThat(consumption.businessRefCode()).isEqualTo("ZD-20260706-009");
     }
 
+    @Test
+    void weighHandoverWithPostingContextWritesLedgerUsingScaleWeight() {
+        // Seed WIP stock so the linked production report can move WIP -> SEMI_FINISHED.
+        seedWip("MD-GW-001", "ZD-GW-001", "MAT-18K-RING", 1001L, "WIP-LINE-01");
+        DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "ST,GS,+000123.45,g"));
+
+        ConsumeReadingCommand consume = new ConsumeReadingCommand(
+                reading.readingCode(), "WEIGH_HANDOVER", "子工单", "ZD-GW-001", "称重联动报工",
+                1001L, 1001L, "MD-GW-001", "ZD-GW-001", "MAT-18K-RING",
+                "WIP-LINE-01", "SEMI-FINISHED", new BigDecimal("10"), "抛光");
+
+        ReadingConsumption consumption = service.consume(consume, OPERATOR);
+
+        assertThat(consumption.posted()).isTrue();
+        assertThat(consumption.ledgerCode()).startsWith("STK-");
+        // The scale weight (123.45g) drove the ledger, not the piece count.
+        assertThat(stockLedgerService.ledgers())
+                .anyMatch(entry -> entry.weight().compareTo(new BigDecimal("123.45")) == 0);
+    }
+
+    @Test
+    void weighHandoverWithoutPostingContextStaysPureBridgeRecord() {
+        DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
+
+        ReadingConsumption consumption = service.consume(
+                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR);
+
+        assertThat(consumption.posted()).isFalse();
+        assertThat(consumption.ledgerCode()).isEmpty();
+    }
+
+    private void seedWip(String motherOrder, String workOrder, String material, long customerId, String warehouse) {
+        stockLedgerService.transfer(new StockTransferCommand(
+                "test_seed",
+                workOrder,
+                null,
+                new StockDimension(OwnerType.CUSTOMER, customerId, customerId, motherOrder, workOrder,
+                        material, warehouse, StockStatus.WIP),
+                new BigDecimal("100"),
+                new BigDecimal("500.00"),
+                "seed wip"));
+    }
+
     private SubmitDeviceReadingCommand command(String deviceCode, String type, String payload) {
         return new SubmitDeviceReadingCommand(deviceCode, DEVICE_KEY, type, payload, "", "", "");
+    }
+
+    private static ConsumeReadingCommand bridgeConsume(
+            String readingCode, String intent, String refType, String refCode, String note) {
+        return new ConsumeReadingCommand(
+                readingCode, intent, refType, refCode, note,
+                null, null, null, null, null, null, null, null, null);
     }
 }

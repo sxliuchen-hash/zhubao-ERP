@@ -198,6 +198,30 @@ function defaultIntentFor(reading: DeviceReading): ReadingConsumptionIntent {
   return intentByType[reading.readingType];
 }
 
+const postingForm = ref({
+  enabled: false,
+  customerId: '',
+  motherOrderCode: '',
+  workOrderCode: '',
+  materialCode: '',
+  fromWarehouseCode: 'WIP',
+  toWarehouseCode: 'SEMI-FINISHED',
+  quantity: '',
+  process: '',
+});
+
+function postingFieldsComplete(): boolean {
+  return (
+    postingForm.value.enabled &&
+    postingForm.value.customerId.trim() !== '' &&
+    postingForm.value.motherOrderCode.trim() !== '' &&
+    postingForm.value.materialCode.trim() !== '' &&
+    postingForm.value.fromWarehouseCode.trim() !== '' &&
+    postingForm.value.toWarehouseCode.trim() !== '' &&
+    postingForm.value.quantity.trim() !== ''
+  );
+}
+
 async function consumeGatewayReading(reading: DeviceReading) {
   gatewayFeedback.value = '';
   const request: ConsumeReadingRequest = {
@@ -206,9 +230,24 @@ async function consumeGatewayReading(reading: DeviceReading) {
     businessRefType: reading.businessRefType || undefined,
     businessRefCode: reading.businessRefCode || undefined,
   };
+  const canPost =
+    (request.intent === 'WEIGH_HANDOVER' || request.intent === 'SCAN_TO_REPORT') && postingFieldsComplete();
+  if (canPost) {
+    request.postingCustomerId = Number(postingForm.value.customerId);
+    request.postingMotherOrderCode = postingForm.value.motherOrderCode.trim();
+    request.postingWorkOrderCode = postingForm.value.workOrderCode.trim() || undefined;
+    request.postingMaterialCode = postingForm.value.materialCode.trim();
+    request.postingFromWarehouseCode = postingForm.value.fromWarehouseCode.trim();
+    request.postingToWarehouseCode = postingForm.value.toWarehouseCode.trim();
+    request.postingQuantity = postingForm.value.quantity.trim();
+    request.postingProcess = postingForm.value.process.trim() || undefined;
+  }
   try {
     const consumption = await consumeReading(request);
-    gatewayFeedback.value = `读数 ${consumption.readingCode} 已消费为「${intentLabels[consumption.intent]}」，操作人 ${consumption.operator}`;
+    const ledgerNote = consumption.ledgerCode
+      ? `，已联动写入台账 ${consumption.ledgerCode}`
+      : '（仅留痕，未写台账）';
+    gatewayFeedback.value = `读数 ${consumption.readingCode} 已消费为「${intentLabels[consumption.intent]}」，操作人 ${consumption.operator}${ledgerNote}`;
     await refreshGateway();
   } catch (error) {
     gatewayFeedback.value = error instanceof Error ? error.message : '读数消费失败';
@@ -1428,6 +1467,23 @@ function nextIntegrationActionFor(deviceCode: string): string {
         </div>
       </div>
 
+      <div class="gateway-posting-toggle">
+        <label class="posting-check">
+          <input v-model="postingForm.enabled" type="checkbox" />
+          <span>联动报工：消费称重/扫码读数时同时写库存台账（WIP → 半成品）</span>
+        </label>
+        <div v-if="postingForm.enabled" class="gateway-form posting-form">
+          <label><span>客户ID</span><input v-model="postingForm.customerId" placeholder="必填，如 1001" /></label>
+          <label><span>母单编码</span><input v-model="postingForm.motherOrderCode" placeholder="必填" /></label>
+          <label><span>工单编码</span><input v-model="postingForm.workOrderCode" placeholder="扫码读数可留空" /></label>
+          <label><span>物料编码</span><input v-model="postingForm.materialCode" placeholder="必填" /></label>
+          <label><span>源仓</span><input v-model="postingForm.fromWarehouseCode" /></label>
+          <label><span>目标仓</span><input v-model="postingForm.toWarehouseCode" /></label>
+          <label><span>数量</span><input v-model="postingForm.quantity" placeholder="必填，件数" /></label>
+          <label><span>工序</span><input v-model="postingForm.process" placeholder="可选" /></label>
+        </div>
+      </div>
+
       <div class="module-table-wrap refined-table-wrap">
         <table class="module-table">
           <thead>
@@ -1487,6 +1543,7 @@ function nextIntegrationActionFor(deviceCode: string): string {
                 <th>意图</th>
                 <th>归一化</th>
                 <th>业务对象</th>
+                <th>台账</th>
                 <th>操作人</th>
                 <th>时间</th>
               </tr>
@@ -1498,11 +1555,19 @@ function nextIntegrationActionFor(deviceCode: string): string {
                 <td><StatusBadge :label="intentLabels[consumption.intent]" tone="blue" /></td>
                 <td>{{ consumption.normalizedValue }}{{ consumption.normalizedUnit }} {{ consumption.normalizedCode }}</td>
                 <td>{{ consumption.businessRefType }} {{ consumption.businessRefCode }}</td>
+                <td>
+                  <StatusBadge
+                    v-if="consumption.ledgerCode"
+                    :label="consumption.ledgerCode"
+                    tone="green"
+                  />
+                  <span v-else class="muted">仅留痕</span>
+                </td>
                 <td>{{ consumption.operator }} / {{ consumption.role }}</td>
                 <td>{{ consumption.consumedAt }}</td>
               </tr>
               <tr v-if="gatewayConsumptions.length === 0">
-                <td colspan="7" class="empty-hint">暂无消费记录。</td>
+                <td colspan="8" class="empty-hint">暂无消费记录。</td>
               </tr>
             </tbody>
           </table>

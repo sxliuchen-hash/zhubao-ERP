@@ -32,8 +32,8 @@ public class JdbcReadingConsumptionRepository implements ReadingConsumptionRepos
                 insert into hw_gateway_reading_consumption (
                     consumption_code, reading_code, device_code, reading_type, intent,
                     normalized_value, normalized_unit, normalized_code, business_ref_type,
-                    business_ref_code, operator, role_code, note, consumed_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    business_ref_code, operator, role_code, note, ledger_code, consumed_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -50,7 +50,8 @@ public class JdbcReadingConsumptionRepository implements ReadingConsumptionRepos
             statement.setString(11, consumption.operator());
             statement.setString(12, consumption.role());
             statement.setString(13, consumption.note());
-            statement.setString(14, consumption.consumedAt());
+            statement.setString(14, consumption.ledgerCode());
+            statement.setString(15, consumption.consumedAt());
             statement.executeUpdate();
             return consumption;
         } catch (SQLException ex) {
@@ -97,7 +98,7 @@ public class JdbcReadingConsumptionRepository implements ReadingConsumptionRepos
         return """
                 select consumption_code, reading_code, device_code, reading_type, intent,
                        normalized_value, normalized_unit, normalized_code, business_ref_type,
-                       business_ref_code, operator, role_code, note, consumed_at
+                       business_ref_code, operator, role_code, note, ledger_code, consumed_at
                   from hw_gateway_reading_consumption
                 """;
     }
@@ -117,6 +118,7 @@ public class JdbcReadingConsumptionRepository implements ReadingConsumptionRepos
                 rs.getString("operator"),
                 rs.getString("role_code"),
                 rs.getString("note"),
+                rs.getString("ledger_code"),
                 rs.getString("consumed_at")
         );
     }

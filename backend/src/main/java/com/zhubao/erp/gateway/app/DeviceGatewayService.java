@@ -1,5 +1,8 @@
 package com.zhubao.erp.gateway.app;
 
+import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.business.domain.ProductionReportResult;
+import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.gateway.domain.ConsumeReadingCommand;
 import com.zhubao.erp.gateway.domain.DeviceReading;
@@ -21,6 +24,7 @@ import com.zhubao.erp.security.app.PasswordHasher;
 import com.zhubao.erp.security.domain.OperatorContext;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -46,6 +50,7 @@ public class DeviceGatewayService {
     private final DeviceReadingNormalizer normalizer;
     private final PasswordHasher passwordHasher;
     private final GatewayRateLimiter rateLimiter;
+    private final BusinessOperationService businessOperationService;
 
     public DeviceGatewayService(
             GatewayDeviceRepository deviceRepository,
@@ -53,7 +58,8 @@ public class DeviceGatewayService {
             ReadingConsumptionRepository consumptionRepository,
             DeviceReadingNormalizer normalizer,
             PasswordHasher passwordHasher,
-            GatewayRateLimiter rateLimiter
+            GatewayRateLimiter rateLimiter,
+            BusinessOperationService businessOperationService
     ) {
         this.deviceRepository = deviceRepository;
         this.readingRepository = readingRepository;
@@ -61,6 +67,7 @@ public class DeviceGatewayService {
         this.normalizer = normalizer;
         this.passwordHasher = passwordHasher;
         this.rateLimiter = rateLimiter;
+        this.businessOperationService = businessOperationService;
     }
 
     public DeviceReading ingest(SubmitDeviceReadingCommand command) {
@@ -138,6 +145,9 @@ public class DeviceGatewayService {
             throw new BusinessException("读数已被消费：" + existing.consumptionCode());
         });
 
+        String businessRefCode = blankToDefault(command.businessRefCode(), reading.businessRefCode());
+        String ledgerCode = maybePostProductionReport(command, reading, intent, operatorContext);
+
         String now = TIME_FORMATTER.format(LocalDateTime.now());
         ReadingConsumption consumption = new ReadingConsumption(
                 "RC-" + reading.readingCode(),
@@ -149,13 +159,104 @@ public class DeviceGatewayService {
                 reading.normalizedUnit(),
                 reading.normalizedCode(),
                 blankToDefault(command.businessRefType(), reading.businessRefType()),
-                blankToDefault(command.businessRefCode(), reading.businessRefCode()),
+                businessRefCode,
                 operatorContext.operator(),
                 operatorContext.role().name(),
                 blankToEmpty(command.note()),
+                ledgerCode,
                 now
         );
         return consumptionRepository.save(consumption);
+    }
+
+    /**
+     * When the consumption carries a complete production-posting context and the intent supports it,
+     * drive a real production report (WIP -> SEMI_FINISHED) via {@link BusinessOperationService} and
+     * return the resulting ledger code. Otherwise return an empty string (pure bridge record).
+     *
+     * <p>For {@code SCALE_WEIGHT} the normalized weight is used; the caller still supplies the piece
+     * count. For {@code SCAN_EVENT} the scanned code becomes the work order when none was supplied.</p>
+     */
+    private String maybePostProductionReport(
+            ConsumeReadingCommand command,
+            DeviceReading reading,
+            ReadingConsumptionIntent intent,
+            OperatorContext operatorContext
+    ) {
+        boolean postingIntent = intent == ReadingConsumptionIntent.WEIGH_HANDOVER
+                || intent == ReadingConsumptionIntent.SCAN_TO_REPORT;
+        if (!postingIntent || !command.hasProductionPosting()) {
+            return "";
+        }
+        if (businessOperationService == null) {
+            throw new BusinessException("业务操作服务不可用，无法联动入账");
+        }
+
+        BigDecimal weight = resolvePostingWeight(command, reading);
+        String workOrderCode = resolvePostingWorkOrder(command, reading, intent);
+
+        ProductionReportResult result = businessOperationService.reportProduction(new ReportProductionCommand(
+                command.postingMotherOrderCode().trim(),  // motherOrderCode
+                workOrderCode,                             // workOrderCode
+                command.postingCustomerId(),               // customerId
+                command.postingOwnerCustomerId(),          // ownerCustomerId
+                command.postingMaterialCode().trim(),      // materialCode
+                command.postingFromWarehouseCode().trim(), // fromWarehouseCode
+                command.postingToWarehouseCode().trim(),   // toWarehouseCode
+                command.postingQuantity(),                 // quantity
+                null,                                      // quantityUnit
+                weight,                                    // weight
+                null,                                      // workDate
+                blankToDefault(command.postingProcess(), "设备读数报工"), // process
+                null,                                      // processCategory
+                null,                                      // productCategory
+                reading.deviceCode(),                      // machineNo
+                null,                                      // workItemName
+                null,                                      // startedAt
+                null,                                      // finishedAt
+                null,                                      // completionStatus
+                "gateway-device",                          // handoffAuditStatus
+                null,                                      // sourceRegisterType
+                null,                                      // sourceRegisterLineNo
+                null,                                      // sourceRegisterSequence
+                operatorContext.operator(),                // operator
+                operatorContext.operator(),                // operatorSignatureName
+                reading.readingCode(),                     // handoffCode
+                "设备网关读数 " + reading.readingCode() + " 联动报工" // remark
+        ));
+        return result.ledgerCode();
+    }
+
+    private BigDecimal resolvePostingWeight(ConsumeReadingCommand command, DeviceReading reading) {
+        if (reading.readingType() == DeviceReadingType.SCALE_WEIGHT
+                && reading.normalizedValue() != null && !reading.normalizedValue().isBlank()) {
+            try {
+                BigDecimal weight = new BigDecimal(reading.normalizedValue());
+                if (weight.signum() > 0) {
+                    return weight;
+                }
+            } catch (NumberFormatException ignored) {
+                // fall through to the quantity fallback below
+            }
+        }
+        // Non-scale readings do not carry a weight; reuse the piece count as a positive placeholder
+        // so the ledger stays balanced and the human retains responsibility for the real weight.
+        return command.postingQuantity();
+    }
+
+    private String resolvePostingWorkOrder(
+            ConsumeReadingCommand command,
+            DeviceReading reading,
+            ReadingConsumptionIntent intent
+    ) {
+        if (command.postingWorkOrderCode() != null && !command.postingWorkOrderCode().isBlank()) {
+            return command.postingWorkOrderCode().trim();
+        }
+        if (intent == ReadingConsumptionIntent.SCAN_TO_REPORT
+                && reading.normalizedCode() != null && !reading.normalizedCode().isBlank()) {
+            return reading.normalizedCode();
+        }
+        throw new BusinessException("缺少工单编码：请提供 postingWorkOrderCode 或使用带工单的扫码读数");
     }
 
     public List<ReadingConsumption> recentConsumptions(int limit) {

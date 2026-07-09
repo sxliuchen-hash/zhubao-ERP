@@ -141,6 +141,8 @@
 - M3.123 设备读数消费闭环，新增 `GATEWAY_READING_CONSUME` 权限、`ReadingConsumption` 可追责桥接记录、内存/JDBC 双仓储、`V26__m3_hardware_gateway_consumption_contract.sql` 和 `POST /api/hardware/gateway/consumptions`、`GET /api/hardware/gateway/consumptions`。操作工/车间组长/质检员/库管员/收货员凭登录会话或评审角色头把 READY/WARNING 读数消费为称重交接、扫码报工、打印确认、视频关联意图，BLOCKED 读数只能忽略(DISMISS)，同一读数拒绝重复消费；消费记录操作人、角色、业务对象和时间，软硬件联动作业台读数表新增消费动作和消费记录表。该边界把设备遥测桥接到可追责的人工业务动作，消费本身不写库存台账，仍需继续把称重/扫码消费联动到真实业务命令。
 - M3.124 设备网关限流防滥用，新增 `GatewayRateLimiter` 滑动窗口限流器和 `GatewayRateLimitException`（映射 HTTP 429）。设备读数接入端点凭设备密钥鉴权而非人工 RBAC，因此单独按设备做滚动窗口限流（默认 60 秒内 120 条，可经 `ZHUBAO_GATEWAY_RATE_LIMIT_MAX` / `ZHUBAO_GATEWAY_RATE_LIMIT_WINDOW_SECONDS` 配置），避免桥接程序配置异常或密钥泄漏导致读数洪泛，各设备配额相互独立。该边界补齐设备侧接入的滥用防护，不代表签名防重放、mTLS 或完整设备身份体系完成。
 - M3.125 设备网关设备管理，新增 `GATEWAY_DEVICE_MANAGE` 权限（仅 ADMIN/总经理）、`RegisterGatewayDeviceCommand` 和 `POST /api/hardware/gateway/devices`、`POST /api/hardware/gateway/devices/{deviceCode}/status`、`POST /api/hardware/gateway/devices/{deviceCode}/rotate-key`。管理员可注册/更新设备、启停设备、轮换设备密钥（PBKDF2 重新哈希，旧密钥立即失效），设备从只读 seed 推进到可运营；停用设备立即拒绝读数接入，更新时空密钥保留原哈希。前端软硬件联动作业台新增设备注册表单和启停/轮换密钥动作。该边界补齐设备生命周期运营，不代表签名防重放、mTLS 或完整设备身份体系完成。
+- M3.126 设备网关 HTTP 集成测试，`M2ManagementApiSmokeTest` 端到端锁定设备密钥推送读数、授权角色消费、操作工被拒设备管理(403)、管理员注册设备的 HTTP 契约。
+- M3.127 设备读数联动业务台账闭环，`ConsumeReadingCommand` 新增可选 `posting*` 字段（客户、母单、工单、物料、源/目标仓、数量、工序），`ReadingConsumption` 新增 `ledgerCode` 和 `V27__m3_hardware_gateway_consumption_ledger.sql`。当称重交接/扫码报工消费带齐业务字段时，`DeviceGatewayService` 调用 `BusinessOperationService.reportProduction` 真正写库存台账（WIP → 半成品）并回写台账号：`SCALE_WEIGHT` 用归一化后的真实重量，`SCAN_EVENT` 用扫码工单号；字段不全时退化为纯留痕（M3.123 行为），保持半自动、可回退。前端软硬件联动作业台读数消费区新增“联动报工”开关和业务字段表单，消费记录表展示台账号。该边界打通设备到库存台账的最后一段，硬件称重/扫码可自动生成报工；不代表全自动主数据匹配、称重误差校验或工资锁账完成。
 
 ## 目录结构
 
