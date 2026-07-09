@@ -83,6 +83,18 @@ class PermissionGuardTest {
     }
 
     @Test
+    void limitsCustomerAuthorizationManagementToAdminAndGeneralManager() {
+        OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
+        OperatorContext sales = new OperatorContext("业务专员 林岚", RoleCode.SALES, DataScope.CUSTOMER_RANGE);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, generalManager))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, sales))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("客户授权管理");
+    }
+
+    @Test
     void limitsAuthAccountManagementToAdminAndGeneralManager() {
         OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);

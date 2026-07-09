@@ -18,6 +18,7 @@ public enum PermissionCode {
     GATEWAY_READING_CONSUME("设备读数消费"),
     GATEWAY_DEVICE_MANAGE("设备网关管理"),
     AUTH_ACCOUNT_MANAGE("登录账号管理"),
+    CUSTOMER_AUTHORIZATION_MANAGE("客户授权管理"),
     APPROVAL_DECISION("审批任务决策"),
     DOCUMENT_ATTACHMENT_UPLOAD("证据附件上传"),
     VIDEO_TASK_OPERATE("视频任务操作");

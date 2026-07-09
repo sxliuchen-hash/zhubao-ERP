@@ -40,6 +40,8 @@ zhubao:
     allow-header-context: true
     menu:
       repository: memory
+    customer-authorization:
+      repository: memory
   hardware:
     poc:
       repository: memory

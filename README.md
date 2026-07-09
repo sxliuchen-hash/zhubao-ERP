@@ -142,6 +142,7 @@
 - M3.124 设备网关限流防滥用，新增 `GatewayRateLimiter` 滑动窗口限流器和 `GatewayRateLimitException`（映射 HTTP 429）。设备读数接入端点凭设备密钥鉴权而非人工 RBAC，因此单独按设备做滚动窗口限流（默认 60 秒内 120 条，可经 `ZHUBAO_GATEWAY_RATE_LIMIT_MAX` / `ZHUBAO_GATEWAY_RATE_LIMIT_WINDOW_SECONDS` 配置），避免桥接程序配置异常或密钥泄漏导致读数洪泛，各设备配额相互独立。该边界补齐设备侧接入的滥用防护，不代表签名防重放、mTLS 或完整设备身份体系完成。
 - M3.125 设备网关设备管理，新增 `GATEWAY_DEVICE_MANAGE` 权限（仅 ADMIN/总经理）、`RegisterGatewayDeviceCommand` 和 `POST /api/hardware/gateway/devices`、`POST /api/hardware/gateway/devices/{deviceCode}/status`、`POST /api/hardware/gateway/devices/{deviceCode}/rotate-key`。管理员可注册/更新设备、启停设备、轮换设备密钥（PBKDF2 重新哈希，旧密钥立即失效），设备从只读 seed 推进到可运营；停用设备立即拒绝读数接入，更新时空密钥保留原哈希。前端软硬件联动作业台新增设备注册表单和启停/轮换密钥动作。该边界补齐设备生命周期运营，不代表签名防重放、mTLS 或完整设备身份体系完成。
 - M3.126 设备网关 HTTP 集成测试，`M2ManagementApiSmokeTest` 端到端锁定设备密钥推送读数、授权角色消费、操作工被拒设备管理(403)、管理员注册设备的 HTTP 契约。
+- M3.130 客户授权关系表持久化，新增 `CustomerAuthorization`、`CustomerAuthorizationRepository`（内存/JDBC 可切换）、`CustomerAuthorizationService`、`CUSTOMER_AUTHORIZATION_MANAGE` 权限（仅 ADMIN/总经理）、`V29__m3_customer_authorization_contract.sql`（`sys_customer_authorization`）和 `GET/POST /api/security/customer-authorizations`、`POST /api/security/customer-authorizations/revocations`。`CUSTOMER_RANGE` 账号的可见客户范围改为来自可维护的授权表（授权表有记录时为准，否则回退账号 `customerScope` 文本字段）；`AuthSessionService` Bearer 会话解析时按授权表计算有效客户范围，业务工作台 GET 过滤据此收敛。前端新增 `customerAuthorizationApi` 服务。该边界把 `CUSTOMER_RANGE` 从账号文本字段升级为可维护授权关系表，不代表完整组织树、跨对象关系推导或全系统行级权限完成。
 - M3.129 权限菜单树持久化，将原先硬编码在 `NavigationMenuService` 的菜单树和角色可见性抽取为 `NavigationMenuRepository`（内存默认 + JDBC 可选），新增 `V28__m3_navigation_menu_contract.sql`（`sys_navigation_menu` / `sys_role_menu` 两表并 seed 评审默认）。`zhubao.security.menu.repository` 本地默认 `memory`、MySQL profile 默认 `jdbc`（环境变量 `ZHUBAO_MENU_REPOSITORY`），菜单标签、路由、按钮权限编码和角色可见性可按部署自定义而无需改代码。`GET /api/security/menu-tree`、登录会话和权限上下文的菜单契约保持不变。该边界解决生产菜单持久化，是走向客户交付准入的关键项；仍不代表菜单在线可视化编辑 UI 或完整组织客户授权表完成。
 - M3.128 设备网关读数防重放，新增 `GatewayReplayGuard`（nonce + 时间戳窗口，按设备隔离）和 `GatewayReplayException`（映射 HTTP 409）。`SubmitDeviceReadingCommand` 新增可选 `nonce`；开启 `zhubao.gateway.replay.enabled`（本地默认关闭，MySQL profile 默认开启，环境变量 `ZHUBAO_GATEWAY_REPLAY_ENABLED`）后，读数必须携带 nonce 和可解析时间戳（epoch 毫秒/ISO-8601/本地时间），时间戳超出 ±300 秒窗口或 nonce 在窗口内重复即拒绝，nonce 仅按窗口保留以限制内存。前端推送读数时自动带 ISO 时间戳和随机 nonce。该边界防止被抓包的有效请求被重放，不代表 mTLS、可验证签名或完整设备身份体系完成（设备密钥以 PBKDF2 哈希存储，无法在服务端做经典 HMAC 验签）。
 - M3.127 设备读数联动业务台账闭环，`ConsumeReadingCommand` 新增可选 `posting*` 字段（客户、母单、工单、物料、源/目标仓、数量、工序），`ReadingConsumption` 新增 `ledgerCode` 和 `V27__m3_hardware_gateway_consumption_ledger.sql`。当称重交接/扫码报工消费带齐业务字段时，`DeviceGatewayService` 调用 `BusinessOperationService.reportProduction` 真正写库存台账（WIP → 半成品）并回写台账号：`SCALE_WEIGHT` 用归一化后的真实重量，`SCAN_EVENT` 用扫码工单号；字段不全时退化为纯留痕（M3.123 行为），保持半自动、可回退。前端软硬件联动作业台读数消费区新增“联动报工”开关和业务字段表单，消费记录表展示台账号。该边界打通设备到库存台账的最后一段，硬件称重/扫码可自动生成报工；不代表全自动主数据匹配、称重误差校验或工资锁账完成。
@@ -301,6 +302,16 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 
 菜单树 JDBC 覆盖 `sys_navigation_menu` 和 `sys_role_menu`：`V28__m3_navigation_menu_contract.sql` seed 12 个一期菜单和各角色可见性，菜单标签、模块、路由、按钮权限编码、排序、启停和角色绑定均可在库中自定义，`GET /api/security/menu-tree` 契约不变。本地默认内存菜单，便于评审。该边界解决生产菜单持久化，不代表菜单在线编辑 UI 或完整组织客户授权表完成。
 
+启用 MySQL 客户授权关系表：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_CUSTOMER_AUTHORIZATION_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+客户授权 JDBC 覆盖 `sys_customer_authorization`：`CUSTOMER_RANGE` 账号可见客户范围由授权表维护（总经理/管理员通过 `POST /api/security/customer-authorizations` 授权、`/revocations` 撤销），登录会话解析时按授权表计算有效范围，授权表无记录时回退账号 `customerScope` 文本字段。本地默认内存仓储，便于评审。该边界不代表完整组织树、跨对象关系推导或全系统行级权限完成。
+
 启用 MySQL 硬件设备网关持久化：
 
 ```powershell
@@ -398,6 +409,9 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/auth/audit-events`
 - `GET /api/security/current-context`
 - `GET /api/security/menu-tree`
+- `GET /api/security/customer-authorizations`
+- `POST /api/security/customer-authorizations`
+- `POST /api/security/customer-authorizations/revocations`
 - `GET /api/business/workspaces/summary`
 - `GET /api/business/workspaces/inbound`
 - `GET /api/business/workspaces/production`
