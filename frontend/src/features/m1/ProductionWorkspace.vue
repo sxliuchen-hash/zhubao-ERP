@@ -16,7 +16,9 @@ import {
   type ProductionReportResult,
 } from '../../services/businessOperationApi';
 import {
+  fetchMachineOutputMachineMatchSuggestions,
   fetchMachineOutputSummary,
+  type MachineOutputMachineMatchSuggestion,
   type MachineOutputSummary,
 } from '../../services/machineOutputApi';
 
@@ -40,6 +42,8 @@ const machineOutputSummary = ref<MachineOutputSummary>({
 });
 const machineOutputSummaryLoading = ref(false);
 const machineOutputSummaryError = ref('');
+const machineMatchSuggestions = ref<MachineOutputMachineMatchSuggestion[]>([]);
+const machineMatchSuggestionError = ref('');
 
 const activeWorkOrder = computed(
   () =>
@@ -103,6 +107,7 @@ const productionActionTrace = [
 
 const machineOutputTopMachines = computed(() => machineOutputSummary.value.byMachine.slice(0, 4));
 const machineOutputWorkDates = computed(() => machineOutputSummary.value.byWorkDate.slice(0, 3));
+const machineMatchSuggestionTop = computed(() => machineMatchSuggestions.value.slice(0, 3));
 const machineOutputTotalText = computed(
   () => `${machineOutputSummary.value.totalQuantity}${machineOutputSummary.value.quantityUnit}`,
 );
@@ -110,6 +115,7 @@ const machineOutputTotalText = computed(
 onMounted(() => {
   void loadProductionWorkspace();
   void loadMachineOutputSummary();
+  void loadMachineMatchSuggestions();
 });
 
 async function loadProductionWorkspace() {
@@ -131,6 +137,16 @@ async function loadMachineOutputSummary() {
     machineOutputSummaryError.value = error instanceof Error ? error.message : '设备产量汇总读取失败';
   } finally {
     machineOutputSummaryLoading.value = false;
+  }
+}
+
+async function loadMachineMatchSuggestions() {
+  machineMatchSuggestionError.value = '';
+  try {
+    machineMatchSuggestions.value = await fetchMachineOutputMachineMatchSuggestions(100);
+  } catch (error) {
+    machineMatchSuggestions.value = [];
+    machineMatchSuggestionError.value = error instanceof Error ? error.message : '机器档案匹配建议读取失败';
   }
 }
 
@@ -165,6 +181,18 @@ function selectWorkOrder(code: string) {
 
 function outputQuantityText(quantity: number | string) {
   return `${quantity}${machineOutputSummary.value.quantityUnit}`;
+}
+
+function machineMatchReadinessLabel(readiness: MachineOutputMachineMatchSuggestion['readiness']) {
+  if (readiness === 'READY_TO_BIND') return '可绑定';
+  if (readiness === 'CONFLICT') return '候选冲突';
+  return '待建档';
+}
+
+function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readiness']): Tone {
+  if (readiness === 'READY_TO_BIND') return 'green';
+  if (readiness === 'CONFLICT') return 'red';
+  return 'amber';
 }
 </script>
 
@@ -464,6 +492,32 @@ function outputQuantityText(quantity: number | string) {
             </div>
             <small v-else>暂无日期汇总</small>
           </div>
+        </div>
+
+        <div class="machine-match-suggestion-panel">
+          <div class="machine-match-suggestion-title">
+            <strong>机器档案匹配建议</strong>
+            <span>按现场机器编号归集未绑定记录，先给出只读建议，不自动改账。</span>
+          </div>
+          <div v-if="machineMatchSuggestionError" class="operation-feedback danger">
+            <strong>机器档案匹配建议读取失败</strong>
+            <span>{{ machineMatchSuggestionError }}</span>
+          </div>
+          <div v-else-if="machineMatchSuggestionTop.length" class="rule-stack machine-match-suggestion-list">
+            <article v-for="item in machineMatchSuggestionTop" :key="item.machineNoSnapshot">
+              <div>
+                <strong>{{ item.machineNoSnapshot }}</strong>
+                <span>{{ item.productCategory || '未记录品类' }} / {{ item.latestWorkDate || '未记录日期' }}</span>
+              </div>
+              <StatusBadge :label="machineMatchReadinessLabel(item.readiness)" :tone="machineMatchTone(item.readiness)" />
+              <small>
+                未匹配 {{ item.unmatchedRecords }} 条 / 已绑定 {{ item.matchedRecords }} 条 /
+                候选 {{ item.candidateMachineIds.length ? item.candidateMachineIds.join(', ') : '待建档' }}
+              </small>
+              <small>{{ item.suggestedAction }}</small>
+            </article>
+          </div>
+          <small v-else>暂无待匹配机器档案。</small>
         </div>
       </div>
 

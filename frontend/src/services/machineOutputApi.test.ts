@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  fetchMachineOutputMachineMatchSuggestions,
   fetchMachineOutputSummary,
   fetchMachineOutputs,
   fetchMachineOutputsByImportBatch,
@@ -59,18 +60,42 @@ describe('machineOutputApi', () => {
             signatureMissingRecords: 1,
           },
         }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: [{
+            machineNoSnapshot: 'ENG-03',
+            productCategory: 'X',
+            candidateMachineIds: [9001],
+            matchedRecords: 1,
+            unmatchedRecords: 1,
+            totalRecords: 2,
+            latestWorkDate: '2026-07-08',
+            sourceRegisterType: 'REG-ENGRAVING',
+            sourceMachineLineNo: '3',
+            readiness: 'READY_TO_BIND',
+            suggestedAction: 'Bind unmatched records to candidate machine id 9001.',
+          }],
+        }),
       } as Response);
 
     const recent = await fetchMachineOutputs(5);
     const byBatch = await fetchMachineOutputsByImportBatch('IMP-REG-ENGRAVING-001');
     const summary = await fetchMachineOutputSummary(20);
+    const suggestions = await fetchMachineOutputMachineMatchSuggestions(20);
 
     expect(recent[0].code).toBe('MOR-REG-001');
     expect(byBatch[0].machineNoSnapshot).toBe('ENG-03');
     expect(summary.byMachine[0].quantity).toBe(12);
+    expect(suggestions[0].readiness).toBe('READY_TO_BIND');
+    expect(suggestions[0].candidateMachineIds).toEqual([9001]);
     expect(fetchMock.mock.calls[0][0]).toContain('/api/machine-outputs?limit=5');
     expect(fetchMock.mock.calls[1][0]).toContain('/api/machine-outputs/import-batches/IMP-REG-ENGRAVING-001');
     expect(fetchMock.mock.calls[2][0]).toContain('/api/machine-outputs/summary?limit=20');
+    expect(fetchMock.mock.calls[3][0]).toContain('/api/machine-outputs/machine-match-suggestions?limit=20');
   });
 
   it('submits a machine output record through JSON API', async () => {

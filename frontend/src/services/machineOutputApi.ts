@@ -50,6 +50,20 @@ export interface MachineOutputSummary {
   signatureMissingRecords: number;
 }
 
+export interface MachineOutputMachineMatchSuggestion {
+  machineNoSnapshot: string;
+  productCategory: string;
+  candidateMachineIds: number[];
+  matchedRecords: number;
+  unmatchedRecords: number;
+  totalRecords: number;
+  latestWorkDate: string;
+  sourceRegisterType: string;
+  sourceMachineLineNo: string;
+  readiness: 'READY_TO_BIND' | 'NEEDS_MASTER_DATA' | 'CONFLICT';
+  suggestedAction: string;
+}
+
 export interface SubmitMachineOutputRequest {
   code?: string;
   workDate: string;
@@ -83,6 +97,14 @@ export async function fetchMachineOutputs(limit = 20): Promise<MachineOutputReco
 
 export async function fetchMachineOutputSummary(limit = 100): Promise<MachineOutputSummary> {
   return apiGet<MachineOutputSummary>(`/api/machine-outputs/summary?limit=${limit}`);
+}
+
+export async function fetchMachineOutputMachineMatchSuggestions(
+  limit = 100,
+): Promise<MachineOutputMachineMatchSuggestion[]> {
+  return apiGet<MachineOutputMachineMatchSuggestion[]>(
+    `/api/machine-outputs/machine-match-suggestions?limit=${limit}`,
+  );
 }
 
 export async function fetchMachineOutputsByImportBatch(importBatchNo: string): Promise<MachineOutputRecord[]> {

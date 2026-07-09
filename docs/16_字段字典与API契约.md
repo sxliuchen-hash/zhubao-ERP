@@ -93,7 +93,7 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.120 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果清单、硬件签字闭环就绪度清单、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、管理员新建/重置非 demo 密码后强制首次登录改密、临时密码一次性消费、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、账号动作申请单号强制开关、账号前置审批任务交接、账号动作审批通过态强制校验、账号停用会话吊销、前置审批证据上传入口和附件预览短期签名令牌：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.120 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /documents/attachments/{code}/preview-url`、`GET /hardware/adapter-plans`、`GET /hardware/protocol-samples`、`GET /hardware/protocol-reviews`、`GET /hardware/protocol-executions`、`GET /hardware/protocol-signoffs`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`GET /auth/accounts/pre-approval-readiness`、`POST /auth/accounts/pre-approval-drafts`、`GET/POST /auth/accounts/pre-approval-applications`、`GET /auth/accounts/pre-approval-evidence`、`POST /auth/accounts/pre-approval-evidence/uploads`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity`、`GET /security/current-context` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、入账后的母单/出库单结构化快照、附件短期签名预览 URL、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果、硬件签字闭环就绪度、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期/强制改密状态、账号客户范围、账号前置审批缺口、申请草稿待补材料、前置审批申请单、申请单绑定的轻量审批任务号、前置审批证据关联状态、上传结果、生产强制模式审批通过态门禁、当前权限上下文客户范围展示、认证审计完整性摘要、停用会话吊销审计和账号变更复核任务；临时密码一次性消费是后端内部安全状态，不新增前端公开字段，前置审批证据上传入口会自动创建/更新证据包并保存附件元数据。`GET /business/workspaces/*` 会按当前 `dataScope` 和 `customerScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。账号管理审批任务、账号前置审批就绪度清单、草稿评估、申请单仓储、申请单号校验、生产配置强制申请单号开关、申请单审批任务交接、审批通过态强制校验、停用会话吊销、强制首次改密、临时密码一次性消费和前置审批证据上传入口是治理契约，不代表完整 IAM、正式电子签字或完整组织客户授权表。
+当前 M3.121 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、设备产量机器档案匹配建议、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果清单、硬件签字闭环就绪度清单、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、管理员新建/重置非 demo 密码后强制首次登录改密、临时密码一次性消费、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、账号动作申请单号强制开关、账号前置审批任务交接、账号动作审批通过态强制校验、账号停用会话吊销、前置审批证据上传入口和附件预览短期签名令牌：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.121 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /machine-outputs/machine-match-suggestions`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /documents/attachments/{code}/preview-url`、`GET /hardware/adapter-plans`、`GET /hardware/protocol-samples`、`GET /hardware/protocol-reviews`、`GET /hardware/protocol-executions`、`GET /hardware/protocol-signoffs`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`GET /auth/accounts/pre-approval-readiness`、`POST /auth/accounts/pre-approval-drafts`、`GET/POST /auth/accounts/pre-approval-applications`、`GET /auth/accounts/pre-approval-evidence`、`POST /auth/accounts/pre-approval-evidence/uploads`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity`、`GET /security/current-context` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、机器档案匹配建议、入账后的母单/出库单结构化快照、附件短期签名预览 URL、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果、硬件签字闭环就绪度、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期/强制改密状态、账号客户范围、账号前置审批缺口、申请草稿待补材料、前置审批申请单、申请单绑定的轻量审批任务号、前置审批证据关联状态、上传结果、生产强制模式审批通过态门禁、当前权限上下文客户范围展示、认证审计完整性摘要、停用会话吊销审计和账号变更复核任务；临时密码一次性消费是后端内部安全状态，不新增前端公开字段，前置审批证据上传入口会自动创建/更新证据包并保存附件元数据。`GET /business/workspaces/*` 会按当前 `dataScope` 和 `customerScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。设备产量机器档案匹配建议只读返回候选，不自动改写历史产量记录。账号管理审批任务、账号前置审批就绪度清单、草稿评估、申请单仓储、申请单号校验、生产配置强制申请单号开关、申请单审批任务交接、审批通过态强制校验、停用会话吊销、强制首次改密、临时密码一次性消费和前置审批证据上传入口是治理契约，不代表完整 IAM、正式电子签字或完整组织客户授权表。
 
 业务操作接口前缀：
 
@@ -176,6 +176,7 @@ M3.119 补充：`POST /api/auth/accounts/pre-approval-evidence/uploads` 使用 `
 |---|---|---|
 | `GET /machine-outputs?limit=20` | 生产统计 / 样例库 | 查询最近设备产量记录，默认最多 20 条 |
 | `GET /machine-outputs/summary?limit=100` | 生产派工 / 生产统计 | 汇总最近设备产量记录，返回总记录数、总产量、按机器/日期分组、机器档案待匹配数和签名附件待补数 |
+| `GET /machine-outputs/machine-match-suggestions?limit=100` | 生产派工 / 机器档案复核 | M3.121 起按现场机器编号聚合未绑定 `machineId` 的设备产量记录，返回候选机器档案 ID、未匹配数量和人工复核动作；只读建议，不自动绑定 |
 | `GET /machine-outputs/import-batches/{importBatchNo}` | 样例库/登记表入账结果 | 查询某个登记表导入批次生成的设备产量记录 |
 | `POST /machine-outputs` | 生产统计 / 设备产量补录 | 手工或低成本设备适配提交设备产量记录，受 `MACHINE_OUTPUT_SUBMIT` 权限控制 |
 
@@ -209,6 +210,20 @@ M3.119 补充：`POST /api/auth/accounts/pre-approval-evidence/uploads` 使用 `
 | `byWorkDate[]` | 按 `workDate` 分组的产量和记录数，供日报入口使用 |
 | `unmatchedMachineRecords` | `machineId` 为空的记录数，表示还未匹配机器档案 |
 | `signatureMissingRecords` | `signatureMediaId` 为空的记录数，表示仍需补手写签名或附件 |
+
+`MachineOutputMachineMatchSuggestion`：
+| 字段 | 说明 |
+|---|---|
+| `machineNoSnapshot` | 现场机器编号快照，来自登记表或手工补录 |
+| `productCategory` | 同组记录中优先取到的品类快照 |
+| `candidateMachineIds[]` | 同一机器编号已有已绑定记录时返回的候选机器档案 ID；为空表示需要先建档或人工确认 |
+| `matchedRecords` / `unmatchedRecords` / `totalRecords` | 同一机器编号下已绑定、未绑定和总记录数 |
+| `latestWorkDate` | 同组记录中最新产量日期，用于人工复核排序 |
+| `sourceRegisterType` / `sourceMachineLineNo` | 原始登记表类型和机器行号快照，方便回看低成本硬件/纸质登记来源 |
+| `readiness` | `READY_TO_BIND`、`NEEDS_MASTER_DATA` 或 `CONFLICT`；当前只作为复核建议状态 |
+| `suggestedAction` | 下一步人工处理建议，不代表后端已经执行绑定 |
+
+M3.121 补充：`GET /api/machine-outputs/machine-match-suggestions` 只基于最近设备产量记录做只读聚合，不写 `biz_machine_output_record`，不创建机器主数据，不自动绑定 `machineId`，也不补签名附件；后续仍需增加机器档案表、批量绑定命令、审批/审计、签名附件和硬件 SDK/协议接入。
 
 ### 2.1 登记表导入模板字段
 

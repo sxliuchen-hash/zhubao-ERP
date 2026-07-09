@@ -9861,6 +9861,41 @@ body {
   color: #0f766e;
 }
 
+.machine-match-suggestion-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #d7e4ec;
+}
+
+.machine-match-suggestion-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.machine-match-suggestion-title strong {
+  color: #0f172a;
+}
+
+.machine-match-suggestion-title span,
+.machine-match-suggestion-panel > small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.machine-match-suggestion-list article {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.machine-match-suggestion-list article small {
+  grid-column: 1 / -1;
+}
+
 .compact-process-list li {
   border-radius: 5px;
 }

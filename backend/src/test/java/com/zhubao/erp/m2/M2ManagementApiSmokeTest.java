@@ -289,6 +289,10 @@ class M2ManagementApiSmokeTest {
                 "/api/machine-outputs/summary?limit=10",
                 String.class
         );
+        ResponseEntity<String> suggestions = restTemplate.getForEntity(
+                "/api/machine-outputs/machine-match-suggestions?limit=10",
+                String.class
+        );
 
         assertThat(submitted.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(submitted.getBody()).contains(
@@ -310,6 +314,14 @@ class M2ManagementApiSmokeTest {
                 "\"workDate\":\"2026-07-08\"",
                 "\"unmatchedMachineRecords\":1",
                 "\"signatureMissingRecords\":1"
+        );
+
+        assertThat(suggestions.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(suggestions.getBody()).contains(
+                "\"machineNoSnapshot\":\"ENG-03\"",
+                "\"candidateMachineIds\":[]",
+                "\"unmatchedRecords\":1",
+                "\"readiness\":\"NEEDS_MASTER_DATA\""
         );
     }
 

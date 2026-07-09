@@ -2,6 +2,7 @@ package com.zhubao.erp.machine.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.machine.app.MachineOutputService;
+import com.zhubao.erp.machine.domain.MachineOutputMachineMatchSuggestion;
 import com.zhubao.erp.machine.domain.MachineOutputRecord;
 import com.zhubao.erp.machine.domain.MachineOutputSummary;
 import com.zhubao.erp.machine.domain.SubmitMachineOutputCommand;
@@ -34,6 +35,13 @@ public class MachineOutputController {
     @GetMapping("/summary")
     public ApiResponse<MachineOutputSummary> summary(@RequestParam(defaultValue = "100") int limit) {
         return ApiResponse.ok(service.summary(limit));
+    }
+
+    @GetMapping("/machine-match-suggestions")
+    public ApiResponse<List<MachineOutputMachineMatchSuggestion>> machineMatchSuggestions(
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.ok(service.machineMatchSuggestions(limit));
     }
 
     @GetMapping("/import-batches/{importBatchNo}")

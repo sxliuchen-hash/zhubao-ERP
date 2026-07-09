@@ -1,6 +1,7 @@
 package com.zhubao.erp.machine.app;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.machine.domain.MachineOutputMachineMatchSuggestion;
 import com.zhubao.erp.machine.domain.MachineOutputMachineSummary;
 import com.zhubao.erp.machine.domain.MachineOutputRecord;
 import com.zhubao.erp.machine.domain.MachineOutputRepository;
@@ -13,9 +14,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class MachineOutputService {
@@ -86,6 +90,23 @@ public class MachineOutputService {
         );
     }
 
+    public List<MachineOutputMachineMatchSuggestion> machineMatchSuggestions(int limit) {
+        Map<String, MatchAccumulator> suggestions = new LinkedHashMap<>();
+        for (MachineOutputRecord record : recent(limit)) {
+            suggestions.computeIfAbsent(
+                    normalizedMachineNo(record),
+                    ignored -> new MatchAccumulator(blankToDefault(record.machineNoSnapshot(), "UNKNOWN"))
+            ).add(record);
+        }
+        return suggestions.values().stream()
+                .filter(MatchAccumulator::hasUnmatchedRecords)
+                .map(MatchAccumulator::toSuggestion)
+                .sorted(Comparator
+                        .comparing(MachineOutputMachineMatchSuggestion::unmatchedRecords).reversed()
+                        .thenComparing(MachineOutputMachineMatchSuggestion::machineNoSnapshot))
+                .toList();
+    }
+
     public List<MachineOutputRecord> byImportBatchNo(String importBatchNo) {
         if (importBatchNo == null || importBatchNo.isBlank()) {
             throw new BusinessException("缺少导入批次号");
@@ -129,6 +150,10 @@ public class MachineOutputService {
             return fallback;
         }
         return value.trim();
+    }
+
+    private String normalizedMachineNo(MachineOutputRecord record) {
+        return blankToDefault(record.machineNoSnapshot(), "UNKNOWN").toUpperCase(Locale.ROOT);
     }
 
     private List<MachineOutputMachineSummary> summarizeByMachine(List<MachineOutputRecord> records) {
@@ -179,6 +204,77 @@ public class MachineOutputService {
         private void add(BigDecimal value) {
             quantity = quantity.add(value);
             records++;
+        }
+    }
+
+    private static class MatchAccumulator {
+        private final String machineNoSnapshot;
+        private final Set<Long> candidateMachineIds = new LinkedHashSet<>();
+        private int matchedRecords;
+        private int unmatchedRecords;
+        private int totalRecords;
+        private String productCategory = "";
+        private String latestWorkDate = "";
+        private String sourceRegisterType = "";
+        private String sourceMachineLineNo = "";
+
+        private MatchAccumulator(String machineNoSnapshot) {
+            this.machineNoSnapshot = machineNoSnapshot;
+        }
+
+        private void add(MachineOutputRecord record) {
+            totalRecords++;
+            if (record.machineId() == null) {
+                unmatchedRecords++;
+            } else {
+                matchedRecords++;
+                candidateMachineIds.add(record.machineId());
+            }
+            productCategory = firstNonBlank(productCategory, record.productCategory());
+            sourceRegisterType = firstNonBlank(sourceRegisterType, record.sourceRegisterType());
+            sourceMachineLineNo = firstNonBlank(sourceMachineLineNo, record.machineLineNo());
+            if (record.workDate() != null && record.workDate().compareTo(latestWorkDate) > 0) {
+                latestWorkDate = record.workDate();
+            }
+        }
+
+        private boolean hasUnmatchedRecords() {
+            return unmatchedRecords > 0;
+        }
+
+        private MachineOutputMachineMatchSuggestion toSuggestion() {
+            String readiness;
+            String action;
+            if (candidateMachineIds.isEmpty()) {
+                readiness = "NEEDS_MASTER_DATA";
+                action = "Create machine master data or confirm the low-cost device number before binding records.";
+            } else if (candidateMachineIds.size() == 1) {
+                readiness = "READY_TO_BIND";
+                action = "Bind unmatched records to candidate machine id " + candidateMachineIds.iterator().next() + ".";
+            } else {
+                readiness = "CONFLICT";
+                action = "Review duplicate machine master mappings before binding unmatched records.";
+            }
+            return new MachineOutputMachineMatchSuggestion(
+                    machineNoSnapshot,
+                    productCategory,
+                    List.copyOf(candidateMachineIds),
+                    matchedRecords,
+                    unmatchedRecords,
+                    totalRecords,
+                    latestWorkDate,
+                    sourceRegisterType,
+                    sourceMachineLineNo,
+                    readiness,
+                    action
+            );
+        }
+
+        private String firstNonBlank(String current, String next) {
+            if (current != null && !current.isBlank()) {
+                return current;
+            }
+            return next == null ? "" : next.trim();
         }
     }
 }

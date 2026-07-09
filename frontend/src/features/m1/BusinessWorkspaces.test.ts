@@ -33,6 +33,7 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('送检入账');
     expect(wrapper.text()).toContain('设备产量汇总');
     expect(wrapper.text()).toContain('机器档案待匹配');
+    expect(wrapper.text()).toContain('机器档案匹配建议');
     expect(wrapper.text()).toContain('报工校验规则');
     expect(wrapper.text()).toContain('提交报工');
     expect(wrapper.text()).toContain('审批阻断');

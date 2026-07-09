@@ -103,6 +103,35 @@ class MachineOutputServiceTest {
         assertThat(summary.byWorkDate().get(0).records()).isEqualTo(2);
     }
 
+    @Test
+    void suggestsMachineMasterMatchesForUnmatchedOutputs() {
+        service.submit(command("MOR-MATCH-001", "2026-07-08", 9001L, "ENG-03", "X", "12", "1"));
+        service.submit(command("MOR-MATCH-002", "2026-07-08", null, "ENG-03", "X", "8", "2"));
+        service.submit(command("MOR-MATCH-003", "2026-07-07", null, "ENG-09", "Y", "5", "3"));
+
+        var suggestions = service.machineMatchSuggestions(10);
+
+        assertThat(suggestions).hasSize(2);
+        var readyToBind = suggestions.stream()
+                .filter(suggestion -> suggestion.machineNoSnapshot().equals("ENG-03"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(readyToBind.candidateMachineIds()).containsExactly(9001L);
+        assertThat(readyToBind.readiness()).isEqualTo("READY_TO_BIND");
+        assertThat(readyToBind.matchedRecords()).isEqualTo(1);
+        assertThat(readyToBind.unmatchedRecords()).isEqualTo(1);
+        assertThat(readyToBind.totalRecords()).isEqualTo(2);
+        assertThat(readyToBind.latestWorkDate()).isEqualTo("2026-07-08");
+
+        var needsMasterData = suggestions.stream()
+                .filter(suggestion -> suggestion.machineNoSnapshot().equals("ENG-09"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(needsMasterData.candidateMachineIds()).isEmpty();
+        assertThat(needsMasterData.readiness()).isEqualTo("NEEDS_MASTER_DATA");
+        assertThat(needsMasterData.unmatchedRecords()).isEqualTo(1);
+    }
+
     private SubmitMachineOutputCommand command(
             String code,
             String workDate,
