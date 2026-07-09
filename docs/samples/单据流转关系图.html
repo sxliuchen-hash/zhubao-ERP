@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>单据流转关系图 - 珠宝来料加工系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 24px; }
+  h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+  .note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 20px; }
+
+  .flow { max-width: 980px; margin: 0 auto; }
+  .level { display: flex; align-items: center; gap: 12px; margin: 0 auto; justify-content: center; flex-wrap: wrap; }
+  .arrow-down { text-align: center; color: #9aa4b0; font-size: 24px; margin: 4px 0; }
+
+  .card { border-radius: 10px; padding: 12px 16px; min-width: 200px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .card .t { font-size: 15px; font-weight: bold; }
+  .card .c { font-size: 12px; opacity: .9; margin-top: 2px; }
+  .card .fields { font-size: 11px; margin-top: 6px; line-height: 1.5; opacity: .95; }
+  .card .rel { font-size: 11px; margin-top: 6px; font-weight: bold; }
+
+  .order   { background: #eaf1fb; border: 2px solid #3b6fb0; }
+  .mother  { background: #fff4e0; border: 2px solid #d99a2b; }
+  .sub     { background: #e7f6ec; border: 2px solid #2f9e57; }
+  .op      { background: #fdeef0; border: 2px solid #c85a6a; }
+  .out     { background: #eef0f5; border: 2px solid #6b7684; }
+
+  .badge-follow { display: inline-block; background: #1f2733; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+
+  .legend { max-width: 980px; margin: 24px auto 0; background: #fff; border-radius: 10px; padding: 14px 18px; font-size: 13px; }
+  .legend h3 { font-size: 14px; margin-bottom: 8px; }
+  .legend li { margin: 4px 0; list-style: none; }
+  .legend .k { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+
+  .row-multi { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  @media print { body { background: #fff; padding: 0; } }
+</style>
+</head>
+<body>
+  <h1>单据流转关系图</h1>
+  <p class="note">一张图看懂：哪些单据跟着订单走、哪些跟着母单走、哪些跟着子工单走。编码全程唯一，扫码即可追溯。</p>
+
+  <div class="flow">
+    <!-- 订单 -->
+    <div class="level">
+      <div class="card order">
+        <div class="t">① 客户订单　<span class="badge-follow">跟客户走</span></div>
+        <div class="c">DD-20260709-001</div>
+        <div class="fields">客户、产品、约定数量/重量、交货日、业务员</div>
+        <div class="rel">1 个订单 → 可含多个母单</div>
+      </div>
+    </div>
+    <div class="arrow-down">↓</div>
+
+    <!-- 母单 -->
+    <div class="level">
+      <div class="card mother">
+        <div class="t">② 母单（来料批次）　<span class="badge-follow">跟这批料走</span></div>
+        <div class="c">CC-20260709-001-JL　🔖 标签贴周转盒/袋</div>
+        <div class="fields">客户、快递单号、物料、数量、重量、拆包签字、收货人</div>
+        <div class="rel">1 个母单 → 可拆多个子工单 / 可多次出货</div>
+      </div>
+    </div>
+    <div class="arrow-down">↓ 拆分</div>
+
+    <!-- 子工单（多个） -->
+    <div class="level row-multi">
+      <div class="card sub">
+        <div class="t">③ 子工单　<span class="badge-follow">跟母单走</span></div>
+        <div class="c">ZD-...-001</div>
+        <div class="fields">工序模板、计划数量/重量、负责人/工位</div>
+      </div>
+      <div class="card sub">
+        <div class="t">③ 子工单</div>
+        <div class="c">ZD-...-002</div>
+        <div class="fields">工序模板、计划数量/重量</div>
+      </div>
+      <div class="card sub">
+        <div class="t">③ 子工单</div>
+        <div class="c">ZD-...-003</div>
+        <div class="fields">…</div>
+      </div>
+    </div>
+    <div class="arrow-down">↓ 每个子工单产生</div>
+
+    <!-- 工序类单据（跟子工单走） -->
+    <div class="level row-multi">
+      <div class="card op">
+        <div class="t">④ 报工记录　<span class="badge-follow">跟子工单走</span></div>
+        <div class="fields">工序、数量、投入/产出重量、损耗、报工人</div>
+      </div>
+      <div class="card op">
+        <div class="t">④ 质检记录</div>
+        <div class="fields">结果、缺陷、责任归因、质检员</div>
+      </div>
+      <div class="card op">
+        <div class="t">④ 返工单</div>
+        <div class="fields">返工工序、原因、次数</div>
+      </div>
+      <div class="card op">
+        <div class="t">④ 损耗/工资试算</div>
+        <div class="fields">超标损耗、计件试算（不真扣）</div>
+      </div>
+    </div>
+    <div class="arrow-down">↓ 完工入成品仓</div>
+
+    <!-- 出库 -->
+    <div class="level">
+      <div class="card out">
+        <div class="t">⑤ 出库单　<span class="badge-follow">跟母单/订单走</span></div>
+        <div class="c">CK-...-001　🔖 出货标签</div>
+        <div class="fields">客户、交货类目、数量、快递公司+单号、经办人</div>
+        <div class="rel">1 个母单可多次出货；退货走售后复核回退</div>
+      </div>
+    </div>
+    <div class="arrow-down">↓ 贯穿全程</div>
+
+    <!-- 库存台账 -->
+    <div class="level">
+      <div class="card" style="background:#1f2733;color:#fff;border:2px solid #1f2733;min-width:520px;">
+        <div class="t">📒 库存台账（全程记账，扫码可追溯）</div>
+        <div class="fields">每一次数量/重量/状态变化都记一笔，按“客户+母单+子工单+物料+仓库+状态”管理。<br/>扫任意母单二维码，就能看到这批料从收货到出货的完整经过。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <h3>图例：单据"跟谁走"</h3>
+    <li><span class="k" style="background:#3b6fb0;"></span> 蓝 = 跟客户/订单走：客户订单</li>
+    <li><span class="k" style="background:#d99a2b;"></span> 黄 = 跟这批来料（母单）走：母单、出库单　🔖 需打印标签贴周转盒/袋</li>
+    <li><span class="k" style="background:#2f9e57;"></span> 绿 = 跟母单拆出的子工单走：子工单</li>
+    <li><span class="k" style="background:#c85a6a;"></span> 红 = 跟子工单走：报工、质检、返工、损耗试算</li>
+    <li><span class="k" style="background:#1f2733;"></span> 黑 = 全程贯穿：库存台账（追溯的底账）</li>
+    <p style="margin-top:10px;color:#6b7684;">说明：标签打印一次贴上去，只印固定信息；<b>加工进度靠手机扫码看实时最新工序</b>，不反复打印。</p>
+  </div>
+</body>
+</html>

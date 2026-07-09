@@ -4,81 +4,74 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>母单标签样张 - 珠宝来料加工系统</title>
-<!-- 二维码库：优先用本地/CDN，离线时用下方内置降级方案画占位 -->
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: "微软雅黑", "Microsoft YaHei", sans-serif;
-    background: #eef1f5;
-    color: #1f2733;
-    padding: 24px;
-  }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 24px; }
   .page-title { text-align: center; margin-bottom: 6px; font-size: 20px; }
-  .page-note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 20px; }
-  .label-row { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; }
+  .page-note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 8px; }
+  .principle { max-width: 760px; margin: 0 auto 20px; background: #fff8e6; border: 1px solid #f0d089; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #8a5a12; }
+  .principle b { color: #1f2733; }
 
-  /* 一张标签：模拟贴在周转盒/周转袋上的实物标签 */
-  .label {
-    width: 380px;
-    background: #fff;
-    border: 2px solid #1f2733;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 4px 14px rgba(0,0,0,.12);
-  }
-  .label-head {
-    background: #1f2733;
-    color: #fff;
-    padding: 8px 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
+  .label-row { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: flex-start; }
+
+  /* 实物标签：打印一次贴上去，只放固定不变的信息 */
+  .label { width: 360px; background: #fff; border: 2px solid #1f2733; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+  .label-head { background: #1f2733; color: #fff; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
   .label-head .brand { font-size: 12px; opacity: .85; }
   .label-head .type { font-size: 12px; background: #f4b740; color: #1f2733; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
-
   .label-body { display: flex; padding: 12px; gap: 12px; }
   .qr-box { width: 120px; flex-shrink: 0; text-align: center; }
   .qr-box .qr { width: 120px; height: 120px; border: 1px solid #d0d6dd; display: flex; align-items: center; justify-content: center; background: #fff; }
   .qr-box .qr img, .qr-box .qr canvas { width: 118px; height: 118px; }
   .qr-box .qr-hint { font-size: 11px; color: #6b7684; margin-top: 4px; }
-
   .info { flex: 1; }
   .mother-code { font-size: 22px; font-weight: bold; letter-spacing: .5px; color: #1f2733; word-break: break-all; }
   .mother-code-hint { font-size: 11px; color: #6b7684; margin-bottom: 8px; }
-
   .kv { display: grid; grid-template-columns: 64px 1fr; row-gap: 5px; font-size: 13px; }
   .kv dt { color: #6b7684; }
   .kv dd { color: #1f2733; font-weight: 600; }
+  .label-foot { border-top: 1px dashed #c7ced6; padding: 8px 12px; font-size: 12px; color: #46505c; display: flex; justify-content: space-between; }
 
-  .label-foot {
-    border-top: 1px dashed #c7ced6;
-    padding: 8px 12px;
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #46505c;
-  }
-  .badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-  .badge.green { background: #e4f5ea; color: #1f8b4c; }
-  .badge.amber { background: #fdf0d5; color: #a86a12; }
+  /* 手机端"扫码后看到的实时信息"示意 */
+  .phone { width: 240px; flex-shrink: 0; }
+  .phone-frame { border: 8px solid #1f2733; border-radius: 26px; overflow: hidden; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  .phone-top { background: #1f2733; height: 20px; }
+  .phone-screen { padding: 12px; }
+  .phone-title { font-size: 13px; font-weight: bold; margin-bottom: 2px; }
+  .phone-sub { font-size: 11px; color: #6b7684; margin-bottom: 10px; word-break: break-all; }
+  .live-tag { display: inline-block; background: #e4f5ea; color: #1f8b4c; font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 4px; margin-bottom: 10px; }
+  .steps { list-style: none; }
+  .steps li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px dashed #e2e7ec; font-size: 12px; }
+  .steps .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+  .steps .done .dot { background: #1f8b4c; }
+  .steps .doing .dot { background: #f4b740; }
+  .steps .todo .dot { background: #c7ced6; }
+  .steps .s-name { font-weight: 600; }
+  .steps .s-detail { color: #6b7684; }
+  .steps .doing .s-name { color: #a86a12; }
+  .phone-cap { text-align: center; font-size: 12px; color: #6b7684; margin-top: 8px; }
 
   .caption { text-align: center; font-size: 12px; color: #6b7684; margin-top: 8px; }
+  .arrow { align-self: center; font-size: 28px; color: #9aa4b0; }
 
   @media print {
     body { background: #fff; padding: 0; }
-    .page-title, .page-note, .caption { display: none; }
+    .page-title, .page-note, .principle, .caption, .phone, .arrow, .phone-cap { display: none; }
     .label { box-shadow: none; page-break-inside: avoid; }
   }
 </style>
 </head>
 <body>
   <h1 class="page-title">母单标签样张（贴周转盒 / 周转袋用）</h1>
-  <p class="page-note">这是效果样张，扫码即可调出该母单的全部信息和加工进度。请客户确认：标签上的信息够不够、要不要加/减。</p>
+  <p class="page-note">左边是打印贴上去的实物标签，右边是工人手机扫码后看到的实时进度。</p>
+  <div class="principle">
+    💡 <b>重要设计原则</b>：标签打印一次就贴上去不再变，所以标签上<b>只放固定不变的信息</b>（母单号、客户、物料、数量、重量、日期）。
+    <b>加工进度、当前工序这种会变的信息不印在标签上</b>——工人<b>手机扫一下二维码</b>就能看到最新工序，既实时准确，又不用反复打印，省纸省事。
+  </div>
 
   <div class="label-row">
-    <!-- 样张一：常规母单标签 -->
+    <!-- 实物标签 -->
     <div>
       <div class="label" id="label1">
         <div class="label-head">
@@ -88,7 +81,7 @@
         <div class="label-body">
           <div class="qr-box">
             <div class="qr" id="qr1"></div>
-            <div class="qr-hint">扫码看全链路</div>
+            <div class="qr-hint">扫码看实时进度</div>
           </div>
           <div class="info">
             <div class="mother-code">CC-20260709-001-JL</div>
@@ -100,19 +93,43 @@
               <dt>数量</dt><dd>320 件</dd>
               <dt>重量</dt><dd>35.20 克</dd>
               <dt>收货日</dt><dd>2026-07-09</dd>
-              <dt>快递</dt><dd>顺丰 SF-IN-...001</dd>
             </dl>
           </div>
         </div>
         <div class="label-foot">
-          <span>当前工序：<b>抛光</b> <span class="badge amber">加工中</span></span>
+          <span>快递：顺丰 SF-IN-...001</span>
           <span>收货人：何琴</span>
         </div>
       </div>
-      <p class="caption">样张一 · 常规母单标签</p>
+      <p class="caption">实物标签 · 只印固定信息（打印一次贴上去）</p>
     </div>
 
-    <!-- 样张二：信息更全的周转盒大标签 -->
+    <div class="arrow">→</div>
+
+    <!-- 手机扫码后看到的实时进度 -->
+    <div class="phone">
+      <div class="phone-frame">
+        <div class="phone-top"></div>
+        <div class="phone-screen">
+          <div class="phone-title">CC-20260709-001-JL</div>
+          <div class="phone-sub">恒信珠宝 · 18K 金戒托 · 320 件</div>
+          <span class="live-tag">实时进度</span>
+          <ul class="steps">
+            <li class="done"><span class="dot"></span><div><div class="s-name">收货签收</div><div class="s-detail">何琴 · 07-09 09:12</div></div></li>
+            <li class="done"><span class="dot"></span><div><div class="s-name">拆包称重</div><div class="s-detail">35.20 克 · 07-09 09:40</div></div></li>
+            <li class="done"><span class="dot"></span><div><div class="s-name">拆分子工单</div><div class="s-detail">3 个子工单</div></div></li>
+            <li class="doing"><span class="dot"></span><div><div class="s-name">抛光（进行中）</div><div class="s-detail">王强 · 已完成 2/3</div></div></li>
+            <li class="todo"><span class="dot"></span><div><div class="s-name">质检</div><div class="s-detail">待开始</div></div></li>
+            <li class="todo"><span class="dot"></span><div><div class="s-name">成品入库 / 出货</div><div class="s-detail">待开始</div></div></li>
+          </ul>
+        </div>
+      </div>
+      <p class="phone-cap">扫码后手机看到的最新工序（会随进度自动更新）</p>
+    </div>
+  </div>
+
+  <div class="label-row" style="margin-top:28px;">
+    <!-- 周转盒大标签 -->
     <div>
       <div class="label" id="label2">
         <div class="label-head">
@@ -122,7 +139,7 @@
         <div class="label-body">
           <div class="qr-box">
             <div class="qr" id="qr2"></div>
-            <div class="qr-hint">扫码看进度</div>
+            <div class="qr-hint">扫码看实时进度</div>
           </div>
           <div class="info">
             <div class="mother-code">CC-20260709-002-JL</div>
@@ -132,29 +149,26 @@
               <dt>物料</dt><dd>银链条</dd>
               <dt>数量</dt><dd>500 条</dd>
               <dt>重量</dt><dd>683.20 克</dd>
-              <dt>子工单</dt><dd>共 3 个（ZD..01/02/03）</dd>
-              <dt>负责人</dt><dd>车间组长 李华</dd>
               <dt>交货日</dt><dd>2026-07-20</dd>
+              <dt>负责人</dt><dd>李华</dd>
             </dl>
           </div>
         </div>
         <div class="label-foot">
-          <span>进度：拆分完成 3/3 · 抛光 2/3 <span class="badge green">在制</span></span>
-          <span>打印：2026-07-09 14:05</span>
+          <span>子工单：ZD..01 / 02 / 03</span>
+          <span>打印：2026-07-09</span>
         </div>
       </div>
-      <p class="caption">样张二 · 周转盒大标签（信息更全）</p>
+      <p class="caption">周转盒大标签 · 同样只印固定信息</p>
     </div>
   </div>
 
 <script>
-  // 二维码内容：只放业务编码和类型，扫码后由系统跳转到母单详情（与系统现有扫码解析格式一致：JG|类型|编码）
   function drawQr(elId, text) {
     var el = document.getElementById(elId);
     if (window.QRCode) {
       new QRCode(el, { text: text, width: 118, height: 118, correctLevel: QRCode.CorrectLevel.M });
     } else {
-      // 离线降级：没联网加载到二维码库时，显示占位方块和文本，效果示意不受影响
       el.innerHTML = '<div style="font-size:11px;color:#6b7684;padding:6px;text-align:center;">二维码占位<br/>' + text + '</div>';
       el.style.background = 'repeating-linear-gradient(45deg,#eee,#eee 6px,#fff 6px,#fff 12px)';
     }
