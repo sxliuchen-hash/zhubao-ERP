@@ -34,6 +34,12 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
     }
 
     @Override
+    public synchronized void savePackage(DocumentPackage documentPackage) {
+        packages.removeIf(existing -> existing.code().equals(documentPackage.code()));
+        packages.add(documentPackage);
+    }
+
+    @Override
     public synchronized void saveAttachment(EvidenceAttachment attachment) {
         attachments.removeIf(existing -> existing.code().equals(attachment.code()));
         attachments.add(attachment);

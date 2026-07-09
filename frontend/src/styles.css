@@ -16917,6 +16917,39 @@ input {
   gap: 3px;
 }
 
+.security-pre-approval-evidence-upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) auto;
+  gap: 6px;
+  align-items: end;
+  border: 1px solid rgba(178, 221, 232, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 7px;
+}
+
+.security-pre-approval-evidence-upload label {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.security-pre-approval-evidence-upload span,
+.security-pre-approval-evidence-upload small {
+  color: #cbd8e5;
+  font-size: 10px;
+}
+
+.security-pre-approval-evidence-upload select,
+.security-pre-approval-evidence-upload input {
+  width: 100%;
+  min-width: 0;
+}
+
+.security-pre-approval-evidence-upload small {
+  grid-column: 1 / -1;
+}
+
 .security-limitation-row {
   display: grid;
   grid-column: 1 / -1;

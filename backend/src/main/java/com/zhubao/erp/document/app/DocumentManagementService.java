@@ -70,6 +70,11 @@ public class DocumentManagementService {
         return repository.auditEvents();
     }
 
+    public DocumentPackage savePackage(DocumentPackage documentPackage) {
+        repository.savePackage(documentPackage);
+        return documentPackage;
+    }
+
     public EvidenceAttachmentUploadResult uploadAttachment(
             String documentCode,
             String businessType,

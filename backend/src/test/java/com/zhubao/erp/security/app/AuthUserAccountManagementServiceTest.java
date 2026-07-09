@@ -5,8 +5,11 @@ import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
+import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
@@ -27,7 +30,9 @@ import com.zhubao.erp.security.infra.InMemoryAuthAccountPreApprovalApplicationRe
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -41,6 +46,8 @@ class AuthUserAccountManagementServiceTest {
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();
     private final PasswordExpiryPolicy passwordExpiryPolicy = new PasswordExpiryPolicy();
     private final NavigationMenuService navigationMenuService = new NavigationMenuService();
+    @TempDir
+    Path tempDir;
     private final OperatorContext admin = new OperatorContext(
             "系统管理员",
             RoleCode.ADMIN,
@@ -432,6 +439,52 @@ class AuthUserAccountManagementServiceTest {
                     assertThat(summary.attachmentCodes()).containsExactly("ATT-AUTH-PRE-PASSWORD-001");
                     assertThat(summary.status()).isEqualTo("已关联证据");
                     assertThat(summary.tone()).isEqualTo("green");
+                });
+    }
+
+    @Test
+    void uploadsPreApprovalEvidenceAndCreatesApplicationDocumentPackage() {
+        Fixture fixture = fixture();
+        AuthAccountPreApprovalApplication application = readyPreApprovalApplication(
+                "AUTH-PRE-APP-PASSWORD-UPLOAD-001",
+                "AUTH-PRE-PASSWORD-001",
+                "管理员重置密码",
+                "planner"
+        );
+        fixture.preApprovalApplicationRepository().save(application);
+
+        AuthAccountPreApprovalEvidenceSummary summary = fixture.managementService().uploadPreApprovalEvidence(
+                application.applicationCode(),
+                "identity-check.pdf",
+                "application/pdf",
+                "identity check content".getBytes(),
+                admin
+        );
+
+        assertThat(summary.applicationCode()).isEqualTo(application.applicationCode());
+        assertThat(summary.documentCode()).isEqualTo("DOC-AUTH-PRE-APP-PASSWORD-UPLOAD-001");
+        assertThat(summary.requiredEvidence()).isEqualTo("本人核验附件");
+        assertThat(summary.attachmentCount()).isEqualTo(1);
+        assertThat(summary.missingEvidence()).isZero();
+        assertThat(summary.status()).isEqualTo("已关联证据");
+        assertThat(summary.attachmentCodes()).singleElement().asString().startsWith("ATT-UP-");
+        assertThat(fixture.documentRepository().packages())
+                .filteredOn(documentPackage -> documentPackage.code().equals("DOC-AUTH-PRE-APP-PASSWORD-UPLOAD-001"))
+                .singleElement()
+                .satisfies(documentPackage -> {
+                    assertThat(documentPackage.category()).isEqualTo("账号前置审批");
+                    assertThat(documentPackage.businessCode()).isEqualTo(application.applicationCode());
+                    assertThat(documentPackage.linkedEvidence()).isEqualTo(1);
+                    assertThat(documentPackage.status()).isEqualTo("已关联证据");
+                });
+        assertThat(fixture.documentRepository().attachments())
+                .filteredOn(attachment -> attachment.businessCode().equals(application.applicationCode()))
+                .singleElement()
+                .satisfies(attachment -> {
+                    assertThat(attachment.businessType()).isEqualTo("账号前置审批");
+                    assertThat(attachment.fileName()).isEqualTo("identity-check.pdf");
+                    assertThat(attachment.storageLocation()).contains("DOC-AUTH-PRE-APP-PASSWORD-UPLOAD-001");
+                    assertThat(attachment.checksum()).startsWith("sha256:");
                 });
     }
 
@@ -927,6 +980,10 @@ class AuthUserAccountManagementServiceTest {
         InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
                 new InMemoryAuthAccountPreApprovalApplicationRepository();
         InMemoryDocumentManagementRepository documentRepository = new InMemoryDocumentManagementRepository();
+        DocumentManagementService documentManagementService = new DocumentManagementService(
+                documentRepository,
+                localStorage()
+        );
         ApprovalService approvalService = new ApprovalService(approvalRepository);
         AuthSessionService sessionService = new AuthSessionService(
                 navigationMenuService,
@@ -946,6 +1003,7 @@ class AuthUserAccountManagementServiceTest {
                 preApprovalApplicationRepository,
                 sessionService,
                 documentRepository,
+                documentManagementService,
                 enforcePreApprovalForAccountActions
         );
         return new Fixture(
@@ -957,6 +1015,12 @@ class AuthUserAccountManagementServiceTest {
                 managementService,
                 sessionService
         );
+    }
+
+    private LocalAttachmentObjectStorage localStorage() {
+        AttachmentStorageProperties properties = new AttachmentStorageProperties();
+        properties.setLocalRoot(tempDir.toString());
+        return new LocalAttachmentObjectStorage(properties);
     }
 
     private record Fixture(

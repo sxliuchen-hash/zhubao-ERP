@@ -58,6 +58,7 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('AUTH-PRE-TASK-202607090001-0001');
     expect(wrapper.text()).toContain('WAITING_EVIDENCE');
     expect(wrapper.text()).toContain('前置审批证据');
+    expect(wrapper.text()).toContain('证据附件');
     expect(wrapper.text()).toContain('本人核验附件');
     expect(wrapper.text()).toContain('已关联证据');
     expect(wrapper.text()).toContain('ATT-AUTH-PRE-PASSWORD-001');

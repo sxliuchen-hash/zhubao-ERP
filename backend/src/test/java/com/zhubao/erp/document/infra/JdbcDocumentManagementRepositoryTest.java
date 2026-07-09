@@ -114,6 +114,49 @@ class JdbcDocumentManagementRepositoryTest {
                 .isEqualTo("已归档");
     }
 
+    @Test
+    void savesAndUpdatesDocumentPackage() {
+        DocumentPackage documentPackage = new DocumentPackage(
+                "DOC-AUTH-PRE-APP-001",
+                "账号前置审批证据包",
+                "账号前置审批",
+                "AUTH-PRE-APP-001",
+                "系统管理员",
+                "归档账号前置审批证据。",
+                1,
+                0,
+                "待补本人核验附件",
+                "账号审批证据长期保留",
+                "2026-07-09 12:00:00",
+                "amber"
+        );
+
+        repository.savePackage(documentPackage);
+        repository.savePackage(new DocumentPackage(
+                documentPackage.code(),
+                documentPackage.title(),
+                documentPackage.category(),
+                documentPackage.businessCode(),
+                documentPackage.owner(),
+                documentPackage.purpose(),
+                documentPackage.requiredEvidence(),
+                1,
+                "已关联证据",
+                documentPackage.retentionPolicy(),
+                "2026-07-09 12:05:00",
+                "green"
+        ));
+
+        assertThat(new JdbcDocumentManagementRepository(dataSource).packages())
+                .filteredOn(item -> item.code().equals("DOC-AUTH-PRE-APP-001"))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.linkedEvidence()).isEqualTo(1);
+                    assertThat(item.status()).isEqualTo("已关联证据");
+                    assertThat(item.tone()).isEqualTo("green");
+                });
+    }
+
     private void createSchema() throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {

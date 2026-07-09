@@ -1,4 +1,4 @@
-import { apiGet, apiPost, clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
+import { apiGet, apiPost, apiPostForm, clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
 
 export const authSessionChangedEvent = 'zhubao-auth-session-changed';
 
@@ -286,6 +286,16 @@ export async function fetchAuthAccountPreApprovalApplications(): Promise<AuthAcc
 
 export async function fetchAuthAccountPreApprovalEvidence(): Promise<AuthAccountPreApprovalEvidenceSummary[]> {
   return apiGet<AuthAccountPreApprovalEvidenceSummary[]>('/api/auth/accounts/pre-approval-evidence');
+}
+
+export async function uploadAuthAccountPreApprovalEvidence(
+  applicationCode: string,
+  file: File,
+): Promise<AuthAccountPreApprovalEvidenceSummary> {
+  const body = new FormData();
+  body.append('applicationCode', applicationCode);
+  body.append('file', file);
+  return apiPostForm<AuthAccountPreApprovalEvidenceSummary>('/api/auth/accounts/pre-approval-evidence/uploads', body);
 }
 
 export async function submitAuthAccountPreApprovalApplication(

@@ -93,6 +93,19 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
     }
 
     @Override
+    public void savePackage(DocumentPackage documentPackage) {
+        try (Connection connection = dataSource.getConnection()) {
+            if (packageExists(connection, documentPackage.code())) {
+                updatePackage(connection, documentPackage);
+            } else {
+                insertPackage(connection, documentPackage);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to save document package: " + documentPackage.code(), ex);
+        }
+    }
+
+    @Override
     public void saveAttachment(EvidenceAttachment attachment) {
         try (Connection connection = dataSource.getConnection()) {
             if (attachmentExists(connection, attachment.code())) {
@@ -118,6 +131,10 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
         }
     }
 
+    private boolean packageExists(Connection connection, String code) throws SQLException {
+        return exists(connection, "select id from doc_package where code = ?", code);
+    }
+
     private boolean attachmentExists(Connection connection, String code) throws SQLException {
         return exists(connection, "select id from doc_evidence_attachment where code = ?", code);
     }
@@ -133,6 +150,59 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
                 return rs.next();
             }
         }
+    }
+
+    private void insertPackage(Connection connection, DocumentPackage documentPackage) throws SQLException {
+        String sql = """
+                insert into doc_package (
+                    code, title, category, business_code, owner_name, purpose, required_evidence,
+                    linked_evidence, status, retention_policy, last_updated, tone
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindPackage(statement, documentPackage);
+            statement.executeUpdate();
+        }
+    }
+
+    private void updatePackage(Connection connection, DocumentPackage documentPackage) throws SQLException {
+        String sql = """
+                update doc_package
+                   set title = ?, category = ?, business_code = ?, owner_name = ?, purpose = ?,
+                       required_evidence = ?, linked_evidence = ?, status = ?, retention_policy = ?,
+                       last_updated = ?, tone = ?
+                 where code = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, documentPackage.title());
+            statement.setString(2, documentPackage.category());
+            statement.setString(3, documentPackage.businessCode());
+            statement.setString(4, documentPackage.owner());
+            statement.setString(5, documentPackage.purpose());
+            statement.setInt(6, documentPackage.requiredEvidence());
+            statement.setInt(7, documentPackage.linkedEvidence());
+            statement.setString(8, documentPackage.status());
+            statement.setString(9, documentPackage.retentionPolicy());
+            statement.setString(10, documentPackage.lastUpdated());
+            statement.setString(11, documentPackage.tone());
+            statement.setString(12, documentPackage.code());
+            statement.executeUpdate();
+        }
+    }
+
+    private void bindPackage(PreparedStatement statement, DocumentPackage documentPackage) throws SQLException {
+        statement.setString(1, documentPackage.code());
+        statement.setString(2, documentPackage.title());
+        statement.setString(3, documentPackage.category());
+        statement.setString(4, documentPackage.businessCode());
+        statement.setString(5, documentPackage.owner());
+        statement.setString(6, documentPackage.purpose());
+        statement.setInt(7, documentPackage.requiredEvidence());
+        statement.setInt(8, documentPackage.linkedEvidence());
+        statement.setString(9, documentPackage.status());
+        statement.setString(10, documentPackage.retentionPolicy());
+        statement.setString(11, documentPackage.lastUpdated());
+        statement.setString(12, documentPackage.tone());
     }
 
     private void insertAttachment(Connection connection, EvidenceAttachment attachment) throws SQLException {

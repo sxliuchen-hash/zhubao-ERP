@@ -1,8 +1,11 @@
 package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
+import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
@@ -33,7 +36,10 @@ import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.mock.web.MockMultipartFile;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 
@@ -45,6 +51,8 @@ class AuthControllerAccountManagementTest {
     private final PasswordHasher passwordHasher = new PasswordHasher();
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();
     private final PasswordExpiryPolicy passwordExpiryPolicy = new PasswordExpiryPolicy();
+    @TempDir
+    Path tempDir;
 
     @Test
     void accountListRequiresManagementPermission() {
@@ -96,6 +104,14 @@ class AuthControllerAccountManagementTest {
                 .hasMessageContaining("OPERATOR")
                 .hasMessageContaining("登录账号管理");
         assertThatThrownBy(() -> fixture.controller().accountPreApprovalEvidence(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR")
+                .hasMessageContaining("登录账号管理");
+        assertThatThrownBy(() -> fixture.controller().uploadAccountPreApprovalEvidence(
+                "AUTH-PRE-APP-001",
+                new MockMultipartFile("file", "identity-check.pdf", "application/pdf", "demo".getBytes()),
+                request
+        ))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("OPERATOR")
                 .hasMessageContaining("登录账号管理");
@@ -197,6 +213,39 @@ class AuthControllerAccountManagementTest {
                     assertThat(summary.attachmentCodes()).containsExactly("ATT-AUTH-PRE-001");
                     assertThat(summary.status()).isEqualTo("已关联证据");
                     assertThat(summary.documentCode()).isEqualTo("DOC-AUTH-PRE-001");
+                });
+    }
+
+    @Test
+    void uploadsPreApprovalEvidenceThroughControllerBoundary() throws Exception {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = request(RoleCode.ADMIN);
+        AuthAccountPreApprovalApplication application = fixture.controller()
+                .submitAccountPreApprovalApplication(preApprovalApplicationCommand(), request)
+                .data();
+
+        ApiResponse<AuthAccountPreApprovalEvidenceSummary> uploaded =
+                fixture.controller().uploadAccountPreApprovalEvidence(
+                        application.applicationCode(),
+                        new MockMultipartFile(
+                                "file",
+                                "planner-identity-check.pdf",
+                                "application/pdf",
+                                "identity-check".getBytes()
+                        ),
+                        request
+                );
+
+        assertThat(uploaded.data().applicationCode()).isEqualTo(application.applicationCode());
+        assertThat(uploaded.data().documentCode()).isEqualTo("DOC-" + application.applicationCode());
+        assertThat(uploaded.data().status()).isEqualTo("已关联证据");
+        assertThat(uploaded.data().attachmentCodes()).singleElement().asString().startsWith("ATT-UP-");
+        assertThat(fixture.documentRepository().packages())
+                .filteredOn(documentPackage -> documentPackage.code().equals("DOC-" + application.applicationCode()))
+                .singleElement()
+                .satisfies(documentPackage -> {
+                    assertThat(documentPackage.category()).isEqualTo("账号前置审批");
+                    assertThat(documentPackage.linkedEvidence()).isEqualTo(1);
                 });
     }
 
@@ -316,6 +365,10 @@ class AuthControllerAccountManagementTest {
         InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
                 new InMemoryAuthAccountPreApprovalApplicationRepository();
         InMemoryDocumentManagementRepository documentRepository = new InMemoryDocumentManagementRepository();
+        DocumentManagementService documentManagementService = new DocumentManagementService(
+                documentRepository,
+                localStorage()
+        );
         AuthSessionService authSessionService = new AuthSessionService(
                 new NavigationMenuService(),
                 auditRepository,
@@ -333,7 +386,9 @@ class AuthControllerAccountManagementTest {
                 null,
                 preApprovalApplicationRepository,
                 null,
-                documentRepository
+                documentRepository,
+                documentManagementService,
+                false
         );
         OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService, true);
         AuthController controller = new AuthController(
@@ -343,6 +398,12 @@ class AuthControllerAccountManagementTest {
                 new PermissionGuard()
         );
         return new Fixture(controller, accountRepository, preApprovalApplicationRepository, documentRepository);
+    }
+
+    private LocalAttachmentObjectStorage localStorage() {
+        AttachmentStorageProperties properties = new AttachmentStorageProperties();
+        properties.setLocalRoot(tempDir.toString());
+        return new LocalAttachmentObjectStorage(properties);
     }
 
     private MockHttpServletRequest request(RoleCode role) {

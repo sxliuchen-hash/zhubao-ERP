@@ -10,6 +10,8 @@ public interface DocumentManagementRepository {
 
     List<DocumentAuditEvent> auditEvents();
 
+    void savePackage(DocumentPackage documentPackage);
+
     void saveAttachment(EvidenceAttachment attachment);
 
     void saveAuditEvent(DocumentAuditEvent auditEvent);

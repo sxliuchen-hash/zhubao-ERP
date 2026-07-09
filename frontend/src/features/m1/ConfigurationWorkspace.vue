@@ -25,6 +25,7 @@ import {
   fetchAuthSession,
   loginAuthSession,
   logoutAuthSession,
+  uploadAuthAccountPreApprovalEvidence,
   type AuthAccountPreApprovalApplication,
   type AuthAccountPreApprovalDraft,
   type AuthAccountPreApprovalEvidenceSummary,
@@ -52,6 +53,10 @@ const authAccounts = ref<AuthUserAccountSummary[]>(authAccountSummaryFallback);
 const authPreApprovalDraft = ref<AuthAccountPreApprovalDraft>(authAccountPreApprovalDraftFallback);
 const authPreApprovalApplications = ref<AuthAccountPreApprovalApplication[]>(authAccountPreApprovalApplicationFallback);
 const authPreApprovalEvidence = ref<AuthAccountPreApprovalEvidenceSummary[]>(authAccountPreApprovalEvidenceFallback);
+const authPreApprovalEvidenceApplicationCode = ref(authAccountPreApprovalEvidenceFallback[0]?.applicationCode ?? '');
+const authPreApprovalEvidenceFile = ref<File | null>(null);
+const authPreApprovalEvidenceBusy = ref(false);
+const authPreApprovalEvidenceMessage = ref('');
 const authPreApprovalReadiness = ref<AuthAccountPreApprovalReadiness[]>(authAccountPreApprovalReadinessFallback);
 const authAuditEvents = ref<AuthAuditEvent[]>([
   {
@@ -173,6 +178,7 @@ async function loadAuthPreApprovalApplications() {
   try {
     const applications = await fetchAuthAccountPreApprovalApplications();
     authPreApprovalApplications.value = applications.length ? applications : authAccountPreApprovalApplicationFallback;
+    syncPreApprovalEvidenceApplicationCode();
   } catch {
     // Keep local pre-approval application samples visible when the backend is not running.
   }
@@ -184,6 +190,53 @@ async function loadAuthPreApprovalEvidence() {
     authPreApprovalEvidence.value = evidence.length ? evidence : authAccountPreApprovalEvidenceFallback;
   } catch {
     // Keep local pre-approval evidence samples visible when the backend is not running.
+  }
+}
+
+function syncPreApprovalEvidenceApplicationCode() {
+  if (
+    authPreApprovalEvidenceApplicationCode.value
+    && authPreApprovalApplications.value.some(
+      (application) => application.applicationCode === authPreApprovalEvidenceApplicationCode.value,
+    )
+  ) {
+    return;
+  }
+  authPreApprovalEvidenceApplicationCode.value = authPreApprovalApplications.value[0]?.applicationCode ?? '';
+}
+
+function handlePreApprovalEvidenceFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  authPreApprovalEvidenceFile.value = input.files?.[0] ?? null;
+}
+
+async function handleUploadPreApprovalEvidence() {
+  authPreApprovalEvidenceBusy.value = true;
+  authPreApprovalEvidenceMessage.value = '';
+  try {
+    if (!authPreApprovalEvidenceApplicationCode.value) {
+      authPreApprovalEvidenceMessage.value = '请选择前置审批申请单';
+      return;
+    }
+    if (!authPreApprovalEvidenceFile.value) {
+      authPreApprovalEvidenceMessage.value = '请选择证据附件';
+      return;
+    }
+    const uploaded = await uploadAuthAccountPreApprovalEvidence(
+      authPreApprovalEvidenceApplicationCode.value,
+      authPreApprovalEvidenceFile.value,
+    );
+    authPreApprovalEvidence.value = [
+      uploaded,
+      ...authPreApprovalEvidence.value.filter((item) => item.applicationCode !== uploaded.applicationCode),
+    ];
+    authPreApprovalEvidenceFile.value = null;
+    authPreApprovalEvidenceMessage.value = `已上传：${uploaded.requiredEvidence}`;
+    await loadAuthPreApprovalEvidence();
+  } catch (error) {
+    authPreApprovalEvidenceMessage.value = error instanceof Error ? error.message : '上传前置审批证据失败';
+  } finally {
+    authPreApprovalEvidenceBusy.value = false;
   }
 }
 
@@ -607,6 +660,37 @@ function readinessTone(tone: string): Tone {
         </div>
         <div class="security-pre-approval-evidence">
           <strong>前置审批证据</strong>
+          <form class="security-pre-approval-evidence-upload" @submit.prevent="handleUploadPreApprovalEvidence">
+            <label>
+              <span>申请单</span>
+              <select v-model="authPreApprovalEvidenceApplicationCode" :disabled="authPreApprovalEvidenceBusy">
+                <option
+                  v-for="application in authPreApprovalApplications"
+                  :key="application.applicationCode"
+                  :value="application.applicationCode"
+                >
+                  {{ application.applicationCode }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>证据附件</span>
+              <input
+                :disabled="authPreApprovalEvidenceBusy"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.zip"
+                @change="handlePreApprovalEvidenceFileChange"
+              />
+            </label>
+            <button
+              class="secondary-button"
+              type="submit"
+              :disabled="authPreApprovalEvidenceBusy || !authPreApprovalEvidenceApplicationCode || !authPreApprovalEvidenceFile"
+            >
+              {{ authPreApprovalEvidenceBusy ? '上传中' : '上传' }}
+            </button>
+            <small v-if="authPreApprovalEvidenceMessage">{{ authPreApprovalEvidenceMessage }}</small>
+          </form>
           <article v-for="evidence in authPreApprovalEvidence" :key="`${evidence.applicationCode}-${evidence.documentCode}`">
             <div>
               <b>{{ evidence.applicationCode }} / {{ evidence.requiredEvidence }}</b>

@@ -16,6 +16,7 @@ import {
   submitAuthAccountPreApprovalApplication,
   unlockAuthAccount,
   updateAuthAccountStatus,
+  uploadAuthAccountPreApprovalEvidence,
   upsertAuthAccount,
 } from './authApi';
 
@@ -276,6 +277,37 @@ describe('authApi', () => {
     expect(evidence[0].attachmentCodes).toContain('ATT-AUTH-PRE-PASSWORD-001');
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/accounts/pre-approval-evidence', expect.objectContaining({
       headers: { Authorization: 'Bearer admin-token' },
+    }));
+  });
+
+  it('uploads account pre-approval evidence with bearer token', async () => {
+    setAuthToken('admin-token');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response({
+      applicationCode: 'AUTH-PRE-APP-PASSWORD-001',
+      readinessCode: 'AUTH-PRE-PASSWORD-001',
+      actionType: '管理员重置密码',
+      targetUsername: 'planner',
+      requiredEvidence: '本人核验附件',
+      documentCode: 'DOC-AUTH-PRE-APP-PASSWORD-001',
+      attachmentCount: 1,
+      missingEvidence: 0,
+      attachmentCodes: ['ATT-UP-001'],
+      latestUploadedAt: '2026-07-09 12:10:00',
+      status: '已关联证据',
+      nextAction: '保留账号前置审批附件并等待审批复核',
+      tone: 'green',
+    }));
+
+    const evidence = await uploadAuthAccountPreApprovalEvidence(
+      'AUTH-PRE-APP-PASSWORD-001',
+      new File(['identity check'], 'identity-check.pdf', { type: 'application/pdf' }),
+    );
+
+    expect(evidence.documentCode).toBe('DOC-AUTH-PRE-APP-PASSWORD-001');
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/accounts/pre-approval-evidence/uploads', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
+      body: expect.any(FormData),
     }));
   });
 

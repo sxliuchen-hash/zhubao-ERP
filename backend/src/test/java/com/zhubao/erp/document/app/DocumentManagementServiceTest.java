@@ -1,6 +1,7 @@
 package com.zhubao.erp.document.app;
 
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
+import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
 import org.junit.jupiter.api.Test;
@@ -62,6 +63,49 @@ class DocumentManagementServiceTest {
         assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
         assertThat(service.summary().attachments()).isEqualTo(6);
         assertThat(service.auditEvents()).extracting("action").contains("上传附件");
+    }
+
+    @Test
+    void savesDynamicDocumentPackageForPreApprovalEvidence() {
+        DocumentManagementService service = newService();
+
+        service.savePackage(new DocumentPackage(
+                "DOC-AUTH-PRE-APP-001",
+                "管理员重置密码证据包",
+                "账号前置审批",
+                "AUTH-PRE-APP-001",
+                "系统管理员",
+                "归档账号前置审批证据。",
+                1,
+                0,
+                "待补本人核验附件",
+                "账号审批证据长期保留",
+                "2026-07-09 12:00:00",
+                "amber"
+        ));
+        service.savePackage(new DocumentPackage(
+                "DOC-AUTH-PRE-APP-001",
+                "管理员重置密码证据包",
+                "账号前置审批",
+                "AUTH-PRE-APP-001",
+                "系统管理员",
+                "归档账号前置审批证据。",
+                1,
+                1,
+                "已关联证据",
+                "账号审批证据长期保留",
+                "2026-07-09 12:05:00",
+                "green"
+        ));
+
+        assertThat(service.packages())
+                .filteredOn(documentPackage -> documentPackage.code().equals("DOC-AUTH-PRE-APP-001"))
+                .singleElement()
+                .satisfies(documentPackage -> {
+                    assertThat(documentPackage.linkedEvidence()).isEqualTo(1);
+                    assertThat(documentPackage.status()).isEqualTo("已关联证据");
+                    assertThat(documentPackage.tone()).isEqualTo("green");
+                });
     }
 
     private DocumentManagementService newService() {

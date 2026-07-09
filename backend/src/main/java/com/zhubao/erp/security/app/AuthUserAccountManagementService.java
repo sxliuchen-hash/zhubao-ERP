@@ -5,7 +5,9 @@ import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
+import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
@@ -57,6 +59,7 @@ public class AuthUserAccountManagementService {
     private final AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository;
     private final AuthSessionService authSessionService;
     private final DocumentManagementRepository documentManagementRepository;
+    private final DocumentManagementService documentManagementService;
     private final boolean enforcePreApprovalForAccountActions;
 
     public AuthUserAccountManagementService(
@@ -171,7 +174,35 @@ public class AuthUserAccountManagementService {
                 preApprovalApplicationRepository,
                 authSessionService,
                 documentManagementRepository,
+                null,
                 false
+        );
+    }
+
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            AuthSessionService authSessionService,
+            DocumentManagementRepository documentManagementRepository,
+            boolean enforcePreApprovalForAccountActions
+    ) {
+        this(
+                accountRepository,
+                passwordHasher,
+                passwordPolicy,
+                passwordExpiryPolicy,
+                authAuditRepository,
+                approvalService,
+                preApprovalApplicationRepository,
+                authSessionService,
+                documentManagementRepository,
+                null,
+                enforcePreApprovalForAccountActions
         );
     }
 
@@ -186,6 +217,7 @@ public class AuthUserAccountManagementService {
             AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
             AuthSessionService authSessionService,
             DocumentManagementRepository documentManagementRepository,
+            DocumentManagementService documentManagementService,
             @Value("${zhubao.auth.pre-approval.enforce-account-actions:false}")
             boolean enforcePreApprovalForAccountActions
     ) {
@@ -198,6 +230,7 @@ public class AuthUserAccountManagementService {
         this.preApprovalApplicationRepository = preApprovalApplicationRepository;
         this.authSessionService = authSessionService;
         this.documentManagementRepository = documentManagementRepository;
+        this.documentManagementService = documentManagementService;
         this.enforcePreApprovalForAccountActions = enforcePreApprovalForAccountActions;
     }
 
@@ -321,14 +354,59 @@ public class AuthUserAccountManagementService {
     }
 
     public List<AuthAccountPreApprovalEvidenceSummary> preApprovalEvidence() {
-        List<EvidenceAttachment> accountPreApprovalAttachments = documentManagementRepository == null
-                ? List.of()
-                : documentManagementRepository.attachments().stream()
-                .filter(attachment -> "账号前置审批".equals(attachment.businessType()))
-                .toList();
+        List<EvidenceAttachment> accountPreApprovalAttachments = accountPreApprovalAttachments();
         return preApprovalApplications().stream()
                 .map(application -> summarizePreApprovalEvidence(application, accountPreApprovalAttachments))
                 .toList();
+    }
+
+    public AuthAccountPreApprovalEvidenceSummary uploadPreApprovalEvidence(
+            String applicationCode,
+            String fileName,
+            String mediaType,
+            byte[] content,
+            OperatorContext operatorContext
+    ) {
+        if (documentManagementService == null || documentManagementRepository == null) {
+            throw new BusinessException("账号前置审批证据上传未配置");
+        }
+        if (content == null || content.length == 0) {
+            throw new BusinessException("附件内容不能为空");
+        }
+        AuthAccountPreApprovalApplication application = requirePreApprovalApplication(applicationCode);
+        String now = DISPLAY_TIME.format(Instant.now());
+        documentManagementService.savePackage(preApprovalEvidencePackage(
+                application,
+                operatorContext.operator(),
+                0,
+                "待补" + requiredEvidenceForApplication(application),
+                now,
+                "amber"
+        ));
+        documentManagementService.uploadAttachment(
+                preApprovalEvidenceDocumentCode(application),
+                "账号前置审批",
+                application.applicationCode(),
+                fileName,
+                mediaType,
+                "账号前置审批上传",
+                operatorContext.operator(),
+                "保留账号前置审批附件并等待审批复核",
+                content
+        );
+        List<EvidenceAttachment> accountPreApprovalAttachments = accountPreApprovalAttachments();
+        int linkedEvidence = (int) accountPreApprovalAttachments.stream()
+                .filter(attachment -> application.applicationCode().equals(attachment.businessCode()))
+                .count();
+        documentManagementService.savePackage(preApprovalEvidencePackage(
+                application,
+                operatorContext.operator(),
+                linkedEvidence,
+                "已关联证据",
+                now,
+                "green"
+        ));
+        return summarizePreApprovalEvidence(application, accountPreApprovalAttachments);
     }
 
     public AuthAccountPreApprovalApplication submitPreApprovalApplication(
@@ -610,6 +688,53 @@ public class AuthUserAccountManagementService {
             case "WAITING_SYSTEM_CAPABILITY" -> "补齐系统能力：" + String.join(" / ", draft.missingCapabilities());
             default -> "提交审批人复核并冻结账号动作放行条件";
         };
+    }
+
+    private List<EvidenceAttachment> accountPreApprovalAttachments() {
+        if (documentManagementRepository == null) {
+            return List.of();
+        }
+        return documentManagementRepository.attachments().stream()
+                .filter(attachment -> "账号前置审批".equals(attachment.businessType()))
+                .toList();
+    }
+
+    private AuthAccountPreApprovalApplication requirePreApprovalApplication(String applicationCode) {
+        String normalizedCode = blankToDefault(applicationCode, "");
+        if (normalizedCode.isBlank()) {
+            throw new BusinessException("账号前置审批申请单号不能为空");
+        }
+        return requirePreApprovalApplicationRepository()
+                .findByCode(normalizedCode)
+                .orElseThrow(() -> new BusinessException("账号前置审批申请单不存在：" + normalizedCode));
+    }
+
+    private String preApprovalEvidenceDocumentCode(AuthAccountPreApprovalApplication application) {
+        return "DOC-" + application.applicationCode();
+    }
+
+    private DocumentPackage preApprovalEvidencePackage(
+            AuthAccountPreApprovalApplication application,
+            String owner,
+            int linkedEvidence,
+            String status,
+            String updatedAt,
+            String tone
+    ) {
+        return new DocumentPackage(
+                preApprovalEvidenceDocumentCode(application),
+                application.actionType() + "证据包",
+                "账号前置审批",
+                application.applicationCode(),
+                owner,
+                "归档账号前置审批申请单、本人核验、岗位交接和审批复核证据。",
+                1,
+                linkedEvidence,
+                status,
+                "账号审批证据长期保留",
+                updatedAt,
+                tone
+        );
     }
 
     private AuthAccountPreApprovalEvidenceSummary summarizePreApprovalEvidence(
