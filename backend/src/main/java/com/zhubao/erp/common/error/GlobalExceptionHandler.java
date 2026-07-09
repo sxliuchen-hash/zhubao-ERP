@@ -3,6 +3,7 @@ package com.zhubao.erp.common.error;
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.gateway.error.GatewayRateLimitException;
+import com.zhubao.erp.gateway.error.GatewayReplayException;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,12 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
     public ApiResponse<Void> handleGatewayRateLimitException(GatewayRateLimitException ex) {
         return ApiResponse.error(42901, ex.getMessage());
+    }
+
+    @ExceptionHandler(GatewayReplayException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleGatewayReplayException(GatewayReplayException ex) {
+        return ApiResponse.error(40901, ex.getMessage());
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})

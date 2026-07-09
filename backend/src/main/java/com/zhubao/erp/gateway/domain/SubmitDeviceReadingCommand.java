@@ -16,6 +16,19 @@ public record SubmitDeviceReadingCommand(
         @NotBlank String rawPayload,
         String businessRefType,
         String businessRefCode,
-        String capturedAt
+        String capturedAt,
+        String nonce
 ) {
+    /** Backward-compatible constructor without a nonce (used by review flows and older callers). */
+    public SubmitDeviceReadingCommand(
+            String deviceCode,
+            String deviceKey,
+            String readingType,
+            String rawPayload,
+            String businessRefType,
+            String businessRefCode,
+            String capturedAt
+    ) {
+        this(deviceCode, deviceKey, readingType, rawPayload, businessRefType, businessRefCode, capturedAt, null);
+    }
 }

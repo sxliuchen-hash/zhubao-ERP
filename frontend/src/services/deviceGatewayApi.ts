@@ -53,6 +53,7 @@ export interface SubmitDeviceReadingRequest {
   businessRefType?: string;
   businessRefCode?: string;
   capturedAt?: string;
+  nonce?: string;
 }
 
 export type ReadingConsumptionIntent =

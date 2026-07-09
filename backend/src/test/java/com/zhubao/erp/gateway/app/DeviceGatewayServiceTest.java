@@ -8,6 +8,7 @@ import com.zhubao.erp.gateway.domain.ReadingConsumption;
 import com.zhubao.erp.gateway.domain.RegisterGatewayDeviceCommand;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.gateway.error.GatewayRateLimitException;
+import com.zhubao.erp.gateway.error.GatewayReplayException;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.infra.InMemoryDeviceReadingRepository;
 import com.zhubao.erp.gateway.infra.InMemoryGatewayDeviceRepository;
@@ -52,7 +53,8 @@ class DeviceGatewayServiceTest {
         service = new DeviceGatewayService(
                 deviceRepository, readingRepository, consumptionRepository,
                 new DeviceReadingNormalizer(), passwordHasher,
-                new GatewayRateLimiter(1000, 60), businessOperationService);
+                new GatewayRateLimiter(1000, 60), new GatewayReplayGuard(false, 300),
+                businessOperationService);
     }
 
     private StockLedgerService stockLedgerService;
@@ -247,6 +249,7 @@ class DeviceGatewayServiceTest {
                 new DeviceReadingNormalizer(),
                 passwordHasher,
                 new GatewayRateLimiter(2, 60),
+                new GatewayReplayGuard(false, 300),
                 new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository())));
 
         limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
@@ -258,6 +261,39 @@ class DeviceGatewayServiceTest {
 
         // A different device is not affected by another device's quota.
         assertThat(limitedService.ingest(command("SCAN-PC-01", "SCAN_EVENT", "ZD-1")).status()).isNotNull();
+    }
+
+    @Test
+    void enforcesReplayProtectionWhenEnabled() {
+        PasswordHasher passwordHasher = new PasswordHasher();
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("zhubao.gateway.demo-device-key", DEVICE_KEY);
+        DeviceGatewayService guardedService = new DeviceGatewayService(
+                new InMemoryGatewayDeviceRepository(passwordHasher, environment),
+                new InMemoryDeviceReadingRepository(),
+                new InMemoryReadingConsumptionRepository(),
+                new DeviceReadingNormalizer(),
+                passwordHasher,
+                new GatewayRateLimiter(1000, 60),
+                new GatewayReplayGuard(true, 300),
+                new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository())));
+
+        String timestamp = java.time.Instant.now().toString();
+        SubmitDeviceReadingCommand first = new SubmitDeviceReadingCommand(
+                "SCALE-01", DEVICE_KEY, "SCALE_WEIGHT", "88.6g", "", "", timestamp, "nonce-a");
+        assertThat(guardedService.ingest(first).status()).isEqualTo(DeviceReadingStatus.READY);
+
+        SubmitDeviceReadingCommand replay = new SubmitDeviceReadingCommand(
+                "SCALE-01", DEVICE_KEY, "SCALE_WEIGHT", "88.6g", "", "", timestamp, "nonce-a");
+        assertThatThrownBy(() -> guardedService.ingest(replay))
+                .isInstanceOf(GatewayReplayException.class)
+                .hasMessageContaining("疑似重放");
+
+        SubmitDeviceReadingCommand missingNonce = new SubmitDeviceReadingCommand(
+                "SCALE-01", DEVICE_KEY, "SCALE_WEIGHT", "88.6g", "", "", timestamp, null);
+        assertThatThrownBy(() -> guardedService.ingest(missingNonce))
+                .isInstanceOf(GatewayReplayException.class)
+                .hasMessageContaining("必须携带 nonce");
     }
 
     @Test

@@ -20,6 +20,7 @@ import com.zhubao.erp.gateway.domain.RegisterGatewayDeviceCommand;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.gateway.error.DeviceAuthenticationException;
 import com.zhubao.erp.gateway.error.GatewayRateLimitException;
+import com.zhubao.erp.gateway.error.GatewayReplayException;
 import com.zhubao.erp.security.app.PasswordHasher;
 import com.zhubao.erp.security.domain.OperatorContext;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,7 @@ public class DeviceGatewayService {
     private final DeviceReadingNormalizer normalizer;
     private final PasswordHasher passwordHasher;
     private final GatewayRateLimiter rateLimiter;
+    private final GatewayReplayGuard replayGuard;
     private final BusinessOperationService businessOperationService;
 
     public DeviceGatewayService(
@@ -59,6 +61,7 @@ public class DeviceGatewayService {
             DeviceReadingNormalizer normalizer,
             PasswordHasher passwordHasher,
             GatewayRateLimiter rateLimiter,
+            GatewayReplayGuard replayGuard,
             BusinessOperationService businessOperationService
     ) {
         this.deviceRepository = deviceRepository;
@@ -67,6 +70,7 @@ public class DeviceGatewayService {
         this.normalizer = normalizer;
         this.passwordHasher = passwordHasher;
         this.rateLimiter = rateLimiter;
+        this.replayGuard = replayGuard;
         this.businessOperationService = businessOperationService;
     }
 
@@ -79,6 +83,10 @@ public class DeviceGatewayService {
             throw new GatewayRateLimitException(
                     "设备 " + device.deviceCode() + " 读数频率超过限制（窗口内上限 "
                             + rateLimiter.maxReadings() + " 条），请检查桥接程序或密钥是否异常");
+        }
+        String replayRejection = replayGuard.check(device.deviceCode(), command.nonce(), command.capturedAt());
+        if (!replayRejection.isBlank()) {
+            throw new GatewayReplayException(replayRejection);
         }
         DeviceReadingType type = DeviceReadingType.fromString(command.readingType());
         if (type == null) {

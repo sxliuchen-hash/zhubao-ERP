@@ -318,6 +318,14 @@ function gatewayStatusTone(status: string): Tone {
   return 'red';
 }
 
+function generateNonce(): string {
+  const cryptoObj = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+    return cryptoObj.randomUUID();
+  }
+  return `nonce-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 async function refreshGateway() {
   try {
     const [devices, readings, summary, consumptions] = await Promise.all([
@@ -352,6 +360,9 @@ async function submitGatewayReading() {
       rawPayload: gatewayForm.value.rawPayload,
       businessRefType: gatewayForm.value.businessRefType.trim() || undefined,
       businessRefCode: gatewayForm.value.businessRefCode.trim() || undefined,
+      // Send a timestamp + unique nonce so the push works whether or not replay protection is enabled.
+      capturedAt: new Date().toISOString(),
+      nonce: generateNonce(),
     });
     gatewayFeedback.value = `读数 ${reading.readingCode} 已接入：${reading.status} ${reading.message}`;
     await refreshGateway();

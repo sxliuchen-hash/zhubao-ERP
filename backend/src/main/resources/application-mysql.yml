@@ -29,6 +29,9 @@ zhubao:
     rate-limit:
       max-readings: ${ZHUBAO_GATEWAY_RATE_LIMIT_MAX:120}
       window-seconds: ${ZHUBAO_GATEWAY_RATE_LIMIT_WINDOW_SECONDS:60}
+    replay:
+      enabled: ${ZHUBAO_GATEWAY_REPLAY_ENABLED:true}
+      window-seconds: ${ZHUBAO_GATEWAY_REPLAY_WINDOW_SECONDS:300}
   hardware:
     poc:
       repository: ${ZHUBAO_HARDWARE_POC_REPOSITORY:jdbc}
