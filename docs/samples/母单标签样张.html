@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>母单标签样张 - 珠宝来料加工系统</title>
+<!-- 二维码库：优先用本地/CDN，离线时用下方内置降级方案画占位 -->
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "微软雅黑", "Microsoft YaHei", sans-serif;
+    background: #eef1f5;
+    color: #1f2733;
+    padding: 24px;
+  }
+  .page-title { text-align: center; margin-bottom: 6px; font-size: 20px; }
+  .page-note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 20px; }
+  .label-row { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; }
+
+  /* 一张标签：模拟贴在周转盒/周转袋上的实物标签 */
+  .label {
+    width: 380px;
+    background: #fff;
+    border: 2px solid #1f2733;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  }
+  .label-head {
+    background: #1f2733;
+    color: #fff;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .label-head .brand { font-size: 12px; opacity: .85; }
+  .label-head .type { font-size: 12px; background: #f4b740; color: #1f2733; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+
+  .label-body { display: flex; padding: 12px; gap: 12px; }
+  .qr-box { width: 120px; flex-shrink: 0; text-align: center; }
+  .qr-box .qr { width: 120px; height: 120px; border: 1px solid #d0d6dd; display: flex; align-items: center; justify-content: center; background: #fff; }
+  .qr-box .qr img, .qr-box .qr canvas { width: 118px; height: 118px; }
+  .qr-box .qr-hint { font-size: 11px; color: #6b7684; margin-top: 4px; }
+
+  .info { flex: 1; }
+  .mother-code { font-size: 22px; font-weight: bold; letter-spacing: .5px; color: #1f2733; word-break: break-all; }
+  .mother-code-hint { font-size: 11px; color: #6b7684; margin-bottom: 8px; }
+
+  .kv { display: grid; grid-template-columns: 64px 1fr; row-gap: 5px; font-size: 13px; }
+  .kv dt { color: #6b7684; }
+  .kv dd { color: #1f2733; font-weight: 600; }
+
+  .label-foot {
+    border-top: 1px dashed #c7ced6;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #46505c;
+  }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+  .badge.green { background: #e4f5ea; color: #1f8b4c; }
+  .badge.amber { background: #fdf0d5; color: #a86a12; }
+
+  .caption { text-align: center; font-size: 12px; color: #6b7684; margin-top: 8px; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .page-title, .page-note, .caption { display: none; }
+    .label { box-shadow: none; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <h1 class="page-title">母单标签样张（贴周转盒 / 周转袋用）</h1>
+  <p class="page-note">这是效果样张，扫码即可调出该母单的全部信息和加工进度。请客户确认：标签上的信息够不够、要不要加/减。</p>
+
+  <div class="label-row">
+    <!-- 样张一：常规母单标签 -->
+    <div>
+      <div class="label" id="label1">
+        <div class="label-head">
+          <span class="brand">XX 珠宝来料加工系统</span>
+          <span class="type">母单</span>
+        </div>
+        <div class="label-body">
+          <div class="qr-box">
+            <div class="qr" id="qr1"></div>
+            <div class="qr-hint">扫码看全链路</div>
+          </div>
+          <div class="info">
+            <div class="mother-code">CC-20260709-001-JL</div>
+            <div class="mother-code-hint">母单号（全链路唯一，追溯入口）</div>
+            <dl class="kv">
+              <dt>客户</dt><dd>恒信珠宝</dd>
+              <dt>订单号</dt><dd>DD-20260709-001</dd>
+              <dt>物料</dt><dd>18K 金戒托</dd>
+              <dt>数量</dt><dd>320 件</dd>
+              <dt>重量</dt><dd>35.20 克</dd>
+              <dt>收货日</dt><dd>2026-07-09</dd>
+              <dt>快递</dt><dd>顺丰 SF-IN-...001</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="label-foot">
+          <span>当前工序：<b>抛光</b> <span class="badge amber">加工中</span></span>
+          <span>收货人：何琴</span>
+        </div>
+      </div>
+      <p class="caption">样张一 · 常规母单标签</p>
+    </div>
+
+    <!-- 样张二：信息更全的周转盒大标签 -->
+    <div>
+      <div class="label" id="label2">
+        <div class="label-head">
+          <span class="brand">XX 珠宝来料加工系统</span>
+          <span class="type">周转盒</span>
+        </div>
+        <div class="label-body">
+          <div class="qr-box">
+            <div class="qr" id="qr2"></div>
+            <div class="qr-hint">扫码看进度</div>
+          </div>
+          <div class="info">
+            <div class="mother-code">CC-20260709-002-JL</div>
+            <div class="mother-code-hint">母单号 + 周转盒号：BOX-018</div>
+            <dl class="kv">
+              <dt>客户</dt><dd>雅辰饰品</dd>
+              <dt>物料</dt><dd>银链条</dd>
+              <dt>数量</dt><dd>500 条</dd>
+              <dt>重量</dt><dd>683.20 克</dd>
+              <dt>子工单</dt><dd>共 3 个（ZD..01/02/03）</dd>
+              <dt>负责人</dt><dd>车间组长 李华</dd>
+              <dt>交货日</dt><dd>2026-07-20</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="label-foot">
+          <span>进度：拆分完成 3/3 · 抛光 2/3 <span class="badge green">在制</span></span>
+          <span>打印：2026-07-09 14:05</span>
+        </div>
+      </div>
+      <p class="caption">样张二 · 周转盒大标签（信息更全）</p>
+    </div>
+  </div>
+
+<script>
+  // 二维码内容：只放业务编码和类型，扫码后由系统跳转到母单详情（与系统现有扫码解析格式一致：JG|类型|编码）
+  function drawQr(elId, text) {
+    var el = document.getElementById(elId);
+    if (window.QRCode) {
+      new QRCode(el, { text: text, width: 118, height: 118, correctLevel: QRCode.CorrectLevel.M });
+    } else {
+      // 离线降级：没联网加载到二维码库时，显示占位方块和文本，效果示意不受影响
+      el.innerHTML = '<div style="font-size:11px;color:#6b7684;padding:6px;text-align:center;">二维码占位<br/>' + text + '</div>';
+      el.style.background = 'repeating-linear-gradient(45deg,#eee,#eee 6px,#fff 6px,#fff 12px)';
+    }
+  }
+  window.addEventListener('load', function () {
+    drawQr('qr1', 'JG|mother|CC-20260709-001-JL');
+    drawQr('qr2', 'JG|mother|CC-20260709-002-JL');
+  });
+</script>
+</body>
+</html>
