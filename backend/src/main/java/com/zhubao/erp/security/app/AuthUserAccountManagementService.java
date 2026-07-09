@@ -61,6 +61,7 @@ public class AuthUserAccountManagementService {
     private final DocumentManagementRepository documentManagementRepository;
     private final DocumentManagementService documentManagementService;
     private final boolean enforcePreApprovalForAccountActions;
+    private final CustomerAuthorizationService customerAuthorizationService;
 
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
@@ -206,6 +207,35 @@ public class AuthUserAccountManagementService {
         );
     }
 
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            AuthSessionService authSessionService,
+            DocumentManagementRepository documentManagementRepository,
+            DocumentManagementService documentManagementService,
+            boolean enforcePreApprovalForAccountActions
+    ) {
+        this(
+                accountRepository,
+                passwordHasher,
+                passwordPolicy,
+                passwordExpiryPolicy,
+                authAuditRepository,
+                approvalService,
+                preApprovalApplicationRepository,
+                authSessionService,
+                documentManagementRepository,
+                documentManagementService,
+                enforcePreApprovalForAccountActions,
+                null
+        );
+    }
+
     @Autowired
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
@@ -219,7 +249,8 @@ public class AuthUserAccountManagementService {
             DocumentManagementRepository documentManagementRepository,
             DocumentManagementService documentManagementService,
             @Value("${zhubao.auth.pre-approval.enforce-account-actions:false}")
-            boolean enforcePreApprovalForAccountActions
+            boolean enforcePreApprovalForAccountActions,
+            CustomerAuthorizationService customerAuthorizationService
     ) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
@@ -232,6 +263,7 @@ public class AuthUserAccountManagementService {
         this.documentManagementRepository = documentManagementRepository;
         this.documentManagementService = documentManagementService;
         this.enforcePreApprovalForAccountActions = enforcePreApprovalForAccountActions;
+        this.customerAuthorizationService = customerAuthorizationService;
     }
 
     public List<AuthUserAccountSummary> accounts() {
@@ -490,6 +522,7 @@ public class AuthUserAccountManagementService {
                 passwordChangeRequired,
                 temporaryPasswordConsumed
         ));
+        syncCustomerAuthorizations(saved, operatorContext);
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
         String auditedAction = action
                 + preApprovalApplicationSuffix(preApprovalApplication)
@@ -497,6 +530,34 @@ public class AuthUserAccountManagementService {
         recordManagementAudit(username, operatorContext, auditedAction);
         recordApprovalSummary(saved, operatorContext, auditedAction);
         return summary(saved, Instant.now());
+    }
+
+    /**
+     * Keep the customer authorization table in sync with the account's customer scope so that the
+     * authoritative source (M3.130) reflects account management. Grants the account's current
+     * customer scope and revokes rows no longer in scope. No-op when the authorization service is
+     * unavailable (review-only configurations).
+     */
+    private void syncCustomerAuthorizations(AuthUserAccount account, OperatorContext operatorContext) {
+        if (customerAuthorizationService == null) {
+            return;
+        }
+        List<String> desired = account.dataScope() == DataScope.CUSTOMER_RANGE
+                ? account.customerScope()
+                : List.of();
+        List<String> existingCodes = customerAuthorizationService.authorizationsFor(account.username()).stream()
+                .map(com.zhubao.erp.security.domain.CustomerAuthorization::customerCode)
+                .toList();
+        for (String customerCode : desired) {
+            if (!existingCodes.contains(customerCode)) {
+                customerAuthorizationService.grant(account.username(), customerCode, "", operatorContext.operator());
+            }
+        }
+        for (String customerCode : existingCodes) {
+            if (!desired.contains(customerCode)) {
+                customerAuthorizationService.revoke(account.username(), customerCode);
+            }
+        }
     }
 
     public AuthUserAccountSummary updateEnabled(String username, boolean enabled, String reason, OperatorContext operatorContext) {

@@ -29,6 +29,7 @@ import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.security.infra.InMemoryAuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
+import com.zhubao.erp.security.infra.InMemoryCustomerAuthorizationRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -108,6 +109,74 @@ class AuthUserAccountManagementServiceTest {
                 .filteredOn(account -> account.username().equals("planner"))
                 .singleElement()
                 .satisfies(account -> assertThat(account.customerScope()).containsExactly("恒信珠宝", "雅辰饰品"));
+    }
+
+    @Test
+    void 账号客户范围同步写入客户授权表() {
+        Fixture fixture = fixture();
+
+        // 新建 CUSTOMER_RANGE 账号时，账号客户范围应同步写入授权表 sys_customer_authorization
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "Planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝", "雅辰饰品"),
+                true,
+                false
+        ), admin);
+
+        assertThat(fixture.customerAuthorizationService().authorizationsFor("planner"))
+                .extracting(auth -> auth.customerCode())
+                .containsExactlyInAnyOrder("恒信珠宝", "雅辰饰品");
+
+        // 收敛客户范围（去掉雅辰饰品）后，授权表应同步撤销不再授权的客户
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                null,
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false
+        ), admin);
+
+        assertThat(fixture.customerAuthorizationService().authorizationsFor("planner"))
+                .extracting(auth -> auth.customerCode())
+                .containsExactly("恒信珠宝");
+    }
+
+    @Test
+    void 数据范围切换为非客户范围时清空授权表() {
+        Fixture fixture = fixture();
+
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "Planner",
+                "Secure-2026-Plan!",
+                "计划员 陈敏",
+                "SALES",
+                "CUSTOMER_RANGE",
+                List.of("恒信珠宝"),
+                true,
+                false
+        ), admin);
+        assertThat(fixture.customerAuthorizationService().authorizationsFor("planner")).hasSize(1);
+
+        // dataScope 改为 DEPARTMENT，非 CUSTOMER_RANGE，应清空该账号的客户授权
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner",
+                null,
+                "计划员 陈敏",
+                "SALES",
+                "DEPARTMENT",
+                List.of(),
+                true,
+                false
+        ), admin);
+
+        assertThat(fixture.customerAuthorizationService().authorizationsFor("planner")).isEmpty();
     }
 
     @Test
@@ -986,13 +1055,18 @@ class AuthUserAccountManagementServiceTest {
                 localStorage()
         );
         ApprovalService approvalService = new ApprovalService(approvalRepository);
+        InMemoryCustomerAuthorizationRepository customerAuthorizationRepository =
+                new InMemoryCustomerAuthorizationRepository();
+        CustomerAuthorizationService customerAuthorizationService =
+                new CustomerAuthorizationService(customerAuthorizationRepository);
         AuthSessionService sessionService = new AuthSessionService(
                 navigationMenuService,
                 auditRepository,
                 accountRepository,
                 passwordHasher,
                 passwordExpiryPolicy,
-                passwordPolicy
+                passwordPolicy,
+                customerAuthorizationService
         );
         AuthUserAccountManagementService managementService = new AuthUserAccountManagementService(
                 accountRepository,
@@ -1005,7 +1079,8 @@ class AuthUserAccountManagementServiceTest {
                 sessionService,
                 documentRepository,
                 documentManagementService,
-                enforcePreApprovalForAccountActions
+                enforcePreApprovalForAccountActions,
+                customerAuthorizationService
         );
         return new Fixture(
                 accountRepository,
@@ -1014,7 +1089,8 @@ class AuthUserAccountManagementServiceTest {
                 preApprovalApplicationRepository,
                 documentRepository,
                 managementService,
-                sessionService
+                sessionService,
+                customerAuthorizationService
         );
     }
 
@@ -1031,7 +1107,8 @@ class AuthUserAccountManagementServiceTest {
             InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
             InMemoryDocumentManagementRepository documentRepository,
             AuthUserAccountManagementService managementService,
-            AuthSessionService sessionService
+            AuthSessionService sessionService,
+            CustomerAuthorizationService customerAuthorizationService
     ) {
     }
 }
