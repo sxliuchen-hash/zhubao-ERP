@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>子工单 / 出货标签样张 - 珠宝来料加工系统</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; background: #eef1f5; color: #1f2733; padding: 24px; }
+  .page-title { text-align: center; margin-bottom: 6px; font-size: 20px; }
+  .page-note { text-align: center; color: #6b7684; font-size: 13px; margin-bottom: 20px; }
+  .label-row { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: flex-start; }
+
+  .label { width: 360px; background: #fff; border: 2px solid #1f2733; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+  .label-head { color: #fff; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .label-head.sub { background: #2f9e57; }
+  .label-head.out { background: #3b6fb0; }
+  .label-head.rew { background: #c85a6a; }
+  .label-head .brand { font-size: 12px; opacity: .9; }
+  .label-head .type { font-size: 12px; background: #fff; color: #1f2733; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+  .label-body { display: flex; padding: 12px; gap: 12px; }
+  .qr-box { width: 120px; flex-shrink: 0; text-align: center; }
+  .qr-box .qr { width: 120px; height: 120px; border: 1px solid #d0d6dd; display: flex; align-items: center; justify-content: center; background: #fff; }
+  .qr-box .qr img, .qr-box .qr canvas { width: 118px; height: 118px; }
+  .qr-box .qr-hint { font-size: 11px; color: #6b7684; margin-top: 4px; }
+  .info { flex: 1; }
+  .big-code { font-size: 19px; font-weight: bold; color: #1f2733; word-break: break-all; }
+  .code-hint { font-size: 11px; color: #6b7684; margin-bottom: 8px; }
+  .kv { display: grid; grid-template-columns: 64px 1fr; row-gap: 5px; font-size: 13px; }
+  .kv dt { color: #6b7684; }
+  .kv dd { color: #1f2733; font-weight: 600; }
+  .label-foot { border-top: 1px dashed #c7ced6; padding: 8px 12px; font-size: 12px; color: #46505c; display: flex; justify-content: space-between; }
+  .caption { text-align: center; font-size: 12px; color: #6b7684; margin-top: 8px; }
+
+  @media print { body { background:#fff; padding:0; } .page-title,.page-note,.caption { display:none; } .label { box-shadow:none; page-break-inside:avoid; } }
+</style>
+</head>
+<body>
+  <h1 class="page-title">子工单 / 出货 / 返工 标签样张</h1>
+  <p class="page-note">与母单标签同一套设计：只印固定信息，进度靠手机扫码看实时最新工序。</p>
+
+  <div class="label-row">
+    <!-- 子工单标签 -->
+    <div>
+      <div class="label">
+        <div class="label-head sub">
+          <span class="brand">XX 珠宝来料加工系统</span>
+          <span class="type">子工单</span>
+        </div>
+        <div class="label-body">
+          <div class="qr-box"><div class="qr" id="qrSub"></div><div class="qr-hint">扫码报工/看工序</div></div>
+          <div class="info">
+            <div class="big-code">ZD-20260709-001-JL-001</div>
+            <div class="code-hint">子工单号（挂在母单下）</div>
+            <dl class="kv">
+              <dt>母单</dt><dd>CC-...-001-JL</dd>
+              <dt>客户</dt><dd>恒信珠宝</dd>
+              <dt>物料</dt><dd>18K 金戒托</dd>
+              <dt>数量</dt><dd>120 件</dd>
+              <dt>工序模板</dt><dd>戒托标准流程</dd>
+              <dt>负责人</dt><dd>王强</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="label-foot"><span>工序：雕刻→抛光→质检</span><span>打印：07-09</span></div>
+      </div>
+      <p class="caption">子工单标签 · 工人扫码报工</p>
+    </div>
+
+    <!-- 出货标签 -->
+    <div>
+      <div class="label">
+        <div class="label-head out">
+          <span class="brand">XX 珠宝来料加工系统</span>
+          <span class="type">出货</span>
+        </div>
+        <div class="label-body">
+          <div class="qr-box"><div class="qr" id="qrOut"></div><div class="qr-hint">扫码看出货详情</div></div>
+          <div class="info">
+            <div class="big-code">CK-20260709-001-JL-001</div>
+            <div class="code-hint">出货单号（挂在母单/订单下）</div>
+            <dl class="kv">
+              <dt>母单</dt><dd>CC-...-001-JL</dd>
+              <dt>客户</dt><dd>恒信珠宝</dd>
+              <dt>交货类目</dt><dd>成品</dd>
+              <dt>数量</dt><dd>320 件</dd>
+              <dt>净重</dt><dd>34.48 克</dd>
+              <dt>收件人</dt><dd>恒信珠宝 · 张经理</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="label-foot"><span>快递：顺丰 SF-OUT-...022</span><span>经办：何琳</span></div>
+      </div>
+      <p class="caption">出货标签 · 贴快递包裹</p>
+    </div>
+
+    <!-- 返工标签 -->
+    <div>
+      <div class="label">
+        <div class="label-head rew">
+          <span class="brand">XX 珠宝来料加工系统</span>
+          <span class="type">返工</span>
+        </div>
+        <div class="label-body">
+          <div class="qr-box"><div class="qr" id="qrRew"></div><div class="qr-hint">扫码看返工原因</div></div>
+          <div class="info">
+            <div class="big-code">ZD-...-001-FG001</div>
+            <div class="code-hint">返工单号（挂在原子工单下）</div>
+            <dl class="kv">
+              <dt>原工单</dt><dd>ZD-...-001</dd>
+              <dt>客户</dt><dd>恒信珠宝</dd>
+              <dt>返工数量</dt><dd>8 件</dd>
+              <dt>返工工序</dt><dd>精抛</dd>
+              <dt>原因</dt><dd>表面划痕</dd>
+              <dt>返工次数</dt><dd>第 1 次</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="label-foot"><span>责任：待质检确认</span><span>打印：07-09</span></div>
+      </div>
+      <p class="caption">返工标签 · 跟随返工品</p>
+    </div>
+  </div>
+
+<script>
+  function drawQr(elId, text) {
+    var el = document.getElementById(elId);
+    if (window.QRCode) { new QRCode(el, { text: text, width: 118, height: 118, correctLevel: QRCode.CorrectLevel.M }); }
+    else { el.innerHTML = '<div style="font-size:11px;color:#6b7684;padding:6px;text-align:center;">二维码占位<br/>' + text + '</div>'; el.style.background = 'repeating-linear-gradient(45deg,#eee,#eee 6px,#fff 6px,#fff 12px)'; }
+  }
+  window.addEventListener('load', function () {
+    drawQr('qrSub', 'JG|work_order|ZD-20260709-001-JL-001');
+    drawQr('qrOut', 'JG|outbound|CK-20260709-001-JL-001');
+    drawQr('qrRew', 'JG|rework|ZD-20260709-001-JL-001-FG001');
+  });
+</script>
+</body>
+</html>
