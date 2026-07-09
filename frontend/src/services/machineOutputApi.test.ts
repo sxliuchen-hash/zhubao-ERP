@@ -169,4 +169,31 @@ describe('machineOutputApi', () => {
     expect(options?.method).toBe('POST');
     expect(JSON.parse(options?.body as string)).toMatchObject({ machineNoSnapshot: 'ENG-03', machineId: 9001 });
   });
+
+  it('查询与保存机器档案主数据', async () => {
+    const { fetchMachineProfiles, saveMachineProfile } = await import('./machineOutputApi');
+    const profile = {
+      id: 9003,
+      machineNo: 'ENG-03',
+      machineName: '雕刻机 3 号',
+      machineType: '雕刻',
+      location: '雕刻车间',
+      enabled: true,
+      remark: '',
+      createdBy: '李华',
+      createdAt: '2026-07-09T10:00:00',
+    };
+    const ok = (data: unknown) => ({ ok: true, json: async () => ({ code: 0, message: 'ok', data }) } as Response);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(ok([profile]))
+      .mockResolvedValueOnce(ok(profile));
+
+    const list = await fetchMachineProfiles();
+    const saved = await saveMachineProfile({ machineNo: 'ENG-03', machineName: '雕刻机 3 号' });
+
+    expect(list[0].machineNo).toBe('ENG-03');
+    expect(saved.id).toBe(9003);
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/machine-profiles');
+    expect(fetchMock.mock.calls[1][1]?.method).toBe('POST');
+  });
 });

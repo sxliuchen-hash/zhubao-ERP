@@ -142,6 +142,7 @@
 - M3.124 设备网关限流防滥用，新增 `GatewayRateLimiter` 滑动窗口限流器和 `GatewayRateLimitException`（映射 HTTP 429）。设备读数接入端点凭设备密钥鉴权而非人工 RBAC，因此单独按设备做滚动窗口限流（默认 60 秒内 120 条，可经 `ZHUBAO_GATEWAY_RATE_LIMIT_MAX` / `ZHUBAO_GATEWAY_RATE_LIMIT_WINDOW_SECONDS` 配置），避免桥接程序配置异常或密钥泄漏导致读数洪泛，各设备配额相互独立。该边界补齐设备侧接入的滥用防护，不代表签名防重放、mTLS 或完整设备身份体系完成。
 - M3.125 设备网关设备管理，新增 `GATEWAY_DEVICE_MANAGE` 权限（仅 ADMIN/总经理）、`RegisterGatewayDeviceCommand` 和 `POST /api/hardware/gateway/devices`、`POST /api/hardware/gateway/devices/{deviceCode}/status`、`POST /api/hardware/gateway/devices/{deviceCode}/rotate-key`。管理员可注册/更新设备、启停设备、轮换设备密钥（PBKDF2 重新哈希，旧密钥立即失效），设备从只读 seed 推进到可运营；停用设备立即拒绝读数接入，更新时空密钥保留原哈希。前端软硬件联动作业台新增设备注册表单和启停/轮换密钥动作。该边界补齐设备生命周期运营，不代表签名防重放、mTLS 或完整设备身份体系完成。
 - M3.126 设备网关 HTTP 集成测试，`M2ManagementApiSmokeTest` 端到端锁定设备密钥推送读数、授权角色消费、操作工被拒设备管理(403)、管理员注册设备的 HTTP 契约。
+- M3.135 机器档案主数据表，新增 `MachineProfile`、`MachineProfileRepository`（内存/JDBC 可切换）、`MachineProfileService`、`SaveMachineProfileCommand`、`V30__m3_machine_profile_contract.sql`（`sys_machine`，seed 雕刻 1-8 号机）和 `GET/POST /api/machine-profiles`（新增/更新受 `MACHINE_OUTPUT_SUBMIT` 权限守卫，机器编号唯一）。为 M3.134 设备产量绑定提供真实可选的机器档案来源：`machine_no` 对应设备产量记录 `machineNoSnapshot`，`id` 即绑定命令 `machineId`。前端 `machineOutputApi` 新增 `fetchMachineProfiles`/`saveMachineProfile`。该边界补齐机器主数据维护，不代表设备台账、点检保养或设备 SDK 直连完成。
 - M3.134 设备产量机器档案绑定命令，`MachineOutputRepository` 新增 `bindMachineId`（内存/JDBC，仅更新同编号且未绑定的记录），新增 `BindMachineOutputCommand`、`MachineOutputBindingResult`、`MachineOutputService.bindMachine` 和 `POST /api/machine-outputs/machine-bindings`（受 `MACHINE_OUTPUT_SUBMIT` 权限守卫）。承接 M3.121 匹配建议：复核候选机器档案 ID 后可把同编号未绑定设备产量记录批量绑定，不覆盖历史绑定；无未绑定记录时拒绝。前端 `machineOutputApi` 新增 `bindMachineOutput`，生产派工报工作业台机器档案匹配建议区对 `READY_TO_BIND` 项新增"绑定到机器档案"动作。该边界补齐设备产量到机器主数据的人工绑定闭环，不代表自动建档、批量多编号绑定或签名附件闭环完成。
 - M3.133 客户授权前端管理界面，配置基线页 `当前权限 / 数据范围边界` 区新增"客户授权管理（CUSTOMER_RANGE）"面板，接入 `customerAuthorizationApi` 的 `GET/POST /api/security/customer-authorizations` 和 `/revocations`，总经理/管理员可在界面手工授权/撤销客户、查看授权清单；后端不可用时保持空列表兜底。至此客户授权形成"账号管理自动同步 + 界面手工维护 → 授权表 → 会话有效范围 → 业务工作台 GET 过滤"端到端可用闭环。该边界不代表完整组织树、跨对象关系推导或全系统行级权限完成。
 - M3.132 客户授权表接入账号管理，`AuthUserAccountManagementService` 新增可选 `CustomerAuthorizationService` 依赖（重载构造器向后兼容 + 全参 `@Autowired` 构造器）；管理员创建/更新 `CUSTOMER_RANGE` 账号时，账号客户范围同步写入客户授权表 `sys_customer_authorization`（新增客户授权、撤销不再授权的客户），当数据范围切换为非 `CUSTOMER_RANGE` 时清空该账号授权。授权表已是登录会话客户范围的权威来源（M3.130），本轮打通"账号管理 → 授权表 → 会话有效范围 → 业务工作台 GET 过滤"闭环。该边界不代表完整组织树、跨对象关系推导或全系统行级权限完成。
@@ -315,6 +316,16 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 
 客户授权 JDBC 覆盖 `sys_customer_authorization`：`CUSTOMER_RANGE` 账号可见客户范围由授权表维护（总经理/管理员通过 `POST /api/security/customer-authorizations` 授权、`/revocations` 撤销），登录会话解析时按授权表计算有效范围，授权表无记录时回退账号 `customerScope` 文本字段。本地默认内存仓储，便于评审。该边界不代表完整组织树、跨对象关系推导或全系统行级权限完成。
 
+启用 MySQL 机器档案主数据：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="mysql"
+$env:ZHUBAO_MACHINE_PROFILE_REPOSITORY="jdbc"
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+```
+
+机器档案 JDBC 覆盖 `sys_machine`：`V30__m3_machine_profile_contract.sql` seed 雕刻 1-8 号机，机器编号唯一，`GET/POST /api/machine-profiles` 维护机器档案，为设备产量绑定（M3.134）提供真实 `machineId` 来源。本地默认内存仓储，便于评审。
+
 启用 MySQL 硬件设备网关持久化：
 
 ```powershell
@@ -462,6 +473,8 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/machine-outputs/machine-match-suggestions`
 - `POST /api/machine-outputs/machine-bindings`
 - `GET /api/machine-outputs/import-batches/{importBatchNo}`
+- `GET /api/machine-profiles`
+- `POST /api/machine-profiles`
 - `POST /api/machine-outputs`
 
 ## 当前阶段与下一步

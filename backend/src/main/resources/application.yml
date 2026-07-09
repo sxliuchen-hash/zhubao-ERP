@@ -25,6 +25,8 @@ zhubao:
     repository: memory
   machine-output:
     repository: memory
+  machine-profile:
+    repository: memory
   business-document:
     repository: memory
   gateway:
