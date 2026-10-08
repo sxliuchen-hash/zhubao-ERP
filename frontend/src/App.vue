@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import AppShell from './components/AppShell.vue';
 import ApprovalWorkspace from './features/m1/ApprovalWorkspace.vue';
 import ConfigurationWorkspace from './features/m1/ConfigurationWorkspace.vue';
@@ -37,23 +37,28 @@ type TabKey =
   | 'operations'
   | 'mobile';
 
-const tabs: Array<{ key: TabKey; label: string; meta: string; badge?: string; code: string }> = [
-  { key: 'dashboard', label: '首页工作台', meta: '项目进展 / 调度', badge: '3', code: 'OP' },
-  { key: 'inbound', label: '来料母单', meta: '收货 / 拆包', badge: '6', code: 'IN' },
-  { key: 'production', label: '生产工单', meta: '排产 / 报工', badge: '18', code: 'MO' },
-  { key: 'quality', label: '质检返工', meta: '缺陷 / 损耗', badge: '7', code: 'QC' },
-  { key: 'inventory', label: '库存追溯', meta: '客户所有权', code: 'ST' },
-  { key: 'approvals', label: '审批工作台', meta: '损耗 / 账号 / 异常', badge: '3', code: 'AP' },
-  { key: 'configuration', label: '配置基线', meta: '参数 / 构型', badge: '8', code: 'CF' },
-  { key: 'documents', label: '文档附件', meta: '证据 / 归档', badge: '5', code: 'EV' },
-  { key: 'sample', label: '样例库', meta: '验收脚本', code: 'SA' },
-  { key: 'label', label: '标签打印', meta: '母单 / 周转盒', code: 'LB' },
-  { key: 'hardware', label: '软硬件联动', meta: '设备 / 兜底', badge: '4', code: 'HW' },
-  { key: 'operations', label: '运维中心', meta: '日志 / 指标', badge: '3', code: 'OC' },
-  { key: 'mobile', label: 'PWA 作业', meta: '扫码 / 现场', code: 'PW' },
+const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; group: 'work' | 'system' }> = [
+  { key: 'dashboard', label: '首页', meta: '今日待办', code: 'OP', group: 'work' },
+  { key: 'inbound', label: '来料', meta: '收货入库', code: 'IN', group: 'work' },
+  { key: 'production', label: '生产', meta: '派工报工', code: 'MO', group: 'work' },
+  { key: 'quality', label: '质检', meta: '返工放行', code: 'QC', group: 'work' },
+  { key: 'inventory', label: '库存', meta: '出库退货', code: 'ST', group: 'work' },
+  { key: 'approvals', label: '审批', meta: '待我处理', code: 'AP', group: 'work' },
+  { key: 'label', label: '标签', meta: '打印补打', code: 'LB', group: 'work' },
+  { key: 'sample', label: '登记导入', meta: 'Excel 入账', code: 'SA', group: 'system' },
+  { key: 'documents', label: '附件', meta: '照片视频', code: 'EV', group: 'system' },
+  { key: 'hardware', label: '设备', meta: '读数接入', code: 'HW', group: 'system' },
+  { key: 'configuration', label: '配置', meta: '账号权限', code: 'CF', group: 'system' },
+  { key: 'operations', label: '运维', meta: '备份日志', code: 'OC', group: 'system' },
+  { key: 'mobile', label: '手机作业', meta: '扫码报工', code: 'PW', group: 'system' },
 ];
 
 const activeTab = ref<TabKey>('dashboard');
+const traceQuery = ref('');
+provide('zhubao-trace-query', traceQuery);
+provide('zhubao-open-tab', (tab: TabKey) => {
+  activateTab(tab);
+});
 const authSession = ref<AuthSession | null>(null);
 const tabKeySet = new Set<TabKey>(tabs.map((tab) => tab.key));
 const authorizedMenuCodes = computed(() => {
@@ -72,10 +77,12 @@ const visibleTabs = computed(() => {
   const filteredTabs = tabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
   return filteredTabs.length ? filteredTabs : tabs.filter((tab) => tab.key === 'dashboard');
 });
+const visibleWorkTabs = computed(() => visibleTabs.value.filter((tab) => tab.group === 'work'));
+const visibleSystemTabs = computed(() => visibleTabs.value.filter((tab) => tab.group === 'system'));
 const activeTitle = computed(() => (
   visibleTabs.value.find((tab) => tab.key === activeTab.value)?.label
   ?? visibleTabs.value[0]?.label
-  ?? '首页工作台'
+  ?? '首页'
 ));
 
 watch(activeTab, () => {
@@ -125,10 +132,11 @@ function isTabKey(value: string): value is TabKey {
 </script>
 
 <template>
-  <AppShell :title="activeTitle">
+  <AppShell v-model:trace-query="traceQuery" :title="activeTitle">
     <template #nav>
+      <p v-if="visibleWorkTabs.length" class="nav-group-label">作业</p>
       <button
-        v-for="tab in visibleTabs"
+        v-for="tab in visibleWorkTabs"
         :key="tab.key"
         class="nav-button"
         :data-tab="tab.key"
@@ -136,12 +144,19 @@ function isTabKey(value: string): value is TabKey {
         type="button"
         @click="activateTab(tab.key)"
       >
-        <i class="nav-code" aria-hidden="true">{{ tab.code }}</i>
-        <span>
-          <strong>{{ tab.label }}</strong>
-          <small>{{ tab.meta }}</small>
-        </span>
-        <b v-if="tab.badge">{{ tab.badge }}</b>
+        <strong>{{ tab.label }}</strong>
+      </button>
+      <p v-if="visibleSystemTabs.length" class="nav-group-label">系统</p>
+      <button
+        v-for="tab in visibleSystemTabs"
+        :key="tab.key"
+        class="nav-button"
+        :data-tab="tab.key"
+        :class="{ active: activeTab === tab.key }"
+        type="button"
+        @click="activateTab(tab.key)"
+      >
+        <strong>{{ tab.label }}</strong>
       </button>
     </template>
 

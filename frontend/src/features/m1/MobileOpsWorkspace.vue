@@ -3,28 +3,36 @@ import { onMounted, ref } from 'vue';
 import ScanResolver from '../scan/ScanResolver.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
-  mobileCapabilities as fallbackMobileCapabilities,
-  mobileTasks as fallbackMobileTasks,
-  offlineDrafts as fallbackOfflineDrafts,
-} from '../../data/m1PrototypeData';
-import {
   fetchMobileWorkspace,
   type MobileWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
 
-const workspace = ref<MobileWorkspaceModel>({
-  tasks: fallbackMobileTasks,
-  capabilities: fallbackMobileCapabilities,
-  offlineDrafts: fallbackOfflineDrafts,
+const emptyMobile = (): MobileWorkspaceModel => ({
+  tasks: [],
+  capabilities: [],
+  offlineDrafts: [],
 });
 
-onMounted(async () => {
-  try {
-    workspace.value = await fetchMobileWorkspace();
-  } catch {
-    // Keep deterministic local samples available when the backend is not running.
-  }
+const workspace = ref<MobileWorkspaceModel>(emptyMobile());
+const loadError = ref('');
+
+onMounted(() => {
+  void loadMobileWorkspace();
 });
+
+async function loadMobileWorkspace() {
+  loadError.value = '';
+  try {
+    const loaded = await fetchMobileWorkspace();
+    workspace.value = loaded;
+    if (loaded.tasks.length === 0 && loaded.offlineDrafts.length === 0) {
+      loadError.value = '接口没有返回现场任务';
+    }
+  } catch (error) {
+    workspace.value = emptyMobile();
+    loadError.value = error instanceof Error ? error.message : '现场任务加载失败';
+  }
+}
 </script>
 
 <template>
@@ -70,8 +78,8 @@ onMounted(async () => {
         </div>
         <div class="phone-card">
           <small>当前扫码对象</small>
-          <strong>ZD-20260706-001</strong>
-          <span>抛光工序 / 计划 80 件 / 已完成 56 件</span>
+          <strong>{{ workspace.tasks[0]?.code || '暂无单据' }}</strong>
+          <span>{{ workspace.tasks[0] ? `${workspace.tasks[0].scene} / ${workspace.tasks[0].nextAction}` : '暂无当前任务' }}</span>
         </div>
         <div class="phone-actions">
           <button type="button">报工</button>
@@ -81,14 +89,10 @@ onMounted(async () => {
         </div>
         <div class="phone-form">
           <label>
-            <span>本次完成数量</span>
-            <input value="24" readonly />
+            <span>现场要求</span>
+            <input :value="workspace.tasks[0]?.required || ''" readonly />
           </label>
-          <label>
-            <span>产出重量</span>
-            <input value="36.20 g" readonly />
-          </label>
-          <button type="button">提交报工</button>
+          <p v-if="loadError" class="operation-feedback danger">{{ loadError }}</p>
         </div>
       </div>
 
@@ -100,6 +104,8 @@ onMounted(async () => {
               <p>移动页面只保留现场必须信息，减少录入负担。</p>
             </div>
           </div>
+          <p v-if="loadError" class="operation-feedback danger">{{ loadError }}</p>
+          <p v-else-if="workspace.tasks.length === 0" class="empty-hint">暂无现场任务</p>
           <div class="mobile-task-list">
             <article v-for="task in workspace.tasks" :key="task.code">
               <div>
@@ -139,6 +145,7 @@ onMounted(async () => {
                 <p>弱网场景不能丢数据，但恢复后必须复核状态。</p>
               </div>
             </div>
+            <p v-if="workspace.offlineDrafts.length === 0" class="empty-hint">暂无离线草稿</p>
             <div class="draft-list">
               <article v-for="draft in workspace.offlineDrafts" :key="draft.code">
                 <div>

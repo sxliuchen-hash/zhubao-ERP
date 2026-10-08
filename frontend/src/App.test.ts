@@ -17,48 +17,24 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('M3.117 ERP/MES OPERATIONS DESK');
-    expect(wrapper.text()).toContain('M3.117 / 临时密码一次性');
-    expect(wrapper.text()).toContain('复核补录');
-    expect(wrapper.text()).toContain('登录审计');
-    expect(wrapper.text()).toContain('授权导航过滤');
-    expect(wrapper.text()).toContain('账号审批摘要');
-    expect(wrapper.text()).toContain('账号客户范围');
-    expect(wrapper.text()).toContain('账号前置审批');
-    expect(wrapper.text()).toContain('审批草稿评估');
-    expect(wrapper.text()).toContain('前置申请单');
-    expect(wrapper.text()).toContain('申请单 JDBC');
-    expect(wrapper.text()).toContain('强制申请单号');
-    expect(wrapper.text()).toContain('临时密码一次性');
-    expect(wrapper.text()).toContain('账号密码哈希');
-    expect(wrapper.text()).toContain('失败登录锁定');
-    expect(wrapper.text()).toContain('账号启停解锁');
-    expect(wrapper.text()).toContain('密码策略校验');
-    expect(wrapper.text()).toContain('自助改密续期');
-    expect(wrapper.text()).toContain('审计摘要链');
-    expect(wrapper.text()).toContain('硬件 POC 仓储');
-    expect(wrapper.text()).toContain('POC 证据关联');
-    expect(wrapper.text()).toContain('低成本硬件适配');
-    expect(wrapper.text()).toContain('硬件协议样本');
-    expect(wrapper.text()).toContain('硬件参数复核');
-    expect(wrapper.text()).toContain('硬件复测结果');
-    expect(wrapper.text()).toContain('硬件签字闭环');
-    expect(wrapper.text()).toContain('数据范围过滤');
-    expect(wrapper.find('.ops-command-metrics').exists()).toBe(true);
-    expect(wrapper.findAll('.ops-command-metrics article')).toHaveLength(3);
-    expect(wrapper.text()).toContain('首页工作台');
-    expect(wrapper.text()).toContain('来料母单');
-    expect(wrapper.text()).toContain('生产工单');
-    expect(wrapper.text()).toContain('质检返工');
-    expect(wrapper.text()).toContain('库存追溯');
-    expect(wrapper.text()).toContain('审批工作台');
-    expect(wrapper.text()).toContain('配置基线');
-    expect(wrapper.text()).toContain('文档附件');
-    expect(wrapper.text()).toContain('样例库');
-    expect(wrapper.text()).toContain('标签打印');
-    expect(wrapper.text()).toContain('软硬件联动');
-    expect(wrapper.text()).toContain('运维中心');
-    expect(wrapper.text()).toContain('PWA 作业');
+    expect(wrapper.text()).toContain('来料加工');
+    expect(wrapper.find('.nav-group-label').text()).toContain('作业');
+    expect(wrapper.text()).toContain('今日待办');
+    expect(wrapper.text()).toContain('当前处理单');
+    expect(wrapper.find('.ops-scope-ribbon').exists()).toBe(false);
+    expect(wrapper.find('.ops-nav').text()).toContain('首页');
+    expect(wrapper.find('.ops-nav').text()).toContain('来料');
+    expect(wrapper.find('.ops-nav').text()).toContain('生产');
+    expect(wrapper.find('.ops-nav').text()).toContain('质检');
+    expect(wrapper.find('.ops-nav').text()).toContain('库存');
+    expect(wrapper.find('.ops-nav').text()).toContain('审批');
+    expect(wrapper.find('.ops-nav').text()).toContain('标签');
+    expect(wrapper.find('.ops-nav').text()).toContain('登记导入');
+    expect(wrapper.find('.ops-nav').text()).toContain('附件');
+    expect(wrapper.find('.ops-nav').text()).toContain('设备');
+    expect(wrapper.find('.ops-nav').text()).toContain('配置');
+    expect(wrapper.find('.ops-nav').text()).toContain('运维');
+    expect(wrapper.find('.ops-nav').text()).toContain('手机作业');
   });
 
   it('filters sidebar navigation from the authenticated menu contract', async () => {
@@ -72,9 +48,9 @@ describe('App', () => {
       'production',
       'mobile',
     ]);
-    expect(wrapper.find('.ops-nav').text()).toContain('生产工单');
-    expect(wrapper.find('.ops-nav').text()).not.toContain('来料母单');
-    expect(wrapper.find('.ops-nav').text()).not.toContain('配置基线');
+    expect(wrapper.find('.ops-nav').text()).toContain('生产');
+    expect(wrapper.find('.ops-nav').text()).not.toContain('来料');
+    expect(wrapper.find('.ops-nav').text()).not.toContain('配置');
 
     window.dispatchEvent(new CustomEvent(authSessionChangedEvent, {
       detail: { session: sessionWithMenus(['dashboard', 'quality']) },

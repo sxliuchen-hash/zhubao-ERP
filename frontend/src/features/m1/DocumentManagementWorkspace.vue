@@ -172,12 +172,8 @@ async function createPreviewUrl() {
   <div class="page-stack document-page">
     <section class="operations-hero document-hero">
       <div class="hero-copy">
-        <div class="console-title-line">
-          <span class="eyebrow">Document & Evidence Control</span>
-          <StatusBadge label="M3.38 界面密度整改" tone="green" />
-        </div>
-        <h2>文档与附件管理工作台</h2>
-        <p>把需求文档、评审包、质检照片、称重记录、视频兜底和配置审批证据统一管理；当前对象内容默认本地存储，附件元数据可切换 JDBC 仓储。</p>
+        <h2>附件</h2>
+        <p>查看单据照片、称重记录和视频，缺的证据从这里补上。</p>
       </div>
       <div class="hero-kpis">
         <article>
@@ -239,36 +235,14 @@ async function createPreviewUrl() {
         </article>
       </div>
 
-      <div class="document-control-checks">
-        <div class="panel-title-row">
-          <div>
-            <span class="eyebrow">Storage Boundary</span>
-            <h2>仓储边界</h2>
-          </div>
-          <StatusBadge label="可切换" tone="blue" />
-        </div>
-        <article v-for="item in controlRows" :key="item.label" :class="`tone-${item.tone}`">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <small>{{ item.state }}</small>
-        </article>
-      </div>
-    </section>
-
-    <section class="document-source-grid" aria-label="外部样例校准">
-      <article v-for="item in sourceBasis" :key="item.label">
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-        <small>{{ item.detail }}</small>
-      </article>
     </section>
 
     <section class="document-upload-console" aria-label="附件上传与预览测试">
       <div class="section-heading">
         <div>
           <span class="eyebrow">Upload & Preview</span>
-          <h2>附件上传与预览测试台</h2>
-          <p>使用后端 multipart API 上传示例称重附件，写入本地存储适配，并通过仓储保存附件元数据、checksum、审计事件和 15 分钟预览链接。</p>
+          <h2>上传附件</h2>
+          <p>选择文件后上传，并生成短期预览链接。</p>
         </div>
         <div class="button-row">
           <button class="primary-button" type="button" :disabled="uploading" @click="uploadDemoEvidence">
@@ -435,33 +409,6 @@ async function createPreviewUrl() {
               <small>{{ event.detail }}</small>
             </div>
             <StatusBadge :label="event.eventCode" :tone="event.tone" />
-          </article>
-        </div>
-      </div>
-
-      <div class="section-block">
-        <div class="section-heading">
-          <div>
-            <h2>后续接入边界</h2>
-            <p>本阶段不重复造对象存储，先固定对象存储边界、元数据仓储边界和流程审计边界。</p>
-          </div>
-        </div>
-        <div class="rule-grid compact">
-          <article>
-            <strong>上传服务</strong>
-            <span>当前默认 local://evidence，本地根目录由 `zhubao.documents.storage.local-root` 配置，元数据由 `zhubao.documents.repository` 切换 memory/JDBC。</span>
-          </article>
-          <article>
-            <strong>附件预览</strong>
-            <span>图片、PDF、视频预览要走统一签名 URL，不直接暴露存储路径。</span>
-          </article>
-          <article>
-            <strong>版本锁定</strong>
-            <span>审批通过后的配置和质检证据要锁定 checksum 与审计事件。</span>
-          </article>
-          <article>
-            <strong>真实数据测试</strong>
-            <span>后端 smoke 测试覆盖文档包、附件、审计接口、缺口统计、本地内容读回和 JDBC 元数据重载。</span>
           </article>
         </div>
       </div>

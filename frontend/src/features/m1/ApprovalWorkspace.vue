@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   approvalStatusTone,
-  approvalTaskFallback,
   type ApprovalDecisionCommand,
   type ApprovalTask,
   type ApprovalStatus,
@@ -15,8 +14,8 @@ import {
   submitApprovalDecision,
 } from '../../services/approvalApi';
 
-const tasks = ref<ApprovalTask[]>(approvalTaskFallback);
-const pendingTasks = ref<ApprovalTask[]>(approvalTaskFallback.filter((task) => task.status === 'WAITING_APPROVAL'));
+const tasks = ref<ApprovalTask[]>([]);
+const pendingTasks = ref<ApprovalTask[]>([]);
 const loading = ref(false);
 const loadingError = ref('');
 const decisionSubmitting = ref(false);
@@ -77,14 +76,15 @@ async function reloadApprovals() {
 
   try {
     const [all, pending] = await Promise.all([fetchApprovalTasks(), fetchPendingApprovalTasks()]);
-    tasks.value = all.length > 0 ? all : approvalTaskFallback;
-    pendingTasks.value = pending.length > 0
-      ? pending
-      : tasks.value.filter((task) => task.status === 'WAITING_APPROVAL');
+    tasks.value = all;
+    pendingTasks.value = pending;
+    if (all.length === 0 && pending.length === 0) {
+      loadingError.value = '接口没有返回审批任务';
+    }
   } catch (error) {
-    loadingError.value = error instanceof Error ? error.message : '审批任务加载失败，已使用本地评审样例';
-    tasks.value = approvalTaskFallback;
-    pendingTasks.value = approvalTaskFallback.filter((task) => task.status === 'WAITING_APPROVAL');
+    tasks.value = [];
+    pendingTasks.value = [];
+    loadingError.value = error instanceof Error ? error.message : '审批任务加载失败';
   } finally {
     loading.value = false;
   }
@@ -204,6 +204,7 @@ function taskTone(task: ApprovalTask): Tone {
           </div>
         </div>
 
+        <p v-if="loadingError" class="operation-feedback danger">{{ loadingError }}</p>
         <div class="module-table-wrap refined-table-wrap">
           <table class="module-table approval-task-table">
             <thead>
@@ -236,6 +237,9 @@ function taskTone(task: ApprovalTask): Tone {
                 <td><StatusBadge :label="statusText(task.status)" :tone="taskTone(task)" /></td>
                 <td>{{ task.formalPayroll ? '正式工资' : '仅试算快照' }}</td>
                 <td>{{ task.locked ? '已锁定' : '待处理' }}</td>
+              </tr>
+              <tr v-if="tasks.length === 0">
+                <td colspan="7">暂无审批任务</td>
               </tr>
             </tbody>
           </table>
@@ -283,36 +287,30 @@ function taskTone(task: ApprovalTask): Tone {
           <div v-else-if="decisionError" class="operation-feedback danger">
             <strong>审批提交失败</strong>
             <span>{{ decisionError }}</span>
-            <small>请确认后端已有该审批任务；本地样例只能用于评审展示。</small>
-          </div>
-          <div v-else-if="loadingError" class="operation-feedback warning">
-            <strong>审批 API 暂不可用</strong>
-            <span>{{ loadingError }}</span>
-            <small>页面正在使用本地审批样例，不代表生产审批任务已落库。</small>
-          </div>
-        </section>
-
-        <section class="evidence-slot-panel">
-          <div class="panel-title-row">
-            <span class="eyebrow">SNAPSHOT</span>
-            <StatusBadge label="审批快照" tone="blue" />
-          </div>
-          <div class="rule-stack">
-            <article>
-              <strong>来源摘要</strong>
-              <span>{{ activeTask.sourceSummary }}</span>
-            </article>
-            <article>
-              <strong>锁定策略</strong>
-              <span>处理后 `locked=true`，后续变更必须新建任务或审计事件。</span>
-            </article>
-            <article>
-              <strong>当前边界</strong>
-              <span>轻量审批不等于完整工作流、生产账号前置审批、正式工资锁账或财务凭证。</span>
-            </article>
+            <small>请确认后端已有该审批任务。</small>
           </div>
         </section>
       </aside>
+
+      <section v-if="activeTask" class="evidence-slot-panel">
+        <div class="panel-title-row">
+          <StatusBadge label="审批快照" tone="blue" />
+        </div>
+        <div class="rule-stack">
+          <article>
+            <strong>来源摘要</strong>
+            <span>{{ activeTask.sourceSummary }}</span>
+          </article>
+          <article>
+            <strong>锁定策略</strong>
+            <span>处理后锁定，后续变更必须新建任务或审计事件。</span>
+          </article>
+          <article>
+            <strong>当前边界</strong>
+            <span>轻量审批不等于完整工作流、生产账号前置审批、正式工资锁账或财务凭证。</span>
+          </article>
+        </div>
+      </section>
     </section>
   </div>
 </template>

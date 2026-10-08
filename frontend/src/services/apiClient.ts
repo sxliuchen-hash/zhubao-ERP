@@ -6,12 +6,26 @@ export interface ApiResponse<T> {
 
 const authTokenKey = 'zhubao-auth-token';
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
-const apiEnabled = import.meta.env.MODE === 'test' || Boolean(baseUrl) || import.meta.env.VITE_ENABLE_API === 'true';
 
-function assertApiEnabled() {
-  if (!apiEnabled) {
-    throw new Error('API 未配置，当前使用本地评审样例');
+async function request(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return init ? await fetch(url, init) : await fetch(url);
+  } catch {
+    throw new Error('后端接口不可用');
   }
+}
+
+async function readPayload<T>(response: Response): Promise<T> {
+  let payload: ApiResponse<T>;
+  try {
+    payload = (await response.json()) as ApiResponse<T>;
+  } catch {
+    throw new Error('后端接口不可用');
+  }
+  if (!response.ok || payload.code !== 0) {
+    throw new Error(payload.message || '请求失败');
+  }
+  return payload.data;
 }
 
 function storage(): Storage | null {
@@ -38,20 +52,14 @@ function authHeaders(): Record<string, string> {
 }
 
 export async function apiGet<TResponse>(path: string): Promise<TResponse> {
-  assertApiEnabled();
   const headers = authHeaders();
   const url = `${baseUrl}${path}`;
-  const response = Object.keys(headers).length ? await fetch(url, { headers }) : await fetch(url);
-  const payload = (await response.json()) as ApiResponse<TResponse>;
-  if (!response.ok || payload.code !== 0) {
-    throw new Error(payload.message || '请求失败');
-  }
-  return payload.data;
+  const response = Object.keys(headers).length ? await request(url, { headers }) : await request(url);
+  return readPayload<TResponse>(response);
 }
 
 export async function apiPost<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
-  assertApiEnabled();
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await request(`${baseUrl}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -59,24 +67,15 @@ export async function apiPost<TRequest, TResponse>(path: string, body: TRequest)
     },
     body: JSON.stringify(body),
   });
-  const payload = (await response.json()) as ApiResponse<TResponse>;
-  if (!response.ok || payload.code !== 0) {
-    throw new Error(payload.message || '请求失败');
-  }
-  return payload.data;
+  return readPayload<TResponse>(response);
 }
 
 export async function apiPostForm<TResponse>(path: string, body: FormData): Promise<TResponse> {
-  assertApiEnabled();
   const headers = authHeaders();
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await request(`${baseUrl}${path}`, {
     method: 'POST',
     ...(Object.keys(headers).length ? { headers } : {}),
     body,
   });
-  const payload = (await response.json()) as ApiResponse<TResponse>;
-  if (!response.ok || payload.code !== 0) {
-    throw new Error(payload.message || '请求失败');
-  }
-  return payload.data;
+  return readPayload<TResponse>(response);
 }

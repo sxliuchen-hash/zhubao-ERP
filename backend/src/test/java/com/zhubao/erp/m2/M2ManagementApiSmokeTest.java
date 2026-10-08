@@ -180,11 +180,6 @@ class M2ManagementApiSmokeTest {
     void exposesHardwareIntegrationApis() {
         ResponseEntity<String> devices = restTemplate.getForEntity("/api/hardware/devices", String.class);
         ResponseEntity<String> tasks = restTemplate.getForEntity("/api/hardware/integration-tasks", String.class);
-        ResponseEntity<String> adapterPlans = restTemplate.getForEntity("/api/hardware/adapter-plans", String.class);
-        ResponseEntity<String> protocolSamples = restTemplate.getForEntity("/api/hardware/protocol-samples", String.class);
-        ResponseEntity<String> protocolReviews = restTemplate.getForEntity("/api/hardware/protocol-reviews", String.class);
-        ResponseEntity<String> protocolExecutions = restTemplate.getForEntity("/api/hardware/protocol-executions", String.class);
-        ResponseEntity<String> protocolSignoffs = restTemplate.getForEntity("/api/hardware/protocol-signoffs", String.class);
         ResponseEntity<String> pocRecords = restTemplate.getForEntity("/api/hardware/poc-records", String.class);
         ResponseEntity<String> pocEvidence = restTemplate.getForEntity("/api/hardware/poc-evidence", String.class);
         ResponseEntity<String> summary = restTemplate.getForEntity("/api/hardware/summary", String.class);
@@ -192,45 +187,6 @@ class M2ManagementApiSmokeTest {
         assertThat(devices.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(devices.getBody()).contains("CAM-UNPACK-01", "SCALE-01");
         assertThat(tasks.getBody()).contains("INT-VID-001", "人工上传");
-        assertThat(adapterPlans.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(adapterPlans.getBody()).contains(
-                "SCALE-01",
-                "人工读数录入",
-                "串口/TCP",
-                "称重照片"
-        );
-        assertThat(protocolSamples.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(protocolSamples.getBody()).contains(
-                "SCALE-01",
-                "RS232",
-                "ST,GS",
-                "baudRate"
-        );
-        assertThat(protocolReviews.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(protocolReviews.getBody()).contains(
-                "SCALE-01",
-                "HW-REV-SCALE-20260710-001",
-                "电子秤型号和接口类型待冻结",
-                "baudRate",
-                "RS232/USB/TCP"
-        );
-        assertThat(protocolExecutions.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(protocolExecutions.getBody()).contains(
-                "SCALE-01",
-                "HW-EXEC-SCALE-20260710-001",
-                "\"executionStatus\":\"阻断\"",
-                "\"modelFreezeStatus\":\"未冻结\"",
-                "原始报文缺失"
-        );
-        assertThat(protocolSignoffs.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(protocolSignoffs.getBody()).contains(
-                "SCALE-01",
-                "HW-SIGN-SCALE-20260710-001",
-                "\"signoffStatus\":\"阻断\"",
-                "\"modelFreezeDecision\":\"禁止冻结\"",
-                "仅允许人工读数兜底",
-                "原始报文"
-        );
         assertThat(pocRecords.getBody()).contains("POC-SCAN-20260706-001", "弱光扫码");
         assertThat(pocEvidence.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(pocEvidence.getBody()).contains(

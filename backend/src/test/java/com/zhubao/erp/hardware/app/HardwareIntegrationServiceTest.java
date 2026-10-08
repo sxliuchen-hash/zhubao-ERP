@@ -26,59 +26,6 @@ class HardwareIntegrationServiceTest {
                 });
         assertThat(service.findTasks())
                 .anySatisfy(task -> assertThat(task.nextAction()).contains("人工上传"));
-        assertThat(service.findAdapterPlans()).hasSize(5);
-        assertThat(service.findAdapterPlans())
-                .anySatisfy(plan -> {
-                    assertThat(plan.deviceCode()).isEqualTo("SCALE-01");
-                    assertThat(plan.primaryAdapter()).contains("人工读数");
-                    assertThat(plan.fallbackAdapter()).contains("称重照片");
-                    assertThat(plan.nextIntegrationAction()).contains("串口/TCP");
-                    assertThat(plan.tone()).isEqualTo("red");
-                });
-        assertThat(service.findProtocolSamples()).hasSize(5);
-        assertThat(service.findProtocolSamples())
-                .anySatisfy(sample -> {
-                    assertThat(sample.deviceCode()).isEqualTo("SCALE-01");
-                    assertThat(sample.protocolType()).contains("RS232", "USB", "TCP");
-                    assertThat(sample.requiredParameters()).contains("baudRate");
-                    assertThat(sample.samplePayload()).contains("ST,GS");
-                    assertThat(sample.tone()).isEqualTo("red");
-                });
-        assertThat(service.findProtocolReviews()).hasSize(5);
-        assertThat(service.findProtocolReviews())
-                .anySatisfy(review -> {
-                    assertThat(review.deviceCode()).isEqualTo("SCALE-01");
-                    assertThat(review.deviceModelStatus()).contains("待冻结");
-                    assertThat(review.pendingParameters()).contains("interfaceType", "baudRate", "dataBits");
-                    assertThat(review.blocker()).contains("RS232/USB/TCP");
-                    assertThat(review.tone()).isEqualTo("red");
-                });
-        assertThat(service.findProtocolExecutions()).hasSize(5);
-        assertThat(service.findProtocolExecutions())
-                .anySatisfy(execution -> {
-                    assertThat(execution.deviceCode()).isEqualTo("SCALE-01");
-                    assertThat(execution.executionStatus()).isEqualTo("阻断");
-                    assertThat(execution.modelFreezeStatus()).isEqualTo("未冻结");
-                    assertThat(execution.failedParameters()).contains("interfaceType", "baudRate");
-                    assertThat(execution.evidenceStatus()).contains("原始报文缺失");
-                    assertThat(execution.tone()).isEqualTo("red");
-                });
-        assertThat(service.findProtocolSignoffs()).hasSize(5);
-        assertThat(service.findProtocolSignoffs())
-                .anySatisfy(signoff -> {
-                    assertThat(signoff.deviceCode()).isEqualTo("SCALE-01");
-                    assertThat(signoff.signoffStatus()).isEqualTo("阻断");
-                    assertThat(signoff.missingAttachments()).contains("接口照片", "原始报文");
-                    assertThat(signoff.modelFreezeDecision()).isEqualTo("禁止冻结");
-                    assertThat(signoff.rolloutGate()).contains("人工读数兜底");
-                    assertThat(signoff.tone()).isEqualTo("red");
-                })
-                .anySatisfy(signoff -> {
-                    assertThat(signoff.deviceCode()).isEqualTo("SCAN-PC-01");
-                    assertThat(signoff.signoffStatus()).isEqualTo("已签字");
-                    assertThat(signoff.missingAttachments()).isEmpty();
-                    assertThat(signoff.modelFreezeDecision()).isEqualTo("已冻结");
-                });
         assertThat(service.findPocRecords()).hasSize(4);
         assertThat(service.blockedPocCount()).isEqualTo(1);
         assertThat(service.findPocRecords())

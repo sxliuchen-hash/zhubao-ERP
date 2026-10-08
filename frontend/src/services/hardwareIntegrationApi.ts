@@ -30,18 +30,6 @@ interface HardwareSummaryDto {
   pocBlocked: number;
 }
 
-export interface HardwareAdapterPlan {
-  deviceCode: string;
-  deviceName: string;
-  phase: string;
-  primaryAdapter: string;
-  fallbackAdapter: string;
-  evidenceRequirement: string;
-  nextIntegrationAction: string;
-  riskLevel: string;
-  tone: Tone;
-}
-
 export interface HardwarePocEvidenceSummary {
   pocCode: string;
   scene: string;
@@ -56,111 +44,18 @@ export interface HardwarePocEvidenceSummary {
   tone: Tone;
 }
 
-export interface HardwareProtocolSample {
-  deviceCode: string;
-  deviceName: string;
-  protocolType: string;
-  sampleStatus: string;
-  requiredParameters: string[];
-  samplePayload: string;
-  evidenceCode: string;
-  captureMethod: string;
-  nextReviewAction: string;
-  riskLevel: string;
-  tone: Tone;
-}
-
-export interface HardwareProtocolReviewItem {
-  reviewCode: string;
-  deviceCode: string;
-  deviceName: string;
-  protocolType: string;
-  reviewStatus: string;
-  deviceModelStatus: string;
-  confirmedParameters: string[];
-  pendingParameters: string[];
-  evidenceCode: string;
-  owner: string;
-  reviewWindow: string;
-  blocker: string;
-  nextAction: string;
-  riskLevel: string;
-  tone: Tone;
-}
-
-export interface HardwareProtocolExecutionResult {
-  executionCode: string;
-  reviewCode: string;
-  deviceCode: string;
-  deviceName: string;
-  protocolType: string;
-  executionStatus: string;
-  executedAt: string;
-  executedBy: string;
-  deviceModelSnapshot: string;
-  modelFreezeStatus: string;
-  acceptedParameters: string[];
-  failedParameters: string[];
-  evidenceCode: string;
-  evidenceStatus: string;
-  resultSummary: string;
-  nextAction: string;
-  riskLevel: string;
-  tone: Tone;
-}
-
-export interface HardwareProtocolSignoffReadiness {
-  signoffCode: string;
-  executionCode: string;
-  deviceCode: string;
-  deviceName: string;
-  signoffStatus: string;
-  requiredAttachments: string[];
-  missingAttachments: string[];
-  signerRoles: string[];
-  signedBy: string;
-  signedAt: string;
-  modelFreezeDecision: string;
-  rolloutGate: string;
-  closureSummary: string;
-  nextAction: string;
-  riskLevel: string;
-  tone: Tone;
-}
-
 export interface HardwareWorkspaceModel {
   devices: HardwareDevice[];
   tasks: IntegrationTask[];
-  adapterPlans: HardwareAdapterPlan[];
-  protocolSamples: HardwareProtocolSample[];
-  protocolReviews: HardwareProtocolReviewItem[];
-  protocolExecutions: HardwareProtocolExecutionResult[];
-  protocolSignoffs: HardwareProtocolSignoffReadiness[];
   pocRecords: HardwarePocRecord[];
   pocEvidence: HardwarePocEvidenceSummary[];
   summary: HardwareSummaryDto;
 }
 
 export async function fetchHardwareWorkspace(): Promise<HardwareWorkspaceModel> {
-  const [
-    devices,
-    tasks,
-    adapterPlans,
-    protocolSamples,
-    protocolReviews,
-    protocolExecutions,
-    protocolSignoffs,
-    pocRecords,
-    pocEvidence,
-    summary,
-  ] = await Promise.all([
+  const [devices, tasks, pocRecords, pocEvidence, summary] = await Promise.all([
     apiGet<HardwareDeviceDto[]>('/api/hardware/devices'),
     apiGet<IntegrationTask[]>('/api/hardware/integration-tasks'),
-    apiGet<HardwareAdapterPlan[]>('/api/hardware/adapter-plans'),
-    apiGet<HardwareProtocolSample[]>('/api/hardware/protocol-samples'),
-    apiGet<HardwareProtocolReviewItem[]>('/api/hardware/protocol-reviews'),
-    apiGet<HardwareProtocolExecutionResult[]>('/api/hardware/protocol-executions'),
-    apiGet<HardwareProtocolSignoffReadiness[]>('/api/hardware/protocol-signoffs'),
     apiGet<HardwarePocRecordDto[]>('/api/hardware/poc-records'),
     apiGet<HardwarePocEvidenceSummary[]>('/api/hardware/poc-evidence'),
     apiGet<HardwareSummaryDto>('/api/hardware/summary'),
@@ -169,11 +64,6 @@ export async function fetchHardwareWorkspace(): Promise<HardwareWorkspaceModel> 
   return {
     devices: devices.map(mapDevice),
     tasks,
-    adapterPlans,
-    protocolSamples,
-    protocolReviews,
-    protocolExecutions,
-    protocolSignoffs,
     pocRecords: pocRecords.map(mapPocRecord),
     pocEvidence,
     summary,

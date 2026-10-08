@@ -12,8 +12,6 @@ import {
 } from '../../services/registerImportApi';
 import { fetchMachineOutputsByImportBatch } from '../../services/machineOutputApi';
 import { fetchMotherOrder, fetchOutboundOrder } from '../../services/businessDocumentApi';
-import { productionReadinessItems } from '../../data/m1PrototypeData';
-import { registerFieldCoverage, registerProcessCoverage } from '../../data/registerImportTemplates';
 
 vi.mock('../../services/registerImportApi', () => ({
   correctRegisterImportRow: vi.fn(),
@@ -51,49 +49,25 @@ describe('SampleLibraryWorkspace', () => {
   it('renders the sample library as an acceptance-data workbench', () => {
     const wrapper = mount(SampleLibraryWorkspace);
 
-    expect(wrapper.text()).toContain('样例验收指挥台');
-    expect(wrapper.text()).toContain('M3.82 复核补录入口');
-    expect(wrapper.text()).toContain('样例矩阵');
-    expect(wrapper.text()).toContain('当前主样例');
-    expect(wrapper.text()).toContain('开源调研命中');
-    expect(wrapper.text()).toContain('现场登记表导入准备度');
+    expect(wrapper.text()).toContain('登记导入');
+    expect(wrapper.text()).toContain('登记表导入');
     expect(wrapper.text()).toContain('登记表确认批次复核');
     expect(wrapper.text()).toContain('入账映射计划');
-    expect(wrapper.text()).toContain('工序与字段覆盖审计');
-    expect(wrapper.text()).toContain('上线待确认门禁');
-    expect(wrapper.text()).toContain('真实验收数据集');
-    expect(wrapper.text()).toContain('现场数据缺口');
+    expect(wrapper.text()).not.toContain('样例矩阵');
+    expect(wrapper.text()).not.toContain('开源调研命中');
+    expect(wrapper.text()).not.toContain('上线待确认门禁');
 
-    expect(wrapper.findAll('.sample-row')).toHaveLength(4);
-    expect(wrapper.findAll('.reference-card')).toHaveLength(3);
     expect(wrapper.findAll('.register-template-row')).toHaveLength(4);
     expect(wrapper.findAll('.register-review-batch-table tbody tr')).toHaveLength(2);
-    expect(wrapper.findAll('.register-process-grid article')).toHaveLength(registerProcessCoverage.length);
-    expect(wrapper.findAll('.register-field-audit-table tbody tr')).toHaveLength(registerFieldCoverage.length);
-    expect(wrapper.findAll('.readiness-row')).toHaveLength(productionReadinessItems.length);
-    expect(wrapper.findAll('.fixture-row')).toHaveLength(2);
-    expect(wrapper.findAll('.gate-card')).toHaveLength(6);
-    expect(wrapper.findAll('.field-gap-list article').length).toBeGreaterThan(0);
-
-    expect(wrapper.text()).toContain('ERPNext Job Card');
-    expect(wrapper.text()).toContain('Odoo Quality Checks');
-    expect(wrapper.text()).toContain('InvenTree Build Orders');
     expect(wrapper.text()).toContain('REG-OUTBOUND');
     expect(wrapper.text()).toContain('paperExpressText');
     expect(wrapper.text()).toContain('sourceRegisterLineNo');
     expect(wrapper.text()).toContain('operatorSignatureName');
-    expect(wrapper.text()).toContain('独立设备产量表');
     expect(wrapper.text()).toContain('IMP-REG-INBOUND-20260707193000');
     expect(wrapper.text()).toContain('待业务单据入账映射');
     expect(wrapper.text()).toContain('motherOrderCode 缺失');
     expect(wrapper.text()).toContain('登记表上传预检');
     expect(wrapper.text()).toContain('上传预检');
-    expect(wrapper.text()).toContain('P0-02');
-    expect(wrapper.text()).toContain('损耗计算口径');
-    expect(wrapper.text()).toContain('备份和恢复验收');
-    expect(wrapper.text()).toContain('P0-10');
-    expect(wrapper.text()).toContain('REAL-FLOW-20260706-001');
-    expect(wrapper.text()).toContain('BusinessOperationRealFlowTest');
   });
 
   it('loads recent confirmed register batches from the backend and selects batch detail', async () => {

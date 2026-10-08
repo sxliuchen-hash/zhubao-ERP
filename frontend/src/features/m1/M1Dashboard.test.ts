@@ -1,37 +1,87 @@
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { InboundOrder } from '../../data/m1PrototypeData';
+import {
+  fetchInboundWorkspace,
+  fetchProductionWorkspace,
+  fetchQualityWorkspace,
+} from '../../services/businessWorkspaceApi';
 import M1Dashboard from './M1Dashboard.vue';
 
-describe('M1Dashboard', () => {
-  it('renders a shop-floor ERP/MES workbench instead of a thin review page', () => {
-    const wrapper = mount(M1Dashboard);
+vi.mock('../../services/businessWorkspaceApi', () => ({
+  fetchInboundWorkspace: vi.fn(),
+  fetchProductionWorkspace: vi.fn(),
+  fetchQualityWorkspace: vi.fn(),
+}));
 
-    expect(wrapper.text()).toContain('M3.56 OPERATIONS DESK');
-    expect(wrapper.text()).toContain('来料加工现场作业台');
+function order(code: string, status: string): InboundOrder {
+  return {
+    code,
+    customer: '恒信珠宝',
+    material: '18K 金戒托',
+    inboundDate: '07-06',
+    expressCompany: '顺丰',
+    courierNo: code,
+    senderName: '张先生',
+    receiverName: '何琳',
+    unpackSigner: '何琳',
+    goodsName: '戒托来料',
+    qty: 1,
+    weight: '1.00 g',
+    status,
+    video: '已关联',
+    owner: '客户所有',
+    remark: '',
+  };
+}
+
+describe('M1Dashboard', () => {
+  beforeEach(() => {
+    vi.mocked(fetchInboundWorkspace).mockResolvedValue({
+      checkpoints: [],
+      orders: [order('MD-API-001', '待拆包'), order('MD-API-002', '已入库')],
+      risks: [],
+    });
+    vi.mocked(fetchProductionWorkspace).mockResolvedValue({
+      stationLoads: [],
+      workOrders: [],
+      handoffs: [],
+    });
+    vi.mocked(fetchQualityWorkspace).mockResolvedValue({
+      metrics: [],
+      cases: [],
+      lossApprovals: [],
+    });
+  });
+
+  it('keeps the selected row and the side panel on the same document', async () => {
+    const wrapper = mount(M1Dashboard);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('今日待办');
     expect(wrapper.text()).toContain('当前处理单');
-    expect(wrapper.text()).toContain('真实链路');
-    expect(wrapper.text()).toContain('今日单据池');
-    expect(wrapper.text()).toContain('焦点工单');
-    expect(wrapper.text()).toContain('称重交接');
-    expect(wrapper.text()).toContain('轻量审批任务');
-    expect(wrapper.text()).toContain('证据链健康度');
-    expect(wrapper.text()).toContain('软硬件结合管理');
-    expect(wrapper.text()).toContain('样例与开源依据');
-    expect(wrapper.text()).toContain('ERPNext Work Order / Job Card');
-    expect(wrapper.text()).toContain('Odoo Shop Floor / Quality Checks');
-    expect(wrapper.text()).toContain('InvenTree Stock / Build Orders');
-    expect(wrapper.text()).toContain('工位运行状态');
-    expect(wrapper.text()).toContain('模块完成度与真实 API 契约');
-    expect(wrapper.text()).toContain('M3.56 字段补齐');
     expect(wrapper.text()).toContain('来料待处理');
-    expect(wrapper.text()).toContain('loss-approvals');
-    expect(wrapper.text()).toContain('工资试算');
-    expect(wrapper.text()).toContain('售后复核');
-    expect(wrapper.find('table.floor-dispatch-table').exists()).toBe(true);
-    expect(wrapper.find('.active-record-panel').exists()).toBe(true);
-    expect(wrapper.find('.operator-checklist').exists()).toBe(true);
-    expect(wrapper.findAll('.flow-step-list article')).toHaveLength(6);
-    expect(wrapper.findAll('.mission-kpi-grid article')).toHaveLength(5);
-    expect(wrapper.findAll('.focus-card-v2')).toHaveLength(3);
+    expect(wrapper.text()).not.toContain('分派责任人');
+    expect(wrapper.findAll('.mission-kpi-grid article')).toHaveLength(4);
+    expect(wrapper.find('.active-record-code strong').text()).toBe('MD-API-001');
+
+    const rows = wrapper.findAll('table.floor-dispatch-table tbody tr');
+    await rows[1].trigger('click');
+
+    expect(wrapper.find('.active-record-code strong').text()).toBe('MD-API-002');
+    expect(wrapper.find('.active-record-panel').text()).toContain('去收货');
+  });
+
+  it('shows an empty list and the failure reason when workspace apis are unavailable', async () => {
+    vi.mocked(fetchInboundWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));
+    vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));
+    vi.mocked(fetchQualityWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));
+
+    const wrapper = mount(M1Dashboard);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('待办接口不可用');
+    expect(wrapper.text()).toContain('暂无待办单据');
+    expect(wrapper.find('.active-record-code').exists()).toBe(false);
   });
 });

@@ -2,6 +2,17 @@
 defineProps<{
   title: string;
 }>();
+
+const traceQuery = defineModel<string>('traceQuery', { default: '' });
+
+const businessDate = formatToday();
+
+function formatToday() {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
 </script>
 
 <template>
@@ -10,121 +21,29 @@ defineProps<{
       <div class="brand ops-brand">
         <span class="brand-mark">ZB</span>
         <div>
-          <strong>来料加工 ERP/MES</strong>
-          <span>库存 · 工单 · 质检 · 追溯</span>
+          <strong>来料加工</strong>
+          <span>收货 · 生产 · 质检 · 库存</span>
         </div>
-      </div>
-
-      <div class="sidebar-status ops-status-card">
-        <span>当前基线</span>
-        <strong>M3.117 / 临时密码一次性</strong>
-        <i>仍处于 M3 增量开发：本轮补齐管理员临时密码首次成功登录后即消费的安全边界。</i>
       </div>
 
       <nav class="nav ops-nav" aria-label="主导航">
         <slot name="nav" />
       </nav>
-
-      <div class="sidebar-matrix ops-health-grid" aria-label="系统运行概览">
-        <span><b />API</span>
-        <span><b />PWA</span>
-        <span><b />NVR</span>
-        <span><b />Ledger</span>
-      </div>
-
-      <div class="sidebar-footer ops-version-card">
-        <span>技术基线</span>
-        <strong>Spring Boot / Vue / PWA / MySQL</strong>
-      </div>
     </aside>
 
     <main class="workspace ops-workspace review-workspace">
       <div class="top-strip ops-topbar review-topbar">
         <div class="context-stack">
-          <span>车间：总装一线</span>
-          <span>班次：白班</span>
-          <span>业务日期：2026-07-06</span>
+          <span>{{ businessDate }}</span>
         </div>
-        <div class="sync-stack">
-          <span><i class="live-dot" />API 正常</span>
-          <span>证据完整率 92%</span>
-          <span>高风险 3</span>
-        </div>
+        <label class="global-search lean-search">
+          <span>追溯</span>
+          <input v-model="traceQuery" placeholder="母单、工单或快递单号" aria-label="追溯查询" />
+        </label>
       </div>
 
-      <header class="workspace-header ops-page-header review-page-header">
-        <div>
-          <span class="eyebrow">M3.117 ERP/MES OPERATIONS DESK</span>
-          <h1>{{ title }}</h1>
-          <p>白班来料、在制工单、质检返工、库存台账、审批、附件证据、硬件兜底、低成本适配计划、协议样本、参数复核、复测结果、签字闭环和账号前置审批缺口统一进入现场作业台。</p>
-          <div class="ops-scope-ribbon" aria-label="当前实现边界">
-            <span>库存台账 JDBC</span>
-            <span>业务动作写台账</span>
-            <span>验收 fixture</span>
-            <span>附件元数据仓储</span>
-            <span>硬件 POC</span>
-            <span>硬件 POC 仓储</span>
-            <span>POC 证据关联</span>
-            <span>低成本硬件适配</span>
-            <span>硬件协议样本</span>
-            <span>硬件参数复核</span>
-            <span>硬件复测结果</span>
-            <span>硬件签字闭环</span>
-            <span>运维中心</span>
-            <span>登录会话</span>
-            <span>账号密码哈希</span>
-            <span>失败登录锁定</span>
-            <span>账号启停解锁</span>
-            <span>密码策略校验</span>
-            <span>密码过期边界</span>
-            <span>自助改密续期</span>
-            <span>审计摘要链</span>
-            <span>登记表模板</span>
-            <span>设备产量汇总</span>
-            <span>业务单据快照</span>
-            <span>复核补录</span>
-            <span>登录审计</span>
-            <span>授权导航过滤</span>
-            <span>数据范围过滤</span>
-            <span>账号审批摘要</span>
-            <span>账号客户范围</span>
-            <span>账号前置审批</span>
-            <span>审批草稿评估</span>
-            <span>前置申请单</span>
-            <span>申请单 JDBC</span>
-            <span>强制申请单号</span>
-            <span>审批通过态校验</span>
-            <span>停用会话吊销</span>
-            <span>强制首次改密</span>
-            <span>临时密码一次性</span>
-            <span>工资试算基线</span>
-          </div>
-        </div>
-        <div class="ops-command-metrics" aria-label="生产作业状态">
-          <article>
-            <span>待办</span>
-            <strong>31</strong>
-            <small>收货/报工/质检</small>
-          </article>
-          <article>
-            <span>阻断</span>
-            <strong>3</strong>
-            <small>称重/视频/审批</small>
-          </article>
-          <article>
-            <span>台账</span>
-            <strong>57</strong>
-            <small>自动化测试通过</small>
-          </article>
-        </div>
-        <div class="header-actions command-actions-panel" aria-label="全局操作">
-          <label class="global-search">
-            <span>全局追溯</span>
-            <input value="MD-20260706-001" aria-label="全局追溯" />
-          </label>
-          <button class="secondary-button" type="button">导出评审包</button>
-          <button class="primary-button" type="button">新建母单</button>
-        </div>
+      <header class="workspace-header ops-page-header review-page-header lean-header">
+        <h1>{{ title }}</h1>
       </header>
 
       <slot />
