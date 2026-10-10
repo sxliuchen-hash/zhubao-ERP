@@ -189,6 +189,30 @@ public class AuthSessionService {
         ));
     }
 
+    /**
+     * 按登录会话重新读取账号。岗位工序以账号上的绑定为准，不使用请求里自报的工序列表。
+     */
+    public Optional<AuthUserAccount> currentAccount(String rawAuthorizationHeader) {
+        Optional<SessionEntry> entry = resolve(rawAuthorizationHeader);
+        if (entry.isEmpty()) {
+            return Optional.empty();
+        }
+        AuthUserAccount sessionUser = entry.get().user();
+        if (sessionUser.passwordChangeRequired()) {
+            recordAudit(
+                    "SESSION_RESOLVE",
+                    sessionUser.username(),
+                    sessionUser.operator(),
+                    sessionUser.role().name(),
+                    "DENIED",
+                    "临时密码会话必须先完成自助改密",
+                    entry.get().token()
+            );
+            throw new PermissionDeniedException("临时密码会话必须先完成自助改密");
+        }
+        return userAccountRepository.findByUsername(sessionUser.username());
+    }
+
     private List<String> effectiveCustomerScope(AuthUserAccount user) {
         if (user.dataScope() != DataScope.CUSTOMER_RANGE || customerAuthorizationService == null) {
             return user.customerScope();
@@ -278,7 +302,8 @@ public class AuthSessionService {
                 null,
                 currentAccount.customerScope(),
                 false,
-                false
+                false,
+                currentAccount.allowedProcesses()
         ));
         SessionEntry updatedEntry = new SessionEntry(entry.token(), updated, entry.expiresAt());
         sessions.put(entry.token(), updatedEntry);
@@ -433,7 +458,8 @@ public class AuthSessionService {
                 user.passwordChangeRequired(),
                 user.customerScope(),
                 navigationMenuService.menuCodesFor(user.role()),
-                navigationMenuService.menuTreeFor(user.role())
+                navigationMenuService.menuTreeFor(user.role()),
+                user.allowedProcesses()
         );
     }
 

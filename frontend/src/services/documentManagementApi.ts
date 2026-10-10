@@ -1,4 +1,4 @@
-import { apiGet, apiPostForm } from './apiClient';
+import { apiGet, apiPost, apiPostForm } from './apiClient';
 import type {
   DocumentAuditEvent,
   DocumentManagementSummary,
@@ -36,6 +36,32 @@ export interface AttachmentPreviewUrl {
   expiresAt: string;
 }
 
+export interface StoredContentItem {
+  code: string;
+  fileName: string;
+  businessType: string;
+  businessCode: string;
+  owner: string;
+  storageLocation: string;
+  mediaType: string;
+  status: string;
+  uploadedAt: string;
+  sizeBytes: number;
+  sizeLabel: string;
+}
+
+export interface StoredContentInventory {
+  provider: string;
+  rootPath: string;
+  fileCount: number;
+  usedBytes: number;
+  usedLabel: string;
+  diskTotalBytes: number;
+  diskFreeBytes: number;
+  diskUsedPercent: number;
+  items: StoredContentItem[];
+}
+
 export async function fetchDocumentSummary(): Promise<DocumentManagementSummary> {
   return apiGet<DocumentManagementSummary>('/api/documents/summary');
 }
@@ -65,6 +91,17 @@ export async function uploadEvidenceAttachment(
   body.append('file', input.file);
 
   return apiPostForm<EvidenceAttachmentUploadResult>('/api/documents/attachments/uploads', body);
+}
+
+export async function fetchStoredContent(): Promise<StoredContentInventory> {
+  return apiGet<StoredContentInventory>('/api/documents/storage');
+}
+
+export async function retireStoredContent(code: string): Promise<StoredContentItem> {
+  return apiPost<Record<string, never>, StoredContentItem>(
+    `/api/documents/attachments/${encodeURIComponent(code)}/retirements`,
+    {},
+  );
 }
 
 export async function fetchAttachmentPreviewUrl(code: string): Promise<AttachmentPreviewUrl> {

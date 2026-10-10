@@ -14,6 +14,9 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('客户范围');
     expect(wrapper.text()).toContain('客户授权');
     expect(wrapper.text()).toContain('授权客户');
+    expect(wrapper.text()).toContain('用户管理');
+    expect(wrapper.text()).toContain('存储内容');
+    expect(wrapper.text()).toContain('创建账号');
     expect(wrapper.text()).not.toContain('系统参数');
     expect(wrapper.text()).not.toContain('角色权限基线');
     expect(wrapper.text()).not.toContain('工序模板');

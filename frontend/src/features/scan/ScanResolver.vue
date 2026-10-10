@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { parseScanCode, type ParsedScanCode } from './scanCode';
 
-const content = ref('JG|WO|CC-20260706-001-JL-ZD001');
+const content = ref('JG|work_order|CC-20260706-001-JL-ZD001');
 const result = ref<ParsedScanCode | null>(null);
 const error = ref('');
 

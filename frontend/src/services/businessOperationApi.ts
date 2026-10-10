@@ -23,6 +23,9 @@ export interface ConfirmInboundRequest {
   operator: string;
   evidenceCode?: string;
   remark?: string;
+  processingRequirement: string;
+  dueDate: string;
+  customerName?: string;
 }
 
 export interface InboundConfirmationResult {
@@ -480,7 +483,10 @@ function normalizeBusinessDate(value: string | undefined, fallbackCode?: string)
   return value;
 }
 
-export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundRequest {
+export function buildConfirmInboundRequest(
+  order: InboundOrder,
+  extra?: { processingRequirement?: string; dueDate?: string; customerName?: string },
+): ConfirmInboundRequest {
   const customerId = customerIds[order.customer] ?? 9000;
 
   return {
@@ -505,13 +511,19 @@ export function buildConfirmInboundRequest(order: InboundOrder): ConfirmInboundR
     operator: '库管员 何琳',
     evidenceCode: order.courierNo,
     remark: order.remark || '前端来料作业主控台确认',
+    processingRequirement: extra?.processingRequirement?.trim() ?? '',
+    dueDate: extra?.dueDate?.trim() ?? '',
+    customerName: extra?.customerName?.trim() || order.customer,
   };
 }
 
-export async function confirmInbound(order: InboundOrder): Promise<InboundConfirmationResult> {
+export async function confirmInbound(
+  order: InboundOrder,
+  extra?: { processingRequirement?: string; dueDate?: string; customerName?: string },
+): Promise<InboundConfirmationResult> {
   return apiPost<ConfirmInboundRequest, InboundConfirmationResult>(
     '/api/business/operations/inbound-confirmations',
-    buildConfirmInboundRequest(order),
+    buildConfirmInboundRequest(order, extra),
   );
 }
 

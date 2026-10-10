@@ -1,5 +1,8 @@
 package com.zhubao.erp.operations.app;
 
+import com.zhubao.erp.document.domain.DocumentManagementRepository;
+import com.zhubao.erp.hardware.app.HardwareIntegrationService;
+import com.zhubao.erp.hardware.domain.HardwarePocRecordRepository;
 import com.zhubao.erp.operations.domain.OperationsCenterSnapshot;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
@@ -380,6 +383,47 @@ class OperationsCenterServiceTest {
         assertThat(logChecklist.status()).isEqualTo("READ_FILE");
         assertThat(logChecklist.tone()).isEqualTo("green");
         assertThat(logChecklist.evidence()).contains("zhubao-erp.log");
+    }
+
+    @Test
+    void reportsHardwarePresenceAndStorageUsage() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<HardwareIntegrationService> hardwareServices = mock(ObjectProvider.class);
+        DocumentManagementRepository documents = mock(DocumentManagementRepository.class);
+        HardwarePocRecordRepository pocRecords = mock(HardwarePocRecordRepository.class);
+        when(documents.attachments()).thenReturn(List.of());
+        when(pocRecords.findAll()).thenReturn(List.of());
+        when(hardwareServices.getIfAvailable()).thenReturn(new HardwareIntegrationService(pocRecords, documents));
+
+        OperationsCenterService service = new OperationsCenterService(
+                new MockEnvironment(),
+                noDataSourceProvider(),
+                "http://localhost:5173/",
+                "",
+                "",
+                "",
+                800,
+                24,
+                hardwareServices,
+                null
+        );
+
+        OperationsCenterSnapshot snapshot = service.snapshot();
+
+        assertThat(snapshot.storageVolumes())
+                .extracting(OperationsCenterSnapshot.StorageVolume::code)
+                .contains("SYSTEM_DISK", "EVIDENCE_STORE", "BACKUP_STORE");
+        assertThat(snapshot.runtimeMetrics())
+                .extracting(OperationsCenterSnapshot.RuntimeMetric::code)
+                .contains("DISK");
+        assertThat(snapshot.hardwareNodes())
+                .extracting(OperationsCenterSnapshot.HardwarePresence::code)
+                .contains("SCAN-PC-01", "CAM-UNPACK-01");
+        assertThat(snapshot.hardwareNodes())
+                .filteredOn(node -> "SCAN-PC-01".equals(node.code()))
+                .singleElement()
+                .satisfies(node -> assertThat(node.status()).isEqualTo("在线"));
+        assertThat(findService(snapshot, "HARDWARE").detail()).contains("在线");
     }
 
     @Test

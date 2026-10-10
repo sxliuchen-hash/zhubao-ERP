@@ -1,6 +1,7 @@
 package com.zhubao.erp.label.app;
 
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.GenerateLabelCommand;
@@ -103,7 +104,10 @@ class LabelServiceTest {
                 "EV001",
                 null,
                 "ACTIVE",
-                "2026-07-09 10:00"
+                "2026-07-09 10:00",
+                "来料加工",
+                "2026-07-20",
+                "恒信珠宝"
         ));
         LabelService service = new LabelService(repository);
 
@@ -113,9 +117,9 @@ class LabelServiceTest {
         assertThat(payload.primaryCode()).isEqualTo("MO20260709001");
         assertThat(payload.qrContent()).isEqualTo("JG|mother|MO20260709001");
         assertThat(payload.fields()).extracting(LabelField::name)
-                .contains("客户", "物料", "数量", "重量", "收货日");
+                .contains("客户", "加工要求", "期限", "单号", "物料", "数量", "重量", "收货日");
         assertThat(payload.fields()).extracting(LabelField::value)
-                .contains("客户#8", "黄金原料", "100 件", "520.5 克", "2026-07-09");
+                .contains("恒信珠宝", "来料加工", "2026-07-20", "MO20260709001", "黄金原料", "100 件", "520.5 克", "2026-07-09");
         assertThat(payload.footerLeft()).contains("顺丰").contains("SF123456789");
         assertThat(payload.footerRight()).contains("王收货");
     }
@@ -176,15 +180,19 @@ class LabelServiceTest {
                 "MO20260709002", 8L, 8L, "AU9999", "2026-07-09", "顺丰", "SF123456789",
                 "李寄件", "王收货", "赵拆包", "黄金原料", "CUSTOMER", true, "WH01",
                 new BigDecimal("100.000"), "件", new BigDecimal("520.50"), "IN_STOCK", "LG001",
-                null, null, null, "operator01", "EV001", null, "ACTIVE", "2026-07-09 10:00"));
+                null, null, null, "operator01", "EV001", null, "ACTIVE", "2026-07-09 10:00",
+                "来料加工", "2026-07-20", "恒信珠宝"));
+        businessRepository.saveMotherSplitState(new MotherSplitState(
+                "MO20260709002", MotherSplitState.KEEP, "K7M2", "operator01", "2026-07-09T10:00:00"));
         LabelService service = new LabelService(businessRepository, new InMemoryLabelTemplateRepository());
 
         LabelPayload payload = service.generateMotherLabel("MO20260709002");
 
-        // 默认母单模板字段顺序：客户/物料/数量/重量/收货日
         assertThat(payload.templateCode()).isEqualTo("MOTHER-DEFAULT");
         assertThat(payload.fields()).extracting(LabelField::name)
-                .containsExactly("客户", "物料", "数量", "重量", "收货日");
+                .containsExactly("验证码", "客户", "加工要求", "期限", "单号", "物料", "数量", "重量");
+        assertThat(payload.fields()).extracting(LabelField::value)
+                .contains("K7M2", "恒信珠宝", "来料加工", "2026-07-20", "MO20260709002");
         assertThat(payload.footerLeft()).contains("顺丰");
         assertThat(payload.footerRight()).contains("王收货");
     }

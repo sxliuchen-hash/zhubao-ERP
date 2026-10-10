@@ -13,7 +13,12 @@ class ConfigurationBaselineServiceTest {
         assertThat(service.systemParameters()).hasSize(7);
         assertThat(service.codeRules()).hasSize(5);
         assertThat(service.rolePermissions()).hasSize(6);
-        assertThat(service.processTemplates()).hasSize(4);
+        assertThat(service.processTemplates()).hasSize(5);
+        assertThat(service.processTemplates())
+                .anySatisfy(template -> {
+                    assertThat(template.code()).isEqualTo("PROC-STATION-STD");
+                    assertThat(template.steps()).containsExactly("雕刻", "镶嵌", "抛光");
+                });
         assertThat(service.warehouseStates()).hasSize(6);
         assertThat(service.videoParameters()).hasSize(5);
         assertThat(service.changeRequests()).hasSize(3);

@@ -19,6 +19,7 @@ export interface AuthSession {
   customerScope: string[];
   menuCodes: string[];
   menuTree: NavigationMenuItem[];
+  allowedProcesses?: string[];
 }
 
 export interface NavigationMenuItem {
@@ -80,6 +81,7 @@ export interface AuthUserAccountSummary {
   failedLoginCount: number;
   lockedUntil: string;
   locked: boolean;
+  allowedProcesses?: string[];
 }
 
 export interface AuthAccountPreApprovalReadiness {
@@ -200,6 +202,7 @@ export interface ManageAuthUserAccountRequest {
   enabled: boolean;
   demoAccount: boolean;
   preApprovalApplicationCode?: string;
+  allowedProcesses?: string[];
 }
 
 export interface AuthUserAccountStatusRequest {

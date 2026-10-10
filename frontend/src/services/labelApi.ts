@@ -100,6 +100,21 @@ export async function fetchMotherLabel(code: string, templateCode?: string): Pro
   return apiGet<LabelPayload>(`/api/label/mother-orders/${encodeURIComponent(code)}${query}`);
 }
 
+export async function fetchWorkOrderLabel(code: string, templateCode?: string): Promise<LabelPayload> {
+  const query = templateCode ? `?templateCode=${encodeURIComponent(templateCode)}` : '';
+  return apiGet<LabelPayload>(`/api/label/work-orders/${encodeURIComponent(code)}${query}`);
+}
+
+export interface ReprintLabelRequest {
+  type: LabelType;
+  primaryCode: string;
+  reason: string;
+}
+
+export async function reprintLabel(request: ReprintLabelRequest): Promise<LabelPayload> {
+  return apiPost<ReprintLabelRequest, LabelPayload>('/api/label/reprints', request);
+}
+
 // 查询全部标签模板
 export async function fetchLabelTemplates(): Promise<LabelTemplate[]> {
   return apiGet<LabelTemplate[]>('/api/label/templates');
@@ -120,7 +135,11 @@ export const labelTypeOptions: Array<{ value: LabelType; label: string }> = [
 
 // 母单标签字段来源下拉选项（模板编辑用）
 export const motherFieldSourceOptions: Array<{ value: string; label: string }> = [
+  { value: 'verificationCode', label: '验证码' },
   { value: 'customer', label: '客户' },
+  { value: 'processingRequirement', label: '加工要求' },
+  { value: 'dueDate', label: '期限' },
+  { value: 'code', label: '单号' },
   { value: 'goodsName', label: '物料名称' },
   { value: 'materialCode', label: '物料编码' },
   { value: 'quantity', label: '数量' },
@@ -129,5 +148,4 @@ export const motherFieldSourceOptions: Array<{ value: string; label: string }> =
   { value: 'warehouseCode', label: '仓库' },
   { value: 'receiver', label: '收货人' },
   { value: 'express', label: '快递' },
-  { value: 'code', label: '母单号' },
 ];

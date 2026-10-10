@@ -194,6 +194,8 @@ public class ApprovalService {
                 + "; lossWeight=" + result.lossWeight()
                 + "; allowedLossWeight=" + result.allowedLossWeight()
                 + "; excessLossWeight=" + result.excessLossWeight()
+                + "; pieceWage=" + result.pieceWage()
+                + "; lossDeduction=" + result.lossDeduction()
                 + "; trialWage=" + result.trialWage()
                 + "; formalPayroll=" + result.formalPayroll();
     }

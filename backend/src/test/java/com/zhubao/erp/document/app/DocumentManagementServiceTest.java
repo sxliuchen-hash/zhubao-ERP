@@ -1,8 +1,9 @@
 package com.zhubao.erp.document.app;
 
 import com.zhubao.erp.common.error.BusinessException;
-import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.domain.DocumentPackage;
+import com.zhubao.erp.document.domain.StoredContentInventory;
+import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,55 @@ class DocumentManagementServiceTest {
         assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
         assertThat(service.summary().attachments()).isEqualTo(6);
         assertThat(service.auditEvents()).extracting("action").contains("上传附件");
+    }
+
+    @Test
+    void inventoriesLocalFilesAndRetiresStoredContent() {
+        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        AttachmentStorageProperties properties = new AttachmentStorageProperties();
+        properties.setProvider("local");
+        properties.setLocalRoot(tempDir.toString());
+        DocumentManagementService service = new DocumentManagementService(
+                repository,
+                new LocalAttachmentObjectStorage(properties),
+                new DocumentPreviewTokenProperties(),
+                Clock.systemDefaultZone(),
+                properties
+        );
+        byte[] content = "weight photo demo".getBytes();
+        var uploaded = service.uploadAttachment(
+                "DOC-INBOUND-20260706-001",
+                "称重交接",
+                "HO-20260706-014",
+                "weight-photo.jpg",
+                "image/jpeg",
+                "PC 后台上传",
+                "库管员 何琳",
+                "无",
+                content
+        );
+
+        StoredContentInventory inventory = service.storageInventory();
+
+        assertThat(inventory.provider()).isEqualTo("local");
+        assertThat(inventory.usedBytes()).isEqualTo(content.length);
+        assertThat(inventory.items())
+                .filteredOn(item -> item.code().equals(uploaded.code()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.sizeBytes()).isEqualTo(content.length);
+                    assertThat(item.status()).isEqualTo("已上传");
+                });
+
+        var retired = service.retireStoredContent(uploaded.code(), "系统管理员");
+
+        assertThat(retired.status()).isEqualTo("已下线");
+        assertThat(retired.sizeBytes()).isEqualTo(-1);
+        assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isFalse();
+        assertThat(service.auditEvents()).extracting("action").contains("下线存储内容");
+        assertThatThrownBy(() -> service.retireStoredContent(uploaded.code(), "系统管理员"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已下线");
     }
 
     @Test

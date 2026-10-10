@@ -29,6 +29,9 @@ public record MotherOrderRecord(
         String evidenceCode,
         String remark,
         String status,
-        String createdAt
+        String createdAt,
+        String processingRequirement,
+        String dueDate,
+        String customerName
 ) {
 }

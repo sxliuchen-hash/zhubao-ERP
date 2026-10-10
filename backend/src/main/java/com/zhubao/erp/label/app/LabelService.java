@@ -1,7 +1,10 @@
 package com.zhubao.erp.label.app;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
+import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.business.domain.LabelReprintLog;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.GenerateLabelCommand;
 import com.zhubao.erp.label.domain.LabelField;
@@ -11,9 +14,11 @@ import com.zhubao.erp.label.domain.LabelTemplate;
 import com.zhubao.erp.label.domain.LabelTemplateField;
 import com.zhubao.erp.label.domain.LabelTemplateRepository;
 import com.zhubao.erp.label.domain.LabelType;
+import com.zhubao.erp.label.domain.ReprintLabelCommand;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -24,13 +29,14 @@ import java.util.Optional;
 /**
  * 标签生成应用服务。
  *
- * <p>提供两种能力：<br>
+ * <p>提供三种能力：<br>
  * 1) 通用生成：按前端传入的类型、主编码和固定字段组装可打印载荷；<br>
- * 2) 母单标签便捷生成：当结构化母单已存在时，直接按母单记录生成标签字段。<br>
- * 二维码内容统一为 {@code JG|<scanType>|<编码>}，扫码后可跳转对应详情。</p>
+ * 2) 母单或子单贴纸：从已落库单据带出验证码、客户、加工要求、期限和单号；<br>
+ * 3) 补打：沿用原验证码，并把原因写入补打日志。<br>
+ * 二维码内容统一为 {@code JG|<scanType>|<编码>}。</p>
  *
- * <p>M3.137 起支持用户自定义标签模板：若命令带模板编码或该类型存在默认模板，
- * 则采用模板的品牌抬头、字段来源、脚注来源和打印机设置；模板缺省时回退到内置默认布局。</p>
+ * <p>若命令带模板编码或该类型存在默认模板，则采用模板的品牌抬头、字段来源和打印机设置；
+ * 模板缺省时回退到内置现场贴纸布局。物料、数量、重量可以留在模板里，但不能成为唯一内容。</p>
  */
 @Service
 public class LabelService {
@@ -89,55 +95,104 @@ public class LabelService {
         );
     }
 
-    /** 母单标签便捷生成：从已落库的结构化母单记录组装标签（只放固定信息）。 */
+    /** 母单标签便捷生成：从已落库的结构化母单记录组装标签。 */
     public LabelPayload generateMotherLabel(String motherOrderCode) {
         return generateMotherLabel(motherOrderCode, null);
     }
 
     /** 母单标签便捷生成，可指定模板编码。 */
     public LabelPayload generateMotherLabel(String motherOrderCode, String templateCode) {
-        if (businessDocumentRepository == null) {
-            throw new BusinessException("业务单据仓储不可用，无法按母单生成标签");
-        }
-        if (motherOrderCode == null || motherOrderCode.isBlank()) {
-            throw new BusinessException("缺少母单号");
-        }
-        MotherOrderRecord record = businessDocumentRepository.findMotherOrderByCode(motherOrderCode.trim())
-                .orElseThrow(() -> new BusinessException("未找到结构化母单：" + motherOrderCode));
+        MotherOrderRecord record = requireMother(motherOrderCode);
+        businessDocumentRepository.findMotherSplitState(record.code())
+                .filter(state -> MotherSplitState.SPLIT.equals(state.decision()))
+                .ifPresent(state -> {
+                    throw new BusinessException("这张母单已拆成子单，请打印子单贴纸");
+                });
+        StickerFacts facts = motherFacts(record);
+        return payloadOf(LabelType.MOTHER, record.code(), facts, templateCode, true);
+    }
 
-        LabelTemplate template = resolveTemplate(templateCode, LabelType.MOTHER);
+    /** 子单标签：从已拆出的子单带出现场贴纸。 */
+    public LabelPayload generateWorkOrderLabel(String workOrderCode) {
+        return generateWorkOrderLabel(workOrderCode, null);
+    }
+
+    /** 子单标签，可指定模板编码。 */
+    public LabelPayload generateWorkOrderLabel(String workOrderCode, String templateCode) {
+        if (businessDocumentRepository == null) {
+            throw new BusinessException("业务单据仓储不可用，无法按子单生成标签");
+        }
+        if (workOrderCode == null || workOrderCode.isBlank()) {
+            throw new BusinessException("缺少子单号");
+        }
+        ChildWorkOrderRecord record = businessDocumentRepository.findChildWorkOrderByCode(workOrderCode.trim())
+                .orElseThrow(() -> new BusinessException("未找到子单：" + workOrderCode));
+        return payloadOf(LabelType.WORK_ORDER, record.code(), childFacts(record), templateCode, false);
+    }
+
+    /** 补打母单或子单贴纸，验证码不变，并写入补打日志。 */
+    public LabelPayload reprint(ReprintLabelCommand command) {
+        if (command == null) {
+            throw new BusinessException("补打命令不能为空");
+        }
+        if (command.reason() == null || command.reason().isBlank()) {
+            throw new BusinessException("补打必须填写原因");
+        }
+        String reason = command.reason().trim();
+        if (reason.length() > 200) {
+            throw new BusinessException("补打原因过长");
+        }
+        LabelType type = LabelType.fromString(command.type());
+        if (type != LabelType.MOTHER && type != LabelType.WORK_ORDER) {
+            throw new BusinessException("只支持母单和子单贴纸补打");
+        }
+        if (businessDocumentRepository == null) {
+            throw new BusinessException("业务单据仓储不可用，无法记录补打日志");
+        }
+        LabelPayload payload = type == LabelType.MOTHER
+                ? generateMotherLabel(command.primaryCode())
+                : generateWorkOrderLabel(command.primaryCode());
+        String verificationCode = fieldValue(payload.fields(), "验证码");
+        if (verificationCode.isBlank()) {
+            throw new BusinessException("这张贴纸还没有验证码，不能补打");
+        }
+        String operator = command.operator() == null || command.operator().isBlank()
+                ? "现场"
+                : command.operator().trim();
+        businessDocumentRepository.saveLabelReprint(new LabelReprintLog(
+                null,
+                type.name(),
+                payload.primaryCode(),
+                verificationCode,
+                operator,
+                reason,
+                TIME_FORMATTER.format(LocalDateTime.now())
+        ));
+        return payload;
+    }
+
+    private LabelPayload payloadOf(
+            LabelType type,
+            String code,
+            StickerFacts facts,
+            String templateCode,
+            boolean motherFallback
+    ) {
+        LabelTemplate template = resolveTemplate(templateCode, type);
         String brand = template != null && !template.brandTitle().isBlank() ? template.brandTitle() : DEFAULT_BRAND;
         LabelPrinterSetting printerSetting = template != null ? template.printerSetting() : LabelPrinterSetting.defaultSetting();
-
-        List<LabelField> fields;
-        String footerLeft;
-        String footerRight;
-        if (template != null && !template.fields().isEmpty()) {
-            // 使用模板字段定义：按 source 从母单带出取值
-            fields = new ArrayList<>();
-            template.fields().stream()
-                    .sorted(Comparator.comparingInt(LabelTemplateField::sortOrder))
-                    .forEach(field -> addField(fields, field.label(), valueFromMotherOrder(field.source(), record)));
-            footerLeft = footerValue(template.footerLeftSource(), record, defaultExpressText(record));
-            footerRight = footerValue(template.footerRightSource(), record, defaultReceiverText(record));
-        } else {
-            // 无模板时回退到内置默认布局
-            fields = new ArrayList<>();
-            addField(fields, "客户", customerText(record));
-            addField(fields, "物料", firstNonBlank(record.goodsName(), record.materialCode()));
-            addField(fields, "数量", quantityText(record));
-            addField(fields, "重量", weightText(record));
-            addField(fields, "收货日", record.inboundDate());
-            footerLeft = defaultExpressText(record);
-            footerRight = defaultReceiverText(record);
+        String footerLeft = "";
+        String footerRight = "";
+        if (motherFallback) {
+            footerLeft = footerValue(template == null ? null : template.footerLeftSource(), facts, facts.express());
+            footerRight = footerValue(template == null ? null : template.footerRightSource(), facts, receiverFooter(facts.receiver()));
         }
-
         return new LabelPayload(
-                LabelType.MOTHER,
-                LabelType.MOTHER.label(),
-                record.code(),
-                qrContent(LabelType.MOTHER, record.code()),
-                fields,
+                type,
+                type.label(),
+                code,
+                qrContent(type, code),
+                composeFields(template, facts, motherFallback),
                 footerLeft,
                 footerRight,
                 TIME_FORMATTER.format(LocalDateTime.now()),
@@ -145,6 +200,78 @@ public class LabelService {
                 template != null ? template.templateCode() : "",
                 printerSetting
         );
+    }
+
+    private MotherOrderRecord requireMother(String motherOrderCode) {
+        if (businessDocumentRepository == null) {
+            throw new BusinessException("业务单据仓储不可用，无法按母单生成标签");
+        }
+        if (motherOrderCode == null || motherOrderCode.isBlank()) {
+            throw new BusinessException("缺少母单号");
+        }
+        return businessDocumentRepository.findMotherOrderByCode(motherOrderCode.trim())
+                .orElseThrow(() -> new BusinessException("未找到结构化母单：" + motherOrderCode));
+    }
+
+    private StickerFacts motherFacts(MotherOrderRecord record) {
+        String verificationCode = businessDocumentRepository.findMotherSplitState(record.code())
+                .map(MotherSplitState::verificationCode)
+                .orElse("");
+        return new StickerFacts(
+                blankToEmpty(verificationCode),
+                customerText(record),
+                blankToEmpty(record.processingRequirement()),
+                blankToEmpty(record.dueDate()),
+                blankToEmpty(record.code()),
+                blankToEmpty(record.goodsName()),
+                blankToEmpty(record.materialCode()),
+                quantityText(record.quantity(), record.quantityUnit()),
+                weightText(record.weight()),
+                blankToEmpty(record.inboundDate()),
+                blankToEmpty(record.warehouseCode()),
+                firstNonBlank(record.receiverName(), record.unpackSigner()),
+                defaultExpressText(record)
+        );
+    }
+
+    private StickerFacts childFacts(ChildWorkOrderRecord record) {
+        return new StickerFacts(
+                blankToEmpty(record.verificationCode()),
+                blankToEmpty(record.customerName()),
+                blankToEmpty(record.processingRequirement()),
+                blankToEmpty(record.dueDate()),
+                blankToEmpty(record.code()),
+                blankToEmpty(record.goodsName()),
+                blankToEmpty(record.materialCode()),
+                quantityText(record.quantity(), record.quantityUnit()),
+                weightText(record.weight()),
+                "",
+                blankToEmpty(record.warehouseCode()),
+                "",
+                ""
+        );
+    }
+
+    private List<LabelField> composeFields(LabelTemplate template, StickerFacts facts, boolean motherFallback) {
+        List<LabelField> fields = new ArrayList<>();
+        if (template != null && !template.fields().isEmpty()) {
+            template.fields().stream()
+                    .sorted(Comparator.comparingInt(LabelTemplateField::sortOrder))
+                    .forEach(field -> addField(fields, field.label(), valueOf(field.source(), facts)));
+            return fields;
+        }
+        addField(fields, "验证码", facts.verificationCode());
+        addField(fields, "客户", facts.customer());
+        addField(fields, "加工要求", facts.processingRequirement());
+        addField(fields, "期限", facts.dueDate());
+        addField(fields, "单号", facts.code());
+        addField(fields, "物料", firstNonBlank(facts.goodsName(), facts.materialCode()));
+        addField(fields, "数量", facts.quantity());
+        addField(fields, "重量", facts.weight());
+        if (motherFallback) {
+            addField(fields, "收货日", facts.inboundDate());
+        }
+        return fields;
     }
 
     /** 解析要使用的模板：优先按模板编码，其次按类型默认模板；仓储不可用或无匹配时返回 null。 */
@@ -167,31 +294,34 @@ public class LabelService {
         return defaultTemplate.filter(LabelTemplate::enabled).orElse(null);
     }
 
-    /** 按字段来源键从母单记录取值。 */
-    private String valueFromMotherOrder(String source, MotherOrderRecord record) {
+    /** 按字段来源键取值。 */
+    private String valueOf(String source, StickerFacts facts) {
         if (source == null) {
             return "";
         }
         return switch (source.trim()) {
-            case "customer" -> customerText(record);
-            case "goodsName" -> blankToEmpty(record.goodsName());
-            case "materialCode" -> blankToEmpty(record.materialCode());
-            case "quantity" -> quantityText(record);
-            case "weight" -> weightText(record);
-            case "inboundDate" -> blankToEmpty(record.inboundDate());
-            case "warehouseCode" -> blankToEmpty(record.warehouseCode());
-            case "receiver" -> firstNonBlank(record.receiverName(), record.unpackSigner());
-            case "express" -> defaultExpressText(record);
-            case "code" -> blankToEmpty(record.code());
+            case "customer" -> facts.customer();
+            case "goodsName" -> facts.goodsName();
+            case "materialCode" -> facts.materialCode();
+            case "quantity" -> facts.quantity();
+            case "weight" -> facts.weight();
+            case "inboundDate" -> facts.inboundDate();
+            case "warehouseCode" -> facts.warehouseCode();
+            case "receiver" -> facts.receiver();
+            case "express" -> facts.express();
+            case "code" -> facts.code();
+            case "verificationCode" -> facts.verificationCode();
+            case "processingRequirement" -> facts.processingRequirement();
+            case "dueDate" -> facts.dueDate();
             default -> "";
         };
     }
 
-    private String footerValue(String source, MotherOrderRecord record, String fallback) {
+    private String footerValue(String source, StickerFacts facts, String fallback) {
         if (source == null || source.isBlank()) {
             return fallback;
         }
-        String value = valueFromMotherOrder(source, record);
+        String value = valueOf(source, facts);
         return value.isBlank() ? fallback : value;
     }
 
@@ -216,26 +346,38 @@ public class LabelService {
         }
     }
 
+    private String fieldValue(List<LabelField> fields, String name) {
+        for (LabelField field : fields) {
+            if (name.equals(field.name())) {
+                return blankToEmpty(field.value());
+            }
+        }
+        return "";
+    }
+
     private String customerText(MotherOrderRecord record) {
+        if (record.customerName() != null && !record.customerName().isBlank()) {
+            return record.customerName().trim();
+        }
         if (record.customerId() != null) {
             return "客户#" + record.customerId();
         }
         return "";
     }
 
-    private String quantityText(MotherOrderRecord record) {
-        if (record.quantity() == null) {
+    private String quantityText(BigDecimal quantity, String unit) {
+        if (quantity == null) {
             return "";
         }
-        String unit = record.quantityUnit() == null || record.quantityUnit().isBlank() ? "件" : record.quantityUnit();
-        return record.quantity().stripTrailingZeros().toPlainString() + " " + unit;
+        String unitText = unit == null || unit.isBlank() ? "件" : unit;
+        return quantity.stripTrailingZeros().toPlainString() + " " + unitText;
     }
 
-    private String weightText(MotherOrderRecord record) {
-        if (record.weight() == null) {
+    private String weightText(BigDecimal weight) {
+        if (weight == null) {
             return "";
         }
-        return record.weight().stripTrailingZeros().toPlainString() + " 克";
+        return weight.stripTrailingZeros().toPlainString() + " 克";
     }
 
     private String defaultExpressText(MotherOrderRecord record) {
@@ -247,9 +389,8 @@ public class LabelService {
         return ("快递：" + (company + " " + courier)).trim();
     }
 
-    private String defaultReceiverText(MotherOrderRecord record) {
-        String receiver = firstNonBlank(record.receiverName(), record.unpackSigner());
-        return receiver.isBlank() ? "" : "收货人：" + receiver;
+    private String receiverFooter(String receiver) {
+        return receiver == null || receiver.isBlank() ? "" : "收货人：" + receiver.trim();
     }
 
     private String firstNonBlank(String a, String b) {
@@ -261,5 +402,22 @@ public class LabelService {
 
     private String blankToEmpty(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private record StickerFacts(
+            String verificationCode,
+            String customer,
+            String processingRequirement,
+            String dueDate,
+            String code,
+            String goodsName,
+            String materialCode,
+            String quantity,
+            String weight,
+            String inboundDate,
+            String warehouseCode,
+            String receiver,
+            String express
+    ) {
     }
 }

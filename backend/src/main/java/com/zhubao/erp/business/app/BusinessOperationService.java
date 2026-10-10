@@ -37,8 +37,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 @Service
 public class BusinessOperationService {
@@ -71,7 +73,10 @@ public class BusinessOperationService {
     }
 
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
+        assertRequiredText(command.processingRequirement(), "加工要求不能为空");
+        assertDueDate(command.dueDate());
         assertMotherOrderAvailable(command.motherOrderCode());
+        assertCourierAvailable(command.courierNo(), command.motherOrderCode());
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension rawCustomerStock = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -576,6 +581,9 @@ public class BusinessOperationService {
         appendField(remark, "收货人", command.receiverName());
         appendField(remark, "拆箱签字", command.unpackSigner());
         appendField(remark, "货品名称", command.goodsName());
+        appendField(remark, "客户", command.customerName());
+        appendField(remark, "加工要求", command.processingRequirement());
+        appendField(remark, "完成期限", command.dueDate());
         appendField(remark, "数量单位", command.quantityUnit());
         appendRegisterSource(remark, command.sourceRegisterType(), command.sourceRegisterLineNo(), command.sourceRegisterSequence());
         if (command.evidenceCode() != null && !command.evidenceCode().isBlank()) {
@@ -634,8 +642,37 @@ public class BusinessOperationService {
                 blankToEmpty(command.evidenceCode()),
                 blankToEmpty(command.remark()),
                 "INBOUND_CONFIRMED",
-                RECORD_TIME.format(LocalDateTime.now())
+                RECORD_TIME.format(LocalDateTime.now()),
+                command.processingRequirement().trim(),
+                command.dueDate().trim(),
+                blankToEmpty(command.customerName())
         ));
+    }
+
+    private void assertRequiredText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(message);
+        }
+    }
+
+    private void assertDueDate(String dueDate) {
+        assertRequiredText(dueDate, "完成期限不能为空");
+        try {
+            LocalDate.parse(dueDate.trim());
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException("完成期限需使用 yyyy-MM-dd");
+        }
+    }
+
+    private void assertCourierAvailable(String courierNo, String motherOrderCode) {
+        if (businessDocumentRepository == null || courierNo == null || courierNo.isBlank()) {
+            return;
+        }
+        businessDocumentRepository.findMotherOrderByCourierNo(courierNo.trim())
+                .filter(record -> !record.code().equals(motherOrderCode))
+                .ifPresent(record -> {
+                    throw new BusinessException("快递单号已关联母单：" + record.code());
+                });
     }
 
     private void saveOutboundOrder(ShipFinishedStockCommand command, StockLedgerEntry entry) {

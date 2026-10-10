@@ -95,6 +95,18 @@ class PermissionGuardTest {
     }
 
     @Test
+    void limitsStoredContentManagementToAdminAndGeneralManager() {
+        OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
+        OperatorContext keeper = new OperatorContext("库管员 何琴", RoleCode.WAREHOUSE_KEEPER, DataScope.TEAM);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.DOCUMENT_CONTENT_MANAGE, admin))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.DOCUMENT_CONTENT_MANAGE, keeper))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("存储内容管理");
+    }
+
+    @Test
     void limitsAuthAccountManagementToAdminAndGeneralManager() {
         OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
@@ -108,5 +120,20 @@ class PermissionGuardTest {
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("FINANCE_STATISTICIAN")
                 .hasMessageContaining("登录账号管理");
+    }
+
+    @Test
+    void allowsFinanceStatisticianToPostOperatingLedgers() {
+        OperatorContext finance = new OperatorContext("财务统计", RoleCode.FINANCE_STATISTICIAN, DataScope.DEPARTMENT);
+        OperatorContext operator = new OperatorContext("操作工 王强", RoleCode.OPERATOR, DataScope.SELF);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.FINANCE_BILLING_POST, finance))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.FINANCE_PAYROLL, finance))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.FINANCE_RECEIPT, operator))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR")
+                .hasMessageContaining("收款登记");
     }
 }

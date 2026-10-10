@@ -227,7 +227,10 @@ public class RegisterImportPostingExecutionService {
                 decimalValue(fields, "weight"),
                 operator,
                 value(fields, "evidenceCode"),
-                postingRemark(draft, fields, command)
+                postingRemark(draft, fields, command),
+                value(fields, "processingRequirement"),
+                value(fields, "dueDate"),
+                value(fields, "customerName")
         );
     }
 

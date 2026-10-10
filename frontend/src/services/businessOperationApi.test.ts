@@ -54,6 +54,9 @@ describe('businessOperationApi', () => {
       weight: '486.25',
       operator: '库管员 何琳',
       evidenceCode: 'SF1048329001',
+      processingRequirement: '',
+      dueDate: '',
+      customerName: '恒信珠宝',
     });
   });
 

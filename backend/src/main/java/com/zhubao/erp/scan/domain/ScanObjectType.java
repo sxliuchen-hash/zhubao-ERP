@@ -4,5 +4,6 @@ public enum ScanObjectType {
     MOTHER_ORDER,
     WORK_ORDER,
     OUTBOUND_ORDER,
+    REWORK,
     EXPRESS_NO
 }

@@ -2,8 +2,13 @@ package com.zhubao.erp.operations.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhubao.erp.gateway.app.DeviceGatewayService;
+import com.zhubao.erp.gateway.domain.GatewayDeviceView;
+import com.zhubao.erp.hardware.app.HardwareIntegrationService;
+import com.zhubao.erp.hardware.domain.HardwareDevice;
 import com.zhubao.erp.operations.domain.OperationsCenterSnapshot;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
@@ -19,6 +24,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.DigestInputStream;
@@ -60,6 +66,8 @@ public class OperationsCenterService {
     private final String logFile;
     private final int frontendProbeTimeoutMs;
     private final int backupRpoHours;
+    private final ObjectProvider<HardwareIntegrationService> hardwareServices;
+    private final ObjectProvider<DeviceGatewayService> gatewayServices;
 
     public OperationsCenterService(
             Environment environment,
@@ -71,6 +79,33 @@ public class OperationsCenterService {
             @Value("${zhubao.operations.frontend-probe-timeout-ms:800}") int frontendProbeTimeoutMs,
             @Value("${zhubao.operations.backup-rpo-hours:24}") int backupRpoHours
     ) {
+        this(
+                environment,
+                dataSources,
+                frontendUrl,
+                frontendProbeUrl,
+                backupRoot,
+                logFile,
+                frontendProbeTimeoutMs,
+                backupRpoHours,
+                null,
+                null
+        );
+    }
+
+    @Autowired
+    public OperationsCenterService(
+            Environment environment,
+            ObjectProvider<DataSource> dataSources,
+            @Value("${zhubao.operations.frontend-url:http://localhost:5173/}") String frontendUrl,
+            @Value("${zhubao.operations.frontend-probe-url:}") String frontendProbeUrl,
+            @Value("${zhubao.operations.backup-root:}") String backupRoot,
+            @Value("${zhubao.operations.log-file:}") String logFile,
+            @Value("${zhubao.operations.frontend-probe-timeout-ms:800}") int frontendProbeTimeoutMs,
+            @Value("${zhubao.operations.backup-rpo-hours:24}") int backupRpoHours,
+            ObjectProvider<HardwareIntegrationService> hardwareServices,
+            ObjectProvider<DeviceGatewayService> gatewayServices
+    ) {
         this.environment = environment;
         this.dataSources = dataSources;
         this.frontendUrl = frontendUrl;
@@ -79,6 +114,8 @@ public class OperationsCenterService {
         this.logFile = logFile;
         this.frontendProbeTimeoutMs = frontendProbeTimeoutMs;
         this.backupRpoHours = backupRpoHours;
+        this.hardwareServices = hardwareServices;
+        this.gatewayServices = gatewayServices;
     }
 
     public OperationsCenterSnapshot snapshot() {
@@ -96,7 +133,11 @@ public class OperationsCenterService {
         backups.add(cosBackupStatus(cosBackup, now));
         List<OperationsCenterSnapshot.BackupStatus> localBackupEvidence = new ArrayList<>(localBackups);
         localBackupEvidence.add(restoreDrill);
+        List<OperationsCenterSnapshot.HardwarePresence> hardwareNodes = hardwarePresences(now);
+        List<OperationsCenterSnapshot.StorageVolume> storageVolumes = storageVolumes();
         List<OperationsCenterSnapshot.ServiceStatus> services = serviceStatuses(database, frontend, pwa, localBackupEvidence, cosBackup, now);
+        refreshHardwareService(services, hardwareNodes, DISPLAY_TIME.format(now));
+        refreshStorageService(services, storageVolumes, DISPLAY_TIME.format(now));
         List<OperationsCenterSnapshot.ErrorSummary> errors = errorSummaries(now, logs);
         List<OperationsCenterSnapshot.OperationAlert> alerts = operationAlerts(now, services, errors, backups);
 
@@ -126,7 +167,9 @@ public class OperationsCenterService {
                 backups,
                 restoreDrillRecords,
                 alerts,
-                checklist(database, frontend, pwa, logs, cosBackup, restoreDrill)
+                checklist(database, frontend, pwa, logs, cosBackup, restoreDrill),
+                hardwareNodes,
+                storageVolumes
         );
     }
 
@@ -233,40 +276,343 @@ public class OperationsCenterService {
         OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
         double loadAverage = osBean.getSystemLoadAverage();
 
-        return List.of(
-                new OperationsCenterSnapshot.RuntimeMetric(
-                        "JVM_MEMORY",
-                        "JVM 内存",
-                        String.valueOf(memoryPercent),
-                        "%",
-                        toMiB(usedMemory) + " / " + toMiB(maxMemory) + " MiB",
-                        memoryPercent >= 85 ? "red" : memoryPercent >= 70 ? "amber" : "green"
-                ),
-                new OperationsCenterSnapshot.RuntimeMetric(
-                        "THREADS",
-                        "线程数",
-                        String.valueOf(threadBean.getThreadCount()),
-                        "个",
-                        "峰值 " + threadBean.getPeakThreadCount(),
-                        threadBean.getThreadCount() > 200 ? "amber" : "blue"
-                ),
-                new OperationsCenterSnapshot.RuntimeMetric(
-                        "PROCESSORS",
-                        "CPU 核心",
-                        String.valueOf(runtime.availableProcessors()),
-                        "核",
-                        loadAverage >= 0 ? "系统负载 " + String.format(Locale.ROOT, "%.2f", loadAverage) : "系统负载不可用",
-                        "blue"
-                ),
-                new OperationsCenterSnapshot.RuntimeMetric(
-                        "UPTIME",
-                        "后端运行",
-                        String.valueOf(ManagementFactory.getRuntimeMXBean().getUptime() / 60_000),
-                        "分钟",
-                        ManagementFactory.getRuntimeMXBean().getName(),
-                        "green"
-                )
+        List<OperationsCenterSnapshot.RuntimeMetric> metrics = new ArrayList<>();
+        metrics.add(new OperationsCenterSnapshot.RuntimeMetric(
+                "JVM_MEMORY",
+                "JVM 内存",
+                String.valueOf(memoryPercent),
+                "%",
+                toMiB(usedMemory) + " / " + toMiB(maxMemory) + " MiB",
+                memoryPercent >= 85 ? "red" : memoryPercent >= 70 ? "amber" : "green"
+        ));
+        metrics.add(new OperationsCenterSnapshot.RuntimeMetric(
+                "THREADS",
+                "线程数",
+                String.valueOf(threadBean.getThreadCount()),
+                "个",
+                "峰值 " + threadBean.getPeakThreadCount(),
+                threadBean.getThreadCount() > 200 ? "amber" : "blue"
+        ));
+        metrics.add(new OperationsCenterSnapshot.RuntimeMetric(
+                "PROCESSORS",
+                "CPU 核心",
+                String.valueOf(runtime.availableProcessors()),
+                "核",
+                loadAverage >= 0 ? "系统负载 " + String.format(Locale.ROOT, "%.2f", loadAverage) : "系统负载不可用",
+                "blue"
+        ));
+        metrics.add(diskMetric());
+        metrics.add(new OperationsCenterSnapshot.RuntimeMetric(
+                "UPTIME",
+                "后端运行",
+                String.valueOf(ManagementFactory.getRuntimeMXBean().getUptime() / 60_000),
+                "分钟",
+                ManagementFactory.getRuntimeMXBean().getName(),
+                "green"
+        ));
+        return metrics;
+    }
+
+    private OperationsCenterSnapshot.RuntimeMetric diskMetric() {
+        try {
+            FileStore store = Files.getFileStore(Path.of("").toAbsolutePath());
+            long total = Math.max(store.getTotalSpace(), 0);
+            long free = Math.max(store.getUsableSpace(), 0);
+            long used = Math.max(total - free, 0);
+            int percent = total == 0 ? 0 : (int) Math.round(used * 100.0 / total);
+            String tone = percent >= 90 ? "red" : percent >= 75 ? "amber" : "green";
+            return new OperationsCenterSnapshot.RuntimeMetric(
+                    "DISK",
+                    "磁盘占用",
+                    String.valueOf(percent),
+                    "%",
+                    readableSize(used) + " / " + readableSize(total) + "，剩余 " + readableSize(free),
+                    tone
+            );
+        } catch (IOException exception) {
+            return new OperationsCenterSnapshot.RuntimeMetric(
+                    "DISK",
+                    "磁盘占用",
+                    "0",
+                    "%",
+                    "无法读取磁盘：" + truncate(exception.getMessage(), 80),
+                    "amber"
+            );
+        }
+    }
+
+    private List<OperationsCenterSnapshot.HardwarePresence> hardwarePresences(Instant now) {
+        String checkedAt = DISPLAY_TIME.format(now);
+        List<OperationsCenterSnapshot.HardwarePresence> nodes = new ArrayList<>();
+        HardwareIntegrationService hardware = hardwareServices == null ? null : hardwareServices.getIfAvailable();
+        if (hardware != null) {
+            for (HardwareDevice device : hardware.findDevices()) {
+                nodes.add(workshopHardware(device, checkedAt));
+            }
+        }
+        DeviceGatewayService gateway = gatewayServices == null ? null : gatewayServices.getIfAvailable();
+        if (gateway != null) {
+            for (GatewayDeviceView device : gateway.devices()) {
+                nodes.add(gatewayHardware(device, checkedAt));
+            }
+        }
+        return nodes;
+    }
+
+    private OperationsCenterSnapshot.HardwarePresence workshopHardware(HardwareDevice device, String checkedAt) {
+        String status = switch (device.status()) {
+            case ONLINE -> "在线";
+            case DEGRADED -> "降级";
+            case MANUAL -> "人工";
+        };
+        String tone = switch (device.status()) {
+            case ONLINE -> "green";
+            case DEGRADED -> "amber";
+            case MANUAL -> "blue";
+        };
+        return new OperationsCenterSnapshot.HardwarePresence(
+                device.code(),
+                device.name(),
+                device.scene(),
+                status,
+                device.protocol(),
+                "兜底：" + device.fallback(),
+                checkedAt,
+                tone
         );
+    }
+
+    private OperationsCenterSnapshot.HardwarePresence gatewayHardware(GatewayDeviceView device, String checkedAt) {
+        if (!device.enabled()) {
+            return new OperationsCenterSnapshot.HardwarePresence(
+                    device.deviceCode(),
+                    device.deviceName(),
+                    blankToReviewText(device.location(), "未填写位置"),
+                    "停用",
+                    "设备网关",
+                    blankToReviewText(device.fallbackNote(), "设备已停用"),
+                    checkedAt,
+                    "gray"
+            );
+        }
+        if (device.lastReadingAt() == null || device.lastReadingAt().isBlank()) {
+            return new OperationsCenterSnapshot.HardwarePresence(
+                    device.deviceCode(),
+                    device.deviceName(),
+                    blankToReviewText(device.location(), "未填写位置"),
+                    "未上报",
+                    "设备网关",
+                    "已启用，尚未收到读数。",
+                    checkedAt,
+                    "amber"
+            );
+        }
+        return new OperationsCenterSnapshot.HardwarePresence(
+                device.deviceCode(),
+                device.deviceName(),
+                blankToReviewText(device.location(), "未填写位置"),
+                "在线",
+                "设备网关",
+                "最近读数 " + device.lastReadingAt() + "，窗口内 " + device.recentReadings() + " 条。",
+                checkedAt,
+                "green"
+        );
+    }
+
+    private List<OperationsCenterSnapshot.StorageVolume> storageVolumes() {
+        List<OperationsCenterSnapshot.StorageVolume> volumes = new ArrayList<>();
+        volumes.add(diskVolume("SYSTEM_DISK", "系统磁盘", Path.of("").toAbsolutePath()));
+        String evidenceRoot = environment.getProperty("zhubao.documents.storage.local-root", "target/zhubao-evidence");
+        volumes.add(directoryVolume("EVIDENCE_STORE", "附件存储", Path.of(evidenceRoot), "现场照片、短视频和证据附件"));
+        if (backupRoot == null || backupRoot.isBlank()) {
+            volumes.add(new OperationsCenterSnapshot.StorageVolume(
+                    "BACKUP_STORE",
+                    "备份目录",
+                    "未配置",
+                    "0 B",
+                    "未配置",
+                    0,
+                    "配置 zhubao.operations.backup-root 后显示备份占用。",
+                    "amber"
+            ));
+        } else {
+            volumes.add(directoryVolume("BACKUP_STORE", "备份目录", Path.of(backupRoot), "数据库备份和恢复演练证据"));
+        }
+        return volumes;
+    }
+
+    private OperationsCenterSnapshot.StorageVolume diskVolume(String code, String name, Path path) {
+        try {
+            FileStore store = fileStore(path);
+            long total = Math.max(store.getTotalSpace(), 0);
+            long free = Math.max(store.getUsableSpace(), 0);
+            long used = Math.max(total - free, 0);
+            int percent = total == 0 ? 0 : (int) Math.round(used * 100.0 / total);
+            return new OperationsCenterSnapshot.StorageVolume(
+                    code,
+                    name,
+                    path.toAbsolutePath().normalize().toString(),
+                    readableSize(used),
+                    readableSize(total),
+                    percent,
+                    store.name() + " / " + store.type() + "，剩余 " + readableSize(free),
+                    percent >= 90 ? "red" : percent >= 75 ? "amber" : "green"
+            );
+        } catch (IOException exception) {
+            return new OperationsCenterSnapshot.StorageVolume(
+                    code,
+                    name,
+                    path.toAbsolutePath().normalize().toString(),
+                    "0 B",
+                    "不可用",
+                    0,
+                    "无法读取磁盘：" + truncate(exception.getMessage(), 80),
+                    "amber"
+            );
+        }
+    }
+
+    private OperationsCenterSnapshot.StorageVolume directoryVolume(String code, String name, Path path, String purpose) {
+        long used = directorySize(path);
+        int files = directoryFileCount(path);
+        try {
+            FileStore store = fileStore(path);
+            long total = Math.max(store.getTotalSpace(), 0);
+            int percent = total == 0 ? 0 : (int) Math.min(100, Math.round(used * 100.0 / total));
+            String tone = percent >= 90 ? "red" : percent >= 75 ? "amber" : Files.isDirectory(path) ? "green" : "amber";
+            String detail = Files.isDirectory(path)
+                    ? purpose + "，" + files + " 个文件，占所在磁盘 " + percent + "%。"
+                    : purpose + "，目录尚不存在。";
+            return new OperationsCenterSnapshot.StorageVolume(
+                    code,
+                    name,
+                    path.toAbsolutePath().normalize().toString(),
+                    readableSize(used),
+                    readableSize(total),
+                    percent,
+                    detail,
+                    tone
+            );
+        } catch (IOException exception) {
+            return new OperationsCenterSnapshot.StorageVolume(
+                    code,
+                    name,
+                    path.toAbsolutePath().normalize().toString(),
+                    readableSize(used),
+                    "不可用",
+                    0,
+                    purpose + "，无法读取磁盘。",
+                    "amber"
+            );
+        }
+    }
+
+    private void refreshHardwareService(
+            List<OperationsCenterSnapshot.ServiceStatus> services,
+            List<OperationsCenterSnapshot.HardwarePresence> nodes,
+            String checkedAt
+    ) {
+        if (nodes.isEmpty()) {
+            return;
+        }
+        long attention = nodes.stream().filter(node -> "amber".equals(node.tone()) || "red".equals(node.tone())).count();
+        long online = nodes.stream().filter(node -> "在线".equals(node.status())).count();
+        replaceService(services, new OperationsCenterSnapshot.ServiceStatus(
+                "HARDWARE",
+                "软硬件联动",
+                attention > 0 ? "ATTENTION" : "ONLINE",
+                "/api/hardware/devices",
+                "在线 " + online + " 台，需关注 " + attention + " 台，共 " + nodes.size() + " 台。",
+                "现场实施负责人",
+                checkedAt,
+                attention > 0 ? "amber" : "green"
+        ));
+    }
+
+    private void refreshStorageService(
+            List<OperationsCenterSnapshot.ServiceStatus> services,
+            List<OperationsCenterSnapshot.StorageVolume> volumes,
+            String checkedAt
+    ) {
+        OperationsCenterSnapshot.StorageVolume disk = findVolume(volumes, "SYSTEM_DISK");
+        OperationsCenterSnapshot.StorageVolume evidence = findVolume(volumes, "EVIDENCE_STORE");
+        if (disk == null) {
+            return;
+        }
+        String detail = "磁盘已用 " + disk.usedPercent() + "%（" + disk.used() + " / " + disk.capacity() + "）";
+        if (evidence != null) {
+            detail += "，附件目录 " + evidence.used() + "。";
+        }
+        replaceService(services, new OperationsCenterSnapshot.ServiceStatus(
+                "ATTACHMENT",
+                "附件对象存储",
+                "red".equals(disk.tone()) ? "DISK_FULL" : "amber".equals(disk.tone()) ? "DISK_TIGHT" : "ONLINE",
+                evidence == null ? disk.path() : evidence.path(),
+                detail,
+                "平台负责人",
+                checkedAt,
+                disk.tone()
+        ));
+    }
+
+    private void replaceService(
+            List<OperationsCenterSnapshot.ServiceStatus> services,
+            OperationsCenterSnapshot.ServiceStatus replacement
+    ) {
+        for (int index = 0; index < services.size(); index++) {
+            if (replacement.code().equals(services.get(index).code())) {
+                services.set(index, replacement);
+                return;
+            }
+        }
+    }
+
+    private OperationsCenterSnapshot.StorageVolume findVolume(
+            List<OperationsCenterSnapshot.StorageVolume> volumes,
+            String code
+    ) {
+        return volumes.stream().filter(volume -> code.equals(volume.code())).findFirst().orElse(null);
+    }
+
+    private FileStore fileStore(Path path) throws IOException {
+        Path probe = path.toAbsolutePath().normalize();
+        while (probe != null && !Files.exists(probe)) {
+            probe = probe.getParent();
+        }
+        if (probe == null) {
+            probe = Path.of("").toAbsolutePath();
+        }
+        return Files.getFileStore(probe);
+    }
+
+    private long directorySize(Path root) {
+        if (root == null || !Files.isDirectory(root)) {
+            return 0;
+        }
+        long total = 0;
+        try (Stream<Path> stream = Files.walk(root)) {
+            for (Path path : stream.filter(Files::isRegularFile).toList()) {
+                try {
+                    total += Files.size(path);
+                } catch (IOException exception) {
+                    // 单个文件读不到时跳过。
+                }
+            }
+        } catch (IOException exception) {
+            return total;
+        }
+        return total;
+    }
+
+    private int directoryFileCount(Path root) {
+        if (root == null || !Files.isDirectory(root)) {
+            return 0;
+        }
+        try (Stream<Path> stream = Files.walk(root)) {
+            return (int) stream.filter(Files::isRegularFile).count();
+        } catch (IOException exception) {
+            return 0;
+        }
     }
 
     private DatabaseProbe probeDatabase(Instant now) {
@@ -1385,6 +1731,9 @@ public class OperationsCenterService {
     }
 
     private String readableSize(long bytes) {
+        if (bytes >= 1024L * 1024L * 1024L) {
+            return String.format(Locale.ROOT, "%.2f GiB", bytes / 1024.0 / 1024.0 / 1024.0);
+        }
         if (bytes >= 1024L * 1024L) {
             return String.format(Locale.ROOT, "%.2f MiB", bytes / 1024.0 / 1024.0);
         }

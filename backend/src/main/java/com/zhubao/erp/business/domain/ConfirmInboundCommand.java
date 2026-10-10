@@ -27,6 +27,9 @@ public record ConfirmInboundCommand(
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal weight,
         @NotBlank String operator,
         String evidenceCode,
-        String remark
+        String remark,
+        @NotBlank(message = "加工要求不能为空") String processingRequirement,
+        @NotBlank(message = "完成期限不能为空") String dueDate,
+        String customerName
 ) {
 }

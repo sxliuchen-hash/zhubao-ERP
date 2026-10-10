@@ -112,6 +112,28 @@ export interface OperationAlert {
   tone: Tone;
 }
 
+export interface HardwarePresence {
+  code: string;
+  name: string;
+  scene: string;
+  status: string;
+  protocol: string;
+  detail: string;
+  checkedAt: string;
+  tone: Tone;
+}
+
+export interface StorageVolume {
+  code: string;
+  name: string;
+  path: string;
+  used: string;
+  capacity: string;
+  usedPercent: number;
+  detail: string;
+  tone: Tone;
+}
+
 export interface OperationsCenterSnapshot {
   generatedAt: string;
   summary: OperationsCenterSummary;
@@ -123,6 +145,8 @@ export interface OperationsCenterSnapshot {
   restoreDrillRecords: RestoreDrillRecord[];
   alerts: OperationAlert[];
   checklist: OperationChecklistItem[];
+  hardwareNodes: HardwarePresence[];
+  storageVolumes: StorageVolume[];
 }
 
 export const operationsCenterFallback: OperationsCenterSnapshot = {
@@ -204,6 +228,7 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
     { code: 'JVM_MEMORY', label: 'JVM 内存', value: '42', unit: '%', detail: '420 / 1024 MiB', tone: 'green' },
     { code: 'THREADS', label: '线程数', value: '38', unit: '个', detail: '峰值 47', tone: 'blue' },
     { code: 'PROCESSORS', label: 'CPU 核心', value: '8', unit: '核', detail: '系统负载 1.24', tone: 'blue' },
+    { code: 'DISK', label: '磁盘占用', value: '61', unit: '%', detail: '240 GiB / 400 GiB，剩余 160 GiB', tone: 'green' },
     { code: 'UPTIME', label: '后端运行', value: '128', unit: '分钟', detail: '评审环境样例', tone: 'green' },
   ],
   errorSummaries: [
@@ -433,6 +458,60 @@ export const operationsCenterFallback: OperationsCenterSnapshot = {
       status: '未接入真实目录',
       evidence: '运行 verify-restore 后在备份目录留下 restore 标记/日志',
       owner: '运维负责人',
+      tone: 'amber',
+    },
+  ],
+  hardwareNodes: [
+    {
+      code: 'CAM-UNPACK-01',
+      name: '拆包台摄像头',
+      scene: '来料拆包视频证据',
+      status: '降级',
+      protocol: 'NVR 时间段截取',
+      detail: '兜底：截取失败后允许人工上传 MP4',
+      checkedAt: '2026-07-07 08:00:00',
+      tone: 'amber',
+    },
+    {
+      code: 'SCAN-PC-01',
+      name: 'PC 扫码枪',
+      scene: '后台收货和标签复核',
+      status: '在线',
+      protocol: 'USB HID 键盘模式',
+      detail: '兜底：手工录入编码并二次确认',
+      checkedAt: '2026-07-07 08:00:00',
+      tone: 'green',
+    },
+  ],
+  storageVolumes: [
+    {
+      code: 'SYSTEM_DISK',
+      name: '系统磁盘',
+      path: 'C:\\',
+      used: '240 GiB',
+      capacity: '400 GiB',
+      usedPercent: 61,
+      detail: '本地磁盘，剩余 160 GiB',
+      tone: 'green',
+    },
+    {
+      code: 'EVIDENCE_STORE',
+      name: '附件存储',
+      path: 'target/zhubao-evidence',
+      used: '128 MiB',
+      capacity: '400 GiB',
+      usedPercent: 1,
+      detail: '现场照片、短视频和证据附件，12 个文件。',
+      tone: 'green',
+    },
+    {
+      code: 'BACKUP_STORE',
+      name: '备份目录',
+      path: '未配置',
+      used: '0 B',
+      capacity: '未配置',
+      usedPercent: 0,
+      detail: '配置备份目录后显示备份占用。',
       tone: 'amber',
     },
   ],

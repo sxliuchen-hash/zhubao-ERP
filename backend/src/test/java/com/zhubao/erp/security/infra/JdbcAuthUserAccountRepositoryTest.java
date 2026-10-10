@@ -205,6 +205,7 @@ class JdbcAuthUserAccountRepositoryTest {
                         password_changed_at timestamp default current_timestamp,
                         password_change_required boolean not null default false,
                         temporary_password_consumed boolean not null default false,
+                        allowed_processes varchar(64) not null default '',
                         failed_login_count int not null default 0,
                         locked_until timestamp null,
                         last_login_at timestamp null,

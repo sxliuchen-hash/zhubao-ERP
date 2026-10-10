@@ -20,6 +20,8 @@ import {
 import InboundWorkspace from './InboundWorkspace.vue';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
 import MobileOpsWorkspace from './MobileOpsWorkspace.vue';
+import { lookupProcessStation, submitProcessStation } from '../../services/processStationApi';
+import { lookupQualityCheck, openQualityRework, submitQualityCheck } from '../../services/qualityCheckApi';
 import ProductionWorkspace from './ProductionWorkspace.vue';
 import QualityWorkspace from './QualityWorkspace.vue';
 
@@ -29,6 +31,28 @@ vi.mock('../../services/businessWorkspaceApi', () => ({
   fetchQualityWorkspace: vi.fn(),
   fetchInventoryWorkspace: vi.fn(),
   fetchMobileWorkspace: vi.fn(),
+}));
+
+vi.mock('../../services/mobileIntakeApi', () => ({
+  fetchMotherOrder: vi.fn().mockRejectedValue(new Error('母单不存在')),
+  lookupMobileIntake: vi.fn(),
+  submitMobileIntake: vi.fn(),
+}));
+
+vi.mock('../../services/processStationApi', () => ({
+  lookupProcessStation: vi.fn(),
+  submitProcessStation: vi.fn(),
+}));
+
+vi.mock('../../services/qualityCheckApi', () => ({
+  lookupQualityCheck: vi.fn(),
+  submitQualityCheck: vi.fn(),
+  openQualityRework: vi.fn(),
+}));
+
+vi.mock('../../services/documentCaptureApi', () => ({
+  fetchCaptures: vi.fn().mockResolvedValue([]),
+  uploadCapture: vi.fn(),
 }));
 
 const inboundOrder: InboundOrder = {
@@ -301,13 +325,180 @@ describe('M1 business workspaces', () => {
     expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
   });
 
-  it('renders mobile capability boundaries and offline drafts', async () => {
+  it('renders the mobile intake form', async () => {
     const wrapper = mount(MobileOpsWorkspace);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('移动现场作业台');
-    expect(wrapper.text()).toContain('PWA 能力边界');
-    expect(wrapper.text()).toContain('离线草稿');
-    expect(wrapper.text()).toContain('DRAFT-QC-003');
+    expect(wrapper.text()).toContain('手机收货');
+    expect(wrapper.text()).toContain('快递单号');
+    expect(wrapper.find('[aria-label="快递单号"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="拍面单"]').exists()).toBe(true);
+  });
+
+  it('opens a photo picker instead of telling the operator the browser cannot scan', async () => {
+    const clicks = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    const media = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
+    const wrapper = mount(MobileOpsWorkspace);
+    await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
+
+    expect(wrapper.text()).not.toContain('当前浏览器不能直接扫码');
+    expect(clicks).toHaveBeenCalled();
+    clicks.mockRestore();
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: media });
+  });
+
+  it('shows only the signed-in station submit button', async () => {
+    vi.mocked(lookupProcessStation).mockResolvedValue({
+      orderCode: 'ZD-100',
+      customerName: '恒信珠宝',
+      dueDate: '2026-10-20',
+      processingRequirement: '内壁刻字',
+      stations: [{
+        processName: '雕刻',
+        requirement: '内壁刻字',
+        dueDate: '2026-10-20',
+        previousProcessName: '',
+        previousSubmitted: true,
+        submitted: false,
+      }],
+      message: '',
+    });
+    const wrapper = mount(MobileOpsWorkspace);
+    await wrapper.get('[aria-label="岗位报工"]').trigger('click');
+    await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
+    await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('ZD-100');
+    expect(wrapper.text()).toContain('恒信珠宝');
+    expect(wrapper.text()).toContain('雕刻要求');
+    expect(wrapper.text()).toContain('内壁刻字');
+    expect(wrapper.text()).toContain('2026-10-20');
+    expect(wrapper.text()).toContain('上一道是否已交');
+    expect(wrapper.text()).toContain('无上一道');
+    expect(wrapper.text()).toContain('提交雕刻');
+    expect(wrapper.text()).not.toContain('提交镶嵌');
+    expect(wrapper.text()).not.toContain('提交抛光');
+  });
+
+  it('shows the server rejection when the previous station is not handed in', async () => {
+    vi.mocked(lookupProcessStation).mockResolvedValue({
+      orderCode: 'ZD-100',
+      customerName: '恒信珠宝',
+      dueDate: '2026-10-20',
+      processingRequirement: '内壁刻字',
+      stations: [{
+        processName: '镶嵌',
+        requirement: '内壁刻字',
+        dueDate: '2026-10-20',
+        previousProcessName: '雕刻',
+        previousSubmitted: false,
+        submitted: false,
+      }],
+      message: '',
+    });
+    vi.mocked(submitProcessStation).mockRejectedValue(new Error('上一道「雕刻」还没交，不能交「镶嵌」'));
+    const wrapper = mount(MobileOpsWorkspace);
+    await wrapper.get('[aria-label="岗位报工"]').trigger('click');
+    await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
+    await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
+    await flushPromises();
+    const submit = wrapper.findAll('button').find((button) => button.text() === '提交镶嵌');
+    expect(submit).toBeTruthy();
+    await submit!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('上一道「雕刻」还没交，不能交「镶嵌」');
+    expect(wrapper.text()).toContain('未交');
+    expect(wrapper.text()).not.toContain('提交雕刻');
+    expect(wrapper.text()).not.toContain('提交抛光');
+  });
+
+  it('requires every requirement line and records the signed-in inspector', async () => {
+    vi.mocked(lookupQualityCheck).mockResolvedValue({
+      orderCode: 'ZD-100',
+      motherOrderCode: 'MD-100',
+      customerName: '恒信珠宝',
+      dueDate: '2026-10-20',
+      processingRequirement: '内壁刻字\n镶一颗主石\n镜面抛光',
+      ready: true,
+      blockReason: '',
+      inspector: '质检员 周娜',
+      qualityCaseCode: '',
+      outcome: '',
+      frozen: false,
+      reworkOrderCode: '',
+      lines: [
+        { lineNo: 1, clause: '内壁刻字', verdict: '', reason: '' },
+        { lineNo: 2, clause: '镶一颗主石', verdict: '', reason: '' },
+        { lineNo: 3, clause: '镜面抛光', verdict: '', reason: '' },
+      ],
+    });
+    const wrapper = mount(QualityWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="质检贴纸"]').setValue('JG|work_order|ZD-100');
+    await wrapper.get('[aria-label="识别质检贴纸"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('内壁刻字');
+    expect(wrapper.text()).toContain('镶一颗主石');
+    expect(wrapper.text()).toContain('镜面抛光');
+    expect(wrapper.text()).toContain('质检员 周娜');
+    expect(wrapper.find('[aria-label="质检员姓名"]').exists()).toBe(false);
+    expect((wrapper.get('[aria-label="提交质检"]').element as HTMLButtonElement).disabled).toBe(true);
+    expect(wrapper.text()).toContain('每一条加工要求都要有结果才能提交');
+
+    await wrapper.get('[aria-label="合格 1"]').trigger('click');
+    await wrapper.get('[aria-label="合格 2"]').trigger('click');
+    expect((wrapper.get('[aria-label="提交质检"]').element as HTMLButtonElement).disabled).toBe(true);
+
+    await wrapper.get('[aria-label="不合格 3"]').trigger('click');
+    expect(wrapper.text()).toContain('不合格和让步必须写原因');
+    expect((wrapper.get('[aria-label="提交质检"]').element as HTMLButtonElement).disabled).toBe(true);
+    await wrapper.get('[aria-label="原因 3"]').setValue('镜面有划痕');
+    expect((wrapper.get('[aria-label="提交质检"]').element as HTMLButtonElement).disabled).toBe(false);
+
+    vi.mocked(submitQualityCheck).mockResolvedValue({
+      qualityCaseCode: 'QC-ZD-100',
+      orderCode: 'ZD-100',
+      motherOrderCode: 'MD-100',
+      inspector: '质检员 周娜',
+      outcome: '不合格',
+      frozen: true,
+      ledgerCode: 'STK-1',
+      reworkOrderCode: '',
+      lines: [
+        { lineNo: 1, clause: '内壁刻字', verdict: '合格', reason: '' },
+        { lineNo: 2, clause: '镶一颗主石', verdict: '合格', reason: '' },
+        { lineNo: 3, clause: '镜面抛光', verdict: '不合格', reason: '镜面有划痕' },
+      ],
+    });
+    await wrapper.get('[aria-label="提交质检"]').trigger('click');
+    await flushPromises();
+
+    const payload = vi.mocked(submitQualityCheck).mock.calls[0][0];
+    expect(payload).not.toHaveProperty('inspector');
+    expect(payload.lines).toHaveLength(3);
+    expect(wrapper.text()).toContain('质检员 周娜');
+    expect(wrapper.text()).toContain('QC-ZD-100');
+    expect(wrapper.text()).toContain('半成品已转入冻结');
+
+    vi.mocked(openQualityRework).mockResolvedValue({
+      reworkOrderCode: 'FG-ZD-100',
+      qualityCaseCode: 'QC-ZD-100',
+      orderCode: 'ZD-100',
+      motherOrderCode: 'MD-100',
+      ledgerCode: 'STK-2',
+      fromStockStatus: 'FROZEN',
+      toStockStatus: 'REWORK',
+    });
+    await wrapper.get('[aria-label="开返工"]').trigger('click');
+    await flushPromises();
+
+    expect(openQualityRework).toHaveBeenCalledWith('JG|work_order|ZD-100');
+    expect(wrapper.text()).toContain('FG-ZD-100');
+    expect(wrapper.text()).toContain('MD-100 / ZD-100');
+    expect(wrapper.text()).toContain('库存已从冻结转入返工');
   });
 });

@@ -31,6 +31,8 @@ zhubao:
     repository: ${ZHUBAO_LABEL_TEMPLATE_REPOSITORY:jdbc}
   business-document:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
+  finance:
+    repository: ${ZHUBAO_FINANCE_REPOSITORY:jdbc}
   gateway:
     repository: ${ZHUBAO_GATEWAY_REPOSITORY:jdbc}
     demo-device-key: ${ZHUBAO_GATEWAY_DEMO_DEVICE_KEY:zhubao-device-demo}

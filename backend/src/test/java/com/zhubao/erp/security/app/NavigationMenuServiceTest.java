@@ -37,4 +37,17 @@ class NavigationMenuServiceTest {
                     assertThat(item.buttonCodes()).contains("AUTH_ACCOUNT_MANAGE");
                 });
     }
+
+    @Test
+    void showsFinanceMenuOnlyToFinanceAndManagers() {
+        assertThat(service.menuCodesFor(RoleCode.FINANCE_STATISTICIAN))
+                .contains("dashboard", "approvals", "finance")
+                .doesNotContain("production", "quality");
+        assertThat(service.menuTreeFor(RoleCode.ADMIN))
+                .anySatisfy(item -> {
+                    assertThat(item.code()).isEqualTo("finance");
+                    assertThat(item.buttonCodes()).contains("FINANCE_BILLING_POST", "FINANCE_PAYROLL");
+                });
+        assertThat(service.menuCodesFor(RoleCode.OPERATOR)).doesNotContain("finance");
+    }
 }

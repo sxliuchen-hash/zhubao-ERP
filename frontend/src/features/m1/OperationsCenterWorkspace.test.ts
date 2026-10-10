@@ -7,6 +7,11 @@ describe('OperationsCenterWorkspace', () => {
     const wrapper = mount(OperationsCenterWorkspace);
 
     expect(wrapper.text()).toContain('运维中心');
+    expect(wrapper.text()).toContain('硬件在线');
+    expect(wrapper.text()).toContain('拆包台摄像头');
+    expect(wrapper.text()).toContain('存储占用');
+    expect(wrapper.text()).toContain('附件存储');
+    expect(wrapper.text()).toContain('磁盘占用');
     expect(wrapper.text()).toContain('M3.62 运维告警汇总');
     expect(wrapper.text()).toContain('PWA 静态资源');
     expect(wrapper.text()).toContain('腾讯云 COS 备份');

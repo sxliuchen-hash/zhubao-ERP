@@ -11,6 +11,9 @@ import {
   confirmInbound,
   type InboundConfirmationResult,
 } from '../../services/businessOperationApi';
+import { fetchCaptures, type DocumentCapture } from '../../services/documentCaptureApi';
+import { fetchMotherOrder, type MobileIntakeResult } from '../../services/mobileIntakeApi';
+import MotherSplitPanel from './MotherSplitPanel.vue';
 
 const emptyInbound = (): InboundWorkspaceModel => ({
   checkpoints: [],
@@ -24,6 +27,12 @@ const confirmingInbound = ref(false);
 const confirmationResult = ref<InboundConfirmationResult | null>(null);
 const confirmationError = ref('');
 const selectedOrderCode = ref('');
+const processingRequirement = ref('');
+const dueDate = ref('');
+const captures = ref<DocumentCapture[]>([]);
+const motherDetail = ref<MobileIntakeResult | null>(null);
+const structuredCode = ref('');
+const structuredError = ref('');
 const { keyword, filtered: filteredOrders } = useDeskFilter(
   () => workspace.value.orders,
   (order) => `${order.code} ${order.customer} ${order.material} ${order.courierNo} ${order.goodsName} ${order.status}`,
@@ -59,6 +68,7 @@ async function loadInboundWorkspace() {
     if (!workspace.value.orders.some((order) => order.code === selectedOrderCode.value)) {
       selectedOrderCode.value = activeOrder.value?.code ?? '';
     }
+    await loadOrderExtras(selectedOrderCode.value);
   }
 }
 
@@ -75,15 +85,44 @@ function statusTone(status: string): Tone {
   return 'green';
 }
 
+async function loadOrderExtras(code: string) {
+  captures.value = [];
+  motherDetail.value = null;
+  if (!code) {
+    return;
+  }
+  try {
+    motherDetail.value = await fetchMotherOrder(code);
+    processingRequirement.value = motherDetail.value.processingRequirement;
+    dueDate.value = motherDetail.value.dueDate;
+  } catch {
+    motherDetail.value = null;
+  }
+  try {
+    captures.value = await fetchCaptures(code);
+  } catch {
+    captures.value = [];
+  }
+}
+
 async function confirmActiveInbound() {
   if (!activeOrder.value) return;
+  if (!processingRequirement.value.trim() || !dueDate.value.trim()) {
+    confirmationError.value = '加工要求和完成期限不能为空';
+    confirmationResult.value = null;
+    return;
+  }
 
   confirmingInbound.value = true;
   confirmationResult.value = null;
   confirmationError.value = '';
 
   try {
-    confirmationResult.value = await confirmInbound(activeOrder.value);
+    confirmationResult.value = await confirmInbound(activeOrder.value, {
+      processingRequirement: processingRequirement.value,
+      dueDate: dueDate.value,
+      customerName: activeOrder.value.customer,
+    });
     await loadInboundWorkspace();
   } catch (error) {
     confirmationError.value = error instanceof Error ? error.message : '确认入库失败';
@@ -92,10 +131,30 @@ async function confirmActiveInbound() {
   }
 }
 
+async function openStructuredMother() {
+  structuredError.value = '';
+  const code = structuredCode.value.trim();
+  if (!code) {
+    structuredError.value = '请填写母单号';
+    return;
+  }
+  try {
+    motherDetail.value = await fetchMotherOrder(code);
+    processingRequirement.value = motherDetail.value.processingRequirement;
+    dueDate.value = motherDetail.value.dueDate;
+  } catch (error) {
+    motherDetail.value = null;
+    structuredError.value = error instanceof Error ? error.message : '母单不存在';
+  }
+}
+
 function selectInboundOrder(code: string) {
   selectedOrderCode.value = code;
   confirmationResult.value = null;
   confirmationError.value = '';
+  processingRequirement.value = '';
+  dueDate.value = '';
+  void loadOrderExtras(code);
 }
 </script>
 
@@ -196,7 +255,21 @@ function selectInboundOrder(code: string) {
             <dd>{{ activeOrder.remark }}</dd>
             <dt>风险</dt>
             <dd>{{ activeRisk?.title ?? '无阻断' }}</dd>
+            <template v-if="motherDetail">
+              <dt>加工要求</dt>
+              <dd>{{ motherDetail.processingRequirement }}</dd>
+              <dt>期限</dt>
+              <dd>{{ motherDetail.dueDate }}</dd>
+            </template>
           </dl>
+          <label class="field">
+            <span>加工要求</span>
+            <textarea v-model="processingRequirement" aria-label="加工要求" />
+          </label>
+          <label class="field">
+            <span>完成期限</span>
+            <input v-model="dueDate" type="date" aria-label="完成期限" />
+          </label>
           <div class="detail-actions three-actions">
             <button class="primary-button" type="button" :disabled="confirmingInbound" @click="confirmActiveInbound">
               {{ confirmingInbound ? '正在入账' : '确认入库' }}
@@ -212,6 +285,13 @@ function selectInboundOrder(code: string) {
             <span>{{ confirmationError }}</span>
             <small>请确认后端 API 已启动，并检查数量、重量和库存维度。</small>
           </div>
+          <label class="field">
+            <span>打开母单号</span>
+            <input v-model="structuredCode" aria-label="打开母单号" placeholder="如 MD-20261008-001" />
+          </label>
+          <button class="table-action" type="button" @click="openStructuredMother">打开母单</button>
+          <p v-if="structuredError" class="operation-feedback danger">{{ structuredError }}</p>
+          <MotherSplitPanel v-if="motherDetail" :mother-order-code="motherDetail.motherOrderCode" />
         </section>
       </aside>
 
@@ -222,6 +302,19 @@ function selectInboundOrder(code: string) {
           </div>
         </div>
         <div class="evidence-health compact-evidence-health">
+          <article>
+            <div>
+              <strong>拆包视频</strong>
+              <span v-if="captures.length === 0">待补</span>
+              <span v-else>已关联 {{ captures.length }} 个文件</span>
+            </div>
+          </article>
+          <article v-for="item in captures" :key="item.code">
+            <div>
+              <strong>{{ item.fileName }}</strong>
+              <a :href="item.previewUrl" target="_blank" rel="noopener">打开</a>
+            </div>
+          </article>
           <article v-for="item in workspace.checkpoints" :key="item.label">
             <div>
               <strong>{{ item.label }}</strong>

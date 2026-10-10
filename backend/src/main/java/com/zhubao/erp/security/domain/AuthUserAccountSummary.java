@@ -18,9 +18,11 @@ public record AuthUserAccountSummary(
         boolean passwordChangeRequired,
         int failedLoginCount,
         String lockedUntil,
-        boolean locked
+        boolean locked,
+        List<String> allowedProcesses
 ) {
     public AuthUserAccountSummary {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
+        allowedProcesses = allowedProcesses == null ? List.of() : List.copyOf(allowedProcesses);
     }
 }

@@ -21,8 +21,18 @@ public enum PermissionCode {
     CUSTOMER_AUTHORIZATION_MANAGE("客户授权管理"),
     APPROVAL_DECISION("审批任务决策"),
     DOCUMENT_ATTACHMENT_UPLOAD("证据附件上传"),
+    DOCUMENT_CONTENT_MANAGE("存储内容管理"),
+    DOCUMENT_CAPTURE("手机采集"),
     VIDEO_TASK_OPERATE("视频任务操作"),
-    LABEL_PRINT("标签打印");
+    LABEL_PRINT("标签打印"),
+    BUSINESS_MOTHER_SPLIT("母单拆子单"),
+    FINANCE_PRICE_MANAGE("客户工价维护"),
+    FINANCE_BILLING_POST("加工费入账"),
+    FINANCE_RECEIPT("收款登记"),
+    FINANCE_PAYROLL("工资核算"),
+    FINANCE_CONSUMABLE("消耗品管理"),
+    FINANCE_ASSET("固定资产"),
+    FINANCE_PAYABLE("应付与付款");
 
     private final String label;
 

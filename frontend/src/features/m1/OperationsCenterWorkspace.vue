@@ -26,6 +26,10 @@ const activeAlert = computed(
   () => snapshot.value.alerts.find((alert) => alert.tone === 'red' || alert.tone === 'amber') ?? snapshot.value.alerts[0],
 );
 
+const hardwareNodes = computed(() => snapshot.value.hardwareNodes ?? []);
+const storageVolumes = computed(() => snapshot.value.storageVolumes ?? []);
+const onlineHardwareCount = computed(() => hardwareNodes.value.filter((node) => node.status === '在线').length);
+
 const heroStats = computed(() => [
   {
     label: '服务',
@@ -102,7 +106,7 @@ function errorTone(error: ErrorSummary): Tone {
         <div class="operations-title-row">
           <div>
             <h2>运维中心</h2>
-            <p>集中查看日志、服务器运行指标、报错汇总、数据库备份情况，以及数据库、前端、后端和软硬件联动的运行状态。</p>
+            <p>查看硬件是否在线、磁盘和附件目录占用、服务状态、日志、报错和数据库备份。</p>
           </div>
           <button class="secondary-button" type="button" :disabled="loading" @click="loadOperationsCenter">
             {{ loading ? '刷新中' : '刷新状态' }}
@@ -133,6 +137,63 @@ function errorTone(error: ErrorSummary): Tone {
           <dt>动作</dt>
           <dd>{{ activeAlert?.nextAction ?? activeError.nextAction }}</dd>
         </dl>
+      </aside>
+    </section>
+
+    <section class="operations-grid" aria-label="硬件在线和存储占用">
+      <div class="operations-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">HARDWARE</span>
+            <h2>硬件在线</h2>
+          </div>
+          <StatusBadge
+            :label="hardwareNodes.length ? `${onlineHardwareCount} / ${hardwareNodes.length} 在线` : '未接入'"
+            :tone="hardwareNodes.length && onlineHardwareCount === hardwareNodes.length ? 'green' : 'amber'"
+          />
+        </div>
+        <p v-if="hardwareNodes.length === 0" class="empty-hint">还没有接入现场设备或网关设备。</p>
+        <div v-else class="service-status-grid">
+          <article v-for="node in hardwareNodes" :key="node.code" :class="`tone-${node.tone}`">
+            <div>
+              <strong>{{ node.name }}</strong>
+              <span>{{ node.code }} · {{ node.scene }}</span>
+            </div>
+            <StatusBadge :label="node.status" :tone="node.tone" />
+            <small>{{ node.protocol }}。{{ node.detail }}</small>
+            <em>{{ node.checkedAt }}</em>
+          </article>
+        </div>
+      </div>
+
+      <aside class="operations-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">STORAGE</span>
+            <h2>存储占用</h2>
+          </div>
+        </div>
+        <div class="backup-status-list">
+          <article v-for="volume in storageVolumes" :key="volume.code" :class="`tone-${volume.tone}`">
+            <div>
+              <strong>{{ volume.name }}</strong>
+              <small>{{ volume.code }}</small>
+              <span>{{ volume.path }}</span>
+            </div>
+            <StatusBadge :label="`${volume.usedPercent}%`" :tone="volume.tone" />
+            <dl>
+              <dt>已用</dt>
+              <dd>{{ volume.used }}</dd>
+              <dt>容量</dt>
+              <dd>{{ volume.capacity }}</dd>
+              <dt>说明</dt>
+              <dd>{{ volume.detail }}</dd>
+            </dl>
+            <div class="storage-meter" aria-hidden="true">
+              <span :style="{ width: `${Math.min(volume.usedPercent, 100)}%` }" />
+            </div>
+          </article>
+        </div>
       </aside>
     </section>
 

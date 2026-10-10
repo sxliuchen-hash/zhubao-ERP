@@ -129,6 +129,8 @@ describe('operationsCenterApi', () => {
     expect(snapshot.restoreDrillRecords[0].checks[0].tone).toBe('green');
     expect(snapshot.alerts[0].code).toBe('OPS-ALERT-BACKUP-DB-BACKUP-POC');
     expect(snapshot.alerts[0].tone).toBe('amber');
+    expect(snapshot.hardwareNodes).toEqual([]);
+    expect(snapshot.storageVolumes).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith('/api/operations/center');
   });
 });

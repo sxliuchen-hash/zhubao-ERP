@@ -99,7 +99,12 @@ public class RegisterImportPostingPlanService {
         put(mapped, "operator", valueOrDefault(fields.get("operator"), batch.confirmedBy()));
         put(mapped, "evidenceCode", fields.get("evidenceCode"));
         put(mapped, "remark", fields.get("remark"));
+        put(mapped, "processingRequirement", fields.get("processingRequirement"));
+        put(mapped, "dueDate", fields.get("dueDate"));
+        put(mapped, "customerName", fields.get("customerName"));
         require(missing, mapped, "motherOrderCode", "缺少系统母单号，不能确认客户来料入库");
+        require(missing, mapped, "processingRequirement", "缺少加工要求，不能确认客户来料入库");
+        require(missing, mapped, "dueDate", "缺少完成期限，不能确认客户来料入库");
         require(missing, mapped, "customerId", "缺少客户 ID，不能建立客户所有库存维度");
         require(missing, mapped, "materialCode", "缺少物料编码，不能写库存台账");
         require(missing, mapped, "quantity", "缺少入库数量，不能写库存台账");

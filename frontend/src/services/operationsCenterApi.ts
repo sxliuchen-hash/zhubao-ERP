@@ -1,9 +1,11 @@
 import type {
+  HardwarePresence,
   OperationsCenterSnapshot,
   OperationsServiceStatus,
   OperationAlert,
   RestoreDrillCheck,
   RestoreDrillRecord,
+  StorageVolume,
 } from '../data/operationsCenterData';
 import type { Tone } from '../data/m1PrototypeData';
 import { apiGet } from './apiClient';
@@ -14,10 +16,12 @@ type RestoreDrillRecordDto = Omit<RestoreDrillRecord, 'tone' | 'checks'> & {
   tone: string;
   checks: Array<Omit<RestoreDrillCheck, 'tone'> & { tone: string }>;
 };
-type OperationsCenterSnapshotDto = Omit<OperationsCenterSnapshot, 'services' | 'restoreDrillRecords' | 'alerts'> & {
+type OperationsCenterSnapshotDto = Omit<OperationsCenterSnapshot, 'services' | 'restoreDrillRecords' | 'alerts' | 'hardwareNodes' | 'storageVolumes'> & {
   services: OperationsServiceStatusDto[];
   restoreDrillRecords?: RestoreDrillRecordDto[];
   alerts?: OperationAlertDto[];
+  hardwareNodes?: Array<Omit<HardwarePresence, 'tone'> & { tone: string }>;
+  storageVolumes?: Array<Omit<StorageVolume, 'tone'> & { tone: string }>;
 };
 
 export async function fetchOperationsCenterSnapshot(): Promise<OperationsCenterSnapshot> {
@@ -39,6 +43,8 @@ export async function fetchOperationsCenterSnapshot(): Promise<OperationsCenterS
     })),
     alerts: (snapshot.alerts ?? []).map((alert) => ({ ...alert, tone: mapTone(alert.tone) })),
     checklist: snapshot.checklist.map((item) => ({ ...item, tone: mapTone(item.tone) })),
+    hardwareNodes: (snapshot.hardwareNodes ?? []).map((node) => ({ ...node, tone: mapTone(node.tone) })),
+    storageVolumes: (snapshot.storageVolumes ?? []).map((volume) => ({ ...volume, tone: mapTone(volume.tone) })),
   };
 }
 

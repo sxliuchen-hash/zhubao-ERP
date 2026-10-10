@@ -1,6 +1,7 @@
 package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.approval.app.ApprovalService;
+import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
@@ -507,6 +508,9 @@ public class AuthUserAccountManagementService {
         Instant lockedUntil = existing == null || passwordProvided ? null : existing.lockedUntil();
         boolean passwordChangeRequired = passwordProvided ? !command.demoAccount() : existing.passwordChangeRequired();
         boolean temporaryPasswordConsumed = passwordProvided ? false : existing.temporaryPasswordConsumed();
+        List<String> allowedProcesses = command.allowedProcesses() == null
+                ? (existing == null ? List.of() : existing.allowedProcesses())
+                : WorkshopProcesses.bind(command.allowedProcesses());
         AuthUserAccount saved = accountRepository.save(new AuthUserAccount(
                 username,
                 passwordHash,
@@ -520,7 +524,8 @@ public class AuthUserAccountManagementService {
                 lockedUntil,
                 customerScope,
                 passwordChangeRequired,
-                temporaryPasswordConsumed
+                temporaryPasswordConsumed,
+                allowedProcesses
         ));
         syncCustomerAuthorizations(saved, operatorContext);
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
@@ -636,7 +641,8 @@ public class AuthUserAccountManagementService {
                 account.passwordChangeRequired(),
                 account.failedLoginCount(),
                 account.lockedUntil() == null ? "" : DISPLAY_TIME.format(account.lockedUntil()),
-                locked
+                locked,
+                account.allowedProcesses()
         );
     }
 

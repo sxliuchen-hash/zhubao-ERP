@@ -98,19 +98,27 @@ public class InMemoryLabelTemplateRepository implements LabelTemplateRepository 
         create(new LabelTemplate(
                 null, "MOTHER-DEFAULT", "母单默认模板", LabelType.MOTHER, "珠宝来料加工系统",
                 List.of(
-                        new LabelTemplateField("客户", "customer", 1),
-                        new LabelTemplateField("物料", "goodsName", 2),
-                        new LabelTemplateField("数量", "quantity", 3),
-                        new LabelTemplateField("重量", "weight", 4),
-                        new LabelTemplateField("收货日", "inboundDate", 5)),
+                        new LabelTemplateField("验证码", "verificationCode", 1),
+                        new LabelTemplateField("客户", "customer", 2),
+                        new LabelTemplateField("加工要求", "processingRequirement", 3),
+                        new LabelTemplateField("期限", "dueDate", 4),
+                        new LabelTemplateField("单号", "code", 5),
+                        new LabelTemplateField("物料", "goodsName", 6),
+                        new LabelTemplateField("数量", "quantity", 7),
+                        new LabelTemplateField("重量", "weight", 8)),
                 "express", "receiver", true, true, mediumLabel,
                 "一期评审 seed", "system", "2026-07-09T10:00:00"));
         create(new LabelTemplate(
                 null, "WORK_ORDER-DEFAULT", "子工单默认模板", LabelType.WORK_ORDER, "珠宝来料加工系统",
                 List.of(
-                        new LabelTemplateField("客户", "customer", 1),
-                        new LabelTemplateField("物料", "goodsName", 2),
-                        new LabelTemplateField("数量", "quantity", 3)),
+                        new LabelTemplateField("验证码", "verificationCode", 1),
+                        new LabelTemplateField("客户", "customer", 2),
+                        new LabelTemplateField("加工要求", "processingRequirement", 3),
+                        new LabelTemplateField("期限", "dueDate", 4),
+                        new LabelTemplateField("单号", "code", 5),
+                        new LabelTemplateField("物料", "goodsName", 6),
+                        new LabelTemplateField("数量", "quantity", 7),
+                        new LabelTemplateField("重量", "weight", 8)),
                 "", "", true, true, mediumLabel,
                 "一期评审 seed", "system", "2026-07-09T10:00:00"));
         create(new LabelTemplate(

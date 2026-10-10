@@ -6,7 +6,10 @@ import com.zhubao.erp.label.app.LabelTemplateService;
 import com.zhubao.erp.label.domain.GenerateLabelCommand;
 import com.zhubao.erp.label.domain.LabelPayload;
 import com.zhubao.erp.label.domain.LabelTemplate;
+import com.zhubao.erp.label.domain.ReprintLabelCommand;
 import com.zhubao.erp.label.domain.SaveLabelTemplateCommand;
+import com.zhubao.erp.security.app.OperatorContextResolver;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,10 +36,16 @@ public class LabelController {
 
     private final LabelService labelService;
     private final LabelTemplateService labelTemplateService;
+    private final OperatorContextResolver operatorContextResolver;
 
-    public LabelController(LabelService labelService, LabelTemplateService labelTemplateService) {
+    public LabelController(
+            LabelService labelService,
+            LabelTemplateService labelTemplateService,
+            OperatorContextResolver operatorContextResolver
+    ) {
         this.labelService = labelService;
         this.labelTemplateService = labelTemplateService;
+        this.operatorContextResolver = operatorContextResolver;
     }
 
     /** 通用标签生成。 */
@@ -52,6 +61,30 @@ public class LabelController {
             @RequestParam(required = false) String templateCode
     ) {
         return ApiResponse.ok(labelService.generateMotherLabel(code, templateCode));
+    }
+
+    /** 按子单号生成贴纸，可指定模板编码。 */
+    @GetMapping("/work-orders/{code}")
+    public ApiResponse<LabelPayload> workOrderLabel(
+            @PathVariable String code,
+            @RequestParam(required = false) String templateCode
+    ) {
+        return ApiResponse.ok(labelService.generateWorkOrderLabel(code, templateCode));
+    }
+
+    /** 补打母单或子单贴纸，并写入补打日志。 */
+    @PostMapping("/reprints")
+    public ApiResponse<LabelPayload> reprint(
+            @Valid @RequestBody ReprintLabelCommand command,
+            HttpServletRequest request
+    ) {
+        String operator = operatorContextResolver.resolve(request).operator();
+        return ApiResponse.ok(labelService.reprint(new ReprintLabelCommand(
+                command.type(),
+                command.primaryCode(),
+                command.reason(),
+                operator
+        )));
     }
 
     /** 查询全部标签模板。 */

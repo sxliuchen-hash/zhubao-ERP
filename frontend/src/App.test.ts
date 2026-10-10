@@ -6,14 +6,28 @@ import { authSessionChangedEvent, fetchAuthSession, type AuthSession } from './s
 vi.mock('./services/authApi', () => ({
   authSessionChangedEvent: 'zhubao-auth-session-changed',
   fetchAuthSession: vi.fn(),
+  fetchAuthDemoUsers: vi.fn().mockResolvedValue(['admin']),
+  loginAuthSession: vi.fn(),
+  logoutAuthSession: vi.fn().mockResolvedValue(undefined),
+  changeOwnPassword: vi.fn(),
 }));
 
 describe('App', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(fetchAuthSession).mockResolvedValue(null);
   });
 
+  it('shows the login page before a session exists', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.find('.login-card').text()).toContain('登录');
+    expect(wrapper.find('.ops-nav').exists()).toBe(false);
+  });
+
   it('starts on the M1 business workbench and exposes core modules', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
     const wrapper = mount(App);
     await flushPromises();
 
@@ -67,9 +81,51 @@ describe('App', () => {
     }));
     await flushPromises();
 
-    expect(wrapper.findAll('.nav-button')).toHaveLength(13);
+    expect(wrapper.find('.login-card').text()).toContain('登录');
+    expect(wrapper.findAll('.nav-button')).toHaveLength(0);
+  });
+
+  it('shows an icon on every module and can collapse the sidebar', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.findAll('.nav-button .nav-icon')).toHaveLength(15);
+    expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('true');
+    expect(wrapper.get('.app-shell').classes()).not.toContain('is-collapsed');
+
+    await wrapper.get('.sidebar-toggle').trigger('click');
+
+    expect(wrapper.get('.app-shell').classes()).toContain('is-collapsed');
+    expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('false');
+    expect(wrapper.get('.sidebar-toggle').attributes('aria-label')).toBe('展开侧边栏');
+    expect(localStorage.getItem('zhubao-sidebar-collapsed')).toBe('1');
+    expect(wrapper.findAll('.nav-button .nav-icon')).toHaveLength(15);
+
+    await wrapper.get('.sidebar-toggle').trigger('click');
+
+    expect(wrapper.get('.app-shell').classes()).not.toContain('is-collapsed');
+    expect(localStorage.getItem('zhubao-sidebar-collapsed')).toBe('0');
   });
 });
+
+const allMenuCodes = [
+  'dashboard',
+  'inbound',
+  'production',
+  'progress',
+  'quality',
+  'inventory',
+  'finance',
+  'approvals',
+  'label',
+  'sample',
+  'documents',
+  'hardware',
+  'configuration',
+  'operations',
+  'mobile',
+];
 
 function sessionWithMenus(menuCodes: string[]): AuthSession {
   return {

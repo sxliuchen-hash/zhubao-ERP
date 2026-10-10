@@ -47,6 +47,16 @@ public class ConfigurationBaselineService {
 
     private final List<ProcessTemplate> processTemplates = List.of(
             new ProcessTemplate(
+                    "PROC-STATION-STD",
+                    "现场三道工序",
+                    "来料加工子单 / 不拆母单",
+                    List.of("雕刻", "镶嵌", "抛光"),
+                    "按单上记下的工序顺序交付。上一道没交，下一道不能交",
+                    "账号绑定可做的工序。扫码后只提交绑定的那一道",
+                    "中间工序留在在制，最后一道完成再转入半成品",
+                    "客户、加工要求、期限、工序、操作人"
+            ),
+            new ProcessTemplate(
                     "PROC-RING-STD",
                     "戒托标准加工",
                     "18K 金戒托 / PT950 吊坠坯",

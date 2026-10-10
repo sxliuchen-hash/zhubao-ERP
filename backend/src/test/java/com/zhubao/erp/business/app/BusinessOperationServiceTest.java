@@ -69,7 +69,10 @@ class BusinessOperationServiceTest {
                 bd("486.250"),
                 "库管员 何琳",
                 "SF1048329001",
-                "拆包称重确认"
+                "拆包称重确认",
+                "戒托抛光",
+                "2026-07-20",
+                "恒信珠宝"
         ));
 
         assertThat(result.motherOrderCode()).isEqualTo("MD-20260706-001");
@@ -80,7 +83,7 @@ class BusinessOperationServiceTest {
         StockLedgerEntry ledger = repository.findAllLedgers().get(0);
         assertThat(ledger.documentType()).isEqualTo("inbound_confirm");
         assertThat(ledger.documentCode()).isEqualTo("MD-20260706-001");
-        assertThat(ledger.remark()).contains("库管员 何琳", "2026-07-06", "顺丰", "张先生", "拆箱签字", "戒托来料", "数量单位", "件", "来源登记表", "签收入库登记表", "原表行号", "4", "纸质序号", "1", "SF1048329001", "拆包称重确认");
+        assertThat(ledger.remark()).contains("库管员 何琳", "2026-07-06", "顺丰", "张先生", "拆箱签字", "戒托来料", "数量单位", "件", "来源登记表", "签收入库登记表", "原表行号", "4", "纸质序号", "1", "SF1048329001", "拆包称重确认", "戒托抛光", "2026-07-20");
         assertThat(ledger.to().ownerType()).isEqualTo(OwnerType.CUSTOMER);
         assertThat(ledger.to().ownerCustomerId()).isEqualTo(1001L);
         assertThat(ledger.to().customerId()).isEqualTo(1001L);
@@ -124,7 +127,10 @@ class BusinessOperationServiceTest {
                 bd("18.500"),
                 "库管员 何琳",
                 "ATT-IN-DOC-001",
-                "结构化母单测试"
+                "结构化母单测试",
+                "戒托抛光",
+                "2026-07-20",
+                "恒信珠宝"
         ));
 
         assertThat(documentRepository.findMotherOrderByCode("MD-DOC-20260708-001"))
@@ -136,6 +142,9 @@ class BusinessOperationServiceTest {
                     assertThat(record.weight()).isEqualByComparingTo("18.500");
                     assertThat(record.sourceRegisterType()).isEqualTo("签收入库登记表");
                     assertThat(record.sourceRegisterLineNo()).isEqualTo(5);
+                    assertThat(record.processingRequirement()).isEqualTo("戒托抛光");
+                    assertThat(record.dueDate()).isEqualTo("2026-07-20");
+                    assertThat(record.customerName()).isEqualTo("恒信珠宝");
                 });
         assertThat(stockRepository.findAllLedgers()).hasSize(1);
 
@@ -160,7 +169,10 @@ class BusinessOperationServiceTest {
                 bd("18.500"),
                 "库管员 何琳",
                 "ATT-IN-DOC-001",
-                "重复结构化母单测试"
+                "重复结构化母单测试",
+                "戒托抛光",
+                "2026-07-20",
+                "恒信珠宝"
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("结构化母单已存在");
         assertThat(stockRepository.findAllLedgers()).hasSize(1);

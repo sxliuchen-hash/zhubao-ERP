@@ -1,5 +1,6 @@
 package com.zhubao.erp.security.infra;
 
+import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.DataScope;
@@ -43,8 +44,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 insert into auth_user_account (
                     username, password_hash, operator, role_code, data_scope, enabled, demo_account,
                     password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
-                    temporary_password_consumed
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    temporary_password_consumed, allowed_processes
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -61,6 +62,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setString(11, serializeCustomerScope(account.customerScope()));
             statement.setBoolean(12, account.passwordChangeRequired());
             statement.setBoolean(13, account.temporaryPasswordConsumed());
+            statement.setString(14, WorkshopProcesses.join(account.allowedProcesses()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -82,7 +84,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                        locked_until = ?,
                        customer_scope = ?,
                        password_change_required = ?,
-                       temporary_password_consumed = ?
+                       temporary_password_consumed = ?,
+                       allowed_processes = ?
                  where username = ?
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -99,7 +102,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setString(10, serializeCustomerScope(account.customerScope()));
             statement.setBoolean(11, account.passwordChangeRequired());
             statement.setBoolean(12, account.temporaryPasswordConsumed());
-            statement.setString(13, normalize(account.username()));
+            statement.setString(13, WorkshopProcesses.join(account.allowedProcesses()));
+            statement.setString(14, normalize(account.username()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -112,7 +116,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
                        password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
-                       temporary_password_consumed
+                       temporary_password_consumed, allowed_processes
                   from auth_user_account
                  order by username
                 """;
@@ -134,7 +138,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
                        password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
-                       temporary_password_consumed
+                       temporary_password_consumed, allowed_processes
                   from auth_user_account
                  where username = ?
                 """;
@@ -277,7 +281,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 readInstant(rs, "locked_until"),
                 parseCustomerScope(rs.getString("customer_scope")),
                 rs.getBoolean("password_change_required"),
-                rs.getBoolean("temporary_password_consumed")
+                rs.getBoolean("temporary_password_consumed"),
+                WorkshopProcesses.bind(WorkshopProcesses.split(rs.getString("allowed_processes")))
         );
     }
 

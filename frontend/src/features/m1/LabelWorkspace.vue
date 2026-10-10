@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import QrImage from '../../components/QrImage.vue';
 import {
   fetchLabelTemplates,
   fetchMotherLabel,
+  fetchWorkOrderLabel,
   generateLabel,
   labelTypeOptions,
   motherFieldSourceOptions,
+  reprintLabel,
   saveLabelTemplate,
   type LabelField,
   type LabelPayload,
@@ -14,10 +15,11 @@ import {
   type LabelTemplateField,
   type LabelType,
 } from '../../services/labelApi';
+import { parseScanCode } from '../scan/scanCode';
+import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
 
-// 标签打印工作台：把样张里的"贴周转盒/周转袋标签"变成系统真功能。
-// 支持用户自定义标签模板（字段、抬头、脚注、打印机设置）。
-// 设计原则与样张一致——标签只承载固定不变的信息，加工进度靠扫码实时查看。
+// 标签打印工作台。标签只印固定信息，进度靠扫码查看。
+// 前期只做黑白打印：预览和出纸都是白底黑字，按标签纸毫米尺寸单独打印。
 
 const defaultPrinter = { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 };
 
@@ -28,11 +30,14 @@ const sampleLabel: LabelPayload = {
   primaryCode: 'CC-20260709-001-JL',
   qrContent: 'JG|mother|CC-20260709-001-JL',
   fields: [
+    { name: '验证码', value: 'K7M2' },
     { name: '客户', value: '恒信珠宝' },
+    { name: '加工要求', value: '内壁刻字' },
+    { name: '期限', value: '2026-07-20' },
+    { name: '单号', value: 'CC-20260709-001-JL' },
     { name: '物料', value: '18K 金戒托' },
     { name: '数量', value: '320 件' },
     { name: '重量', value: '35.20 克' },
-    { name: '收货日', value: '2026-07-09' },
   ],
   footerLeft: '快递：顺丰 SF-IN-...001',
   footerRight: '收货人：何琴',
@@ -46,6 +51,10 @@ const preview = ref<LabelPayload>(sampleLabel);
 const feedback = ref('');
 const errorMessage = ref('');
 const submitting = ref(false);
+const stickerQuery = ref('');
+const stickerHint = ref('');
+const reprintReason = ref('');
+const loadedSticker = ref<{ type: LabelType; code: string } | null>(null);
 
 // 模板列表（连后端后加载）
 const templates = ref<LabelTemplate[]>([]);
@@ -76,9 +85,17 @@ const form = ref<{
 const motherOrderCode = ref('');
 const motherTemplateCode = ref('');
 
-const brandName = computed(() => preview.value.brandTitle || '珠宝来料加工系统');
-
-const hasFields = computed(() => preview.value.fields.length > 0);
+const labelMarkup = computed(() => buildLabelMarkup(preview.value));
+const sheetStyle = computed(() => ({
+  width: `${preview.value.printerSetting.widthMm * labelPreviewScale}mm`,
+  height: `${preview.value.printerSetting.heightMm * labelPreviewScale}mm`,
+}));
+const labelScaleStyle = computed(() => ({
+  transform: `scale(${labelPreviewScale})`,
+  transformOrigin: 'top left',
+  width: `${preview.value.printerSetting.widthMm}mm`,
+  height: `${preview.value.printerSetting.heightMm}mm`,
+}));
 
 // 当前类型可选模板
 const templatesForType = computed(() =>
@@ -87,12 +104,6 @@ const templatesForType = computed(() =>
 const motherTemplates = computed(() =>
   templates.value.filter((template) => template.labelType === 'MOTHER' && template.enabled),
 );
-
-// 打印区域尺寸（按打印机设置的毫米数）
-const labelStyle = computed(() => ({
-  width: `${preview.value.printerSetting.widthMm}mm`,
-  minHeight: `${preview.value.printerSetting.heightMm}mm`,
-}));
 
 function addField() {
   form.value.fields.push({ name: '', value: '' });
@@ -140,6 +151,92 @@ async function submitGenerate() {
   }
 }
 
+async function openFieldSticker() {
+  feedback.value = '';
+  errorMessage.value = '';
+  stickerHint.value = '';
+  const raw = stickerQuery.value.trim();
+  if (!raw) {
+    errorMessage.value = '请填写母单号、子单号或贴纸二维码';
+    return;
+  }
+  let kind: 'MOTHER' | 'WORK_ORDER' | '' = '';
+  let code = raw;
+  if (raw.startsWith('JG|')) {
+    try {
+      const parsed = parseScanCode(raw);
+      if (parsed.objectType === 'MOTHER_ORDER') kind = 'MOTHER';
+      else if (parsed.objectType === 'WORK_ORDER') kind = 'WORK_ORDER';
+      else {
+        errorMessage.value = '这不是母单或子单贴纸';
+        return;
+      }
+      code = parsed.code;
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : '未识别的二维码内容';
+      return;
+    }
+  }
+  submitting.value = true;
+  try {
+    const payload = await loadStickerPayload(kind, code);
+    showSticker(payload, payload.type === 'WORK_ORDER' ? 'WORK_ORDER' : 'MOTHER');
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '贴纸生成失败';
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function loadStickerPayload(kind: 'MOTHER' | 'WORK_ORDER' | '', code: string): Promise<LabelPayload> {
+  if (kind === 'WORK_ORDER') return fetchWorkOrderLabel(code);
+  if (kind === 'MOTHER') return fetchMotherLabel(code);
+  try {
+    return await fetchMotherLabel(code);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!message.includes('未找到')) throw error;
+    return fetchWorkOrderLabel(code);
+  }
+}
+
+function showSticker(payload: LabelPayload, kind: 'MOTHER' | 'WORK_ORDER') {
+  preview.value = payload;
+  loadedSticker.value = { type: payload.type, code: payload.primaryCode };
+  const hasCode = payload.fields.some((field) => field.name === '验证码' && field.value.trim() !== '');
+  stickerHint.value = hasCode
+    ? (kind === 'WORK_ORDER' ? `已打开子单 ${payload.primaryCode}` : `已打开母单 ${payload.primaryCode}`)
+    : '这张单还没有验证码。不拆的母单要先在来料页选择不拆。';
+  feedback.value = `已从单据生成贴纸：${payload.primaryCode}`;
+}
+
+async function reprintSticker() {
+  feedback.value = '';
+  errorMessage.value = '';
+  if (!loadedSticker.value) {
+    errorMessage.value = '请先按单号打开现场贴纸';
+    return;
+  }
+  if (!reprintReason.value.trim()) {
+    errorMessage.value = '补打必须填写原因';
+    return;
+  }
+  submitting.value = true;
+  try {
+    const payload = await reprintLabel({
+      type: loadedSticker.value.type,
+      primaryCode: loadedSticker.value.code,
+      reason: reprintReason.value.trim(),
+    });
+    preview.value = payload;
+    feedback.value = `已记录补打：${payload.primaryCode}`;
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '补打失败';
+  } finally {
+    submitting.value = false;
+  }
+}
+
 async function loadMotherLabel() {
   feedback.value = '';
   errorMessage.value = '';
@@ -160,9 +257,7 @@ async function loadMotherLabel() {
 }
 
 function printLabel() {
-  if (typeof window !== 'undefined') {
-    window.print();
-  }
+  openLabelPrint(preview.value);
 }
 
 // ---- 模板管理 ----
@@ -303,14 +398,31 @@ onMounted(loadTemplates);
     <section class="label-intro">
       <h2>标签打印</h2>
       <p class="label-note">
-        把样张里的"贴周转盒 / 周转袋标签"变成系统真功能。标签<strong>只印固定不变的信息</strong>（编码、客户、物料、数量、重量、日期），
-        加工进度这类会变的信息不印在标签上，工人<strong>手机扫二维码</strong>就能看最新工序，省纸省事。
-        支持<strong>自定义标签模板与打印机设置</strong>。
+        现场贴纸印验证码、客户、加工要求、期限和单号。物料、数量、重量可以一起印。进度用手机扫二维码查看。
+        前期使用<strong>黑白打印</strong>，按标签纸尺寸单独出纸，不使用彩色。
       </p>
     </section>
 
     <div class="label-layout">
       <section class="label-forms">
+        <div class="form-card">
+          <h3>现场贴纸</h3>
+          <p class="hint">按母单号或子单号打开，字段从单据带出。也可以粘贴贴纸上的二维码内容。</p>
+          <label class="field">
+            <span>单号或二维码</span>
+            <input v-model="stickerQuery" type="text" aria-label="现场贴纸单号" placeholder="母单号、子单号或 JG|mother|单号" />
+          </label>
+          <button type="button" class="primary-button" aria-label="打开现场贴纸" :disabled="submitting" @click="openFieldSticker">
+            打开贴纸
+          </button>
+          <p v-if="stickerHint" class="hint">{{ stickerHint }}</p>
+          <label class="field">
+            <span>补打原因</span>
+            <input v-model="reprintReason" type="text" aria-label="补打原因" placeholder="如 贴纸丢失" />
+          </label>
+          <button type="button" class="table-action" :disabled="submitting" @click="reprintSticker">补打并记录</button>
+        </div>
+
         <div class="form-card">
           <h3>通用标签生成</h3>
           <label class="field">
@@ -391,8 +503,7 @@ onMounted(loadTemplates);
           <span>标签预览</span>
           <div class="toolbar-actions">
             <span class="printer-hint">
-              {{ preview.printerSetting.widthMm }}×{{ preview.printerSetting.heightMm }}mm ·
-              {{ preview.printerSetting.dpi }}dpi ·
+              {{ preview.printerSetting.widthMm }}×{{ preview.printerSetting.heightMm }}mm · 黑白 ·
               {{ preview.printerSetting.copies }} 份
               <template v-if="preview.printerSetting.printerName">· {{ preview.printerSetting.printerName }}</template>
             </span>
@@ -401,33 +512,13 @@ onMounted(loadTemplates);
         </div>
 
         <div class="label-print-area">
-          <div class="label-card" :style="labelStyle">
-            <div class="label-head">
-              <span class="brand">{{ brandName }}</span>
-              <span class="type">{{ preview.typeLabel }}</span>
-            </div>
-            <div class="label-body">
-              <div class="qr-box">
-                <QrImage :content="preview.qrContent" :size="120" />
-                <div class="qr-hint">扫码看实时进度</div>
-              </div>
-              <div class="info">
-                <div class="primary-code">{{ preview.primaryCode }}</div>
-                <div class="primary-code-hint">编码（全链路唯一，追溯入口）</div>
-                <dl v-if="hasFields" class="kv">
-                  <template v-for="field in preview.fields" :key="field.name">
-                    <dt>{{ field.name }}</dt>
-                    <dd>{{ field.value }}</dd>
-                  </template>
-                </dl>
-              </div>
-            </div>
-            <div class="label-foot">
-              <span>{{ preview.footerLeft }}</span>
-              <span>{{ preview.footerRight }}</span>
+          <component :is="'style'">{{ labelFaceCss }}</component>
+          <div class="label-mat">
+            <div class="label-sheet" :style="sheetStyle">
+              <div class="label-scale" :style="labelScaleStyle" v-html="labelMarkup"></div>
             </div>
           </div>
-          <p class="qr-content-line">二维码内容：{{ preview.qrContent }}</p>
+          <p class="qr-content-line">二维码内容：{{ preview.qrContent }}。打印时请关闭页眉页脚，并选择黑白标签机或激光机。</p>
         </div>
       </section>
     </div>
@@ -527,7 +618,7 @@ onMounted(loadTemplates);
           </label>
         </div>
 
-        <h5>打印机设置</h5>
+        <h5>打印机设置（黑白）</h5>
         <div class="editor-grid">
           <label class="field">
             <span>宽度(mm)</span>
@@ -542,8 +633,8 @@ onMounted(loadTemplates);
             <input v-model.number="templateForm.dpi" type="number" min="1" />
           </label>
           <label class="field">
-            <span>打印机名称（提示用）</span>
-            <input v-model="templateForm.printerName" type="text" placeholder="如 ZDesigner ZD888" />
+            <span>黑白打印机名称（提示用）</span>
+            <input v-model="templateForm.printerName" type="text" placeholder="如 黑白标签机" />
           </label>
           <label class="field">
             <span>份数</span>
@@ -710,86 +801,20 @@ onMounted(loadTemplates);
   color: #6b7684;
   font-weight: 400;
 }
-.label-card {
-  background: #fff;
-  border: 2px solid #1f2733;
+.label-mat {
+  background: #e6e8eb;
+  border: 1px solid #d5dbe2;
   border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  padding: 16px;
+  overflow: auto;
 }
-.label-head {
-  background: #1f2733;
-  color: #fff;
-  padding: 8px 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.label-sheet {
+  position: relative;
 }
-.label-head .brand {
-  font-size: 12px;
-  opacity: 0.85;
-}
-.label-head .type {
-  font-size: 12px;
-  background: #f4b740;
-  color: #1f2733;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: bold;
-}
-.label-body {
-  display: flex;
-  padding: 12px;
-  gap: 12px;
-}
-.qr-box {
-  width: 120px;
-  flex-shrink: 0;
-  text-align: center;
-}
-.qr-box .qr-hint {
-  font-size: 11px;
-  color: #6b7684;
-  margin-top: 4px;
-}
-.info {
-  flex: 1;
-}
-.primary-code {
-  font-size: 20px;
-  font-weight: bold;
-  letter-spacing: 0.5px;
-  color: #1f2733;
-  word-break: break-all;
-}
-.primary-code-hint {
-  font-size: 11px;
-  color: #6b7684;
-  margin-bottom: 8px;
-}
-.kv {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  row-gap: 5px;
-  font-size: 13px;
-  margin: 0;
-}
-.kv dt {
-  color: #6b7684;
-}
-.kv dd {
-  color: #1f2733;
-  font-weight: 600;
-  margin: 0;
-}
-.label-foot {
-  border-top: 1px dashed #c7ced6;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: #46505c;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+.label-scale {
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 .qr-content-line {
   font-size: 12px;
@@ -845,20 +870,27 @@ onMounted(loadTemplates);
   margin-top: 12px;
 }
 
-@media print {
-  .label-forms,
-  .preview-toolbar,
-  .label-intro,
-  .qr-content-line,
+@media (max-width: 900px) {
+  .label-desk,
+  .label-layout,
+  .label-layout > *,
+  .form-card,
   .template-manager {
-    display: none;
+    min-width: 0;
+    max-width: 100%;
   }
-  .label-layout {
-    grid-template-columns: 1fr;
+
+  .label-layout,
+  .field-row { grid-template-columns: minmax(0, 1fr); }
+
+  .preview-toolbar,
+  .manager-head,
+  .editor-actions,
+  .toolbar-actions {
+    flex-wrap: wrap;
+    align-items: flex-start;
   }
-  .label-card {
-    box-shadow: none;
-    page-break-inside: avoid;
-  }
+
+  .template-manager { overflow-x: auto; }
 }
 </style>

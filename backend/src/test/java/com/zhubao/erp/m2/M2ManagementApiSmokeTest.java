@@ -391,7 +391,10 @@ class M2ManagementApiSmokeTest {
         assertThat(quality.getBody()).contains("LOSS-20260706-009", "损耗阻断");
         assertThat(inventory.getBody()).contains("LEDGER-20260706-001", "视频证据");
         assertThat(mobile.getBody()).contains("DRAFT-QC-003", "离线草稿");
-        assertThat(summary.getBody()).contains("\"inboundOrders\":4", "\"activeWorkOrders\":5", "\"mobileTasks\":3");
+        assertThat(summary.getBody()).contains("\"activeWorkOrders\":5", "\"mobileTasks\":3");
+        // 手机收货写入的母单会并进工作台，同一 Spring 上下文里可能已经多出单据。
+        int inboundOrders = Integer.parseInt(summary.getBody().replaceAll(".*\"inboundOrders\":(\\d+).*", "$1"));
+        assertThat(inboundOrders).isGreaterThanOrEqualTo(4);
     }
 
     @Test
@@ -453,16 +456,19 @@ class M2ManagementApiSmokeTest {
 
     @Test
     void confirmsInboundThroughBusinessOperationApiAndWritesInventoryLedger() {
-        Map<String, Object> request = Map.of(
-                "motherOrderCode", "MD-SMOKE-20260706-001",
-                "customerId", 1001L,
-                "materialCode", "MAT-18K-RING",
-                "warehouseCode", "RAW-CUSTOMER",
-                "quantity", new BigDecimal("12"),
-                "weight", new BigDecimal("18.500"),
-                "operator", "库管员 何琳",
-                "evidenceCode", "SF-SMOKE-001",
-                "remark", "smoke test"
+        Map<String, Object> request = Map.ofEntries(
+                Map.entry("motherOrderCode", "MD-SMOKE-20260706-001"),
+                Map.entry("customerId", 1001L),
+                Map.entry("materialCode", "MAT-18K-RING"),
+                Map.entry("warehouseCode", "RAW-CUSTOMER"),
+                Map.entry("quantity", new BigDecimal("12")),
+                Map.entry("weight", new BigDecimal("18.500")),
+                Map.entry("operator", "库管员 何琳"),
+                Map.entry("evidenceCode", "SF-SMOKE-001"),
+                Map.entry("remark", "smoke test"),
+                Map.entry("processingRequirement", "戒托抛光"),
+                Map.entry("dueDate", "2026-07-20"),
+                Map.entry("customerName", "恒信珠宝")
         );
 
         ResponseEntity<String> confirmed = restTemplate.postForEntity(

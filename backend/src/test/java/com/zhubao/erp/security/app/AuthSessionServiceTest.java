@@ -154,7 +154,8 @@ class AuthSessionServiceTest {
     void exposesSortedDemoUsernames() {
         AuthSessionService service = service();
 
-        assertThat(service.demoUsernames()).containsExactly("admin", "leader", "operator", "qc", "warehouse");
+        assertThat(service.demoUsernames()).containsExactly(
+                "admin", "carve", "inlay", "leader", "operator", "polish", "qc", "warehouse");
     }
 
     @Test

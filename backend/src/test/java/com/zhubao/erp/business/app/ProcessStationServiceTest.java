@@ -1,0 +1,262 @@
+package com.zhubao.erp.business.app;
+
+import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.ProcessStationCard;
+import com.zhubao.erp.business.domain.ProcessStationReportResult;
+import com.zhubao.erp.business.domain.ProcessStationView;
+import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
+import com.zhubao.erp.business.domain.SplitMotherOrderLine;
+import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
+import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.domain.StockBalance;
+import com.zhubao.erp.inventory.domain.StockLedgerEntry;
+import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
+import com.zhubao.erp.scan.app.ScanCodeParser;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.RoleCode;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * 三个工序岗位扫码：只看绑定工序，按顺序交付，最后一道才转入半成品。
+ */
+class ProcessStationServiceTest {
+
+    private InMemoryStockLedgerRepository stockRepository;
+    private StockLedgerService stockLedgerService;
+    private InMemoryBusinessDocumentRepository documents;
+    private BusinessOperationService operations;
+    private MotherOrderSplitService splitService;
+    private ProcessStationService stationService;
+
+    @BeforeEach
+    void setUp() {
+        stockRepository = new InMemoryStockLedgerRepository();
+        stockLedgerService = new StockLedgerService(stockRepository);
+        documents = new InMemoryBusinessDocumentRepository();
+        operations = new BusinessOperationService(stockLedgerService, null, documents);
+        splitService = new MotherOrderSplitService(documents, stockLedgerService);
+        stationService = new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser());
+    }
+
+    @Test
+    void carvingAccountSeesOnlyItsProcessAndUnboundAccountCannotReport() {
+        String childCode = splitOneChild("MD-STATION-001");
+        String sticker = "JG|work_order|" + childCode;
+
+        ProcessStationView carving = stationService.lookup(sticker, account("雕刻工 林海", "雕刻"));
+
+        assertThat(carving.orderCode()).isEqualTo(childCode);
+        assertThat(carving.customerName()).isEqualTo("恒信珠宝");
+        assertThat(carving.dueDate()).isEqualTo("2026-10-20");
+        assertThat(carving.stations()).extracting(ProcessStationCard::processName).containsExactly("雕刻");
+        assertThat(carving.stations().get(0).requirement()).isEqualTo("内壁刻字");
+        assertThat(carving.stations().get(0).previousProcessName()).isBlank();
+        assertThat(carving.stations().get(0).previousSubmitted()).isTrue();
+        assertThat(carving.message()).isBlank();
+
+        ProcessStationView unbound = stationService.lookup(sticker, account("操作工 王强"));
+        assertThat(unbound.stations()).isEmpty();
+        assertThat(unbound.message()).contains("不能报工");
+        assertThatThrownBy(() -> stationService.report(sticker, "雕刻", account("操作工 王强")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前账号不能做这道工序");
+        assertThat(documents.listProcessStationHandoffs(childCode)).isEmpty();
+        assertThat(stockLedgerService.ledgers()).extracting(StockLedgerEntry::documentType)
+                .doesNotContain("process_station_report", "production_report");
+    }
+
+    @Test
+    void rejectsSkippedProcessAndKeepsWipUntilTheLastStation() {
+        String childCode = splitOneChild("MD-STATION-002");
+        String sticker = "JG|work_order|" + childCode;
+        AuthUserAccount carving = account("雕刻工 林海", "雕刻");
+        AuthUserAccount inlay = account("镶嵌工 赵敏", "镶嵌");
+        AuthUserAccount polish = account("抛光工 陈刚", "抛光");
+
+        ProcessStationView inlayView = stationService.lookup(sticker, inlay);
+        assertThat(inlayView.stations()).extracting(ProcessStationCard::processName).containsExactly("镶嵌");
+        assertThat(inlayView.stations().get(0).previousProcessName()).isEqualTo("雕刻");
+        assertThat(inlayView.stations().get(0).previousSubmitted()).isFalse();
+        assertThatThrownBy(() -> stationService.report(sticker, "镶嵌", inlay))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("雕刻")
+                .hasMessageContaining("还没交");
+        assertThatThrownBy(() -> stationService.report(sticker, "抛光", polish))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("还没交");
+
+        ProcessStationReportResult carved = stationService.report(sticker, "雕刻", carving);
+
+        assertThat(carved.movedToSemiFinished()).isFalse();
+        assertThat(carved.stockStatus()).isEqualTo("WIP");
+        assertThat(quantity(childCode, StockStatus.WIP)).isEqualByComparingTo("4");
+        assertThat(quantity(childCode, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("0");
+        assertThat(stockLedgerService.ledgers())
+                .filteredOn(entry -> childCode.equals(entry.documentCode()))
+                .extracting(StockLedgerEntry::documentType)
+                .contains("process_station_report")
+                .doesNotContain("production_report");
+        assertThat(stationService.lookup(sticker, inlay).stations().get(0).previousSubmitted()).isTrue();
+
+        ProcessStationReportResult inlaid = stationService.report(sticker, "镶嵌", inlay);
+        assertThat(inlaid.movedToSemiFinished()).isFalse();
+        assertThat(quantity(childCode, StockStatus.WIP)).isEqualByComparingTo("4");
+
+        assertThatThrownBy(() -> stationService.report(sticker, "雕刻", carving))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已经交过");
+
+        ProcessStationReportResult polished = stationService.report(sticker, "抛光", polish);
+        assertThat(polished.movedToSemiFinished()).isTrue();
+        assertThat(polished.stockStatus()).isEqualTo("SEMI_FINISHED");
+        assertThat(quantity(childCode, StockStatus.WIP)).isEqualByComparingTo("0");
+        assertThat(quantity(childCode, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("4");
+        assertThat(stockLedgerService.ledgers())
+                .filteredOn(entry -> "production_report".equals(entry.documentType()))
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.from().stockStatus()).isEqualTo(StockStatus.WIP);
+                    assertThat(entry.to().stockStatus()).isEqualTo(StockStatus.SEMI_FINISHED);
+                    assertThat(entry.remark()).contains("工序：抛光");
+                });
+    }
+
+    @Test
+    void keptMotherMovesRawWaitingIntoWipBeforeTheFirstStation() {
+        inbound("MD-KEEP-STATION", "10", "20");
+        splitService.keep("MD-KEEP-STATION", "何琳");
+        String sticker = "JG|mother|MD-KEEP-STATION";
+
+        ProcessStationView view = stationService.lookup(sticker, account("雕刻工 林海", "雕刻"));
+        assertThat(view.stations()).extracting(ProcessStationCard::processName).containsExactly("雕刻");
+        assertThat(rawWaiting("MD-KEEP-STATION").quantity()).isEqualByComparingTo("10");
+
+        stationService.report(sticker, "雕刻", account("雕刻工 林海", "雕刻"));
+
+        assertThat(rawWaiting("MD-KEEP-STATION").quantity()).isEqualByComparingTo("0");
+        assertThat(quantity("MD-KEEP-STATION", StockStatus.WIP)).isEqualByComparingTo("10");
+        assertThat(quantity("MD-KEEP-STATION", StockStatus.SEMI_FINISHED)).isEqualByComparingTo("0");
+        assertThat(stockLedgerService.ledgers()).extracting(StockLedgerEntry::documentType)
+                .contains("work_order_split", "process_station_report")
+                .doesNotContain("production_report");
+
+        stationService.report(sticker, "镶嵌", account("镶嵌工 赵敏", "镶嵌"));
+        stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光"));
+
+        assertThat(quantity("MD-KEEP-STATION", StockStatus.WIP)).isEqualByComparingTo("0");
+        assertThat(quantity("MD-KEEP-STATION", StockStatus.SEMI_FINISHED)).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void skippedProcessOnTheOrderIsNotRequiredAndLastSelectedProcessFinishesStock() {
+        inbound("MD-PARTIAL", "8", "16");
+        var split = splitService.split(new SplitMotherOrderCommand("MD-PARTIAL", "何琳", List.of(
+                new SplitMotherOrderLine(new BigDecimal("3"), new BigDecimal("6"), List.of("抛光", "雕刻")),
+                new SplitMotherOrderLine(new BigDecimal("5"), new BigDecimal("10"), null)
+        )));
+        String childCode = split.children().get(0).code();
+        String sticker = "JG|work_order|" + childCode;
+
+        assertThatThrownBy(() -> stationService.report(sticker, "镶嵌", account("镶嵌工 赵敏", "镶嵌")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("没有「镶嵌」");
+        assertThatThrownBy(() -> stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("雕刻");
+
+        stationService.report(sticker, "雕刻", account("雕刻工 林海", "雕刻"));
+        assertThat(quantity(childCode, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("0");
+
+        ProcessStationReportResult polished = stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光"));
+        assertThat(polished.movedToSemiFinished()).isTrue();
+        assertThat(quantity(childCode, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("3");
+    }
+
+    @Test
+    void splitMotherStickerCannotBeReportedAsAStation() {
+        String childCode = splitOneChild("MD-ALREADY-SPLIT");
+        assertThat(childCode).isNotBlank();
+
+        assertThatThrownBy(() -> stationService.lookup("JG|mother|MD-ALREADY-SPLIT", account("雕刻工 林海", "雕刻")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请扫描子单贴纸");
+    }
+
+    private String splitOneChild(String motherCode) {
+        inbound(motherCode, "10", "20");
+        var view = splitService.split(new SplitMotherOrderCommand(motherCode, "何琳", List.of(
+                new SplitMotherOrderLine(new BigDecimal("4"), new BigDecimal("8"), null),
+                new SplitMotherOrderLine(new BigDecimal("6"), new BigDecimal("12"), null)
+        )));
+        return view.children().get(0).code();
+    }
+
+    private void inbound(String code, String quantity, String weight) {
+        operations.confirmInbound(new ConfirmInboundCommand(
+                code,
+                1001L,
+                1001L,
+                "AU9999",
+                "2026-10-08",
+                "顺丰",
+                "SF" + code.replace("-", ""),
+                "",
+                "何琳",
+                "何琳",
+                "戒托",
+                "",
+                null,
+                "",
+                "RAW-CUSTOMER",
+                new BigDecimal(quantity),
+                "件",
+                new BigDecimal(weight),
+                "何琳",
+                "",
+                "测试入库",
+                "内壁刻字",
+                "2026-10-20",
+                "恒信珠宝"
+        ));
+    }
+
+    private AuthUserAccount account(String operator, String... processes) {
+        return new AuthUserAccount(
+                operator,
+                "hash",
+                operator,
+                RoleCode.OPERATOR,
+                DataScope.SELF,
+                true,
+                true
+        ).withAllowedProcesses(List.of(processes));
+    }
+
+    private BigDecimal quantity(String orderCode, StockStatus status) {
+        return stockLedgerService.balances().stream()
+                .filter(balance -> orderCode.equals(balance.dimension().workOrderCode())
+                        || (balance.dimension().workOrderCode() == null && orderCode.equals(balance.dimension().motherOrderCode())))
+                .filter(balance -> balance.dimension().stockStatus() == status)
+                .map(StockBalance::quantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private StockBalance rawWaiting(String motherOrderCode) {
+        return stockLedgerService.balances().stream()
+                .filter(balance -> motherOrderCode.equals(balance.dimension().motherOrderCode()))
+                .filter(balance -> balance.dimension().workOrderCode() == null)
+                .filter(balance -> balance.dimension().stockStatus() == StockStatus.RAW_WAITING)
+                .findFirst()
+                .orElseThrow();
+    }
+}

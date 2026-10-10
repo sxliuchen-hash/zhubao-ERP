@@ -11,12 +11,18 @@ import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.StoredAttachmentObject;
+import com.zhubao.erp.document.domain.StoredContentInventory;
+import com.zhubao.erp.document.domain.StoredContentItem;
+import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Clock;
@@ -25,6 +31,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,6 +48,7 @@ public class DocumentManagementService {
     private final DocumentManagementRepository repository;
     private final AttachmentObjectStorage attachmentObjectStorage;
     private final DocumentPreviewTokenProperties previewTokenProperties;
+    private final AttachmentStorageProperties storageProperties;
     private final Clock clock;
     private final AtomicInteger uploadSequence = new AtomicInteger(1);
     private final Map<String, String> uploadedStorageKeys = new ConcurrentHashMap<>();
@@ -52,13 +60,22 @@ public class DocumentManagementService {
         this(repository, attachmentObjectStorage, new DocumentPreviewTokenProperties(), Clock.systemDefaultZone());
     }
 
-    @Autowired
     public DocumentManagementService(
             DocumentManagementRepository repository,
             AttachmentObjectStorage attachmentObjectStorage,
             DocumentPreviewTokenProperties previewTokenProperties
     ) {
-        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone());
+        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), null);
+    }
+
+    @Autowired
+    public DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties,
+            AttachmentStorageProperties storageProperties
+    ) {
+        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), storageProperties);
     }
 
     DocumentManagementService(
@@ -67,9 +84,20 @@ public class DocumentManagementService {
             DocumentPreviewTokenProperties previewTokenProperties,
             Clock clock
     ) {
+        this(repository, attachmentObjectStorage, previewTokenProperties, clock, null);
+    }
+
+    DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties,
+            Clock clock,
+            AttachmentStorageProperties storageProperties
+    ) {
         this.repository = repository;
         this.attachmentObjectStorage = attachmentObjectStorage;
         this.previewTokenProperties = previewTokenProperties == null ? new DocumentPreviewTokenProperties() : previewTokenProperties;
+        this.storageProperties = storageProperties;
         this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
@@ -78,7 +106,8 @@ public class DocumentManagementService {
         long missingEvidence = attachments.stream()
                 .filter(attachment -> !attachment.status().equals("已关联")
                         && !attachment.status().equals("已归档")
-                        && !attachment.status().equals("已上传"))
+                        && !attachment.status().equals("已上传")
+                        && !attachment.status().equals("已下线"))
                 .count();
         long manualFallbacks = attachments.stream()
                 .filter(attachment -> !attachment.fallbackAction().equals("无"))
@@ -102,6 +131,78 @@ public class DocumentManagementService {
 
     public List<DocumentAuditEvent> auditEvents() {
         return repository.auditEvents();
+    }
+
+    /**
+     * 汇总附件目录实际占用、所在磁盘余量，以及每条已登记内容。
+     */
+    public StoredContentInventory storageInventory() {
+        Path root = storageRoot();
+        List<StoredContentItem> items = repository.attachments().stream()
+                .map(this::toStoredContentItem)
+                .toList();
+        long usedBytes = directorySize(root);
+        DiskUsage disk = diskUsage(root);
+        String provider = storageProperties == null || storageProperties.getProvider() == null
+                || storageProperties.getProvider().isBlank()
+                ? "local"
+                : storageProperties.getProvider().trim();
+        return new StoredContentInventory(
+                provider,
+                root.toAbsolutePath().normalize().toString(),
+                items.size(),
+                usedBytes,
+                readableSize(usedBytes),
+                disk.totalBytes(),
+                disk.freeBytes(),
+                disk.usedPercent(),
+                items
+        );
+    }
+
+    /**
+     * 管理员下线一条存储内容：删除本地对象，台账保留为已下线。
+     */
+    public StoredContentItem retireStoredContent(String code, String operator) {
+        EvidenceAttachment attachment = findAttachment(code)
+                .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        if ("已下线".equals(attachment.status())) {
+            throw new BusinessException("内容已下线：" + code);
+        }
+        localStorageKey(attachment.storageLocation()).ifPresent(storageKey -> {
+            attachmentObjectStorage.delete(storageKey);
+            uploadedStorageKeys.remove(code);
+        });
+        String now = LocalDateTime.now(clock).format(DATE_TIME_FORMATTER);
+        EvidenceAttachment retired = new EvidenceAttachment(
+                attachment.code(),
+                attachment.documentCode(),
+                attachment.businessType(),
+                attachment.businessCode(),
+                attachment.fileName(),
+                attachment.mediaType(),
+                attachment.storageLocation(),
+                attachment.storagePolicy(),
+                attachment.source(),
+                "已下线",
+                attachment.owner(),
+                attachment.checksum(),
+                attachment.uploadedAt(),
+                attachment.fallbackAction(),
+                "gray"
+        );
+        repository.saveAttachment(retired);
+        String actor = operator == null || operator.isBlank() ? "系统管理员" : operator.trim();
+        repository.saveAuditEvent(new DocumentAuditEvent(
+                now,
+                "DOC-AUD-RETIRE-" + attachment.code(),
+                attachment.documentCode(),
+                "下线存储内容",
+                actor,
+                "下线 " + attachment.fileName() + "，并删除本地对象。",
+                "amber"
+        ));
+        return toStoredContentItem(retired);
     }
 
     public DocumentPackage savePackage(DocumentPackage documentPackage) {
@@ -288,6 +389,104 @@ public class DocumentManagementService {
     }
 
     private record PreviewToken(long expiresAtEpoch, String signature) {
+    }
+
+    private StoredContentItem toStoredContentItem(EvidenceAttachment attachment) {
+        long sizeBytes = sizeBytes(attachment);
+        return new StoredContentItem(
+                attachment.code(),
+                attachment.fileName(),
+                attachment.businessType(),
+                attachment.businessCode(),
+                attachment.owner(),
+                attachment.storageLocation(),
+                attachment.mediaType(),
+                attachment.status(),
+                attachment.uploadedAt(),
+                sizeBytes,
+                readableSize(sizeBytes)
+        );
+    }
+
+    private long sizeBytes(EvidenceAttachment attachment) {
+        Optional<String> storageKey = localStorageKey(attachment.storageLocation());
+        if (storageKey.isEmpty()) {
+            return -1;
+        }
+        Path root = storageRoot().toAbsolutePath().normalize();
+        Path file = root.resolve(storageKey.get()).normalize();
+        if (!file.startsWith(root)) {
+            return -1;
+        }
+        try {
+            return Files.isRegularFile(file) ? Files.size(file) : -1;
+        } catch (IOException exception) {
+            return -1;
+        }
+    }
+
+    private Path storageRoot() {
+        if (storageProperties != null
+                && storageProperties.getLocalRoot() != null
+                && !storageProperties.getLocalRoot().isBlank()) {
+            return Path.of(storageProperties.getLocalRoot());
+        }
+        return Path.of("target/zhubao-evidence");
+    }
+
+    private long directorySize(Path root) {
+        if (root == null || !Files.isDirectory(root)) {
+            return 0;
+        }
+        long total = 0;
+        try (var stream = Files.walk(root)) {
+            for (Path path : stream.filter(Files::isRegularFile).toList()) {
+                try {
+                    total += Files.size(path);
+                } catch (IOException exception) {
+                    // 单个文件读不到时跳过，其余占用仍然统计。
+                }
+            }
+        } catch (IOException exception) {
+            return total;
+        }
+        return total;
+    }
+
+    private DiskUsage diskUsage(Path root) {
+        try {
+            Path probe = root.toAbsolutePath().normalize();
+            while (probe != null && !Files.exists(probe)) {
+                probe = probe.getParent();
+            }
+            if (probe == null) {
+                probe = Path.of("").toAbsolutePath();
+            }
+            var store = Files.getFileStore(probe);
+            long total = Math.max(store.getTotalSpace(), 0);
+            long free = Math.max(store.getUsableSpace(), 0);
+            long used = Math.max(total - free, 0);
+            int percent = total == 0 ? 0 : (int) Math.round(used * 100.0 / total);
+            return new DiskUsage(total, free, percent);
+        } catch (IOException exception) {
+            return new DiskUsage(0, 0, 0);
+        }
+    }
+
+    private String readableSize(long bytes) {
+        if (bytes < 0) {
+            return "未落本地";
+        }
+        if (bytes >= 1024L * 1024L) {
+            return String.format(Locale.ROOT, "%.2f MiB", bytes / 1024.0 / 1024.0);
+        }
+        if (bytes >= 1024L) {
+            return String.format(Locale.ROOT, "%.2f KiB", bytes / 1024.0);
+        }
+        return bytes + " B";
+    }
+
+    private record DiskUsage(long totalBytes, long freeBytes, int usedPercent) {
     }
 
     private String sanitizeFileName(String fileName) {

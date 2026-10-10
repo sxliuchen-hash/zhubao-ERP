@@ -6,6 +6,8 @@ import com.zhubao.erp.document.domain.StoredAttachmentObject;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -51,6 +53,63 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
     }
 
     @Override
+    public StoredAttachmentObject putStream(
+            String documentCode,
+            String attachmentCode,
+            String fileName,
+            String mediaType,
+            InputStream input,
+            long declaredSize,
+            long maxBytes
+    ) {
+        if (input == null) {
+            throw new BusinessException("附件内容不能为空");
+        }
+        if (declaredSize > maxBytes || maxBytes <= 0) {
+            throw new BusinessException("文件超过大小限制");
+        }
+        String safeMediaType = mediaType == null || mediaType.isBlank() ? "application/octet-stream" : mediaType;
+        String storageKey = storageKey(documentCode, attachmentCode, fileName);
+        Path target = resolveStorageKey(storageKey);
+        try {
+            Files.createDirectories(target.getParent());
+        } catch (IOException exception) {
+            throw new BusinessException("附件写入本地存储失败：" + exception.getMessage());
+        }
+        MessageDigest digest = sha256Digest();
+        long written = 0;
+        try (InputStream source = input; OutputStream output = Files.newOutputStream(target)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = source.read(buffer)) >= 0) {
+                written += read;
+                if (written > maxBytes) {
+                    throw new BusinessException("文件超过大小限制");
+                }
+                digest.update(buffer, 0, read);
+                output.write(buffer, 0, read);
+            }
+        } catch (BusinessException exception) {
+            deleteQuietly(target);
+            throw exception;
+        } catch (IOException exception) {
+            deleteQuietly(target);
+            throw new BusinessException("附件写入本地存储失败：" + exception.getMessage());
+        }
+        if (written == 0) {
+            deleteQuietly(target);
+            throw new BusinessException("附件内容不能为空");
+        }
+        return new StoredAttachmentObject(
+                storageKey,
+                "local://" + storageKey,
+                safeMediaType,
+                written,
+                "sha256:" + HexFormat.of().formatHex(digest.digest())
+        );
+    }
+
+    @Override
     public byte[] get(String storageKey) {
         Path target = resolveStorageKey(storageKey);
         if (!Files.exists(target)) {
@@ -60,6 +119,19 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
             return Files.readAllBytes(target);
         } catch (IOException exception) {
             throw new BusinessException("附件读取本地存储失败：" + exception.getMessage());
+        }
+    }
+
+    @Override
+    public void delete(String storageKey) {
+        deleteQuietly(resolveStorageKey(storageKey));
+    }
+
+    private void deleteQuietly(Path target) {
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException exception) {
+            throw new BusinessException("附件删除失败：" + exception.getMessage());
         }
     }
 
@@ -94,9 +166,13 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
     }
 
     private String sha256(byte[] content) {
+        MessageDigest digest = sha256Digest();
+        return HexFormat.of().formatHex(digest.digest(content));
+    }
+
+    private MessageDigest sha256Digest() {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(content));
+            return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("当前运行环境不支持 SHA-256", exception);
         }

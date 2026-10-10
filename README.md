@@ -1,6 +1,6 @@
 # 来料加工进销存与生产管理系统
 
-面向客户来料加工。主链路是收货、报工、质检、库存、出库和追溯。当前界面是一套浅色作业台，日常页用表格和当前单据。
+面向客户来料加工。主链路是收货、报工、质检、库存、出库和追溯。未登录时先进入登录页；管理员在配置页维护账号，并可以查看和下线已存储的照片、视频和附件。运维页显示现场硬件是否在线，以及磁盘、附件目录和备份目录的占用。当前界面是一套浅色作业台，日常页用表格和当前单据。侧栏可以收成图标加名称，手机宽度改成顶部可滑动的图标条，表格在屏幕里横向滑动。标签按纸张尺寸黑白打印。手机作业可以识别快递单号、生成母单并上传拆包短视频，也可以按岗位扫子单或不拆母单贴纸，只提交账号绑定的工序。母单可以不拆打一张贴纸，或拆成子单后逐张打印；贴纸上有验证码、客户、加工要求和期限。雕刻、镶嵌、抛光按单上的顺序交付，最后一道完成才把在制转入半成品。质检页扫子单或不拆母单贴纸，按换行逐条核对加工要求，质检员取当前登录账号；不合格把半成品转入冻结并可以开返工，合格和让步只留下核对记录。施工顺序见 [docs/25_现场作业收口计划.md](docs/25_现场作业收口计划.md)。现场照片和短视频的试运行方案见 [docs/24_手机现场采集方案.md](docs/24_手机现场采集方案.md)，录像机截取作备选。
 
 基础版本是 Git 标签 `baseline-m3.138`。之后的整理在分支 `dev/after-m3.138`。
 
@@ -279,6 +279,8 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/documents/summary`
 - `GET /api/documents/packages`
 - `GET /api/documents/attachments`
+- `GET /api/documents/storage`
+- `POST /api/documents/attachments/{code}/retirements`
 - `GET /api/documents/audit-events`
 - `POST /api/documents/attachments/uploads`
 - `GET /api/documents/attachments/{code}/preview-url`
@@ -295,6 +297,7 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `POST /api/security/customer-authorizations`
 - `POST /api/security/customer-authorizations/revocations`
 - `GET /api/business/workspaces/summary`
+- `GET /api/business/operations/progress`
 - `GET /api/business/workspaces/inbound`
 - `GET /api/business/workspaces/production`
 - `GET /api/business/workspaces/quality`
@@ -348,10 +351,35 @@ powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runt
 - `GET /api/label/mother-orders/{code}`
 - `GET /api/label/templates`
 - `POST /api/label/templates`
+- `GET /api/finance/price-agreements`
+- `POST /api/finance/price-agreements`
+- `POST /api/finance/billing-runs`
+- `GET /api/finance/unpriced`
+- `POST /api/finance/receivable-reversals`
+- `POST /api/finance/receipts`
+- `GET /api/finance/statements`
+- `GET /api/finance/worker-rates`
+- `POST /api/finance/worker-rates`
+- `GET /api/finance/payroll-lines`
+- `POST /api/finance/payroll-runs`
+- `POST /api/finance/payroll-runs/confirmations`
+- `GET /api/finance/consumable-items`
+- `POST /api/finance/consumable-items`
+- `GET /api/finance/consumable-movements`
+- `POST /api/finance/consumable-purchases`
+- `POST /api/finance/consumable-issues`
+- `GET /api/finance/fixed-assets`
+- `POST /api/finance/fixed-assets`
+- `GET /api/finance/depreciation-entries`
+- `POST /api/finance/depreciation-runs`
+- `POST /api/finance/outsource-bills`
+- `GET /api/finance/payables`
+- `POST /api/finance/payable-payments`
+- `GET /api/finance/operating-statement`
 
 ## 当前状态
 
-一期业务命令已能写库存台账。客户交付版本尚未形成。下一步是收掉只读说明接口和页面里的第二套样例数据，而不是再加模块。
+一期业务命令已能写库存台账。财务页做经营核算：按客户协议计加工费，并汇总工资、消耗品、固定资产和外协。不做会计凭证和总账，工资确认后不生成银行代发。客户交付版本尚未形成。
 
 ## 文档
 

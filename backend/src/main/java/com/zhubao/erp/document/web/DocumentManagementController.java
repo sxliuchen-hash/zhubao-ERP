@@ -3,15 +3,21 @@ package com.zhubao.erp.document.web;
 import com.zhubao.erp.document.domain.AttachmentContent;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.document.app.DocumentCaptureService;
 import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
+import com.zhubao.erp.document.domain.DocumentCaptureView;
 import com.zhubao.erp.document.domain.DocumentManagementSummary;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
+import com.zhubao.erp.document.domain.StoredContentInventory;
+import com.zhubao.erp.document.domain.StoredContentItem;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import com.zhubao.erp.security.app.OperatorContextResolver;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,9 +34,42 @@ import java.util.List;
 public class DocumentManagementController {
 
     private final DocumentManagementService documentManagementService;
+    private final DocumentCaptureService documentCaptureService;
+    private final OperatorContextResolver operatorContextResolver;
 
-    public DocumentManagementController(DocumentManagementService documentManagementService) {
+    public DocumentManagementController(
+            DocumentManagementService documentManagementService,
+            DocumentCaptureService documentCaptureService,
+            OperatorContextResolver operatorContextResolver
+    ) {
         this.documentManagementService = documentManagementService;
+        this.documentCaptureService = documentCaptureService;
+        this.operatorContextResolver = operatorContextResolver;
+    }
+
+    @GetMapping("/captures")
+    public ApiResponse<List<DocumentCaptureView>> captures(@RequestParam String businessCode) {
+        return ApiResponse.ok(documentCaptureService.list(businessCode));
+    }
+
+    @PostMapping(value = "/captures", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<EvidenceAttachmentUploadResult> capture(
+            @RequestParam String objectType,
+            @RequestParam String businessCode,
+            @RequestParam String scene,
+            @RequestParam MultipartFile file,
+            HttpServletRequest request
+    ) throws IOException {
+        return ApiResponse.ok(documentCaptureService.capture(
+                objectType,
+                businessCode,
+                scene,
+                file.getOriginalFilename(),
+                file.getContentType(),
+                file.getInputStream(),
+                file.getSize(),
+                operatorContextResolver.resolve(request)
+        ));
     }
 
     @GetMapping("/summary")
@@ -46,6 +85,11 @@ public class DocumentManagementController {
     @GetMapping("/attachments")
     public ApiResponse<List<EvidenceAttachment>> attachments() {
         return ApiResponse.ok(documentManagementService.attachments());
+    }
+
+    @GetMapping("/storage")
+    public ApiResponse<StoredContentInventory> storage() {
+        return ApiResponse.ok(documentManagementService.storageInventory());
     }
 
     @GetMapping("/audit-events")
@@ -73,6 +117,17 @@ public class DocumentManagementController {
                 owner,
                 fallbackAction,
                 file.getBytes()
+        ));
+    }
+
+    @PostMapping("/attachments/{code}/retirements")
+    public ApiResponse<StoredContentItem> retireAttachment(
+            @PathVariable String code,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(documentManagementService.retireStoredContent(
+                code,
+                operatorContextResolver.resolve(request).operator()
         ));
     }
 

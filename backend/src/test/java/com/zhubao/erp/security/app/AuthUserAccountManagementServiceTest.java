@@ -78,6 +78,67 @@ class AuthUserAccountManagementServiceTest {
         assertThat(session.operator()).isEqualTo("计划员 陈敏");
         assertThat(session.role()).isEqualTo("SALES");
         assertThat(session.demoAccount()).isFalse();
+        assertThat(session.allowedProcesses()).isEmpty();
+    }
+
+    @Test
+    void bindsWorkshopProcessesOntoTheExistingAccount() {
+        Fixture fixture = fixture();
+
+        var created = fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "station1",
+                "Secure-2026-Station!",
+                "雕刻工 林海",
+                "OPERATOR",
+                "SELF",
+                null,
+                true,
+                true,
+                null,
+                List.of("抛光", "雕刻", "雕刻")
+        ), admin);
+
+        assertThat(created.allowedProcesses()).containsExactly("雕刻", "抛光");
+        AuthSession session = fixture.sessionService().login(new AuthLoginCommand("station1", "Secure-2026-Station!"));
+        assertThat(session.allowedProcesses()).containsExactly("雕刻", "抛光");
+
+        var kept = fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "station1",
+                null,
+                "雕刻工 林海",
+                "OPERATOR",
+                "SELF",
+                true,
+                true
+        ), admin);
+        assertThat(kept.allowedProcesses()).containsExactly("雕刻", "抛光");
+
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "station1",
+                null,
+                "雕刻工 林海",
+                "OPERATOR",
+                "SELF",
+                null,
+                true,
+                true,
+                null,
+                List.of("焊接")
+        ), admin)).isInstanceOf(BusinessException.class).hasMessageContaining("未知工序");
+
+        var cleared = fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "station1",
+                null,
+                "雕刻工 林海",
+                "OPERATOR",
+                "SELF",
+                null,
+                true,
+                true,
+                null,
+                List.of()
+        ), admin);
+        assertThat(cleared.allowedProcesses()).isEmpty();
     }
 
     @Test

@@ -146,6 +146,9 @@ class RegisterImportPostingPlanServiceTest {
         fields.put("quantityUnit", "件");
         fields.put("weight", "18.500");
         fields.put("operator", "库管员 何琳");
+        fields.put("processingRequirement", "戒托抛光");
+        fields.put("dueDate", "2026-07-20");
+        fields.put("customerName", "恒信珠宝");
 
         return preview(
                 "IMP-REG-INBOUND-POSTING-PLAN",

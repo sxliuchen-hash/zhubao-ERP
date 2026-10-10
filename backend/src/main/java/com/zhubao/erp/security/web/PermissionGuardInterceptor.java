@@ -22,6 +22,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/inventory/ledger/transfers", PermissionCode.INVENTORY_LEDGER_TRANSFER),
             Map.entry("/api/business/operations/inbound-confirmations", PermissionCode.BUSINESS_INBOUND_CONFIRM),
             Map.entry("/api/business/operations/production-reports", PermissionCode.BUSINESS_PRODUCTION_REPORT),
+            Map.entry("/api/business/operations/process-stations", PermissionCode.BUSINESS_PRODUCTION_REPORT),
+            Map.entry("/api/business/operations/quality-checks", PermissionCode.BUSINESS_QUALITY_FREEZE),
+            Map.entry("/api/business/operations/quality-checks/rework", PermissionCode.BUSINESS_REWORK_DISPATCH),
             Map.entry("/api/business/operations/quality-freezes", PermissionCode.BUSINESS_QUALITY_FREEZE),
             Map.entry("/api/business/operations/rework-dispatches", PermissionCode.BUSINESS_REWORK_DISPATCH),
             Map.entry("/api/business/operations/rework-reports", PermissionCode.BUSINESS_REWORK_REPORT),
@@ -39,10 +42,15 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/security/customer-authorizations/revocations", PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE),
             Map.entry("/api/auth/accounts", PermissionCode.AUTH_ACCOUNT_MANAGE),
             Map.entry("/api/documents/attachments/uploads", PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD),
+            Map.entry("/api/documents/captures", PermissionCode.DOCUMENT_CAPTURE),
+            Map.entry("/api/business/operations/mobile-intakes", PermissionCode.BUSINESS_INBOUND_CONFIRM),
             Map.entry("/api/video-clip-tasks", PermissionCode.VIDEO_TASK_OPERATE),
             Map.entry("/api/label/generate", PermissionCode.LABEL_PRINT),
-            Map.entry("/api/label/templates", PermissionCode.LABEL_PRINT)
+            Map.entry("/api/label/templates", PermissionCode.LABEL_PRINT),
+            Map.entry("/api/label/reprints", PermissionCode.LABEL_PRINT)
     );
+    private final Pattern motherSplitPath = Pattern.compile("^/api/business/operations/mother-orders/[^/]+/(keep|splits)$");
+    private final Pattern documentRetirePath = Pattern.compile("^/api/documents/attachments/[^/]+/retirements$");
     private final Pattern approvalDecisionPath = Pattern.compile("^/api/approvals/tasks/[^/]+/decisions$");
     private final Pattern videoTaskOperationPath = Pattern.compile("^/api/video-clip-tasks/[^/]+/(retry|manual-upload)$");
     private final Pattern registerImportReviewPath = Pattern.compile("^/api/register-import/batches/[^/]+/rows/\\d+/corrections$");
@@ -91,8 +99,46 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         if (gatewayDeviceManagePath.matcher(path).matches()) {
             return PermissionCode.GATEWAY_DEVICE_MANAGE;
         }
+        if (motherSplitPath.matcher(path).matches()) {
+            return PermissionCode.BUSINESS_MOTHER_SPLIT;
+        }
         if (videoTaskOperationPath.matcher(path).matches()) {
             return PermissionCode.VIDEO_TASK_OPERATE;
+        }
+        if (documentRetirePath.matcher(path).matches()) {
+            return PermissionCode.DOCUMENT_CONTENT_MANAGE;
+        }
+        if (path.startsWith("/api/finance/")) {
+            return financePermission(path);
+        }
+        return null;
+    }
+
+    private PermissionCode financePermission(String path) {
+        if (path.equals("/api/finance/price-agreements")) {
+            return PermissionCode.FINANCE_PRICE_MANAGE;
+        }
+        if (path.equals("/api/finance/billing-runs") || path.equals("/api/finance/receivable-reversals")) {
+            return PermissionCode.FINANCE_BILLING_POST;
+        }
+        if (path.equals("/api/finance/receipts")) {
+            return PermissionCode.FINANCE_RECEIPT;
+        }
+        if (path.equals("/api/finance/worker-rates")
+                || path.equals("/api/finance/payroll-runs")
+                || path.equals("/api/finance/payroll-runs/confirmations")) {
+            return PermissionCode.FINANCE_PAYROLL;
+        }
+        if (path.equals("/api/finance/consumable-items")
+                || path.equals("/api/finance/consumable-purchases")
+                || path.equals("/api/finance/consumable-issues")) {
+            return PermissionCode.FINANCE_CONSUMABLE;
+        }
+        if (path.equals("/api/finance/fixed-assets") || path.equals("/api/finance/depreciation-runs")) {
+            return PermissionCode.FINANCE_ASSET;
+        }
+        if (path.equals("/api/finance/outsource-bills") || path.equals("/api/finance/payable-payments")) {
+            return PermissionCode.FINANCE_PAYABLE;
         }
         return null;
     }

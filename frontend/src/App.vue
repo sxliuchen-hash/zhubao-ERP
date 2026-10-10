@@ -1,22 +1,27 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import AppShell from './components/AppShell.vue';
+import NavIcon from './components/NavIcon.vue';
+import LoginPage from './features/auth/LoginPage.vue';
 import ApprovalWorkspace from './features/m1/ApprovalWorkspace.vue';
 import ConfigurationWorkspace from './features/m1/ConfigurationWorkspace.vue';
 import DocumentManagementWorkspace from './features/m1/DocumentManagementWorkspace.vue';
 import HardwareIntegrationWorkspace from './features/m1/HardwareIntegrationWorkspace.vue';
 import InboundWorkspace from './features/m1/InboundWorkspace.vue';
 import InventoryTraceWorkspace from './features/m1/InventoryTraceWorkspace.vue';
+import FinanceWorkspace from './features/m1/FinanceWorkspace.vue';
 import LabelWorkspace from './features/m1/LabelWorkspace.vue';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
 import MobileOpsWorkspace from './features/m1/MobileOpsWorkspace.vue';
 import OperationsCenterWorkspace from './features/m1/OperationsCenterWorkspace.vue';
 import ProductionWorkspace from './features/m1/ProductionWorkspace.vue';
+import ProgressWorkspace from './features/m1/ProgressWorkspace.vue';
 import QualityWorkspace from './features/m1/QualityWorkspace.vue';
 import SampleLibraryWorkspace from './features/m1/SampleLibraryWorkspace.vue';
 import {
   authSessionChangedEvent,
   fetchAuthSession,
+  logoutAuthSession,
   type AuthSession,
   type AuthSessionChangedDetail,
   type NavigationMenuItem,
@@ -26,8 +31,10 @@ type TabKey =
   | 'dashboard'
   | 'inbound'
   | 'production'
+  | 'progress'
   | 'quality'
   | 'inventory'
+  | 'finance'
   | 'approvals'
   | 'configuration'
   | 'documents'
@@ -41,16 +48,18 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; grou
   { key: 'dashboard', label: '首页', meta: '今日待办', code: 'OP', group: 'work' },
   { key: 'inbound', label: '来料', meta: '收货入库', code: 'IN', group: 'work' },
   { key: 'production', label: '生产', meta: '派工报工', code: 'MO', group: 'work' },
+  { key: 'progress', label: '进度', meta: '在制筛选', code: 'PG', group: 'work' },
   { key: 'quality', label: '质检', meta: '返工放行', code: 'QC', group: 'work' },
   { key: 'inventory', label: '库存', meta: '出库退货', code: 'ST', group: 'work' },
+  { key: 'finance', label: '财务', meta: '客户账成本', code: 'FN', group: 'work' },
   { key: 'approvals', label: '审批', meta: '待我处理', code: 'AP', group: 'work' },
   { key: 'label', label: '标签', meta: '打印补打', code: 'LB', group: 'work' },
   { key: 'sample', label: '登记导入', meta: 'Excel 入账', code: 'SA', group: 'system' },
   { key: 'documents', label: '附件', meta: '照片视频', code: 'EV', group: 'system' },
   { key: 'hardware', label: '设备', meta: '读数接入', code: 'HW', group: 'system' },
-  { key: 'configuration', label: '配置', meta: '账号权限', code: 'CF', group: 'system' },
-  { key: 'operations', label: '运维', meta: '备份日志', code: 'OC', group: 'system' },
-  { key: 'mobile', label: '手机作业', meta: '扫码报工', code: 'PW', group: 'system' },
+  { key: 'configuration', label: '配置', meta: '用户与内容', code: 'CF', group: 'system' },
+  { key: 'operations', label: '运维', meta: '硬件存储', code: 'OC', group: 'system' },
+  { key: 'mobile', label: '手机作业', meta: '收货报工', code: 'PW', group: 'system' },
 ];
 
 const activeTab = ref<TabKey>('dashboard');
@@ -60,6 +69,7 @@ provide('zhubao-open-tab', (tab: TabKey) => {
   activateTab(tab);
 });
 const authSession = ref<AuthSession | null>(null);
+const authReady = ref(false);
 const tabKeySet = new Set<TabKey>(tabs.map((tab) => tab.key));
 const authorizedMenuCodes = computed(() => {
   if (!authSession.value) {
@@ -79,6 +89,10 @@ const visibleTabs = computed(() => {
 });
 const visibleWorkTabs = computed(() => visibleTabs.value.filter((tab) => tab.group === 'work'));
 const visibleSystemTabs = computed(() => visibleTabs.value.filter((tab) => tab.group === 'system'));
+const navigationGroups = computed(() => [
+  { label: '作业', tabs: visibleWorkTabs.value },
+  { label: '系统', tabs: visibleSystemTabs.value },
+]);
 const activeTitle = computed(() => (
   visibleTabs.value.find((tab) => tab.key === activeTab.value)?.label
   ?? visibleTabs.value[0]?.label
@@ -109,7 +123,14 @@ async function restoreAuthSessionForNavigation() {
     authSession.value = await fetchAuthSession();
   } catch {
     authSession.value = null;
+  } finally {
+    authReady.value = true;
   }
+}
+
+async function handleLogout() {
+  await logoutAuthSession();
+  authSession.value = null;
 }
 
 function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) {
@@ -132,39 +153,44 @@ function isTabKey(value: string): value is TabKey {
 </script>
 
 <template>
-  <AppShell v-model:trace-query="traceQuery" :title="activeTitle">
+  <p v-if="!authReady" class="login-page">正在恢复登录</p>
+  <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
+  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle">
+    <template #session>
+      <div class="top-session">
+        <span>{{ authSession?.operator }}</span>
+        <button class="secondary-button" type="button" @click="handleLogout">退出</button>
+      </div>
+    </template>
+
     <template #nav>
-      <p v-if="visibleWorkTabs.length" class="nav-group-label">作业</p>
-      <button
-        v-for="tab in visibleWorkTabs"
-        :key="tab.key"
-        class="nav-button"
-        :data-tab="tab.key"
-        :class="{ active: activeTab === tab.key }"
-        type="button"
-        @click="activateTab(tab.key)"
-      >
-        <strong>{{ tab.label }}</strong>
-      </button>
-      <p v-if="visibleSystemTabs.length" class="nav-group-label">系统</p>
-      <button
-        v-for="tab in visibleSystemTabs"
-        :key="tab.key"
-        class="nav-button"
-        :data-tab="tab.key"
-        :class="{ active: activeTab === tab.key }"
-        type="button"
-        @click="activateTab(tab.key)"
-      >
-        <strong>{{ tab.label }}</strong>
-      </button>
+      <template v-for="group in navigationGroups" :key="group.label">
+        <p v-if="group.tabs.length" class="nav-group-label">{{ group.label }}</p>
+        <button
+          v-for="tab in group.tabs"
+          :key="tab.key"
+          class="nav-button"
+          :data-tab="tab.key"
+          :class="{ active: activeTab === tab.key }"
+          :title="`${tab.label} · ${tab.meta}`"
+          type="button"
+          @click="activateTab(tab.key)"
+        >
+          <span class="nav-icon-wrap">
+            <NavIcon :name="tab.key" />
+          </span>
+          <span class="nav-label"><strong>{{ tab.label }}</strong></span>
+        </button>
+      </template>
     </template>
 
     <M1Dashboard v-if="activeTab === 'dashboard'" />
     <InboundWorkspace v-else-if="activeTab === 'inbound'" />
     <ProductionWorkspace v-else-if="activeTab === 'production'" />
+    <ProgressWorkspace v-else-if="activeTab === 'progress'" />
     <QualityWorkspace v-else-if="activeTab === 'quality'" />
     <InventoryTraceWorkspace v-else-if="activeTab === 'inventory'" />
+    <FinanceWorkspace v-else-if="activeTab === 'finance'" />
     <ApprovalWorkspace v-else-if="activeTab === 'approvals'" />
     <ConfigurationWorkspace v-else-if="activeTab === 'configuration'" />
     <DocumentManagementWorkspace v-else-if="activeTab === 'documents'" />

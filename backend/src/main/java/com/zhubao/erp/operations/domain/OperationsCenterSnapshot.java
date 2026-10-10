@@ -12,7 +12,9 @@ public record OperationsCenterSnapshot(
         List<BackupStatus> backupStatuses,
         List<RestoreDrillRecord> restoreDrillRecords,
         List<OperationAlert> alerts,
-        List<OperationChecklistItem> checklist
+        List<OperationChecklistItem> checklist,
+        List<HardwarePresence> hardwareNodes,
+        List<StorageVolume> storageVolumes
 ) {
     public OperationsCenterSnapshot {
         services = List.copyOf(services);
@@ -23,6 +25,8 @@ public record OperationsCenterSnapshot(
         restoreDrillRecords = List.copyOf(restoreDrillRecords);
         alerts = List.copyOf(alerts);
         checklist = List.copyOf(checklist);
+        hardwareNodes = List.copyOf(hardwareNodes);
+        storageVolumes = List.copyOf(storageVolumes);
     }
 
     public record Summary(
@@ -146,6 +150,30 @@ public record OperationsCenterSnapshot(
             String status,
             String evidence,
             String owner,
+            String tone
+    ) {
+    }
+
+    public record HardwarePresence(
+            String code,
+            String name,
+            String scene,
+            String status,
+            String protocol,
+            String detail,
+            String checkedAt,
+            String tone
+    ) {
+    }
+
+    public record StorageVolume(
+            String code,
+            String name,
+            String path,
+            String used,
+            String capacity,
+            int usedPercent,
+            String detail,
             String tone
     ) {
     }

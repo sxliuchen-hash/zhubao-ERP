@@ -38,8 +38,18 @@ public class PermissionGuard {
         allow(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, RoleCode.GENERAL_MANAGER);
         allow(PermissionCode.APPROVAL_DECISION, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
+        allow(PermissionCode.DOCUMENT_CONTENT_MANAGE, RoleCode.ADMIN);
+        allow(PermissionCode.DOCUMENT_CAPTURE, RoleCode.OPERATOR, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.VIDEO_TASK_OPERATE, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.LABEL_PRINT, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER, RoleCode.OPERATOR);
+        allow(PermissionCode.BUSINESS_MOTHER_SPLIT, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
+        allow(PermissionCode.FINANCE_PRICE_MANAGE, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_BILLING_POST, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_RECEIPT, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_PAYROLL, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_CONSUMABLE, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_ASSET, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_PAYABLE, RoleCode.FINANCE_STATISTICIAN);
     }
 
     public void assertAllowed(PermissionCode permission, OperatorContext operatorContext) {

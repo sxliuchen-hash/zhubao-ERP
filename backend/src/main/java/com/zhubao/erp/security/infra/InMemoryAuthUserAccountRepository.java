@@ -29,6 +29,12 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
         save(demo("qc", "qc123", "质检员 周娜", RoleCode.QUALITY_INSPECTOR, DataScope.DEPARTMENT, passwordHasher));
         save(demo("warehouse", "warehouse123", "库管员 何琳", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT, passwordHasher));
         save(demo("operator", "operator123", "操作工 王强", RoleCode.OPERATOR, DataScope.SELF, passwordHasher));
+        save(demo("carve", "carve123", "雕刻工 林海", RoleCode.OPERATOR, DataScope.SELF, passwordHasher)
+                .withAllowedProcesses(List.of("雕刻")));
+        save(demo("inlay", "inlay123", "镶嵌工 赵敏", RoleCode.OPERATOR, DataScope.SELF, passwordHasher)
+                .withAllowedProcesses(List.of("镶嵌")));
+        save(demo("polish", "polish123", "抛光工 陈刚", RoleCode.OPERATOR, DataScope.SELF, passwordHasher)
+                .withAllowedProcesses(List.of("抛光")));
     }
 
     @Override
@@ -73,7 +79,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.lockedUntil(),
                 account.customerScope(),
                 account.passwordChangeRequired(),
-                account.temporaryPasswordConsumed()
+                account.temporaryPasswordConsumed(),
+                account.allowedProcesses()
         ));
     }
 
@@ -92,7 +99,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 null,
                 account.customerScope(),
                 account.passwordChangeRequired(),
-                account.temporaryPasswordConsumed()
+                account.temporaryPasswordConsumed(),
+                account.allowedProcesses()
         ));
     }
 
@@ -111,7 +119,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 lockedUntil,
                 account.customerScope(),
                 account.passwordChangeRequired(),
-                account.temporaryPasswordConsumed()
+                account.temporaryPasswordConsumed(),
+                account.allowedProcesses()
         ));
     }
 
@@ -130,7 +139,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 null,
                 account.customerScope(),
                 account.passwordChangeRequired(),
-                account.temporaryPasswordConsumed()
+                account.temporaryPasswordConsumed(),
+                account.allowedProcesses()
         ));
     }
 
@@ -155,7 +165,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                     account.lockedUntil(),
                     account.customerScope(),
                     true,
-                    true
+                    true,
+                    account.allowedProcesses()
             );
         });
         return consumed.get();
