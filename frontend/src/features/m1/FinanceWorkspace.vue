@@ -283,7 +283,6 @@ function kindLabel(kind: string) {
 <template>
   <div class="finance-workspace">
     <header class="section-block">
-      <strong>财务</strong>
       <p>加工费按客户协议入账。来料实物仍在库存页。这里不算会计凭证。</p>
       <div class="finance-sections">
         <button

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 
 defineProps<{
   title: string;
+  location?: string;
 }>();
 
 const traceQuery = defineModel<string>('traceQuery', { default: '' });
@@ -71,6 +72,13 @@ function toggleCollapsed() {
 
     <main class="workspace ops-workspace review-workspace">
       <div class="top-strip ops-topbar review-topbar">
+        <div class="mobile-brand">
+          <span class="brand-mark">ZB</span>
+          <div>
+            <strong>{{ title }}</strong>
+            <span v-if="location">{{ location }}</span>
+          </div>
+        </div>
         <div class="context-stack">
           <span>{{ businessDate }}</span>
         </div>
@@ -82,10 +90,15 @@ function toggleCollapsed() {
       </div>
 
       <header class="workspace-header ops-page-header review-page-header lean-header">
+        <p v-if="location" class="page-location">{{ location }}</p>
         <h1>{{ title }}</h1>
       </header>
 
       <slot />
     </main>
+
+    <nav class="mobile-tabbar" aria-label="手机导航">
+      <slot name="mobile-nav" />
+    </nav>
   </div>
 </template>

@@ -62,6 +62,11 @@ defineProps<{
       <circle cx="10" cy="17" r="1.7" />
     </template>
     <path v-else-if="name === 'operations'" d="M3 12h4l2.2-5 3.6 10L15 12h6" />
+    <template v-else-if="name === 'more'">
+      <circle class="is-fill" cx="6" cy="12" r="1.4" />
+      <circle class="is-fill" cx="12" cy="12" r="1.4" />
+      <circle class="is-fill" cx="18" cy="12" r="1.4" />
+    </template>
     <template v-else-if="name === 'mobile'">
       <path d="M8 3.5h8a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z" />
       <path d="M11 18.5h2" />

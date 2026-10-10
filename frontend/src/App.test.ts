@@ -32,7 +32,14 @@ describe('App', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('来料加工');
-    expect(wrapper.find('.nav-group-label').text()).toContain('作业');
+    expect(wrapper.findAll('.nav-group-label').map((label) => label.text())).toEqual([
+      '工作台',
+      '来料与订单',
+      '生产与质量',
+      '库存与交付',
+      '财务经营',
+      '协同与系统',
+    ]);
     expect(wrapper.text()).toContain('今日待办');
     expect(wrapper.text()).toContain('当前处理单');
     expect(wrapper.find('.ops-scope-ribbon').exists()).toBe(false);
@@ -49,6 +56,13 @@ describe('App', () => {
     expect(wrapper.find('.ops-nav').text()).toContain('配置');
     expect(wrapper.find('.ops-nav').text()).toContain('运维');
     expect(wrapper.find('.ops-nav').text()).toContain('手机作业');
+    expect(wrapper.get('.page-location').text()).toBe('工作台');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('工作台');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('现场作业');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('审批');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('更多');
+    expect(wrapper.get('.mobile-tabbar').text()).not.toContain('消息');
+    expect(wrapper.get('.mobile-tabbar').text()).not.toContain('扫码');
   });
 
   it('filters sidebar navigation from the authenticated menu contract', async () => {
@@ -90,7 +104,7 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.findAll('.nav-button .nav-icon')).toHaveLength(15);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(15);
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('true');
     expect(wrapper.get('.app-shell').classes()).not.toContain('is-collapsed');
 
@@ -100,12 +114,54 @@ describe('App', () => {
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('false');
     expect(wrapper.get('.sidebar-toggle').attributes('aria-label')).toBe('展开侧边栏');
     expect(localStorage.getItem('zhubao-sidebar-collapsed')).toBe('1');
-    expect(wrapper.findAll('.nav-button .nav-icon')).toHaveLength(15);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(15);
 
     await wrapper.get('.sidebar-toggle').trigger('click');
 
     expect(wrapper.get('.app-shell').classes()).not.toContain('is-collapsed');
     expect(localStorage.getItem('zhubao-sidebar-collapsed')).toBe('0');
+  });
+
+  it('hides finance from navigation when the session has no finance menu', async () => {
+    const codes = allMenuCodes.filter((code) => code !== 'finance');
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(codes));
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.find('.ops-nav').text()).not.toContain('财务');
+    expect(wrapper.findAll('.nav-group-label').map((label) => label.text())).not.toContain('财务经营');
+    await wrapper.get('.mobile-tabbar button[aria-haspopup="dialog"]').trigger('click');
+    expect(wrapper.get('.mobile-more-sheet').text()).not.toContain('财务');
+    expect(wrapper.get('.mobile-more-sheet').text()).toContain('来料');
+  });
+
+  it('opens an authorized module from the mobile more sheet without a second page state', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
+    const wrapper = mount(App);
+    await flushPromises();
+
+    await wrapper.get('[aria-label="追溯查询"]').setValue('MD-1');
+    await wrapper.get('.mobile-tabbar button[aria-haspopup="dialog"]').trigger('click');
+    await wrapper.get('.mobile-more-item[data-mobile-tab="finance"]').trigger('click');
+
+    expect(wrapper.get('h1').text()).toBe('财务');
+    expect(wrapper.get('.page-location').text()).toBe('财务经营');
+    expect(wrapper.find('.mobile-more-sheet').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="追溯查询"]').element).toHaveProperty('value', 'MD-1');
+    expect(wrapper.findAll('.finance-workspace')).toHaveLength(1);
+  });
+
+  it('shows the password change form outside the shell', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce({
+      ...sessionWithMenus(['dashboard']),
+      passwordChangeRequired: true,
+    });
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.find('[aria-label="首次修改密码"]').exists()).toBe(true);
+    expect(wrapper.find('.mobile-tabbar').exists()).toBe(false);
+    expect(wrapper.find('.ops-nav').exists()).toBe(false);
   });
 });
 

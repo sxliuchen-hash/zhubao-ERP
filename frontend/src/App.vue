@@ -44,16 +44,28 @@ type TabKey =
   | 'operations'
   | 'mobile';
 
-const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; group: 'work' | 'system' }> = [
-  { key: 'dashboard', label: '首页', meta: '今日待办', code: 'OP', group: 'work' },
-  { key: 'inbound', label: '来料', meta: '收货入库', code: 'IN', group: 'work' },
-  { key: 'production', label: '生产', meta: '派工报工', code: 'MO', group: 'work' },
-  { key: 'progress', label: '进度', meta: '在制筛选', code: 'PG', group: 'work' },
-  { key: 'quality', label: '质检', meta: '返工放行', code: 'QC', group: 'work' },
-  { key: 'inventory', label: '库存', meta: '出库退货', code: 'ST', group: 'work' },
-  { key: 'finance', label: '财务', meta: '客户账成本', code: 'FN', group: 'work' },
-  { key: 'approvals', label: '审批', meta: '待我处理', code: 'AP', group: 'work' },
-  { key: 'label', label: '标签', meta: '打印补打', code: 'LB', group: 'work' },
+type NavGroupId = 'desk' | 'inbound' | 'production' | 'inventory' | 'finance' | 'system';
+
+/** 只改变展示分组，不新增菜单编码，也不因此放宽权限。 */
+const navGroups: Array<{ id: NavGroupId; label: string }> = [
+  { id: 'desk', label: '工作台' },
+  { id: 'inbound', label: '来料与订单' },
+  { id: 'production', label: '生产与质量' },
+  { id: 'inventory', label: '库存与交付' },
+  { id: 'finance', label: '财务经营' },
+  { id: 'system', label: '协同与系统' },
+];
+
+const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; group: NavGroupId }> = [
+  { key: 'dashboard', label: '首页', meta: '今日待办', code: 'OP', group: 'desk' },
+  { key: 'inbound', label: '来料', meta: '收货入库', code: 'IN', group: 'inbound' },
+  { key: 'label', label: '标签', meta: '打印补打', code: 'LB', group: 'inbound' },
+  { key: 'production', label: '生产', meta: '派工报工', code: 'MO', group: 'production' },
+  { key: 'progress', label: '进度', meta: '在制筛选', code: 'PG', group: 'production' },
+  { key: 'quality', label: '质检', meta: '返工放行', code: 'QC', group: 'production' },
+  { key: 'inventory', label: '库存', meta: '出库退货', code: 'ST', group: 'inventory' },
+  { key: 'finance', label: '财务', meta: '客户账成本', code: 'FN', group: 'finance' },
+  { key: 'approvals', label: '审批', meta: '待我处理', code: 'AP', group: 'system' },
   { key: 'sample', label: '登记导入', meta: 'Excel 入账', code: 'SA', group: 'system' },
   { key: 'documents', label: '附件', meta: '照片视频', code: 'EV', group: 'system' },
   { key: 'hardware', label: '设备', meta: '读数接入', code: 'HW', group: 'system' },
@@ -62,7 +74,10 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; grou
   { key: 'mobile', label: '手机作业', meta: '收货报工', code: 'PW', group: 'system' },
 ];
 
+const mobilePrimaryKeys: TabKey[] = ['dashboard', 'mobile', 'approvals'];
+
 const activeTab = ref<TabKey>('dashboard');
+const moreOpen = ref(false);
 const traceQuery = ref('');
 provide('zhubao-trace-query', traceQuery);
 provide('zhubao-open-tab', (tab: TabKey) => {
@@ -87,19 +102,26 @@ const visibleTabs = computed(() => {
   const filteredTabs = tabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
   return filteredTabs.length ? filteredTabs : tabs.filter((tab) => tab.key === 'dashboard');
 });
-const visibleWorkTabs = computed(() => visibleTabs.value.filter((tab) => tab.group === 'work'));
-const visibleSystemTabs = computed(() => visibleTabs.value.filter((tab) => tab.group === 'system'));
-const navigationGroups = computed(() => [
-  { label: '作业', tabs: visibleWorkTabs.value },
-  { label: '系统', tabs: visibleSystemTabs.value },
-]);
-const activeTitle = computed(() => (
-  visibleTabs.value.find((tab) => tab.key === activeTab.value)?.label
-  ?? visibleTabs.value[0]?.label
-  ?? '首页'
-));
+const navigationGroups = computed(() => navGroups
+  .map((group) => ({
+    label: group.label,
+    tabs: visibleTabs.value.filter((tab) => tab.group === group.id),
+  }))
+  .filter((group) => group.tabs.length > 0));
+const activeTabMeta = computed(() => visibleTabs.value.find((tab) => tab.key === activeTab.value) ?? visibleTabs.value[0]);
+const activeTitle = computed(() => activeTabMeta.value?.label ?? '首页');
+const activeLocation = computed(() => navGroups.find((group) => group.id === activeTabMeta.value?.group)?.label ?? '');
+const mobilePrimaryTabs = computed(() => mobilePrimaryKeys
+  .map((key) => visibleTabs.value.find((tab) => tab.key === key))
+  .filter((tab): tab is (typeof tabs)[number] => Boolean(tab))
+  .map((tab) => ({
+    key: tab.key,
+    label: tab.key === 'dashboard' ? '工作台' : tab.key === 'mobile' ? '现场作业' : '审批',
+  })));
+const moreTabs = computed(() => visibleTabs.value.filter((tab) => !mobilePrimaryKeys.includes(tab.key)));
 
 watch(activeTab, () => {
+  moreOpen.value = false;
   void nextTick(() => window.scrollTo(0, 0));
 });
 
@@ -143,6 +165,11 @@ function activateTab(tab: TabKey) {
   }
 }
 
+function openMobileTab(tab: TabKey) {
+  moreOpen.value = false;
+  activateTab(tab);
+}
+
 function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
   return items.flatMap((item) => [item.code, ...flattenMenuCodes(item.children)]);
 }
@@ -155,11 +182,50 @@ function isTabKey(value: string): value is TabKey {
 <template>
   <p v-if="!authReady" class="login-page">正在恢复登录</p>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
-  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle">
+  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation">
     <template #session>
       <div class="top-session">
         <span>{{ authSession?.operator }}</span>
         <button class="secondary-button" type="button" @click="handleLogout">退出</button>
+      </div>
+    </template>
+
+    <template #mobile-nav>
+      <button
+        v-for="item in mobilePrimaryTabs"
+        :key="item.key"
+        class="mobile-tab"
+        :class="{ active: activeTab === item.key }"
+        :data-mobile-tab="item.key"
+        type="button"
+        @click="openMobileTab(item.key)"
+      >
+        <NavIcon :name="item.key" />
+        <span>{{ item.label }}</span>
+      </button>
+      <button
+        v-if="moreTabs.length"
+        class="mobile-tab"
+        :class="{ active: moreOpen || moreTabs.some((tab) => tab.key === activeTab) }"
+        type="button"
+        aria-haspopup="dialog"
+        :aria-expanded="moreOpen ? 'true' : 'false'"
+        @click="moreOpen = !moreOpen"
+      >
+        <NavIcon name="more" />
+        <span>更多</span>
+      </button>
+      <div v-if="moreOpen" class="mobile-more-sheet" role="dialog" aria-label="更多功能">
+        <button
+          v-for="tab in moreTabs"
+          :key="tab.key"
+          class="mobile-more-item"
+          :data-mobile-tab="tab.key"
+          type="button"
+          @click="openMobileTab(tab.key)"
+        >
+          {{ tab.label }}
+        </button>
       </div>
     </template>
 
