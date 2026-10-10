@@ -391,7 +391,8 @@ function kindLabel(kind: string) {
         {{ statement.stockQuantity }} 件 / {{ statement.stockWeight }} 克。{{ statement.stockNote }}
       </p>
       <p v-if="statement && statement.lines.length === 0" class="empty-hint">暂无账单行</p>
-      <table v-if="statement && statement.lines.length">
+      <div v-if="statement && statement.lines.length" class="erp-table-wrap" tabindex="0" aria-label="账单明细，可横向滚动">
+      <table>
         <thead>
           <tr>
             <th>来源</th>
@@ -411,6 +412,7 @@ function kindLabel(kind: string) {
           </tr>
         </tbody>
       </table>
+      </div>
       <p v-if="billing && billing.unpriced.length === 0 && billing.createdCount === 0" class="empty-hint">没有新的可入账单</p>
       <ul v-if="billing && billing.unpriced.length">
         <li v-for="(item, index) in billing.unpriced" :key="index">
@@ -466,7 +468,8 @@ function kindLabel(kind: string) {
         <button class="table-action" type="button" :disabled="busy" @click="buildPayroll(true)">确认并锁定</button>
       </div>
       <p v-if="payrollLines.length === 0" class="empty-hint">暂无工资行</p>
-      <table v-else>
+      <div v-else class="erp-table-wrap" tabindex="0" aria-label="工资明细，可横向滚动">
+      <table>
         <thead>
           <tr>
             <th>工人</th>
@@ -488,6 +491,7 @@ function kindLabel(kind: string) {
           </tr>
         </tbody>
       </table>
+      </div>
     </section>
 
     <section v-else-if="section === 'consumable'" class="section-block">
@@ -508,7 +512,8 @@ function kindLabel(kind: string) {
         <button class="primary-button" type="button" :disabled="busy" @click="loadConsumables">查看结存</button>
       </div>
       <p v-if="consumables.length === 0" class="empty-hint">暂无消耗品</p>
-      <table v-else>
+      <div v-else class="erp-table-wrap" tabindex="0" aria-label="消耗品结存，可横向滚动">
+      <table>
         <thead>
           <tr>
             <th>编码</th>
@@ -526,6 +531,7 @@ function kindLabel(kind: string) {
           </tr>
         </tbody>
       </table>
+      </div>
     </section>
 
     <section v-else-if="section === 'asset'" class="section-block">
@@ -566,7 +572,8 @@ function kindLabel(kind: string) {
       </label>
       <button class="table-action" type="button" :disabled="busy" @click="submitPayment">登记付款</button>
       <p v-if="payables.length === 0" class="empty-hint">暂无应付</p>
-      <table v-else>
+      <div v-else class="erp-table-wrap" tabindex="0" aria-label="应付明细，可横向滚动">
+      <table>
         <thead>
           <tr>
             <th>单号</th>
@@ -586,6 +593,7 @@ function kindLabel(kind: string) {
           </tr>
         </tbody>
       </table>
+      </div>
     </section>
 
     <section v-else class="section-block">

@@ -87,7 +87,8 @@ function openRow(row: ProgressRow) {
     <p v-if="loadError" class="operation-feedback" :class="{ danger: rows.length === 0 && loadError !== '暂无在制单据' }">
       {{ loadError }}
     </p>
-    <table v-if="rows.length">
+    <div v-if="rows.length" class="erp-table-wrap" tabindex="0" aria-label="进度明细，可横向滚动">
+    <table>
       <thead>
         <tr>
           <th>客户</th>
@@ -115,5 +116,6 @@ function openRow(row: ProgressRow) {
         </tr>
       </tbody>
     </table>
+    </div>
   </section>
 </template>

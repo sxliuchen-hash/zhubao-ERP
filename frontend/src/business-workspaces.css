@@ -1,0 +1,71 @@
+/* 业务页面按内容区宽度适配；协同与系统继续使用自己的命名容器。 */
+.ops-workspace { container: business-workspace / inline-size; }
+
+:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) :is(p, dd, strong, small) {
+  overflow-wrap: anywhere;
+}
+:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) :is(.module-table-wrap, .erp-table-wrap) {
+  min-width: 0;
+  max-width: 100%;
+}
+:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) table { min-width: 720px; }
+:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) th { white-space: nowrap; }
+:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk) td { min-width: 88px; }
+:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) table .table-action { white-space: nowrap; }
+.production-desk .production-dispatch-table { min-width: 960px; }
+.active-record-code { display: grid; gap: 6px; margin: 12px 0; }
+.active-record-code span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.mission-kpi-grid strong small { margin-left: 4px; font-size: 12px; font-weight: 400; color: var(--muted); }
+
+/* 设备统计和追溯区域的文字按标签、数值、说明分行。 */
+.machine-output-summary-grid, .machine-output-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.machine-output-summary-grid article { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--soft); }
+.machine-output-summary-grid span { color: var(--muted); font-size: 12px; }
+.machine-output-summary-grid strong { font-size: 22px; }
+.machine-output-split > div, .machine-output-list article, .machine-match-suggestion-list article,
+.machine-match-suggestion-list article > div, .machine-match-suggestion-title { display: grid; gap: 8px; min-width: 0; }
+.machine-match-suggestion-panel { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px; }
+.machine-match-suggestion-title { margin-bottom: 12px; }
+.machine-match-suggestion-title span, .machine-match-suggestion-list :is(span, small), .machine-output-list small { color: var(--muted); font-size: 12px; }
+.machine-match-suggestion-list :is(button, .status-badge) { justify-self: start; }
+.compact-evidence-health article { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: start; }
+.compact-evidence-health article > div { display: grid; gap: 6px; min-width: 0; flex: 1 1 160px; }
+.compact-evidence-health article span { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.inventory-detail-grid > .module-rule-panel { padding: 16px; }
+.compact-panel-title { margin-bottom: 12px; }
+.timeline { display: grid; gap: 16px; }
+.timeline article { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding-left: 12px; border-left: 2px solid var(--border); }
+.timeline article > div { display: grid; gap: 4px; min-width: 0; }
+.timeline :is(time, small, span) { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.production-desk .handoff-table, .inventory-trace-desk .ledger-table { max-width: 100%; overflow-x: auto; }
+.production-desk .handoff-row { min-width: 650px; grid-template-columns: minmax(160px, 1.6fr) repeat(6, minmax(70px, 1fr)); }
+.inventory-trace-desk .ledger-row { min-width: 650px; grid-template-columns: 100px minmax(170px, 1.5fr) 100px 100px minmax(180px, 1.5fr); }
+.production-desk .handoff-row > *, .inventory-trace-desk .ledger-row > * { min-width: 0; overflow-wrap: anywhere; }
+
+/* 财务与进度的表单和明细共用紧凑间距，输入控件不能撑开窄屏。 */
+.finance-workspace, .progress-board { display: grid; gap: 16px; min-width: 0; }
+.finance-workspace > .section-block { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; min-width: 0; }
+.finance-workspace > .section-block > :is(div, form, p, ul) { flex-basis: 100%; min-width: 0; }
+.finance-workspace > .section-block > label { flex: 1 1 160px; max-width: 320px; min-width: 0; }
+:is(.finance-workspace, .progress-board) label { display: grid; gap: 6px; min-width: 0; }
+:is(.finance-workspace, .progress-board) :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
+.finance-workspace .account-admin-grid { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); align-items: end; gap: 12px; }
+:is(.finance-workspace, .progress-board) :is(.finance-actions, .finance-filters) label { flex: 1 1 160px; min-width: 0; }
+.progress-board header p { margin-top: 6px; color: var(--muted); font-size: 13px; }
+
+@container business-workspace (max-width: 1060px) {
+  :is(.inbound-work-grid, .production-work-grid, .quality-work-grid, .inventory-work-grid, .command-grid-v2) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: none;
+  }
+  .ops-workspace :is(.inbound-work-grid, .production-work-grid, .quality-work-grid, .inventory-work-grid, .command-grid-v2) > * { grid-area: auto; }
+}
+@container business-workspace (max-width: 560px) {
+  .finance-workspace > .section-block > label { max-width: none; flex-basis: 100%; }
+  .timeline article { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
