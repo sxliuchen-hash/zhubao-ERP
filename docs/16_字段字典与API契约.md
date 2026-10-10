@@ -2475,6 +2475,23 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `POST /api/scan/resolve` | `ApiResponse<ScanResolveResponse>` |
+| `POST /api/scan/context` | `ApiResponse<ScanContextResponse>` |
+
+`POST /api/scan/resolve` 保持兼容：请求仍是 `content` 和可选 `scene`，响应 `objectType`、`code`、`nextAction`、`allowed`。`allowed` 固定为 `true`，只说明格式能识别，不是权限结论，当前不要求登录。
+
+`POST /api/scan/context` 要求登录会话。请求字段：
+
+| 字段 | 说明 |
+|---|---|
+| `content` | 必填。贴纸、运单或手输内容 |
+| `objectType` | 可选。`MOTHER_ORDER`、`WORK_ORDER`、`OUTBOUND_ORDER`、`REWORK`、`EXPRESS_NO`。与 `JG\|` 贴纸类型冲突时拒绝 |
+| `intent` | 可选。`LOOKUP`、`INTAKE`、`PRODUCTION`、`QUALITY`、`SHIPPING`。省略视为 `LOOKUP`。不能代替岗位权限 |
+
+响应分组为 `target`、`order`、`requirements`、`progress`、`relatedTargets`、`requiresSelection`、`actions`、`operationContext`。未知数量、重量和客户用空值，不补 0。母单要求与子单快照分字段保留，来源分别为 `MOTHER_ORDER`、`WORK_ORDER`。岗位要求来源为 `PROCESS`。`progress.progressRecords` 已预留过程记录形状，当前固定为空数组，没有保存接口。`progress.reinspection.available` 当前固定为 `false`；原不合格质检仍保留，不能当成复检已放行。
+
+`actions[].code` 只使用 `SELECT_CHILD`、`INTAKE`、`REPORT_PROCESS`、`SUBMIT_QUALITY`、`OPEN_REWORK`、`REPORT_REWORK`、`RELEASE`、`SHIP`、`FILL_LOGISTICS`。`blockKind` 为 `NONE`、`PERMISSION` 或 `STATE`。这些代码不是可执行的接口地址。`operationContext` 给出余额候选和事实快照；多笔余额时 `selectedBalance` 为空。已拆母单 `requiresSelection=true`，不把第一张子单写入 `target.workOrderCode`。
+
+发货意图下，纯运单只返回规范化物流号和 `FILL_LOGISTICS`，不带回入库母单。收货意图下，运单已有母单则打开原单且 `INTAKE` 不可再次建单；没有母单时订单字段为空，有收货权限才允许 `INTAKE`。有限数据范围下，无权和不存在都返回「单号不在当前账号的业务数据范围内」，响应不带客户、要求和关联单。全公司范围明确查无此单时返回「未找到对应单据」。本接口不写库存、工序、质检或出货单。
 
 ### AuthController
 
