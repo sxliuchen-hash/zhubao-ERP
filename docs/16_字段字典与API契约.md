@@ -2362,3 +2362,5 @@ M3.83 当前角色菜单编码基线：
 | 不带客户的月度经营、工资、工人单价、消耗品、固定资产、折旧、应付 | `FINANCE_COMPANY_READ` 且 `dataScope=ALL` | 这些数字不能按客户范围拆开看。客户范围账号即使有财务角色也不能靠省略 `customerId` 看到全公司 |
 
 未带登录会话、也未显式给出 `X-Zhubao-Role` 的请求拒绝。操作工等只能看订单的角色没有上述两个读取权限。现有写入权限和请求头兜底开关不扩大。错误仍走 `40301`。
+
+`GET /api/finance/dashboard?yearMonth=YYYY-MM&customerId=可选` 只读。`data` 含 `yearMonth`、`generatedAt`、`scope`、`operating`、`trend`。`trend` 为选择月及向前五个月，当前自然月标记 `throughQueryTime=true`，不计算增幅。`currentBalances` 与 `receivableRanking` 本段为 `null`。`capabilities` 写明各块是否可用及原因。公司范围含折旧；客户范围不含公司折旧。查询不生成账单、工资或折旧。

@@ -3,6 +3,7 @@ package com.zhubao.erp.finance.web;
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.finance.app.FinanceBillingService;
 import com.zhubao.erp.finance.app.FinanceCostService;
+import com.zhubao.erp.finance.app.FinanceDashboardService;
 import com.zhubao.erp.finance.app.FinancePayrollService;
 import com.zhubao.erp.finance.app.FinanceReadAuthorizer;
 import com.zhubao.erp.finance.app.FinanceReportService;
@@ -12,6 +13,7 @@ import com.zhubao.erp.finance.domain.ConsumableStockView;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.CustomerStatement;
 import com.zhubao.erp.finance.domain.DepreciationEntry;
+import com.zhubao.erp.finance.domain.FinanceDashboard;
 import com.zhubao.erp.finance.domain.FinanceCommands.BillingRunCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.DepreciationRunCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.IssueConsumableCommand;
@@ -64,6 +66,7 @@ public class FinanceController {
     private final FinanceReportService reportService;
     private final OperatorContextResolver operatorContextResolver;
     private final FinanceReadAuthorizer readAuthorizer;
+    private final FinanceDashboardService dashboardService;
 
     public FinanceController(
             FinanceBillingService billingService,
@@ -72,7 +75,7 @@ public class FinanceController {
             FinanceReportService reportService,
             OperatorContextResolver operatorContextResolver
     ) {
-        this(billingService, payrollService, costService, reportService, operatorContextResolver, new FinanceReadAuthorizer());
+        this(billingService, payrollService, costService, reportService, operatorContextResolver, new FinanceReadAuthorizer(), null);
     }
 
     @Autowired
@@ -82,7 +85,8 @@ public class FinanceController {
             FinanceCostService costService,
             FinanceReportService reportService,
             OperatorContextResolver operatorContextResolver,
-            FinanceReadAuthorizer readAuthorizer
+            FinanceReadAuthorizer readAuthorizer,
+            FinanceDashboardService dashboardService
     ) {
         this.billingService = billingService;
         this.payrollService = payrollService;
@@ -90,6 +94,7 @@ public class FinanceController {
         this.reportService = reportService;
         this.operatorContextResolver = operatorContextResolver;
         this.readAuthorizer = readAuthorizer;
+        this.dashboardService = dashboardService;
     }
 
     @GetMapping("/price-agreements")
@@ -303,6 +308,15 @@ public class FinanceController {
             readAuthorizer.assertCustomer(context, customerId, statement.customerName());
         }
         return ApiResponse.ok(reportService.operating(yearMonth, customerId));
+    }
+
+    @GetMapping("/dashboard")
+    public ApiResponse<FinanceDashboard> dashboard(
+            @RequestParam String yearMonth,
+            @RequestParam(required = false) Long customerId,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(dashboardService.dashboard(readContext(request), yearMonth, customerId));
     }
 
     private OperatorContext readContext(HttpServletRequest request) {

@@ -42,9 +42,16 @@ public class FinanceReadAuthorizer {
         if (context.customerScope().isEmpty()) {
             throw new PermissionDeniedException("当前账号没有授权客户，不能查看财务");
         }
-        if (!matches(context.customerScope(), customerId, customerName)) {
+        if (!customerVisible(context, customerId, customerName)) {
             throw new PermissionDeniedException("无权查看该客户的财务");
         }
+    }
+
+    public boolean customerVisible(OperatorContext context, long customerId, String customerName) {
+        if (context.dataScope() == DataScope.ALL) {
+            return true;
+        }
+        return matches(context.customerScope(), customerId, customerName);
     }
 
     public List<PriceAgreement> visibleAgreements(OperatorContext context, List<PriceAgreement> rows) {
