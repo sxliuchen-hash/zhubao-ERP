@@ -37,3 +37,4 @@ V36__m3_finance_operations.sql
 V37__m3_progress_board_menu.sql
 V38__m3_auth_pre_approval_target_snapshot.sql
 V39__m3_inventory_source_work_order.sql
+V40__m3_finance_payment_idempotency.sql

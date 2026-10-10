@@ -2346,6 +2346,8 @@ PWA 一期边界：
 | `GET /api/finance/operating-statement` | `ApiResponse<OperatingStatement>` |
 | `GET /api/finance/dashboard` | `ApiResponse<FinanceDashboard>` |
 
+`POST /api/finance/payable-payments` 的请求体在应付单号、金额、付款日之外可以带 `idempotencyKey`，最长 80 字符。余额检查、付款流水和已付金额在同一事务中完成。JDBC 先锁应付行，再用 `paid_amount + 本次金额 <= amount` 条件更新；内存用同一把锁。流水合计与已付余额保持一致。同一幂等键且应付单、金额、付款日相同的重试返回原来的付款单，不新增流水；同一键但内容不同则拒绝。并发使用同一键只产生一笔付款。不传键时仍禁止超付，但不保证网络重试去重。已有库需在备份后受控执行 V40，为 `fin_payable_payment` 增加可空的 `idempotency_key`。该变更不修改 V36。
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。

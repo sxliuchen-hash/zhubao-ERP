@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FinanceWorkspace from './FinanceWorkspace.vue';
-import { fetchOperatingStatement, fetchStatement, generateBilling, saveConsumableItem, purchaseConsumable, issueConsumable, saveFixedAsset, runDepreciation, saveOutsource, fetchConsumables, fetchPayables } from '../../services/financeApi';
+import { fetchOperatingStatement, fetchStatement, generateBilling, saveConsumableItem, purchaseConsumable, issueConsumable, saveFixedAsset, runDepreciation, saveOutsource, fetchConsumables, fetchPayables, payPayable } from '../../services/financeApi';
 
 vi.mock('../../services/financeApi', () => ({
   fetchStatement: vi.fn(),
@@ -140,5 +140,25 @@ describe('FinanceWorkspace', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('工资未确认，成本按 0');
+  });
+
+  it('付款后刷新失败仍保留幂等键，再次点击不换键', async () => {
+    vi.mocked(payPayable).mockResolvedValue({ code: 'FIN-PMT-1' });
+    vi.mocked(fetchPayables).mockRejectedValueOnce(new Error('应付列表刷新失败')).mockResolvedValueOnce([]);
+    const wrapper = mount(FinanceWorkspace);
+    await selectSection(wrapper, '应付汇总');
+    await wrapper.get('[aria-label="应付单号"]').setValue('FIN-AP-1');
+    await wrapper.get('[aria-label="付款金额"]').setValue('60');
+    await wrapper.get('[aria-label="付款日期"]').setValue('2026-10-10');
+    const pay = wrapper.findAll('button').find((button) => button.text() === '登记付款');
+    await pay?.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('应付列表刷新失败');
+    const firstKey = vi.mocked(payPayable).mock.calls[0][0].idempotencyKey;
+    expect(firstKey).toBeTruthy();
+    await pay?.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(payPayable).mock.calls[1][0].idempotencyKey).toBe(firstKey);
+    expect(wrapper.text()).toContain('付款已登记');
   });
 });

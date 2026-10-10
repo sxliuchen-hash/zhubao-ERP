@@ -230,7 +230,12 @@ export function fetchPayables(yearMonth: string): Promise<PayableView[]> {
   return apiGet(`/api/finance/payables${month}`);
 }
 
-export function payPayable(body: { payableCode: string; amount: number; paidOn: string }): Promise<unknown> {
+export function payPayable(body: {
+  payableCode: string;
+  amount: number;
+  paidOn: string;
+  idempotencyKey?: string;
+}): Promise<unknown> {
   return apiPost('/api/finance/payable-payments', body);
 }
 

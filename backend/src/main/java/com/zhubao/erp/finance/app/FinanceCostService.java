@@ -217,24 +217,20 @@ public class FinanceCostService {
 
     public PayablePayment pay(PayablePaymentCommand command, String operator) {
         FinanceTexts.day(command.paidOn());
-        Payable payable = finance.findPayable(command.payableCode())
-                .orElseThrow(() -> new BusinessException("找不到应付"));
         BigDecimal amount = FinanceTexts.money(command.amount());
-        BigDecimal unpaid = payable.amount().subtract(payable.paidAmount());
-        if (amount.compareTo(unpaid) > 0) {
-            throw new BusinessException("付款金额不能超过尚未支付的余额");
+        String idempotencyKey = command.idempotencyKey() == null ? "" : command.idempotencyKey().trim();
+        if (idempotencyKey.length() > 80) {
+            throw new BusinessException("付款幂等键不能超过 80 个字符");
         }
         PayablePayment payment = new PayablePayment(
                 FinanceTexts.code("FIN-PMT", sequence),
-                payable.code(),
+                command.payableCode().trim(),
                 amount,
                 command.paidOn(),
                 operator,
                 FinanceTexts.now()
         );
-        finance.savePayablePayment(payment);
-        finance.savePayable(payable.pay(FinanceTexts.money(payable.paidAmount().add(amount))));
-        return payment;
+        return finance.registerPayablePayment(payment, idempotencyKey);
     }
 
     private ConsumableItem requireItem(String code) {

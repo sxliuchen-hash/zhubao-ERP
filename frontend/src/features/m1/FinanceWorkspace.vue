@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, ref } from 'vue';
+import { inject, ref, watch } from 'vue';
 import {
   confirmPayroll,
   fetchConsumables,
@@ -68,6 +68,19 @@ const operating = ref<OperatingStatement | null>(null);
 const payableCode = ref('');
 const payAmount = ref('');
 const payDate = ref(today);
+const paymentKey = ref('');
+
+watch([payableCode, payAmount, payDate], () => {
+  paymentKey.value = '';
+});
+
+function paymentIdempotencyKey() {
+  if (!paymentKey.value) {
+    const random = globalThis.crypto?.randomUUID?.();
+    paymentKey.value = random ?? `pay-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+  return paymentKey.value;
+}
 const consumableForm = ref({ code: '', name: '', unitName: '', quantity: '', amount: '', supplier: '', issueQuantity: '' });
 const assetForm = ref({ name: '', category: '', originalValue: '', residualValue: '0', startMonth: today.slice(0, 7), usefulMonths: '' });
 const outsourceForm = ref({ supplier: '', amount: '', motherOrderCode: '' });
@@ -290,12 +303,15 @@ async function addOutsource() {
 
 async function submitPayment() {
   await run(async () => {
+    const idempotencyKey = paymentIdempotencyKey();
     await payPayable({
       payableCode: payableCode.value.trim(),
       amount: Number(payAmount.value),
       paidOn: payDate.value,
+      idempotencyKey,
     });
     payables.value = await fetchPayables(yearMonth.value.trim());
+    paymentKey.value = '';
     message.value = '付款已登记';
   });
 }

@@ -5,6 +5,7 @@ import com.zhubao.erp.finance.domain.ConsumableItem;
 import com.zhubao.erp.finance.domain.ConsumableMovement;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.DepreciationEntry;
+import com.zhubao.erp.finance.domain.FinancePaymentProbe;
 import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.FixedAsset;
 import com.zhubao.erp.finance.domain.Payable;
@@ -14,9 +15,11 @@ import com.zhubao.erp.finance.domain.PayrollRun;
 import com.zhubao.erp.finance.domain.PriceAgreement;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.WorkerRate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -43,6 +46,18 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     private final ConcurrentHashMap<String, DepreciationEntry> depreciations = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Payable> payables = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, PayablePayment> payablePayments = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> paymentCodeByIdempotency = new ConcurrentHashMap<>();
+    private final Object paymentLock = new Object();
+    private final FinancePaymentProbe paymentProbe;
+
+    @Autowired
+    public InMemoryFinanceRepository() {
+        this(FinancePaymentProbe.NONE);
+    }
+
+    public InMemoryFinanceRepository(FinancePaymentProbe paymentProbe) {
+        this.paymentProbe = paymentProbe == null ? FinancePaymentProbe.NONE : paymentProbe;
+    }
 
     @Override
     public void saveAgreement(PriceAgreement agreement) {
@@ -215,6 +230,53 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     @Override
     public void savePayablePayment(PayablePayment payment) {
         payablePayments.put(payment.code(), payment);
+    }
+
+    @Override
+    public PayablePayment registerPayablePayment(PayablePayment payment, String idempotencyKey) {
+        String key = idempotencyKey == null ? "" : idempotencyKey.trim();
+        synchronized (paymentLock) {
+            if (!key.isEmpty()) {
+                String existingCode = paymentCodeByIdempotency.get(key);
+                if (existingCode != null) {
+                    PayablePayment existing = payablePayments.get(existingCode);
+                    if (existing == null || !samePayment(existing, payment)) {
+                        throw new BusinessException("同一幂等键的付款内容不一致");
+                    }
+                    return existing;
+                }
+            }
+            Payable payable = payables.get(payment.payableCode());
+            if (payable == null) {
+                throw new BusinessException("找不到应付");
+            }
+            BigDecimal nextPaid = payable.paidAmount().add(payment.amount());
+            if (nextPaid.compareTo(payable.amount()) > 0) {
+                throw new BusinessException("付款金额不能超过尚未支付的余额");
+            }
+            paymentProbe.beforePaymentInsert();
+            payablePayments.put(payment.code(), payment);
+            if (!key.isEmpty()) {
+                paymentCodeByIdempotency.put(key, payment.code());
+            }
+            try {
+                paymentProbe.beforeBalanceUpdate();
+                payables.put(payable.code(), payable.pay(nextPaid));
+            } catch (RuntimeException ex) {
+                payablePayments.remove(payment.code());
+                if (!key.isEmpty()) {
+                    paymentCodeByIdempotency.remove(key);
+                }
+                throw ex;
+            }
+            return payment;
+        }
+    }
+
+    private boolean samePayment(PayablePayment existing, PayablePayment requested) {
+        return existing.payableCode().equals(requested.payableCode())
+                && existing.amount().compareTo(requested.amount()) == 0
+                && existing.paidOn().equals(requested.paidOn());
     }
 
     @Override

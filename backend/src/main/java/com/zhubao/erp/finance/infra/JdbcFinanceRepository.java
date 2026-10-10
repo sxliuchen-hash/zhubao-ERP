@@ -6,6 +6,7 @@ import com.zhubao.erp.finance.domain.ConsumableItem;
 import com.zhubao.erp.finance.domain.ConsumableMovement;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.DepreciationEntry;
+import com.zhubao.erp.finance.domain.FinancePaymentProbe;
 import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.FixedAsset;
 import com.zhubao.erp.finance.domain.Payable;
@@ -18,6 +19,7 @@ import com.zhubao.erp.finance.domain.PricingMode;
 import com.zhubao.erp.finance.domain.ReceiptAllocation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.WorkerRate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -40,9 +42,16 @@ import java.util.Optional;
 public class JdbcFinanceRepository implements FinanceRepository {
 
     private final DataSource dataSource;
+    private final FinancePaymentProbe paymentProbe;
 
+    @Autowired
     public JdbcFinanceRepository(DataSource dataSource) {
+        this(dataSource, FinancePaymentProbe.NONE);
+    }
+
+    public JdbcFinanceRepository(DataSource dataSource, FinancePaymentProbe paymentProbe) {
         this.dataSource = dataSource;
+        this.paymentProbe = paymentProbe == null ? FinancePaymentProbe.NONE : paymentProbe;
     }
 
     @Override
@@ -719,6 +728,143 @@ public class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public Optional<Payable> findPayableBySource(String sourceCode) {
         return listPayables().stream().filter(payable -> sourceCode.equals(payable.sourceCode())).findFirst();
+    }
+
+    @Override
+    public PayablePayment registerPayablePayment(PayablePayment payment, String idempotencyKey) {
+        String key = idempotencyKey == null ? "" : idempotencyKey.trim();
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                Payable payable = lockPayable(connection, payment.payableCode());
+                if (!key.isEmpty()) {
+                    PayablePayment existing = findPaymentByKey(connection, key);
+                    if (existing != null) {
+                        if (!samePayment(existing, payment)) {
+                            throw new BusinessException("同一幂等键的付款内容不一致");
+                        }
+                        connection.rollback();
+                        return existing;
+                    }
+                }
+                if (payable == null) {
+                    throw new BusinessException("找不到应付");
+                }
+                if (payable.paidAmount().add(payment.amount()).compareTo(payable.amount()) > 0) {
+                    throw new BusinessException("付款金额不能超过尚未支付的余额");
+                }
+                paymentProbe.beforePaymentInsert();
+                insertPayment(connection, payment, key);
+                paymentProbe.beforeBalanceUpdate();
+                if (addPaidAmount(connection, payable.code(), payment.amount()) != 1) {
+                    throw new BusinessException("付款金额不能超过尚未支付的余额");
+                }
+                connection.commit();
+                return payment;
+            } catch (RuntimeException | SQLException ex) {
+                connection.rollback();
+                if (ex instanceof SQLException sql && isDuplicate(sql) && !key.isEmpty()) {
+                    try (Connection lookup = dataSource.getConnection()) {
+                        PayablePayment existing = findPaymentByKey(lookup, key);
+                        if (existing != null && samePayment(existing, payment)) {
+                            return existing;
+                        }
+                        if (existing != null) {
+                            throw new BusinessException("同一幂等键的付款内容不一致");
+                        }
+                    }
+                }
+                if (ex instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                throw new IllegalStateException("付款事务失败", ex);
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("付款事务失败", ex);
+        }
+    }
+
+    private Payable lockPayable(Connection connection, String code) throws SQLException {
+        String sql = "select * from fin_payable where code = ? for update";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return mapPayable(rs);
+            }
+        }
+    }
+
+    private PayablePayment findPaymentByKey(Connection connection, String key) throws SQLException {
+        String sql = """
+                select code, payable_code, amount, paid_on, operator_name, created_at
+                  from fin_payable_payment
+                 where idempotency_key = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, key);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new PayablePayment(
+                        rs.getString("code"),
+                        rs.getString("payable_code"),
+                        rs.getBigDecimal("amount"),
+                        rs.getString("paid_on"),
+                        rs.getString("operator_name"),
+                        rs.getString("created_at")
+                );
+            }
+        }
+    }
+
+    private void insertPayment(Connection connection, PayablePayment payment, String key) throws SQLException {
+        String sql = """
+                insert into fin_payable_payment (
+                    code, payable_code, amount, paid_on, operator_name, created_at, idempotency_key
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, payment.code());
+            statement.setString(2, payment.payableCode());
+            statement.setBigDecimal(3, payment.amount());
+            statement.setString(4, payment.paidOn());
+            statement.setString(5, payment.operator());
+            statement.setString(6, payment.createdAt());
+            if (key.isEmpty()) {
+                statement.setNull(7, Types.VARCHAR);
+            } else {
+                statement.setString(7, key);
+            }
+            statement.executeUpdate();
+        }
+    }
+
+    private int addPaidAmount(Connection connection, String payableCode, BigDecimal amount) throws SQLException {
+        String sql = """
+                update fin_payable
+                   set paid_amount = paid_amount + ?
+                 where code = ?
+                   and paid_amount + ? <= amount
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBigDecimal(1, amount);
+            statement.setString(2, payableCode);
+            statement.setBigDecimal(3, amount);
+            return statement.executeUpdate();
+        }
+    }
+
+    private boolean samePayment(PayablePayment existing, PayablePayment requested) {
+        return existing.payableCode().equals(requested.payableCode())
+                && existing.amount().compareTo(requested.amount()) == 0
+                && existing.paidOn().equals(requested.paidOn());
     }
 
     @Override

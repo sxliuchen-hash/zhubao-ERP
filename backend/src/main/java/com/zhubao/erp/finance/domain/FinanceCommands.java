@@ -128,7 +128,11 @@ public final class FinanceCommands {
     public record PayablePaymentCommand(
             @NotBlank String payableCode,
             @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
-            @NotBlank String paidOn
+            @NotBlank String paidOn,
+            String idempotencyKey
     ) {
+        public PayablePaymentCommand(String payableCode, BigDecimal amount, String paidOn) {
+            this(payableCode, amount, paidOn, null);
+        }
     }
 }

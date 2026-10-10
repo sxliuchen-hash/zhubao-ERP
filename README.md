@@ -84,6 +84,8 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-runtime-package.ps1 -Pac
 
 工作台每次请求只装入一份单据、余额和台账快照，客户范围明确时按客户或母单缩小台账读取。库存页仍返回完整授权流水，接口字段不变。千单万条下的调用次数和耗时见[开发进度](docs/14_开发进度跟踪.md)。
 
-已有 MySQL 库不会随 `docker compose up` 升级。升级使用 `scripts/upgrade-database.ps1` 或运行包里的 `upgrade-database`，先备份，再按版本表和校验和执行。历史迁移最大版本仍是 V39。MySQL 8.4 上 V36 的 `year_month` 目前会失败并停住，历史脚本未改，见[开发进度](docs/14_开发进度跟踪.md)和[部署手册](docs/19_Docker一键部署与离线交付.md)。
+已有 MySQL 库不会随 `docker compose up` 升级。升级使用 `scripts/upgrade-database.ps1` 或运行包里的 `upgrade-database`，先备份，再按版本表和校验和执行。迁移目录现已包含 V40。MySQL 8.4 上 V36 的 `year_month` 目前会失败并停住，因此空库升级仍到不了 V40；V36 原文未改，见[开发进度](docs/14_开发进度跟踪.md)和[部署手册](docs/19_Docker一键部署与离线交付.md)。
 
 账号申请的消费、账号变更和管理审计一次提交。同一申请并发或重复执行只会成功一次；中途失败会整笔回滚并可重试。停用账号后的会话吊销若失败，账号保持停用，只重试吊销，不要再次执行原申请。内存与 H2 兼容模式的验证不代替真实 MySQL，见[开发进度](docs/14_开发进度跟踪.md)。
+
+应付付款把余额检查、付款流水和已付金额放在同一次提交里，避免并发超付或只记下流水。相同付款幂等键的重试返回原来的付款单。已有 MySQL 库须备份并受控执行 V40，历史的 V36 未改。
