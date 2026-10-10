@@ -50,6 +50,8 @@ public class PermissionGuard {
         allow(PermissionCode.FINANCE_CONSUMABLE, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.FINANCE_ASSET, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.FINANCE_PAYABLE, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_CUSTOMER_READ, RoleCode.FINANCE_STATISTICIAN);
+        allow(PermissionCode.FINANCE_COMPANY_READ, RoleCode.FINANCE_STATISTICIAN);
     }
 
     public void assertAllowed(PermissionCode permission, OperatorContext operatorContext) {

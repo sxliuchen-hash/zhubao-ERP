@@ -4,6 +4,7 @@ import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.finance.app.FinanceBillingService;
 import com.zhubao.erp.finance.app.FinanceCostService;
 import com.zhubao.erp.finance.app.FinancePayrollService;
+import com.zhubao.erp.finance.app.FinanceReadAuthorizer;
 import com.zhubao.erp.finance.app.FinanceReportService;
 import com.zhubao.erp.finance.domain.BillingRunResult;
 import com.zhubao.erp.finance.domain.ConsumableMovement;
@@ -37,7 +38,9 @@ import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.UnpricedItem;
 import com.zhubao.erp.finance.domain.WorkerRate;
 import com.zhubao.erp.security.app.OperatorContextResolver;
+import com.zhubao.erp.security.domain.OperatorContext;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,6 +63,7 @@ public class FinanceController {
     private final FinanceCostService costService;
     private final FinanceReportService reportService;
     private final OperatorContextResolver operatorContextResolver;
+    private final FinanceReadAuthorizer readAuthorizer;
 
     public FinanceController(
             FinanceBillingService billingService,
@@ -68,16 +72,38 @@ public class FinanceController {
             FinanceReportService reportService,
             OperatorContextResolver operatorContextResolver
     ) {
+        this(billingService, payrollService, costService, reportService, operatorContextResolver, new FinanceReadAuthorizer());
+    }
+
+    @Autowired
+    public FinanceController(
+            FinanceBillingService billingService,
+            FinancePayrollService payrollService,
+            FinanceCostService costService,
+            FinanceReportService reportService,
+            OperatorContextResolver operatorContextResolver,
+            FinanceReadAuthorizer readAuthorizer
+    ) {
         this.billingService = billingService;
         this.payrollService = payrollService;
         this.costService = costService;
         this.reportService = reportService;
         this.operatorContextResolver = operatorContextResolver;
+        this.readAuthorizer = readAuthorizer;
     }
 
     @GetMapping("/price-agreements")
-    public ApiResponse<List<PriceAgreement>> agreements(@RequestParam(required = false) Long customerId) {
-        return ApiResponse.ok(billingService.agreements(customerId));
+    public ApiResponse<List<PriceAgreement>> agreements(
+            @RequestParam(required = false) Long customerId,
+            HttpServletRequest request
+    ) {
+        OperatorContext context = readContext(request);
+        List<PriceAgreement> rows = billingService.agreements(customerId);
+        if (customerId != null) {
+            String name = rows.stream().map(PriceAgreement::customerName).filter(value -> !value.isBlank()).findFirst().orElse("");
+            readAuthorizer.assertCustomer(context, customerId, name);
+        }
+        return ApiResponse.ok(readAuthorizer.visibleAgreements(context, rows));
     }
 
     @PostMapping("/price-agreements")
@@ -96,9 +122,16 @@ public class FinanceController {
     @GetMapping("/unpriced")
     public ApiResponse<List<UnpricedItem>> unpriced(
             @RequestParam String yearMonth,
-            @RequestParam(required = false) Long customerId
+            @RequestParam(required = false) Long customerId,
+            HttpServletRequest request
     ) {
-        return ApiResponse.ok(billingService.unpriced(yearMonth, customerId));
+        OperatorContext context = readContext(request);
+        List<UnpricedItem> rows = billingService.unpriced(yearMonth, customerId);
+        if (customerId != null) {
+            String name = rows.stream().map(UnpricedItem::customerName).filter(value -> !value.isBlank()).findFirst().orElse("");
+            readAuthorizer.assertCustomer(context, customerId, name);
+        }
+        return ApiResponse.ok(readAuthorizer.visibleUnpriced(context, rows));
     }
 
     @PostMapping("/receivable-reversals")
@@ -120,13 +153,18 @@ public class FinanceController {
     @GetMapping("/statements")
     public ApiResponse<CustomerStatement> statement(
             @RequestParam long customerId,
-            @RequestParam(required = false) String yearMonth
+            @RequestParam(required = false) String yearMonth,
+            HttpServletRequest request
     ) {
-        return ApiResponse.ok(billingService.statement(customerId, yearMonth));
+        OperatorContext context = readContext(request);
+        CustomerStatement statement = billingService.statement(customerId, yearMonth);
+        readAuthorizer.assertCustomer(context, customerId, statement.customerName());
+        return ApiResponse.ok(statement);
     }
 
     @GetMapping("/worker-rates")
-    public ApiResponse<List<WorkerRate>> workerRates() {
+    public ApiResponse<List<WorkerRate>> workerRates(HttpServletRequest request) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(payrollService.rates());
     }
 
@@ -139,7 +177,11 @@ public class FinanceController {
     }
 
     @GetMapping("/payroll-lines")
-    public ApiResponse<List<PayrollLine>> payrollLines(@RequestParam(required = false) String yearMonth) {
+    public ApiResponse<List<PayrollLine>> payrollLines(
+            @RequestParam(required = false) String yearMonth,
+            HttpServletRequest request
+    ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(payrollService.lines(yearMonth));
     }
 
@@ -157,12 +199,17 @@ public class FinanceController {
     }
 
     @GetMapping("/consumable-items")
-    public ApiResponse<List<ConsumableStockView>> consumables() {
+    public ApiResponse<List<ConsumableStockView>> consumables(HttpServletRequest request) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.consumableStocks());
     }
 
     @GetMapping("/consumable-movements")
-    public ApiResponse<List<ConsumableMovement>> movements(@RequestParam(required = false) String itemCode) {
+    public ApiResponse<List<ConsumableMovement>> movements(
+            @RequestParam(required = false) String itemCode,
+            HttpServletRequest request
+    ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.movements(itemCode));
     }
 
@@ -190,7 +237,8 @@ public class FinanceController {
     }
 
     @GetMapping("/fixed-assets")
-    public ApiResponse<List<FixedAsset>> assets() {
+    public ApiResponse<List<FixedAsset>> assets(HttpServletRequest request) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.assets());
     }
 
@@ -203,7 +251,11 @@ public class FinanceController {
     }
 
     @GetMapping("/depreciation-entries")
-    public ApiResponse<List<DepreciationEntry>> depreciations(@RequestParam(required = false) String yearMonth) {
+    public ApiResponse<List<DepreciationEntry>> depreciations(
+            @RequestParam(required = false) String yearMonth,
+            HttpServletRequest request
+    ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.depreciations(yearMonth));
     }
 
@@ -221,7 +273,11 @@ public class FinanceController {
     }
 
     @GetMapping("/payables")
-    public ApiResponse<List<PayableView>> payables(@RequestParam(required = false) String yearMonth) {
+    public ApiResponse<List<PayableView>> payables(
+            @RequestParam(required = false) String yearMonth,
+            HttpServletRequest request
+    ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(reportService.payables(yearMonth));
     }
 
@@ -236,9 +292,22 @@ public class FinanceController {
     @GetMapping("/operating-statement")
     public ApiResponse<OperatingStatement> operating(
             @RequestParam String yearMonth,
-            @RequestParam(required = false) Long customerId
+            @RequestParam(required = false) Long customerId,
+            HttpServletRequest request
     ) {
+        OperatorContext context = readContext(request);
+        if (customerId == null) {
+            readAuthorizer.assertCompany(context);
+        } else {
+            CustomerStatement statement = billingService.statement(customerId, yearMonth);
+            readAuthorizer.assertCustomer(context, customerId, statement.customerName());
+        }
         return ApiResponse.ok(reportService.operating(yearMonth, customerId));
+    }
+
+    private OperatorContext readContext(HttpServletRequest request) {
+        readAuthorizer.assertSignedIn(request);
+        return operatorContextResolver.resolve(request);
     }
 
     private String operator(HttpServletRequest request) {

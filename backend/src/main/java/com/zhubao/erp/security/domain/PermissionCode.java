@@ -32,7 +32,9 @@ public enum PermissionCode {
     FINANCE_PAYROLL("工资核算"),
     FINANCE_CONSUMABLE("消耗品管理"),
     FINANCE_ASSET("固定资产"),
-    FINANCE_PAYABLE("应付与付款");
+    FINANCE_PAYABLE("应付与付款"),
+    FINANCE_CUSTOMER_READ("客户财务读取"),
+    FINANCE_COMPANY_READ("公司成本与工资读取");
 
     private final String label;
 

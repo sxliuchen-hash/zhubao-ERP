@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 public class PermissionGuardInterceptor implements HandlerInterceptor {
 
     private static final String POST = "POST";
+    private static final String GET = "GET";
 
     private final OperatorContextResolver operatorContextResolver;
     private final PermissionGuard permissionGuard;
@@ -76,10 +77,13 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
     }
 
     private PermissionCode permissionFor(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (GET.equals(request.getMethod()) && path.startsWith("/api/finance/")) {
+            return financeReadPermission(path);
+        }
         if (!POST.equals(request.getMethod())) {
             return null;
         }
-        String path = request.getRequestURI();
         PermissionCode exactPermission = exactPostPermissions.get(path);
         if (exactPermission != null) {
             return exactPermission;
@@ -141,5 +145,16 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             return PermissionCode.FINANCE_PAYABLE;
         }
         return null;
+    }
+
+    /** 财务读取单独授权。能看订单不代表能看收入、工资或公司成本。 */
+    private PermissionCode financeReadPermission(String path) {
+        if (path.equals("/api/finance/statements")
+                || path.equals("/api/finance/price-agreements")
+                || path.equals("/api/finance/unpriced")
+                || path.equals("/api/finance/operating-statement")) {
+            return PermissionCode.FINANCE_CUSTOMER_READ;
+        }
+        return PermissionCode.FINANCE_COMPANY_READ;
     }
 }
