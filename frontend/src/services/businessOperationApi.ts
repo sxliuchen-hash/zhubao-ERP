@@ -2,6 +2,7 @@ import type { InboundOrder, InventoryBalance, LossApproval, QualityCase, WorkOrd
 import { apiPost } from './apiClient';
 import { fetchAuthSession } from './authApi';
 import type { BusinessOperationContext } from '../types/businessOperationContext';
+import { confirmedQuantityAndWeight } from './operationAmountPolicy';
 
 export interface ConfirmInboundRequest {
   motherOrderCode: string;
@@ -386,6 +387,7 @@ export interface LossApprovalResult {
 }
 
 type OperationRow = { operationContext?: BusinessOperationContext | null };
+type AmountInput = { quantity?: number | string; weight?: number | string };
 
 function context(row: OperationRow) {
   const value = row.operationContext;
@@ -405,6 +407,17 @@ function context(row: OperationRow) {
     quantity: value.quantity,
     weight: String(value.weight),
   };
+}
+
+/** 用调用方明确提交的数量和重量覆盖整批快照，避免只改数量时悄悄带走整批重量。 */
+function withConfirmedAmounts<T extends object>(
+  row: OperationRow,
+  extra: AmountInput,
+  fields: (stock: ReturnType<typeof context>) => T,
+) {
+  const stock = context(row);
+  const amounts = confirmedQuantityAndWeight(extra);
+  return { ...stock, ...fields(stock), ...extra, ...amounts };
 }
 
 function requireFields<T extends object>(request: T, fields: Array<[keyof T, string]>): T {
@@ -436,14 +449,13 @@ async function actor(): Promise<string> {
 }
 
 export function buildConfirmInboundRequest(order: InboundOrder, extra: Partial<ConfirmInboundRequest> = {}): ConfirmInboundRequest {
-  const stock = context(order);
-  return requireFields({
-    ...stock, warehouseCode: stock.fromWarehouseCode,
+  return requireFields(withConfirmedAmounts(order, extra, (stock) => ({
+    warehouseCode: stock.fromWarehouseCode,
     inboundDate: order.inboundDate, expressCompany: order.expressCompany, courierNo: order.courierNo,
     senderName: order.senderName, receiverName: order.receiverName, unpackSigner: order.unpackSigner,
     goodsName: order.goodsName, customerName: order.customer, quantityUnit: '件',
-    operator: '', processingRequirement: '', dueDate: '', ...extra,
-  }, [['operator', '操作人'], ['processingRequirement', '加工要求'], ['dueDate', '完成期限']]);
+    operator: '', processingRequirement: '', dueDate: '',
+  })), [['operator', '操作人'], ['processingRequirement', '加工要求'], ['dueDate', '完成期限']]);
 }
 
 export async function confirmInbound(order: InboundOrder, extra: Partial<ConfirmInboundRequest> = {}): Promise<InboundConfirmationResult> {
@@ -451,12 +463,14 @@ export async function confirmInbound(order: InboundOrder, extra: Partial<Confirm
 }
 
 export function buildProductionReportRequest(order: WorkOrder, handoffCode?: string, extra: Partial<ProductionReportRequest> = {}): ProductionReportRequest {
-  return requireFields({
-    ...context(order), toWarehouseCode: 'SEMI-FINISHED', process: order.process,
+  const request = withConfirmedAmounts(order, extra, (stock) => ({
+    toWarehouseCode: stock.fromWarehouseCode, process: order.process,
     processCategory: order.processCategory, productCategory: order.productCategory, machineNo: order.machineNo,
     workItemName: order.workItemName, startedAt: order.startedAt, finishedAt: order.finishedAt,
-    handoffCode, operator: '', ...extra,
-  }, [['operator', '操作人'], ['workOrderCode', '工单号']]);
+    handoffCode, operator: '',
+  }));
+  // 目标仓库必须与正式工单一致；库存状态由服务端按是否末道决定，不能把状态名当成仓库。
+  return requireFields({ ...request, toWarehouseCode: request.fromWarehouseCode }, [['operator', '操作人'], ['workOrderCode', '工单号']]);
 }
 
 export async function reportProduction(order: WorkOrder, handoffCode?: string, extra: Partial<ProductionReportRequest> = {}): Promise<ProductionReportResult> {
@@ -464,9 +478,10 @@ export async function reportProduction(order: WorkOrder, handoffCode?: string, e
 }
 
 export function buildQualityFreezeRequest(row: QualityCase, extra: Partial<QualityFreezeRequest> = {}): QualityFreezeRequest {
-  return requireFields({ ...context(row), qualityCaseCode: row.code, toWarehouseCode: 'FROZEN-QC',
-    process: row.process, defect: row.defect, inspector: '', ...extra,
-  }, [['inspector', '质检员'], ['workOrderCode', '工单号']]);
+  return requireFields(withConfirmedAmounts(row, extra, () => ({
+    qualityCaseCode: row.code, toWarehouseCode: 'FROZEN-QC',
+    process: row.process, defect: row.defect === '未判定' ? '' : row.defect, inspector: '',
+  })), [['inspector', '质检员'], ['workOrderCode', '工单号'], ['defect', '缺陷说明']]);
 }
 
 export async function freezeQualityStock(row: QualityCase, extra: Partial<QualityFreezeRequest> = {}): Promise<QualityFreezeResult> {
@@ -474,9 +489,10 @@ export async function freezeQualityStock(row: QualityCase, extra: Partial<Qualit
 }
 
 export function buildReworkDispatchRequest(row: QualityCase, extra: Partial<ReworkDispatchRequest> = {}): ReworkDispatchRequest {
-  return requireFields({ ...context(row), qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'REWORK-LINE-01',
-    process: row.process, reason: row.defect, operator: '', ...extra,
-  }, [['reworkOrderCode', '返工单号'], ['operator', '操作人'], ['reason', '返工原因']]);
+  return requireFields(withConfirmedAmounts(row, extra, () => ({
+    qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'REWORK-LINE-01',
+    process: row.process, reason: row.defect === '未判定' ? '' : row.defect, operator: '',
+  })), [['reworkOrderCode', '返工单号'], ['operator', '操作人'], ['reason', '返工原因']]);
 }
 
 export async function dispatchRework(row: QualityCase, extra: Partial<ReworkDispatchRequest> = {}): Promise<ReworkDispatchResult> {
@@ -484,9 +500,10 @@ export async function dispatchRework(row: QualityCase, extra: Partial<ReworkDisp
 }
 
 export function buildReworkReportRequest(row: QualityCase, extra: Partial<ReworkReportRequest> = {}): ReworkReportRequest {
-  return requireFields({ ...context(row), qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'SEMI-FINISHED',
-    process: row.process, operator: '', ...extra,
-  }, [['reworkOrderCode', '返工单号'], ['operator', '操作人']]);
+  return requireFields(withConfirmedAmounts(row, extra, () => ({
+    qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'SEMI-FINISHED',
+    process: row.process, operator: '',
+  })), [['reworkOrderCode', '返工单号'], ['operator', '操作人']]);
 }
 
 export async function reportRework(row: QualityCase, extra: Partial<ReworkReportRequest> = {}): Promise<ReworkReportResult> {
@@ -494,9 +511,10 @@ export async function reportRework(row: QualityCase, extra: Partial<ReworkReport
 }
 
 export function buildQualityReleaseRequest(row: QualityCase, extra: Partial<QualityReleaseRequest> = {}): QualityReleaseRequest {
-  return requireFields({ ...context(row), qualityCaseCode: row.code, toWarehouseCode: 'FINISHED-CUSTOMER',
-    process: row.process, inspector: '', releaseResult: '', ...extra,
-  }, [['inspector', '质检员'], ['releaseResult', '复检结论']]);
+  return requireFields(withConfirmedAmounts(row, extra, () => ({
+    qualityCaseCode: row.code, toWarehouseCode: 'FINISHED-CUSTOMER',
+    process: row.process, inspector: '', releaseResult: '',
+  })), [['inspector', '质检员'], ['releaseResult', '复检结论']]);
 }
 
 export async function releaseQualityStock(row: QualityCase, extra: Partial<QualityReleaseRequest> = {}): Promise<QualityReleaseResult> {
@@ -504,9 +522,10 @@ export async function releaseQualityStock(row: QualityCase, extra: Partial<Quali
 }
 
 export function buildOutboundShipmentRequest(row: InventoryBalance, extra: Partial<OutboundShipmentRequest> = {}): OutboundShipmentRequest {
-  return requireFields({ ...context(row), toWarehouseCode: 'SHIPPED-CUSTOMER', shipmentCode: '', logisticsNo: '',
-    deliveryCategory: '成品', operator: '', ...extra,
-  }, [['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['operator', '操作人']]);
+  return requireFields(withConfirmedAmounts(row, extra, () => ({
+    toWarehouseCode: 'SHIPPED-CUSTOMER', shipmentCode: '', logisticsNo: '',
+    deliveryCategory: '成品', operator: '',
+  })), [['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['operator', '操作人']]);
 }
 
 export async function shipFinishedStock(row: InventoryBalance, extra: Partial<OutboundShipmentRequest> = {}): Promise<OutboundShipmentResult> {
@@ -514,9 +533,10 @@ export async function shipFinishedStock(row: InventoryBalance, extra: Partial<Ou
 }
 
 export function buildCustomerReturnRequest(row: InventoryBalance, extra: Partial<CustomerReturnRequest> = {}): CustomerReturnRequest {
-  return requireFields({ ...context(row), toWarehouseCode: 'RETURN-CHECK', returnCode: '', originalShipmentCode: '',
-    returnLogisticsNo: '', reason: '', operator: '', ...extra,
-  }, [['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['operator', '操作人']]);
+  return requireFields(withConfirmedAmounts(row, extra, () => ({
+    toWarehouseCode: 'RETURN-CHECK', returnCode: '', originalShipmentCode: '',
+    returnLogisticsNo: '', reason: '', operator: '',
+  })), [['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['operator', '操作人']]);
 }
 
 export async function returnCustomerShipment(row: InventoryBalance, extra: Partial<CustomerReturnRequest> = {}): Promise<CustomerReturnResult> {
@@ -525,10 +545,11 @@ export async function returnCustomerShipment(row: InventoryBalance, extra: Parti
 
 export function buildAfterSalesReviewRequest(row: InventoryBalance, extra: Partial<AfterSalesReviewRequest> = {}): AfterSalesReviewRequest {
   const target = { RELEASE: 'FINISHED-CUSTOMER', REWORK: 'REWORK-LINE-01', SCRAP: 'SCRAP', FREEZE: 'FROZEN-QC' };
-  return requireFields({ ...context(row), toWarehouseCode: extra.disposition ? target[extra.disposition] : '',
+  return requireFields(withConfirmedAmounts(row, extra, () => ({
+    toWarehouseCode: extra.disposition ? target[extra.disposition] : '',
     reviewCode: '', returnCode: '', originalShipmentCode: '', disposition: extra.disposition as AfterSalesReviewDisposition,
-    inspector: '', finding: '', ...extra,
-  }, [['reviewCode', '售后复核单号'], ['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'],
+    inspector: '', finding: '',
+  })), [['reviewCode', '售后复核单号'], ['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'],
     ['disposition', '处理结论'], ['inspector', '质检员'], ['finding', '复核说明']]);
 }
 

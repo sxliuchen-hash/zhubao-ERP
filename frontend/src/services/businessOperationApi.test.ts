@@ -32,21 +32,29 @@ beforeEach(() => {
 });
 
 describe('正式单据操作', () => {
-  it('按正式库存维度出库并保留用户输入的数量、物流和证据', () => {
+  it('按正式库存维度出库并原样保留明确填写的数量和重量', () => {
     expect(buildOutboundShipmentRequest(inventory, { shipmentCode: 'OUT-REAL', logisticsNo: 'YT123',
-      quantity: 3, weight: '6.2', operator: '实际库管', evidenceCode: 'EVIDENCE-REAL',
+      quantity: 2, weight: '6.20', operator: '实际库管', evidenceCode: 'EVIDENCE-REAL',
     })).toMatchObject({ customerId: 57, ownerCustomerId: 57, motherOrderCode: 'MD-REAL',
       workOrderCode: 'ZD-REAL', materialCode: 'MAT-REAL', fromWarehouseCode: 'REAL-WAREHOUSE',
-      shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', quantity: 3, weight: '6.2', evidenceCode: 'EVIDENCE-REAL' });
+      shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', quantity: 2, weight: '6.20', evidenceCode: 'EVIDENCE-REAL' });
+    expect(() => buildOutboundShipmentRequest(inventory, { shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', operator: '库管', quantity: 2 }))
+      .toThrow('必须同时填写');
+    expect(() => buildOutboundShipmentRequest(inventory, { shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', operator: '库管', weight: '6.20' }))
+      .toThrow('必须同时填写');
+    expect(() => buildOutboundShipmentRequest(inventory, { shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', operator: '库管' }))
+      .toThrow('留空不会自动沿用整批重量');
   });
 
   it('缺少正式上下文或物流信息时拒绝构造命令，不回退样例客户', () => {
     expect(() => buildOutboundShipmentRequest({ ...inventory, operationContext: undefined })).toThrow('正式操作上下文');
-    expect(() => buildOutboundShipmentRequest(inventory, { shipmentCode: 'OUT-REAL', operator: '库管' })).toThrow('发货运单号');
+    expect(() => buildOutboundShipmentRequest(inventory, {
+      shipmentCode: 'OUT-REAL', operator: '库管', quantity: 12, weight: '25.75',
+    })).toThrow('发货运单号');
   });
 
   it('登录账号决定实际操作人，未登录不得提交', async () => {
-    await shipFinishedStock(inventory, { shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', operator: '伪造操作人' });
+    await shipFinishedStock(inventory, { shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', operator: '伪造操作人', quantity: 12, weight: '25.75' });
     expect(apiPost).toHaveBeenCalledWith('/api/business/operations/outbound-shipments', expect.objectContaining({ operator: '当前账号' }));
     vi.mocked(fetchAuthSession).mockResolvedValue(null);
     vi.mocked(apiPost).mockClear();
@@ -55,24 +63,30 @@ describe('正式单据操作', () => {
   });
 
   it('退货必须明确原出库与本次物流，售后处理由用户选择', () => {
-    expect(() => buildCustomerReturnRequest(inventory, { returnCode: 'RET-REAL' })).toThrow('原出库单号');
+    expect(() => buildCustomerReturnRequest(inventory, { returnCode: 'RET-REAL', quantity: 12, weight: '25.75' })).toThrow('原出库单号');
     expect(buildCustomerReturnRequest(inventory, { returnCode: 'RET-REAL', originalShipmentCode: 'OUT-9',
-      returnLogisticsNo: 'RET-TRACK', reason: '客户退回', operator: '库管',
-    })).toMatchObject({ originalShipmentCode: 'OUT-9', returnLogisticsNo: 'RET-TRACK', quantity: 12 });
+      returnLogisticsNo: 'RET-TRACK', reason: '客户退回', operator: '库管', quantity: 12, weight: '25.75',
+    })).toMatchObject({ originalShipmentCode: 'OUT-9', returnLogisticsNo: 'RET-TRACK', quantity: 12, weight: '25.75' });
     expect(buildAfterSalesReviewRequest(inventory, { reviewCode: 'ASR-1', returnCode: 'RET-REAL',
-      originalShipmentCode: 'OUT-9', disposition: 'RELEASE', inspector: '质检', finding: '复核合格',
-    })).toMatchObject({ disposition: 'RELEASE', toWarehouseCode: 'FINISHED-CUSTOMER', quantity: 12 });
+      originalShipmentCode: 'OUT-9', disposition: 'RELEASE', inspector: '质检', finding: '复核合格', quantity: 3, weight: '6.20',
+    })).toMatchObject({ disposition: 'RELEASE', toWarehouseCode: 'FINISHED-CUSTOMER', quantity: 3, weight: '6.20' });
   });
 
-  it('质检与返工沿用真实工单、实际重量和明确返工单号', () => {
-    expect(buildQualityFreezeRequest(quality, { inspector: '当前质检' })).toMatchObject({
-      motherOrderCode: 'MD-REAL', workOrderCode: 'ZD-REAL', quantity: 12, weight: '25.75', inspector: '当前质检' });
-    expect(() => buildReworkDispatchRequest(quality, { operator: '组长' })).toThrow('返工单号');
-    expect(buildReworkDispatchRequest(quality, { operator: '组长', reworkOrderCode: 'FG-REAL' })).toMatchObject({
-      reworkOrderCode: 'FG-REAL', reason: '划痕', customerId: 57 });
-    expect(buildReworkReportRequest(quality, { operator: '返工人', reworkOrderCode: 'FG-REAL' })).toMatchObject({
-      reworkOrderCode: 'FG-REAL', weight: '25.75' });
-    expect(() => buildQualityReleaseRequest(quality, { inspector: '质检' })).toThrow('复检结论');
+  it('质检与返工沿用真实工单，未判定不能充当缺陷或返工原因', () => {
+    const amounts = { quantity: 12, weight: '25.75' };
+    expect(buildQualityFreezeRequest(quality, { inspector: '当前质检', ...amounts })).toMatchObject({
+      motherOrderCode: 'MD-REAL', workOrderCode: 'ZD-REAL', quantity: 12, weight: '25.75', defect: '划痕', inspector: '当前质检' });
+    expect(() => buildQualityFreezeRequest({ ...quality, defect: '未判定' }, { inspector: '当前质检', ...amounts })).toThrow('缺陷说明');
+    expect(buildQualityFreezeRequest({ ...quality, defect: '未判定' }, { inspector: '当前质检', ...amounts, defect: '表面划伤' }))
+      .toMatchObject({ defect: '表面划伤', quantity: 12, weight: '25.75' });
+    expect(() => buildReworkDispatchRequest(quality, { operator: '组长', ...amounts })).toThrow('返工单号');
+    expect(buildReworkDispatchRequest(quality, { operator: '组长', reworkOrderCode: 'FG-REAL', ...amounts, reason: '重新抛光' })).toMatchObject({
+      reworkOrderCode: 'FG-REAL', reason: '重新抛光', customerId: 57, weight: '25.75' });
+    expect(() => buildReworkDispatchRequest({ ...quality, defect: '未判定' }, { operator: '组长', reworkOrderCode: 'FG-REAL', ...amounts }))
+      .toThrow('返工原因');
+    expect(buildReworkReportRequest(quality, { operator: '返工人', reworkOrderCode: 'FG-REAL', quantity: 2, weight: '4.250' })).toMatchObject({
+      reworkOrderCode: 'FG-REAL', quantity: 2, weight: '4.250' });
+    expect(() => buildQualityReleaseRequest(quality, { inspector: '质检', ...amounts })).toThrow('复检结论');
   });
 
   it('损耗试算必须有完整实测和计价输入，审批人取当前会话', async () => {
@@ -85,12 +99,17 @@ describe('正式单据操作', () => {
 
   it('来料与报工不生成纸质行号、样例日期或称重', () => {
     const inbound = { code: 'MD-REAL', customer: '实际客户', inboundDate: '2026-10-10', operationContext } as InboundOrder;
-    const request = buildConfirmInboundRequest(inbound, { operator: '收货人', processingRequirement: '镜面抛光', dueDate: '2026-10-20' });
-    expect(request).toMatchObject({ customerId: 57, materialCode: 'MAT-REAL', inboundDate: '2026-10-10', weight: '25.75' });
+    expect(() => buildConfirmInboundRequest(inbound, { operator: '收货人', processingRequirement: '镜面抛光', dueDate: '2026-10-20' }))
+      .toThrow('留空不会自动沿用整批重量');
+    const request = buildConfirmInboundRequest(inbound, {
+      operator: '收货人', processingRequirement: '镜面抛光', dueDate: '2026-10-20', quantity: 12, weight: '25.75',
+    });
+    expect(request).toMatchObject({ customerId: 57, materialCode: 'MAT-REAL', inboundDate: '2026-10-10', quantity: 12, weight: '25.75' });
     expect(request).not.toHaveProperty('sourceRegisterLineNo');
     const work = { code: 'ZD-REAL', process: '雕刻', operationContext } as WorkOrder;
-    const report = buildProductionReportRequest(work, undefined, { operator: '操机员', quantity: 2, weight: '4.5' });
-    expect(report).toMatchObject({ quantity: 2, weight: '4.5', motherOrderCode: 'MD-REAL' });
+    const report = buildProductionReportRequest(work, undefined, { operator: '操机员', quantity: 2, weight: '4.50' });
+    expect(report).toMatchObject({ quantity: 2, weight: '4.50', motherOrderCode: 'MD-REAL', toWarehouseCode: 'REAL-WAREHOUSE' });
     expect(report).not.toHaveProperty('workDate');
+    expect(() => buildProductionReportRequest(work, undefined, { operator: '操机员', quantity: 2 })).toThrow('必须同时填写');
   });
 });

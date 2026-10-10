@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import OperationInputs from './OperationInputs.vue';
+import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
@@ -39,7 +40,7 @@ const emptyQuality = (): QualityWorkspaceModel => ({
 
 const workspace = ref<QualityWorkspaceModel>(emptyQuality());
 const loadError = ref('');
-const operationValues = ref<Record<string, string>>({});
+const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
 const freezingQualityStock = ref(false);
 const qualityFreezeResult = ref<QualityFreezeResult | null>(null);
 const qualityFreezeError = ref('');
@@ -57,6 +58,7 @@ const lossApprovalResult = ref<LossApprovalResult | null>(null);
 const lossApprovalError = ref('');
 const selectedQualityCaseCode = ref('');
 const checkScanText = ref('');
+let recognitionVersion = 0;
 const checkHint = ref('');
 const checkError = ref('');
 const checkBusy = ref(false);
@@ -114,7 +116,26 @@ const canSubmitRequirement = computed(() => (
   Boolean(checkView.value?.ready) && !requirementSubmitted.value && requirementHint.value === '' && !checkSubmitting.value
 ));
 
-watch(activeCase, () => { operationValues.value = {}; });
+const recordedDefect = computed(() => {
+  const value = activeCase.value?.defect?.trim() ?? '';
+  return value && value !== '未判定' ? value : '';
+});
+const effectiveDefect = computed(() => operationValues.value.defect?.trim() || recordedDefect.value);
+const effectiveReason = computed(() => operationValues.value.reason?.trim() || recordedDefect.value);
+
+watch(activeCase, (item) => { resetAmounts(item?.operationContext); });
+watch(checkScanText, () => {
+  const hadRecognition = checkView.value !== null || checkBusy.value || checkResult.value !== null || requirementRework.value !== null;
+  recognitionVersion += 1;
+  checkBusy.value = false;
+  checkView.value = null;
+  clauseDrafts.value = {};
+  checkResult.value = null;
+  requirementRework.value = null;
+  checkError.value = '';
+  requirementReworkError.value = '';
+  checkHint.value = hadRecognition ? '贴纸已变化，请重新识别' : '';
+}, { flush: 'sync' });
 
 function qualityCaseTone(status: string, action = ''): Tone {
   if (status.includes('完成')) return 'green';
@@ -153,6 +174,8 @@ async function freezeActiveQualityStock() {
   qualityFreezeError.value = '';
 
   try {
+    if (!effectiveDefect.value) throw new Error('请填写缺陷说明');
+    assertAmounts();
     qualityFreezeResult.value = await freezeQualityStock(activeCase.value, operationDraft(operationValues.value));
     await loadQualityWorkspace();
   } catch (error) {
@@ -170,7 +193,11 @@ async function dispatchActiveRework() {
   reworkDispatchError.value = '';
 
   try {
-    reworkDispatchResult.value = await dispatchRework(activeCase.value, operationDraft(operationValues.value));
+    const draft = operationDraft(operationValues.value);
+    if (!effectiveReason.value) throw new Error('请填写返工原因');
+    if (!String(draft.reworkOrderCode ?? '').trim()) throw new Error('请填写返工单号');
+    assertAmounts();
+    reworkDispatchResult.value = await dispatchRework(activeCase.value, draft);
     await loadQualityWorkspace();
   } catch (error) {
     reworkDispatchError.value = error instanceof Error ? error.message : '生成返工工单失败';
@@ -187,6 +214,7 @@ async function reportActiveRework() {
   reworkReportError.value = '';
 
   try {
+    assertAmounts();
     reworkReportResult.value = await reportRework(activeCase.value, operationDraft(operationValues.value));
     await loadQualityWorkspace();
   } catch (error) {
@@ -204,6 +232,7 @@ async function releaseActiveQualityStock() {
   qualityReleaseError.value = '';
 
   try {
+    assertAmounts();
     qualityReleaseResult.value = await releaseQualityStock(activeCase.value, operationDraft(operationValues.value));
     await loadQualityWorkspace();
   } catch (error) {
@@ -251,7 +280,6 @@ async function recognizeRequirement() {
   checkResult.value = null;
   requirementRework.value = null;
   requirementReworkError.value = '';
-  checkView.value = null;
   const raw = checkScanText.value.trim();
   if (!raw) {
     checkHint.value = '请先扫子单贴纸，或不拆母单的贴纸';
@@ -269,15 +297,20 @@ async function recognizeRequirement() {
       return;
     }
   }
+  const version = ++recognitionVersion;
+  checkView.value = null;
+  clauseDrafts.value = {};
   checkBusy.value = true;
   try {
     const loaded = await lookupQualityCheck(raw);
+    if (version !== recognitionVersion || raw !== checkScanText.value.trim()) return;
     resetRequirementDrafts(loaded);
     checkView.value = loaded;
   } catch (error) {
+    if (version !== recognitionVersion) return;
     checkError.value = error instanceof Error ? error.message : '贴纸识别失败';
   } finally {
-    checkBusy.value = false;
+    if (version === recognitionVersion) checkBusy.value = false;
   }
 }
 
@@ -286,19 +319,20 @@ async function submitRequirement() {
     return;
   }
   checkSubmitting.value = true;
+  const view = checkView.value;
+  const version = recognitionVersion;
+  const lines = view.lines.map((line) => ({
+    lineNo: line.lineNo,
+    verdict: clauseDrafts.value[line.lineNo]?.verdict ?? '',
+    reason: clauseDrafts.value[line.lineNo]?.reason.trim() ?? '',
+  }));
   checkError.value = '';
   try {
-    const result = await submitQualityCheck({
-      code: checkScanText.value.trim(),
-      lines: checkView.value.lines.map((line) => ({
-        lineNo: line.lineNo,
-        verdict: clauseDrafts.value[line.lineNo]?.verdict ?? '',
-        reason: clauseDrafts.value[line.lineNo]?.reason.trim() ?? '',
-      })),
-    });
+    const result = await submitQualityCheck({ code: view.orderCode, lines });
+    if (version !== recognitionVersion) return;
     checkResult.value = result;
     checkView.value = {
-      ...checkView.value,
+      ...view,
       inspector: result.inspector,
       qualityCaseCode: result.qualityCaseCode,
       outcome: result.outcome,
@@ -310,6 +344,7 @@ async function submitRequirement() {
     };
     checkHint.value = '';
   } catch (error) {
+    if (version !== recognitionVersion) return;
     checkError.value = error instanceof Error ? error.message : '提交质检失败';
   } finally {
     checkSubmitting.value = false;
@@ -321,15 +356,19 @@ async function openRequirementRework() {
     return;
   }
   reworkOpening.value = true;
+  const view = checkView.value;
+  const version = recognitionVersion;
   requirementReworkError.value = '';
   try {
-    const opened = await openQualityRework(checkScanText.value.trim());
+    const opened = await openQualityRework(view.orderCode);
+    if (version !== recognitionVersion) return;
     requirementRework.value = opened;
     checkView.value = {
-      ...checkView.value,
+      ...view,
       reworkOrderCode: opened.reworkOrderCode,
     };
   } catch (error) {
+    if (version !== recognitionVersion) return;
     requirementReworkError.value = error instanceof Error ? error.message : '开返工失败';
   } finally {
     reworkOpening.value = false;
@@ -532,12 +571,16 @@ function selectQualityCase(code: string) {
             <dt>损耗审批</dt>
             <dd>{{ activeApproval?.code ?? '无' }}</dd>
           </dl>
-          <OperationInputs v-model="operationValues" :fields="[['approvalCode', '损耗申请单号'], ['reworkOrderCode', '返工单号'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['releaseResult', '复检结论'], ['evidenceCode', '证据编号'], ['operator', '损耗报工人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量（克）', 'number'], ['outputWeight', '产出重量（克）', 'number'], ['reasonableTransferWeight', '合理转移重量（克）', 'number'], ['standardLossRatePercent', '标准损耗率（%）', 'number'], ['acceptedQuantity', '验收数量', 'number'], ['pieceRate', '计件单价', 'number'], ['lossDeductionUnitPrice', '损耗扣减单价', 'number']]" />
+          <OperationInputs v-model="operationValues" :fields="[['defect', '缺陷说明'], ['reason', '返工原因'], ['approvalCode', '损耗申请单号'], ['reworkOrderCode', '返工单号'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['releaseResult', '复检结论'], ['evidenceCode', '证据编号'], ['operator', '损耗报工人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量（克）', 'number'], ['outputWeight', '产出重量（克）', 'number'], ['reasonableTransferWeight', '合理转移重量（克）', 'number'], ['standardLossRatePercent', '标准损耗率（%）', 'number'], ['acceptedQuantity', '验收数量', 'number'], ['pieceRate', '计件单价', 'number'], ['lossDeductionUnitPrice', '损耗扣减单价', 'number']]" />
+          <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
+          <p v-if="activeCase.defect === '未判定' && !operationValues.defect?.trim()" class="operation-feedback warning">未判定不能作为缺陷，请填写缺陷说明。</p>
+          <p v-if="!effectiveReason" class="operation-feedback warning">生成返工前请填写返工原因。</p>
+          <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
           <div class="detail-actions">
-            <button class="primary-button" type="button" :disabled="freezingQualityStock" @click="freezeActiveQualityStock">
+            <button class="primary-button" type="button" :disabled="freezingQualityStock || !effectiveDefect" @click="freezeActiveQualityStock">
               {{ freezingQualityStock ? '正在冻结' : '冻结异常库存' }}
             </button>
-            <button class="secondary-button" type="button" :disabled="dispatchingRework" @click="dispatchActiveRework">
+            <button class="secondary-button" type="button" :disabled="dispatchingRework || !effectiveReason" @click="dispatchActiveRework">
               {{ dispatchingRework ? '正在派发' : '生成返工工单' }}
             </button>
             <button class="secondary-button" type="button" :disabled="reportingRework" @click="reportActiveRework">

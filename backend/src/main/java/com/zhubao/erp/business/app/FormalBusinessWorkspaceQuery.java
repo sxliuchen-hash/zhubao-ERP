@@ -235,10 +235,24 @@ final class FormalBusinessWorkspaceQuery {
     private OperationContext context(String motherCode, String orderCode, Set<StockStatus> statuses) {
         List<StockBalance> matches = balances().stream().filter(FormalBusinessWorkspaceQuery::positive)
                 .filter(balance -> Objects.equals(motherCode, balance.dimension().motherOrderCode()))
-                .filter(balance -> Objects.equals(text(orderCode).equals(motherCode) ? "" : text(orderCode), text(balance.dimension().workOrderCode())))
+                .filter(balance -> matchesWorkOrder(motherCode, orderCode, balance.dimension()))
                 .filter(balance -> statuses.contains(balance.dimension().stockStatus())).toList();
         // 多仓库或多状态有余额时，不能替使用者猜测来源库存。
         return matches.size() == 1 ? context(matches.get(0)) : null;
+    }
+
+    private boolean matchesWorkOrder(String motherCode, String orderCode, StockDimension dimension) {
+        String requested = text(orderCode);
+        String stored = text(dimension.workOrderCode());
+        if (!requested.equals(motherCode)) {
+            return requested.equals(stored);
+        }
+        // 不拆母单在收货阶段尚无工单，首报转在制后以母单号作为真实加工工单。
+        if (dimension.stockStatus() == StockStatus.RAW_WAITING) {
+            return stored.isEmpty();
+        }
+        // 保留历史仅以空工单登记的实际库存；与正式工单并存时由唯一余额检查阻断猜测。
+        return requested.equals(stored) || stored.isEmpty();
     }
 
     private OperationContext context(StockBalance balance) {

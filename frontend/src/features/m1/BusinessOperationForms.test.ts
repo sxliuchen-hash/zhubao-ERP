@@ -60,7 +60,8 @@ describe('业务操作真实输入', () => {
     await wrapper.get('[aria-label="发货运单号"]').setValue('YT-SECOND');
     await wrapper.findAll('button').find(button => button.text() === '确认出库')!.trigger('click');
     await flushPromises();
-    expect(shipFinishedStock).toHaveBeenLastCalledWith(balances[1], { shipmentCode: 'OUT-SECOND', logisticsNo: 'YT-SECOND' });
+    expect(shipFinishedStock).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('留空不会自动沿用整批重量');
     expect(wrapper.findAll('tbody tr.is-selected')).toHaveLength(1);
 
   });

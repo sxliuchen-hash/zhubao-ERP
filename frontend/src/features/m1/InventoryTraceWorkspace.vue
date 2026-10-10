@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import OperationInputs from './OperationInputs.vue';
+import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
@@ -27,7 +28,7 @@ const emptyInventory = (): InventoryWorkspaceModel => ({
 
 const workspace = ref<InventoryWorkspaceModel>(emptyInventory());
 const loadError = ref('');
-const operationValues = ref<Record<string, string>>({});
+const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
 const shippingFinishedStock = ref(false);
 const outboundShipmentResult = ref<OutboundShipmentResult | null>(null);
 const outboundShipmentError = ref('');
@@ -57,7 +58,7 @@ const latestLedger = computed(
     workspace.value.ledgerEntries[0],
 );
 
-watch(activeBalance, () => { operationValues.value = {}; });
+watch(activeBalance, (balance) => { resetAmounts(balance?.operationContext); });
 
 function balanceKey(item: InventoryBalance) {
   const context = item.operationContext;
@@ -107,6 +108,7 @@ async function shipActiveFinishedStock() {
   afterSalesReviewError.value = '';
 
   try {
+    assertAmounts();
     outboundShipmentResult.value = await shipFinishedStock(activeBalance.value, operationDraft(operationValues.value));
     await loadInventoryWorkspace();
   } catch (error) {
@@ -126,6 +128,7 @@ async function returnActiveCustomerShipment() {
   afterSalesReviewError.value = '';
 
   try {
+    assertAmounts();
     customerReturnResult.value = await returnCustomerShipment(activeBalance.value, operationDraft(operationValues.value));
     await loadInventoryWorkspace();
   } catch (error) {
@@ -143,6 +146,7 @@ async function reviewActiveAfterSalesReturn() {
   afterSalesReviewError.value = '';
 
   try {
+    assertAmounts();
     afterSalesReviewResult.value = await reviewAfterSalesReturn(activeBalance.value, operationDraft(operationValues.value));
     await loadInventoryWorkspace();
   } catch (error) {
@@ -151,6 +155,8 @@ async function reviewActiveAfterSalesReturn() {
     reviewingAfterSalesReturn.value = false;
   }
 }
+
+defineExpose({ reloadInventory: loadInventoryWorkspace });
 
 function selectBalance(item: InventoryBalance) {
   selectedBalanceKey.value = balanceKey(item);
@@ -198,7 +204,7 @@ function selectBalance(item: InventoryBalance) {
             <tbody>
               <tr
                 v-for="item in filteredBalances"
-                :key="`${item.owner}-${item.batch}-${item.status}`"
+                :key="balanceKey(item)"
                 :class="{ 'is-selected': activeBalance && balanceKey(activeBalance) === balanceKey(item) }"
                 :aria-selected="activeBalance && balanceKey(activeBalance) === balanceKey(item)"
                 @click="selectBalance(item)"
@@ -241,6 +247,8 @@ function selectBalance(item: InventoryBalance) {
             <dd>{{ latestLedger?.bizCode ?? '暂无' }}</dd>
           </dl>
           <OperationInputs v-model="operationValues" :fields="[['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
+          <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
+          <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
           <div class="detail-actions">
             <button class="primary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
               {{ shippingFinishedStock ? '正在出库' : '确认出库' }}

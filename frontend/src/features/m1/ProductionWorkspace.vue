@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import OperationInputs from './OperationInputs.vue';
+import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
@@ -29,7 +30,7 @@ const emptyProduction = (): ProductionWorkspaceModel => ({
 
 const workspace = ref<ProductionWorkspaceModel>(emptyProduction());
 const loadError = ref('');
-const operationValues = ref<Record<string, string>>({});
+const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
 const reportingProduction = ref(false);
 const productionReportResult = ref<ProductionReportResult | null>(null);
 const productionReportError = ref('');
@@ -138,7 +139,7 @@ async function loadMachineMatchSuggestions() {
   }
 }
 
-watch(activeWorkOrder, () => { operationValues.value = {}; });
+watch(activeWorkOrder, (order) => { resetAmounts(order?.operationContext); });
 
 function workOrderTone(status: string): Tone {
   if (status.includes('称重')) return 'red';
@@ -155,6 +156,7 @@ async function reportActiveProduction() {
   productionReportError.value = '';
 
   try {
+    assertAmounts();
     productionReportResult.value = await reportProduction(activeWorkOrder.value, activeHandoff.value?.code, operationDraft(operationValues.value));
     await loadProductionWorkspace();
   } catch (error) {
@@ -302,6 +304,8 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
             <em>{{ activeWorkOrder.progress }}%</em>
           </div>
           <OperationInputs v-model="operationValues" :fields="[['quantity', '本次完成数量', 'number'], ['weight', '本次产出重量（克）', 'number'], ['workDate', '报工日期', 'date'], ['evidenceCode', '证据编号']]" />
+          <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
+          <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
           <div class="detail-actions three-actions">
             <button class="primary-button" type="button" :disabled="reportingProduction" @click="reportActiveProduction">
               {{ reportingProduction ? '正在入账' : '提交报工' }}

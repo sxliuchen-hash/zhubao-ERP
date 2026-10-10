@@ -482,7 +482,7 @@ describe('M1 business workspaces', () => {
     await wrapper.get('[aria-label="开返工"]').trigger('click');
     await flushPromises();
 
-    expect(openQualityRework).toHaveBeenCalledWith('JG|work_order|ZD-100');
+    expect(openQualityRework).toHaveBeenCalledWith('ZD-100');
     expect(wrapper.text()).toContain('FG-ZD-100');
     expect(wrapper.text()).toContain('MD-100 / ZD-100');
     expect(wrapper.text()).toContain('库存已从冻结转入返工');
