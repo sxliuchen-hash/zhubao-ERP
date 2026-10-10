@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
-import type { Tone } from '../../data/m1PrototypeData';
+import type { InboundOrder, Tone } from '../../data/m1PrototypeData';
 import {
   fetchInboundWorkspace,
   type InboundWorkspaceModel,
@@ -30,9 +30,15 @@ const selectedOrderCode = ref('');
 const processingRequirement = ref('');
 const dueDate = ref('');
 const captures = ref<DocumentCapture[]>([]);
+const captureError = ref('');
 const motherDetail = ref<MobileIntakeResult | null>(null);
 const structuredCode = ref('');
 const structuredError = ref('');
+const customerKeyword = ref('');
+const statusKeyword = ref('');
+const advancedOpen = ref(false);
+const detailOpen = ref(false);
+const loading = ref(false);
 const { keyword, filtered: filteredOrders } = useDeskFilter(
   () => workspace.value.orders,
   (order) => `${order.code} ${order.customer} ${order.material} ${order.courierNo} ${order.goodsName} ${order.status}`,
@@ -49,12 +55,23 @@ const activeRisk = computed(
   () => workspace.value.risks.find((risk) => risk.code === activeOrder.value?.code) ?? workspace.value.risks[0],
 );
 
+const visibleOrders = computed(() => {
+  const customer = customerKeyword.value.trim().toLowerCase();
+  const status = statusKeyword.value.trim();
+  return filteredOrders.value.filter((order) => {
+    const customerMatched = !customer || order.customer.toLowerCase().includes(customer);
+    const statusMatched = !status || order.status.includes(status);
+    return customerMatched && statusMatched;
+  });
+});
+
 onMounted(() => {
   void loadInboundWorkspace();
 });
 
 async function loadInboundWorkspace() {
   loadError.value = '';
+  loading.value = true;
   try {
     const loaded = await fetchInboundWorkspace();
     workspace.value = loaded;
@@ -65,6 +82,7 @@ async function loadInboundWorkspace() {
     workspace.value = emptyInbound();
     loadError.value = error instanceof Error ? error.message : '来料单据加载失败';
   } finally {
+    loading.value = false;
     if (!workspace.value.orders.some((order) => order.code === selectedOrderCode.value)) {
       selectedOrderCode.value = activeOrder.value?.code ?? '';
     }
@@ -100,9 +118,20 @@ async function loadOrderExtras(code: string) {
   }
   try {
     captures.value = await fetchCaptures(code);
-  } catch {
+    captureError.value = '';
+  } catch (error) {
     captures.value = [];
+    captureError.value = error instanceof Error ? error.message : '视频暂时无法打开';
   }
+}
+
+function requirementText(order: InboundOrder) {
+  if (motherDetail.value?.motherOrderCode !== order.code) {
+    return '打开后核对';
+  }
+  const requirement = motherDetail.value.processingRequirement.trim() || '未记录';
+  const due = motherDetail.value.dueDate.trim() || '未记录';
+  return `${requirement} / ${due}`;
 }
 
 async function confirmActiveInbound() {
@@ -150,83 +179,107 @@ async function openStructuredMother() {
 
 function selectInboundOrder(code: string) {
   selectedOrderCode.value = code;
+  detailOpen.value = true;
   confirmationResult.value = null;
   confirmationError.value = '';
   processingRequirement.value = '';
   dueDate.value = '';
   void loadOrderExtras(code);
 }
+
+function backToList() {
+  detailOpen.value = false;
+}
 </script>
 
 <template>
-  <div class="inbound-desk page-stack">
+  <div class="inbound-desk page-stack" :class="{ 'is-detail': detailOpen }">
     <section class="module-work-grid inbound-work-grid" aria-label="来料作业主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">
           <div>
             <h2>今日母单池</h2>
           </div>
-          <div class="module-tools">
-            <label>
-              <span>扫码</span>
-              <input v-model="keyword" placeholder="母单或快递单号" aria-label="快递或母单扫码" />
-            </label>
-          </div>
+          <button class="primary-button" type="button" :disabled="!activeOrder || confirmingInbound" @click="confirmActiveInbound">
+            {{ confirmingInbound ? '正在入账' : '确认入库' }}
+          </button>
+        </div>
+        <div class="module-tools inbound-filters">
+          <label>
+            <span>扫码</span>
+            <input v-model="keyword" placeholder="母单或快递单号" aria-label="快递或母单扫码" />
+          </label>
+          <label>
+            <span>客户</span>
+            <input v-model="customerKeyword" placeholder="客户名称" aria-label="客户筛选" />
+          </label>
+          <button class="secondary-button" type="button" :aria-expanded="advancedOpen ? 'true' : 'false'" @click="advancedOpen = !advancedOpen">
+            {{ advancedOpen ? '收起筛选' : '更多筛选' }}
+          </button>
+          <label v-if="advancedOpen">
+            <span>状态</span>
+            <input v-model="statusKeyword" placeholder="如 待拆包" aria-label="状态筛选" />
+          </label>
         </div>
 
+        <p v-if="loading" class="empty-hint">正在加载来料</p>
         <p v-if="loadError" class="operation-feedback danger">{{ loadError }}</p>
-        <div class="module-table-wrap refined-table-wrap">
+        <div class="module-table-wrap refined-table-wrap inbound-table-wrap">
           <table class="module-table inbound-dispatch-table">
             <thead>
               <tr>
                 <th>母单</th>
-                <th>签收</th>
-                <th>客户/货品</th>
-                <th>快递</th>
-                <th>寄收/签字</th>
-                <th>数量重量</th>
-                <th>入库状态</th>
+                <th>客户</th>
+                <th>加工要求／期限</th>
+                <th class="amount">数量重量</th>
+                <th>状态</th>
                 <th>动作</th>
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="order in filteredOrders"
+                v-for="order in visibleOrders"
                 :key="order.code"
                 :class="{ 'is-selected': activeOrder?.code === order.code }"
                 :aria-selected="activeOrder?.code === order.code"
                 @click="selectInboundOrder(order.code)"
               >
-                <td><strong>{{ order.code }}</strong></td>
-                <td>{{ order.inboundDate }} / {{ order.expressCompany }}</td>
-                <td>
-                  <span class="cell-stack">
-                    <b>{{ order.customer }}</b>
-                    <small>{{ order.goodsName || order.material }}</small>
-                  </span>
-                </td>
-                <td>{{ order.courierNo }}</td>
-                <td>
-                  <span class="cell-stack">
-                    <b>{{ order.senderName }} -> {{ order.receiverName }}</b>
-                    <small>拆箱：{{ order.unpackSigner || '待补签' }}</small>
-                  </span>
-                </td>
-                <td>{{ order.qty }} 件 / {{ order.weight }}</td>
+                <td class="code"><strong>{{ order.code }}</strong></td>
+                <td>{{ order.customer }}</td>
+                <td>{{ requirementText(order) }}</td>
+                <td class="amount">{{ order.qty }} 件 / {{ order.weight }}</td>
                 <td><StatusBadge :label="order.status" :tone="statusTone(order.status)" /></td>
                 <td><button class="table-action" type="button" @click.stop="selectInboundOrder(order.code)">处理</button></td>
               </tr>
-              <tr v-if="filteredOrders.length === 0">
-                <td colspan="8">暂无来料单据</td>
+              <tr v-if="!loading && visibleOrders.length === 0">
+                <td colspan="6">暂无来料单据</td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="inbound-cards">
+          <p v-if="!loading && visibleOrders.length === 0" class="empty-hint">暂无来料单据</p>
+          <button
+            v-for="order in visibleOrders"
+            :key="order.code"
+            class="inbound-card"
+            type="button"
+            @click="selectInboundOrder(order.code)"
+          >
+            <span class="inbound-card-top">
+              <strong class="code">{{ order.code }}</strong>
+              <StatusBadge :label="order.status" :tone="statusTone(order.status)" />
+            </span>
+            <span>{{ order.customer }}</span>
+            <span>{{ requirementText(order) }} · {{ order.qty }} 件 / {{ order.weight }}</span>
+          </button>
         </div>
       </div>
 
       <aside v-if="activeOrder" class="module-side-panel">
         <section class="active-object-card tone-amber">
           <div class="panel-title-row">
+            <button class="secondary-button detail-back" type="button" @click="backToList">返回列表</button>
             <StatusBadge :label="activeOrder.status" :tone="statusTone(activeOrder.status)" />
           </div>
           <strong>{{ activeOrder.code }}</strong>
@@ -305,7 +358,8 @@ function selectInboundOrder(code: string) {
           <article>
             <div>
               <strong>拆包视频</strong>
-              <span v-if="captures.length === 0">待补</span>
+              <span v-if="captureError">{{ captureError }}</span>
+              <span v-else-if="captures.length === 0">待补</span>
               <span v-else>已关联 {{ captures.length }} 个文件</span>
             </div>
           </article>

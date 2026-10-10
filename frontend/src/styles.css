@@ -1246,6 +1246,48 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   color: var(--accent-dark);
 }
 
+.inbound-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.inbound-cards,
+.detail-back { display: none; }
+
+.inbound-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-surface);
+  background: var(--content);
+  padding: 12px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.inbound-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .inbound-table-wrap { display: none; }
+  .inbound-cards { display: grid; gap: 8px; }
+  .detail-back { display: inline-flex; }
+
+  .inbound-desk:not(.is-detail) .module-side-panel,
+  .inbound-desk:not(.is-detail) .evidence-slot-panel { display: none; }
+
+  .inbound-desk.is-detail .module-master-panel { display: none; }
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
