@@ -742,29 +742,6 @@ onMounted(loadTemplates);
   border-radius: 6px;
   font-size: 13px;
 }
-.link-button {
-  background: none;
-  border: none;
-  color: #2f6fed;
-  cursor: pointer;
-  font-size: 13px;
-}
-.link-button.danger {
-  color: #d0453b;
-}
-.primary-button {
-  background: #1f2733;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 9px 16px;
-  cursor: pointer;
-  font-size: 14px;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 .hint {
   color: #6b7684;
   font-size: 12px;

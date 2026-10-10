@@ -25,6 +25,7 @@ import {
   type PayableView,
   type PayrollLine,
 } from '../../services/financeApi';
+import { formatAmount } from '../../utils/formatAmount';
 
 type Section = 'statement' | 'receipt' | 'payroll' | 'consumable' | 'asset' | 'payable' | 'operating';
 
@@ -352,8 +353,8 @@ function kindLabel(kind: string) {
         <input v-model="unitPrice" aria-label="单价" />
       </label>
       <p v-if="statement" class="empty-hint">
-        {{ statement.customerName }} 应收 {{ statement.receivableAmount }} ，已收 {{ statement.receivedAmount }} ，未收
-        {{ statement.outstandingAmount }} ，预收 {{ statement.prepaymentAmount }} 。在库
+        {{ statement.customerName }} 应收 {{ formatAmount(statement.receivableAmount) }} ，已收 {{ formatAmount(statement.receivedAmount) }} ，未收
+        {{ formatAmount(statement.outstandingAmount) }} ，预收 {{ formatAmount(statement.prepaymentAmount) }} 。在库
         {{ statement.stockQuantity }} 件 / {{ statement.stockWeight }} 克。{{ statement.stockNote }}
       </p>
       <p v-if="statement && statement.lines.length === 0" class="empty-hint">暂无账单行</p>
@@ -364,16 +365,16 @@ function kindLabel(kind: string) {
             <th>母单</th>
             <th>子单</th>
             <th>工序</th>
-            <th>金额</th>
+            <th class="amount">金额</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="line in statement.lines" :key="line.code">
-            <td>{{ line.sourceType }}</td>
-            <td>{{ line.motherOrderCode }}</td>
-            <td>{{ line.workOrderCode || '—' }}</td>
+            <td class="code">{{ line.sourceType }}</td>
+            <td class="code">{{ line.motherOrderCode }}</td>
+            <td class="code">{{ line.workOrderCode || '—' }}</td>
             <td>{{ line.processName || '—' }}</td>
-            <td>{{ line.amount }}</td>
+            <td class="amount">{{ formatAmount(line.amount) }}</td>
           </tr>
         </tbody>
       </table>
@@ -438,19 +439,19 @@ function kindLabel(kind: string) {
             <th>工人</th>
             <th>单号</th>
             <th>工序</th>
-            <th>计件</th>
-            <th>扣损</th>
-            <th>实得</th>
+            <th class="amount">计件</th>
+            <th class="amount">扣损</th>
+            <th class="amount">实得</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="(line, index) in payrollLines" :key="`${line.orderCode}-${index}`">
             <td>{{ line.operatorName }}</td>
-            <td>{{ line.orderCode }}</td>
+            <td class="code">{{ line.orderCode }}</td>
             <td>{{ line.processName }}</td>
-            <td>{{ line.grossAmount }}</td>
-            <td>{{ line.lossDeduction }}</td>
-            <td>{{ line.netAmount }}</td>
+            <td class="amount">{{ formatAmount(line.grossAmount) }}</td>
+            <td class="amount">{{ formatAmount(line.lossDeduction) }}</td>
+            <td class="amount">{{ formatAmount(line.netAmount) }}</td>
           </tr>
         </tbody>
       </table>
@@ -469,15 +470,15 @@ function kindLabel(kind: string) {
             <th>编码</th>
             <th>名称</th>
             <th>结存数量</th>
-            <th>结存金额</th>
+            <th class="amount">结存金额</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="item in consumables" :key="item.code">
-            <td>{{ item.code }}</td>
+            <td class="code">{{ item.code }}</td>
             <td>{{ item.name }}</td>
             <td>{{ item.onHandQuantity }} {{ item.unitName }}</td>
-            <td>{{ item.onHandAmount }}</td>
+            <td class="amount">{{ formatAmount(item.onHandAmount) }}</td>
           </tr>
         </tbody>
       </table>
@@ -513,17 +514,17 @@ function kindLabel(kind: string) {
             <th>单号</th>
             <th>种类</th>
             <th>对象</th>
-            <th>应付</th>
-            <th>未付</th>
+            <th class="amount">应付</th>
+            <th class="amount">未付</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="item in payables" :key="item.code">
-            <td>{{ item.code }}</td>
+            <td class="code">{{ item.code }}</td>
             <td>{{ kindLabel(item.kind) }}</td>
             <td>{{ item.payee }}</td>
-            <td>{{ item.amount }}</td>
-            <td>{{ item.unpaidAmount }}</td>
+            <td class="amount">{{ formatAmount(item.amount) }}</td>
+            <td class="amount">{{ formatAmount(item.unpaidAmount) }}</td>
           </tr>
         </tbody>
       </table>
@@ -534,9 +535,9 @@ function kindLabel(kind: string) {
       <p v-if="!operating" class="empty-hint">填写月份后查看。留空客户编号就是全公司。</p>
       <div v-else>
         <p>
-          {{ operating.yearMonth }} 收入 {{ operating.revenue }} ，工资 {{ operating.wageCost }} ，消耗
-          {{ operating.consumableCost }} ，折旧 {{ operating.depreciationCost }} ，外协 {{ operating.outsourceCost }} ，结果
-          {{ operating.result }}
+          {{ operating.yearMonth }} 收入 {{ formatAmount(operating.revenue) }} ，工资 {{ formatAmount(operating.wageCost) }} ，消耗
+          {{ formatAmount(operating.consumableCost) }} ，折旧 {{ formatAmount(operating.depreciationCost) }} ，外协 {{ formatAmount(operating.outsourceCost) }} ，结果
+          {{ formatAmount(operating.result) }}
         </p>
         <p v-if="operating.gaps.length === 0" class="empty-hint">本月没有缺口说明</p>
         <ul v-else>
