@@ -2,17 +2,24 @@ import { describe, expect, it } from 'vitest';
 import {
   mapInboundWorkspace,
   mapInventoryWorkspace,
-  mapMobileWorkspace,
   mapProductionWorkspace,
 } from './businessWorkspaceApi';
+
+const operationContext = {
+  customerId: 51, ownerCustomerId: 51, motherOrderCode: 'MD-REAL', workOrderCode: 'WO-REAL',
+  materialCode: 'MAT-REAL', warehouseCode: 'WIP', ownerType: 'CUSTOMER', stockStatus: 'IN_PROCESS',
+  quantity: 12, weight: 18.2,
+};
 
 describe('businessWorkspaceApi mappers', () => {
   it('maps inbound workspace DTO fields to UI model fields', () => {
     const model = mapInboundWorkspace({
+      dataSource: 'LIVE',
       checkpoints: [{ label: '视频完整率', value: '92%', detail: '1 个截取任务失败', tone: 'amber' }],
       orders: [
         {
           code: 'MD-001',
+          operationContext,
           customer: '恒信珠宝',
           material: '18K 金戒托',
           inboundDate: '07-06',
@@ -33,6 +40,8 @@ describe('businessWorkspaceApi mappers', () => {
       risks: [],
     });
 
+    expect(model.dataSource).toBe('LIVE');
+    expect(model.orders[0].operationContext).toEqual(operationContext);
     expect(model.checkpoints[0].status).toBe('1 个截取任务失败');
     expect(model.orders[0]).toMatchObject({
       qty: 12,
@@ -46,10 +55,12 @@ describe('businessWorkspaceApi mappers', () => {
 
   it('maps production quantities and handoff node names', () => {
     const model = mapProductionWorkspace({
+      dataSource: 'LIVE',
       stationLoads: [{ label: '抛光', value: '6 张 / 78%', detail: '等待称重', tone: 'amber' }],
       workOrders: [
         {
           code: 'ZD-001',
+          operationContext,
           customer: '恒信珠宝',
           material: '戒托',
           process: '抛光',
@@ -82,6 +93,7 @@ describe('businessWorkspaceApi mappers', () => {
       ],
     });
 
+    expect(model.workOrders[0].operationContext).toEqual(operationContext);
     expect(model.stationLoads[0]).toMatchObject({ station: '抛光', queue: '6 张', capacity: '78%' });
     expect(model.workOrders[0]).toMatchObject({
       plannedQty: 80,
@@ -95,10 +107,12 @@ describe('businessWorkspaceApi mappers', () => {
 
   it('maps inventory ledger and evidence contracts', () => {
     const model = mapInventoryWorkspace({
+      dataSource: 'DEMO',
       balances: [
         {
           owner: '恒信珠宝',
           batch: 'MD-001',
+          operationContext,
           material: '戒托',
           location: '原料库',
           status: '待加工',
@@ -131,28 +145,11 @@ describe('businessWorkspaceApi mappers', () => {
       ],
     });
 
+    expect(model.dataSource).toBe('DEMO');
+    expect(model.balances[0].operationContext).toEqual(operationContext);
     expect(model.balances[0].qty).toBe(10);
     expect(model.ledgerEntries[0]).toMatchObject({ bizCode: 'LEDGER-001', source: 'MD-001' });
     expect(model.evidence[0]).toMatchObject({ label: '视频证据', status: '1 个截取失败' });
   });
 
-  it('maps mobile capabilities and offline drafts', () => {
-    const model = mapMobileWorkspace({
-      tasks: [],
-      capabilities: [{ label: '离线草稿', value: '设计中', detail: '弱网暂存', tone: 'amber' }],
-      offlineDrafts: [
-        {
-          code: 'DRAFT-QC-003',
-          title: '缺陷拍照',
-          detail: '照片已缓存',
-          owner: '周婷',
-          action: '15:06',
-          tone: 'red',
-        },
-      ],
-    });
-
-    expect(model.capabilities[0]).toMatchObject({ status: '设计中', detail: '弱网暂存' });
-    expect(model.offlineDrafts[0]).toMatchObject({ scene: '缺陷拍照', savedAt: '15:06' });
-  });
 });

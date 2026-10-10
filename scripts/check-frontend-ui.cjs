@@ -1,288 +1,214 @@
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
+// 仅复用已安装依赖或已有缓存，不自动安装包和浏览器。
 function loadPlaywright() {
-  try {
-    return require('playwright');
-  } catch {
-    const npxRoot = path.resolve('.npm-cache/_npx');
-    if (fs.existsSync(npxRoot)) {
-      for (const entry of fs.readdirSync(npxRoot)) {
-        const candidate = path.join(npxRoot, entry, 'node_modules', 'playwright');
-        if (fs.existsSync(candidate)) {
-          return require(candidate);
-        }
+  const candidates = [process.env.ZHUBAO_PLAYWRIGHT_MODULE, 'playwright', 'playwright-core'].filter(Boolean);
+  const cacheRoots = [
+    path.resolve('.npm-cache/_npx'),
+    process.env.npm_config_cache && path.join(process.env.npm_config_cache, '_npx'),
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'npm-cache', '_npx'),
+    path.join(os.homedir(), '.npm', '_npx'),
+  ].filter(Boolean);
+  for (const root of cacheRoots) {
+    if (!fs.existsSync(root)) continue;
+    for (const entry of fs.readdirSync(root)) {
+      for (const name of ['playwright', 'playwright-core']) {
+        candidates.push(path.join(root, entry, 'node_modules', name));
       }
     }
-    throw new Error(
-      '缺少 Playwright 包。请先运行：$env:npm_config_cache=".\\.npm-cache"; npx --yes --package playwright playwright --version'
-    );
   }
+  for (const candidate of candidates) {
+    try { return require(candidate); } catch { /* 继续查找下一个已有缓存。 */ }
+  }
+  throw new Error('未找到已有 Playwright。请通过 ZHUBAO_PLAYWRIGHT_MODULE 指向现有包目录；本脚本不会安装依赖。');
 }
 
-const { chromium } = loadPlaywright();
-
 const targetUrl = process.argv[2] ?? 'http://localhost:5173/';
-const outputDir = path.resolve('output/playwright');
+const outputDir = path.resolve(process.env.ZHUBAO_UI_OUTPUT_DIR ?? 'output/playwright');
+const viewports = [
+  { name: 'desktop', width: 1280, height: 900 },
+  { name: 'mobile', width: 390, height: 844 },
+];
+const scenarios = [
+  { key: 'dashboard', marker: '.command-center-v3' },
+  { key: 'inbound', marker: '.inbound-desk', table: '.inbound-dispatch-table' },
+  { key: 'production', marker: '.production-desk', table: '.production-dispatch-table' },
+  { key: 'quality', marker: '.quality-desk', table: '.quality-dispatch-table' },
+  { key: 'inventory', marker: '.inventory-trace-desk', table: '.inventory-dispatch-table' },
+  { key: 'finance', marker: '.finance-workspace' },
+  { key: 'configuration', marker: '[aria-label="用户管理"]' },
+  { key: 'documents', marker: '.document-page' },
+  { key: 'hardware', marker: '.hardware-desk' },
+  { key: 'operations', marker: '.operations-center-page' },
+];
 
-fs.mkdirSync(outputDir, { recursive: true });
+function redact(value) {
+  let text = String(value);
+  for (const secret of [process.env.ZHUBAO_UI_PASSWORD, process.env.ZHUBAO_UI_TOKEN].filter(Boolean)) {
+    text = text.split(secret).join('[已隐藏]');
+  }
+  return text;
+}
 
-async function inspectLayout(page) {
-  return page.evaluate(() => {
+async function settle(page) {
+  await page.waitForLoadState('networkidle', { timeout: 15_000 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function enterWorkspace(page) {
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  await page.waitForSelector('.ops-shell, .login-card', { timeout: 20_000 });
+  if (await page.locator('form[aria-label="首次修改密码"]').isVisible()) {
+    throw new Error('测试账号要求首次修改密码，请先在授权流程中完成改密，再运行只读页面检查。');
+  }
+  if (await page.locator('form[aria-label="登录"]').isVisible()) {
+    const username = process.env.ZHUBAO_UI_USERNAME;
+    const password = process.env.ZHUBAO_UI_PASSWORD;
+    if (!username || !password) {
+      throw new Error('当前没有有效会话。请提供 ZHUBAO_UI_STORAGE_STATE、ZHUBAO_UI_TOKEN，或 ZHUBAO_UI_USERNAME 与 ZHUBAO_UI_PASSWORD。');
+    }
+    const form = page.locator('form[aria-label="登录"]');
+    await form.locator('input[autocomplete="username"]').fill(username);
+    // 先触发账号失焦，再填写密码，避免演示账号自动填充覆盖测试密码。
+    await form.locator('input[autocomplete="username"]').press('Tab');
+    await settle(page);
+    await form.locator('input[autocomplete="current-password"]').fill(password);
+    await form.getByRole('button', { name: '登录', exact: true }).click();
+    await page.waitForSelector('.ops-shell, form[aria-label="首次修改密码"], .login-message', { timeout: 20_000 });
+    if (!(await page.locator('.ops-shell').isVisible())) {
+      const hint = await page.locator('.login-message').textContent().catch(() => '');
+      throw new Error(`测试账号登录未进入工作区；${hint || '请检查账号状态或首次改密要求。'}`);
+    }
+  }
+  await settle(page);
+}
+
+async function openTab(page, key) {
+  const desktop = page.locator(`button[data-tab="${key}"]`);
+  if (await desktop.isVisible()) {
+    await desktop.click();
+    return;
+  }
+  let mobile = page.locator(`button[data-mobile-tab="${key}"]`);
+  if (!(await mobile.isVisible())) {
+    const more = page.locator('.mobile-tabbar > button[aria-haspopup="dialog"]');
+    if (await more.isVisible()) await more.click();
+    mobile = page.locator(`button[data-mobile-tab="${key}"]`);
+  }
+  if (!(await mobile.isVisible())) throw new Error(`当前账号没有可访问的 ${key} 菜单，请使用具有检查范围权限的测试账号。`);
+  await mobile.click();
+}
+
+async function inspectLayout(page, marker) {
+  return page.evaluate((selector) => {
     const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
-    const header = document.querySelector('.ops-page-header');
-
+    const content = document.querySelector(selector);
+    const width = document.documentElement.clientWidth;
     return {
-      title: text(document.querySelector('h1')),
-      baseline: text(document.querySelector('.ops-status-card')).slice(0, 100),
-      pageEyebrow: text(document.querySelector('.ops-page-header .eyebrow')),
-      innerEyebrow: text(document.querySelector('.mission-copy .eyebrow')),
-      headerHeight: Math.round(header?.getBoundingClientRect().height || 0),
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      title: text(document.querySelector('.ops-page-header h1')),
+      headings: Array.from(content?.querySelectorAll('h2, h3') ?? []).map(text),
+      rows: content?.querySelectorAll('tbody tr').length ?? 0,
+      emptyHints: Array.from(content?.querySelectorAll('.empty-hint') ?? []).map(text),
+      visibleErrors: Array.from(content?.querySelectorAll('.operation-feedback.danger, [role="alert"]') ?? []).map(text),
+      overflow: document.documentElement.scrollWidth > width + 1,
       scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
+      clientWidth: width,
+      overflowElements: Array.from(content?.querySelectorAll('*') ?? [])
+        .filter((el) => {
+          const bounds = el.getBoundingClientRect();
+          return bounds.width > 0 && (bounds.right > width + 1 || bounds.left < -1)
+            && getComputedStyle(el).position !== 'fixed'
+            && !el.closest('.module-table-wrap, .document-table-wrap, .ops-table-wrap, .finance-table-wrap');
+        })
+        .slice(0, 8)
+        .map((el) => ({ tag: el.tagName, className: String(el.className), text: text(el).slice(0, 80) })),
     };
-  });
+  }, marker);
 }
 
 async function main() {
+  const { chromium } = loadPlaywright();
+  fs.mkdirSync(outputDir, { recursive: true });
+  const result = { target: targetUrl, pages: [], console: [], pageErrors: [], requestFailures: [], blockedWrites: [], failures: [] };
   let browser;
+  for (const options of [{}, { channel: 'msedge' }, { channel: 'chrome' }]) {
+    try { browser = await chromium.launch({ ...options, headless: true }); break; } catch { /* 继续尝试已有浏览器。 */ }
+  }
+  if (!browser) throw new Error('无法启动已安装的 Chromium、Edge 或 Chrome；本脚本不会下载浏览器。');
+  let activeScenario = '登录';
+  let context;
   try {
-    browser = await chromium.launch({ headless: true });
+    context = await browser.newContext({
+      viewport: { width: viewports[0].width, height: viewports[0].height },
+      ...(process.env.ZHUBAO_UI_STORAGE_STATE ? { storageState: process.env.ZHUBAO_UI_STORAGE_STATE } : {}),
+    });
+    if (process.env.ZHUBAO_UI_TOKEN) {
+      await context.addInitScript((token) => localStorage.setItem('zhubao-auth-token', token), process.env.ZHUBAO_UI_TOKEN);
+    }
+    const page = await context.newPage();
+    page.on('console', (message) => {
+      if (['error', 'warning'].includes(message.type())) result.console.push({ page: activeScenario, type: message.type(), text: redact(message.text()) });
+    });
+    page.on('pageerror', (error) => result.pageErrors.push({ page: activeScenario, text: redact(error.message) }));
+    page.on('requestfailed', (request) => result.requestFailures.push({ page: activeScenario, method: request.method(), url: new URL(request.url()).pathname, error: request.failure()?.errorText }));
+    // 页面检查只允许查询和显式登录，防止误点或初始化逻辑写入业务。
+    await page.route('**/api/**', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (['GET', 'HEAD', 'OPTIONS'].includes(request.method()) || (request.method() === 'POST' && pathname === '/api/auth/login')) {
+        await route.continue();
+      } else {
+        result.blockedWrites.push({ page: activeScenario, method: request.method(), path: pathname });
+        await route.abort('blockedbyclient');
+      }
+    });
+    await enterWorkspace(page);
+    for (const viewport of viewports) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const scenario of scenarios) {
+        activeScenario = `${viewport.name}/${scenario.key}`;
+        try {
+          await openTab(page, scenario.key);
+          await page.waitForSelector(scenario.marker, { timeout: 15_000 });
+          await settle(page);
+          let selection = { status: '无单据或无需选择' };
+          if (scenario.table) {
+            const rows = page.locator(`${scenario.table} tbody tr`)
+              .filter({ has: page.locator('td'), hasNot: page.locator('td[colspan]') });
+            if (await rows.count() && await rows.first().isVisible()) {
+              await rows.first().click();
+              await settle(page);
+              selection = { status: '已选择实际第一行' };
+            }
+          }
+          const layout = await inspectLayout(page, scenario.marker);
+          const screenshot = `${viewport.name}-${scenario.key}.png`;
+          await page.screenshot({ path: path.join(outputDir, screenshot), fullPage: true });
+          result.pages.push({ viewport: viewport.name, key: scenario.key, screenshot, selection, ...layout });
+          if (!layout.title) result.failures.push(`${activeScenario} 缺少页面标题`);
+          if (layout.overflow) result.failures.push(`${activeScenario} 横向溢出：${layout.scrollWidth} > ${layout.clientWidth}`);
+        } catch (error) {
+          result.failures.push(`${activeScenario}：${redact(error.message)}`);
+        }
+      }
+    }
   } catch (error) {
-    try {
-      browser = await chromium.launch({ channel: 'msedge', headless: true });
-    } catch {
-      browser = await chromium.launch({ channel: 'chrome', headless: true });
-    }
+    result.failures.push(redact(error.message));
+  } finally {
+    await context?.close();
+    await browser.close();
   }
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  const messages = [];
-
-  page.on('console', (message) => {
-    messages.push({ type: message.type(), text: message.text() });
-  });
-
-  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 });
-  await page.waitForTimeout(500);
-
-  const dashboard = await inspectLayout(page);
-  await page.screenshot({ path: path.join(outputDir, 'm356-dashboard.png'), fullPage: false });
-
-  await page.click('button[data-tab="inbound"]');
-  await page.waitForTimeout(300);
-  await page.click("tbody tr:has-text('MD-20260706-003')");
-  await page.waitForTimeout(200);
-
-  const inbound = await page.evaluate(() => {
-    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
-
-    return {
-      title: text(document.querySelector('h1')),
-      selectedRows: document.querySelectorAll('tbody tr.is-selected').length,
-      activeCode: text(document.querySelector('.active-object-card > strong')),
-      actionTrace: Array.from(document.querySelectorAll('.inbound-action-trace strong')).map(text),
-      hasReceiptFields: text(document.body).includes('拆箱') &&
-        text(document.body).includes('寄货人') &&
-        text(document.body).includes('收货人'),
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    };
-  });
-  await page.screenshot({ path: path.join(outputDir, 'm356-inbound.png'), fullPage: false });
-
-  await page.click('button[data-tab="production"]');
-  await page.waitForTimeout(300);
-  await page.click("table.production-dispatch-table tbody tr:has-text('ZD-20260706-001')");
-  await page.waitForTimeout(200);
-
-  const production = await page.evaluate(() => {
-    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
-
-    return {
-      title: text(document.querySelector('h1')),
-      selectedRows: document.querySelectorAll('table.production-dispatch-table tbody tr.is-selected').length,
-      activeCode: text(document.querySelector('.active-object-card > strong')),
-      actionTrace: Array.from(document.querySelectorAll('.operation-action-trace strong')).map(text),
-      hasSiteRegisterFields: text(document.body).includes('雕刻') &&
-        text(document.body).includes('ENG-03') &&
-        text(document.body).includes('交单审核'),
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    };
-  });
-  await page.screenshot({ path: path.join(outputDir, 'm356-production.png'), fullPage: false });
-
-  await page.click('button[data-tab="quality"]');
-  await page.waitForTimeout(300);
-  await page.click("table.quality-dispatch-table tbody tr:has-text('QC-20260706-022')");
-  await page.waitForTimeout(200);
-
-  const quality = await page.evaluate(() => {
-    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
-
-    return {
-      title: text(document.querySelector('h1')),
-      selectedRows: document.querySelectorAll('table.quality-dispatch-table tbody tr.is-selected').length,
-      activeCode: text(document.querySelector('.active-object-card > strong')),
-      actionTrace: Array.from(document.querySelectorAll('.operation-action-trace strong')).map(text),
-      hasLegacyRuntimeBoard: Boolean(document.querySelector('.quality-runtime-board')),
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    };
-  });
-  await page.screenshot({ path: path.join(outputDir, 'm356-quality.png'), fullPage: false });
-
-  await page.click('button[data-tab="inventory"]');
-  await page.waitForTimeout(300);
-  await page.click("table.inventory-dispatch-table tbody tr:has-text('ZD-20260706-001')");
-  await page.waitForTimeout(200);
-
-  const inventory = await page.evaluate(() => {
-    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
-
-    return {
-      title: text(document.querySelector('h1')),
-      selectedRows: document.querySelectorAll('table.inventory-dispatch-table tbody tr.is-selected').length,
-      activeCode: text(document.querySelector('.active-object-card > strong')),
-      actionTrace: Array.from(document.querySelectorAll('.operation-action-trace strong')).map(text),
-      hasLedgerTitle: text(document.body).includes('库存台账明细'),
-      hasTraceEvidenceTitle: text(document.body).includes('追溯证据'),
-      hasLegacyOpsBoard: Boolean(document.querySelector('.inventory-trace-desk > .module-ops-board')),
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    };
-  });
-  await page.screenshot({ path: path.join(outputDir, 'm356-inventory.png'), fullPage: false });
-
-  await page.click('button[data-tab="configuration"]');
-  await page.waitForTimeout(300);
-
-  const configuration = await page.evaluate(() => {
-    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
-    const bodyText = text(document.body);
-
-    return {
-      title: text(document.querySelector('h1')),
-      hasSecurityPanel: bodyText.includes('当前权限 / 数据范围边界'),
-      hasHeaders: bodyText.includes('X-Zhubao-Role') && bodyText.includes('X-Zhubao-Data-Scope'),
-      hasSiteProcessTemplates: bodyText.includes('PROC-ENGRAVE-DAY') &&
-        bodyText.includes('PROC-POLISH-DAILY'),
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    };
-  });
-  await page.screenshot({ path: path.join(outputDir, 'm356-configuration.png'), fullPage: false });
-
-  await page.click('button[data-tab="operations"]');
-  await page.waitForTimeout(300);
-
-  const operations = await page.evaluate(() => {
-    const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
-    const bodyText = text(document.body);
-
-    return {
-      title: text(document.querySelector('h1')),
-      hasCosService: bodyText.includes('腾讯云 COS 备份'),
-      hasAlerts: bodyText.includes('告警汇总') && bodyText.includes('OPS-ALERT'),
-      hasCosBackupStatus: bodyText.includes('COS-BACKUP-DISABLED') || bodyText.includes('COS-BACKUP-READY'),
-      hasCosChecklist: bodyText.includes('OPS-CHK-007'),
-      hasRestoreDrill: bodyText.includes('恢复演练校验') && bodyText.includes('RESTORE-DRILL'),
-      hasStructuredRestoreDrill: bodyText.includes('结构化恢复演练记录') && bodyText.includes('backup_checksum'),
-      hasRestoreChecklist: bodyText.includes('OPS-CHK-008'),
-      hasM362Label: bodyText.includes('M3.62 运维告警汇总'),
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    };
-  });
-  await page.screenshot({ path: path.join(outputDir, 'm356-operations.png'), fullPage: false });
-
-  await browser.close();
-
-  const result = {
-    dashboard,
-    inbound,
-    production,
-    quality,
-    inventory,
-    configuration,
-    operations,
-    console: messages.filter((message) => ['error', 'warning'].includes(message.type)),
-  };
-
-  const failures = [];
-  for (const [name, section] of Object.entries({ dashboard, inbound, production, quality, inventory, configuration, operations })) {
-    if (section.overflow) {
-      failures.push(`${name} has horizontal overflow: ${section.scrollWidth} > ${section.clientWidth}`);
-    }
+  for (const key of ['console', 'pageErrors', 'requestFailures', 'blockedWrites']) {
+    if (result[key].length) result.failures.push(`${key} 发现 ${result[key].length} 项异常，详见报告`);
   }
-  if (inbound.selectedRows !== 1 || inbound.activeCode !== 'MD-20260706-003') {
-    failures.push(`inbound selection mismatch: ${JSON.stringify(inbound)}`);
-  }
-  if (!dashboard.pageEyebrow.includes('M3.56') || !dashboard.baseline.includes('M3.56')) {
-    failures.push(`dashboard M3.56 baseline missing: ${JSON.stringify(dashboard)}`);
-  }
-  if (!inbound.hasReceiptFields) {
-    failures.push(`inbound receipt fields missing: ${JSON.stringify(inbound)}`);
-  }
-  if (production.selectedRows !== 1 || production.activeCode !== 'ZD-20260706-001') {
-    failures.push(`production selection mismatch: ${JSON.stringify(production)}`);
-  }
-  if (!production.hasSiteRegisterFields) {
-    failures.push(`production site register fields missing: ${JSON.stringify(production)}`);
-  }
-  if (!production.actionTrace.includes('扫码进站') || !production.actionTrace.includes('送检入账')) {
-    failures.push(`production action trace incomplete: ${production.actionTrace.join(', ')}`);
-  }
-  if (quality.selectedRows !== 1 || quality.activeCode !== 'QC-20260706-022') {
-    failures.push(`quality selection mismatch: ${JSON.stringify(quality)}`);
-  }
-  if (!quality.actionTrace.includes('冻结异常库存') || !quality.actionTrace.includes('损耗审批')) {
-    failures.push(`quality action trace incomplete: ${quality.actionTrace.join(', ')}`);
-  }
-  if (quality.hasLegacyRuntimeBoard) {
-    failures.push('quality legacy runtime board is still rendered');
-  }
-  if (inventory.selectedRows !== 1 || inventory.activeCode !== 'ZD-20260706-001') {
-    failures.push(`inventory selection mismatch: ${JSON.stringify(inventory)}`);
-  }
-  if (!inventory.actionTrace.includes('客户权属') || !inventory.actionTrace.includes('售后复核')) {
-    failures.push(`inventory action trace incomplete: ${inventory.actionTrace.join(', ')}`);
-  }
-  if (!inventory.hasLedgerTitle || !inventory.hasTraceEvidenceTitle) {
-    failures.push(`inventory missing trace anchors: ${JSON.stringify(inventory)}`);
-  }
-  if (inventory.hasLegacyOpsBoard) {
-    failures.push('inventory legacy operations board is still rendered');
-  }
-  if (!configuration.hasSecurityPanel || !configuration.hasHeaders) {
-    failures.push(`configuration security context missing: ${JSON.stringify(configuration)}`);
-  }
-  if (!configuration.hasSiteProcessTemplates) {
-    failures.push(`configuration site process templates missing: ${JSON.stringify(configuration)}`);
-  }
-  if (!operations.hasCosService || !operations.hasAlerts || !operations.hasCosBackupStatus || !operations.hasCosChecklist || !operations.hasRestoreDrill || !operations.hasStructuredRestoreDrill || !operations.hasRestoreChecklist || !operations.hasM362Label) {
-    failures.push(`operations backup/restore readiness missing: ${JSON.stringify(operations)}`);
-  }
-  if (result.console.length > 0) {
-    failures.push(`console warnings/errors: ${JSON.stringify(result.console)}`);
-  }
-
-  fs.writeFileSync(path.join(outputDir, 'm356-ui-check.json'), `${JSON.stringify(result, null, 2)}\n`);
-  if (failures.length > 0) {
-    console.error(JSON.stringify({ result, failures }, null, 2));
-    process.exit(1);
-  }
+  fs.writeFileSync(path.join(outputDir, 'ui-check.json'), `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify(result, null, 2));
+  if (result.failures.length) process.exitCode = 1;
 }
 
 main().catch((error) => {
-  console.error(error);
-  process.exit(1);
+  console.error(redact(error.message));
+  process.exitCode = 1;
 });

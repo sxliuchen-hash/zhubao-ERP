@@ -2,18 +2,13 @@
 import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
-  hardwareDevices as fallbackHardwareDevices,
-  hardwarePocRecords as fallbackHardwarePocRecords,
-  integrationTasks as fallbackIntegrationTasks,
-  type HardwareDevice,
   type HardwarePocRecord,
   type IntegrationTask,
   type Tone,
 } from '../../data/m1PrototypeData';
-import { evidenceAttachments } from '../../data/documentManagementData';
+import { fetchAuthSession } from '../../services/authApi';
 import {
   fetchHardwareWorkspace,
-  type HardwarePocEvidenceSummary,
   type HardwareWorkspaceModel,
 } from '../../services/hardwareIntegrationApi';
 import {
@@ -36,20 +31,10 @@ import {
 } from '../../services/deviceGatewayApi';
 
 const workspace = ref<HardwareWorkspaceModel>({
-  devices: fallbackHardwareDevices,
-  tasks: fallbackIntegrationTasks,
-  pocRecords: fallbackHardwarePocRecords,
-  pocEvidence: fallbackHardwarePocEvidence(),
-  summary: {
-    totalDevices: fallbackHardwareDevices.length,
-    fallbackRequired: fallbackHardwareDevices.filter((device) => device.status !== 'online').length,
-    averageHealth: Math.round(
-      fallbackIntegrationTasks.reduce((total, task) => total + task.health, 0) / fallbackIntegrationTasks.length,
-    ),
-    pocRecords: fallbackHardwarePocRecords.length,
-    pocBlocked: fallbackHardwarePocRecords.filter((record) => record.result === '阻断').length,
-  },
+  devices: [], tasks: [], pocRecords: [], pocEvidence: [],
+  summary: { totalDevices: 0, fallbackRequired: 0, averageHealth: 0, pocRecords: 0, pocBlocked: 0 },
 });
+const isAdmin = ref(false);
 const loadingError = ref('');
 
 const activeDevice = computed(
@@ -62,10 +47,7 @@ const activeTask = computed(
   () => [...workspace.value.tasks].sort((a, b) => a.health - b.health)[0],
 );
 
-const hardwareDevices = computed(() => workspace.value.devices);
-const hardwarePocRecords = computed(() => workspace.value.pocRecords);
 const hardwarePocEvidence = computed(() => workspace.value.pocEvidence);
-const integrationTasks = computed(() => workspace.value.tasks);
 
 const hardwareStats = computed(() => [
   {
@@ -139,10 +121,10 @@ const gatewaySummary = ref<GatewayIngestionSummary>({
 });
 const gatewayError = ref('');
 const gatewayForm = ref({
-  deviceCode: 'SCALE-01',
+  deviceCode: '',
   deviceKey: '',
   readingType: 'SCALE_WEIGHT' as DeviceReadingType,
-  rawPayload: 'ST,GS,+000123.45,g',
+  rawPayload: '',
   businessRefType: '',
   businessRefCode: '',
 });
@@ -331,9 +313,10 @@ async function refreshGateway() {
 }
 
 async function submitGatewayReading() {
+  if (!isAdmin.value) return;
   gatewayFeedback.value = '';
   if (!gatewayForm.value.deviceKey.trim()) {
-    gatewayFeedback.value = '请填写设备密钥（评审默认 zhubao-device-demo）';
+    gatewayFeedback.value = '请填写设备密钥';
     return;
   }
   gatewaySubmitting.value = true;
@@ -345,7 +328,7 @@ async function submitGatewayReading() {
       rawPayload: gatewayForm.value.rawPayload,
       businessRefType: gatewayForm.value.businessRefType.trim() || undefined,
       businessRefCode: gatewayForm.value.businessRefCode.trim() || undefined,
-      // Send a timestamp + unique nonce so the push works whether or not replay protection is enabled.
+      // 携带时间戳和唯一随机数，兼容防重放校验。
       capturedAt: new Date().toISOString(),
       nonce: generateNonce(),
     });
@@ -362,7 +345,12 @@ onMounted(async () => {
   try {
     workspace.value = await fetchHardwareWorkspace();
   } catch (error) {
-    loadingError.value = error instanceof Error ? error.message : '硬件接口不可用，已使用本地样例';
+    loadingError.value = error instanceof Error ? error.message : '硬件接口不可用';
+  }
+  try {
+    isAdmin.value = (await fetchAuthSession())?.role === 'ADMIN';
+  } catch {
+    isAdmin.value = false;
   }
   await refreshGateway();
 });
@@ -389,51 +377,12 @@ function taskTone(task: IntegrationTask): Tone {
   return 'green';
 }
 
-function getHardwarePocBlockedCount(): number {
-  return workspace.value.summary.pocBlocked;
-}
-
-function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
-  return fallbackHardwarePocRecords.map((record) => {
-    const attachments = evidenceAttachments.filter(
-      (attachment) => attachment.businessType === '硬件 POC' && attachment.businessCode === record.code,
-    );
-    if (attachments.length === 0) {
-      return {
-        pocCode: record.code,
-        scene: record.scene,
-        result: record.result,
-        documentCode: '',
-        attachmentCount: 0,
-        missingEvidence: 1,
-        attachmentCodes: [],
-        latestUploadedAt: '',
-        status: '待补证据',
-        nextAction: '补传现场 POC 原始照片、视频或日志',
-        tone: 'red',
-      };
-    }
-    const latest = attachments[attachments.length - 1];
-    return {
-      pocCode: record.code,
-      scene: record.scene,
-      result: record.result,
-      documentCode: latest.documentCode,
-      attachmentCount: attachments.length,
-      missingEvidence: attachments.filter((attachment) => attachment.status.includes('缺失')).length,
-      attachmentCodes: attachments.map((attachment) => attachment.code),
-      latestUploadedAt: latest.uploadedAt,
-      status: '已关联证据',
-      nextAction: latest.fallbackAction,
-      tone: latest.tone,
-    };
-  });
-}
-
 </script>
 
 <template>
   <div class="hardware-desk page-stack">
+    <p v-if="loadingError" class="operation-feedback danger" role="alert">设备状态读取失败：{{ loadingError }}</p>
+    <p v-else-if="workspace.devices.length === 0" class="empty-hint">暂无设备点位，请先登记并连接现场设备。</p>
     <section class="module-command-surface hardware-command-surface" aria-label="软硬件联动作业台">
       <div class="module-command-main">
         <div class="console-title-line">
@@ -556,11 +505,6 @@ function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
             <dt>兜底</dt>
             <dd>{{ activeDevice.fallback }}</dd>
           </dl>
-          <div v-if="loadingError" class="operation-feedback warning">
-            <strong>硬件 API 暂不可用</strong>
-            <span>{{ loadingError }}</span>
-            <small>当前使用本地样例，真实设备状态需以后端接口为准。</small>
-          </div>
         </section>
 
         <section class="evidence-slot-panel">
@@ -637,7 +581,7 @@ function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
       <div v-if="gatewayError" class="operation-feedback warning">
         <strong>设备网关接口不可用</strong>
         <span>{{ gatewayError }}</span>
-        <small>读数接入需连接后端 /api/hardware/gateway/*，评审默认设备密钥为 zhubao-device-demo。</small>
+        <small>请检查网关连接和设备配置后重试。</small>
       </div>
 
       <div class="module-stat-grid">
@@ -664,11 +608,12 @@ function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
       </div>
 
       <div class="split-layout wide-left">
-        <div class="section-block">
+        <details v-if="isAdmin" class="section-block" aria-label="管理员诊断区">
+          <summary>管理员诊断区（模拟设备推送）</summary>
           <div class="section-heading">
             <div>
               <h3>模拟设备推送</h3>
-              <p>用于评审现场读数接入链路：选择设备、读数类型和原始报文即可提交。</p>
+              <p>仅用于现场联调。提交会写入真实网关读数记录，请使用专用诊断设备。</p>
             </div>
           </div>
           <form class="gateway-form" @submit.prevent="submitGatewayReading">
@@ -678,7 +623,7 @@ function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
             </label>
             <label>
               <span>设备密钥</span>
-              <input v-model="gatewayForm.deviceKey" type="password" placeholder="zhubao-device-demo" aria-label="设备密钥" />
+              <input v-model="gatewayForm.deviceKey" type="password" placeholder="请输入诊断设备密钥" aria-label="设备密钥" />
             </label>
             <label>
               <span>读数类型</span>
@@ -707,7 +652,7 @@ function fallbackHardwarePocEvidence(): HardwarePocEvidenceSummary[] {
           <div v-if="gatewayFeedback" class="operation-feedback">
             <span>{{ gatewayFeedback }}</span>
           </div>
-        </div>
+        </details>
 
         <div class="section-block">
           <div class="section-heading">

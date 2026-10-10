@@ -5,7 +5,6 @@ import type {
   InventoryBalance,
   InventoryLedgerEntry,
   LossApproval,
-  OfflineDraft,
   ProductionHandoff,
   QualityCase,
   WorkOrder,
@@ -13,7 +12,6 @@ import type {
 import {
   fetchInboundWorkspace,
   fetchInventoryWorkspace,
-  fetchMobileWorkspace,
   fetchProductionWorkspace,
   fetchQualityWorkspace,
 } from '../../services/businessWorkspaceApi';
@@ -30,7 +28,6 @@ vi.mock('../../services/businessWorkspaceApi', () => ({
   fetchProductionWorkspace: vi.fn(),
   fetchQualityWorkspace: vi.fn(),
   fetchInventoryWorkspace: vi.fn(),
-  fetchMobileWorkspace: vi.fn(),
 }));
 
 vi.mock('../../services/mobileIntakeApi', () => ({
@@ -191,13 +188,7 @@ const ledger: InventoryLedgerEntry = {
   operator: '何琳',
 };
 
-const offlineDraft: OfflineDraft = {
-  code: 'DRAFT-QC-003',
-  scene: '缺陷拍照',
-  savedAt: '15:06',
-  risk: '照片已缓存',
-  tone: 'red',
-};
+
 
 describe('M1 business workspaces', () => {
   beforeEach(() => {
@@ -230,11 +221,6 @@ describe('M1 business workspaces', () => {
       ledgerEntries: [ledger],
       timeline: [],
       evidence: [],
-    });
-    vi.mocked(fetchMobileWorkspace).mockResolvedValue({
-      tasks: [],
-      capabilities: [],
-      offlineDrafts: [offlineDraft],
     });
   });
 

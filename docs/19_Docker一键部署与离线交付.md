@@ -44,9 +44,9 @@
     images/
       zhubao-erp-images-<version>.tar
     mysql-init/
-      V1__m0_foundation.sql
+      V0001__m0_foundation.sql
       ...
-      V11__m3_lightweight_approval_contract.sql
+      V0011__m3_lightweight_approval_contract.sql
   zhubao-erp-runtime-<version>.zip
   zhubao-erp-runtime-<version>.zip.sha256
 ```
@@ -300,7 +300,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 ## 8. 数据库初始化与升级
 
-`mysql-init/*.sql` 会挂载到 `/docker-entrypoint-initdb.d`，MySQL 官方镜像只会在首次初始化空数据目录时执行这些 SQL。
+`mysql-init/*.sql` 会挂载到 `/docker-entrypoint-initdb.d`，MySQL 官方镜像只会在首次初始化空数据目录时执行这些 SQL。打包脚本通过 `export-mysql-init.ps1` 按数字版本生成 `V0001__...sql` 等等宽副本，保证文件名字典序就是版本顺序；源码历史迁移名称和内容保持不变。重复版本、非空目标目录或运行包内错序 SQL 会被阻断。
 
 这意味着：
 
@@ -308,7 +308,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 - 已有数据库升级不会自动重复执行 `mysql-init`。
 - 后续生产升级必须引入明确的迁移流程，例如 Flyway/Liquibase 或受控 SQL 升级脚本。
 
-当前 M3.41 只解决首次部署初始化，不代表已经完成生产级数据库版本迁移体系。
+本次修正首次初始化的文件执行顺序，未引入自动生产升级器。已有数据库不会自动执行新增迁移；升级前须备份，按数字版本受控执行尚未应用的 SQL 并保留执行记录。结构门禁与副本内容校验不替代 MySQL 空库冷启动和旧库升级演练。
 
 ---
 

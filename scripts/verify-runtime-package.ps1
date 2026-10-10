@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$PackagePath,
     [switch]$AllowMissingImages,
     [switch]$Help
@@ -213,6 +213,17 @@ function Test-RuntimePackage([string]$packageRoot) {
     $sqlFiles = Get-ChildItem -LiteralPath $mysqlInitDir -Filter "*.sql" -File
     if ($sqlFiles.Count -eq 0) {
         throw "mysql-init directory does not contain SQL initialization files."
+    }
+    $previousVersion = -1
+    foreach ($sql in ($sqlFiles | Sort-Object Name)) {
+        if ($sql.Name -notmatch '^V(\d+)__.+\.sql$') {
+            throw "无法识别初始化 SQL 版本：$($sql.Name)"
+        }
+        $version = [int]$Matches[1]
+        if ($version -le $previousVersion) {
+            throw "初始化 SQL 文件名字典序与版本顺序不一致：$($sql.Name)"
+        }
+        $previousVersion = $version
     }
 
     $imagesDir = Join-Path $packageRoot "images"

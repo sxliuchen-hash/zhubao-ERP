@@ -23,7 +23,7 @@ import java.util.List;
 @Component
 public class BusinessWorkspaceSeedData {
 
-    // M2 review seed data. M3 should replace this provider with database seed records.
+    // 仅供显式启用演示工作台时读取；正式查询不合并这些评审样例。
     public InboundWorkspaceData inbound() {
         return new InboundWorkspaceData(
                 List.of(

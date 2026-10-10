@@ -28,7 +28,8 @@ import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "zhubao.business.workspace.demo-enabled=true")
 class M2ManagementApiSmokeTest {
 
     @Autowired
@@ -392,7 +393,7 @@ class M2ManagementApiSmokeTest {
         assertThat(inventory.getBody()).contains("LEDGER-20260706-001", "视频证据");
         assertThat(mobile.getBody()).contains("DRAFT-QC-003", "离线草稿");
         assertThat(summary.getBody()).contains("\"activeWorkOrders\":5", "\"mobileTasks\":3");
-        // 手机收货写入的母单会并进工作台，同一 Spring 上下文里可能已经多出单据。
+        // 本类显式验证演示契约；正式单据不并入演示视图。
         int inboundOrders = Integer.parseInt(summary.getBody().replaceAll(".*\"inboundOrders\":(\\d+).*", "$1"));
         assertThat(inboundOrders).isGreaterThanOrEqualTo(4);
     }

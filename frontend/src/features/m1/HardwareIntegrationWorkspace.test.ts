@@ -1,18 +1,42 @@
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HardwareIntegrationWorkspace from './HardwareIntegrationWorkspace.vue';
+import { fetchHardwareWorkspace } from '../../services/hardwareIntegrationApi';
+import { fetchAuthSession, type AuthSession } from '../../services/authApi';
+import { hardwareDevices } from '../../data/m1ReviewFixtures';
+
+vi.mock('../../services/hardwareIntegrationApi', () => ({ fetchHardwareWorkspace: vi.fn() }));
+vi.mock('../../services/authApi', () => ({ fetchAuthSession: vi.fn() }));
+vi.mock('../../services/deviceGatewayApi', () => ({
+  fetchGatewayDevices: vi.fn().mockResolvedValue([]), fetchGatewaySummary: vi.fn().mockResolvedValue({ totalDevices: 0 }),
+  fetchRecentConsumptions: vi.fn().mockResolvedValue([]), fetchRecentReadings: vi.fn().mockResolvedValue([]),
+  consumeReading: vi.fn(), ingestDeviceReading: vi.fn(), registerGatewayDevice: vi.fn(),
+  rotateGatewayDeviceKey: vi.fn(), setGatewayDeviceEnabled: vi.fn(),
+}));
 
 describe('HardwareIntegrationWorkspace', () => {
-  it('renders devices and gateway readings without protocol review boards', () => {
-    const wrapper = mount(HardwareIntegrationWorkspace);
+  beforeEach(() => {
+    vi.mocked(fetchAuthSession).mockResolvedValue(null);
+    vi.mocked(fetchHardwareWorkspace).mockResolvedValue({ devices: [], tasks: [], pocRecords: [], pocEvidence: [], summary: { totalDevices: 0, fallbackRequired: 0, averageHealth: 0, pocRecords: 0, pocBlocked: 0 } });
+  });
 
-    expect(wrapper.text()).toContain('软硬件联动作业台');
-    expect(wrapper.text()).toContain('设备兼容池');
-    expect(wrapper.text()).toContain('设备网关读数接入');
-    expect(wrapper.find('table.hardware-device-table').exists()).toBe(true);
+  it('接口失败保持设备空态并显示原因，普通账号不显示模拟推送', async () => {
+    vi.mocked(fetchHardwareWorkspace).mockRejectedValueOnce(new Error('硬件服务不可用'));
+    const wrapper = mount(HardwareIntegrationWorkspace);
+    await flushPromises();
+    expect(wrapper.text()).toContain('硬件服务不可用');
+    expect(wrapper.text()).not.toContain('拆包台摄像头');
+    expect(wrapper.findAll('table.hardware-device-table tbody tr')).toHaveLength(0);
+    expect(wrapper.text()).not.toContain('模拟设备推送');
+  });
+
+  it('加载 API 设备，管理员仅在明确标记的诊断区使用模拟工具', async () => {
+    vi.mocked(fetchHardwareWorkspace).mockResolvedValueOnce({ devices: hardwareDevices, tasks: [], pocRecords: [], pocEvidence: [], summary: { totalDevices: hardwareDevices.length, fallbackRequired: 0, averageHealth: 0, pocRecords: 0, pocBlocked: 0 } });
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce({ role: 'ADMIN' } as AuthSession);
+    const wrapper = mount(HardwareIntegrationWorkspace);
+    await flushPromises();
     expect(wrapper.text()).toContain('拆包台摄像头');
-    expect(wrapper.text()).not.toContain('PROTOCOL REVIEW');
-    expect(wrapper.text()).not.toContain('SIGNOFF READINESS');
-    expect(wrapper.text()).not.toContain('ADAPTER PLANS');
+    expect(wrapper.find('details[aria-label="管理员诊断区"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('提交会写入真实网关读数记录');
   });
 });

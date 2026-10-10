@@ -1,11 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
-  documentAuditEvents as fallbackAuditEvents,
-  documentPackages as fallbackPackages,
-  documentSummary as fallbackSummary,
-  evidenceAttachments as fallbackAttachments,
   type DocumentAuditEvent,
   type DocumentManagementSummary,
   type DocumentPackage,
@@ -22,10 +18,13 @@ import {
   type EvidenceAttachmentUploadResult,
 } from '../../services/documentManagementApi';
 
-const summary = ref<DocumentManagementSummary>(fallbackSummary);
-const packages = ref<DocumentPackage[]>(fallbackPackages);
-const attachments = ref<EvidenceAttachment[]>(fallbackAttachments);
-const auditEvents = ref<DocumentAuditEvent[]>(fallbackAuditEvents);
+const summary = ref<DocumentManagementSummary>({ packages: 0, attachments: 0, missingEvidence: 0, manualFallbacks: 0, auditEvents: 0 });
+const packages = ref<DocumentPackage[]>([]);
+const attachments = ref<EvidenceAttachment[]>([]);
+const auditEvents = ref<DocumentAuditEvent[]>([]);
+const loadingError = ref('');
+const selectedFile = ref<File | null>(null);
+const selectedPackageCode = ref('');
 const uploading = ref(false);
 const uploadResult = ref<EvidenceAttachmentUploadResult | null>(null);
 const uploadError = ref('');
@@ -34,7 +33,7 @@ const previewResult = ref<AttachmentPreviewUrl | null>(null);
 const previewError = ref('');
 
 const activePackage = computed(
-  () => packages.value.find((item) => item.status.includes('缺') || item.status.includes('待')) ?? packages.value[0],
+  () => packages.value.find((item) => item.code === selectedPackageCode.value) ?? packages.value.find((item) => item.status.includes('缺') || item.status.includes('待')) ?? packages.value[0],
 );
 
 const activeAttachments = computed(() =>
@@ -42,15 +41,14 @@ const activeAttachments = computed(() =>
 );
 
 const previewTargetCode = computed(
-  () => uploadResult.value?.code ?? activeAttachments.value[0]?.code ?? attachments.value[0]?.code ?? '',
+  () => uploadResult.value?.code ?? activeAttachments.value[0]?.code ?? '',
 );
 
-const sourceBasis = [
-  { label: '制造工单', value: 'Work Order / Job Card / Stock Entry', detail: '样例按工单、工序和库存台账组织。' },
-  { label: '质量检查', value: 'Quality Check / Defect Evidence', detail: '质检附件必须绑定缺陷、处理动作和复检。' },
-  { label: '标签编码', value: 'GS1 / 批次 / 业务单号', detail: '附件包围绕母单、工单、质检单和 POC 编码追溯。' },
-  { label: '对象存储', value: 'Local / JDBC metadata / NAS / S3', detail: '当前对象内容默认本地存储，附件元数据可切换 JDBC 仓储。' },
-] as const;
+watch(selectedPackageCode, () => {
+  uploadResult.value = null;
+  previewResult.value = null;
+  previewError.value = '';
+});
 
 const evidenceCoverage = computed(() => {
   const required = packages.value.reduce((total, item) => total + item.requiredEvidence, 0);
@@ -74,14 +72,10 @@ const missingPackages = computed(() =>
     .slice(0, 4),
 );
 
-const controlRows = [
-  { label: '元数据仓储', value: 'zhubao.documents.repository', state: 'memory / JDBC', tone: 'green' },
-  { label: '内容存储', value: 'zhubao.documents.storage.local-root', state: 'local://evidence', tone: 'blue' },
-  { label: '预览边界', value: 'preview-url + checksum', state: '15 分钟签名', tone: 'amber' },
-  { label: '后续复用', value: 'NAS / S3 / MinIO', state: '接口预留', tone: 'violet' },
-] as const;
+onMounted(loadDocuments);
 
-onMounted(async () => {
+async function loadDocuments() {
+  loadingError.value = '';
   try {
     const [nextSummary, nextPackages, nextAttachments, nextAuditEvents] = await Promise.all([
       fetchDocumentSummary(),
@@ -93,22 +87,27 @@ onMounted(async () => {
     packages.value = nextPackages;
     attachments.value = nextAttachments;
     auditEvents.value = nextAuditEvents;
-  } catch {
-    // Keep local deterministic review samples when the backend is not running.
+  } catch (error) {
+    loadingError.value = error instanceof Error ? error.message : '附件数据读取失败';
   }
-});
+}
 
-async function uploadDemoEvidence() {
-  if (!activePackage.value) return;
+function selectFile(event: Event) {
+  selectedFile.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+  uploadError.value = '';
+}
+
+async function uploadEvidence() {
+  if (!activePackage.value || !selectedFile.value) {
+    uploadError.value = '请选择文档包和附件文件';
+    return;
+  }
 
   uploading.value = true;
   uploadResult.value = null;
   uploadError.value = '';
 
   try {
-    const file = new File(['weight=121.15g;operator=he-lin;scene=document-demo'], 'demo-weight-photo.txt', {
-      type: 'text/plain',
-    });
     const result = await uploadEvidenceAttachment({
       documentCode: activePackage.value.code,
       businessType: activePackage.value.category,
@@ -116,34 +115,10 @@ async function uploadDemoEvidence() {
       source: 'PC 文档工作台上传',
       owner: activePackage.value.owner,
       fallbackAction: '无',
-      file,
+      file: selectedFile.value,
     });
     uploadResult.value = result;
-    attachments.value = [
-      {
-        code: result.code,
-        documentCode: result.documentCode,
-        businessType: activePackage.value.category,
-        businessCode: activePackage.value.businessCode,
-        fileName: result.fileName,
-        mediaType: result.mediaType,
-        storageLocation: result.storageLocation,
-        storagePolicy: 'hot 180d -> archive',
-        source: 'PC 文档工作台上传',
-        status: '已上传',
-        owner: activePackage.value.owner,
-        checksum: result.checksum,
-        uploadedAt: result.uploadedAt,
-        fallbackAction: '无',
-        tone: 'green',
-      },
-      ...attachments.value,
-    ];
-    summary.value = {
-      ...summary.value,
-      attachments: summary.value.attachments + 1,
-      auditEvents: summary.value.auditEvents + 1,
-    };
+    await loadDocuments();
   } catch (error) {
     uploadError.value = error instanceof Error ? error.message : '上传附件失败';
   } finally {
@@ -195,6 +170,9 @@ async function createPreviewUrl() {
       </div>
     </section>
 
+    <p v-if="loadingError" class="operation-feedback danger" role="alert">附件数据读取失败：{{ loadingError }}</p>
+    <p v-else-if="packages.length === 0" class="empty-hint">暂无文档包，请从业务单据建立证据关联。</p>
+
     <section class="document-control-board" aria-label="文档证据运营板">
       <article v-if="activePackage" class="document-active-case" :class="`tone-${activePackage.tone}`">
         <div class="panel-title-row">
@@ -237,7 +215,7 @@ async function createPreviewUrl() {
 
     </section>
 
-    <section class="document-upload-console" aria-label="附件上传与预览测试">
+    <section class="document-upload-console" aria-label="附件上传与预览">
       <div class="section-heading">
         <div>
           <span class="eyebrow">Upload & Preview</span>
@@ -245,8 +223,10 @@ async function createPreviewUrl() {
           <p>选择文件后上传，并生成短期预览链接。</p>
         </div>
         <div class="button-row">
-          <button class="primary-button" type="button" :disabled="uploading" @click="uploadDemoEvidence">
-            {{ uploading ? '正在上传' : '上传称重照片' }}
+          <label>文档包<select v-model="selectedPackageCode" :disabled="uploading" aria-label="上传文档包"><option value="">当前待补文档包</option><option v-for="item in packages" :key="item.code" :value="item.code">{{ item.code }} / {{ item.title }}</option></select></label>
+          <label>附件文件<input type="file" aria-label="附件文件" :disabled="uploading" @change="selectFile" /></label>
+          <button class="primary-button" type="button" :disabled="uploading || !activePackage || !selectedFile" @click="uploadEvidence">
+            {{ uploading ? '正在上传' : '上传所选文件' }}
           </button>
           <button class="secondary-button" type="button" :disabled="previewing || !previewTargetCode" @click="createPreviewUrl">
             {{ previewing ? '正在生成' : '生成预览链接' }}
@@ -262,7 +242,7 @@ async function createPreviewUrl() {
         <article v-else-if="uploadError" class="operation-feedback danger">
           <strong>附件上传失败</strong>
           <span>{{ uploadError }}</span>
-          <small>请确认后端已启动，或继续使用本地样例兜底评审页面。</small>
+          <small>请检查文件和网络后重试。</small>
         </article>
         <article v-if="previewResult" class="operation-feedback success">
           <strong>预览链接已生成</strong>
@@ -285,7 +265,6 @@ async function createPreviewUrl() {
             <h2>文档包台账</h2>
             <p>每个业务动作都必须能关联文档包、附件、存储策略和审计事件。</p>
           </div>
-          <StatusBadge label="M3.37 元数据仓储可切换" tone="green" />
         </div>
         <div class="document-table-wrap">
           <table class="document-table">
@@ -415,3 +394,9 @@ async function createPreviewUrl() {
     </section>
   </div>
 </template>
+
+<style scoped>
+.document-upload-console label { min-width: 0; max-width: 100%; }
+.document-upload-console select,
+.document-upload-console input { box-sizing: border-box; min-width: 0; width: 100%; max-width: 100%; }
+</style>

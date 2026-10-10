@@ -106,6 +106,8 @@ export interface AuthAccountPreApprovalDraftRequest {
   targetRole?: string;
   targetDataScope?: string;
   targetCustomerScope?: string[];
+  targetAllowedProcesses?: string[];
+  statusAction?: 'ENABLE' | 'DISABLE' | 'UNLOCK';
   targetEnabled?: boolean;
   demoAccount?: boolean;
   reason: string;
@@ -139,6 +141,8 @@ export interface AuthAccountPreApprovalApplicationRequest {
   targetRole?: string;
   targetDataScope?: string;
   targetCustomerScope?: string[];
+  targetAllowedProcesses?: string[];
+  statusAction?: 'ENABLE' | 'DISABLE' | 'UNLOCK';
   targetEnabled?: boolean;
   demoAccount?: boolean;
   reason: string;
@@ -157,6 +161,8 @@ export interface AuthAccountPreApprovalApplication {
   targetRole: string;
   targetDataScope: string;
   targetCustomerScope: string[];
+  targetAllowedProcesses?: string[];
+  statusAction?: 'ENABLE' | 'DISABLE' | 'UNLOCK' | '';
   targetEnabled: boolean | null;
   demoAccount: boolean | null;
   reason: string;
@@ -240,7 +246,7 @@ export async function logoutAuthSession(): Promise<void> {
       await apiPost<Record<string, never>, void>('/api/auth/logout', {});
     }
   } catch {
-    // Local logout must still work when the backend session has already expired or is unreachable.
+    // 后端会话过期或暂时不可用时，仍需清理本地登录状态。
   } finally {
     clearAuthToken();
     notifyAuthSessionChanged(null);

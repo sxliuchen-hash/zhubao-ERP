@@ -1,22 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
-import {
-  acceptanceDataSets,
-  hardwarePocRecords,
-  openSourceSampleMappings,
-  productionReadinessItems,
-  sampleScenarios,
-  type Tone,
-} from '../../data/m1PrototypeData';
+import type { Tone } from '../../data/m1PrototypeData';
+import { fetchAuthSession } from '../../services/authApi';
 import {
   buildRegisterImportPostingPlan,
-  registerCoverageTone,
-  registerFieldCoverage,
-  registerImportReviewBatches,
   registerImportSummary,
   registerImportTemplates,
-  registerProcessCoverage,
   registerRuleTone,
   type RegisterImportBatch,
   type RegisterImportBatchRow,
@@ -51,58 +41,15 @@ import {
   registerPreviewIssueFileName,
 } from './registerPreviewExport';
 
-function scenarioTone(status: string): Tone {
-  if (status === 'ready') return 'green';
-  if (status === 'blocked') return 'red';
-  return 'amber';
-}
-
-function scenarioLabel(status: string) {
-  if (status === 'ready') return '可演示';
-  if (status === 'blocked') return '阻塞';
-  return '待补数据';
-}
-
-function mappingLabel(status: string) {
-  if (status === 'applied') return '已映射';
-  if (status === 'watching') return '观察中';
-  return '预留';
-}
-
-function mappingTone(status: string): Tone {
-  if (status === 'applied') return 'green';
-  if (status === 'watching') return 'blue';
-  return 'gray';
-}
-
-function dataSetLabel(status: string) {
-  if (status === 'active') return '测试中';
-  if (status === 'blocked') return '阻塞';
-  return '待现场数据';
-}
-
-function dataSetTone(status: string): Tone {
-  if (status === 'active') return 'green';
-  if (status === 'blocked') return 'red';
-  return 'amber';
-}
-
-function readinessStatusLabel(status: string) {
-  if (status === 'confirmed') return '已确认';
-  if (status === 'needs-trial') return '需试点';
-  if (status === 'deferred') return '延期';
-  return '待确认';
+async function currentOperator(): Promise<string> {
+  const session = await fetchAuthSession();
+  if (!session?.operator) throw new Error('登录会话不可用，请重新登录后操作');
+  return session.operator;
 }
 
 function parserStatusLabel(status: string) {
   if (status === 'COMMAND_READY') return '预览就绪';
   return '解析器待接入';
-}
-
-function coverageStatusLabel(status: string) {
-  if (status === 'covered') return '已覆盖';
-  if (status === 'partial') return '待结构化';
-  return '未覆盖';
 }
 
 function keyFieldLabel(template: (typeof registerImportTemplates)[number]) {
@@ -196,8 +143,6 @@ async function submitRegisterPreview() {
   }
 }
 
-const activeScenario = sampleScenarios[0];
-const activeDataSet = acceptanceDataSets.find((dataset) => dataset.scenarioId === activeScenario.id);
 const activeRegisterTemplate = registerImportTemplates[0];
 const selectedRegisterTemplateCode = ref(activeRegisterTemplate.code);
 const registerBusinessDate = ref(new Date().toISOString().slice(0, 10));
@@ -209,15 +154,13 @@ const registerPreviewDownloadError = ref('');
 const registerConfirmLoading = ref(false);
 const registerConfirmError = ref('');
 const registerConfirmResult = ref<RegisterImportBatch | null>(null);
-const registerReviewBatches = ref<RegisterImportBatch[]>([...registerImportReviewBatches]);
-const selectedRegisterBatchNo = ref(registerImportReviewBatches[0]?.importBatchNo ?? '');
-const registerBatchDetail = ref<RegisterImportBatch | null>(registerImportReviewBatches[0] ?? null);
+const registerReviewBatches = ref<RegisterImportBatch[]>([]);
+const selectedRegisterBatchNo = ref('');
+const registerBatchDetail = ref<RegisterImportBatch | null>(null);
 const registerBatchLoading = ref(false);
 const registerBatchError = ref('');
-const registerBatchSource = ref('本地评审样例');
-const registerPostingPlan = ref<RegisterImportPostingPlan | null>(
-  registerImportReviewBatches[0] ? buildRegisterImportPostingPlan(registerImportReviewBatches[0]) : null,
-);
+const registerBatchSource = ref('尚未读取');
+const registerPostingPlan = ref<RegisterImportPostingPlan | null>(null);
 const registerPostingPlanLoading = ref(false);
 const registerPostingPlanError = ref('');
 const registerPostingPlanSource = ref('本地映射计划');
@@ -357,20 +300,22 @@ async function loadRegisterReviewBatches() {
   registerBatchLoading.value = true;
   try {
     const batches = await fetchRegisterImportBatches(10);
+    registerReviewBatches.value = batches;
+    registerBatchSource.value = '后端结构化批次';
     if (batches.length) {
-      registerReviewBatches.value = batches;
       selectedRegisterBatchNo.value = batches[0].importBatchNo;
       registerBatchDetail.value = batches[0];
       registerBatchSource.value = '后端结构化批次';
       await loadRegisterPostingPlan(batches[0].importBatchNo, batches[0]);
+    } else {
+      selectedRegisterBatchNo.value = '';
+      registerBatchDetail.value = null;
+      registerPostingPlan.value = null;
     }
   } catch (error) {
-    registerBatchSource.value = '本地评审样例';
+    registerBatchSource.value = '读取失败';
     registerBatchError.value = error instanceof Error ? error.message : '批次列表读取失败';
-    if (selectedRegisterBatch.value) {
-      registerPostingPlan.value = buildRegisterImportPostingPlan(selectedRegisterBatch.value);
-      registerPostingPlanSource.value = '本地映射计划';
-    }
+
   } finally {
     registerBatchLoading.value = false;
   }
@@ -393,7 +338,7 @@ async function selectRegisterBatch(importBatchNo: string) {
     registerBatchDetail.value = await fetchRegisterImportBatch(importBatchNo);
     registerBatchSource.value = '后端结构化批次';
   } catch (error) {
-    registerBatchSource.value = '本地评审样例';
+    registerBatchSource.value = '读取失败';
     registerBatchError.value = error instanceof Error ? error.message : '批次详情读取失败';
   }
   await loadRegisterPostingPlan(importBatchNo, registerBatchDetail.value ?? fallbackBatch);
@@ -460,8 +405,8 @@ async function submitRegisterCorrection() {
       fields: {
         [target.issue.field]: correctionValue,
       },
-      operator: '样例库复核员',
-      correctionRemark: '样例库登记表复核补录',
+      operator: await currentOperator(),
+      correctionRemark: '登记表复核补录',
     });
     registerBatchDetail.value = detail;
     registerReviewBatches.value = registerReviewBatches.value.map((batch) =>
@@ -509,8 +454,8 @@ async function executeRegisterPosting() {
   try {
     const result = await postRegisterImportBatch(batchNo, {
       allowWarnings: registerPostingPlan.value.status === 'WARNING',
-      operator: '样例库复核员',
-      postingRemark: '样例库登记表批次显式入账',
+      operator: await currentOperator(),
+      postingRemark: '登记表批次显式入账',
     });
     registerPostingExecutionResult.value = result;
 
@@ -598,8 +543,8 @@ async function confirmRegisterPreview() {
   try {
     const confirmed = await confirmRegisterImport({
       preview: registerPreview.value,
-      operator: '样例库复核员',
-      confirmRemark: '样例库确认导入仅保存结构化批次，暂不直接写业务台账',
+      operator: await currentOperator(),
+      confirmRemark: '确认导入仅保存结构化批次，暂不直接写业务台账',
     });
     registerConfirmResult.value = confirmed;
     registerReviewBatches.value = [
@@ -617,129 +562,6 @@ async function confirmRegisterPreview() {
     registerConfirmLoading.value = false;
   }
 }
-
-const sampleKpis = computed(() => [
-  {
-    label: '核心样例',
-    value: sampleScenarios.length,
-    unit: '条',
-    detail: `${sampleScenarios.filter((scenario) => scenario.status === 'ready').length} 条可演示`,
-    tone: 'blue' as Tone,
-  },
-  {
-    label: '开源映射',
-    value: openSourceSampleMappings.filter((mapping) => mapping.status === 'applied').length,
-    unit: '项',
-    detail: `覆盖 ${openSourceSampleMappings.length} 个参考对象`,
-    tone: 'green' as Tone,
-  },
-  {
-    label: '真实数据集',
-    value: acceptanceDataSets.length,
-    unit: '组',
-    detail: `${acceptanceDataSets.filter((dataset) => dataset.status === 'active').length} 组进入回归`,
-    tone: 'violet' as Tone,
-  },
-  {
-    label: '待补缺口',
-    value: acceptanceDataSets.reduce((sum, dataset) => sum + dataset.gaps.length, 0),
-    unit: '项',
-    detail: '现场数据、登录人、硬件证据',
-    tone: 'amber' as Tone,
-  },
-  {
-    label: '硬件 POC',
-    value: hardwarePocRecords.length,
-    unit: '项',
-    detail: `${hardwarePocRecords.filter((record) => record.tone === 'red').length} 项阻断`,
-    tone: 'red' as Tone,
-  },
-  {
-    label: '登记模板',
-    value: registerImportSummary.templates,
-    unit: '类',
-    detail: `${registerImportSummary.commandReadyTemplates} 类命令已对齐`,
-    tone: 'green' as Tone,
-  },
-]);
-
-const scenarioRows = computed(() =>
-  sampleScenarios.map((scenario) => {
-    const mappings = openSourceSampleMappings.filter((mapping) => mapping.mappedScenarioId === scenario.id);
-    const datasets = acceptanceDataSets.filter((dataset) => dataset.scenarioId === scenario.id);
-
-    return {
-      ...scenario,
-      mappingCount: mappings.length,
-      dataSetCount: datasets.length,
-      primaryFixture: datasets[0]?.fixture ?? '待绑定 fixture',
-      coverage: `${scenario.chain.length} 节点 / ${scenario.evidence.length} 证据`,
-    };
-  }),
-);
-
-const researchCards = [
-  {
-    source: 'ERPNext Job Card',
-    referenceUrl: 'https://docs.frappe.io/erpnext/job-card',
-    reusablePattern: '工单按工序拆到 Job Card，记录工作站、员工、完工数量、时间日志、物料请求和 WIP 进度。',
-    mappedTo: '生产工单 / 工序报工 / 损耗试算',
-    gate: '报工样例必须写库存台账或证据事件，不能只改页面状态。',
-    tone: 'blue' as Tone,
-  },
-  {
-    source: 'Odoo Quality Checks',
-    referenceUrl:
-      'https://www.odoo.com/documentation/19.0/applications/inventory_and_mrp/quality/quality_management/quality_checks.html',
-    reusablePattern: '质检点可由规则自动生成，也可落在制造单、库存作业或 Shop Floor 工序上处理 Pass/Fail。',
-    mappedTo: '质检返工 / 复检放行 / 缺陷附件',
-    gate: '质检样例必须包含缺陷、处理动作、返工或复检结果、照片和责任人。',
-    tone: 'green' as Tone,
-  },
-  {
-    source: 'InvenTree Build Orders',
-    referenceUrl: 'https://docs.inventree.org/en/stable/manufacturing/build/',
-    reusablePattern: '构建单按 BOM 分配库存，完工时扣减已分配库存并生成成品，测试结果和附件可绑定到构建输出。',
-    mappedTo: '客户库存隔离 / 批次追溯 / 验收测试',
-    gate: '样例必须校验客户所有权、批次、库位、状态和测试结果，不允许只保留汇总数。',
-    tone: 'violet' as Tone,
-  },
-] as const;
-
-const testGates = [
-  { code: 'G1', label: '业务主链路', detail: '来料、拆包、工单、报工、质检、出库必须一条样例跑通。', state: '已接入', tone: 'green' as Tone },
-  { code: 'G2', label: '库存台账', detail: '数量、重量、状态、库位变化必须有 before/after。', state: '已接入', tone: 'green' as Tone },
-  { code: 'G3', label: '证据链', detail: '称重、照片、视频、附件、操作日志需要统一编号。', state: '部分缺口', tone: 'amber' as Tone },
-  { code: 'G4', label: '硬件兜底', detail: 'NVR、扫码、标签、电子秤失败时保留人工路径。', state: 'POC 中', tone: 'amber' as Tone },
-  { code: 'G5', label: '自动化测试', detail: 'fixture 必须被后端或前端测试引用。', state: '已接入', tone: 'blue' as Tone },
-  { code: 'G6', label: '真实数据替换', detail: '试点前用脱敏真实单据替换演示样例。', state: '未完成', tone: 'red' as Tone },
-] as const;
-
-const fieldGapRows = computed(() =>
-  acceptanceDataSets.flatMap((dataset) =>
-    dataset.gaps.map((gap, index) => ({
-      code: `${dataset.code}-G${index + 1}`,
-      scenarioId: dataset.scenarioId,
-      gap,
-      fixture: dataset.fixture,
-      tone: dataset.status === 'active' ? ('amber' as Tone) : ('red' as Tone),
-    })),
-  ),
-);
-
-const readinessSummary = computed(() => ({
-  total: productionReadinessItems.length,
-  p0Pending: productionReadinessItems.filter((item) => item.priority === 'P0' && item.status !== 'confirmed').length,
-  needsTrial: productionReadinessItems.filter((item) => item.status === 'needs-trial').length,
-  confirmed: productionReadinessItems.filter((item) => item.status === 'confirmed').length,
-}));
-
-const registerCoverageSummary = computed(() => ({
-  processCovered: registerProcessCoverage.filter((item) => item.status === 'covered').length,
-  processPartial: registerProcessCoverage.filter((item) => item.status === 'partial').length,
-  fieldsCovered: registerFieldCoverage.filter((item) => item.status === 'covered').length,
-  fieldsPartial: registerFieldCoverage.filter((item) => item.status === 'partial').length,
-}));
 
 const registerTemplateRows = computed(() =>
   registerImportTemplates.map((template) => ({
@@ -1030,7 +852,7 @@ const registerTemplateRows = computed(() =>
         </article>
       </div>
       <p v-if="registerBatchError" class="register-preview-error">
-        {{ registerBatchError }}；当前继续显示本地评审批次，不代表已写业务台账。
+        {{ registerBatchError }}；请检查连接后重试。
       </p>
       <div class="register-review-grid">
         <div class="erp-table-wrap register-review-batch-wrap">

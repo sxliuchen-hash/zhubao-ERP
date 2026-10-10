@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import OperationInputs from './OperationInputs.vue';
+import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
-import type { Tone } from '../../data/m1PrototypeData';
+import type { InventoryBalance, Tone } from '../../data/m1PrototypeData';
 import {
   fetchInventoryWorkspace,
   type InventoryWorkspaceModel,
@@ -25,6 +27,7 @@ const emptyInventory = (): InventoryWorkspaceModel => ({
 
 const workspace = ref<InventoryWorkspaceModel>(emptyInventory());
 const loadError = ref('');
+const operationValues = ref<Record<string, string>>({});
 const shippingFinishedStock = ref(false);
 const outboundShipmentResult = ref<OutboundShipmentResult | null>(null);
 const outboundShipmentError = ref('');
@@ -54,8 +57,13 @@ const latestLedger = computed(
     workspace.value.ledgerEntries[0],
 );
 
-function balanceKey(item: { owner: string; batch: string; status: string }) {
-  return `${item.owner}::${item.batch}::${item.status}`;
+watch(activeBalance, () => { operationValues.value = {}; });
+
+function balanceKey(item: InventoryBalance) {
+  const context = item.operationContext;
+  return JSON.stringify([item.owner, item.batch, item.material, item.location, item.status,
+    context?.customerId, context?.ownerCustomerId, context?.motherOrderCode, context?.workOrderCode,
+    context?.materialCode, context?.warehouseCode, context?.ownerType, context?.stockStatus]);
 }
 
 function inventoryBalanceTone(status: string): Tone {
@@ -99,7 +107,7 @@ async function shipActiveFinishedStock() {
   afterSalesReviewError.value = '';
 
   try {
-    outboundShipmentResult.value = await shipFinishedStock(activeBalance.value);
+    outboundShipmentResult.value = await shipFinishedStock(activeBalance.value, operationDraft(operationValues.value));
     await loadInventoryWorkspace();
   } catch (error) {
     outboundShipmentError.value = error instanceof Error ? error.message : '确认出库失败';
@@ -118,7 +126,7 @@ async function returnActiveCustomerShipment() {
   afterSalesReviewError.value = '';
 
   try {
-    customerReturnResult.value = await returnCustomerShipment(activeBalance.value);
+    customerReturnResult.value = await returnCustomerShipment(activeBalance.value, operationDraft(operationValues.value));
     await loadInventoryWorkspace();
   } catch (error) {
     customerReturnError.value = error instanceof Error ? error.message : '客户退货入库失败';
@@ -135,7 +143,7 @@ async function reviewActiveAfterSalesReturn() {
   afterSalesReviewError.value = '';
 
   try {
-    afterSalesReviewResult.value = await reviewAfterSalesReturn(activeBalance.value);
+    afterSalesReviewResult.value = await reviewAfterSalesReturn(activeBalance.value, operationDraft(operationValues.value));
     await loadInventoryWorkspace();
   } catch (error) {
     afterSalesReviewError.value = error instanceof Error ? error.message : '售后复核分流失败';
@@ -144,7 +152,7 @@ async function reviewActiveAfterSalesReturn() {
   }
 }
 
-function selectBalance(item: { owner: string; batch: string; status: string }) {
+function selectBalance(item: InventoryBalance) {
   selectedBalanceKey.value = balanceKey(item);
   outboundShipmentResult.value = null;
   outboundShipmentError.value = '';
@@ -157,6 +165,7 @@ function selectBalance(item: { owner: string; batch: string; status: string }) {
 
 <template>
   <div class="inventory-trace-desk page-stack">
+    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <section class="module-work-grid inventory-work-grid" aria-label="库存追溯主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">
@@ -231,6 +240,7 @@ function selectBalance(item: { owner: string; batch: string; status: string }) {
             <dt>最近台账</dt>
             <dd>{{ latestLedger?.bizCode ?? '暂无' }}</dd>
           </dl>
+          <OperationInputs v-model="operationValues" :fields="[['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
           <div class="detail-actions">
             <button class="primary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
               {{ shippingFinishedStock ? '正在出库' : '确认出库' }}

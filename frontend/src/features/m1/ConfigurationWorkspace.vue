@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
+import AccountApprovalPanel from './AccountApprovalPanel.vue';
 import type { Tone } from '../../data/m1PrototypeData';
 import {
   changeOwnPassword,
   fetchAuthAccounts,
-  fetchAuthDemoUsers,
   fetchAuthSession,
-  loginAuthSession,
-  logoutAuthSession,
   unlockAuthAccount,
   updateAuthAccountStatus,
   upsertAuthAccount,
   type AuthSession,
   type AuthUserAccountSummary,
+  type AuthAccountPreApprovalApplication,
+  type AuthAccountPreApprovalApplicationRequest,
+  type ManageAuthUserAccountRequest,
 } from '../../services/authApi';
 import {
   fetchStoredContent,
@@ -28,11 +29,6 @@ import {
 } from '../../services/customerAuthorizationApi';
 
 const authSession = ref<AuthSession | null>(null);
-const authDemoUsers = ref<string[]>([]);
-const authUsername = ref('');
-const authPassword = ref('');
-const authBusy = ref(false);
-const authMessage = ref('');
 const passwordCurrent = ref('');
 const passwordNew = ref('');
 const passwordConfirm = ref('');
@@ -56,7 +52,6 @@ const processForm = ref({
   demoAccount: false,
   processes: [] as string[],
 });
-const processBusy = ref(false);
 const processMessage = ref('');
 const accountRoles = [
   { value: 'ADMIN', label: '系统管理员' },
@@ -83,6 +78,66 @@ const storedContent = ref<StoredContentInventory | null>(null);
 const contentError = ref('');
 const contentMessage = ref('');
 const contentBusyCode = ref('');
+const approvalRequest = ref<AuthAccountPreApprovalApplicationRequest | null>(null);
+const executedApplicationCode = ref('');
+let pendingAccountAction: ((applicationCode: string) => Promise<unknown>) | null = null;
+
+function prepareAccountAction(request: AuthAccountPreApprovalApplicationRequest, action: (applicationCode: string) => Promise<unknown>) {
+  if (accountEditorBusy.value) return;
+  approvalRequest.value = request;
+  pendingAccountAction = action;
+  accountEditorMessage.value = '已准备账号操作，请在账号申请与审批区提交申请';
+}
+
+function prepareUpsert(request: ManageAuthUserAccountRequest, actionType: string) {
+  prepareAccountAction({
+    actionType, targetUsername: request.username, targetOperator: request.operator,
+    targetRole: request.role, targetDataScope: request.dataScope,
+    targetCustomerScope: request.customerScope, targetEnabled: request.enabled,
+    targetAllowedProcesses: [...(request.allowedProcesses ?? [])],
+    statusAction: actionType === 'CHANGE_STATUS' ? request.enabled ? 'ENABLE' : 'DISABLE' : undefined,
+    demoAccount: request.demoAccount, reason: '',
+  }, code => upsertAuthAccount({ ...request, preApprovalApplicationCode: code }));
+}
+
+async function executeApprovedAction(application: AuthAccountPreApprovalApplication) {
+  const request = approvalRequest.value;
+  accountEditorMessage.value = '';
+  if (!request || !pendingAccountAction) {
+    accountEditorMessage.value = '请先重新选择并准备该账号操作，再执行对应申请';
+    return;
+  }
+  const expectedReadiness: Record<string, string> = {
+    CREATE_ACCOUNT: 'AUTH-PRE-CREATE-001', RESET_PASSWORD: 'AUTH-PRE-PASSWORD-001',
+    CHANGE_STATUS: 'AUTH-PRE-STATUS-001', CHANGE_ROLE_SCOPE: 'AUTH-PRE-ROLE-001',
+  };
+  if (application.targetUsername !== request.targetUsername || application.readinessCode !== expectedReadiness[request.actionType]
+    || (request.targetOperator !== undefined && application.targetOperator !== request.targetOperator)
+    || (request.targetRole !== undefined && application.targetRole !== request.targetRole)
+    || (request.targetDataScope !== undefined && application.targetDataScope !== request.targetDataScope)
+    || (request.targetEnabled !== undefined && application.targetEnabled !== request.targetEnabled)
+    || (request.demoAccount !== undefined && application.demoAccount !== request.demoAccount)
+    || (request.statusAction !== undefined && application.statusAction !== request.statusAction)
+    || (request.targetAllowedProcesses !== undefined && JSON.stringify(application.targetAllowedProcesses ?? []) !== JSON.stringify(request.targetAllowedProcesses))
+    || (request.targetCustomerScope !== undefined && JSON.stringify(application.targetCustomerScope) !== JSON.stringify(request.targetCustomerScope))) {
+    accountEditorMessage.value = '已批准申请与当前准备的账号操作不一致，请重新申请';
+    return;
+  }
+  accountEditorBusy.value = true;
+  try {
+    await pendingAccountAction(application.applicationCode);
+    executedApplicationCode.value = application.applicationCode;
+    pendingAccountAction = null;
+    approvalRequest.value = null;
+    accountEditor.value.password = '';
+    accountEditorMessage.value = `已执行 ${application.applicationCode} 的账号操作`;
+    await loadAuthAccounts();
+  } catch (error) {
+    accountEditorMessage.value = error instanceof Error ? error.message : '执行账号操作失败';
+  } finally {
+    accountEditorBusy.value = false;
+  }
+}
 
 function emptyAccountEditor() {
   return {
@@ -99,7 +154,6 @@ function emptyAccountEditor() {
 
 onMounted(async () => {
   await restoreAuthSession();
-  await loadDemoUsers();
   await loadAuthAccounts();
   await loadCustomerAuthorizations();
   await loadStoredContent();
@@ -110,14 +164,6 @@ async function restoreAuthSession() {
     authSession.value = await fetchAuthSession();
   } catch {
     authSession.value = null;
-  }
-}
-
-async function loadDemoUsers() {
-  try {
-    authDemoUsers.value = await fetchAuthDemoUsers();
-  } catch {
-    authDemoUsers.value = [];
   }
 }
 
@@ -214,54 +260,27 @@ async function saveAccount() {
     accountEditorMessage.value = '新建账号必须填写初始密码';
     return;
   }
-  accountEditorBusy.value = true;
-  try {
-    await upsertAuthAccount({
-      username: editor.username.trim(),
-      password: editor.password.trim() || undefined,
-      operator: editor.operator.trim(),
-      role: editor.role,
-      dataScope: editor.dataScope,
-      enabled: editor.enabled,
-      demoAccount: editor.demoAccount,
-    });
-    accountEditorMessage.value = editor.editing ? `已更新 ${editor.username}` : `已创建 ${editor.username}`;
-    if (!editor.editing) {
-      resetAccountEditor();
-    } else {
-      accountEditor.value.password = '';
-    }
-    await loadAuthAccounts();
-  } catch (error) {
-    accountEditorMessage.value = error instanceof Error ? error.message : '保存账号失败';
-  } finally {
-    accountEditorBusy.value = false;
-  }
+  const existing = authAccounts.value.find(account => account.username === editor.username.trim());
+  prepareUpsert({
+    username: editor.username.trim(), password: editor.password || undefined,
+    operator: editor.operator.trim(), role: editor.role, dataScope: editor.dataScope,
+    customerScope: existing?.customerScope ?? [], allowedProcesses: existing?.allowedProcesses ?? [],
+    enabled: editor.enabled, demoAccount: editor.demoAccount,
+  }, !editor.editing ? 'CREATE_ACCOUNT' : editor.password ? 'RESET_PASSWORD'
+    : existing?.enabled !== editor.enabled ? 'CHANGE_STATUS' : 'CHANGE_ROLE_SCOPE');
 }
 
 async function toggleAccount(account: AuthUserAccountSummary) {
-  accountEditorMessage.value = '';
-  try {
-    await updateAuthAccountStatus(account.username, {
-      enabled: !account.enabled,
-      reason: account.enabled ? '管理员停用' : '管理员启用',
-    });
-    accountEditorMessage.value = account.enabled ? `已停用 ${account.username}` : `已启用 ${account.username}`;
-    await loadAuthAccounts();
-  } catch (error) {
-    accountEditorMessage.value = error instanceof Error ? error.message : '更新账号状态失败';
-  }
+  const enabled = !account.enabled;
+  prepareAccountAction({ actionType: 'CHANGE_STATUS', targetUsername: account.username,
+    targetEnabled: enabled, statusAction: enabled ? 'ENABLE' : 'DISABLE', reason: '' }, code => updateAuthAccountStatus(account.username, {
+      enabled, reason: enabled ? '管理员启用' : '管理员停用', preApprovalApplicationCode: code,
+    }));
 }
 
 async function unlockAccount(account: AuthUserAccountSummary) {
-  accountEditorMessage.value = '';
-  try {
-    await unlockAuthAccount(account.username, { reason: '管理员解锁' });
-    accountEditorMessage.value = `已解锁 ${account.username}`;
-    await loadAuthAccounts();
-  } catch (error) {
-    accountEditorMessage.value = error instanceof Error ? error.message : '解锁失败';
-  }
+  prepareAccountAction({ actionType: 'CHANGE_STATUS', targetUsername: account.username,
+    statusAction: 'UNLOCK', reason: '' }, code => unlockAuthAccount(account.username, { reason: '管理员解锁', preApprovalApplicationCode: code }));
 }
 
 async function loadStoredContent() {
@@ -311,65 +330,13 @@ async function saveProcesses() {
     processMessage.value = '请先点一个账号';
     return;
   }
-  processBusy.value = true;
-  try {
-    await upsertAuthAccount({
-      username: processForm.value.username,
-      operator: processForm.value.operator,
-      role: processForm.value.role,
-      dataScope: processForm.value.dataScope,
-      customerScope: processForm.value.customerScope,
-      enabled: processForm.value.enabled,
-      demoAccount: processForm.value.demoAccount,
-      allowedProcesses: processForm.value.processes,
-    });
-    processMessage.value = processForm.value.processes.length
-      ? `已绑定 ${processForm.value.processes.join('、')}`
-      : '已清空可做工序';
-    await loadAuthAccounts();
-  } catch (error) {
-    processMessage.value = error instanceof Error ? error.message : '保存工序失败';
-  } finally {
-    processBusy.value = false;
-  }
-}
-
-function syncDemoPassword() {
-  if (authDemoUsers.value.includes(authUsername.value)) {
-    authPassword.value = `${authUsername.value}123`;
-  }
-}
-
-async function handleLogin() {
-  authBusy.value = true;
-  authMessage.value = '';
-  try {
-    authSession.value = await loginAuthSession({
-      username: authUsername.value,
-      password: authPassword.value,
-    });
-    authMessage.value = `已登录：${authSession.value.roleLabel}`;
-    await loadAuthAccounts();
-    await loadCustomerAuthorizations();
-  } catch (error) {
-    authMessage.value = error instanceof Error ? error.message : '登录失败';
-  } finally {
-    authBusy.value = false;
-  }
-}
-
-async function handleLogout() {
-  authBusy.value = true;
-  authMessage.value = '';
-  try {
-    await logoutAuthSession();
-    authSession.value = null;
-    authMessage.value = '已退出登录会话';
-    await loadAuthAccounts();
-    await loadCustomerAuthorizations();
-  } finally {
-    authBusy.value = false;
-  }
+  prepareUpsert({
+    username: processForm.value.username, operator: processForm.value.operator,
+    role: processForm.value.role, dataScope: processForm.value.dataScope,
+    customerScope: [...processForm.value.customerScope], enabled: processForm.value.enabled,
+    demoAccount: processForm.value.demoAccount, allowedProcesses: [...processForm.value.processes],
+  }, 'CHANGE_ROLE_SCOPE');
+  processMessage.value = '工序变更已准备，请提交账号申请';
 }
 
 async function handleChangePassword() {
@@ -423,8 +390,8 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
     <section class="operations-hero">
       <div class="hero-copy">
         <span class="eyebrow">Accounts</span>
-        <h2>登录与客户范围</h2>
-        <p>登录、查看账号、授权客户范围。</p>
+        <h2>账号与客户范围</h2>
+        <p>管理账号、岗位工序、客户范围与账号操作审批。</p>
       </div>
     </section>
 
@@ -434,54 +401,18 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
           <div>
             <span class="eyebrow">SIGN IN</span>
             <h2>登录会话</h2>
-            <p>登录后，后续请求携带 Bearer token。客户范围以当前会话为准。</p>
+            <p>客户范围以当前登录账号为准。</p>
           </div>
           <StatusBadge :label="authSession ? authSession.roleLabel : '未登录'" :tone="authSession ? 'green' : 'amber'" />
         </div>
 
-        <form class="auth-session-strip" aria-label="轻量登录会话" @submit.prevent="handleLogin">
-          <div>
-            <span>当前会话</span>
-            <strong>{{ authSession ? `${authSession.operator} / ${authSession.roleLabel}` : '未登录' }}</strong>
-            <small>
-              {{
-                authSession
-                  ? `会话 ${authSession.expiresAt} / 密码到期 ${authSession.passwordExpiresAt || '未记录'}${authSession.passwordChangeRequired ? ' / 需先自助改密' : ''}`
-                  : '登录成功后写入本地 token'
-              }}
-            </small>
-          </div>
-          <label>
-            <span>账号</span>
-            <input
-              v-model="authUsername"
-              :disabled="authBusy"
-              list="auth-demo-users"
-              autocomplete="username"
-              @change="syncDemoPassword"
-            />
-            <datalist id="auth-demo-users">
-              <option v-for="username in authDemoUsers" :key="username" :value="username" />
-            </datalist>
-          </label>
-          <label>
-            <span>密码</span>
-            <input v-model="authPassword" :disabled="authBusy" type="password" autocomplete="current-password" />
-          </label>
-          <div class="auth-session-actions">
-            <button class="primary-button" type="submit" :disabled="authBusy">
-              {{ authBusy ? '处理中' : '登录' }}
-            </button>
-            <button class="secondary-button" type="button" :disabled="authBusy || !authSession" @click="handleLogout">退出</button>
-          </div>
-          <small v-if="authMessage" class="auth-session-message">{{ authMessage }}</small>
-        </form>
+        <p class="empty-hint">当前会话：{{ authSession ? `${authSession.operator} / ${authSession.roleLabel}` : '未登录' }}。切换账号请使用顶部退出入口。</p>
 
         <form class="auth-password-strip" aria-label="自助改密续期" @submit.prevent="handleChangePassword">
           <div>
             <span>自助改密</span>
             <strong>{{ authSession ? '登录后更新自己的密码' : '需先建立登录会话' }}</strong>
-            <small>仅接受 Bearer token，不使用请求头角色兜底。</small>
+            <small>更新当前登录账号的密码。</small>
           </div>
           <label>
             <span>当前密码</span>
@@ -577,8 +508,8 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
               <input v-model="processForm.processes" type="checkbox" :value="name" />
               {{ name }}
             </label>
-            <button class="primary-button" type="submit" :disabled="processBusy || !processForm.username">
-              {{ processBusy ? '保存中' : '保存工序' }}
+            <button class="primary-button" type="submit" :disabled="accountEditorBusy || !processForm.username">
+              申请工序变更
             </button>
             <p v-if="processMessage" class="customer-auth-message">{{ processMessage }}</p>
           </form>
@@ -666,7 +597,7 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
           </div>
           <div class="auth-session-actions">
             <button class="primary-button" type="submit" :disabled="accountEditorBusy">
-              {{ accountEditorBusy ? '保存中' : accountEditor.editing ? '保存账号' : '创建账号' }}
+              {{ accountEditorBusy ? '保存中' : accountEditor.editing ? '申请更新账号' : '申请创建账号' }}
             </button>
           </div>
           <p v-if="accountEditorMessage" class="customer-auth-message">{{ accountEditorMessage }}</p>
@@ -683,15 +614,17 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
             <div class="account-row-actions">
               <button class="table-action" type="button" @click="editAccount(account)">编辑</button>
               <button class="table-action" type="button" @click="toggleAccount(account)">
-                {{ account.enabled ? '停用' : '启用' }}
+                {{ account.enabled ? '申请停用' : '申请启用' }}
               </button>
-              <button v-if="account.locked" class="table-action" type="button" @click="unlockAccount(account)">解锁</button>
+              <button v-if="account.locked" class="table-action" type="button" @click="unlockAccount(account)">申请解锁</button>
             </div>
           </article>
           <p v-if="authAccounts.length === 0" class="empty-hint">暂无账号可管理</p>
         </div>
       </aside>
     </section>
+
+    <AccountApprovalPanel :request="approvalRequest" :operator="authSession?.operator || ''" :executing="accountEditorBusy" :executed-application-code="executedApplicationCode" @execute="executeApprovedAction" />
 
     <section class="security-context-panel" aria-label="存储内容管理">
       <div class="security-context-main">
@@ -754,3 +687,11 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
     </section>
   </div>
 </template>
+
+<style scoped>
+.auth-password-strip,
+.customer-auth-form { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+form label { display: grid; gap: 6px; min-width: 0; }
+form input:not([type="checkbox"]), form select { box-sizing: border-box; width: 100%; min-width: 0; }
+.customer-auth-form label:has(input[type="checkbox"]) { display: flex; align-items: center; }
+</style>

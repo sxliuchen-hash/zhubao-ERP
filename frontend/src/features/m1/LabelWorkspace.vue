@@ -21,33 +21,8 @@ import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } fro
 // 标签打印工作台。标签只印固定信息，进度靠扫码查看。
 // 前期只做黑白打印：预览和出纸都是白底黑字，按标签纸毫米尺寸单独打印。
 
-const defaultPrinter = { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 };
-
-// 本地评审样例（未连后端 API 时展示，保证离线也能看到效果）
-const sampleLabel: LabelPayload = {
-  type: 'MOTHER',
-  typeLabel: '母单',
-  primaryCode: 'CC-20260709-001-JL',
-  qrContent: 'JG|mother|CC-20260709-001-JL',
-  fields: [
-    { name: '验证码', value: 'K7M2' },
-    { name: '客户', value: '恒信珠宝' },
-    { name: '加工要求', value: '内壁刻字' },
-    { name: '期限', value: '2026-07-20' },
-    { name: '单号', value: 'CC-20260709-001-JL' },
-    { name: '物料', value: '18K 金戒托' },
-    { name: '数量', value: '320 件' },
-    { name: '重量', value: '35.20 克' },
-  ],
-  footerLeft: '快递：顺丰 SF-IN-...001',
-  footerRight: '收货人：何琴',
-  printedAt: '（本地样例）',
-  brandTitle: '珠宝来料加工系统',
-  templateCode: '',
-  printerSetting: { ...defaultPrinter },
-};
-
-const preview = ref<LabelPayload>(sampleLabel);
+const preview = ref<LabelPayload | null>(null);
+const templatesError = ref('');
 const feedback = ref('');
 const errorMessage = ref('');
 const submitting = ref(false);
@@ -85,16 +60,16 @@ const form = ref<{
 const motherOrderCode = ref('');
 const motherTemplateCode = ref('');
 
-const labelMarkup = computed(() => buildLabelMarkup(preview.value));
+const labelMarkup = computed(() => preview.value ? buildLabelMarkup(preview.value) : '');
 const sheetStyle = computed(() => ({
-  width: `${preview.value.printerSetting.widthMm * labelPreviewScale}mm`,
-  height: `${preview.value.printerSetting.heightMm * labelPreviewScale}mm`,
+  width: `${(preview.value?.printerSetting.widthMm ?? 60) * labelPreviewScale}mm`,
+  height: `${(preview.value?.printerSetting.heightMm ?? 40) * labelPreviewScale}mm`,
 }));
 const labelScaleStyle = computed(() => ({
   transform: `scale(${labelPreviewScale})`,
   transformOrigin: 'top left',
-  width: `${preview.value.printerSetting.widthMm}mm`,
-  height: `${preview.value.printerSetting.heightMm}mm`,
+  width: `${(preview.value?.printerSetting.widthMm ?? 60)}mm`,
+  height: `${(preview.value?.printerSetting.heightMm ?? 40)}mm`,
 }));
 
 // 当前类型可选模板
@@ -114,16 +89,19 @@ function removeField(index: number) {
 }
 
 async function loadTemplates() {
+  templatesError.value = '';
   try {
     templates.value = await fetchLabelTemplates();
     templatesLoaded.value = true;
-  } catch {
-    // 未连后端时静默，使用本地样例
+  } catch (error) {
+    templatesError.value = error instanceof Error ? error.message : '标签模板读取失败';
     templatesLoaded.value = false;
   }
 }
 
 async function submitGenerate() {
+  preview.value = null;
+  loadedSticker.value = null;
   feedback.value = '';
   errorMessage.value = '';
   if (!form.value.primaryCode.trim()) {
@@ -152,6 +130,8 @@ async function submitGenerate() {
 }
 
 async function openFieldSticker() {
+  preview.value = null;
+  loadedSticker.value = null;
   feedback.value = '';
   errorMessage.value = '';
   stickerHint.value = '';
@@ -238,6 +218,8 @@ async function reprintSticker() {
 }
 
 async function loadMotherLabel() {
+  preview.value = null;
+  loadedSticker.value = null;
   feedback.value = '';
   errorMessage.value = '';
   if (!motherOrderCode.value.trim()) {
@@ -257,7 +239,7 @@ async function loadMotherLabel() {
 }
 
 function printLabel() {
-  openLabelPrint(preview.value);
+  if (preview.value) openLabelPrint(preview.value);
 }
 
 // ---- 模板管理 ----
@@ -498,7 +480,7 @@ onMounted(loadTemplates);
         <p v-if="errorMessage" class="feedback error">{{ errorMessage }}</p>
       </section>
 
-      <section class="label-preview">
+      <section v-if="preview" class="label-preview">
         <div class="preview-toolbar">
           <span>标签预览</span>
           <div class="toolbar-actions">
@@ -521,6 +503,7 @@ onMounted(loadTemplates);
           <p class="qr-content-line">二维码内容：{{ preview.qrContent }}。打印时请关闭页眉页脚，并选择黑白标签机或激光机。</p>
         </div>
       </section>
+      <section v-else class="label-preview"><p class="hint">请先按单号打开贴纸或生成标签，成功后再预览和打印。</p></section>
     </div>
 
     <!-- 模板与打印机设置管理 -->
@@ -529,7 +512,7 @@ onMounted(loadTemplates);
         <h3>标签模板与打印机设置</h3>
         <button type="button" class="link-button" @click="newTemplate">+ 新建模板</button>
       </div>
-      <p v-if="!templatesLoaded" class="hint">未连接后端 API，模板管理需连接后端；当前展示本地样例标签。</p>
+      <p v-if="!templatesLoaded" class="hint">{{ templatesError || '正在读取标签模板' }}</p>
       <table v-else class="template-table">
         <thead>
           <tr>

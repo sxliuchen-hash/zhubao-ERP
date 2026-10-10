@@ -194,6 +194,7 @@ function backToList() {
 
 <template>
   <div class="inbound-desk page-stack" :class="{ 'is-detail': detailOpen }">
+    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <section class="module-work-grid inbound-work-grid" aria-label="来料作业主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">

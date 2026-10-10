@@ -5,9 +5,6 @@ import type {
   InventoryBalance,
   InventoryLedgerEntry,
   LossApproval,
-  MobileCapability,
-  MobileTask,
-  OfflineDraft,
   ProductionHandoff,
   ProductionStationLoad,
   QualityCase,
@@ -18,6 +15,7 @@ import type {
   WorkOrder,
 } from '../data/m1PrototypeData';
 import { apiGet } from './apiClient';
+import type { BusinessOperationContext } from '../types/businessOperationContext';
 
 interface ReviewStatDto {
   label: string;
@@ -36,6 +34,7 @@ interface ActionItemDto {
 }
 
 interface InboundOrderDto {
+  operationContext?: BusinessOperationContext;
   code: string;
   customer: string;
   material: string;
@@ -55,6 +54,7 @@ interface InboundOrderDto {
 }
 
 interface WorkOrderDto {
+  operationContext?: BusinessOperationContext;
   code: string;
   customer: string;
   material: string;
@@ -96,65 +96,61 @@ interface InventoryLedgerEntryDto {
 }
 
 export interface InboundWorkspaceModel {
+  dataSource?: 'LIVE' | 'DEMO';
   checkpoints: InboundCheckpoint[];
   orders: InboundOrder[];
   risks: InboundRisk[];
 }
 
 export interface ProductionWorkspaceModel {
+  dataSource?: 'LIVE' | 'DEMO';
   stationLoads: ProductionStationLoad[];
   workOrders: WorkOrder[];
   handoffs: ProductionHandoff[];
 }
 
 export interface QualityWorkspaceModel {
+  dataSource?: 'LIVE' | 'DEMO';
   metrics: QualityMetric[];
   cases: QualityCase[];
   lossApprovals: LossApproval[];
 }
 
 export interface InventoryWorkspaceModel {
+  dataSource?: 'LIVE' | 'DEMO';
   balances: InventoryBalance[];
   ledgerEntries: InventoryLedgerEntry[];
   timeline: TraceEvent[];
   evidence: TraceEvidence[];
 }
 
-export interface MobileWorkspaceModel {
-  tasks: MobileTask[];
-  capabilities: MobileCapability[];
-  offlineDrafts: OfflineDraft[];
-}
-
 interface InboundWorkspaceDto {
+  dataSource?: 'LIVE' | 'DEMO';
   checkpoints: ReviewStatDto[];
   orders: InboundOrderDto[];
   risks: ActionItemDto[];
 }
 
 interface ProductionWorkspaceDto {
+  dataSource?: 'LIVE' | 'DEMO';
   stationLoads: ReviewStatDto[];
   workOrders: WorkOrderDto[];
   handoffs: ProductionHandoffDto[];
 }
 
 interface QualityWorkspaceDto {
+  dataSource?: 'LIVE' | 'DEMO';
   metrics: QualityMetric[];
   cases: QualityCase[];
   lossApprovals: LossApproval[];
 }
 
 interface InventoryWorkspaceDto {
+  dataSource?: 'LIVE' | 'DEMO';
   balances: Array<Omit<InventoryBalance, 'qty'> & { quantity: number }>;
   ledgerEntries: InventoryLedgerEntryDto[];
   timeline: TraceEvent[];
   evidence: ActionItemDto[];
-}
-
-interface MobileWorkspaceDto {
-  tasks: MobileTask[];
-  capabilities: ReviewStatDto[];
-  offlineDrafts: ActionItemDto[];
 }
 
 function splitStatValue(value: string): [string, string] {
@@ -164,6 +160,7 @@ function splitStatValue(value: string): [string, string] {
 
 export function mapInboundWorkspace(dto: InboundWorkspaceDto): InboundWorkspaceModel {
   return {
+    dataSource: dto.dataSource,
     checkpoints: dto.checkpoints.map((item) => ({
       label: item.label,
       value: item.value,
@@ -172,6 +169,7 @@ export function mapInboundWorkspace(dto: InboundWorkspaceDto): InboundWorkspaceM
     })),
     orders: dto.orders.map((order) => ({
       code: order.code,
+      operationContext: order.operationContext,
       customer: order.customer,
       material: order.material,
       inboundDate: order.inboundDate ?? '',
@@ -194,6 +192,7 @@ export function mapInboundWorkspace(dto: InboundWorkspaceDto): InboundWorkspaceM
 
 export function mapProductionWorkspace(dto: ProductionWorkspaceDto): ProductionWorkspaceModel {
   return {
+    dataSource: dto.dataSource,
     stationLoads: dto.stationLoads.map((stat) => {
       const [queue, capacity] = splitStatValue(stat.value);
       return {
@@ -206,6 +205,7 @@ export function mapProductionWorkspace(dto: ProductionWorkspaceDto): ProductionW
     }),
     workOrders: dto.workOrders.map((order) => ({
       code: order.code,
+      operationContext: order.operationContext,
       customer: order.customer,
       material: order.material,
       process: order.process,
@@ -242,7 +242,9 @@ export function mapQualityWorkspace(dto: QualityWorkspaceDto): QualityWorkspaceM
 
 export function mapInventoryWorkspace(dto: InventoryWorkspaceDto): InventoryWorkspaceModel {
   return {
+    dataSource: dto.dataSource,
     balances: dto.balances.map((item) => ({
+      operationContext: item.operationContext,
       owner: item.owner,
       batch: item.batch,
       material: item.material,
@@ -271,25 +273,6 @@ export function mapInventoryWorkspace(dto: InventoryWorkspaceDto): InventoryWork
   };
 }
 
-export function mapMobileWorkspace(dto: MobileWorkspaceDto): MobileWorkspaceModel {
-  return {
-    tasks: dto.tasks,
-    capabilities: dto.capabilities.map((item) => ({
-      label: item.label,
-      status: item.value,
-      detail: item.detail,
-      tone: item.tone,
-    })),
-    offlineDrafts: dto.offlineDrafts.map((item) => ({
-      code: item.code,
-      scene: item.title,
-      savedAt: item.action,
-      risk: item.detail,
-      tone: item.tone,
-    })),
-  };
-}
-
 export async function fetchInboundWorkspace(): Promise<InboundWorkspaceModel> {
   return mapInboundWorkspace(await apiGet<InboundWorkspaceDto>('/api/business/workspaces/inbound'));
 }
@@ -304,8 +287,4 @@ export async function fetchQualityWorkspace(): Promise<QualityWorkspaceModel> {
 
 export async function fetchInventoryWorkspace(): Promise<InventoryWorkspaceModel> {
   return mapInventoryWorkspace(await apiGet<InventoryWorkspaceDto>('/api/business/workspaces/inventory'));
-}
-
-export async function fetchMobileWorkspace(): Promise<MobileWorkspaceModel> {
-  return mapMobileWorkspace(await apiGet<MobileWorkspaceDto>('/api/business/workspaces/mobile'));
 }

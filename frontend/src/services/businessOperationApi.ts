@@ -1,5 +1,7 @@
 import type { InboundOrder, InventoryBalance, LossApproval, QualityCase, WorkOrder } from '../data/m1PrototypeData';
 import { apiPost } from './apiClient';
+import { fetchAuthSession } from './authApi';
+import type { BusinessOperationContext } from '../types/businessOperationContext';
 
 export interface ConfirmInboundRequest {
   motherOrderCode: string;
@@ -383,473 +385,166 @@ export interface LossApprovalResult {
   evidenceCode?: string;
 }
 
-const customerIds: Record<string, number> = {
-  恒信珠宝: 1001,
-  雅辰饰品: 1002,
-  璟瑞工贸: 1003,
-  瑞禾珠宝: 1004,
-};
+type OperationRow = { operationContext?: BusinessOperationContext | null };
 
-const materialCodes: Record<string, string> = {
-  '18K 金戒托': 'MAT-18K-RING',
-  银链半成品: 'MAT-SILVER-CHAIN',
-  宝石托坯: 'MAT-GEM-BASE',
-  'PT950 吊坠坯': 'MAT-PT950-PENDANT',
-};
-
-const workOrderMotherOrders: Record<string, string> = {
-  'ZD-20260706-001': 'MD-20260706-001',
-  'ZD-20260706-002': 'MD-20260706-001',
-  'ZD-20260706-006': 'MD-20260706-002',
-  'ZD-20260706-009': 'MD-20260706-001',
-  'FG-20260706-001': 'MD-20260706-004',
-  'FG-20260706-002': 'MD-20260706-004',
-};
-
-const workOrderCustomers: Record<string, string> = {
-  'ZD-20260706-001': '恒信珠宝',
-  'ZD-20260706-002': '恒信珠宝',
-  'ZD-20260706-006': '雅辰饰品',
-  'ZD-20260706-009': '恒信珠宝',
-  'FG-20260706-001': '瑞禾珠宝',
-  'FG-20260706-002': '瑞禾珠宝',
-};
-
-const workOrderMaterials: Record<string, string> = {
-  'ZD-20260706-001': '18K 金戒托',
-  'ZD-20260706-002': '18K 金戒托',
-  'ZD-20260706-006': '银链半成品',
-  'ZD-20260706-009': '18K 金戒托',
-  'FG-20260706-001': 'PT950 吊坠坯',
-  'FG-20260706-002': 'PT950 吊坠坯',
-};
-
-const inventoryBatchWorkOrders: Record<string, string> = {
-  'MD-20260706-001': 'ZD-20260706-001',
-  'MD-20260706-002': 'ZD-20260706-006',
-  'ZD-20260706-001': 'ZD-20260706-001',
-  'FG-20260706-002': 'FG-20260706-002',
-};
-
-const productionWeights: Record<string, string> = {
-  'ZD-20260706-001': '84.950',
-  'ZD-20260706-002': '121.150',
-  'ZD-20260706-006': '478.240',
-  'ZD-20260706-009': '128.600',
-  'FG-20260706-002': '26.200',
-};
-
-const qualityFreezeQuantities: Record<string, number> = {
-  'QC-20260706-021': 5,
-  'QC-20260706-022': 6,
-  'QC-20260706-023': 1,
-};
-
-const qualityFreezeWeights: Record<string, string> = {
-  'QC-20260706-021': '7.200',
-  'QC-20260706-022': '13.660',
-  'QC-20260706-023': '1.250',
-};
-
-const lossAcceptedQuantities: Record<string, number> = {
-  'LOSS-20260706-009': 56,
-  'LOSS-20260706-010': 210,
-};
-
-const processPieceRates: Record<string, string> = {
-  抛光: '0.80',
-  雕刻: '0.65',
-  焊接: '0.72',
-  镶石: '1.20',
-  返工抛光: '0.00',
-};
-
-const lossWeightFallbacks: Record<string, { inputWeight: string; outputWeight: string }> = {
-  'LOSS-20260706-009': { inputWeight: '121.150', outputWeight: '116.550' },
-  'LOSS-20260706-010': { inputWeight: '684.400', outputWeight: '683.200' },
-};
-
-function normalizeBusinessDate(value: string | undefined, fallbackCode?: string): string | undefined {
-  if (value?.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    return value;
+function context(row: OperationRow) {
+  const value = row.operationContext;
+  if (!value || !value.customerId || !value.motherOrderCode || !value.materialCode || !value.warehouseCode) {
+    throw new Error('单据缺少正式操作上下文，请刷新单据后重试');
   }
-  const codeDate = fallbackCode?.match(/20\d{6}/)?.[0];
-  if (codeDate) {
-    return `${codeDate.slice(0, 4)}-${codeDate.slice(4, 6)}-${codeDate.slice(6, 8)}`;
+  if (value.ownerType !== 'CUSTOMER') {
+    throw new Error('此操作仅适用于客户所有库存');
   }
-  if (value?.match(/^\d{2}-\d{2}$/)) {
-    return `2026-${value}`;
+  return {
+    motherOrderCode: value.motherOrderCode,
+    workOrderCode: value.workOrderCode,
+    customerId: value.customerId,
+    ownerCustomerId: value.ownerCustomerId ?? undefined,
+    materialCode: value.materialCode,
+    fromWarehouseCode: value.warehouseCode,
+    quantity: value.quantity,
+    weight: String(value.weight),
+  };
+}
+
+function requireFields<T extends object>(request: T, fields: Array<[keyof T, string]>): T {
+  for (const [key, label] of fields) {
+    const value = request[key];
+    if (value === undefined || value === null || String(value).trim() === '') {
+      throw new Error(`请填写${label}`);
+    }
   }
-  return value;
+  const numericFields: Array<[string, string]> = [
+    ['quantity', '本次数量'], ['weight', '本次重量'], ['acceptedQuantity', '验收数量'], ['inputWeight', '投入重量'],
+    ['outputWeight', '产出重量'], ['reasonableTransferWeight', '合理转移重量'], ['pieceRate', '计件单价'],
+    ['standardLossRatePercent', '标准损耗率'], ['lossDeductionUnitPrice', '损耗扣减单价'],
+  ];
+  for (const [key, label] of numericFields) {
+    const value = (request as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    if (String(value).trim() === '' || !Number.isFinite(Number(value)) || Number(value) < 0) {
+      throw new Error(`${label}必须为非负数`);
+    }
+  }
+  return request;
 }
 
-export function buildConfirmInboundRequest(
-  order: InboundOrder,
-  extra?: { processingRequirement?: string; dueDate?: string; customerName?: string },
-): ConfirmInboundRequest {
-  const customerId = customerIds[order.customer] ?? 9000;
-
-  return {
-    motherOrderCode: order.code,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[order.material] ?? `MAT-${order.code}`,
-    inboundDate: normalizeBusinessDate(order.inboundDate, order.code),
-    expressCompany: order.expressCompany,
-    courierNo: order.courierNo,
-    senderName: order.senderName,
-    receiverName: order.receiverName,
-    unpackSigner: order.unpackSigner,
-    goodsName: order.goodsName,
-    sourceRegisterType: '签收入库登记表',
-    sourceRegisterLineNo: 4,
-    sourceRegisterSequence: '1',
-    warehouseCode: 'RAW-CUSTOMER',
-    quantity: order.qty,
-    quantityUnit: '件',
-    weight: parseWeight(order.weight),
-    operator: '库管员 何琳',
-    evidenceCode: order.courierNo,
-    remark: order.remark || '前端来料作业主控台确认',
-    processingRequirement: extra?.processingRequirement?.trim() ?? '',
-    dueDate: extra?.dueDate?.trim() ?? '',
-    customerName: extra?.customerName?.trim() || order.customer,
-  };
+async function actor(): Promise<string> {
+  const session = await fetchAuthSession();
+  if (!session?.operator) throw new Error('请登录后再提交业务操作');
+  return session.operator;
 }
 
-export async function confirmInbound(
-  order: InboundOrder,
-  extra?: { processingRequirement?: string; dueDate?: string; customerName?: string },
-): Promise<InboundConfirmationResult> {
-  return apiPost<ConfirmInboundRequest, InboundConfirmationResult>(
-    '/api/business/operations/inbound-confirmations',
-    buildConfirmInboundRequest(order, extra),
-  );
+export function buildConfirmInboundRequest(order: InboundOrder, extra: Partial<ConfirmInboundRequest> = {}): ConfirmInboundRequest {
+  const stock = context(order);
+  return requireFields({
+    ...stock, warehouseCode: stock.fromWarehouseCode,
+    inboundDate: order.inboundDate, expressCompany: order.expressCompany, courierNo: order.courierNo,
+    senderName: order.senderName, receiverName: order.receiverName, unpackSigner: order.unpackSigner,
+    goodsName: order.goodsName, customerName: order.customer, quantityUnit: '件',
+    operator: '', processingRequirement: '', dueDate: '', ...extra,
+  }, [['operator', '操作人'], ['processingRequirement', '加工要求'], ['dueDate', '完成期限']]);
 }
 
-export function buildProductionReportRequest(order: WorkOrder, handoffCode?: string): ProductionReportRequest {
-  const customerId = customerIds[order.customer] ?? 9000;
-
-  return {
-    motherOrderCode: workOrderMotherOrders[order.code] ?? order.code,
-    workOrderCode: order.code,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[order.material] ?? `MAT-${order.code}`,
-    fromWarehouseCode: 'WIP-LINE-01',
-    toWarehouseCode: 'SEMI-FINISHED',
-    quantity: order.finishedQty,
-    quantityUnit: '件',
-    weight: productionWeights[order.code] ?? String(order.finishedQty),
-    workDate: normalizeBusinessDate(undefined, order.code),
-    process: order.process,
-    processCategory: order.processCategory,
-    productCategory: order.productCategory,
-    machineNo: order.machineNo,
-    workItemName: order.workItemName,
-    startedAt: order.startedAt,
-    finishedAt: order.finishedAt,
-    completionStatus: order.completionStatus,
-    handoffAuditStatus: order.handoffAuditStatus,
-    sourceRegisterType: order.process === '雕刻' ? '雕刻机统计单（日）' : '工作项目记录单（日）',
-    sourceRegisterLineNo: order.process === '雕刻' ? 6 : 12,
-    sourceRegisterSequence: '1',
-    operator: order.assignee,
-    operatorSignatureName: order.process === '雕刻' || order.processCategory === '设备' ? order.assignee : undefined,
-    handoffCode,
-    remark: '前端生产派工主控台报工',
-  };
+export async function confirmInbound(order: InboundOrder, extra: Partial<ConfirmInboundRequest> = {}): Promise<InboundConfirmationResult> {
+  return apiPost('/api/business/operations/inbound-confirmations', buildConfirmInboundRequest(order, { ...extra, operator: await actor() }));
 }
 
-export async function reportProduction(order: WorkOrder, handoffCode?: string): Promise<ProductionReportResult> {
-  return apiPost<ProductionReportRequest, ProductionReportResult>(
-    '/api/business/operations/production-reports',
-    buildProductionReportRequest(order, handoffCode),
-  );
+export function buildProductionReportRequest(order: WorkOrder, handoffCode?: string, extra: Partial<ProductionReportRequest> = {}): ProductionReportRequest {
+  return requireFields({
+    ...context(order), toWarehouseCode: 'SEMI-FINISHED', process: order.process,
+    processCategory: order.processCategory, productCategory: order.productCategory, machineNo: order.machineNo,
+    workItemName: order.workItemName, startedAt: order.startedAt, finishedAt: order.finishedAt,
+    handoffCode, operator: '', ...extra,
+  }, [['operator', '操作人'], ['workOrderCode', '工单号']]);
 }
 
-export function buildQualityFreezeRequest(qualityCase: QualityCase): QualityFreezeRequest {
-  const customer = workOrderCustomers[qualityCase.workOrder] ?? '恒信珠宝';
-  const material = workOrderMaterials[qualityCase.workOrder] ?? qualityCase.workOrder;
-  const customerId = customerIds[customer] ?? 9000;
-
-  return {
-    qualityCaseCode: qualityCase.code,
-    motherOrderCode: workOrderMotherOrders[qualityCase.workOrder] ?? qualityCase.workOrder,
-    workOrderCode: qualityCase.workOrder,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[material] ?? `MAT-${qualityCase.workOrder}`,
-    fromWarehouseCode: 'SEMI-FINISHED',
-    toWarehouseCode: 'FROZEN-QC',
-    quantity: qualityFreezeQuantities[qualityCase.code] ?? 1,
-    weight: qualityFreezeWeights[qualityCase.code] ?? '1.000',
-    process: qualityCase.process,
-    inspector: qualityCase.inspector,
-    defect: qualityCase.defect,
-    evidenceCode: `PHOTO-${qualityCase.code}`,
-    remark: '前端质检作业主控台冻结异常库存',
-  };
+export async function reportProduction(order: WorkOrder, handoffCode?: string, extra: Partial<ProductionReportRequest> = {}): Promise<ProductionReportResult> {
+  return apiPost('/api/business/operations/production-reports', buildProductionReportRequest(order, handoffCode, { ...extra, operator: await actor() }));
 }
 
-export async function freezeQualityStock(qualityCase: QualityCase): Promise<QualityFreezeResult> {
-  return apiPost<QualityFreezeRequest, QualityFreezeResult>(
-    '/api/business/operations/quality-freezes',
-    buildQualityFreezeRequest(qualityCase),
-  );
+export function buildQualityFreezeRequest(row: QualityCase, extra: Partial<QualityFreezeRequest> = {}): QualityFreezeRequest {
+  return requireFields({ ...context(row), qualityCaseCode: row.code, toWarehouseCode: 'FROZEN-QC',
+    process: row.process, defect: row.defect, inspector: '', ...extra,
+  }, [['inspector', '质检员'], ['workOrderCode', '工单号']]);
 }
 
-export function buildReworkDispatchRequest(qualityCase: QualityCase): ReworkDispatchRequest {
-  const customer = workOrderCustomers[qualityCase.workOrder] ?? '恒信珠宝';
-  const material = workOrderMaterials[qualityCase.workOrder] ?? qualityCase.workOrder;
-  const customerId = customerIds[customer] ?? 9000;
-
-  return {
-    reworkOrderCode: qualityCase.code.replace('QC-', 'FG-'),
-    qualityCaseCode: qualityCase.code,
-    motherOrderCode: workOrderMotherOrders[qualityCase.workOrder] ?? qualityCase.workOrder,
-    workOrderCode: qualityCase.workOrder,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[material] ?? `MAT-${qualityCase.workOrder}`,
-    fromWarehouseCode: 'FROZEN-QC',
-    toWarehouseCode: 'REWORK-LINE-01',
-    quantity: qualityFreezeQuantities[qualityCase.code] ?? 1,
-    weight: qualityFreezeWeights[qualityCase.code] ?? '1.000',
-    process: `返工${qualityCase.process}`,
-    operator: '车间组长 马杰',
-    reason: qualityCase.defect,
-    evidenceCode: `PHOTO-${qualityCase.code}`,
-    remark: '前端质检作业主控台生成返工工单',
-  };
+export async function freezeQualityStock(row: QualityCase, extra: Partial<QualityFreezeRequest> = {}): Promise<QualityFreezeResult> {
+  return apiPost('/api/business/operations/quality-freezes', buildQualityFreezeRequest(row, { ...extra, inspector: await actor() }));
 }
 
-export async function dispatchRework(qualityCase: QualityCase): Promise<ReworkDispatchResult> {
-  return apiPost<ReworkDispatchRequest, ReworkDispatchResult>(
-    '/api/business/operations/rework-dispatches',
-    buildReworkDispatchRequest(qualityCase),
-  );
+export function buildReworkDispatchRequest(row: QualityCase, extra: Partial<ReworkDispatchRequest> = {}): ReworkDispatchRequest {
+  return requireFields({ ...context(row), qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'REWORK-LINE-01',
+    process: row.process, reason: row.defect, operator: '', ...extra,
+  }, [['reworkOrderCode', '返工单号'], ['operator', '操作人'], ['reason', '返工原因']]);
 }
 
-export function buildReworkReportRequest(qualityCase: QualityCase): ReworkReportRequest {
-  const customer = workOrderCustomers[qualityCase.workOrder] ?? '恒信珠宝';
-  const material = workOrderMaterials[qualityCase.workOrder] ?? qualityCase.workOrder;
-  const customerId = customerIds[customer] ?? 9000;
-
-  return {
-    reworkOrderCode: qualityCase.code.replace('QC-', 'FG-'),
-    qualityCaseCode: qualityCase.code,
-    motherOrderCode: workOrderMotherOrders[qualityCase.workOrder] ?? qualityCase.workOrder,
-    workOrderCode: qualityCase.workOrder,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[material] ?? `MAT-${qualityCase.workOrder}`,
-    fromWarehouseCode: 'REWORK-LINE-01',
-    toWarehouseCode: 'SEMI-FINISHED',
-    quantity: qualityFreezeQuantities[qualityCase.code] ?? 1,
-    weight: qualityFreezeWeights[qualityCase.code] ?? '1.000',
-    process: `返工${qualityCase.process}`,
-    operator: '王强',
-    evidenceCode: `PHOTO-REWORK-${qualityCase.code}`,
-    remark: '前端质检作业主控台提交返工报工',
-  };
+export async function dispatchRework(row: QualityCase, extra: Partial<ReworkDispatchRequest> = {}): Promise<ReworkDispatchResult> {
+  return apiPost('/api/business/operations/rework-dispatches', buildReworkDispatchRequest(row, { ...extra, operator: await actor() }));
 }
 
-export async function reportRework(qualityCase: QualityCase): Promise<ReworkReportResult> {
-  return apiPost<ReworkReportRequest, ReworkReportResult>(
-    '/api/business/operations/rework-reports',
-    buildReworkReportRequest(qualityCase),
-  );
+export function buildReworkReportRequest(row: QualityCase, extra: Partial<ReworkReportRequest> = {}): ReworkReportRequest {
+  return requireFields({ ...context(row), qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'SEMI-FINISHED',
+    process: row.process, operator: '', ...extra,
+  }, [['reworkOrderCode', '返工单号'], ['operator', '操作人']]);
 }
 
-export function buildQualityReleaseRequest(qualityCase: QualityCase): QualityReleaseRequest {
-  const customer = workOrderCustomers[qualityCase.workOrder] ?? '恒信珠宝';
-  const material = workOrderMaterials[qualityCase.workOrder] ?? qualityCase.workOrder;
-  const customerId = customerIds[customer] ?? 9000;
-
-  return {
-    qualityCaseCode: qualityCase.code,
-    motherOrderCode: workOrderMotherOrders[qualityCase.workOrder] ?? qualityCase.workOrder,
-    workOrderCode: qualityCase.workOrder,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[material] ?? `MAT-${qualityCase.workOrder}`,
-    fromWarehouseCode: 'SEMI-FINISHED',
-    toWarehouseCode: 'FINISHED-CUSTOMER',
-    quantity: qualityFreezeQuantities[qualityCase.code] ?? 1,
-    weight: qualityFreezeWeights[qualityCase.code] ?? '1.000',
-    process: qualityCase.process.includes('复检') ? qualityCase.process : `复检${qualityCase.process}`,
-    inspector: qualityCase.inspector,
-    releaseResult: qualityCase.action === '放行' ? '复检合格，允许成品入库' : `${qualityCase.action}后复检放行`,
-    evidenceCode: `PHOTO-RELEASE-${qualityCase.code}`,
-    remark: '前端质检作业主控台复检放行',
-  };
+export async function reportRework(row: QualityCase, extra: Partial<ReworkReportRequest> = {}): Promise<ReworkReportResult> {
+  return apiPost('/api/business/operations/rework-reports', buildReworkReportRequest(row, { ...extra, operator: await actor() }));
 }
 
-export async function releaseQualityStock(qualityCase: QualityCase): Promise<QualityReleaseResult> {
-  return apiPost<QualityReleaseRequest, QualityReleaseResult>(
-    '/api/business/operations/quality-releases',
-    buildQualityReleaseRequest(qualityCase),
-  );
+export function buildQualityReleaseRequest(row: QualityCase, extra: Partial<QualityReleaseRequest> = {}): QualityReleaseRequest {
+  return requireFields({ ...context(row), qualityCaseCode: row.code, toWarehouseCode: 'FINISHED-CUSTOMER',
+    process: row.process, inspector: '', releaseResult: '', ...extra,
+  }, [['inspector', '质检员'], ['releaseResult', '复检结论']]);
 }
 
-export function buildOutboundShipmentRequest(balance: InventoryBalance): OutboundShipmentRequest {
-  const customerId = customerIds[balance.owner] ?? 9000;
-  const workOrderCode = inventoryBatchWorkOrders[balance.batch] ?? balance.batch;
-  const shortCode = balance.batch.replace(/[^0-9]/g, '') || '20260706001';
-
-  return {
-    shipmentCode: `OUT-${shortCode}`,
-    motherOrderCode: balance.batch.startsWith('MD-') ? balance.batch : (workOrderMotherOrders[workOrderCode] ?? balance.batch),
-    workOrderCode,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[balance.material] ?? `MAT-${balance.batch}`,
-    fromWarehouseCode: 'FINISHED-CUSTOMER',
-    toWarehouseCode: 'SHIPPED-CUSTOMER',
-    deliveryDate: '2026-07-06',
-    deliveryCategory: balance.status.includes('返工') ? '返修件' : '成品',
-    quantity: balance.qty,
-    quantityUnit: '件',
-    weight: parseWeight(balance.weight),
-    expressCompany: '顺丰',
-    logisticsNo: `SF-OUT-${shortCode}`,
-    paperExpressText: `顺丰 SF-OUT-${shortCode}`,
-    sourceRegisterType: '交货情况登记表',
-    sourceRegisterLineNo: 3,
-    sourceRegisterSequence: '1',
-    handler: '何琳',
-    operator: '库管员 何琳',
-    evidenceCode: `ATT-OUT-${shortCode}`,
-    remark: '前端库存追溯主控台确认出库',
-  };
+export async function releaseQualityStock(row: QualityCase, extra: Partial<QualityReleaseRequest> = {}): Promise<QualityReleaseResult> {
+  return apiPost('/api/business/operations/quality-releases', buildQualityReleaseRequest(row, { ...extra, inspector: await actor() }));
 }
 
-export async function shipFinishedStock(balance: InventoryBalance): Promise<OutboundShipmentResult> {
-  return apiPost<OutboundShipmentRequest, OutboundShipmentResult>(
-    '/api/business/operations/outbound-shipments',
-    buildOutboundShipmentRequest(balance),
-  );
+export function buildOutboundShipmentRequest(row: InventoryBalance, extra: Partial<OutboundShipmentRequest> = {}): OutboundShipmentRequest {
+  return requireFields({ ...context(row), toWarehouseCode: 'SHIPPED-CUSTOMER', shipmentCode: '', logisticsNo: '',
+    deliveryCategory: '成品', operator: '', ...extra,
+  }, [['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['operator', '操作人']]);
 }
 
-export function buildCustomerReturnRequest(balance: InventoryBalance): CustomerReturnRequest {
-  const customerId = customerIds[balance.owner] ?? 9000;
-  const workOrderCode = inventoryBatchWorkOrders[balance.batch] ?? balance.batch;
-  const shortCode = balance.batch.replace(/[^0-9]/g, '') || '20260706001';
-
-  return {
-    returnCode: `RET-${shortCode}`,
-    originalShipmentCode: `OUT-${shortCode}`,
-    motherOrderCode: balance.batch.startsWith('MD-') ? balance.batch : (workOrderMotherOrders[workOrderCode] ?? balance.batch),
-    workOrderCode,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[balance.material] ?? `MAT-${balance.batch}`,
-    fromWarehouseCode: 'SHIPPED-CUSTOMER',
-    toWarehouseCode: 'RETURN-CHECK',
-    quantity: balance.qty,
-    weight: parseWeight(balance.weight),
-    returnLogisticsNo: `SF-RET-${shortCode}`,
-    reason: '客户退回复核',
-    operator: '库管员 何琳',
-    evidenceCode: `ATT-RET-${shortCode}`,
-    remark: '前端库存追溯主控台客户退货入库',
-  };
+export async function shipFinishedStock(row: InventoryBalance, extra: Partial<OutboundShipmentRequest> = {}): Promise<OutboundShipmentResult> {
+  return apiPost('/api/business/operations/outbound-shipments', buildOutboundShipmentRequest(row, { ...extra, operator: await actor() }));
 }
 
-export async function returnCustomerShipment(balance: InventoryBalance): Promise<CustomerReturnResult> {
-  return apiPost<CustomerReturnRequest, CustomerReturnResult>(
-    '/api/business/operations/customer-returns',
-    buildCustomerReturnRequest(balance),
-  );
+export function buildCustomerReturnRequest(row: InventoryBalance, extra: Partial<CustomerReturnRequest> = {}): CustomerReturnRequest {
+  return requireFields({ ...context(row), toWarehouseCode: 'RETURN-CHECK', returnCode: '', originalShipmentCode: '',
+    returnLogisticsNo: '', reason: '', operator: '', ...extra,
+  }, [['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['operator', '操作人']]);
 }
 
-export function buildAfterSalesReviewRequest(balance: InventoryBalance): AfterSalesReviewRequest {
-  const customerId = customerIds[balance.owner] ?? 9000;
-  const workOrderCode = inventoryBatchWorkOrders[balance.batch] ?? balance.batch;
-  const shortCode = balance.batch.replace(/[^0-9]/g, '') || '20260706001';
-
-  return {
-    reviewCode: `ASR-${shortCode}`,
-    returnCode: `RET-${shortCode}`,
-    originalShipmentCode: `OUT-${shortCode}`,
-    motherOrderCode: balance.batch.startsWith('MD-') ? balance.batch : (workOrderMotherOrders[workOrderCode] ?? balance.batch),
-    workOrderCode,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[balance.material] ?? `MAT-${balance.batch}`,
-    fromWarehouseCode: 'RETURN-CHECK',
-    toWarehouseCode: 'REWORK-LINE-01',
-    quantity: Math.min(balance.qty, 2),
-    weight: parseWeight(balance.weight),
-    disposition: 'REWORK',
-    inspector: '周娜',
-    finding: '售后复核发现外观/工艺问题，转返工处理',
-    evidenceCode: `PHOTO-ASR-${shortCode}`,
-    remark: '前端库存追溯主控台售后复核分流',
-  };
+export async function returnCustomerShipment(row: InventoryBalance, extra: Partial<CustomerReturnRequest> = {}): Promise<CustomerReturnResult> {
+  return apiPost('/api/business/operations/customer-returns', buildCustomerReturnRequest(row, { ...extra, operator: await actor() }));
 }
 
-export async function reviewAfterSalesReturn(balance: InventoryBalance): Promise<AfterSalesReviewResult> {
-  return apiPost<AfterSalesReviewRequest, AfterSalesReviewResult>(
-    '/api/business/operations/after-sales-reviews',
-    buildAfterSalesReviewRequest(balance),
-  );
+export function buildAfterSalesReviewRequest(row: InventoryBalance, extra: Partial<AfterSalesReviewRequest> = {}): AfterSalesReviewRequest {
+  const target = { RELEASE: 'FINISHED-CUSTOMER', REWORK: 'REWORK-LINE-01', SCRAP: 'SCRAP', FREEZE: 'FROZEN-QC' };
+  return requireFields({ ...context(row), toWarehouseCode: extra.disposition ? target[extra.disposition] : '',
+    reviewCode: '', returnCode: '', originalShipmentCode: '', disposition: extra.disposition as AfterSalesReviewDisposition,
+    inspector: '', finding: '', ...extra,
+  }, [['reviewCode', '售后复核单号'], ['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'],
+    ['disposition', '处理结论'], ['inspector', '质检员'], ['finding', '复核说明']]);
 }
 
-export function buildLossApprovalRequest(approval: LossApproval): LossApprovalRequest {
-  const customer = workOrderCustomers[approval.workOrder] ?? '恒信珠宝';
-  const material = workOrderMaterials[approval.workOrder] ?? approval.workOrder;
-  const customerId = customerIds[customer] ?? 9000;
-  const weights = parseLossEvidenceWeights(approval);
-
-  return {
-    approvalCode: approval.code,
-    motherOrderCode: workOrderMotherOrders[approval.workOrder] ?? approval.workOrder,
-    workOrderCode: approval.workOrder,
-    customerId,
-    ownerCustomerId: customerId,
-    materialCode: materialCodes[material] ?? `MAT-${approval.workOrder}`,
-    process: approval.process,
-    operator: approval.workOrder === 'ZD-20260706-001' ? '李华' : '王强',
-    approver: '车间组长 马杰',
-    inputWeight: weights.inputWeight,
-    outputWeight: weights.outputWeight,
-    reasonableTransferWeight: '0.000',
-    standardLossRatePercent: parsePercent(approval.standard),
-    acceptedQuantity: lossAcceptedQuantities[approval.code] ?? 1,
-    pieceRate: processPieceRates[approval.process] ?? '0.80',
-    lossDeductionUnitPrice: '6.00',
-    evidenceCode: weights.evidenceCode,
-    remark: '前端质检作业主控台提交损耗审批和工资试算',
-  };
+export async function reviewAfterSalesReturn(row: InventoryBalance, extra: Partial<AfterSalesReviewRequest> = {}): Promise<AfterSalesReviewResult> {
+  return apiPost('/api/business/operations/after-sales-reviews', buildAfterSalesReviewRequest(row, { ...extra, inspector: await actor() }));
 }
 
-export async function approveLoss(approval: LossApproval): Promise<LossApprovalResult> {
-  return apiPost<LossApprovalRequest, LossApprovalResult>(
-    '/api/business/operations/loss-approvals',
-    buildLossApprovalRequest(approval),
-  );
+export function buildLossApprovalRequest(row: LossApproval, extra: Partial<LossApprovalRequest> = {}): LossApprovalRequest {
+  return requireFields({ ...context(row), approvalCode: row.code, process: row.process, operator: '', approver: '',
+    inputWeight: '', outputWeight: '', reasonableTransferWeight: '', standardLossRatePercent: '',
+    acceptedQuantity: undefined as unknown as number, pieceRate: '', lossDeductionUnitPrice: '', ...extra,
+  }, [['approvalCode', '损耗申请单号'], ['operator', '报工人'], ['approver', '审批人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量'], ['outputWeight', '产出重量'],
+    ['reasonableTransferWeight', '合理转移重量'], ['standardLossRatePercent', '标准损耗率'],
+    ['acceptedQuantity', '验收数量'], ['pieceRate', '计件单价'], ['lossDeductionUnitPrice', '损耗扣减单价']]);
 }
 
-function parseWeight(weight: string): string {
-  const value = weight.replace(/[^\d.]/g, '');
-  return value || '0';
-}
-
-function parsePercent(percent: string): string {
-  const value = percent.replace(/[^\d.]/g, '');
-  return value || '0';
-}
-
-function parseLossEvidenceWeights(approval: LossApproval): { inputWeight: string; outputWeight: string; evidenceCode: string } {
-  const input = approval.evidence.match(/投入\s*([\d.]+)g/);
-  const output = approval.evidence.match(/产出\s*([\d.]+)g/);
-  const fallback = lossWeightFallbacks[approval.code] ?? { inputWeight: '1.000', outputWeight: '1.000' };
-
-  return {
-    inputWeight: input?.[1] ?? fallback.inputWeight,
-    outputWeight: output?.[1] ?? fallback.outputWeight,
-    evidenceCode: approval.evidence.includes('HO-') ? approval.evidence : 'HO-20260706-021',
-  };
+export async function approveLoss(row: LossApproval, extra: Partial<LossApprovalRequest> = {}): Promise<LossApprovalResult> {
+  return apiPost('/api/business/operations/loss-approvals', buildLossApprovalRequest(row, { ...extra, approver: await actor() }));
 }

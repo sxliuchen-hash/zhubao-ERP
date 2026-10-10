@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import OperationInputs from './OperationInputs.vue';
+import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
-import type { Tone } from '../../data/m1PrototypeData';
+import type { LossApproval, Tone } from '../../data/m1PrototypeData';
 import { parseScanCode } from '../scan/scanCode';
 import {
   fetchQualityWorkspace,
@@ -37,6 +39,7 @@ const emptyQuality = (): QualityWorkspaceModel => ({
 
 const workspace = ref<QualityWorkspaceModel>(emptyQuality());
 const loadError = ref('');
+const operationValues = ref<Record<string, string>>({});
 const freezingQualityStock = ref(false);
 const qualityFreezeResult = ref<QualityFreezeResult | null>(null);
 const qualityFreezeError = ref('');
@@ -78,9 +81,7 @@ const activeCase = computed(
 
 const activeApproval = computed(
   () =>
-    workspace.value.lossApprovals.find((item) => item.workOrder === activeCase.value?.workOrder) ??
-    workspace.value.lossApprovals.find((item) => item.action.includes('待')) ??
-    workspace.value.lossApprovals[0],
+    workspace.value.lossApprovals.find((item) => item.workOrder === activeCase.value?.workOrder),
 );
 
 const shownInspector = computed(() => checkResult.value?.inspector || checkView.value?.inspector || '');
@@ -112,6 +113,8 @@ const requirementHint = computed(() => {
 const canSubmitRequirement = computed(() => (
   Boolean(checkView.value?.ready) && !requirementSubmitted.value && requirementHint.value === '' && !checkSubmitting.value
 ));
+
+watch(activeCase, () => { operationValues.value = {}; });
 
 function qualityCaseTone(status: string, action = ''): Tone {
   if (status.includes('完成')) return 'green';
@@ -150,7 +153,7 @@ async function freezeActiveQualityStock() {
   qualityFreezeError.value = '';
 
   try {
-    qualityFreezeResult.value = await freezeQualityStock(activeCase.value);
+    qualityFreezeResult.value = await freezeQualityStock(activeCase.value, operationDraft(operationValues.value));
     await loadQualityWorkspace();
   } catch (error) {
     qualityFreezeError.value = error instanceof Error ? error.message : '冻结异常库存失败';
@@ -167,7 +170,7 @@ async function dispatchActiveRework() {
   reworkDispatchError.value = '';
 
   try {
-    reworkDispatchResult.value = await dispatchRework(activeCase.value);
+    reworkDispatchResult.value = await dispatchRework(activeCase.value, operationDraft(operationValues.value));
     await loadQualityWorkspace();
   } catch (error) {
     reworkDispatchError.value = error instanceof Error ? error.message : '生成返工工单失败';
@@ -184,7 +187,7 @@ async function reportActiveRework() {
   reworkReportError.value = '';
 
   try {
-    reworkReportResult.value = await reportRework(activeCase.value);
+    reworkReportResult.value = await reportRework(activeCase.value, operationDraft(operationValues.value));
     await loadQualityWorkspace();
   } catch (error) {
     reworkReportError.value = error instanceof Error ? error.message : '提交返工报工失败';
@@ -201,7 +204,7 @@ async function releaseActiveQualityStock() {
   qualityReleaseError.value = '';
 
   try {
-    qualityReleaseResult.value = await releaseQualityStock(activeCase.value);
+    qualityReleaseResult.value = await releaseQualityStock(activeCase.value, operationDraft(operationValues.value));
     await loadQualityWorkspace();
   } catch (error) {
     qualityReleaseError.value = error instanceof Error ? error.message : '复检放行失败';
@@ -211,17 +214,24 @@ async function releaseActiveQualityStock() {
 }
 
 async function approveActiveLoss() {
-  if (!activeApproval.value) return;
+  if (!activeCase.value) return;
 
   approvingLoss.value = true;
   lossApprovalResult.value = null;
   lossApprovalError.value = '';
 
   try {
-    lossApprovalResult.value = await approveLoss(activeApproval.value);
+    const draft = operationDraft(operationValues.value);
+    if (!operationValues.value.approvalCode?.trim()) throw new Error('请填写损耗申请单号');
+    const application: LossApproval = {
+      code: operationValues.value.approvalCode.trim(), workOrder: activeCase.value.workOrder,
+      process: activeCase.value.process, operationContext: activeCase.value.operationContext,
+      standard: '', actual: '', evidence: '', action: '待申请', tone: 'amber',
+    };
+    lossApprovalResult.value = await approveLoss(application, draft);
     await loadQualityWorkspace();
   } catch (error) {
-    lossApprovalError.value = error instanceof Error ? error.message : '提交损耗审批失败';
+    lossApprovalError.value = error instanceof Error ? error.message : '提交损耗申请失败';
   } finally {
     approvingLoss.value = false;
   }
@@ -343,6 +353,7 @@ function selectQualityCase(code: string) {
 
 <template>
   <div class="quality-desk page-stack">
+    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <section class="quality-check-panel" aria-label="对照加工要求">
       <div class="section-heading">
         <div>
@@ -521,6 +532,7 @@ function selectQualityCase(code: string) {
             <dt>损耗审批</dt>
             <dd>{{ activeApproval?.code ?? '无' }}</dd>
           </dl>
+          <OperationInputs v-model="operationValues" :fields="[['approvalCode', '损耗申请单号'], ['reworkOrderCode', '返工单号'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['releaseResult', '复检结论'], ['evidenceCode', '证据编号'], ['operator', '损耗报工人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量（克）', 'number'], ['outputWeight', '产出重量（克）', 'number'], ['reasonableTransferWeight', '合理转移重量（克）', 'number'], ['standardLossRatePercent', '标准损耗率（%）', 'number'], ['acceptedQuantity', '验收数量', 'number'], ['pieceRate', '计件单价', 'number'], ['lossDeductionUnitPrice', '损耗扣减单价', 'number']]" />
           <div class="detail-actions">
             <button class="primary-button" type="button" :disabled="freezingQualityStock" @click="freezeActiveQualityStock">
               {{ freezingQualityStock ? '正在冻结' : '冻结异常库存' }}
@@ -535,7 +547,7 @@ function selectQualityCase(code: string) {
               {{ releasingQualityStock ? '正在放行' : '复检放行入库' }}
             </button>
             <button class="secondary-button" type="button" :disabled="approvingLoss" @click="approveActiveLoss">
-              {{ approvingLoss ? '正在试算' : '提交损耗审批' }}
+              {{ approvingLoss ? '正在试算' : '提交损耗申请' }}
             </button>
           </div>
           <div v-if="qualityFreezeResult" class="operation-feedback success">
@@ -571,12 +583,12 @@ function selectQualityCase(code: string) {
             <span>{{ qualityReleaseError }}</span>
           </div>
           <div v-if="lossApprovalResult" class="operation-feedback success">
-            <strong>损耗审批已生成工资试算</strong>
+            <strong>损耗申请已生成工资试算</strong>
             <span>{{ lossApprovalResult.approvalCode }} / {{ lossApprovalResult.approvalStatus }}</span>
             <small>试算 {{ lossApprovalResult.trialWage }}，不进入正式工资</small>
           </div>
           <div v-else-if="lossApprovalError" class="operation-feedback danger">
-            <strong>提交损耗审批失败</strong>
+            <strong>提交损耗申请失败</strong>
             <span>{{ lossApprovalError }}</span>
           </div>
         </section>

@@ -16,7 +16,7 @@ class BusinessWorkspaceServiceTest {
     @Test
     void exposesCoreBusinessWorkspaceBaseline() {
         BusinessWorkspaceService service = new BusinessWorkspaceService(
-                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData())
+                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData()), null, null, null, null, true
         );
 
         assertThat(service.summary().inboundOrders()).isEqualTo(4);
@@ -48,7 +48,7 @@ class BusinessWorkspaceServiceTest {
     @Test
     void filtersWorkspaceDataByOperatorDataScope() {
         BusinessWorkspaceService service = new BusinessWorkspaceService(
-                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData())
+                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData()), null, null, null, null, true
         );
         OperatorContext receiverSelf = new OperatorContext(
                 "库管员 何琳",
@@ -72,7 +72,7 @@ class BusinessWorkspaceServiceTest {
     @Test
     void filtersCustomerScopedWorkspaceDataByAuthorizedCustomerHeader() {
         BusinessWorkspaceService service = new BusinessWorkspaceService(
-                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData())
+                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData()), null, null, null, null, true
         );
         OperatorContext customerScope = new OperatorContext(
                 "sales-review",
@@ -99,7 +99,7 @@ class BusinessWorkspaceServiceTest {
     @Test
     void filtersCustomerScopedWorkspaceDataByBearerAccountScope() {
         BusinessWorkspaceService service = new BusinessWorkspaceService(
-                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData())
+                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData()), null, null, null, null, true
         );
         OperatorContext customerScope = new OperatorContext(
                 "计划员 陈敏",

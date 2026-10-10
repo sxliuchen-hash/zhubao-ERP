@@ -117,9 +117,7 @@ if (-not $dockerReadmeByPrefix) {
     throw "Docker deployment README not found under docs\19_Docker*.md"
 }
 Copy-Item -LiteralPath $dockerReadmeByPrefix.FullName -Destination (Join-Path $packageDir "README_DOCKER.md")
-Get-ChildItem -LiteralPath (Join-Path $repoRoot "backend\src\main\resources\db\mysql") -Filter "*.sql" |
-    Sort-Object Name |
-    Copy-Item -Destination $mysqlInitDir
+& (Join-Path $repoRoot "scripts\export-mysql-init.ps1") -Destination $mysqlInitDir
 
 $envExampleInPackage = Join-Path $packageDir ".env.example"
 (Get-Content -LiteralPath $envExampleInPackage) -replace '^ZHUBAO_IMAGE_TAG=.*$', "ZHUBAO_IMAGE_TAG=$Version" |

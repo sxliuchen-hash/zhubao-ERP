@@ -349,12 +349,13 @@ public class AuthUserAccountManagementService {
         List<String> missingEvidence = readiness.requiredBeforeAction().stream()
                 .filter(required -> providedEvidence.stream().noneMatch(provided -> evidenceMatches(required, provided)))
                 .toList();
-        boolean readyForBlockingApproval = missingEvidence.isEmpty() && readiness.missingCapabilities().isEmpty();
+        // 完整 IAM 的扩展能力缺口继续展示，已实现的轻量审批只以本次材料完整性作为送审条件。
+        boolean readyForBlockingApproval = missingEvidence.isEmpty();
         String blockingStatus = readyForBlockingApproval
                 ? "可进入阻断式审批"
-                : missingEvidence.isEmpty() ? "系统缺阻断式审批能力" : "缺少前置材料";
+                : "缺少前置材料";
         String nextAction = missingEvidence.isEmpty()
-                ? readiness.nextAction()
+                ? "提交审批人复核；完整 IAM 扩展要求见能力缺口说明"
                 : "补齐前置材料：" + String.join(" / ", missingEvidence);
         return new AuthAccountPreApprovalDraft(
                 "AUTH-PRE-DRAFT-" + action.name() + "-" + username.toUpperCase(Locale.ROOT),
@@ -478,7 +479,9 @@ public class AuthUserAccountManagementService {
                 draft.riskLevel(),
                 draft.tone(),
                 "",
-                DISPLAY_TIME.format(Instant.now())
+                DISPLAY_TIME.format(Instant.now()),
+                WorkshopProcesses.bind(command.targetAllowedProcesses()),
+                normalizeEnum(command.statusAction())
         );
         ApprovalTask task = createPreApprovalTask(application);
         return requirePreApprovalApplicationRepository().save(withPreApprovalTask(application, task));
@@ -496,6 +499,10 @@ public class AuthUserAccountManagementService {
                 preApprovalActionForUpsert(existing, passwordProvided, role, dataScope, customerScope, command.enabled()),
                 username
         );
+        List<String> allowedProcesses = command.allowedProcesses() == null
+                ? (existing == null ? List.of() : existing.allowedProcesses())
+                : WorkshopProcesses.bind(command.allowedProcesses());
+        validateTargetSnapshot(preApprovalApplication, command, role, dataScope, customerScope, allowedProcesses);
         if (existing == null && !passwordProvided) {
             throw new BusinessException("新建账号必须提供初始密码");
         }
@@ -508,9 +515,7 @@ public class AuthUserAccountManagementService {
         Instant lockedUntil = existing == null || passwordProvided ? null : existing.lockedUntil();
         boolean passwordChangeRequired = passwordProvided ? !command.demoAccount() : existing.passwordChangeRequired();
         boolean temporaryPasswordConsumed = passwordProvided ? false : existing.temporaryPasswordConsumed();
-        List<String> allowedProcesses = command.allowedProcesses() == null
-                ? (existing == null ? List.of() : existing.allowedProcesses())
-                : WorkshopProcesses.bind(command.allowedProcesses());
+
         AuthUserAccount saved = accountRepository.save(new AuthUserAccount(
                 username,
                 passwordHash,
@@ -534,6 +539,7 @@ public class AuthUserAccountManagementService {
                 + passwordChangeRequiredSuffix(passwordProvided, passwordChangeRequired);
         recordManagementAudit(username, operatorContext, auditedAction);
         recordApprovalSummary(saved, operatorContext, auditedAction);
+        markPreApprovalExecuted(preApprovalApplication);
         return summary(saved, Instant.now());
     }
 
@@ -582,6 +588,7 @@ public class AuthUserAccountManagementService {
                 PreApprovalAction.CHANGE_STATUS,
                 account.username()
         );
+        validateStatusSnapshot(preApprovalApplication, enabled ? "ENABLE" : "DISABLE", enabled);
         accountRepository.updateEnabled(account.username(), enabled);
         AuthUserAccount updated = requireAccount(account.username());
         int revokedSessions = revokeSessionsIfDisabled(updated, enabled, operatorContext);
@@ -591,6 +598,7 @@ public class AuthUserAccountManagementService {
                 + revokedSessionsSuffix(enabled, revokedSessions);
         recordManagementAudit(account.username(), operatorContext, action);
         recordApprovalSummary(updated, operatorContext, action);
+        markPreApprovalExecuted(preApprovalApplication);
         return summary(updated, Instant.now());
     }
 
@@ -610,11 +618,13 @@ public class AuthUserAccountManagementService {
                 PreApprovalAction.CHANGE_STATUS,
                 account.username()
         );
+        validateStatusSnapshot(preApprovalApplication, "UNLOCK", null);
         accountRepository.unlock(account.username());
         AuthUserAccount updated = requireAccount(account.username());
         String action = "管理员解锁账号" + reasonSuffix(reason) + preApprovalApplicationSuffix(preApprovalApplication);
         recordManagementAudit(account.username(), operatorContext, action);
         recordApprovalSummary(updated, operatorContext, action);
+        markPreApprovalExecuted(preApprovalApplication);
         return summary(updated, Instant.now());
     }
 
@@ -742,9 +752,6 @@ public class AuthUserAccountManagementService {
     private String applicationStatus(AuthAccountPreApprovalDraft draft) {
         if (!draft.missingEvidence().isEmpty()) {
             return "WAITING_EVIDENCE";
-        }
-        if (!draft.missingCapabilities().isEmpty()) {
-            return "WAITING_SYSTEM_CAPABILITY";
         }
         return "READY_FOR_BLOCKING_APPROVAL";
     }
@@ -939,7 +946,9 @@ public class AuthUserAccountManagementService {
                 application.riskLevel(),
                 application.tone(),
                 task.approvalCode(),
-                application.submittedAt()
+                application.submittedAt(),
+                application.targetAllowedProcesses(),
+                application.statusAction()
         );
     }
 
@@ -973,6 +982,66 @@ public class AuthUserAccountManagementService {
             requireApprovedPreApprovalTask(application);
         }
         return application;
+    }
+
+    private void validateTargetSnapshot(AuthAccountPreApprovalApplication application, ManageAuthUserAccountCommand command,
+                                        RoleCode role, DataScope scope, List<String> customerScope, List<String> processes) {
+        if (application == null) return;
+        boolean matches = blankToDefault(application.targetOperator(), "").equals(blankToDefault(command.operator(), ""))
+                && normalizeEnum(application.targetRole()).equals(role.name())
+                && normalizeEnum(application.targetDataScope()).equals(scope.name())
+                && new java.util.HashSet<>(normalizeList(application.targetCustomerScope())).equals(new java.util.HashSet<>(customerScope))
+                && java.util.Objects.equals(application.targetEnabled(), command.enabled())
+                && java.util.Objects.equals(application.demoAccount(), command.demoAccount())
+                && new java.util.HashSet<>(WorkshopProcesses.bind(application.targetAllowedProcesses())).equals(new java.util.HashSet<>(processes));
+        if (!matches) throw new BusinessException("账号动作与已批准申请的目标资料、权限或工序不一致：" + application.applicationCode());
+        if ("AUTH-PRE-STATUS-001".equals(application.readinessCode())) {
+            validateStatusSnapshot(application, command.enabled() ? "ENABLE" : "DISABLE", command.enabled());
+        }
+    }
+
+    private void validateStatusSnapshot(AuthAccountPreApprovalApplication application, String action, Boolean enabled) {
+        if (application == null) return;
+        if (!action.equals(normalizeEnum(application.statusAction()))
+                || enabled != null && !java.util.Objects.equals(enabled, application.targetEnabled())) {
+            throw new BusinessException("账号启停或解锁动作与已批准申请不一致：" + application.applicationCode());
+        }
+    }
+
+    private void markPreApprovalExecuted(AuthAccountPreApprovalApplication application) {
+        if (application == null) return;
+        requirePreApprovalApplicationRepository().save(new AuthAccountPreApprovalApplication(
+                application.applicationCode(),
+                application.draftCode(),
+                application.readinessCode(),
+                application.actionType(),
+                application.targetUsername(),
+                application.applicant(),
+                application.applicantRole(),
+                application.targetOperator(),
+                application.targetRole(),
+                application.targetDataScope(),
+                application.targetCustomerScope(),
+                application.targetEnabled(),
+                application.demoAccount(),
+                application.reason(),
+                application.requiredEvidence(),
+                application.providedEvidence(),
+                application.missingEvidence(),
+                application.missingCapabilities(),
+                application.approverRoles(),
+                application.blockingStatus(),
+                "EXECUTED",
+                false,
+                application.sourceSummary(),
+                "账号动作已执行，后续变更须重新申请",
+                application.riskLevel(),
+                application.tone(),
+                application.approvalTaskCode(),
+                application.submittedAt(),
+                application.targetAllowedProcesses(),
+                application.statusAction()
+        ));
     }
 
     private void requireApprovedPreApprovalTask(AuthAccountPreApprovalApplication application) {
@@ -1087,6 +1156,8 @@ public class AuthUserAccountManagementService {
                 + "; targetRole=" + blankToDefault(command.targetRole(), "")
                 + "; targetDataScope=" + blankToDefault(command.targetDataScope(), "")
                 + "; targetCustomerScope=" + String.join("|", normalizeList(command.targetCustomerScope()))
+                + "; targetAllowedProcesses=" + String.join("|", WorkshopProcesses.bind(command.targetAllowedProcesses()))
+                + "; statusAction=" + normalizeEnum(command.statusAction())
                 + "; targetEnabled=" + (command.targetEnabled() == null ? "" : command.targetEnabled())
                 + "; demoAccount=" + (command.demoAccount() == null ? "" : command.demoAccount())
                 + "; reason=" + blankToDefault(command.reason(), "")

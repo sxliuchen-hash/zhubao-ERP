@@ -28,6 +28,7 @@ const openTab = inject<(tab: DeskTab) => void>('zhubao-open-tab', () => {});
 const selectedCode = ref('');
 const dispatchRows = ref<DispatchRow[]>([]);
 const loadError = ref('');
+const demoData = ref(false);
 
 onMounted(() => {
   void loadDispatchRows();
@@ -35,11 +36,13 @@ onMounted(() => {
 
 async function loadDispatchRows() {
   loadError.value = '';
+  demoData.value = false;
   const errors: string[] = [];
   const rows: DispatchRow[] = [];
 
   try {
     const inbound = await fetchInboundWorkspace();
+    demoData.value ||= inbound.dataSource === 'DEMO';
     rows.push(...inbound.orders.map(inboundRow));
   } catch (error) {
     errors.push(error instanceof Error ? error.message : '来料单据加载失败');
@@ -47,6 +50,7 @@ async function loadDispatchRows() {
 
   try {
     const production = await fetchProductionWorkspace();
+    demoData.value ||= production.dataSource === 'DEMO';
     rows.push(...production.workOrders.map(workOrderRow));
   } catch (error) {
     errors.push(error instanceof Error ? error.message : '工单加载失败');
@@ -54,6 +58,7 @@ async function loadDispatchRows() {
 
   try {
     const quality = await fetchQualityWorkspace();
+    demoData.value ||= quality.dataSource === 'DEMO';
     rows.push(...quality.cases.map(qualityRow));
   } catch (error) {
     errors.push(error instanceof Error ? error.message : '质检单加载失败');
@@ -173,6 +178,7 @@ function qualityTone(status: string): Tone {
 
 <template>
   <div class="command-center-v3 page-stack">
+    <p v-if="demoData" class="operation-feedback warning">当前待办含评审样例，仅用于演示。</p>
     <section class="mission-kpi-grid lean-kpis" aria-label="今日待办">
       <article v-for="item in commandStats" :key="item.label" :class="`tone-${item.tone}`">
         <span>{{ item.label }}</span>

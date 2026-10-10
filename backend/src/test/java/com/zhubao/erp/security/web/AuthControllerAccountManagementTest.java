@@ -462,7 +462,7 @@ class AuthControllerAccountManagementTest {
                 "SALES",
                 "CUSTOMER_RANGE",
                 List.of("恒信珠宝"),
-                true,
+                false,
                 false,
                 "账号动作前置审批放行校验",
                 List.of("账号申请单", "直属负责人审批", "系统管理员复核"),
@@ -478,7 +478,9 @@ class AuthControllerAccountManagementTest {
                 "中",
                 "green",
                 "",
-                "2026-07-09 10:00:00"
+                "2026-07-09 10:00:00",
+                List.of(),
+                "DISABLE"
         );
     }
 

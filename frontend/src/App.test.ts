@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
+import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import { authSessionChangedEvent, fetchAuthSession, type AuthSession } from './services/authApi';
 
 vi.mock('./services/authApi', () => ({
@@ -11,9 +12,11 @@ vi.mock('./services/authApi', () => ({
   logoutAuthSession: vi.fn().mockResolvedValue(undefined),
   changeOwnPassword: vi.fn(),
 }));
+vi.mock('./features/m1/HardwareIntegrationWorkspace.vue', () => { throw new Error('页面文件下载失败'); });
 
 describe('App', () => {
   beforeEach(() => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     localStorage.clear();
     vi.mocked(fetchAuthSession).mockResolvedValue(null);
   });
@@ -143,12 +146,44 @@ describe('App', () => {
     await wrapper.get('[aria-label="追溯查询"]').setValue('MD-1');
     await wrapper.get('.mobile-tabbar button[aria-haspopup="dialog"]').trigger('click');
     await wrapper.get('.mobile-more-item[data-mobile-tab="finance"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.findAll('.finance-workspace')).toHaveLength(1));
 
     expect(wrapper.get('h1').text()).toBe('财务');
     expect(wrapper.get('.page-location').text()).toBe('财务经营');
     expect(wrapper.find('.mobile-more-sheet').exists()).toBe(false);
     expect(wrapper.get('[aria-label="追溯查询"]').element).toHaveProperty('value', 'MD-1');
     expect(wrapper.findAll('.finance-workspace')).toHaveLength(1);
+  });
+
+  it('页面按需加载后可正常切回首页', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'finance']));
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.get('.nav-button[data-tab="finance"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.finance-workspace').exists()).toBe(true));
+    await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
+    expect(wrapper.find('.finance-workspace').exists()).toBe(false);
+    expect(wrapper.text()).toContain('今日待办');
+  });
+
+  it('页面文件加载失败时保留导航并提供中文重试入口', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'hardware']));
+    const wrapper = mount(App, { global: { config: { errorHandler: () => {} } } });
+    await flushPromises();
+    await wrapper.get('.nav-button[data-tab="hardware"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('页面加载失败，请检查网络后重试。'));
+    expect(wrapper.get('[role="alert"]').text()).toContain('重新加载页面');
+    await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
+    expect(wrapper.text()).toContain('今日待办');
+  });
+
+  it('加载状态用中文反馈并可重试失败页面', async () => {
+    const retry = vi.fn();
+    const wrapper = mount(WorkspaceLoadState, { global: { provide: { 'zhubao-retry-workspace': retry } } });
+    expect(wrapper.get('[role="status"]').text()).toContain('正在加载页面');
+    await wrapper.setProps({ error: new Error('网络异常') });
+    await wrapper.get('button').trigger('click');
+    expect(retry).toHaveBeenCalledOnce();
   });
 
   it('shows the password change form outside the shell', async () => {

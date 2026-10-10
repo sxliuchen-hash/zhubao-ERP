@@ -995,6 +995,65 @@ class AuthUserAccountManagementServiceTest {
         return readyPreApprovalApplication(applicationCode, readinessCode, actionType, targetUsername, "");
     }
 
+    @Test
+    void completeEvidenceEnablesRealBlockingApprovalAndBindsTheTargetSnapshot() {
+        Fixture fixture = fixture(true);
+        List<String> evidence = fixture.managementService().preApprovalReadiness().stream()
+                .filter(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
+                .findFirst().orElseThrow().requiredBeforeAction();
+        AuthAccountPreApprovalApplication application = fixture.managementService().submitPreApprovalApplication(
+                new AuthAccountPreApprovalApplicationCommand("CREATE_ACCOUNT", "new-worker", "新操作员", "OPERATOR", "SELF", List.of(),
+                        true, false, "新增岗位账号", evidence, List.of("抛光"), ""), admin);
+        assertThat(application.readyForBlockingApproval()).isTrue();
+        assertThat(application.applicationStatus()).isEqualTo("READY_FOR_BLOCKING_APPROVAL");
+        assertThat(application.missingCapabilities()).contains("正式电子签字");
+        approve(fixture, application);
+
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "new-worker", "Secure-2026-Worker!", "新操作员", "ADMIN", "ALL", List.of(), true, false,
+                application.applicationCode(), List.of("抛光")), admin)).hasMessageContaining("目标资料、权限或工序不一致");
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "new-worker", "Secure-2026-Worker!", "新操作员", "OPERATOR", "SELF", List.of(), true, false,
+                application.applicationCode(), List.of("雕刻")), admin)).hasMessageContaining("目标资料、权限或工序不一致");
+        assertThat(fixture.accountRepository().findByUsername("new-worker")).isEmpty();
+
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "new-worker", "Secure-2026-Worker!", "新操作员", "OPERATOR", "SELF", List.of(), true, false,
+                application.applicationCode(), List.of("抛光")), admin);
+        assertThat(fixture.accountRepository().findByUsername("new-worker")).get()
+                .satisfies(account -> assertThat(account.allowedProcesses()).containsExactly("抛光"));
+        assertThat(fixture.preApprovalApplicationRepository().findByCode(application.applicationCode())).get()
+                .satisfies(executed -> {
+                    assertThat(executed.applicationStatus()).isEqualTo("EXECUTED");
+                    assertThat(executed.readyForBlockingApproval()).isFalse();
+                });
+    }
+
+    @Test
+    void approvedDisableCannotBeUsedToUnlockEnableOrExecuteTwice() {
+        Fixture fixture = fixture(true);
+        List<String> evidence = fixture.managementService().preApprovalReadiness().stream()
+                .filter(item -> item.readinessCode().equals("AUTH-PRE-STATUS-001"))
+                .findFirst().orElseThrow().requiredBeforeAction();
+        AuthAccountPreApprovalApplication application = fixture.managementService().submitPreApprovalApplication(
+                new AuthAccountPreApprovalApplicationCommand("CHANGE_STATUS", "operator", "", "", "", List.of(),
+                        false, null, "岗位交接停用", evidence, List.of(), "DISABLE"), admin);
+        approve(fixture, application);
+        assertThatThrownBy(() -> fixture.managementService().unlock("operator", "试图复用", application.applicationCode(), admin))
+                .hasMessageContaining("启停或解锁动作与已批准申请不一致");
+        assertThatThrownBy(() -> fixture.managementService().updateEnabled("operator", true, "试图复用", application.applicationCode(), admin))
+                .hasMessageContaining("启停或解锁动作与已批准申请不一致");
+        assertThat(fixture.accountRepository().findByUsername("operator")).get().satisfies(account -> assertThat(account.enabled()).isTrue());
+        fixture.managementService().updateEnabled("operator", false, "岗位交接停用", application.applicationCode(), admin);
+        assertThatThrownBy(() -> fixture.managementService().updateEnabled("operator", false, "重复停用", application.applicationCode(), admin))
+                .hasMessageContaining("尚未具备账号动作放行条件");
+    }
+
+    private void approve(Fixture fixture, AuthAccountPreApprovalApplication application) {
+        new ApprovalService(fixture.approvalRepository()).decide(application.approvalTaskCode(),
+                new com.zhubao.erp.approval.domain.ApprovalDecisionCommand("APPROVE", "总经理", "资料已核对", ""));
+    }
+
     private AuthAccountPreApprovalApplication readyPreApprovalApplication(
             String applicationCode,
             String readinessCode,

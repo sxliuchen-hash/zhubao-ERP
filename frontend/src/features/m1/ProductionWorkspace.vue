@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import OperationInputs from './OperationInputs.vue';
+import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import type { Tone } from '../../data/m1PrototypeData';
@@ -27,6 +29,7 @@ const emptyProduction = (): ProductionWorkspaceModel => ({
 
 const workspace = ref<ProductionWorkspaceModel>(emptyProduction());
 const loadError = ref('');
+const operationValues = ref<Record<string, string>>({});
 const reportingProduction = ref(false);
 const productionReportResult = ref<ProductionReportResult | null>(null);
 const productionReportError = ref('');
@@ -135,6 +138,8 @@ async function loadMachineMatchSuggestions() {
   }
 }
 
+watch(activeWorkOrder, () => { operationValues.value = {}; });
+
 function workOrderTone(status: string): Tone {
   if (status.includes('称重')) return 'red';
   if (status.includes('待')) return 'amber';
@@ -150,7 +155,7 @@ async function reportActiveProduction() {
   productionReportError.value = '';
 
   try {
-    productionReportResult.value = await reportProduction(activeWorkOrder.value, activeHandoff.value?.code);
+    productionReportResult.value = await reportProduction(activeWorkOrder.value, activeHandoff.value?.code, operationDraft(operationValues.value));
     await loadProductionWorkspace();
   } catch (error) {
     productionReportError.value = error instanceof Error ? error.message : '提交报工失败';
@@ -184,6 +189,7 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
 
 <template>
   <div class="production-desk page-stack">
+    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <section class="module-work-grid production-work-grid" aria-label="生产派工主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">
@@ -295,6 +301,7 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
             <span><b :style="{ width: `${activeWorkOrder.progress}%` }" /></span>
             <em>{{ activeWorkOrder.progress }}%</em>
           </div>
+          <OperationInputs v-model="operationValues" :fields="[['quantity', '本次完成数量', 'number'], ['weight', '本次产出重量（克）', 'number'], ['workDate', '报工日期', 'date'], ['evidenceCode', '证据编号']]" />
           <div class="detail-actions three-actions">
             <button class="primary-button" type="button" :disabled="reportingProduction" @click="reportActiveProduction">
               {{ reportingProduction ? '正在入账' : '提交报工' }}

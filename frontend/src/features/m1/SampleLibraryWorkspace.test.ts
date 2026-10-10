@@ -1,5 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerImportReviewBatches, buildRegisterImportPostingPlan } from '../../data/registerImportTemplates';
+import { fetchAuthSession, type AuthSession } from '../../services/authApi';
 import SampleLibraryWorkspace from './SampleLibraryWorkspace.vue';
 import {
   correctRegisterImportRow,
@@ -12,6 +14,8 @@ import {
 } from '../../services/registerImportApi';
 import { fetchMachineOutputsByImportBatch } from '../../services/machineOutputApi';
 import { fetchMotherOrder, fetchOutboundOrder } from '../../services/businessDocumentApi';
+
+vi.mock('../../services/authApi', () => ({ fetchAuthSession: vi.fn().mockResolvedValue({ operator: '登记复核员' }) }));
 
 vi.mock('../../services/registerImportApi', () => ({
   correctRegisterImportRow: vi.fn(),
@@ -32,9 +36,10 @@ vi.mock('../../services/businessDocumentApi', () => ({
 
 describe('SampleLibraryWorkspace', () => {
   beforeEach(() => {
-    vi.mocked(fetchRegisterImportBatches).mockRejectedValue(new Error('API 未配置，当前使用本地评审样例'));
+    vi.mocked(fetchAuthSession).mockResolvedValue({ operator: '登记复核员' } as AuthSession);
+    vi.mocked(fetchRegisterImportBatches).mockResolvedValue(registerImportReviewBatches);
     vi.mocked(fetchRegisterImportBatch).mockRejectedValue(new Error('API 未配置，当前使用本地评审样例'));
-    vi.mocked(fetchRegisterImportPostingPlan).mockRejectedValue(new Error('API 未配置，当前使用本地评审样例'));
+    vi.mocked(fetchRegisterImportPostingPlan).mockImplementation(async (batchNo) => buildRegisterImportPostingPlan(registerImportReviewBatches.find((item) => item.importBatchNo === batchNo) ?? registerImportReviewBatches[0]));
     vi.mocked(correctRegisterImportRow).mockRejectedValue(new Error('API 未配置，当前使用本地评审样例'));
     vi.mocked(fetchMachineOutputsByImportBatch).mockResolvedValue([]);
     vi.mocked(fetchMotherOrder).mockRejectedValue(new Error('未查询结构化母单'));
@@ -46,9 +51,10 @@ describe('SampleLibraryWorkspace', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders the sample library as an acceptance-data workbench', () => {
+  it('renders the register import workbench from backend batches', async () => {
     const wrapper = mount(SampleLibraryWorkspace);
 
+    await flushPromises();
     expect(wrapper.text()).toContain('登记导入');
     expect(wrapper.text()).toContain('登记表导入');
     expect(wrapper.text()).toContain('登记表确认批次复核');
@@ -68,6 +74,20 @@ describe('SampleLibraryWorkspace', () => {
     expect(wrapper.text()).toContain('motherOrderCode 缺失');
     expect(wrapper.text()).toContain('登记表上传预检');
     expect(wrapper.text()).toContain('上传预检');
+  });
+
+  it('接口失败和空批次不显示本地评审单据', async () => {
+    vi.mocked(fetchRegisterImportBatches).mockRejectedValueOnce(new Error('批次服务不可用'));
+    const wrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
+    expect(wrapper.text()).toContain('批次服务不可用');
+    expect(wrapper.findAll('.register-review-batch-table tbody tr')).toHaveLength(0);
+    expect(wrapper.text()).not.toContain('IMP-REG-INBOUND-20260707193000');
+    wrapper.unmount();
+    vi.mocked(fetchRegisterImportBatches).mockResolvedValueOnce([]);
+    const emptyWrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
+    expect(emptyWrapper.findAll('.register-review-batch-table tbody tr')).toHaveLength(0);
   });
 
   it('loads recent confirmed register batches from the backend and selects batch detail', async () => {
@@ -239,7 +259,7 @@ describe('SampleLibraryWorkspace', () => {
     };
     const correctedBatch = {
       ...blockedBatch,
-      nextAction: '已完成登记表复核补录：样例库复核员；重新生成入账映射计划后再决定是否显式入账',
+      nextAction: '已完成登记表复核补录：登记复核员；重新生成入账映射计划后再决定是否显式入账',
       rows: blockedBatch.rows.map((row) => ({
         ...row,
         normalizedFields: {
@@ -284,8 +304,8 @@ describe('SampleLibraryWorkspace', () => {
       fields: {
         shipmentCode: 'OUT-REG-001',
       },
-      operator: '样例库复核员',
-      correctionRemark: '样例库登记表复核补录',
+      operator: '登记复核员',
+      correctionRemark: '登记表复核补录',
     });
     expect(fetchRegisterImportPostingPlan).toHaveBeenLastCalledWith(blockedBatch.importBatchNo);
     expect(wrapper.text()).toContain('已补录第 6 行 shipmentCode');
@@ -374,9 +394,9 @@ describe('SampleLibraryWorkspace', () => {
       blockedRows: 0,
       executable: true,
       status: 'CONFIRMED',
-      confirmedBy: '样例库复核员',
+      confirmedBy: '登记复核员',
       confirmedAt: '2026-07-07T19:10:00',
-      confirmRemark: '样例库确认导入仅保存结构化批次',
+      confirmRemark: '确认导入仅保存结构化批次',
       nextAction: '已落结构化导入批次，待业务单据入账映射',
       rows: [{
         importBatchNo: 'IMP-REG-OUTBOUND-20260707190000',
@@ -405,12 +425,12 @@ describe('SampleLibraryWorkspace', () => {
     await flushPromises();
 
     expect(confirmRegisterImport).toHaveBeenCalledWith(expect.objectContaining({
-      operator: '样例库复核员',
+      operator: '登记复核员',
       preview: expect.objectContaining({
         importBatchNo: 'IMP-REG-OUTBOUND-20260707190000',
       }),
     }));
-    expect(wrapper.text()).toContain('CONFIRMED / 样例库复核员');
+    expect(wrapper.text()).toContain('CONFIRMED / 登记复核员');
     expect(wrapper.text()).toContain('ShipFinishedStockCommand');
     expect(wrapper.text()).toContain('业务单据入账映射');
   });
@@ -513,7 +533,7 @@ describe('SampleLibraryWorkspace', () => {
       skippedDrafts: 0,
       blockedDrafts: 0,
       warningDrafts: 0,
-      operator: '样例库复核员',
+      operator: '登记复核员',
       postedAt: '2026-07-07T20:35:00',
       nextAction: '已通过后端业务服务完成入账；库存变化已进入库存台账',
       items: [{
@@ -588,14 +608,14 @@ describe('SampleLibraryWorkspace', () => {
 
     expect(postRegisterImportBatch).toHaveBeenCalledWith(readyBatch.importBatchNo, {
       allowWarnings: false,
-      operator: '样例库复核员',
-      postingRemark: '样例库登记表批次显式入账',
+      operator: '登记复核员',
+      postingRemark: '登记表批次显式入账',
     });
     expect(fetchRegisterImportBatch).toHaveBeenCalledWith(readyBatch.importBatchNo);
     expect(fetchMotherOrder).toHaveBeenCalledWith('MO-REG-001');
     expect(fetchOutboundOrder).not.toHaveBeenCalled();
     expect(fetchMachineOutputsByImportBatch).toHaveBeenCalledWith(readyBatch.importBatchNo);
-    expect(wrapper.text()).toContain('POSTED / 样例库复核员');
+    expect(wrapper.text()).toContain('POSTED / 登记复核员');
     expect(wrapper.text()).toContain('MO-REG-001');
     expect(wrapper.text()).toContain('LEDGER-REG-001');
     expect(wrapper.text()).toContain('业务单据快照');
@@ -711,7 +731,7 @@ describe('SampleLibraryWorkspace', () => {
       skippedDrafts: 0,
       blockedDrafts: 0,
       warningDrafts: 0,
-      operator: '样例库复核员',
+      operator: '登记复核员',
       postedAt: '2026-07-07T20:50:00',
       nextAction: '已通过后端业务服务完成出库入账；库存变化已进入库存台账',
       items: [{
@@ -762,14 +782,14 @@ describe('SampleLibraryWorkspace', () => {
 
     expect(postRegisterImportBatch).toHaveBeenCalledWith(readyBatch.importBatchNo, {
       allowWarnings: false,
-      operator: '样例库复核员',
-      postingRemark: '样例库登记表批次显式入账',
+      operator: '登记复核员',
+      postingRemark: '登记表批次显式入账',
     });
     expect(fetchRegisterImportBatch).toHaveBeenCalledWith(readyBatch.importBatchNo);
     expect(fetchOutboundOrder).toHaveBeenCalledWith('OUT-REG-001');
     expect(fetchMotherOrder).not.toHaveBeenCalled();
     expect(fetchMachineOutputsByImportBatch).toHaveBeenCalledWith(readyBatch.importBatchNo);
-    expect(wrapper.text()).toContain('POSTED / 样例库复核员');
+    expect(wrapper.text()).toContain('POSTED / 登记复核员');
     expect(wrapper.text()).toContain('OUT-REG-001');
     expect(wrapper.text()).toContain('LEDGER-OUT-REG-001');
     expect(wrapper.text()).toContain('业务单据快照');

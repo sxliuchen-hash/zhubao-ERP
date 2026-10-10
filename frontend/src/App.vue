@@ -1,23 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import AppShell from './components/AppShell.vue';
 import NavIcon from './components/NavIcon.vue';
+import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import LoginPage from './features/auth/LoginPage.vue';
-import ApprovalWorkspace from './features/m1/ApprovalWorkspace.vue';
-import ConfigurationWorkspace from './features/m1/ConfigurationWorkspace.vue';
-import DocumentManagementWorkspace from './features/m1/DocumentManagementWorkspace.vue';
-import HardwareIntegrationWorkspace from './features/m1/HardwareIntegrationWorkspace.vue';
-import InboundWorkspace from './features/m1/InboundWorkspace.vue';
-import InventoryTraceWorkspace from './features/m1/InventoryTraceWorkspace.vue';
-import FinanceWorkspace from './features/m1/FinanceWorkspace.vue';
-import LabelWorkspace from './features/m1/LabelWorkspace.vue';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
-import MobileOpsWorkspace from './features/m1/MobileOpsWorkspace.vue';
-import OperationsCenterWorkspace from './features/m1/OperationsCenterWorkspace.vue';
-import ProductionWorkspace from './features/m1/ProductionWorkspace.vue';
-import ProgressWorkspace from './features/m1/ProgressWorkspace.vue';
-import QualityWorkspace from './features/m1/QualityWorkspace.vue';
-import SampleLibraryWorkspace from './features/m1/SampleLibraryWorkspace.vue';
 import {
   authSessionChangedEvent,
   fetchAuthSession,
@@ -77,6 +64,36 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; grou
 const mobilePrimaryKeys: TabKey[] = ['dashboard', 'mobile', 'approvals'];
 
 const activeTab = ref<TabKey>('dashboard');
+const workspaceLoaders = {
+  inbound: () => import('./features/m1/InboundWorkspace.vue'),
+  production: () => import('./features/m1/ProductionWorkspace.vue'),
+  progress: () => import('./features/m1/ProgressWorkspace.vue'),
+  quality: () => import('./features/m1/QualityWorkspace.vue'),
+  inventory: () => import('./features/m1/InventoryTraceWorkspace.vue'),
+  finance: () => import('./features/m1/FinanceWorkspace.vue'),
+  approvals: () => import('./features/m1/ApprovalWorkspace.vue'),
+  configuration: () => import('./features/m1/ConfigurationWorkspace.vue'),
+  documents: () => import('./features/m1/DocumentManagementWorkspace.vue'),
+  sample: () => import('./features/m1/SampleLibraryWorkspace.vue'),
+  label: () => import('./features/m1/LabelWorkspace.vue'),
+  hardware: () => import('./features/m1/HardwareIntegrationWorkspace.vue'),
+  operations: () => import('./features/m1/OperationsCenterWorkspace.vue'),
+  mobile: () => import('./features/m1/MobileOpsWorkspace.vue'),
+};
+const workspaceLoadAttempt = ref(0);
+provide('zhubao-retry-workspace', () => { workspaceLoadAttempt.value += 1; });
+const activeWorkspace = computed(() => {
+  // 重建异步组件以重新请求失败的页面，已加载模块由浏览器缓存复用。
+  void workspaceLoadAttempt.value;
+  if (activeTab.value === 'dashboard') return null;
+  return defineAsyncComponent({
+    loader: workspaceLoaders[activeTab.value],
+    loadingComponent: WorkspaceLoadState,
+    errorComponent: WorkspaceLoadState,
+    delay: 150,
+    timeout: 30_000,
+  });
+});
 const moreOpen = ref(false);
 const traceQuery = ref('');
 provide('zhubao-trace-query', traceQuery);
@@ -251,19 +268,6 @@ function isTabKey(value: string): value is TabKey {
     </template>
 
     <M1Dashboard v-if="activeTab === 'dashboard'" />
-    <InboundWorkspace v-else-if="activeTab === 'inbound'" />
-    <ProductionWorkspace v-else-if="activeTab === 'production'" />
-    <ProgressWorkspace v-else-if="activeTab === 'progress'" />
-    <QualityWorkspace v-else-if="activeTab === 'quality'" />
-    <InventoryTraceWorkspace v-else-if="activeTab === 'inventory'" />
-    <FinanceWorkspace v-else-if="activeTab === 'finance'" />
-    <ApprovalWorkspace v-else-if="activeTab === 'approvals'" />
-    <ConfigurationWorkspace v-else-if="activeTab === 'configuration'" />
-    <DocumentManagementWorkspace v-else-if="activeTab === 'documents'" />
-    <SampleLibraryWorkspace v-else-if="activeTab === 'sample'" />
-    <LabelWorkspace v-else-if="activeTab === 'label'" />
-    <HardwareIntegrationWorkspace v-else-if="activeTab === 'hardware'" />
-    <OperationsCenterWorkspace v-else-if="activeTab === 'operations'" />
-    <MobileOpsWorkspace v-else />
+    <component :is="activeWorkspace" v-else />
   </AppShell>
 </template>

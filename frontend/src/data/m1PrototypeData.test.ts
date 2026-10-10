@@ -8,7 +8,7 @@ import {
   openSourceSampleMappings,
   productionReadinessItems,
   sampleScenarios,
-} from './m1PrototypeData';
+} from './m1ReviewFixtures';
 
 describe('m1PrototypeData', () => {
   it('keeps hardware fallback cases explicit', () => {

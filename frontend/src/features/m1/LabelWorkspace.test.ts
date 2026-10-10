@@ -23,25 +23,23 @@ describe('LabelWorkspace', () => {
     } as Response);
   }
 
-  it('渲染标签打印工作台与本地样例预览', async () => {
+  it('没有真实标签时显示空态并禁止打印样例', async () => {
     mockTemplates();
     const wrapper = mount(LabelWorkspace);
     await flushPromises();
+    expect(wrapper.text()).toContain('请先按单号打开贴纸');
+    expect(wrapper.text()).not.toContain('CC-20260709-001-JL');
+    expect(wrapper.find('.bw-label svg').exists()).toBe(false);
+    expect(wrapper.find('.preview-toolbar .primary-button').exists()).toBe(false);
+    expect(openLabelPrint).not.toHaveBeenCalled();
+  });
 
-    expect(wrapper.text()).toContain('标签打印');
-    expect(wrapper.text()).toContain('黑白打印');
-    expect(wrapper.text()).toContain('通用标签生成');
-    expect(wrapper.text()).toContain('按母单号便捷生成');
-    expect(wrapper.text()).toContain('标签模板与打印机设置');
-    expect(wrapper.text()).toContain('CC-20260709-001-JL');
-    expect(wrapper.text()).toContain('JG|mother|CC-20260709-001-JL');
-    expect(wrapper.find('.bw-label svg').exists()).toBe(true);
-    expect(wrapper.html()).not.toContain('#f4b740');
-
-    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
-    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({
-      primaryCode: 'CC-20260709-001-JL',
-    }));
+  it('模板接口失败明确显示原因，不回退本地标签', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('连接失败'));
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    expect(wrapper.text()).toContain('后端接口不可用');
+    expect(wrapper.find('.bw-label svg').exists()).toBe(false);
   });
 
   it('提供四种标签类型下拉选项', async () => {
@@ -124,5 +122,11 @@ describe('LabelWorkspace', () => {
     expect(wrapper.text()).toContain('内壁刻字');
     expect(wrapper.text()).toContain('2026-10-20');
     expect(wrapper.text()).toContain('JG|work_order|ZD-1');
+    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
+    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'ZD-1' }));
+    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('');
+    await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
+    expect(wrapper.find('.preview-toolbar .primary-button').exists()).toBe(false);
+
   });
 });

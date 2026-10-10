@@ -47,6 +47,8 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                     assertThat(application.targetUsername()).isEqualTo("planner");
                     assertThat(application.targetCustomerScope()).containsExactly("恒信珠宝", "雅辰饰品");
                     assertThat(application.targetEnabled()).isTrue();
+                    assertThat(application.targetAllowedProcesses()).containsExactly("抛光", "雕刻");
+                    assertThat(application.statusAction()).isEqualTo("DISABLE");
                     assertThat(application.demoAccount()).isFalse();
                     assertThat(application.requiredEvidence()).contains("账号申请单", "直属负责人审批");
                     assertThat(application.providedEvidence()).containsExactly("账号申请单：AUTH-REQ-001");
@@ -140,7 +142,9 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                 "高",
                 readyForBlockingApproval ? "green" : "red",
                 "AUTH-PRE-TASK-202607090001-0001",
-                "2026-07-09 09:00:00"
+                "2026-07-09 09:00:00",
+                List.of("抛光", "雕刻"),
+                "DISABLE"
         );
     }
 
@@ -178,6 +182,8 @@ class JdbcAuthAccountPreApprovalApplicationRepositoryTest {
                         risk_level varchar(32) not null default '',
                         tone varchar(32) not null default '',
                         submitted_at varchar(32) not null,
+                        target_allowed_processes text null,
+                        status_action varchar(16) not null default '',
                         unique key uk_auth_pre_approval_application_code (application_code)
                     )
                     """);

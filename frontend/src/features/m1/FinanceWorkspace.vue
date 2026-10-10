@@ -47,7 +47,8 @@ const busy = ref(false);
 
 const customerId = ref('');
 const customerName = ref('');
-const yearMonth = ref('2026-10');
+const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
+const yearMonth = ref(today.slice(0, 7));
 const statement = ref<CustomerStatement | null>(null);
 const billing = ref<BillingRunResult | null>(null);
 const mode = ref('WEIGHT');
@@ -56,7 +57,7 @@ const processName = ref('雕刻');
 const chargeUnit = ref('GRAM');
 
 const receiptAmount = ref('');
-const receiptDate = ref('2026-10-09');
+const receiptDate = ref(today);
 const receiptLine = ref('');
 const receiptAllocated = ref('');
 
@@ -66,7 +67,23 @@ const payables = ref<PayableView[]>([]);
 const operating = ref<OperatingStatement | null>(null);
 const payableCode = ref('');
 const payAmount = ref('');
-const payDate = ref('2026-10-09');
+const payDate = ref(today);
+const consumableForm = ref({ code: '', name: '', unitName: '', quantity: '', amount: '', supplier: '', issueQuantity: '' });
+const assetForm = ref({ name: '', category: '', originalValue: '', residualValue: '0', startMonth: today.slice(0, 7), usefulMonths: '' });
+const outsourceForm = ref({ supplier: '', amount: '', motherOrderCode: '' });
+
+function requiredText(value: string, label: string) {
+  if (!value.trim()) throw new Error(`请填写${label}`);
+  return value.trim();
+}
+
+function requiredNumber(value: string | number, label: string, allowZero = false) {
+  const number = Number(value);
+  if (!String(value).trim() || !Number.isFinite(number) || (allowZero ? number < 0 : number <= 0)) {
+    throw new Error(`${label}必须为${allowZero ? '非负' : '正'}数`);
+  }
+  return number;
+}
 
 function fail(reason: unknown) {
   error.value = reason instanceof Error ? reason.message : '请求失败';
@@ -190,24 +207,29 @@ async function loadConsumables() {
 
 async function addConsumable() {
   await run(async () => {
-    await saveConsumableItem({ code: 'GLUE', name: '胶', unitName: '支' });
+    const form = consumableForm.value;
+    const itemCode = requiredText(form.code, '消耗品编码');
+    const quantity = requiredNumber(form.quantity, '采购数量');
+    const amount = requiredNumber(form.amount, '采购金额');
+    const supplier = requiredText(form.supplier, '供应商');
+    await saveConsumableItem({ code: itemCode, name: requiredText(form.name, '消耗品名称'), unitName: requiredText(form.unitName, '计量单位') });
     await purchaseConsumable({
-      itemCode: 'GLUE',
-      quantity: 10,
-      amount: 30,
-      supplier: '胶行',
+      itemCode,
+      quantity,
+      amount,
+      supplier,
       yearMonth: yearMonth.value.trim(),
     });
     consumables.value = await fetchConsumables();
-    message.value = '已登记胶的采购';
+    message.value = `已登记 ${form.name} 的采购`;
   });
 }
 
 async function useConsumable() {
   await run(async () => {
     await issueConsumable({
-      itemCode: 'GLUE',
-      quantity: 1,
+      itemCode: requiredText(consumableForm.value.code, '消耗品编码'),
+      quantity: requiredNumber(consumableForm.value.issueQuantity, '领用数量'),
       customerId: customerId.value.trim() ? Number(customerId.value) : null,
       yearMonth: yearMonth.value.trim(),
     });
@@ -218,14 +240,26 @@ async function useConsumable() {
 
 async function addAsset() {
   await run(async () => {
+    const form = assetForm.value;
+    const originalValue = requiredNumber(form.originalValue, '资产原值');
+    const residualValue = requiredNumber(form.residualValue, '预计残值', true);
+    const usefulMonths = requiredNumber(form.usefulMonths, '使用月数');
+    if (residualValue > originalValue) throw new Error('预计残值不能超过资产原值');
+    if (!Number.isInteger(usefulMonths)) throw new Error('使用月数必须为正整数');
     await saveFixedAsset({
-      name: '抛光机',
-      category: '设备',
-      originalValue: 1000,
-      residualValue: 0,
-      startMonth: yearMonth.value.trim(),
-      usefulMonths: 36,
+      name: requiredText(form.name, '资产名称'),
+      category: requiredText(form.category, '资产类别'),
+      originalValue,
+      residualValue,
+      startMonth: requiredText(form.startMonth, '开始折旧月份'),
+      usefulMonths,
     });
+    message.value = '固定资产已登记';
+  });
+}
+
+async function depreciateAssets() {
+  await run(async () => {
     const entries = await runDepreciation(yearMonth.value.trim());
     message.value = `已生成 ${entries.length} 条折旧`;
   });
@@ -243,11 +277,11 @@ async function loadPayables() {
 async function addOutsource() {
   await run(async () => {
     await saveOutsource({
-      supplier: '外协厂',
-      amount: Number(payAmount.value || '0'),
+      supplier: requiredText(outsourceForm.value.supplier, '外协供应商'),
+      amount: requiredNumber(outsourceForm.value.amount, '外协金额'),
       yearMonth: yearMonth.value.trim(),
       customerId: customerId.value.trim() ? Number(customerId.value) : null,
-      motherOrderCode: '',
+      motherOrderCode: outsourceForm.value.motherOrderCode.trim(),
     });
     payables.value = await fetchPayables(yearMonth.value.trim());
     message.value = '外协应付已登记';
@@ -301,7 +335,7 @@ function kindLabel(kind: string) {
     <section class="section-block finance-filters">
       <label>
         月份
-        <input v-model="yearMonth" aria-label="财务月份" />
+        <input v-model="yearMonth" type="month" aria-label="财务月份" />
       </label>
       <label>
         客户编号
@@ -388,7 +422,7 @@ function kindLabel(kind: string) {
     <section v-else-if="section === 'receipt'" class="section-block">
       <label>
         收款日期
-        <input v-model="receiptDate" aria-label="收款日期" />
+        <input v-model="receiptDate" type="date" aria-label="收款日期" />
       </label>
       <label>
         金额
@@ -457,10 +491,21 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'consumable'" class="section-block">
+      <form class="account-admin-grid" aria-label="消耗品采购登记" @submit.prevent="addConsumable">
+        <label>消耗品编码<input v-model="consumableForm.code" aria-label="消耗品编码" required /></label>
+        <label>消耗品名称<input v-model="consumableForm.name" aria-label="消耗品名称" required /></label>
+        <label>计量单位<input v-model="consumableForm.unitName" aria-label="计量单位" required /></label>
+        <label>采购数量<input v-model="consumableForm.quantity" aria-label="采购数量" type="number" min="0.001" step="any" required /></label>
+        <label>采购金额<input v-model="consumableForm.amount" aria-label="采购金额" type="number" min="0.01" step="0.01" required /></label>
+        <label>供应商<input v-model="consumableForm.supplier" aria-label="采购供应商" required /></label>
+        <button class="table-action" type="submit" :disabled="busy">登记采购</button>
+      </form>
+      <form class="finance-actions" aria-label="消耗品领用登记" @submit.prevent="useConsumable">
+        <label>领用数量<input v-model="consumableForm.issueQuantity" aria-label="领用数量" type="number" min="0.001" step="any" required /></label>
+        <button class="table-action" type="submit" :disabled="busy">登记领用</button>
+      </form>
       <div class="finance-actions">
         <button class="primary-button" type="button" :disabled="busy" @click="loadConsumables">查看结存</button>
-        <button class="table-action" type="button" :disabled="busy" @click="addConsumable">登记胶采购</button>
-        <button class="table-action" type="button" :disabled="busy" @click="useConsumable">领用 1 支</button>
       </div>
       <p v-if="consumables.length === 0" class="empty-hint">暂无消耗品</p>
       <table v-else>
@@ -485,13 +530,27 @@ function kindLabel(kind: string) {
 
     <section v-else-if="section === 'asset'" class="section-block">
       <p>直线法折旧只进公司月度成本，不摊到客户。</p>
-      <button class="primary-button" type="button" :disabled="busy" @click="addAsset">登记抛光机并计提本月折旧</button>
+      <form class="account-admin-grid" aria-label="固定资产登记" @submit.prevent="addAsset">
+        <label>资产名称<input v-model="assetForm.name" aria-label="资产名称" required /></label>
+        <label>资产类别<input v-model="assetForm.category" aria-label="资产类别" required /></label>
+        <label>资产原值<input v-model="assetForm.originalValue" aria-label="资产原值" type="number" min="0.01" step="0.01" required /></label>
+        <label>预计残值<input v-model="assetForm.residualValue" aria-label="预计残值" type="number" min="0" step="0.01" required /></label>
+        <label>开始折旧月份<input v-model="assetForm.startMonth" aria-label="开始折旧月份" type="month" required /></label>
+        <label>使用月数<input v-model="assetForm.usefulMonths" aria-label="使用月数" type="number" min="1" step="1" required /></label>
+        <button class="primary-button" type="submit" :disabled="busy">登记固定资产</button>
+      </form>
+      <button class="table-action" type="button" :disabled="busy" @click="depreciateAssets">计提本月折旧</button>
     </section>
 
     <section v-else-if="section === 'payable'" class="section-block">
+      <form class="account-admin-grid" aria-label="外协登记" @submit.prevent="addOutsource">
+        <label>外协供应商<input v-model="outsourceForm.supplier" aria-label="外协供应商" required /></label>
+        <label>外协金额<input v-model="outsourceForm.amount" aria-label="外协金额" type="number" min="0.01" step="0.01" required /></label>
+        <label>关联母单<input v-model="outsourceForm.motherOrderCode" aria-label="外协母单号" /></label>
+        <button class="table-action" type="submit" :disabled="busy">登记外协</button>
+      </form>
       <div class="finance-actions">
         <button class="primary-button" type="button" :disabled="busy" @click="loadPayables">查看应付</button>
-        <button class="table-action" type="button" :disabled="busy" @click="addOutsource">登记外协</button>
       </div>
       <label>
         应付单号
@@ -503,7 +562,7 @@ function kindLabel(kind: string) {
       </label>
       <label>
         付款日期
-        <input v-model="payDate" aria-label="付款日期" />
+        <input v-model="payDate" type="date" aria-label="付款日期" />
       </label>
       <button class="table-action" type="button" :disabled="busy" @click="submitPayment">登记付款</button>
       <p v-if="payables.length === 0" class="empty-hint">暂无应付</p>
@@ -531,7 +590,7 @@ function kindLabel(kind: string) {
 
     <section v-else class="section-block">
       <button class="primary-button" type="button" :disabled="busy" @click="loadOperating">查看经营结果</button>
-      <p v-if="!operating" class="empty-hint">填写月份后查看。留空客户编号就是全公司。</p>
+      <p v-if="!operating" class="empty-hint">填写月份后查看。查询范围由当前账号的财务权限与客户授权决定。</p>
       <div v-else>
         <p>
           {{ operating.yearMonth }} 收入 {{ formatAmount(operating.revenue) }} ，工资 {{ formatAmount(operating.wageCost) }} ，消耗

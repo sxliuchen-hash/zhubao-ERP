@@ -47,7 +47,7 @@ pnpm --filter zhubao-erp-frontend dev
 
 本地默认内存仓储。启用 MySQL 时设置 SPRING_PROFILES_ACTIVE=mysql 和 ZHUBAO_DB_URL、ZHUBAO_DB_USERNAME、ZHUBAO_DB_PASSWORD。各模块默认值与 Docker 覆盖见 [运行配置](docs/05_系统架构设计.md#运行配置与持久化)；仅开启 MySQL profile 不代表所有模块都已持久化。
 
-前端默认同源访问；直连其他后端时设置 VITE_API_BASE_URL。空数据、接口失败和演示数据来源须明确区分。
+前端默认同源访问；直连其他后端时设置 VITE_API_BASE_URL。工作台默认读取正式单据与台账，空库显示空列表；演示快照须显式开启，详见[数据来源](docs/05_系统架构设计.md#数据流与一致性)。附件与财务使用真实输入，账号操作通过申请、批准、执行完成。
 
 ## 验证
 
@@ -57,7 +57,7 @@ pnpm --filter zhubao-erp-frontend test
 pnpm --filter zhubao-erp-frontend build
 ```
 
-提交门槛以 AGENTS 为准。页面检查可使用 node scripts/check-frontend-ui.cjs http://localhost:5173/，需本地服务与 Playwright；output 截图不替代业务验收。
+统一检查可运行 `powershell -ExecutionPolicy Bypass -File scripts/check.ps1`，旧 check-m0/check-m1 命令转发到同一入口，任一步失败即停止。脚本维护回归见 `scripts/test-maintenance.ps1`。提交门槛以 AGENTS 为准。页面检查可使用 node scripts/check-frontend-ui.cjs http://localhost:5173/，需本地服务与 Playwright；output 截图不替代业务验收。
 
 ## Docker 交付
 

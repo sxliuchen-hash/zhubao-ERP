@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
-  operationsCenterFallback,
   type ErrorSummary,
   type OperationsCenterSnapshot,
   type OperationsServiceStatus,
@@ -10,7 +9,12 @@ import {
 import type { Tone } from '../../data/m1PrototypeData';
 import { fetchOperationsCenterSnapshot } from '../../services/operationsCenterApi';
 
-const snapshot = ref<OperationsCenterSnapshot>(operationsCenterFallback);
+const snapshot = ref<OperationsCenterSnapshot>({
+  generatedAt: '',
+  summary: { overallStatus: '未知', serviceCount: 0, degradedServices: 0, openErrors: 0, criticalErrors: 0, openAlerts: 0, criticalAlerts: 0, backupStatus: '未知', uptimeMinutes: 0 },
+  services: [], runtimeMetrics: [], errorSummaries: [], recentLogs: [], backupStatuses: [], restoreDrillRecords: [], alerts: [], checklist: [], hardwareNodes: [], storageVolumes: [],
+});
+const hasSnapshot = ref(false);
 const loading = ref(false);
 const loadingError = ref('');
 
@@ -78,9 +82,10 @@ async function loadOperationsCenter() {
 
   try {
     snapshot.value = await fetchOperationsCenterSnapshot();
+    hasSnapshot.value = true;
   } catch (error) {
-    loadingError.value = error instanceof Error ? error.message : '运维中心接口不可用，已使用本地评审样例';
-    snapshot.value = operationsCenterFallback;
+    loadingError.value = error instanceof Error ? error.message : '运维中心接口不可用';
+
   } finally {
     loading.value = false;
   }
@@ -101,7 +106,6 @@ function errorTone(error: ErrorSummary): Tone {
       <div class="operations-command-main">
         <div class="console-title-line">
           <span class="eyebrow">OPERATIONS CENTER</span>
-          <StatusBadge label="M3.62 运维告警汇总" tone="green" />
         </div>
         <div class="operations-title-row">
           <div>
@@ -113,7 +117,7 @@ function errorTone(error: ErrorSummary): Tone {
           </button>
         </div>
 
-        <div class="operations-hero-grid" aria-label="运维关键指标">
+        <div v-if="hasSnapshot" class="operations-hero-grid" aria-label="运维关键指标">
           <article v-for="item in heroStats" :key="item.label" :class="`tone-${item.tone}`">
             <span>{{ item.label }}</span>
             <strong>{{ item.value }}<small>{{ item.unit }}</small></strong>
@@ -131,16 +135,16 @@ function errorTone(error: ErrorSummary): Tone {
         <p>{{ activeService?.detail }}</p>
         <dl v-if="activeAlert || activeError" class="operations-focus-grid">
           <dt>当前告警</dt>
-          <dd>{{ activeAlert?.title ?? `${activeError.module} / ${activeError.severity}` }}</dd>
+          <dd>{{ activeAlert?.title ?? `${activeError?.module} / ${activeError?.severity}` }}</dd>
           <dt>责任人</dt>
-          <dd>{{ activeAlert?.owner ?? activeError.owner }}</dd>
+          <dd>{{ activeAlert?.owner ?? activeError?.owner }}</dd>
           <dt>动作</dt>
-          <dd>{{ activeAlert?.nextAction ?? activeError.nextAction }}</dd>
+          <dd>{{ activeAlert?.nextAction ?? activeError?.nextAction }}</dd>
         </dl>
       </aside>
     </section>
 
-    <section class="operations-grid" aria-label="硬件在线和存储占用">
+    <section v-if="hasSnapshot" class="operations-grid" aria-label="硬件在线和存储占用">
       <div class="operations-panel">
         <div class="section-heading">
           <div>
@@ -198,11 +202,12 @@ function errorTone(error: ErrorSummary): Tone {
     </section>
 
     <p v-if="loadingError" class="operation-feedback danger">
-      <strong>接口兜底</strong>
+      <strong>状态读取失败</strong>
       <span>{{ loadingError }}</span>
+      <small>{{ hasSnapshot ? `保留最后一次真实采集结果：${snapshot.generatedAt}` : '尚未取得真实运行状态' }}</small>
     </p>
 
-    <section class="operations-grid alerts" aria-label="告警汇总和运行状态">
+    <section v-if="hasSnapshot" class="operations-grid alerts" aria-label="告警汇总和运行状态">
       <div class="operations-panel alert-panel">
         <div class="section-heading">
           <div>
@@ -249,7 +254,7 @@ function errorTone(error: ErrorSummary): Tone {
       </aside>
     </section>
 
-    <section class="operations-grid" aria-label="运行状态">
+    <section v-if="hasSnapshot" class="operations-grid" aria-label="运行状态">
       <div class="operations-panel service-panel">
         <div class="section-heading">
           <div>
@@ -272,7 +277,7 @@ function errorTone(error: ErrorSummary): Tone {
       </div>
     </section>
 
-    <section class="operations-grid lower" aria-label="报错、日志和备份">
+    <section v-if="hasSnapshot" class="operations-grid lower" aria-label="报错、日志和备份">
       <div class="operations-panel error-panel">
         <div class="section-heading">
           <div>
@@ -332,7 +337,7 @@ function errorTone(error: ErrorSummary): Tone {
       </aside>
     </section>
 
-    <section class="operations-grid backup" aria-label="备份与上线检查">
+    <section v-if="hasSnapshot" class="operations-grid backup" aria-label="备份与上线检查">
       <div class="operations-panel backup-panel">
         <div class="section-heading">
           <div>
@@ -422,7 +427,6 @@ function errorTone(error: ErrorSummary): Tone {
             <span class="eyebrow">RUNBOOK</span>
             <h2>运维接入清单</h2>
           </div>
-          <StatusBadge label="M3.62" tone="green" />
         </div>
         <div class="ops-checklist">
           <article v-for="item in snapshot.checklist" :key="item.code" :class="`tone-${item.tone}`">
@@ -437,15 +441,5 @@ function errorTone(error: ErrorSummary): Tone {
       </aside>
     </section>
 
-    <section class="operations-source-note" aria-label="运维中心设计依据">
-      <article>
-        <strong>设计边界</strong>
-        <span>当前运维中心复用 Spring Boot Actuator/Micrometer 的健康和指标思路，但只开放业务聚合 API；备份只读状态，不从页面执行 `mysqldump`。</span>
-      </article>
-      <article>
-        <strong>下一步</strong>
-        <span>接入真实登录权限、PWA 运行态细节、日志平台、恢复演练记录入库归档和告警通知。</span>
-      </article>
-    </section>
   </div>
 </template>
