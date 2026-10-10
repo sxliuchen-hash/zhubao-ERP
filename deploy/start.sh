@@ -39,3 +39,5 @@ fi
 
 docker compose --env-file .env -f docker-compose.yml up -d
 docker compose --env-file .env -f docker-compose.yml ps
+echo "Existing databases are not upgraded by this startup. Back up first, then run upgrade-database.sh."
+echo "已有数据库不会随本次启动升级。请先备份，再执行 upgrade-database.sh。"

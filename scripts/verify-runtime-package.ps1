@@ -199,6 +199,8 @@ function Test-RuntimePackage([string]$packageRoot) {
         "backup-mysql.sh",
         "verify-restore.ps1",
         "verify-restore.sh",
+        "upgrade-database.ps1",
+        "upgrade-database.sh",
         "README_DOCKER.md",
         "MANIFEST.sha256"
     )

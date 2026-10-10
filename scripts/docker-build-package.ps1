@@ -110,6 +110,8 @@ Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\backup-mysql.ps1") -Destinat
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\backup-mysql.sh") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\verify-restore.ps1") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\verify-restore.sh") -Destination $packageDir
+Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\upgrade-database.ps1") -Destination $packageDir
+Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\upgrade-database.sh") -Destination $packageDir
 $dockerReadmeByPrefix = Get-ChildItem -LiteralPath (Join-Path $repoRoot "docs") -Filter "19_Docker*.md" |
     Sort-Object Name |
     Select-Object -First 1

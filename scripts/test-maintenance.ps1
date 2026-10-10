@@ -39,7 +39,8 @@ try {
     $invalidSql = Join-Path $invalidPackage "mysql-init"
     New-Item -ItemType Directory -Force -Path $invalidSql | Out-Null
     foreach ($file in @('docker-compose.yml', '.env.example', 'start.ps1', 'start.sh', 'backup-mysql.ps1',
-        'backup-mysql.sh', 'verify-restore.ps1', 'verify-restore.sh', 'README_DOCKER.md', 'MANIFEST.sha256')) {
+        'backup-mysql.sh', 'verify-restore.ps1', 'verify-restore.sh', 'upgrade-database.ps1', 'upgrade-database.sh',
+        'README_DOCKER.md', 'MANIFEST.sha256')) {
         [IO.File]::WriteAllText((Join-Path $invalidPackage $file), '', $encoding)
     }
     foreach ($version in @(2, 19)) {

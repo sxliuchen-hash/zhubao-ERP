@@ -1,0 +1,39 @@
+1	TABLE	inv_stock_ledger
+2	TABLE	sys_sample_scenario
+3	TABLE	biz_workspace_snapshot
+4	TABLE	cfg_baseline_snapshot
+5	TABLE	cfg_change_request
+6	COLUMN	inv_stock_balance	dimension_key
+7	TABLE	hw_poc_record
+8	TABLE	biz_workspace_trace_event
+9	ROW	biz_workspace_snapshot	snapshot_code	SNAP-20260706-DAY
+10	TABLE	doc_package
+11	TABLE	approval_task
+12	TABLE	register_import_batch
+13	TABLE	biz_machine_output_record
+14	TABLE	biz_mother_order
+15	TABLE	auth_audit_event
+16	TABLE	auth_user_account
+17	COLUMN	auth_user_account	failed_login_count
+18	COLUMN	auth_audit_event	event_hash
+19	ROW	hw_poc_record	poc_code	POC-VID-20260706-001
+20	COLUMN	auth_user_account	customer_scope
+21	TABLE	auth_account_pre_approval_application
+22	COLUMN	auth_account_pre_approval_application	approval_task_code
+23	COLUMN	auth_user_account	password_change_required
+24	COLUMN	auth_user_account	temporary_password_consumed
+25	TABLE	hw_gateway_device
+26	TABLE	hw_gateway_reading_consumption
+27	COLUMN	hw_gateway_reading_consumption	ledger_code
+28	TABLE	sys_navigation_menu
+29	TABLE	sys_customer_authorization
+30	TABLE	sys_machine
+31	TABLE	sys_label_template
+32	COLUMN	biz_mother_order	processing_requirement
+33	TABLE	biz_mother_order_split
+34	TABLE	biz_process_station_handoff
+35	TABLE	biz_quality_requirement_check
+36	TABLE	fin_price_agreement
+37	ROW	sys_navigation_menu	code	progress
+38	COLUMN	auth_account_pre_approval_application	target_allowed_processes
+39	COLUMN	inv_stock_ledger	from_work_order_code

@@ -301,17 +301,28 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 ## 8. 数据库初始化与升级
 
-`mysql-init/*.sql` 会挂载到 `/docker-entrypoint-initdb.d`，MySQL 官方镜像只会在首次初始化空数据目录时执行这些 SQL。打包脚本通过 `export-mysql-init.ps1` 按数字版本生成 `V0001__...sql` 等等宽副本，保证文件名字典序就是版本顺序；源码历史迁移名称和内容保持不变。重复版本、非空目标目录或运行包内错序 SQL 会被阻断。
+`mysql-init/*.sql` 仍只挂到 `/docker-entrypoint-initdb.d`。MySQL 官方镜像只在数据目录第一次初始化时执行这些 SQL。打包脚本按数字版本生成 `V0001__...sql` 等等宽副本，历史迁移原文件不改。`start.ps1` / `start.sh` 只执行 `docker compose up`，不会升级已有库，也不会重跑初始化目录。
 
-这意味着：
+已有库使用显式入口：
 
-- 第一次部署会自动建表并加载当前合同 SQL。
-- 已有数据库升级不会自动重复执行 `mysql-init`。
-- 后续生产升级必须引入明确的迁移流程，例如 Flyway/Liquibase 或受控 SQL 升级脚本。
+- 开发机：`scripts/upgrade-database.ps1 -Command plan|adopt|upgrade -Url <jdbc> -Username <用户> -Password <密码> -BackupConfirmed`
+- 运行包：先 `backup-mysql.ps1` 或 `backup-mysql.sh`，再 `upgrade-database.ps1 -Command plan`，确认后续版本后执行 `-Command upgrade -BackupConfirmed`。容器内入口不会随普通启动运行。
 
-本次修正首次初始化的文件执行顺序，未引入自动生产升级器。已有数据库不会自动执行新增迁移；升级前须备份，按数字版本受控执行尚未应用的 SQL 并保留执行记录。结构门禁与副本内容校验不替代 MySQL 空库冷启动和旧库升级演练。
+版本记在 `schema_migration`：版本、脚本名、SHA-256 校验和、状态（`APPLYING` / `SUCCESS` / `FAILED`）、开始和结束时间、错误信息。校验和按迁移文件原始字节计算。
 
----
+规则：
+
+- 空库从 V1 按顺序执行到当前最大版本。当前脚本最大版本以目录中的连续编号为准，不能写死在 V38。
+- 已有库如果没有版本表，先 `plan`。它只报告结构探针能连续证明的版本，不写版本表，也不把库标成最新。
+- `adopt` 只登记这段连续已存在的结构，不重放脚本。探针中间断开时拒绝登记。
+- 已成功版本的文件校验和若与记录不一致，拒绝继续，不改记录、不跳过。
+- 遇到 `FAILED` 或 `APPLYING` 立即停止。MySQL 的 DDL 不能整段回滚；半成品可能已经留下。恢复方法是用升级前的完整备份还原数据库。不要在未确认结构的情况下删除失败记录后重跑。
+- 重复执行只跳过校验和相同且状态为 `SUCCESS` 的版本，不再次执行其 SQL。
+- 历史 `V*.sql` 保持 append-only，升级程序不改写它们。
+
+升级顺序：备份、`plan`、必要时 `adopt`、`upgrade`、抽查关键表和 `schema_migration`、失败则按备份恢复。结构门禁和 H2 测试不能代替真实 MySQL 演练。
+
+2026-10-10 在独立临时 MySQL 8.4 上，空库执行到 V36 失败：未加引号的 `year_month` 被服务器判为语法错误。V35 之前已成功，`fin_price_agreement` 和 `fin_price_line` 已留下，后续版本没有执行。历史脚本未改。细节见[开发进度](./14_开发进度跟踪.md)。
 
 ## 9. 更新与回滚
 
@@ -330,7 +341,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 1. 保留上一版本运行包和镜像 tar。
 2. 停止当前版本容器。
 3. 在上一版本目录执行启动脚本。
-4. 如果数据库结构已升级，必须按数据库备份恢复方案处理；仅回滚镜像不保证数据库兼容。
+4. 如果数据库结构已升级，只回滚镜像不够。用升级前备份恢复数据库；不要指望失败的 DDL 自动撤销。
 
 ---
 
@@ -372,10 +383,11 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 - 非破坏性恢复演练脚本，导入临时数据库、检查恢复表数量，并默认删除临时库。
 - 恢复演练 JSON 结构化证据，运维中心只读展示 `restoreDrillRecords`。
 - 运维告警汇总，运维中心只读展示 `alerts` 和 summary 告警数量。
+- 显式数据库升级入口 `upgrade-database`。启动脚本不升级已有库，也不重跑 `mysql-init`。
 
 尚未完成：
 
-- 生产级数据库迁移工具。
+- 历史迁移 V36 在 MySQL 8.4 上因未加引号的 `year_month` 不能执行。空库因此停在失败版本，本批没有改写该历史脚本。
 - 将 MySQL 备份脚本纳入任务计划/cron 和失败告警。
 - 备份恢复演练记录入库归档、系统内告警持久化及确认/关闭流程。外部通知不是一期必选项。
 - 公网证书自动申请。试运行配置使用容器内自签证书，手机完成证书信任后以 HTTPS 核验摄像头；正式域名证书仍需自行替换 `/etc/nginx/certs` 里的证书文件。

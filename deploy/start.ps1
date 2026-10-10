@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $deployRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $deployRoot
@@ -43,3 +43,5 @@ if ($imageTar) {
 
 docker compose --env-file .env -f docker-compose.yml up -d
 docker compose --env-file .env -f docker-compose.yml ps
+Write-Host "Existing databases are not upgraded by this startup. Back up first, then run upgrade-database.ps1."
+Write-Host "已有数据库不会随本次启动升级。请先备份，再执行 upgrade-database.ps1。"

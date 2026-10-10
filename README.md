@@ -83,3 +83,5 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-runtime-package.ps1 -Pac
 现场操作中的本次数量和本次重量必须成对确认，留空不会自动带走整批重量。质检提交绑定已识别单号；不拆母单按收货、在制、质检和出库阶段提供操作上下文。待检异常需填写真实缺陷和返工原因。定向验证见[开发进度](docs/14_开发进度跟踪.md)。
 
 工作台每次请求只装入一份单据、余额和台账快照，客户范围明确时按客户或母单缩小台账读取。库存页仍返回完整授权流水，接口字段不变。千单万条下的调用次数和耗时见[开发进度](docs/14_开发进度跟踪.md)。
+
+已有 MySQL 库不会随 `docker compose up` 升级。升级使用 `scripts/upgrade-database.ps1` 或运行包里的 `upgrade-database`，先备份，再按版本表和校验和执行。历史迁移最大版本仍是 V39。MySQL 8.4 上 V36 的 `year_month` 目前会失败并停住，历史脚本未改，见[开发进度](docs/14_开发进度跟踪.md)和[部署手册](docs/19_Docker一键部署与离线交付.md)。
