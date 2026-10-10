@@ -64,6 +64,8 @@ zhubao:
     pre-approval:
       repository: memory
       enforce-account-actions: false
+    account-action:
+      repository: memory
   operations:
     frontend-url: ${ZHUBAO_FRONTEND_URL:http://localhost:5173/}
     frontend-probe-url: ${ZHUBAO_FRONTEND_PROBE_URL:}

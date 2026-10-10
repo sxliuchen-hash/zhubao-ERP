@@ -10,6 +10,8 @@ import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.security.domain.AuthAccountActionRepository;
+import com.zhubao.erp.security.domain.AuthAccountMutation;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationRepository;
@@ -26,6 +28,8 @@ import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.domain.SessionRevocationResult;
+import com.zhubao.erp.security.infra.InMemoryAuthAccountActionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -63,6 +67,7 @@ public class AuthUserAccountManagementService {
     private final DocumentManagementService documentManagementService;
     private final boolean enforcePreApprovalForAccountActions;
     private final CustomerAuthorizationService customerAuthorizationService;
+    private final AuthAccountActionRepository actionRepository;
 
     public AuthUserAccountManagementService(
             AuthUserAccountRepository accountRepository,
@@ -233,6 +238,38 @@ public class AuthUserAccountManagementService {
                 documentManagementRepository,
                 documentManagementService,
                 enforcePreApprovalForAccountActions,
+                null,
+                null
+        );
+    }
+
+    public AuthUserAccountManagementService(
+            AuthUserAccountRepository accountRepository,
+            PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            AuthAuditRepository authAuditRepository,
+            ApprovalService approvalService,
+            AuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository,
+            AuthSessionService authSessionService,
+            DocumentManagementRepository documentManagementRepository,
+            DocumentManagementService documentManagementService,
+            boolean enforcePreApprovalForAccountActions,
+            CustomerAuthorizationService customerAuthorizationService
+    ) {
+        this(
+                accountRepository,
+                passwordHasher,
+                passwordPolicy,
+                passwordExpiryPolicy,
+                authAuditRepository,
+                approvalService,
+                preApprovalApplicationRepository,
+                authSessionService,
+                documentManagementRepository,
+                documentManagementService,
+                enforcePreApprovalForAccountActions,
+                customerAuthorizationService,
                 null
         );
     }
@@ -251,7 +288,8 @@ public class AuthUserAccountManagementService {
             DocumentManagementService documentManagementService,
             @Value("${zhubao.auth.pre-approval.enforce-account-actions:false}")
             boolean enforcePreApprovalForAccountActions,
-            CustomerAuthorizationService customerAuthorizationService
+            CustomerAuthorizationService customerAuthorizationService,
+            AuthAccountActionRepository actionRepository
     ) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
@@ -265,6 +303,13 @@ public class AuthUserAccountManagementService {
         this.documentManagementService = documentManagementService;
         this.enforcePreApprovalForAccountActions = enforcePreApprovalForAccountActions;
         this.customerAuthorizationService = customerAuthorizationService;
+        this.actionRepository = actionRepository != null
+                ? actionRepository
+                : new InMemoryAuthAccountActionRepository(
+                        accountRepository,
+                        authAuditRepository,
+                        preApprovalApplicationRepository
+                );
     }
 
     public List<AuthUserAccountSummary> accounts() {
@@ -516,7 +561,7 @@ public class AuthUserAccountManagementService {
         boolean passwordChangeRequired = passwordProvided ? !command.demoAccount() : existing.passwordChangeRequired();
         boolean temporaryPasswordConsumed = passwordProvided ? false : existing.temporaryPasswordConsumed();
 
-        AuthUserAccount saved = accountRepository.save(new AuthUserAccount(
+        AuthUserAccount proposed = new AuthUserAccount(
                 username,
                 passwordHash,
                 command.operator().trim(),
@@ -531,15 +576,19 @@ public class AuthUserAccountManagementService {
                 passwordChangeRequired,
                 temporaryPasswordConsumed,
                 allowedProcesses
-        ));
-        syncCustomerAuthorizations(saved, operatorContext);
+        );
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
         String auditedAction = action
                 + preApprovalApplicationSuffix(preApprovalApplication)
                 + passwordChangeRequiredSuffix(passwordProvided, passwordChangeRequired);
-        recordManagementAudit(username, operatorContext, auditedAction);
+        actionRepository.commit(AuthAccountMutation.save(
+                proposed,
+                newManagementAudit(username, operatorContext, auditedAction),
+                preApprovalApplication
+        ));
+        AuthUserAccount saved = requireAccount(username);
+        syncCustomerAuthorizations(saved, operatorContext);
         recordApprovalSummary(saved, operatorContext, auditedAction);
-        markPreApprovalExecuted(preApprovalApplication);
         return summary(saved, Instant.now());
     }
 
@@ -589,16 +638,19 @@ public class AuthUserAccountManagementService {
                 account.username()
         );
         validateStatusSnapshot(preApprovalApplication, enabled ? "ENABLE" : "DISABLE", enabled);
-        accountRepository.updateEnabled(account.username(), enabled);
-        AuthUserAccount updated = requireAccount(account.username());
-        int revokedSessions = revokeSessionsIfDisabled(updated, enabled, operatorContext);
         String action = (enabled ? "启用账号" : "停用账号")
                 + reasonSuffix(reason)
-                + preApprovalApplicationSuffix(preApprovalApplication)
-                + revokedSessionsSuffix(enabled, revokedSessions);
-        recordManagementAudit(account.username(), operatorContext, action);
-        recordApprovalSummary(updated, operatorContext, action);
-        markPreApprovalExecuted(preApprovalApplication);
+                + preApprovalApplicationSuffix(preApprovalApplication);
+        String transactionalReason = action + (enabled || authSessionService == null ? "" : "；会话吊销在提交后执行");
+        actionRepository.commit(AuthAccountMutation.setEnabled(
+                account.username(),
+                enabled,
+                newManagementAudit(account.username(), operatorContext, transactionalReason),
+                preApprovalApplication
+        ));
+        AuthUserAccount updated = requireAccount(account.username());
+        int revokedSessions = revokeAfterCommit(updated, enabled, operatorContext);
+        recordApprovalSummary(updated, operatorContext, action + revokedSessionsSuffix(enabled, revokedSessions));
         return summary(updated, Instant.now());
     }
 
@@ -619,13 +671,42 @@ public class AuthUserAccountManagementService {
                 account.username()
         );
         validateStatusSnapshot(preApprovalApplication, "UNLOCK", null);
-        accountRepository.unlock(account.username());
-        AuthUserAccount updated = requireAccount(account.username());
         String action = "管理员解锁账号" + reasonSuffix(reason) + preApprovalApplicationSuffix(preApprovalApplication);
-        recordManagementAudit(account.username(), operatorContext, action);
+        actionRepository.commit(AuthAccountMutation.unlock(
+                account.username(),
+                newManagementAudit(account.username(), operatorContext, action),
+                preApprovalApplication
+        ));
+        AuthUserAccount updated = requireAccount(account.username());
         recordApprovalSummary(updated, operatorContext, action);
-        markPreApprovalExecuted(preApprovalApplication);
         return summary(updated, Instant.now());
+    }
+
+    /**
+     * 账号已经停用且申请已消费后，只重试会话吊销。不会再次修改账号，也不会再次消费申请。
+     * 会话存放在进程内存，不能加入账号数据库事务；吊销失败时停用结果保持有效。
+     */
+    public SessionRevocationResult retrySessionRevocation(String username, OperatorContext operatorContext) {
+        AuthUserAccount account = requireAccount(username);
+        if (account.enabled()) {
+            throw new BusinessException("账号仍处于启用状态，不能单独重试会话吊销：" + account.username());
+        }
+        if (authSessionService == null) {
+            throw new BusinessException("会话服务未配置，无法重试会话吊销：" + account.username());
+        }
+        try {
+            int revoked = authSessionService.revokeSessionsForUsername(
+                    account.username(),
+                    "Retry session revocation by " + operatorContext.operator() + "; account=" + account.username()
+            );
+            recordFollowUpAudit(account.username(), operatorContext, "SUCCESS",
+                    "重试会话吊销完成；revokedSessions=" + revoked);
+            return new SessionRevocationResult(account.username(), revoked);
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new BusinessException("会话吊销仍然失败。请稍后再只重试会话吊销，不要再次执行该申请：" + account.username());
+        }
     }
 
     private AuthUserAccount requireAccount(String username) {
@@ -656,19 +737,61 @@ public class AuthUserAccountManagementService {
         );
     }
 
-    private void recordManagementAudit(String targetUsername, OperatorContext operatorContext, String reason) {
-        authAuditRepository.save(new AuthAuditEvent(
-                "AUTH-ACC-" + DISPLAY_TIME.format(Instant.now()).replace(" ", "-").replace(":", "") + "-"
+    private AuthAuditEvent newManagementAudit(String targetUsername, OperatorContext operatorContext, String reason) {
+        return newAudit("AUTH-ACC-", "ACCOUNT_MANAGEMENT", targetUsername, operatorContext, "SUCCESS", reason);
+    }
+
+    private void recordFollowUpAudit(String targetUsername, OperatorContext operatorContext, String result, String reason) {
+        authAuditRepository.save(newAudit("AUTH-REV-", "SESSION_REVOCATION", targetUsername, operatorContext, result, reason));
+    }
+
+    private AuthAuditEvent newAudit(
+            String prefix,
+            String eventType,
+            String targetUsername,
+            OperatorContext operatorContext,
+            String result,
+            String reason
+    ) {
+        return new AuthAuditEvent(
+                prefix + DISPLAY_TIME.format(Instant.now()).replace(" ", "-").replace(":", "") + "-"
                         + String.format("%04d", auditSequence.incrementAndGet()),
-                "ACCOUNT_MANAGEMENT",
+                eventType,
                 targetUsername,
                 operatorContext.operator(),
                 operatorContext.role().name(),
-                "SUCCESS",
+                result,
                 reason,
                 DISPLAY_TIME.format(Instant.now()),
                 tokenSuffix(operatorContext.sessionToken())
-        ));
+        );
+    }
+
+    /**
+     * 会话吊销发生在账号事务提交之后。失败时不回滚停用，避免申请重新变为可执行；调用方只重试吊销。
+     * 即使吊销失败，后续解析会话也会因账号已停用而拒绝，避免旧令牌继续访问。
+     */
+    private int revokeAfterCommit(AuthUserAccount account, boolean enabled, OperatorContext operatorContext) {
+        if (enabled || authSessionService == null) {
+            return 0;
+        }
+        try {
+            int revoked = authSessionService.revokeSessionsForUsername(
+                    account.username(),
+                    "Account disabled by " + operatorContext.operator() + "; account=" + account.username()
+            );
+            recordFollowUpAudit(account.username(), operatorContext, "SUCCESS",
+                    "停用账号后的会话吊销完成；revokedSessions=" + revoked);
+            return revoked;
+        } catch (RuntimeException ex) {
+            try {
+                recordFollowUpAudit(account.username(), operatorContext, "FAILURE",
+                        "账号已停用，会话吊销失败，请只重试会话吊销");
+            } catch (RuntimeException ignored) {
+                // 吊销结果审计失败时，已提交的停用和申请消费仍然保留
+            }
+            throw new BusinessException("账号已停用，会话吊销失败。请只重试会话吊销，不要再次执行该申请：" + account.username());
+        }
     }
 
     private void recordApprovalSummary(AuthUserAccount account, OperatorContext operatorContext, String action) {
@@ -1008,42 +1131,6 @@ public class AuthUserAccountManagementService {
         }
     }
 
-    private void markPreApprovalExecuted(AuthAccountPreApprovalApplication application) {
-        if (application == null) return;
-        requirePreApprovalApplicationRepository().save(new AuthAccountPreApprovalApplication(
-                application.applicationCode(),
-                application.draftCode(),
-                application.readinessCode(),
-                application.actionType(),
-                application.targetUsername(),
-                application.applicant(),
-                application.applicantRole(),
-                application.targetOperator(),
-                application.targetRole(),
-                application.targetDataScope(),
-                application.targetCustomerScope(),
-                application.targetEnabled(),
-                application.demoAccount(),
-                application.reason(),
-                application.requiredEvidence(),
-                application.providedEvidence(),
-                application.missingEvidence(),
-                application.missingCapabilities(),
-                application.approverRoles(),
-                application.blockingStatus(),
-                "EXECUTED",
-                false,
-                application.sourceSummary(),
-                "账号动作已执行，后续变更须重新申请",
-                application.riskLevel(),
-                application.tone(),
-                application.approvalTaskCode(),
-                application.submittedAt(),
-                application.targetAllowedProcesses(),
-                application.statusAction()
-        ));
-    }
-
     private void requireApprovedPreApprovalTask(AuthAccountPreApprovalApplication application) {
         String approvalTaskCode = blankToDefault(application.approvalTaskCode(), "");
         if (approvalTaskCode.isBlank()) {
@@ -1094,16 +1181,6 @@ public class AuthUserAccountManagementService {
 
     private String preApprovalApplicationSuffix(AuthAccountPreApprovalApplication application) {
         return application == null ? "" : "；前置申请单：" + application.applicationCode();
-    }
-
-    private int revokeSessionsIfDisabled(AuthUserAccount account, boolean enabled, OperatorContext operatorContext) {
-        if (enabled || authSessionService == null) {
-            return 0;
-        }
-        return authSessionService.revokeSessionsForUsername(
-                account.username(),
-                "Account disabled by " + operatorContext.operator() + "; account=" + account.username()
-        );
     }
 
     private String revokedSessionsSuffix(boolean enabled, int revokedSessions) {

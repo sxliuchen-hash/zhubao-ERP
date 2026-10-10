@@ -32,6 +32,16 @@ public class InMemoryAuthAuditRepository implements AuthAuditRepository {
         return sealed;
     }
 
+    /**
+     * 撤回尚未提交完成的管理审计。只供同一包内的账号动作补偿使用。
+     */
+    void discard(String eventId) {
+        if (eventId == null || eventId.isBlank()) {
+            return;
+        }
+        events.removeIf(event -> eventId.equals(event.eventId()));
+    }
+
     @Override
     public List<AuthAuditEvent> findRecent(int limit) {
         int safeLimit = Math.max(1, Math.min(limit, MAX_AUDIT_EVENTS));

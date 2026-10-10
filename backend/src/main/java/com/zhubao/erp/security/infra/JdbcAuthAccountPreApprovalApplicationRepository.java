@@ -92,6 +92,43 @@ public class JdbcAuthAccountPreApprovalApplicationRepository
         }
     }
 
+    /**
+     * 锁住仍可执行的申请行。不改变申请状态，未提交前其他连接看不到中间值；提交或回滚后锁释放。
+     * 返回 0 表示申请已执行或不再可执行。
+     */
+    int lockReady(Connection connection, String applicationCode) throws SQLException {
+        String sql = """
+                update auth_account_pre_approval_application
+                   set next_action = '账号动作执行中'
+                 where application_code = ?
+                   and application_status = 'READY_FOR_BLOCKING_APPROVAL'
+                   and ready_for_blocking_approval = true
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, applicationCode);
+            return statement.executeUpdate();
+        }
+    }
+
+    /**
+     * 在已锁住的申请行上标记为已执行。条件不满足时返回 0，调用方必须回滚。
+     */
+    int markExecuted(Connection connection, String applicationCode) throws SQLException {
+        String sql = """
+                update auth_account_pre_approval_application
+                   set application_status = 'EXECUTED',
+                       ready_for_blocking_approval = false,
+                       next_action = '账号动作已执行，后续变更须重新申请'
+                 where application_code = ?
+                   and application_status = 'READY_FOR_BLOCKING_APPROVAL'
+                   and ready_for_blocking_approval = true
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, applicationCode);
+            return statement.executeUpdate();
+        }
+    }
+
     private AuthAccountPreApprovalApplication update(AuthAccountPreApprovalApplication application) {
         String sql = """
                 update auth_account_pre_approval_application

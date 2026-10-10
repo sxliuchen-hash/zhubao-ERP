@@ -89,6 +89,34 @@ public class JdbcAuthAuditRepository implements AuthAuditRepository {
         return rows;
     }
 
+    /**
+     * 在调用方的事务连接上封存并插入审计。失败时由调用方回滚。
+     */
+    AuthAuditEvent insertOn(Connection connection, AuthAuditEvent event) throws SQLException {
+        String sql = """
+                insert into auth_audit_event (
+                    event_id, event_type, username, operator, role, result, reason, occurred_at,
+                    session_token_suffix, previous_event_hash, event_hash
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        AuthAuditEvent sealed = AuthAuditIntegrity.seal(event, latestEventHash(connection));
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, sealed.eventId());
+            statement.setString(2, sealed.eventType());
+            statement.setString(3, sealed.username());
+            statement.setString(4, sealed.operator());
+            statement.setString(5, sealed.role());
+            statement.setString(6, sealed.result());
+            statement.setString(7, sealed.reason());
+            statement.setString(8, sealed.occurredAt());
+            statement.setString(9, sealed.sessionTokenSuffix());
+            statement.setString(10, sealed.previousEventHash());
+            statement.setString(11, sealed.eventHash());
+            statement.executeUpdate();
+        }
+        return sealed;
+    }
+
     private String latestEventHash(Connection connection) throws SQLException {
         String sql = "select event_hash from auth_audit_event order by id desc limit 1";
         try (PreparedStatement statement = connection.prepareStatement(sql);

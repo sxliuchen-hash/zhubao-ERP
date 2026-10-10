@@ -56,7 +56,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
     private final Pattern videoTaskOperationPath = Pattern.compile("^/api/video-clip-tasks/[^/]+/(retry|manual-upload)$");
     private final Pattern registerImportReviewPath = Pattern.compile("^/api/register-import/batches/[^/]+/rows/\\d+/corrections$");
     private final Pattern registerImportPostingPath = Pattern.compile("^/api/register-import/batches/[^/]+/posting-commands$");
-    private final Pattern authAccountStatusPath = Pattern.compile("^/api/auth/accounts/[^/]+/(status|unlock)$");
+    private final Pattern authAccountStatusPath = Pattern.compile("^/api/auth/accounts/[^/]+/(status|unlock|session-revocations)$");
     private final Pattern gatewayDeviceManagePath = Pattern.compile("^/api/hardware/gateway/devices/[^/]+/(status|rotate-key)$");
 
     public PermissionGuardInterceptor(

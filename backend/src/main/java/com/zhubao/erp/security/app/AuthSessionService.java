@@ -437,7 +437,29 @@ public class AuthSessionService {
             );
             throw new PermissionDeniedException("登录会话已过期");
         }
+        rejectDisabledAccount(entry);
         return Optional.of(entry);
+    }
+
+    /**
+     * 停用已提交但会话表吊销失败时，旧令牌仍可能留在内存。解析时以账号启用状态为准并清掉该令牌。
+     */
+    private void rejectDisabledAccount(SessionEntry entry) {
+        Optional<AuthUserAccount> current = userAccountRepository.findByUsername(entry.user().username());
+        if (current.isPresent() && current.get().enabled()) {
+            return;
+        }
+        sessions.remove(entry.token(), entry);
+        recordAudit(
+                "SESSION_RESOLVE",
+                entry.user().username(),
+                entry.user().operator(),
+                entry.user().role().name(),
+                "DENIED",
+                "账号已停用，拒绝继续使用会话",
+                entry.token()
+        );
+        throw new PermissionDeniedException("登录账号已停用");
     }
 
     private AuthSession toSession(SessionEntry entry) {

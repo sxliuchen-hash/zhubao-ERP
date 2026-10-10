@@ -38,4 +38,45 @@ public record AuthAccountPreApprovalApplication(
         this(applicationCode, draftCode, readinessCode, actionType, targetUsername, applicant, applicantRole, targetOperator, targetRole, targetDataScope, targetCustomerScope, targetEnabled, demoAccount, reason, requiredEvidence, providedEvidence, missingEvidence, missingCapabilities, approverRoles, blockingStatus, applicationStatus, readyForBlockingApproval, sourceSummary, nextAction, riskLevel, tone, approvalTaskCode, submittedAt, List.of(), "");
     }
 
+    /**
+     * 账号动作提交成功后的申请单。只在同一事务内替换原可执行状态。
+     */
+    public AuthAccountPreApprovalApplication executed() {
+        return new AuthAccountPreApprovalApplication(
+                applicationCode,
+                draftCode,
+                readinessCode,
+                actionType,
+                targetUsername,
+                applicant,
+                applicantRole,
+                targetOperator,
+                targetRole,
+                targetDataScope,
+                targetCustomerScope,
+                targetEnabled,
+                demoAccount,
+                reason,
+                requiredEvidence,
+                providedEvidence,
+                missingEvidence,
+                missingCapabilities,
+                approverRoles,
+                blockingStatus,
+                "EXECUTED",
+                false,
+                sourceSummary,
+                "账号动作已执行，后续变更须重新申请",
+                riskLevel,
+                tone,
+                approvalTaskCode,
+                submittedAt,
+                targetAllowedProcesses,
+                statusAction
+        );
+    }
+
+    public boolean executable() {
+        return "READY_FOR_BLOCKING_APPROVAL".equals(applicationStatus) && readyForBlockingApproval;
+    }
 }

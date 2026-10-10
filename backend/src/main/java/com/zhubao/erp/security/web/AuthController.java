@@ -22,6 +22,7 @@ import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
+import com.zhubao.erp.security.domain.SessionRevocationResult;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -198,6 +199,14 @@ public class AuthController {
                 command.preApprovalApplicationCode(),
                 manageAccountOperator(request)
         ));
+    }
+
+    @PostMapping("/accounts/{username}/session-revocations")
+    public ApiResponse<SessionRevocationResult> retrySessionRevocation(
+            @PathVariable String username,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(accountManagementService.retrySessionRevocation(username, manageAccountOperator(request)));
     }
 
     private OperatorContext manageAccountOperator(HttpServletRequest request) {

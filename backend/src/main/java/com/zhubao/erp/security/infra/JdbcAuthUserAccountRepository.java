@@ -317,4 +317,136 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
+
+    /**
+     * 在调用方的事务连接上写入账号。影响行数为 0 时由调用方回滚。
+     */
+    void apply(Connection connection, com.zhubao.erp.security.domain.AuthAccountMutation mutation) throws SQLException {
+        switch (mutation.kind()) {
+            case SAVE -> write(connection, mutation.account());
+            case SET_ENABLED -> {
+                if (updateEnabledOn(connection, mutation.username(), Boolean.TRUE.equals(mutation.enabled())) != 1) {
+                    throw new com.zhubao.erp.common.error.BusinessException("账号不存在：" + mutation.username());
+                }
+            }
+            case UNLOCK -> {
+                if (unlockOn(connection, mutation.username()) != 1) {
+                    throw new com.zhubao.erp.common.error.BusinessException("账号不存在：" + mutation.username());
+                }
+            }
+        }
+    }
+
+    private void write(Connection connection, AuthUserAccount account) throws SQLException {
+        if (account == null) {
+            throw new com.zhubao.erp.common.error.BusinessException("保存账号缺少账号资料");
+        }
+        if (exists(connection, account.username())) {
+            updateOn(connection, account);
+            return;
+        }
+        insertOn(connection, account);
+    }
+
+    private boolean exists(Connection connection, String username) throws SQLException {
+        String sql = "select username from auth_user_account where username = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, normalize(username));
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private void insertOn(Connection connection, AuthUserAccount account) throws SQLException {
+        String sql = """
+                insert into auth_user_account (
+                    username, password_hash, operator, role_code, data_scope, enabled, demo_account,
+                    password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
+                    temporary_password_consumed, allowed_processes
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, normalize(account.username()));
+            statement.setString(2, account.passwordHash());
+            statement.setString(3, account.operator());
+            statement.setString(4, account.role().name());
+            statement.setString(5, account.dataScope().name());
+            statement.setBoolean(6, account.enabled());
+            statement.setBoolean(7, account.demoAccount());
+            setInstant(statement, 8, account.passwordChangedAt());
+            statement.setInt(9, account.failedLoginCount());
+            setInstant(statement, 10, account.lockedUntil());
+            statement.setString(11, serializeCustomerScope(account.customerScope()));
+            statement.setBoolean(12, account.passwordChangeRequired());
+            statement.setBoolean(13, account.temporaryPasswordConsumed());
+            statement.setString(14, WorkshopProcesses.join(account.allowedProcesses()));
+            statement.executeUpdate();
+        }
+    }
+
+    private void updateOn(Connection connection, AuthUserAccount account) throws SQLException {
+        String sql = """
+                update auth_user_account
+                   set password_hash = ?,
+                       operator = ?,
+                       role_code = ?,
+                       data_scope = ?,
+                       enabled = ?,
+                       demo_account = ?,
+                       password_changed_at = ?,
+                       failed_login_count = ?,
+                       locked_until = ?,
+                       customer_scope = ?,
+                       password_change_required = ?,
+                       temporary_password_consumed = ?,
+                       allowed_processes = ?
+                 where username = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, account.passwordHash());
+            statement.setString(2, account.operator());
+            statement.setString(3, account.role().name());
+            statement.setString(4, account.dataScope().name());
+            statement.setBoolean(5, account.enabled());
+            statement.setBoolean(6, account.demoAccount());
+            setInstant(statement, 7, account.passwordChangedAt());
+            statement.setInt(8, account.failedLoginCount());
+            setInstant(statement, 9, account.lockedUntil());
+            statement.setString(10, serializeCustomerScope(account.customerScope()));
+            statement.setBoolean(11, account.passwordChangeRequired());
+            statement.setBoolean(12, account.temporaryPasswordConsumed());
+            statement.setString(13, WorkshopProcesses.join(account.allowedProcesses()));
+            statement.setString(14, normalize(account.username()));
+            if (statement.executeUpdate() != 1) {
+                throw new com.zhubao.erp.common.error.BusinessException("账号不存在：" + account.username());
+            }
+        }
+    }
+
+    private int updateEnabledOn(Connection connection, String username, boolean enabled) throws SQLException {
+        String sql = """
+                update auth_user_account
+                   set enabled = ?
+                 where username = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBoolean(1, enabled);
+            statement.setString(2, normalize(username));
+            return statement.executeUpdate();
+        }
+    }
+
+    private int unlockOn(Connection connection, String username) throws SQLException {
+        String sql = """
+                update auth_user_account
+                   set failed_login_count = 0,
+                       locked_until = null
+                 where username = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, normalize(username));
+            return statement.executeUpdate();
+        }
+    }
 }

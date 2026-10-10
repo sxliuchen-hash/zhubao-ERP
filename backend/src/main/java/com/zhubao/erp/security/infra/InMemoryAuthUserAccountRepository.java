@@ -43,6 +43,13 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
         return account;
     }
 
+    /**
+     * 撤销尚未提交完成的新账号。只供同一包内的账号动作补偿使用。
+     */
+    void delete(String username) {
+        accounts.remove(normalize(username));
+    }
+
     @Override
     public List<AuthUserAccount> findAll() {
         return accounts.values().stream()
