@@ -1,0 +1,193 @@
+/* 登记导入按操作、规则、批次分层；宽表格只在自身容器滚动。 */
+.sample-control-workbench {
+  container: register-workbench / inline-size;
+}
+
+.register-workflow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 16px 20px;
+  list-style: none;
+  background: var(--content);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+}
+
+.register-workflow li { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.register-workflow li > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--action-soft);
+  color: var(--action-dark);
+  font-weight: 700;
+}
+.register-workflow strong, .register-workflow small { display: block; }
+.register-workflow small { margin-top: 2px; color: var(--muted); }
+
+.sample-control-workbench .register-import-grid {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+.sample-control-workbench :is(.register-import-panel, .register-detail-panel) {
+  min-width: 0;
+  padding: 20px;
+}
+.sample-control-workbench :is(.register-import-panel, .register-detail-panel, .register-review-panel) > * + * {
+  margin-top: 20px;
+}
+.sample-control-workbench .section-heading { align-items: start; margin-bottom: 0; gap: 12px; }
+.sample-control-workbench .section-heading p { margin-top: 6px; color: var(--muted); font-size: 13px; }
+.sample-control-workbench .register-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sample-control-workbench :is(.register-kpi-strip, .register-review-kpis, .register-preview-summary, .register-posting-kpis) article {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--soft);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sample-control-workbench :is(.register-kpi-strip, .register-review-kpis, .register-preview-summary, .register-posting-kpis) article > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.sample-control-workbench :is(.register-kpi-strip, .register-review-kpis, .register-preview-summary, .register-posting-kpis) article > strong {
+  font-size: 22px;
+  line-height: 1.3;
+}
+.sample-control-workbench :is(.register-kpi-strip, .register-review-kpis, .register-preview-summary, .register-posting-kpis) small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.register-preview-console {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.register-preview-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, .55fr);
+  align-items: end;
+  gap: 14px;
+}
+.sample-control-workbench label { display: grid; gap: 6px; min-width: 0; }
+.sample-control-workbench :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
+.register-preview-controls label:has(input[type="file"]) { grid-column: 1 / -1; }
+.register-preview-controls button { justify-self: start; }
+.register-preview-current { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--muted); font-size: 12px; }
+.register-preview-current strong { font-weight: 400; overflow-wrap: anywhere; }
+.register-preview-current small { flex-basis: 100%; }
+
+.register-template-reference {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.register-template-reference summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--soft);
+}
+.register-template-reference summary span { margin-left: 6px; font-weight: 400; font-size: 12px; color: var(--muted); }
+.register-template-reference summary:focus-visible { outline: 2px solid var(--action); outline-offset: -3px; }
+.register-template-reference .erp-table-wrap { border: 0; border-radius: 0; }
+.register-template-table { min-width: 1000px; }
+.sample-control-workbench th { white-space: nowrap; }
+.sample-control-workbench td { font-size: 13px; line-height: 1.6; }
+.register-template-table td { min-width: 100px; }
+.register-template-table td:first-child { min-width: 180px; }
+.register-template-table td:nth-child(3) { min-width: 180px; max-width: 240px; }
+.register-template-table td:nth-child(4) { white-space: nowrap; }
+.register-template-table td:nth-child(5) { min-width: 180px; }
+.sample-control-workbench .cell-stack { gap: 4px; }
+.register-detail-panel h2 { font-size: 16px; }
+.sample-control-workbench .detail-grid { grid-template-columns: 64px minmax(0, 1fr); gap: 12px; font-size: 13px; }
+.sample-control-workbench .detail-grid dd { overflow-wrap: anywhere; }
+.register-field-list, .register-rule-list { display: grid; gap: 12px; padding: 14px; }
+.register-field-list article, .register-rule-list article { display: grid; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
+.register-field-list article + article, .register-rule-list article + article { border-top: 1px solid var(--border); padding-top: 12px; }
+.register-field-list span { color: var(--action-dark); font-size: 12px; }
+.register-field-list small, .register-rule-list small { color: var(--muted); font-size: 12px; }
+.register-rule-list b { color: var(--tone, var(--ink)); font-size: 12px; }
+
+.register-review-kpis, .register-preview-summary, .register-posting-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+}
+.sample-control-workbench .register-preview-summary strong,
+.sample-control-workbench .register-posting-kpis strong { font-size: 16px; }
+.register-review-grid { display: grid; gap: 20px; min-width: 0; }
+.register-review-batch-table { min-width: 900px; }
+.register-review-batch-table tbody tr { cursor: pointer; }
+.register-review-batch-table tbody tr:hover { background: var(--soft); }
+.register-review-detail, .register-posting-plan-card, .register-preview-result {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.register-review-detail { padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.register-review-detail-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; overflow-wrap: anywhere; }
+.register-review-detail-head > span { flex-basis: 100%; font-size: 13px; color: var(--muted); }
+.register-review-actions, .register-preview-actions, .register-posting-actions, .register-posting-plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.register-posting-plan-head { justify-content: space-between; }
+.register-preview-blockers, .register-posting-missing-list,
+.register-posting-result, .register-business-document-result,
+.register-machine-output-result, .register-batch-row-list { display: grid; gap: 12px; min-width: 0; }
+.register-preview-blockers article, .register-posting-missing-list article,
+.register-posting-result > *, .register-business-document-result > *,
+.register-machine-output-result > *, .register-batch-row-list article {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.register-correction-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.register-correction-panel > div { grid-column: 1 / -1; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.register-correction-panel button { justify-self: start; }
+.register-field-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.register-field-chips small { display: grid; gap: 3px; padding: 6px 8px; background: var(--soft); border: 1px solid var(--border); border-radius: 6px; overflow-wrap: anywhere; }
+.register-field-chips b { color: var(--muted); font-weight: 400; }
+.register-preview-table, .register-posting-draft-table { min-width: 650px; }
+.register-preview-confirmation { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
+.register-preview-confirmation > div { display: grid; gap: 6px; overflow-wrap: anywhere; }
+.register-preview-error, .register-correction-error { padding: 12px; background: #fff1f0; border-radius: 6px; color: var(--danger); overflow-wrap: anywhere; }
+.register-correction-ok { padding: 12px; background: #eefbf4; border-radius: 6px; color: var(--success); }
+
+/* 按可用内容宽度折叠，侧栏和浏览器缩放不会把操作区挤成窄列。 */
+@container register-workbench (max-width: 1050px) {
+  .sample-control-workbench .register-import-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@container register-workbench (max-width: 560px) {
+  .register-workflow { gap: 12px; padding: 14px; grid-template-columns: minmax(0, 1fr); }
+  .sample-control-workbench :is(.register-import-panel, .register-detail-panel) { padding: 16px; }
+  .sample-control-workbench .register-kpi-strip { grid-template-columns: minmax(0, 1fr); }
+  .sample-control-workbench .register-kpi-strip article { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .sample-control-workbench .register-kpi-strip small { grid-column: 1 / -1; }
+  .register-preview-controls, .register-correction-panel { grid-template-columns: minmax(0, 1fr); }
+  .register-preview-controls label:has(input[type="file"]) { grid-column: auto; }
+  .register-preview-controls button { width: 100%; }
+}

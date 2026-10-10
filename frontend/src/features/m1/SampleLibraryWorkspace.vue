@@ -143,8 +143,7 @@ async function submitRegisterPreview() {
   }
 }
 
-const activeRegisterTemplate = registerImportTemplates[0];
-const selectedRegisterTemplateCode = ref(activeRegisterTemplate.code);
+const selectedRegisterTemplateCode = ref(registerImportTemplates[0].code);
 const registerBusinessDate = ref(new Date().toISOString().slice(0, 10));
 const selectedRegisterFile = ref<File | null>(null);
 const registerPreview = ref<RegisterImportPreview | null>(null);
@@ -181,8 +180,9 @@ const registerBusinessDocumentLoading = ref(false);
 const registerBusinessDocumentError = ref('');
 
 const selectedRegisterTemplate = computed(() =>
-  registerImportTemplates.find((template) => template.code === selectedRegisterTemplateCode.value) ?? activeRegisterTemplate,
+  registerImportTemplates.find((template) => template.code === selectedRegisterTemplateCode.value) ?? registerImportTemplates[0],
 );
+const activeRegisterTemplate = selectedRegisterTemplate;
 
 const registerPreviewRows = computed(() => registerPreview.value?.rows.slice(0, 6) ?? []);
 const registerPreviewIssues = computed(() => registerPreviewIssueCount(registerPreview.value));
@@ -574,12 +574,11 @@ const registerTemplateRows = computed(() =>
 
 <template>
   <div class="sample-control-workbench page-stack">
-    <section class="sample-command-surface" aria-label="登记导入">
-      <div class="sample-command-copy">
-        <h2>登记导入</h2>
-        <p>上传入库、出货、抛光、雕刻登记表。先预检，确认无误后再写入库存台账。</p>
-      </div>
-    </section>
+    <ol class="register-workflow" aria-label="登记导入流程">
+      <li><span>1</span><div><strong>上传预检</strong><small>选择模板与 Excel 文件</small></div></li>
+      <li><span>2</span><div><strong>复核确认</strong><small>处理阻断与警告信息</small></div></li>
+      <li><span>3</span><div><strong>执行入账</strong><small>确认后生成业务单据</small></div></li>
+    </ol>
 
     <section class="sample-ops-grid register-import-grid" aria-label="现场登记表导入准备度">
       <div class="sample-table-panel register-import-panel">
@@ -598,17 +597,52 @@ const registerTemplateRows = computed(() =>
             <small>{{ registerImportSummary.requiredFields }} 个必填</small>
           </article>
           <article>
-            <span>命令对齐</span>
+            <span>可用模板</span>
             <strong>{{ registerImportSummary.commandReadyTemplates }}</strong>
             <small>入库/报工/出货</small>
           </article>
           <article>
             <span>解析状态</span>
             <strong>上传预览</strong>
-            <small>{{ registerImportSummary.parserStatus }}</small>
+            <small>预检 → 批次确认 → 显式入账</small>
           </article>
         </div>
-        <div class="erp-table-wrap sample-matrix-wrap">
+        <form class="register-preview-console" aria-label="登记表上传预检" @submit.prevent="submitRegisterPreview">
+          <div class="register-preview-title">
+            <span class="eyebrow">UPLOAD PREVIEW</span>
+            <strong>登记表上传预检</strong>
+          </div>
+          <div class="register-preview-controls">
+            <label>
+              <span>登记模板</span>
+              <select v-model="selectedRegisterTemplateCode">
+                <option v-for="template in registerImportTemplates" :key="template.code" :value="template.code">
+                  {{ template.name }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>业务日期</span>
+              <input v-model="registerBusinessDate" type="date">
+            </label>
+            <label>
+              <span>Excel 文件</span>
+              <input type="file" accept=".xlsx" @change="onRegisterFileChange">
+            </label>
+            <button class="primary-button" type="submit" :disabled="registerPreviewLoading">
+              {{ registerPreviewLoading ? '预检中' : '上传预检' }}
+            </button>
+          </div>
+          <div class="register-preview-current">
+            <span>{{ selectedRegisterTemplate.sourceFile }}</span>
+            <strong>{{ selectedRegisterTemplate.businessFlow }}</strong>
+            <small>{{ selectedRegisterFile?.name ?? '未选择文件' }}</small>
+          </div>
+          <p v-if="registerPreviewError" class="register-preview-error">{{ registerPreviewError }}</p>
+        </form>
+        <details class="register-template-reference">
+          <summary>查看全部模板与字段概览 <span>{{ registerImportSummary.templates }} 类模板</span></summary>
+        <div class="erp-table-wrap sample-matrix-wrap" tabindex="0" aria-label="登记模板概览，可横向滚动">
           <table class="erp-table register-template-table">
             <thead>
               <tr>
@@ -644,39 +678,7 @@ const registerTemplateRows = computed(() =>
             </tbody>
           </table>
         </div>
-        <form class="register-preview-console" aria-label="登记表上传预检" @submit.prevent="submitRegisterPreview">
-          <div class="register-preview-title">
-            <span class="eyebrow">UPLOAD PREVIEW</span>
-            <strong>登记表上传预检</strong>
-          </div>
-          <div class="register-preview-controls">
-            <label>
-              <span>登记模板</span>
-              <select v-model="selectedRegisterTemplateCode">
-                <option v-for="template in registerImportTemplates" :key="template.code" :value="template.code">
-                  {{ template.code }} / {{ template.name }}
-                </option>
-              </select>
-            </label>
-            <label>
-              <span>业务日期</span>
-              <input v-model="registerBusinessDate" type="date">
-            </label>
-            <label>
-              <span>Excel 文件</span>
-              <input type="file" accept=".xlsx" @change="onRegisterFileChange">
-            </label>
-            <button class="primary-button" type="submit" :disabled="registerPreviewLoading">
-              {{ registerPreviewLoading ? '预检中' : '上传预检' }}
-            </button>
-          </div>
-          <div class="register-preview-current">
-            <span>{{ selectedRegisterTemplate.sourceFile }}</span>
-            <strong>{{ selectedRegisterTemplate.targetCommand }}</strong>
-            <small>{{ selectedRegisterFile?.name ?? '未选择文件' }}</small>
-          </div>
-          <p v-if="registerPreviewError" class="register-preview-error">{{ registerPreviewError }}</p>
-        </form>
+        </details>
         <section v-if="registerPreview" class="register-preview-result" aria-label="登记表预检结果">
           <div class="register-preview-summary">
             <article>
@@ -784,23 +786,28 @@ const registerTemplateRows = computed(() =>
             <span class="eyebrow">ACTIVE TEMPLATE</span>
             <h2>{{ activeRegisterTemplate.name }}</h2>
           </div>
-          <StatusBadge label="命令已对齐" tone="green" />
+          <StatusBadge :label="parserStatusLabel(activeRegisterTemplate.parserStatus)" tone="green" />
         </div>
         <dl class="detail-grid">
-          <dt>目标命令</dt>
-          <dd>{{ activeRegisterTemplate.targetCommand }}</dd>
-          <dt>台账类型</dt>
-          <dd>{{ activeRegisterTemplate.targetLedgerType }}</dd>
+          <dt>业务流程</dt>
+          <dd>{{ activeRegisterTemplate.businessFlow }}</dd>
+          <dt>来源文件</dt>
+          <dd>{{ activeRegisterTemplate.sourceFile }}</dd>
           <dt>下一动作</dt>
-          <dd>{{ activeRegisterTemplate.nextAction }}</dd>
+          <dd>确认批次后，复核客户、物料等必要信息，再执行入账。</dd>
         </dl>
+        <details class="register-template-reference">
+          <summary>字段映射 <span>{{ activeRegisterTemplate.fields.length }} 项字段</span></summary>
         <div class="register-field-list" aria-label="字段映射">
-          <article v-for="field in activeRegisterTemplate.fields.slice(0, 7)" :key="field.sourceColumn">
+          <article v-for="field in activeRegisterTemplate.fields" :key="field.sourceColumn">
             <strong>{{ field.sourceColumn }}</strong>
             <span>{{ field.targetField }}</span>
             <small>{{ field.normalizeRule }}</small>
           </article>
         </div>
+        </details>
+        <details class="register-template-reference" open>
+          <summary>导入校验规则 <span>{{ activeRegisterTemplate.validationRules.length }} 条规则</span></summary>
         <div class="register-rule-list" aria-label="导入校验规则">
           <article
             v-for="rule in activeRegisterTemplate.validationRules"
@@ -812,6 +819,7 @@ const registerTemplateRows = computed(() =>
             <small>{{ rule.fallback }}</small>
           </article>
         </div>
+        </details>
       </aside>
     </section>
 

@@ -28,7 +28,9 @@ function loadPlaywright() {
 const targetUrl = process.argv[2] ?? 'http://localhost:5173/';
 const outputDir = path.resolve(process.env.ZHUBAO_UI_OUTPUT_DIR ?? 'output/playwright');
 const viewports = [
+  { name: 'wide', width: 1536, height: 960 },
   { name: 'desktop', width: 1280, height: 900 },
+  { name: 'compact', width: 1024, height: 768 },
   { name: 'mobile', width: 390, height: 844 },
 ];
 const scenarios = [
@@ -38,6 +40,8 @@ const scenarios = [
   { key: 'quality', marker: '.quality-desk', table: '.quality-dispatch-table' },
   { key: 'inventory', marker: '.inventory-trace-desk', table: '.inventory-dispatch-table' },
   { key: 'finance', marker: '.finance-workspace' },
+  { key: 'approvals', marker: '.approval-workspace' },
+  { key: 'sample', marker: '.sample-control-workbench' },
   { key: 'configuration', marker: '[aria-label="用户管理"]' },
   { key: 'documents', marker: '.document-page' },
   { key: 'hardware', marker: '.hardware-desk' },
@@ -54,6 +58,9 @@ function redact(value) {
 
 async function settle(page) {
   await page.waitForLoadState('networkidle', { timeout: 15_000 });
+  // 菜单切换不会重新导航，旧的 networkidle 状态不能证明新页面已加载完成。
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('button:disabled'))
+    .some((button) => /^(刷新中|读取中|加载中)/.test(button.textContent.trim())), null, { timeout: 20_000 });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
@@ -113,6 +120,9 @@ async function inspectLayout(page, marker) {
       emptyHints: Array.from(content?.querySelectorAll('.empty-hint') ?? []).map(text),
       visibleErrors: Array.from(content?.querySelectorAll('.operation-feedback.danger, [role="alert"]') ?? []).map(text),
       overflow: document.documentElement.scrollWidth > width + 1,
+      compressedHeaders: Array.from(content?.querySelectorAll('th') ?? [])
+        .filter((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().width < 48)
+        .map(text),
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: width,
       overflowElements: Array.from(content?.querySelectorAll('*') ?? [])
@@ -173,6 +183,11 @@ async function main() {
           await openTab(page, scenario.key);
           await page.waitForSelector(scenario.marker, { timeout: 15_000 });
           await settle(page);
+          if (scenario.key === 'sample') {
+            // 展开模板概览，避免仅验证折叠状态而漏掉宽表格回归。
+            await page.locator('.register-import-panel > details').evaluate((el) => { el.open = true; });
+            await page.locator('.register-detail-panel > details').first().evaluate((el) => { el.open = true; });
+          }
           let selection = { status: '无单据或无需选择' };
           if (scenario.table) {
             const rows = page.locator(`${scenario.table} tbody tr`)
@@ -189,6 +204,7 @@ async function main() {
           result.pages.push({ viewport: viewport.name, key: scenario.key, screenshot, selection, ...layout });
           if (!layout.title) result.failures.push(`${activeScenario} 缺少页面标题`);
           if (layout.overflow) result.failures.push(`${activeScenario} 横向溢出：${layout.scrollWidth} > ${layout.clientWidth}`);
+          if (layout.compressedHeaders.length) result.failures.push(`${activeScenario} 表头过窄：${layout.compressedHeaders.join('、')}`);
         } catch (error) {
           result.failures.push(`${activeScenario}：${redact(error.message)}`);
         }

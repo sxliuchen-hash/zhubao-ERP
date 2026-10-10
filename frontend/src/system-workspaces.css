@@ -1,0 +1,632 @@
+/* 协同与系统工作区共用布局，断点以内容区可用宽度为准。 */
+.system-workspace-shell .ops-workspace {
+  container: system-workspace / inline-size;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page) {
+  gap: var(--space-4);
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page, .security-context-panel) :is(article, section, aside, form, div, dd) {
+  min-width: 0;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page, .security-context-panel) :is(p, dd, small, em, .cell-stack, .operation-feedback) {
+  overflow-wrap: anywhere;
+}
+
+.system-workspace-shell :is(.module-command-main, .operations-command-main, .security-context-main, .security-context-side) {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+}
+
+.system-workspace-shell :is(.approval-command-surface, .hardware-command-surface, .operations-command-surface) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+.system-workspace-shell :is(.module-command-title, .operations-title-row, .console-title-line, .restore-drill-title, .detail-title) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.system-workspace-shell :is(.module-command-title, .operations-title-row) h2 {
+  font-size: 20px;
+}
+
+.system-workspace-shell :is(.module-date-card, .module-priority-panel, .operations-focus-panel) {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.system-workspace-shell .module-date-card {
+  gap: var(--space-1);
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.system-workspace-shell :is(.module-priority-panel, .operations-focus-panel) {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--soft);
+}
+
+.system-workspace-shell :is(.module-priority-panel > div, .module-priority-panel article > div) {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.system-workspace-shell .module-priority-panel article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.system-workspace-shell :is(.module-priority-panel, .operations-focus-panel) :is(span:not(.status-badge), small, p) {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk) .module-flow-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk) .module-flow-strip article {
+  display: flex;
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-3);
+  background: var(--soft);
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk) .module-flow-strip article > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.system-workspace-shell :is(.approval-work-grid, .hardware-work-grid) {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk) :is(.module-master-panel, .module-side-panel > section, .evidence-slot-panel, .module-rule-panel) {
+  padding: var(--space-4);
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page) :is(.section-heading, .module-toolbar, .panel-title-row) {
+  margin-bottom: var(--space-3);
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page) .section-heading p {
+  margin-top: var(--space-1);
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page) :is(.module-stat-grid, .hero-kpis, .operations-hero-grid, .runtime-metric-grid) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page) :is(.module-stat-grid, .hero-kpis, .operations-hero-grid, .runtime-metric-grid) article {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--soft);
+}
+
+.system-workspace-shell :is(.operations-hero-grid, .runtime-metric-grid) strong {
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.system-workspace-shell :is(.module-stat-grid, .hero-kpis, .operations-hero-grid, .runtime-metric-grid) strong small {
+  margin-left: var(--space-1);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.system-workspace-shell :is(.operations-hero-grid, .runtime-metric-grid) :is(span, em) {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+/* 列保持可读宽度，窄容器在表格内部滚动，避免中文被挤成竖排。 */
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page, .security-context-panel) :is(.module-table-wrap, .document-table-wrap, .ops-table-wrap) {
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page, .security-context-panel) table {
+  min-width: 720px;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page, .security-context-panel) th {
+  white-space: nowrap;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page, .security-context-panel) td {
+  min-width: 96px;
+  line-height: 1.6;
+}
+
+.system-workspace-shell .attachment-table {
+  min-width: 1000px;
+}
+
+.system-workspace-shell .attachment-table td:nth-child(4) {
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page) .detail-grid,
+.system-workspace-shell :is(.document-case-grid, .operations-focus-grid, .backup-status-list dl, .ops-alert-list dl, .restore-drill-records dl) {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.system-workspace-shell :is(.document-case-grid, .operations-focus-grid, .backup-status-list dl, .ops-alert-list dl, .restore-drill-records dl) dt {
+  color: var(--ink-muted);
+}
+
+.system-workspace-shell :is(.document-case-grid, .operations-focus-grid, .backup-status-list dl, .ops-alert-list dl, .restore-drill-records dl) dd {
+  margin: 0;
+}
+
+.system-workspace-shell .approval-comment-field {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.system-workspace-shell :is(.approval-workspace, .hardware-desk) .rule-stack article {
+  display: grid;
+  gap: var(--space-2);
+  line-height: 1.6;
+}
+
+.system-workspace-shell :is(.document-master, .document-detail, .document-active-case, .document-gap-stack, .operations-panel) {
+  padding: var(--space-4);
+}
+
+.system-workspace-shell .document-hero {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.system-workspace-shell .document-layout {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+}
+
+.system-workspace-shell :is(.document-upload-console .button-row label, .document-gap-stack article, .document-audit-list article) {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.system-workspace-shell .document-upload-console .button-row {
+  width: 100%;
+}
+
+.system-workspace-shell .document-upload-console .button-row label {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.system-workspace-shell .document-upload-console :is(input, select) {
+  width: 100%;
+  min-width: 0;
+}
+
+.system-workspace-shell .document-upload-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+.system-workspace-shell .document-linked-list article {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  align-items: start;
+}
+
+.system-workspace-shell :is(.document-gap-stack, .document-audit-list) :is(span, small),
+.system-workspace-shell .hero-copy p {
+  color: var(--ink-muted);
+}
+
+/* 设备注册、读数和消费表单共用字段节奏。 */
+.system-workspace-shell .hardware-desk .section-block {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  padding: var(--space-4);
+}
+
+.system-workspace-shell .hardware-desk :is(.gateway-form, .posting-form) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.system-workspace-shell .hardware-desk .gateway-form label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.system-workspace-shell .hardware-desk .gateway-form :is(input, select) {
+  width: 100%;
+  min-width: 0;
+}
+
+.system-workspace-shell .hardware-desk :is(.gateway-posting-toggle, .integration-list, .hardware-poc-list) {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.system-workspace-shell .hardware-desk :is(.integration-list, .hardware-poc-list) article {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: start;
+  justify-content: space-between;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.system-workspace-shell .hardware-desk :is(.integration-main, .hardware-poc-list article > div) {
+  display: grid;
+  flex: 1 1 180px;
+  gap: var(--space-1);
+}
+
+.system-workspace-shell .hardware-desk :is(.device-admin-actions, .posting-check) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.system-workspace-shell .hardware-desk .posting-check input {
+  min-height: auto;
+}
+
+.system-workspace-shell .hardware-desk .health-meter {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 80px;
+}
+
+/* 配置页将会话、账号和授权分为清晰的面板。 */
+.system-workspace-shell .security-context-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+  gap: var(--space-5);
+  align-items: start;
+  padding: var(--space-5);
+}
+
+.system-workspace-shell .security-context-panel > .security-context-main:only-child {
+  grid-column: 1 / -1;
+}
+
+.system-workspace-shell :is(.security-account-contract, .security-customer-auth, .security-identity-grid) {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.system-workspace-shell .security-identity-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.system-workspace-shell :is(.security-identity-grid article, .security-account-contract, .security-customer-auth) {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--soft);
+}
+
+.system-workspace-shell .security-identity-grid article {
+  display: grid;
+  gap: var(--space-2);
+  background: var(--content);
+}
+
+.system-workspace-shell :is(.account-process-row, .security-customer-auth > article) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: start;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--content);
+}
+
+.system-workspace-shell :is(.account-process-row, .security-customer-auth > article) > div:first-child {
+  display: grid;
+  flex: 1 1 200px;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.system-workspace-shell :is(.account-row-actions, .auth-session-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.system-workspace-shell :is(.customer-auth-hint, .customer-auth-message, .auth-session-message, .security-identity-grid span, .security-identity-grid small, .account-process-row span, .account-process-row small) {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+/* 表单在窄面板内按实际可用宽度换行，复选框保持原生紧凑尺寸。 */
+.system-workspace-shell .security-context-panel :is(.auth-password-strip, .customer-auth-form, .account-admin-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.system-workspace-shell .security-context-panel :is(.auth-password-strip, .customer-auth-form, .account-admin-grid) label {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.system-workspace-shell .security-context-panel :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.system-workspace-shell .security-context-panel :is(label:has(input[type="checkbox"]), label:has(input[type="radio"]), .account-admin-checks) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.system-workspace-shell .security-context-panel :is(input[type="checkbox"], input[type="radio"]) {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+
+.system-workspace-shell .security-context-panel .auth-password-strip .auth-session-actions {
+  grid-column: 1 / -1;
+}
+
+.system-workspace-shell .auth-password-strip > div:first-child {
+  display: grid;
+  gap: var(--space-1);
+  grid-column: 1 / -1;
+}
+
+.system-workspace-shell :is(.auth-session-message, .customer-auth-form > strong, .customer-auth-form > p) {
+  grid-column: 1 / -1;
+}
+
+/* 运维数据以状态卡、标签值和可滚动日志呈现。 */
+.system-workspace-shell .operations-center-page .operations-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.system-workspace-shell :is(.service-status-grid, .backup-status-list, .ops-alert-list, .log-stream, .ops-checklist, .restore-drill-records) {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.system-workspace-shell :is(.service-status-grid, .backup-status-list, .ops-alert-list) > article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--tone, var(--action));
+  border-radius: var(--radius-control);
+  background: var(--soft);
+}
+
+.system-workspace-shell :is(.service-status-grid, .backup-status-list, .ops-alert-list) article > div:first-child {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.system-workspace-shell :is(.service-status-grid, .backup-status-list, .ops-alert-list) article > :is(small, em, dl, .storage-meter) {
+  grid-column: 1 / -1;
+}
+
+.system-workspace-shell :is(.service-status-grid, .backup-status-list, .ops-alert-list) :is(span:not(.status-badge), small, em) {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.system-workspace-shell .runtime-metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.system-workspace-shell .log-stream {
+  max-height: 480px;
+  overflow: auto;
+}
+
+.system-workspace-shell :is(.log-stream article, .ops-checklist article, .restore-drill-records > article) {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--soft);
+}
+
+.system-workspace-shell .log-stream article {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.system-workspace-shell .log-stream article > :is(strong, span, small) {
+  grid-column: 1 / -1;
+}
+
+.system-workspace-shell .log-stream :is(time, small),
+.system-workspace-shell .restore-drill-checks em {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.system-workspace-shell .restore-drill-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.system-workspace-shell .operations-focus-panel > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.system-workspace-shell .restore-drill-title > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.system-workspace-shell .operations-center-page :is(.ops-checklist, .log-stream) .status-badge {
+  justify-self: start;
+}
+
+.system-workspace-shell .operations-center-page :is(.ops-checklist, .restore-drill-title) small,
+.system-workspace-shell .ops-checklist article span:not(.status-badge) {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.system-workspace-shell .ops-checklist article > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.system-workspace-shell .restore-drill-checks {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.system-workspace-shell .restore-drill-checks span {
+  display: grid;
+  gap: var(--space-1);
+  border-left: 3px solid var(--tone, var(--border));
+  padding-left: var(--space-2);
+}
+
+.system-workspace-shell .checksum-value {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.system-workspace-shell :is(.document-page, .operations-center-page, .hardware-desk, .security-context-panel) .empty-hint,
+.system-workspace-shell .restore-drill-empty {
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--soft);
+  color: var(--ink-muted);
+}
+
+@container system-workspace (max-width: 1060px) {
+  .system-workspace-shell :is(.approval-command-surface, .hardware-command-surface, .operations-command-surface, .approval-work-grid, .hardware-work-grid, .document-layout, .security-context-panel) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: none;
+  }
+
+  .system-workspace-shell :is(.approval-work-grid, .hardware-work-grid) > * {
+    grid-area: auto;
+  }
+
+  .system-workspace-shell :is(.approval-workspace, .hardware-desk) .module-side-panel {
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  }
+
+  .system-workspace-shell .operations-center-page .operations-grid.lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container system-workspace (max-width: 700px) {
+  .system-workspace-shell :is(.approval-workspace, .hardware-desk, .document-page, .operations-center-page) :is(.module-stat-grid, .hero-kpis, .operations-hero-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-workspace-shell .operations-center-page .operations-grid,
+  .system-workspace-shell :is(.document-control-board, .hardware-detail-grid, .hardware-desk .split-layout, .document-page .split-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-workspace-shell :is(.approval-command-surface, .hardware-command-surface, .operations-command-surface, .document-hero, .security-context-panel) {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+
+  .system-workspace-shell :is(.approval-workspace, .hardware-desk) .module-tools {
+    width: 100%;
+  }
+
+  .system-workspace-shell :is(.approval-workspace, .hardware-desk) .module-tools label {
+    flex: 1 1 100%;
+  }
+
+  .system-workspace-shell :is(.approval-workspace, .hardware-desk) .module-tools input {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@container system-workspace (max-width: 460px) {
+  .system-workspace-shell :is(.security-identity-grid, .runtime-metric-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-workspace-shell :is(.service-status-grid, .backup-status-list, .ops-alert-list) > article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-workspace-shell :is(.document-case-grid, .operations-focus-grid, .backup-status-list dl, .ops-alert-list dl, .restore-drill-records dl) {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+}

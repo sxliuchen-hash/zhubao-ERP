@@ -51,11 +51,31 @@ describe('SampleLibraryWorkspace', () => {
     vi.unstubAllGlobals();
   });
 
+  it('切换模板时同步展示对应字段与校验规则', async () => {
+    const wrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
+
+    const selector = wrapper.get('form[aria-label="登记表上传预检"] select');
+    await selector.setValue('REG-OUTBOUND');
+    const detail = wrapper.get('.register-detail-panel');
+    expect(detail.get('h2').text()).toBe('交货情况登记表');
+    expect(detail.text()).toContain('成品库存 -> 打包出货 -> 已发货库存');
+    expect(detail.text()).toContain('OUT-001');
+    expect(detail.text()).not.toContain('IN-001');
+
+    await selector.setValue('REG-ENGRAVING');
+    expect(detail.get('h2').text()).toBe('雕刻机统计单（日）');
+    expect(detail.text()).toContain('ENG-001');
+    expect(detail.text()).not.toContain('OUT-001');
+    expect(detail.get('[aria-label="字段映射"]').text()).toContain('品类');
+    wrapper.unmount();
+  });
+
   it('renders the register import workbench from backend batches', async () => {
     const wrapper = mount(SampleLibraryWorkspace);
 
     await flushPromises();
-    expect(wrapper.text()).toContain('登记导入');
+    expect(wrapper.get('[aria-label="登记导入流程"]').text()).toContain('上传预检');
     expect(wrapper.text()).toContain('登记表导入');
     expect(wrapper.text()).toContain('登记表确认批次复核');
     expect(wrapper.text()).toContain('入账映射计划');

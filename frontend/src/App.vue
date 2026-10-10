@@ -199,7 +199,7 @@ function isTabKey(value: string): value is TabKey {
 <template>
   <p v-if="!authReady" class="login-page">正在恢复登录</p>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
-  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation">
+  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': activeTabMeta?.group === 'system' }">
     <template #session>
       <div class="top-session">
         <span>{{ authSession?.operator }}</span>
