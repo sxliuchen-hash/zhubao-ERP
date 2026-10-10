@@ -59,8 +59,18 @@ public final class FinanceCommands {
             @NotBlank String customerName,
             @NotBlank String receivedOn,
             @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
-            @Valid List<ReceiptAllocationCommand> allocations
+            @Valid List<ReceiptAllocationCommand> allocations,
+            String idempotencyKey
     ) {
+        public RecordReceiptCommand(
+                Long customerId,
+                String customerName,
+                String receivedOn,
+                BigDecimal amount,
+                List<ReceiptAllocationCommand> allocations
+        ) {
+            this(customerId, customerName, receivedOn, amount, allocations, null);
+        }
     }
 
     public record SaveWorkerRateCommand(

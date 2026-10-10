@@ -38,3 +38,4 @@
 38	COLUMN	auth_account_pre_approval_application	target_allowed_processes
 39	COLUMN	inv_stock_ledger	from_work_order_code
 40	COLUMN	fin_payable_payment	idempotency_key
+41	COLUMN	fin_customer_receipt	idempotency_key

@@ -151,6 +151,7 @@ export function recordReceipt(body: {
   receivedOn: string;
   amount: number;
   allocations: ReceiptAllocation[];
+  idempotencyKey?: string;
 }): Promise<CustomerReceipt> {
   return apiPost('/api/finance/receipts', body);
 }

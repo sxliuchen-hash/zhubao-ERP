@@ -60,6 +60,23 @@ const receiptAmount = ref('');
 const receiptDate = ref(today);
 const receiptLine = ref('');
 const receiptAllocated = ref('');
+const receiptKey = ref('');
+const savedReceiptCode = ref('');
+const receiptRefreshError = ref('');
+
+watch([customerId, customerName, receiptAmount, receiptDate, receiptLine, receiptAllocated], () => {
+  receiptKey.value = '';
+  savedReceiptCode.value = '';
+  receiptRefreshError.value = '';
+});
+
+function receiptIdempotencyKey() {
+  if (!receiptKey.value) {
+    const random = globalThis.crypto?.randomUUID?.();
+    receiptKey.value = random ?? `rc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+  return receiptKey.value;
+}
 
 const payrollLines = ref<PayrollLine[]>([]);
 const consumables = ref<ConsumableStock[]>([]);
@@ -161,21 +178,55 @@ async function createBilling() {
 }
 
 async function saveReceipt() {
-  await run(async () => {
+  busy.value = true;
+  error.value = '';
+  message.value = '';
+  receiptRefreshError.value = '';
+  try {
     const id = requireCustomer();
     const allocations = receiptLine.value.trim()
       ? [{ receivableCode: receiptLine.value.trim(), amount: Number(receiptAllocated.value || receiptAmount.value) }]
       : [];
-    await recordReceipt({
+    const idempotencyKey = receiptIdempotencyKey();
+    const receipt = await recordReceipt({
       customerId: id,
       customerName: customerName.value.trim() || statement.value?.customerName || `客户${id}`,
       receivedOn: receiptDate.value,
       amount: Number(receiptAmount.value),
       allocations,
+      idempotencyKey,
     });
-    message.value = '收款已登记';
-    statement.value = await fetchStatement(String(id), '');
-  });
+    savedReceiptCode.value = receipt.code;
+    message.value = `收款已登记，单号 ${receipt.code}`;
+    await refreshReceiptStatement(id);
+  } catch (reason) {
+    fail(reason);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function refreshReceiptStatement(customer: number) {
+  try {
+    statement.value = await fetchStatement(String(customer), '');
+    receiptRefreshError.value = '';
+    receiptKey.value = '';
+  } catch (reason) {
+    const detail = reason instanceof Error ? reason.message : '查询失败';
+    receiptRefreshError.value = `收款已登记，账单刷新失败：${detail}。请只重试查询，不要再次登记。`;
+  }
+}
+
+async function retryReceiptQuery() {
+  busy.value = true;
+  error.value = '';
+  try {
+    await refreshReceiptStatement(requireCustomer());
+  } catch (reason) {
+    fail(reason);
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function buildPayroll(confirm: boolean) {
@@ -454,7 +505,10 @@ function kindLabel(kind: string) {
         核销金额
         <input v-model="receiptAllocated" aria-label="核销金额" />
       </label>
-      <button class="primary-button" type="button" :disabled="busy" @click="saveReceipt">登记收款</button>
+      <p v-if="savedReceiptCode">收款单号 {{ savedReceiptCode }}</p>
+      <p v-if="receiptRefreshError" class="operation-feedback danger">{{ receiptRefreshError }}</p>
+      <button v-if="receiptRefreshError" class="table-action" type="button" :disabled="busy" @click="retryReceiptQuery">重新查询账单</button>
+      <button class="primary-button" type="button" :disabled="busy || !!receiptRefreshError" @click="saveReceipt">登记收款</button>
     </section>
 
     <section v-else-if="section === 'payroll'" class="section-block">

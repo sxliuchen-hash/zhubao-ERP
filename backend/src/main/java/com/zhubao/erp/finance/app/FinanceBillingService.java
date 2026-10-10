@@ -162,6 +162,10 @@ public class FinanceBillingService {
         LocalMonth received = receivedMonth(command.receivedOn());
         BigDecimal amount = FinanceTexts.money(command.amount());
         List<ReceiptAllocation> allocations = normalizeAllocations(command, amount);
+        String idempotencyKey = command.idempotencyKey() == null ? "" : command.idempotencyKey().trim();
+        if (idempotencyKey.length() > 80) {
+            throw new BusinessException("收款幂等键不能超过 80 个字符");
+        }
         CustomerReceipt receipt = new CustomerReceipt(
                 FinanceTexts.code("FIN-RC", sequence),
                 command.customerId(),
@@ -173,8 +177,7 @@ public class FinanceBillingService {
                 operator,
                 FinanceTexts.now()
         );
-        finance.saveReceipt(receipt);
-        return receipt;
+        return finance.registerReceipt(receipt, idempotencyKey);
     }
 
     public CustomerStatement statement(long customerId, String yearMonth) {

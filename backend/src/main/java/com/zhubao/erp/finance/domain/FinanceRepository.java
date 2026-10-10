@@ -22,6 +22,13 @@ public interface FinanceRepository {
 
     void saveReceipt(CustomerReceipt receipt);
 
+    /**
+     * 在同一持久化动作里保存收款单和核销行。
+     * 幂等键相同且客户、金额、收款日、客户名称和核销明细一致时返回原收款单；内容不同则拒绝。
+     * 空键不去重。JDBC 使用单连接事务；内存用同一把锁。
+     */
+    CustomerReceipt registerReceipt(CustomerReceipt receipt, String idempotencyKey);
+
     List<CustomerReceipt> listReceipts();
 
     void saveWorkerRate(WorkerRate rate);

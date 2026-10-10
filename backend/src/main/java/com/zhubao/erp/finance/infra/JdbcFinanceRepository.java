@@ -7,6 +7,7 @@ import com.zhubao.erp.finance.domain.ConsumableMovement;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.DepreciationEntry;
 import com.zhubao.erp.finance.domain.FinancePaymentProbe;
+import com.zhubao.erp.finance.domain.FinanceReceiptProbe;
 import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.FixedAsset;
 import com.zhubao.erp.finance.domain.Payable;
@@ -31,6 +32,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,15 +45,21 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     private final DataSource dataSource;
     private final FinancePaymentProbe paymentProbe;
+    private final FinanceReceiptProbe receiptProbe;
 
     @Autowired
     public JdbcFinanceRepository(DataSource dataSource) {
-        this(dataSource, FinancePaymentProbe.NONE);
+        this(dataSource, FinancePaymentProbe.NONE, FinanceReceiptProbe.NONE);
     }
 
     public JdbcFinanceRepository(DataSource dataSource, FinancePaymentProbe paymentProbe) {
+        this(dataSource, paymentProbe, FinanceReceiptProbe.NONE);
+    }
+
+    public JdbcFinanceRepository(DataSource dataSource, FinancePaymentProbe paymentProbe, FinanceReceiptProbe receiptProbe) {
         this.dataSource = dataSource;
         this.paymentProbe = paymentProbe == null ? FinancePaymentProbe.NONE : paymentProbe;
+        this.receiptProbe = receiptProbe == null ? FinanceReceiptProbe.NONE : receiptProbe;
     }
 
     @Override
@@ -246,6 +254,183 @@ public class JdbcFinanceRepository implements FinanceRepository {
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to save receipt: " + receipt.code(), ex);
         }
+    }
+
+    @Override
+    public CustomerReceipt registerReceipt(CustomerReceipt receipt, String idempotencyKey) {
+        String key = idempotencyKey == null ? "" : idempotencyKey.trim();
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                if (!key.isEmpty()) {
+                    CustomerReceipt existing = findReceiptByKey(connection, key);
+                    if (existing != null) {
+                        if (!sameReceipt(existing, receipt)) {
+                            throw new BusinessException("同一幂等键的收款内容不一致");
+                        }
+                        connection.rollback();
+                        return existing;
+                    }
+                }
+                insertReceipt(connection, receipt, key);
+                receiptProbe.beforeAllocationInsert();
+                insertAllocations(connection, receipt);
+                connection.commit();
+                return receipt;
+            } catch (RuntimeException | SQLException ex) {
+                connection.rollback();
+                if (ex instanceof SQLException sql && isDuplicate(sql) && !key.isEmpty()) {
+                    try (Connection lookup = dataSource.getConnection()) {
+                        CustomerReceipt existing = findReceiptByKey(lookup, key);
+                        if (existing != null && sameReceipt(existing, receipt)) {
+                            return existing;
+                        }
+                        if (existing != null) {
+                            throw new BusinessException("同一幂等键的收款内容不一致");
+                        }
+                    }
+                }
+                if (ex instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                throw new IllegalStateException("收款事务失败", ex);
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("收款事务失败", ex);
+        }
+    }
+
+    private void insertReceipt(Connection connection, CustomerReceipt receipt, String key) throws SQLException {
+        String sql = """
+                insert into fin_customer_receipt (
+                    code, customer_id, customer_name, `year_month`, amount, received_on, operator_name, created_at,
+                    idempotency_key
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, receipt.code());
+            statement.setLong(2, receipt.customerId());
+            statement.setString(3, receipt.customerName());
+            statement.setString(4, receipt.yearMonth());
+            statement.setBigDecimal(5, receipt.amount());
+            statement.setString(6, receipt.receivedOn());
+            statement.setString(7, receipt.operator());
+            statement.setString(8, receipt.createdAt());
+            if (key.isEmpty()) {
+                statement.setNull(9, Types.VARCHAR);
+            } else {
+                statement.setString(9, key);
+            }
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertAllocations(Connection connection, CustomerReceipt receipt) throws SQLException {
+        String sql = """
+                insert into fin_receipt_allocation (receipt_code, line_no, receivable_code, amount)
+                values (?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int lineNo = 1;
+            for (ReceiptAllocation item : receipt.allocations()) {
+                statement.setString(1, receipt.code());
+                statement.setInt(2, lineNo++);
+                statement.setString(3, item.receivableCode());
+                statement.setBigDecimal(4, item.amount());
+                statement.addBatch();
+            }
+            if (lineNo > 1) {
+                statement.executeBatch();
+            }
+        }
+    }
+
+    private CustomerReceipt findReceiptByKey(Connection connection, String key) throws SQLException {
+        String sql = """
+                select code, customer_id, customer_name, `year_month`, amount, received_on, operator_name, created_at
+                  from fin_customer_receipt
+                 where idempotency_key = ?
+                """;
+        String code;
+        long customerId;
+        String customerName;
+        String yearMonth;
+        BigDecimal amount;
+        String receivedOn;
+        String operator;
+        String createdAt;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, key);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                code = rs.getString("code");
+                customerId = rs.getLong("customer_id");
+                customerName = rs.getString("customer_name");
+                yearMonth = rs.getString("year_month");
+                amount = rs.getBigDecimal("amount");
+                receivedOn = rs.getString("received_on");
+                operator = rs.getString("operator_name");
+                createdAt = rs.getString("created_at");
+            }
+        }
+        return new CustomerReceipt(
+                code,
+                customerId,
+                customerName,
+                yearMonth,
+                amount,
+                receivedOn,
+                loadAllocations(connection, code),
+                operator,
+                createdAt
+        );
+    }
+
+    private List<ReceiptAllocation> loadAllocations(Connection connection, String receiptCode) throws SQLException {
+        String sql = """
+                select receivable_code, amount
+                  from fin_receipt_allocation
+                 where receipt_code = ?
+                 order by line_no
+                """;
+        List<ReceiptAllocation> allocations = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, receiptCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    allocations.add(new ReceiptAllocation(rs.getString("receivable_code"), rs.getBigDecimal("amount")));
+                }
+            }
+        }
+        return allocations;
+    }
+
+    private boolean sameReceipt(CustomerReceipt existing, CustomerReceipt requested) {
+        if (existing.customerId() != requested.customerId()
+                || existing.amount().compareTo(requested.amount()) != 0
+                || !existing.receivedOn().equals(requested.receivedOn())
+                || !existing.customerName().equals(requested.customerName())
+                || existing.allocations().size() != requested.allocations().size()) {
+            return false;
+        }
+        List<ReceiptAllocation> left = existing.allocations().stream()
+                .sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount))
+                .toList();
+        List<ReceiptAllocation> right = requested.allocations().stream()
+                .sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount))
+                .toList();
+        for (int index = 0; index < left.size(); index++) {
+            if (!left.get(index).receivableCode().equals(right.get(index).receivableCode())
+                    || left.get(index).amount().compareTo(right.get(index).amount()) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

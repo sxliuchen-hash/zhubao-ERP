@@ -6,6 +6,7 @@ import com.zhubao.erp.finance.domain.ConsumableMovement;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.DepreciationEntry;
 import com.zhubao.erp.finance.domain.FinancePaymentProbe;
+import com.zhubao.erp.finance.domain.FinanceReceiptProbe;
 import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.FixedAsset;
 import com.zhubao.erp.finance.domain.Payable;
@@ -13,6 +14,7 @@ import com.zhubao.erp.finance.domain.PayablePayment;
 import com.zhubao.erp.finance.domain.PayrollLine;
 import com.zhubao.erp.finance.domain.PayrollRun;
 import com.zhubao.erp.finance.domain.PriceAgreement;
+import com.zhubao.erp.finance.domain.ReceiptAllocation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.WorkerRate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,16 +49,24 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     private final ConcurrentHashMap<String, Payable> payables = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, PayablePayment> payablePayments = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> paymentCodeByIdempotency = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> receiptCodeByIdempotency = new ConcurrentHashMap<>();
     private final Object paymentLock = new Object();
+    private final Object receiptLock = new Object();
     private final FinancePaymentProbe paymentProbe;
+    private final FinanceReceiptProbe receiptProbe;
 
     @Autowired
     public InMemoryFinanceRepository() {
-        this(FinancePaymentProbe.NONE);
+        this(FinancePaymentProbe.NONE, FinanceReceiptProbe.NONE);
     }
 
     public InMemoryFinanceRepository(FinancePaymentProbe paymentProbe) {
+        this(paymentProbe, FinanceReceiptProbe.NONE);
+    }
+
+    public InMemoryFinanceRepository(FinancePaymentProbe paymentProbe, FinanceReceiptProbe receiptProbe) {
         this.paymentProbe = paymentProbe == null ? FinancePaymentProbe.NONE : paymentProbe;
+        this.receiptProbe = receiptProbe == null ? FinanceReceiptProbe.NONE : receiptProbe;
     }
 
     @Override
@@ -101,6 +111,60 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     @Override
     public void saveReceipt(CustomerReceipt receipt) {
         receipts.put(receipt.code(), receipt);
+    }
+
+    @Override
+    public CustomerReceipt registerReceipt(CustomerReceipt receipt, String idempotencyKey) {
+        String key = idempotencyKey == null ? "" : idempotencyKey.trim();
+        synchronized (receiptLock) {
+            if (!key.isEmpty()) {
+                String existingCode = receiptCodeByIdempotency.get(key);
+                if (existingCode != null) {
+                    CustomerReceipt existing = receipts.get(existingCode);
+                    if (existing == null || !sameReceipt(existing, receipt)) {
+                        throw new BusinessException("同一幂等键的收款内容不一致");
+                    }
+                    return existing;
+                }
+            }
+            receipts.put(receipt.code(), receipt);
+            if (!key.isEmpty()) {
+                receiptCodeByIdempotency.put(key, receipt.code());
+            }
+            try {
+                receiptProbe.beforeAllocationInsert();
+            } catch (RuntimeException ex) {
+                receipts.remove(receipt.code());
+                if (!key.isEmpty()) {
+                    receiptCodeByIdempotency.remove(key);
+                }
+                throw ex;
+            }
+            return receipt;
+        }
+    }
+
+    private boolean sameReceipt(CustomerReceipt existing, CustomerReceipt requested) {
+        if (existing.customerId() != requested.customerId()
+                || existing.amount().compareTo(requested.amount()) != 0
+                || !existing.receivedOn().equals(requested.receivedOn())
+                || !existing.customerName().equals(requested.customerName())
+                || existing.allocations().size() != requested.allocations().size()) {
+            return false;
+        }
+        List<ReceiptAllocation> left = existing.allocations().stream()
+                .sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount))
+                .toList();
+        List<ReceiptAllocation> right = requested.allocations().stream()
+                .sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount))
+                .toList();
+        for (int index = 0; index < left.size(); index++) {
+            if (!left.get(index).receivableCode().equals(right.get(index).receivableCode())
+                    || left.get(index).amount().compareTo(right.get(index).amount()) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

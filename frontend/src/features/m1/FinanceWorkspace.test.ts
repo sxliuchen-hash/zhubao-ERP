@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FinanceWorkspace from './FinanceWorkspace.vue';
-import { fetchOperatingStatement, fetchStatement, generateBilling, saveConsumableItem, purchaseConsumable, issueConsumable, saveFixedAsset, runDepreciation, saveOutsource, fetchConsumables, fetchPayables, payPayable } from '../../services/financeApi';
+import { fetchOperatingStatement, fetchStatement, generateBilling, saveConsumableItem, purchaseConsumable, issueConsumable, saveFixedAsset, runDepreciation, saveOutsource, fetchConsumables, fetchPayables, payPayable, recordReceipt } from '../../services/financeApi';
 
 vi.mock('../../services/financeApi', () => ({
   fetchStatement: vi.fn(),
@@ -160,5 +160,47 @@ describe('FinanceWorkspace', () => {
     await flushPromises();
     expect(vi.mocked(payPayable).mock.calls[1][0].idempotencyKey).toBe(firstKey);
     expect(wrapper.text()).toContain('付款已登记');
+  });
+
+  it('收款成功后查询失败时保留单号，并只重试查询', async () => {
+    vi.mocked(recordReceipt).mockResolvedValue({
+      code: 'FIN-RC-9',
+      amount: 80,
+      receivedOn: '2026-10-10',
+      allocations: [],
+    });
+    vi.mocked(fetchStatement)
+      .mockRejectedValueOnce(new Error('查询账单失败'))
+      .mockResolvedValueOnce({
+        customerId: 1008,
+        customerName: '恒信珠宝',
+        stockQuantity: 0,
+        stockWeight: 0,
+        receivableAmount: 0,
+        receivedAmount: 80,
+        outstandingAmount: 0,
+        prepaymentAmount: 80,
+        lines: [],
+        receipts: [],
+        stockNote: '实物为当前结存',
+      });
+    const wrapper = mount(FinanceWorkspace);
+    await selectSection(wrapper, '收款');
+    await wrapper.get('[aria-label="客户编号"]').setValue('1008');
+    await wrapper.get('[aria-label="收款金额"]').setValue('80');
+    await wrapper.get('[aria-label="收款日期"]').setValue('2026-10-10');
+    const register = wrapper.findAll('button').find((button) => button.text() === '登记收款');
+    await register?.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('收款单号 FIN-RC-9');
+    expect(wrapper.text()).toContain('请只重试查询，不要再次登记');
+    expect(register?.attributes('disabled')).toBeDefined();
+    expect(recordReceipt).toHaveBeenCalledTimes(1);
+    await wrapper.findAll('button').find((button) => button.text() === '重新查询账单')?.trigger('click');
+    await flushPromises();
+    expect(recordReceipt).toHaveBeenCalledTimes(1);
+    expect(fetchStatement).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).not.toContain('请只重试查询，不要再次登记');
+    expect(wrapper.text()).toContain('收款单号 FIN-RC-9');
   });
 });
