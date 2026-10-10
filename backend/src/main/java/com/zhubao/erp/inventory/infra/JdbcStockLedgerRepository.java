@@ -6,6 +6,8 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockTransferRules;
+import com.zhubao.erp.common.error.BusinessException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -16,10 +18,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.inventory.repository", havingValue = "jdbc")
@@ -33,16 +33,16 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
 
     @Override
     public StockLedgerEntry save(StockLedgerEntry entry) {
-        verifyTransferDimensions(entry);
+        StockTransferRules.verify(entry);
         try (Connection connection = dataSource.getConnection()) {
             boolean previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
                 insertLedger(connection, entry);
                 if (entry.from() != null) {
-                    applyDelta(connection, entry.from(), entry.quantity().negate(), entry.weight().negate(), entry.code());
+                    debitBalance(connection, entry);
                 }
-                applyDelta(connection, entry.to(), entry.quantity(), entry.weight(), entry.code());
+                creditBalance(connection, entry.to(), entry.quantity(), entry.weight(), entry.code());
                 connection.commit();
                 return entry;
             } catch (SQLException | RuntimeException ex) {
@@ -60,7 +60,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     public List<StockLedgerEntry> findAllLedgers() {
         String sql = """
                 select code, biz_time, document_type, document_code, owner_type, owner_customer_id,
-                       customer_id, mother_order_code, work_order_code, material_code,
+                       customer_id, mother_order_code, work_order_code, from_work_order_code, material_code,
                        quantity, weight, from_warehouse_code, to_warehouse_code,
                        from_stock_status, to_stock_status, remark
                   from inv_stock_ledger
@@ -88,7 +88,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                         to.ownerCustomerId(),
                         to.customerId(),
                         to.motherOrderCode(),
-                        to.workOrderCode(),
+                        rs.getString("from_work_order_code"),
                         to.materialCode(),
                         fromWarehouse,
                         StockStatus.valueOf(fromStatus)
@@ -182,9 +182,9 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
         String sql = """
                 insert into inv_stock_ledger (
                     code, biz_time, document_type, document_code, owner_type, owner_customer_id, customer_id,
-                    mother_order_code, work_order_code, material_code, quantity, weight,
+                    mother_order_code, work_order_code, from_work_order_code, material_code, quantity, weight,
                     from_warehouse_code, to_warehouse_code, from_stock_status, to_stock_status, remark
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         StockDimension to = entry.to();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -197,56 +197,56 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             setNullableLong(statement, 7, to.customerId());
             statement.setString(8, to.motherOrderCode());
             statement.setString(9, to.workOrderCode());
-            statement.setString(10, to.materialCode());
-            statement.setBigDecimal(11, entry.quantity());
-            statement.setBigDecimal(12, entry.weight());
-            statement.setString(13, entry.from() == null ? null : entry.from().warehouseCode());
-            statement.setString(14, to.warehouseCode());
-            statement.setString(15, entry.from() == null ? null : entry.from().stockStatus().name());
-            statement.setString(16, to.stockStatus().name());
-            statement.setString(17, entry.remark());
+            statement.setString(10, entry.from() == null ? null : entry.from().workOrderCode());
+            statement.setString(11, to.materialCode());
+            statement.setBigDecimal(12, entry.quantity());
+            statement.setBigDecimal(13, entry.weight());
+            statement.setString(14, entry.from() == null ? null : entry.from().warehouseCode());
+            statement.setString(15, to.warehouseCode());
+            statement.setString(16, entry.from() == null ? null : entry.from().stockStatus().name());
+            statement.setString(17, to.stockStatus().name());
+            statement.setString(18, entry.remark());
             statement.executeUpdate();
         }
     }
 
-    private void applyDelta(Connection connection, StockDimension dimension, BigDecimal quantityDelta, BigDecimal weightDelta, String ledgerCode)
-            throws SQLException {
-        String key = dimensionKey(dimension);
-        String select = "select available_quantity, available_weight from inv_stock_balance where dimension_key = ?";
-        try (PreparedStatement statement = connection.prepareStatement(select)) {
-            statement.setString(1, key);
+    private void debitBalance(Connection connection, StockLedgerEntry entry) throws SQLException {
+        String sql = """
+                update inv_stock_balance
+                   set available_quantity = available_quantity - ?,
+                       available_weight = available_weight - ?, last_ledger_code = ?
+                 where dimension_key = ?
+                   and available_quantity >= ? and available_weight >= ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBigDecimal(1, entry.quantity());
+            statement.setBigDecimal(2, entry.weight());
+            statement.setString(3, entry.code());
+            statement.setString(4, dimensionKey(entry.from()));
+            statement.setBigDecimal(5, entry.quantity());
+            statement.setBigDecimal(6, entry.weight());
+            if (statement.executeUpdate() == 0) {
+                // 条件扣减已经作出足额判定，此处重读只用于提供具体失败原因。
+                StockTransferRules.requireSufficient(readBalance(connection, entry.from()), entry);
+                throw new BusinessException("来源库存不足，请刷新后重试");
+            }
+        }
+    }
+
+    private StockBalance readBalance(Connection connection, StockDimension dimension) throws SQLException {
+        String sql = "select available_quantity, available_weight from inv_stock_balance where dimension_key = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, dimensionKey(dimension));
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
-                    updateBalance(
-                            connection,
-                            key,
-                            rs.getBigDecimal("available_quantity").add(quantityDelta),
-                            rs.getBigDecimal("available_weight").add(weightDelta),
-                            ledgerCode
-                    );
-                    return;
+                    return new StockBalance(dimension, rs.getBigDecimal("available_quantity"), rs.getBigDecimal("available_weight"));
                 }
             }
         }
-        insertBalance(connection, dimension, key, quantityDelta, weightDelta, ledgerCode);
+        return new StockBalance(dimension, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 
-    private void updateBalance(Connection connection, String key, BigDecimal quantity, BigDecimal weight, String ledgerCode) throws SQLException {
-        String sql = """
-                update inv_stock_balance
-                   set available_quantity = ?, available_weight = ?, last_ledger_code = ?
-                 where dimension_key = ?
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBigDecimal(1, quantity);
-            statement.setBigDecimal(2, weight);
-            statement.setString(3, ledgerCode);
-            statement.setString(4, key);
-            statement.executeUpdate();
-        }
-    }
-
-    private void insertBalance(Connection connection, StockDimension dimension, String key, BigDecimal quantity, BigDecimal weight, String ledgerCode)
+    private void creditBalance(Connection connection, StockDimension dimension, BigDecimal quantity, BigDecimal weight, String ledgerCode)
             throws SQLException {
         String sql = """
                 insert into inv_stock_balance (
@@ -254,6 +254,10 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                     material_code, warehouse_code, stock_status, dimension_key,
                     available_quantity, available_weight, last_ledger_code
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on duplicate key update
+                    available_quantity = available_quantity + values(available_quantity),
+                    available_weight = available_weight + values(available_weight),
+                    last_ledger_code = values(last_ledger_code)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, dimension.ownerType().name());
@@ -264,29 +268,11 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             statement.setString(6, dimension.materialCode());
             statement.setString(7, dimension.warehouseCode());
             statement.setString(8, dimension.stockStatus().name());
-            statement.setString(9, key);
+            statement.setString(9, dimensionKey(dimension));
             statement.setBigDecimal(10, quantity);
             statement.setBigDecimal(11, weight);
             statement.setString(12, ledgerCode);
             statement.executeUpdate();
-        }
-    }
-
-    private void verifyTransferDimensions(StockLedgerEntry entry) {
-        if (entry.from() == null) {
-            return;
-        }
-        StockDimension from = entry.from();
-        StockDimension to = entry.to();
-        boolean sameBusinessDimension =
-                from.ownerType() == to.ownerType()
-                        && Objects.equals(from.ownerCustomerId(), to.ownerCustomerId())
-                        && Objects.equals(from.customerId(), to.customerId())
-                        && Objects.equals(from.motherOrderCode(), to.motherOrderCode())
-                        && Objects.equals(from.workOrderCode(), to.workOrderCode())
-                        && Objects.equals(from.materialCode(), to.materialCode());
-        if (!sameBusinessDimension) {
-            throw new IllegalArgumentException("Stock transfer cannot change owner, customer, order, or material dimension");
         }
     }
 

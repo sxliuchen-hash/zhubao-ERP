@@ -134,8 +134,10 @@ class FormalBusinessWorkspaceQueryTest {
     void legacyQualityAndReworkCommandsRemainVisibleFromTheirRealLedger() {
         receipt("MD-OLD", 7001L, "真实客户", "收货员");
         StockDimension raw = stocks.balances().get(0).dimension();
+        StockDimension wip = new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, "MD-OLD", "ZD-OLD", "MAT-REAL", "RAW", StockStatus.WIP);
         StockDimension semi = new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, "MD-OLD", "ZD-OLD", "MAT-REAL", "SEMI", StockStatus.SEMI_FINISHED);
-        stocks.transfer(new StockTransferCommand("production_report", "ZD-OLD", raw, semi, new BigDecimal("2"), new BigDecimal("12.5"), "生产报工；工序：抛光；操作人：张工"));
+        stocks.transfer(new StockTransferCommand("work_order_split", "ZD-OLD", raw, wip, new BigDecimal("2"), new BigDecimal("12.5"), "正式拆单"));
+        stocks.transfer(new StockTransferCommand("production_report", "ZD-OLD", wip, semi, new BigDecimal("2"), new BigDecimal("12.5"), "生产报工；工序：抛光；操作人：张工"));
         BusinessOperationService operations = new BusinessOperationService(stocks, approvals, documents);
         operations.freezeQualityStock(new FreezeQualityStockCommand("QC-OLD", "MD-OLD", "ZD-OLD", 7001L, 7001L, "MAT-REAL",
                 "SEMI", "FROZEN", new BigDecimal("2"), new BigDecimal("12.5"), "抛光", "质检员", "表面划伤", "", ""));

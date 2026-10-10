@@ -1059,11 +1059,14 @@ MySQL 持久化表：
 | 台账表 | `inv_stock_ledger`，只追加库存业务事件 |
 | 余额表 | `inv_stock_balance`，由台账写入同步维护 |
 | 维度键 | `dimension_key`，格式为 `ownerType|ownerCustomerId|customerId|motherOrderCode|workOrderCode|materialCode|warehouseCode|stockStatus` |
-| 迁移脚本 | `V6__m3_inventory_jdbc_repository_contract.sql` |
+| 迁移脚本 | `V6__m3_inventory_jdbc_repository_contract.sql`、`V39__m3_inventory_source_work_order.sql` |
 
 持久化约束：
 
-- `from` 和 `to` 维度只允许改变仓库和库存状态，不允许在一次库存转移中改变所有权、客户、母单、工单或物料。
+- `from` 和 `to` 不允许改变所有权、客户、母单或物料。工单通常保持不变；仅 `work_order_split` 允许 `RAW_WAITING` 的空工单转为 `WIP` 的非空工单，覆盖拆成子单与不拆母单首次报工。
+- 来源工单独立存入 `from_work_order_code`；空值表示真实空工单，重读时不能回退目标工单。其他不可变业务维度与目标共用，来源仓库、状态继续分别保存。
+- `StockLedgerRepository.save` 是单笔库存原子边界：足额检查、来源扣减、目标增量和台账追加一起成功或一起失败。内存同步校验，JDBC 使用条件扣减、原子增量和单连接事务；同维度岗位交付仍检查足额，净余额不变。
+- 同一台账号重复保存拒绝且余额不变；业务单号可能包含多次合法部分交付，不能只凭单号去重。该契约不承诺库存与业务单据仓储之间的跨仓储事务。
 - `dimension_key` 用于规避 MySQL 可空字段参与唯一索引时的重复余额问题。
 - 库存台账号使用日期时间戳 + 序列，避免服务重启后简单日序列重复。
 
