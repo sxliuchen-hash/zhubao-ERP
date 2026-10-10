@@ -67,8 +67,11 @@ public class BusinessWorkspaceService {
     }
     public BusinessWorkspaceSummary summary() { return summary(SYSTEM_CONTEXT); }
     public BusinessWorkspaceSummary summary(OperatorContext operator) {
+        if (!demoEnabled) {
+            return formalQuery.summary(operator);
+        }
         return new BusinessWorkspaceSummary(inbound(operator).orders().size(), production(operator).workOrders().size(),
                 quality(operator).cases().size(), inventory(operator).ledgerEntries().size(), mobile(operator).tasks().size(),
-                demoEnabled ? "DEMO" : "LIVE");
+                "DEMO");
     }
 }

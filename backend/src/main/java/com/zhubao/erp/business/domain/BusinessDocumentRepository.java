@@ -25,6 +25,9 @@ public interface BusinessDocumentRepository {
 
     Optional<MotherSplitState> findMotherSplitState(String motherOrderCode);
 
+    /** 一次读取全部母单拆分状态，供进度和工作台在单次请求内建索引。 */
+    List<MotherSplitState> listAllMotherSplitStates();
+
     boolean childWorkOrderExists(String code);
 
     ChildWorkOrderRecord saveChildWorkOrder(ChildWorkOrderRecord record);

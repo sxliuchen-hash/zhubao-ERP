@@ -1,5 +1,6 @@
 package com.zhubao.erp.inventory.infra;
 
+import com.zhubao.erp.inventory.domain.CustomerLedgerFilter;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
@@ -20,6 +21,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.inventory.repository", havingValue = "jdbc")
@@ -58,57 +60,104 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
 
     @Override
     public List<StockLedgerEntry> findAllLedgers() {
+        return queryLedgers("", List.of());
+    }
+
+    @Override
+    public List<StockLedgerEntry> findLedgersByCustomers(Set<Long> customerIds, Set<String> motherOrderCodes) {
+        Set<Long> ids = customerIds == null ? Set.of() : customerIds;
+        Set<String> mothers = motherOrderCodes == null ? Set.of() : motherOrderCodes;
+        if (ids.isEmpty() && mothers.isEmpty()) {
+            return List.of();
+        }
+        // 占位符过多时退回一次全量读取再过滤，避免超长 IN 语句；仍然不是逐行查询。
+        if (ids.size() + mothers.size() > 800) {
+            return findAllLedgers().stream().filter(entry -> CustomerLedgerFilter.touches(entry, ids, mothers)).toList();
+        }
+        StringBuilder where = new StringBuilder(" where ");
+        List<Object> parameters = new ArrayList<>();
+        if (!ids.isEmpty()) {
+            where.append("customer_id in (");
+            appendPlaceholders(where, ids.size());
+            where.append(')');
+            parameters.addAll(ids);
+        }
+        if (!mothers.isEmpty()) {
+            if (!ids.isEmpty()) {
+                where.append(" or ");
+            }
+            where.append("mother_order_code in (");
+            appendPlaceholders(where, mothers.size());
+            where.append(')');
+            parameters.addAll(mothers);
+        }
+        return queryLedgers(where.toString(), parameters);
+    }
+
+    private List<StockLedgerEntry> queryLedgers(String whereSql, List<Object> parameters) {
         String sql = """
                 select code, biz_time, document_type, document_code, owner_type, owner_customer_id,
                        customer_id, mother_order_code, work_order_code, from_work_order_code, material_code,
                        quantity, weight, from_warehouse_code, to_warehouse_code,
                        from_stock_status, to_stock_status, remark
                   from inv_stock_ledger
-                 order by biz_time, id
-                """;
+                """ + whereSql + " order by biz_time, id";
         List<StockLedgerEntry> entries = new ArrayList<>();
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet rs = statement.executeQuery()) {
-            while (rs.next()) {
-                StockDimension to = dimension(
-                        ownerType(rs.getString("owner_type")),
-                        nullableLong(rs, "owner_customer_id"),
-                        nullableLong(rs, "customer_id"),
-                        rs.getString("mother_order_code"),
-                        rs.getString("work_order_code"),
-                        rs.getString("material_code"),
-                        rs.getString("to_warehouse_code"),
-                        StockStatus.valueOf(rs.getString("to_stock_status"))
-                );
-                String fromWarehouse = rs.getString("from_warehouse_code");
-                String fromStatus = rs.getString("from_stock_status");
-                StockDimension from = fromWarehouse == null || fromStatus == null ? null : dimension(
-                        to.ownerType(),
-                        to.ownerCustomerId(),
-                        to.customerId(),
-                        to.motherOrderCode(),
-                        rs.getString("from_work_order_code"),
-                        to.materialCode(),
-                        fromWarehouse,
-                        StockStatus.valueOf(fromStatus)
-                );
-                entries.add(new StockLedgerEntry(
-                        rs.getString("code"),
-                        rs.getTimestamp("biz_time").toInstant(),
-                        rs.getString("document_type"),
-                        rs.getString("document_code"),
-                        from,
-                        to,
-                        rs.getBigDecimal("quantity"),
-                        rs.getBigDecimal("weight"),
-                        rs.getString("remark")
-                ));
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < parameters.size(); i++) {
+                statement.setObject(i + 1, parameters.get(i));
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    StockDimension to = dimension(
+                            ownerType(rs.getString("owner_type")),
+                            nullableLong(rs, "owner_customer_id"),
+                            nullableLong(rs, "customer_id"),
+                            rs.getString("mother_order_code"),
+                            rs.getString("work_order_code"),
+                            rs.getString("material_code"),
+                            rs.getString("to_warehouse_code"),
+                            StockStatus.valueOf(rs.getString("to_stock_status"))
+                    );
+                    String fromWarehouse = rs.getString("from_warehouse_code");
+                    String fromStatus = rs.getString("from_stock_status");
+                    StockDimension from = fromWarehouse == null || fromStatus == null ? null : dimension(
+                            to.ownerType(),
+                            to.ownerCustomerId(),
+                            to.customerId(),
+                            to.motherOrderCode(),
+                            rs.getString("from_work_order_code"),
+                            to.materialCode(),
+                            fromWarehouse,
+                            StockStatus.valueOf(fromStatus)
+                    );
+                    entries.add(new StockLedgerEntry(
+                            rs.getString("code"),
+                            rs.getTimestamp("biz_time").toInstant(),
+                            rs.getString("document_type"),
+                            rs.getString("document_code"),
+                            from,
+                            to,
+                            rs.getBigDecimal("quantity"),
+                            rs.getBigDecimal("weight"),
+                            rs.getString("remark")
+                    ));
+                }
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to load stock ledger entries", ex);
         }
         return entries;
+    }
+
+    private static void appendPlaceholders(StringBuilder sql, int count) {
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                sql.append(',');
+            }
+            sql.append('?');
+        }
     }
 
     @Override

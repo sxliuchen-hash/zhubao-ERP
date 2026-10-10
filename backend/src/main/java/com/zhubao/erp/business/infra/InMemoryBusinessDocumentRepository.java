@@ -92,6 +92,11 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public List<MotherSplitState> listAllMotherSplitStates() {
+        return List.copyOf(splitStates.values());
+    }
+
+    @Override
     public boolean childWorkOrderExists(String code) {
         return childWorkOrders.containsKey(code);
     }

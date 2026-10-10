@@ -1,5 +1,6 @@
 package com.zhubao.erp.inventory.infra;
 
+import com.zhubao.erp.inventory.domain.CustomerLedgerFilter;
 import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.inventory.repository", havingValue = "memory", matchIfMissing = true)
@@ -44,6 +46,16 @@ public class InMemoryStockLedgerRepository implements StockLedgerRepository {
     @Override
     public synchronized List<StockLedgerEntry> findAllLedgers() {
         return List.copyOf(ledgers);
+    }
+
+    @Override
+    public synchronized List<StockLedgerEntry> findLedgersByCustomers(Set<Long> customerIds, Set<String> motherOrderCodes) {
+        Set<Long> ids = customerIds == null ? Set.of() : customerIds;
+        Set<String> mothers = motherOrderCodes == null ? Set.of() : motherOrderCodes;
+        if (ids.isEmpty() && mothers.isEmpty()) {
+            return List.of();
+        }
+        return ledgers.stream().filter(entry -> CustomerLedgerFilter.touches(entry, ids, mothers)).toList();
     }
 
     @Override

@@ -50,29 +50,63 @@ public class ProgressBoardService {
             String dueDate,
             String status
     ) {
+        Map<String, MotherSplitState> splits = new LinkedHashMap<>();
+        for (MotherSplitState state : documents.listAllMotherSplitStates()) {
+            splits.putIfAbsent(state.motherOrderCode(), state);
+        }
+        return listFrom(
+                operator,
+                customer,
+                process,
+                dueDate,
+                status,
+                documents.listAllChildWorkOrders(),
+                documents.listAllProcessStationHandoffs(),
+                documents.listAllQualityRequirementChecks(),
+                documents.listMotherOrders(),
+                splits
+        );
+    }
+
+    /**
+     * 用本次请求已经装入的单据快照计算进度，不再按母单逐条查询拆分状态。
+     */
+    List<ProgressRow> listFrom(
+            OperatorContext operator,
+            String customer,
+            String process,
+            String dueDate,
+            String status,
+            List<ChildWorkOrderRecord> childOrders,
+            List<ProcessStationHandoff> handoffRows,
+            List<QualityRequirementCheck> qualityChecks,
+            List<MotherOrderRecord> motherOrders,
+            Map<String, MotherSplitState> splits
+    ) {
         Map<String, List<ChildWorkOrderRecord>> children = new LinkedHashMap<>();
-        for (ChildWorkOrderRecord child : documents.listAllChildWorkOrders()) {
+        for (ChildWorkOrderRecord child : childOrders) {
             children.computeIfAbsent(child.motherOrderCode(), key -> new ArrayList<>()).add(child);
         }
         Map<String, Set<String>> submitted = new LinkedHashMap<>();
-        for (ProcessStationHandoff handoff : documents.listAllProcessStationHandoffs()) {
+        for (ProcessStationHandoff handoff : handoffRows) {
             if (handoff.orderCode().startsWith("FG-")) {
                 continue;
             }
             submitted.computeIfAbsent(handoff.orderCode(), key -> new LinkedHashSet<>()).add(handoff.processName());
         }
         Map<String, QualityRequirementCheck> checks = new LinkedHashMap<>();
-        for (QualityRequirementCheck check : documents.listAllQualityRequirementChecks()) {
+        for (QualityRequirementCheck check : qualityChecks) {
             checks.put(check.orderCode(), check);
         }
 
         List<ProgressRow> rows = new ArrayList<>();
-        for (MotherOrderRecord mother : documents.listMotherOrders()) {
+        Map<String, MotherSplitState> splitByMother = splits == null ? Map.of() : splits;
+        for (MotherOrderRecord mother : motherOrders) {
             if (!withinScope(operator, mother.customerId(), mother.customerName())) {
                 continue;
             }
             List<ChildWorkOrderRecord> family = children.getOrDefault(mother.code(), List.of());
-            MotherSplitState split = documents.findMotherSplitState(mother.code()).orElse(null);
+            MotherSplitState split = splitByMother.get(mother.code());
             boolean splitDecision = split != null && MotherSplitState.SPLIT.equals(split.decision());
             if (family.isEmpty() && !splitDecision) {
                 if (split != null && MotherSplitState.KEEP.equals(split.decision())) {

@@ -314,6 +314,32 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public List<MotherSplitState> listAllMotherSplitStates() {
+        String sql = """
+                select mother_order_code, split_decision, verification_code, operator, created_at
+                  from biz_mother_order_split
+                 order by mother_order_code
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rs = statement.executeQuery()) {
+            List<MotherSplitState> states = new ArrayList<>();
+            while (rs.next()) {
+                states.add(new MotherSplitState(
+                        rs.getString("mother_order_code"),
+                        rs.getString("split_decision"),
+                        rs.getString("verification_code"),
+                        rs.getString("operator"),
+                        rs.getString("created_at")
+                ));
+            }
+            return states;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to list mother split states", ex);
+        }
+    }
+
+    @Override
     public boolean childWorkOrderExists(String code) {
         return exists("select count(*) from biz_work_order where code = ?", code);
     }

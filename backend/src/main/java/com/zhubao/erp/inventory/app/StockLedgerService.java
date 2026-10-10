@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
@@ -43,6 +44,11 @@ public class StockLedgerService {
 
     public List<StockLedgerEntry> ledgers() {
         return repository.findAllLedgers();
+    }
+
+    /** 客户范围明确时只读取相关台账；全量读取仍走 {@link #ledgers()}。 */
+    public List<StockLedgerEntry> ledgersForCustomers(Set<Long> customerIds, Set<String> motherOrderCodes) {
+        return repository.findLedgersByCustomers(customerIds, motherOrderCodes);
     }
 
     public List<StockBalance> balances() {
