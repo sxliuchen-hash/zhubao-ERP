@@ -1,62 +1,14 @@
 # 来料加工进销存与生产管理系统 字段字典与 API 契约
 
-**文档版本**：V1.1
-**更新日期**：2026-07-09
-**适用阶段**：M2 API 基线，M3 数据库和前后端联调依据  
+**文档版本**：V2.0
+**更新日期**：2026-10-10
+**文档定位**：现行 API 调用、字段校验、权限和存储边界的统一入口
 
----
+## 1. 使用范围
 
-## 1. 目标
+本文件记录已在源码注册的接口及有效字段。目标业务模型与未来能力见[产品需求](./01_PRD_产品需求文档.md)、[领域模型](./03_领域模型与数据库设计.md)；规划接口不作为现行调用契约。完整历史与已移除评审字段见[整理前契约](./archive/contracts/16_字段字典与API契约_整理前.md)。
 
-本文件先冻结“评审工作台 API”的字段契约，解决前端样例、后端 API、后续 seed 数据和数据库设计之间的字段不一致问题。
-
-当前接口仍返回确定性样例数据，不代表最终生产持久化已完成。M3 需要将这些字段迁移到：
-
-- MySQL 业务表和样例 seed 数据。
-- 后端 repository/service。
-- 前端 API client。
-- 验收脚本和演示环境初始化数据。
-
-当前代码和草案位置：
-
-- [BusinessWorkspaceService.java](../backend/src/main/java/com/zhubao/erp/business/app/BusinessWorkspaceService.java)
-- [BusinessReviewData.java](../backend/src/main/java/com/zhubao/erp/business/domain/BusinessReviewData.java)
-- [BusinessWorkspaceRepository.java](../backend/src/main/java/com/zhubao/erp/business/domain/BusinessWorkspaceRepository.java)
-- [BusinessWorkspaceSeedData.java](../backend/src/main/java/com/zhubao/erp/business/infra/BusinessWorkspaceSeedData.java)
-- [businessWorkspaceApi.ts](../frontend/src/services/businessWorkspaceApi.ts)
-- [V3__m2_business_workspace_contract.sql](../backend/src/main/resources/db/mysql/V3__m2_business_workspace_contract.sql)
-- [ConfigurationBaselineService.java](../backend/src/main/java/com/zhubao/erp/configuration/app/ConfigurationBaselineService.java)
-- [ConfigurationBaselineData.java](../backend/src/main/java/com/zhubao/erp/configuration/domain/ConfigurationBaselineData.java)
-- [configurationBaselineApi.ts](../frontend/src/services/configurationBaselineApi.ts)
-- [V4__m2_configuration_baseline_contract.sql](../backend/src/main/resources/db/mysql/V4__m2_configuration_baseline_contract.sql)
-- [V5__m2_configuration_change_control_contract.sql](../backend/src/main/resources/db/mysql/V5__m2_configuration_change_control_contract.sql)
-- [V7__m3_hardware_poc_record_contract.sql](../backend/src/main/resources/db/mysql/V7__m3_hardware_poc_record_contract.sql)
-- [V8__m3_business_workspace_jdbc_repository_contract.sql](../backend/src/main/resources/db/mysql/V8__m3_business_workspace_jdbc_repository_contract.sql)
-- [V9__m3_business_workspace_review_seed.sql](../backend/src/main/resources/db/mysql/V9__m3_business_workspace_review_seed.sql)
-- [DocumentManagementService.java](../backend/src/main/java/com/zhubao/erp/document/app/DocumentManagementService.java)
-- [documentManagementApi.ts](../frontend/src/services/documentManagementApi.ts)
-- [V10__m3_document_management_contract.sql](../backend/src/main/resources/db/mysql/V10__m3_document_management_contract.sql)
-- [ApprovalService.java](../backend/src/main/java/com/zhubao/erp/approval/app/ApprovalService.java)
-- [JdbcApprovalTaskRepository.java](../backend/src/main/java/com/zhubao/erp/approval/infra/JdbcApprovalTaskRepository.java)
-- [V11__m3_lightweight_approval_contract.sql](../backend/src/main/resources/db/mysql/V11__m3_lightweight_approval_contract.sql)
-- [OperationsCenterService.java](../backend/src/main/java/com/zhubao/erp/operations/app/OperationsCenterService.java)
-- [operationsCenterApi.ts](../frontend/src/services/operationsCenterApi.ts)
-- [RegisterImportTemplateService.java](../backend/src/main/java/com/zhubao/erp/register/app/RegisterImportTemplateService.java)
-- [RegisterImportConfirmationService.java](../backend/src/main/java/com/zhubao/erp/register/app/RegisterImportConfirmationService.java)
-- [RegisterImportPostingPlanService.java](../backend/src/main/java/com/zhubao/erp/register/app/RegisterImportPostingPlanService.java)
-- [RegisterImportController.java](../backend/src/main/java/com/zhubao/erp/register/web/RegisterImportController.java)
-- [registerImportApi.ts](../frontend/src/services/registerImportApi.ts)
-- [V12__m3_register_import_batch_contract.sql](../backend/src/main/resources/db/mysql/V12__m3_register_import_batch_contract.sql)
-- [BusinessDocumentService.java](../backend/src/main/java/com/zhubao/erp/business/app/BusinessDocumentService.java)
-- [BusinessDocumentController.java](../backend/src/main/java/com/zhubao/erp/business/web/BusinessDocumentController.java)
-- [V14__m3_business_document_contract.sql](../backend/src/main/resources/db/mysql/V14__m3_business_document_contract.sql)
-- [NavigationMenuService.java](../backend/src/main/java/com/zhubao/erp/security/app/NavigationMenuService.java)
-- [SecurityContextController.java](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)
-- [authApi.ts](../frontend/src/services/authApi.ts)
-- [V20__m3_auth_user_customer_scope_contract.sql](../backend/src/main/resources/db/mysql/V20__m3_auth_user_customer_scope_contract.sql)
-- [V23__m3_auth_force_password_change.sql](../backend/src/main/resources/db/mysql/V23__m3_auth_force_password_change.sql)
-
----
+业务工作台仍包含评审快照与正式单据混合读取，数据来源见“持久化与数据来源”。接口存在、测试通过或仓储可切换均不代表生产实际使用。现场采集、拆单、工序交接、质检、网关、财务等当前入口统一列于末章“现行端点索引”，完整请求与响应类型可由对应控制器追溯。
 
 ## 2. 接口分组
 
@@ -93,50 +45,9 @@
 | `POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | 样例库/导入复核 | 对确认批次行补录入账映射字段，更新行级标准化字段后重新生成 posting plan；不写库存台账或业务单据 |
 | `POST /batches/{importBatchNo}/posting-commands` | 样例库/登记表入账 | 显式执行已通过映射计划的批次行，调用后端业务服务生成库存台账；阻断行和重复入账拒绝 |
 
-当前 M3.121 已完成 Excel 上传预览解析、前端问题 CSV 下载、真实空白模板结构复核、结构化导入批次确认、参考表字段命名复核、确认批次复核台、只读入账映射计划、行级复核补录入口、显式入账命令、雕刻设备产量独立落库、生产页设备产量汇总入口、设备产量机器档案匹配建议、基础业务单据结构化持久化切片、硬件 POC 记录仓储可切换、硬件 POC 证据只读关联、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果清单、硬件签字闭环就绪度清单、业务工作台 GET 首版数据范围过滤，以及账号仓储、PBKDF2 密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、管理员新建/重置非 demo 密码后强制首次登录改密、临时密码一次性消费、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、账号动作申请单号强制开关、账号前置审批任务交接、账号动作审批通过态强制校验、账号停用会话吊销、前置审批证据上传入口和附件预览短期签名令牌：支持入库、出货、抛光、雕刻 4 类登记表，能处理空白模板占位行、抛光 6 个重复日报块、抛光无纸质序号明细行、雕刻 6 组 x 8 号机器组内继承、数量单位和纸质快递栏拆分；4 类模板已纳入 `sourceRegisterType/sourceRegisterLineNo` 字段映射，字段总数仍为 48。M3.75 将入库表真实表头 `寄货人/姓名`、`收货人/姓名` 和雕刻派生定位字段 `机器编号行号` 写入模板契约。M3.121 前端可通过 `GET /batches`、`GET /batches/{importBatchNo}`、`GET /batches/{importBatchNo}/posting-plan`、`POST /batches/{importBatchNo}/rows/{sourceLineNo}/corrections`、`POST /batches/{importBatchNo}/posting-commands`、`GET /machine-outputs/summary`、`GET /machine-outputs/machine-match-suggestions`、`GET /business/documents/mother-orders/{code}`、`GET /business/documents/outbound-orders/{code}`、`GET /documents/attachments/{code}/preview-url`、`GET /hardware/adapter-plans`、`GET /hardware/protocol-samples`、`GET /hardware/protocol-reviews`、`GET /hardware/protocol-executions`、`GET /hardware/protocol-signoffs`、`GET /hardware/poc-records`、`GET /hardware/poc-evidence`、`GET /auth/accounts`、`GET /auth/accounts/pre-approval-readiness`、`POST /auth/accounts/pre-approval-drafts`、`GET/POST /auth/accounts/pre-approval-applications`、`GET /auth/accounts/pre-approval-evidence`、`POST /auth/accounts/pre-approval-evidence/uploads`、`POST /auth/login`、`POST /auth/password`、`GET /auth/audit-integrity`、`GET /security/current-context` 和 `GET /approvals/tasks` 查看最近确认批次、行级标准化字段、警告消息、命令草稿、缺失字段补录入口、入账按钮、后端返回的业务单号/台账号、设备产量统计、机器档案匹配建议、入账后的母单/出库单结构化快照、附件短期签名预览 URL、硬件低成本适配计划、硬件协议样本清单、硬件协议参数复核清单、硬件复测执行结果、硬件签字闭环就绪度、硬件 POC 记录、POC 证据关联摘要、账号改密/到期/过期/强制改密状态、账号客户范围、账号前置审批缺口、申请草稿待补材料、前置审批申请单、申请单绑定的轻量审批任务号、前置审批证据关联状态、上传结果、生产强制模式审批通过态门禁、当前权限上下文客户范围展示、认证审计完整性摘要、停用会话吊销审计和账号变更复核任务；临时密码一次性消费是后端内部安全状态，不新增前端公开字段，前置审批证据上传入口会自动创建/更新证据包并保存附件元数据。`GET /business/workspaces/*` 会按当前 `dataScope` 和 `customerScope` 收敛返回数据。确认导入、复核补录和 posting plan 仅用于结构化复核与入账准备；真正入账必须走独立 POST 命令，并继续复用业务服务与库存台账服务。设备产量机器档案匹配建议只读返回候选，不自动改写历史产量记录。账号管理审批任务、账号前置审批就绪度清单、草稿评估、申请单仓储、申请单号校验、生产配置强制申请单号开关、申请单审批任务交接、审批通过态强制校验、停用会话吊销、强制首次改密、临时密码一次性消费和前置审批证据上传入口是治理契约，不代表完整 IAM、正式电子签字或完整组织客户授权表。
+登记表导入分为预览、结构化批次确认、逐行复核、入账计划和显式入账。预览、确认与复核不写库存；仅独立入账命令调用业务服务，阻断行与重复入账拒绝。设备产量独立保存，机器绑定由人工复核后执行。
 
 业务操作接口前缀：
-
-M3.97 补充：账号管理动作成功后会写入 `ACCOUNT_MANAGEMENT` 轻量审批摘要任务，可通过 `GET /api/approvals/tasks` 进入后续复核；该任务是事后摘要，不阻断账号创建/更新、启停或管理员解锁，也不代表完整 IAM、生产账号前置审批、SSO/JWT、组织客户授权表或复杂审批流完成。
-
-M3.98 补充：`zhubao.security.allow-header-context` 控制 `X-Zhubao-*` 请求头身份兜底。本地默认 `true` 保留评审脚本兼容，MySQL profile 默认 `${ZHUBAO_ALLOW_HEADER_CONTEXT:false}`，关闭后无 Bearer 登录会话的请求会被拒绝，不再落到匿名 `ADMIN/ALL`。
-M3.99 补充：账号表新增 `customer_scope`，`ManageAuthUserAccountCommand.customerScope` 只在 `dataScope=CUSTOMER_RANGE` 时保存并去重，非客户范围账号会清空该字段；Bearer 登录会话、当前权限上下文和业务工作台 GET 过滤优先使用账号 `customerScope`，`X-Zhubao-Customer-Scope` 仅作为请求头评审兜底。该补充不代表完整组织客户授权表、跨对象关系推导或全系统行级权限完成。
-M3.100 补充：`GET /api/security/current-context` 与前端配置基线页固定展示客户范围状态，账号卡展示 `CUSTOMER_RANGE` 账号客户列表，全局基线、样例库上线门禁和运维提示同步使用“账号客户范围可视化”口径。该补充只解决可见性和交付口径对齐，不代表完整组织客户授权表、生产菜单持久化或 SSO/JWT 完成。
-M3.107 补充：`GET /api/auth/accounts/pre-approval-readiness` 返回账号前置审批就绪度只读清单，覆盖创建生产账号、变更角色/数据范围、管理员重置密码和账号启停/解锁的必备材料、缺失能力、审批角色、审计证据、上线门禁和下一步动作。该补充复用 `AUTH_ACCOUNT_MANAGE` 权限，只用于暴露缺口，不阻断现有账号动作，不代表正式电子签字或阻断式 IAM 完成。
-M3.108 补充：`POST /api/auth/accounts/pre-approval-drafts` 对账号动作申请草稿进行评估，返回已收材料、待补材料、系统缺失能力、阻断状态、申请人快照、风险等级和下一步动作。该补充不写账号、不创建审批任务、不落库，只为后续阻断式前置审批流冻结请求/响应契约。
-M3.109 补充：`GET/POST /api/auth/accounts/pre-approval-applications` 将草稿评估结果保存为账号前置审批申请单，返回申请单状态、目标账号快照、待补材料、系统缺失能力和提交时间。该补充使用内存仓储先固定申请单契约，不创建生产账号、不放行账号动作，也不代表正式电子签字或阻断式 IAM 完成。
-M3.110 补充：新增 `JdbcAuthAccountPreApprovalApplicationRepository`、`AuthPreApprovalJdbcDataSourceConfiguration` 和 `V21__m3_auth_pre_approval_application_contract.sql`，`zhubao.auth.pre-approval.repository=jdbc` 时将申请单保存到 `auth_account_pre_approval_application`。MySQL profile 默认读取 `ZHUBAO_AUTH_PRE_APPROVAL_REPOSITORY`，默认值为 `jdbc`；本地默认仍可用内存仓储。
-M3.111 补充：账号管理、账号启停和管理员解锁命令新增可选 `preApprovalApplicationCode`。显式传入时后端会读取申请单仓储，校验申请单存在、目标账号匹配、动作 readiness 匹配且 `applicationStatus=READY_FOR_BLOCKING_APPROVAL` / `readyForBlockingApproval=true`，通过后把申请单号写入账号管理审计和 `ACCOUNT_MANAGEMENT` 事后复核摘要；未传入时仍沿用当前非强制路径。
-M3.112 补充：新增配置 `zhubao.auth.pre-approval.enforce-account-actions` / `ZHUBAO_AUTH_PRE_APPROVAL_ENFORCE_ACCOUNT_ACTIONS`。本地默认 `false`，MySQL profile 默认 `true`；开启后账号管理、账号启停和管理员解锁请求必须携带 `preApprovalApplicationCode`，缺失时直接拒绝，携带时继续复用 M3.111 目标账号、动作 readiness 和 READY 状态校验。
-M3.113 补充：申请单提交后会创建 `ACCOUNT_PRE_APPROVAL` 轻量审批任务，申请单响应新增 `approvalTaskCode`，MySQL 表通过 `V22__m3_auth_pre_approval_task_handoff.sql` 新增 `approval_task_code`。该任务用于审批台交接和后续决策留痕。
-
-M3.114 补充：`zhubao.auth.pre-approval.enforce-account-actions=true` 时，账号创建/更新、启停和管理员解锁必须携带 READY 申请单，且申请单绑定的 `ACCOUNT_PRE_APPROVAL` 任务必须为 `APPROVED`；WAITING/REJECTED/缺失任务号都会在账号写入、认证审计和 `ACCOUNT_MANAGEMENT` 事后复核前被拒绝。该边界不代表正式电子签字、审批后自动放行或完整 IAM 完成。
-
-M3.115 补充：停用账号成功后会按 username 吊销现有内存 Bearer 会话，写入 `SESSION_REVOKED` 认证审计，账号管理审计和 `ACCOUNT_MANAGEMENT` 复核摘要会追加 `revokedSessions=N`；启用账号不会吊销会话。该边界只覆盖当前轻量内存 token，不代表完整 IAM、SSO/JWT、分布式会话或正式电子签字完成。
-
-M3.116 补充：管理员创建或重置非 demo 账号密码后会保存 `passwordChangeRequired=true`，登录成功返回临时 Bearer 会话并在 `AuthSession`、`AuthUserAccountSummary` 中回显；该会话可调用 `POST /api/auth/password` 完成自助改密，但 `operatorContext()` 会拒绝解析为业务操作身份。自助改密成功后清除 `passwordChangeRequired`、刷新密码时间并继续复用原 token。该边界不代表一次性临时密码通道、完整 IAM、SSO/JWT 或正式电子签字完成。
-
-M3.117 补充：`AuthUserAccount` 和 `auth_user_account` 新增内部字段 `temporaryPasswordConsumed` / `temporary_password_consumed`。管理员创建或重置非 demo 密码时该字段重置为 `false`；首次临时密码登录通过密码校验后会原子消费为 `true` 并返回 Bearer 会话；后续再次使用同一临时密码登录会被拒绝，且不增加失败登录次数或触发锁定。原 Bearer 会话仍可调用 `POST /api/auth/password`，自助改密成功后清除 `passwordChangeRequired` 和 `temporary_password_consumed`。该字段不进入 `AuthSession` 或 `AuthUserAccountSummary` 响应，前端仍通过 `passwordChangeRequired` 展示“需首次改密”。
-
-M3.118 补充：`GET /api/auth/accounts/pre-approval-evidence` 返回 `AuthAccountPreApprovalEvidenceSummary[]`，复用 `AUTH_ACCOUNT_MANAGE` 权限。后端按 `EvidenceAttachment.businessType=账号前置审批`、`businessCode=AuthAccountPreApprovalApplication.applicationCode` 聚合申请单与附件元数据；未匹配附件时返回待补状态，匹配附件时返回文档号、附件编码、缺失数量、最新上传时间、状态和下一步动作。该接口只读，不上传文件、不创建签字、不改变账号动作放行规则。
-
-M3.119 补充：`POST /api/auth/accounts/pre-approval-evidence/uploads` 使用 `multipart/form-data` 上传账号前置审批证据，复用 `AUTH_ACCOUNT_MANAGE` 权限。请求字段为 `applicationCode` 和 `file`；后端先校验申请单存在，再自动创建/更新 `DocumentPackage.code=DOC-<applicationCode>` 的证据包，并通过文档附件服务保存附件元数据。上传后的 `EvidenceAttachment` 固定绑定 `documentCode=DOC-<applicationCode>`、`businessType=账号前置审批`、`businessCode=<applicationCode>`，响应仍为单条 `AuthAccountPreApprovalEvidenceSummary`。该入口只补账号前置审批证据上传第一步，不创建正式电子签字，不改变账号动作放行规则，也不代表生产 NAS/S3 签名访问和归档策略完成。
-
-`AuthAccountPreApprovalEvidenceSummary`：
-
-| 字段 | 说明 |
-|---|---|
-| `applicationCode` | 前置审批申请单号，对应 `auth_account_pre_approval_application.application_code` |
-| `readinessCode` / `actionType` | 申请单对应的前置审批类型和账号动作 |
-| `targetUsername` | 目标账号 |
-| `requiredEvidence` | 当前动作必备附件，如 `本人核验附件`、`岗位交接或本人确认附件` |
-| `documentCode` | 已关联附件所属文档编码；未关联时为空 |
-| `attachmentCount` / `missingEvidence` | 已匹配附件数量和仍缺失/待上传附件数量 |
-| `attachmentCodes` | 已关联的 `EvidenceAttachment.code` 列表 |
-| `latestUploadedAt` | 最新附件上传时间快照 |
-| `status` | `待补...`、`证据待补` 或 `已关联证据` |
-| `nextAction` | 下一步处理说明，缺失时提示使用 `businessType=账号前置审批` 和 `businessCode=申请单号` 绑定附件 |
-| `tone` | 前端状态色，沿用 `red`、`amber`、`green` 等枚举 |
 
 ```http
 /api/business/operations
@@ -174,11 +85,11 @@ M3.119 补充：`POST /api/auth/accounts/pre-approval-evidence/uploads` 使用 `
 
 | 接口 | 页面 | 用途 |
 |---|---|---|
-| `GET /machine-outputs?limit=20` | 生产统计 / 样例库 | 查询最近设备产量记录，默认最多 20 条 |
-| `GET /machine-outputs/summary?limit=100` | 生产派工 / 生产统计 | 汇总最近设备产量记录，返回总记录数、总产量、按机器/日期分组、机器档案待匹配数和签名附件待补数 |
-| `GET /machine-outputs/machine-match-suggestions?limit=100` | 生产派工 / 机器档案复核 | M3.121 起按现场机器编号聚合未绑定 `machineId` 的设备产量记录，返回候选机器档案 ID、未匹配数量和人工复核动作；只读建议，不自动绑定 |
-| `GET /machine-outputs/import-batches/{importBatchNo}` | 样例库/登记表入账结果 | 查询某个登记表导入批次生成的设备产量记录 |
-| `POST /machine-outputs` | 生产统计 / 设备产量补录 | 手工或低成本设备适配提交设备产量记录，受 `MACHINE_OUTPUT_SUBMIT` 权限控制 |
+| `GET /api/machine-outputs?limit=20` | 生产统计 / 样例库 | 查询最近设备产量记录，默认最多 20 条 |
+| `GET /api/machine-outputs/summary?limit=100` | 生产派工 / 生产统计 | 汇总最近设备产量记录，返回总记录数、总产量、按机器/日期分组、机器档案待匹配数和签名附件待补数 |
+| `GET /api/machine-outputs/machine-match-suggestions?limit=100` | 生产派工 / 机器档案复核 | 按现场机器编号聚合未绑定 `machineId` 的设备产量记录，返回候选机器档案 ID、未匹配数量和人工复核动作；只读建议，不自动绑定 |
+| `GET /api/machine-outputs/import-batches/{importBatchNo}` | 样例库/登记表入账结果 | 查询某个登记表导入批次生成的设备产量记录 |
+| `POST /api/machine-outputs` | 生产统计 / 设备产量补录 | 手工或低成本设备适配提交设备产量记录，受 `MACHINE_OUTPUT_SUBMIT` 权限控制 |
 
 `SubmitMachineOutputCommand`：
 
@@ -198,7 +109,7 @@ M3.119 补充：`POST /api/auth/accounts/pre-approval-evidence/uploads` 使用 `
 | `status` | 可选，默认 `SUBMITTED` |
 | `remark` / `operator` | 备注和录入人 |
 
-`MachineOutputRecord` 返回上述字段并补充 `createdBy`、`createdAt`。M3.79 中 `REG-ENGRAVING` 的 `POST /register-import/.../posting-commands` 会先经 `BusinessOperationService.reportProduction` 写库存台账，再保存同批次 `MachineOutputRecord`；这解决“雕刻产量只在台账备注里”的缺口。M3.80 新增的 `MachineOutputSummary` 面向生产统计页，先基于最近记录聚合，后续可替换为 SQL 聚合或独立报表表。
+`MachineOutputRecord` 返回上述字段并补充 `createdBy`、`createdAt`。雕刻登记表显式入账先调用生产报工写库存台账，再保存同批次设备产量记录；统计基于最近记录聚合。
 
 `MachineOutputSummary`：
 
@@ -223,11 +134,11 @@ M3.119 补充：`POST /api/auth/accounts/pre-approval-evidence/uploads` 使用 `
 | `readiness` | `READY_TO_BIND`、`NEEDS_MASTER_DATA` 或 `CONFLICT`；当前只作为复核建议状态 |
 | `suggestedAction` | 下一步人工处理建议，不代表后端已经执行绑定 |
 
-M3.121 补充：`GET /api/machine-outputs/machine-match-suggestions` 只基于最近设备产量记录做只读聚合，不写 `biz_machine_output_record`，不创建机器主数据，不自动绑定 `machineId`，也不补签名附件；后续仍需增加机器档案表、批量绑定命令、审批/审计、签名附件和硬件 SDK/协议接入。
+机器匹配建议只读，不自动绑定。当前已有机器档案与显式绑定命令；签名附件、批量多编号绑定和厂商协议接入仍需后续完善。
 
 ### 2.1 登记表导入模板字段
 
-`RegisterImportTemplate` 用于约束后续 Excel 导入器，不直接写业务数据。
+`RegisterImportTemplate` 约束当前 Excel 导入器的字段解析与校验，不直接写业务数据。
 
 | 字段 | 说明 |
 |---|---|
@@ -340,7 +251,7 @@ MySQL 持久化表：
 | `register_import_batch` | 批次头、模板、来源文件、统计、确认人和状态 |
 | `register_import_row` | 行级原表行号、纸质序号、状态、标准化字段 JSON 和消息 JSON |
 
-M3.76 前端复核台约束：
+前端复核台约束：
 
 - `GET /api/register-import/batches?limit=10` 用于显示最近确认批次，后端返回批次头和行级快照；`limit` 在服务端限制为 1-50。
 - `GET /api/register-import/batches/{importBatchNo}` 用于点击批次后读取单批次详情，展示 `rows[].normalizedFields` 和 `rows[].messages`。
@@ -348,7 +259,7 @@ M3.76 前端复核台约束：
 - `status=CONFIRMED` 在页面显示为“待入账映射”，不得被解释为已经生成母单、报工、设备产量或出库单。
 - `status=POSTED` 在页面显示为“已入业务单据”，重复调用显式入账命令必须被后端拒绝。
 - 入账映射必须走 `POST /posting-commands` 独立命令，不能在批次查询或 posting plan 接口中隐式写库存台账。
-- M3.82 的复核补录只允许更新未入账批次行的 `normalizedFields`；`importBatchNo`、`sourceRegisterLineNo`、`sourceRegisterSequence` 等来源审计字段禁止通过补录接口覆盖。
+- 的复核补录只允许更新未入账批次行的 `normalizedFields`；`importBatchNo`、`sourceRegisterLineNo`、`sourceRegisterSequence` 等来源审计字段禁止通过补录接口覆盖。
 
 ### 2.4 登记表入账映射计划
 
@@ -520,11 +431,6 @@ M3.76 前端复核台约束：
 |---|---|---|
 | `GET /devices` | 软硬件联动 | 返回设备兼容矩阵 |
 | `GET /integration-tasks` | 软硬件联动 | 返回硬件调用任务和健康度 |
-| `GET /adapter-plans` | 软硬件联动 | 返回摄像头、标签打印、扫码、PWA 摄像头和电子秤的一期低成本适配计划、失败兜底、证据要求和复测动作 |
-| `GET /protocol-samples` | 软硬件联动 | 返回 NVR/RTSP、标签打印、USB HID、PWA 扫码和电子秤 RS232/USB/TCP 预留的协议参数、样本载荷、证据编码和复测动作 |
-| `GET /protocol-reviews` | 软硬件联动 | 返回已确认参数、待复核参数、型号冻结状态、责任人、复核窗口、阻断项和下一步动作 |
-| `GET /protocol-executions` | 软硬件联动 | 返回复测执行状态、执行时间、执行人、型号冻结状态、通过/未通过参数、证据状态、结果摘要和下一步动作 |
-| `GET /protocol-signoffs` | 软硬件联动 | 返回必备附件、缺失附件、签字角色、签字状态、型号冻结决策和上线门禁 |
 | `GET /poc-records` | 软硬件联动 | 返回现场 POC 验证记录 |
 | `GET /poc-evidence` | 软硬件联动 | 返回 POC 记录与附件证据的只读关联摘要 |
 | `GET /summary` | 软硬件联动 | 返回设备、兜底、健康度和 POC 阻断汇总 |
@@ -542,8 +448,8 @@ M3.76 前端复核台约束：
 | `GET /attachments` | 文档附件 | 返回附件元数据、存储位置、校验和和兜底动作 |
 | `GET /audit-events` | 文档附件 | 返回上传、补传、归档、审批锁定审计事件 |
 | `POST /attachments/uploads` | 文档附件 | multipart 上传附件，生成附件元数据、checksum、审计事件和预览 URL |
-| `GET /attachments/{code}/preview-url` | 文档附件 | M3.120 起返回带 `expiresAt` 与 HMAC `token` 的短期附件预览 URL |
-| `GET /attachments/{code}/content?expiresAt=<epoch>&token=<hmac>` | 文档附件 | M3.120 起校验附件编码、过期时间和 HMAC token 后读取当前存储适配器的附件内容；后续生产环境继续替换为 NAS/S3/COS 对象存储签名 URL |
+| `GET /attachments/{code}/preview-url` | 文档附件 | 返回带 `expiresAt` 与 HMAC `token` 的短期附件预览 URL |
+| `GET /attachments/{code}/content?expiresAt=<epoch>&token=<hmac>` | 文档附件 | 校验附件编码、过期时间和 HMAC token 后读取当前存储适配器的附件内容；后续生产环境继续替换为 NAS/S3/COS 对象存储签名 URL |
 
 运维中心接口前缀：
 
@@ -590,7 +496,7 @@ M3.76 前端复核台约束：
 | `goodsName` | 现场货品名称快照，可与物料档案名称不同 |
 | `quantity` | 件数 |
 | `quantityUnit` | 数量单位，默认 `件`，可按物料配置为 `颗/条/批` 等 |
-| `weight` | 重量展示值，M3 应拆成 `netWeight` + `weightUnit` |
+| `weight` | 评审工作台重量展示值；正式数量计算使用业务命令中的数值字段与单位 |
 | `status` | 入库状态 |
 | `videoStatus` | 拆包视频状态 |
 | `ownerType` | 库存所有权，目前固定为客户所有 |
@@ -605,7 +511,7 @@ M3.76 前端复核台约束：
 
 ### 4.2 `ConfirmInboundCommand`
 
-`POST /api/business/operations/inbound-confirmations` 使用该命令模型。该接口是 M3.5 第一条真实业务动作基线，不再只返回工作台样例。
+`POST /api/business/operations/inbound-confirmations` 使用该命令模型。该接口执行真实业务动作并保存正式单据与库存台账。
 
 | 字段 | 说明 |
 |---|---|
@@ -697,7 +603,7 @@ M3.76 前端复核台约束：
 
 ### 5.3 `ReportProductionCommand`
 
-`POST /api/business/operations/production-reports` 使用该命令模型。该接口是 M3.6 生产报工写台账基线。
+`POST /api/business/operations/production-reports` 使用该命令模型。该接口是 生产报工写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -791,7 +697,7 @@ M3.76 前端复核台约束：
 
 ### 6.3 `FreezeQualityStockCommand`
 
-`POST /api/business/operations/quality-freezes` 使用该命令模型。该接口是 M3.8 质检冻结写台账基线。
+`POST /api/business/operations/quality-freezes` 使用该命令模型。该接口是 质检冻结写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -837,7 +743,7 @@ M3.76 前端复核台约束：
 
 ### 6.5 `DispatchReworkCommand`
 
-`POST /api/business/operations/rework-dispatches` 使用该命令模型。该接口是 M3.9 返工派发写台账基线。
+`POST /api/business/operations/rework-dispatches` 使用该命令模型。该接口是 返工派发写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -885,7 +791,7 @@ M3.76 前端复核台约束：
 
 ### 6.7 `ReportReworkCommand`
 
-`POST /api/business/operations/rework-reports` 使用该命令模型。该接口是 M3.10 返工报工写台账基线。
+`POST /api/business/operations/rework-reports` 使用该命令模型。该接口是 返工报工写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -933,7 +839,7 @@ M3.76 前端复核台约束：
 
 ### 6.9 `ReleaseQualityStockCommand`
 
-`POST /api/business/operations/quality-releases` 使用该命令模型。该接口是 M3.14 复检放行写台账基线。
+`POST /api/business/operations/quality-releases` 使用该命令模型。该接口是 复检放行写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -980,7 +886,7 @@ M3.76 前端复核台约束：
 
 ### 6.11 `ApproveLossCommand`
 
-`POST /api/business/operations/loss-approvals` 使用该命令模型。该接口是 M3.19 损耗审批与工资试算基线，目标是先冻结损耗归因和工资试算口径，不接入正式审批流，不写库存台账。
+`POST /api/business/operations/loss-approvals` 使用该命令模型。该接口是 损耗审批与工资试算基线，目标是先冻结损耗归因和工资试算口径，不接入正式审批流，不写库存台账。
 
 | 字段 | 说明 |
 |---|---|
@@ -1034,7 +940,7 @@ M3.76 前端复核台约束：
 实现约束：
 
 - 该接口当前不调用 `StockLedgerService`，不改变库存余额，也不追加库存台账。
-- 该接口会在 M3.22 生成轻量审批任务，但只证明固定场景审批、审批责任和工资试算口径，不代表 Flowable/正式审批流已经接入。
+- 该接口会在 生成轻量审批任务，但只证明固定场景审批、审批责任和工资试算口径，不代表 Flowable/正式审批流已经接入。
 - 工序单价、扣损单价、标准损耗率必须作为快照字段保存，后续配置调整不得反向影响历史试算。
 - 正式工资发放、工资锁账、财务凭证和员工薪资明细仍在一期边界外；后续若接入工资模块，必须从该试算快照转入独立工资单状态机。
 
@@ -1042,7 +948,7 @@ M3.76 前端复核台约束：
 
 ### 6.13 `ApprovalTask`
 
-M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3.24 已补 JDBC 仓储，可将任务与审计事件写入 MySQL 合同表。M3.97 起账号创建/更新、启停和管理员解锁成功后也会生成 `ACCOUNT_MANAGEMENT` 事后复核摘要任务。它仍不是完整流程引擎，不处理并行会签、复杂条件路由、正式工资锁账或生产账号前置审批。
+轻量审批保存固定场景任务与审计事件，支持内存/JDBC 仓储。账号创建/更新、启停和管理员解锁成功后也会生成 `ACCOUNT_MANAGEMENT` 事后复核摘要任务。前置账号审批使用独立 `ACCOUNT_PRE_APPROVAL` 场景；轻量审批不处理并行会签、复杂条件路由或正式工资锁账。
 
 | 字段 | 说明 |
 |---|---|
@@ -1091,8 +997,8 @@ M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3
 - `WAITING_APPROVAL` 任务只能处理一次，处理后 `locked=true`。
 - `AUTO_APPROVED` 用于未超标或在规则阈值内的自动通过快照。
 - 默认仓储为内存实现；设置 `zhubao.approval.repository=jdbc` 或 `ZHUBAO_APPROVAL_REPOSITORY=jdbc` 后启用 `JdbcApprovalTaskRepository`。
-- `V11__m3_lightweight_approval_contract.sql` 冻结 `approval_task` 和 `approval_audit_event` 合同表；M3.24 已补 H2 仓储测试验证任务持久化、审批决策和审计事件写入。
-- 后续仍需接入真实用户、角色权限、审批 UI、复杂流程编排、工资锁账审计和生产账号前置审批。
+- `V11__m3_lightweight_approval_contract.sql` 冻结 `approval_task` 和 `approval_audit_event` 合同表；已补 H2 仓储测试验证任务持久化、审批决策和审计事件写入。
+- 当前已有角色权限和账号前置审批任务；完整审批操作流程、复杂编排与工资锁账审计仍需完善。
 - 审批通过不自动写库存台账、不自动发放工资、不自动生成财务凭证。
 - 账号管理摘要任务不自动回滚或拦截账号动作，只提供后续复核入口。
 
@@ -1102,7 +1008,7 @@ M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3
 |---|---|
 | 默认模式 | `zhubao.approval.repository=memory`，继续使用内存仓储，便于无数据库评审 |
 | JDBC 模式 | `zhubao.approval.repository=jdbc`，写入 `approval_task` 和 `approval_audit_event` |
-| MySQL profile | `ZHUBAO_APPROVAL_REPOSITORY=jdbc` |
+| MySQL profile | `ZHUBAO_APPROVAL_REPOSITORY` 默认 `memory`；Docker 交付配置默认覆盖为 `jdbc` |
 | 任务主键 | `approval_code` 唯一，当前复用损耗审批单号 |
 | 审计策略 | 每次 `save` 写入一条 `approval_audit_event`，用于保留创建、自动通过、人工通过或驳回痕迹 |
 | 当前限制 | 只解决固定场景轻量审批持久化；不代表正式权限、复杂审批流、工资锁账或财务凭证完成 |
@@ -1142,9 +1048,9 @@ M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3
 - 所有余额必须能由台账明细汇总解释。
 - 冻结、在制、返工、成品、发货必须是库存状态维度。
 
-### 7.4 M3 库存持久化契约
+### 7.4 库存持久化契约
 
-当前已新增 `JdbcStockLedgerRepository` 作为库存台账第一个 M3 持久化切入点。
+`JdbcStockLedgerRepository` 负责持久化库存台账与余额。
 
 | 项目 | 契约 |
 |---|---|
@@ -1163,7 +1069,7 @@ M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3
 
 ### 7.5 `ShipFinishedStockCommand`
 
-`POST /api/business/operations/outbound-shipments` 使用该命令模型。该接口是 M3.15 成品出库写台账基线。
+`POST /api/business/operations/outbound-shipments` 使用该命令模型。该接口是 成品出库写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -1222,7 +1128,7 @@ M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3
 
 ### 7.6 `CustomerReturnCommand`
 
-`POST /api/business/operations/customer-returns` 使用该命令模型。该接口是 M3.17 客户退货入库写台账基线。
+`POST /api/business/operations/customer-returns` 使用该命令模型。该接口是 客户退货入库写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -1267,11 +1173,11 @@ M3.22 新增轻量审批任务基线，最初用于承载超标损耗审批。M3
 - `from` 与 `to` 必须保持同一客户、母单、工单和物料维度。
 - 客户退货只允许改变仓库和库存状态，当前基线为 `SHIPPED -> FINISHED`，仓库从 `SHIPPED-CUSTOMER` 转入 `RETURN-CHECK`。
 - 若来源已发货库存不足，后端必须拒绝写台账。
-- M3.17 只完成退货入库台账基线；M3.31 起由 `POST /after-sales-reviews` 决定复核后的放行、返工、报废或冻结分流。
+- 只完成退货入库台账基线；由 `POST /after-sales-reviews` 决定复核后的放行、返工、报废或冻结分流。
 
 ### 7.7 `AfterSalesReviewCommand`
 
-`POST /api/business/operations/after-sales-reviews` 使用该命令模型。该接口是 M3.31 售后复核分流写台账基线。
+`POST /api/business/operations/after-sales-reviews` 使用该命令模型。该接口是 售后复核分流写台账基线。
 
 | 字段 | 说明 |
 |---|---|
@@ -1403,10 +1309,10 @@ PWA 一期边界：
 | `fileName` | 上传文件名 |
 | `mediaType` | MIME 类型 |
 | `size` | 文件字节数 |
-| `storageLocation` | 当前存储位置，M3.37 默认对象内容仍可为 `local://evidence/{documentCode}/{attachmentCode}/{fileName}`，附件元数据可写入内存或 JDBC 仓储，后续对象内容迁移为 NAS/S3 签名访问 |
+| `storageLocation` | 当前存储位置，默认对象内容仍可为 `local://evidence/{documentCode}/{attachmentCode}/{fileName}`，附件元数据可写入内存或 JDBC 仓储，后续对象内容迁移为 NAS/S3 签名访问 |
 | `checksum` | `sha256` 校验和 |
 | `uploadedAt` | 上传时间 |
-| `previewUrl` | M3.120 起为短期签名预览内容地址，包含 `expiresAt` 与 HMAC `token` |
+| `previewUrl` | 为短期签名预览内容地址，包含 `expiresAt` 与 HMAC `token` |
 
 ### 9.5 `AttachmentPreviewUrl`
 
@@ -1415,14 +1321,14 @@ PWA 一期边界：
 | `code` | 附件编码 |
 | `fileName` | 文件名 |
 | `mediaType` | MIME 类型 |
-| `url` | M3.120 起返回 `/api/documents/attachments/{code}/content?expiresAt=<epoch>&token=<hmac>` 格式的短期签名 URL |
+| `url` | 返回 `/api/documents/attachments/{code}/content?expiresAt=<epoch>&token=<hmac>` 格式的短期签名 URL |
 | `expiresAt` | 过期时间展示值，默认 15 分钟后过期，可由 `zhubao.documents.preview.ttl-minutes` 调整 |
 
-M3.120 补充：文档附件预览从固定 `preview-demo` 推进到短期 HMAC 令牌。`zhubao.documents.preview.secret` 用于签名 `attachmentCode:expiresAt`，`zhubao.documents.preview.ttl-minutes` 控制默认 15 分钟有效期；内容读取接口会校验路径附件编码、`expiresAt` 和 `token`，令牌缺失、篡改或过期都会拒绝。该补充只保护当前后端内容读取入口，不代表已经完成 NAS/S3/COS 对象存储切换、对象版本锁定、按登录账号授权的细粒度预览权限或不可篡改审计。
+附件预览使用短期 HMAC 令牌。`zhubao.documents.preview.secret` 签名 `attachmentCode:expiresAt`，`zhubao.documents.preview.ttl-minutes` 控制默认 15 分钟有效期；内容读取验证附件编码、有效期与签名。该机制不替代按登录账号授权的细粒度预览权限或对象存储归档策略。
 
 文档附件约束：
 
-- 当前 M3.37 已支持 multipart 上传到后端本地存储适配、checksum、审计事件、预览 URL 和内容读取；文档包、附件元数据和审计事件通过 `DocumentManagementRepository` 支持内存/JDBC 切换。
+- 当前 已支持 multipart 上传到后端本地存储适配、checksum、审计事件、预览 URL 和内容读取；文档包、附件元数据和审计事件通过 `DocumentManagementRepository` 支持内存/JDBC 切换。
 - `zhubao.documents.repository=jdbc` 时读取/写入 V10 合同表：`doc_package`、`doc_evidence_attachment`、`doc_audit_event`。
 - 后续生产环境必须按部署条件接 NAS/S3 兼容存储，并通过签名 URL 控制预览和下载。
 - 质检、称重、视频、配置审批证据必须能绑定业务对象、校验和、保留策略和审计事件。
@@ -1438,25 +1344,20 @@ M3.120 补充：文档附件预览从固定 `preview-demo` 推进到短期 HMAC 
 
 ---
 
-## 10. M3 迁移要求
+## 10. 持久化与数据来源
 
-1. 将当前 `BusinessWorkspaceService` 内存样例迁移为 seed 数据。
-2. 用 MySQL repository 替换当前 `InMemoryBusinessWorkspaceRepository`。
-3. 将 `status`、`action`、`tone` 分离，避免前端展示状态污染业务状态。
-4. 将重量字段拆为数值和单位，禁止长期使用字符串重量参与计算。
-5. 将客户、物料、人员、工序单价、损耗率保存快照字段。
-6. 将工作台 API 改为读取真实业务聚合，不再直接维护独立样例数据。
+正式交易与评审快照分别维护，调用方必须识别数据来源。目标是由正式业务聚合产生工作台查询，演示样例留在评审环境；这属于实现收敛，不缩减客户、物料、员工、订单、库存与追溯的完整目标范围。
 
 ### 10.1 业务工作台 JDBC 读取基线
 
-当前已新增 `JdbcBusinessWorkspaceRepository` 作为业务工作台从内存样例迁移到 MySQL seed 数据的第一步。
+工作台仓储提供内存 seed 与 MySQL 评审快照两种来源；部分工作台同时合并正式单据，不能把快照统计视为生产事实。
 
 | 项目 | 契约 |
 |---|---|
 | 默认模式 | `zhubao.business.repository=memory`，继续使用内存 seed，便于无数据库评审 |
 | JDBC 模式 | `zhubao.business.repository=jdbc`，读取 `biz_workspace_*` 合同表 |
 | 快照选择 | 优先使用 `zhubao.business.snapshot-code`，未配置时读取 `biz_workspace_snapshot` 中最新业务日期 |
-| MySQL profile | `ZHUBAO_BUSINESS_REPOSITORY=jdbc`、`ZHUBAO_BUSINESS_SNAPSHOT_CODE=SNAP-20260706-DAY` |
+| MySQL profile | `ZHUBAO_BUSINESS_REPOSITORY` 默认 `memory`；设为 `jdbc` 时可用 `ZHUBAO_BUSINESS_SNAPSHOT_CODE` 指定评审快照 |
 | 追溯时间线 | `biz_workspace_trace_event`，由 `V8__m3_business_workspace_jdbc_repository_contract.sql` 提供 |
 | 评审 seed | `V9__m3_business_workspace_review_seed.sql`，提供当前 M2/M3 页面评审样例 |
 
@@ -1466,9 +1367,15 @@ M3.120 补充：文档附件预览从固定 `preview-demo` 推进到短期 HMAC 
 - 页面仍不得直接修改库存余额，正式动作必须继续落到业务命令和库存台账。
 - 后续应将读取来源从评审快照升级为来料、工单、质检、库存和附件的真实聚合查询。
 
+当前读取组合：来料将正式母单与快照按编码合并；生产和质检将正式进度与快照合并；库存及移动工作台仍读取评审仓储。对应实现为 `BusinessWorkspaceService`。正式库存余额与台账应调用 `/api/inventory/balances`、`/api/inventory/ledgers`；正式进度调用 `/api/business/operations/progress`。
+
+运行配置按入口区分：`application-mysql.yml` 中工作台、审批和文档元数据仓储默认仍是 `memory`；`deploy/docker-compose.yml` 与 `deploy/.env.example` 将这三项默认设为 `jdbc`。正式业务单据在 MySQL profile 默认为 `jdbc`。最终生效值取决于实际环境变量，不能仅凭启用 MySQL profile 推断所有仓储已持久化。
+
+来料、生产、质检页面当前仍调用 `/api/business/workspaces/*`；后端按编码先取正式记录，再补没有重复编码的评审记录。检查点、工位负载、交接示例和质检指标仍来自评审仓储，不能随正式单据列表一起视作实时统计。正式单据内存仓储初始为空，业务动作保存后才产生记录；快照 seed 与正式单据是不同数据集。
+
 ### 10.2 业务操作写台账基线
 
-当前已新增 `BusinessOperationService`，用于把页面操作落到库存台账。
+业务命令统一通过库存服务产生台账，页面不得直接修改库存余额。
 
 | 项目 | 契约 |
 |---|---|
@@ -1490,11 +1397,11 @@ M3.120 补充：文档附件预览从固定 `preview-demo` 推进到短期 HMAC 
 | 权属边界 | `OwnerType.CUSTOMER`，保持客户来料和企业自有库存隔离 |
 | 当前限制 | 母单/出库单已具备基础结构化快照和明细行，但尚未完成主数据匹配、完整状态流转、补录 UI、追溯聚合和单据更正；轻量审批可切换 JDBC 持久化，但正式权限、复杂审批流、审批 UI、工资锁账/发放、售后结算和对象存储仍需继续接入 |
 
-这些接口证明一期闭环开始从“展示样例”进入“业务命令”。库存变化必须通过库存服务产生只追加台账；损耗审批、工资试算、称重交接和退货复核这类非库存动作也必须先建独立业务命令，再按职责接入审批服务、工资服务或证据服务。
+库存台账必须只追加；损耗审批、工资计算和证据采集按职责调用相应服务。
 
-### 10.3 业务单据结构化持久化切片
+### 10.3 正式业务单据持久化
 
-M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库从“仅库存台账备注可追溯”推进到基础业务单据结构化快照：
+`BusinessDocumentRepository` 保存正式业务单据及其关联记录，供操作命令、进度查询与标签使用：
 
 | 项目 | 契约 |
 |---|---|
@@ -1506,7 +1413,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | 防重复 | 调用库存台账前先检查母单号/出库单号是否已存在，存在则拒绝，避免重复库存入账 |
 | 查询接口 | `GET /api/business/documents/mother-orders/{code}`、`GET /api/business/documents/outbound-orders/{code}` |
 
-当前该切片优先解决登记表显式入账后的结构化追溯和测试证据；尚未覆盖拆单、工单生命周期、出库冻结、单据更正、主数据自动匹配和前端补录界面。
+正式单据已包含拆单、工序交接与按要求质检记录；完整状态流转、单据更正、主数据自动匹配及业务验收仍需按产品范围推进。
 
 ---
 
@@ -1521,7 +1428,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `scene` | 验证场景，例如 PWA 弱光扫码 |
 | `testWindow` | 验证日期和时间段 |
 | `result` | 验证结果：通过、有条件通过、阻断 |
-| `evidence` | 现场证据摘要；M3.95 起可通过 `/api/hardware/poc-evidence` 查看附件元数据关联摘要 |
+| `evidence` | 现场证据摘要；可通过 `/api/hardware/poc-evidence` 查看附件元数据关联摘要 |
 | `blocker` | 阻断项或剩余风险 |
 | `owner` | 当前责任人快照 |
 | `nextAction` | 下一步动作 |
@@ -1544,109 +1451,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 
 `GET /api/hardware/poc-evidence` 只读聚合 `HardwarePocRecord` 和 `EvidenceAttachment`，关联条件为 `EvidenceAttachment.businessType = 硬件 POC` 且 `EvidenceAttachment.businessCode = HardwarePocRecord.code`；该接口不执行上传、归档、复测确认或设备直连动作。
 
-### 11.3 `HardwareAdapterPlan`
-
-| 字段 | 说明 |
-|---|---|
-| `deviceCode` | 设备编码，对应设备兼容矩阵中的编码，例如 `SCALE-01` |
-| `deviceName` | 设备名称快照 |
-| `phase` | 接入阶段，当前为一期低成本适配 |
-| `primaryAdapter` | 一期优先适配方式，例如浏览器/驱动打印、USB HID、人工读数或 NVR 时间段截取 |
-| `fallbackAdapter` | 主适配失败时的人工兜底方式 |
-| `evidenceRequirement` | 现场必须保留的证据，例如视频、标签样张、扫码截图、称重照片、checksum 或补打日志 |
-| `nextIntegrationAction` | 下一步复测、参数冻结、协议样本采集或权限补齐动作 |
-| `riskLevel` | 当前风险等级：`低`、`中`、`高` |
-| `tone` | 前端状态色：`green`、`blue`、`amber`、`red` 等 |
-
-`GET /api/hardware/adapter-plans` 返回只读适配计划，用于在不采购高成本专用硬件、不承诺厂商 SDK 强集成的前提下，先冻结摄像头、标签打印、PC 扫码、PWA 摄像头和电子秤的一期主适配、失败兜底和证据要求。该接口不执行硬件采集、打印、扫码、称重、视频截取或附件上传动作。
-
-### 11.4 `HardwareProtocolSample`
-
-| 字段 | 说明 |
-|---|---|
-| `deviceCode` | 设备编码，对应设备兼容矩阵中的编码，例如 `SCALE-01` |
-| `deviceName` | 设备名称快照 |
-| `protocolType` | 协议或接入类型，例如 `RTSP / ONVIF / FFmpeg`、`USB HID` 或 `RS232 / USB / TCP reserved + manual reading` |
-| `sampleStatus` | 样本状态，例如 `样本已冻结`、`待复测`、`接口待确认` |
-| `requiredParameters` | 现场复测必须补齐或确认的参数列表，例如 `baudRate`、`channel`、`printerName` |
-| `samplePayload` | 协议样本或样本标识，例如 `ST,GS,+000123.45,g`、`PDF-LABEL-MD-20260706-001` |
-| `evidenceCode` | 协议样本对应的证据编码 |
-| `captureMethod` | 样本采集方式，例如截图、录屏、dry-run 日志、人工读数照片或报文样本占位 |
-| `nextReviewAction` | 下一步参数复核、现场复测或样本补齐动作 |
-| `riskLevel` | 当前风险等级：`低`、`中`、`高` |
-| `tone` | 前端状态色：`green`、`blue`、`amber`、`red` 等 |
-
-`GET /api/hardware/protocol-samples` 返回只读协议样本清单，用于把 M3.102 适配计划中的接口预留推进到现场参数模板、样本载荷和复测输入。该接口不执行取流、打印、扫码、称重、串口读取、TCP 采集、附件上传或复测结论确认。
-
-### 11.5 `HardwareProtocolReviewItem`
-
-| 字段 | 说明 |
-|---|---|
-| `reviewCode` | 参数复核记录编码，例如 `HW-REV-SCALE-20260710-001` |
-| `deviceCode` | 设备编码，对应设备兼容矩阵中的编码 |
-| `deviceName` | 设备名称快照 |
-| `protocolType` | 协议或接入类型快照 |
-| `reviewStatus` | 参数复核状态，例如 `参数已冻结`、`待现场复核`、`接口待确认` |
-| `deviceModelStatus` | 真实设备型号或接口类型冻结状态 |
-| `confirmedParameters` | 已确认参数列表 |
-| `pendingParameters` | 待复核参数列表，例如 `interfaceType`、`baudRate`、`channel` |
-| `evidenceCode` | 关联的协议样本或现场证据编码 |
-| `owner` | 当前复核责任人 |
-| `reviewWindow` | 计划或最近复核窗口 |
-| `blocker` | 当前阻断项；无阻断时可为 `无` |
-| `nextAction` | 下一步参数复核、样本补齐、型号冻结或证据补传动作 |
-| `riskLevel` | 当前风险等级：`低`、`中`、`高` |
-| `tone` | 前端状态色：`green`、`blue`、`amber`、`red` 等 |
-
-`GET /api/hardware/protocol-reviews` 返回只读参数复核清单，用于把协议样本推进到责任人、复核窗口、待确认参数和型号冻结状态。该接口不执行硬件采集、真实复测、型号写入、附件上传或复测结论确认。
-
-### 11.6 `HardwareProtocolExecutionResult`
-
-| 字段 | 说明 |
-|---|---|
-| `executionCode` | 复测执行结果编码，例如 `HW-EXEC-SCALE-20260710-001` |
-| `reviewCode` | 关联的参数复核记录编码 |
-| `deviceCode` | 设备编码，对应设备兼容矩阵中的编码 |
-| `deviceName` | 设备名称快照 |
-| `protocolType` | 协议或接入类型快照 |
-| `executionStatus` | 执行结果状态，例如 `通过`、`有条件通过`、`待复测`、`阻断` |
-| `executedAt` | 最近执行时间；未执行时可为空字符串 |
-| `executedBy` | 执行人或当前执行责任人 |
-| `deviceModelSnapshot` | 执行时记录的设备型号、驱动或接口类型快照 |
-| `modelFreezeStatus` | 设备型号或接口类型冻结状态 |
-| `acceptedParameters` | 本次复测已通过或已确认参数列表 |
-| `failedParameters` | 本次复测未通过、缺失或仍待确认参数列表 |
-| `evidenceCode` | 关联的协议样本、POC 或现场证据编码 |
-| `evidenceStatus` | 证据状态，例如 `扫码录屏已关联`、`原始报文缺失` |
-| `resultSummary` | 执行结果摘要 |
-| `nextAction` | 下一步复测、证据补传、型号冻结或人工兜底动作 |
-| `riskLevel` | 当前风险等级：`低`、`中`、`高` |
-| `tone` | 前端状态色：`green`、`blue`、`amber`、`red` 等 |
-
-`GET /api/hardware/protocol-executions` 返回只读复测执行结果，用于承接参数复核后的执行状态、证据状态和未通过参数展示。该接口不执行硬件采集、取流、打印、扫码、称重、串口读取、附件上传、正式签字或型号最终冻结。
-
-### 11.7 `HardwareProtocolSignoffReadiness`
-
-| 字段 | 说明 |
-|---|---|
-| `signoffCode` | 签字就绪记录编码，例如 `HW-SIGN-SCALE-20260710-001` |
-| `executionCode` | 关联的复测执行结果编码 |
-| `deviceCode` | 设备编码，对应设备兼容矩阵中的编码 |
-| `deviceName` | 设备名称快照 |
-| `signoffStatus` | 签字状态，例如 `已签字`、`待签字`、`待补证据`、`阻断` |
-| `requiredAttachments` | 签字前必备附件列表，例如接口照片、铭牌照片、原始报文、校准记录 |
-| `missingAttachments` | 当前仍缺失的附件列表 |
-| `signerRoles` | 需要参与签字或复核的角色列表 |
-| `signedBy` | 已签字人快照；未签字时为空字符串 |
-| `signedAt` | 已签字时间；未签字时为空字符串 |
-| `modelFreezeDecision` | 型号或接口冻结决策，例如 `已冻结`、`暂不冻结`、`禁止冻结` |
-| `rolloutGate` | 一期上线门禁，例如 `允许一期上线`、`仅允许人工读数兜底` |
-| `closureSummary` | 签字闭环摘要 |
-| `nextAction` | 下一步补证据、签字、重新复测或兜底动作 |
-| `riskLevel` | 当前风险等级：`低`、`中`、`高` |
-| `tone` | 前端状态色：`green`、`blue`、`amber`、`red` 等 |
-
-`GET /api/hardware/protocol-signoffs` 返回只读签字闭环就绪度，用于把复测执行结果推进到附件缺口、签字角色、型号冻结决策和上线门禁展示。该接口不执行附件上传、电子签字、型号冻结写入、硬件采集或厂商协议直连。
+已移除的适配计划、协议样本、参数复核、复测结果和签字就绪度五组说明接口不属于现行 API；原字段保存在[整理前契约](./archive/contracts/16_字段字典与API契约_整理前.md)。硬件型号确认、现场复测与签字要求继续作为需求和上线决策保留。
 
 硬件 POC 约束：
 
@@ -1654,20 +1459,17 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 - 结果为阻断时必须有人工兜底或明确排期。
 - POC 记录必须能关联设备、业务场景和证据附件。
 - 电子秤、NVR、PWA 扫码、标签打印至少各保留一条现场验证记录。
-- M3.94 起 `GET /api/hardware/poc-records` 读取 `HardwarePocRecordRepository`，接口响应字段不变；本地默认 `memory`，MySQL profile 默认 `jdbc`，seed 脚本为 `V19__m3_hardware_poc_record_seed.sql`。
-- M3.95 起 `GET /api/hardware/poc-evidence` 读取附件元数据做只读证据关联，未关联附件的 POC 明确返回待补证据。
-- M3.102 起 `GET /api/hardware/adapter-plans` 返回五类低成本硬件适配计划，用于指导现场复测和接口预留，不代表设备协议直连完成。
-- M3.103 起 `GET /api/hardware/protocol-samples` 返回五类协议样本清单，用于冻结参数模板、样本载荷和复测输入，不代表现场复测完成或硬件协议采集已上线。
-- M3.104 起 `GET /api/hardware/protocol-reviews` 返回五类参数复核清单，用于推进待复核参数、责任人和型号冻结状态，不代表真实设备型号已冻结或复测结论完成。
-- M3.105 起 `GET /api/hardware/protocol-executions` 返回五类复测执行结果，用于展示执行状态、证据状态、通过/未通过参数和下一步动作，不代表现场附件上传闭环、正式签字或真实设备型号最终冻结完成。
-- M3.106 起 `GET /api/hardware/protocol-signoffs` 返回五类签字闭环就绪度，用于展示必备附件、缺失附件、签字角色、型号冻结决策和上线门禁，不代表真实附件上传、正式电子签字或型号冻结写入完成。
+- `GET /api/hardware/poc-records` 读取 `HardwarePocRecordRepository`，接口响应字段不变；本地默认 `memory`，MySQL profile 默认 `jdbc`，seed 脚本为 `V19__m3_hardware_poc_record_seed.sql`。
+- `GET /api/hardware/poc-evidence` 读取附件元数据做只读证据关联，未关联附件的 POC 明确返回待补证据。
 - `zhubao.hardware.poc.repository` / `ZHUBAO_HARDWARE_POC_REPOSITORY` 只控制 POC 记录仓储来源，不代表硬件 SDK、NVR 协议、打印驱动、扫码识别或电子秤采集已完成强集成。
 
 ---
 
-## 11. 配置基线字段
+## 12. 配置基线字段
 
-### 11.1 `SystemParameter`
+本章是只读评审基线数据结构，不代表可在线编辑并生效的系统配置、真实变更申请或真实审计。日常配置页面已收敛为账号、客户授权、机器档案、标签等实际管理能力；未来参数管理需求仍保留在产品需求中。
+
+### 12.1 `SystemParameter`
 
 | 字段 | 说明 |
 |---|---|
@@ -1679,7 +1481,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `changeControl` | 变更要求，例如需审批、记录日志 |
 | `effectiveScope` | 影响范围 |
 
-### 11.2 `CodeRule`
+### 12.2 `CodeRule`
 
 | 字段 | 说明 |
 |---|---|
@@ -1689,7 +1491,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `uniqueness` | 唯一性规则 |
 | `changePolicy` | 冻结或变更策略 |
 
-### 11.3 `RolePermissionBaseline`
+### 12.3 `RolePermissionBaseline`
 
 | 字段 | 说明 |
 |---|---|
@@ -1698,7 +1500,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `permissions` | 基础权限列表 |
 | `sensitiveActions` | 必须审计的敏感动作 |
 
-### 11.4 `ProcessTemplate`
+### 12.4 `ProcessTemplate`
 
 | 字段 | 说明 |
 |---|---|
@@ -1711,7 +1513,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `qualityRule` | 质检规则 |
 | `snapshotFields` | 工单创建时必须快照的字段 |
 
-### 11.5 `WarehouseState`
+### 12.5 `WarehouseState`
 
 | 字段 | 说明 |
 |---|---|
@@ -1722,7 +1524,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `transitionRule` | 状态流转规则 |
 | `negativeAllowed` | 是否允许负库存，一期默认 false |
 
-### 11.6 `VideoParameter`
+### 12.6 `VideoParameter`
 
 | 字段 | 说明 |
 |---|---|
@@ -1733,7 +1535,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `retention` | 保存周期或保留策略 |
 | `changeControl` | 变更要求 |
 
-### 11.7 `ConfigurationChangeRequest`
+### 12.7 `ConfigurationChangeRequest`
 
 | 字段 | 说明 |
 |---|---|
@@ -1750,7 +1552,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `riskLevel` | 风险等级 |
 | `submittedAt` | 提交时间 |
 
-### 11.8 `ConfigurationAuditEvent`
+### 12.8 `ConfigurationAuditEvent`
 
 | 字段 | 说明 |
 |---|---|
@@ -1763,9 +1565,9 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `evidence` | 关联证据 |
 | `traceId` | 审计追踪号 |
 
-配置基线迁移要求：
+规划中的配置维护要求（不表示当前已提供配置写入 API）：
 
-1. M3 使用 `cfg_*` 表承载配置基线 seed 数据。
+1. 现有 `cfg_*` 表是配置基线 seed 契约；真实配置维护需接入明确的命令、权限和审计。
 2. 参数编辑必须在权限、审批、审计日志完成后开放。
 3. C1 配置变更必须保留历史，不能直接覆盖旧值。
 4. 工序模板变更只影响新工单，历史工单使用快照字段。
@@ -1775,11 +1577,11 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 
 ---
 
-## 12. M3.33 轻量权限守卫契约
+## 13. 权限守卫
 
-当前版本尚未接入生产 SSO/JWT、组织树和客户授权表，但敏感 POST 已接入后端轻量角色守卫，业务工作台 GET 已按 `dataScope` 做首版过滤，菜单树已返回到前端并在登录会话下驱动侧栏过滤，避免评审原型继续处于“所有人都能提交关键动作、所有人都看全量工作台”的状态。
+敏感命令由角色权限守卫保护，工作台与财务查询分别校验数据范围。客户授权表和菜单仓储已落地；完整组织树与 SSO/JWT 仍未接入。详细读取规则见相应能力章节。
 
-### 12.1 请求头
+### 13.1 请求头
 
 | Header | 说明 | 默认值 | 示例 |
 |---|---|---|---|
@@ -1790,10 +1592,10 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 
 说明：
 - 默认 `ADMIN` 只在 `zhubao.security.allow-header-context=true` 时用于兼容现有评审脚本和自动化测试，不代表生产环境允许匿名管理员。
-- 后续接真实登录后，应由登录态、JWT 或网关注入操作人、角色和数据范围，前端不得自行伪造。
+- 正式环境使用登录态解析操作人、角色和范围；请求头仅用于显式允许的评审环境。
 - 角色或数据范围无法识别时返回 `403`。
 
-### 12.2 受保护接口
+### 13.2 受保护接口
 
 | 接口 | 权限码 | 允许角色 |
 |---|---|---|
@@ -1813,7 +1615,7 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 | `POST /api/video-clip-tasks`、`POST /api/video-clip-tasks/{code}/retry`、`POST /api/video-clip-tasks/{code}/manual-upload` | `VIDEO_TASK_OPERATE` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`WORKSHOP_LEADER` |
 | `GET /api/auth/accounts`、`GET /api/auth/accounts/pre-approval-readiness`、`POST /api/auth/accounts/pre-approval-drafts`、`GET/POST /api/auth/accounts/pre-approval-applications`、`POST /api/auth/accounts`、`POST /api/auth/accounts/{username}/status`、`POST /api/auth/accounts/{username}/unlock` | `AUTH_ACCOUNT_MANAGE` | `ADMIN`、`GENERAL_MANAGER` |
 
-### 12.3 错误响应
+### 13.3 错误响应
 
 角色越权时返回：
 
@@ -1826,22 +1628,22 @@ M3.81 新增 `BusinessDocumentRepository`，将来料确认入库和成品出库
 }
 ```
 
-HTTP 状态码必须是 `403`。M3.33 已补 smoke 测试验证 `OPERATOR` 角色调用损耗审批会被拒绝。
+权限拒绝的 HTTP 状态码为 `403`，业务错误码为 `40301`。
 
-### 12.4 当前限制
+### 13.4 当前限制
 
-- M3.63 已接入登录会话 token，M3.84/M3.85 已接入登录审计事件和仓储边界，M3.87 已接入账号仓储和 PBKDF2 密码哈希边界，M3.88 已接入失败次数与临时锁定，M3.89 已接入账号启停和管理员解锁管理边界，M3.90 已接入创建/重置密码策略校验，M3.91 已接入 90 天密码过期检测和管理员重置刷新边界，M3.92 已接入登录态自助改密/续期边界，M3.93 已接入认证审计摘要链边界，M3.97 已接入账号管理审批摘要边界，M3.98 已接入请求头身份兜底配置开关，M3.99 已接入账号客户范围边界，M3.100 已接入客户范围可视化，M3.107 已接入账号前置审批就绪度只读契约，M3.108 已接入账号前置审批草稿评估契约，M3.109 已接入账号前置审批申请单边界，M3.110 已接入账号前置审批申请单 JDBC 持久化边界，M3.111 已接入账号动作申请单号校验边界，M3.112 已接入账号动作申请单号强制开关，M3.113 已接入账号前置审批任务交接，M3.114 已接入账号动作审批通过态强制校验，M3.115 已接入账号停用会话吊销，M3.116 已接入管理员新建/重置密码强制首次改密，M3.117 已接入临时密码一次性消费，M3.118 已接入前置审批证据只读关联，M3.119 已接入前置审批证据上传入口；正式电子签字、完整 IAM、JWT/SSO、正式会话续期和生产不可篡改审计仍未完成。
-- M3.96 已对业务工作台 GET 接入 `SELF`、`TEAM`、`DEPARTMENT`、`CUSTOMER_RANGE` 首版过滤，M3.99 已让 Bearer `CUSTOMER_RANGE` 从账号 `customerScope` 读取客户范围；完整组织树、完整组织客户授权表、跨对象关系推导和全系统行级权限仍未完成。
+- 认证优先使用 Bearer 会话；账号、审计、菜单和客户授权均有内存/JDBC 仓储。正式电子签字、SSO/JWT 与不可篡改审计不属于当前完成能力。
+- 工作台 GET、进度和财务读取按各自查询规则过滤；不能据此推断所有接口已具备全系统行级授权。完整组织树与跨对象范围推导仍待完善。
 - 尚未把权限矩阵持久化到数据库或配置基线变更流程。
 - 尚未把审批人和权限守卫结果统一写入完整审计事件。
 
 ---
 
-## 13. M3.63/M3.87-M3.93/M3.97-M3.100/M3.107-M3.119 轻量登录会话 API 与账号仓储
+## 14. 认证与账号
 
-M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 POST 权限守卫从“请求头模拟”推进到“Bearer token 优先”。M3.87 将账号读取和密码校验从硬编码演示账号推进到 `AuthUserAccountRepository` 与 PBKDF2 密码哈希；M3.88 在同一仓储边界上记录失败次数和临时锁定；M3.89 新增账号管理、启停和管理员解锁边界；M3.90 新增生产账号密码策略校验；M3.91 新增生产账号 90 天密码过期检测、登录拒绝审计和管理员重置刷新 `passwordChangedAt`；M3.92 新增 Bearer 登录会话内的自助改密/续期边界；M3.93 新增认证审计事件摘要链和最近事件完整性校验摘要；M3.97 新增账号管理动作成功后的 `ACCOUNT_MANAGEMENT` 事后审批摘要任务；M3.98 新增请求头身份兜底开关，MySQL profile 默认要求 Bearer 登录会话；M3.99 新增账号客户范围，`CUSTOMER_RANGE` Bearer 会话从账号 `customerScope` 提供客户范围；M3.100 将该客户范围显式呈现在当前权限上下文、配置基线账号卡、全局基线和上线门禁提示中；M3.107 新增账号前置审批就绪度只读清单；M3.108 新增账号前置审批草稿评估；M3.109 新增账号前置审批申请单边界；M3.110 新增申请单 JDBC 持久化边界；M3.111 新增账号动作申请单号显式校验边界；M3.112 新增账号动作申请单号强制开关；M3.113 新增账号前置审批任务交接；M3.114 新增强制模式下账号动作审批通过态校验；M3.115 新增停用账号后吊销现有 Bearer 会话并记录 `SESSION_REVOKED`；M3.116 新增管理员新建/重置非 demo 密码后的强制首次登录改密状态和临时密码会话业务上下文拒绝；M3.117 新增临时密码首次成功登录后的一次性消费状态；M3.118 新增前置审批证据只读聚合；M3.119 新增前置审批证据上传入口。默认 seed 仍是评审账号，账号审批摘要、账号客户范围、客户范围可视化、前置审批就绪度、草稿评估、申请单仓储、申请单号校验、强制申请单号开关、申请单审批任务、审批通过态校验、停用会话吊销、强制首次改密、临时密码一次性消费和前置审批证据上传入口不等于完整生产用户中心、正式电子签字或完整组织客户授权表。
+账号来自 `AuthUserAccountRepository`，使用 PBKDF2 密码哈希；支持失败锁定、密码策略、过期检查、自助改密、临时密码一次性消费及认证审计。账号前置审批与事后复核是不同任务类型，放行规则见本章账号管理部分。
 
-### 13.1 `POST /api/auth/login`
+### 14.1 `POST /api/auth/login`
 
 请求：
 
@@ -1869,7 +1671,7 @@ M3.63 新增轻量登录会话基线，用于让前端配置基线页和敏感 P
 - 成功登录会清零失败次数和锁定到期时间。
 - 未知账号和停用账号仍返回通用“用户名或密码错误”，避免通过错误提示枚举账号。
 
-M3.91 密码过期规则：
+密码过期规则：
 
 - 生产账号以 `passwordChangedAt` 为起点，90 天后过期。
 - `passwordChangedAt` 为空的生产账号视为已过期。
@@ -1891,41 +1693,41 @@ M3.91 密码过期规则：
 | `passwordChangedAt` | 密码最近变更时间展示值；未知为空字符串 |
 | `passwordExpiresAt` | 密码到期时间展示值；`passwordChangedAt` 为空时返回 epoch 对应展示值 |
 | `passwordExpired` | 当前会话账号密码是否已过期；过期生产账号通常无法新建会话，仅用于边界展示和评审 seed 判定 |
-| `passwordChangeRequired` | M3.116/M3.117 当前会话是否必须先完成自助改密；为 `true` 时 token 可用于 `POST /api/auth/password`，但不能解析为业务操作上下文；临时密码是否已消费不暴露给前端 |
-| `customerScope` | M3.99 账号客户范围；`dataScope=CUSTOMER_RANGE` 时由账号仓储带出并供业务工作台 GET 过滤使用 |
+| `passwordChangeRequired` | 当前会话是否必须先完成自助改密；为 `true` 时 token 可用于 `POST /api/auth/password`，但不能解析为业务操作上下文；临时密码是否已消费不暴露给前端 |
+| `customerScope` | 账号客户范围；`dataScope=CUSTOMER_RANGE` 时由账号仓储带出并供业务工作台 GET 过滤使用 |
 | `menuCodes` | 当前角色可见菜单编码，使用前端模块 tab key，如 `dashboard`、`inbound`、`approvals`、`sample` |
 | `menuTree` | 当前角色可见菜单树，元素结构见 13.5；包含菜单编码、名称、模块说明、路由和按钮权限编码 |
 
-### 13.2 其他认证接口
+### 14.2 其他认证接口
 
 | API | 说明 |
 |---|---|
 | `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话 |
 | `POST /api/auth/logout` | 注销当前 token；前端无论后端是否可达都清理本地 token |
-| `POST /api/auth/password` | M3.92 自助改密/续期；M3.117 起成功后清除强制首次改密标记和临时密码消费标记；只接受 Bearer 登录会话，不使用请求头角色兜底 |
+| `POST /api/auth/password` | 自助改密/续期；成功后清除强制首次改密标记和临时密码消费标记；只接受 Bearer 登录会话，不使用请求头角色兜底 |
 | `GET /api/auth/demo-users` | 返回可用于评审的演示账号列表 |
-| `GET /api/auth/audit-events` | 返回最近登录会话审计事件，当前最多保留 50 条内存事件 |
-| `GET /api/auth/audit-integrity` | M3.93 返回最近认证审计事件摘要链校验结果 |
+| `GET /api/auth/audit-events` | 返回最近登录会话审计事件，默认返回最近审计事件；仓储可切换内存/JDBC |
+| `GET /api/auth/audit-integrity` | 返回最近认证审计事件摘要链校验结果 |
 
 `POST /api/auth/password` 请求：
 
 | 字段 | 说明 |
 |---|---|
 | `currentPassword` | 当前登录账号的原密码，必须校验通过 |
-| `newPassword` | 新密码，必须通过 M3.90 生产密码策略，且不得与当前密码相同 |
+| `newPassword` | 新密码，必须通过 生产密码策略，且不得与当前密码相同 |
 
 自助改密成功后：
 
 - 返回刷新后的 `AuthSession`，token 保持不变。
 - 更新账号 `passwordChangedAt`，账号摘要和会话中的 `passwordExpiresAt/passwordExpired` 随之刷新。
-- M3.117 起清除账号 `passwordChangeRequired` 和 `temporary_password_consumed` 标记，临时密码会话改密后可重新解析为业务操作上下文。
+- 清除账号 `passwordChangeRequired` 和 `temporary_password_consumed` 标记，临时密码会话改密后可重新解析为业务操作上下文。
 - 清零该账号失败登录次数和锁定到期时间。
 - 写入 `PASSWORD_CHANGE` / `SUCCESS` 审计事件，审计中只保留 token 尾号。
 - 该接口不纳入 `PermissionGuardInterceptor` 请求头兜底，由 `AuthSessionService` 内部 Bearer session 校验；无 Bearer token、当前密码错误、新密码与旧密码相同或不符合策略时返回拒绝或业务错误。
 
-### 13.3 登录会话审计
+### 14.3 登录会话审计
 
-M3.84 新增 `AuthAuditEvent`，用于记录登录成功、登录失败、会话读取、退出和无效 token 解析；M3.89 起记录账号管理动作；M3.92 起记录自助改密动作；M3.93 起写入 `previousEventHash/eventHash` 摘要链。默认本地为内存队列，重启后丢失；M3.85 起可通过 JDBC 仓储写入 `auth_audit_event`，但仍不等于生产不可篡改审计或安全日志平台。
+`AuthAuditEvent` 记录登录、会话解析、退出、账号管理与改密事件，并保存 `previousEventHash/eventHash` 摘要链。本地内存模式重启丢失，JDBC 模式写入 `auth_audit_event`；摘要链不等于不可篡改归档。
 
 `AuthAuditEvent`：
 
@@ -1954,7 +1756,7 @@ M3.84 新增 `AuthAuditEvent`，用于记录登录成功、登录失败、会话
 | `brokenEventId` | 校验失败时的断点事件号；通过时为空 |
 | `message` | 校验说明 |
 
-M3.85 新增 `AuthAuditRepository` 仓储边界：
+新增 `AuthAuditRepository` 仓储边界：
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
@@ -1963,7 +1765,7 @@ M3.85 新增 `AuthAuditRepository` 仓储边界：
 
 `V15__m3_auth_audit_contract.sql` 冻结 `auth_audit_event` 合同表，字段包括 `event_id`、`event_type`、`username`、`operator`、`role`、`result`、`reason`、`occurred_at` 和 `session_token_suffix`。该表不保存密码、完整 token 或客户端密钥。
 
-M3.87 新增 `AuthUserAccountRepository` 仓储边界：
+新增 `AuthUserAccountRepository` 仓储边界：
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
@@ -1981,25 +1783,25 @@ M3.87 新增 `AuthUserAccountRepository` 仓储边界：
 | `last_login_at` | 最近成功登录时间 |
 | `last_failed_login_at` | 最近失败登录时间 |
 
-M3.91 起 `password_changed_at` 用于 90 天密码过期检测和管理员重置刷新边界；M3.92 起自助改密成功也会刷新该字段。M3.97 起账号管理动作会生成账号审批摘要任务，但当前表仍未覆盖生产账号初始化前置审批、SSO/JWT 或菜单持久化。
+`password_changed_at` 用于密码过期检测；管理员创建/重置密码和用户自助改密会刷新该字段。账号前置审批申请单与菜单分别使用独立仓储。
 
 `V20__m3_auth_user_customer_scope_contract.sql` 在 `auth_user_account` 上新增：
 
 | 字段 | 说明 |
 |---|---|
-| `customer_scope` | M3.99 账号客户范围，当前以 `|` 序列化保存；读取时兼容 `|`、`,`、`，`、`;`、`；` 分隔符，仅在 `data_scope=CUSTOMER_RANGE` 时作为 Bearer 数据范围过滤依据 |
+| `customer_scope` | 账号客户范围，当前以 `|` 序列化保存；读取时兼容 `|`、`,`、`，`、`;`、`；` 分隔符，仅在 `data_scope=CUSTOMER_RANGE` 时作为 Bearer 数据范围过滤依据 |
 
 `V23__m3_auth_force_password_change.sql` 在 `auth_user_account` 上新增：
 
 | 字段 | 说明 |
 |---|---|
-| `password_change_required` | M3.116 强制首次登录改密状态；管理员新建/重置非 demo 账号密码后写 `true`，登录会话和账号摘要返回 `passwordChangeRequired=true`，自助改密成功后清除 |
+| `password_change_required` | 强制首次登录改密状态；管理员新建/重置非 demo 账号密码后写 `true`，登录会话和账号摘要返回 `passwordChangeRequired=true`，自助改密成功后清除 |
 
 `V24__m3_auth_temporary_password_once.sql` 在 `auth_user_account` 上新增：
 
 | 字段 | 说明 |
 |---|---|
-| `temporary_password_consumed` | M3.117 临时密码一次性消费状态；仅当 `password_change_required=true` 时有意义，首次临时密码登录成功前从 `false` 原子更新为 `true`，重复使用同一临时密码登录会被拒绝，自助改密成功后清除为 `false`；该字段不进入前端公开响应 |
+| `temporary_password_consumed` | 临时密码一次性消费状态；仅当 `password_change_required=true` 时有意义，首次临时密码登录成功前从 `false` 原子更新为 `true`，重复使用同一临时密码登录会被拒绝，自助改密成功后清除为 `false`；该字段不进入前端公开响应 |
 
 `V18__m3_auth_audit_integrity_contract.sql` 在 `auth_audit_event` 上新增：
 
@@ -2008,38 +1810,38 @@ M3.91 起 `password_changed_at` 用于 90 天密码过期检测和管理员重�
 | `previous_event_hash` | 前一条认证审计事件摘要 |
 | `event_hash` | 当前事件摘要，保存时由内存/JDBC 审计仓储生成 |
 
-### 13.4 账号管理接口
+### 14.4 账号管理接口
 
-M3.89 新增账号管理服务边界，面向管理员和总经理开放。账号管理接口要求 Bearer 会话或显式评审角色头，不使用现有请求头兜底里的匿名默认管理员；M3.90 起创建账号或重置密码必须先通过生产密码策略；M3.91 起创建账号或重置密码会刷新 `passwordChangedAt`，账号摘要会暴露密码到期状态；M3.92 起用户也可在 Bearer 会话内自助改密刷新 `passwordChangedAt`；M3.97 起创建/更新、启停和管理员解锁成功后会生成 `ACCOUNT_MANAGEMENT` 轻量审批摘要任务；M3.99 起 `CUSTOMER_RANGE` 账号可保存客户范围并在 Bearer 会话中带出；M3.107 起新增账号前置审批就绪度只读清单；M3.108 起新增账号前置审批草稿评估；M3.109 起新增账号前置审批申请单提交与查询；M3.110 起申请单可通过 JDBC 仓储持久化和重载；M3.111 起账号管理、启停和解锁命令可显式携带 `preApprovalApplicationCode` 做申请单放行校验；M3.112 起可通过配置强制账号动作携带申请单号；M3.113 起申请单提交会生成 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`；M3.114 起强制开关开启时账号动作还会校验绑定任务为 `APPROVED`；M3.115 起停用账号会吊销该 username 现有 Bearer 会话并写 `SESSION_REVOKED`；M3.116 起管理员新建/重置非 demo 密码会标记 `passwordChangeRequired=true`，临时密码会话只能先自助改密；M3.117 起首次临时密码登录后会消费内部通道，后续同一临时密码不能再次登录；M3.118 起申请单可只读聚合证据附件；M3.119 起申请单证据可通过专用 multipart 入口上传并自动绑定附件元数据。该接口用于验证生产账号创建/更新、启停、停用会话吊销、解锁、密码策略、密码过期检测、强制首次登录改密、临时密码一次性消费、管理审计、事后复核摘要、账号客户范围、前置审批缺口、申请草稿材料缺口、申请单状态、申请单号校验、强制申请单号开关、申请单审批任务交接、审批通过态门禁和证据附件上传入口的最小合同，不代表完整 IAM、正式电子签字、完整组织客户授权表、SSO/JWT 或安全日志平台完成。
+账号管理仅向具有 `AUTH_ACCOUNT_MANAGE` 的管理员和总经理开放，要求 Bearer 会话或允许的显式评审角色头，不使用匿名管理员兜底。创建/重置密码遵循密码策略；成功管理动作写认证审计和事后复核。启用前置审批强制开关时，账号动作还须提交匹配且已审批通过的申请单。
 
 | API | 权限 | 说明 |
 |---|---|---|
 | `GET /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 返回账号状态摘要列表；GET 在控制器内显式调用权限守卫 |
-| `GET /api/auth/accounts/pre-approval-readiness` | `AUTH_ACCOUNT_MANAGE` | M3.107 返回账号前置审批就绪度只读清单；用于暴露必备材料和缺失能力，不阻断现有账号动作 |
-| `POST /api/auth/accounts/pre-approval-drafts` | `AUTH_ACCOUNT_MANAGE` | M3.108 评估账号前置审批申请草稿；返回已收材料、待补材料、系统缺失能力和阻断状态，不写账号、不创建审批任务 |
-| `GET /api/auth/accounts/pre-approval-applications` | `AUTH_ACCOUNT_MANAGE` | M3.109 返回已提交的账号前置审批申请单；M3.110 起可切换 JDBC 仓储，按提交时间倒序 |
-| `POST /api/auth/accounts/pre-approval-applications` | `AUTH_ACCOUNT_MANAGE` | M3.109 将草稿评估结果保存为申请单；M3.110 起可切换 JDBC 仓储持久化；M3.113 起生成 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`；不写账号、不阻断账号动作 |
-| `GET /api/auth/accounts/pre-approval-evidence` | `AUTH_ACCOUNT_MANAGE` | M3.118 返回申请单证据摘要，按 `businessType=账号前置审批`、`businessCode=applicationCode` 关联附件元数据 |
-| `POST /api/auth/accounts/pre-approval-evidence/uploads` | `AUTH_ACCOUNT_MANAGE` | M3.119 multipart 上传申请单证据附件；请求字段 `applicationCode`、`file`，自动创建/更新 `DOC-<applicationCode>` 证据包并绑定 `documentCode=DOC-<applicationCode>`、`businessType=账号前置审批`、`businessCode=<applicationCode>` |
-| `POST /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 新建或更新账号；新建必须提供密码，更新不传密码时保留原密码哈希，传密码时需通过密码策略并重置失败次数和锁定状态；M3.111 起传入 `preApprovalApplicationCode` 时校验申请单放行状态，M3.112 起强制开关开启时该字段必填，M3.114 起强制模式还要求绑定审批任务为 `APPROVED`，M3.117 起提供密码且 `demoAccount=false` 会要求目标账号首次登录先自助改密，并重置临时密码消费状态 |
-| `POST /api/auth/accounts/{username}/status` | `AUTH_ACCOUNT_MANAGE` | 启用或停用账号，停用后登录仍返回通用“用户名或密码错误”；M3.111 起传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，M3.112 起强制开关开启时该字段必填，M3.114 起强制模式还要求绑定审批任务为 `APPROVED`，M3.115 起 `enabled=false` 会吊销目标账号现有 Bearer 会话并记录 `SESSION_REVOKED` |
-| `POST /api/auth/accounts/{username}/unlock` | `AUTH_ACCOUNT_MANAGE` | 管理员清零失败次数并解除临时锁定；M3.111 起传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，M3.112 起强制开关开启时该字段必填，M3.114 起强制模式还要求绑定审批任务为 `APPROVED` |
+| `GET /api/auth/accounts/pre-approval-readiness` | `AUTH_ACCOUNT_MANAGE` | 返回账号前置审批就绪度只读清单；用于暴露必备材料和缺失能力，不阻断现有账号动作 |
+| `POST /api/auth/accounts/pre-approval-drafts` | `AUTH_ACCOUNT_MANAGE` | 评估账号前置审批申请草稿；返回已收材料、待补材料、系统缺失能力和阻断状态，不写账号、不创建审批任务 |
+| `GET /api/auth/accounts/pre-approval-applications` | `AUTH_ACCOUNT_MANAGE` | 返回已提交的账号前置审批申请单；可切换 JDBC 仓储，按提交时间倒序 |
+| `POST /api/auth/accounts/pre-approval-applications` | `AUTH_ACCOUNT_MANAGE` | 将草稿评估结果保存为申请单；可切换 JDBC 仓储持久化；生成 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`；不写账号、不阻断账号动作 |
+| `GET /api/auth/accounts/pre-approval-evidence` | `AUTH_ACCOUNT_MANAGE` | 返回申请单证据摘要，按 `businessType=账号前置审批`、`businessCode=applicationCode` 关联附件元数据 |
+| `POST /api/auth/accounts/pre-approval-evidence/uploads` | `AUTH_ACCOUNT_MANAGE` | multipart 上传申请单证据附件；请求字段 `applicationCode`、`file`，自动创建/更新 `DOC-<applicationCode>` 证据包并绑定 `documentCode=DOC-<applicationCode>`、`businessType=账号前置审批`、`businessCode=<applicationCode>` |
+| `POST /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 新建或更新账号；新建必须提供密码，更新不传密码时保留原密码哈希，传密码时需通过密码策略并重置失败次数和锁定状态；传入 `preApprovalApplicationCode` 时校验申请单放行状态，强制开关开启时该字段必填，强制模式还要求绑定审批任务为 `APPROVED`，提供密码且 `demoAccount=false` 会要求目标账号首次登录先自助改密，并重置临时密码消费状态 |
+| `POST /api/auth/accounts/{username}/status` | `AUTH_ACCOUNT_MANAGE` | 启用或停用账号，停用后登录仍返回通用“用户名或密码错误”；传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，强制开关开启时该字段必填，强制模式还要求绑定审批任务为 `APPROVED`，`enabled=false` 会吊销目标账号现有 Bearer 会话并记录 `SESSION_REVOKED` |
+| `POST /api/auth/accounts/{username}/unlock` | `AUTH_ACCOUNT_MANAGE` | 管理员清零失败次数并解除临时锁定；传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，强制开关开启时该字段必填，强制模式还要求绑定审批任务为 `APPROVED` |
 
 `ManageAuthUserAccountCommand`：
 
 | 字段 | 说明 |
 |---|---|
 | `username` | 登录用户名，后端归一化为小写 |
-| `password` | 新建账号必填；更新账号可不传，不返回给前端；提供时必须通过 M3.90 密码策略；提供时 M3.91 会刷新 `passwordChangedAt` 并清除失败锁定，M3.117 起非 demo 账号还会设置 `passwordChangeRequired=true` 且 `temporary_password_consumed=false` |
+| `password` | 新建账号必填；更新账号可不传，不返回给前端；提供时必须通过 密码策略；提供时 会刷新 `passwordChangedAt` 并清除失败锁定，非 demo 账号还会设置 `passwordChangeRequired=true` 且 `temporary_password_consumed=false` |
 | `operator` | 操作人姓名或岗位快照 |
 | `role` | `RoleCode` 编码 |
 | `dataScope` | `DataScope` 编码 |
-| `customerScope` | M3.99 可选客户范围列表；仅 `dataScope=CUSTOMER_RANGE` 时保存并去重，非客户范围账号会清空；更新账号不传该字段时保留既有范围 |
+| `customerScope` | 可选客户范围列表；仅 `dataScope=CUSTOMER_RANGE` 时保存并去重，非客户范围账号会清空；更新账号不传该字段时保留既有范围 |
 | `enabled` | 是否启用 |
 | `demoAccount` | 是否评审 seed 账号；生产账号应为 `false` |
-| `preApprovalApplicationCode` | M3.111 前置审批申请单号；显式传入时后端必须能查到申请单，且目标账号、动作 readiness 和 `READY_FOR_BLOCKING_APPROVAL` 状态匹配，否则拒绝账号动作；M3.112 强制开关开启时必填 |
+| `preApprovalApplicationCode` | 前置审批申请单号；显式传入时后端必须能查到申请单，且目标账号、动作 readiness 和 `READY_FOR_BLOCKING_APPROVAL` 状态匹配，否则拒绝账号动作；强制开关开启时必填 |
 
-M3.90 密码策略：
+密码策略：
 
 | 规则 | 说明 |
 |---|---|
@@ -2050,14 +1852,14 @@ M3.90 密码策略：
 | 常见弱口令 | 拒绝 `123456`、`12345678`、`admin123`、`password`、`password123`、`qwerty123`、`welcome123` 等内置弱口令 |
 | seed 账号 | 默认评审 seed 账号仅用于评审，不作为生产密码策略豁免依据；生产上线前必须替换、停用或删除 |
 
-M3.91 密码过期边界：
+密码过期边界：
 
 | 规则 | 说明 |
 |---|---|
 | 有效期 | 生产账号密码有效期 90 天 |
 | 改密时间来源 | `auth_user_account.password_changed_at` / `AuthUserAccount.passwordChangedAt` |
 | 过期处理 | 登录密码校验通过后仍拒绝创建会话，返回 `403` 和“密码已过期，请联系管理员重置密码” |
-| 续期边界 | 管理员创建账号或重置密码刷新 `passwordChangedAt`；M3.92 起登录态自助改密成功也刷新 `passwordChangedAt` |
+| 续期边界 | 管理员创建账号或重置密码刷新 `passwordChangedAt`；登录态自助改密成功也刷新 `passwordChangedAt` |
 | seed 账号 | `demoAccount=true` 的评审 seed 账号不因 90 天规则过期；生产上线前仍必须停用、删除或替换 |
 
 `AuthUserAccountStatusCommand`：
@@ -2066,14 +1868,14 @@ M3.91 密码过期边界：
 |---|---|
 | `enabled` | `true` 启用，`false` 停用 |
 | `reason` | 管理原因，写入账号管理审计原因 |
-| `preApprovalApplicationCode` | M3.111 前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验申请单目标账号和放行状态；M3.112 强制开关开启时必填 |
+| `preApprovalApplicationCode` | 前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验申请单目标账号和放行状态；强制开关开启时必填 |
 
 `AuthUserAccountUnlockCommand`：
 
 | 字段 | 说明 |
 |---|---|
 | `reason` | 解锁原因，写入账号管理审计原因 |
-| `preApprovalApplicationCode` | M3.111 前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验申请单目标账号和放行状态；M3.112 强制开关开启时必填 |
+| `preApprovalApplicationCode` | 前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验申请单目标账号和放行状态；强制开关开启时必填 |
 
 返回 `AuthUserAccountSummary`：
 
@@ -2083,13 +1885,13 @@ M3.91 密码过期边界：
 | `operator` | 操作人快照 |
 | `role` / `roleLabel` | 角色编码和中文名 |
 | `dataScope` / `dataScopeLabel` | 数据范围编码和中文名 |
-| `customerScope` | M3.99 账号客户范围；`CUSTOMER_RANGE` 账号用于 Bearer 数据范围过滤，其他数据范围账号为空 |
+| `customerScope` | 账号客户范围；`CUSTOMER_RANGE` 账号用于 Bearer 数据范围过滤，其他数据范围账号为空 |
 | `enabled` | 是否启用 |
 | `demoAccount` | 是否评审 seed 账号 |
 | `passwordChangedAt` | 密码最近变更时间展示值；未知为空字符串 |
 | `passwordExpiresAt` | 密码到期时间展示值 |
 | `passwordExpired` | 当前账号密码是否已过期 |
-| `passwordChangeRequired` | M3.116/M3.117 是否必须先完成首次自助改密；管理员新建/重置非 demo 密码后为 `true`，自助改密成功后为 `false` |
+| `passwordChangeRequired` | 是否必须先完成首次自助改密；管理员新建/重置非 demo 密码后为 `true`，自助改密成功后为 `false` |
 | `failedLoginCount` | 当前连续失败次数 |
 | `lockedUntil` | 锁定到期展示值；未锁定为空字符串 |
 | `locked` | 当前是否仍在锁定时间内 |
@@ -2101,7 +1903,7 @@ M3.91 密码过期边界：
 | `readinessCode` | 就绪度项编码，如 `AUTH-PRE-CREATE-001` |
 | `actionType` | 账号动作类型，如创建生产账号、变更角色/数据范围、管理员重置密码、账号启停/解锁 |
 | `scenario` | 触发该前置审批缺口的业务场景 |
-| `enforcementStatus` | 当前执行状态；M3.114 起可显示“申请单号和审批通过态强制校验已开启”或“申请单号可校验，默认不强制”，其他动作仍可能提示电子签字或差异比对缺口 |
+| `enforcementStatus` | 当前执行状态；可显示“申请单号和审批通过态强制校验已开启”或“申请单号可校验，默认不强制”，其他动作仍可能提示电子签字或差异比对缺口 |
 | `requiredBeforeAction` | 生产前置审批应具备的申请、审批、复核或交付材料 |
 | `missingCapabilities` | 当前缺失的能力，如审批通过态强制校验、客户授权表、正式电子签字、审批后自动放行 |
 | `approverRoles` | 建议审批或复核角色 |
@@ -2131,7 +1933,7 @@ M3.91 密码过期边界：
 | 字段 | 说明 |
 |---|---|
 | `draftCode` | 草稿评估编码，当前格式为 `AUTH-PRE-DRAFT-<ACTION>-<USERNAME>` |
-| `readinessCode` | 对应 M3.107 就绪度项编码 |
+| `readinessCode` | 对应 就绪度项编码 |
 | `actionType` | 账号动作中文名 |
 | `targetUsername` | 目标账号 |
 | `applicant` / `applicantRole` | 当前申请人和角色，来自登录会话或显式评审角色头 |
@@ -2141,14 +1943,14 @@ M3.91 密码过期边界：
 | `missingCapabilities` | 当前系统缺失能力，如审批通过态强制校验、正式电子签字、审批后自动放行 |
 | `approverRoles` | 建议审批角色 |
 | `blockingStatus` | `缺少前置材料`、`系统缺阻断式审批能力` 或 `可进入阻断式审批` |
-| `readyForBlockingApproval` | 当前草稿是否已具备进入阻断式审批的全部材料和系统能力；M3.108 通常为 `false` |
+| `readyForBlockingApproval` | 当前草稿是否已具备进入阻断式审批的全部材料和系统能力；通常为 `false` |
 | `sourceSummary` | 草稿评估摘要，包含目标账号、角色、客户范围、原因和 `pre-action draft only` 边界说明 |
 | `nextAction` | 下一步补齐动作 |
 | `riskLevel` / `tone` | 风险等级和前端展示色调 |
 
 `AuthAccountPreApprovalApplicationCommand`：
 
-字段与 `AuthAccountPreApprovalDraftCommand` 一致。M3.109 的 POST 会先复用草稿评估逻辑，再将评估结果保存为申请单；M3.113 起会创建 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`。当前不执行账号创建/更新/启停/解锁，也不等于 `ACCOUNT_MANAGEMENT` 事后审批任务。
+字段与 `AuthAccountPreApprovalDraftCommand` 一致。的 POST 会先复用草稿评估逻辑，再将评估结果保存为申请单；会创建 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`。当前不执行账号创建/更新/启停/解锁，也不等于 `ACCOUNT_MANAGEMENT` 事后审批任务。
 
 返回 `AuthAccountPreApprovalApplication`：
 
@@ -2171,10 +1973,10 @@ M3.91 密码过期边界：
 | `sourceSummary` | 包含 `stored pre-approval application`、`approvalTaskCode` 与 `not yet an enforcing IAM workflow` 边界说明 |
 | `nextAction` | 下一步补齐动作 |
 | `riskLevel` / `tone` | 风险等级和前端展示色调 |
-| `approvalTaskCode` | M3.113 生成的 `ACCOUNT_PRE_APPROVAL` 轻量审批任务号；为空表示未接入审批服务或历史数据 |
+| `approvalTaskCode` | 生成的 `ACCOUNT_PRE_APPROVAL` 轻量审批任务号；为空表示未接入审批服务或历史数据 |
 | `submittedAt` | 申请单提交时间，当前为展示用本地时间字符串 |
 
-M3.110 `auth_account_pre_approval_application` 合同表：
+`auth_account_pre_approval_application` 合同表：
 
 | 字段 | 说明 |
 |---|---|
@@ -2188,14 +1990,14 @@ M3.110 `auth_account_pre_approval_application` 合同表：
 | `reason` | 申请原因 |
 | `required_evidence` / `provided_evidence` / `missing_evidence` / `missing_capabilities` | 前置材料与系统能力缺口；列表字段用 `|` 序列化 |
 | `approver_roles` | 建议审批角色，`|` 序列化 |
-| `blocking_status` / `application_status` / `approval_task_code` / `ready_for_blocking_approval` | 草稿阻断状态、申请单状态、M3.113 轻量审批任务号和是否具备进入阻断式审批条件 |
+| `blocking_status` / `application_status` / `approval_task_code` / `ready_for_blocking_approval` | 草稿阻断状态、申请单状态、轻量审批任务号和是否具备进入阻断式审批条件 |
 | `source_summary` / `next_action` / `risk_level` / `tone` | 边界摘要、下一步、风险等级和展示色 |
 | `submitted_at` | 提交时间字符串 |
 | `created_time` / `updated_time` | 数据库写入与更新时间 |
 
-索引：`uk_auth_pre_approval_application_code`、`idx_auth_pre_approval_target_username`、`idx_auth_pre_approval_status`、`idx_auth_pre_approval_readiness`，M3.113 新增 `idx_auth_pre_approval_task_code`。
+索引：`uk_auth_pre_approval_application_code`、`idx_auth_pre_approval_target_username`、`idx_auth_pre_approval_status`、`idx_auth_pre_approval_readiness`，新增 `idx_auth_pre_approval_task_code`。
 
-M3.113 `ACCOUNT_PRE_APPROVAL` 轻量审批任务：
+`ACCOUNT_PRE_APPROVAL` 轻量审批任务：
 
 | 字段 | 说明 |
 |---|---|
@@ -2205,9 +2007,9 @@ M3.113 `ACCOUNT_PRE_APPROVAL` 轻量审批任务：
 | `sourceSummary` | 包含申请单号、目标账号、目标角色、数据范围、客户范围、待补材料、系统缺口和 `not final IAM approval` 边界 |
 | `evidenceCode` | 当前填申请单号，后续可替换为正式审批附件或电子签字证据 |
 
-管理动作会写入 `AuthAuditEvent`，`eventType` 为 `ACCOUNT_MANAGEMENT`，`eventId` 前缀为 `AUTH-ACC-`，`sessionTokenSuffix` 只保留管理员 token 尾号。M3.97 起同一成功动作还会写入 `ApprovalTask` 事后复核摘要，`scene=ACCOUNT_MANAGEMENT`、`businessCode=username`、`sourceStatus=WAITING_ACCOUNT_REVIEW`，`sourceSummary` 包含 action、applicantRole、targetOperator、targetRole、targetDataScope、M3.99 `targetCustomerScope`、enabled、demoAccount、M3.116 `passwordChangeRequired` 和 boundary。
+管理动作会写入 `AuthAuditEvent`，`eventType` 为 `ACCOUNT_MANAGEMENT`，`eventId` 前缀为 `AUTH-ACC-`，`sessionTokenSuffix` 只保留管理员 token 尾号。同一成功动作还会写入 `ApprovalTask` 事后复核摘要，`scene=ACCOUNT_MANAGEMENT`、`businessCode=username`、`sourceStatus=WAITING_ACCOUNT_REVIEW`，`sourceSummary` 包含 action、applicantRole、targetOperator、targetRole、targetDataScope、`targetCustomerScope`、enabled、demoAccount、`passwordChangeRequired` 和 boundary。
 
-M3.111 申请单号校验规则：
+申请单号校验规则：
 
 | 场景 | 校验动作 | 失败条件 |
 |---|---|---|
@@ -2216,9 +2018,25 @@ M3.111 申请单号校验规则：
 | 变更角色 / 数据范围 / 客户范围 | `AUTH-PRE-ROLE-001` | 同上 |
 | 启用 / 停用 / 管理解锁 | `AUTH-PRE-STATUS-001` | 同上 |
 
-M3.112 起该校验可通过 `zhubao.auth.pre-approval.enforce-account-actions` 强制执行；本地评审默认关闭时未传入仍保留 M3.89-M3.110 的账号管理路径和事后复核摘要，MySQL profile 默认开启时未传入会拒绝账号动作。M3.113 已生成 `ACCOUNT_PRE_APPROVAL` 任务并回写 `approvalTaskCode`；M3.114 起强制模式还要求该任务为 `APPROVED`，否则账号动作在写库和审计前被拒绝。M3.115 起账号停用成功后会追加会话吊销和 `revokedSessions=N` 摘要。M3.116 起账号创建/重置密码摘要会追加 `passwordChangeRequired=true/false`，M3.117 起临时密码首次成功登录后会消费内部通道，M3.118 起申请单可只读关联本人核验/岗位交接附件元数据，M3.119 起申请单证据可通过 multipart 入口上传并自动创建/更新 `DOC-<applicationCode>` 证据包。后续仍要补正式电子签字、审批后自动放行、生产归档策略/签名访问和完整 IAM。
+`zhubao.auth.pre-approval.enforce-account-actions` 本地默认 `false`，MySQL profile 默认 `true`。强制模式下，缺失申请单号、申请单不匹配或绑定任务未为 `APPROVED` 均在账号写入和审计前拒绝。停用账号会吊销现有 Bearer 会话；创建/重置非 demo 密码要求首次改密。上传证据不自动执行账号动作，审批后仍需显式提交。正式电子签字、审批后自动放行与归档保全仍属后续范围。
 
-### 13.5 菜单树接口
+`AuthAccountPreApprovalEvidenceSummary`：
+
+| 字段 | 说明 |
+|---|---|
+| `applicationCode` | 前置审批申请单号，对应 `auth_account_pre_approval_application.application_code` |
+| `readinessCode` / `actionType` | 申请单对应的前置审批类型和账号动作 |
+| `targetUsername` | 目标账号 |
+| `requiredEvidence` | 当前动作必备附件，如 `本人核验附件`、`岗位交接或本人确认附件` |
+| `documentCode` | 已关联附件所属文档编码；未关联时为空 |
+| `attachmentCount` / `missingEvidence` | 已匹配附件数量和仍缺失/待上传附件数量 |
+| `attachmentCodes` | 已关联的 `EvidenceAttachment.code` 列表 |
+| `latestUploadedAt` | 最新附件上传时间快照 |
+| `status` | `待补...`、`证据待补` 或 `已关联证据` |
+| `nextAction` | 下一步处理说明，缺失时提示使用 `businessType=账号前置审批` 和 `businessCode=申请单号` 绑定附件 |
+| `tone` | 前端状态色，沿用 `red`、`amber`、`green` 等枚举 |
+
+### 14.5 菜单树接口
 
 `GET /api/security/menu-tree` 返回当前角色可见菜单树。认证优先级与 `GET /api/security/current-context` 一致：优先读取 Bearer token；无 token 且 `zhubao.security.allow-header-context=true` 时使用 `X-Zhubao-*` 请求头兜底；关闭该开关时返回权限拒绝。
 
@@ -2229,47 +2047,36 @@ M3.112 起该校验可通过 `zhubao.auth.pre-approval.enforce-account-actions` 
 | `code` | 菜单编码，当前与前端 `App.vue` tab key 对齐 |
 | `label` | 菜单中文名 |
 | `module` | 菜单业务分组说明 |
-| `route` | 预留路由标识，当前仍用于契约展示 |
+| `route` | 菜单路由标识，供前端导航使用 |
 | `buttonCodes` | 该菜单关联的敏感按钮权限编码，如 `REGISTER_IMPORT_REVIEW`、`BUSINESS_INBOUND_CONFIRM` |
-| `children` | 子菜单列表；当前 M3.83 先返回一层菜单，保留树形结构 |
+| `children` | 子菜单列表；当前 先返回一层菜单，保留树形结构 |
 
-M3.83 当前角色菜单编码基线：
+角色菜单来自仓储配置，不能把某次 seed 的完整列表作为固定权限契约。默认菜单包含进度与财务；当前角色绑定见[内存菜单仓储](../backend/src/main/java/com/zhubao/erp/security/infra/InMemoryNavigationMenuRepository.java)，MySQL 部署读取 `sys_navigation_menu/sys_role_menu`。新增或调整角色可见性须与后端动作权限分开验证。
 
-| 角色 | 可见菜单 |
-|---|---|
-| `ADMIN` / `GENERAL_MANAGER` | `dashboard`、`inbound`、`production`、`quality`、`inventory`、`approvals`、`configuration`、`documents`、`sample`、`hardware`、`operations`、`mobile` |
-| `SALES` | `dashboard`、`inbound`、`inventory`、`documents`、`sample` |
-| `RECEIVER` | `dashboard`、`inbound`、`documents`、`hardware`、`mobile` |
-| `WORKSHOP_LEADER` | `dashboard`、`production`、`quality`、`approvals`、`sample`、`hardware`、`operations`、`mobile` |
-| `OPERATOR` | `dashboard`、`production`、`mobile` |
-| `QUALITY_INSPECTOR` | `dashboard`、`quality`、`inventory`、`documents`、`mobile` |
-| `WAREHOUSE_KEEPER` | `dashboard`、`inbound`、`inventory`、`documents`、`sample`、`hardware`、`operations`、`mobile` |
-| `FINANCE_STATISTICIAN` | `dashboard`、`approvals`、`configuration` |
+菜单与角色可见性使用 `NavigationMenuRepository`，本地默认内存、MySQL profile 默认 JDBC；前端按会话 `menuCodes/menuTree` 过滤导航。导航隐藏不替代后端权限守卫。
 
-菜单树当前先作为后端可验证契约和配置基线页展示依据；M3.86 起前端登录会话会按 `menuCodes/menuTree` 过滤侧栏导航，未登录、请求头兜底或 API 不可用时仍保留全量评审导航。
-
-### 13.6 当前限制
+### 14.6 当前限制
 
 - token 保存在内存，服务重启即失效。
-- M3.119 已接入账号仓储、PBKDF2 密码哈希、失败锁定、账号启停、停用会话吊销、管理员解锁、强制首次登录改密、临时密码一次性消费、密码策略、90 天密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读清单、账号前置审批草稿评估、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、强制申请单号开关、申请单审批任务交接、审批通过态强制校验和前置审批证据上传入口，但默认 seed 仍是评审账号，不用于生产。
-- 申请单仓储、申请单号校验、强制申请单号开关、`ACCOUNT_PRE_APPROVAL` 轻量审批任务、强制模式审批通过态校验、停用会话吊销、强制首次改密和临时密码一次性消费当前不执行电子签字；会话吊销仅覆盖本服务内存 Bearer token，仍需接入完整 IAM、正式刷新 token、SSO/JWT、菜单树持久化、完整组织客户授权表和不可篡改审计策略。
-- M3.83 菜单树仍是后端内存基线服务，不等于生产角色表、菜单表或按钮表。
-- M3.93 登录审计可切换内存/JDBC 仓储并生成摘要链，但仍不等于生产安全日志平台、归档保全或真正不可篡改审计。
-- M3.86 前端侧栏会按登录会话 `menuCodes/menuTree` 做导航过滤；未登录、请求头兜底或 API 不可用时仍保留全量评审导航，不等于生产级菜单授权完成。
+- 默认 seed 是评审账号，正式环境应初始化生产账号并替换评审凭据。
+- 申请单仓储、申请单号校验、强制申请单号开关、`ACCOUNT_PRE_APPROVAL` 轻量审批任务、强制模式审批通过态校验、停用会话吊销、强制首次改密和临时密码一次性消费当前不执行电子签字；会话吊销仅覆盖本服务内存 Bearer token，仍需接入完整 IAM、正式刷新 token、SSO/JWT、完整组织授权体系和不可篡改审计策略。
+- 菜单树与角色可见性已经支持 `sys_navigation_menu`、`sys_role_menu` 持久化；在线菜单编辑和完整组织树仍未完成。
+- 登录审计可切换内存/JDBC 仓储并生成摘要链，但仍不等于生产安全日志平台、归档保全或真正不可篡改审计。
+- 登录后导航按会话菜单过滤；具体动作仍须由后端授权。前端账号管理表单未传前置申请单号时，在 MySQL 默认强制模式下会被拒绝，不能据表单存在视为审批操作流程已闭环。
 - `dataScope` 和账号 `customerScope` 已进入业务工作台 GET 首版过滤，完整组织树、完整组织客户授权表、跨对象关系推导和全系统行级权限仍待固化。
 
 ---
 
-## 14. M3.52/M3.63/M3.83/M3.86-M3.92/M3.98-M3.100 当前权限上下文接口
+## 15. 当前权限上下文
 
-`GET /api/security/current-context` 用于把当前身份、角色、数据范围、客户范围、可执行敏感动作和授权菜单树显式暴露给前端配置基线页。M3.63 起优先读取 `Authorization: Bearer <token>` 登录会话；M3.98 起无 token 时是否继续使用请求头兜底由 `zhubao.security.allow-header-context` 控制，本地默认开启以兼容评审脚本和自动化测试，MySQL profile 默认关闭。M3.83 起该接口同步返回 `menuCodes` 和 `menuTree`。M3.86 起前端 `App` 会恢复登录会话并按 `menuCodes/menuTree` 过滤侧栏模块，登录/退出/自助改密通过 `zhubao-auth-session-changed` 事件即时刷新导航和会话摘要。M3.87 起登录会话身份来自账号仓储和密码哈希校验结果；M3.88 起登录失败锁定也由账号仓储维护；M3.89 起配置菜单暴露 `AUTH_ACCOUNT_MANAGE` 按钮权限编码，配置基线页展示只读账号状态摘要；M3.90 起账号管理创建/重置密码受 `PasswordPolicy` 约束；M3.91 起登录会话和账号摘要暴露密码改密/到期/过期边界；M3.92 起自助改密成功后刷新当前会话摘要；M3.99 起 Bearer `CUSTOMER_RANGE` 上下文会返回账号 `customerScope`；M3.100 起配置页固定展示客户范围状态，并在限制说明中区分 Bearer 账号范围和请求头评审兜底范围；M3.116 起强制改密会话不能解析为当前权限上下文，必须先完成自助改密；M3.117 起重复使用已消费临时密码不能再创建新会话。
+`GET /api/security/current-context` 返回身份、角色、数据范围、客户范围、敏感动作和菜单树。优先读取 Bearer 会话；无 token 时由 `zhubao.security.allow-header-context` 决定是否接受评审请求头，本地默认开启、MySQL profile 默认关闭。客户范围由账号与客户授权关系计算；强制改密会话必须先自助改密，不能解析为业务上下文。
 
-### 14.1 请求头
+### 15.1 请求头
 
 认证优先级：
 
 1. `Authorization: Bearer <token>`。
-2. `zhubao.security.allow-header-context=true` 时的 M3.33 轻量权限守卫请求头兜底。
+2. `zhubao.security.allow-header-context=true` 时的 轻量权限守卫请求头兜底。
 
 | Header | 说明 |
 |---|---|
@@ -2280,7 +2087,7 @@ M3.83 当前角色菜单编码基线：
 | `X-Zhubao-Data-Scope` | 当前数据范围编码 |
 | `X-Zhubao-Customer-Scope` | 请求头兜底客户范围；仅在允许请求头身份兜底且 `dataScope=CUSTOMER_RANGE` 时用于评审过滤 |
 
-### 14.2 返回字段
+### 15.2 返回字段
 
 | 字段 | 说明 |
 |---|---|
@@ -2299,7 +2106,7 @@ M3.83 当前角色菜单编码基线：
 | `limitationNotes` | 当前认证、数据范围、菜单权限和审批锁账限制 |
 | `headerContract` | 请求头契约，包含操作人、角色、数据范围和客户范围 Header 名称 |
 
-### 14.3 示例
+### 15.3 示例
 
 ```json
 {
@@ -2343,16 +2150,16 @@ M3.83 当前角色菜单编码基线：
 }
 ```
 
-### 14.4 当前限制
+### 15.4 当前限制
 
-- 业务工作台 GET 已按 `dataScope` 和 M3.99 账号 `customerScope` 做首版过滤，M3.100 配置基线页已固定展示客户范围状态；仍必须继续提示完整组织树、完整组织客户授权表和深层行级权限未完成。
-- 菜单和按钮权限已由后端返回 M3.83 内存基线菜单树；M3.86 前端登录会话导航已按 `menuCodes/menuTree` 过滤，但未登录和请求头兜底仍展示全量评审导航。
-- 尚未建立生产持久化菜单表、角色菜单关联表和按钮权限配置表。
-- M3.119 已建立账号仓储、密码哈希、失败锁定、账号启停、停用会话吊销、管理员解锁、强制首次登录改密、临时密码一次性消费、密码策略、密码过期检测、登录态自助改密/续期、认证审计摘要链、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、客户范围可视化、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、账号前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、强制申请单号开关、申请单审批任务交接、审批通过态强制校验和前置审批证据上传入口，但正式电子签字、完整 IAM、SSO/JWT、真正不可篡改审计和完整安全日志平台仍待接入。
-- 当前接口不返回密码或任何生产鉴权密钥；`customerScope` 只回显 Bearer 账号或本次请求头兜底解析出的客户/业务对象范围，完整组织客户授权表尚未完成。
+- 业务工作台的范围过滤不等于全系统行级权限；完整组织树和跨对象范围推导仍需完善。
+- 菜单和按钮权限由后端仓储返回；前端导航过滤不替代接口授权。
+- 菜单表与角色菜单关联表已持久化；按钮权限仍使用权限编码与守卫规则，在线管理和完整组织授权需另行完善。
+- 认证和账号操作规则见“认证与账号”；正式电子签字、SSO/JWT 和不可篡改审计仍属待决策或后续实现范围。
+- 本接口不返回密码或鉴权密钥；`customerScope` 仅回显当前身份的有效客户范围，客户授权表已支持独立维护。
 - 后续接入正式用户中心后，应保持生产关闭匿名管理员请求头兜底，只在测试环境显式启用。
 
-## 15. 财务读取授权
+## 16. 财务读取与经营汇总
 
 财务 GET 不再把 `customerId` 当成授权。
 
@@ -2364,3 +2171,330 @@ M3.83 当前角色菜单编码基线：
 未带登录会话、也未显式给出 `X-Zhubao-Role` 的请求拒绝。操作工等只能看订单的角色没有上述两个读取权限。现有写入权限和请求头兜底开关不扩大。错误仍走 `40301`。
 
 `GET /api/finance/dashboard?yearMonth=YYYY-MM&customerId=可选` 只读。`data` 含 `yearMonth`、`generatedAt`、`scope`、`operating`、`trend`。`trend` 为选择月及向前五个月，当前自然月标记 `throughQueryTime=true`，不计算增幅。`currentBalances` 与 `receivableRanking` 本段为 `null`。`capabilities` 写明各块是否可用及原因。公司范围含折旧；客户范围不含公司折旧。查询不生成账单、工资或折旧。
+
+### 16.1 经营汇总请求与返回
+
+| 字段 | 类型与说明 |
+|---|---|
+| `yearMonth` | 必填查询参数，格式 `YYYY-MM`；不合法月份拒绝 |
+| `customerId` | 可选客户编号；提供时校验客户读取权限及有效客户范围，省略时要求全公司读取权限 |
+| `generatedAt` | 汇总生成时间 |
+| `scope.kind/customerIds/note` | 实际查询范围、已授权客户编号和范围说明，不回传未授权客户 |
+| `operating` | `OperatingStatement`：`yearMonth/customerId/revenue/wageCost/consumableCost/depreciationCost/outsourceCost/result/gaps` |
+| `trend[]` | 每项包含 `yearMonth/throughQueryTime/operating`；共六个月，当月仅截至查询时刻 |
+| `currentBalances` | 当前阶段为 `null`，不能当作余额为 0 |
+| `receivableRanking` | 当前阶段为 `null`，不能当作空客户排行 |
+| `capabilities[]` | 每项包含 `part/available/reason`，不可用能力明确给出原因 |
+
+经营收入按应收入账月份统计，收款不重复计收入；客户范围不分摊公司折旧。查询只读取，不生成账单、工资或折旧。完整类型见[FinanceDashboard](../backend/src/main/java/com/zhubao/erp/finance/domain/FinanceDashboard.java)与[OperatingStatement](../backend/src/main/java/com/zhubao/erp/finance/domain/OperatingStatement.java)。
+
+## 17. 现行端点索引
+
+本索引按当前控制器映射核对。相对路径与所属控制器前缀已合并；字段详表在前文，未展开的新类型以控制器和对应领域模型为准。后端权限以控制器及 `PermissionGuardInterceptor` 为准，不能因 HTTP GET 或导航可见而推断允许匿名读取。
+
+### ApprovalController
+
+来源：[ApprovalController](../backend/src/main/java/com/zhubao/erp/approval/web/ApprovalController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/approvals/tasks` | `ApiResponse<List<ApprovalTask>>` |
+| `GET /api/approvals/tasks/pending` | `ApiResponse<List<ApprovalTask>>` |
+| `GET /api/approvals/tasks/{approvalCode}` | `ApiResponse<ApprovalTask>` |
+| `POST /api/approvals/tasks/{approvalCode}/decisions` | `ApiResponse<ApprovalTask>` |
+
+### BusinessDocumentController
+
+来源：[BusinessDocumentController](../backend/src/main/java/com/zhubao/erp/business/web/BusinessDocumentController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/business/documents/mother-orders/{code}` | `ApiResponse<MotherOrderRecord>` |
+| `GET /api/business/documents/outbound-orders/{code}` | `ApiResponse<OutboundOrderRecord>` |
+
+### BusinessOperationController
+
+来源：[BusinessOperationController](../backend/src/main/java/com/zhubao/erp/business/web/BusinessOperationController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeLookup>` |
+| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>` |
+| `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |
+| `GET /api/business/operations/mother-orders/{code}/split` | `ApiResponse<MotherOrderSplitView>` |
+| `POST /api/business/operations/mother-orders/{code}/keep` | `ApiResponse<MotherOrderSplitView>` |
+| `POST /api/business/operations/mother-orders/{code}/splits` | `ApiResponse<MotherOrderSplitView>` |
+| `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
+| `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
+| `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>` |
+| `POST /api/business/operations/production-reports` | `ApiResponse<ProductionReportResult>` |
+| `GET /api/business/operations/quality-checks` | `ApiResponse<QualityCheckView>` |
+| `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>` |
+| `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>` |
+| `POST /api/business/operations/quality-freezes` | `ApiResponse<QualityFreezeResult>` |
+| `POST /api/business/operations/rework-dispatches` | `ApiResponse<ReworkDispatchResult>` |
+| `POST /api/business/operations/rework-reports` | `ApiResponse<ReworkReportResult>` |
+| `POST /api/business/operations/quality-releases` | `ApiResponse<QualityReleaseResult>` |
+| `POST /api/business/operations/outbound-shipments` | `ApiResponse<OutboundShipmentResult>` |
+| `POST /api/business/operations/customer-returns` | `ApiResponse<CustomerReturnResult>` |
+| `POST /api/business/operations/after-sales-reviews` | `ApiResponse<AfterSalesReviewResult>` |
+| `POST /api/business/operations/loss-approvals` | `ApiResponse<LossApprovalResult>` |
+
+### BusinessWorkspaceController
+
+来源：[BusinessWorkspaceController](../backend/src/main/java/com/zhubao/erp/business/web/BusinessWorkspaceController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/business/workspaces/inbound` | `ApiResponse<InboundWorkspaceData>` |
+| `GET /api/business/workspaces/production` | `ApiResponse<ProductionWorkspaceData>` |
+| `GET /api/business/workspaces/quality` | `ApiResponse<QualityWorkspaceData>` |
+| `GET /api/business/workspaces/inventory` | `ApiResponse<InventoryWorkspaceData>` |
+| `GET /api/business/workspaces/mobile` | `ApiResponse<MobileWorkspaceData>` |
+| `GET /api/business/workspaces/summary` | `ApiResponse<BusinessWorkspaceSummary>` |
+
+### ProgressBoardController
+
+来源：[ProgressBoardController](../backend/src/main/java/com/zhubao/erp/business/web/ProgressBoardController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/business/operations/progress` | `ApiResponse<List<ProgressRow>>` |
+
+### ConfigurationBaselineController
+
+来源：[ConfigurationBaselineController](../backend/src/main/java/com/zhubao/erp/configuration/web/ConfigurationBaselineController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/configuration/baseline/summary` | `ApiResponse<ConfigurationBaselineSummary>` |
+| `GET /api/configuration/baseline/system-parameters` | `ApiResponse<List<SystemParameter>>` |
+| `GET /api/configuration/baseline/code-rules` | `ApiResponse<List<CodeRule>>` |
+| `GET /api/configuration/baseline/role-permissions` | `ApiResponse<List<RolePermissionBaseline>>` |
+| `GET /api/configuration/baseline/process-templates` | `ApiResponse<List<ProcessTemplate>>` |
+| `GET /api/configuration/baseline/warehouse-states` | `ApiResponse<List<WarehouseState>>` |
+| `GET /api/configuration/baseline/video-parameters` | `ApiResponse<List<VideoParameter>>` |
+| `GET /api/configuration/baseline/components` | `ApiResponse<List<ComponentBaseline>>` |
+| `GET /api/configuration/baseline/backup-policies` | `ApiResponse<List<BackupPolicy>>` |
+| `GET /api/configuration/baseline/change-requests` | `ApiResponse<List<ConfigurationChangeRequest>>` |
+| `GET /api/configuration/baseline/audit-events` | `ApiResponse<List<ConfigurationAuditEvent>>` |
+
+### DocumentManagementController
+
+来源：[DocumentManagementController](../backend/src/main/java/com/zhubao/erp/document/web/DocumentManagementController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/documents/captures` | `ApiResponse<List<DocumentCaptureView>>` |
+| `POST /api/documents/captures` | `ApiResponse<EvidenceAttachmentUploadResult>` |
+| `GET /api/documents/summary` | `ApiResponse<DocumentManagementSummary>` |
+| `GET /api/documents/packages` | `ApiResponse<List<DocumentPackage>>` |
+| `GET /api/documents/attachments` | `ApiResponse<List<EvidenceAttachment>>` |
+| `GET /api/documents/storage` | `ApiResponse<StoredContentInventory>` |
+| `GET /api/documents/audit-events` | `ApiResponse<List<DocumentAuditEvent>>` |
+| `POST /api/documents/attachments/uploads` | `ApiResponse<EvidenceAttachmentUploadResult>` |
+| `POST /api/documents/attachments/{code}/retirements` | `ApiResponse<StoredContentItem>` |
+| `GET /api/documents/attachments/{code}/preview-url` | `ApiResponse<AttachmentPreviewUrl>` |
+| `GET /api/documents/attachments/{code}/content` | `ResponseEntity<byte[]>` |
+
+### FinanceController
+
+来源：[FinanceController](../backend/src/main/java/com/zhubao/erp/finance/web/FinanceController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/finance/price-agreements` | `ApiResponse<List<PriceAgreement>>` |
+| `POST /api/finance/price-agreements` | `ApiResponse<PriceAgreement>` |
+| `POST /api/finance/billing-runs` | `ApiResponse<BillingRunResult>` |
+| `GET /api/finance/unpriced` | `ApiResponse<List<UnpricedItem>>` |
+| `POST /api/finance/receivable-reversals` | `ApiResponse<ReceivableLine>` |
+| `POST /api/finance/receipts` | `ApiResponse<CustomerReceipt>` |
+| `GET /api/finance/statements` | `ApiResponse<CustomerStatement>` |
+| `GET /api/finance/worker-rates` | `ApiResponse<List<WorkerRate>>` |
+| `POST /api/finance/worker-rates` | `ApiResponse<WorkerRate>` |
+| `GET /api/finance/payroll-lines` | `ApiResponse<List<PayrollLine>>` |
+| `POST /api/finance/payroll-runs` | `ApiResponse<PayrollGenerateResult>` |
+| `POST /api/finance/payroll-runs/confirmations` | `ApiResponse<PayrollRun>` |
+| `GET /api/finance/consumable-items` | `ApiResponse<List<ConsumableStockView>>` |
+| `GET /api/finance/consumable-movements` | `ApiResponse<List<ConsumableMovement>>` |
+| `POST /api/finance/consumable-items` | `ApiResponse<com.zhubao.erp.finance.domain.ConsumableItem>` |
+| `POST /api/finance/consumable-purchases` | `ApiResponse<ConsumableMovement>` |
+| `POST /api/finance/consumable-issues` | `ApiResponse<ConsumableMovement>` |
+| `GET /api/finance/fixed-assets` | `ApiResponse<List<FixedAsset>>` |
+| `POST /api/finance/fixed-assets` | `ApiResponse<FixedAsset>` |
+| `GET /api/finance/depreciation-entries` | `ApiResponse<List<DepreciationEntry>>` |
+| `POST /api/finance/depreciation-runs` | `ApiResponse<List<DepreciationEntry>>` |
+| `POST /api/finance/outsource-bills` | `ApiResponse<Payable>` |
+| `GET /api/finance/payables` | `ApiResponse<List<PayableView>>` |
+| `POST /api/finance/payable-payments` | `ApiResponse<PayablePayment>` |
+| `GET /api/finance/operating-statement` | `ApiResponse<OperatingStatement>` |
+| `GET /api/finance/dashboard` | `ApiResponse<FinanceDashboard>` |
+
+### DeviceGatewayController
+
+来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/hardware/gateway/readings` | `ApiResponse<DeviceReading>` |
+| `GET /api/hardware/gateway/readings` | `ApiResponse<List<DeviceReading>>` |
+| `GET /api/hardware/gateway/devices/{deviceCode}/readings` | `ApiResponse<List<DeviceReading>>` |
+| `GET /api/hardware/gateway/devices` | `ApiResponse<List<GatewayDeviceView>>` |
+| `GET /api/hardware/gateway/summary` | `ApiResponse<GatewayIngestionSummary>` |
+| `POST /api/hardware/gateway/consumptions` | `ApiResponse<ReadingConsumption>` |
+| `GET /api/hardware/gateway/consumptions` | `ApiResponse<List<ReadingConsumption>>` |
+| `POST /api/hardware/gateway/devices` | `ApiResponse<GatewayDeviceView>` |
+| `POST /api/hardware/gateway/devices/{deviceCode}/status` | `ApiResponse<GatewayDeviceView>` |
+| `POST /api/hardware/gateway/devices/{deviceCode}/rotate-key` | `ApiResponse<GatewayDeviceView>` |
+
+### HardwareIntegrationController
+
+来源：[HardwareIntegrationController](../backend/src/main/java/com/zhubao/erp/hardware/web/HardwareIntegrationController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/hardware/devices` | `ApiResponse<List<HardwareDevice>>` |
+| `GET /api/hardware/integration-tasks` | `ApiResponse<List<IntegrationTask>>` |
+| `GET /api/hardware/poc-records` | `ApiResponse<List<HardwarePocRecord>>` |
+| `GET /api/hardware/poc-evidence` | `ApiResponse<List<HardwarePocEvidenceSummary>>` |
+| `GET /api/hardware/summary` | `ApiResponse<HardwareSummary>` |
+
+### InventoryController
+
+来源：[InventoryController](../backend/src/main/java/com/zhubao/erp/inventory/web/InventoryController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/inventory/ledger/transfers` | `ApiResponse<StockLedgerEntry>` |
+| `GET /api/inventory/ledgers` | `ApiResponse<List<StockLedgerEntry>>` |
+| `GET /api/inventory/balances` | `ApiResponse<List<StockBalance>>` |
+
+### LabelController
+
+来源：[LabelController](../backend/src/main/java/com/zhubao/erp/label/web/LabelController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/label/generate` | `ApiResponse<LabelPayload>` |
+| `GET /api/label/mother-orders/{code}` | `ApiResponse<LabelPayload>` |
+| `GET /api/label/work-orders/{code}` | `ApiResponse<LabelPayload>` |
+| `POST /api/label/reprints` | `ApiResponse<LabelPayload>` |
+| `GET /api/label/templates` | `ApiResponse<List<LabelTemplate>>` |
+| `POST /api/label/templates` | `ApiResponse<LabelTemplate>` |
+
+### MachineOutputController
+
+来源：[MachineOutputController](../backend/src/main/java/com/zhubao/erp/machine/web/MachineOutputController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/machine-outputs` | `ApiResponse<List<MachineOutputRecord>>` |
+| `GET /api/machine-outputs/summary` | `ApiResponse<MachineOutputSummary>` |
+| `GET /api/machine-outputs/machine-match-suggestions` | `ApiResponse<List<MachineOutputMachineMatchSuggestion>>` |
+| `GET /api/machine-outputs/import-batches/{importBatchNo}` | `ApiResponse<List<MachineOutputRecord>>` |
+| `POST /api/machine-outputs` | `ApiResponse<MachineOutputRecord>` |
+| `POST /api/machine-outputs/machine-bindings` | `ApiResponse<MachineOutputBindingResult>` |
+
+### MachineProfileController
+
+来源：[MachineProfileController](../backend/src/main/java/com/zhubao/erp/machine/web/MachineProfileController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/machine-profiles` | `ApiResponse<List<MachineProfile>>` |
+| `POST /api/machine-profiles` | `ApiResponse<MachineProfile>` |
+
+### VideoClipTaskController
+
+来源：[VideoClipTaskController](../backend/src/main/java/com/zhubao/erp/media/web/VideoClipTaskController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/video-clip-tasks` | `ApiResponse<VideoClipTask>` |
+| `GET /api/video-clip-tasks` | `ApiResponse<List<VideoClipTask>>` |
+| `POST /api/video-clip-tasks/{code}/retry` | `ApiResponse<VideoClipTask>` |
+| `POST /api/video-clip-tasks/{code}/manual-upload` | `ApiResponse<VideoClipTask>` |
+
+### OperationsCenterController
+
+来源：[OperationsCenterController](../backend/src/main/java/com/zhubao/erp/operations/web/OperationsCenterController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/operations/center` | `ApiResponse<OperationsCenterSnapshot>` |
+
+### RegisterImportController
+
+来源：[RegisterImportController](../backend/src/main/java/com/zhubao/erp/register/web/RegisterImportController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/register-import/templates` | `ApiResponse<List<RegisterImportTemplate>>` |
+| `GET /api/register-import/summary` | `ApiResponse<RegisterImportTemplateService.RegisterImportSummary>` |
+| `POST /api/register-import/previews` | `ApiResponse<RegisterImportPreview>` |
+| `POST /api/register-import/batches/confirm` | `ApiResponse<RegisterImportBatch>` |
+| `GET /api/register-import/batches` | `ApiResponse<List<RegisterImportBatch>>` |
+| `GET /api/register-import/batches/{importBatchNo}` | `ApiResponse<RegisterImportBatch>` |
+| `POST /api/register-import/batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | `ApiResponse<RegisterImportBatch>` |
+| `GET /api/register-import/batches/{importBatchNo}/posting-plan` | `ApiResponse<RegisterImportPostingPlan>` |
+| `POST /api/register-import/batches/{importBatchNo}/posting-commands` | `ApiResponse<RegisterImportPostingExecutionResult>` |
+
+### SampleScenarioController
+
+来源：[SampleScenarioController](../backend/src/main/java/com/zhubao/erp/sample/web/SampleScenarioController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/samples/scenarios` | `ApiResponse<List<SampleScenario>>` |
+| `GET /api/samples/summary` | `ApiResponse<SampleSummary>` |
+
+### ScanController
+
+来源：[ScanController](../backend/src/main/java/com/zhubao/erp/scan/web/ScanController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/scan/resolve` | `ApiResponse<ScanResolveResponse>` |
+
+### AuthController
+
+来源：[AuthController](../backend/src/main/java/com/zhubao/erp/security/web/AuthController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/auth/login` | `ApiResponse<AuthSession>` |
+| `GET /api/auth/session` | `ApiResponse<AuthSession>` |
+| `POST /api/auth/logout` | `ApiResponse<Void>` |
+| `POST /api/auth/password` | `ApiResponse<AuthSession>` |
+| `GET /api/auth/demo-users` | `ApiResponse<List<String>>` |
+| `GET /api/auth/audit-events` | `ApiResponse<List<AuthAuditEvent>>` |
+| `GET /api/auth/audit-integrity` | `ApiResponse<AuthAuditIntegritySummary>` |
+| `GET /api/auth/accounts` | `ApiResponse<List<AuthUserAccountSummary>>` |
+| `GET /api/auth/accounts/pre-approval-readiness` | `ApiResponse<List<AuthAccountPreApprovalReadiness>>` |
+| `POST /api/auth/accounts/pre-approval-drafts` | `ApiResponse<AuthAccountPreApprovalDraft>` |
+| `GET /api/auth/accounts/pre-approval-applications` | `ApiResponse<List<AuthAccountPreApprovalApplication>>` |
+| `GET /api/auth/accounts/pre-approval-evidence` | `ApiResponse<List<AuthAccountPreApprovalEvidenceSummary>>` |
+| `POST /api/auth/accounts/pre-approval-evidence/uploads` | `ApiResponse<AuthAccountPreApprovalEvidenceSummary>` |
+| `POST /api/auth/accounts/pre-approval-applications` | `ApiResponse<AuthAccountPreApprovalApplication>` |
+| `POST /api/auth/accounts` | `ApiResponse<AuthUserAccountSummary>` |
+| `POST /api/auth/accounts/{username}/status` | `ApiResponse<AuthUserAccountSummary>` |
+| `POST /api/auth/accounts/{username}/unlock` | `ApiResponse<AuthUserAccountSummary>` |
+
+### CustomerAuthorizationController
+
+来源：[CustomerAuthorizationController](../backend/src/main/java/com/zhubao/erp/security/web/CustomerAuthorizationController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/security/customer-authorizations` | `ApiResponse<List<CustomerAuthorization>>` |
+| `POST /api/security/customer-authorizations` | `ApiResponse<CustomerAuthorization>` |
+| `POST /api/security/customer-authorizations/revocations` | `ApiResponse<RevokeResult>` |
+
+### SecurityContextController
+
+来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/security/current-context` | `ApiResponse<SecurityCurrentContext>` |
+| `GET /api/security/menu-tree` | `ApiResponse<List<NavigationMenuItem>>` |

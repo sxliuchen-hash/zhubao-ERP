@@ -1,8 +1,8 @@
 # Docker 一键部署与离线交付
 
-**文档版本**：V1.2
-**更新日期**：2026-07-07  
-**适用阶段**：M3.62 Docker 无源码交付、备份和运维告警汇总基线
+**文档版本**：V1.3
+**更新日期**：2026-10-10
+**文档定位**：当前唯一运行部署与备份操作依据，覆盖 Docker 无源码交付、局域网 HTTPS、现场附件存储与恢复边界
 
 ---
 
@@ -10,7 +10,9 @@
 
 本方案用于降低现场部署和运维成本，并避免向客户交付源码。
 
-腾讯云 CVM + COS、本地电脑、本地服务器三类部署运维细节见 [20_腾讯云与本地部署运维方案](./20_腾讯云与本地部署运维方案.md)。
+一期已确认安装在厂内电脑，仅在局域网使用，不需要外网或域名；手机扫码和拍摄仍需 HTTPS。本文的 HTTPS 与上传代理配置对应当前工作区尚未提交的部署改动，正式打包前须随部署变更一起核验。客户确认来源见[归档确认清单](./archive/customer/26_客户确认清单汇总表.md)，参数与验收状态统一在[上线待确认清单](./22_真实数据与上线待确认清单.md)维护。
+
+本文件是当前唯一运行部署手册。[历史云端与本地方案](./archive/design/20_腾讯云与本地部署运维方案.md)仅保留选型背景，不作为第二套操作流程；云服务器和独立本地服务器可按后续需要使用同一运行包。
 
 交付原则：
 
@@ -124,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -Pac
 
 - Docker Engine
 - Docker Compose v2
-- 可用端口：默认 `80`、`8080`
+- 可用端口：默认 `80`、`443`、`8080`
 - 至少 4 GB 内存，建议 8 GB 以上
 - 可持久化磁盘目录
 
@@ -180,7 +182,7 @@ Compose 服务：
 |---|---|---|
 | `mysql` | 业务数据库 | 仅容器内访问 |
 | `backend` | Spring Boot API、业务服务、运维中心 API | `8080` |
-| `frontend` | Nginx 静态站点和 API 反向代理 | `80` |
+| `frontend` | Nginx 静态站点和 API 反向代理 | `80`、`443` |
 
 ---
 
@@ -192,7 +194,9 @@ Compose 服务：
 | `ZHUBAO_BACKEND_IMAGE` | `zhubao-erp-backend` | 后端镜像名 |
 | `ZHUBAO_FRONTEND_IMAGE` | `zhubao-erp-frontend` | 前端镜像名 |
 | `ZHUBAO_MYSQL_IMAGE` | `mysql:8.4` | MySQL 镜像名 |
-| `ZHUBAO_HTTP_PORT` | `80` | 前端访问端口 |
+| `ZHUBAO_HTTP_PORT` | `80` | 前端 HTTP 端口。电脑可以继续用。手机摄像头不要走这个端口 |
+| `ZHUBAO_HTTPS_PORT` | `443` | 前端 HTTPS 端口。手机扫码和打开摄像头用这个地址 |
+| `ZHUBAO_TLS_SAN` | 空 | 手机访问时用的 IP 或域名，多个用英文逗号。空着时自签证书只包含 localhost |
 | `ZHUBAO_BACKEND_PORT` | `8080` | 后端直连端口 |
 | `ZHUBAO_PUBLIC_URL` | `http://localhost/` | 运维中心展示的前端地址 |
 | `ZHUBAO_FRONTEND_PROBE_URL` | `http://frontend/` | 后端容器内部探测前端 Nginx 的地址 |
@@ -220,6 +224,21 @@ Compose 卷：
 | `evidence-data` | `/app/evidence` | 附件、证据文件、本地对象存储 |
 | `backend-logs` | `/logs` | 后端日志文件，运维中心从 `ZHUBAO_LOG_FILE` 只读展示近期日志和 WARN/ERROR 汇总 |
 | `backup-data` | `/backups` | 备份目录和运维中心备份检查目录 |
+| `frontend-certs` | `/etc/nginx/certs` | 前端 HTTPS 证书 |
+
+### 7.1 手机现场采集与附件目录
+
+试运行以手机拍照和短视频为主，按母单、工单、返工单或出货单关联证据；NVR 截取接口仅作后续备选，不采购、不启用、不进入试运行作业页。
+
+- 手机上传使用 `POST /api/documents/captures`，按单查询使用 `GET /api/documents/captures`；权限、请求字段与短期签名预览以[16 现行契约](./16_字段字典与API契约.md)为准。
+- 图片允许 JPEG/PNG，单张不超过 8MB；视频允许 MP4/WebM，单个不超过 50MB。30 秒是前端提示，服务器按文件大小校验，当前不校验视频时长。
+- 网页入口单次请求不超过 55MB，上传等待 300 秒；请求上限不放宽图片和视频各自的文件限额。
+- 采集文件流式写入本地目录，保留 SHA-256，重复校验和返回已有附件。Docker 使用 `evidence-data` 卷的 `/app/evidence`；本地开发由 `zhubao.documents.storage.local-root` 指定，默认 `target/zhubao-evidence`。
+- 试运行不切换 NAS/S3/COS 对象存储。弱网支持保留本次文件并重试，当前不提供完整离线采集队列。
+
+数据库备份只覆盖业务表与附件元数据，不包含上述照片和视频文件。现场需另外确认 `evidence-data` 或本机附件目录的拷贝范围、保存位置、保留周期与责任人，并在试运行结束前完成附件恢复样例验证。NAS/S3/COS 增量附件备份尚未落地，不能用数据库恢复成功代替附件恢复验收。
+
+### 7.2 数据库备份与 COS 目标
 
 M3.58 起，运行包内提供受控数据库备份脚本，可用于人工执行或纳入 Windows 任务计划/Linux cron：
 
@@ -248,6 +267,8 @@ powershell -ExecutionPolicy Bypass -File .\backup-mysql.ps1 -UploadCos -CosPrefi
 
 COS 上传依赖服务器已安装并配置 `coscmd`，脚本不保存 SecretId/SecretKey。
 
+每日自动备份至 COS 是已确认目标，现有包提供手动备份与显式上传命令，尚未自动创建任务计划/cron。COS Bucket、Region、Prefix、访问凭据及保留策略仍待提供或确认；配置完成后需验证一次实际上传与恢复，不能以 readiness 配置齐全视为上传已成功。
+
 备份恢复演练使用非破坏性临时库校验，不覆盖生产数据库：
 
 Windows：
@@ -271,7 +292,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 正式生产仍需要补充：
 
 - 将 `backup-mysql.ps1` 或 `backup-mysql.sh` 纳入任务计划/cron。
-- 恢复演练记录入库归档、告警持久化和通知通道；M3.62 已完成 JSON 结构化证据展示和快照告警汇总。
+- 恢复演练记录入库归档、告警持久化及确认/关闭流程。当前已支持 JSON 证据展示和系统内快照告警；一期不接企业微信、短信或电话，外部通知后续按需决定。
 - 备份保留周期和清理策略。
 - 附件证据目录的 NAS/S3/COS 增量备份。
 
@@ -318,6 +339,8 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 - `docker compose ps` 三个服务均运行。
 - 浏览器可打开 `http://<server>:<ZHUBAO_HTTP_PORT>/`。
+- 手机摄像头打开 `https://<server>:<ZHUBAO_HTTPS_PORT>/`。自签证书需在手机端完成信任配置，并真机核验摄像头权限；只跳过网页证书警告不能保证摄像头可用。`ZHUBAO_TLS_SAN` 要写成手机实际访问的 IP 或域名。
+- 经过网页入口上传拆包视频时，请求体上限为 55MB，上传等待 300 秒。视频文件本身仍不超过 50MB。
 - 前端可访问后端 API。
 - `GET /actuator/health` 返回可用。
 - `GET /api/operations/center` 返回数据库、后端、日志和备份信息。
@@ -332,7 +355,7 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 ## 11. 当前边界
 
-M3.62 Docker 基线已覆盖：
+当前运行包已覆盖：
 
 - 后端 jar 镜像。
 - 前端 dist + Nginx 镜像。
@@ -353,8 +376,8 @@ M3.62 Docker 基线已覆盖：
 
 - 生产级数据库迁移工具。
 - 将 MySQL 备份脚本纳入任务计划/cron 和失败告警。
-- 备份恢复演练记录入库归档、告警持久化和通知通道。
-- HTTPS 证书自动配置。
+- 备份恢复演练记录入库归档、系统内告警持久化及确认/关闭流程。外部通知不是一期必选项。
+- 公网证书自动申请。试运行配置使用容器内自签证书，手机完成证书信任后以 HTTPS 核验摄像头；正式域名证书仍需自行替换 `/etc/nginx/certs` 里的证书文件。
 - 多租户或多客户隔离部署。
-- NAS/S3 正式对象存储。
+- 照片和视频的独立附件备份与恢复闭环，以及后续按需切换的 NAS/S3/COS 对象存储。
 - 容器日志采集到集中日志平台。

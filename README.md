@@ -1,395 +1,71 @@
 # 来料加工进销存与生产管理系统
 
-面向客户来料加工。主链路是收货、报工、质检、库存、出库和追溯。未登录时先进入登录页；管理员在配置页维护账号，并可以查看和下线已存储的照片、视频和附件。运维页显示现场硬件是否在线，以及磁盘、附件目录和备份目录的占用。当前界面是一套浅色作业台，日常页用表格和当前单据。侧栏可以收成图标加名称。手机宽度使用底部「工作台、现场作业、审批、更多」，表格在屏幕里横向滑动。标签按纸张尺寸黑白打印。手机作业可以识别快递单号、生成母单并上传拆包短视频，也可以按岗位扫子单或不拆母单贴纸，只提交账号绑定的工序。母单可以不拆打一张贴纸，或拆成子单后逐张打印；贴纸上有验证码、客户、加工要求和期限。雕刻、镶嵌、抛光按单上的顺序交付，最后一道完成才把在制转入半成品。质检页扫子单或不拆母单贴纸，按换行逐条核对加工要求，质检员取当前登录账号；不合格把半成品转入冻结并可以开返工，合格和让步只留下核对记录。施工顺序见 [docs/25_现场作业收口计划.md](docs/25_现场作业收口计划.md)。现场照片和短视频的试运行方案见 [docs/24_手机现场采集方案.md](docs/24_手机现场采集方案.md)，录像机截取作备选。
+面向客户来料加工，围绕母单、工单和库存台账管理收货、生产、质检、出库、退货与证据追溯。财务提供加工费、收付款、工资和成本的经营核算，不提供会计总账或银行代发。
 
-基础版本是 Git 标签 `baseline-m3.138`。之后的整理在分支 `dev/after-m3.138`。
+当前仍处于内部开发与验证，尚未形成正式客户交付版本。功能状态见 [开发进度](docs/14_开发进度跟踪.md)，上线条件见 [上线待确认清单](docs/22_真实数据与上线待确认清单.md)。
 
-文档索引见 [docs/README.md](docs/README.md)。历史调研、样张和进度长记录在 [docs/archive](docs/archive/)。
+## 文档入口
 
-后续界面改版按 [ERP 整体 UI 与多端设计规划](docs/26_ERP整体UI与多端设计规划.md) 推进：统一电脑页面模板，优先建设财务经营仪表盘，并按岗位重排手机任务流，预留 APP／小程序设计与平台适配边界。UI-01 已把全站换成固定浅色主题：深蓝灰文字、蓝色主操作、暖金只用于品牌标记，财务金额按千分位和两位小数右对齐。UI-02 已换成深蓝灰侧栏和六个业务分组，手机使用底部导航。UI-03 来料页改为筛选、列表和选中详情，手机用卡片进入详情。UI-04 已给财务读取加上服务端权限和客户范围，空客户编号不能看成全公司。UI-05 增加只读经营汇总和六个月趋势，当前余额与排行仍为空；页面仪表盘尚未替换。
+| 用途 | 文档 |
+|---|---|
+| 产品范围与业务规则 | [产品需求](docs/01_PRD_产品需求文档.md)、[业务流程](docs/02_业务流程与规则设计.md) |
+| 当前技术、持久化与工程约定 | [系统架构](docs/05_系统架构设计.md)、[AGENTS](AGENTS.md) |
+| 当前接口与字段 | [API 契约](docs/16_字段字典与API契约.md) |
+| 安装、手机 HTTPS、备份与恢复 | [部署手册](docs/19_Docker一键部署与离线交付.md) |
+| UI 设计与下一任务 | [UI 设计](docs/26_ERP整体UI与多端设计规划.md)、[UI 任务入口](docs/27_UI开发执行提示词.md) |
+| 客户版本与历史来源 | [交付记录](docs/23_客户交付版本记录.md)、[归档索引](docs/archive/README.md) |
 
-切换开发模型后，可按 [UI 开发执行提示词](docs/27_UI开发执行提示词.md) 逐段实施。提示词固定视觉与财务口径，每轮只执行一个任务；参考图已保存在仓库内。
+完整分类见 [文档索引](docs/README.md)。现行文档维护当前事实；历史需求、方案、验证与已完成任务归档后停止逐轮同步。
 
-## 目录结构
+## 目录与环境
 
 ```text
 backend/   Spring Boot 3 / Java 17 后端
 frontend/  Vue 3 / Vite / PWA 前端
-docs/      现行设计文档；过程材料在 docs/archive
-scripts/   本地开发和验证脚本
+deploy/    Docker 配置、启动、备份与恢复
+scripts/   开发、构建和验证入口
+docs/      现行文档与分类归档
 ```
 
-## 环境要求
+需要 Java 17 或兼容 JDK、Node.js 18+、pnpm 9+；npx 工具需要 npm。scripts/maven.ps1 会准备项目本地 Maven。
 
-- Java 17。
-- Node.js 18+。
-- npm 10+。
-- pnpm 9+。
-- Maven 不要求全局安装，`scripts/maven.ps1` 会下载项目本地 Maven 到 `.tools/`。
-
-## 常用命令
-
-一键启动前后端本地开发环境（推荐）：
+## 本地开发
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1
 ```
 
-或直接双击项目根目录的 `dev-up.cmd`。该脚本会：
+也可双击 dev-up.cmd。默认后端 http://localhost:8080、前端 http://localhost:5173，Vite 将 /api 代理到后端。启动脚本支持 -BackendOnly、-FrontendOnly、-SameWindow、-NoBrowser。
 
-- 启动后端 Spring Boot（端口 8080，首次自动下载内置 Maven）。
-- 启动前端 Vite（端口 5173，首次自动 `pnpm install`）。
-- 前端已配置 `/api` 代理到后端 8080，启动后自动打开浏览器 `http://localhost:5173`。
-
-默认在两个独立 PowerShell 窗口分别启动前后端，便于分别看日志、关窗口即停。常用开关：
+分别启动或首次安装依赖：
 
 ```powershell
-# 仅启动后端 / 仅启动前端
-powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -BackendOnly
-powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -FrontendOnly
-# 在当前窗口以后台作业方式启动（日志混合，Ctrl+C 一并停止）
-powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -SameWindow
-# 启动后不自动打开浏览器
-powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1 -NoBrowser
+pnpm install --store-dir .\.pnpm-store
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
+pnpm --filter zhubao-erp-frontend dev
 ```
 
-后端测试：
+本地默认内存仓储。启用 MySQL 时设置 SPRING_PROFILES_ACTIVE=mysql 和 ZHUBAO_DB_URL、ZHUBAO_DB_USERNAME、ZHUBAO_DB_PASSWORD。各模块默认值与 Docker 覆盖见 [运行配置](docs/05_系统架构设计.md#运行配置与持久化)；仅开启 MySQL profile 不代表所有模块都已持久化。
+
+前端默认同源访问；直连其他后端时设置 VITE_API_BASE_URL。空数据、接口失败和演示数据来源须明确区分。
+
+## 验证
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml test
-```
-
-前端依赖和测试：
-
-```powershell
-$env:npm_config_cache=".\.npm-cache"
-pnpm install --store-dir .\.pnpm-store
 pnpm --filter zhubao-erp-frontend test
 pnpm --filter zhubao-erp-frontend build
 ```
 
-前端 UI 冒烟检查会读取首页、来料母单和配置页，生成 `output/playwright/m352-*.png` 截图和 `m352-ui-check.json` 指标。首次运行如本地没有 Playwright 包，可先执行一次 `npx --yes --package playwright playwright --version` 让 npm 缓存包落地：
+提交门槛以 AGENTS 为准。页面检查可使用 node scripts/check-frontend-ui.cjs http://localhost:5173/，需本地服务与 Playwright；output 截图不替代业务验收。
+
+## Docker 交付
 
 ```powershell
-$env:npm_config_cache=".\.npm-cache"
-$env:LOCALAPPDATA="$PWD\.cache\localappdata"
-node scripts\check-frontend-ui.cjs http://localhost:5173/
+powershell -ExecutionPolicy Bypass -File scripts/docker-build-package.ps1 -Version <版本号>
+powershell -ExecutionPolicy Bypass -File scripts/verify-runtime-package.ps1 -PackagePath <运行包目录或zip>
 ```
 
-前端连接后端 API：
+运行包采用 MySQL、后端和 Nginx 前端。安装、配置、升级限制、备份与非破坏性恢复演练统一按 [部署手册](docs/19_Docker一键部署与离线交付.md) 执行。
 
-```powershell
-$env:VITE_API_BASE_URL="http://localhost:8080"
-pnpm --filter zhubao-erp-frontend dev
-```
-
-开发服务器把 `/api` 代理到 `localhost:8080`。后端没启动或接口没有单据时，页面显示空列表和失败原因，不再使用本地样例。需要直连后端地址时，再设置 `VITE_API_BASE_URL`。
-
-M0 一键检查：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/check-m0.ps1
-```
-
-M1 一键检查：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/check-m1.ps1
-```
-
-启动后端：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-启用 MySQL 库存台账持久化：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_DB_URL="jdbc:mysql://localhost:3306/zhubao_erp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
-$env:ZHUBAO_DB_USERNAME="zhubao"
-$env:ZHUBAO_DB_PASSWORD="your-password"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-启用 MySQL 业务工作台评审数据：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_BUSINESS_REPOSITORY="jdbc"
-$env:ZHUBAO_BUSINESS_SNAPSHOT_CODE="SNAP-20260706-DAY"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-业务工作台 JDBC 当前读取的是 `biz_workspace_*` 评审快照和 seed 数据，用于验收与演示；正式交易闭环仍需继续接入来料、生产、质检、出库等真实业务表。
-
-启用 MySQL 硬件 POC 记录仓储：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_HARDWARE_POC_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-硬件 POC JDBC 当前覆盖 `hw_poc_record`，用于持久化现场验证窗口、结果、证据摘要、阻断项、责任人和下一步动作；`V19__m3_hardware_poc_record_seed.sql` 会写入 NVR 视频、标签打印、PWA 弱光扫码和电子秤人工读数 4 条基线记录。该边界不改变 `/api/hardware/poc-records` 契约，也不代表 NVR、打印机、扫码设备或电子秤已经完成厂商 SDK/协议直连。
-
-启用 MySQL 轻量审批任务持久化：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_APPROVAL_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-审批 JDBC 当前只覆盖固定场景轻量审批任务和审计事件；M3.33 已对敏感 POST 接入轻量角色守卫，M3.119 已补账号仓储、密码哈希、登录失败锁定、账号启停、管理员解锁、生产密码策略、密码过期检测、管理员新建/重置非 demo 密码后强制首次登录改密、临时密码一次性消费、登录态自助改密/续期、认证审计摘要链、业务工作台 GET 首版数据范围过滤、账号管理审批摘要、请求头身份兜底开关、账号客户范围边界、账号前置审批就绪度只读契约、前置审批草稿评估契约、前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、生产配置强制申请单号开关、申请单审批任务交接、审批通过态强制校验、账号停用会话吊销和前置审批证据上传入口，但持久化菜单、完整组织客户授权表、复杂审批流、审批 UI、正式电子签字和工资锁账仍需继续开发。
-
-启用 MySQL 登录账号仓储：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_AUTH_USERS_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-账号 JDBC 当前覆盖 `auth_user_account`，保存 `username`、`password_hash`、操作人快照、角色、数据范围、客户范围、启停状态、`demo_account`、`password_changed_at`、`password_change_required`、`temporary_password_consumed`、失败登录次数、锁定到期时间、最近登录和最近失败时间；M3.119 已提供账号创建/更新、启停、停用账号吊销现有 Bearer 会话、管理员解锁、密码策略校验、90 天密码过期检测、管理员新建/重置非 demo 密码后标记 `passwordChangeRequired` 并重置临时密码消费状态、首次临时密码登录成功后一次性消费、重复临时密码登录拒绝、临时密码会话业务上下文拒绝、登录态自助改密清除强制改密标记和消费标记并续期、认证审计摘要链、业务工作台 GET 首版数据范围过滤、账号管理审批摘要、MySQL profile 请求头兜底默认关闭、`CUSTOMER_RANGE` 账号客户范围、账号前置审批就绪度只读契约、账号前置审批草稿评估契约、前置审批申请单 JDBC 持久化、账号动作申请单号校验边界、生产配置强制申请单号开关、申请单审批任务交接、审批通过态强制校验和前置审批证据上传入口，并写入 `ACCOUNT_MANAGEMENT` / `ACCOUNT_PRE_APPROVAL` / `LOGIN DENIED` / `PASSWORD_CHANGE` / `SESSION_REVOKED` 审计事件。默认初始化账号仍是评审用账号，生产上线前必须替换密码、停用或删除演示账号，并继续接入 SSO/JWT、正式电子签字、审计防篡改、完整组织客户授权表和正式账号生命周期策略。
-
-启用 MySQL 登录审计持久化：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_AUTH_AUDIT_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-登录审计 JDBC 当前覆盖 `auth_audit_event`，记录登录成功、失败、锁定拒绝、密码过期拒绝、会话读取、退出、无效 token 解析、M3.89 账号管理动作和 M3.92 自助改密动作，只保存 token 尾号；M3.93 起新增 `previous_event_hash/event_hash` 摘要链字段和 `GET /api/auth/audit-integrity` 校验摘要。前端登录会话已按后端菜单编码过滤侧栏模块，M3.96 业务工作台 GET 已按当前 `dataScope` 做首版过滤，M3.97 账号管理动作会生成 `ACCOUNT_MANAGEMENT` 审批摘要任务，M3.98 MySQL profile 默认关闭请求头身份兜底，M3.99 Bearer `CUSTOMER_RANGE` 会话可从账号 `customerScope` 带出客户范围。但 SSO/JWT、生产菜单持久化、完整组织客户授权表、审计不可篡改策略和安全日志平台仍需继续接入。
-
-启用 MySQL 文档附件元数据持久化：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_DOCUMENTS_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-文档附件 JDBC 当前覆盖 `doc_package`、`doc_evidence_attachment`、`doc_audit_event` 三张合同表；附件二进制内容仍由 `zhubao.documents.storage.*` 指定的存储适配处理；M3.120 已为本地内容读取补短期 HMAC 预览令牌和过期时间校验，生产 NAS/S3/COS 对象存储切换、版本锁定和正式审计保全仍需继续开发。
-
-启用 MySQL 权限菜单树持久化：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_MENU_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-菜单树 JDBC 覆盖 `sys_navigation_menu` 和 `sys_role_menu`：`V28__m3_navigation_menu_contract.sql` seed 12 个一期菜单和各角色可见性，菜单标签、模块、路由、按钮权限编码、排序、启停和角色绑定均可在库中自定义，`GET /api/security/menu-tree` 契约不变。本地默认内存菜单，便于评审。该边界解决生产菜单持久化，不代表菜单在线编辑 UI 或完整组织客户授权表完成。
-
-启用 MySQL 客户授权关系表：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_CUSTOMER_AUTHORIZATION_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-客户授权 JDBC 覆盖 `sys_customer_authorization`：`CUSTOMER_RANGE` 账号可见客户范围由授权表维护（总经理/管理员通过 `POST /api/security/customer-authorizations` 授权、`/revocations` 撤销），登录会话解析时按授权表计算有效范围，授权表无记录时回退账号 `customerScope` 文本字段。本地默认内存仓储，便于评审。该边界不代表完整组织树、跨对象关系推导或全系统行级权限完成。
-
-启用 MySQL 机器档案主数据：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_MACHINE_PROFILE_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-机器档案 JDBC 覆盖 `sys_machine`：`V30__m3_machine_profile_contract.sql` seed 雕刻 1-8 号机，机器编号唯一，`GET/POST /api/machine-profiles` 维护机器档案，为设备产量绑定（M3.134）提供真实 `machineId` 来源。本地默认内存仓储，便于评审。
-
-启用 MySQL 硬件设备网关持久化：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="mysql"
-$env:ZHUBAO_GATEWAY_REPOSITORY="jdbc"
-powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml spring-boot:run
-```
-
-设备网关 JDBC 覆盖 `hw_gateway_device` 和 `hw_gateway_reading`：注册设备保存设备名、可接受读数类型和 PBKDF2 哈希后的设备密钥，读数保存归一化值、单位、编码、READY/WARNING/BLOCKED 状态和原始报文。低成本硬件通过 `POST /api/hardware/gateway/readings` 凭设备密钥推送标准化读数，评审默认设备密钥由 `ZHUBAO_GATEWAY_DEMO_DEVICE_KEY` 提供（默认 `zhubao-device-demo`），生产上线前必须替换、停用或删除评审设备并轮换密钥。该边界打通设备到系统的接入通道，不代表厂商 SDK/协议直连、真实设备型号冻结或读数自动写业务台账完成。
-
-启动前端：
-
-```powershell
-pnpm --filter zhubao-erp-frontend dev
-```
-
-默认地址：
-
-- 后端 API：`http://localhost:8080`
-- 前端：`http://localhost:5173`
-
-Docker 离线运行包：
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.62.0
-```
-
-只验证无源码运行包结构、不构建镜像：
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Version m3.62-layout -NoDockerBuild -SkipTests
-```
-
-单独验收已有运行包目录或 zip：
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-runtime-package.ps1 -PackagePath .deploy-artifacts\zhubao-erp-runtime-m3.62.0.zip
-```
-
-运行包内生成 MySQL 备份：
-```powershell
-powershell -ExecutionPolicy Bypass -File .\backup-mysql.ps1
-```
-
-运行包内生成备份并上传腾讯云 COS：
-```powershell
-powershell -ExecutionPolicy Bypass -File .\backup-mysql.ps1 -UploadCos -CosPrefix prod/mysql/
-```
-
-运行包内验证备份可恢复：
-```powershell
-powershell -ExecutionPolicy Bypass -File .\verify-restore.ps1 -BackupFile .\runtime-backups\zhubao_erp_mysql_20260707-090000.sql -Operator ops-user
-```
-
-## 当前 API
-
-- `POST /api/scan/resolve`
-- `POST /api/inventory/ledger/transfers`
-- `GET /api/inventory/ledgers`
-- `GET /api/inventory/balances`
-- `POST /api/video-clip-tasks`
-- `GET /api/video-clip-tasks`
-- `GET /api/samples/scenarios`
-- `GET /api/samples/summary`
-- `GET /api/hardware/devices`
-- `GET /api/hardware/integration-tasks`
-- `GET /api/hardware/poc-records`
-- `GET /api/hardware/poc-evidence`
-- `GET /api/hardware/summary`
-- `POST /api/hardware/gateway/readings`
-- `GET /api/hardware/gateway/readings`
-- `GET /api/hardware/gateway/devices`
-- `GET /api/hardware/gateway/devices/{deviceCode}/readings`
-- `GET /api/hardware/gateway/summary`
-- `POST /api/hardware/gateway/consumptions`
-- `GET /api/hardware/gateway/consumptions`
-- `POST /api/hardware/gateway/devices`
-- `POST /api/hardware/gateway/devices/{deviceCode}/status`
-- `POST /api/hardware/gateway/devices/{deviceCode}/rotate-key`
-- `GET /api/documents/summary`
-- `GET /api/documents/packages`
-- `GET /api/documents/attachments`
-- `GET /api/documents/storage`
-- `POST /api/documents/attachments/{code}/retirements`
-- `GET /api/documents/audit-events`
-- `POST /api/documents/attachments/uploads`
-- `GET /api/documents/attachments/{code}/preview-url`
-- `GET /api/documents/attachments/{code}/content?expiresAt=<epoch>&token=<hmac>`
-- `GET /api/operations/center`
-- `POST /api/auth/login`
-- `GET /api/auth/session`
-- `POST /api/auth/logout`
-- `GET /api/auth/demo-users`
-- `GET /api/auth/audit-events`
-- `GET /api/security/current-context`
-- `GET /api/security/menu-tree`
-- `GET /api/security/customer-authorizations`
-- `POST /api/security/customer-authorizations`
-- `POST /api/security/customer-authorizations/revocations`
-- `GET /api/business/workspaces/summary`
-- `GET /api/business/operations/progress`
-- `GET /api/business/workspaces/inbound`
-- `GET /api/business/workspaces/production`
-- `GET /api/business/workspaces/quality`
-- `GET /api/business/workspaces/inventory`
-- `GET /api/business/workspaces/mobile`
-- `POST /api/business/operations/inbound-confirmations`
-- `POST /api/business/operations/production-reports`
-- `POST /api/business/operations/quality-freezes`
-- `POST /api/business/operations/rework-dispatches`
-- `POST /api/business/operations/rework-reports`
-- `POST /api/business/operations/quality-releases`
-- `POST /api/business/operations/outbound-shipments`
-- `POST /api/business/operations/customer-returns`
-- `POST /api/business/operations/after-sales-reviews`
-- `POST /api/business/operations/loss-approvals`
-- `GET /api/business/documents/mother-orders/{code}`
-- `GET /api/business/documents/outbound-orders/{code}`
-- `GET /api/approvals/tasks`
-- `GET /api/approvals/tasks/pending`
-- `GET /api/approvals/tasks/{approvalCode}`
-- `POST /api/approvals/tasks/{approvalCode}/decisions`
-- `GET /api/configuration/baseline/summary`
-- `GET /api/configuration/baseline/system-parameters`
-- `GET /api/configuration/baseline/code-rules`
-- `GET /api/configuration/baseline/role-permissions`
-- `GET /api/configuration/baseline/process-templates`
-- `GET /api/configuration/baseline/warehouse-states`
-- `GET /api/configuration/baseline/video-parameters`
-- `GET /api/configuration/baseline/components`
-- `GET /api/configuration/baseline/backup-policies`
-- `GET /api/configuration/baseline/change-requests`
-- `GET /api/configuration/baseline/audit-events`
-- `GET /api/register-import/templates`
-- `GET /api/register-import/summary`
-- `POST /api/register-import/previews`
-- `POST /api/register-import/batches/confirm`
-- `GET /api/register-import/batches`
-- `GET /api/register-import/batches/{importBatchNo}`
-- `GET /api/register-import/batches/{importBatchNo}/posting-plan`
-- `POST /api/register-import/batches/{importBatchNo}/rows/{sourceLineNo}/corrections`
-- `POST /api/register-import/batches/{importBatchNo}/posting-commands`
-- `GET /api/machine-outputs`
-- `GET /api/machine-outputs/summary`
-- `GET /api/machine-outputs/machine-match-suggestions`
-- `POST /api/machine-outputs/machine-bindings`
-- `GET /api/machine-outputs/import-batches/{importBatchNo}`
-- `GET /api/machine-profiles`
-- `POST /api/machine-profiles`
-- `POST /api/machine-outputs`
-- `POST /api/label/generate`
-- `GET /api/label/mother-orders/{code}`
-- `GET /api/label/templates`
-- `POST /api/label/templates`
-- `GET /api/finance/price-agreements`
-- `POST /api/finance/price-agreements`
-- `POST /api/finance/billing-runs`
-- `GET /api/finance/unpriced`
-- `POST /api/finance/receivable-reversals`
-- `POST /api/finance/receipts`
-- `GET /api/finance/statements`
-- `GET /api/finance/worker-rates`
-- `POST /api/finance/worker-rates`
-- `GET /api/finance/payroll-lines`
-- `POST /api/finance/payroll-runs`
-- `POST /api/finance/payroll-runs/confirmations`
-- `GET /api/finance/consumable-items`
-- `POST /api/finance/consumable-items`
-- `GET /api/finance/consumable-movements`
-- `POST /api/finance/consumable-purchases`
-- `POST /api/finance/consumable-issues`
-- `GET /api/finance/fixed-assets`
-- `POST /api/finance/fixed-assets`
-- `GET /api/finance/depreciation-entries`
-- `POST /api/finance/depreciation-runs`
-- `POST /api/finance/outsource-bills`
-- `GET /api/finance/payables`
-- `POST /api/finance/payable-payments`
-- `GET /api/finance/operating-statement`
-
-## 当前状态
-
-一期业务命令已能写库存台账。财务页做经营核算：按客户协议计加工费，并汇总工资、消耗品、固定资产和外协。不做会计凭证和总账，工资确认后不生成银行代发。客户交付版本尚未形成。
-
-## 文档
-
-- [文档索引](docs/README.md)
-- [产品需求](docs/01_PRD_产品需求文档.md)
-- [业务流程](docs/02_业务流程与规则设计.md)
-- [领域模型](docs/03_领域模型与数据库设计.md)
-- [Docker 部署](docs/19_Docker一键部署与离线交付.md)
-- [上线待确认](docs/22_真实数据与上线待确认清单.md)
+手机摄像头需访问 HTTPS。试运行的 ZHUBAO_TLS_SAN 填实际访问 IP 或域名；网页请求上限 55MB，单个视频仍不超过 50MB。生产需核验账号、证书信任、附件备份和现场设备。
