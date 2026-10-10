@@ -210,6 +210,7 @@ Compose 服务：
 | `ZHUBAO_DOCUMENTS_REPOSITORY` | `jdbc` | 文档附件元数据仓储 |
 | `ZHUBAO_AUTH_USERS_REPOSITORY` | `jdbc` | 登录账号仓储；Compose 默认写入 `auth_user_account` |
 | `ZHUBAO_AUTH_AUDIT_REPOSITORY` | `jdbc` | 登录审计仓储；Compose 默认写入 `auth_audit_event` |
+| `ZHUBAO_DOCUMENT_PREVIEW_SECRET` | 空 | 附件短期预览签名密钥；MySQL 模式必须显式配置至少 32 字符随机值，空值、开发默认值或过短值将阻止后端启动 |
 | `ZHUBAO_LOG_FILE` | `/logs/zhubao-erp.log` | 运维中心只读日志来源；Compose 同步设置 `LOGGING_FILE_NAME` |
 
 ---

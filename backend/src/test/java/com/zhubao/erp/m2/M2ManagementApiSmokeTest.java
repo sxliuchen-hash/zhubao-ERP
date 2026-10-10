@@ -107,7 +107,7 @@ class M2ManagementApiSmokeTest {
         confirmation.put("confirmRemark", "Smoke 确认导入仅落结构化批次，不直接写库存台账");
         confirmation.put("preview", outboundReadyPreview(importBatchNo));
 
-        ResponseEntity<String> confirmed = restTemplate.postForEntity(
+        ResponseEntity<String> confirmed = signedPost(
                 "/api/register-import/batches/confirm",
                 confirmation,
                 String.class
@@ -131,7 +131,7 @@ class M2ManagementApiSmokeTest {
                 "materialCode", "MAT-18K-RING",
                 "weight", "9.200"
         ));
-        ResponseEntity<String> corrected = restTemplate.postForEntity(
+        ResponseEntity<String> corrected = signedPost(
                 "/api/register-import/batches/" + importBatchNo + "/rows/3/corrections",
                 corrections,
                 String.class
@@ -150,7 +150,7 @@ class M2ManagementApiSmokeTest {
                 "\"sourceRegisterLineNo\":\"3\""
         );
         assertThat(loaded.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(loaded.getBody()).contains(importBatchNo, "\"confirmedBy\":\"何琳\"");
+        assertThat(loaded.getBody()).contains(importBatchNo, "\"confirmedBy\":\"系统管理员\"");
         assertThat(postingPlan.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(postingPlan.getBody()).contains(
                 importBatchNo,
@@ -314,10 +314,10 @@ class M2ManagementApiSmokeTest {
 
     @Test
     void exposesDocumentManagementApis() {
-        ResponseEntity<String> summary = restTemplate.getForEntity("/api/documents/summary", String.class);
-        ResponseEntity<String> packages = restTemplate.getForEntity("/api/documents/packages", String.class);
-        ResponseEntity<String> attachments = restTemplate.getForEntity("/api/documents/attachments", String.class);
-        ResponseEntity<String> auditEvents = restTemplate.getForEntity("/api/documents/audit-events", String.class);
+        ResponseEntity<String> summary = signedGet("/api/documents/summary", String.class);
+        ResponseEntity<String> packages = signedGet("/api/documents/packages", String.class);
+        ResponseEntity<String> attachments = signedGet("/api/documents/attachments", String.class);
+        ResponseEntity<String> auditEvents = signedGet("/api/documents/audit-events", String.class);
 
         assertThat(summary.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(summary.getBody()).contains(
@@ -350,7 +350,7 @@ class M2ManagementApiSmokeTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
-        ResponseEntity<String> uploaded = restTemplate.postForEntity(
+        ResponseEntity<String> uploaded = signedPost(
                 "/api/documents/attachments/uploads",
                 new HttpEntity<>(body, headers),
                 String.class
@@ -362,7 +362,7 @@ class M2ManagementApiSmokeTest {
                 .doesNotContain("preview-demo");
 
         String uploadedCode = uploaded.getBody().replaceAll(".*\"code\":\"([^\"]+)\".*", "$1");
-        ResponseEntity<String> preview = restTemplate.getForEntity(
+        ResponseEntity<String> preview = signedGet(
                 "/api/documents/attachments/" + uploadedCode + "/preview-url",
                 String.class
         );
@@ -472,12 +472,12 @@ class M2ManagementApiSmokeTest {
                 Map.entry("customerName", "恒信珠宝")
         );
 
-        ResponseEntity<String> confirmed = restTemplate.postForEntity(
+        ResponseEntity<String> confirmed = signedPost(
                 "/api/business/operations/inbound-confirmations",
                 request,
                 String.class
         );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
         ResponseEntity<String> structuredMotherOrder = restTemplate.getForEntity(
                 "/api/business/documents/mother-orders/MD-SMOKE-20260706-001",
                 String.class
@@ -508,60 +508,29 @@ class M2ManagementApiSmokeTest {
 
     @Test
     void reportsProductionThroughBusinessOperationApiAndMovesWipStock() {
-        Map<String, Object> wipDimension = Map.of(
-                "ownerType", "CUSTOMER",
-                "ownerCustomerId", 1002L,
-                "customerId", 1002L,
-                "motherOrderCode", "MD-SMOKE-20260706-002",
-                "workOrderCode", "ZD-SMOKE-20260706-006",
-                "materialCode", "MAT-SILVER-CHAIN",
-                "warehouseCode", "WIP-LINE-01",
-                "stockStatus", "WIP"
-        );
-        Map<String, Object> seedWip = Map.of(
-                "documentType", "split_work_order",
-                "documentCode", "ZD-SMOKE-20260706-006",
-                "to", wipDimension,
-                "quantity", new BigDecimal("300"),
-                "weight", new BigDecimal("683.200"),
-                "remark", "seed WIP for production report smoke test"
-        );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedWip, String.class);
-
-        Map<String, Object> request = new LinkedHashMap<>();
-        request.put("motherOrderCode", "MD-SMOKE-20260706-002");
-        request.put("workOrderCode", "ZD-SMOKE-20260706-006");
-        request.put("customerId", 1002L);
-        request.put("materialCode", "MAT-SILVER-CHAIN");
-        request.put("fromWarehouseCode", "WIP-LINE-01");
-        request.put("toWarehouseCode", "SEMI-FINISHED");
-        request.put("quantity", new BigDecimal("210"));
-        request.put("weight", new BigDecimal("478.240"));
-        request.put("process", "焊接");
-        request.put("operator", "王强");
-        request.put("handoffCode", "HO-SMOKE-001");
-        request.put("remark", "production report smoke test");
-
-        ResponseEntity<String> reported = restTemplate.postForEntity(
-                "/api/business/operations/production-reports",
-                request,
-                String.class
-        );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
-
-        assertThat(reported.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(reported.getBody()).contains(
-                "ZD-SMOKE-20260706-006",
-                "WIP",
-                "SEMI_FINISHED",
-                "HO-SMOKE-001"
-        );
-        assertThat(balances.getBody()).contains(
-                "MD-SMOKE-20260706-002",
-                "ZD-SMOKE-20260706-006",
-                "SEMI-FINISHED",
-                "SEMI_FINISHED"
-        );
+        String mother = "MD-SMOKE-20260706-002";
+        prepareKeptMother(mother, "WIP-LINE-01", "300", "683.200");
+        reportStation(mother, "雕刻", "carve");
+        reportStation(mother, "镶嵌", "inlay");
+        Map<String, Object> command = new LinkedHashMap<>();
+        command.put("motherOrderCode", mother);
+        command.put("workOrderCode", mother);
+        command.put("customerId", 1002L);
+        command.put("materialCode", "MAT-SILVER-CHAIN");
+        command.put("fromWarehouseCode", "WIP-LINE-01");
+        command.put("toWarehouseCode", "WIP-LINE-01");
+        command.put("quantity", new BigDecimal("300"));
+        command.put("weight", new BigDecimal("683.200"));
+        command.put("process", "抛光");
+        command.put("operator", "请求冒名者");
+        command.put("handoffCode", "HO-SMOKE-001");
+        var reported = restTemplate.postForEntity("/api/business/operations/production-reports",
+                new HttpEntity<>(command, sessionHeaders("polish")), String.class);
+        assertThat(reported.getStatusCode().is2xxSuccessful()).as(reported.getBody()).isTrue();
+        assertThat(reported.getBody()).contains(mother, "SEMI_FINISHED", "HO-SMOKE-001", "抛光工 陈刚")
+                .doesNotContain("请求冒名者");
+        assertThat(signedGet("/api/inventory/balances", String.class).getBody())
+                .contains(mother, "SEMI_FINISHED");
     }
 
     @Test
@@ -584,7 +553,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("121.150"),
                 "remark", "seed semi-finished for quality freeze smoke test"
         );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedSemiFinished, String.class);
+        signedPost("/api/inventory/ledger/transfers", seedSemiFinished, String.class);
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("qualityCaseCode", "QC-SMOKE-20260706-022");
@@ -602,12 +571,12 @@ class M2ManagementApiSmokeTest {
         request.put("evidenceCode", "PHOTO-QC-SMOKE-001");
         request.put("remark", "quality freeze smoke test");
 
-        ResponseEntity<String> frozen = restTemplate.postForEntity(
+        ResponseEntity<String> frozen = signedPost(
                 "/api/business/operations/quality-freezes",
                 request,
                 String.class
         );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
 
         assertThat(frozen.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(frozen.getBody()).contains(
@@ -644,7 +613,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("13.660"),
                 "remark", "seed frozen stock for rework dispatch smoke test"
         );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedFrozen, String.class);
+        signedPost("/api/inventory/ledger/transfers", seedFrozen, String.class);
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("reworkOrderCode", "FG-SMOKE-20260706-023");
@@ -663,12 +632,12 @@ class M2ManagementApiSmokeTest {
         request.put("evidenceCode", "PHOTO-QC-SMOKE-002");
         request.put("remark", "rework dispatch smoke test");
 
-        ResponseEntity<String> dispatched = restTemplate.postForEntity(
+        ResponseEntity<String> dispatched = signedPost(
                 "/api/business/operations/rework-dispatches",
                 request,
                 String.class
         );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
 
         assertThat(dispatched.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(dispatched.getBody()).contains(
@@ -706,7 +675,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("13.660"),
                 "remark", "seed rework stock for rework report smoke test"
         );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedRework, String.class);
+        signedPost("/api/inventory/ledger/transfers", seedRework, String.class);
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("reworkOrderCode", "FG-SMOKE-20260706-024");
@@ -724,12 +693,12 @@ class M2ManagementApiSmokeTest {
         request.put("evidenceCode", "PHOTO-REWORK-SMOKE-001");
         request.put("remark", "rework report smoke test");
 
-        ResponseEntity<String> reported = restTemplate.postForEntity(
+        ResponseEntity<String> reported = signedPost(
                 "/api/business/operations/rework-reports",
                 request,
                 String.class
         );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
 
         assertThat(reported.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(reported.getBody()).contains(
@@ -749,62 +718,36 @@ class M2ManagementApiSmokeTest {
 
     @Test
     void releasesQualityStockThroughBusinessOperationApiAndMovesSemiFinishedToFinished() {
-        Map<String, Object> semiFinishedDimension = Map.of(
-                "ownerType", "CUSTOMER",
-                "ownerCustomerId", 1002L,
-                "customerId", 1002L,
-                "motherOrderCode", "MD-SMOKE-20260706-006",
-                "workOrderCode", "ZD-SMOKE-20260706-025",
-                "materialCode", "MAT-SILVER-CHAIN",
-                "warehouseCode", "SEMI-FINISHED",
-                "stockStatus", "SEMI_FINISHED"
-        );
-        Map<String, Object> seedSemiFinished = Map.of(
-                "documentType", "rework_report",
-                "documentCode", "FG-SMOKE-20260706-025",
-                "to", semiFinishedDimension,
-                "quantity", new BigDecimal("6"),
-                "weight", new BigDecimal("13.660"),
-                "remark", "seed semi-finished for quality release smoke test"
-        );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedSemiFinished, String.class);
-
-        Map<String, Object> request = new LinkedHashMap<>();
-        request.put("qualityCaseCode", "QC-SMOKE-20260706-025");
-        request.put("motherOrderCode", "MD-SMOKE-20260706-006");
-        request.put("workOrderCode", "ZD-SMOKE-20260706-025");
-        request.put("customerId", 1002L);
-        request.put("materialCode", "MAT-SILVER-CHAIN");
-        request.put("fromWarehouseCode", "SEMI-FINISHED");
-        request.put("toWarehouseCode", "FINISHED-CUSTOMER");
-        request.put("quantity", new BigDecimal("6"));
-        request.put("weight", new BigDecimal("13.660"));
-        request.put("process", "复检焊接");
-        request.put("inspector", "周娜");
-        request.put("releaseResult", "复检合格，允许成品入库");
-        request.put("evidenceCode", "PHOTO-RELEASE-SMOKE-001");
-        request.put("remark", "quality release smoke test");
-
-        ResponseEntity<String> released = restTemplate.postForEntity(
-                "/api/business/operations/quality-releases",
-                request,
-                String.class
-        );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
-
-        assertThat(released.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(released.getBody()).contains(
-                "QC-SMOKE-20260706-025",
-                "SEMI_FINISHED",
-                "FINISHED",
-                "PHOTO-RELEASE-SMOKE-001"
-        );
-        assertThat(balances.getBody()).contains(
-                "MD-SMOKE-20260706-006",
-                "ZD-SMOKE-20260706-025",
-                "FINISHED-CUSTOMER",
-                "FINISHED"
-        );
+        String mother = "MD-SMOKE-20260706-006";
+        prepareKeptMother(mother, "SEMI-FINISHED", "6", "13.660");
+        reportStation(mother, "雕刻", "carve");
+        reportStation(mother, "镶嵌", "inlay");
+        reportStation(mother, "抛光", "polish");
+        var check = restTemplate.postForEntity("/api/business/operations/quality-checks",
+                new HttpEntity<>(Map.of("code", mother, "lines", List.of(Map.of("lineNo", 1, "verdict", "合格", "reason", ""))),
+                        sessionHeaders("qc")), String.class);
+        assertThat(check.getStatusCode().is2xxSuccessful()).as(check.getBody()).isTrue();
+        Map<String, Object> command = new LinkedHashMap<>();
+        command.put("qualityCaseCode", "QC-" + mother);
+        command.put("motherOrderCode", mother);
+        command.put("workOrderCode", mother);
+        command.put("customerId", 1002L);
+        command.put("materialCode", "MAT-SILVER-CHAIN");
+        command.put("fromWarehouseCode", "SEMI-FINISHED");
+        command.put("toWarehouseCode", "FINISHED-CUSTOMER");
+        command.put("quantity", new BigDecimal("6"));
+        command.put("weight", new BigDecimal("13.660"));
+        command.put("process", "抛光");
+        command.put("inspector", "请求冒名者");
+        command.put("releaseResult", "合格");
+        command.put("evidenceCode", "PHOTO-RELEASE-SMOKE-001");
+        var released = restTemplate.postForEntity("/api/business/operations/quality-releases",
+                new HttpEntity<>(command, sessionHeaders("qc")), String.class);
+        assertThat(released.getStatusCode().is2xxSuccessful()).as(released.getBody()).isTrue();
+        assertThat(released.getBody()).contains(mother, "FINISHED", "PHOTO-RELEASE-SMOKE-001", "质检员 周娜")
+                .doesNotContain("请求冒名者");
+        assertThat(signedGet("/api/inventory/balances", String.class).getBody())
+                .contains(mother, "FINISHED-CUSTOMER");
     }
 
     @Test
@@ -827,7 +770,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("13.660"),
                 "remark", "seed finished stock for outbound shipment smoke test"
         );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedFinished, String.class);
+        signedPost("/api/inventory/ledger/transfers", seedFinished, String.class);
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("shipmentCode", "OUT-SMOKE-20260706-026");
@@ -844,12 +787,12 @@ class M2ManagementApiSmokeTest {
         request.put("evidenceCode", "ATT-OUT-SMOKE-001");
         request.put("remark", "outbound shipment smoke test");
 
-        ResponseEntity<String> shipped = restTemplate.postForEntity(
+        ResponseEntity<String> shipped = signedPost(
                 "/api/business/operations/outbound-shipments",
                 request,
                 String.class
         );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
         ResponseEntity<String> structuredOutboundOrder = restTemplate.getForEntity(
                 "/api/business/documents/outbound-orders/OUT-SMOKE-20260706-026",
                 String.class
@@ -900,7 +843,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("13.660"),
                 "remark", "seed shipped stock for customer return smoke test"
         );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedShipped, String.class);
+        signedPost("/api/inventory/ledger/transfers", seedShipped, String.class);
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("returnCode", "RET-SMOKE-20260707-027");
@@ -919,12 +862,12 @@ class M2ManagementApiSmokeTest {
         request.put("evidenceCode", "ATT-RET-SMOKE-001");
         request.put("remark", "customer return smoke test");
 
-        ResponseEntity<String> returned = restTemplate.postForEntity(
+        ResponseEntity<String> returned = signedPost(
                 "/api/business/operations/customer-returns",
                 request,
                 String.class
         );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
 
         assertThat(returned.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(returned.getBody()).contains(
@@ -963,7 +906,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("4.550"),
                 "remark", "seed return check stock for after sales review smoke test"
         );
-        restTemplate.postForEntity("/api/inventory/ledger/transfers", seedReturnCheck, String.class);
+        signedPost("/api/inventory/ledger/transfers", seedReturnCheck, String.class);
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("reviewCode", "ASR-SMOKE-20260707-030");
@@ -983,12 +926,12 @@ class M2ManagementApiSmokeTest {
         request.put("evidenceCode", "PHOTO-ASR-SMOKE-030");
         request.put("remark", "after sales review smoke test");
 
-        ResponseEntity<String> reviewed = restTemplate.postForEntity(
+        ResponseEntity<String> reviewed = signedPost(
                 "/api/business/operations/after-sales-reviews",
                 request,
                 String.class
         );
-        ResponseEntity<String> balances = restTemplate.getForEntity("/api/inventory/balances", String.class);
+        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
 
         assertThat(reviewed.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(reviewed.getBody()).contains(
@@ -1028,7 +971,7 @@ class M2ManagementApiSmokeTest {
         request.put("evidenceCode", "HO-SMOKE-LOSS-009");
         request.put("remark", "loss approval smoke test");
 
-        ResponseEntity<String> approved = restTemplate.postForEntity(
+        ResponseEntity<String> approved = signedPost(
                 "/api/business/operations/loss-approvals",
                 request,
                 String.class
@@ -1394,6 +1337,58 @@ class M2ManagementApiSmokeTest {
         assertThat(audits.getBody()).contains("CFG-AUD-20260706-001", "TRACE-CFG-002");
     }
 
+    private final Map<String, HttpHeaders> signedSessions = new LinkedHashMap<>();
+
+    private HttpHeaders sessionHeaders(String username) {
+        return signedSessions.computeIfAbsent(username, name -> {
+            var login = restTemplate.postForEntity("/api/auth/login",
+                    Map.of("username", name, "password", name + "123"), String.class);
+            assertThat(login.getStatusCode().is2xxSuccessful()).as(login.getBody()).isTrue();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(jsonString(login.getBody(), "token"));
+            return headers;
+        });
+    }
+
+    private <T> ResponseEntity<T> signedGet(String path, Class<T> responseType) {
+        return restTemplate.exchange(path, HttpMethod.GET, new HttpEntity<>(sessionHeaders("admin")), responseType);
+    }
+
+    private <T> ResponseEntity<T> signedPost(String path, Object body, Class<T> responseType) {
+        HttpHeaders headers = new HttpHeaders();
+        Object payload = body;
+        if (body instanceof HttpEntity<?> entity) {
+            headers.addAll(entity.getHeaders());
+            payload = entity.getBody();
+        }
+        headers.addAll(sessionHeaders("admin"));
+        return restTemplate.postForEntity(path, new HttpEntity<>(payload, headers), responseType);
+    }
+
+    private void prepareKeptMother(String code, String warehouse, String quantity, String weight) {
+        Map<String, Object> command = new LinkedHashMap<>();
+        command.put("motherOrderCode", code);
+        command.put("customerId", 1002L);
+        command.put("customerName", "雅辰饰品");
+        command.put("materialCode", "MAT-SILVER-CHAIN");
+        command.put("warehouseCode", warehouse);
+        command.put("quantity", new BigDecimal(quantity));
+        command.put("weight", new BigDecimal(weight));
+        command.put("operator", "请求冒名者");
+        command.put("processingRequirement", "表面无划痕");
+        command.put("dueDate", "2099-01-01");
+        var inbound = signedPost("/api/business/operations/inbound-confirmations", command, String.class);
+        assertThat(inbound.getStatusCode().is2xxSuccessful()).as(inbound.getBody()).isTrue();
+        var kept = signedPost("/api/business/operations/mother-orders/" + code + "/keep", Map.of(), String.class);
+        assertThat(kept.getStatusCode().is2xxSuccessful()).as(kept.getBody()).isTrue();
+    }
+
+    private void reportStation(String code, String process, String username) {
+        var report = restTemplate.postForEntity("/api/business/operations/process-stations",
+                new HttpEntity<>(Map.of("code", code, "process", process), sessionHeaders(username)), String.class);
+        assertThat(report.getStatusCode().is2xxSuccessful()).as(report.getBody()).isTrue();
+    }
+
     private String jsonString(String body, String field) {
         Pattern pattern = Pattern.compile("\"" + Pattern.quote(field) + "\"\\s*:\\s*\"([^\"]+)\"");
         Matcher matcher = pattern.matcher(body == null ? "" : body);
@@ -1501,7 +1496,7 @@ class M2ManagementApiSmokeTest {
         ResponseEntity<String> consumed = restTemplate.exchange(
                 "/api/hardware/gateway/consumptions",
                 HttpMethod.POST,
-                new HttpEntity<>(consume, operatorHeaders),
+                new HttpEntity<>(consume, sessionHeaders("operator")),
                 String.class);
         assertThat(consumed.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(consumed.getBody()).contains(

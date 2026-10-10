@@ -1,6 +1,7 @@
 package com.zhubao.erp.register.app;
 
 import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.business.app.ProcessStationService;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.OutboundShipmentResult;
@@ -17,6 +18,8 @@ import com.zhubao.erp.register.domain.RegisterImportPostingDraft;
 import com.zhubao.erp.register.domain.RegisterImportPostingExecutionItem;
 import com.zhubao.erp.register.domain.RegisterImportPostingExecutionResult;
 import com.zhubao.erp.register.domain.RegisterImportPostingPlan;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -35,6 +38,7 @@ public class RegisterImportPostingExecutionService {
     private final RegisterImportPostingPlanService postingPlanService;
     private final BusinessOperationService businessOperationService;
     private final MachineOutputService machineOutputService;
+    private final ProcessStationService processStationService;
 
     public RegisterImportPostingExecutionService(
             RegisterImportConfirmationService confirmationService,
@@ -42,13 +46,34 @@ public class RegisterImportPostingExecutionService {
             BusinessOperationService businessOperationService,
             MachineOutputService machineOutputService
     ) {
+        this(confirmationService, postingPlanService, businessOperationService, machineOutputService, null);
+    }
+
+    @Autowired
+    public RegisterImportPostingExecutionService(
+            RegisterImportConfirmationService confirmationService,
+            RegisterImportPostingPlanService postingPlanService,
+            BusinessOperationService businessOperationService,
+            MachineOutputService machineOutputService,
+            ProcessStationService processStationService
+    ) {
         this.confirmationService = confirmationService;
         this.postingPlanService = postingPlanService;
         this.businessOperationService = businessOperationService;
         this.machineOutputService = machineOutputService;
+        this.processStationService = processStationService;
     }
 
     public RegisterImportPostingExecutionResult post(String importBatchNo, PostRegisterImportBatchCommand command) {
+        return postInternal(importBatchNo, command, null);
+    }
+
+    public RegisterImportPostingExecutionResult post(String importBatchNo, PostRegisterImportBatchCommand command, AuthUserAccount account) {
+        if (account == null) throw new BusinessException("登记表入账必须登录");
+        return postInternal(importBatchNo, command, account);
+    }
+
+    private RegisterImportPostingExecutionResult postInternal(String importBatchNo, PostRegisterImportBatchCommand command, AuthUserAccount account) {
         RegisterImportBatch batch = confirmationService.batch(importBatchNo);
         if ("POSTED".equals(batch.status())) {
             throw new BusinessException("导入批次已入账，不能重复执行：" + importBatchNo);
@@ -62,7 +87,7 @@ public class RegisterImportPostingExecutionService {
             throw new BusinessException("入账映射计划存在警告行，请显式 allowWarnings 后再执行：" + importBatchNo);
         }
 
-        String operator = normalizeOperator(command, batch);
+        String operator = account == null ? normalizeOperator(command, batch) : account.operator();
         String postedAt = POST_TIME_FORMATTER.format(LocalDateTime.now());
         List<PreparedPosting> preparedPostings = plan.drafts().stream()
                 .filter(draft -> !"POSTED".equals(draft.status()))
@@ -74,7 +99,7 @@ public class RegisterImportPostingExecutionService {
 
         List<RegisterImportPostingExecutionItem> items = new ArrayList<>();
         for (PreparedPosting posting : preparedPostings) {
-            RegisterImportPostingExecutionItem item = execute(plan.templateCode(), posting);
+            RegisterImportPostingExecutionItem item = execute(plan.templateCode(), posting, account);
             items.add(item);
             confirmationService.markRowsPosted(
                     importBatchNo,
@@ -127,7 +152,7 @@ public class RegisterImportPostingExecutionService {
         return new PreparedPosting(draft, businessCommand, command);
     }
 
-    private RegisterImportPostingExecutionItem execute(String templateCode, PreparedPosting posting) {
+    private RegisterImportPostingExecutionItem execute(String templateCode, PreparedPosting posting, AuthUserAccount account) {
         Object command = posting.businessCommand();
         if (command instanceof ConfirmInboundCommand inboundCommand) {
             InboundConfirmationResult result = businessOperationService.confirmInbound(inboundCommand);
@@ -138,7 +163,12 @@ public class RegisterImportPostingExecutionService {
             return item(posting.draft(), result.shipmentCode(), result.ledgerCode(), "已执行 ShipFinishedStockCommand");
         }
         if (command instanceof ReportProductionCommand productionCommand) {
-            ProductionReportResult result = businessOperationService.reportProduction(productionCommand);
+            if (account != null && processStationService == null) {
+                throw new BusinessException("岗位报工服务不可用，不能从登记表绕过工序校验");
+            }
+            ProductionReportResult result = account == null
+                    ? businessOperationService.reportProduction(productionCommand)
+                    : processStationService.reportProduction(productionCommand, account);
             String message = "已执行 ReportProductionCommand";
             if ("REG-ENGRAVING".equals(templateCode)) {
                 MachineOutputRecord outputRecord = submitMachineOutput(posting.draft(), result, posting.command());

@@ -41,6 +41,12 @@ public class OperatorContextResolver {
         });
     }
 
+    /** 受保护的业务读取必须使用真实登录会话，不能使用开发请求头身份兜底。 */
+    public OperatorContext requireSession(HttpServletRequest request) {
+        return authSessionService.operatorContext(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
+                .orElseThrow(() -> new PermissionDeniedException("请先登录后再访问业务数据"));
+    }
+
     private OperatorContext resolveHeaders(HttpServletRequest request) {
         String operator = headerOrDefault(request, OPERATOR_HEADER, "system-review");
         RoleCode role = parseRole(headerOrDefault(request, ROLE_HEADER, RoleCode.ADMIN.name()));

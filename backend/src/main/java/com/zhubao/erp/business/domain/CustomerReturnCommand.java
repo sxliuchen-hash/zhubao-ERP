@@ -20,7 +20,7 @@ public record CustomerReturnCommand(
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal weight,
         @NotBlank String returnLogisticsNo,
         @NotBlank String reason,
-        @NotBlank String operator,
+        String operator,
         String evidenceCode,
         String remark
 ) {

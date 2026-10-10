@@ -21,6 +21,9 @@ zhubao:
     repository: ${ZHUBAO_APPROVAL_REPOSITORY:memory}
   documents:
     repository: ${ZHUBAO_DOCUMENTS_REPOSITORY:memory}
+    preview:
+      require-explicit-secret: true
+      secret: ${ZHUBAO_DOCUMENT_PREVIEW_SECRET:}
   register-import:
     repository: ${ZHUBAO_REGISTER_IMPORT_REPOSITORY:jdbc}
   machine-output:

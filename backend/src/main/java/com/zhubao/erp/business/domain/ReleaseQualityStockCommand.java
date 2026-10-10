@@ -18,7 +18,7 @@ public record ReleaseQualityStockCommand(
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal quantity,
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal weight,
         @NotBlank String process,
-        @NotBlank String inspector,
+        String inspector,
         @NotBlank String releaseResult,
         String evidenceCode,
         String remark

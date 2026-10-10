@@ -9,6 +9,7 @@ import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.ProcessStationReportResult;
 import com.zhubao.erp.business.domain.ProcessStationView;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
+import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -22,7 +23,10 @@ import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.scan.domain.ScanObjectType;
 import com.zhubao.erp.scan.domain.ScanResolveResponse;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,6 +34,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 三个工序岗位扫码。只展示账号绑定的工序，并按单上的顺序交付。
@@ -46,6 +51,7 @@ public class ProcessStationService {
     private final StockLedgerService stockLedgerService;
     private final BusinessOperationService businessOperationService;
     private final ScanCodeParser scanCodeParser;
+    private final BusinessDataAccess dataAccess;
 
     public ProcessStationService(
             BusinessDocumentRepository documents,
@@ -53,15 +59,28 @@ public class ProcessStationService {
             BusinessOperationService businessOperationService,
             ScanCodeParser scanCodeParser
     ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, null);
+    }
+
+    @Autowired
+    public ProcessStationService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess
+    ) {
         this.documents = documents;
         this.stockLedgerService = stockLedgerService;
         this.businessOperationService = businessOperationService;
         this.scanCodeParser = scanCodeParser;
+        this.dataAccess = dataAccess;
     }
 
     public ProcessStationView lookup(String rawCode, AuthUserAccount account) {
         requireAccount(account);
         StationTicket ticket = resolve(rawCode);
+        assertCustomer(ticket, account);
         List<String> visible = visibleProcesses(ticket, account);
         if (visible.isEmpty()) {
             return new ProcessStationView(
@@ -87,10 +106,25 @@ public class ProcessStationService {
         );
     }
 
-    public ProcessStationReportResult report(String rawCode, String requestedProcess, AuthUserAccount account) {
+    public synchronized ProcessStationReportResult report(String rawCode, String requestedProcess, AuthUserAccount account) {
         requireAccount(account);
         StationTicket ticket = resolve(rawCode);
-        String process = normalizeRequested(requestedProcess);
+        ReportProductionCommand command = defaultCommand(ticket, requestedProcess, account.operator());
+        ProductionReportResult result = reportProduction(command, account);
+        return new ProcessStationReportResult(
+                ticket.orderCode(), result.process(), result.ledgerCode(),
+                result.toStockStatus() == StockStatus.SEMI_FINISHED, result.toStockStatus().name()
+        );
+    }
+
+    /** 通用报工沿用现场整单交付规则，并完整保存请求中的报工登记字段。 */
+    public synchronized ProductionReportResult reportProduction(ReportProductionCommand submittedCommand, AuthUserAccount account) {
+        requireAccount(account);
+        ReportProductionCommand command = BusinessCommandActors.withActor(submittedCommand, account.operator().trim());
+        StationTicket ticket = resolve(command.workOrderCode());
+        assertCustomer(ticket, account);
+        assertFormalCommand(ticket, command);
+        String process = normalizeRequested(command.process());
         if (!ticket.processes().contains(process)) {
             throw new BusinessException("这张单没有「" + process + "」这道工序");
         }
@@ -104,12 +138,18 @@ public class ProcessStationService {
         if (!previous.isBlank() && !submitted(ticket.orderCode(), previous)) {
             throw new BusinessException("上一道「" + previous + "」还没交，不能交「" + process + "」");
         }
-        String operator = account.operator();
+        String operator = account.operator().trim();
         ensureWipForKeptMother(ticket, operator);
         boolean last = process.equals(ticket.processes().get(ticket.processes().size() - 1));
-        StockLedgerEntry entry = last
-                ? moveToSemiFinished(ticket, process, operator)
-                : recordStation(ticket, process, operator);
+        StockDimension from = wipDimension(ticket);
+        StockDimension to = last ? new StockDimension(
+                from.ownerType(), from.ownerCustomerId(), from.customerId(), from.motherOrderCode(),
+                from.workOrderCode(), from.materialCode(), command.toWarehouseCode(), StockStatus.SEMI_FINISHED
+        ) : from;
+        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+                last ? "production_report" : STATION_DOCUMENT,
+                ticket.orderCode(), from, to, command.quantity(), command.weight(), productionRemark(command)
+        ));
         documents.saveProcessStationHandoff(new ProcessStationHandoff(
                 ticket.orderCode(),
                 process,
@@ -117,12 +157,9 @@ public class ProcessStationService {
                 entry.code(),
                 RECORD_TIME.format(LocalDateTime.now())
         ));
-        return new ProcessStationReportResult(
-                ticket.orderCode(),
-                process,
-                entry.code(),
-                last,
-                last ? StockStatus.SEMI_FINISHED.name() : StockStatus.WIP.name()
+        return new ProductionReportResult(
+                ticket.orderCode(), entry.code(), from.warehouseCode(), to.warehouseCode(),
+                from.stockStatus(), to.stockStatus(), entry.quantity(), entry.weight(), process, operator, command.handoffCode()
         );
     }
 
@@ -145,21 +182,8 @@ public class ProcessStationService {
         ));
     }
 
-    private StockLedgerEntry recordStation(StationTicket ticket, String process, String operator) {
-        StockDimension wip = wipDimension(ticket);
-        return stockLedgerService.transfer(new StockTransferCommand(
-                STATION_DOCUMENT,
-                ticket.orderCode(),
-                wip,
-                wip,
-                ticket.quantity(),
-                ticket.weight(),
-                "岗位报工；工序：" + process + "；操作人：" + operator
-        ));
-    }
-
-    private StockLedgerEntry moveToSemiFinished(StationTicket ticket, String process, String operator) {
-        var result = businessOperationService.reportProduction(new ReportProductionCommand(
+    private ReportProductionCommand defaultCommand(StationTicket ticket, String process, String operator) {
+        return new ReportProductionCommand(
                 ticket.motherOrderCode(),
                 ticket.orderCode(),
                 ticket.customerId(),
@@ -187,18 +211,69 @@ public class ProcessStationService {
                 null,
                 null,
                 null
-        ));
-        return new StockLedgerEntry(
-                result.ledgerCode(),
-                null,
-                "production_report",
-                ticket.orderCode(),
-                null,
-                null,
-                result.quantity(),
-                result.weight(),
-                null
         );
+    }
+
+    private void assertFormalCommand(StationTicket ticket, ReportProductionCommand command) {
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        if (!Objects.equals(ticket.motherOrderCode(), command.motherOrderCode())
+                || !Objects.equals(ticket.customerId(), command.customerId())
+                || !Objects.equals(ticket.ownerCustomerId(), ownerCustomerId)
+                || !Objects.equals(ticket.materialCode(), command.materialCode())
+                || !Objects.equals(ticket.warehouseCode(), command.fromWarehouseCode())
+                || !Objects.equals(ticket.warehouseCode(), command.toWarehouseCode())) {
+            throw new BusinessException("报工的客户、母单、物料和仓库必须与正式工单一致");
+        }
+        if (command.quantity() == null || command.weight() == null
+                || ticket.quantity().compareTo(command.quantity()) != 0
+                || ticket.weight().compareTo(command.weight()) != 0) {
+            throw new BusinessException("工序交付须提交整单数量和重量，部分报工不能标记工序完成");
+        }
+        if (!blank(command.quantityUnit()).isEmpty() && !ticket.quantityUnit().equals(command.quantityUnit().trim())) {
+            throw new BusinessException("报工数量单位必须与正式工单一致");
+        }
+        if (!blank(command.completionStatus()).isEmpty()
+                && !List.of("完成", "已完成", "全部完成").contains(command.completionStatus().trim())) {
+            throw new BusinessException("只有整单已完成才能交付工序");
+        }
+        if (!blank(command.handoffAuditStatus()).isEmpty()
+                && !List.of("已审核", "审核通过", "已交单", "通过").contains(command.handoffAuditStatus().trim())) {
+            throw new BusinessException("交单审核未通过，不能交付工序");
+        }
+    }
+
+    private String productionRemark(ReportProductionCommand command) {
+        StringBuilder remark = new StringBuilder("生产报工；工序：").append(command.process())
+                .append("；操作人：").append(command.operator());
+        appendField(remark, "工序日期", command.workDate());
+        appendField(remark, "工序类型", command.processCategory());
+        appendField(remark, "品类", command.productCategory());
+        appendField(remark, "数量单位", command.quantityUnit());
+        appendField(remark, "机器编号", command.machineNo());
+        appendField(remark, "操机签字", command.operatorSignatureName());
+        appendField(remark, "工作项目", command.workItemName());
+        appendField(remark, "开始时间", command.startedAt());
+        appendField(remark, "完成时间", command.finishedAt());
+        appendField(remark, "完成情况", command.completionStatus());
+        appendField(remark, "交单审核", command.handoffAuditStatus());
+        appendField(remark, "来源登记表", command.sourceRegisterType());
+        appendField(remark, "原表行号", command.sourceRegisterLineNo() == null ? null : command.sourceRegisterLineNo().toString());
+        appendField(remark, "纸质序号", command.sourceRegisterSequence());
+        appendField(remark, "交接", command.handoffCode());
+        appendField(remark, "备注", command.remark());
+        return remark.toString();
+    }
+
+    private void appendField(StringBuilder remark, String label, String value) {
+        if (!blank(value).isEmpty()) {
+            remark.append("；").append(label).append("：").append(value);
+        }
+    }
+
+    private void assertCustomer(StationTicket ticket, AuthUserAccount account) {
+        if (dataAccess != null) {
+            dataAccess.assertCustomer(BusinessDataAccess.contextOf(account), ticket.customerId(), ticket.customerName());
+        }
     }
 
     private ProcessStationCard card(StationTicket ticket, String process) {
@@ -369,6 +444,9 @@ public class ProcessStationService {
     private void requireAccount(AuthUserAccount account) {
         if (account == null || account.operator() == null || account.operator().isBlank()) {
             throw new BusinessException("请先登录后再做岗位报工");
+        }
+        if (!List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.WORKSHOP_LEADER, RoleCode.OPERATOR).contains(account.role())) {
+            throw new PermissionDeniedException("当前账号不是报工岗位");
         }
     }
 

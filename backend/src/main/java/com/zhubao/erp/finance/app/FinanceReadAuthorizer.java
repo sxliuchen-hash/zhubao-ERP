@@ -1,5 +1,8 @@
 package com.zhubao.erp.finance.app;
 
+import com.zhubao.erp.business.domain.BusinessDocumentRepository;
+import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.PriceAgreement;
 import com.zhubao.erp.finance.domain.UnpricedItem;
 import com.zhubao.erp.security.app.OperatorContextResolver;
@@ -7,23 +10,71 @@ import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
- * 财务读取的客户范围。全公司、授权客户集合和单个客户分开判断。
+ * 财务读写的客户范围。全公司、授权客户集合和单个客户分开判断。
  * 空的客户范围不是全公司，空的 customerId 也不能绕过授权。
  */
 @Component
 public class FinanceReadAuthorizer {
 
-    public void assertSignedIn(HttpServletRequest request) {
-        String authorization = request.getHeader("Authorization");
+    private final FinanceRepository finance;
+    private final BusinessDocumentRepository documents;
+
+    public FinanceReadAuthorizer() {
+        this(null, null);
+    }
+
+    @Autowired
+    public FinanceReadAuthorizer(FinanceRepository finance, BusinessDocumentRepository documents) {
+        this.finance = finance;
+        this.documents = documents;
+    }
+
+    /** 写命令只接受客户编号或持久化的真实客户名称，不信任请求提交的显示名称。 */
+    public void assertCustomerWrite(OperatorContext context, Long customerId) {
+        if (customerId == null) {
+            assertCompany(context);
+            return;
+        }
+        if (customerVisible(context, customerId, "")) {
+            return;
+        }
+        if (documents != null && documents.listMotherOrders().stream()
+                .anyMatch(row -> customerId.equals(row.customerId())
+                        && customerVisible(context, customerId, row.customerName()))) {
+            return;
+        }
+        if (finance != null && (finance.listAgreements().stream()
+                .anyMatch(row -> customerId.equals(row.customerId()) && customerVisible(context, customerId, row.customerName()))
+                || finance.listReceivables().stream()
+                .anyMatch(row -> customerId.equals(row.customerId()) && customerVisible(context, customerId, row.customerName()))
+                || finance.listReceipts().stream()
+                .anyMatch(row -> customerId.equals(row.customerId()) && customerVisible(context, customerId, row.customerName())))) {
+            return;
+        }
+        assertCustomer(context, customerId, "");
+    }
+
+    /** 冲销请求没有客户编号，必须由应收原行确定授权范围。 */
+    public void assertReceivableWrite(OperatorContext context, String receivableCode) {
+        if (finance == null) {
+            throw new PermissionDeniedException("缺少应收归属信息，不能冲销");
+        }
+        var original = finance.findReceivableByCode(receivableCode)
+                .orElseThrow(() -> new BusinessException("找不到要冲销的账单行"));
+        assertCustomer(context, original.customerId(), original.customerName());
+    }
+
+    public void assertSignedIn(HttpServletRequest request, OperatorContext context) {
         String role = request.getHeader(OperatorContextResolver.ROLE_HEADER);
-        boolean signedIn = authorization != null && !authorization.isBlank();
         boolean explicitRole = role != null && !role.isBlank();
-        if (!signedIn && !explicitRole) {
+        // 头身份仅在解析器显式允许的环境使用；无效令牌不得退回默认管理员。
+        if (context.headerBased() && !explicitRole) {
             throw new PermissionDeniedException("请先登录后再查看财务");
         }
     }

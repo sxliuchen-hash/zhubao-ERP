@@ -153,6 +153,7 @@ public class DocumentCaptureService {
         return repository.attachments().stream()
                 .filter(attachment -> code.equals(attachment.businessCode()))
                 .filter(attachment -> "手机采集".equals(attachment.source()))
+                .filter(attachment -> !"已下线".equals(attachment.status()))
                 .map(this::viewOf)
                 .toList();
     }

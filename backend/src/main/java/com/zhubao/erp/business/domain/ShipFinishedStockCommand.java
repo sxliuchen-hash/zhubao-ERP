@@ -27,7 +27,7 @@ public record ShipFinishedStockCommand(
         Integer sourceRegisterLineNo,
         String sourceRegisterSequence,
         String handler,
-        @NotBlank String operator,
+        String operator,
         String evidenceCode,
         String remark
 ) {

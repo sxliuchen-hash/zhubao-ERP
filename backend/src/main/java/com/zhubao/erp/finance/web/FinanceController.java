@@ -116,11 +116,13 @@ public class FinanceController {
             @Valid @RequestBody SavePriceAgreementCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCustomerWrite(readContext(request), command.customerId());
         return ApiResponse.ok(billingService.saveAgreement(command, operator(request)));
     }
 
     @PostMapping("/billing-runs")
-    public ApiResponse<BillingRunResult> generate(@Valid @RequestBody BillingRunCommand command) {
+    public ApiResponse<BillingRunResult> generate(@Valid @RequestBody BillingRunCommand command, HttpServletRequest request) {
+        readAuthorizer.assertCustomerWrite(readContext(request), command.customerId());
         return ApiResponse.ok(billingService.generate(command));
     }
 
@@ -144,6 +146,7 @@ public class FinanceController {
             @Valid @RequestBody ReverseReceivableCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertReceivableWrite(readContext(request), command.receivableCode());
         return ApiResponse.ok(billingService.reverse(command, operator(request)));
     }
 
@@ -152,6 +155,7 @@ public class FinanceController {
             @Valid @RequestBody RecordReceiptCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCustomerWrite(readContext(request), command.customerId());
         return ApiResponse.ok(billingService.receive(command, operator(request)));
     }
 
@@ -178,6 +182,7 @@ public class FinanceController {
             @Valid @RequestBody SaveWorkerRateCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(payrollService.saveRate(command, operator(request)));
     }
 
@@ -191,7 +196,8 @@ public class FinanceController {
     }
 
     @PostMapping("/payroll-runs")
-    public ApiResponse<PayrollGenerateResult> generatePayroll(@Valid @RequestBody PayrollRunCommand command) {
+    public ApiResponse<PayrollGenerateResult> generatePayroll(@Valid @RequestBody PayrollRunCommand command, HttpServletRequest request) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(payrollService.generate(command));
     }
 
@@ -200,6 +206,7 @@ public class FinanceController {
             @Valid @RequestBody PayrollRunCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(payrollService.confirm(command, operator(request)));
     }
 
@@ -220,8 +227,10 @@ public class FinanceController {
 
     @PostMapping("/consumable-items")
     public ApiResponse<com.zhubao.erp.finance.domain.ConsumableItem> saveConsumable(
-            @Valid @RequestBody SaveConsumableItemCommand command
+            @Valid @RequestBody SaveConsumableItemCommand command,
+            HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.saveItem(command));
     }
 
@@ -230,6 +239,7 @@ public class FinanceController {
             @Valid @RequestBody PurchaseConsumableCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.purchase(command, operator(request)));
     }
 
@@ -238,6 +248,7 @@ public class FinanceController {
             @Valid @RequestBody IssueConsumableCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.issue(command, operator(request)));
     }
 
@@ -252,6 +263,7 @@ public class FinanceController {
             @Valid @RequestBody SaveFixedAssetCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.saveAsset(command, operator(request)));
     }
 
@@ -265,7 +277,8 @@ public class FinanceController {
     }
 
     @PostMapping("/depreciation-runs")
-    public ApiResponse<List<DepreciationEntry>> depreciate(@Valid @RequestBody DepreciationRunCommand command) {
+    public ApiResponse<List<DepreciationEntry>> depreciate(@Valid @RequestBody DepreciationRunCommand command, HttpServletRequest request) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.depreciate(command));
     }
 
@@ -274,6 +287,7 @@ public class FinanceController {
             @Valid @RequestBody OutsourceBillCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.outsource(command, operator(request)));
     }
 
@@ -291,6 +305,7 @@ public class FinanceController {
             @Valid @RequestBody PayablePaymentCommand command,
             HttpServletRequest request
     ) {
+        readAuthorizer.assertCompany(readContext(request));
         return ApiResponse.ok(costService.pay(command, operator(request)));
     }
 
@@ -320,8 +335,9 @@ public class FinanceController {
     }
 
     private OperatorContext readContext(HttpServletRequest request) {
-        readAuthorizer.assertSignedIn(request);
-        return operatorContextResolver.resolve(request);
+        OperatorContext context = operatorContextResolver.resolve(request);
+        readAuthorizer.assertSignedIn(request, context);
+        return context;
     }
 
     private String operator(HttpServletRequest request) {

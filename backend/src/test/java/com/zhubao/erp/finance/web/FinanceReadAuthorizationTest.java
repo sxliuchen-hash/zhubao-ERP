@@ -27,6 +27,12 @@ class FinanceReadAuthorizationTest {
         assertThat(anonymous.getStatusCode().value()).isEqualTo(403);
         assertThat(anonymous.getBody()).contains("请先登录");
 
+        HttpHeaders invalidToken = new HttpHeaders();
+        invalidToken.setBearerAuth("invalid-finance-session");
+        ResponseEntity<String> fakeBearer = exchange("/api/finance/payroll-lines", HttpMethod.GET, null, invalidToken);
+        assertThat(fakeBearer.getStatusCode().value()).isEqualTo(403);
+        assertThat(fakeBearer.getBody()).contains("登录会话不存在或已退出");
+
         ResponseEntity<String> operator = exchange(
                 "/api/finance/statements?customerId=91004",
                 HttpMethod.GET,

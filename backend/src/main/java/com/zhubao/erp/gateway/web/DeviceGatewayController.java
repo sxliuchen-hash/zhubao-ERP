@@ -10,8 +10,11 @@ import com.zhubao.erp.gateway.domain.ReadingConsumption;
 import com.zhubao.erp.gateway.domain.RegisterGatewayDeviceCommand;
 import com.zhubao.erp.gateway.domain.SubmitDeviceReadingCommand;
 import com.zhubao.erp.security.app.OperatorContextResolver;
+import com.zhubao.erp.security.app.AuthSessionService;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,11 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * HTTP surface of the low-cost hardware ingestion gateway.
- *
- * <p>The ingestion endpoint authenticates by device key (inside the service) rather than the
- * human RBAC interceptor, so cheap hardware bridges can push readings without a login. The read
- * endpoints expose devices, recent readings and an ingestion summary for the operations console.</p>
+ * 设备网关 HTTP 接口。设备读数上传使用设备密钥；人工消费必须使用真实登录会话。
+ * 读取接口提供设备列表、近期读数和采集摘要。
  */
 @RestController
 @RequestMapping("/api/hardware/gateway")
@@ -35,13 +35,21 @@ public class DeviceGatewayController {
 
     private final DeviceGatewayService service;
     private final OperatorContextResolver operatorContextResolver;
+    private final AuthSessionService authSessions;
 
     public DeviceGatewayController(
             DeviceGatewayService service,
             OperatorContextResolver operatorContextResolver
     ) {
+        this(service, operatorContextResolver, null);
+    }
+
+    @Autowired
+    public DeviceGatewayController(DeviceGatewayService service, OperatorContextResolver operatorContextResolver,
+                                   AuthSessionService authSessions) {
         this.service = service;
         this.operatorContextResolver = operatorContextResolver;
+        this.authSessions = authSessions;
     }
 
     @PostMapping("/readings")
@@ -77,7 +85,11 @@ public class DeviceGatewayController {
             @Valid @RequestBody ConsumeReadingCommand command,
             HttpServletRequest request
     ) {
-        return ApiResponse.ok(service.consume(command, operatorContextResolver.resolve(request)));
+        var context = operatorContextResolver.requireSession(request);
+        if (authSessions == null) throw new PermissionDeniedException("设备读数消费必须登录");
+        var account = authSessions.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
+                .orElseThrow(() -> new PermissionDeniedException("设备读数消费必须登录"));
+        return ApiResponse.ok(service.consume(command, context, account));
     }
 
     @GetMapping("/consumptions")

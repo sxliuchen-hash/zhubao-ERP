@@ -13,6 +13,13 @@ import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.StoredContentInventory;
 import com.zhubao.erp.document.domain.StoredContentItem;
+import com.zhubao.erp.business.app.BusinessDataAccess;
+import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.common.error.BusinessException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -36,19 +43,32 @@ public class DocumentManagementController {
     private final DocumentManagementService documentManagementService;
     private final DocumentCaptureService documentCaptureService;
     private final OperatorContextResolver operatorContextResolver;
+    private final BusinessDataAccess dataAccess;
 
     public DocumentManagementController(
             DocumentManagementService documentManagementService,
             DocumentCaptureService documentCaptureService,
             OperatorContextResolver operatorContextResolver
     ) {
+        this(documentManagementService, documentCaptureService, operatorContextResolver, null);
+    }
+
+    @Autowired
+    public DocumentManagementController(
+            DocumentManagementService documentManagementService,
+            DocumentCaptureService documentCaptureService,
+            OperatorContextResolver operatorContextResolver,
+            BusinessDataAccess dataAccess
+    ) {
         this.documentManagementService = documentManagementService;
         this.documentCaptureService = documentCaptureService;
         this.operatorContextResolver = operatorContextResolver;
+        this.dataAccess = dataAccess;
     }
 
     @GetMapping("/captures")
-    public ApiResponse<List<DocumentCaptureView>> captures(@RequestParam String businessCode) {
+    public ApiResponse<List<DocumentCaptureView>> captures(@RequestParam String businessCode, HttpServletRequest request) {
+        dataAccess.assertCanRead(operatorContextResolver.requireSession(request), businessCode);
         return ApiResponse.ok(documentCaptureService.list(businessCode));
     }
 
@@ -60,6 +80,8 @@ public class DocumentManagementController {
             @RequestParam MultipartFile file,
             HttpServletRequest request
     ) throws IOException {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        dataAccess.assertCanRead(context, businessCode);
         return ApiResponse.ok(documentCaptureService.capture(
                 objectType,
                 businessCode,
@@ -68,32 +90,41 @@ public class DocumentManagementController {
                 file.getContentType(),
                 file.getInputStream(),
                 file.getSize(),
-                operatorContextResolver.resolve(request)
+                context
         ));
     }
 
     @GetMapping("/summary")
-    public ApiResponse<DocumentManagementSummary> summary() {
-        return ApiResponse.ok(documentManagementService.summary());
+    public ApiResponse<DocumentManagementSummary> summary(HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        List<DocumentPackage> packages = visiblePackages(context);
+        List<EvidenceAttachment> attachments = visibleAttachments(context);
+        return ApiResponse.ok(new DocumentManagementSummary(packages.size(), attachments.size(),
+                (int) attachments.stream().filter(row -> !List.of("已关联", "已归档", "已上传", "已下线").contains(row.status())).count(),
+                (int) attachments.stream().filter(row -> !"无".equals(row.fallbackAction())).count(),
+                (int) documentManagementService.auditEvents().stream().filter(row -> packages.stream()
+                        .anyMatch(item -> item.code().equals(row.documentCode()))).count()));
     }
 
     @GetMapping("/packages")
-    public ApiResponse<List<DocumentPackage>> packages() {
-        return ApiResponse.ok(documentManagementService.packages());
+    public ApiResponse<List<DocumentPackage>> packages(HttpServletRequest request) {
+        return ApiResponse.ok(visiblePackages(operatorContextResolver.requireSession(request)));
     }
 
     @GetMapping("/attachments")
-    public ApiResponse<List<EvidenceAttachment>> attachments() {
-        return ApiResponse.ok(documentManagementService.attachments());
+    public ApiResponse<List<EvidenceAttachment>> attachments(HttpServletRequest request) {
+        return ApiResponse.ok(visibleAttachments(operatorContextResolver.requireSession(request)));
     }
 
     @GetMapping("/storage")
-    public ApiResponse<StoredContentInventory> storage() {
+    public ApiResponse<StoredContentInventory> storage(HttpServletRequest request) {
+        assertManager(operatorContextResolver.requireSession(request));
         return ApiResponse.ok(documentManagementService.storageInventory());
     }
 
     @GetMapping("/audit-events")
-    public ApiResponse<List<DocumentAuditEvent>> auditEvents() {
+    public ApiResponse<List<DocumentAuditEvent>> auditEvents(HttpServletRequest request) {
+        assertManager(operatorContextResolver.requireSession(request));
         return ApiResponse.ok(documentManagementService.auditEvents());
     }
 
@@ -105,8 +136,11 @@ public class DocumentManagementController {
             @RequestParam String source,
             @RequestParam String owner,
             @RequestParam(required = false) String fallbackAction,
-            @RequestParam MultipartFile file
+            @RequestParam MultipartFile file,
+            HttpServletRequest request
     ) throws IOException {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        dataAccess.assertCanRead(context, businessCode);
         return ApiResponse.ok(documentManagementService.uploadAttachment(
                 documentCode,
                 businessType,
@@ -114,7 +148,7 @@ public class DocumentManagementController {
                 file.getOriginalFilename(),
                 file.getContentType(),
                 source,
-                owner,
+                context.operator(),
                 fallbackAction,
                 file.getBytes()
         ));
@@ -125,15 +159,35 @@ public class DocumentManagementController {
             @PathVariable String code,
             HttpServletRequest request
     ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        assertManager(context);
         return ApiResponse.ok(documentManagementService.retireStoredContent(
                 code,
-                operatorContextResolver.resolve(request).operator()
+                context.operator()
         ));
     }
 
     @GetMapping("/attachments/{code}/preview-url")
-    public ApiResponse<AttachmentPreviewUrl> previewUrl(@PathVariable String code) {
+    public ApiResponse<AttachmentPreviewUrl> previewUrl(@PathVariable String code, HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        EvidenceAttachment attachment = documentManagementService.attachments().stream().filter(row -> code.equals(row.code())).findFirst()
+                .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        dataAccess.assertCanRead(context, attachment.businessCode());
         return ApiResponse.ok(documentManagementService.previewUrl(code));
+    }
+
+    private List<DocumentPackage> visiblePackages(OperatorContext context) {
+        return documentManagementService.packages().stream().filter(row -> dataAccess.canRead(context, row.businessCode())).toList();
+    }
+
+    private List<EvidenceAttachment> visibleAttachments(OperatorContext context) {
+        return documentManagementService.attachments().stream().filter(row -> dataAccess.canRead(context, row.businessCode())).toList();
+    }
+
+    private void assertManager(OperatorContext context) {
+        if (context.dataScope() != DataScope.ALL || context.role() != RoleCode.ADMIN && context.role() != RoleCode.GENERAL_MANAGER) {
+            throw new PermissionDeniedException("附件存储和审计仅向公司范围的管理角色开放");
+        }
     }
 
     @GetMapping("/attachments/{code}/content")

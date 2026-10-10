@@ -1,6 +1,7 @@
 package com.zhubao.erp.gateway.app;
 
 import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.business.app.ProcessStationService;
 import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.common.error.BusinessException;
@@ -23,6 +24,8 @@ import com.zhubao.erp.gateway.error.GatewayRateLimitException;
 import com.zhubao.erp.gateway.error.GatewayReplayException;
 import com.zhubao.erp.security.app.PasswordHasher;
 import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -32,11 +35,8 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Application service for the low-cost hardware ingestion gateway.
- *
- * <p>Devices authenticate with a shared device key (never a human login), submit a standardized
- * reading, and the service normalizes and persists it. This keeps cheap hardware bridges out of
- * the RBAC path while still auditing every reading.</p>
+ * 设备网关应用服务。设备使用独立密钥上传读数，服务负责标准化和持久化。
+ * 人工消费读数使用登录会话，联动报工必须执行岗位工序规则。
  */
 @Service
 public class DeviceGatewayService {
@@ -53,6 +53,7 @@ public class DeviceGatewayService {
     private final GatewayRateLimiter rateLimiter;
     private final GatewayReplayGuard replayGuard;
     private final BusinessOperationService businessOperationService;
+    private final ProcessStationService processStationService;
 
     public DeviceGatewayService(
             GatewayDeviceRepository deviceRepository,
@@ -64,6 +65,22 @@ public class DeviceGatewayService {
             GatewayReplayGuard replayGuard,
             BusinessOperationService businessOperationService
     ) {
+        this(deviceRepository, readingRepository, consumptionRepository, normalizer, passwordHasher,
+                rateLimiter, replayGuard, businessOperationService, null);
+    }
+
+    @Autowired
+    public DeviceGatewayService(
+            GatewayDeviceRepository deviceRepository,
+            DeviceReadingRepository readingRepository,
+            ReadingConsumptionRepository consumptionRepository,
+            DeviceReadingNormalizer normalizer,
+            PasswordHasher passwordHasher,
+            GatewayRateLimiter rateLimiter,
+            GatewayReplayGuard replayGuard,
+            BusinessOperationService businessOperationService,
+            ProcessStationService processStationService
+    ) {
         this.deviceRepository = deviceRepository;
         this.readingRepository = readingRepository;
         this.consumptionRepository = consumptionRepository;
@@ -72,6 +89,7 @@ public class DeviceGatewayService {
         this.rateLimiter = rateLimiter;
         this.replayGuard = replayGuard;
         this.businessOperationService = businessOperationService;
+        this.processStationService = processStationService;
     }
 
     public DeviceReading ingest(SubmitDeviceReadingCommand command) {
@@ -128,11 +146,19 @@ public class DeviceGatewayService {
         return readingRepository.findByDeviceCode(deviceCode.trim(), clampLimit(limit));
     }
 
-    /**
-     * Consume a device reading into an accountable business intent. RBAC is enforced at the
-     * interceptor; the resolved operator context is passed in so the consumption is attributed.
-     */
+    /** 内部兼容入口；HTTP 消费必须使用带真实账号的重载。 */
     public ReadingConsumption consume(ConsumeReadingCommand command, OperatorContext operatorContext) {
+        return consumeInternal(command, operatorContext, null);
+    }
+
+    public ReadingConsumption consume(ConsumeReadingCommand command, OperatorContext operatorContext, AuthUserAccount account) {
+        if (account == null) throw new BusinessException("设备读数消费必须登录");
+        OperatorContext actor = new OperatorContext(account.operator(), account.role(), account.dataScope(),
+                false, operatorContext.sessionToken(), operatorContext.customerScope());
+        return consumeInternal(command, actor, account);
+    }
+
+    private ReadingConsumption consumeInternal(ConsumeReadingCommand command, OperatorContext operatorContext, AuthUserAccount account) {
         if (command == null) {
             throw new BusinessException("读数消费命令不能为空");
         }
@@ -154,7 +180,7 @@ public class DeviceGatewayService {
         });
 
         String businessRefCode = blankToDefault(command.businessRefCode(), reading.businessRefCode());
-        String ledgerCode = maybePostProductionReport(command, reading, intent, operatorContext);
+        String ledgerCode = maybePostProductionReport(command, reading, intent, operatorContext, account);
 
         String now = TIME_FORMATTER.format(LocalDateTime.now());
         ReadingConsumption consumption = new ReadingConsumption(
@@ -177,19 +203,13 @@ public class DeviceGatewayService {
         return consumptionRepository.save(consumption);
     }
 
-    /**
-     * When the consumption carries a complete production-posting context and the intent supports it,
-     * drive a real production report (WIP -> SEMI_FINISHED) via {@link BusinessOperationService} and
-     * return the resulting ledger code. Otherwise return an empty string (pure bridge record).
-     *
-     * <p>For {@code SCALE_WEIGHT} the normalized weight is used; the caller still supplies the piece
-     * count. For {@code SCAN_EVENT} the scanned code becomes the work order when none was supplied.</p>
-     */
+    /** 有完整入账字段时进入岗位报工，保留读数编号和设备来源；否则只保存桥接记录。 */
     private String maybePostProductionReport(
             ConsumeReadingCommand command,
             DeviceReading reading,
             ReadingConsumptionIntent intent,
-            OperatorContext operatorContext
+            OperatorContext operatorContext,
+            AuthUserAccount account
     ) {
         boolean postingIntent = intent == ReadingConsumptionIntent.WEIGH_HANDOVER
                 || intent == ReadingConsumptionIntent.SCAN_TO_REPORT;
@@ -199,39 +219,25 @@ public class DeviceGatewayService {
         if (businessOperationService == null) {
             throw new BusinessException("业务操作服务不可用，无法联动入账");
         }
+        if (account != null && processStationService == null) {
+            throw new BusinessException("岗位报工服务不可用，不能从设备读数绕过工序校验");
+        }
 
         BigDecimal weight = resolvePostingWeight(command, reading);
         String workOrderCode = resolvePostingWorkOrder(command, reading, intent);
 
-        ProductionReportResult result = businessOperationService.reportProduction(new ReportProductionCommand(
-                command.postingMotherOrderCode().trim(),  // motherOrderCode
-                workOrderCode,                             // workOrderCode
-                command.postingCustomerId(),               // customerId
-                command.postingOwnerCustomerId(),          // ownerCustomerId
-                command.postingMaterialCode().trim(),      // materialCode
-                command.postingFromWarehouseCode().trim(), // fromWarehouseCode
-                command.postingToWarehouseCode().trim(),   // toWarehouseCode
-                command.postingQuantity(),                 // quantity
-                null,                                      // quantityUnit
-                weight,                                    // weight
-                null,                                      // workDate
-                blankToDefault(command.postingProcess(), "设备读数报工"), // process
-                null,                                      // processCategory
-                null,                                      // productCategory
-                reading.deviceCode(),                      // machineNo
-                null,                                      // workItemName
-                null,                                      // startedAt
-                null,                                      // finishedAt
-                null,                                      // completionStatus
-                "gateway-device",                          // handoffAuditStatus
-                null,                                      // sourceRegisterType
-                null,                                      // sourceRegisterLineNo
-                null,                                      // sourceRegisterSequence
-                operatorContext.operator(),                // operator
-                operatorContext.operator(),                // operatorSignatureName
-                reading.readingCode(),                     // handoffCode
-                "设备网关读数 " + reading.readingCode() + " 联动报工" // remark
-        ));
+        ReportProductionCommand production = new ReportProductionCommand(
+                command.postingMotherOrderCode().trim(), workOrderCode, command.postingCustomerId(),
+                command.postingOwnerCustomerId(), command.postingMaterialCode().trim(),
+                command.postingFromWarehouseCode().trim(), command.postingToWarehouseCode().trim(),
+                command.postingQuantity(), null, weight, null,
+                blankToDefault(command.postingProcess(), "设备读数报工"), null, null, reading.deviceCode(),
+                null, null, null, null, "gateway-device", null, null, null, operatorContext.operator(),
+                operatorContext.operator(), reading.readingCode(), "设备网关读数 " + reading.readingCode() + " 联动报工"
+        );
+        ProductionReportResult result = account == null
+                ? businessOperationService.reportProduction(production)
+                : processStationService.reportProduction(production, account);
         return result.ledgerCode();
     }
 
@@ -244,11 +250,10 @@ public class DeviceGatewayService {
                     return weight;
                 }
             } catch (NumberFormatException ignored) {
-                // fall through to the quantity fallback below
+                // 无有效重量时沿用内部兼容入口的数量占位规则。
             }
         }
-        // Non-scale readings do not carry a weight; reuse the piece count as a positive placeholder
-        // so the ledger stays balanced and the human retains responsibility for the real weight.
+        // 非称重读数沿用历史数量占位；HTTP 报工还必须通过岗位的正式重量校验。
         return command.postingQuantity();
     }
 
@@ -272,8 +277,8 @@ public class DeviceGatewayService {
     }
 
     /**
-     * Register a new gateway device or update an existing one. On create the device key is required;
-     * on update a blank key keeps the current hash. Returns the safe view (never the key hash).
+     * 注册或更新设备。新设备必须填写密钥；更新时留空则保留原哈希。
+     * 返回安全视图，不包含设备密钥哈希。
      */
     public GatewayDeviceView registerDevice(RegisterGatewayDeviceCommand command) {
         if (command == null) {

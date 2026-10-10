@@ -1,6 +1,9 @@
 package com.zhubao.erp.register.app;
 
 import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.business.app.ProcessStationService;
+import com.zhubao.erp.business.domain.ProductionReportResult;
+import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
@@ -18,6 +21,10 @@ import com.zhubao.erp.register.domain.RegisterImportPostingPlan;
 import com.zhubao.erp.register.domain.RegisterImportPreview;
 import com.zhubao.erp.register.domain.RegisterImportPreviewRow;
 import com.zhubao.erp.register.infra.InMemoryRegisterImportBatchRepository;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.RoleCode;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -27,6 +34,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class RegisterImportPostingExecutionServiceTest {
 
@@ -128,6 +140,49 @@ class RegisterImportPostingExecutionServiceTest {
                     assertThat(record.sourceLineNo()).isEqualTo(6);
                     assertThat(record.importBatchNo()).isEqualTo(batch.importBatchNo());
                 });
+    }
+
+    @Test
+    void accountPostingUsesStationRulesAndPreservesRegisterMetadata() {
+        ProcessStationService stations = mock(ProcessStationService.class);
+        AuthUserAccount account = new AuthUserAccount("worker", "hash", "会话雕刻员", RoleCode.OPERATOR,
+                DataScope.SELF, true, true).withAllowedProcesses(List.of("雕刻"));
+        when(stations.reportProduction(any(), eq(account))).thenReturn(new ProductionReportResult(
+                "WO-REG-ENG-001", "STK-STATION", "WIP", "SEMI-FINISHED", StockStatus.WIP,
+                StockStatus.SEMI_FINISHED, new BigDecimal("12"), new BigDecimal("4.8"), "雕刻", account.operator(), ""));
+        var secured = new RegisterImportPostingExecutionService(confirmationService, postingPlanService,
+                businessOperationService, machineOutputService, stations);
+        var batch = confirmationService.confirm(new ConfirmRegisterImportCommand(engravingPreviewWithBusinessKeys(), "复核员", ""));
+
+        var result = secured.post(batch.importBatchNo(), new PostRegisterImportBatchCommand(false, "伪造操作人", "来源备注"), account);
+
+        ArgumentCaptor<ReportProductionCommand> captured = ArgumentCaptor.forClass(ReportProductionCommand.class);
+        verify(stations).reportProduction(captured.capture(), eq(account));
+        assertThat(captured.getValue().operator()).isEqualTo(account.operator());
+        assertThat(captured.getValue().machineNo()).isEqualTo("ENG-03");
+        assertThat(captured.getValue().sourceRegisterLineNo()).isEqualTo(6);
+        assertThat(captured.getValue().sourceRegisterSequence()).isEqualTo("1");
+        assertThat(captured.getValue().remark()).contains("来源备注", batch.importBatchNo());
+        assertThat(result.operator()).isEqualTo(account.operator());
+        assertThat(stockRepository.findAllLedgers()).isEmpty();
+        assertThat(machineOutputRepository.findByImportBatchNo(batch.importBatchNo())).singleElement()
+                .satisfies(record -> assertThat(record.ledgerCode()).isEqualTo("STK-STATION"));
+    }
+
+    @Test
+    void stationRejectionDoesNotPostBatchOrCreateMachineOutput() {
+        ProcessStationService stations = mock(ProcessStationService.class);
+        AuthUserAccount account = new AuthUserAccount("worker", "hash", "未绑定岗位", RoleCode.OPERATOR, DataScope.SELF, true, true);
+        when(stations.reportProduction(any(), eq(account))).thenThrow(new BusinessException("当前账号不能做这道工序"));
+        var secured = new RegisterImportPostingExecutionService(confirmationService, postingPlanService,
+                businessOperationService, machineOutputService, stations);
+        var batch = confirmationService.confirm(new ConfirmRegisterImportCommand(engravingPreviewWithBusinessKeys(), "复核员", ""));
+
+        assertThatThrownBy(() -> secured.post(batch.importBatchNo(), new PostRegisterImportBatchCommand(false, "伪造操作人", ""), account))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不能做这道工序");
+        assertThat(confirmationService.batch(batch.importBatchNo()).status()).isEqualTo("CONFIRMED");
+        assertThat(stockRepository.findAllLedgers()).isEmpty();
+        assertThat(machineOutputRepository.findByImportBatchNo(batch.importBatchNo())).isEmpty();
     }
 
     private RegisterImportPreview inboundPreviewWithBusinessKeys() {

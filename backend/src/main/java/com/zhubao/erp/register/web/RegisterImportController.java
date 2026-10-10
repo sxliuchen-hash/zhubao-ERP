@@ -14,6 +14,11 @@ import com.zhubao.erp.register.domain.RegisterImportPostingExecutionResult;
 import com.zhubao.erp.register.domain.RegisterImportPostingPlan;
 import com.zhubao.erp.register.domain.RegisterImportPreview;
 import com.zhubao.erp.register.domain.RegisterImportTemplate;
+import com.zhubao.erp.security.app.AuthSessionService;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.error.PermissionDeniedException;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,6 +41,7 @@ public class RegisterImportController {
     private final RegisterImportConfirmationService confirmationService;
     private final RegisterImportPostingPlanService postingPlanService;
     private final RegisterImportPostingExecutionService postingExecutionService;
+    private final AuthSessionService authSessions;
 
     public RegisterImportController(
             RegisterImportTemplateService templateService,
@@ -44,11 +50,24 @@ public class RegisterImportController {
             RegisterImportPostingPlanService postingPlanService,
             RegisterImportPostingExecutionService postingExecutionService
     ) {
+        this(templateService, previewService, confirmationService, postingPlanService, postingExecutionService, null);
+    }
+
+    @Autowired
+    public RegisterImportController(
+            RegisterImportTemplateService templateService,
+            RegisterImportPreviewService previewService,
+            RegisterImportConfirmationService confirmationService,
+            RegisterImportPostingPlanService postingPlanService,
+            RegisterImportPostingExecutionService postingExecutionService,
+            AuthSessionService authSessions
+    ) {
         this.templateService = templateService;
         this.previewService = previewService;
         this.confirmationService = confirmationService;
         this.postingPlanService = postingPlanService;
         this.postingExecutionService = postingExecutionService;
+        this.authSessions = authSessions;
     }
 
     @GetMapping("/templates")
@@ -76,8 +95,9 @@ public class RegisterImportController {
     }
 
     @PostMapping("/batches/confirm")
-    public ApiResponse<RegisterImportBatch> confirm(@RequestBody ConfirmRegisterImportCommand command) {
-        return ApiResponse.ok(confirmationService.confirm(command));
+    public ApiResponse<RegisterImportBatch> confirm(@RequestBody ConfirmRegisterImportCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(confirmationService.confirm(new ConfirmRegisterImportCommand(
+                command.preview(), requireAccount(request).operator(), command.confirmRemark())));
     }
 
     @GetMapping("/batches")
@@ -94,9 +114,11 @@ public class RegisterImportController {
     public ApiResponse<RegisterImportBatch> correctRowFields(
             @PathVariable String importBatchNo,
             @PathVariable int sourceLineNo,
-            @RequestBody CorrectRegisterImportRowCommand command
+            @RequestBody CorrectRegisterImportRowCommand command,
+            HttpServletRequest request
     ) {
-        return ApiResponse.ok(confirmationService.correctRowFields(importBatchNo, sourceLineNo, command));
+        return ApiResponse.ok(confirmationService.correctRowFields(importBatchNo, sourceLineNo,
+                new CorrectRegisterImportRowCommand(command.fields(), requireAccount(request).operator(), command.correctionRemark())));
     }
 
     @GetMapping("/batches/{importBatchNo}/posting-plan")
@@ -107,8 +129,15 @@ public class RegisterImportController {
     @PostMapping("/batches/{importBatchNo}/posting-commands")
     public ApiResponse<RegisterImportPostingExecutionResult> postBatch(
             @PathVariable String importBatchNo,
-            @RequestBody(required = false) PostRegisterImportBatchCommand command
+            @RequestBody(required = false) PostRegisterImportBatchCommand command,
+            HttpServletRequest request
     ) {
-        return ApiResponse.ok(postingExecutionService.post(importBatchNo, command));
+        return ApiResponse.ok(postingExecutionService.post(importBatchNo, command, requireAccount(request)));
+    }
+
+    private AuthUserAccount requireAccount(HttpServletRequest request) {
+        if (authSessions == null) throw new PermissionDeniedException("登记表操作必须登录");
+        return authSessions.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
+                .orElseThrow(() -> new PermissionDeniedException("登记表操作必须登录"));
     }
 }

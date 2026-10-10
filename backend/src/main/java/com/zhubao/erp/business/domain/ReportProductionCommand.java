@@ -30,7 +30,7 @@ public record ReportProductionCommand(
         String sourceRegisterType,
         Integer sourceRegisterLineNo,
         String sourceRegisterSequence,
-        @NotBlank String operator,
+        String operator,
         String operatorSignatureName,
         String handoffCode,
         String remark

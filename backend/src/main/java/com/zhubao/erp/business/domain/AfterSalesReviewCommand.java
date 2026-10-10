@@ -20,7 +20,7 @@ public record AfterSalesReviewCommand(
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal quantity,
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal weight,
         @NotNull AfterSalesReviewDisposition disposition,
-        @NotBlank String inspector,
+        String inspector,
         @NotBlank String finding,
         String evidenceCode,
         String remark

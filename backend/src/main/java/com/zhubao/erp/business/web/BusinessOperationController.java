@@ -4,6 +4,8 @@ import com.zhubao.erp.business.app.BusinessOperationService;
 import com.zhubao.erp.business.app.MotherOrderSplitService;
 import com.zhubao.erp.business.app.ProcessStationService;
 import com.zhubao.erp.business.app.QualityRequirementService;
+import com.zhubao.erp.business.app.BusinessCommandActors;
+import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.domain.AfterSalesReviewCommand;
 import com.zhubao.erp.business.domain.AfterSalesReviewResult;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
@@ -44,6 +46,9 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -65,6 +70,7 @@ public class BusinessOperationController {
     private final ProcessStationService processStationService;
     private final AuthSessionService authSessionService;
     private final QualityRequirementService qualityRequirementService;
+    private final BusinessDataAccess dataAccess;
 
     public BusinessOperationController(
             BusinessOperationService businessOperationService,
@@ -83,7 +89,6 @@ public class BusinessOperationController {
         );
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public BusinessOperationController(
             BusinessOperationService businessOperationService,
             MobileIntakeService mobileIntakeService,
@@ -93,6 +98,21 @@ public class BusinessOperationController {
             AuthSessionService authSessionService,
             QualityRequirementService qualityRequirementService
     ) {
+        this(businessOperationService, mobileIntakeService, motherOrderSplitService, operatorContextResolver,
+                processStationService, authSessionService, qualityRequirementService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BusinessOperationController(
+            BusinessOperationService businessOperationService,
+            MobileIntakeService mobileIntakeService,
+            MotherOrderSplitService motherOrderSplitService,
+            OperatorContextResolver operatorContextResolver,
+            ProcessStationService processStationService,
+            AuthSessionService authSessionService,
+            QualityRequirementService qualityRequirementService,
+            BusinessDataAccess dataAccess
+    ) {
         this.businessOperationService = businessOperationService;
         this.mobileIntakeService = mobileIntakeService;
         this.motherOrderSplitService = motherOrderSplitService;
@@ -100,11 +120,15 @@ public class BusinessOperationController {
         this.processStationService = processStationService;
         this.authSessionService = authSessionService;
         this.qualityRequirementService = qualityRequirementService;
+        this.dataAccess = dataAccess;
     }
 
     @GetMapping("/mobile-intakes")
-    public ApiResponse<MobileIntakeLookup> lookupMobileIntake(@RequestParam String courierNo) {
-        return ApiResponse.ok(mobileIntakeService.lookup(courierNo));
+    public ApiResponse<MobileIntakeLookup> lookupMobileIntake(@RequestParam String courierNo, HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        MobileIntakeLookup lookup = mobileIntakeService.lookup(courierNo);
+        if (lookup.found() && dataAccess != null) dataAccess.assertCanRead(context, lookup.motherOrderCode());
+        return ApiResponse.ok(lookup);
     }
 
     @PostMapping("/mobile-intakes")
@@ -112,16 +136,28 @@ public class BusinessOperationController {
             @Valid @RequestBody MobileIntakeCommand command,
             HttpServletRequest request
     ) {
-        return ApiResponse.ok(mobileIntakeService.intake(command, operatorContextResolver.resolve(request)));
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (dataAccess != null) dataAccess.assertCustomer(context, command.customerId(), "");
+        MobileIntakeLookup existing = mobileIntakeService.lookup(command.courierNo());
+        if (existing.found() && dataAccess != null) dataAccess.assertCanRead(context, existing.motherOrderCode());
+        return ApiResponse.ok(mobileIntakeService.intake(command, context));
     }
 
     @GetMapping("/mother-orders/{code}")
-    public ApiResponse<MobileIntakeResult> motherOrder(@PathVariable String code) {
+    public ApiResponse<MobileIntakeResult> motherOrder(@PathVariable String code, HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (dataAccess != null) dataAccess.assertCanRead(context, code);
         return ApiResponse.ok(mobileIntakeService.view(code));
     }
 
     @GetMapping("/mother-orders/{code}/split")
-    public ApiResponse<MotherOrderSplitView> motherSplit(@PathVariable String code) {
+    public ApiResponse<MotherOrderSplitView> motherSplit(@PathVariable String code, HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (!java.util.List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.RECEIVER,
+                RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER).contains(context.role())) {
+            throw new PermissionDeniedException("当前账号不是收货或拆单岗位");
+        }
+        if (dataAccess != null) dataAccess.assertDocumentCustomer(context, code);
         return ApiResponse.ok(motherOrderSplitService.view(code));
     }
 
@@ -130,7 +166,9 @@ public class BusinessOperationController {
             @PathVariable String code,
             HttpServletRequest request
     ) {
-        return ApiResponse.ok(motherOrderSplitService.keep(code, operatorContextResolver.resolve(request).operator()));
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (dataAccess != null) dataAccess.assertDocumentCustomer(context, code);
+        return ApiResponse.ok(motherOrderSplitService.keep(code, context.operator()));
     }
 
     @PostMapping("/mother-orders/{code}/splits")
@@ -139,16 +177,20 @@ public class BusinessOperationController {
             @Valid @RequestBody SplitMotherOrderRequest body,
             HttpServletRequest request
     ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (dataAccess != null) dataAccess.assertDocumentCustomer(context, code);
         return ApiResponse.ok(motherOrderSplitService.split(new SplitMotherOrderCommand(
                 code,
-                operatorContextResolver.resolve(request).operator(),
+                context.operator(),
                 body.lines()
         )));
     }
 
     @PostMapping("/inbound-confirmations")
-    public ApiResponse<InboundConfirmationResult> confirmInbound(@Valid @RequestBody ConfirmInboundCommand command) {
-        return ApiResponse.ok(businessOperationService.confirmInbound(command));
+    public ApiResponse<InboundConfirmationResult> confirmInbound(@Valid @RequestBody ConfirmInboundCommand command, HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (dataAccess != null) dataAccess.assertCustomer(context, command.customerId(), "");
+        return ApiResponse.ok(businessOperationService.confirmInbound(BusinessCommandActors.withActor(command, context.operator())));
     }
 
     @GetMapping("/process-stations")
@@ -172,8 +214,8 @@ public class BusinessOperationController {
     }
 
     @PostMapping("/production-reports")
-    public ApiResponse<ProductionReportResult> reportProduction(@Valid @RequestBody ReportProductionCommand command) {
-        return ApiResponse.ok(businessOperationService.reportProduction(command));
+    public ApiResponse<ProductionReportResult> reportProduction(@Valid @RequestBody ReportProductionCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(requireProcessStationService().reportProduction(command, requireStationAccount(request)));
     }
 
     @GetMapping("/quality-checks")
@@ -201,43 +243,56 @@ public class BusinessOperationController {
     }
 
     @PostMapping("/quality-freezes")
-    public ApiResponse<QualityFreezeResult> freezeQualityStock(@Valid @RequestBody FreezeQualityStockCommand command) {
-        return ApiResponse.ok(businessOperationService.freezeQualityStock(command));
+    public ApiResponse<QualityFreezeResult> freezeQualityStock(@Valid @RequestBody FreezeQualityStockCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(businessOperationService.freezeQualityStock(BusinessCommandActors.withActor(command,
+                commandActor(request, command.customerId(), command.motherOrderCode()))));
     }
 
     @PostMapping("/rework-dispatches")
-    public ApiResponse<ReworkDispatchResult> dispatchRework(@Valid @RequestBody DispatchReworkCommand command) {
-        return ApiResponse.ok(businessOperationService.dispatchRework(command));
+    public ApiResponse<ReworkDispatchResult> dispatchRework(@Valid @RequestBody DispatchReworkCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(businessOperationService.dispatchRework(BusinessCommandActors.withActor(command,
+                commandActor(request, command.customerId(), command.motherOrderCode()))));
     }
 
     @PostMapping("/rework-reports")
-    public ApiResponse<ReworkReportResult> reportRework(@Valid @RequestBody ReportReworkCommand command) {
-        return ApiResponse.ok(businessOperationService.reportRework(command));
+    public ApiResponse<ReworkReportResult> reportRework(@Valid @RequestBody ReportReworkCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(businessOperationService.reportRework(BusinessCommandActors.withActor(command,
+                commandActor(request, command.customerId(), command.motherOrderCode()))));
     }
 
     @PostMapping("/quality-releases")
-    public ApiResponse<QualityReleaseResult> releaseQualityStock(@Valid @RequestBody ReleaseQualityStockCommand command) {
-        return ApiResponse.ok(businessOperationService.releaseQualityStock(command));
+    public ApiResponse<QualityReleaseResult> releaseQualityStock(@Valid @RequestBody ReleaseQualityStockCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(requireQualityRequirementService().release(command, requireQualityAccount(request)));
     }
 
     @PostMapping("/outbound-shipments")
-    public ApiResponse<OutboundShipmentResult> shipFinishedStock(@Valid @RequestBody ShipFinishedStockCommand command) {
-        return ApiResponse.ok(businessOperationService.shipFinishedStock(command));
+    public ApiResponse<OutboundShipmentResult> shipFinishedStock(@Valid @RequestBody ShipFinishedStockCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(businessOperationService.shipFinishedStock(BusinessCommandActors.withActor(command,
+                commandActor(request, command.customerId(), command.motherOrderCode()))));
     }
 
     @PostMapping("/customer-returns")
-    public ApiResponse<CustomerReturnResult> returnCustomerShipment(@Valid @RequestBody CustomerReturnCommand command) {
-        return ApiResponse.ok(businessOperationService.returnCustomerShipment(command));
+    public ApiResponse<CustomerReturnResult> returnCustomerShipment(@Valid @RequestBody CustomerReturnCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(businessOperationService.returnCustomerShipment(BusinessCommandActors.withActor(command,
+                commandActor(request, command.customerId(), command.motherOrderCode()))));
     }
 
     @PostMapping("/after-sales-reviews")
-    public ApiResponse<AfterSalesReviewResult> reviewAfterSalesReturn(@Valid @RequestBody AfterSalesReviewCommand command) {
-        return ApiResponse.ok(businessOperationService.reviewAfterSalesReturn(command));
+    public ApiResponse<AfterSalesReviewResult> reviewAfterSalesReturn(@Valid @RequestBody AfterSalesReviewCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(businessOperationService.reviewAfterSalesReturn(BusinessCommandActors.withActor(command,
+                commandActor(request, command.customerId(), command.motherOrderCode()))));
     }
 
     @PostMapping("/loss-approvals")
-    public ApiResponse<LossApprovalResult> approveLoss(@Valid @RequestBody ApproveLossCommand command) {
-        return ApiResponse.ok(businessOperationService.approveLoss(command));
+    public ApiResponse<LossApprovalResult> approveLoss(@Valid @RequestBody ApproveLossCommand command, HttpServletRequest request) {
+        return ApiResponse.ok(businessOperationService.approveLoss(BusinessCommandActors.withActor(command,
+                commandActor(request, command.customerId(), command.motherOrderCode()))));
+    }
+
+    private String commandActor(HttpServletRequest request, Long customerId, String motherOrderCode) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (dataAccess != null) dataAccess.assertDocumentCustomer(context, customerId, motherOrderCode);
+        return context.operator();
     }
 
     private ProcessStationService requireProcessStationService() {
@@ -248,11 +303,7 @@ public class BusinessOperationController {
     }
 
     private AuthUserAccount requireStationAccount(HttpServletRequest request) {
-        if (authSessionService == null) {
-            throw new BusinessException("请先登录后再做岗位报工");
-        }
-        return authSessionService.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
-                .orElseThrow(() -> new BusinessException("请先登录后再做岗位报工"));
+        return requireBusinessAccount(request);
     }
 
     private QualityRequirementService requireQualityRequirementService() {
@@ -263,10 +314,22 @@ public class BusinessOperationController {
     }
 
     private AuthUserAccount requireQualityAccount(HttpServletRequest request) {
+        return requireBusinessAccount(request);
+    }
+
+    private AuthUserAccount requireBusinessAccount(HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
         if (authSessionService == null) {
-            throw new BusinessException("请先登录后再做质检对照");
+            throw new BusinessException("请先登录后再操作业务");
         }
-        return authSessionService.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
-                .orElseThrow(() -> new BusinessException("请先登录后再做质检对照"));
+        AuthUserAccount account = authSessionService.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
+                .orElseThrow(() -> new BusinessException("请先登录后再操作业务"));
+        // 使用本次会话解析出的有效客户授权，撤销授权后不能继续沿用账号旧快照。
+        return new AuthUserAccount(
+                account.username(), account.passwordHash(), account.operator(), account.role(), account.dataScope(),
+                account.enabled(), account.demoAccount(), account.passwordChangedAt(), account.failedLoginCount(),
+                account.lockedUntil(), context.customerScope(), account.passwordChangeRequired(),
+                account.temporaryPasswordConsumed(), account.allowedProcesses()
+        );
     }
 }

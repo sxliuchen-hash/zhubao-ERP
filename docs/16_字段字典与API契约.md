@@ -2509,3 +2509,11 @@ PWA 一期边界：
 |---|---|
 | `GET /api/security/current-context` | `ApiResponse<SecurityCurrentContext>` |
 | `GET /api/security/menu-tree` | `ApiResponse<List<NavigationMenuItem>>` |
+
+## 2026-10-10 复核第二批契约补充
+
+- 附件列表、统计、采集列表、预览签发及库存读取要求真实 Bearer 会话；有限范围按实际单据客户及岗位关系过滤。存储清单与附件审计仅全公司范围管理员、总经理可读。附件下线后原签名链接亦不能继续读取。
+- 业务写入中的 `operator`、`inspector`、`approver` 不作为身份凭据，可省略，服务端使用会话账号。登记确认、纠正、入账及设备读数消费也要求真实会话。
+- 通用 `production-reports` 保留原登记字段，但必须匹配正式工单维度、整单数量重量、账号绑定工序和前道交付；只有末道转半成品。登记导入及设备生产消费共用该规则。
+- 通用 `quality-releases` 以正式末道交付及质检事实决定是否放行；请求说明不能替代合格或让步判定。
+- 财务公司写命令要求 `ALL` 范围；客户写命令使用客户编号及已保存的名称判断授权，冲销以原应收客户为准。MySQL 模式新增必填环境变量 `ZHUBAO_DOCUMENT_PREVIEW_SECRET`，至少 32 字符且禁止开发默认值。

@@ -19,7 +19,7 @@ public record DispatchReworkCommand(
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal quantity,
         @NotNull @DecimalMin(value = "0.000", inclusive = false) BigDecimal weight,
         @NotBlank String process,
-        @NotBlank String operator,
+        String operator,
         @NotBlank String reason,
         String evidenceCode,
         String remark

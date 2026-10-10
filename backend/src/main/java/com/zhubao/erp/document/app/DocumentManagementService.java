@@ -287,6 +287,7 @@ public class DocumentManagementService {
     public AttachmentPreviewUrl previewUrl(String code) {
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        assertActive(attachment);
         PreviewToken previewToken = newPreviewToken(attachment.code());
         return new AttachmentPreviewUrl(
                 attachment.code(),
@@ -305,6 +306,7 @@ public class DocumentManagementService {
     public AttachmentContent content(String code) {
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        assertActive(attachment);
         String storageKey = uploadedStorageKeys.get(code);
         if (storageKey == null) {
             storageKey = localStorageKey(attachment.storageLocation())
@@ -317,6 +319,10 @@ public class DocumentManagementService {
                 attachment.mediaType(),
                 content
         );
+    }
+
+    private void assertActive(EvidenceAttachment attachment) {
+        if ("已下线".equals(attachment.status())) throw new BusinessException("内容已下线：" + attachment.code());
     }
 
     private Optional<EvidenceAttachment> findAttachment(String code) {

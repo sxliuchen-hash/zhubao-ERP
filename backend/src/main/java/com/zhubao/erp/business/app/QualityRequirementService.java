@@ -28,7 +28,12 @@ import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.scan.domain.ScanObjectType;
 import com.zhubao.erp.scan.domain.ScanResolveResponse;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
+import com.zhubao.erp.business.domain.QualityReleaseResult;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -38,6 +43,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
+import java.util.Objects;
 
 /**
  * 质检对照加工要求。质检员取当前登录账号，不合格才调用现有冻结命令。
@@ -58,6 +64,7 @@ public class QualityRequirementService {
     private final StockLedgerService stockLedgerService;
     private final BusinessOperationService businessOperationService;
     private final ScanCodeParser scanCodeParser;
+    private final BusinessDataAccess dataAccess;
 
     public QualityRequirementService(
             BusinessDocumentRepository documents,
@@ -65,15 +72,28 @@ public class QualityRequirementService {
             BusinessOperationService businessOperationService,
             ScanCodeParser scanCodeParser
     ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, null);
+    }
+
+    @Autowired
+    public QualityRequirementService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess
+    ) {
         this.documents = documents;
         this.stockLedgerService = stockLedgerService;
         this.businessOperationService = businessOperationService;
         this.scanCodeParser = scanCodeParser;
+        this.dataAccess = dataAccess;
     }
 
     public QualityCheckView lookup(String rawCode, AuthUserAccount account) {
         requireAccount(account);
         Ticket ticket = resolve(rawCode);
+        assertCustomer(ticket, account);
         QualityRequirementCheck existing = documents.findQualityRequirementCheck(ticket.orderCode()).orElse(null);
         if (existing != null) {
             return submittedView(ticket, existing);
@@ -102,6 +122,7 @@ public class QualityRequirementService {
             throw new BusinessException("请先扫贴纸");
         }
         Ticket ticket = resolve(command.code());
+        assertCustomer(ticket, account);
         if (documents.findQualityRequirementCheck(ticket.orderCode()).isPresent()) {
             throw new BusinessException("这张单已经做过质检对照");
         }
@@ -148,6 +169,7 @@ public class QualityRequirementService {
     public QualityReworkResult openRework(String rawCode, AuthUserAccount account) {
         requireAccount(account);
         Ticket ticket = resolve(rawCode);
+        assertCustomer(ticket, account);
         QualityRequirementCheck check = documents.findQualityRequirementCheck(ticket.orderCode())
                 .orElseThrow(() -> new BusinessException("请先提交质检对照"));
         if (!QualityVerdicts.FAIL.equals(check.outcome())) {
@@ -190,6 +212,42 @@ public class QualityRequirementService {
                 dispatched.fromStockStatus().name(),
                 dispatched.toStockStatus().name()
         );
+    }
+
+    /** 兼容放行必须以末工序交付与已保存的合格或让步质检事实为依据。 */
+    public QualityReleaseResult release(ReleaseQualityStockCommand submitted, AuthUserAccount account) {
+        requireAccount(account);
+        ReleaseQualityStockCommand command = BusinessCommandActors.withActor(submitted, account.operator().trim());
+        Ticket ticket = resolve(command.workOrderCode());
+        assertCustomer(ticket, account);
+        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        if (!Objects.equals(ticket.motherOrderCode(), command.motherOrderCode())
+                || !Objects.equals(ticket.customerId(), command.customerId())
+                || !Objects.equals(ticket.ownerCustomerId(), ownerCustomerId)
+                || !Objects.equals(ticket.materialCode(), command.materialCode())
+                || !Objects.equals(ticket.warehouseCode(), command.fromWarehouseCode())
+                || !lastProcess(ticket).equals(command.process())) {
+            throw new BusinessException("放行的客户、母单、物料、来源仓库和工序必须与正式工单一致");
+        }
+        if (!lastProcessSubmitted(ticket)) {
+            throw new BusinessException(PROCESS_BLOCK);
+        }
+        QualityRequirementCheck check = documents.findQualityRequirementCheck(ticket.orderCode())
+                .orElseThrow(() -> new BusinessException("请先完成质检对照，不能直接放行"));
+        if (!Objects.equals(check.motherOrderCode(), ticket.motherOrderCode())
+                || !Objects.equals(check.qualityCaseCode(), command.qualityCaseCode())
+                || check.frozen()
+                || (!QualityVerdicts.PASS.equals(check.outcome()) && !QualityVerdicts.CONCESSION.equals(check.outcome()))) {
+            throw new BusinessException("只有真实合格或让步的质检结果才能放行");
+        }
+        // 放行说明原样保留；能否放行由已经保存的逐项质检结论决定。
+        return businessOperationService.releaseQualityStock(command);
+    }
+
+    private void assertCustomer(Ticket ticket, AuthUserAccount account) {
+        if (dataAccess != null) {
+            dataAccess.assertCustomer(BusinessDataAccess.contextOf(account), ticket.customerId(), ticket.customerName());
+        }
     }
 
     private QualityFreezeResult freeze(Ticket ticket, String qualityCaseCode, String inspector, String defect) {
@@ -470,6 +528,9 @@ public class QualityRequirementService {
     private void requireAccount(AuthUserAccount account) {
         if (account == null || account.operator() == null || account.operator().isBlank()) {
             throw new BusinessException(LOGIN_REQUIRED);
+        }
+        if (!List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.WORKSHOP_LEADER, RoleCode.QUALITY_INSPECTOR).contains(account.role())) {
+            throw new PermissionDeniedException("当前账号不是质检岗位");
         }
     }
 
