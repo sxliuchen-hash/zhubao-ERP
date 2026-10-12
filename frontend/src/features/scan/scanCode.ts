@@ -19,6 +19,8 @@ const typeMap: Record<string, ScanObjectType> = {
 
 const queryWaybill = /(?:waybillNo|mailNo|billNo|expressNo|logisticCode|waybill)=([A-Za-z0-9-]{8,32})/i;
 
+/** 只保留与旧 /api/scan/resolve 一致的格式解析。页面查单不再调用这里。 */
+
 export function parseScanCode(content: string, scene = 'lookup'): ParsedScanCode {
   const normalized = content.trim();
   if (normalized.startsWith('JG|')) {

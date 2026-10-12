@@ -20,6 +20,8 @@ import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
 import MobileOpsWorkspace from './MobileOpsWorkspace.vue';
 import { lookupProcessStation, submitProcessStation } from '../../services/processStationApi';
 import { lookupQualityCheck, openQualityRework, submitQualityCheck } from '../../services/qualityCheckApi';
+import { queryScanContext } from '../../services/scanContextApi';
+import { contextForQuery } from '../scan/scanContextFixture';
 import ProductionWorkspace from './ProductionWorkspace.vue';
 import QualityWorkspace from './QualityWorkspace.vue';
 
@@ -51,6 +53,11 @@ vi.mock('../../services/documentCaptureApi', () => ({
   fetchCaptures: vi.fn().mockResolvedValue([]),
   uploadCapture: vi.fn(),
 }));
+
+vi.mock('../../services/scanContextApi', async () => {
+  const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
+  return { ...actual, queryScanContext: vi.fn() };
+});
 
 const inboundOrder: InboundOrder = {
   code: 'MD-API-001',
@@ -222,6 +229,7 @@ describe('M1 business workspaces', () => {
       timeline: [],
       evidence: [],
     });
+    vi.mocked(queryScanContext).mockImplementation(async (request) => contextForQuery(request));
   });
 
   it('renders inbound documents returned by the api', async () => {

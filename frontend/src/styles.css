@@ -1288,6 +1288,20 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   .inbound-desk.is-detail .module-master-panel { display: none; }
 }
 
+.scan-entry input,
+.scan-entry select,
+.scan-entry .primary-button,
+.scan-entry .secondary-button,
+.scan-choice-button {
+  min-height: 44px;
+}
+
+.scan-context-card,
+.scan-choice-list {
+  display: grid;
+  gap: 8px;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

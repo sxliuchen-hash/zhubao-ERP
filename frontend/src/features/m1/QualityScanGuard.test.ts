@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import QualityWorkspace from './QualityWorkspace.vue';
 import { fetchQualityWorkspace } from '../../services/businessWorkspaceApi';
 import { lookupQualityCheck, openQualityRework, submitQualityCheck } from '../../services/qualityCheckApi';
+import { queryScanContext } from '../../services/scanContextApi';
+import { contextForQuery } from '../scan/scanContextFixture';
 import type { QualityCheckResult, QualityCheckView } from '../../services/qualityCheckApi';
 
 vi.mock('../../services/businessWorkspaceApi', () => ({ fetchQualityWorkspace: vi.fn() }));
@@ -13,6 +15,10 @@ vi.mock('../../services/businessOperationApi', () => ({
 vi.mock('../../services/qualityCheckApi', () => ({
   lookupQualityCheck: vi.fn(), openQualityRework: vi.fn(), submitQualityCheck: vi.fn(),
 }));
+vi.mock('../../services/scanContextApi', async () => {
+  const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
+  return { ...actual, queryScanContext: vi.fn() };
+});
 
 function view(orderCode: string): QualityCheckView {
   return {
@@ -26,6 +32,7 @@ function view(orderCode: string): QualityCheckView {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchQualityWorkspace).mockResolvedValue({ metrics: [], cases: [], lossApprovals: [], dataSource: 'LIVE' });
+  vi.mocked(queryScanContext).mockImplementation(async (request) => contextForQuery(request));
 });
 
 describe('质检扫码不串单', () => {
@@ -33,8 +40,8 @@ describe('质检扫码不串单', () => {
     let resolveA: (value: QualityCheckView) => void = () => {};
     let resolveB: (value: QualityCheckView) => void = () => {};
     vi.mocked(lookupQualityCheck).mockImplementation((code: string) => new Promise((resolve) => {
-      if (code.endsWith('A')) resolveA = resolve;
-      else resolveB = resolve;
+      if (code === 'A') resolveA = resolve;
+      else if (code === 'B') resolveB = resolve;
     }));
     const wrapper = mount(QualityWorkspace);
     await flushPromises();
@@ -63,7 +70,7 @@ describe('质检扫码不串单', () => {
   });
 
   it('提交和返工使用成功识别的单号，旧响应晚到不写回新单', async () => {
-    vi.mocked(lookupQualityCheck).mockImplementation(async (code: string) => view(code.endsWith('B') ? 'B' : 'A'));
+    vi.mocked(lookupQualityCheck).mockImplementation(async (code: string) => view(code === 'B' ? 'B' : 'A'));
     let resolveSubmit: (value: QualityCheckResult) => void = () => {};
     vi.mocked(submitQualityCheck).mockImplementation(() => new Promise<QualityCheckResult>((resolve) => { resolveSubmit = resolve; }));
     const wrapper = mount(QualityWorkspace);

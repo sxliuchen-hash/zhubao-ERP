@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import LabelWorkspace from './LabelWorkspace.vue';
 import { openLabelPrint } from './labelPrint';
+import { queryScanContext } from '../../services/scanContextApi';
+import { buildScanContext } from '../scan/scanContextFixture';
 
 vi.mock('./labelPrint', async () => {
   const actual = await vi.importActual<typeof import('./labelPrint')>('./labelPrint');
@@ -9,6 +11,11 @@ vi.mock('./labelPrint', async () => {
     ...actual,
     openLabelPrint: vi.fn(),
   };
+});
+
+vi.mock('../../services/scanContextApi', async () => {
+  const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
+  return { ...actual, queryScanContext: vi.fn() };
 });
 
 describe('LabelWorkspace', () => {
@@ -46,7 +53,7 @@ describe('LabelWorkspace', () => {
     mockTemplates();
     const wrapper = mount(LabelWorkspace);
     await flushPromises();
-    const typeOptions = wrapper.find('.label-forms select').findAll('option');
+    const typeOptions = wrapper.get('[aria-label="标签类型"]').findAll('option');
 
     expect(typeOptions.map((option) => option.text())).toEqual(['母单', '子工单', '出货', '返工']);
   });
@@ -112,6 +119,10 @@ describe('LabelWorkspace', () => {
     });
     const wrapper = mount(LabelWorkspace);
     await flushPromises();
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      objectType: 'WORK_ORDER',
+      code: 'ZD-1',
+    }));
     await wrapper.get('[aria-label="现场贴纸单号"]').setValue('JG|work_order|ZD-1');
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     await flushPromises();

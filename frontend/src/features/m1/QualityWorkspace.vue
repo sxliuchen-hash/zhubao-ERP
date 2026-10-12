@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import OperationInputs from './OperationInputs.vue';
 import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import type { LossApproval, Tone } from '../../data/m1PrototypeData';
-import { parseScanCode } from '../scan/scanCode';
+import OrderContextCard from '../scan/OrderContextCard.vue';
+import ScanInput from '../scan/ScanInput.vue';
+import type { ScanDraft } from '../scan/scanDraft';
+import { canonicalTarget, useScanContext } from '../scan/useScanContext';
+import type { ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   fetchQualityWorkspace,
   type QualityWorkspaceModel,
@@ -58,6 +62,8 @@ const lossApprovalResult = ref<LossApprovalResult | null>(null);
 const lossApprovalError = ref('');
 const selectedQualityCaseCode = ref('');
 const checkScanText = ref('');
+const qualityScan = reactive(useScanContext());
+const qualityCode = ref('');
 let recognitionVersion = 0;
 const checkHint = ref('');
 const checkError = ref('');
@@ -113,7 +119,12 @@ const requirementHint = computed(() => {
   return '';
 });
 const canSubmitRequirement = computed(() => (
-  Boolean(checkView.value?.ready) && !requirementSubmitted.value && requirementHint.value === '' && !checkSubmitting.value
+  Boolean(qualityCode.value)
+  && Boolean(checkView.value?.ready)
+  && !requirementSubmitted.value
+  && requirementHint.value === ''
+  && !checkSubmitting.value
+  && !qualityScan.loading
 ));
 
 const recordedDefect = computed(() => {
@@ -124,18 +135,23 @@ const effectiveDefect = computed(() => operationValues.value.defect?.trim() || r
 const effectiveReason = computed(() => operationValues.value.reason?.trim() || recordedDefect.value);
 
 watch(activeCase, (item) => { resetAmounts(item?.operationContext); });
-watch(checkScanText, () => {
-  const hadRecognition = checkView.value !== null || checkBusy.value || checkResult.value !== null || requirementRework.value !== null;
+function invalidateQualityTarget() {
+  const hadRecognition = checkView.value !== null || checkBusy.value || checkResult.value !== null
+    || requirementRework.value !== null || qualityScan.context !== null || qualityCode.value !== '';
   recognitionVersion += 1;
   checkBusy.value = false;
   checkView.value = null;
   clauseDrafts.value = {};
   checkResult.value = null;
   requirementRework.value = null;
+  qualityCode.value = '';
   checkError.value = '';
   requirementReworkError.value = '';
+  qualityScan.invalidate();
   checkHint.value = hadRecognition ? '贴纸已变化，请重新识别' : '';
-}, { flush: 'sync' });
+}
+
+watch(checkScanText, () => invalidateQualityTarget(), { flush: 'sync' });
 
 function qualityCaseTone(status: string, action = ''): Tone {
   if (status.includes('完成')) return 'green';
@@ -274,53 +290,70 @@ function resetRequirementDrafts(view: QualityCheckView) {
   clauseDrafts.value = next;
 }
 
-async function recognizeRequirement() {
+async function recognizeRequirement(draft: ScanDraft) {
   checkHint.value = '';
   checkError.value = '';
   checkResult.value = null;
   requirementRework.value = null;
   requirementReworkError.value = '';
-  const raw = checkScanText.value.trim();
-  if (!raw) {
-    checkHint.value = '请先扫子单贴纸，或不拆母单的贴纸';
-    return;
-  }
-  if (raw.startsWith('JG|')) {
-    try {
-      const parsed = parseScanCode(raw);
-      if (parsed.objectType !== 'WORK_ORDER' && parsed.objectType !== 'MOTHER_ORDER') {
-        checkHint.value = '请扫描子单贴纸，或不拆母单的贴纸';
-        return;
-      }
-    } catch (error) {
-      checkHint.value = error instanceof Error ? error.message : '未识别的二维码内容';
-      return;
-    }
-  }
+  const raw = draft.content.trim();
   const version = ++recognitionVersion;
   checkView.value = null;
   clauseDrafts.value = {};
+  qualityCode.value = '';
+  if (!raw) {
+    qualityScan.invalidate();
+    checkHint.value = '请先扫子单贴纸，或不拆母单的贴纸';
+    return;
+  }
   checkBusy.value = true;
   try {
-    const loaded = await lookupQualityCheck(raw);
-    if (version !== recognitionVersion || raw !== checkScanText.value.trim()) return;
+    const response = await qualityScan.lookup({
+      content: raw,
+      objectType: draft.objectType,
+      intent: 'QUALITY',
+    });
+    if (version !== recognitionVersion) return;
+    if (!response) {
+      if (qualityScan.error) checkError.value = qualityScan.error;
+      return;
+    }
+    if (response.requiresSelection) {
+      checkHint.value = '请选择要质检的子单';
+      return;
+    }
+    const target = canonicalTarget(response);
+    if (!target || (target.objectType !== 'WORK_ORDER' && target.objectType !== 'MOTHER_ORDER')) {
+      checkHint.value = '请扫描子单贴纸，或不拆母单的贴纸';
+      return;
+    }
+    const loaded = await lookupQualityCheck(target.code);
+    if (version !== recognitionVersion) return;
+    qualityCode.value = target.code;
     resetRequirementDrafts(loaded);
     checkView.value = loaded;
   } catch (error) {
     if (version !== recognitionVersion) return;
+    qualityCode.value = '';
     checkError.value = error instanceof Error ? error.message : '贴纸识别失败';
   } finally {
     if (version === recognitionVersion) checkBusy.value = false;
   }
 }
 
+async function selectQualityTarget(related: ScanRelatedTarget) {
+  if (!related.code || !related.objectType) return;
+  await recognizeRequirement({ content: related.code, objectType: related.objectType });
+}
+
 async function submitRequirement() {
-  if (!canSubmitRequirement.value || !checkView.value) {
+  if (!canSubmitRequirement.value || !checkView.value || !qualityCode.value) {
     return;
   }
   checkSubmitting.value = true;
   const view = checkView.value;
   const version = recognitionVersion;
+  const code = qualityCode.value;
   const lines = view.lines.map((line) => ({
     lineNo: line.lineNo,
     verdict: clauseDrafts.value[line.lineNo]?.verdict ?? '',
@@ -328,8 +361,8 @@ async function submitRequirement() {
   }));
   checkError.value = '';
   try {
-    const result = await submitQualityCheck({ code: view.orderCode, lines });
-    if (version !== recognitionVersion) return;
+    const result = await submitQualityCheck({ code, lines });
+    if (version !== recognitionVersion || qualityCode.value !== code) return;
     checkResult.value = result;
     checkView.value = {
       ...view,
@@ -352,16 +385,17 @@ async function submitRequirement() {
 }
 
 async function openRequirementRework() {
-  if (!checkView.value || !canOpenRequirementRework.value) {
+  if (!checkView.value || !qualityCode.value || !canOpenRequirementRework.value) {
     return;
   }
   reworkOpening.value = true;
   const view = checkView.value;
   const version = recognitionVersion;
+  const code = qualityCode.value;
   requirementReworkError.value = '';
   try {
-    const opened = await openQualityRework(view.orderCode);
-    if (version !== recognitionVersion) return;
+    const opened = await openQualityRework(code);
+    if (version !== recognitionVersion || qualityCode.value !== code) return;
     requirementRework.value = opened;
     checkView.value = {
       ...view,
@@ -400,22 +434,21 @@ function selectQualityCase(code: string) {
           <p>扫子单贴纸。不拆的母单扫母单贴纸。质检员是当前登录账号。</p>
         </div>
       </div>
-      <label class="field">
-        <span>贴纸二维码</span>
-        <input
-          v-model="checkScanText"
-          type="text"
-          placeholder="JG|work_order|子单号 或 JG|mother|母单号"
-          aria-label="质检贴纸"
-        />
-      </label>
-      <div class="button-row">
-        <button class="primary-button" type="button" :disabled="checkBusy" aria-label="识别质检贴纸" @click="recognizeRequirement">
-          {{ checkBusy ? '正在识别' : '识别贴纸' }}
-        </button>
-      </div>
+      <ScanInput
+        v-model="checkScanText"
+        field-text="贴纸二维码"
+        input-aria-label="质检贴纸"
+        placeholder="JG|work_order|子单号 或 JG|mother|母单号"
+        submit-label="识别贴纸"
+        submit-aria-label="识别质检贴纸"
+        photo-aria-label="拍贴纸"
+        :busy="checkBusy || qualityScan.loading"
+        @draft="invalidateQualityTarget"
+        @recognize="recognizeRequirement"
+      />
       <p v-if="checkHint" class="operation-feedback warning">{{ checkHint }}</p>
       <p v-if="checkError" class="operation-feedback danger">{{ checkError }}</p>
+      <OrderContextCard :context="qualityScan.context" @select="selectQualityTarget" />
 
       <template v-if="checkView">
         <dl class="detail-grid compact-detail-grid">

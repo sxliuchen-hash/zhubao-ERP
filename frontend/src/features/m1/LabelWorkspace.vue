@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   fetchLabelTemplates,
   fetchMotherLabel,
@@ -15,7 +15,11 @@ import {
   type LabelTemplateField,
   type LabelType,
 } from '../../services/labelApi';
-import { parseScanCode } from '../scan/scanCode';
+import OrderContextCard from '../scan/OrderContextCard.vue';
+import ScanInput from '../scan/ScanInput.vue';
+import type { ScanDraft } from '../scan/scanDraft';
+import { canonicalTarget, useScanContext } from '../scan/useScanContext';
+import type { ScanRelatedTarget } from '../../services/scanContextApi';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
 
 // 标签打印工作台。标签只印固定信息，进度靠扫码查看。
@@ -28,6 +32,7 @@ const errorMessage = ref('');
 const submitting = ref(false);
 const stickerQuery = ref('');
 const stickerHint = ref('');
+const labelScan = reactive(useScanContext());
 const reprintReason = ref('');
 const loadedSticker = ref<{ type: LabelType; code: string } | null>(null);
 
@@ -129,55 +134,74 @@ async function submitGenerate() {
   }
 }
 
-async function openFieldSticker() {
+function clearStickerTarget() {
+  const had = labelScan.context !== null || preview.value !== null || loadedSticker.value !== null;
+  labelScan.invalidate();
   preview.value = null;
   loadedSticker.value = null;
+  if (had) stickerHint.value = '单号已变化，请重新查询';
+}
+
+watch(stickerQuery, () => clearStickerTarget(), { flush: 'sync' });
+
+async function openFieldSticker(draft: ScanDraft) {
   feedback.value = '';
   errorMessage.value = '';
   stickerHint.value = '';
-  const raw = stickerQuery.value.trim();
+  const raw = draft.content.trim();
   if (!raw) {
+    labelScan.invalidate();
+    preview.value = null;
+    loadedSticker.value = null;
     errorMessage.value = '请填写母单号、子单号或贴纸二维码';
     return;
   }
-  let kind: 'MOTHER' | 'WORK_ORDER' | '' = '';
-  let code = raw;
-  if (raw.startsWith('JG|')) {
-    try {
-      const parsed = parseScanCode(raw);
-      if (parsed.objectType === 'MOTHER_ORDER') kind = 'MOTHER';
-      else if (parsed.objectType === 'WORK_ORDER') kind = 'WORK_ORDER';
-      else {
-        errorMessage.value = '这不是母单或子单贴纸';
-        return;
-      }
-      code = parsed.code;
-    } catch (error) {
-      errorMessage.value = error instanceof Error ? error.message : '未识别的二维码内容';
-      return;
-    }
+  const response = await labelScan.lookup({
+    content: raw,
+    objectType: draft.objectType,
+    intent: 'LOOKUP',
+  });
+  if (!response) {
+    preview.value = null;
+    loadedSticker.value = null;
+    if (labelScan.error) errorMessage.value = labelScan.error;
+    return;
   }
+  const seen = labelScan.revision;
+  if (response.requiresSelection) {
+    preview.value = null;
+    loadedSticker.value = null;
+    stickerHint.value = '请选择母单或子单';
+    return;
+  }
+  const target = canonicalTarget(response);
+  if (!target) {
+    errorMessage.value = '没有定位到单据';
+    return;
+  }
+  if (target.objectType !== 'MOTHER_ORDER' && target.objectType !== 'WORK_ORDER') {
+    errorMessage.value = '这不是母单或子单贴纸';
+    return;
+  }
+  const kind = target.objectType === 'WORK_ORDER' ? 'WORK_ORDER' : 'MOTHER';
   submitting.value = true;
   try {
-    const payload = await loadStickerPayload(kind, code);
-    showSticker(payload, payload.type === 'WORK_ORDER' ? 'WORK_ORDER' : 'MOTHER');
+    const payload = kind === 'WORK_ORDER'
+      ? await fetchWorkOrderLabel(target.code)
+      : await fetchMotherLabel(target.code);
+    if (labelScan.revision !== seen) return;
+    showSticker(payload, kind);
   } catch (error) {
+    if (labelScan.revision !== seen) return;
     errorMessage.value = error instanceof Error ? error.message : '贴纸生成失败';
   } finally {
-    submitting.value = false;
+    if (labelScan.revision === seen) submitting.value = false;
   }
 }
 
-async function loadStickerPayload(kind: 'MOTHER' | 'WORK_ORDER' | '', code: string): Promise<LabelPayload> {
-  if (kind === 'WORK_ORDER') return fetchWorkOrderLabel(code);
-  if (kind === 'MOTHER') return fetchMotherLabel(code);
-  try {
-    return await fetchMotherLabel(code);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    if (!message.includes('未找到')) throw error;
-    return fetchWorkOrderLabel(code);
-  }
+async function chooseStickerTarget(related: ScanRelatedTarget) {
+  if (!related.code || !related.objectType) return;
+  await openFieldSticker({ content: related.code, objectType: related.objectType });
 }
 
 function showSticker(payload: LabelPayload, kind: 'MOTHER' | 'WORK_ORDER') {
@@ -390,14 +414,20 @@ onMounted(loadTemplates);
         <div class="form-card">
           <h3>现场贴纸</h3>
           <p class="hint">按母单号或子单号打开，字段从单据带出。也可以粘贴贴纸上的二维码内容。</p>
-          <label class="field">
-            <span>单号或二维码</span>
-            <input v-model="stickerQuery" type="text" aria-label="现场贴纸单号" placeholder="母单号、子单号或 JG|mother|单号" />
-          </label>
-          <button type="button" class="primary-button" aria-label="打开现场贴纸" :disabled="submitting" @click="openFieldSticker">
-            打开贴纸
-          </button>
+          <ScanInput
+            v-model="stickerQuery"
+            field-text="单号或二维码"
+            input-aria-label="现场贴纸单号"
+            placeholder="母单号、子单号或 JG|mother|单号"
+            submit-label="打开贴纸"
+            submit-aria-label="打开现场贴纸"
+            photo-aria-label="拍贴纸"
+            :busy="submitting || labelScan.loading"
+            @draft="clearStickerTarget"
+            @recognize="openFieldSticker"
+          />
           <p v-if="stickerHint" class="hint">{{ stickerHint }}</p>
+          <OrderContextCard :context="labelScan.context" @select="chooseStickerTarget" />
           <label class="field">
             <span>补打原因</span>
             <input v-model="reprintReason" type="text" aria-label="补打原因" placeholder="如 贴纸丢失" />
@@ -409,7 +439,7 @@ onMounted(loadTemplates);
           <h3>通用标签生成</h3>
           <label class="field">
             <span>标签类型</span>
-            <select v-model="form.type">
+            <select v-model="form.type" aria-label="标签类型">
               <option v-for="option in labelTypeOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
