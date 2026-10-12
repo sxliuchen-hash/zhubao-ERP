@@ -2,7 +2,7 @@ package com.zhubao.erp.scan.domain;
 
 import java.util.List;
 
-/** 正式事实与过程记录分开。过程记录在保存能力落地前保持空列表。 */
+/** 正式事实与过程记录分开。过程记录只返回已经保存的说明。 */
 public record ScanContextProgress(
         List<ScanHandoffFact> handoffs,
         ScanQualityFact quality,

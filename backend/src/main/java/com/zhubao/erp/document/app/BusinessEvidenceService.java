@@ -20,10 +20,13 @@ import com.zhubao.erp.document.domain.EvidenceLinkView;
 import com.zhubao.erp.document.domain.HistoricalEvidenceView;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
+import com.zhubao.erp.scan.domain.OperationProgressRecord;
+import com.zhubao.erp.scan.domain.OperationProgressRepository;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -48,6 +51,7 @@ public class BusinessEvidenceService {
     private final DocumentManagementService documentManagementService;
     private final BusinessDataAccess dataAccess;
     private final PermissionGuard permissionGuard;
+    private final OperationProgressRepository progressRecords;
     private final AtomicInteger sequence = new AtomicInteger();
 
     public BusinessEvidenceService(
@@ -59,6 +63,20 @@ public class BusinessEvidenceService {
             BusinessDataAccess dataAccess,
             PermissionGuard permissionGuard
     ) {
+        this(documents, links, businessDocuments, stocks, documentManagementService, dataAccess, permissionGuard, null);
+    }
+
+    @Autowired
+    public BusinessEvidenceService(
+            DocumentManagementRepository documents,
+            BusinessEvidenceLinkRepository links,
+            BusinessDocumentRepository businessDocuments,
+            StockLedgerService stocks,
+            DocumentManagementService documentManagementService,
+            BusinessDataAccess dataAccess,
+            PermissionGuard permissionGuard,
+            OperationProgressRepository progressRecords
+    ) {
         this.documents = documents;
         this.links = links;
         this.businessDocuments = businessDocuments;
@@ -66,6 +84,7 @@ public class BusinessEvidenceService {
         this.documentManagementService = documentManagementService;
         this.dataAccess = dataAccess;
         this.permissionGuard = permissionGuard;
+        this.progressRecords = progressRecords;
     }
 
     public BusinessEvidenceLink bind(BindEvidenceCommand command, OperatorContext operator) {
@@ -112,7 +131,7 @@ public class BusinessEvidenceService {
         if (!origin.equals(targetType) || !targetCode.equals(attachment.businessCode())) {
             throw new BusinessException("附件不属于当前单据");
         }
-        assertOperation(stage, operationType, operationCode, processName, targetType, targetCode);
+        assertOperation(stage, operationType, operationCode, processName, clauseNo, targetType, targetCode);
 
         String hash = EvidenceLinkKey.hash(
                 targetType, targetCode, stage, scene, operationType, operationCode, processName, clauseNo, attachmentCode
@@ -207,6 +226,7 @@ public class BusinessEvidenceService {
             String operationType,
             String operationCode,
             String processName,
+            String clauseNo,
             String targetType,
             String targetCode
     ) {
@@ -244,7 +264,44 @@ public class BusinessEvidenceService {
             assertShipment(operationCode, targetType, targetCode);
             return;
         }
+        if (EvidenceCodes.PROGRESS_NOTE.equals(operationType)) {
+            assertProgressNote(stage, operationCode, processName, clauseNo, targetType, targetCode);
+            return;
+        }
         throw new BusinessException("当前阶段不能绑定这种操作");
+    }
+
+    private void assertProgressNote(
+            String stage,
+            String operationCode,
+            String processName,
+            String clauseNo,
+            String targetType,
+            String targetCode
+    ) {
+        if (!EvidenceCodes.PRODUCTION.equals(stage)
+                && !EvidenceCodes.QUALITY.equals(stage)
+                && !EvidenceCodes.SHIPPING.equals(stage)) {
+            throw new BusinessException("当前阶段不能绑定这种操作");
+        }
+        if (progressRecords == null) {
+            throw new BusinessException("过程记录不存在");
+        }
+        OperationProgressRecord record = progressRecords.findByCode(operationCode).orElse(null);
+        if (record == null) {
+            throw new BusinessException("过程记录不存在");
+        }
+        if (!stage.equals(record.stage())
+                || !targetType.equals(record.targetType())
+                || !targetCode.equals(record.targetCode())) {
+            throw new BusinessException("证据必须绑到这条过程记录所在的单据和阶段");
+        }
+        if (!processName.isEmpty() && !processName.equals(record.process())) {
+            throw new BusinessException("证据工序与过程记录不一致");
+        }
+        if (!clauseNo.isEmpty() && !clauseNo.equals(record.clauseNo())) {
+            throw new BusinessException("证据条款与过程记录不一致");
+        }
     }
 
     private void assertIntake(String operationCode, String targetType, String targetCode) {

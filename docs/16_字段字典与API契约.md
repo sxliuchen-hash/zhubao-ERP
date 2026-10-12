@@ -1333,7 +1333,7 @@ PWA 一期边界：
 文档附件约束：
 
 - 当前 已支持 multipart 上传到后端本地存储适配、checksum、审计事件、预览 URL 和内容读取；文档包、附件元数据和审计事件通过 `DocumentManagementRepository` 支持内存/JDBC 切换。
-- `zhubao.documents.repository=jdbc` 时读取/写入 V10 合同表：`doc_package`、`doc_evidence_attachment`、`doc_audit_event`。V42 为附件增加可空 `object_type`，并新增 `doc_business_evidence_link`。已有库需备份后受控执行 V42，不修改 V10 或 V36。
+- `zhubao.documents.repository=jdbc` 时读取/写入 V10 合同表：`doc_package`、`doc_evidence_attachment`、`doc_audit_event`。V42 为附件增加可空 `object_type`，并新增 `doc_business_evidence_link`。过程说明使用 V43 的 `scan_operation_progress`，由 `zhubao.scan-progress.repository` 切换。已有库需备份后受控执行 V42 和 V43，不修改 V10 或 V36。
 - 后续生产环境必须按部署条件接 NAS/S3 兼容存储，并通过签名 URL 控制预览和下载。
 - 质检、称重、视频、配置审批证据必须能绑定业务对象、校验和、保留策略和审计事件。
 - 审批完成后的配置和质检证据应锁定 checksum，后续修改必须产生新版本或新审计事件。
@@ -1350,8 +1350,8 @@ PWA 一期边界：
 | `targetCode` | 真实单据编号，必须等于附件 `businessCode` |
 | `stage` | `INTAKE`、`PRODUCTION`、`QUALITY`、`SHIPPING`、`REWORK` |
 | `scene` | `UNPACK`、`WEIGH`、`DEFECT`、`FINISH`、`PROCESS`、`CHECK`、`PACK`、`WAYBILL` |
-| `operationType` | 已存在的服务端操作：`inbound_confirm`、`process_station_report`、`production_report`、`quality_check`、`quality_freeze`、`quality_release`、`rework_dispatch`、`rework_report`、`outbound_shipment` |
-| `operationCode` | 对应台账号、质检案件号、返工号或已落库出货单号。不接受交接编号或前端自编编号 |
+| `operationType` | 已存在的服务端操作：`inbound_confirm`、`process_station_report`、`production_report`、`quality_check`、`quality_freeze`、`quality_release`、`rework_dispatch`、`rework_report`、`outbound_shipment`、`progress_note` |
+| `operationCode` | 对应台账号、质检案件号、返工号、已落库出货单号或过程记录编号。不接受交接编号或前端自编编号 |
 | `processName` | 工序。生产证据必填；其他阶段可空，空值保存为空字符串 |
 | `clauseNo` | 条款号。可空，空值保存为空字符串 |
 | `operatorName` | 当前登录操作人 |
@@ -1365,7 +1365,7 @@ PWA 一期边界：
 - 同时校验单据存在、附件属于该单据、操作已经落库，以及当前用户能读取该单并具备对应操作权限。
 - 母单与子单、不同客户的单据不能因为客户端声称同客户而复用附件。
 - 已下线附件不能预览，也不能新增绑定；已有引用保留。
-- 绑定不报工、不判定质检、不扣库存。过程记录集合仍为空，不开放保存。
+- 绑定不报工、不判定质检、不扣库存。`progress_note` 只能绑到已经保存的过程记录，记录不存在或单据、阶段不一致时拒绝。旧的正式操作绑定仍然可用。
 - 旧 `POST /api/documents/captures`、`POST /api/documents/attachments/uploads` 和命令里的单个 `evidenceCode` 保持原样。
 
 文档附件存储配置：
@@ -2510,6 +2510,7 @@ PWA 一期边界：
 |---|---|
 | `POST /api/scan/resolve` | `ApiResponse<ScanResolveResponse>` |
 | `POST /api/scan/context` | `ApiResponse<ScanContextResponse>` |
+| `POST /api/scan/progress-records` | `ApiResponse<ScanProgressRecord>` |
 
 `POST /api/scan/resolve` 保持兼容：请求仍是 `content` 和可选 `scene`，响应 `objectType`、`code`、`nextAction`、`allowed`。`allowed` 固定为 `true`，只说明格式能识别，不是权限结论，当前不要求登录。
 
@@ -2521,13 +2522,36 @@ PWA 一期边界：
 | `objectType` | 可选。`MOTHER_ORDER`、`WORK_ORDER`、`OUTBOUND_ORDER`、`REWORK`、`EXPRESS_NO`。与 `JG\|` 贴纸类型冲突时拒绝 |
 | `intent` | 可选。`LOOKUP`、`INTAKE`、`PRODUCTION`、`QUALITY`、`SHIPPING`。省略视为 `LOOKUP`。不能代替岗位权限 |
 
-响应分组为 `target`、`order`、`requirements`、`progress`、`relatedTargets`、`requiresSelection`、`actions`、`operationContext`。未知数量、重量和客户用空值，不补 0。母单要求与子单快照分字段保留，来源分别为 `MOTHER_ORDER`、`WORK_ORDER`。岗位要求来源为 `PROCESS`。`progress.progressRecords` 已预留过程记录形状，当前固定为空数组，没有保存接口。`progress.reinspection.available` 当前固定为 `false`；原不合格质检仍保留，不能当成复检已放行。
+响应分组为 `target`、`order`、`requirements`、`progress`、`relatedTargets`、`requiresSelection`、`actions`、`operationContext`。未知数量、重量和客户用空值，不补 0。母单要求与子单快照分字段保留，来源分别为 `MOTHER_ORDER`、`WORK_ORDER`。岗位要求来源为 `PROCESS`。`progress.progressRecords` 返回该单据已保存的过程说明；没有记录时为 `[]`，不编造。`progress.reinspection.available` 当前固定为 `false`；原不合格质检仍保留，不能当成复检已放行。
+
+`progress.progressRecords[]` 字段：
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 服务端过程记录编号，形如 `PG-` 开头 |
+| `targetType` | `MOTHER_ORDER` 或 `WORK_ORDER` |
+| `targetCode` | 真实单据编号 |
+| `motherOrderCode` | 该单据所属母单，由服务端读取 |
+| `stage` | `PRODUCTION`、`QUALITY`、`SHIPPING`。中文只在界面映射为生产过程、质检过程、发货准备 |
+| `process` | 工序。生产说明可填；其他阶段可空 |
+| `clauseNo` | 条款号，可空 |
+| `note` | 规范化后的说明 |
+| `operatorId` | 当前登录账号 |
+| `operatorName` | 保存时的操作人姓名快照 |
+| `operatorRole` | 保存时的岗位代码快照 |
+| `supplementary` | 正式业务已经完成时为 `true`，表示这是补充记录，不把单据改回进行中 |
+| `recordedAt` | 首次写入时间。重试返回原时间 |
+| `requestId` | 客户端本次说明的请求编号 |
+
+`POST /api/scan/progress-records` 要求登录。请求只接受 `targetType`、`targetCode`、`motherOrderCode`、`stage`、`process`、`clauseNo`、`note`、`requestId`。客户端另传姓名、岗位、数量、重量或完成百分比都会被忽略，不能据此扩大权限。保存前同时核对真实单据、当前读取权限和阶段对应岗位权限：生产过程要有生产报工权限，质检过程要有质检权限，发货准备要有成品出库权限。已拆母单不能把过程记在母单上。不拆母单可以记在母单上。母单号必须与服务端单据一致，不能因为客户相同就跨母子单记录。相同 `requestId`、同一账号、同一目标和同一规范化说明重试时返回原记录；说明变了或目标变了不能合并。该请求编号不能跨客户或跨单重放。此接口不写库存、工资、工序交付、质检结论或出货单，也不是正式命令的幂等回放。
+
+过程说明保存成功后，证据绑定使用 `operationType=progress_note`，`operationCode` 为上面的 `code`。记录不存在不能绑定。上传或绑定失败只保留记录编号，不重新调用本接口。
 
 `actions[].code` 只使用 `SELECT_CHILD`、`INTAKE`、`REPORT_PROCESS`、`SUBMIT_QUALITY`、`OPEN_REWORK`、`REPORT_REWORK`、`RELEASE`、`SHIP`、`FILL_LOGISTICS`。`blockKind` 为 `NONE`、`PERMISSION` 或 `STATE`。这些代码不是可执行的接口地址。`operationContext` 给出余额候选和事实快照；多笔余额时 `selectedBalance` 为空。已拆母单 `requiresSelection=true`，不把第一张子单写入 `target.workOrderCode`。
 
-发货意图下，纯运单只返回规范化物流号和 `FILL_LOGISTICS`，不带回入库母单。收货意图下，运单已有母单则打开原单且 `INTAKE` 不可再次建单；没有母单时订单字段为空，有收货权限才允许 `INTAKE`。有限数据范围下，无权和不存在都返回「单号不在当前账号的业务数据范围内」，响应不带客户、要求和关联单。全公司范围明确查无此单时返回「未找到对应单据」。本接口不写库存、工序、质检或出货单。
+发货意图下，纯运单只返回规范化物流号和 `FILL_LOGISTICS`，不带回入库母单。收货意图下，运单已有母单则打开原单且 `INTAKE` 不可再次建单；没有母单时订单字段为空，有收货权限才允许 `INTAKE`。有限数据范围下，无权和不存在都返回「单号不在当前账号的业务数据范围内」，响应不带客户、要求和关联单。全公司范围明确查无此单时返回「未找到对应单据」。上下文查询不写库存、工序、质检或出货单。
 
-S2 起，收货、岗位报工、质检贴纸和标签现场贴纸改为调用本接口。前端不再按编码长度把业务编码猜成运单，也不再用本地解析结果作为提交单号。`requiresSelection` 为真时必须由用户选择，查询失败不能回落到页面默认单据。过程记录仍然只返回空集合，没有保存接口。
+S2 起，收货、岗位报工、质检贴纸和标签现场贴纸改为调用上下文接口。S4 起，手机岗位、桌面岗位、质检和发货准备可以追加过程说明，保存逻辑相同。前端不再按编码长度把业务编码猜成运单，也不再用本地解析结果作为提交单号。`requiresSelection` 为真时必须由用户选择，查询失败不能回落到页面默认单据。扫码成功不等于已经留证或已经报工。过程说明保存在服务端，迁移为 `V43__m3_operation_progress.sql`。本地默认 `zhubao.scan-progress.repository=memory`，MySQL 配置默认 JDBC。已有库需备份后受控执行 V43，不修改 V36 或 V42。
 
 ### AuthController
 

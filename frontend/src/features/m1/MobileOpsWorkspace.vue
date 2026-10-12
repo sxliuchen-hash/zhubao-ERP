@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import OrderContextCard from '../scan/OrderContextCard.vue';
+import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
 import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
+import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
-import type { ScanContextResponse, ScanRelatedTarget } from '../../services/scanContextApi';
+import type { ScanContextResponse, ScanProgressRecord, ScanRelatedTarget } from '../../services/scanContextApi';
 import { uploadCapture, type DocumentCapture } from '../../services/documentCaptureApi';
 import { submitMobileIntake, type MobileIntakeResult } from '../../services/mobileIntakeApi';
 import {
@@ -41,6 +43,13 @@ const stationCode = ref('');
 const stationBusy = ref(false);
 const submittingProcess = ref('');
 const stationScan = reactive(useScanContext());
+
+const stationProgressTarget = computed(() => progressTargetFromScan(stationScan.context));
+const stationProcessOptions = computed(() => (stationView.value?.stations ?? []).map((item) => item.processName));
+
+function rememberStationProgress(record: ScanProgressRecord) {
+  appendProgressRecord(stationScan.context, record);
+}
 
 const newExpressCode = computed(() => {
   const target = intakeScan.identity;
@@ -371,6 +380,15 @@ async function submitStation(station: ProcessStationCard) {
       <p v-if="stationHint" class="operation-feedback">{{ stationHint }}</p>
       <p v-if="stationError" class="operation-feedback danger">{{ stationError }}</p>
       <OrderContextCard :context="stationScan.context" @select="chooseStationTarget" />
+      <ProgressNoteForm
+        v-if="stationProgressTarget"
+        stage="PRODUCTION"
+        :target-type="stationProgressTarget.targetType"
+        :target-code="stationProgressTarget.targetCode"
+        :mother-order-code="stationProgressTarget.motherOrderCode"
+        :process-options="stationProcessOptions"
+        @saved="rememberStationProgress"
+      />
       <article v-for="station in stationView?.stations ?? []" :key="station.processName" class="section-block">
         <h2>{{ station.processName }}</h2>
         <dl class="detail-grid">

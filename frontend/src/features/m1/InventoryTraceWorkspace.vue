@@ -5,6 +5,8 @@ import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
+import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
+import { progressTargetOf } from '../scan/progressTarget';
 import type { InventoryBalance, Tone } from '../../data/m1PrototypeData';
 import {
   fetchInventoryWorkspace,
@@ -51,6 +53,7 @@ const activeBalance = computed(
     workspace.value.balances.find((item) => item.status.includes('在制') || item.frozen !== '0') ??
     workspace.value.balances[0],
 );
+const shippingProgressTarget = computed(() => progressTargetOf(activeBalance.value?.operationContext));
 
 const latestLedger = computed(
   () =>
@@ -249,6 +252,13 @@ function selectBalance(item: InventoryBalance) {
           <OperationInputs v-model="operationValues" :fields="[['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
           <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
           <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
+          <ProgressNoteForm
+            v-if="shippingProgressTarget"
+            stage="SHIPPING"
+            :target-type="shippingProgressTarget.targetType"
+            :target-code="shippingProgressTarget.targetCode"
+            :mother-order-code="shippingProgressTarget.motherOrderCode"
+          />
           <div class="detail-actions">
             <button class="primary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
               {{ shippingFinishedStock ? '正在出库' : '确认出库' }}

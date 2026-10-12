@@ -5,6 +5,8 @@ import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
+import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
+import { progressTargetOf } from '../scan/progressTarget';
 import type { Tone } from '../../data/m1PrototypeData';
 import {
   fetchProductionWorkspace,
@@ -60,6 +62,12 @@ const activeWorkOrder = computed(
     workspace.value.workOrders.find((order) => order.status.includes('待')) ??
     workspace.value.workOrders[0],
 );
+const productionProgressTarget = computed(() => progressTargetOf(activeWorkOrder.value?.operationContext));
+
+function deskProcessOptions(process: string | undefined): string[] {
+  const text = process?.trim() ?? '';
+  return text === '雕刻' || text === '镶嵌' || text === '抛光' ? [text] : [];
+}
 
 const activeHandoff = computed(
   () =>
@@ -321,6 +329,14 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
             <span>{{ productionReportError }}</span>
             <small>请确认该工单已有在制库存，并完成必要称重交接。</small>
           </div>
+          <ProgressNoteForm
+            v-if="productionProgressTarget"
+            stage="PRODUCTION"
+            :target-type="productionProgressTarget.targetType"
+            :target-code="productionProgressTarget.targetCode"
+            :mother-order-code="productionProgressTarget.motherOrderCode"
+            :process-options="deskProcessOptions(activeWorkOrder?.process)"
+          />
         </section>
 
         <section class="handoff-focus-panel">

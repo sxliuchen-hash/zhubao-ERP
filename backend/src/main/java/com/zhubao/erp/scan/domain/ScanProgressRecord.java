@@ -1,7 +1,8 @@
 package com.zhubao.erp.scan.domain;
 
 /**
- * 过程记录的响应形状。保存动作在后续增量开放，当前查询只返回空集合。
+ * 过程记录的查询形状。阶段保存稳定代码，中文只在展示层映射。
+ * 补充记录只说明已经完成的正式业务之后又补了一句，不把单据改回进行中。
  */
 public record ScanProgressRecord(
         String code,
@@ -13,6 +14,9 @@ public record ScanProgressRecord(
         String clauseNo,
         String note,
         String operatorId,
+        String operatorName,
+        String operatorRole,
+        boolean supplementary,
         String recordedAt,
         String requestId
 ) {

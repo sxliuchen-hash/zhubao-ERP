@@ -28,6 +28,8 @@ zhubao:
     capture:
       photo-max-bytes: 8388608
       video-max-bytes: 52428800
+  scan-progress:
+    repository: memory
   register-import:
     repository: memory
   machine-output:

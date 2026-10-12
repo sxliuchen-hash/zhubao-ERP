@@ -24,6 +24,8 @@ zhubao:
     preview:
       require-explicit-secret: true
       secret: ${ZHUBAO_DOCUMENT_PREVIEW_SECRET:}
+  scan-progress:
+    repository: ${ZHUBAO_SCAN_PROGRESS_REPOSITORY:jdbc}
   register-import:
     repository: ${ZHUBAO_REGISTER_IMPORT_REPOSITORY:jdbc}
   machine-output:

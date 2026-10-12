@@ -82,6 +82,13 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public List<OutboundOrderRecord> listOutboundOrders() {
+        return outboundOrders.values().stream()
+                .sorted(java.util.Comparator.comparing(OutboundOrderRecord::code))
+                .toList();
+    }
+
+    @Override
     public void saveMotherSplitState(MotherSplitState state) {
         splitStates.put(state.motherOrderCode(), state);
     }

@@ -21,6 +21,8 @@ public interface BusinessDocumentRepository {
 
     Optional<OutboundOrderRecord> findOutboundOrderByCode(String code);
 
+    List<OutboundOrderRecord> listOutboundOrders();
+
     void saveMotherSplitState(MotherSplitState state);
 
     Optional<MotherSplitState> findMotherSplitState(String motherOrderCode);

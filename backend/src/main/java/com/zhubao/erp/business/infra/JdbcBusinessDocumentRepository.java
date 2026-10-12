@@ -262,6 +262,31 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public List<OutboundOrderRecord> listOutboundOrders() {
+        String sql = """
+                select code, mother_order_code, work_order_code, customer_id, owner_customer_id,
+                       material_code, from_warehouse_code, to_warehouse_code, delivery_date,
+                       delivery_category, delivery_quantity, delivery_quantity_unit, delivery_weight,
+                       express_company, express_no, logistics_raw_text, handler_name_snapshot,
+                       source_register_type, source_line_no, source_sequence_no, operator,
+                       evidence_code, outbound_remark, order_status, ledger_code, created_at
+                  from biz_outbound_order
+                 order by code
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rs = statement.executeQuery()) {
+            List<OutboundOrderRecord> rows = new ArrayList<>();
+            while (rs.next()) {
+                rows.add(mapOutboundOrder(rs));
+            }
+            return List.copyOf(rows);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to list outbound orders", ex);
+        }
+    }
+
+    @Override
     public void saveMotherSplitState(MotherSplitState state) {
         String sql = """
                 insert into biz_mother_order_split (

@@ -59,6 +59,9 @@ export interface ScanProgressRecord {
   clauseNo: string | null;
   note: string | null;
   operatorId: string | null;
+  operatorName: string | null;
+  operatorRole: string | null;
+  supplementary: boolean;
   recordedAt: string | null;
   requestId: string | null;
 }
@@ -187,4 +190,22 @@ export function queryScanContext(input: ScanContextQuery): Promise<ScanContextRe
   if (input.objectType) body.objectType = input.objectType;
   if (input.intent) body.intent = input.intent;
   return apiPost<ScanContextQuery, ScanContextResponse>('/api/scan/context', body);
+}
+
+export type ProgressStage = 'PRODUCTION' | 'QUALITY' | 'SHIPPING';
+
+/** 追加过程说明。操作人由服务端从会话读取，这里不能传姓名或岗位。 */
+export interface SaveProgressRecordCommand {
+  targetType: string;
+  targetCode: string;
+  motherOrderCode: string;
+  stage: ProgressStage;
+  process: string;
+  clauseNo: string;
+  note: string;
+  requestId: string;
+}
+
+export function saveProgressRecord(command: SaveProgressRecordCommand): Promise<ScanProgressRecord> {
+  return apiPost<SaveProgressRecordCommand, ScanProgressRecord>('/api/scan/progress-records', command);
 }

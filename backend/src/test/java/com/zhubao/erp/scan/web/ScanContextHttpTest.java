@@ -47,4 +47,23 @@ class ScanContextHttpTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("未找到对应单据"));
     }
+
+    @Test
+    void progressSaveRequiresLoginAndIgnoresClientIdentity() throws Exception {
+        mvc.perform(post("/api/scan/progress-records")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetType\":\"MOTHER_ORDER\",\"targetCode\":\"MD-HTTP-MISSING\",\"stage\":\"PRODUCTION\",\"note\":\"补一句\",\"requestId\":\"req-http-01\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("请先登录后再记录过程"));
+
+        String token = sessions.login(new AuthLoginCommand("admin", "admin123")).token();
+        mvc.perform(post("/api/scan/progress-records")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"targetType":"MOTHER_ORDER","targetCode":"MD-HTTP-MISSING","stage":"PRODUCTION","note":"补一句","requestId":"req-http-01","operatorName":"黑客","operatorRole":"ADMIN","quantity":9}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("单据不存在"));
+    }
 }

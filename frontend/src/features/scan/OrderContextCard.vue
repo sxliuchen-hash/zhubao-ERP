@@ -3,8 +3,10 @@ import {
   scanObjectTypeLabel,
   type ScanBalanceCandidate,
   type ScanContextResponse,
+  type ScanProgressRecord,
   type ScanRelatedTarget,
 } from '../../services/scanContextApi';
+import { progressStageLabel } from './progressTarget';
 
 defineProps<{
   context: ScanContextResponse | null;
@@ -40,6 +42,15 @@ function balanceText(item: ScanBalanceCandidate): string {
     amount(item.quantity, null),
     amount(item.weight, '克'),
   ].join(' / ');
+}
+
+function progressText(record: ScanProgressRecord): string {
+  const parts = [progressStageLabel(record.stage)];
+  if (record.process?.trim()) parts.push(record.process.trim());
+  if (record.supplementary) parts.push('补充记录');
+  parts.push(record.note?.trim() || '未填写说明');
+  if (record.operatorName?.trim()) parts.push(record.operatorName.trim());
+  return parts.join(' · ');
 }
 
 const actionLabels: Record<string, string> = {
@@ -119,7 +130,7 @@ const actionLabels: Record<string, string> = {
     <p v-if="!context.progress.progressRecords.length">暂无过程记录</p>
     <ul v-else>
       <li v-for="record in context.progress.progressRecords" :key="record.code || record.note || record.recordedAt || ''">
-        {{ record.note || record.code || '未填写说明' }}
+        {{ progressText(record) }}
       </li>
     </ul>
     <p v-if="context.progress.reinspection && !context.progress.reinspection.available">

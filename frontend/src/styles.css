@@ -1312,6 +1312,23 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   margin: 0;
 }
 
+.progress-note {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-note h3,
+.progress-note p {
+  margin: 0;
+}
+
+.progress-note textarea,
+.progress-note select,
+.progress-note input,
+.progress-note .secondary-button {
+  min-height: 44px;
+}
+
 .evidence-capture .primary-button,
 .evidence-capture .secondary-button,
 .evidence-capture input[type="file"] {

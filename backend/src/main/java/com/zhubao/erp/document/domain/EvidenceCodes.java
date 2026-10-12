@@ -27,6 +27,7 @@ public final class EvidenceCodes {
     public static final String REWORK_DISPATCH = "rework_dispatch";
     public static final String REWORK_REPORT = "rework_report";
     public static final String OUTBOUND_SHIPMENT = "outbound_shipment";
+    public static final String PROGRESS_NOTE = "progress_note";
 
     public static final String LINKED = "LINKED";
     public static final String UPLOADED_PENDING_LINK = "UPLOADED_PENDING_LINK";

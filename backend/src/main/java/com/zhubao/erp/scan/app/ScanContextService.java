@@ -34,6 +34,7 @@ import com.zhubao.erp.scan.domain.ScanHandoffFact;
 import com.zhubao.erp.scan.domain.ScanIntent;
 import com.zhubao.erp.scan.domain.ScanObjectType;
 import com.zhubao.erp.scan.domain.ScanOperationContext;
+import com.zhubao.erp.scan.domain.ScanProgressRecord;
 import com.zhubao.erp.scan.domain.ScanQualityFact;
 import com.zhubao.erp.scan.domain.ScanQualityLineFact;
 import com.zhubao.erp.scan.domain.ScanReinspectionStatus;
@@ -41,12 +42,15 @@ import com.zhubao.erp.scan.domain.ScanRelatedTarget;
 import com.zhubao.erp.scan.domain.ScanRequirementItem;
 import com.zhubao.erp.scan.domain.ScanShipmentFact;
 import com.zhubao.erp.scan.domain.ScanStockFact;
+import com.zhubao.erp.scan.domain.OperationProgressRepository;
+import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -98,6 +102,7 @@ public class ScanContextService {
     private final QualityRequirementService quality;
     private final PermissionGuard permissions;
     private final ScanCodeParser parser;
+    private final OperationProgressRepository progressRecords;
 
     public ScanContextService(
             BusinessDocumentService documents,
@@ -108,6 +113,20 @@ public class ScanContextService {
             PermissionGuard permissions,
             ScanCodeParser parser
     ) {
+        this(documents, stocks, dataAccess, stations, quality, permissions, parser, null);
+    }
+
+    @Autowired
+    public ScanContextService(
+            BusinessDocumentService documents,
+            StockLedgerService stocks,
+            BusinessDataAccess dataAccess,
+            ProcessStationService stations,
+            QualityRequirementService quality,
+            PermissionGuard permissions,
+            ScanCodeParser parser,
+            OperationProgressRepository progressRecords
+    ) {
         this.documents = documents;
         this.stocks = stocks;
         this.dataAccess = dataAccess;
@@ -115,6 +134,7 @@ public class ScanContextService {
         this.quality = quality;
         this.permissions = permissions;
         this.parser = parser;
+        this.progressRecords = progressRecords;
     }
 
     public ScanContextResponse query(ScanContextRequest request, AuthUserAccount account) {
@@ -682,7 +702,20 @@ public class ScanContextService {
                 balance.quantity(),
                 balance.weight()
         )).toList();
-        return new ScanContextProgress(handoffs, qualityFact, reinspection, stock, shipmentsOf(outbound, balances), List.of());
+        return new ScanContextProgress(handoffs, qualityFact, reinspection, stock, shipmentsOf(outbound, balances), loadProgress(handoffOrderCode));
+    }
+
+    /** 按真实工单带回已保存的过程说明。没有记录时为空，不编造。 */
+    private List<ScanProgressRecord> loadProgress(String orderCode) {
+        if (progressRecords == null || blank(orderCode).isBlank()) {
+            return List.of();
+        }
+        String targetType = documents.findChildWorkOrder(orderCode).isPresent()
+                ? EvidenceCodes.WORK_ORDER
+                : EvidenceCodes.MOTHER_ORDER;
+        return progressRecords.findByTarget(targetType, orderCode).stream()
+                .map(record -> record.toScan())
+                .toList();
     }
 
     private List<ScanShipmentFact> shipmentsOf(OutboundOrderRecord outbound, List<ScanBalanceCandidate> balances) {

@@ -7,10 +7,12 @@ import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import type { LossApproval, Tone } from '../../data/m1PrototypeData';
 import OrderContextCard from '../scan/OrderContextCard.vue';
+import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
 import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
+import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
-import type { ScanRelatedTarget } from '../../services/scanContextApi';
+import type { ScanProgressRecord, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   fetchQualityWorkspace,
   type QualityWorkspaceModel,
@@ -63,6 +65,11 @@ const lossApprovalError = ref('');
 const selectedQualityCaseCode = ref('');
 const checkScanText = ref('');
 const qualityScan = reactive(useScanContext());
+const qualityProgressTarget = computed(() => progressTargetFromScan(qualityScan.context));
+
+function rememberQualityProgress(record: ScanProgressRecord) {
+  appendProgressRecord(qualityScan.context, record);
+}
 const qualityCode = ref('');
 let recognitionVersion = 0;
 const checkHint = ref('');
@@ -449,6 +456,14 @@ function selectQualityCase(code: string) {
       <p v-if="checkHint" class="operation-feedback warning">{{ checkHint }}</p>
       <p v-if="checkError" class="operation-feedback danger">{{ checkError }}</p>
       <OrderContextCard :context="qualityScan.context" @select="selectQualityTarget" />
+      <ProgressNoteForm
+        v-if="qualityProgressTarget"
+        stage="QUALITY"
+        :target-type="qualityProgressTarget.targetType"
+        :target-code="qualityProgressTarget.targetCode"
+        :mother-order-code="qualityProgressTarget.motherOrderCode"
+        @saved="rememberQualityProgress"
+      />
 
       <template v-if="checkView">
         <dl class="detail-grid compact-detail-grid">

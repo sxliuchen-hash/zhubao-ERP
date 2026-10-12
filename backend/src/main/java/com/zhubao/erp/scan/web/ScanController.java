@@ -1,10 +1,13 @@
 package com.zhubao.erp.scan.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.scan.app.OperationProgressService;
 import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.scan.app.ScanContextService;
+import com.zhubao.erp.scan.domain.SaveOperationProgressCommand;
 import com.zhubao.erp.scan.domain.ScanContextRequest;
 import com.zhubao.erp.scan.domain.ScanContextResponse;
+import com.zhubao.erp.scan.domain.ScanProgressRecord;
 import com.zhubao.erp.scan.domain.ScanResolveRequest;
 import com.zhubao.erp.scan.domain.ScanResolveResponse;
 import com.zhubao.erp.security.app.AuthSessionService;
@@ -23,15 +26,18 @@ public class ScanController {
 
     private final ScanCodeParser scanCodeParser;
     private final ScanContextService scanContextService;
+    private final OperationProgressService operationProgressService;
     private final AuthSessionService authSessionService;
 
     public ScanController(
             ScanCodeParser scanCodeParser,
             ScanContextService scanContextService,
+            OperationProgressService operationProgressService,
             AuthSessionService authSessionService
     ) {
         this.scanCodeParser = scanCodeParser;
         this.scanContextService = scanContextService;
+        this.operationProgressService = operationProgressService;
         this.authSessionService = authSessionService;
     }
 
@@ -50,5 +56,19 @@ public class ScanController {
         AuthUserAccount account = authSessionService.currentAccount(httpRequest.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
                 .orElseThrow(() -> new PermissionDeniedException("请先登录后再访问业务数据"));
         return ApiResponse.ok(scanContextService.query(request, account));
+    }
+
+    /**
+     * 追加过程说明。登录后按阶段校验岗位权限。
+     * 不交付工序、不提交质检、不计算出货，也不把发货准备写成出货单。
+     */
+    @PostMapping("/progress-records")
+    public ApiResponse<ScanProgressRecord> saveProgress(
+            @RequestBody SaveOperationProgressCommand command,
+            HttpServletRequest httpRequest
+    ) {
+        AuthUserAccount account = authSessionService.currentAccount(httpRequest.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
+                .orElseThrow(() -> new PermissionDeniedException("请先登录后再记录过程"));
+        return ApiResponse.ok(operationProgressService.save(command, account));
     }
 }

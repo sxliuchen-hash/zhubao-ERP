@@ -118,6 +118,32 @@ describe('扫码上下文卡片', () => {
     }
   });
 
+  it('发货准备记录显示阶段和补充标记，不显示已发货', () => {
+    const context = buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-1', motherOrderCode: 'MD-1' });
+    context.progress.progressRecords = [{
+      code: 'PG-1',
+      targetType: 'WORK_ORDER',
+      targetCode: 'ZD-1',
+      motherOrderCode: 'MD-1',
+      stage: 'SHIPPING',
+      process: null,
+      clauseNo: null,
+      note: '正在打包',
+      operatorId: 'wh-s4',
+      operatorName: '库管员 何琳',
+      operatorRole: 'WAREHOUSE_KEEPER',
+      supplementary: true,
+      recordedAt: '2026-10-12 11:00:00',
+      requestId: 'req-ship-0002',
+    }];
+    const wrapper = mount(OrderContextCard, { props: { context } });
+    expect(wrapper.text()).toContain('发货准备');
+    expect(wrapper.text()).toContain('补充记录');
+    expect(wrapper.text()).toContain('正在打包');
+    expect(wrapper.text()).toContain('库管员 何琳');
+    expect(wrapper.text()).not.toContain('已发货');
+  });
+
   it('已拆母单必须点选，不会把第一张子单当成已选', async () => {
     const wrapper = mount(OrderContextCard, {
       props: {
