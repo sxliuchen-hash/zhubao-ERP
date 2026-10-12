@@ -30,6 +30,8 @@ zhubao:
       video-max-bytes: 52428800
   scan-progress:
     repository: memory
+  command-request:
+    repository: memory
   register-import:
     repository: memory
   machine-output:

@@ -32,9 +32,9 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void realCatalogKeepsContiguousVersionsThroughV43() {
+    void realCatalogKeepsContiguousVersionsThroughV44() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(43);
+        assertThat(scripts).hasSize(44);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);
@@ -45,6 +45,8 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(41).fileName()).isEqualTo("V42__m3_business_evidence_link.sql");
         assertThat(scripts.get(42).version()).isEqualTo(43);
         assertThat(scripts.get(42).fileName()).isEqualTo("V43__m3_operation_progress.sql");
+        assertThat(scripts.get(43).version()).isEqualTo(44);
+        assertThat(scripts.get(43).fileName()).isEqualTo("V44__m3_command_request.sql");
         assertThat(MigrationCatalog.loadClasspath()).extracting(MigrationScript::version)
                 .containsExactlyElementsOf(scripts.stream().map(MigrationScript::version).toList());
     }

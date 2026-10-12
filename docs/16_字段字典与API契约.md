@@ -2553,6 +2553,8 @@ PWA 一期边界：
 
 S2 起，收货、岗位报工、质检贴纸和标签现场贴纸改为调用上下文接口。S4 起，手机岗位、桌面岗位、质检和发货准备可以追加过程说明，保存逻辑相同。前端不再按编码长度把业务编码猜成运单，也不再用本地解析结果作为提交单号。`requiresSelection` 为真时必须由用户选择，查询失败不能回落到页面默认单据。扫码成功不等于已经留证或已经报工。过程说明保存在服务端，迁移为 `V43__m3_operation_progress.sql`。本地默认 `zhubao.scan-progress.repository=memory`，MySQL 配置默认 JDBC。已有库需备份后受控执行 V43，不修改 V36 或 V42。
 
+S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请求记在 `biz_command_request`，迁移为 `V44__m3_command_request.sql`。同账号、同 `requestId`、同内容回放 `resultText`；内容不一致返回「同一请求的内容不一致」；其他账号返回「该请求不能跨账号重放」。成功结果和本次通过工作单元连接写入的事实同一次提交。现有来料、报工、质检、发货接口仍直接调用旧仓储，尚未接入该工作单元。已有库需备份后受控执行 V44，不修改已发布迁移。
+
 ### AuthController
 
 来源：[AuthController](../backend/src/main/java/com/zhubao/erp/security/web/AuthController.java)。

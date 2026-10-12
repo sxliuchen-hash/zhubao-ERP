@@ -41,3 +41,4 @@
 41	COLUMN	fin_customer_receipt	idempotency_key
 42	TABLE	doc_business_evidence_link
 43	TABLE	scan_operation_progress
+44	TABLE	biz_command_request
