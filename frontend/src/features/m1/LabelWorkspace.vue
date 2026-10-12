@@ -38,6 +38,7 @@ const loadedSticker = ref<{ type: LabelType; code: string } | null>(null);
 
 // 模板列表（连后端后加载）
 const templates = ref<LabelTemplate[]>([]);
+const templateKeyword = ref('');
 const templatesLoaded = ref(false);
 
 // 通用生成表单
@@ -84,6 +85,11 @@ const templatesForType = computed(() =>
 const motherTemplates = computed(() =>
   templates.value.filter((template) => template.labelType === 'MOTHER' && template.enabled),
 );
+const visibleTemplates = computed(() => {
+  const text = templateKeyword.value.trim().toLowerCase();
+  if (!text) return templates.value;
+  return templates.value.filter((template) => `${template.templateCode} ${template.templateName} ${template.labelType}`.toLowerCase().includes(text));
+});
 
 function addField() {
   form.value.fields.push({ name: '', value: '' });
@@ -543,7 +549,12 @@ onMounted(loadTemplates);
         <button type="button" class="link-button" @click="newTemplate">+ 新建模板</button>
       </div>
       <p v-if="!templatesLoaded" class="hint">{{ templatesError || '正在读取标签模板' }}</p>
-      <table v-else class="template-table">
+      <label v-else>
+        <span>查找模板</span>
+        <input v-model="templateKeyword" aria-label="查找模板" placeholder="编码或名称" />
+      </label>
+      <div v-if="templatesLoaded" class="desk-table-wrap">
+      <table class="template-table">
         <thead>
           <tr>
             <th>模板编码</th>
@@ -556,7 +567,7 @@ onMounted(loadTemplates);
           </tr>
         </thead>
         <tbody>
-          <tr v-for="template in templates" :key="template.id">
+          <tr v-for="template in visibleTemplates" :key="template.id">
             <td>{{ template.templateCode }}</td>
             <td>{{ template.templateName }}</td>
             <td>{{ template.labelType }}</td>
@@ -567,6 +578,17 @@ onMounted(loadTemplates);
           </tr>
         </tbody>
       </table>
+      </div>
+      <div v-if="templatesLoaded" class="desk-cards">
+        <article v-for="template in visibleTemplates" :key="`card-${template.id}`" class="desk-card production-handoff-card">
+          <span class="desk-card-top">
+            <strong class="code">{{ template.templateCode }}</strong>
+            <span>{{ template.printerSetting.widthMm }}×{{ template.printerSetting.heightMm }}mm</span>
+          </span>
+          <span>{{ template.templateName }} · {{ template.labelType }}</span>
+          <button type="button" class="link-button" @click="editTemplate(template)">编辑</button>
+        </article>
+      </div>
 
       <div v-if="showTemplateEditor" class="template-editor">
         <h4>{{ templateForm.id ? '编辑模板' : '新建模板' }}</h4>
