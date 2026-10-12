@@ -1290,6 +1290,7 @@ PWA 一期边界：
 | `uploadedAt` | 上传或待上传时间 |
 | `fallbackAction` | 失败兜底动作 |
 | `tone` | 前端状态色 |
+| `objectType` | 服务端确认后的来源单据类型：`MOTHER_ORDER`、`WORK_ORDER`、`OUTBOUND_ORDER`、`REWORK`。空值表示旧附件来源不确定，只能回看 |
 
 ### 9.3 `DocumentAuditEvent`
 
@@ -1332,10 +1333,40 @@ PWA 一期边界：
 文档附件约束：
 
 - 当前 已支持 multipart 上传到后端本地存储适配、checksum、审计事件、预览 URL 和内容读取；文档包、附件元数据和审计事件通过 `DocumentManagementRepository` 支持内存/JDBC 切换。
-- `zhubao.documents.repository=jdbc` 时读取/写入 V10 合同表：`doc_package`、`doc_evidence_attachment`、`doc_audit_event`。
+- `zhubao.documents.repository=jdbc` 时读取/写入 V10 合同表：`doc_package`、`doc_evidence_attachment`、`doc_audit_event`。V42 为附件增加可空 `object_type`，并新增 `doc_business_evidence_link`。已有库需备份后受控执行 V42，不修改 V10 或 V36。
 - 后续生产环境必须按部署条件接 NAS/S3 兼容存储，并通过签名 URL 控制预览和下载。
 - 质检、称重、视频、配置审批证据必须能绑定业务对象、校验和、保留策略和审计事件。
 - 审批完成后的配置和质检证据应锁定 checksum，后续修改必须产生新版本或新审计事件。
+
+### 9.6 `BusinessEvidenceLink`
+
+文件和引用分开。同一校验和在同一张单据上不重复落盘；跨场景、跨工序、跨条款各保留一条引用。
+
+| 字段 | 说明 |
+|---|---|
+| `linkCode` | 引用编号 |
+| `attachmentCode` | 已存在的附件编号 |
+| `targetType` | 真实单据类型，与附件 `objectType` 相同 |
+| `targetCode` | 真实单据编号，必须等于附件 `businessCode` |
+| `stage` | `INTAKE`、`PRODUCTION`、`QUALITY`、`SHIPPING`、`REWORK` |
+| `scene` | `UNPACK`、`WEIGH`、`DEFECT`、`FINISH`、`PROCESS`、`CHECK`、`PACK`、`WAYBILL` |
+| `operationType` | 已存在的服务端操作：`inbound_confirm`、`process_station_report`、`production_report`、`quality_check`、`quality_freeze`、`quality_release`、`rework_dispatch`、`rework_report`、`outbound_shipment` |
+| `operationCode` | 对应台账号、质检案件号、返工号或已落库出货单号。不接受交接编号或前端自编编号 |
+| `processName` | 工序。生产证据必填；其他阶段可空，空值保存为空字符串 |
+| `clauseNo` | 条款号。可空，空值保存为空字符串 |
+| `operatorName` | 当前登录操作人 |
+| `linkedAt` | 绑定时间 |
+| `linkKeyHash` | 上述业务键的 SHA-256。命中后仍核对原始维度 |
+
+查询 `EvidenceBoard` 分两列：`links` 是已经关联的引用，`historical` 是同一单据上尚未关联或来源不确定的附件。来源不确定的旧附件 `label` 为「历史单据证据」，`fileState` 为 `HISTORICAL`，不带工序或操作编号。已上传但还没绑定的文件 `fileState` 为 `UPLOADED_PENDING_LINK`。已绑定为 `LINKED`。
+
+绑定约束：
+
+- 同时校验单据存在、附件属于该单据、操作已经落库，以及当前用户能读取该单并具备对应操作权限。
+- 母单与子单、不同客户的单据不能因为客户端声称同客户而复用附件。
+- 已下线附件不能预览，也不能新增绑定；已有引用保留。
+- 绑定不报工、不判定质检、不扣库存。过程记录集合仍为空，不开放保存。
+- 旧 `POST /api/documents/captures`、`POST /api/documents/attachments/uploads` 和命令里的单个 `evidenceCode` 保持原样。
 
 文档附件存储配置：
 
@@ -2303,6 +2334,9 @@ PWA 一期边界：
 |---|---|
 | `GET /api/documents/captures` | `ApiResponse<List<DocumentCaptureView>>` |
 | `POST /api/documents/captures` | `ApiResponse<EvidenceAttachmentUploadResult>` |
+| `POST /api/documents/evidence-files` | `ApiResponse<EvidenceAttachmentUploadResult>` |
+| `POST /api/documents/evidence-links` | `ApiResponse<BusinessEvidenceLink>` |
+| `GET /api/documents/evidence-links` | `ApiResponse<EvidenceBoard>` |
 | `GET /api/documents/summary` | `ApiResponse<DocumentManagementSummary>` |
 | `GET /api/documents/packages` | `ApiResponse<List<DocumentPackage>>` |
 | `GET /api/documents/attachments` | `ApiResponse<List<EvidenceAttachment>>` |

@@ -15,6 +15,7 @@ public record EvidenceAttachment(
         String checksum,
         String uploadedAt,
         String fallbackAction,
-        String tone
+        String tone,
+        String objectType
 ) {
 }

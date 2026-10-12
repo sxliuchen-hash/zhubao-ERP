@@ -61,7 +61,8 @@ class JdbcDocumentManagementRepositoryTest {
                 "sha256:jdbc-upload",
                 "2026-07-07 07:30",
                 "无",
-                "green"
+                "green",
+                null
         );
         DocumentAuditEvent auditEvent = new DocumentAuditEvent(
                 "2026-07-07 07:30",
@@ -104,7 +105,8 @@ class JdbcDocumentManagementRepositoryTest {
                 uploaded.checksum(),
                 uploaded.uploadedAt(),
                 uploaded.fallbackAction(),
-                "green"
+                "green",
+                uploaded.objectType()
         ));
 
         assertThat(reloaded.attachments())
@@ -194,7 +196,8 @@ class JdbcDocumentManagementRepositoryTest {
                         checksum varchar(120) not null,
                         uploaded_at varchar(30) not null,
                         fallback_action varchar(300) not null,
-                        tone varchar(20) not null
+                        tone varchar(20) not null,
+                        object_type varchar(32)
                     )
                     """);
             statement.execute("""

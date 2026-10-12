@@ -3,8 +3,12 @@ package com.zhubao.erp.document.web;
 import com.zhubao.erp.document.domain.AttachmentContent;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.document.app.BusinessEvidenceService;
 import com.zhubao.erp.document.app.DocumentCaptureService;
 import com.zhubao.erp.document.app.DocumentManagementService;
+import com.zhubao.erp.document.domain.BindEvidenceCommand;
+import com.zhubao.erp.document.domain.EvidenceBoard;
+import com.zhubao.erp.document.domain.BusinessEvidenceLink;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentCaptureView;
 import com.zhubao.erp.document.domain.DocumentManagementSummary;
@@ -28,6 +32,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,13 +49,23 @@ public class DocumentManagementController {
     private final DocumentCaptureService documentCaptureService;
     private final OperatorContextResolver operatorContextResolver;
     private final BusinessDataAccess dataAccess;
+    private final BusinessEvidenceService businessEvidenceService;
 
     public DocumentManagementController(
             DocumentManagementService documentManagementService,
             DocumentCaptureService documentCaptureService,
             OperatorContextResolver operatorContextResolver
     ) {
-        this(documentManagementService, documentCaptureService, operatorContextResolver, null);
+        this(documentManagementService, documentCaptureService, operatorContextResolver, null, null);
+    }
+
+    public DocumentManagementController(
+            DocumentManagementService documentManagementService,
+            DocumentCaptureService documentCaptureService,
+            OperatorContextResolver operatorContextResolver,
+            BusinessDataAccess dataAccess
+    ) {
+        this(documentManagementService, documentCaptureService, operatorContextResolver, dataAccess, null);
     }
 
     @Autowired
@@ -58,12 +73,14 @@ public class DocumentManagementController {
             DocumentManagementService documentManagementService,
             DocumentCaptureService documentCaptureService,
             OperatorContextResolver operatorContextResolver,
-            BusinessDataAccess dataAccess
+            BusinessDataAccess dataAccess,
+            BusinessEvidenceService businessEvidenceService
     ) {
         this.documentManagementService = documentManagementService;
         this.documentCaptureService = documentCaptureService;
         this.operatorContextResolver = operatorContextResolver;
         this.dataAccess = dataAccess;
+        this.businessEvidenceService = businessEvidenceService;
     }
 
     @GetMapping("/captures")
@@ -90,6 +107,58 @@ public class DocumentManagementController {
                 file.getContentType(),
                 file.getInputStream(),
                 file.getSize(),
+                context
+        ));
+    }
+
+    @PostMapping(value = "/evidence-files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<EvidenceAttachmentUploadResult> storeEvidenceFile(
+            @RequestParam String objectType,
+            @RequestParam String businessCode,
+            @RequestParam String scene,
+            @RequestParam MultipartFile file,
+            HttpServletRequest request
+    ) throws IOException {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        dataAccess.assertCanRead(context, businessCode);
+        return ApiResponse.ok(documentCaptureService.storeVerified(
+                objectType,
+                businessCode,
+                scene,
+                file.getOriginalFilename(),
+                file.getContentType(),
+                file.getInputStream(),
+                file.getSize(),
+                context
+        ));
+    }
+
+    @PostMapping("/evidence-links")
+    public ApiResponse<BusinessEvidenceLink> bindEvidence(
+            @RequestBody BindEvidenceCommand command,
+            HttpServletRequest request
+    ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        return ApiResponse.ok(businessEvidenceService.bind(command, context));
+    }
+
+    @GetMapping("/evidence-links")
+    public ApiResponse<EvidenceBoard> evidenceLinks(
+            @RequestParam String targetType,
+            @RequestParam String targetCode,
+            @RequestParam(required = false) String stage,
+            @RequestParam(required = false) String operationType,
+            @RequestParam(required = false) String operationCode,
+            HttpServletRequest request
+    ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        dataAccess.assertCanRead(context, targetCode);
+        return ApiResponse.ok(businessEvidenceService.query(
+                targetType,
+                targetCode,
+                stage,
+                operationType,
+                operationCode,
                 context
         ));
     }

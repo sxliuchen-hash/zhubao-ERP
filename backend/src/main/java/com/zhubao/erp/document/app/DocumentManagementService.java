@@ -1,5 +1,6 @@
 package com.zhubao.erp.document.app;
 
+import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.AttachmentContent;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
@@ -49,6 +50,7 @@ public class DocumentManagementService {
     private final AttachmentObjectStorage attachmentObjectStorage;
     private final DocumentPreviewTokenProperties previewTokenProperties;
     private final AttachmentStorageProperties storageProperties;
+    private final BusinessDocumentRepository businessDocuments;
     private final Clock clock;
     private final AtomicInteger uploadSequence = new AtomicInteger(1);
     private final Map<String, String> uploadedStorageKeys = new ConcurrentHashMap<>();
@@ -65,7 +67,16 @@ public class DocumentManagementService {
             AttachmentObjectStorage attachmentObjectStorage,
             DocumentPreviewTokenProperties previewTokenProperties
     ) {
-        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), null);
+        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), null, null);
+    }
+
+    public DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties,
+            AttachmentStorageProperties storageProperties
+    ) {
+        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), storageProperties, null);
     }
 
     @Autowired
@@ -73,9 +84,10 @@ public class DocumentManagementService {
             DocumentManagementRepository repository,
             AttachmentObjectStorage attachmentObjectStorage,
             DocumentPreviewTokenProperties previewTokenProperties,
-            AttachmentStorageProperties storageProperties
+            AttachmentStorageProperties storageProperties,
+            BusinessDocumentRepository businessDocuments
     ) {
-        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), storageProperties);
+        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), storageProperties, businessDocuments);
     }
 
     DocumentManagementService(
@@ -84,7 +96,7 @@ public class DocumentManagementService {
             DocumentPreviewTokenProperties previewTokenProperties,
             Clock clock
     ) {
-        this(repository, attachmentObjectStorage, previewTokenProperties, clock, null);
+        this(repository, attachmentObjectStorage, previewTokenProperties, clock, null, null);
     }
 
     DocumentManagementService(
@@ -94,10 +106,22 @@ public class DocumentManagementService {
             Clock clock,
             AttachmentStorageProperties storageProperties
     ) {
+        this(repository, attachmentObjectStorage, previewTokenProperties, clock, storageProperties, null);
+    }
+
+    DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties,
+            Clock clock,
+            AttachmentStorageProperties storageProperties,
+            BusinessDocumentRepository businessDocuments
+    ) {
         this.repository = repository;
         this.attachmentObjectStorage = attachmentObjectStorage;
         this.previewTokenProperties = previewTokenProperties == null ? new DocumentPreviewTokenProperties() : previewTokenProperties;
         this.storageProperties = storageProperties;
+        this.businessDocuments = businessDocuments;
         this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
@@ -189,7 +213,8 @@ public class DocumentManagementService {
                 attachment.checksum(),
                 attachment.uploadedAt(),
                 attachment.fallbackAction(),
-                "gray"
+                "gray",
+                attachment.objectType()
         );
         repository.saveAttachment(retired);
         String actor = operator == null || operator.isBlank() ? "系统管理员" : operator.trim();
@@ -234,6 +259,7 @@ public class DocumentManagementService {
         String sanitizedFileName = sanitizeFileName(fileName);
         String safeMediaType = mediaType == null || mediaType.isBlank() ? "application/octet-stream" : mediaType;
         String safeFallbackAction = fallbackAction == null || fallbackAction.isBlank() ? "无" : fallbackAction;
+        String objectType = AttachmentOrigins.onlyHit(businessDocuments, businessCode);
         StoredAttachmentObject storedObject = attachmentObjectStorage.put(
                 documentCode,
                 code,
@@ -257,7 +283,8 @@ public class DocumentManagementService {
                 storedObject.checksum(),
                 now,
                 safeFallbackAction,
-                "green"
+                "green",
+                objectType.isEmpty() ? null : objectType
         );
         repository.saveAttachment(attachment);
         uploadedStorageKeys.put(code, storedObject.storageKey());

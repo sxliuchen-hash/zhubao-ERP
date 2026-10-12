@@ -558,7 +558,8 @@ class AuthUserAccountManagementServiceTest {
                 "sha256:identity-check",
                 "2026-07-09 11:00",
                 "无",
-                "green"
+                "green",
+                null
         ));
 
         assertThat(fixture.managementService().preApprovalEvidence())

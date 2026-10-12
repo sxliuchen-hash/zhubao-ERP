@@ -44,6 +44,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/auth/accounts", PermissionCode.AUTH_ACCOUNT_MANAGE),
             Map.entry("/api/documents/attachments/uploads", PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD),
             Map.entry("/api/documents/captures", PermissionCode.DOCUMENT_CAPTURE),
+            Map.entry("/api/documents/evidence-files", PermissionCode.DOCUMENT_CAPTURE),
+            Map.entry("/api/documents/evidence-links", PermissionCode.DOCUMENT_CAPTURE),
             Map.entry("/api/business/operations/mobile-intakes", PermissionCode.BUSINESS_INBOUND_CONFIRM),
             Map.entry("/api/video-clip-tasks", PermissionCode.VIDEO_TASK_OPERATE),
             Map.entry("/api/label/generate", PermissionCode.LABEL_PRINT),

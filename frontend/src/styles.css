@@ -1302,6 +1302,41 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   gap: 8px;
 }
 
+.evidence-capture {
+  display: grid;
+  gap: 10px;
+}
+
+.evidence-capture h3,
+.evidence-hint {
+  margin: 0;
+}
+
+.evidence-capture .primary-button,
+.evidence-capture .secondary-button,
+.evidence-capture input[type="file"] {
+  min-height: 44px;
+}
+
+.evidence-file-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-file-list li {
+  display: grid;
+  gap: 6px;
+}
+
+.evidence-preview {
+  max-width: 100%;
+  max-height: 240px;
+  background: #111;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

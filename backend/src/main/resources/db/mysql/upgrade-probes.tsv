@@ -39,3 +39,4 @@
 39	COLUMN	inv_stock_ledger	from_work_order_code
 40	COLUMN	fin_payable_payment	idempotency_key
 41	COLUMN	fin_customer_receipt	idempotency_key
+42	TABLE	doc_business_evidence_link

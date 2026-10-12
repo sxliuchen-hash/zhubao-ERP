@@ -200,7 +200,8 @@ class AuthControllerAccountManagementTest {
                 "sha256:pre-approval",
                 "2026-07-09 11:20",
                 "无",
-                "green"
+                "green",
+                null
         ));
 
         ApiResponse<List<AuthAccountPreApprovalEvidenceSummary>> evidence =

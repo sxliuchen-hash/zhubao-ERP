@@ -13,6 +13,7 @@ import {
 } from '../../services/businessOperationApi';
 import { fetchCaptures, type DocumentCapture } from '../../services/documentCaptureApi';
 import { fetchMotherOrder, type MobileIntakeResult } from '../../services/mobileIntakeApi';
+import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import MotherSplitPanel from './MotherSplitPanel.vue';
 
 const emptyInbound = (): InboundWorkspaceModel => ({
@@ -54,6 +55,12 @@ const activeOrder = computed(
 const activeRisk = computed(
   () => workspace.value.risks.find((risk) => risk.code === activeOrder.value?.code) ?? workspace.value.risks[0],
 );
+
+const evidenceOperationCode = computed(() => {
+  if (!activeOrder.value || !motherDetail.value) return '';
+  if (motherDetail.value.motherOrderCode !== activeOrder.value.code) return '';
+  return motherDetail.value.ledgerCode ?? '';
+});
 
 const visibleOrders = computed(() => {
   const customer = customerKeyword.value.trim().toLowerCase();
@@ -370,6 +377,15 @@ function backToList() {
               <a :href="item.previewUrl" target="_blank" rel="noopener">打开</a>
             </div>
           </article>
+          <EvidenceCapture
+            v-if="activeOrder"
+            target-type="MOTHER_ORDER"
+            :target-code="activeOrder.code"
+            stage="INTAKE"
+            scene="UNPACK"
+            operation-type="inbound_confirm"
+            :operation-code="evidenceOperationCode"
+          />
           <article v-for="item in workspace.checkpoints" :key="item.label">
             <div>
               <strong>{{ item.label }}</strong>

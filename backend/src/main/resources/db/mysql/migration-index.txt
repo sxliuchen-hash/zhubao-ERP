@@ -39,3 +39,4 @@ V38__m3_auth_pre_approval_target_snapshot.sql
 V39__m3_inventory_source_work_order.sql
 V40__m3_finance_payment_idempotency.sql
 V41__m3_finance_receipt_idempotency.sql
+V42__m3_business_evidence_link.sql

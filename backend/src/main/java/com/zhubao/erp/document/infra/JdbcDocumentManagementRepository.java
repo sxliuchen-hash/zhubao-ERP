@@ -53,7 +53,7 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
         return query("""
                 select code, document_code, business_type, business_code, file_name, media_type,
                        storage_location, storage_policy, source, status, owner_name, checksum,
-                       uploaded_at, fallback_action, tone
+                       uploaded_at, fallback_action, tone, object_type
                   from doc_evidence_attachment
                  order by id
                 """, mapper((rs) -> new EvidenceAttachment(
@@ -71,7 +71,8 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
                 rs.getString("checksum"),
                 rs.getString("uploaded_at"),
                 rs.getString("fallback_action"),
-                rs.getString("tone")
+                rs.getString("tone"),
+                rs.getString("object_type")
         )));
     }
 
@@ -210,8 +211,8 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
                 insert into doc_evidence_attachment (
                     code, document_code, business_type, business_code, file_name, media_type,
                     storage_location, storage_policy, source, status, owner_name, checksum,
-                    uploaded_at, fallback_action, tone
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    uploaded_at, fallback_action, tone, object_type
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             bindAttachment(statement, attachment);
@@ -224,7 +225,7 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
                 update doc_evidence_attachment
                    set document_code = ?, business_type = ?, business_code = ?, file_name = ?, media_type = ?,
                        storage_location = ?, storage_policy = ?, source = ?, status = ?, owner_name = ?,
-                       checksum = ?, uploaded_at = ?, fallback_action = ?, tone = ?
+                       checksum = ?, uploaded_at = ?, fallback_action = ?, tone = ?, object_type = ?
                  where code = ?
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -242,7 +243,8 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
             statement.setString(12, attachment.uploadedAt());
             statement.setString(13, attachment.fallbackAction());
             statement.setString(14, attachment.tone());
-            statement.setString(15, attachment.code());
+            statement.setString(15, attachment.objectType());
+            statement.setString(16, attachment.code());
             statement.executeUpdate();
         }
     }
@@ -263,6 +265,7 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
         statement.setString(13, attachment.uploadedAt());
         statement.setString(14, attachment.fallbackAction());
         statement.setString(15, attachment.tone());
+        statement.setString(16, attachment.objectType());
     }
 
     private void insertAuditEvent(Connection connection, DocumentAuditEvent auditEvent) throws SQLException {

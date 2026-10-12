@@ -143,7 +143,7 @@ class BusinessReadAuthorizationTest {
 
     private void saveAttachment(String code, String documentCode, String businessCode, String status) {
         documents.saveAttachment(new EvidenceAttachment(code, documentCode, "称重", businessCode, "test.jpg", "image/jpeg",
-                "local://r03-authorization-test/" + code, "本地", "手机采集", status, "收货员甲", "sha256:" + code, "2026-10-10", "无", "green"));
+                "local://r03-authorization-test/" + code, "本地", "手机采集", status, "收货员甲", "sha256:" + code, "2026-10-10", "无", "green", null));
     }
 
     private ResponseEntity<String> get(String path, HttpHeaders headers) {

@@ -89,7 +89,8 @@ final class DocumentManagementSeedData {
                         "sha256:inbound-waybill-demo",
                         "2026-07-06 08:45",
                         "无",
-                        "green"
+                        "green",
+                        null
                 ),
                 new EvidenceAttachment(
                         "ATT-IN-20260706-002",
@@ -106,7 +107,8 @@ final class DocumentManagementSeedData {
                         "待生成",
                         "待上传",
                         "PWA 或 PC 后台补传称重照片",
-                        "red"
+                        "red",
+                        null
                 ),
                 new EvidenceAttachment(
                         "ATT-QC-20260706-021",
@@ -123,7 +125,8 @@ final class DocumentManagementSeedData {
                         "sha256:qc-defect-demo",
                         "2026-07-06 15:12",
                         "无",
-                        "green"
+                        "green",
+                        null
                 ),
                 new EvidenceAttachment(
                         "ATT-HW-20260706-001",
@@ -140,7 +143,8 @@ final class DocumentManagementSeedData {
                         "sha256:poc-video-demo",
                         "2026-07-06 17:08",
                         "弱光失败时允许手工录入编码",
-                        "amber"
+                        "amber",
+                        null
                 ),
                 new EvidenceAttachment(
                         "ATT-CFG-20260706-001",
@@ -157,7 +161,8 @@ final class DocumentManagementSeedData {
                         "待生成",
                         "待归档",
                         "审批完成后锁定版本",
-                        "amber"
+                        "amber",
+                        null
                 )
         );
     }
