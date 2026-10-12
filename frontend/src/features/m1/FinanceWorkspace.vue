@@ -1156,6 +1156,7 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'statement'" class="section-block">
+      <h2>客户账单</h2>
       <div class="finance-actions">
         <button class="primary-button" type="button" :disabled="busy" @click="loadStatement">查询账单</button>
         <button class="table-action" type="button" :disabled="busy" @click="createBilling">生成本月账单</button>
@@ -1196,7 +1197,7 @@ function kindLabel(kind: string) {
         {{ statement.stockQuantity }} 件 / {{ statement.stockWeight }} 克。{{ statement.stockNote }}
       </p>
       <p v-if="statement && statement.lines.length === 0" class="empty-hint">暂无账单行</p>
-      <div v-if="statement && statement.lines.length" class="erp-table-wrap" tabindex="0" aria-label="账单明细，可横向滚动">
+      <div v-if="statement && statement.lines.length" class="erp-table-wrap finance-register-table" tabindex="0" aria-label="账单明细，可横向滚动">
       <table>
         <thead>
           <tr>
@@ -1218,6 +1219,16 @@ function kindLabel(kind: string) {
         </tbody>
       </table>
       </div>
+      <div v-if="statement && statement.lines.length" class="desk-cards">
+        <article v-for="line in statement.lines" :key="`card-${line.code}`" class="desk-card production-handoff-card">
+          <span class="desk-card-top">
+            <strong class="code">{{ line.motherOrderCode }}</strong>
+            <span>{{ formatAmount(line.amount) }}</span>
+          </span>
+          <span>{{ line.sourceType }} · {{ line.processName || '—' }}</span>
+          <span>{{ line.workOrderCode || '—' }}</span>
+        </article>
+      </div>
       <p v-if="billing && billing.unpriced.length === 0 && billing.createdCount === 0" class="empty-hint">没有新的可入账单</p>
       <ul v-if="billing && billing.unpriced.length">
         <li v-for="(item, index) in billing.unpriced" :key="index">
@@ -1227,6 +1238,7 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'receipt'" class="section-block">
+      <h2>登记收款</h2>
       <label>
         收款日期
         <input v-model="receiptDate" type="date" aria-label="收款日期" />
@@ -1250,6 +1262,7 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'payroll'" class="section-block">
+      <h2>工资试算</h2>
       <label>
         工序
         <select v-model="processName" aria-label="工资工序">
@@ -1276,7 +1289,7 @@ function kindLabel(kind: string) {
         <button class="table-action" type="button" :disabled="busy" @click="buildPayroll(true)">确认并锁定</button>
       </div>
       <p v-if="payrollLines.length === 0" class="empty-hint">暂无工资行</p>
-      <div v-else class="erp-table-wrap" tabindex="0" aria-label="工资明细，可横向滚动">
+      <div v-else class="erp-table-wrap finance-register-table" tabindex="0" aria-label="工资明细，可横向滚动">
       <table>
         <thead>
           <tr>
@@ -1300,9 +1313,20 @@ function kindLabel(kind: string) {
         </tbody>
       </table>
       </div>
+      <div v-if="payrollLines.length" class="desk-cards">
+        <article v-for="(line, index) in payrollLines" :key="`pay-card-${line.orderCode}-${index}`" class="desk-card production-handoff-card">
+          <span class="desk-card-top">
+            <strong>{{ line.operatorName }}</strong>
+            <span>{{ formatAmount(line.netAmount) }}</span>
+          </span>
+          <span>{{ line.orderCode }} · {{ line.processName }}</span>
+          <span>计件 {{ formatAmount(line.grossAmount) }} · 扣损 {{ formatAmount(line.lossDeduction) }}</span>
+        </article>
+      </div>
     </section>
 
     <section v-else-if="section === 'consumable'" class="section-block">
+      <h2>消耗品登记</h2>
       <form class="account-admin-grid" aria-label="消耗品采购登记" @submit.prevent="addConsumable">
         <label>消耗品编码<input v-model="consumableForm.code" aria-label="消耗品编码" required /></label>
         <label>消耗品名称<input v-model="consumableForm.name" aria-label="消耗品名称" required /></label>
@@ -1320,7 +1344,7 @@ function kindLabel(kind: string) {
         <button class="primary-button" type="button" :disabled="busy" @click="loadConsumables">查看结存</button>
       </div>
       <p v-if="consumables.length === 0" class="empty-hint">暂无消耗品</p>
-      <div v-else class="erp-table-wrap" tabindex="0" aria-label="消耗品结存，可横向滚动">
+      <div v-else class="erp-table-wrap finance-register-table" tabindex="0" aria-label="消耗品结存，可横向滚动">
       <table>
         <thead>
           <tr>
@@ -1340,10 +1364,24 @@ function kindLabel(kind: string) {
         </tbody>
       </table>
       </div>
+      <div v-if="consumables.length" class="desk-cards">
+        <article v-for="item in consumables" :key="`con-card-${item.code}`" class="desk-card production-handoff-card">
+          <span class="desk-card-top">
+            <strong class="code">{{ item.code }}</strong>
+            <span>{{ formatAmount(item.onHandAmount) }}</span>
+          </span>
+          <span>{{ item.name }}</span>
+          <span>{{ item.onHandQuantity }} {{ item.unitName }}</span>
+        </article>
+      </div>
     </section>
 
     <section v-else-if="section === 'asset'" class="section-block">
-      <p>直线法折旧只进公司月度成本，不摊到客户。</p>
+      <h2>固定资产登记</h2>
+      <details class="production-note">
+        <summary>折旧说明</summary>
+        <p>直线法折旧只进公司月度成本，不摊到客户。</p>
+      </details>
       <form class="account-admin-grid" aria-label="固定资产登记" @submit.prevent="addAsset">
         <label>资产名称<input v-model="assetForm.name" aria-label="资产名称" required /></label>
         <label>资产类别<input v-model="assetForm.category" aria-label="资产类别" required /></label>
@@ -1357,6 +1395,7 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'payable'" class="section-block">
+      <h2>外协与付款</h2>
       <form class="account-admin-grid" aria-label="外协登记" @submit.prevent="addOutsource">
         <label>外协供应商<input v-model="outsourceForm.supplier" aria-label="外协供应商" required /></label>
         <label>外协金额<input v-model="outsourceForm.amount" aria-label="外协金额" type="number" min="0.01" step="0.01" required /></label>
@@ -1380,7 +1419,7 @@ function kindLabel(kind: string) {
       </label>
       <button class="table-action" type="button" :disabled="busy" @click="submitPayment">登记付款</button>
       <p v-if="payables.length === 0" class="empty-hint">暂无应付</p>
-      <div v-else class="erp-table-wrap" tabindex="0" aria-label="应付明细，可横向滚动">
+      <div v-else class="erp-table-wrap finance-register-table" tabindex="0" aria-label="应付明细，可横向滚动">
       <table>
         <thead>
           <tr>
@@ -1401,6 +1440,16 @@ function kindLabel(kind: string) {
           </tr>
         </tbody>
       </table>
+      </div>
+      <div v-if="payables.length" class="desk-cards">
+        <article v-for="item in payables" :key="`payee-card-${item.code}`" class="desk-card production-handoff-card">
+          <span class="desk-card-top">
+            <strong class="code">{{ item.code }}</strong>
+            <span>{{ formatAmount(item.unpaidAmount) }}</span>
+          </span>
+          <span>{{ kindLabel(item.kind) }} · {{ item.payee }}</span>
+          <span>应付 {{ formatAmount(item.amount) }}</span>
+        </article>
       </div>
     </section>
 
