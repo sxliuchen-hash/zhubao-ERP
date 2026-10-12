@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import AccountApprovalPanel from './AccountApprovalPanel.vue';
 import type { Tone } from '../../data/m1PrototypeData';
@@ -35,6 +35,8 @@ const passwordConfirm = ref('');
 const passwordBusy = ref(false);
 const passwordMessage = ref('');
 const authAccounts = ref<AuthUserAccountSummary[]>([]);
+const accountKeyword = ref('');
+const accountDetailOpen = ref(false);
 const accountLoadError = ref('');
 const customerAuthorizations = ref<CustomerAuthorization[]>([]);
 const customerAuthForm = ref({ username: '', customerCode: '', customerName: '' });
@@ -310,6 +312,12 @@ async function retireContent(code: string, fileName: string) {
   }
 }
 
+const filteredAccounts = computed(() => {
+  const text = accountKeyword.value.trim().toLowerCase();
+  if (!text) return authAccounts.value;
+  return authAccounts.value.filter((account) => `${account.username} ${account.operator} ${account.roleLabel}`.toLowerCase().includes(text));
+});
+
 function selectAccount(account: AuthUserAccountSummary) {
   processForm.value = {
     username: account.username,
@@ -322,6 +330,11 @@ function selectAccount(account: AuthUserAccountSummary) {
     processes: [...(account.allowedProcesses ?? [])],
   };
   processMessage.value = '';
+  accountDetailOpen.value = true;
+}
+
+function backToAccounts() {
+  accountDetailOpen.value = false;
 }
 
 async function saveProcesses() {
@@ -477,30 +490,36 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
       </div>
 
       <aside class="security-context-side">
-        <div class="security-account-contract">
-          <strong>账号</strong>
-          <p v-if="accountLoadError" class="operation-feedback danger">{{ accountLoadError }}</p>
-          <p v-if="authAccounts.length === 0" class="empty-hint">暂无账号</p>
-          <article
-            v-for="account in authAccounts"
-            :key="account.username"
-            class="account-process-row"
-            @click="selectAccount(account)"
-          >
-            <div>
-              <b>{{ account.username }} / {{ account.operator }}</b>
+        <div class="security-account-contract desk-page" :class="{ 'is-detail': accountDetailOpen }">
+          <div class="module-master-panel">
+            <strong>账号</strong>
+            <label>
+              <span>查找账号</span>
+              <input v-model="accountKeyword" aria-label="查找账号" placeholder="账号或姓名" />
+            </label>
+            <p v-if="accountLoadError" class="operation-feedback danger">{{ accountLoadError }}</p>
+            <p v-if="filteredAccounts.length === 0" class="empty-hint">暂无账号</p>
+            <button
+              v-for="account in filteredAccounts"
+              :key="account.username"
+              class="desk-card"
+              type="button"
+              @click="selectAccount(account)"
+            >
+              <span class="desk-card-top">
+                <strong>{{ account.username }} / {{ account.operator }}</strong>
+                <StatusBadge :label="accountStatusLabel(account)" :tone="accountStatusTone(account)" />
+              </span>
               <span>{{ account.roleLabel }} · {{ account.dataScopeLabel }}</span>
-              <small>
+              <span>
                 {{ account.demoAccount ? '演示账号' : '生产账号' }} · 失败 {{ account.failedLoginCount }} 次
                 <template v-if="account.customerScope.length"> · 客户 {{ account.customerScope.join('、') }}</template>
                 <template v-if="account.allowedProcesses?.length"> · 可做 {{ account.allowedProcesses.join('、') }}</template>
-                <template v-if="account.lockedUntil"> · 锁定至 {{ account.lockedUntil }}</template>
-                <template v-if="account.passwordExpired"> · 密码已过期</template>
-              </small>
-            </div>
-            <StatusBadge :label="accountStatusLabel(account)" :tone="accountStatusTone(account)" />
-          </article>
-          <form class="customer-auth-form" @submit.prevent="saveProcesses">
+              </span>
+            </button>
+          </div>
+          <form class="customer-auth-form module-side-panel" @submit.prevent="saveProcesses">
+            <button class="secondary-button detail-back" type="button" @click="backToAccounts">返回账号</button>
             <strong>可做工序</strong>
             <p class="customer-auth-hint">点上面的账号，勾选雕刻、镶嵌、抛光中的一道或多道。</p>
             <p>{{ processForm.username ? `${processForm.username} / ${processForm.operator}` : '尚未选择账号' }}</p>
@@ -606,7 +625,7 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
       <aside class="security-context-side">
         <div class="security-account-contract">
           <strong>账号操作</strong>
-          <article v-for="account in authAccounts" :key="`manage-${account.username}`" class="account-process-row">
+          <article v-for="account in filteredAccounts" :key="`manage-${account.username}`" class="desk-card production-handoff-card">
             <div>
               <b>{{ account.username }} / {{ account.operator }}</b>
               <span>{{ account.roleLabel }} · {{ account.dataScopeLabel }}</span>
@@ -644,7 +663,7 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
         </div>
         <p v-if="contentError" class="operation-feedback danger">{{ contentError }}</p>
         <p v-if="contentMessage" class="customer-auth-message">{{ contentMessage }}</p>
-        <div class="ops-table-wrap">
+        <div class="ops-table-wrap desk-table-wrap">
           <table class="ops-data-table">
             <thead>
               <tr>
@@ -681,6 +700,24 @@ function accountStatusTone(account: AuthUserAccountSummary): Tone {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="desk-cards">
+          <article v-for="item in storedContent?.items ?? []" :key="`card-${item.code}`" class="desk-card production-handoff-card">
+            <span class="desk-card-top">
+              <strong>{{ item.fileName }}</strong>
+              <span>{{ item.status }}</span>
+            </span>
+            <span>{{ item.businessType }} / {{ item.businessCode }}</span>
+            <span>{{ item.owner }} · {{ item.sizeLabel }}</span>
+            <button
+              class="table-action"
+              type="button"
+              :disabled="item.status === '已下线' || contentBusyCode === item.code"
+              @click="retireContent(item.code, item.fileName)"
+            >
+              {{ item.status === '已下线' ? '已下线' : '下线' }}
+            </button>
+          </article>
         </div>
         <p v-if="storedContent && storedContent.items.length === 0" class="empty-hint">还没有存储内容</p>
       </div>
