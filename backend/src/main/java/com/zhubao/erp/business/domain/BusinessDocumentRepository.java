@@ -74,9 +74,35 @@ public interface BusinessDocumentRepository {
 
     void saveQualityRequirementCheck(QualityRequirementCheck check);
 
+    /** 在当前工作单元里保存质检对照，不单独提交。 */
+    void saveQualityRequirementCheck(QualityRequirementCheck check, WorkSession session);
+
     Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode);
+
+    Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode, WorkSession session);
 
     List<QualityRequirementCheck> listAllQualityRequirementChecks();
 
     void attachQualityRework(String orderCode, String reworkOrderCode);
+
+    /** 在当前工作单元里关联返工单，不单独提交。 */
+    void attachQualityRework(String orderCode, String reworkOrderCode, WorkSession session);
+
+    void saveQualityRound(QualityRound round);
+
+    /** 在当前工作单元里保存质检轮次，不单独提交。重复轮次抛出「这一轮质检已经提交」。 */
+    void saveQualityRound(QualityRound round, WorkSession session);
+
+    List<QualityRound> listQualityRounds(String orderCode);
+
+    List<QualityRound> listQualityRounds(String orderCode, WorkSession session);
+
+    void saveQualityReworkReport(QualityReworkReport report);
+
+    /** 在当前工作单元里保存返工报工，不单独提交。 */
+    void saveQualityReworkReport(QualityReworkReport report, WorkSession session);
+
+    Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode);
+
+    Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode, WorkSession session);
 }

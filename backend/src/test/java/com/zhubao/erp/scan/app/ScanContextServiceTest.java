@@ -207,7 +207,7 @@ class ScanContextServiceTest {
         assertThat(action(response, ScanContextService.RELEASE).allowed()).isFalse();
         assertThat(action(response, ScanContextService.RELEASE).blockReason()).contains("原不合格记录仍保留");
         assertThat(action(response, ScanContextService.REPORT_PROCESS).allowed()).isFalse();
-        assertThat(action(response, ScanContextService.SUBMIT_QUALITY).blockReason()).contains("复检轮次尚未实施");
+        assertThat(action(response, ScanContextService.SUBMIT_QUALITY).blockReason()).contains("不能覆盖原不合格记录");
         assertThat(response.progress().progressRecords()).isEmpty();
         assertThat(stocks.ledgers()).hasSize(ledgers);
         assertThat(repository.findQualityRequirementCheck(childCode).orElseThrow().outcome()).isEqualTo(QualityVerdicts.FAIL);

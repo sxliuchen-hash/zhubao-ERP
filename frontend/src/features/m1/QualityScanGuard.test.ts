@@ -13,7 +13,12 @@ vi.mock('../../services/businessOperationApi', () => ({
   releaseQualityStock: vi.fn(), reportRework: vi.fn(),
 }));
 vi.mock('../../services/qualityCheckApi', () => ({
-  lookupQualityCheck: vi.fn(), openQualityRework: vi.fn(), submitQualityCheck: vi.fn(),
+  lookupQualityCheck: vi.fn(),
+  openQualityRework: vi.fn(),
+  submitQualityCheck: vi.fn(),
+  reportQualityRework: vi.fn(),
+  submitQualityRecheck: vi.fn(),
+  releaseQualityRound: vi.fn(),
 }));
 vi.mock('../../services/scanContextApi', async () => {
   const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
@@ -108,7 +113,7 @@ describe('质检扫码不串单', () => {
     });
     await wrapper.get('[aria-label="开返工"]').trigger('click');
     await flushPromises();
-    expect(openQualityRework).toHaveBeenCalledWith('B');
+    expect(openQualityRework).toHaveBeenCalledWith('B', expect.stringMatching(/^quality-/));
     expect(wrapper.text()).toContain('FG-B');
   });
 });

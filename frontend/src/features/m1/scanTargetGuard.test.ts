@@ -46,6 +46,9 @@ vi.mock('../../services/qualityCheckApi', () => ({
   lookupQualityCheck: vi.fn(),
   openQualityRework: vi.fn(),
   submitQualityCheck: vi.fn(),
+  reportQualityRework: vi.fn(),
+  submitQualityRecheck: vi.fn(),
+  releaseQualityRound: vi.fn(),
 }));
 vi.mock('../../services/documentCaptureApi', () => ({
   fetchCaptures: vi.fn().mockResolvedValue([]),

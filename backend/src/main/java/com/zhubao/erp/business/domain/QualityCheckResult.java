@@ -14,11 +14,31 @@ public record QualityCheckResult(
         boolean frozen,
         String ledgerCode,
         String reworkOrderCode,
-        List<QualityCheckLine> lines
+        List<QualityCheckLine> lines,
+        String roundCode,
+        int roundNo,
+        String roundType
 ) {
     public QualityCheckResult {
         lines = lines == null ? List.of() : List.copyOf(lines);
         ledgerCode = ledgerCode == null ? "" : ledgerCode;
         reworkOrderCode = reworkOrderCode == null ? "" : reworkOrderCode;
+        roundCode = roundCode == null ? "" : roundCode;
+        roundType = roundType == null ? "" : roundType;
+    }
+
+    public QualityCheckResult(
+            String qualityCaseCode,
+            String orderCode,
+            String motherOrderCode,
+            String inspector,
+            String outcome,
+            boolean frozen,
+            String ledgerCode,
+            String reworkOrderCode,
+            List<QualityCheckLine> lines
+    ) {
+        this(qualityCaseCode, orderCode, motherOrderCode, inspector, outcome, frozen, ledgerCode,
+                reworkOrderCode, lines, "", 0, "");
     }
 }

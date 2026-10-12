@@ -1,18 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import OperationInputs from './OperationInputs.vue';
+import QualityPanel from '../quality/QualityPanel.vue';
 import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import type { LossApproval, Tone } from '../../data/m1PrototypeData';
-import OrderContextCard from '../scan/OrderContextCard.vue';
-import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
-import ScanInput from '../scan/ScanInput.vue';
-import type { ScanDraft } from '../scan/scanDraft';
-import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
-import { canonicalTarget, useScanContext } from '../scan/useScanContext';
-import type { ScanProgressRecord, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   fetchQualityWorkspace,
   type QualityWorkspaceModel,
@@ -29,14 +23,6 @@ import {
   type ReworkReportResult,
   type QualityFreezeResult,
 } from '../../services/businessOperationApi';
-import {
-  lookupQualityCheck,
-  openQualityRework,
-  submitQualityCheck,
-  type QualityCheckResult,
-  type QualityCheckView,
-  type QualityReworkResult,
-} from '../../services/qualityCheckApi';
 
 const emptyQuality = (): QualityWorkspaceModel => ({
   metrics: [],
@@ -63,25 +49,6 @@ const approvingLoss = ref(false);
 const lossApprovalResult = ref<LossApprovalResult | null>(null);
 const lossApprovalError = ref('');
 const selectedQualityCaseCode = ref('');
-const checkScanText = ref('');
-const qualityScan = reactive(useScanContext());
-const qualityProgressTarget = computed(() => progressTargetFromScan(qualityScan.context));
-
-function rememberQualityProgress(record: ScanProgressRecord) {
-  appendProgressRecord(qualityScan.context, record);
-}
-const qualityCode = ref('');
-let recognitionVersion = 0;
-const checkHint = ref('');
-const checkError = ref('');
-const checkBusy = ref(false);
-const checkSubmitting = ref(false);
-const checkView = ref<QualityCheckView | null>(null);
-const checkResult = ref<QualityCheckResult | null>(null);
-const clauseDrafts = ref<Record<number, { verdict: string; reason: string }>>({});
-const reworkOpening = ref(false);
-const requirementRework = ref<QualityReworkResult | null>(null);
-const requirementReworkError = ref('');
 const { keyword, filtered: filteredCases } = useDeskFilter(
   () => workspace.value.cases,
   (item) => `${item.code} ${item.workOrder} ${item.process} ${item.inspector} ${item.defect} ${item.status}`,
@@ -99,41 +66,6 @@ const activeApproval = computed(
     workspace.value.lossApprovals.find((item) => item.workOrder === activeCase.value?.workOrder),
 );
 
-const shownInspector = computed(() => checkResult.value?.inspector || checkView.value?.inspector || '');
-const requirementSubmitted = computed(() => Boolean(checkView.value?.qualityCaseCode));
-const canOpenRequirementRework = computed(() => (
-  checkView.value?.outcome === '不合格' && !checkView.value.reworkOrderCode && !requirementRework.value
-));
-const requirementHint = computed(() => {
-  const view = checkView.value;
-  if (!view || view.qualityCaseCode) {
-    return '';
-  }
-  if (!view.ready) {
-    return view.blockReason;
-  }
-  const missingVerdict = view.lines.some((line) => !clauseDrafts.value[line.lineNo]?.verdict);
-  if (missingVerdict) {
-    return '每一条加工要求都要有结果才能提交';
-  }
-  const missingReason = view.lines.some((line) => {
-    const draft = clauseDrafts.value[line.lineNo];
-    return (draft?.verdict === '不合格' || draft?.verdict === '让步') && !draft.reason.trim();
-  });
-  if (missingReason) {
-    return '不合格和让步必须写原因';
-  }
-  return '';
-});
-const canSubmitRequirement = computed(() => (
-  Boolean(qualityCode.value)
-  && Boolean(checkView.value?.ready)
-  && !requirementSubmitted.value
-  && requirementHint.value === ''
-  && !checkSubmitting.value
-  && !qualityScan.loading
-));
-
 const recordedDefect = computed(() => {
   const value = activeCase.value?.defect?.trim() ?? '';
   return value && value !== '未判定' ? value : '';
@@ -142,23 +74,6 @@ const effectiveDefect = computed(() => operationValues.value.defect?.trim() || r
 const effectiveReason = computed(() => operationValues.value.reason?.trim() || recordedDefect.value);
 
 watch(activeCase, (item) => { resetAmounts(item?.operationContext); });
-function invalidateQualityTarget() {
-  const hadRecognition = checkView.value !== null || checkBusy.value || checkResult.value !== null
-    || requirementRework.value !== null || qualityScan.context !== null || qualityCode.value !== '';
-  recognitionVersion += 1;
-  checkBusy.value = false;
-  checkView.value = null;
-  clauseDrafts.value = {};
-  checkResult.value = null;
-  requirementRework.value = null;
-  qualityCode.value = '';
-  checkError.value = '';
-  requirementReworkError.value = '';
-  qualityScan.invalidate();
-  checkHint.value = hadRecognition ? '贴纸已变化，请重新识别' : '';
-}
-
-watch(checkScanText, () => invalidateQualityTarget(), { flush: 'sync' });
 
 function qualityCaseTone(status: string, action = ''): Tone {
   if (status.includes('完成')) return 'green';
@@ -289,133 +204,6 @@ async function approveActiveLoss() {
   }
 }
 
-function resetRequirementDrafts(view: QualityCheckView) {
-  const next: Record<number, { verdict: string; reason: string }> = {};
-  for (const line of view.lines) {
-    next[line.lineNo] = { verdict: line.verdict, reason: line.reason };
-  }
-  clauseDrafts.value = next;
-}
-
-async function recognizeRequirement(draft: ScanDraft) {
-  checkHint.value = '';
-  checkError.value = '';
-  checkResult.value = null;
-  requirementRework.value = null;
-  requirementReworkError.value = '';
-  const raw = draft.content.trim();
-  const version = ++recognitionVersion;
-  checkView.value = null;
-  clauseDrafts.value = {};
-  qualityCode.value = '';
-  if (!raw) {
-    qualityScan.invalidate();
-    checkHint.value = '请先扫子单贴纸，或不拆母单的贴纸';
-    return;
-  }
-  checkBusy.value = true;
-  try {
-    const response = await qualityScan.lookup({
-      content: raw,
-      objectType: draft.objectType,
-      intent: 'QUALITY',
-    });
-    if (version !== recognitionVersion) return;
-    if (!response) {
-      if (qualityScan.error) checkError.value = qualityScan.error;
-      return;
-    }
-    if (response.requiresSelection) {
-      checkHint.value = '请选择要质检的子单';
-      return;
-    }
-    const target = canonicalTarget(response);
-    if (!target || (target.objectType !== 'WORK_ORDER' && target.objectType !== 'MOTHER_ORDER')) {
-      checkHint.value = '请扫描子单贴纸，或不拆母单的贴纸';
-      return;
-    }
-    const loaded = await lookupQualityCheck(target.code);
-    if (version !== recognitionVersion) return;
-    qualityCode.value = target.code;
-    resetRequirementDrafts(loaded);
-    checkView.value = loaded;
-  } catch (error) {
-    if (version !== recognitionVersion) return;
-    qualityCode.value = '';
-    checkError.value = error instanceof Error ? error.message : '贴纸识别失败';
-  } finally {
-    if (version === recognitionVersion) checkBusy.value = false;
-  }
-}
-
-async function selectQualityTarget(related: ScanRelatedTarget) {
-  if (!related.code || !related.objectType) return;
-  await recognizeRequirement({ content: related.code, objectType: related.objectType });
-}
-
-async function submitRequirement() {
-  if (!canSubmitRequirement.value || !checkView.value || !qualityCode.value) {
-    return;
-  }
-  checkSubmitting.value = true;
-  const view = checkView.value;
-  const version = recognitionVersion;
-  const code = qualityCode.value;
-  const lines = view.lines.map((line) => ({
-    lineNo: line.lineNo,
-    verdict: clauseDrafts.value[line.lineNo]?.verdict ?? '',
-    reason: clauseDrafts.value[line.lineNo]?.reason.trim() ?? '',
-  }));
-  checkError.value = '';
-  try {
-    const result = await submitQualityCheck({ code, lines });
-    if (version !== recognitionVersion || qualityCode.value !== code) return;
-    checkResult.value = result;
-    checkView.value = {
-      ...view,
-      inspector: result.inspector,
-      qualityCaseCode: result.qualityCaseCode,
-      outcome: result.outcome,
-      frozen: result.frozen,
-      reworkOrderCode: result.reworkOrderCode,
-      lines: result.lines,
-      ready: false,
-      blockReason: '',
-    };
-    checkHint.value = '';
-  } catch (error) {
-    if (version !== recognitionVersion) return;
-    checkError.value = error instanceof Error ? error.message : '提交质检失败';
-  } finally {
-    checkSubmitting.value = false;
-  }
-}
-
-async function openRequirementRework() {
-  if (!checkView.value || !qualityCode.value || !canOpenRequirementRework.value) {
-    return;
-  }
-  reworkOpening.value = true;
-  const view = checkView.value;
-  const version = recognitionVersion;
-  const code = qualityCode.value;
-  requirementReworkError.value = '';
-  try {
-    const opened = await openQualityRework(code);
-    if (version !== recognitionVersion || qualityCode.value !== code) return;
-    requirementRework.value = opened;
-    checkView.value = {
-      ...view,
-      reworkOrderCode: opened.reworkOrderCode,
-    };
-  } catch (error) {
-    if (version !== recognitionVersion) return;
-    requirementReworkError.value = error instanceof Error ? error.message : '开返工失败';
-  } finally {
-    reworkOpening.value = false;
-  }
-}
-
 function selectQualityCase(code: string) {
   selectedQualityCaseCode.value = code;
   qualityFreezeResult.value = null;
@@ -434,117 +222,10 @@ function selectQualityCase(code: string) {
 <template>
   <div class="quality-desk page-stack">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
-    <section class="quality-check-panel" aria-label="对照加工要求">
-      <div class="section-heading">
-        <div>
-          <h2>对照加工要求</h2>
-          <p>扫子单贴纸。不拆的母单扫母单贴纸。质检员是当前登录账号。</p>
-        </div>
-      </div>
-      <ScanInput
-        v-model="checkScanText"
-        field-text="贴纸二维码"
-        input-aria-label="质检贴纸"
-        placeholder="JG|work_order|子单号 或 JG|mother|母单号"
-        submit-label="识别贴纸"
-        submit-aria-label="识别质检贴纸"
-        photo-aria-label="拍贴纸"
-        :busy="checkBusy || qualityScan.loading"
-        @draft="invalidateQualityTarget"
-        @recognize="recognizeRequirement"
-      />
-      <p v-if="checkHint" class="operation-feedback warning">{{ checkHint }}</p>
-      <p v-if="checkError" class="operation-feedback danger">{{ checkError }}</p>
-      <OrderContextCard :context="qualityScan.context" @select="selectQualityTarget" />
-      <ProgressNoteForm
-        v-if="qualityProgressTarget"
-        stage="QUALITY"
-        :target-type="qualityProgressTarget.targetType"
-        :target-code="qualityProgressTarget.targetCode"
-        :mother-order-code="qualityProgressTarget.motherOrderCode"
-        @saved="rememberQualityProgress"
-      />
-
-      <template v-if="checkView">
-        <dl class="detail-grid compact-detail-grid">
-          <dt>单号</dt>
-          <dd>{{ checkView.orderCode }}</dd>
-          <dt>客户</dt>
-          <dd>{{ checkView.customerName || '未填写' }}</dd>
-          <dt>期限</dt>
-          <dd>{{ checkView.dueDate || '未填写' }}</dd>
-          <dt>质检员</dt>
-          <dd>{{ shownInspector || '请先登录' }}</dd>
-        </dl>
-
-        <article v-for="line in checkView.lines" :key="line.lineNo" class="quality-clause">
-          <strong>{{ line.lineNo }}. {{ line.clause }}</strong>
-          <template v-if="requirementSubmitted">
-            <p>{{ line.verdict }}<span v-if="line.reason"> · {{ line.reason }}</span></p>
-          </template>
-          <template v-else-if="clauseDrafts[line.lineNo]">
-            <div class="quality-verdict-row">
-              <button
-                v-for="verdict in ['合格', '不合格', '让步']"
-                :key="verdict"
-                type="button"
-                class="secondary-button quality-verdict"
-                :class="{
-                  'is-selected': clauseDrafts[line.lineNo].verdict === verdict,
-                  'is-pass': verdict === '合格',
-                  'is-fail': verdict === '不合格',
-                  'is-concession': verdict === '让步',
-                }"
-                :aria-label="`${verdict} ${line.lineNo}`"
-                :aria-pressed="clauseDrafts[line.lineNo].verdict === verdict"
-                @click="clauseDrafts[line.lineNo].verdict = verdict"
-              >
-                {{ verdict }}
-              </button>
-            </div>
-            <label class="field">
-              <span>{{ clauseDrafts[line.lineNo].verdict === '合格' ? '原因（合格可以不写）' : '原因' }}</span>
-              <textarea
-                v-model="clauseDrafts[line.lineNo].reason"
-                :aria-label="`原因 ${line.lineNo}`"
-                :placeholder="clauseDrafts[line.lineNo].verdict === '不合格' || clauseDrafts[line.lineNo].verdict === '让步' ? '必须写原因' : '可以不写'"
-              />
-            </label>
-          </template>
-        </article>
-
-        <p v-if="requirementHint" class="operation-feedback warning">{{ requirementHint }}</p>
-        <div v-if="!requirementSubmitted" class="button-row">
-          <button
-            class="primary-button"
-            type="button"
-            aria-label="提交质检"
-            :disabled="!canSubmitRequirement"
-            @click="submitRequirement"
-          >
-            {{ checkSubmitting ? '正在提交' : '提交质检' }}
-          </button>
-        </div>
-        <div v-if="checkResult" class="operation-feedback success">
-          <strong>质检已提交 · {{ checkResult.outcome }}</strong>
-          <span>{{ checkResult.inspector }}</span>
-          <span>质检单 {{ checkResult.qualityCaseCode }}</span>
-          <span>{{ checkResult.frozen ? '半成品已转入冻结' : '已留下核对记录，未转入冻结' }}</span>
-        </div>
-        <div v-if="canOpenRequirementRework" class="button-row">
-          <button class="primary-button" type="button" aria-label="开返工" :disabled="reworkOpening" @click="openRequirementRework">
-            {{ reworkOpening ? '正在开返工' : '开返工' }}
-          </button>
-        </div>
-        <div v-if="checkView.reworkOrderCode" class="operation-feedback success">
-          <strong>已开返工 {{ checkView.reworkOrderCode }}</strong>
-          <span>关联质检 {{ checkView.qualityCaseCode }}</span>
-          <span>原单 {{ checkView.motherOrderCode }} / {{ checkView.orderCode }}</span>
-          <span v-if="requirementRework">库存已从冻结转入返工</span>
-        </div>
-        <p v-if="requirementReworkError" class="operation-feedback danger">{{ requirementReworkError }}</p>
-      </template>
-    </section>
+    <QualityPanel
+      title="对照加工要求"
+      intro="扫子单贴纸。不拆的母单扫母单贴纸。质检员是当前登录账号。超时用原确认回放，不会另开一次质检。"
+    />
 
     <section class="module-work-grid quality-work-grid" aria-label="质检返工主控台">
       <div class="module-master-panel">

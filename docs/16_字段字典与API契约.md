@@ -560,7 +560,7 @@ MySQL 持久化表：
 - `OwnerType` 固定为 `CUSTOMER`，确保客户来料不会进入企业自有库存。
 - `workOrderCode` 为空，表示仍处于母单原料库存，后续子工单拆分再进入在制库存。
 - 带 `requestId` 时，动作记为 `INBOUND_CONFIRM`，目标类型 `MOTHER_ORDER`，目标编号是母单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `InboundConfirmationResult`；换母单、换客户、换数量重量或其他内容会拒绝，必须换新 `requestId`。母单、来料事实、入库流水和成功结果在同一条数据库连接里提交。单据保存失败或结果保存失败时整单回滚。非空运单由 `courier_identity` 唯一约束保证不会建出两张母单。
-- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付已另行接入。未带 `requestId` 的岗位交付、通用 `production-reports`、质检、开返工、返工报工、放行和确认发货没有接入这条入库事务。
+- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付、初检、开返工、返工报工、复检和放行已另行接入各自的工作单元，不并进这条入库事务。未带 `requestId` 的岗位交付、通用 `production-reports`、旧质检调用和确认发货仍各自提交。
 
 ---
 
@@ -621,7 +621,33 @@ MySQL 持久化表：
 
 证据只能在交付成功并拿到台账号之后绑定。中间工序的操作类型是 `process_station_report`，末道是 `production_report`，操作编号是返回的 `ledgerCode`。上传或绑定失败只补文件或引用，不重新交付。过程说明仍走 `POST /api/scan/progress-records`，不产生库存、工资或工序完成。
 
-不带 `requestId` 的岗位交付，以及下面的通用 `production-reports`，仍由库存仓储和交接单各自打开连接并提交。这不是回放，也不能当成已经同事务。本次没有新迁移：交付唯一键沿用 `V34__m3_process_station.sql`，请求表沿用 `V44__m3_command_request.sql`。
+不带 `requestId` 的岗位交付，以及下面的通用 `production-reports`，仍由库存仓储和交接单各自打开连接并提交。这不是回放，也不能当成已经同事务。工序交付没有新迁移：交付唯一键沿用 `V34__m3_process_station.sql`，请求表沿用 `V44__m3_command_request.sql`。
+
+### 5.2.2 质检轮次与复检
+
+桌面质检面板调用下面这些命令。质检员取当前登录账号。请求里另传的姓名不采用。
+
+| 方法 | 命令 | 动作 |
+|---|---|---|
+| `POST /api/business/operations/quality-checks` | `QualityCheckCommand`，增加可选 `requestId` | `QUALITY_CHECK` |
+| `POST /api/business/operations/quality-checks/rework` | `QualityReworkCommand`，增加可选 `requestId` | `QUALITY_REWORK` |
+| `POST /api/business/operations/quality-checks/rework-reports` | `QualityFollowCommand`：`code`、可选 `requestId` | `REWORK_REPORT` |
+| `POST /api/business/operations/quality-checks/rechecks` | `QualityRecheckCommand`：`code`、`lines`、可选 `requestId` | `QUALITY_RECHECK` |
+| `POST /api/business/operations/quality-checks/releases` | `QualityFollowCommand` | `QUALITY_RELEASE` |
+
+`requestId` 规则与工序交付相同。有值时，同账号、同请求、同规范化内容回放原结果。换条款或原因、换单据、换客户、换账号都拒绝。规范化内容含客户、货权客户、母单号；初检和复检还含逐条判定。目标类型是 `WORK_ORDER` 或 `MOTHER_ORDER`。
+
+初检和复检的结果都是 `QualityCheckResult`。除原有质检单号外，增加 `roundCode`、`roundNo`、`roundType`。`roundType` 为 `INITIAL` 或 `RECHECK`。初检轮次号是 1。复检使用下一个轮次号，并记下返工单号和返工报工台账。原质检对照上的条款、原因、`frozen` 和返工号不因复检而改写。
+
+带 `requestId` 时，本次库存流水、本次轮次或返工事实、成功结果在同一条连接提交。保存失败整单回滚。不带 `requestId` 时仍各自提交，不回放；这时失败可能只留下库存。桌面质检池里的 `quality-freezes`、`rework-dispatches`、`rework-reports` 和 `quality-releases` 仍不接收 `requestId`。
+
+复检前必须已经开返工，并且 `biz_quality_rework_report` 里有这条返工单的报工事实，库存回到半成品，没有未处理冻结。复检不合格会再记一笔冻结。只有最新轮次为合格或让步、半成品余额足够、且没有冻结余额时才能放行。放行不把初检 `frozen` 改成 0。
+
+查询 `QualityCheckView` 增加 `roundCode`、`roundNo`、`roundType`、`reworkReported`、`canRecheck`、`recheckBlock`、`canRelease`、`releaseBlock` 和 `rounds`。没有轮次行的旧初检在 `rounds` 里作为历史首轮读出，`roundCode` 为空，不补插入复检。
+
+证据在拿到轮次号之后绑定。操作类型是 `quality_round`，操作编号是 `roundCode`，场景是 `CHECK`。上传或绑定失败不重新质检。过程说明仍不是正式结论。
+
+迁移 `V46__m3_quality_round.sql`，新增 `biz_quality_round`、`biz_quality_round_line`、`biz_quality_rework_report`。已有库需备份后受控执行，不修改已发布迁移。H2 测试不是 MySQL 升级验收。
 
 ### 5.3 `ReportProductionCommand`
 
@@ -2298,8 +2324,11 @@ PWA 一期边界：
 | `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。可选 `requestId`。有值时动作是 `PROCESS_HANDOFF`，同账号同请求同内容回放原结果。不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。无 `requestId` 时不回放、不保证同事务 |
 | `POST /api/business/operations/production-reports` | `ApiResponse<ProductionReportResult>`。不接收 `requestId`，库存和交付事实仍各自提交，不回放 |
 | `GET /api/business/operations/quality-checks` | `ApiResponse<QualityCheckView>` |
-| `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>` |
-| `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>` |
+| `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>`。可选 `requestId`。有值时动作是 `QUALITY_CHECK`，初检轮次、适用冻结和成功结果同一次提交 |
+| `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>`。可选 `requestId`。有值时动作是 `QUALITY_REWORK` |
+| `POST /api/business/operations/quality-checks/rework-reports` | `ApiResponse<ReworkReportResult>`。可选 `requestId`。有值时动作是 `REWORK_REPORT` |
+| `POST /api/business/operations/quality-checks/rechecks` | `ApiResponse<QualityCheckResult>`。可选 `requestId`。有值时动作是 `QUALITY_RECHECK`，结果用轮次号区分，不覆盖初检 |
+| `POST /api/business/operations/quality-checks/releases` | `ApiResponse<QualityReleaseResult>`。可选 `requestId`。有值时动作是 `QUALITY_RELEASE`，按最新轮次放行 |
 | `POST /api/business/operations/quality-freezes` | `ApiResponse<QualityFreezeResult>` |
 | `POST /api/business/operations/rework-dispatches` | `ApiResponse<ReworkDispatchResult>` |
 | `POST /api/business/operations/rework-reports` | `ApiResponse<ReworkReportResult>` |
@@ -2544,7 +2573,7 @@ PWA 一期边界：
 | `objectType` | 可选。`MOTHER_ORDER`、`WORK_ORDER`、`OUTBOUND_ORDER`、`REWORK`、`EXPRESS_NO`。与 `JG\|` 贴纸类型冲突时拒绝 |
 | `intent` | 可选。`LOOKUP`、`INTAKE`、`PRODUCTION`、`QUALITY`、`SHIPPING`。省略视为 `LOOKUP`。不能代替岗位权限 |
 
-响应分组为 `target`、`order`、`requirements`、`progress`、`relatedTargets`、`requiresSelection`、`actions`、`operationContext`。未知数量、重量和客户用空值，不补 0。母单要求与子单快照分字段保留，来源分别为 `MOTHER_ORDER`、`WORK_ORDER`。岗位要求来源为 `PROCESS`。`progress.progressRecords` 返回该单据已保存的过程说明；没有记录时为 `[]`，不编造。`progress.reinspection.available` 当前固定为 `false`；原不合格质检仍保留，不能当成复检已放行。
+响应分组为 `target`、`order`、`requirements`、`progress`、`relatedTargets`、`requiresSelection`、`actions`、`operationContext`。未知数量、重量和客户用空值，不补 0。母单要求与子单快照分字段保留，来源分别为 `MOTHER_ORDER`、`WORK_ORDER`。岗位要求来源为 `PROCESS`。`progress.progressRecords` 返回该单据已保存的过程说明；没有记录时为 `[]`，不编造。`progress.reinspection.available` 只在已有合格或让步的复检轮次时为 `true`，原因仍说明原不合格记录保留。没有这种复检结论时为 `false`，不能把原不合格当成已经放行。
 
 `progress.progressRecords[]` 字段：
 
@@ -2575,7 +2604,7 @@ PWA 一期边界：
 
 S2 起，收货、岗位报工、质检贴纸和标签现场贴纸改为调用上下文接口。S4 起，手机岗位、桌面岗位、质检和发货准备可以追加过程说明，保存逻辑相同。前端不再按编码长度把业务编码猜成运单，也不再用本地解析结果作为提交单号。`requiresSelection` 为真时必须由用户选择，查询失败不能回落到页面默认单据。扫码成功不等于已经留证或已经报工。过程说明保存在服务端，迁移为 `V43__m3_operation_progress.sql`。本地默认 `zhubao.scan-progress.repository=memory`，MySQL 配置默认 JDBC。已有库需备份后受控执行 V43，不修改 V36 或 V42。
 
-S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请求记在 `biz_command_request`，迁移为 `V44__m3_command_request.sql`。同账号、同 `requestId`、同内容回放 `resultText`；内容不一致返回「同一请求的内容不一致」；其他账号返回「该请求不能跨账号重放」。成功结果和本次通过工作单元连接写入的事实同一次提交。S5p 当时来料、报工、质检、发货都还没接入。S5a 已接入来料建单和带 `requestId` 的入库确认。S5b 已接入带 `requestId` 的工序交付。未带 `requestId` 的岗位交付、通用 `production-reports`、质检、返工和发货仍各自提交。已有库需备份后受控执行 V44，不修改已发布迁移。S5b 没有新迁移。
+S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请求记在 `biz_command_request`，迁移为 `V44__m3_command_request.sql`。同账号、同 `requestId`、同内容回放 `resultText`；内容不一致返回「同一请求的内容不一致」；其他账号返回「该请求不能跨账号重放」。成功结果和本次通过工作单元连接写入的事实同一次提交。S5p 当时来料、报工、质检、发货都还没接入。S5a 已接入来料建单和带 `requestId` 的入库确认。S5b 已接入带 `requestId` 的工序交付。S5c 已接入带 `requestId` 的初检、开返工、返工报工、复检和放行，迁移 `V46__m3_quality_round.sql`。未带 `requestId` 的旧质检调用、通用 `production-reports` 和确认发货仍各自提交。已有库需备份后受控执行 V44 与 V46，不修改已发布迁移。
 
 ### AuthController
 

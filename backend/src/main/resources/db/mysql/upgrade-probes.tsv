@@ -43,3 +43,4 @@
 43	TABLE	scan_operation_progress
 44	TABLE	biz_command_request
 45	COLUMN	biz_mother_order	courier_identity
+46	TABLE	biz_quality_round

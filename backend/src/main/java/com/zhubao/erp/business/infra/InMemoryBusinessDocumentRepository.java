@@ -9,6 +9,8 @@ import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
+import com.zhubao.erp.business.domain.QualityReworkReport;
+import com.zhubao.erp.business.domain.QualityRound;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,6 +36,8 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     private final List<LabelReprintLog> reprintLogs = new CopyOnWriteArrayList<>();
     private final ConcurrentMap<String, ProcessStationHandoff> processHandoffs = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, QualityRequirementCheck> qualityChecks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, QualityRound> qualityRounds = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, QualityReworkReport> qualityReworkReports = new ConcurrentHashMap<>();
     private final AtomicLong reprintSequence = new AtomicLong();
 
     @Override
@@ -261,15 +265,25 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
 
     @Override
     public void saveQualityRequirementCheck(QualityRequirementCheck check) {
-        QualityRequirementCheck existing = qualityChecks.putIfAbsent(check.orderCode(), check);
-        if (existing != null) {
-            throw new BusinessException("这张单已经做过质检对照");
-        }
+        putQualityCheck(check);
+    }
+
+    @Override
+    public synchronized void saveQualityRequirementCheck(QualityRequirementCheck check, WorkSession session) {
+        requireSession(session);
+        putQualityCheck(check);
+        session.onRollback(() -> qualityChecks.remove(check.orderCode(), check));
     }
 
     @Override
     public Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode) {
         return Optional.ofNullable(qualityChecks.get(orderCode));
+    }
+
+    @Override
+    public Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode, WorkSession session) {
+        requireSession(session);
+        return findQualityRequirementCheck(orderCode);
     }
 
     @Override
@@ -281,6 +295,80 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
 
     @Override
     public void attachQualityRework(String orderCode, String reworkOrderCode) {
+        putQualityRework(orderCode, reworkOrderCode);
+    }
+
+    @Override
+    public synchronized void attachQualityRework(String orderCode, String reworkOrderCode, WorkSession session) {
+        requireSession(session);
+        QualityRequirementCheck before = qualityChecks.get(orderCode);
+        putQualityRework(orderCode, reworkOrderCode);
+        session.onRollback(() -> {
+            if (before == null) {
+                qualityChecks.remove(orderCode);
+            } else {
+                qualityChecks.put(orderCode, before);
+            }
+        });
+    }
+
+    @Override
+    public void saveQualityRound(QualityRound round) {
+        putQualityRound(round);
+    }
+
+    @Override
+    public synchronized void saveQualityRound(QualityRound round, WorkSession session) {
+        requireSession(session);
+        putQualityRound(round);
+        session.onRollback(() -> qualityRounds.remove(round.roundCode(), round));
+    }
+
+    @Override
+    public List<QualityRound> listQualityRounds(String orderCode) {
+        return qualityRounds.values().stream()
+                .filter(round -> orderCode.equals(round.orderCode()))
+                .sorted(Comparator.comparingInt(QualityRound::roundNo))
+                .toList();
+    }
+
+    @Override
+    public List<QualityRound> listQualityRounds(String orderCode, WorkSession session) {
+        requireSession(session);
+        return listQualityRounds(orderCode);
+    }
+
+    @Override
+    public void saveQualityReworkReport(QualityReworkReport report) {
+        putReworkReport(report);
+    }
+
+    @Override
+    public synchronized void saveQualityReworkReport(QualityReworkReport report, WorkSession session) {
+        requireSession(session);
+        putReworkReport(report);
+        session.onRollback(() -> qualityReworkReports.remove(report.reworkOrderCode(), report));
+    }
+
+    @Override
+    public Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode) {
+        return Optional.ofNullable(qualityReworkReports.get(reworkOrderCode));
+    }
+
+    @Override
+    public Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode, WorkSession session) {
+        requireSession(session);
+        return findQualityReworkReport(reworkOrderCode);
+    }
+
+    private void putQualityCheck(QualityRequirementCheck check) {
+        QualityRequirementCheck existing = qualityChecks.putIfAbsent(check.orderCode(), check);
+        if (existing != null) {
+            throw new BusinessException("这张单已经做过质检对照");
+        }
+    }
+
+    private void putQualityRework(String orderCode, String reworkOrderCode) {
         QualityRequirementCheck current = qualityChecks.get(orderCode);
         if (current == null) {
             throw new BusinessException("请先提交质检对照");
@@ -289,6 +377,26 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
             throw new BusinessException("已经开过返工");
         }
         qualityChecks.put(orderCode, current.withRework(reworkOrderCode));
+    }
+
+    private synchronized void putQualityRound(QualityRound round) {
+        boolean duplicated = qualityRounds.values().stream()
+                .anyMatch(existing -> existing.qualityCaseCode().equals(round.qualityCaseCode())
+                        && existing.roundNo() == round.roundNo());
+        if (duplicated) {
+            throw new BusinessException("这一轮质检已经提交");
+        }
+        QualityRound existing = qualityRounds.putIfAbsent(round.roundCode(), round);
+        if (existing != null) {
+            throw new BusinessException("这一轮质检已经提交");
+        }
+    }
+
+    private void putReworkReport(QualityReworkReport report) {
+        QualityReworkReport existing = qualityReworkReports.putIfAbsent(report.reworkOrderCode(), report);
+        if (existing != null) {
+            throw new BusinessException("返工已经报过工");
+        }
     }
 
     private void putHandoff(ProcessStationHandoff handoff) {

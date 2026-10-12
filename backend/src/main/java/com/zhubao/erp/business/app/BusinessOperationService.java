@@ -232,6 +232,11 @@ public class BusinessOperationService {
     }
 
     public QualityFreezeResult freezeQualityStock(FreezeQualityStockCommand command) {
+        return freezeQualityStock(command, null);
+    }
+
+    /** 带工作单元时，冻结流水不另开连接。 */
+    public QualityFreezeResult freezeQualityStock(FreezeQualityStockCommand command, WorkSession session) {
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromSemiFinished = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -254,7 +259,7 @@ public class BusinessOperationService {
                 StockStatus.FROZEN
         );
 
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockLedgerEntry entry = postTransfer(new StockTransferCommand(
                 "quality_freeze",
                 command.qualityCaseCode(),
                 fromSemiFinished,
@@ -262,7 +267,7 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        ), session);
 
         return new QualityFreezeResult(
                 command.qualityCaseCode(),
@@ -281,6 +286,11 @@ public class BusinessOperationService {
     }
 
     public ReworkDispatchResult dispatchRework(DispatchReworkCommand command) {
+        return dispatchRework(command, null);
+    }
+
+    /** 带工作单元时，开返工流水不另开连接。 */
+    public ReworkDispatchResult dispatchRework(DispatchReworkCommand command, WorkSession session) {
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFrozen = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -303,7 +313,7 @@ public class BusinessOperationService {
                 StockStatus.REWORK
         );
 
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockLedgerEntry entry = postTransfer(new StockTransferCommand(
                 "rework_dispatch",
                 command.reworkOrderCode(),
                 fromFrozen,
@@ -311,7 +321,7 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        ), session);
 
         return new ReworkDispatchResult(
                 command.reworkOrderCode(),
@@ -331,6 +341,11 @@ public class BusinessOperationService {
     }
 
     public ReworkReportResult reportRework(ReportReworkCommand command) {
+        return reportRework(command, null);
+    }
+
+    /** 带工作单元时，返工报工流水不另开连接。 */
+    public ReworkReportResult reportRework(ReportReworkCommand command, WorkSession session) {
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromRework = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -353,7 +368,7 @@ public class BusinessOperationService {
                 StockStatus.SEMI_FINISHED
         );
 
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockLedgerEntry entry = postTransfer(new StockTransferCommand(
                 "rework_report",
                 command.reworkOrderCode(),
                 fromRework,
@@ -361,7 +376,7 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        ), session);
 
         return new ReworkReportResult(
                 command.reworkOrderCode(),
@@ -381,6 +396,11 @@ public class BusinessOperationService {
     }
 
     public QualityReleaseResult releaseQualityStock(ReleaseQualityStockCommand command) {
+        return releaseQualityStock(command, null);
+    }
+
+    /** 带工作单元时，放行流水不另开连接。 */
+    public QualityReleaseResult releaseQualityStock(ReleaseQualityStockCommand command, WorkSession session) {
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromSemiFinished = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -403,7 +423,7 @@ public class BusinessOperationService {
                 StockStatus.FINISHED
         );
 
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockLedgerEntry entry = postTransfer(new StockTransferCommand(
                 "quality_release",
                 command.qualityCaseCode(),
                 fromSemiFinished,
@@ -411,7 +431,7 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        ), session);
 
         return new QualityReleaseResult(
                 command.qualityCaseCode(),
@@ -662,6 +682,13 @@ public class BusinessOperationService {
             remark.append("；备注：").append(command.remark());
         }
         return remark.toString();
+    }
+
+    private StockLedgerEntry postTransfer(StockTransferCommand command, WorkSession session) {
+        if (session == null) {
+            return stockLedgerService.transfer(command);
+        }
+        return stockLedgerService.transfer(command, session);
     }
 
     private void assertMotherOrderAvailable(String code, WorkSession session) {

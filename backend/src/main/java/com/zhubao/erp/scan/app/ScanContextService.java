@@ -14,6 +14,7 @@ import com.zhubao.erp.business.domain.ProcessStationView;
 import com.zhubao.erp.business.domain.QualityCheckLine;
 import com.zhubao.erp.business.domain.QualityCheckView;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
+import com.zhubao.erp.business.domain.QualityRound;
 import com.zhubao.erp.business.domain.QualityVerdicts;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
@@ -85,8 +86,8 @@ public class ScanContextService {
 
     private static final String OUT_OF_SCOPE = "单号不在当前账号的业务数据范围内";
     private static final String NOT_FOUND = "未找到对应单据";
-    private static final String REINSPECTION_PENDING = "独立复检轮次尚未实施";
-    private static final String REINSPECTION_KEPT = "原不合格记录仍保留，独立复检轮次尚未实施";
+    private static final String REINSPECTION_PENDING = "当前没有待复检的不合格记录";
+    private static final String REINSPECTION_KEPT = "原不合格记录仍保留，返工报工并复检合格后才能放行";
     private static final String CHOOSE_CHILD = "这张母单已经拆成子单，请选择子单";
     private static final String CHOOSE_BALANCE = "请选择完整的物料、仓库、货权和库存状态";
     private static final String ALREADY_SHIPPED = "这张出货单已经发货，不能再次扣库存";
@@ -442,7 +443,7 @@ public class ScanContextService {
         ScanContextProgress progress = progressOf(orderCode, check, null, balances);
         List<ScanContextAction> actions = List.of(
                 deny(REPORT_PROCESS, BLOCK_STATE, "返工单不能按普通子单跳过返工规则"),
-                deny(SUBMIT_QUALITY, BLOCK_STATE, "复检轮次尚未实施，不能覆盖原不合格记录"),
+                deny(SUBMIT_QUALITY, BLOCK_STATE, "不能覆盖原不合格记录。返工报工后在质检面板提交复检"),
                 reworkReportAction(balances, account),
                 releaseAction(orderCode, child == null ? WorkshopProcesses.DEFAULT_ORDER : WorkshopProcesses.split(child.processes()), account)
         );
@@ -643,7 +644,7 @@ public class ScanContextService {
         if (check == null) {
             return deny(RELEASE, BLOCK_STATE, "请先完成质检对照，不能直接放行");
         }
-        if (check.frozen() || (!QualityVerdicts.PASS.equals(check.outcome()) && !QualityVerdicts.CONCESSION.equals(check.outcome()))) {
+        if (!releasable(orderCode, check)) {
             return deny(RELEASE, BLOCK_STATE, "只有真实合格或让步的质检结果才能放行。" + REINSPECTION_KEPT);
         }
         if (processes == null || processes.isEmpty()) {
@@ -677,6 +678,63 @@ public class ScanContextService {
         return action(SHIP, true, BLOCK_NONE, null);
     }
 
+    private boolean releasable(String orderCode, QualityRequirementCheck check) {
+        QualityRound latest = latestRound(orderCode, check);
+        if (latest == null) {
+            return false;
+        }
+        if (latest.frozen()) {
+            return false;
+        }
+        return QualityVerdicts.PASS.equals(latest.outcome()) || QualityVerdicts.CONCESSION.equals(latest.outcome());
+    }
+
+    private ScanReinspectionStatus reinspectionOf(String orderCode, QualityRequirementCheck check) {
+        if (check == null || (!check.frozen() && !QualityVerdicts.FAIL.equals(check.outcome()))) {
+            return REINSPECTION_CLOSED;
+        }
+        QualityRound latest = latestRound(orderCode, check);
+        if (latest != null
+                && QualityRound.RECHECK.equals(latest.roundType())
+                && !latest.frozen()
+                && (QualityVerdicts.PASS.equals(latest.outcome()) || QualityVerdicts.CONCESSION.equals(latest.outcome()))) {
+            return new ScanReinspectionStatus(true, "最新复检可以放行，原不合格记录仍保留");
+        }
+        return new ScanReinspectionStatus(false, REINSPECTION_KEPT);
+    }
+
+    private QualityRound latestRound(String orderCode, QualityRequirementCheck check) {
+        List<QualityRound> stored = documents.listQualityRounds(orderCode);
+        QualityRound latest = null;
+        for (QualityRound round : stored) {
+            if (latest == null || round.roundNo() > latest.roundNo()) {
+                latest = round;
+            }
+        }
+        if (latest != null) {
+            return latest;
+        }
+        if (check == null) {
+            return null;
+        }
+        return new QualityRound(
+                "",
+                check.qualityCaseCode(),
+                check.orderCode(),
+                check.motherOrderCode(),
+                1,
+                QualityRound.INITIAL,
+                check.reworkOrderCode(),
+                "",
+                check.outcome(),
+                check.frozen(),
+                check.ledgerCode(),
+                check.inspector(),
+                check.createdAt(),
+                List.of()
+        );
+    }
+
     private ScanContextProgress progressOf(
             String handoffOrderCode,
             QualityRequirementCheck check,
@@ -689,9 +747,7 @@ public class ScanContextService {
                 .map(this::handoffFact)
                 .toList();
         ScanQualityFact qualityFact = check == null ? null : qualityFact(check);
-        ScanReinspectionStatus reinspection = check != null && (check.frozen() || QualityVerdicts.FAIL.equals(check.outcome()))
-                ? new ScanReinspectionStatus(false, REINSPECTION_KEPT)
-                : REINSPECTION_CLOSED;
+        ScanReinspectionStatus reinspection = reinspectionOf(handoffOrderCode, check);
         List<ScanStockFact> stock = balances.stream().map(balance -> new ScanStockFact(
                 balance.materialCode(),
                 balance.warehouseCode(),

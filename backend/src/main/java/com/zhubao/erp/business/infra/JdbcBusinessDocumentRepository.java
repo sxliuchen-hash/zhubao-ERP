@@ -10,6 +10,8 @@ import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityCheckLine;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
+import com.zhubao.erp.business.domain.QualityReworkReport;
+import com.zhubao.erp.business.domain.QualityRound;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -635,90 +637,47 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void saveQualityRequirementCheck(QualityRequirementCheck check) {
-        String headerSql = """
-                insert into biz_quality_requirement_check (
-                    quality_case_code, order_code, mother_order_code, inspector, outcome,
-                    frozen, ledger_code, rework_order_code, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
-        String lineSql = """
-                insert into biz_quality_requirement_line (
-                    quality_case_code, line_no, clause_text, verdict, reason
-                ) values (?, ?, ?, ?, ?)
-                """;
         try (Connection connection = dataSource.getConnection()) {
             boolean previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
-            try (PreparedStatement header = connection.prepareStatement(headerSql)) {
-                header.setString(1, check.qualityCaseCode());
-                header.setString(2, check.orderCode());
-                header.setString(3, check.motherOrderCode());
-                header.setString(4, check.inspector());
-                header.setString(5, check.outcome());
-                header.setInt(6, check.frozen() ? 1 : 0);
-                header.setString(7, check.ledgerCode());
-                header.setString(8, check.reworkOrderCode());
-                header.setString(9, check.createdAt());
-                header.executeUpdate();
-                try (PreparedStatement line = connection.prepareStatement(lineSql)) {
-                    for (QualityCheckLine item : check.lines()) {
-                        line.setString(1, check.qualityCaseCode());
-                        line.setInt(2, item.lineNo());
-                        line.setString(3, item.clause());
-                        line.setString(4, item.verdict());
-                        line.setString(5, item.reason());
-                        line.addBatch();
-                    }
-                    if (!check.lines().isEmpty()) {
-                        line.executeBatch();
-                    }
-                }
+            try {
+                writeQualityCheck(connection, check);
                 connection.commit();
             } catch (SQLException ex) {
                 connection.rollback();
-                if (isDuplicate(ex)) {
-                    throw new BusinessException("这张单已经做过质检对照");
-                }
-                throw new IllegalStateException("Failed to save quality requirement check: " + check.orderCode(), ex);
+                throw qualityCheckFailure(check, ex);
             } finally {
                 connection.setAutoCommit(previousAutoCommit);
             }
         } catch (BusinessException ex) {
             throw ex;
         } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to save quality requirement check: " + check.orderCode(), ex);
+            throw qualityCheckFailure(check, ex);
+        }
+    }
+
+    @Override
+    public void saveQualityRequirementCheck(QualityRequirementCheck check, WorkSession session) {
+        try {
+            writeQualityCheck(requireConnection(session), check);
+        } catch (SQLException ex) {
+            throw qualityCheckFailure(check, ex);
         }
     }
 
     @Override
     public Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode) {
-        String sql = """
-                select quality_case_code, order_code, mother_order_code, inspector, outcome,
-                       frozen, ledger_code, rework_order_code, created_at
-                  from biz_quality_requirement_check
-                 where order_code = ?
-                """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, orderCode);
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
-                    return Optional.empty();
-                }
-                String qualityCaseCode = rs.getString("quality_case_code");
-                return Optional.of(new QualityRequirementCheck(
-                        qualityCaseCode,
-                        rs.getString("order_code"),
-                        rs.getString("mother_order_code"),
-                        rs.getString("inspector"),
-                        rs.getString("outcome"),
-                        rs.getInt("frozen") == 1,
-                        rs.getString("ledger_code"),
-                        rs.getString("rework_order_code"),
-                        rs.getString("created_at"),
-                        loadQualityLines(qualityCaseCode)
-                ));
-            }
+        try (Connection connection = dataSource.getConnection()) {
+            return findQualityRequirementCheck(connection, orderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load quality requirement check: " + orderCode, ex);
+        }
+    }
+
+    @Override
+    public Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode, WorkSession session) {
+        try {
+            return findQualityRequirementCheck(requireConnection(session), orderCode);
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to load quality requirement check: " + orderCode, ex);
         }
@@ -758,41 +717,340 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void attachQualityRework(String orderCode, String reworkOrderCode) {
+        try (Connection connection = dataSource.getConnection()) {
+            writeQualityRework(connection, orderCode, reworkOrderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to attach quality rework: " + orderCode, ex);
+        }
+    }
+
+    @Override
+    public void attachQualityRework(String orderCode, String reworkOrderCode, WorkSession session) {
+        try {
+            writeQualityRework(requireConnection(session), orderCode, reworkOrderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to attach quality rework: " + orderCode, ex);
+        }
+    }
+
+    @Override
+    public void saveQualityRound(QualityRound round) {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                writeQualityRound(connection, round);
+                connection.commit();
+            } catch (SQLException ex) {
+                connection.rollback();
+                throw qualityRoundFailure(round, ex);
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw qualityRoundFailure(round, ex);
+        }
+    }
+
+    @Override
+    public void saveQualityRound(QualityRound round, WorkSession session) {
+        try {
+            writeQualityRound(requireConnection(session), round);
+        } catch (SQLException ex) {
+            throw qualityRoundFailure(round, ex);
+        }
+    }
+
+    @Override
+    public List<QualityRound> listQualityRounds(String orderCode) {
+        try (Connection connection = dataSource.getConnection()) {
+            return listQualityRounds(connection, orderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to list quality rounds: " + orderCode, ex);
+        }
+    }
+
+    @Override
+    public List<QualityRound> listQualityRounds(String orderCode, WorkSession session) {
+        try {
+            return listQualityRounds(requireConnection(session), orderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to list quality rounds: " + orderCode, ex);
+        }
+    }
+
+    @Override
+    public void saveQualityReworkReport(QualityReworkReport report) {
+        try (Connection connection = dataSource.getConnection()) {
+            writeQualityReworkReport(connection, report);
+        } catch (SQLException ex) {
+            throw qualityReportFailure(report, ex);
+        }
+    }
+
+    @Override
+    public void saveQualityReworkReport(QualityReworkReport report, WorkSession session) {
+        try {
+            writeQualityReworkReport(requireConnection(session), report);
+        } catch (SQLException ex) {
+            throw qualityReportFailure(report, ex);
+        }
+    }
+
+    @Override
+    public Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode) {
+        try (Connection connection = dataSource.getConnection()) {
+            return findQualityReworkReport(connection, reworkOrderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load quality rework report: " + reworkOrderCode, ex);
+        }
+    }
+
+    @Override
+    public Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode, WorkSession session) {
+        try {
+            return findQualityReworkReport(requireConnection(session), reworkOrderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load quality rework report: " + reworkOrderCode, ex);
+        }
+    }
+
+    private void writeQualityCheck(Connection connection, QualityRequirementCheck check) throws SQLException {
+        String headerSql = """
+                insert into biz_quality_requirement_check (
+                    quality_case_code, order_code, mother_order_code, inspector, outcome,
+                    frozen, ledger_code, rework_order_code, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        String lineSql = """
+                insert into biz_quality_requirement_line (
+                    quality_case_code, line_no, clause_text, verdict, reason
+                ) values (?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement header = connection.prepareStatement(headerSql)) {
+            header.setString(1, check.qualityCaseCode());
+            header.setString(2, check.orderCode());
+            header.setString(3, check.motherOrderCode());
+            header.setString(4, check.inspector());
+            header.setString(5, check.outcome());
+            header.setInt(6, check.frozen() ? 1 : 0);
+            header.setString(7, check.ledgerCode());
+            header.setString(8, check.reworkOrderCode());
+            header.setString(9, check.createdAt());
+            header.executeUpdate();
+        }
+        try (PreparedStatement line = connection.prepareStatement(lineSql)) {
+            for (QualityCheckLine item : check.lines()) {
+                line.setString(1, check.qualityCaseCode());
+                line.setInt(2, item.lineNo());
+                line.setString(3, item.clause());
+                line.setString(4, item.verdict());
+                line.setString(5, item.reason());
+                line.addBatch();
+            }
+            if (!check.lines().isEmpty()) {
+                line.executeBatch();
+            }
+        }
+    }
+
+    private Optional<QualityRequirementCheck> findQualityRequirementCheck(Connection connection, String orderCode) throws SQLException {
+        String sql = """
+                select quality_case_code, order_code, mother_order_code, inspector, outcome,
+                       frozen, ledger_code, rework_order_code, created_at
+                  from biz_quality_requirement_check
+                 where order_code = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, orderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                String qualityCaseCode = rs.getString("quality_case_code");
+                return Optional.of(new QualityRequirementCheck(
+                        qualityCaseCode,
+                        rs.getString("order_code"),
+                        rs.getString("mother_order_code"),
+                        rs.getString("inspector"),
+                        rs.getString("outcome"),
+                        rs.getInt("frozen") == 1,
+                        rs.getString("ledger_code"),
+                        rs.getString("rework_order_code"),
+                        rs.getString("created_at"),
+                        loadQualityLines(connection, qualityCaseCode)
+                ));
+            }
+        }
+    }
+
+    private void writeQualityRework(Connection connection, String orderCode, String reworkOrderCode) throws SQLException {
         String sql = """
                 update biz_quality_requirement_check
                    set rework_order_code = ?
                  where order_code = ?
                    and rework_order_code = ''
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, reworkOrderCode);
             statement.setString(2, orderCode);
             int updated = statement.executeUpdate();
             if (updated == 0) {
-                Optional<QualityRequirementCheck> current = findQualityRequirementCheck(orderCode);
-                if (current.isEmpty()) {
+                if (findQualityRequirementCheck(connection, orderCode).isEmpty()) {
                     throw new BusinessException("请先提交质检对照");
                 }
                 throw new BusinessException("已经开过返工");
             }
-        } catch (BusinessException ex) {
-            throw ex;
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to attach quality rework: " + orderCode, ex);
         }
     }
 
-    private List<QualityCheckLine> loadQualityLines(String qualityCaseCode) {
+    private void writeQualityRound(Connection connection, QualityRound round) throws SQLException {
+        String headerSql = """
+                insert into biz_quality_round (
+                    round_code, quality_case_code, order_code, mother_order_code, round_no, round_type,
+                    rework_order_code, rework_report_ledger, outcome, frozen, ledger_code, inspector, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        String lineSql = """
+                insert into biz_quality_round_line (
+                    round_code, line_no, clause_text, verdict, reason
+                ) values (?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement header = connection.prepareStatement(headerSql)) {
+            header.setString(1, round.roundCode());
+            header.setString(2, round.qualityCaseCode());
+            header.setString(3, round.orderCode());
+            header.setString(4, round.motherOrderCode());
+            header.setInt(5, round.roundNo());
+            header.setString(6, round.roundType());
+            header.setString(7, round.reworkOrderCode());
+            header.setString(8, round.reworkReportLedger());
+            header.setString(9, round.outcome());
+            header.setInt(10, round.frozen() ? 1 : 0);
+            header.setString(11, round.ledgerCode());
+            header.setString(12, round.inspector());
+            header.setString(13, round.createdAt());
+            header.executeUpdate();
+        }
+        try (PreparedStatement line = connection.prepareStatement(lineSql)) {
+            for (QualityCheckLine item : round.lines()) {
+                line.setString(1, round.roundCode());
+                line.setInt(2, item.lineNo());
+                line.setString(3, item.clause());
+                line.setString(4, item.verdict());
+                line.setString(5, item.reason());
+                line.addBatch();
+            }
+            if (!round.lines().isEmpty()) {
+                line.executeBatch();
+            }
+        }
+    }
+
+    private List<QualityRound> listQualityRounds(Connection connection, String orderCode) throws SQLException {
         String sql = """
+                select round_code, quality_case_code, order_code, mother_order_code, round_no, round_type,
+                       rework_order_code, rework_report_ledger, outcome, frozen, ledger_code, inspector, created_at
+                  from biz_quality_round
+                 where order_code = ?
+                 order by round_no
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, orderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<QualityRound> rounds = new ArrayList<>();
+                while (rs.next()) {
+                    String roundCode = rs.getString("round_code");
+                    rounds.add(new QualityRound(
+                            roundCode,
+                            rs.getString("quality_case_code"),
+                            rs.getString("order_code"),
+                            rs.getString("mother_order_code"),
+                            rs.getInt("round_no"),
+                            rs.getString("round_type"),
+                            rs.getString("rework_order_code"),
+                            rs.getString("rework_report_ledger"),
+                            rs.getString("outcome"),
+                            rs.getInt("frozen") == 1,
+                            rs.getString("ledger_code"),
+                            rs.getString("inspector"),
+                            rs.getString("created_at"),
+                            loadRoundLines(connection, roundCode)
+                    ));
+                }
+                return rounds;
+            }
+        }
+    }
+
+    private void writeQualityReworkReport(Connection connection, QualityReworkReport report) throws SQLException {
+        String sql = """
+                insert into biz_quality_rework_report (
+                    rework_order_code, quality_case_code, order_code, mother_order_code,
+                    ledger_code, operator_name, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, report.reworkOrderCode());
+            statement.setString(2, report.qualityCaseCode());
+            statement.setString(3, report.orderCode());
+            statement.setString(4, report.motherOrderCode());
+            statement.setString(5, report.ledgerCode());
+            statement.setString(6, report.operator());
+            statement.setString(7, report.createdAt());
+            statement.executeUpdate();
+        }
+    }
+
+    private Optional<QualityReworkReport> findQualityReworkReport(Connection connection, String reworkOrderCode) throws SQLException {
+        String sql = """
+                select rework_order_code, quality_case_code, order_code, mother_order_code,
+                       ledger_code, operator_name, created_at
+                  from biz_quality_rework_report
+                 where rework_order_code = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reworkOrderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new QualityReworkReport(
+                        rs.getString("rework_order_code"),
+                        rs.getString("quality_case_code"),
+                        rs.getString("order_code"),
+                        rs.getString("mother_order_code"),
+                        rs.getString("ledger_code"),
+                        rs.getString("operator_name"),
+                        rs.getString("created_at")
+                ));
+            }
+        }
+    }
+
+    private List<QualityCheckLine> loadQualityLines(Connection connection, String qualityCaseCode) throws SQLException {
+        return loadLines(connection, """
                 select line_no, clause_text, verdict, reason
                   from biz_quality_requirement_line
                  where quality_case_code = ?
                  order by line_no
-                """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, qualityCaseCode);
+                """, qualityCaseCode);
+    }
+
+    private List<QualityCheckLine> loadRoundLines(Connection connection, String roundCode) throws SQLException {
+        return loadLines(connection, """
+                select line_no, clause_text, verdict, reason
+                  from biz_quality_round_line
+                 where round_code = ?
+                 order by line_no
+                """, roundCode);
+    }
+
+    private List<QualityCheckLine> loadLines(Connection connection, String sql, String code) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
             try (ResultSet rs = statement.executeQuery()) {
                 List<QualityCheckLine> lines = new ArrayList<>();
                 while (rs.next()) {
@@ -805,9 +1063,28 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
                 }
                 return lines;
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to load quality requirement lines: " + qualityCaseCode, ex);
         }
+    }
+
+    private RuntimeException qualityCheckFailure(QualityRequirementCheck check, SQLException ex) {
+        if (isDuplicate(ex)) {
+            return new BusinessException("这张单已经做过质检对照");
+        }
+        return new IllegalStateException("Failed to save quality requirement check: " + check.orderCode(), ex);
+    }
+
+    private RuntimeException qualityRoundFailure(QualityRound round, SQLException ex) {
+        if (isDuplicate(ex)) {
+            return new BusinessException("这一轮质检已经提交");
+        }
+        return new IllegalStateException("Failed to save quality round: " + round.roundCode(), ex);
+    }
+
+    private RuntimeException qualityReportFailure(QualityReworkReport report, SQLException ex) {
+        if (isDuplicate(ex)) {
+            return new BusinessException("返工已经报过工");
+        }
+        return new IllegalStateException("Failed to save quality rework report: " + report.reworkOrderCode(), ex);
     }
 
     private void writeHandoff(Connection connection, ProcessStationHandoff handoff) throws SQLException {

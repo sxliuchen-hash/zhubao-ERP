@@ -25,7 +25,9 @@ import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityCheckCommand;
 import com.zhubao.erp.business.domain.QualityCheckResult;
 import com.zhubao.erp.business.domain.QualityCheckView;
+import com.zhubao.erp.business.domain.QualityFollowCommand;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
+import com.zhubao.erp.business.domain.QualityRecheckCommand;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
 import com.zhubao.erp.business.domain.QualityReworkCommand;
 import com.zhubao.erp.business.domain.QualityReworkResult;
@@ -252,7 +254,35 @@ public class BusinessOperationController {
             @Valid @RequestBody QualityReworkCommand command,
             HttpServletRequest request
     ) {
-        return ApiResponse.ok(requireQualityRequirementService().openRework(command.code(), requireQualityAccount(request)));
+        return ApiResponse.ok(requireQualityRequirementService().openRework(
+                command.code(),
+                requireQualityAccount(request),
+                command.requestId()
+        ));
+    }
+
+    @PostMapping("/quality-checks/rework-reports")
+    public ApiResponse<ReworkReportResult> reportQualityRework(
+            @Valid @RequestBody QualityFollowCommand command,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(requireQualityRequirementService().reportRework(command, requireQualityAccount(request)));
+    }
+
+    @PostMapping("/quality-checks/rechecks")
+    public ApiResponse<QualityCheckResult> recheckQuality(
+            @Valid @RequestBody QualityRecheckCommand command,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(requireQualityRequirementService().recheck(command, requireQualityAccount(request)));
+    }
+
+    @PostMapping("/quality-checks/releases")
+    public ApiResponse<QualityReleaseResult> releaseQualityRound(
+            @Valid @RequestBody QualityFollowCommand command,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(requireQualityRequirementService().releaseRound(command, requireQualityAccount(request)));
     }
 
     @PostMapping("/quality-freezes")

@@ -7,6 +7,7 @@ import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
+import com.zhubao.erp.business.domain.QualityRound;
 import com.zhubao.erp.common.error.BusinessException;
 import org.springframework.stereotype.Service;
 
@@ -60,6 +61,10 @@ public class BusinessDocumentService {
 
     public Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode) {
         return repository.findQualityRequirementCheck(orderCode);
+    }
+
+    public List<QualityRound> listQualityRounds(String orderCode) {
+        return repository.listQualityRounds(orderCode);
     }
 
     /** 返工没有独立单据，按质检记录上的返工号反查原单。 */
