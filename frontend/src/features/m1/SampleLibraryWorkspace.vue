@@ -154,6 +154,7 @@ const registerConfirmLoading = ref(false);
 const registerConfirmError = ref('');
 const registerConfirmResult = ref<RegisterImportBatch | null>(null);
 const registerReviewBatches = ref<RegisterImportBatch[]>([]);
+const batchKeyword = ref('');
 const selectedRegisterBatchNo = ref('');
 const registerBatchDetail = ref<RegisterImportBatch | null>(null);
 const registerBatchLoading = ref(false);
@@ -320,6 +321,12 @@ async function loadRegisterReviewBatches() {
     registerBatchLoading.value = false;
   }
 }
+
+const visibleRegisterBatches = computed(() => {
+  const text = batchKeyword.value.trim().toLowerCase();
+  if (!text) return registerReviewBatches.value;
+  return registerReviewBatches.value.filter((batch) => `${batch.importBatchNo} ${batch.templateCode} ${batch.sourceFileName} ${batch.targetCommand}`.toLowerCase().includes(text));
+});
 
 async function selectRegisterBatch(importBatchNo: string) {
   selectedRegisterBatchNo.value = importBatchNo;
@@ -642,7 +649,7 @@ const registerTemplateRows = computed(() =>
         </form>
         <details class="register-template-reference">
           <summary>查看全部模板与字段概览 <span>{{ registerImportSummary.templates }} 类模板</span></summary>
-        <div class="erp-table-wrap sample-matrix-wrap" tabindex="0" aria-label="登记模板概览，可横向滚动">
+        <div class="erp-table-wrap desk-table-wrap sample-matrix-wrap" tabindex="0" aria-label="登记模板概览，可横向滚动">
           <table class="erp-table register-template-table">
             <thead>
               <tr>
@@ -751,7 +758,7 @@ const registerTemplateRows = computed(() =>
               <small>{{ item.message.fallback }}</small>
             </article>
           </div>
-          <div class="erp-table-wrap register-preview-table-wrap">
+          <div class="erp-table-wrap desk-table-wrap register-preview-table-wrap">
             <table class="erp-table register-preview-table">
               <thead>
                 <tr>
@@ -776,6 +783,15 @@ const registerTemplateRows = computed(() =>
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="desk-cards">
+            <article v-for="row in registerPreviewRows" :key="`preview-card-${row.sourceLineNo}-${row.sourceRegisterSequence}`" class="desk-card production-handoff-card">
+              <span class="desk-card-top">
+                <strong>行 {{ row.sourceLineNo }}</strong>
+                <StatusBadge :label="row.status" :tone="previewStatusTone(row.status)" />
+              </span>
+              <span>序号 {{ row.sourceRegisterSequence }}</span>
+            </article>
           </div>
         </section>
       </div>
@@ -862,8 +878,12 @@ const registerTemplateRows = computed(() =>
       <p v-if="registerBatchError" class="register-preview-error">
         {{ registerBatchError }}；请检查连接后重试。
       </p>
+      <label>
+        <span>查找批次</span>
+        <input v-model="batchKeyword" aria-label="查找批次" placeholder="批次号、模板或文件" />
+      </label>
       <div class="register-review-grid">
-        <div class="erp-table-wrap register-review-batch-wrap">
+        <div class="erp-table-wrap desk-table-wrap register-review-batch-wrap">
           <table class="erp-table register-review-batch-table">
             <thead>
               <tr>
@@ -877,7 +897,7 @@ const registerTemplateRows = computed(() =>
             </thead>
             <tbody>
               <tr
-                v-for="batch in registerReviewBatches"
+                v-for="batch in visibleRegisterBatches"
                 :key="batch.importBatchNo"
                 :class="{ 'is-selected': batch.importBatchNo === selectedRegisterBatchNo }"
                 @click="selectRegisterBatch(batch.importBatchNo)"
@@ -896,6 +916,22 @@ const registerTemplateRows = computed(() =>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="desk-cards">
+          <button
+            v-for="batch in visibleRegisterBatches"
+            :key="`card-${batch.importBatchNo}`"
+            class="desk-card"
+            type="button"
+            @click="selectRegisterBatch(batch.importBatchNo)"
+          >
+            <span class="desk-card-top">
+              <strong class="code">{{ batch.importBatchNo }}</strong>
+              <StatusBadge :label="batchStatusLabel(batch.status)" :tone="batchStatusTone(batch.status)" />
+            </span>
+            <span>{{ batch.templateCode }} · {{ batch.sourceFileName }}</span>
+            <span>{{ batch.totalRows }} 行 · {{ batch.targetCommand }}</span>
+          </button>
         </div>
         <aside v-if="selectedRegisterBatch" class="register-review-detail">
           <div class="register-review-detail-head">
@@ -1044,7 +1080,7 @@ const registerTemplateRows = computed(() =>
             <p v-if="registerCorrectionError" class="register-correction-error">
               {{ registerCorrectionError }}
             </p>
-            <div class="erp-table-wrap register-posting-draft-wrap">
+            <div class="erp-table-wrap desk-table-wrap register-posting-draft-wrap">
               <table class="erp-table register-posting-draft-table">
                 <thead>
                   <tr>
@@ -1071,7 +1107,7 @@ const registerTemplateRows = computed(() =>
               </table>
             </div>
           </section>
-          <div class="erp-table-wrap register-review-row-wrap">
+          <div class="erp-table-wrap desk-table-wrap register-review-row-wrap">
             <table class="erp-table register-review-row-table">
               <thead>
                 <tr>
@@ -1105,6 +1141,16 @@ const registerTemplateRows = computed(() =>
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="desk-cards">
+            <article v-for="row in selectedRegisterBatchRows" :key="`review-card-${row.importBatchNo}-${row.sourceLineNo}`" class="desk-card production-handoff-card">
+              <span class="desk-card-top">
+                <strong>行 {{ row.sourceLineNo }}</strong>
+                <StatusBadge :label="row.status" :tone="previewStatusTone(row.status)" />
+              </span>
+              <span>序号 {{ row.sourceRegisterSequence || '-' }}</span>
+              <span v-if="row.messages.length">{{ row.messages[0].message }}</span>
+            </article>
           </div>
         </aside>
       </div>
