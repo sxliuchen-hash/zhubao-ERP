@@ -57,13 +57,15 @@ pnpm --filter zhubao-erp-frontend dev
 
 ## 验证
 
+默认按 [AGENTS 验证策略](AGENTS.md)执行受影响范围的定向检查。文档不跑业务测试、构建或打包；普通增量不制作运行包。以下全量命令仅在用户要求、正式发布验收或公共改动需要时使用，不是每次提交的必跑清单。
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml test
 pnpm --filter zhubao-erp-frontend test
 pnpm --filter zhubao-erp-frontend build
 ```
 
-统一检查可运行 `powershell -ExecutionPolicy Bypass -File scripts/check.ps1`，旧 check-m0/check-m1 命令转发到同一入口，任一步失败即停止。脚本维护回归见 `scripts/test-maintenance.ps1`。提交门槛以 AGENTS 为准。页面检查可使用 node scripts/check-frontend-ui.cjs http://localhost:5173/，需本地服务与 Playwright；output 截图不替代业务验收。
+需要统一检查时可运行 `powershell -ExecutionPolicy Bypass -File scripts/check.ps1`，不默认每轮执行；旧 check-m0/check-m1 命令转发到同一入口，任一步失败即停止。脚本维护回归见 `scripts/test-maintenance.ps1`。本次必要验证通过即可按 AGENTS 提交。页面检查可使用 node scripts/check-frontend-ui.cjs http://localhost:5173/，需本地服务与 Playwright；output 截图不替代业务验收。
 
 ## Docker 交付
 
