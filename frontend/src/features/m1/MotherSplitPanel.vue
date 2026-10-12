@@ -238,12 +238,12 @@ function scaleStyle(payload: LabelPayload) {
 }
 .split-summary {
   margin: 0;
-  color: #46505c;
+  color: var(--ink-muted);
   font-size: 13px;
   line-height: 1.5;
 }
 .split-line {
-  border: 1px solid #e2e7ec;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px;
   margin-bottom: 8px;
@@ -273,6 +273,6 @@ function scaleStyle(payload: LabelPayload) {
 }
 .label-sheet {
   overflow: hidden;
-  background: #fff;
+  background: var(--content);
 }
 </style>

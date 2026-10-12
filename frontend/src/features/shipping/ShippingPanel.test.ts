@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ShippingPanel from './ShippingPanel.vue';
 import { queryScanContext, saveProgressRecord } from '../../services/scanContextApi';
 import { shipFinishedStock } from '../../services/businessOperationApi';
-import { bindEvidence, uploadEvidenceFile } from '../../services/evidenceApi';
+import { bindEvidence, uploadEvidenceFile, type StoredEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
 import type { ScanBalanceCandidate, ScanContextResponse } from '../../services/scanContextApi';
 
@@ -264,7 +264,7 @@ describe('发货面板', () => {
     expect(wrapper.text()).toContain('上传失败');
     expect(shipFinishedStock).toHaveBeenCalledTimes(1);
 
-    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-1', fileName: 'after.jpg' });
+    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-1', fileName: 'after.jpg' } as StoredEvidenceFile);
     vi.mocked(bindEvidence).mockResolvedValue({ linkCode: 'L1', attachmentCode: 'ATT-1', scene: 'PACK' });
     await wrapper.findAll('button').find((button) => button.text() === '重试')!.trigger('click');
     await flushPromises();
@@ -345,7 +345,7 @@ describe('发货面板', () => {
     expect(wrapper.text()).toContain('YT90000001');
     expect(wrapper.text()).toContain('可以补传证据');
     expect(wrapper.findAll('button').some((button) => button.text() === '确认发货')).toBe(false);
-    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-2', fileName: 'waybill.jpg' });
+    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-2', fileName: 'waybill.jpg' } as StoredEvidenceFile);
     vi.mocked(bindEvidence).mockResolvedValue({ linkCode: 'L2', attachmentCode: 'ATT-2', scene: 'PACK' });
     await pickFile(wrapper, 'waybill.jpg');
     await wrapper.findAll('button').find((button) => button.text() === '上传并关联')!.trigger('click');

@@ -6,7 +6,7 @@ import type { TraceTarget } from '../scan/traceTarget';
 import ProductionPanel from './ProductionPanel.vue';
 import { queryScanContext, saveProgressRecord } from '../../services/scanContextApi';
 import { lookupProcessStation, submitProcessStation } from '../../services/processStationApi';
-import { bindEvidence, uploadEvidenceFile } from '../../services/evidenceApi';
+import { bindEvidence, uploadEvidenceFile, type StoredEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
 
 vi.mock('../../services/scanContextApi', async () => {
@@ -226,7 +226,7 @@ describe('生产面板', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('上传失败');
 
-    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-1', fileName: 'finish.jpg' });
+    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-1', fileName: 'finish.jpg' } as StoredEvidenceFile);
     vi.mocked(bindEvidence).mockResolvedValue({ linkCode: 'L1', attachmentCode: 'ATT-1', scene: 'PROCESS' });
     await wrapper.findAll('button').find((button) => button.text() === '重试')!.trigger('click');
     await flushPromises();

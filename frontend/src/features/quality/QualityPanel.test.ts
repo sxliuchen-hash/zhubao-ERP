@@ -11,7 +11,7 @@ import {
   submitQualityCheck,
   submitQualityRecheck,
 } from '../../services/qualityCheckApi';
-import { bindEvidence, uploadEvidenceFile } from '../../services/evidenceApi';
+import { bindEvidence, uploadEvidenceFile, type StoredEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
 
 vi.mock('../../services/scanContextApi', async () => {
@@ -311,7 +311,7 @@ describe('质检面板', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('上传失败');
 
-    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-1', fileName: 'check.jpg' });
+    vi.mocked(uploadEvidenceFile).mockResolvedValue({ code: 'ATT-1', fileName: 'check.jpg' } as StoredEvidenceFile);
     vi.mocked(bindEvidence).mockResolvedValue({ linkCode: 'L1', attachmentCode: 'ATT-1', scene: 'CHECK' });
     await wrapper.findAll('button').find((button) => button.text() === '重试')!.trigger('click');
     await flushPromises();

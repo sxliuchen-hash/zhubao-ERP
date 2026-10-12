@@ -471,8 +471,8 @@ function taskTone(task: IntegrationTask): Tone {
               <span>设备/业务码</span>
               <input v-model="deviceKeyword" placeholder="设备编码或名称" aria-label="设备或业务编码" />
             </label>
-            <button class="primary-button" type="button">新建 POC</button>
-            <button class="secondary-button" type="button">导出清单</button>
+            <button class="primary-button" type="button" disabled title="当前版本未提供新建">新建 POC</button>
+            <button class="secondary-button" type="button" disabled title="当前版本未提供导出">导出清单</button>
           </div>
         </div>
 
@@ -500,7 +500,7 @@ function taskTone(task: IntegrationTask): Tone {
                 <td>{{ device.protocol }}</td>
                 <td><StatusBadge :label="deviceLabel(device.status)" :tone="deviceTone(device.status)" /></td>
                 <td>{{ device.fallback }}</td>
-                <td><button class="table-action" type="button">记录 POC</button></td>
+                <td><button class="table-action" type="button" disabled title="当前版本未提供记录">记录 POC</button></td>
               </tr>
             </tbody>
           </table>
@@ -806,6 +806,26 @@ function taskTone(task: IntegrationTask): Tone {
           </tbody>
         </table>
       </div>
+      <div class="desk-cards">
+        <p v-if="gatewayReadings.length === 0" class="empty-hint">暂无读数记录。连接后端并推送读数后展示。</p>
+        <article v-for="reading in gatewayReadings" :key="`reading-card-${reading.readingCode}`" class="desk-card production-handoff-card">
+          <span class="desk-card-top">
+            <strong class="code">{{ reading.readingCode }}</strong>
+            <StatusBadge :label="reading.status" :tone="gatewayStatusTone(reading.status)" />
+          </span>
+          <span>{{ reading.deviceCode }} · {{ reading.readingType }}</span>
+          <span>{{ reading.normalizedValue }}{{ reading.normalizedUnit }} {{ reading.normalizedCode }}</span>
+          <StatusBadge v-if="gatewayConsumedCodes.has(reading.readingCode)" label="已消费" tone="gray" />
+          <button
+            v-else
+            class="secondary-button"
+            type="button"
+            @click="consumeGatewayReading(reading)"
+          >
+            {{ intentLabels[defaultIntentFor(reading)] }}
+          </button>
+        </article>
+      </div>
 
       <div class="section-block">
         <div class="section-heading">
@@ -852,6 +872,18 @@ function taskTone(task: IntegrationTask): Tone {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="desk-cards">
+          <p v-if="gatewayConsumptions.length === 0" class="empty-hint">暂无消费记录。</p>
+          <article v-for="consumption in gatewayConsumptions" :key="`consumption-card-${consumption.consumptionCode}`" class="desk-card production-handoff-card">
+            <span class="desk-card-top">
+              <strong class="code">{{ consumption.consumptionCode }}</strong>
+              <StatusBadge :label="intentLabels[consumption.intent]" tone="blue" />
+            </span>
+            <span>读数 {{ consumption.readingCode }}</span>
+            <span>{{ consumption.businessRefType }} {{ consumption.businessRefCode }}</span>
+            <span>{{ consumption.operator }} / {{ consumption.consumedAt }}</span>
+          </article>
         </div>
       </div>
     </section>

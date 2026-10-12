@@ -26,6 +26,7 @@ public class InMemoryNavigationMenuRepository implements NavigationMenuRepositor
                     PermissionCode.BUSINESS_INBOUND_CONFIRM.name(),
                     PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD.name()
             )),
+            menu("label", "标签", "打印 / 模板", "/label", List.of()),
             menu("production", "生产工单", "排产 / 报工", "/production", List.of(
                     PermissionCode.BUSINESS_PRODUCTION_REPORT.name(),
                     PermissionCode.MACHINE_OUTPUT_SUBMIT.name()
@@ -78,17 +79,17 @@ public class InMemoryNavigationMenuRepository implements NavigationMenuRepositor
     private final Map<RoleCode, Set<String>> roleMenus = new EnumMap<>(RoleCode.class);
 
     public InMemoryNavigationMenuRepository() {
-        allow(RoleCode.ADMIN, "dashboard", "inbound", "production", "progress", "quality", "inventory", "approvals", "finance",
+        allow(RoleCode.ADMIN, "dashboard", "inbound", "label", "production", "progress", "quality", "inventory", "approvals", "finance",
                 "configuration", "documents", "sample", "hardware", "operations", "mobile");
-        allow(RoleCode.GENERAL_MANAGER, "dashboard", "inbound", "production", "progress", "quality", "inventory", "approvals", "finance",
+        allow(RoleCode.GENERAL_MANAGER, "dashboard", "inbound", "label", "production", "progress", "quality", "inventory", "approvals", "finance",
                 "configuration", "documents", "sample", "hardware", "operations", "mobile");
-        allow(RoleCode.SALES, "dashboard", "inbound", "progress", "inventory", "documents", "sample");
-        allow(RoleCode.RECEIVER, "dashboard", "inbound", "progress", "documents", "hardware", "mobile");
+        allow(RoleCode.SALES, "dashboard", "inbound", "label", "progress", "inventory", "documents", "sample");
+        allow(RoleCode.RECEIVER, "dashboard", "inbound", "label", "progress", "documents", "hardware", "mobile");
         allow(RoleCode.WORKSHOP_LEADER, "dashboard", "production", "progress", "quality", "approvals", "sample",
                 "hardware", "operations", "mobile");
         allow(RoleCode.OPERATOR, "dashboard", "production", "mobile");
         allow(RoleCode.QUALITY_INSPECTOR, "dashboard", "progress", "quality", "inventory", "documents", "mobile");
-        allow(RoleCode.WAREHOUSE_KEEPER, "dashboard", "inbound", "progress", "inventory", "documents", "sample",
+        allow(RoleCode.WAREHOUSE_KEEPER, "dashboard", "inbound", "label", "progress", "inventory", "documents", "sample",
                 "hardware", "operations", "mobile");
         allow(RoleCode.FINANCE_STATISTICIAN, "dashboard", "progress", "approvals", "finance", "configuration");
     }

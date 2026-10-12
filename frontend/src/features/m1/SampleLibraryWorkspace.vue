@@ -649,7 +649,7 @@ const registerTemplateRows = computed(() =>
         </form>
         <details class="register-template-reference">
           <summary>查看全部模板与字段概览 <span>{{ registerImportSummary.templates }} 类模板</span></summary>
-        <div class="erp-table-wrap desk-table-wrap sample-matrix-wrap" tabindex="0" aria-label="登记模板概览，可横向滚动">
+        <div class="erp-table-wrap sample-matrix-wrap" tabindex="0" aria-label="登记模板概览，可横向滚动">
           <table class="erp-table register-template-table">
             <thead>
               <tr>
@@ -1105,6 +1105,15 @@ const registerTemplateRows = computed(() =>
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div class="desk-cards">
+              <article v-for="draft in selectedPostingDrafts" :key="`posting-card-${draft.importBatchNo}-${draft.sourceLineNo}`" class="desk-card production-handoff-card">
+                <span class="desk-card-top">
+                  <strong>第 {{ draft.sourceLineNo }} 行</strong>
+                  <StatusBadge :label="draft.status" :tone="previewStatusTone(draft.status)" />
+                </span>
+                <span>{{ draft.targetCommand }}</span>
+              </article>
             </div>
           </section>
           <div class="erp-table-wrap desk-table-wrap register-review-row-wrap">

@@ -2149,7 +2149,7 @@ PWA 一期边界：
 | `buttonCodes` | 该菜单关联的敏感按钮权限编码，如 `REGISTER_IMPORT_REVIEW`、`BUSINESS_INBOUND_CONFIRM` |
 | `children` | 子菜单列表；当前 先返回一层菜单，保留树形结构 |
 
-角色菜单来自仓储配置，不能把某次 seed 的完整列表作为固定权限契约。默认菜单包含进度与财务；当前角色绑定见[内存菜单仓储](../backend/src/main/java/com/zhubao/erp/security/infra/InMemoryNavigationMenuRepository.java)，MySQL 部署读取 `sys_navigation_menu/sys_role_menu`。新增或调整角色可见性须与后端动作权限分开验证。
+角色菜单来自仓储配置，不能把某次 seed 的完整列表作为固定权限契约。默认菜单包含进度、财务和标签。标签页编码 `label` 由 V47 写入，授予管理员、总经理、业务、收货和仓管，操作工不可见。当前角色绑定见[内存菜单仓储](../backend/src/main/java/com/zhubao/erp/security/infra/InMemoryNavigationMenuRepository.java)，MySQL 部署读取 `sys_navigation_menu/sys_role_menu`。新增或调整角色可见性须与后端动作权限分开验证。已有库需备份后受控执行 V47，不修改已发布迁移。
 
 菜单与角色可见性使用 `NavigationMenuRepository`，本地默认内存、MySQL profile 默认 JDBC；前端按会话 `menuCodes/menuTree` 过滤导航。导航隐藏不替代后端权限守卫。
 

@@ -44,3 +44,4 @@ V43__m3_operation_progress.sql
 V44__m3_command_request.sql
 V45__m3_mother_order_courier_identity.sql
 V46__m3_quality_round.sql
+V47__m3_label_menu.sql

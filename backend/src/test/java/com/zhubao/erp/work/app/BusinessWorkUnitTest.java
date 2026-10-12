@@ -143,8 +143,11 @@ class BusinessWorkUnitTest {
                 });
             });
             start.countDown();
-            assertThat(left.get()).isEqualTo("STK-RACE|OUT-RACE");
-            assertThat(right.get()).isEqualTo("STK-RACE|OUT-RACE");
+            // 哪条线程先写入都算一次成功，另一条必须回放同一结果，不能假定左侧先完成。
+            String leftResult = left.get();
+            String rightResult = right.get();
+            assertThat(leftResult).isEqualTo(rightResult);
+            assertThat(leftResult).isIn("STK-RACE|OUT-RACE", "第二次扣减");
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
         } finally {

@@ -50,4 +50,11 @@ class NavigationMenuServiceTest {
                 });
         assertThat(service.menuCodesFor(RoleCode.OPERATOR)).doesNotContain("finance");
     }
+
+    @Test
+    void showsLabelMenuToInboundRolesAndNotOperators() {
+        assertThat(service.menuCodesFor(RoleCode.ADMIN)).contains("label");
+        assertThat(service.menuCodesFor(RoleCode.RECEIVER)).contains("label");
+        assertThat(service.menuCodesFor(RoleCode.OPERATOR)).doesNotContain("label");
+    }
 }

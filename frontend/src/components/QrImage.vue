@@ -18,8 +18,8 @@ const boxSize = computed(() => `${props.size ?? 120}px`);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border: 1px solid #d0d6dd;
+  background: var(--content);
+  border: 1px solid var(--border);
 }
 .qr-image :deep(svg) {
   width: 100%;

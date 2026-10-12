@@ -61,7 +61,11 @@
 .timeline article { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding-left: 12px; border-left: 2px solid var(--border); }
 .timeline article > div { display: grid; gap: 4px; min-width: 0; }
 .timeline :is(time, small, span) { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.inventory-trace-desk .ledger-table { max-width: 100%; overflow-x: auto; }
+.inventory-trace-desk .module-work-grid,
+.inventory-trace-desk .module-detail-grid,
+.inventory-trace-desk .module-rule-panel,
+.inventory-trace-desk .ledger-table { min-width: 0; max-width: 100%; }
+.inventory-trace-desk .ledger-table { overflow-x: auto; }
 .inventory-trace-desk .ledger-row { min-width: 650px; grid-template-columns: 100px minmax(170px, 1.5fr) 100px 100px minmax(180px, 1.5fr); }
 .inventory-trace-desk .ledger-row > * { min-width: 0; overflow-wrap: anywhere; }
 

@@ -523,14 +523,20 @@ export async function releaseQualityStock(row: QualityCase, extra: Partial<Quali
   return apiPost('/api/business/operations/quality-releases', buildQualityReleaseRequest(row, { ...extra, inspector: await actor() }));
 }
 
-export function buildOutboundShipmentRequest(row: InventoryBalance, extra: Partial<OutboundShipmentRequest> = {}): OutboundShipmentRequest {
+export function buildOutboundShipmentRequest(
+  row: InventoryBalance,
+  extra: Partial<Omit<OutboundShipmentRequest, 'quantity' | 'weight'>> & AmountInput = {},
+): OutboundShipmentRequest {
   return requireFields(withConfirmedAmounts(row, extra, () => ({
     toWarehouseCode: 'SHIPPED-CUSTOMER', shipmentCode: '', logisticsNo: '',
     deliveryCategory: '成品', operator: '',
   })), [['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['operator', '操作人']]);
 }
 
-export async function shipFinishedStock(row: InventoryBalance, extra: Partial<OutboundShipmentRequest> = {}): Promise<OutboundShipmentResult> {
+export async function shipFinishedStock(
+  row: InventoryBalance,
+  extra: Partial<Omit<OutboundShipmentRequest, 'quantity' | 'weight'>> & AmountInput = {},
+): Promise<OutboundShipmentResult> {
   return apiPost('/api/business/operations/outbound-shipments', buildOutboundShipmentRequest(row, { ...extra, operator: await actor() }));
 }
 
