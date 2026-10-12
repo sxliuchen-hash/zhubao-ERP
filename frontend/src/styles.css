@@ -1709,11 +1709,13 @@ button.finance-month-button {
 .inbound-cards,
 .production-cards,
 .production-handoff-cards,
+.desk-cards,
 .detail-back { display: none; }
 
 .inbound-card,
 .production-card,
-.production-handoff-card {
+.production-handoff-card,
+.desk-card {
   display: grid;
   gap: 4px;
   width: 100%;
@@ -1727,7 +1729,8 @@ button.finance-month-button {
 }
 
 .production-card,
-.production-handoff-card {
+.production-handoff-card,
+.desk-card {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1742,7 +1745,8 @@ button.finance-month-button {
 }
 
 .production-card-top,
-.production-handoff-top {
+.production-handoff-top,
+.desk-card-top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1769,18 +1773,22 @@ button.finance-month-button {
 @media (max-width: 900px) {
   .inbound-table-wrap,
   .production-table-wrap,
-  .production-handoff-table { display: none; }
+  .production-handoff-table,
+  .desk-table-wrap { display: none; }
   .inbound-cards,
   .production-cards,
-  .production-handoff-cards { display: grid; gap: 8px; }
+  .production-handoff-cards,
+  .desk-cards { display: grid; gap: 8px; }
   .detail-back { display: inline-flex; }
 
   .inbound-desk:not(.is-detail) .module-side-panel,
   .inbound-desk:not(.is-detail) .evidence-slot-panel,
-  .production-desk:not(.is-detail) .module-side-panel { display: none; }
+  .production-desk:not(.is-detail) .module-side-panel,
+  .desk-page:not(.is-detail) .module-side-panel { display: none; }
 
   .inbound-desk.is-detail .module-master-panel,
-  .production-desk.is-detail .module-master-panel { display: none; }
+  .production-desk.is-detail .module-master-panel,
+  .desk-page.is-detail .module-master-panel { display: none; }
 }
 
 .scan-entry input,

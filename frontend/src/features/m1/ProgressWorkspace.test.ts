@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import ProgressWorkspace from './ProgressWorkspace.vue';
+import { ApiRequestError } from '../../services/apiClient';
 import { fetchProgress } from '../../services/progressApi';
 import type { TraceTarget } from '../scan/traceTarget';
 
@@ -93,5 +94,38 @@ describe('ProgressWorkspace', () => {
     await flushPromises();
     await wrapper.get('button.table-action').trigger('click');
     expect(target.value).toMatchObject({ objectType: 'MOTHER_ORDER', code: 'MD-KEEP', intent: 'INTAKE' });
+  });
+
+  it('进入详情再返回时保留筛选，无权限不显示成空成功', async () => {
+    vi.mocked(fetchProgress).mockResolvedValueOnce([
+      {
+        customerId: 1001,
+        customerName: '恒信珠宝',
+        motherOrderCode: 'MD-1',
+        workOrderCode: 'ZD-1',
+        currentProcess: '镶嵌',
+        dueDate: '2099-01-01',
+        overdue: false,
+        qualityOutcome: '未质检',
+        status: '在制',
+        openTab: 'production',
+      },
+    ]);
+    const wrapper = mount(ProgressWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="进度客户"]').setValue('恒信');
+    await wrapper.get('.desk-card').trigger('click');
+    expect(wrapper.classes()).toContain('is-detail');
+    expect(wrapper.find('.active-object-card > strong').text()).toBe('MD-1');
+    await wrapper.get('.detail-back').trigger('click');
+    expect(wrapper.classes()).not.toContain('is-detail');
+    expect((wrapper.get('[aria-label="进度客户"]').element as HTMLInputElement).value).toBe('恒信');
+
+    vi.mocked(fetchProgress).mockRejectedValueOnce(new ApiRequestError('无权查看进度', 403, 40301));
+    const denied = mount(ProgressWorkspace);
+    await flushPromises();
+    expect(denied.text()).toContain('无权限');
+    expect(denied.text()).toContain('无权查看进度');
+    expect(denied.find('.active-object-card').exists()).toBe(false);
   });
 });

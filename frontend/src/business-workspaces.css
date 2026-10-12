@@ -12,8 +12,10 @@
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) th { white-space: nowrap; }
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk) td { min-width: 88px; }
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) table .table-action { white-space: nowrap; }
-.production-desk :is(.production-dispatch-table, .production-handoff-grid) { min-width: 0; }
-.production-desk :is(.production-dispatch-table, .production-handoff-grid) :is(th, td) {
+.production-desk :is(.production-dispatch-table, .production-handoff-grid),
+.progress-board .progress-table { min-width: 0; }
+.production-desk :is(.production-dispatch-table, .production-handoff-grid) :is(th, td),
+.progress-board .progress-table :is(th, td) {
   min-width: 0;
   white-space: normal;
 }
@@ -62,7 +64,6 @@
 :is(.finance-workspace, .progress-board) :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
 .finance-workspace .account-admin-grid { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); align-items: end; gap: 12px; }
 :is(.finance-workspace, .progress-board) :is(.finance-actions, .finance-filters) label { flex: 1 1 160px; min-width: 0; }
-.progress-board header p { margin-top: 6px; color: var(--muted); font-size: 13px; }
 
 @container business-workspace (max-width: 1060px) {
   :is(.inbound-work-grid, .production-work-grid, .quality-work-grid, .inventory-work-grid, .command-grid-v2) {
