@@ -7,6 +7,7 @@ defineProps<{
 }>();
 
 const traceQuery = defineModel<string>('traceQuery', { default: '' });
+const emit = defineEmits<{ openTrace: [] }>();
 
 const collapsedStorageKey = 'zhubao-sidebar-collapsed';
 const collapsed = ref(readCollapsed());
@@ -85,7 +86,13 @@ function toggleCollapsed() {
         <slot name="session" />
         <label class="global-search lean-search">
           <span>追溯</span>
-          <input v-model="traceQuery" placeholder="母单、工单或快递单号" aria-label="追溯查询" />
+          <input
+            v-model="traceQuery"
+            placeholder="母单、工单或快递单号"
+            aria-label="追溯查询"
+            @keydown.enter.prevent="emit('openTrace')"
+          />
+          <button class="secondary-button" type="button" aria-label="打开追溯单据" @click="emit('openTrace')">打开单据</button>
         </label>
       </div>
 

@@ -8,6 +8,7 @@ import type { ScanDraft } from '../scan/scanDraft';
 import { extractCourierNumber } from '../scan/scanCode';
 import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
 import { useScanContext } from '../scan/useScanContext';
+import { useTraceTarget } from '../scan/useTraceTarget';
 import type { InventoryBalance } from '../../data/m1PrototypeData';
 import { shipFinishedStock, type OutboundShipmentResult } from '../../services/businessOperationApi';
 import {
@@ -208,6 +209,14 @@ async function recognize(draft: ScanDraft) {
   recognizedType.value = draft.objectType ?? '';
   applyBalance(response);
 }
+
+useTraceTarget(['SHIPPING'], (target) => {
+  scanText.value = target.code;
+  void recognize({
+    content: target.code,
+    ...(target.objectType ? { objectType: target.objectType } : {}),
+  });
+});
 
 async function chooseTarget(related: ScanRelatedTarget) {
   if (!related.code || !related.objectType) return;

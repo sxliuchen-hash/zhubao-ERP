@@ -4,6 +4,8 @@ import AppShell from './components/AppShell.vue';
 import NavIcon from './components/NavIcon.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import LoginPage from './features/auth/LoginPage.vue';
+import ChainReview from './features/scan/ChainReview.vue';
+import type { TraceTarget } from './features/scan/traceTarget';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
 import {
   authSessionChangedEvent,
@@ -96,7 +98,10 @@ const activeWorkspace = computed(() => {
 });
 const moreOpen = ref(false);
 const traceQuery = ref('');
+const traceTarget = ref<TraceTarget | null>(null);
+let traceToken = 0;
 provide('zhubao-trace-query', traceQuery);
+provide('zhubao-trace-target', traceTarget);
 provide('zhubao-open-tab', (tab: TabKey) => {
   activateTab(tab);
 });
@@ -176,6 +181,13 @@ function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) 
   authSession.value = event.detail.session;
 }
 
+function openTraceDocument() {
+  const code = traceQuery.value.trim();
+  if (!code) return;
+  traceToken += 1;
+  traceTarget.value = { objectType: null, code, intent: 'LOOKUP', token: traceToken };
+}
+
 function activateTab(tab: TabKey) {
   if (visibleTabs.value.some((item) => item.key === tab)) {
     activeTab.value = tab;
@@ -199,7 +211,7 @@ function isTabKey(value: string): value is TabKey {
 <template>
   <p v-if="!authReady" class="login-page">正在恢复登录</p>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
-  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': activeTabMeta?.group === 'system' }">
+  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': activeTabMeta?.group === 'system' }" @open-trace="openTraceDocument">
     <template #session>
       <div class="top-session">
         <span>{{ authSession?.operator }}</span>
@@ -267,6 +279,7 @@ function isTabKey(value: string): value is TabKey {
       </template>
     </template>
 
+    <ChainReview v-if="traceTarget?.intent === 'LOOKUP'" />
     <M1Dashboard v-if="activeTab === 'dashboard'" />
     <component :is="activeWorkspace" v-else />
   </AppShell>

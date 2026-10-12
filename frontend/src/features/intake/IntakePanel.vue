@@ -5,6 +5,7 @@ import OrderContextCard from '../scan/OrderContextCard.vue';
 import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
+import { useTraceTarget } from '../scan/useTraceTarget';
 import type { ScanContextResponse, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   fetchMotherOrder,
@@ -106,6 +107,14 @@ async function recognizeIntake(draft: ScanDraft) {
   });
   applyIntake(response);
 }
+
+useTraceTarget(['INTAKE'], (target) => {
+  scanText.value = target.code;
+  void recognizeIntake({
+    content: target.code,
+    ...(target.objectType ? { objectType: target.objectType } : {}),
+  });
+});
 
 async function chooseIntakeTarget(related: ScanRelatedTarget) {
   if (!related.code || !related.objectType) return;

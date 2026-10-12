@@ -7,6 +7,7 @@ import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
+import { useTraceTarget } from '../scan/useTraceTarget';
 import type { ScanContextResponse, ScanProgressRecord, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   lookupQualityCheck,
@@ -219,6 +220,14 @@ async function recognize(draft: ScanDraft) {
   }
   await loadCheck(response, qualityScan.revision);
 }
+
+useTraceTarget(['QUALITY'], (target) => {
+  scanText.value = target.code;
+  void recognize({
+    content: target.code,
+    ...(target.objectType ? { objectType: target.objectType } : {}),
+  });
+});
 
 async function chooseTarget(related: ScanRelatedTarget) {
   if (!related.code || !related.objectType) return;

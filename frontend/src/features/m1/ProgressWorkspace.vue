@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { inject, onMounted, ref } from 'vue';
+import { inject, onMounted, ref, type Ref } from 'vue';
 import { fetchProgress, type ProgressRow } from '../../services/progressApi';
+import { progressTraceTarget, type TraceTarget } from '../scan/traceTarget';
 
 type DeskTab = 'inbound' | 'production' | 'quality';
 
 const openTab = inject<(tab: DeskTab) => void>('zhubao-open-tab', () => {});
-const traceQuery = inject<{ value: string }>('zhubao-trace-query', ref(''));
+const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
+let traceToken = 0;
 const rows = ref<ProgressRow[]>([]);
 const loadError = ref('');
 const loading = ref(false);
@@ -40,7 +42,8 @@ async function loadRows() {
 }
 
 function openRow(row: ProgressRow) {
-  traceQuery.value = row.workOrderCode || row.motherOrderCode;
+  traceToken += 1;
+  traceTarget.value = progressTraceTarget(row, traceToken);
   openTab(row.openTab);
 }
 </script>

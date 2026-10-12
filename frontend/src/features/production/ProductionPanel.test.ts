@@ -1,5 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
+import type { TraceTarget } from '../scan/traceTarget';
 import ProductionPanel from './ProductionPanel.vue';
 import { queryScanContext, saveProgressRecord } from '../../services/scanContextApi';
 import { lookupProcessStation, submitProcessStation } from '../../services/processStationApi';
@@ -73,6 +75,33 @@ describe('生产面板', () => {
     vi.mocked(uploadEvidenceFile).mockReset();
     vi.mocked(bindEvidence).mockReset();
     vi.mocked(saveProgressRecord).mockReset();
+  });
+
+  it('进度目标按规范单号打开，别的意图不报工', async () => {
+    const target = ref<TraceTarget | null>(null);
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      objectType: 'WORK_ORDER',
+      code: 'ZD-9',
+      customerName: '瑞丽金行',
+    }));
+    vi.mocked(lookupProcessStation).mockResolvedValue({ ...stationView(), orderCode: 'ZD-9' });
+    mount(ProductionPanel, {
+      props: { title: '岗位报工', intro: '扫贴纸后交付' },
+      global: { provide: { 'zhubao-trace-target': target } },
+    });
+    target.value = { objectType: 'WORK_ORDER', code: 'ZD-8', intent: 'SHIPPING', token: 1 };
+    await flushPromises();
+    expect(queryScanContext).not.toHaveBeenCalled();
+
+    target.value = { objectType: 'WORK_ORDER', code: 'ZD-9', intent: 'PRODUCTION', token: 2 };
+    await flushPromises();
+    expect(queryScanContext).toHaveBeenCalledWith({
+      content: 'ZD-9',
+      objectType: 'WORK_ORDER',
+      intent: 'PRODUCTION',
+    });
+    expect(lookupProcessStation).toHaveBeenCalledWith('ZD-9');
+    expect(lookupProcessStation).not.toHaveBeenCalledWith('ZD-8');
   });
 
   it('同一次确认复用请求编号，换工序后换新编号', async () => {

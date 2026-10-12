@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   scanObjectTypeLabel,
   type ScanBalanceCandidate,
@@ -8,9 +9,15 @@ import {
 } from '../../services/scanContextApi';
 import { progressStageLabel } from './progressTarget';
 
-defineProps<{
+const props = defineProps<{
   context: ScanContextResponse | null;
 }>();
+
+const chainEmpty = computed(() => {
+  const progress = props.context?.progress;
+  if (!progress) return true;
+  return progress.handoffs.length === 0 && !progress.quality && progress.shipments.length === 0;
+});
 
 const emit = defineEmits<{
   select: [target: ScanRelatedTarget];
@@ -125,6 +132,24 @@ const actionLabels: Record<string, string> = {
         {{ actionLabels[action.code] || action.code }}：{{ action.allowed ? '当前可办理' : (action.blockReason || '当前不能办理') }}
       </li>
     </ul>
+
+    <section aria-label="全链路">
+      <h3>全链路</h3>
+      <p v-if="chainEmpty">暂无工序交付、质检结论或发货事实</p>
+      <template v-else>
+        <p v-for="item in context.progress.handoffs" :key="`${item.process}-${item.ledgerCode}`">
+          工序 {{ text(item.process) }} · {{ text(item.operator) }} · {{ text(item.ledgerCode) }}
+        </p>
+        <p v-if="context.progress.quality">
+          质检 {{ text(context.progress.quality.outcome) }}
+          · {{ context.progress.quality.frozen ? '已冻结' : '未冻结' }}
+          · 返工 {{ text(context.progress.quality.reworkOrderCode) }}
+        </p>
+        <p v-for="item in context.progress.shipments" :key="item.outboundCode || item.ledgerCode || item.logisticsNo || ''">
+          发货 {{ text(item.outboundCode) }} · {{ text(item.logisticsNo) }} · {{ text(item.status) }}
+        </p>
+      </template>
+    </section>
 
     <h3>过程记录</h3>
     <p v-if="!context.progress.progressRecords.length">暂无过程记录</p>

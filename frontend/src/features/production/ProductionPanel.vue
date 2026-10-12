@@ -7,6 +7,7 @@ import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
+import { useTraceTarget } from '../scan/useTraceTarget';
 import type { ScanContextResponse, ScanProgressRecord, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   lookupProcessStation,
@@ -131,6 +132,14 @@ async function recognizeStation(draft: ScanDraft) {
   }
   await loadStation(response, stationScan.revision);
 }
+
+useTraceTarget(['PRODUCTION'], (target) => {
+  scanText.value = target.code;
+  void recognizeStation({
+    content: target.code,
+    ...(target.objectType ? { objectType: target.objectType } : {}),
+  });
+});
 
 async function chooseStationTarget(related: ScanRelatedTarget) {
   if (!related.code || !related.objectType) return;
