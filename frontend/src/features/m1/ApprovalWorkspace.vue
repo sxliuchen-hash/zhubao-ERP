@@ -8,6 +8,7 @@ import {
   type ApprovalStatus,
 } from '../../data/approvalTaskData';
 import type { Tone } from '../../data/m1PrototypeData';
+import { ApiRequestError } from '../../services/apiClient';
 import {
   fetchApprovalTasks,
   fetchPendingApprovalTasks,
@@ -18,14 +19,26 @@ const tasks = ref<ApprovalTask[]>([]);
 const pendingTasks = ref<ApprovalTask[]>([]);
 const loading = ref(false);
 const loadingError = ref('');
+const accessDenied = ref(false);
 const decisionSubmitting = ref(false);
 const decisionResult = ref<ApprovalTask | null>(null);
 const decisionError = ref('');
 const decisionComment = ref('确认称重、缺陷照片、账号变更摘要和工资试算快照完整，批准本次轻量审批。');
+const keyword = ref('');
+const detailOpen = ref(false);
+const selectedCode = ref('');
 
-const activeTask = computed(
+const fallbackTask = computed(
   () => pendingTasks.value[0] ?? tasks.value.find((task) => task.status === 'WAITING_APPROVAL') ?? tasks.value[0],
 );
+const activeTask = computed(
+  () => tasks.value.find((task) => task.approvalCode === selectedCode.value) ?? fallbackTask.value,
+);
+const visibleTasks = computed(() => {
+  const text = keyword.value.trim().toLowerCase();
+  if (!text) return tasks.value;
+  return tasks.value.filter((task) => `${task.approvalCode} ${task.title} ${task.scene} ${task.businessCode} ${task.applicant}`.toLowerCase().includes(text));
+});
 
 const approvalStats = computed(() => [
   {
@@ -70,9 +83,14 @@ onMounted(async () => {
   await reloadApprovals();
 });
 
+function denied(error: unknown) {
+  return error instanceof ApiRequestError && (error.status === 403 || error.code === 40301);
+}
+
 async function reloadApprovals() {
   loading.value = true;
   loadingError.value = '';
+  accessDenied.value = false;
 
   try {
     const [all, pending] = await Promise.all([fetchApprovalTasks(), fetchPendingApprovalTasks()]);
@@ -84,9 +102,13 @@ async function reloadApprovals() {
   } catch (error) {
     tasks.value = [];
     pendingTasks.value = [];
+    accessDenied.value = denied(error);
     loadingError.value = error instanceof Error ? error.message : '审批任务加载失败';
   } finally {
     loading.value = false;
+    if (!tasks.value.some((task) => task.approvalCode === selectedCode.value)) {
+      selectedCode.value = fallbackTask.value?.approvalCode ?? '';
+    }
   }
 }
 
@@ -126,6 +148,17 @@ function statusText(status: ApprovalStatus): string {
   return map[status];
 }
 
+function selectTask(code: string) {
+  selectedCode.value = code;
+  detailOpen.value = true;
+  decisionResult.value = null;
+  decisionError.value = '';
+}
+
+function backToList() {
+  detailOpen.value = false;
+}
+
 function taskTone(task: ApprovalTask): Tone {
   if (task.status === 'WAITING_APPROVAL') return task.severity;
   return approvalStatusTone(task.status);
@@ -133,11 +166,10 @@ function taskTone(task: ApprovalTask): Tone {
 </script>
 
 <template>
-  <div class="approval-workspace page-stack">
+  <div class="approval-workspace page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <section class="module-command-surface approval-command-surface" aria-label="轻量审批工作台">
       <div class="module-command-main">
         <div class="console-title-line">
-          <span class="eyebrow">APPROVAL DESK</span>
           <StatusBadge label="轻量审批 / 账号复核 / 非正式工资" tone="amber" />
         </div>
         <div class="module-command-title">
@@ -156,20 +188,22 @@ function taskTone(task: ApprovalTask): Tone {
           </article>
         </div>
 
-        <div class="module-flow-strip" aria-label="审批处理链路">
-          <article v-for="step in approvalFlow" :key="step.code" :class="`tone-${step.tone}`">
-            <b>{{ step.code }}</b>
-            <div>
-              <strong>{{ step.name }}</strong>
-              <span>{{ step.status }}</span>
-            </div>
-          </article>
-        </div>
+        <details class="production-note">
+          <summary>审批处理链路</summary>
+          <div class="module-flow-strip" aria-label="审批处理链路">
+            <article v-for="step in approvalFlow" :key="step.code" :class="`tone-${step.tone}`">
+              <b>{{ step.code }}</b>
+              <div>
+                <strong>{{ step.name }}</strong>
+                <span>{{ step.status }}</span>
+              </div>
+            </article>
+          </div>
+        </details>
       </div>
 
       <aside class="module-priority-panel">
         <div>
-          <span class="eyebrow">PENDING</span>
           <strong>审批阻断队列</strong>
         </div>
         <article v-for="task in pendingTasks.slice(0, 4)" :key="task.approvalCode" :class="`tone-${taskTone(task)}`">
@@ -187,14 +221,9 @@ function taskTone(task: ApprovalTask): Tone {
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">
           <div>
-            <span class="eyebrow">APPROVAL TASK POOL</span>
             <h2>审批任务池</h2>
           </div>
           <div class="module-tools">
-            <label>
-              <span>审批单号</span>
-              <input :value="activeTask?.approvalCode ?? '暂无审批任务'" aria-label="审批单号" />
-            </label>
             <button class="secondary-button" type="button" :disabled="loading" @click="reloadApprovals">
               {{ loading ? '刷新中' : '刷新任务' }}
             </button>
@@ -203,9 +232,17 @@ function taskTone(task: ApprovalTask): Tone {
             </button>
           </div>
         </div>
+        <div class="module-tools production-filters">
+          <label>
+            <span>查找</span>
+            <input v-model="keyword" placeholder="审批单、标题或业务单" aria-label="审批查找" />
+          </label>
+        </div>
 
+        <p v-if="loading" class="empty-hint">正在加载审批</p>
+        <p v-if="accessDenied" class="operation-feedback danger">无权限</p>
         <p v-if="loadingError" class="operation-feedback danger">{{ loadingError }}</p>
-        <div class="module-table-wrap refined-table-wrap">
+        <div class="module-table-wrap refined-table-wrap desk-table-wrap">
           <table class="module-table approval-task-table">
             <thead>
               <tr>
@@ -219,7 +256,13 @@ function taskTone(task: ApprovalTask): Tone {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="task in tasks" :key="task.approvalCode">
+              <tr
+                v-for="task in visibleTasks"
+                :key="task.approvalCode"
+                :class="{ 'is-selected': activeTask?.approvalCode === task.approvalCode }"
+                :aria-selected="activeTask?.approvalCode === task.approvalCode"
+                @click="selectTask(task.approvalCode)"
+              >
                 <td><strong>{{ task.approvalCode }}</strong></td>
                 <td>
                   <span class="cell-stack">
@@ -238,18 +281,35 @@ function taskTone(task: ApprovalTask): Tone {
                 <td>{{ task.formalPayroll ? '正式工资' : '仅试算快照' }}</td>
                 <td>{{ task.locked ? '已锁定' : '待处理' }}</td>
               </tr>
-              <tr v-if="tasks.length === 0">
+              <tr v-if="!loading && visibleTasks.length === 0">
                 <td colspan="7">暂无审批任务</td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="desk-cards">
+          <p v-if="!loading && visibleTasks.length === 0" class="empty-hint">暂无审批任务</p>
+          <button
+            v-for="task in visibleTasks"
+            :key="task.approvalCode"
+            class="desk-card"
+            type="button"
+            @click="selectTask(task.approvalCode)"
+          >
+            <span class="desk-card-top">
+              <strong class="code">{{ task.approvalCode }}</strong>
+              <StatusBadge :label="statusText(task.status)" :tone="taskTone(task)" />
+            </span>
+            <span>{{ task.title }}</span>
+            <span>{{ task.scene }} · {{ task.businessCode }}</span>
+          </button>
         </div>
       </div>
 
       <aside v-if="activeTask" class="module-side-panel">
         <section class="active-object-card tone-amber">
           <div class="panel-title-row">
-            <span class="eyebrow">ACTIVE APPROVAL</span>
+            <button class="secondary-button detail-back" type="button" @click="backToList">返回列表</button>
             <StatusBadge :label="statusText(activeTask.status)" :tone="taskTone(activeTask)" />
           </div>
           <strong>{{ activeTask.approvalCode }}</strong>

@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApprovalTask } from '../../data/approvalTaskData';
+import { ApiRequestError } from '../../services/apiClient';
 import { fetchApprovalTasks, fetchPendingApprovalTasks } from '../../services/approvalApi';
 import ApprovalWorkspace from './ApprovalWorkspace.vue';
 
@@ -74,6 +75,27 @@ describe('ApprovalWorkspace', () => {
     expect(wrapper.text()).toContain('轻量审批不等于完整工作流');
     expect(wrapper.text()).toContain('审批通过');
     expect(wrapper.text()).toContain('驳回补证');
+  });
+
+  it('筛选后返回仍保留关键字，无权限不显示成空成功', async () => {
+    const wrapper = mount(ApprovalWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="审批查找"]').setValue('AUTH');
+    expect(wrapper.get('table.approval-task-table').text()).toContain('AUTH-ACC-APP-20260708-001');
+    expect(wrapper.get('table.approval-task-table').text()).not.toContain('LOSS-20260706-009');
+    await wrapper.get('.desk-card').trigger('click');
+    expect(wrapper.classes()).toContain('is-detail');
+    await wrapper.get('.detail-back').trigger('click');
+    expect(wrapper.classes()).not.toContain('is-detail');
+    expect((wrapper.get('[aria-label="审批查找"]').element as HTMLInputElement).value).toBe('AUTH');
+
+    vi.mocked(fetchApprovalTasks).mockRejectedValueOnce(new ApiRequestError('无权查看审批', 403, 40301));
+    vi.mocked(fetchPendingApprovalTasks).mockRejectedValueOnce(new ApiRequestError('无权查看审批', 403, 40301));
+    const denied = mount(ApprovalWorkspace);
+    await flushPromises();
+    expect(denied.text()).toContain('无权限');
+    expect(denied.text()).toContain('无权查看审批');
+    expect(denied.find('.active-object-card').exists()).toBe(false);
   });
 
   it('shows an empty approval list and the failure reason when the api is unavailable', async () => {
