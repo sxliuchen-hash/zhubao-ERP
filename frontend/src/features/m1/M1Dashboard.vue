@@ -132,6 +132,14 @@ const visibleRows = computed(() => {
   );
 });
 
+const listKeyword = ref('');
+const detailOpen = ref(false);
+const listedRows = computed(() => {
+  const text = listKeyword.value.trim().toLowerCase();
+  if (!text) return visibleRows.value;
+  return visibleRows.value.filter((row) => `${row.code} ${row.type} ${row.object} ${row.owner}`.toLowerCase().includes(text));
+});
+
 const selectedRow = computed(() =>
   visibleRows.value.find((row) => row.code === selectedCode.value) ?? visibleRows.value[0],
 );
@@ -149,6 +157,11 @@ function countType(type: string) {
 
 function selectRow(code: string) {
   selectedCode.value = code;
+  detailOpen.value = true;
+}
+
+function backToDesk() {
+  detailOpen.value = false;
 }
 
 function openSelected() {
@@ -186,13 +199,17 @@ function qualityTone(status: string): Tone {
       </article>
     </section>
 
-    <section class="production-desk-grid command-grid-v2 lean-desk" aria-label="今日单据和当前处理单">
-      <main class="dispatch-console-v3 dispatch-console-v2">
+    <section class="production-desk-grid command-grid-v2 lean-desk desk-page" :class="{ 'is-detail': detailOpen }" aria-label="今日单据和当前处理单">
+      <main class="dispatch-console-v3 dispatch-console-v2 module-master-panel">
         <div class="floor-toolbar">
           <h2>今日待办</h2>
+          <label>
+            <span>查找</span>
+            <input v-model="listKeyword" aria-label="待办查找" placeholder="单号、类型或责任人" />
+          </label>
         </div>
         <p v-if="loadError" class="operation-feedback danger">{{ loadError }}</p>
-        <div class="erp-table-wrap command-table-wrap">
+        <div class="erp-table-wrap command-table-wrap desk-table-wrap">
           <table class="erp-table floor-dispatch-table command-table-v2">
             <thead>
               <tr>
@@ -207,7 +224,7 @@ function qualityTone(status: string): Tone {
             </thead>
             <tbody>
               <tr
-                v-for="row in visibleRows"
+                v-for="row in listedRows"
                 :key="`${row.type}-${row.code}`"
                 :class="{ 'is-selected': selectedRow?.code === row.code }"
                 @click="selectRow(row.code)"
@@ -229,16 +246,28 @@ function qualityTone(status: string): Tone {
                   </button>
                 </td>
               </tr>
-              <tr v-if="visibleRows.length === 0">
+              <tr v-if="listedRows.length === 0">
                 <td colspan="7">{{ loadError ? '暂无待办单据' : '没有匹配的单据' }}</td>
               </tr>
             </tbody>
           </table>
         </div>
+        <div class="desk-cards">
+          <p v-if="listedRows.length === 0" class="empty-hint">{{ loadError ? '暂无待办单据' : '没有匹配的单据' }}</p>
+          <button v-for="row in listedRows" :key="`card-${row.type}-${row.code}`" class="desk-card" type="button" @click="selectRow(row.code)">
+            <span class="desk-card-top">
+              <strong class="code">{{ row.code }}</strong>
+              <StatusBadge :label="row.priority" :tone="row.tone" />
+            </span>
+            <span>{{ row.type }} · {{ row.object }}</span>
+            <span>{{ row.node }} · {{ row.owner }}</span>
+          </button>
+        </div>
       </main>
 
-      <aside class="active-record-panel">
+      <aside class="active-record-panel module-side-panel">
         <div class="panel-title-row">
+          <button class="secondary-button detail-back" type="button" @click="backToDesk">返回列表</button>
           <h2>当前处理单</h2>
           <StatusBadge v-if="selectedRow" :label="selectedRow.priority" :tone="selectedRow.tone" />
         </div>

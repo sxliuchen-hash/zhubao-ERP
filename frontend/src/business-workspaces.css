@@ -16,12 +16,14 @@
 .progress-board .progress-table,
 .quality-desk .quality-dispatch-table,
 .inventory-trace-desk .inventory-dispatch-table,
-.approval-workspace .approval-task-table { min-width: 0; }
+.approval-workspace .approval-task-table,
+.command-center-v3 .floor-dispatch-table { min-width: 0; }
 .production-desk :is(.production-dispatch-table, .production-handoff-grid) :is(th, td),
 .progress-board .progress-table :is(th, td),
 .quality-desk .quality-dispatch-table :is(th, td),
 .inventory-trace-desk .inventory-dispatch-table :is(th, td),
-.approval-workspace .approval-task-table :is(th, td) {
+.approval-workspace .approval-task-table :is(th, td),
+.command-center-v3 .floor-dispatch-table :is(th, td) {
   min-width: 0;
   white-space: normal;
 }
