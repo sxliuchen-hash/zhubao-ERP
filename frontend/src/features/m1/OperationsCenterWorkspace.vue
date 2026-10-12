@@ -286,7 +286,7 @@ function errorTone(error: ErrorSummary): Tone {
           </div>
           <StatusBadge :label="`${snapshot.summary.openErrors} 条`" tone="amber" />
         </div>
-        <div class="ops-table-wrap">
+        <div class="ops-table-wrap desk-table-wrap">
           <table class="ops-data-table">
             <thead>
               <tr>
@@ -314,6 +314,16 @@ function errorTone(error: ErrorSummary): Tone {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="desk-cards">
+          <article v-for="error in snapshot.errorSummaries" :key="`card-${error.code}`" class="desk-card production-handoff-card">
+            <span class="desk-card-top">
+              <strong>{{ error.module }}</strong>
+              <StatusBadge :label="error.severity" :tone="errorTone(error)" />
+            </span>
+            <span>{{ error.code }} · {{ error.count }} 次 · {{ error.latest }}</span>
+            <span>{{ error.owner }} · {{ error.nextAction }}</span>
+          </article>
         </div>
       </div>
 
