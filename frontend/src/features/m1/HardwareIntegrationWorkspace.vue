@@ -36,9 +36,19 @@ const workspace = ref<HardwareWorkspaceModel>({
 });
 const isAdmin = ref(false);
 const loadingError = ref('');
+const deviceKeyword = ref('');
+const selectedDeviceCode = ref('');
+const detailOpen = ref(false);
+
+const visibleDevices = computed(() => {
+  const text = deviceKeyword.value.trim().toLowerCase();
+  if (!text) return workspace.value.devices;
+  return workspace.value.devices.filter((device) => `${device.code} ${device.name} ${device.scene}`.toLowerCase().includes(text));
+});
 
 const activeDevice = computed(
   () =>
+    workspace.value.devices.find((device) => device.code === selectedDeviceCode.value) ??
     workspace.value.devices.find((device) => device.status !== 'online') ??
     workspace.value.devices[0],
 );
@@ -367,6 +377,15 @@ function deviceLabel(status: string) {
   return '人工兜底';
 }
 
+function selectDevice(code: string) {
+  selectedDeviceCode.value = code;
+  detailOpen.value = true;
+}
+
+function backToDevices() {
+  detailOpen.value = false;
+}
+
 function pocTone(record: HardwarePocRecord): Tone {
   return record.tone;
 }
@@ -380,7 +399,7 @@ function taskTone(task: IntegrationTask): Tone {
 </script>
 
 <template>
-  <div class="hardware-desk page-stack">
+  <div class="hardware-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <p v-if="loadingError" class="operation-feedback danger" role="alert">设备状态读取失败：{{ loadingError }}</p>
     <p v-else-if="workspace.devices.length === 0" class="empty-hint">暂无设备点位，请先登记并连接现场设备。</p>
     <section class="module-command-surface hardware-command-surface" aria-label="软硬件联动作业台">
@@ -450,14 +469,14 @@ function taskTone(task: IntegrationTask): Tone {
           <div class="module-tools">
             <label>
               <span>设备/业务码</span>
-              <input :value="activeDevice?.code ?? '暂无设备'" aria-label="设备或业务编码" />
+              <input v-model="deviceKeyword" placeholder="设备编码或名称" aria-label="设备或业务编码" />
             </label>
             <button class="primary-button" type="button">新建 POC</button>
             <button class="secondary-button" type="button">导出清单</button>
           </div>
         </div>
 
-        <div class="module-table-wrap refined-table-wrap">
+        <div class="module-table-wrap refined-table-wrap desk-table-wrap">
           <table class="module-table hardware-device-table">
             <thead>
               <tr>
@@ -470,7 +489,7 @@ function taskTone(task: IntegrationTask): Tone {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="device in workspace.devices" :key="device.code">
+              <tr v-for="device in visibleDevices" :key="device.code" @click="selectDevice(device.code)">
                 <td>
                   <span class="cell-stack">
                     <b>{{ device.code }}</b>
@@ -486,12 +505,23 @@ function taskTone(task: IntegrationTask): Tone {
             </tbody>
           </table>
         </div>
+        <div class="desk-cards">
+          <p v-if="visibleDevices.length === 0" class="empty-hint">暂无设备</p>
+          <button v-for="device in visibleDevices" :key="`card-${device.code}`" class="desk-card" type="button" @click="selectDevice(device.code)">
+            <span class="desk-card-top">
+              <strong class="code">{{ device.code }}</strong>
+              <StatusBadge :label="deviceLabel(device.status)" :tone="deviceTone(device.status)" />
+            </span>
+            <span>{{ device.name }}</span>
+            <span>{{ device.scene }} · {{ device.protocol }}</span>
+          </button>
+        </div>
       </div>
 
       <aside class="module-side-panel">
         <section v-if="activeDevice" class="active-object-card tone-amber">
           <div class="panel-title-row">
-            <span class="eyebrow">ACTIVE DEVICE</span>
+            <button class="secondary-button detail-back" type="button" @click="backToDevices">返回列表</button>
             <StatusBadge :label="deviceLabel(activeDevice.status)" :tone="deviceTone(activeDevice.status)" />
           </div>
           <strong>{{ activeDevice.name }}</strong>
@@ -735,7 +765,7 @@ function taskTone(task: IntegrationTask): Tone {
         </div>
       </div>
 
-      <div class="module-table-wrap refined-table-wrap">
+      <div class="module-table-wrap refined-table-wrap desk-table-wrap">
         <table class="module-table">
           <thead>
             <tr>
@@ -785,7 +815,7 @@ function taskTone(task: IntegrationTask): Tone {
           </div>
           <StatusBadge label="RBAC 守卫 / 一次消费" tone="green" />
         </div>
-        <div class="module-table-wrap refined-table-wrap">
+        <div class="module-table-wrap refined-table-wrap desk-table-wrap">
           <table class="module-table">
             <thead>
               <tr>
