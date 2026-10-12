@@ -393,6 +393,7 @@ describe('M1 business workspaces', () => {
     expect(wrapper.findAll('table.inventory-dispatch-table tbody tr.is-selected')).toHaveLength(1);
     expect(wrapper.find('.active-object-card > strong').text()).toBe('MD-20260706-002');
     expect(wrapper.text()).toContain('确认出库');
+    expect(wrapper.text()).toContain('不是回放路径');
     expect(wrapper.text()).toContain('退货入库');
     expect(wrapper.text()).toContain('售后复核');
     expect(wrapper.text()).toContain('客户所有权');
@@ -403,6 +404,25 @@ describe('M1 business workspaces', () => {
     await wrapper.findAll('table.inventory-dispatch-table tbody tr')[1].trigger('click');
 
     expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
+    expect(wrapper.classes()).toContain('is-detail');
+  });
+
+  it('keeps the inventory status filter after returning and shows permission denial', async () => {
+    const wrapper = mount(InventoryTraceWorkspace);
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === '更多筛选')!.trigger('click');
+    await wrapper.get('[aria-label="库存状态筛选"]').setValue('在制');
+    expect(wrapper.get('table.inventory-dispatch-table').text()).toContain('ZD-20260706-001');
+    expect(wrapper.get('table.inventory-dispatch-table').text()).not.toContain('MD-20260706-002');
+    await wrapper.get('.detail-back').trigger('click');
+    expect((wrapper.get('[aria-label="库存状态筛选"]').element as HTMLInputElement).value).toBe('在制');
+
+    vi.mocked(fetchInventoryWorkspace).mockRejectedValueOnce(new ApiRequestError('无权查看库存', 403, 40301));
+    const denied = mount(InventoryTraceWorkspace);
+    await flushPromises();
+    expect(denied.text()).toContain('无权限');
+    expect(denied.text()).toContain('无权查看库存');
+    expect(denied.find('.active-object-card').exists()).toBe(false);
   });
 
   it('renders the mobile intake form', async () => {

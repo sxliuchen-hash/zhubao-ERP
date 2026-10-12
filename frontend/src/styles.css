@@ -1774,7 +1774,8 @@ button.finance-month-button {
   .inbound-table-wrap,
   .production-table-wrap,
   .production-handoff-table,
-  .desk-table-wrap { display: none; }
+  .desk-table-wrap,
+  .ledger-desktop { display: none; }
   .inbound-cards,
   .production-cards,
   .production-handoff-cards,

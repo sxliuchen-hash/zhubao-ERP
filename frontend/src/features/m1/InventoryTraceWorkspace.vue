@@ -7,6 +7,7 @@ import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import ShippingPanel from '../shipping/ShippingPanel.vue';
 import type { InventoryBalance, Tone } from '../../data/m1PrototypeData';
+import { ApiRequestError } from '../../services/apiClient';
 import {
   fetchInventoryWorkspace,
   type InventoryWorkspaceModel,
@@ -29,6 +30,11 @@ const emptyInventory = (): InventoryWorkspaceModel => ({
 
 const workspace = ref<InventoryWorkspaceModel>(emptyInventory());
 const loadError = ref('');
+const accessDenied = ref(false);
+const loading = ref(false);
+const statusKeyword = ref('');
+const advancedOpen = ref(false);
+const detailOpen = ref(false);
 const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
 const shippingFinishedStock = ref(false);
 const outboundShipmentResult = ref<OutboundShipmentResult | null>(null);
@@ -44,6 +50,10 @@ const { keyword, filtered: filteredBalances } = useDeskFilter(
   () => workspace.value.balances,
   (item) => `${item.owner} ${item.batch} ${item.material} ${item.location} ${item.status}`,
 );
+const visibleBalances = computed(() => {
+  const status = statusKeyword.value.trim();
+  return filteredBalances.value.filter((item) => !status || item.status.includes(status));
+});
 
 const activeBalance = computed(
   () =>
@@ -78,8 +88,14 @@ onMounted(() => {
   void loadInventoryWorkspace();
 });
 
+function denied(error: unknown) {
+  return error instanceof ApiRequestError && (error.status === 403 || error.code === 40301);
+}
+
 async function loadInventoryWorkspace() {
   loadError.value = '';
+  accessDenied.value = false;
+  loading.value = true;
   try {
     const loaded = await fetchInventoryWorkspace();
     workspace.value = loaded;
@@ -88,8 +104,10 @@ async function loadInventoryWorkspace() {
     }
   } catch (error) {
     workspace.value = emptyInventory();
+    accessDenied.value = denied(error);
     loadError.value = error instanceof Error ? error.message : '库存单据加载失败';
   } finally {
+    loading.value = false;
     if (!workspace.value.balances.some((item) => balanceKey(item) === selectedBalanceKey.value)) {
       selectedBalanceKey.value = activeBalance.value ? balanceKey(activeBalance.value) : '';
     }
@@ -158,8 +176,13 @@ async function reviewActiveAfterSalesReturn() {
 
 defineExpose({ reloadInventory: loadInventoryWorkspace });
 
+function backToList() {
+  detailOpen.value = false;
+}
+
 function selectBalance(item: InventoryBalance) {
   selectedBalanceKey.value = balanceKey(item);
+  detailOpen.value = true;
   outboundShipmentResult.value = null;
   outboundShipmentError.value = '';
   customerReturnResult.value = null;
@@ -170,7 +193,7 @@ function selectBalance(item: InventoryBalance) {
 </script>
 
 <template>
-  <div class="inventory-trace-desk page-stack">
+  <div class="inventory-trace-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <ShippingPanel
       title="确认发货"
@@ -182,16 +205,25 @@ function selectBalance(item: InventoryBalance) {
           <div>
             <h2>客户库存池</h2>
           </div>
-          <div class="module-tools">
-            <label>
-              <span>查找</span>
-              <input v-model="keyword" placeholder="客户、批次或物料" aria-label="库存追溯关键字" />
-            </label>
-          </div>
+        </div>
+        <div class="module-tools production-filters">
+          <label>
+            <span>查找</span>
+            <input v-model="keyword" placeholder="客户、批次或物料" aria-label="库存追溯关键字" />
+          </label>
+          <button class="secondary-button" type="button" :aria-expanded="advancedOpen ? 'true' : 'false'" @click="advancedOpen = !advancedOpen">
+            {{ advancedOpen ? '收起筛选' : '更多筛选' }}
+          </button>
+          <label v-if="advancedOpen">
+            <span>状态</span>
+            <input v-model="statusKeyword" placeholder="如 成品" aria-label="库存状态筛选" />
+          </label>
         </div>
 
+        <p v-if="loading" class="empty-hint">正在加载库存</p>
+        <p v-if="accessDenied" class="operation-feedback danger">无权限</p>
         <p v-if="loadError" class="operation-feedback danger">{{ loadError }}</p>
-        <div class="module-table-wrap refined-table-wrap">
+        <div class="module-table-wrap refined-table-wrap desk-table-wrap">
           <table class="module-table inventory-dispatch-table">
             <thead>
               <tr>
@@ -207,7 +239,7 @@ function selectBalance(item: InventoryBalance) {
             </thead>
             <tbody>
               <tr
-                v-for="item in filteredBalances"
+                v-for="item in visibleBalances"
                 :key="balanceKey(item)"
                 :class="{ 'is-selected': activeBalance && balanceKey(activeBalance) === balanceKey(item) }"
                 :aria-selected="activeBalance && balanceKey(activeBalance) === balanceKey(item)"
@@ -222,17 +254,35 @@ function selectBalance(item: InventoryBalance) {
                 <td>{{ item.frozen }}</td>
                 <td><button class="table-action" type="button" @click.stop="selectBalance(item)">看台账</button></td>
               </tr>
-              <tr v-if="filteredBalances.length === 0">
+              <tr v-if="!loading && visibleBalances.length === 0">
                 <td colspan="8">暂无库存单据</td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="desk-cards">
+          <p v-if="!loading && visibleBalances.length === 0" class="empty-hint">暂无库存单据</p>
+          <button
+            v-for="item in visibleBalances"
+            :key="balanceKey(item)"
+            class="desk-card"
+            type="button"
+            @click="selectBalance(item)"
+          >
+            <span class="desk-card-top">
+              <strong class="code">{{ item.batch }}</strong>
+              <StatusBadge :label="item.status" :tone="inventoryBalanceTone(item.status)" />
+            </span>
+            <span>{{ item.owner }} · {{ item.material }}</span>
+            <span>{{ item.qty }} 件 / {{ item.weight }} · 冻结 {{ item.frozen }}</span>
+          </button>
         </div>
       </div>
 
       <aside v-if="activeBalance" class="module-side-panel">
         <section class="active-object-card tone-blue">
           <div class="panel-title-row">
+            <button class="secondary-button detail-back" type="button" @click="backToList">返回列表</button>
             <StatusBadge :label="activeBalance.status" :tone="inventoryBalanceTone(activeBalance.status)" />
           </div>
           <strong>{{ activeBalance.batch }}</strong>
@@ -253,6 +303,7 @@ function selectBalance(item: InventoryBalance) {
           <OperationInputs v-model="operationValues" :fields="[['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
           <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
           <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
+          <p class="production-legacy-note">库存台旧确认出库不带请求编号，不是回放路径。现场发货请用上方确认发货。</p>
           <div class="detail-actions">
             <button class="primary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
               {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
@@ -316,7 +367,7 @@ function selectBalance(item: InventoryBalance) {
           <StatusBadge label="只追加" tone="green" />
         </div>
         <h2 class="compact-panel-title">库存台账明细</h2>
-        <div class="ledger-table compact-ledger-table">
+        <div class="ledger-table compact-ledger-table ledger-desktop">
           <div class="ledger-row ledger-head">
             <span>时间</span>
             <span>台账号</span>
@@ -331,6 +382,18 @@ function selectBalance(item: InventoryBalance) {
             <span>{{ entry.after }}</span>
             <span>{{ entry.source }}</span>
           </div>
+          <p v-if="workspace.ledgerEntries.length === 0" class="empty-hint">暂无台账</p>
+        </div>
+        <div class="desk-cards">
+          <p v-if="workspace.ledgerEntries.length === 0" class="empty-hint">暂无台账</p>
+          <article v-for="entry in workspace.ledgerEntries" :key="entry.bizCode" class="desk-card production-handoff-card">
+            <span class="desk-card-top">
+              <strong class="code">{{ entry.bizCode }}</strong>
+              <span>{{ entry.movement }}</span>
+            </span>
+            <span>{{ entry.time }} · 变化后 {{ entry.after }}</span>
+            <span>来源 {{ entry.source }}</span>
+          </article>
         </div>
       </section>
 
