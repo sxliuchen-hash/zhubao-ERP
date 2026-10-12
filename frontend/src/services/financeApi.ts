@@ -244,3 +244,96 @@ export function fetchOperatingStatement(yearMonth: string, customerId: string): 
   const customer = customerId ? `&customerId=${encodeURIComponent(customerId)}` : '';
   return apiGet(`/api/finance/operating-statement?yearMonth=${encodeURIComponent(yearMonth)}${customer}`);
 }
+
+export interface FinanceDashboardScope {
+  kind: string;
+  customerIds: number[];
+  note: string;
+}
+
+export interface FinanceCapability {
+  part: string;
+  available: boolean;
+  reason: string;
+}
+
+export interface FinanceTrendPoint {
+  yearMonth: string;
+  throughQueryTime: boolean;
+  operating: OperatingStatement | null;
+}
+
+export interface CurrentBalances {
+  asOf: string;
+  outstandingAmount: number | null;
+  unpaidAmount: number | null;
+  limitation: string;
+}
+
+export interface ReceivableRankRow {
+  customerId: number;
+  customerName: string;
+  outstandingAmount: number;
+}
+
+export interface ReceivableRanking {
+  total: number;
+  returned: number;
+  truncated: boolean;
+  rows: ReceivableRankRow[];
+}
+
+export interface FinanceDashboard {
+  yearMonth: string;
+  generatedAt: string;
+  scope: FinanceDashboardScope | null;
+  operating: OperatingStatement | null;
+  trend: FinanceTrendPoint[] | null;
+  currentBalances: CurrentBalances | null;
+  receivableRanking: ReceivableRanking | null;
+  capabilities: FinanceCapability[];
+}
+
+export type FinanceDetailKind = 'REVENUE' | 'COST' | 'RECEIVABLE' | 'PAYABLE';
+
+export interface FinanceDetailRow {
+  sourceType: string;
+  sourceCode: string;
+  customerId: number | null;
+  customerName: string;
+  yearMonth: string;
+  amount: number;
+  note: string;
+}
+
+export interface FinanceDetailPage {
+  kind: string;
+  asOf: string;
+  yearMonth: string;
+  page: number;
+  size: number;
+  total: number;
+  totalAmount: number | null;
+  rows: FinanceDetailRow[];
+}
+
+export function fetchFinanceDashboard(yearMonth: string, customerId: string): Promise<FinanceDashboard> {
+  const customer = customerId ? `&customerId=${encodeURIComponent(customerId)}` : '';
+  return apiGet(`/api/finance/dashboard?yearMonth=${encodeURIComponent(yearMonth)}${customer}`);
+}
+
+export function fetchFinanceDetails(query: {
+  kind: FinanceDetailKind;
+  yearMonth: string;
+  customerId: string;
+  page: number;
+  size: number;
+}): Promise<FinanceDetailPage> {
+  const params = new URLSearchParams();
+  params.set('kind', query.kind);
+  if (query.yearMonth) params.set('yearMonth', query.yearMonth);
+  if (query.customerId) params.set('customerId', query.customerId);
+  params.set('page', String(query.page));
+  params.set('size', String(query.size));
+  return apiGet(`/api/finance/dashboard/details?${params.toString()}`);
+}

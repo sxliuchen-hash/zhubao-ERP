@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchStatement, generateBilling } from './financeApi';
+import { ApiRequestError } from './apiClient';
+import { fetchFinanceDashboard, fetchFinanceDetails, fetchStatement, generateBilling } from './financeApi';
 
 describe('financeApi', () => {
   beforeEach(() => {
@@ -53,6 +54,50 @@ describe('financeApi', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       yearMonth: '2026-10',
       customerId: null,
+    });
+  });
+
+  it('经营总览只发 GET，并带上月份和客户', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 0, message: 'ok', data: { yearMonth: '2026-10' } }),
+    } as Response);
+
+    await fetchFinanceDashboard('2026-10', '1008');
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('/api/finance/dashboard?yearMonth=2026-10&customerId=1008');
+    expect(fetchMock.mock.calls[0]?.[1]?.method ?? 'GET').not.toBe('POST');
+  });
+
+  it('明细查询使用种类、月份、客户和分页', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 0, message: 'ok', data: { kind: 'RECEIVABLE', totalAmount: 80, rows: [] } }),
+    } as Response);
+
+    await fetchFinanceDetails({ kind: 'RECEIVABLE', yearMonth: '2026-08', customerId: '42', page: 2, size: 20 });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      '/api/finance/dashboard/details?kind=RECEIVABLE&yearMonth=2026-08&customerId=42&page=2&size=20',
+    );
+  });
+
+  it('无权限时保留 40301，不当成普通失败', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({ code: 40301, message: '无权查看该客户的财务', data: null }),
+    } as Response);
+
+    const error = await fetchFinanceDashboard('2026-10', '9').catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiRequestError);
+    expect(error).toMatchObject({
+      message: '无权查看该客户的财务',
+      status: 403,
+      code: 40301,
     });
   });
 });

@@ -4,6 +4,19 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+/** 保留接口状态码，便于页面区分无权限和其它失败。 */
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code: number;
+
+  constructor(message: string, status: number, code: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 const authTokenKey = 'zhubao-auth-token';
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
 
@@ -23,7 +36,7 @@ async function readPayload<T>(response: Response): Promise<T> {
     throw new Error('后端接口不可用');
   }
   if (!response.ok || payload.code !== 0) {
-    throw new Error(payload.message || '请求失败');
+    throw new ApiRequestError(payload.message || '请求失败', response.status, payload.code ?? 0);
   }
   return payload.data;
 }

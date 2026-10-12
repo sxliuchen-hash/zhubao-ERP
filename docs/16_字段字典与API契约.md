@@ -2272,6 +2272,8 @@ PWA 一期边界：
 
 `GET /api/finance/dashboard/details?kind=REVENUE|COST|RECEIVABLE|PAYABLE&yearMonth=收入和成本必填&customerId=可选&page=1&size=20` 只读。`totalAmount` 是筛选后的全量合计，不是当前页相加。收入和成本跟随月份与范围，合计应与同一范围的 `operating` 对应金额一致。未收和应付忽略月份，使用当前时点，合计应与 `currentBalances` 一致。分页 `page` 从 1 开始，`size` 最大 100。
 
+财务页默认进入经营总览，原有登记和收付仍从同一页的二级入口进入。总览只调用上述两个 GET，打开页面不生成账单、工资、折旧或核销。已入账加工收入和经营结余跟随所选月份；当前未收和应付未付标明 `currentBalances.asOf`，不按月份改成该月小计。客户未收按 `receivableRanking.rows` 的返回顺序展示，前端不重排，也不把本页或分页明细相加当作总额。`gaps` 有内容时页面标暂估并显示原因。`currentBalances.limitation` 有内容时标明未归集范围；公司应付未进入该范围时不能显示成 0。客户范围的经营结余不是全公司净利润。明细合计使用返回的 `totalAmount`。
+
 ### 16.1 经营汇总请求与返回
 
 | 字段 | 类型与说明 |
