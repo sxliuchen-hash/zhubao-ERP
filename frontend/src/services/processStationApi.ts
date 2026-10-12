@@ -32,9 +32,13 @@ export function lookupProcessStation(code: string): Promise<ProcessStationView> 
   );
 }
 
-export function submitProcessStation(code: string, process: string): Promise<ProcessStationReport> {
-  return apiPost<{ code: string; process: string }, ProcessStationReport>(
+export function submitProcessStation(
+  code: string,
+  process: string,
+  requestId?: string,
+): Promise<ProcessStationReport> {
+  return apiPost<{ code: string; process: string; requestId?: string }, ProcessStationReport>(
     '/api/business/operations/process-stations',
-    { code, process },
+    { code, process, ...(requestId ? { requestId } : {}) },
   );
 }

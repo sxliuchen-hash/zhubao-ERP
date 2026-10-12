@@ -25,6 +25,9 @@ import com.zhubao.erp.scan.domain.ScanResolveResponse;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.work.app.BusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandCall;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -39,6 +42,8 @@ import java.util.Objects;
 /**
  * 三个工序岗位扫码。只展示账号绑定的工序，并按单上的顺序交付。
  * 中间工序写入台账但留在在制；最后一道再把在制转入半成品。
+ * 带请求编号的交付进入业务工作单元：不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。
+ * 未带请求编号的交付，以及通用报工，仍各自提交，不回放。
  */
 @Service
 public class ProcessStationService {
@@ -52,6 +57,8 @@ public class ProcessStationService {
     private final BusinessOperationService businessOperationService;
     private final ScanCodeParser scanCodeParser;
     private final BusinessDataAccess dataAccess;
+    private final BusinessWorkUnit workUnit;
+    private final HandoffSaveProbe handoffSaveProbe;
 
     public ProcessStationService(
             BusinessDocumentRepository documents,
@@ -62,7 +69,6 @@ public class ProcessStationService {
         this(documents, stockLedgerService, businessOperationService, scanCodeParser, null);
     }
 
-    @Autowired
     public ProcessStationService(
             BusinessDocumentRepository documents,
             StockLedgerService stockLedgerService,
@@ -70,11 +76,37 @@ public class ProcessStationService {
             ScanCodeParser scanCodeParser,
             BusinessDataAccess dataAccess
     ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, null);
+    }
+
+    @Autowired
+    public ProcessStationService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess,
+            BusinessWorkUnit workUnit
+    ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, HandoffSaveProbe.NONE);
+    }
+
+    public ProcessStationService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess,
+            BusinessWorkUnit workUnit,
+            HandoffSaveProbe handoffSaveProbe
+    ) {
         this.documents = documents;
         this.stockLedgerService = stockLedgerService;
         this.businessOperationService = businessOperationService;
         this.scanCodeParser = scanCodeParser;
         this.dataAccess = dataAccess;
+        this.workUnit = workUnit;
+        this.handoffSaveProbe = handoffSaveProbe == null ? HandoffSaveProbe.NONE : handoffSaveProbe;
     }
 
     public ProcessStationView lookup(String rawCode, AuthUserAccount account) {
@@ -106,19 +138,61 @@ public class ProcessStationService {
         );
     }
 
-    public synchronized ProcessStationReportResult report(String rawCode, String requestedProcess, AuthUserAccount account) {
-        requireAccount(account);
-        StationTicket ticket = resolve(rawCode);
-        ReportProductionCommand command = defaultCommand(ticket, requestedProcess, account.operator());
-        ProductionReportResult result = reportProduction(command, account);
-        return new ProcessStationReportResult(
-                ticket.orderCode(), result.process(), result.ledgerCode(),
-                result.toStockStatus() == StockStatus.SEMI_FINISHED, result.toStockStatus().name()
-        );
+    public ProcessStationReportResult report(String rawCode, String requestedProcess, AuthUserAccount account) {
+        return report(rawCode, requestedProcess, account, null);
     }
 
-    /** 通用报工沿用现场整单交付规则，并完整保存请求中的报工登记字段。 */
+    /**
+     * 带请求编号时，不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。
+     * 同账号、同请求、同规范化内容回放原结果。未带编号时仍各自提交，不回放。
+     * 未装配工作单元时，带编号的调用直接拒绝，不能退回旧路径。
+     */
+    public ProcessStationReportResult report(String rawCode, String requestedProcess, AuthUserAccount account, String requestId) {
+        requireAccount(account);
+        if (requestId == null || requestId.isBlank()) {
+            synchronized (this) {
+                StationTicket ticket = resolve(rawCode);
+                assertCustomer(ticket, account);
+                return stationResult(postStation(defaultCommand(ticket, requestedProcess, account.operator()), account, null));
+            }
+        }
+        if (workUnit == null) {
+            throw new BusinessException("工序交付回放尚未装配");
+        }
+        StationTicket ticket = resolve(rawCode);
+        assertCustomer(ticket, account);
+        String process = normalizeRequested(requestedProcess);
+        String operator = account.operator().trim();
+        String targetType = ticket.keptMother() ? "MOTHER_ORDER" : "WORK_ORDER";
+        String text = workUnit.execute(new CommandCall(
+                requestId,
+                operator,
+                "PROCESS_HANDOFF",
+                targetType,
+                ticket.orderCode(),
+                ProcessHandoffResultText.payload(
+                        ticket.customerId(),
+                        ticket.ownerCustomerId(),
+                        ticket.motherOrderCode(),
+                        process,
+                        ticket.quantity(),
+                        ticket.weight()
+                )
+        ), session -> ProcessHandoffResultText.write(stationResult(
+                postStation(defaultCommand(ticket, process, operator), account, session)
+        )));
+        return ProcessHandoffResultText.read(text);
+    }
+
+    /**
+     * 通用报工沿用现场整单交付规则，并完整保存请求中的报工登记字段。
+     * 此入口不带请求编号，库存流水和交付事实各自提交，不回放。
+     */
     public synchronized ProductionReportResult reportProduction(ReportProductionCommand submittedCommand, AuthUserAccount account) {
+        return postStation(submittedCommand, account, null);
+    }
+
+    private ProductionReportResult postStation(ReportProductionCommand submittedCommand, AuthUserAccount account, WorkSession session) {
         requireAccount(account);
         ReportProductionCommand command = BusinessCommandActors.withActor(submittedCommand, account.operator().trim());
         StationTicket ticket = resolve(command.workOrderCode());
@@ -131,47 +205,67 @@ public class ProcessStationService {
         if (!boundProcesses(account).contains(process)) {
             throw new BusinessException("当前账号不能做这道工序");
         }
-        if (submitted(ticket.orderCode(), process)) {
+        if (submitted(ticket.orderCode(), process, session)) {
             throw new BusinessException("这道工序已经交过");
         }
         String previous = previousProcess(ticket.processes(), process);
-        if (!previous.isBlank() && !submitted(ticket.orderCode(), previous)) {
+        if (!previous.isBlank() && !submitted(ticket.orderCode(), previous, session)) {
             throw new BusinessException("上一道「" + previous + "」还没交，不能交「" + process + "」");
         }
         String operator = account.operator().trim();
-        ensureWipForKeptMother(ticket, operator);
+        ensureWipForKeptMother(ticket, operator, session);
         boolean last = process.equals(ticket.processes().get(ticket.processes().size() - 1));
         StockDimension from = wipDimension(ticket);
         StockDimension to = last ? new StockDimension(
                 from.ownerType(), from.ownerCustomerId(), from.customerId(), from.motherOrderCode(),
                 from.workOrderCode(), from.materialCode(), command.toWarehouseCode(), StockStatus.SEMI_FINISHED
         ) : from;
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockTransferCommand transfer = new StockTransferCommand(
                 last ? "production_report" : STATION_DOCUMENT,
                 ticket.orderCode(), from, to, command.quantity(), command.weight(), productionRemark(command)
-        ));
-        documents.saveProcessStationHandoff(new ProcessStationHandoff(
+        );
+        StockLedgerEntry entry = session == null
+                ? stockLedgerService.transfer(transfer)
+                : stockLedgerService.transfer(transfer, session);
+        handoffSaveProbe.beforeHandoffSave();
+        ProcessStationHandoff handoff = new ProcessStationHandoff(
                 ticket.orderCode(),
                 process,
                 operator,
                 entry.code(),
                 RECORD_TIME.format(LocalDateTime.now())
-        ));
+        );
+        if (session == null) {
+            documents.saveProcessStationHandoff(handoff);
+        } else {
+            documents.saveProcessStationHandoff(handoff, session);
+        }
         return new ProductionReportResult(
                 ticket.orderCode(), entry.code(), from.warehouseCode(), to.warehouseCode(),
                 from.stockStatus(), to.stockStatus(), entry.quantity(), entry.weight(), process, operator, command.handoffCode()
         );
     }
 
-    private void ensureWipForKeptMother(StationTicket ticket, String operator) {
+    private ProcessStationReportResult stationResult(ProductionReportResult result) {
+        return new ProcessStationReportResult(
+                result.workOrderCode(),
+                result.process(),
+                result.ledgerCode(),
+                result.toStockStatus() == StockStatus.SEMI_FINISHED,
+                result.toStockStatus().name()
+        );
+    }
+
+    private void ensureWipForKeptMother(StationTicket ticket, String operator, WorkSession session) {
         if (!ticket.keptMother()) {
             return;
         }
         StockDimension wip = wipDimension(ticket);
-        if (balanceOf(wip).quantity().compareTo(BigDecimal.ZERO) > 0) {
+        StockBalance balance = session == null ? balanceOf(wip) : stockLedgerService.balance(wip, session);
+        if (balance.quantity().compareTo(BigDecimal.ZERO) > 0) {
             return;
         }
-        stockLedgerService.transfer(new StockTransferCommand(
+        StockTransferCommand transfer = new StockTransferCommand(
                 "work_order_split",
                 ticket.orderCode(),
                 rawDimension(ticket),
@@ -179,7 +273,12 @@ public class ProcessStationService {
                 ticket.quantity(),
                 ticket.weight(),
                 "不拆母单转入在制；操作人：" + operator
-        ));
+        );
+        if (session == null) {
+            stockLedgerService.transfer(transfer);
+        } else {
+            stockLedgerService.transfer(transfer, session);
+        }
     }
 
     private ReportProductionCommand defaultCommand(StationTicket ticket, String process, String operator) {
@@ -320,7 +419,14 @@ public class ProcessStationService {
     }
 
     private boolean submitted(String orderCode, String process) {
-        return documents.findProcessStationHandoff(orderCode, process).isPresent();
+        return submitted(orderCode, process, null);
+    }
+
+    private boolean submitted(String orderCode, String process, WorkSession session) {
+        if (session == null) {
+            return documents.findProcessStationHandoff(orderCode, process).isPresent();
+        }
+        return documents.findProcessStationHandoff(orderCode, process, session).isPresent();
     }
 
     private StationTicket resolve(String rawCode) {

@@ -42,6 +42,11 @@ vi.mock('../../services/processStationApi', () => ({
   lookupProcessStation: vi.fn(),
   submitProcessStation: vi.fn(),
 }));
+vi.mock('../../services/evidenceApi', () => ({
+  fetchEvidenceBoard: vi.fn().mockResolvedValue({ links: [], historical: [] }),
+  uploadEvidenceFile: vi.fn(),
+  bindEvidence: vi.fn(),
+}));
 
 vi.mock('../../services/qualityCheckApi', () => ({
   lookupQualityCheck: vi.fn(),
@@ -260,6 +265,7 @@ describe('M1 business workspaces', () => {
     const wrapper = mount(ProductionWorkspace);
     await flushPromises();
 
+    expect(wrapper.text()).toContain('工序交付');
     expect(wrapper.text()).toContain('今日工单池');
     expect(wrapper.find('table.production-dispatch-table').exists()).toBe(true);
     expect(wrapper.findAll('table.production-dispatch-table tbody tr.is-selected')).toHaveLength(1);

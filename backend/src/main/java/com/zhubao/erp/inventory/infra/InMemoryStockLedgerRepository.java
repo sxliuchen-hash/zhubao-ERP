@@ -93,6 +93,14 @@ public class InMemoryStockLedgerRepository implements StockLedgerRepository {
     }
 
     @Override
+    public synchronized StockBalance findBalance(StockDimension dimension, WorkSession session) {
+        if (session == null) {
+            throw new IllegalStateException("库存读取必须处于业务工作单元");
+        }
+        return findBalance(dimension);
+    }
+
+    @Override
     public synchronized void clear() {
         ledgers.clear();
         balances.clear();

@@ -556,44 +556,35 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void saveProcessStationHandoff(ProcessStationHandoff handoff) {
-        String sql = """
-                insert into biz_process_station_handoff (
-                    order_code, process_name, operator, ledger_code, created_at
-                ) values (?, ?, ?, ?, ?)
-                """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, handoff.orderCode());
-            statement.setString(2, handoff.processName());
-            statement.setString(3, handoff.operator());
-            statement.setString(4, handoff.ledgerCode());
-            statement.setString(5, handoff.createdAt());
-            statement.executeUpdate();
+        try (Connection connection = dataSource.getConnection()) {
+            writeHandoff(connection, handoff);
         } catch (SQLException ex) {
-            if (isDuplicate(ex)) {
-                throw new BusinessException("这道工序已经交过");
-            }
-            throw new IllegalStateException("Failed to save process station handoff: " + handoff.orderCode(), ex);
+            throw handoffWriteFailure(handoff, ex);
+        }
+    }
+
+    @Override
+    public void saveProcessStationHandoff(ProcessStationHandoff handoff, WorkSession session) {
+        try {
+            writeHandoff(requireConnection(session), handoff);
+        } catch (SQLException ex) {
+            throw handoffWriteFailure(handoff, ex);
         }
     }
 
     @Override
     public Optional<ProcessStationHandoff> findProcessStationHandoff(String orderCode, String processName) {
-        String sql = """
-                select order_code, process_name, operator, ledger_code, created_at
-                  from biz_process_station_handoff
-                 where order_code = ? and process_name = ?
-                """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, orderCode);
-            statement.setString(2, processName);
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
-                    return Optional.empty();
-                }
-                return Optional.of(mapProcessStationHandoff(rs));
-            }
+        try (Connection connection = dataSource.getConnection()) {
+            return findProcessStationHandoff(connection, orderCode, processName);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load process station handoff: " + orderCode, ex);
+        }
+    }
+
+    @Override
+    public Optional<ProcessStationHandoff> findProcessStationHandoff(String orderCode, String processName, WorkSession session) {
+        try {
+            return findProcessStationHandoff(requireConnection(session), orderCode, processName);
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to load process station handoff: " + orderCode, ex);
         }
@@ -817,6 +808,48 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to load quality requirement lines: " + qualityCaseCode, ex);
         }
+    }
+
+    private void writeHandoff(Connection connection, ProcessStationHandoff handoff) throws SQLException {
+        String sql = """
+                insert into biz_process_station_handoff (
+                    order_code, process_name, operator, ledger_code, created_at
+                ) values (?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, handoff.orderCode());
+            statement.setString(2, handoff.processName());
+            statement.setString(3, handoff.operator());
+            statement.setString(4, handoff.ledgerCode());
+            statement.setString(5, handoff.createdAt());
+            statement.executeUpdate();
+        }
+    }
+
+    private Optional<ProcessStationHandoff> findProcessStationHandoff(Connection connection, String orderCode, String processName)
+            throws SQLException {
+        String sql = """
+                select order_code, process_name, operator, ledger_code, created_at
+                  from biz_process_station_handoff
+                 where order_code = ? and process_name = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, orderCode);
+            statement.setString(2, processName);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(mapProcessStationHandoff(rs));
+            }
+        }
+    }
+
+    private RuntimeException handoffWriteFailure(ProcessStationHandoff handoff, SQLException ex) {
+        if (isDuplicate(ex)) {
+            return new BusinessException("这道工序已经交过");
+        }
+        return new IllegalStateException("Failed to save process station handoff: " + handoff.orderCode(), ex);
     }
 
     private ProcessStationHandoff mapProcessStationHandoff(ResultSet rs) throws SQLException {

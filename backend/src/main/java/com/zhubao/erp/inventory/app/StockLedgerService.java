@@ -1,6 +1,7 @@
 package com.zhubao.erp.inventory.app;
 
 import com.zhubao.erp.inventory.domain.StockBalance;
+import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
@@ -32,9 +33,14 @@ public class StockLedgerService {
         return repository.save(newEntry(command));
     }
 
-    /** 入库流水进入当前工作单元，不在仓储里另开连接提交。 */
+    /** 库存流水进入当前工作单元，不在仓储里另开连接提交。 */
     public StockLedgerEntry transfer(StockTransferCommand command, WorkSession session) {
         return repository.save(newEntry(command), session);
+    }
+
+    /** 在当前工作单元连接上读取余额，能看见本事务尚未提交的转入。 */
+    public StockBalance balance(StockDimension dimension, WorkSession session) {
+        return repository.findBalance(dimension, session);
     }
 
     private StockLedgerEntry newEntry(StockTransferCommand command) {

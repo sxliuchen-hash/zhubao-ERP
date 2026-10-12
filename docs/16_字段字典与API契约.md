@@ -560,7 +560,7 @@ MySQL 持久化表：
 - `OwnerType` 固定为 `CUSTOMER`，确保客户来料不会进入企业自有库存。
 - `workOrderCode` 为空，表示仍处于母单原料库存，后续子工单拆分再进入在制库存。
 - 带 `requestId` 时，动作记为 `INBOUND_CONFIRM`，目标类型 `MOTHER_ORDER`，目标编号是母单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `InboundConfirmationResult`；换母单、换客户、换数量重量或其他内容会拒绝，必须换新 `requestId`。母单、来料事实、入库流水和成功结果在同一条数据库连接里提交。单据保存失败或结果保存失败时整单回滚。非空运单由 `courier_identity` 唯一约束保证不会建出两张母单。
-- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。报工、质检、开返工、返工报工、放行和确认发货没有接入。
+- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付已另行接入。未带 `requestId` 的岗位交付、通用 `production-reports`、质检、开返工、返工报工、放行和确认发货没有接入这条入库事务。
 
 ---
 
@@ -607,9 +607,25 @@ MySQL 持久化表：
 - 工序单价、损耗率必须按报工时快照保存。
 - 返工仍走同一套工单状态机。
 
+### 5.2.1 岗位工序交付 `ProcessStationReportCommand`
+
+`POST /api/business/operations/process-stations` 使用该命令。手机岗位报工和桌面工序交付面板都调用它。没有新的 HTTP 路径。
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 子单号，或不拆母单号。已拆母单不能把母单号当目标 |
+| `process` | 要交付的工序。操作人取当前登录账号 |
+| `requestId` | 可选。同一次确认保持不变，8 到 64 位，只含字母、数字、点、下划线、冒号和减号。不传时仍走旧的各自提交，不回放 |
+
+带 `requestId` 时，动作记为 `PROCESS_HANDOFF`。目标类型是 `WORK_ORDER` 或 `MOTHER_ORDER`，目标编号是解析后的真实单号。规范化内容包含客户、货权客户、母单号、工序、整单数量和重量。同账号、同请求、同规范化内容回放原 `ProcessStationReportResult`，不第二次交付，也不第二次改库存。换工序、换单据、换客户或换账号都会拒绝，必须换新 `requestId`。不拆母单首次转在制、本工序库存流水、交付事实和成功结果在同一条数据库连接里提交。交接保存失败或结果保存失败时整单回滚，不能留下「库存已转但没有交付事实」。已有「这道工序已经交过」只拒绝另一次交付，不能代替结果回放。前序未交、岗位不符、已拆母单未选真实子单仍按原规则拒绝。
+
+证据只能在交付成功并拿到台账号之后绑定。中间工序的操作类型是 `process_station_report`，末道是 `production_report`，操作编号是返回的 `ledgerCode`。上传或绑定失败只补文件或引用，不重新交付。过程说明仍走 `POST /api/scan/progress-records`，不产生库存、工资或工序完成。
+
+不带 `requestId` 的岗位交付，以及下面的通用 `production-reports`，仍由库存仓储和交接单各自打开连接并提交。这不是回放，也不能当成已经同事务。本次没有新迁移：交付唯一键沿用 `V34__m3_process_station.sql`，请求表沿用 `V44__m3_command_request.sql`。
+
 ### 5.3 `ReportProductionCommand`
 
-`POST /api/business/operations/production-reports` 使用该命令模型。该接口是 生产报工写台账基线。
+`POST /api/business/operations/production-reports` 使用该命令模型。该接口不接收 `requestId`。库存流水和工序交付事实仍各自提交，不回放。现场工序交付改走上一节的 `process-stations`。桌面工单池里的「提交报工」仍调用本接口。
 
 | 字段 | 说明 |
 |---|---|
@@ -2279,8 +2295,8 @@ PWA 一期边界：
 | `POST /api/business/operations/mother-orders/{code}/splits` | `ApiResponse<MotherOrderSplitView>` |
 | `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
 | `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
-| `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>` |
-| `POST /api/business/operations/production-reports` | `ApiResponse<ProductionReportResult>` |
+| `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。可选 `requestId`。有值时动作是 `PROCESS_HANDOFF`，同账号同请求同内容回放原结果。不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。无 `requestId` 时不回放、不保证同事务 |
+| `POST /api/business/operations/production-reports` | `ApiResponse<ProductionReportResult>`。不接收 `requestId`，库存和交付事实仍各自提交，不回放 |
 | `GET /api/business/operations/quality-checks` | `ApiResponse<QualityCheckView>` |
 | `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>` |
 | `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>` |
@@ -2559,7 +2575,7 @@ PWA 一期边界：
 
 S2 起，收货、岗位报工、质检贴纸和标签现场贴纸改为调用上下文接口。S4 起，手机岗位、桌面岗位、质检和发货准备可以追加过程说明，保存逻辑相同。前端不再按编码长度把业务编码猜成运单，也不再用本地解析结果作为提交单号。`requiresSelection` 为真时必须由用户选择，查询失败不能回落到页面默认单据。扫码成功不等于已经留证或已经报工。过程说明保存在服务端，迁移为 `V43__m3_operation_progress.sql`。本地默认 `zhubao.scan-progress.repository=memory`，MySQL 配置默认 JDBC。已有库需备份后受控执行 V43，不修改 V36 或 V42。
 
-S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请求记在 `biz_command_request`，迁移为 `V44__m3_command_request.sql`。同账号、同 `requestId`、同内容回放 `resultText`；内容不一致返回「同一请求的内容不一致」；其他账号返回「该请求不能跨账号重放」。成功结果和本次通过工作单元连接写入的事实同一次提交。现有来料、报工、质检、发货接口仍直接调用旧仓储，尚未接入该工作单元。已有库需备份后受控执行 V44，不修改已发布迁移。
+S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请求记在 `biz_command_request`，迁移为 `V44__m3_command_request.sql`。同账号、同 `requestId`、同内容回放 `resultText`；内容不一致返回「同一请求的内容不一致」；其他账号返回「该请求不能跨账号重放」。成功结果和本次通过工作单元连接写入的事实同一次提交。S5p 当时来料、报工、质检、发货都还没接入。S5a 已接入来料建单和带 `requestId` 的入库确认。S5b 已接入带 `requestId` 的工序交付。未带 `requestId` 的岗位交付、通用 `production-reports`、质检、返工和发货仍各自提交。已有库需备份后受控执行 V44，不修改已发布迁移。S5b 没有新迁移。
 
 ### AuthController
 

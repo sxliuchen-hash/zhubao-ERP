@@ -235,6 +235,18 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     }
 
     @Override
+    public StockBalance findBalance(StockDimension dimension, WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("库存读取必须使用工作单元连接");
+        }
+        try {
+            return readBalance(session.connection().get(), dimension);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load stock balance", ex);
+        }
+    }
+
+    @Override
     public void clear() {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement deleteLedgers = connection.prepareStatement("delete from inv_stock_ledger");

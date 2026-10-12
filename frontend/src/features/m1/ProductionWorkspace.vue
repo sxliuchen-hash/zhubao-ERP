@@ -5,6 +5,7 @@ import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
+import ProductionPanel from '../production/ProductionPanel.vue';
 import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
 import { progressTargetOf } from '../scan/progressTarget';
 import type { Tone } from '../../data/m1PrototypeData';
@@ -156,6 +157,7 @@ function workOrderTone(status: string): Tone {
   return 'green';
 }
 
+// 桌面旧报工不带请求编号，不回放，库存和交接单仍各自提交。现场工序交付走上方共用面板。
 async function reportActiveProduction() {
   if (!activeWorkOrder.value) return;
 
@@ -200,6 +202,10 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
 <template>
   <div class="production-desk page-stack">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
+    <ProductionPanel
+      title="工序交付"
+      intro="扫子单或不拆母单贴纸。过程说明和正式交付分开。超时用原确认回放，不会另开一次交付。"
+    />
     <section class="module-work-grid production-work-grid" aria-label="生产派工主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">

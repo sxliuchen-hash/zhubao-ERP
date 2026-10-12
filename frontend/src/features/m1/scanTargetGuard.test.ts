@@ -37,6 +37,11 @@ vi.mock('../../services/processStationApi', () => ({
   lookupProcessStation: vi.fn(),
   submitProcessStation: vi.fn(),
 }));
+vi.mock('../../services/evidenceApi', () => ({
+  fetchEvidenceBoard: vi.fn().mockResolvedValue({ links: [], historical: [] }),
+  uploadEvidenceFile: vi.fn(),
+  bindEvidence: vi.fn(),
+}));
 vi.mock('../../services/qualityCheckApi', () => ({
   lookupQualityCheck: vi.fn(),
   openQualityRework: vi.fn(),
@@ -108,7 +113,7 @@ describe('现场入口防串单', () => {
     const submit = wrapper.findAll('button').find((button) => button.text() === '提交雕刻');
     expect(submit).toBeTruthy();
     await submit!.trigger('click');
-    expect(submitProcessStation).toHaveBeenCalledWith('ZD-100', '雕刻');
+    expect(submitProcessStation).toHaveBeenCalledWith('ZD-100', '雕刻', expect.stringMatching(/^station-/));
 
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-200');
     expect(wrapper.text()).toContain('贴纸已变化，请重新识别');

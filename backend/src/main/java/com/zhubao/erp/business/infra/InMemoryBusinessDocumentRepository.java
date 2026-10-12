@@ -225,16 +225,26 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
 
     @Override
     public void saveProcessStationHandoff(ProcessStationHandoff handoff) {
+        putHandoff(handoff);
+    }
+
+    @Override
+    public synchronized void saveProcessStationHandoff(ProcessStationHandoff handoff, WorkSession session) {
+        requireSession(session);
+        putHandoff(handoff);
         String key = handoffKey(handoff.orderCode(), handoff.processName());
-        ProcessStationHandoff existing = processHandoffs.putIfAbsent(key, handoff);
-        if (existing != null) {
-            throw new BusinessException("这道工序已经交过");
-        }
+        session.onRollback(() -> processHandoffs.remove(key, handoff));
     }
 
     @Override
     public Optional<ProcessStationHandoff> findProcessStationHandoff(String orderCode, String processName) {
         return Optional.ofNullable(processHandoffs.get(handoffKey(orderCode, processName)));
+    }
+
+    @Override
+    public Optional<ProcessStationHandoff> findProcessStationHandoff(String orderCode, String processName, WorkSession session) {
+        requireSession(session);
+        return findProcessStationHandoff(orderCode, processName);
     }
 
     @Override
@@ -279,6 +289,14 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
             throw new BusinessException("已经开过返工");
         }
         qualityChecks.put(orderCode, current.withRework(reworkOrderCode));
+    }
+
+    private void putHandoff(ProcessStationHandoff handoff) {
+        String key = handoffKey(handoff.orderCode(), handoff.processName());
+        ProcessStationHandoff existing = processHandoffs.putIfAbsent(key, handoff);
+        if (existing != null) {
+            throw new BusinessException("这道工序已经交过");
+        }
     }
 
     private String handoffKey(String orderCode, String processName) {

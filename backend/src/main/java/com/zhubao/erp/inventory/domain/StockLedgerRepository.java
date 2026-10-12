@@ -28,5 +28,16 @@ public interface StockLedgerRepository {
 
     StockBalance findBalance(StockDimension dimension);
 
+    /**
+     * 在当前工作单元里读取余额。
+     * JDBC 必须走会话上的同一条连接，才能看见本事务尚未提交的转入。
+     */
+    default StockBalance findBalance(StockDimension dimension, WorkSession session) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("库存读取必须使用工作单元连接");
+        }
+        return findBalance(dimension);
+    }
+
     void clear();
 }

@@ -60,7 +60,13 @@ public interface BusinessDocumentRepository {
 
     void saveProcessStationHandoff(ProcessStationHandoff handoff);
 
+    /** 在当前工作单元里保存工序交付，不单独提交。重复交付抛出「这道工序已经交过」。 */
+    void saveProcessStationHandoff(ProcessStationHandoff handoff, WorkSession session);
+
     Optional<ProcessStationHandoff> findProcessStationHandoff(String orderCode, String processName);
+
+    /** 在当前工作单元连接上读取交付，能看见本事务尚未提交的写入。 */
+    Optional<ProcessStationHandoff> findProcessStationHandoff(String orderCode, String processName, WorkSession session);
 
     List<ProcessStationHandoff> listProcessStationHandoffs(String orderCode);
 

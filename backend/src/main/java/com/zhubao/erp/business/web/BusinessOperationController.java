@@ -210,10 +210,19 @@ public class BusinessOperationController {
             @Valid @RequestBody ProcessStationReportCommand command,
             HttpServletRequest request
     ) {
+        AuthUserAccount account = requireStationAccount(request);
+        if (command.requestId() != null && !command.requestId().isBlank()) {
+            return ApiResponse.ok(requireProcessStationService().report(
+                    command.code(),
+                    command.process(),
+                    account,
+                    command.requestId()
+            ));
+        }
         return ApiResponse.ok(requireProcessStationService().report(
                 command.code(),
                 command.process(),
-                requireStationAccount(request)
+                account
         ));
     }
 
