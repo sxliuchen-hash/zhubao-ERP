@@ -7,6 +7,7 @@ import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import type { LossApproval, Tone } from '../../data/m1PrototypeData';
+import { ApiRequestError } from '../../services/apiClient';
 import {
   fetchQualityWorkspace,
   type QualityWorkspaceModel,
@@ -32,6 +33,11 @@ const emptyQuality = (): QualityWorkspaceModel => ({
 
 const workspace = ref<QualityWorkspaceModel>(emptyQuality());
 const loadError = ref('');
+const accessDenied = ref(false);
+const loading = ref(false);
+const statusKeyword = ref('');
+const advancedOpen = ref(false);
+const detailOpen = ref(false);
 const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
 const freezingQualityStock = ref(false);
 const qualityFreezeResult = ref<QualityFreezeResult | null>(null);
@@ -53,6 +59,10 @@ const { keyword, filtered: filteredCases } = useDeskFilter(
   () => workspace.value.cases,
   (item) => `${item.code} ${item.workOrder} ${item.process} ${item.inspector} ${item.defect} ${item.status}`,
 );
+const visibleCases = computed(() => {
+  const status = statusKeyword.value.trim();
+  return filteredCases.value.filter((item) => !status || item.status.includes(status));
+});
 
 const activeCase = computed(
   () =>
@@ -86,8 +96,14 @@ onMounted(() => {
   void loadQualityWorkspace();
 });
 
+function denied(error: unknown) {
+  return error instanceof ApiRequestError && (error.status === 403 || error.code === 40301);
+}
+
 async function loadQualityWorkspace() {
   loadError.value = '';
+  accessDenied.value = false;
+  loading.value = true;
   try {
     const loaded = await fetchQualityWorkspace();
     workspace.value = loaded;
@@ -96,8 +112,10 @@ async function loadQualityWorkspace() {
     }
   } catch (error) {
     workspace.value = emptyQuality();
+    accessDenied.value = denied(error);
     loadError.value = error instanceof Error ? error.message : '质检单加载失败';
   } finally {
+    loading.value = false;
     if (!workspace.value.cases.some((item) => item.code === selectedQualityCaseCode.value)) {
       selectedQualityCaseCode.value = activeCase.value?.code ?? '';
     }
@@ -204,7 +222,13 @@ async function approveActiveLoss() {
   }
 }
 
+function backToList() {
+  detailOpen.value = false;
+}
+
 function selectQualityCase(code: string) {
+  selectedQualityCaseCode.value = code;
+  detailOpen.value = true;
   selectedQualityCaseCode.value = code;
   qualityFreezeResult.value = null;
   qualityFreezeError.value = '';
@@ -220,7 +244,7 @@ function selectQualityCase(code: string) {
 </script>
 
 <template>
-  <div class="quality-desk page-stack">
+  <div class="quality-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <QualityPanel
       title="对照加工要求"
@@ -233,16 +257,25 @@ function selectQualityCase(code: string) {
           <div>
             <h2>今日质检池</h2>
           </div>
-          <div class="module-tools">
-            <label>
-              <span>扫码</span>
-              <input v-model="keyword" placeholder="质检单或工单号" aria-label="质检扫码" />
-            </label>
-          </div>
+        </div>
+        <div class="module-tools production-filters">
+          <label>
+            <span>扫码</span>
+            <input v-model="keyword" placeholder="质检单或工单号" aria-label="质检扫码" />
+          </label>
+          <button class="secondary-button" type="button" :aria-expanded="advancedOpen ? 'true' : 'false'" @click="advancedOpen = !advancedOpen">
+            {{ advancedOpen ? '收起筛选' : '更多筛选' }}
+          </button>
+          <label v-if="advancedOpen">
+            <span>状态</span>
+            <input v-model="statusKeyword" placeholder="如 待质检" aria-label="质检状态筛选" />
+          </label>
         </div>
 
+        <p v-if="loading" class="empty-hint">正在加载质检</p>
+        <p v-if="accessDenied" class="operation-feedback danger">无权限</p>
         <p v-if="loadError" class="operation-feedback danger">{{ loadError }}</p>
-        <div class="module-table-wrap refined-table-wrap">
+        <div class="module-table-wrap refined-table-wrap desk-table-wrap">
           <table class="module-table quality-dispatch-table">
             <thead>
               <tr>
@@ -257,7 +290,7 @@ function selectQualityCase(code: string) {
             </thead>
             <tbody>
               <tr
-                v-for="item in filteredCases"
+                v-for="item in visibleCases"
                 :key="item.code"
                 :class="{ 'is-selected': activeCase?.code === item.code }"
                 :aria-selected="activeCase?.code === item.code"
@@ -276,17 +309,35 @@ function selectQualityCase(code: string) {
                 <td><StatusBadge :label="item.status" :tone="qualityCaseTone(item.status, item.action)" /></td>
                 <td><button class="table-action" type="button" @click.stop="selectQualityCase(item.code)">处理</button></td>
               </tr>
-              <tr v-if="filteredCases.length === 0">
+              <tr v-if="!loading && visibleCases.length === 0">
                 <td colspan="7">暂无质检单</td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="desk-cards">
+          <p v-if="!loading && visibleCases.length === 0" class="empty-hint">暂无质检单</p>
+          <button
+            v-for="item in visibleCases"
+            :key="item.code"
+            class="desk-card"
+            type="button"
+            @click="selectQualityCase(item.code)"
+          >
+            <span class="desk-card-top">
+              <strong class="code">{{ item.code }}</strong>
+              <StatusBadge :label="item.status" :tone="qualityCaseTone(item.status, item.action)" />
+            </span>
+            <span>{{ item.workOrder }} · {{ item.process }}</span>
+            <span>{{ item.defect }} · {{ item.action }}</span>
+          </button>
         </div>
       </div>
 
       <aside v-if="activeCase" class="module-side-panel">
         <section class="active-object-card tone-violet">
           <div class="panel-title-row">
+            <button class="secondary-button detail-back" type="button" @click="backToList">返回列表</button>
             <StatusBadge :label="activeCase.status" :tone="qualityCaseTone(activeCase.status, activeCase.action)" />
           </div>
           <strong>{{ activeCase.code }}</strong>

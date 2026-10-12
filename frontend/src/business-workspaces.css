@@ -13,13 +13,16 @@
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk) td { min-width: 88px; }
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) table .table-action { white-space: nowrap; }
 .production-desk :is(.production-dispatch-table, .production-handoff-grid),
-.progress-board .progress-table { min-width: 0; }
+.progress-board .progress-table,
+.quality-desk .quality-dispatch-table { min-width: 0; }
 .production-desk :is(.production-dispatch-table, .production-handoff-grid) :is(th, td),
-.progress-board .progress-table :is(th, td) {
+.progress-board .progress-table :is(th, td),
+.quality-desk .quality-dispatch-table :is(th, td) {
   min-width: 0;
   white-space: normal;
 }
-.production-desk .operation-inputs.operation-inputs {
+.production-desk .operation-inputs.operation-inputs,
+.quality-desk .operation-inputs.operation-inputs {
   grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
 }
 .active-record-code { display: grid; gap: 6px; margin: 12px 0; }

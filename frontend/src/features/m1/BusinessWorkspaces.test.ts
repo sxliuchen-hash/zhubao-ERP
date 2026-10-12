@@ -360,6 +360,28 @@ describe('M1 business workspaces', () => {
     await wrapper.findAll('table.quality-dispatch-table tbody tr')[1].trigger('click');
 
     expect(wrapper.find('.active-object-card > strong').text()).toBe('QC-20260706-022');
+    expect(wrapper.classes()).toContain('is-detail');
+  });
+
+  it('filters quality cases and keeps the filter after returning', async () => {
+    const wrapper = mount(QualityWorkspace);
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === '更多筛选')!.trigger('click');
+    await wrapper.get('[aria-label="质检状态筛选"]').setValue('已完成');
+    expect(wrapper.get('table.quality-dispatch-table').text()).toContain('QC-20260706-022');
+    expect(wrapper.get('table.quality-dispatch-table').text()).not.toContain('QC-20260706-021');
+    await wrapper.get('.desk-card').trigger('click');
+    expect(wrapper.classes()).toContain('is-detail');
+    await wrapper.get('.detail-back').trigger('click');
+    expect(wrapper.classes()).not.toContain('is-detail');
+    expect((wrapper.get('[aria-label="质检状态筛选"]').element as HTMLInputElement).value).toBe('已完成');
+
+    vi.mocked(fetchQualityWorkspace).mockRejectedValueOnce(new ApiRequestError('无权查看质检', 403, 40301));
+    const denied = mount(QualityWorkspace);
+    await flushPromises();
+    expect(denied.text()).toContain('无权限');
+    expect(denied.text()).toContain('无权查看质检');
+    expect(denied.find('.active-object-card').exists()).toBe(false);
   });
 
   it('renders inventory ledger details and trace evidence', async () => {
