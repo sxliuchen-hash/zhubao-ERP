@@ -12,7 +12,14 @@
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) th { white-space: nowrap; }
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk) td { min-width: 88px; }
 :is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) table .table-action { white-space: nowrap; }
-.production-desk .production-dispatch-table { min-width: 960px; }
+.production-desk :is(.production-dispatch-table, .production-handoff-grid) { min-width: 0; }
+.production-desk :is(.production-dispatch-table, .production-handoff-grid) :is(th, td) {
+  min-width: 0;
+  white-space: normal;
+}
+.production-desk .operation-inputs.operation-inputs {
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+}
 .active-record-code { display: grid; gap: 6px; margin: 12px 0; }
 .active-record-code span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .mission-kpi-grid strong small { margin-left: 4px; font-size: 12px; font-weight: 400; color: var(--muted); }
@@ -42,10 +49,9 @@
 .timeline article { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding-left: 12px; border-left: 2px solid var(--border); }
 .timeline article > div { display: grid; gap: 4px; min-width: 0; }
 .timeline :is(time, small, span) { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.production-desk .handoff-table, .inventory-trace-desk .ledger-table { max-width: 100%; overflow-x: auto; }
-.production-desk .handoff-row { min-width: 650px; grid-template-columns: minmax(160px, 1.6fr) repeat(6, minmax(70px, 1fr)); }
+.inventory-trace-desk .ledger-table { max-width: 100%; overflow-x: auto; }
 .inventory-trace-desk .ledger-row { min-width: 650px; grid-template-columns: 100px minmax(170px, 1.5fr) 100px 100px minmax(180px, 1.5fr); }
-.production-desk .handoff-row > *, .inventory-trace-desk .ledger-row > * { min-width: 0; overflow-wrap: anywhere; }
+.inventory-trace-desk .ledger-row > * { min-width: 0; overflow-wrap: anywhere; }
 
 /* 财务与进度的表单和明细共用紧凑间距，输入控件不能撑开窄屏。 */
 .finance-workspace, .progress-board { display: grid; gap: 16px; min-width: 0; }

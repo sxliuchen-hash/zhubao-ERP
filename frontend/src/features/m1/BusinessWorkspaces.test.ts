@@ -1,5 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../services/apiClient';
 import type {
   InboundOrder,
   InventoryBalance,
@@ -276,11 +278,67 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('机器档案匹配建议');
     expect(wrapper.text()).not.toContain('报工校验规则');
     expect(wrapper.text()).toContain('提交报工');
+    expect(wrapper.text()).toContain('不是回放路径');
     expect(wrapper.text()).toContain('审批阻断');
 
     await wrapper.findAll('table.production-dispatch-table tbody tr')[0].trigger('click');
 
     expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
+    expect(wrapper.classes()).toContain('is-detail');
+  });
+
+  it('filters production orders and keeps the filter after returning from detail', async () => {
+    const wrapper = mount(ProductionWorkspace);
+    await flushPromises();
+
+    await wrapper.get('[aria-label="客户筛选"]').setValue('恒信');
+    expect(wrapper.get('table.production-dispatch-table').text()).toContain('ZD-20260706-001');
+    expect(wrapper.get('table.production-dispatch-table').text()).not.toContain('ZD-20260706-006');
+
+    await wrapper.get('.production-card').trigger('click');
+    expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
+    expect(wrapper.classes()).toContain('is-detail');
+
+    await wrapper.get('.detail-back').trigger('click');
+    expect(wrapper.classes()).not.toContain('is-detail');
+    expect((wrapper.get('[aria-label="客户筛选"]').element as HTMLInputElement).value).toBe('恒信');
+    expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
+  });
+
+  it('shows an empty production list while loading and when the api returns nothing', async () => {
+    let release: (value: Awaited<ReturnType<typeof fetchProductionWorkspace>>) => void = () => {};
+    vi.mocked(fetchProductionWorkspace).mockReturnValue(new Promise((resolve) => {
+      release = resolve;
+    }));
+    const wrapper = mount(ProductionWorkspace);
+    await nextTick();
+    expect(wrapper.text()).toContain('正在加载工单');
+    expect(wrapper.text()).not.toContain('暂无工单');
+
+    release({ stationLoads: [], workOrders: [], handoffs: [] });
+    await flushPromises();
+    expect(wrapper.text()).toContain('接口没有返回工单');
+    expect(wrapper.text()).toContain('暂无工单');
+    expect(wrapper.text()).toContain('暂无称重交接');
+    expect(wrapper.find('.active-object-card').exists()).toBe(false);
+  });
+
+  it('keeps the production failure and permission text instead of an empty success', async () => {
+    vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new Error('工单接口不可用'));
+    const failed = mount(ProductionWorkspace);
+    await flushPromises();
+    expect(failed.text()).toContain('工单接口不可用');
+    expect(failed.text()).toContain('暂无工单');
+    expect(failed.text()).not.toContain('无权限');
+    expect(failed.text()).not.toContain('ZD-20260706-001');
+
+    vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new ApiRequestError('无权查看生产工单', 403, 40301));
+    const denied = mount(ProductionWorkspace);
+    await flushPromises();
+    expect(denied.text()).toContain('无权限');
+    expect(denied.text()).toContain('无权查看生产工单');
+    expect(denied.find('.active-object-card').exists()).toBe(false);
+    expect(denied.text()).not.toContain('ZD-20260706-001');
   });
 
   it('renders quality metrics and loss approvals', async () => {

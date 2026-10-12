@@ -867,10 +867,8 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   padding: 8px;
 }
 
-.handoff-table,
 .ledger-table { display: grid; gap: 4px; }
 
-.handoff-row,
 .ledger-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
@@ -879,7 +877,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   font-size: 13px;
 }
 
-.handoff-head,
 .ledger-head { color: var(--muted); font-size: 12px; }
 
 .eyebrow { display: none; }
@@ -1700,7 +1697,8 @@ button.finance-month-button {
   }
 }
 
-.inbound-filters {
+.inbound-filters,
+.production-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -1709,9 +1707,13 @@ button.finance-month-button {
 }
 
 .inbound-cards,
+.production-cards,
+.production-handoff-cards,
 .detail-back { display: none; }
 
-.inbound-card {
+.inbound-card,
+.production-card,
+.production-handoff-card {
   display: grid;
   gap: 4px;
   width: 100%;
@@ -1724,6 +1726,14 @@ button.finance-month-button {
   cursor: pointer;
 }
 
+.production-card,
+.production-handoff-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.production-handoff-card { cursor: default; }
+
 .inbound-card-top {
   display: flex;
   align-items: center;
@@ -1731,15 +1741,46 @@ button.finance-month-button {
   gap: 8px;
 }
 
+.production-card-top,
+.production-handoff-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.production-card-top .code,
+.production-handoff-top .code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.production-legacy-note,
+.production-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.production-note summary { cursor: pointer; }
+
 @media (max-width: 900px) {
-  .inbound-table-wrap { display: none; }
-  .inbound-cards { display: grid; gap: 8px; }
+  .inbound-table-wrap,
+  .production-table-wrap,
+  .production-handoff-table { display: none; }
+  .inbound-cards,
+  .production-cards,
+  .production-handoff-cards { display: grid; gap: 8px; }
   .detail-back { display: inline-flex; }
 
   .inbound-desk:not(.is-detail) .module-side-panel,
-  .inbound-desk:not(.is-detail) .evidence-slot-panel { display: none; }
+  .inbound-desk:not(.is-detail) .evidence-slot-panel,
+  .production-desk:not(.is-detail) .module-side-panel { display: none; }
 
-  .inbound-desk.is-detail .module-master-panel { display: none; }
+  .inbound-desk.is-detail .module-master-panel,
+  .production-desk.is-detail .module-master-panel { display: none; }
 }
 
 .scan-entry input,

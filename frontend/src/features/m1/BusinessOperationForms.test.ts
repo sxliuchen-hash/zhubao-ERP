@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../services/apiClient';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
 import ProductionWorkspace from './ProductionWorkspace.vue';
 import QualityWorkspace from './QualityWorkspace.vue';
@@ -78,5 +79,33 @@ describe('业务操作真实输入', () => {
     await wrapper.findAll('button').find(button => button.text() === '提交报工')!.trigger('click');
     await flushPromises();
     expect(reportProduction).toHaveBeenCalledWith(workOrder, undefined, { quantity: 3, weight: '7.125' });
+    expect(vi.mocked(reportProduction).mock.calls[0][2]).not.toHaveProperty('requestId');
+  });
+
+  it('旧报工保存中显示正在入账，失败或无权限时保留已填数量重量', async () => {
+    const workOrder = { code: 'ZD-REAL', customer: '实际客户', material: '物料', process: '抛光', processCategory: '', productCategory: '',
+      machineNo: '', workItemName: '', startedAt: '', finishedAt: '', completionStatus: '', handoffAuditStatus: '',
+      assignee: '', plannedQty: 10, finishedQty: 0, status: '加工中', progress: 0 };
+    vi.mocked(fetchProductionWorkspace).mockResolvedValue({ stationLoads: [], workOrders: [workOrder], handoffs: [], dataSource: 'LIVE' });
+    let rejectReport: (reason?: unknown) => void = () => {};
+    vi.mocked(reportProduction).mockReturnValue(new Promise((_resolve, reject) => {
+      rejectReport = reject;
+    }));
+    const wrapper = mount(ProductionWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="本次完成数量"]').setValue('3');
+    await wrapper.get('[aria-label="本次产出重量（克）"]').setValue('7.125');
+    const pending = wrapper.findAll('button').find(button => button.text() === '提交报工')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('正在入账');
+    expect(wrapper.findAll('button').find(button => button.text() === '正在入账')!.attributes('disabled')).toBeDefined();
+
+    rejectReport(new ApiRequestError('无权提交报工', 403, 40301));
+    await pending;
+    await flushPromises();
+    expect(wrapper.text()).toContain('无权限');
+    expect(wrapper.text()).toContain('无权提交报工');
+    expect((wrapper.get('[aria-label="本次完成数量"]').element as HTMLInputElement).value).toBe('3');
+    expect((wrapper.get('[aria-label="本次产出重量（克）"]').element as HTMLInputElement).value).toBe('7.125');
   });
 });
