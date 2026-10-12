@@ -1,11 +1,14 @@
 package com.zhubao.erp.finance.domain;
 
+import java.math.BigDecimal;
+
 /**
- * 当前余额占位。本段不计算余额，序列化保持 null。
+ * 截至本次查询的当前余额。不随所选月份改成该月账单小计。
  */
 public record CurrentBalances(
         String asOf,
-        String outstandingAmount,
-        String unpaidAmount
+        BigDecimal outstandingAmount,
+        BigDecimal unpaidAmount,
+        String limitation
 ) {
 }

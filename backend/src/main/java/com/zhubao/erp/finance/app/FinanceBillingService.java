@@ -530,6 +530,19 @@ public class FinanceBillingService {
         return FinanceTexts.money(open);
     }
 
+    /** 一条原始账单扣掉红字和已核销后的当前未收。红字行不单独再算一次。 */
+    public BigDecimal currentOpen(ReceivableLine line) {
+        if (line == null || !line.reversesCode().isBlank()) {
+            return FinanceTexts.ZERO;
+        }
+        return openAmount(line);
+    }
+
+    /** 该客户全部账单、红字和核销后的当前未收。未分配预收不抵减这笔未收。 */
+    public BigDecimal currentOutstanding(long customerId) {
+        return statement(customerId, "").outstandingAmount();
+    }
+
     private BigDecimal allocatedTo(List<ReceivableLine> lines) {
         Set<String> codes = new LinkedHashSet<>();
         for (ReceivableLine line : lines) {

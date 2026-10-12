@@ -2268,7 +2268,9 @@ PWA 一期边界：
 
 未带登录会话、也未显式给出 `X-Zhubao-Role` 的请求拒绝。操作工等只能看订单的角色没有上述两个读取权限。现有写入权限和请求头兜底开关不扩大。错误仍走 `40301`。
 
-`GET /api/finance/dashboard?yearMonth=YYYY-MM&customerId=可选` 只读。`data` 含 `yearMonth`、`generatedAt`、`scope`、`operating`、`trend`。`trend` 为选择月及向前五个月，当前自然月标记 `throughQueryTime=true`，不计算增幅。`currentBalances` 与 `receivableRanking` 本段为 `null`。`capabilities` 写明各块是否可用及原因。公司范围含折旧；客户范围不含公司折旧。查询不生成账单、工资或折旧。
+`GET /api/finance/dashboard?yearMonth=YYYY-MM&customerId=可选` 只读。`data` 含 `yearMonth`、`generatedAt`、`scope`、`operating`、`trend`、`currentBalances`、`receivableRanking`。`trend` 为选择月及向前五个月，当前自然月标记 `throughQueryTime=true`，不计算增幅。`currentBalances` 是截至本次查询的当前未收和未付，不随所选月份改成该月小计。`receivableRanking` 只含未收不为 0 的客户，按未收从高到低，并给出 `total`、`returned`、`truncated`。`capabilities` 写明各块是否可用及原因。公司范围含折旧和全部应付；客户范围不含公司折旧，也不能看到未归集到该客户的公司应付。查询不生成账单、工资或折旧。
+
+`GET /api/finance/dashboard/details?kind=REVENUE|COST|RECEIVABLE|PAYABLE&yearMonth=收入和成本必填&customerId=可选&page=1&size=20` 只读。`totalAmount` 是筛选后的全量合计，不是当前页相加。收入和成本跟随月份与范围，合计应与同一范围的 `operating` 对应金额一致。未收和应付忽略月份，使用当前时点，合计应与 `currentBalances` 一致。分页 `page` 从 1 开始，`size` 最大 100。
 
 ### 16.1 经营汇总请求与返回
 
@@ -2280,8 +2282,8 @@ PWA 一期边界：
 | `scope.kind/customerIds/note` | 实际查询范围、已授权客户编号和范围说明，不回传未授权客户 |
 | `operating` | `OperatingStatement`：`yearMonth/customerId/revenue/wageCost/consumableCost/depreciationCost/outsourceCost/result/gaps` |
 | `trend[]` | 每项包含 `yearMonth/throughQueryTime/operating`；共六个月，当月仅截至查询时刻 |
-| `currentBalances` | 当前阶段为 `null`，不能当作余额为 0 |
-| `receivableRanking` | 当前阶段为 `null`，不能当作空客户排行 |
+| `currentBalances` | `asOf`、`outstandingAmount`、`unpaidAmount`、`limitation`。截至本次查询；`limitation` 说明未归集的公司应付没有算进客户范围 |
+| `receivableRanking` | `total`、`returned`、`truncated`、`rows[]`。每行是 `customerId`、`customerName`、`outstandingAmount`。没有未收时 `rows` 为空且 `total=0`，这表示查过且没有余额 |
 | `capabilities[]` | 每项包含 `part/available/reason`，不可用能力明确给出原因 |
 
 经营收入按应收入账月份统计，收款不重复计收入；客户范围不分摊公司折旧。查询只读取，不生成账单、工资或折旧。完整类型见[FinanceDashboard](../backend/src/main/java/com/zhubao/erp/finance/domain/FinanceDashboard.java)与[OperatingStatement](../backend/src/main/java/com/zhubao/erp/finance/domain/OperatingStatement.java)。
@@ -2432,7 +2434,8 @@ PWA 一期边界：
 | `GET /api/finance/payables` | `ApiResponse<List<PayableView>>` |
 | `POST /api/finance/payable-payments` | `ApiResponse<PayablePayment>` |
 | `GET /api/finance/operating-statement` | `ApiResponse<OperatingStatement>` |
-| `GET /api/finance/dashboard` | `ApiResponse<FinanceDashboard>` |
+| `GET /api/finance/dashboard` | `ApiResponse<FinanceDashboard>`。含当前余额和未收排行 |
+| `GET /api/finance/dashboard/details` | `ApiResponse<FinanceDetailPage>`。`kind` 为 `REVENUE`、`COST`、`RECEIVABLE`、`PAYABLE` |
 
 `POST /api/finance/payable-payments` 的请求体在应付单号、金额、付款日之外可以带 `idempotencyKey`，最长 80 字符。余额检查、付款流水和已付金额在同一事务中完成。JDBC 先锁应付行，再用 `paid_amount + 本次金额 <= amount` 条件更新；内存用同一把锁。流水合计与已付余额保持一致。同一幂等键且应付单、金额、付款日相同的重试返回原来的付款单，不新增流水；同一键但内容不同则拒绝。并发使用同一键只产生一笔付款。不传键时仍禁止超付，但不保证网络重试去重。已有库需在备份后受控执行 V40，为 `fin_payable_payment` 增加可空的 `idempotency_key`。该变更不修改 V36。
 

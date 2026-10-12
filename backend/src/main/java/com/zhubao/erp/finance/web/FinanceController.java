@@ -14,6 +14,7 @@ import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.CustomerStatement;
 import com.zhubao.erp.finance.domain.DepreciationEntry;
 import com.zhubao.erp.finance.domain.FinanceDashboard;
+import com.zhubao.erp.finance.domain.FinanceDetailPage;
 import com.zhubao.erp.finance.domain.FinanceCommands.BillingRunCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.DepreciationRunCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.IssueConsumableCommand;
@@ -332,6 +333,18 @@ public class FinanceController {
             HttpServletRequest request
     ) {
         return ApiResponse.ok(dashboardService.dashboard(readContext(request), yearMonth, customerId));
+    }
+
+    @GetMapping("/dashboard/details")
+    public ApiResponse<FinanceDetailPage> dashboardDetails(
+            @RequestParam String kind,
+            @RequestParam(required = false) String yearMonth,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(dashboardService.details(readContext(request), kind, yearMonth, customerId, page, size));
     }
 
     private OperatorContext readContext(HttpServletRequest request) {

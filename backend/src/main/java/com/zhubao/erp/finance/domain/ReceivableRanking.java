@@ -1,14 +1,25 @@
 package com.zhubao.erp.finance.domain;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 客户未收排行占位。本段不查询排行，不能用空列表表示已经查过且没有余额。
+ * 当前客户未收款排行。没有未收时 rows 为空；无权时不返回空列表冒充已查过。
  */
 public record ReceivableRanking(
         int total,
         int returned,
         boolean truncated,
-        List<String> rows
+        List<ReceivableRankRow> rows
 ) {
+    public ReceivableRanking {
+        rows = List.copyOf(rows);
+    }
+
+    public record ReceivableRankRow(
+            long customerId,
+            String customerName,
+            BigDecimal outstandingAmount
+    ) {
+    }
 }
