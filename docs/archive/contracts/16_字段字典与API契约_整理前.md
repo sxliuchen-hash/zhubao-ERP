@@ -27,9 +27,9 @@
 - [BusinessWorkspaceSeedData.java](../../../backend/src/main/java/com/zhubao/erp/business/infra/BusinessWorkspaceSeedData.java)
 - [businessWorkspaceApi.ts](../../../frontend/src/services/businessWorkspaceApi.ts)
 - [V3__m2_business_workspace_contract.sql](../../../backend/src/main/resources/db/mysql/V3__m2_business_workspace_contract.sql)
-- [ConfigurationBaselineService.java](../../../backend/src/main/java/com/zhubao/erp/configuration/app/ConfigurationBaselineService.java)
-- [ConfigurationBaselineData.java](../../../backend/src/main/java/com/zhubao/erp/configuration/domain/ConfigurationBaselineData.java)
-- [configurationBaselineApi.ts](../../../frontend/src/services/configurationBaselineApi.ts)
+- [ConfigurationBaselineService.java](../../../archive/code/2026-10-13/backend/src/main/java/com/zhubao/erp/configuration/app/ConfigurationBaselineService.java)
+- [ConfigurationBaselineData.java](../../../archive/code/2026-10-13/backend/src/main/java/com/zhubao/erp/configuration/domain/ConfigurationBaselineData.java)
+- configurationBaselineApi.ts（历史路径 `frontend/src/services/configurationBaselineApi.ts`，该文件已移除）
 - [V4__m2_configuration_baseline_contract.sql](../../../backend/src/main/resources/db/mysql/V4__m2_configuration_baseline_contract.sql)
 - [V5__m2_configuration_change_control_contract.sql](../../../backend/src/main/resources/db/mysql/V5__m2_configuration_change_control_contract.sql)
 - [V7__m3_hardware_poc_record_contract.sql](../../../backend/src/main/resources/db/mysql/V7__m3_hardware_poc_record_contract.sql)

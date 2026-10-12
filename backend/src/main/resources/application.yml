@@ -18,8 +18,6 @@ management:
 zhubao:
   m0:
     storage-mode: nas-first
-    video-buffer-seconds: 5
-    max-video-retry: 3
   documents:
     repository: memory
     storage:

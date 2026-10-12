@@ -50,7 +50,6 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/documents/evidence-files", PermissionCode.DOCUMENT_CAPTURE),
             Map.entry("/api/documents/evidence-links", PermissionCode.DOCUMENT_CAPTURE),
             Map.entry("/api/business/operations/mobile-intakes", PermissionCode.BUSINESS_INBOUND_CONFIRM),
-            Map.entry("/api/video-clip-tasks", PermissionCode.VIDEO_TASK_OPERATE),
             Map.entry("/api/label/generate", PermissionCode.LABEL_PRINT),
             Map.entry("/api/label/templates", PermissionCode.LABEL_PRINT),
             Map.entry("/api/label/reprints", PermissionCode.LABEL_PRINT)
@@ -58,7 +57,6 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
     private final Pattern motherSplitPath = Pattern.compile("^/api/business/operations/mother-orders/[^/]+/(keep|splits)$");
     private final Pattern documentRetirePath = Pattern.compile("^/api/documents/attachments/[^/]+/retirements$");
     private final Pattern approvalDecisionPath = Pattern.compile("^/api/approvals/tasks/[^/]+/decisions$");
-    private final Pattern videoTaskOperationPath = Pattern.compile("^/api/video-clip-tasks/[^/]+/(retry|manual-upload)$");
     private final Pattern registerImportReviewPath = Pattern.compile("^/api/register-import/batches/[^/]+/rows/\\d+/corrections$");
     private final Pattern registerImportPostingPath = Pattern.compile("^/api/register-import/batches/[^/]+/posting-commands$");
     private final Pattern authAccountStatusPath = Pattern.compile("^/api/auth/accounts/[^/]+/(status|unlock|session-revocations)$");
@@ -110,9 +108,6 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         }
         if (motherSplitPath.matcher(path).matches()) {
             return PermissionCode.BUSINESS_MOTHER_SPLIT;
-        }
-        if (videoTaskOperationPath.matcher(path).matches()) {
-            return PermissionCode.VIDEO_TASK_OPERATE;
         }
         if (documentRetirePath.matcher(path).matches()) {
             return PermissionCode.DOCUMENT_CONTENT_MANAGE;

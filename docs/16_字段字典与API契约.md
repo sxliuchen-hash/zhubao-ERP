@@ -1,12 +1,12 @@
 # 来料加工进销存与生产管理系统 字段字典与 API 契约
 
-**文档版本**：V2.0
-**更新日期**：2026-10-10
+**文档版本**：V2.1
+**更新日期**：2026-10-13
 **文档定位**：现行 API 调用、字段校验、权限和存储边界的统一入口
 
 ## 1. 使用范围
 
-本文件记录已在源码注册的接口及有效字段。目标业务模型与未来能力见[产品需求](./01_PRD_产品需求文档.md)、[领域模型](./03_领域模型与数据库设计.md)；规划接口不作为现行调用契约。完整历史与已移除评审字段见[整理前契约](./archive/contracts/16_字段字典与API契约_整理前.md)。
+本文件记录已在源码注册的接口及有效字段。当前启用范围和架构以[项目核心](./00_项目核心.md)为准；仅在修改具体接口时读取对应章节。已退出的配置基线、样例场景和视频截取原型见[历史 API 片段](./archive/contracts/2026-10-13_弃用原型API片段.md)，不再注册或作为现行契约。
 
 业务工作台默认只读正式单据与台账；评审快照仅在显式演示模式读取，不与正式数据合并，数据来源见“持久化与数据来源”。接口存在、测试通过或仓储可切换均不代表生产实际使用。现场采集、拆单、工序交接、质检、网关、财务等当前入口统一列于末章“现行端点索引”，完整请求与响应类型可由对应控制器追溯。
 
@@ -255,7 +255,7 @@ MySQL 持久化表：
 
 - `GET /api/register-import/batches?limit=10` 用于显示最近确认批次，后端返回批次头和行级快照；`limit` 在服务端限制为 1-50。
 - `GET /api/register-import/batches/{importBatchNo}` 用于点击批次后读取单批次详情，展示 `rows[].normalizedFields` 和 `rows[].messages`。
-- 前端在后端 API 不可用时保留本地评审批次兜底，并明确标注数据来源；该兜底只用于评审界面，不代表已写入 MySQL。
+- 后端 API 不可用时显示读取失败，不回填历史评审批次，也不将未保存数据写成已入账。
 - `status=CONFIRMED` 在页面显示为“待入账映射”，不得被解释为已经生成母单、报工、设备产量或出库单。
 - `status=POSTED` 在页面显示为“已入业务单据”，重复调用显式入账命令必须被后端拒绝。
 - 入账映射必须走 `POST /posting-commands` 独立命令，不能在批次查询或 posting plan 接口中隐式写库存台账。
@@ -400,26 +400,6 @@ MySQL 持久化表：
 | `GET /tasks/pending` | 首页/审批工作台/账号管理/质检返工 | 查询待审批任务 |
 | `GET /tasks/{approvalCode}` | 审批工作台/质检返工 | 查询单个审批任务 |
 | `POST /tasks/{approvalCode}/decisions` | 审批工作台/质检返工 | 审批通过或驳回，并锁定审批快照 |
-
-配置基线接口前缀：
-
-```http
-/api/configuration/baseline
-```
-
-| 接口 | 页面 | 用途 |
-|---|---|---|
-| `GET /summary` | 配置基线 | 返回配置项数量和需审批项数量 |
-| `GET /system-parameters` | 配置基线 | 返回系统参数、等级、作用范围、变更控制 |
-| `GET /code-rules` | 配置基线 | 返回业务编码格式、示例和唯一性规则 |
-| `GET /role-permissions` | 配置基线 | 返回角色、数据范围、权限和敏感动作 |
-| `GET /process-templates` | 配置基线 | 返回工序模板、损耗、工资和质检规则 |
-| `GET /warehouse-states` | 配置基线 | 返回仓库状态、客户所有权边界和状态流转 |
-| `GET /video-parameters` | 配置基线 | 返回视频截取、人工上传和保存策略参数 |
-| `GET /components` | 配置基线 | 返回开源组件版本、许可证、用途和风险 |
-| `GET /backup-policies` | 配置基线 | 返回数据库、附件、配置模板的备份策略 |
-| `GET /change-requests` | 配置基线 | 返回配置变更单、审批状态和风险等级 |
-| `GET /audit-events` | 配置基线 | 返回配置审批、导出和后续修改的审计事件 |
 
 硬件联动接口前缀：
 
@@ -1435,32 +1415,17 @@ PWA 一期边界：
 
 来料、工单、质检、损耗与库存行新增可空 `operationContext`，包含 `customerId`、`ownerCustomerId`、`motherOrderCode`、`workOrderCode`、`materialCode`、`warehouseCode`、`ownerType`、`stockStatus`、`quantity`、`weight`。仅能唯一定位正式库存维度时提供；评审行、多仓或多状态歧义时为空，前端拒绝猜测客户、物料和重量。业务写入使用当前登录人，物流、返工单号、复核结论及损耗计价由使用者输入，不再按样例码生成。
 
-该收敛不缩减客户、物料、员工、订单、库存与追溯的完整目标范围；缺少真实记录的指标、离线草稿和证据不制造占位事实。
+当前启用范围以项目核心和实际页面消费链为准；缺少真实记录的指标、离线草稿和证据不制造占位事实，远期模型只保留归档。
 
-### 10.1 业务工作台 JDBC 读取基线
+### 10.1 正式工作台与显式演示来源
 
-工作台仓储提供内存 seed 与 MySQL 评审快照两种来源；部分工作台同时合并正式单据，不能把快照统计视为生产事实。
+`BusinessWorkspaceService` 默认通过 `FormalBusinessWorkspaceQuery` 聚合正式单据、工序、质检、余额和台账，返回 `dataSource=LIVE`；空库返回空列表，不补评审记录，也不把正式数据与快照合并。
 
-| 项目 | 契约 |
-|---|---|
-| 默认模式 | `zhubao.business.repository=memory`，继续使用内存 seed，便于无数据库评审 |
-| JDBC 模式 | `zhubao.business.repository=jdbc`，读取 `biz_workspace_*` 合同表 |
-| 快照选择 | 优先使用 `zhubao.business.snapshot-code`，未配置时读取 `biz_workspace_snapshot` 中最新业务日期 |
-| MySQL profile | `ZHUBAO_BUSINESS_REPOSITORY` 默认 `memory`；设为 `jdbc` 时可用 `ZHUBAO_BUSINESS_SNAPSHOT_CODE` 指定评审快照 |
-| 追溯时间线 | `biz_workspace_trace_event`，由 `V8__m3_business_workspace_jdbc_repository_contract.sql` 提供 |
-| 评审 seed | `V9__m3_business_workspace_review_seed.sql`，提供当前 M2/M3 页面评审样例 |
+仅在显式 `zhubao.business.workspace.demo-enabled=true` 时使用 `BusinessWorkspaceRepository` 的独立评审快照，返回 `DEMO`。`zhubao.business.repository` 和 `snapshot-code` 只控制这个演示来源，不控制正式母单持久化；历史 `biz_workspace_*` 表与迁移保留兼容。
 
-约束：
+本地正式单据默认内存；MySQL profile 下 `business-document`、库存等默认 JDBC，审批和附件元数据仍受独立开关控制，默认可能是 memory。Compose 显式覆盖相关 JDBC 开关。最终以实际环境变量为准，不能仅凭开启 profile 推断全模块持久化。
 
-- `biz_workspace_*` 是评审快照表，不是最终交易表。
-- 页面仍不得直接修改库存余额，正式动作必须继续落到业务命令和库存台账。
-- 后续应将读取来源从评审快照升级为来料、工单、质检、库存和附件的真实聚合查询。
-
-当前读取组合：来料将正式母单与快照按编码合并；生产和质检将正式进度与快照合并；库存及移动工作台仍读取评审仓储。对应实现为 `BusinessWorkspaceService`。正式库存余额与台账应调用 `/api/inventory/balances`、`/api/inventory/ledgers`；正式进度调用 `/api/business/operations/progress`。
-
-运行配置按入口区分：`application-mysql.yml` 中工作台、审批和文档元数据仓储默认仍是 `memory`；`deploy/docker-compose.yml` 与 `deploy/.env.example` 将这三项默认设为 `jdbc`。正式业务单据在 MySQL profile 默认为 `jdbc`。最终生效值取决于实际环境变量，不能仅凭启用 MySQL profile 推断所有仓储已持久化。
-
-来料、生产、质检页面当前仍调用 `/api/business/workspaces/*`；后端按编码先取正式记录，再补没有重复编码的评审记录。检查点、工位负载、交接示例和质检指标仍来自评审仓储，不能随正式单据列表一起视作实时统计。正式单据内存仓储初始为空，业务动作保存后才产生记录；快照 seed 与正式单据是不同数据集。
+正式余额与流水另可调用 `/api/inventory/balances`、`/api/inventory/ledgers`；正式进度是 `/api/business/operations/progress`。页面展示的聚合也必须服从登录角色与客户范围。
 
 ### 10.2 业务操作写台账基线
 
@@ -1554,118 +1519,6 @@ PWA 一期边界：
 
 ---
 
-## 12. 配置基线字段
-
-本章是只读评审基线数据结构，不代表可在线编辑并生效的系统配置、真实变更申请或真实审计。日常配置页面已收敛为账号、客户授权、机器档案、标签等实际管理能力；未来参数管理需求仍保留在产品需求中。
-
-### 12.1 `SystemParameter`
-
-| 字段 | 说明 |
-|---|---|
-| `key` | 参数键，例如 `inventory.negative.allowed` |
-| `value` | 当前基线值 |
-| `category` | 参数分类：编码、称重、损耗、库存等 |
-| `level` | 配置等级：`C1` 到 `C5` |
-| `description` | 参数说明 |
-| `changeControl` | 变更要求，例如需审批、记录日志 |
-| `effectiveScope` | 影响范围 |
-
-### 12.2 `CodeRule`
-
-| 字段 | 说明 |
-|---|---|
-| `objectType` | 编码对象：母单、子工单、库存台账等 |
-| `format` | 编码格式 |
-| `example` | 示例编码 |
-| `uniqueness` | 唯一性规则 |
-| `changePolicy` | 冻结或变更策略 |
-
-### 12.3 `RolePermissionBaseline`
-
-| 字段 | 说明 |
-|---|---|
-| `role` | 角色名称 |
-| `dataScope` | 数据范围 |
-| `permissions` | 基础权限列表 |
-| `sensitiveActions` | 必须审计的敏感动作 |
-
-### 12.4 `ProcessTemplate`
-
-| 字段 | 说明 |
-|---|---|
-| `code` | 工序模板编码 |
-| `name` | 模板名称 |
-| `materialScope` | 适用物料 |
-| `steps` | 工序步骤 |
-| `lossRule` | 损耗规则 |
-| `wageRule` | 计件工资试算规则 |
-| `qualityRule` | 质检规则 |
-| `snapshotFields` | 工单创建时必须快照的字段 |
-
-### 12.5 `WarehouseState`
-
-| 字段 | 说明 |
-|---|---|
-| `code` | 仓库或状态编码 |
-| `name` | 名称 |
-| `ownerBoundary` | 所有权边界，当前重点为客户所有 |
-| `stockStatus` | 库存状态 |
-| `transitionRule` | 状态流转规则 |
-| `negativeAllowed` | 是否允许负库存，一期默认 false |
-
-### 12.6 `VideoParameter`
-
-| 字段 | 说明 |
-|---|---|
-| `key` | 视频参数键 |
-| `value` | 参数值 |
-| `scene` | 应用场景 |
-| `fallback` | 失败兜底方式 |
-| `retention` | 保存周期或保留策略 |
-| `changeControl` | 变更要求 |
-
-### 12.7 `ConfigurationChangeRequest`
-
-| 字段 | 说明 |
-|---|---|
-| `code` | 配置变更单号 |
-| `targetKey` | 被变更的参数、编码规则或配置对象 |
-| `targetName` | 业务名称 |
-| `changeType` | 变更类型，例如参数调整、规则变更 |
-| `beforeValue` | 变更前值 |
-| `afterValue` | 变更后值 |
-| `reason` | 变更原因 |
-| `applicant` | 申请人快照 |
-| `approver` | 审批人或审批角色快照 |
-| `status` | 待审批、已通过、已驳回等 |
-| `riskLevel` | 风险等级 |
-| `submittedAt` | 提交时间 |
-
-### 12.8 `ConfigurationAuditEvent`
-
-| 字段 | 说明 |
-|---|---|
-| `eventId` | 审计事件号 |
-| `targetKey` | 审计对象 |
-| `operation` | 操作：审批通过、审批驳回、导出基线等 |
-| `operator` | 操作人快照 |
-| `occurredAt` | 发生时间 |
-| `result` | 操作结果 |
-| `evidence` | 关联证据 |
-| `traceId` | 审计追踪号 |
-
-规划中的配置维护要求（不表示当前已提供配置写入 API）：
-
-1. 现有 `cfg_*` 表是配置基线 seed 契约；真实配置维护需接入明确的命令、权限和审计。
-2. 参数编辑必须在权限、审批、审计日志完成后开放。
-3. C1 配置变更必须保留历史，不能直接覆盖旧值。
-4. 工序模板变更只影响新工单，历史工单使用快照字段。
-5. 视频和硬件参数必须支持失败兜底，不允许让硬件集成阻断业务闭环。
-6. 配置变更必须先形成 `ConfigurationChangeRequest`，审批完成后才能写入配置表。
-7. 每一次审批、驳回、导出、修改都必须写入 `ConfigurationAuditEvent` 并关联 `traceId`。
-
----
-
 ## 13. 权限守卫
 
 敏感命令由角色权限守卫保护，工作台与财务查询分别校验数据范围。客户授权表和菜单仓储已落地；完整组织树与 SSO/JWT 仍未接入。详细读取规则见相应能力章节。
@@ -1701,7 +1554,6 @@ PWA 一期边界：
 | `POST /api/business/operations/loss-approvals` | `BUSINESS_LOSS_APPROVAL` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER` |
 | `POST /api/approvals/tasks/{approvalCode}/decisions` | `APPROVAL_DECISION` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER`、`FINANCE_STATISTICIAN` |
 | `POST /api/documents/attachments/uploads` | `DOCUMENT_ATTACHMENT_UPLOAD` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
-| `POST /api/video-clip-tasks`、`POST /api/video-clip-tasks/{code}/retry`、`POST /api/video-clip-tasks/{code}/manual-upload` | `VIDEO_TASK_OPERATE` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`WORKSHOP_LEADER` |
 | `GET /api/auth/accounts`、`GET /api/auth/accounts/pre-approval-readiness`、`POST /api/auth/accounts/pre-approval-drafts`、`GET/POST /api/auth/accounts/pre-approval-applications`、`POST /api/auth/accounts`、`POST /api/auth/accounts/{username}/status`、`POST /api/auth/accounts/{username}/unlock`、`POST /api/auth/accounts/{username}/session-revocations` | `AUTH_ACCOUNT_MANAGE` | `ADMIN`、`GENERAL_MANAGER` |
 
 ### 13.3 错误响应
@@ -2366,24 +2218,6 @@ PWA 一期边界：
 |---|---|
 | `GET /api/business/operations/progress` | `ApiResponse<List<ProgressRow>>` |
 
-### ConfigurationBaselineController
-
-来源：[ConfigurationBaselineController](../backend/src/main/java/com/zhubao/erp/configuration/web/ConfigurationBaselineController.java)。
-
-| 方法与完整路径 | 返回类型 |
-|---|---|
-| `GET /api/configuration/baseline/summary` | `ApiResponse<ConfigurationBaselineSummary>` |
-| `GET /api/configuration/baseline/system-parameters` | `ApiResponse<List<SystemParameter>>` |
-| `GET /api/configuration/baseline/code-rules` | `ApiResponse<List<CodeRule>>` |
-| `GET /api/configuration/baseline/role-permissions` | `ApiResponse<List<RolePermissionBaseline>>` |
-| `GET /api/configuration/baseline/process-templates` | `ApiResponse<List<ProcessTemplate>>` |
-| `GET /api/configuration/baseline/warehouse-states` | `ApiResponse<List<WarehouseState>>` |
-| `GET /api/configuration/baseline/video-parameters` | `ApiResponse<List<VideoParameter>>` |
-| `GET /api/configuration/baseline/components` | `ApiResponse<List<ComponentBaseline>>` |
-| `GET /api/configuration/baseline/backup-policies` | `ApiResponse<List<BackupPolicy>>` |
-| `GET /api/configuration/baseline/change-requests` | `ApiResponse<List<ConfigurationChangeRequest>>` |
-| `GET /api/configuration/baseline/audit-events` | `ApiResponse<List<ConfigurationAuditEvent>>` |
-
 ### DocumentManagementController
 
 来源：[DocumentManagementController](../backend/src/main/java/com/zhubao/erp/document/web/DocumentManagementController.java)。
@@ -2517,17 +2351,6 @@ PWA 一期边界：
 | `GET /api/machine-profiles` | `ApiResponse<List<MachineProfile>>` |
 | `POST /api/machine-profiles` | `ApiResponse<MachineProfile>` |
 
-### VideoClipTaskController
-
-来源：[VideoClipTaskController](../backend/src/main/java/com/zhubao/erp/media/web/VideoClipTaskController.java)。
-
-| 方法与完整路径 | 返回类型 |
-|---|---|
-| `POST /api/video-clip-tasks` | `ApiResponse<VideoClipTask>` |
-| `GET /api/video-clip-tasks` | `ApiResponse<List<VideoClipTask>>` |
-| `POST /api/video-clip-tasks/{code}/retry` | `ApiResponse<VideoClipTask>` |
-| `POST /api/video-clip-tasks/{code}/manual-upload` | `ApiResponse<VideoClipTask>` |
-
 ### OperationsCenterController
 
 来源：[OperationsCenterController](../backend/src/main/java/com/zhubao/erp/operations/web/OperationsCenterController.java)。
@@ -2551,15 +2374,6 @@ PWA 一期边界：
 | `POST /api/register-import/batches/{importBatchNo}/rows/{sourceLineNo}/corrections` | `ApiResponse<RegisterImportBatch>` |
 | `GET /api/register-import/batches/{importBatchNo}/posting-plan` | `ApiResponse<RegisterImportPostingPlan>` |
 | `POST /api/register-import/batches/{importBatchNo}/posting-commands` | `ApiResponse<RegisterImportPostingExecutionResult>` |
-
-### SampleScenarioController
-
-来源：[SampleScenarioController](../backend/src/main/java/com/zhubao/erp/sample/web/SampleScenarioController.java)。
-
-| 方法与完整路径 | 返回类型 |
-|---|---|
-| `GET /api/samples/scenarios` | `ApiResponse<List<SampleScenario>>` |
-| `GET /api/samples/summary` | `ApiResponse<SampleSummary>` |
 
 ### ScanController
 

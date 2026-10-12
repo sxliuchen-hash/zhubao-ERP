@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HardwareIntegrationWorkspace from './HardwareIntegrationWorkspace.vue';
 import { fetchHardwareWorkspace } from '../../services/hardwareIntegrationApi';
 import { fetchAuthSession, type AuthSession } from '../../services/authApi';
-import { hardwareDevices } from '../../data/m1ReviewFixtures';
+
+const hardwareDevices = [{
+  code: 'CAM-TEST-001', name: '拆包台摄像头', scene: '拆包留证', protocol: 'USB',
+  status: 'manual' as const, fallback: '人工上传照片或视频',
+}];
 
 vi.mock('../../services/hardwareIntegrationApi', () => ({ fetchHardwareWorkspace: vi.fn() }));
 vi.mock('../../services/authApi', () => ({ fetchAuthSession: vi.fn() }));
