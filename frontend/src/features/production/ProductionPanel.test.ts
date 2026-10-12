@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
+import { ApiRequestError } from '../../services/apiClient';
 import type { TraceTarget } from '../scan/traceTarget';
 import ProductionPanel from './ProductionPanel.vue';
 import { queryScanContext, saveProgressRecord } from '../../services/scanContextApi';
@@ -52,15 +53,18 @@ function fileOf(name: string) {
   return file;
 }
 
-async function openStation() {
+async function openStation(field = false) {
   vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
     objectType: 'WORK_ORDER',
     code: 'ZD-100',
     customerName: '恒信珠宝',
+    goodsName: '来料戒托',
+    quantity: 18,
+    weight: 12.5,
   }));
   vi.mocked(lookupProcessStation).mockResolvedValue(stationView());
   const wrapper = mount(ProductionPanel, {
-    props: { title: '岗位报工', intro: '扫贴纸后交付' },
+    props: { title: '岗位报工', intro: '扫贴纸后交付', field },
   });
   await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
   await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
@@ -234,5 +238,36 @@ describe('生产面板', () => {
       processName: '雕刻',
       scene: 'PROCESS',
     }));
+  });
+
+  it('手机先核对再报工，勾选和登录过期都不另开交付', async () => {
+    const wrapper = await openStation(true);
+    expect(wrapper.text()).toContain('当前子单');
+    expect(wrapper.text()).toContain('来料戒托');
+    expect(wrapper.text()).toContain('勾选不是报工');
+    expect(wrapper.findAll('button').some((button) => button.text() === '提交雕刻')).toBe(false);
+
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="完成核对"]').trigger('click');
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('18 件');
+    expect(wrapper.text()).toContain('12.5 克');
+
+    const ids: string[] = [];
+    vi.mocked(submitProcessStation).mockImplementation(async (_code, _process, requestId) => {
+      ids.push(requestId ?? '');
+      throw new ApiRequestError('未登录', 401, 401);
+    });
+    const submit = () => wrapper.findAll('button').find((button) => button.text() === '提交雕刻');
+    await submit()!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('登录已过期。已填内容还在');
+    expect(wrapper.text()).toContain('ZD-100');
+    await submit()!.trigger('click');
+    await flushPromises();
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[0]).toMatch(/^station-/);
   });
 });

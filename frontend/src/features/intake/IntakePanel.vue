@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, inject, reactive, ref, watch } from 'vue';
+import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+import FieldSteps from '../field/FieldSteps.vue';
+import { keptInputFailure } from '../field/keptInput';
 import OrderContextCard from '../scan/OrderContextCard.vue';
 import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
@@ -14,10 +17,15 @@ import {
   type MobileIntakeResult,
 } from '../../services/mobileIntakeApi';
 
-defineProps<{
+withDefaults(defineProps<{
   title: string;
   intro: string;
-}>();
+  field?: boolean;
+}>(), {
+  field: false,
+});
+
+const openTab = inject<((tab: string) => void) | null>('zhubao-open-tab', null);
 
 const scanText = ref('');
 const scanHint = ref('');
@@ -51,6 +59,26 @@ const intakeMotherCode = computed(() => {
   if (target.objectType === 'EXPRESS_NO') return target.motherOrderCode ?? '';
   return '';
 });
+
+const savedMother = computed(() => Boolean(created.value) || Boolean(intakeMotherCode.value && !newExpressCode.value));
+
+const intakeStep = computed(() => {
+  if (savedMother.value) return 2;
+  if (newExpressCode.value) return 1;
+  return 0;
+});
+
+const shownCustomer = computed(() => created.value?.customerName || intakeScan.context?.order.customerName || '');
+const shownRequirement = computed(() => created.value?.processingRequirement || intakeScan.context?.order.requirement || '');
+const shownDue = computed(() => created.value?.dueDate || intakeScan.context?.order.dueDate || '');
+
+function openLabelPage() {
+  openTab?.('label');
+}
+
+function shownText(value: string) {
+  return value.trim() || '未记录';
+}
 
 function clearIntakeTarget() {
   const had = intakeScan.context !== null || intakeScan.loading || created.value !== null;
@@ -198,7 +226,7 @@ async function createMotherOrder() {
     } catch {
       // 运单核对失败时保留原来的提交错误，方便原请求重试。
     }
-    formError.value = error instanceof Error ? error.message : '生成母单失败';
+    formError.value = keptInputFailure(error, '生成母单失败');
   } finally {
     if (intakeScan.revision === seen) submitting.value = false;
   }
@@ -213,6 +241,7 @@ async function createMotherOrder() {
         <p>{{ intro }}</p>
       </div>
     </div>
+    <FieldSteps v-if="field" :steps="['扫码识别', '填写要求', '保存证据']" :current="intakeStep" />
     <ScanInput
       v-model="scanText"
       field-text="快递单号或二维码内容"
@@ -230,9 +259,13 @@ async function createMotherOrder() {
     <OrderContextCard :context="intakeScan.context" @select="chooseIntakeTarget" />
   </section>
 
-  <section v-if="newExpressCode && !created" class="section-block">
-    <h2>新建母单</h2>
+  <section v-if="newExpressCode && !created" class="section-block" aria-label="收货草稿">
+    <div class="field-card-head">
+      <h2>新建母单</h2>
+      <StatusBadge v-if="field" label="草稿" tone="gray" />
+    </div>
     <p>快递单号 {{ newExpressCode }}</p>
+    <p v-if="field">草稿尚未建单。网络中断、上传失败或登录过期都会保留已填内容。</p>
     <p>可以先选择照片或视频。建单成功后再上传，失败只补文件，不会再次建单或入库。</p>
     <div class="intake-form">
       <label class="field">
@@ -263,19 +296,38 @@ async function createMotherOrder() {
         <span>重量（克）</span>
         <input v-model="weight" type="number" min="0" step="0.001" aria-label="重量" />
       </label>
-      <button class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
+      <button v-if="!field" class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
         {{ submitting ? '正在生成' : '生成母单' }}
       </button>
     </div>
   </section>
 
+  <article v-if="field && savedMother" class="field-card" aria-label="已保存母单">
+    <div class="field-card-head">
+      <span>已保存</span>
+      <StatusBadge label="已保存" tone="green" />
+    </div>
+    <strong>{{ intakeMotherCode }}</strong>
+    <dl class="detail-grid">
+      <dt>客户</dt>
+      <dd>{{ shownText(shownCustomer) }}</dd>
+      <dt>要求</dt>
+      <dd>{{ shownText(shownRequirement) }}</dd>
+      <dt>期限</dt>
+      <dd>{{ shownText(shownDue) }}</dd>
+    </dl>
+    <button class="secondary-button" type="button" aria-label="打开标签" @click="openLabelPage">打开标签</button>
+  </article>
+
   <section v-if="newExpressCode || intakeMotherCode" class="section-block">
-    <h2>拆包证据</h2>
+    <h2 v-if="field && !created">草稿文件</h2>
+    <h2 v-else-if="field && created">已保存后的拆包证据</h2>
+    <h2 v-else>拆包证据</h2>
     <p v-if="created">
       母单 {{ created.motherOrderCode }}
       <template v-if="created.qrContent"> / {{ created.qrContent }}</template>
     </p>
-    <p v-if="created">业务已保存。证据上传或关联失败时只重试文件，不会再次建单或入库。</p>
+    <p v-if="created">业务已保存。照片或视频失败可以单独重试，不会再次建单或入库。</p>
     <p v-else>文件先留在当前表单。建单成功后上传并关联。</p>
     <EvidenceCapture
       target-type="MOTHER_ORDER"
@@ -286,4 +338,10 @@ async function createMotherOrder() {
       :operation-code="created?.ledgerCode || ''"
     />
   </section>
+
+  <div v-if="field && newExpressCode && !created" class="field-dock">
+    <button class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
+      {{ submitting ? '正在生成' : '生成母单' }}
+    </button>
+  </div>
 </template>

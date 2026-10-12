@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../services/apiClient';
 import IntakePanel from './IntakePanel.vue';
 import { queryScanContext } from '../../services/scanContextApi';
 import { fetchMotherOrder, lookupMobileIntake, submitMobileIntake } from '../../services/mobileIntakeApi';
@@ -35,11 +36,12 @@ async function pickEvidence(wrapper: ReturnType<typeof mount>, name: string, typ
   await input.trigger('change');
 }
 
-function mountPanel() {
+function mountPanel(field = false) {
   return mount(IntakePanel, {
     props: {
       title: '手机收货',
       intro: '扫运单后建单',
+      field,
     },
   });
 }
@@ -176,5 +178,63 @@ describe('收货面板', () => {
     expect(uploadEvidenceFile).toHaveBeenCalledTimes(2);
     expect(wrapper.text()).toContain('业务已保存');
     expect(wrapper.text()).toContain('不会再次建单或入库');
+  });
+
+  it('登录过期和网络中断都保留已填内容，并沿用原请求', async () => {
+    vi.mocked(submitMobileIntake).mockRejectedValue(new ApiRequestError('未登录', 401, 401));
+    vi.mocked(lookupMobileIntake).mockRejectedValue(new Error('网络中断'));
+    const wrapper = mountPanel();
+    await fillNewWaybill(wrapper);
+    const create = () => wrapper.findAll('button').find((button) => button.text() === '生成母单');
+    await create()!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('登录已过期。已填内容还在');
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toBe('恒信珠宝');
+    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('抛光');
+    expect((wrapper.get('[aria-label="完成期限"]').element as HTMLInputElement).value).toBe('2026-10-20');
+
+    await create()!.trigger('click');
+    await flushPromises();
+    const first = vi.mocked(submitMobileIntake).mock.calls[0][0].requestId;
+    const second = vi.mocked(submitMobileIntake).mock.calls[1][0].requestId;
+    expect(second).toBe(first);
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toBe('恒信珠宝');
+  });
+
+  it('手机收货区分草稿和已保存，并留下标签入口', async () => {
+    const openTab = vi.fn();
+    vi.mocked(submitMobileIntake).mockResolvedValue({
+      alreadyExists: false,
+      motherOrderCode: 'MD-20261012-001',
+      courierNo: 'SF1048329001',
+      customerName: '恒信珠宝',
+      processingRequirement: '抛光',
+      dueDate: '2026-10-20',
+      goodsName: '戒托',
+      quantity: 1,
+      weight: 2.5,
+      ledgerCode: 'STK-1',
+      qrContent: 'JG|mother|MD-20261012-001',
+    });
+    const wrapper = mount(IntakePanel, {
+      props: { title: '手机收货', intro: '扫运单后建单', field: true },
+      global: { provide: { 'zhubao-open-tab': openTab } },
+    });
+    await fillNewWaybill(wrapper);
+    expect(wrapper.text()).toContain('草稿');
+    expect(wrapper.text()).toContain('尚未建单');
+    expect(wrapper.text()).not.toContain('已保存');
+
+    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('已保存');
+    expect(wrapper.text()).toContain('恒信珠宝');
+    expect(wrapper.text()).toContain('抛光');
+    expect(wrapper.text()).toContain('2026-10-20');
+    expect(wrapper.find('[aria-label="收货草稿"]').exists()).toBe(false);
+    await wrapper.get('[aria-label="打开标签"]').trigger('click');
+    expect(openTab).toHaveBeenCalledWith('label');
+    expect(wrapper.text()).not.toContain('收款');
   });
 });

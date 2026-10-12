@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+import FieldSteps from '../field/FieldSteps.vue';
+import { keptInputFailure } from '../field/keptInput';
 import OrderContextCard from '../scan/OrderContextCard.vue';
 import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
 import ScanInput from '../scan/ScanInput.vue';
@@ -22,10 +24,13 @@ import {
   type QualityReworkResult,
 } from '../../services/qualityCheckApi';
 
-defineProps<{
+const props = withDefaults(defineProps<{
   title: string;
   intro: string;
-}>();
+  field?: boolean;
+}>(), {
+  field: false,
+});
 
 const scanText = ref('');
 const hint = ref('');
@@ -45,6 +50,7 @@ const releaseLedger = ref('');
 const clauseDrafts = ref<Record<number, { verdict: string; reason: string }>>({});
 const recheckDrafts = ref<Record<number, { verdict: string; reason: string }>>({});
 const requestIds = ref<Record<string, string>>({});
+const focusLine = ref(0);
 const qualityScan = reactive(useScanContext());
 
 const progressTarget = computed(() => progressTargetFromScan(qualityScan.context));
@@ -94,6 +100,21 @@ const canSubmitRecheck = computed(() => (
   && !qualityScan.loading
 ));
 
+const qualityStep = computed(() => {
+  if (!checkView.value) return 0;
+  if (!requirementSubmitted.value) return 1;
+  return 2;
+});
+
+const currentClauseReady = computed(() => {
+  const line = checkView.value?.lines[focusLine.value];
+  if (!line) return false;
+  const draft = clauseDrafts.value[line.lineNo];
+  if (!draft?.verdict) return false;
+  if ((draft.verdict === '不合格' || draft.verdict === '让步') && !draft.reason.trim()) return false;
+  return true;
+});
+
 function missingHint(lines: QualityCheckLine[], drafts: Record<number, { verdict: string; reason: string }>) {
   const missingVerdict = lines.some((line) => !drafts[line.lineNo]?.verdict);
   if (missingVerdict) return '每一条加工要求都要有结果才能提交';
@@ -124,6 +145,7 @@ function resetDrafts(view: QualityCheckView) {
   }
   clauseDrafts.value = next;
   recheckDrafts.value = review;
+  focusLine.value = 0;
 }
 
 function clearTarget() {
@@ -139,6 +161,7 @@ function clearTarget() {
   requestIds.value = {};
   qualityCode.value = '';
   checkBusy.value = false;
+  focusLine.value = 0;
   formError.value = '';
   if (had) hint.value = '贴纸已变化，请重新识别';
 }
@@ -190,7 +213,7 @@ async function loadCheck(response: ScanContextResponse, seen: number) {
   } catch (error) {
     if (qualityScan.revision !== seen) return;
     qualityCode.value = '';
-    formError.value = error instanceof Error ? error.message : '贴纸识别失败';
+    formError.value = keptInputFailure(error, '贴纸识别失败');
   } finally {
     if (qualityScan.revision === seen) checkBusy.value = false;
   }
@@ -258,7 +281,7 @@ async function retrySame(message: string, again: () => Promise<void>) {
     await again();
     return true;
   } catch (error) {
-    formError.value = error instanceof Error ? error.message : '提交失败';
+    formError.value = keptInputFailure(error, '提交失败');
     hint.value = '请用原确认重试，不会另开一次质检';
     return true;
   }
@@ -303,7 +326,7 @@ async function submitRequirement() {
       hint.value = `${roundLabel(result.roundType)}已提交`;
       await refreshView(code, seen);
     });
-    if (!recovered) formError.value = message;
+    if (!recovered) formError.value = keptInputFailure(error, '提交质检失败');
   } finally {
     checkSubmitting.value = false;
   }
@@ -334,7 +357,7 @@ async function openRequirementRework() {
       requirementRework.value = opened;
       hint.value = '已开返工';
     });
-    if (!recovered) formError.value = message;
+    if (!recovered) formError.value = keptInputFailure(error, '开返工失败');
   } finally {
     reworkOpening.value = false;
   }
@@ -365,7 +388,7 @@ async function reportRework() {
       reworkReportLedger.value = reported.ledgerCode;
       hint.value = '返工已报工';
     });
-    if (!recovered) formError.value = message;
+    if (!recovered) formError.value = keptInputFailure(error, '返工报工失败');
   } finally {
     reportingRework.value = false;
   }
@@ -394,7 +417,7 @@ async function submitRecheck() {
       checkResult.value = result;
       hint.value = '复检已提交';
     });
-    if (!recovered) formError.value = message;
+    if (!recovered) formError.value = keptInputFailure(error, '提交复检失败');
   } finally {
     recheckSubmitting.value = false;
   }
@@ -423,10 +446,14 @@ async function releaseRound() {
       releaseLedger.value = released.ledgerCode;
       hint.value = '已放行';
     });
-    if (!recovered) formError.value = message;
+    if (!recovered) formError.value = keptInputFailure(error, '放行失败');
   } finally {
     releasing.value = false;
   }
+}
+
+function showClause(index: number) {
+  return !props.field || requirementSubmitted.value || index === focusLine.value;
 }
 </script>
 
@@ -438,6 +465,7 @@ async function releaseRound() {
         <p>{{ intro }}</p>
       </div>
     </div>
+    <FieldSteps v-if="field" :steps="['扫码识别', '逐条判定', '提交结果']" :current="qualityStep" />
     <ScanInput
       v-model="scanText"
       field-text="贴纸二维码"
@@ -473,8 +501,10 @@ async function releaseRound() {
         <dt>质检员</dt>
         <dd>{{ shownInspector || '请先登录' }}</dd>
       </dl>
+      <p v-if="field">质检员取当前登录账号，页面不能另填姓名。</p>
 
-      <article v-for="line in checkView.lines" :key="line.lineNo" class="quality-clause">
+      <template v-for="(line, index) in checkView.lines" :key="line.lineNo">
+      <article v-if="showClause(index)" class="quality-clause">
         <strong>{{ line.lineNo }}. {{ line.clause }}</strong>
         <template v-if="requirementSubmitted">
           <p>{{ line.verdict }}<span v-if="line.reason"> · {{ line.reason }}</span></p>
@@ -509,9 +539,41 @@ async function releaseRound() {
           </label>
         </template>
       </article>
+      </template>
 
       <p v-if="requirementHint" class="operation-feedback warning">{{ requirementHint }}</p>
-      <div v-if="!requirementSubmitted" class="button-row">
+      <div v-if="field && !requirementSubmitted" class="field-dock">
+        <button
+          v-if="focusLine > 0"
+          class="secondary-button"
+          type="button"
+          aria-label="上一条"
+          @click="focusLine -= 1"
+        >
+          上一条
+        </button>
+        <button
+          v-if="focusLine < checkView.lines.length - 1"
+          class="primary-button"
+          type="button"
+          aria-label="下一条"
+          :disabled="!currentClauseReady"
+          @click="focusLine += 1"
+        >
+          下一条
+        </button>
+        <button
+          v-else
+          class="primary-button"
+          type="button"
+          aria-label="提交质检"
+          :disabled="!canSubmitRequirement"
+          @click="submitRequirement"
+        >
+          {{ checkSubmitting ? '正在提交' : '提交质检' }}
+        </button>
+      </div>
+      <div v-if="!field && !requirementSubmitted" class="button-row">
         <button
           class="primary-button"
           type="button"

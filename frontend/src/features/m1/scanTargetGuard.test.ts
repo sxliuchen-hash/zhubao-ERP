@@ -112,6 +112,10 @@ describe('现场入口防串单', () => {
       intent: 'PRODUCTION',
     });
     expect(lookupProcessStation).toHaveBeenCalledWith('ZD-100');
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    await wrapper.get('[aria-label="完成核对"]').trigger('click');
+    expect(submitProcessStation).not.toHaveBeenCalled();
     await wrapper.get('button').element;
     const submit = wrapper.findAll('button').find((button) => button.text() === '提交雕刻');
     expect(submit).toBeTruthy();
@@ -142,6 +146,7 @@ describe('现场入口防串单', () => {
 
     expect(lookupProcessStation).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('请选择子单');
+    expect(wrapper.find('[aria-label="完成核对"]').exists()).toBe(false);
     expect(wrapper.findAll('button').some((button) => button.text().startsWith('提交'))).toBe(false);
 
     vi.mocked(queryScanContext).mockResolvedValueOnce(buildScanContext({
@@ -159,6 +164,8 @@ describe('现场入口防串单', () => {
     });
     expect(lookupProcessStation).toHaveBeenCalledWith('ZD-2');
     expect(lookupProcessStation).not.toHaveBeenCalledWith('ZD-1');
+    expect(wrapper.find('[aria-label="完成核对"]').exists()).toBe(true);
+    expect(wrapper.findAll('button').some((button) => button.text().startsWith('提交'))).toBe(false);
   });
 
   it('收货失败不会打开新建母单，成功时用规范化运单号而不是原始输入', async () => {

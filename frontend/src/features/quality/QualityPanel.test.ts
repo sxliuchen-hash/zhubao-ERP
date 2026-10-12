@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../services/apiClient';
 import QualityPanel from './QualityPanel.vue';
 import { queryScanContext, saveProgressRecord } from '../../services/scanContextApi';
 import {
@@ -321,5 +322,97 @@ describe('质检面板', () => {
       operationType: 'quality_round',
       scene: 'CHECK',
     }));
+  });
+
+  it('登录过期保留不合格原因', async () => {
+    const wrapper = await openPanel();
+    vi.mocked(submitQualityCheck).mockRejectedValue(new ApiRequestError('未登录', 401, 401));
+    await wrapper.get('[aria-label="不合格 1"]').trigger('click');
+    await wrapper.get('[aria-label="原因 1"]').setValue('划伤');
+    await wrapper.get('[aria-label="提交质检"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('登录已过期。已填内容还在');
+    expect((wrapper.get('[aria-label="原因 1"]').element as HTMLTextAreaElement).value).toBe('划伤');
+    expect(wrapper.find('[aria-label="质检员姓名"]').exists()).toBe(false);
+  });
+
+  it('手机逐条判定，让步要原因，返工仍走原面板', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      objectType: 'WORK_ORDER',
+      code: 'ZD-100',
+      customerName: '恒信珠宝',
+    }));
+    vi.mocked(lookupQualityCheck).mockResolvedValue({
+      ...openView(),
+      lines: [
+        { lineNo: 1, clause: '内壁刻字', verdict: '', reason: '' },
+        { lineNo: 2, clause: '镜面抛光', verdict: '', reason: '' },
+      ],
+    });
+    const wrapper = mount(QualityPanel, {
+      props: { title: '手机质检', intro: '逐条判定', field: true },
+    });
+    await wrapper.get('[aria-label="质检贴纸"]').setValue('JG|work_order|ZD-100');
+    await wrapper.get('[aria-label="识别质检贴纸"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('质检员 周娜');
+    expect(wrapper.text()).toContain('质检员取当前登录账号');
+    expect(wrapper.find('[aria-label="质检员姓名"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('内壁刻字');
+    expect(wrapper.text()).not.toContain('镜面抛光');
+    expect(wrapper.find('[aria-label="提交质检"]').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="不合格 1"]').trigger('click');
+    expect((wrapper.get('[aria-label="下一条"]').element as HTMLButtonElement).disabled).toBe(true);
+    expect(submitQualityCheck).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="原因 1"]').setValue('划伤');
+    expect((wrapper.get('[aria-label="下一条"]').element as HTMLButtonElement).disabled).toBe(false);
+    await wrapper.get('[aria-label="下一条"]').trigger('click');
+
+    expect(wrapper.text()).toContain('镜面抛光');
+    await wrapper.get('[aria-label="让步 2"]').trigger('click');
+    expect((wrapper.get('[aria-label="提交质检"]').element as HTMLButtonElement).disabled).toBe(true);
+    await wrapper.get('[aria-label="原因 2"]').setValue('客户接受');
+    expect((wrapper.get('[aria-label="提交质检"]').element as HTMLButtonElement).disabled).toBe(false);
+
+    vi.mocked(submitQualityCheck).mockResolvedValue({
+      qualityCaseCode: 'QC-ZD-100',
+      orderCode: 'ZD-100',
+      motherOrderCode: 'MD-1',
+      inspector: '质检员 周娜',
+      outcome: '不合格',
+      frozen: true,
+      ledgerCode: 'STK-1',
+      reworkOrderCode: '',
+      lines: [
+        { lineNo: 1, clause: '内壁刻字', verdict: '不合格', reason: '划伤' },
+        { lineNo: 2, clause: '镜面抛光', verdict: '让步', reason: '客户接受' },
+      ],
+      roundCode: 'QR-ZD-100-1',
+      roundNo: 1,
+      roundType: 'INITIAL',
+    });
+    vi.mocked(lookupQualityCheck).mockResolvedValue({
+      ...openView(true),
+      lines: [
+        { lineNo: 1, clause: '内壁刻字', verdict: '不合格', reason: '划伤' },
+        { lineNo: 2, clause: '镜面抛光', verdict: '让步', reason: '客户接受' },
+      ],
+    });
+    await wrapper.get('[aria-label="提交质检"]').trigger('click');
+    await flushPromises();
+    expect(submitQualityCheck).toHaveBeenCalledWith(expect.objectContaining({
+      lines: [
+        { lineNo: 1, verdict: '不合格', reason: '划伤' },
+        { lineNo: 2, verdict: '让步', reason: '客户接受' },
+      ],
+    }));
+    expect(wrapper.find('[aria-label="开返工"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="提交返工报工"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="提交复检"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="放行"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('收款');
   });
 });

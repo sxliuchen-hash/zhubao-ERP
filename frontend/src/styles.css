@@ -1154,6 +1154,162 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 
 .intake-page { max-width: 560px; }
 
+.field-job {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.field-modes,
+.field-process-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.field-modes .primary-button,
+.field-modes .secondary-button,
+.field-process-list .primary-button,
+.field-process-list .secondary-button {
+  width: 100%;
+  min-height: 44px;
+}
+
+.field-steps {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.field-steps li {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--workspace);
+  color: var(--ink-muted);
+  padding: 6px;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.field-steps li.is-current {
+  background: var(--action);
+  color: #fff;
+}
+
+.field-steps li.is-done {
+  background: var(--action-soft);
+  color: var(--action-dark);
+}
+
+.field-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-surface);
+  background: var(--content);
+  padding: 16px;
+}
+
+.field-card strong,
+.field-card dd,
+.field-check span {
+  overflow-wrap: anywhere;
+}
+
+.field-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-card-head h2,
+.field-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.field-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  color: var(--ink);
+  padding: 8px 0;
+  font-size: 16px;
+}
+
+.field-check input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.field-dock {
+  position: sticky;
+  z-index: 5;
+  bottom: 0;
+  display: grid;
+  gap: 8px;
+  background: var(--workspace);
+  padding: 12px 0 4px;
+}
+
+.field-dock .primary-button,
+.field-dock .secondary-button {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.field-job .button-row,
+.field-job .intake-form .button-row,
+.field-job .quality-verdict-row {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.field-job .primary-button,
+.field-job .secondary-button,
+.field-job .quality-verdict-row .quality-verdict {
+  width: 100%;
+  min-height: 44px;
+}
+
+@media (max-width: 900px) {
+  .field-dock {
+    position: fixed;
+    right: 8px;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    left: 8px;
+    z-index: 30;
+    padding: 8px 0;
+  }
+
+  .field-job:has(.field-dock) {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 390px) {
+  .field-modes,
+  .field-process-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 .intake-form {
   display: grid;
   gap: 12px;

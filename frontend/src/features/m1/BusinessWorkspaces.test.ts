@@ -348,6 +348,21 @@ describe('M1 business workspaces', () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: media });
   });
 
+  it('asks for https before opening the camera on an insecure page', async () => {
+    const secure = window.isSecureContext;
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: false });
+    const getUserMedia = vi.fn();
+    const media = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    const wrapper = mount(MobileOpsWorkspace);
+    await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
+
+    expect(wrapper.text()).toContain('请改用 https://');
+    expect(getUserMedia).not.toHaveBeenCalled();
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: secure });
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: media });
+  });
+
   it('shows only the signed-in station submit button', async () => {
     vi.mocked(lookupProcessStation).mockResolvedValue({
       orderCode: 'ZD-100',
@@ -377,6 +392,16 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('2026-10-20');
     expect(wrapper.text()).toContain('上一道是否已交');
     expect(wrapper.text()).toContain('无上一道');
+    expect(wrapper.text()).toContain('勾选不是报工');
+    expect(wrapper.text()).not.toContain('提交雕刻');
+    expect(wrapper.text()).not.toContain('提交镶嵌');
+    expect(wrapper.text()).not.toContain('提交抛光');
+    expect(submitProcessStation).not.toHaveBeenCalled();
+
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="完成核对"]').trigger('click');
+    expect(submitProcessStation).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('提交雕刻');
     expect(wrapper.text()).not.toContain('提交镶嵌');
     expect(wrapper.text()).not.toContain('提交抛光');
@@ -404,6 +429,8 @@ describe('M1 business workspaces', () => {
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    await wrapper.get('[aria-label="完成核对"]').trigger('click');
     const submit = wrapper.findAll('button').find((button) => button.text() === '提交镶嵌');
     expect(submit).toBeTruthy();
     await submit!.trigger('click');
@@ -496,9 +523,51 @@ describe('M1 business workspaces', () => {
     await wrapper.get('[aria-label="开返工"]').trigger('click');
     await flushPromises();
 
-    expect(openQualityRework).toHaveBeenCalledWith('ZD-100');
+    expect(openQualityRework).toHaveBeenCalledWith('ZD-100', expect.stringMatching(/^quality-/));
     expect(wrapper.text()).toContain('FG-ZD-100');
     expect(wrapper.text()).toContain('MD-100 / ZD-100');
     expect(wrapper.text()).toContain('库存已从冻结转入返工');
+  });
+
+  it('手机现场有质检入口，操作页不出现收款', async () => {
+    vi.mocked(lookupQualityCheck).mockResolvedValue({
+      orderCode: 'ZD-100',
+      motherOrderCode: 'MD-100',
+      customerName: '恒信珠宝',
+      dueDate: '2026-10-20',
+      processingRequirement: '内壁刻字',
+      ready: true,
+      blockReason: '',
+      inspector: '质检员 周娜',
+      qualityCaseCode: '',
+      outcome: '',
+      frozen: false,
+      reworkOrderCode: '',
+      lines: [{ lineNo: 1, clause: '内壁刻字', verdict: '', reason: '' }],
+      roundCode: '',
+      roundNo: 0,
+      roundType: '',
+      reworkReported: false,
+      canRecheck: false,
+      recheckBlock: '',
+      canRelease: false,
+      releaseBlock: '',
+      rounds: [],
+    });
+    const wrapper = mount(MobileOpsWorkspace);
+    expect(wrapper.text()).not.toContain('收款');
+    await wrapper.get('[aria-label="发货"]').trigger('click');
+    expect(wrapper.text()).toContain('确认发货');
+    expect(wrapper.text()).not.toContain('收款');
+
+    await wrapper.get('[aria-label="质检"]').trigger('click');
+    await wrapper.get('[aria-label="质检贴纸"]').setValue('JG|work_order|ZD-100');
+    await wrapper.get('[aria-label="识别质检贴纸"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('手机质检');
+    expect(wrapper.text()).toContain('质检员 周娜');
+    expect(wrapper.text()).toContain('质检员取当前登录账号');
+    expect(wrapper.find('[aria-label="质检员姓名"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('收款');
   });
 });
