@@ -18,8 +18,8 @@ import java.util.Optional;
 
 /**
  * JDBC 工作单元。一次命令只使用这里打开的连接，成功时连同请求结果一起提交，失败时整单回滚。
- * 来料建单、带请求编号的入库确认、工序交付，以及带请求编号的初检、开返工、返工报工、复检和放行必须改用 {@link WorkSession#connection()}。
- * 未带请求编号的岗位交付、通用报工、质检旧调用、发货和登记导入若仍调用各自新建连接的保存方法，不会进入本事务。
+ * 来料建单、带请求编号的入库确认、工序交付、初检、开返工、返工报工、复检、放行和确认发货必须改用 {@link WorkSession#connection()}。
+ * 未带请求编号的岗位交付、通用报工、质检旧调用、确认发货和登记导入若仍调用各自新建连接的保存方法，不会进入本事务。
  */
 @Service
 @ConditionalOnProperty(name = "zhubao.command-request.repository", havingValue = "jdbc")

@@ -58,6 +58,7 @@ public class BusinessOperationService {
     private final BusinessDocumentRepository businessDocumentRepository;
     private final BusinessWorkUnit workUnit;
     private final MotherOrderSaveProbe motherOrderSaveProbe;
+    private final OutboundSaveProbe outboundSaveProbe;
 
     public BusinessOperationService(StockLedgerService stockLedgerService) {
         this(stockLedgerService, null, null);
@@ -72,7 +73,7 @@ public class BusinessOperationService {
             ApprovalService approvalService,
             BusinessDocumentRepository businessDocumentRepository
     ) {
-        this(stockLedgerService, approvalService, businessDocumentRepository, null, MotherOrderSaveProbe.NONE);
+        this(stockLedgerService, approvalService, businessDocumentRepository, null, MotherOrderSaveProbe.NONE, OutboundSaveProbe.NONE);
     }
 
     @Autowired
@@ -82,7 +83,7 @@ public class BusinessOperationService {
             BusinessDocumentRepository businessDocumentRepository,
             BusinessWorkUnit workUnit
     ) {
-        this(stockLedgerService, approvalService, businessDocumentRepository, workUnit, MotherOrderSaveProbe.NONE);
+        this(stockLedgerService, approvalService, businessDocumentRepository, workUnit, MotherOrderSaveProbe.NONE, OutboundSaveProbe.NONE);
     }
 
     public BusinessOperationService(
@@ -92,11 +93,23 @@ public class BusinessOperationService {
             BusinessWorkUnit workUnit,
             MotherOrderSaveProbe motherOrderSaveProbe
     ) {
+        this(stockLedgerService, approvalService, businessDocumentRepository, workUnit, motherOrderSaveProbe, OutboundSaveProbe.NONE);
+    }
+
+    public BusinessOperationService(
+            StockLedgerService stockLedgerService,
+            ApprovalService approvalService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit,
+            MotherOrderSaveProbe motherOrderSaveProbe,
+            OutboundSaveProbe outboundSaveProbe
+    ) {
         this.stockLedgerService = stockLedgerService;
         this.approvalService = approvalService;
         this.businessDocumentRepository = businessDocumentRepository;
         this.workUnit = workUnit;
         this.motherOrderSaveProbe = motherOrderSaveProbe == null ? MotherOrderSaveProbe.NONE : motherOrderSaveProbe;
+        this.outboundSaveProbe = outboundSaveProbe == null ? OutboundSaveProbe.NONE : outboundSaveProbe;
     }
 
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
@@ -451,7 +464,38 @@ public class BusinessOperationService {
     }
 
     public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command) {
-        assertOutboundOrderAvailable(command.shipmentCode());
+        return postShipment(command, null);
+    }
+
+    /**
+     * 带请求编号的确认发货。库存流水、出货单和成功结果同一次提交。
+     * 同账号、同请求、同规范化内容回放原结果。未带编号时仍各自提交，不回放。
+     * 未装配工作单元时，带编号的调用直接拒绝，不能退回旧路径。
+     */
+    public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command, String actorId) {
+        if (command.requestId() == null || command.requestId().isBlank()) {
+            return shipFinishedStock(command);
+        }
+        if (workUnit == null) {
+            throw new BusinessException("发货回放尚未装配");
+        }
+        if (businessDocumentRepository == null) {
+            throw new BusinessException("出库单据仓储尚未装配");
+        }
+        String actor = actorId == null ? "" : actorId.trim();
+        String text = workUnit.execute(new CommandCall(
+                command.requestId(),
+                actor,
+                "OUTBOUND_SHIPMENT",
+                "OUTBOUND_ORDER",
+                command.shipmentCode(),
+                ShipmentResultText.payload(command)
+        ), session -> ShipmentResultText.write(postShipment(command, session)));
+        return ShipmentResultText.read(text);
+    }
+
+    private OutboundShipmentResult postShipment(ShipFinishedStockCommand command, WorkSession session) {
+        assertOutboundOrderAvailable(command.shipmentCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFinished = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -474,7 +518,7 @@ public class BusinessOperationService {
                 StockStatus.SHIPPED
         );
 
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockLedgerEntry entry = postTransfer(new StockTransferCommand(
                 "outbound_shipment",
                 command.shipmentCode(),
                 fromFinished,
@@ -482,7 +526,7 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        ), session);
 
         OutboundShipmentResult result = new OutboundShipmentResult(
                 command.shipmentCode(),
@@ -498,7 +542,10 @@ public class BusinessOperationService {
                 command.operator(),
                 command.evidenceCode()
         );
-        saveOutboundOrder(command, entry);
+        if (businessDocumentRepository != null) {
+            outboundSaveProbe.beforeOutboundSave();
+            saveOutboundOrder(command, entry, session);
+        }
         return result;
     }
 
@@ -703,8 +750,14 @@ public class BusinessOperationService {
         }
     }
 
-    private void assertOutboundOrderAvailable(String code) {
-        if (businessDocumentRepository != null && businessDocumentRepository.outboundOrderExists(code)) {
+    private void assertOutboundOrderAvailable(String code, WorkSession session) {
+        if (businessDocumentRepository == null) {
+            return;
+        }
+        boolean exists = session == null
+                ? businessDocumentRepository.outboundOrderExists(code)
+                : businessDocumentRepository.outboundOrderExists(code, session);
+        if (exists) {
             throw new BusinessException("结构化出库单已存在，不能重复确认出库：" + code);
         }
     }
@@ -785,11 +838,8 @@ public class BusinessOperationService {
                 });
     }
 
-    private void saveOutboundOrder(ShipFinishedStockCommand command, StockLedgerEntry entry) {
-        if (businessDocumentRepository == null) {
-            return;
-        }
-        businessDocumentRepository.saveOutboundOrder(new OutboundOrderRecord(
+    private void saveOutboundOrder(ShipFinishedStockCommand command, StockLedgerEntry entry, WorkSession session) {
+        OutboundOrderRecord record = new OutboundOrderRecord(
                 command.shipmentCode(),
                 command.motherOrderCode(),
                 command.workOrderCode(),
@@ -816,7 +866,12 @@ public class BusinessOperationService {
                 "SHIPPED",
                 entry.code(),
                 RECORD_TIME.format(LocalDateTime.now())
-        ));
+        );
+        if (session == null) {
+            businessDocumentRepository.saveOutboundOrder(record);
+        } else {
+            businessDocumentRepository.saveOutboundOrder(record, session);
+        }
     }
 
     private String blankToEmpty(String value) {

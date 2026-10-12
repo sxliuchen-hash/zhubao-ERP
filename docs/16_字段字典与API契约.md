@@ -560,7 +560,7 @@ MySQL 持久化表：
 - `OwnerType` 固定为 `CUSTOMER`，确保客户来料不会进入企业自有库存。
 - `workOrderCode` 为空，表示仍处于母单原料库存，后续子工单拆分再进入在制库存。
 - 带 `requestId` 时，动作记为 `INBOUND_CONFIRM`，目标类型 `MOTHER_ORDER`，目标编号是母单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `InboundConfirmationResult`；换母单、换客户、换数量重量或其他内容会拒绝，必须换新 `requestId`。母单、来料事实、入库流水和成功结果在同一条数据库连接里提交。单据保存失败或结果保存失败时整单回滚。非空运单由 `courier_identity` 唯一约束保证不会建出两张母单。
-- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付、初检、开返工、返工报工、复检和放行已另行接入各自的工作单元，不并进这条入库事务。未带 `requestId` 的岗位交付、通用 `production-reports`、旧质检调用和确认发货仍各自提交。
+- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付、初检、开返工、返工报工、复检和放行已另行接入各自的工作单元，不并进这条入库事务。未带 `requestId` 的岗位交付、通用 `production-reports`、旧质检调用和确认发货仍各自提交。带 `requestId` 的确认发货已另行接入工作单元，不并进这条入库事务。
 
 ---
 
@@ -1147,6 +1147,7 @@ MySQL 持久化表：
 | `operator` | 出库操作人快照 |
 | `evidenceCode` | 出库照片、物流单、交接单或附件编码 |
 | `remark` | 备注 |
+| `requestId` | 可选。同一次确认保持不变，8 到 64 位，只含字母、数字、点、下划线、冒号和减号。不传时仍走旧的各自提交，不回放 |
 
 返回 `OutboundShipmentResult`：
 
@@ -1176,6 +1177,8 @@ MySQL 持久化表：
 - 经办人缺失不得确认出货；快递信息不完整时只能保存草稿，不能转为 `SHIPPED`。
 - 出库不等同于退货；客户退货由 `POST /customer-returns` 独立命令反向写台账。
 - 出货登记中的 `快递` 可能混写公司和单号，导入时先保留 `paperExpressText`，再拆分 `expressCompany/logisticsNo`。
+- 带 `requestId` 时，动作记为 `OUTBOUND_SHIPMENT`，目标类型 `OUTBOUND_ORDER`，目标编号是出货单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `OutboundShipmentResult`。规范化内容包含客户、货权客户、母单、工单、物料、来源仓、目标仓、数量、重量、物流公司和物流单号。换出货单号、换客户、换数量、换重量、换物流或换账号都拒绝，必须换新 `requestId`。库存流水、结构化出库单和成功结果在同一条数据库连接里提交。出库单保存失败或结果保存失败时整单回滚。出货单号唯一键和库存条件扣减在这条写入路径里生效。
+- 不带 `requestId` 的旧调用仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务；这时出库单保存失败可能只留下已扣库存。没有新迁移：出货单唯一键沿用 `V14__m3_business_document_contract.sql`，请求表沿用 `V44__m3_command_request.sql`。
 
 ### 7.6 `CustomerReturnCommand`
 
@@ -1476,7 +1479,7 @@ PWA 一期边界：
 | 售后复核 | `POST /api/business/operations/after-sales-reviews`，`FINISHED@RETURN-CHECK -> FINISHED/REWORK/SCRAP/FROZEN` |
 | 损耗审批 | `POST /api/business/operations/loss-approvals`，返回损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账 |
 | 结构化母单 | `POST /api/business/operations/inbound-confirmations` 在库存台账成功后写 `biz_mother_order/biz_mother_order_item`；重复母单号先拒绝 |
-| 结构化出库单 | `POST /api/business/operations/outbound-shipments` 在库存台账成功后写 `biz_outbound_order/biz_outbound_order_item`；重复出库单号先拒绝 |
+| 结构化出库单 | `POST /api/business/operations/outbound-shipments`。带 `requestId` 时库存流水、出库单和成功结果在同一条连接提交；不带 `requestId` 时仍在库存台账各自提交后再写 `biz_outbound_order/biz_outbound_order_item`。重复出库单号由唯一键拒绝 |
 | 单据查询 | `GET /api/business/documents/mother-orders/{code}`、`GET /api/business/documents/outbound-orders/{code}` |
 | 轻量审批任务 | `GET /api/approvals/tasks`、`GET /api/approvals/tasks/pending`、`POST /api/approvals/tasks/{approvalCode}/decisions`，用于固定场景待审批、审批通过/驳回和锁定 |
 | 后端入口 | `BusinessOperationController` |
@@ -2333,7 +2336,7 @@ PWA 一期边界：
 | `POST /api/business/operations/rework-dispatches` | `ApiResponse<ReworkDispatchResult>` |
 | `POST /api/business/operations/rework-reports` | `ApiResponse<ReworkReportResult>` |
 | `POST /api/business/operations/quality-releases` | `ApiResponse<QualityReleaseResult>` |
-| `POST /api/business/operations/outbound-shipments` | `ApiResponse<OutboundShipmentResult>` |
+| `POST /api/business/operations/outbound-shipments` | `ApiResponse<OutboundShipmentResult>`。可选 `requestId`。有值时动作是 `OUTBOUND_SHIPMENT`，库存流水、出库单和成功结果同一次提交。无 `requestId` 时不回放、不保证同事务 |
 | `POST /api/business/operations/customer-returns` | `ApiResponse<CustomerReturnResult>` |
 | `POST /api/business/operations/after-sales-reviews` | `ApiResponse<AfterSalesReviewResult>` |
 | `POST /api/business/operations/loss-approvals` | `ApiResponse<LossApprovalResult>` |
@@ -2604,7 +2607,7 @@ PWA 一期边界：
 
 S2 起，收货、岗位报工、质检贴纸和标签现场贴纸改为调用上下文接口。S4 起，手机岗位、桌面岗位、质检和发货准备可以追加过程说明，保存逻辑相同。前端不再按编码长度把业务编码猜成运单，也不再用本地解析结果作为提交单号。`requiresSelection` 为真时必须由用户选择，查询失败不能回落到页面默认单据。扫码成功不等于已经留证或已经报工。过程说明保存在服务端，迁移为 `V43__m3_operation_progress.sql`。本地默认 `zhubao.scan-progress.repository=memory`，MySQL 配置默认 JDBC。已有库需备份后受控执行 V43，不修改 V36 或 V42。
 
-S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请求记在 `biz_command_request`，迁移为 `V44__m3_command_request.sql`。同账号、同 `requestId`、同内容回放 `resultText`；内容不一致返回「同一请求的内容不一致」；其他账号返回「该请求不能跨账号重放」。成功结果和本次通过工作单元连接写入的事实同一次提交。S5p 当时来料、报工、质检、发货都还没接入。S5a 已接入来料建单和带 `requestId` 的入库确认。S5b 已接入带 `requestId` 的工序交付。S5c 已接入带 `requestId` 的初检、开返工、返工报工、复检和放行，迁移 `V46__m3_quality_round.sql`。未带 `requestId` 的旧质检调用、通用 `production-reports` 和确认发货仍各自提交。已有库需备份后受控执行 V44 与 V46，不修改已发布迁移。
+S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请求记在 `biz_command_request`，迁移为 `V44__m3_command_request.sql`。同账号、同 `requestId`、同内容回放 `resultText`；内容不一致返回「同一请求的内容不一致」；其他账号返回「该请求不能跨账号重放」。成功结果和本次通过工作单元连接写入的事实同一次提交。S5p 当时来料、报工、质检、发货都还没接入。S5a 已接入来料建单和带 `requestId` 的入库确认。S5b 已接入带 `requestId` 的工序交付。S5c 已接入带 `requestId` 的初检、开返工、返工报工、复检和放行，迁移 `V46__m3_quality_round.sql`。S5d 已接入带 `requestId` 的确认发货。未带 `requestId` 的旧质检调用、通用 `production-reports` 和确认发货仍各自提交。已有库需备份后受控执行 V44 与 V46，不修改已发布迁移。确认发货没有新迁移。
 
 ### AuthController
 

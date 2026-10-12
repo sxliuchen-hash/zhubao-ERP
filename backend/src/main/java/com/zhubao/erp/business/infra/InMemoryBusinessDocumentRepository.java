@@ -130,8 +130,25 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public boolean outboundOrderExists(String code, WorkSession session) {
+        requireSession(session);
+        return outboundOrderExists(code);
+    }
+
+    @Override
     public OutboundOrderRecord saveOutboundOrder(OutboundOrderRecord record) {
         outboundOrders.put(record.code(), record);
+        return record;
+    }
+
+    @Override
+    public synchronized OutboundOrderRecord saveOutboundOrder(OutboundOrderRecord record, WorkSession session) {
+        requireSession(session);
+        OutboundOrderRecord existing = outboundOrders.putIfAbsent(record.code(), record);
+        if (existing != null) {
+            throw new BusinessException("结构化出库单已存在，不能重复确认出库：" + record.code());
+        }
+        session.onRollback(() -> outboundOrders.remove(record.code(), record));
         return record;
     }
 

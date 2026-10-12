@@ -54,8 +54,12 @@ describe('正式单据操作', () => {
   });
 
   it('登录账号决定实际操作人，未登录不得提交', async () => {
-    await shipFinishedStock(inventory, { shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', operator: '伪造操作人', quantity: 12, weight: '25.75' });
-    expect(apiPost).toHaveBeenCalledWith('/api/business/operations/outbound-shipments', expect.objectContaining({ operator: '当前账号' }));
+    await shipFinishedStock(inventory, {
+      shipmentCode: 'OUT-REAL', logisticsNo: 'YT123', operator: '伪造操作人', quantity: 12, weight: '25.75', requestId: 'req-ship-0001',
+    });
+    expect(apiPost).toHaveBeenCalledWith('/api/business/operations/outbound-shipments', expect.objectContaining({
+      operator: '当前账号', requestId: 'req-ship-0001', shipmentCode: 'OUT-REAL', quantity: 12, weight: '25.75', logisticsNo: 'YT123',
+    }));
     vi.mocked(fetchAuthSession).mockResolvedValue(null);
     vi.mocked(apiPost).mockClear();
     await expect(shipFinishedStock(inventory)).rejects.toThrow('请登录');

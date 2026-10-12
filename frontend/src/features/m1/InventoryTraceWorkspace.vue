@@ -6,6 +6,7 @@ import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
+import ShippingPanel from '../shipping/ShippingPanel.vue';
 import { progressTargetOf } from '../scan/progressTarget';
 import type { InventoryBalance, Tone } from '../../data/m1PrototypeData';
 import {
@@ -175,6 +176,10 @@ function selectBalance(item: InventoryBalance) {
 <template>
   <div class="inventory-trace-desk page-stack">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
+    <ShippingPanel
+      title="确认发货"
+      intro="扫成品标签。选择完整库存维度，并填写本次数量、重量和物流。物流扫码只填写运单号。超时用原确认回放，不会另开一次发货。"
+    />
     <section class="module-work-grid inventory-work-grid" aria-label="库存追溯主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">

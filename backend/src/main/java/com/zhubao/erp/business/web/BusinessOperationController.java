@@ -310,8 +310,12 @@ public class BusinessOperationController {
 
     @PostMapping("/outbound-shipments")
     public ApiResponse<OutboundShipmentResult> shipFinishedStock(@Valid @RequestBody ShipFinishedStockCommand command, HttpServletRequest request) {
-        return ApiResponse.ok(businessOperationService.shipFinishedStock(BusinessCommandActors.withActor(command,
-                commandActor(request, command.customerId(), command.motherOrderCode()))));
+        String actor = commandActor(request, command.customerId(), command.motherOrderCode());
+        ShipFinishedStockCommand shipment = BusinessCommandActors.withActor(command, actor);
+        if (shipment.requestId() != null && !shipment.requestId().isBlank()) {
+            return ApiResponse.ok(businessOperationService.shipFinishedStock(shipment, actor));
+        }
+        return ApiResponse.ok(businessOperationService.shipFinishedStock(shipment));
     }
 
     @PostMapping("/customer-returns")

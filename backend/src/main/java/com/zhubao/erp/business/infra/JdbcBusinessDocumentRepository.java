@@ -239,7 +239,41 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public boolean outboundOrderExists(String code, WorkSession session) {
+        return exists(requireConnection(session), "select count(*) from biz_outbound_order where code = ?", code);
+    }
+
+    @Override
     public OutboundOrderRecord saveOutboundOrder(OutboundOrderRecord record) {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                writeOutbound(connection, record);
+                connection.commit();
+                return record;
+            } catch (SQLException | RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw outboundWriteFailure(record, ex);
+        }
+    }
+
+    @Override
+    public OutboundOrderRecord saveOutboundOrder(OutboundOrderRecord record, WorkSession session) {
+        try {
+            writeOutbound(requireConnection(session), record);
+            return record;
+        } catch (SQLException ex) {
+            throw outboundWriteFailure(record, ex);
+        }
+    }
+
+    private void writeOutbound(Connection connection, OutboundOrderRecord record) throws SQLException {
         String sql = """
                 insert into biz_outbound_order (
                     code, mother_order_code, work_order_code, customer_id, owner_customer_id,
@@ -250,49 +284,43 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
                     evidence_code, outbound_remark, order_status, ledger_code, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = dataSource.getConnection()) {
-            boolean previousAutoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, record.code());
-                statement.setString(2, record.motherOrderCode());
-                statement.setString(3, record.workOrderCode());
-                setLong(statement, 4, record.customerId());
-                setLong(statement, 5, record.ownerCustomerId());
-                statement.setString(6, record.materialCode());
-                statement.setString(7, record.fromWarehouseCode());
-                statement.setString(8, record.toWarehouseCode());
-                statement.setString(9, record.deliveryDate());
-                statement.setString(10, record.deliveryCategory());
-                statement.setBigDecimal(11, record.quantity());
-                statement.setString(12, record.quantityUnit());
-                statement.setBigDecimal(13, record.weight());
-                statement.setString(14, record.expressCompany());
-                statement.setString(15, record.logisticsNo());
-                statement.setString(16, record.paperExpressText());
-                statement.setString(17, record.handler());
-                statement.setString(18, record.sourceRegisterType());
-                setInteger(statement, 19, record.sourceRegisterLineNo());
-                statement.setString(20, record.sourceRegisterSequence());
-                statement.setString(21, record.operator());
-                statement.setString(22, record.evidenceCode());
-                statement.setString(23, record.remark());
-                statement.setString(24, record.status());
-                statement.setString(25, record.ledgerCode());
-                statement.setString(26, record.createdAt());
-                statement.executeUpdate();
-                insertOutboundOrderItem(connection, record);
-                connection.commit();
-                return record;
-            } catch (SQLException | RuntimeException ex) {
-                connection.rollback();
-                throw ex;
-            } finally {
-                connection.setAutoCommit(previousAutoCommit);
-            }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to save outbound order: " + record.code(), ex);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, record.code());
+            statement.setString(2, record.motherOrderCode());
+            statement.setString(3, record.workOrderCode());
+            setLong(statement, 4, record.customerId());
+            setLong(statement, 5, record.ownerCustomerId());
+            statement.setString(6, record.materialCode());
+            statement.setString(7, record.fromWarehouseCode());
+            statement.setString(8, record.toWarehouseCode());
+            statement.setString(9, record.deliveryDate());
+            statement.setString(10, record.deliveryCategory());
+            statement.setBigDecimal(11, record.quantity());
+            statement.setString(12, record.quantityUnit());
+            statement.setBigDecimal(13, record.weight());
+            statement.setString(14, record.expressCompany());
+            statement.setString(15, record.logisticsNo());
+            statement.setString(16, record.paperExpressText());
+            statement.setString(17, record.handler());
+            statement.setString(18, record.sourceRegisterType());
+            setInteger(statement, 19, record.sourceRegisterLineNo());
+            statement.setString(20, record.sourceRegisterSequence());
+            statement.setString(21, record.operator());
+            statement.setString(22, record.evidenceCode());
+            statement.setString(23, record.remark());
+            statement.setString(24, record.status());
+            statement.setString(25, record.ledgerCode());
+            statement.setString(26, record.createdAt());
+            statement.executeUpdate();
         }
+        insertOutboundOrderItem(connection, record);
+    }
+
+    private RuntimeException outboundWriteFailure(OutboundOrderRecord record, SQLException ex) {
+        if (isDuplicate(ex)) {
+            return new BusinessException("结构化出库单已存在，不能重复确认出库：" + record.code());
+        }
+        return new IllegalStateException("Failed to save outbound order: " + record.code(), ex);
     }
 
     @Override

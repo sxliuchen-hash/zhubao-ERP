@@ -247,6 +247,7 @@ export interface OutboundShipmentRequest {
   operator: string;
   evidenceCode?: string;
   remark?: string;
+  requestId?: string;
 }
 
 export interface OutboundShipmentResult {

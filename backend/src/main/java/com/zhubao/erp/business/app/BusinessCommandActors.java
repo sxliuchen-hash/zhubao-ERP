@@ -175,7 +175,8 @@ public final class BusinessCommandActors {
                 command.handler(),
                 actor,
                 command.evidenceCode(),
-                command.remark()
+                command.remark(),
+                command.requestId()
         );
     }
 

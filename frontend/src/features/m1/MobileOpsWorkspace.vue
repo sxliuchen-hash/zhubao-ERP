@@ -2,8 +2,9 @@
 import { ref } from 'vue';
 import IntakePanel from '../intake/IntakePanel.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
+import ShippingPanel from '../shipping/ShippingPanel.vue';
 
-const jobMode = ref<'intake' | 'station'>('intake');
+const jobMode = ref<'intake' | 'station' | 'shipping'>('intake');
 </script>
 
 <template>
@@ -25,7 +26,21 @@ const jobMode = ref<'intake' | 'station'>('intake');
       >
         岗位报工
       </button>
+      <button
+        :class="jobMode === 'shipping' ? 'primary-button' : 'secondary-button'"
+        type="button"
+        aria-label="发货"
+        @click="jobMode = 'shipping'"
+      >
+        发货
+      </button>
     </div>
+
+    <ShippingPanel
+      v-if="jobMode === 'shipping'"
+      title="确认发货"
+      intro="扫成品标签。选择完整库存维度，并填写本次数量、重量和物流。物流扫码只填写运单号。"
+    />
 
     <ProductionPanel
       v-if="jobMode === 'station'"

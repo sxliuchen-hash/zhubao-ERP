@@ -29,7 +29,13 @@ public interface BusinessDocumentRepository {
 
     boolean outboundOrderExists(String code);
 
+    /** 在当前工作单元里判断出货单号，能看见本事务尚未提交的写入。 */
+    boolean outboundOrderExists(String code, WorkSession session);
+
     OutboundOrderRecord saveOutboundOrder(OutboundOrderRecord record);
+
+    /** 在当前工作单元里保存出货单，不单独提交。重复出货单号抛出业务异常。 */
+    OutboundOrderRecord saveOutboundOrder(OutboundOrderRecord record, WorkSession session);
 
     Optional<OutboundOrderRecord> findOutboundOrderByCode(String code);
 
