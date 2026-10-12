@@ -19,6 +19,7 @@ export interface MobileIntakeRequest {
   quantity: number;
   weight: string;
   expressCompany?: string;
+  requestId?: string;
 }
 
 export interface MobileIntakeResult {

@@ -33,7 +33,8 @@ public final class BusinessCommandActors {
                 command.remark(),
                 command.processingRequirement(),
                 command.dueDate(),
-                command.customerName()
+                command.customerName(),
+                command.requestId()
         );
     }
 

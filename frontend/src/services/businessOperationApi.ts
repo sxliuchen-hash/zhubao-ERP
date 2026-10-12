@@ -29,6 +29,7 @@ export interface ConfirmInboundRequest {
   processingRequirement: string;
   dueDate: string;
   customerName?: string;
+  requestId?: string;
 }
 
 export interface InboundConfirmationResult {

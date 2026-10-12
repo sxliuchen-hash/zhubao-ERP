@@ -4,6 +4,7 @@ import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -28,7 +29,16 @@ public class StockLedgerService {
     }
 
     public StockLedgerEntry transfer(StockTransferCommand command) {
-        StockLedgerEntry entry = new StockLedgerEntry(
+        return repository.save(newEntry(command));
+    }
+
+    /** 入库流水进入当前工作单元，不在仓储里另开连接提交。 */
+    public StockLedgerEntry transfer(StockTransferCommand command, WorkSession session) {
+        return repository.save(newEntry(command), session);
+    }
+
+    private StockLedgerEntry newEntry(StockTransferCommand command) {
+        return new StockLedgerEntry(
                 nextCode(),
                 Instant.now(),
                 command.documentType(),
@@ -39,7 +49,6 @@ public class StockLedgerService {
                 scale(command.weight()),
                 command.remark()
         );
-        return repository.save(entry);
     }
 
     public List<StockLedgerEntry> ledgers() {

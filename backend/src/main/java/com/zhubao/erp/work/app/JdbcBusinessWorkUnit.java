@@ -18,8 +18,8 @@ import java.util.Optional;
 
 /**
  * JDBC 工作单元。一次命令只使用这里打开的连接，成功时连同请求结果一起提交，失败时整单回滚。
- * {@code JdbcStockLedgerRepository} 和 {@code JdbcBusinessDocumentRepository} 的现有写入仍各自新建连接并提交，
- * 调用它们不会进入本事务。新命令必须改用 {@link WorkSession#connection()}。
+ * 来料建单和入库确认必须改用 {@link WorkSession#connection()}。
+ * 报工、质检、发货和登记导入若仍调用各自新建连接的保存方法，不会进入本事务。
  */
 @Service
 @ConditionalOnProperty(name = "zhubao.command-request.repository", havingValue = "jdbc")

@@ -2,6 +2,7 @@ package com.zhubao.erp.business.infra;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.business.domain.DuplicateCourierException;
 import com.zhubao.erp.business.domain.LabelReprintLog;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
@@ -10,6 +11,7 @@ import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityCheckLine;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -40,54 +42,17 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public boolean motherOrderExists(String code, WorkSession session) {
+        return exists(requireConnection(session), "select count(*) from biz_mother_order where code = ?", code);
+    }
+
+    @Override
     public MotherOrderRecord saveMotherOrder(MotherOrderRecord record) {
-        String sql = """
-                insert into biz_mother_order (
-                    code, customer_id, owner_customer_id, material_code, inbound_date,
-                    inbound_express_company, inbound_express_no, sender_name_snapshot,
-                    receiver_name_snapshot, unpack_signer_name, goods_name_snapshot,
-                    owner_type, is_customer_owned, warehouse_code, quantity, quantity_unit,
-                    weight, stock_status, ledger_code, source_register_type,
-                    source_line_no, source_sequence_no, operator, evidence_code,
-                    inbound_remark, order_status, created_at, processing_requirement, due_date, customer_name
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
         try (Connection connection = dataSource.getConnection()) {
             boolean previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, record.code());
-                setLong(statement, 2, record.customerId());
-                setLong(statement, 3, record.ownerCustomerId());
-                statement.setString(4, record.materialCode());
-                statement.setString(5, record.inboundDate());
-                statement.setString(6, record.expressCompany());
-                statement.setString(7, record.courierNo());
-                statement.setString(8, record.senderName());
-                statement.setString(9, record.receiverName());
-                statement.setString(10, record.unpackSigner());
-                statement.setString(11, record.goodsName());
-                statement.setString(12, record.ownerType());
-                statement.setBoolean(13, record.customerOwned());
-                statement.setString(14, record.warehouseCode());
-                statement.setBigDecimal(15, record.quantity());
-                statement.setString(16, record.quantityUnit());
-                statement.setBigDecimal(17, record.weight());
-                statement.setString(18, record.stockStatus());
-                statement.setString(19, record.ledgerCode());
-                statement.setString(20, record.sourceRegisterType());
-                setInteger(statement, 21, record.sourceRegisterLineNo());
-                statement.setString(22, record.sourceRegisterSequence());
-                statement.setString(23, record.operator());
-                statement.setString(24, record.evidenceCode());
-                statement.setString(25, record.remark());
-                statement.setString(26, record.status());
-                statement.setString(27, record.createdAt());
-                statement.setString(28, record.processingRequirement());
-                statement.setString(29, record.dueDate());
-                statement.setString(30, record.customerName());
-                statement.executeUpdate();
-                insertMotherOrderItem(connection, record);
+            try {
+                writeMotherOrder(connection, record);
                 connection.commit();
                 return record;
             } catch (SQLException | RuntimeException ex) {
@@ -96,26 +61,102 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             } finally {
                 connection.setAutoCommit(previousAutoCommit);
             }
+        } catch (DuplicateCourierException ex) {
+            throw ex;
         } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to save mother order: " + record.code(), ex);
+            throw motherWriteFailure(record.code(), ex);
         }
     }
 
     @Override
-    public Optional<MotherOrderRecord> findMotherOrderByCode(String code) {
+    public MotherOrderRecord saveMotherOrder(MotherOrderRecord record, WorkSession session) {
+        try {
+            writeMotherOrder(requireConnection(session), record);
+            return record;
+        } catch (SQLException ex) {
+            throw motherWriteFailure(record.code(), ex);
+        }
+    }
+
+    private void writeMotherOrder(Connection connection, MotherOrderRecord record) throws SQLException {
         String sql = """
-                select code, customer_id, owner_customer_id, material_code, inbound_date,
-                       inbound_express_company, inbound_express_no, sender_name_snapshot,
-                       receiver_name_snapshot, unpack_signer_name, goods_name_snapshot,
-                       owner_type, is_customer_owned, warehouse_code, quantity, quantity_unit,
-                       weight, stock_status, ledger_code, source_register_type,
-                       source_line_no, source_sequence_no, operator, evidence_code,
-                       inbound_remark, order_status, created_at, processing_requirement, due_date, customer_name
-                  from biz_mother_order
-                 where code = ?
+                insert into biz_mother_order (
+                    code, customer_id, owner_customer_id, material_code, inbound_date,
+                    inbound_express_company, inbound_express_no, sender_name_snapshot,
+                    receiver_name_snapshot, unpack_signer_name, goods_name_snapshot,
+                    owner_type, is_customer_owned, warehouse_code, quantity, quantity_unit,
+                    weight, stock_status, ledger_code, source_register_type,
+                    source_line_no, source_sequence_no, operator, evidence_code,
+                    inbound_remark, order_status, created_at, processing_requirement, due_date,
+                    customer_name, courier_identity
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, record.code());
+            setLong(statement, 2, record.customerId());
+            setLong(statement, 3, record.ownerCustomerId());
+            statement.setString(4, record.materialCode());
+            statement.setString(5, record.inboundDate());
+            statement.setString(6, record.expressCompany());
+            statement.setString(7, record.courierNo());
+            statement.setString(8, record.senderName());
+            statement.setString(9, record.receiverName());
+            statement.setString(10, record.unpackSigner());
+            statement.setString(11, record.goodsName());
+            statement.setString(12, record.ownerType());
+            statement.setBoolean(13, record.customerOwned());
+            statement.setString(14, record.warehouseCode());
+            statement.setBigDecimal(15, record.quantity());
+            statement.setString(16, record.quantityUnit());
+            statement.setBigDecimal(17, record.weight());
+            statement.setString(18, record.stockStatus());
+            statement.setString(19, record.ledgerCode());
+            statement.setString(20, record.sourceRegisterType());
+            setInteger(statement, 21, record.sourceRegisterLineNo());
+            statement.setString(22, record.sourceRegisterSequence());
+            statement.setString(23, record.operator());
+            statement.setString(24, record.evidenceCode());
+            statement.setString(25, record.remark());
+            statement.setString(26, record.status());
+            statement.setString(27, record.createdAt());
+            statement.setString(28, record.processingRequirement());
+            statement.setString(29, record.dueDate());
+            statement.setString(30, record.customerName());
+            setCourierIdentity(statement, 31, record.courierNo());
+            statement.executeUpdate();
+            insertMotherOrderItem(connection, record);
+        }
+    }
+
+    private RuntimeException motherWriteFailure(String code, SQLException ex) {
+        String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+        if (message.contains("courier_identity") || message.contains("uk_mother_order_courier")) {
+            return new DuplicateCourierException();
+        }
+        return new IllegalStateException("Failed to save mother order: " + code, ex);
+    }
+
+    @Override
+    public Optional<MotherOrderRecord> findMotherOrderByCode(String code) {
+        try (Connection connection = dataSource.getConnection()) {
+            return findMotherOrderByCode(connection, code);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load mother order: " + code, ex);
+        }
+    }
+
+    @Override
+    public Optional<MotherOrderRecord> findMotherOrderByCode(String code, WorkSession session) {
+        try {
+            return findMotherOrderByCode(requireConnection(session), code);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load mother order: " + code, ex);
+        }
+    }
+
+    private Optional<MotherOrderRecord> findMotherOrderByCode(Connection connection, String code) throws SQLException {
+        String sql = motherOrderSelect() + " where code = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, code);
             try (ResultSet rs = statement.executeQuery()) {
                 if (!rs.next()) {
@@ -123,8 +164,6 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
                 }
                 return Optional.of(mapMotherOrder(rs));
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to load mother order: " + code, ex);
         }
     }
 
@@ -135,6 +174,25 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         }
         String sql = motherOrderSelect() + " where inbound_express_no = ?";
         return queryMotherOrders(sql, courierNo).stream().findFirst();
+    }
+
+    @Override
+    public Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo, WorkSession session) {
+        if (courierNo == null || courierNo.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = motherOrderSelect() + " where inbound_express_no = ?";
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
+            statement.setString(1, courierNo);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(mapMotherOrder(rs));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query mother orders", ex);
+        }
     }
 
     @Override
@@ -833,8 +891,15 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     private boolean exists(String sql, String code) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection()) {
+            return exists(connection, sql, code);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to check business document code: " + code, ex);
+        }
+    }
+
+    private boolean exists(Connection connection, String sql, String code) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, code);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() && rs.getInt(1) > 0;
@@ -842,6 +907,21 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to check business document code: " + code, ex);
         }
+    }
+
+    private Connection requireConnection(WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("单据写入必须使用工作单元连接");
+        }
+        return session.connection().get();
+    }
+
+    private void setCourierIdentity(PreparedStatement statement, int index, String courierNo) throws SQLException {
+        if (courierNo == null || courierNo.isBlank()) {
+            statement.setNull(index, Types.VARCHAR);
+            return;
+        }
+        statement.setString(index, courierNo.trim());
     }
 
     private void insertMotherOrderItem(Connection connection, MotherOrderRecord record) throws SQLException {

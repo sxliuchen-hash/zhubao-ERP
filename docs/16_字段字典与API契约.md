@@ -536,6 +536,10 @@ MySQL 持久化表：
 | `operator` | 操作人快照 |
 | `evidenceCode` | 快递单、称重记录或视频证据编码 |
 | `remark` | 业务备注 |
+| `processingRequirement` | 加工要求，不能为空 |
+| `dueDate` | 完成期限，`yyyy-MM-dd` |
+| `customerName` | 客户名称快照 |
+| `requestId` | 可选。同一次确认保持不变，8 到 64 位，只含字母、数字、点、下划线、冒号和减号。不传时仍走旧的各自提交，不回放 |
 
 返回 `InboundConfirmationResult`：
 
@@ -555,6 +559,8 @@ MySQL 持久化表：
 - 接口不得直接改库存余额，必须通过 `StockLedgerService.transfer` 追加台账。
 - `OwnerType` 固定为 `CUSTOMER`，确保客户来料不会进入企业自有库存。
 - `workOrderCode` 为空，表示仍处于母单原料库存，后续子工单拆分再进入在制库存。
+- 带 `requestId` 时，动作记为 `INBOUND_CONFIRM`，目标类型 `MOTHER_ORDER`，目标编号是母单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `InboundConfirmationResult`；换母单、换客户、换数量重量或其他内容会拒绝，必须换新 `requestId`。母单、来料事实、入库流水和成功结果在同一条数据库连接里提交。单据保存失败或结果保存失败时整单回滚。非空运单由 `courier_identity` 唯一约束保证不会建出两张母单。
+- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。报工、质检、开返工、返工报工、放行和确认发货没有接入。
 
 ---
 
@@ -2266,7 +2272,7 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `GET /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeLookup>` |
-| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>` |
+| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。可选 `requestId`。有值时动作是 `INTAKE_CREATE`，目标类型 `WAYBILL`，目标编号是规范化运单号。同账号同请求同内容回放原结果；已有运单打开原单，不第二次入库。客户身份写在规范化内容里，换客户不能重放。无 `requestId` 时保持旧行为：先按运单打开，没有才建单，但不回放、不保证同事务 |
 | `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |
 | `GET /api/business/operations/mother-orders/{code}/split` | `ApiResponse<MotherOrderSplitView>` |
 | `POST /api/business/operations/mother-orders/{code}/keep` | `ApiResponse<MotherOrderSplitView>` |

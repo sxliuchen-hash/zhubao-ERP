@@ -14,6 +14,7 @@ import {
 import { fetchCaptures, type DocumentCapture } from '../../services/documentCaptureApi';
 import { fetchMotherOrder, type MobileIntakeResult } from '../../services/mobileIntakeApi';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+import IntakePanel from '../intake/IntakePanel.vue';
 import MotherSplitPanel from './MotherSplitPanel.vue';
 
 const emptyInbound = (): InboundWorkspaceModel => ({
@@ -25,6 +26,8 @@ const emptyInbound = (): InboundWorkspaceModel => ({
 const workspace = ref<InboundWorkspaceModel>(emptyInbound());
 const loadError = ref('');
 const confirmingInbound = ref(false);
+const inboundRequestId = ref('');
+const inboundFingerprint = ref('');
 const confirmationResult = ref<InboundConfirmationResult | null>(null);
 const confirmationError = ref('');
 const selectedOrderCode = ref('');
@@ -152,13 +155,22 @@ async function confirmActiveInbound() {
   confirmingInbound.value = true;
   confirmationResult.value = null;
   confirmationError.value = '';
+  const fingerprint = `${activeOrder.value.code}|${processingRequirement.value.trim()}|${dueDate.value.trim()}|${activeOrder.value.courierNo}|${activeOrder.value.qty}|${activeOrder.value.weight}`;
+  if (!inboundRequestId.value || inboundFingerprint.value !== fingerprint) {
+    const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
+    inboundRequestId.value = `inbound-${random}`.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 64);
+    inboundFingerprint.value = fingerprint;
+  }
 
   try {
     confirmationResult.value = await confirmInbound(activeOrder.value, {
       processingRequirement: processingRequirement.value,
       dueDate: dueDate.value,
       customerName: activeOrder.value.customer,
+      requestId: inboundRequestId.value,
     });
+    inboundRequestId.value = '';
+    inboundFingerprint.value = '';
     await loadInboundWorkspace();
   } catch (error) {
     confirmationError.value = error instanceof Error ? error.message : '确认入库失败';
@@ -202,6 +214,10 @@ function backToList() {
 <template>
   <div class="inbound-desk page-stack" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
+    <IntakePanel
+      title="新建来料"
+      intro="扫运单建母单并入库。已有运单打开原单。超时先核对运单，不盲目再建。"
+    />
     <section class="module-work-grid inbound-work-grid" aria-label="来料作业主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">

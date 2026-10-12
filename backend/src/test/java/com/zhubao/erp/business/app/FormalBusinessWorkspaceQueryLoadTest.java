@@ -24,6 +24,7 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.work.domain.WorkSession;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -420,6 +421,11 @@ class FormalBusinessWorkspaceQueryLoadTest {
 
         @Override
         public StockLedgerEntry save(StockLedgerEntry entry) {
+            throw new UnsupportedOperationException("基准只读取台账");
+        }
+
+        @Override
+        public StockLedgerEntry save(StockLedgerEntry entry, WorkSession session) {
             throw new UnsupportedOperationException("基准只读取台账");
         }
 

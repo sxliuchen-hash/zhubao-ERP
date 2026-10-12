@@ -6,6 +6,7 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.domain.StockTransferRules;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -25,6 +26,29 @@ public class InMemoryStockLedgerRepository implements StockLedgerRepository {
 
     @Override
     public synchronized StockLedgerEntry save(StockLedgerEntry entry) {
+        return apply(entry);
+    }
+
+    @Override
+    public synchronized StockLedgerEntry save(StockLedgerEntry entry, WorkSession session) {
+        if (session == null) {
+            throw new IllegalStateException("库存写入必须处于业务工作单元");
+        }
+        Map<StockDimension, StockBalance> balancesBefore = new LinkedHashMap<>(balances);
+        List<StockLedgerEntry> ledgersBefore = new ArrayList<>(ledgers);
+        StockLedgerEntry saved = apply(entry);
+        session.onRollback(() -> {
+            synchronized (this) {
+                balances.clear();
+                balances.putAll(balancesBefore);
+                ledgers.clear();
+                ledgers.addAll(ledgersBefore);
+            }
+        });
+        return saved;
+    }
+
+    private StockLedgerEntry apply(StockLedgerEntry entry) {
         StockTransferRules.verify(entry);
         if (ledgers.stream().anyMatch(existing -> existing.code().equals(entry.code()))) {
             throw new IllegalStateException("库存台账号已经存在");

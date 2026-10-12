@@ -190,7 +190,11 @@ public class BusinessOperationController {
     public ApiResponse<InboundConfirmationResult> confirmInbound(@Valid @RequestBody ConfirmInboundCommand command, HttpServletRequest request) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         if (dataAccess != null) dataAccess.assertCustomer(context, command.customerId(), "");
-        return ApiResponse.ok(businessOperationService.confirmInbound(BusinessCommandActors.withActor(command, context.operator())));
+        ConfirmInboundCommand inbound = BusinessCommandActors.withActor(command, context.operator());
+        if (inbound.requestId() != null && !inbound.requestId().isBlank()) {
+            return ApiResponse.ok(businessOperationService.confirmInbound(inbound, context.operator()));
+        }
+        return ApiResponse.ok(businessOperationService.confirmInbound(inbound));
     }
 
     @GetMapping("/process-stations")

@@ -2,6 +2,7 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.DuplicateCourierException;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
 import com.zhubao.erp.business.domain.MobileIntakeLookup;
@@ -11,11 +12,16 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.scan.app.CourierNumbers;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.work.app.BusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandCall;
+import com.zhubao.erp.work.domain.WorkSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -34,14 +40,25 @@ public class MobileIntakeService {
 
     private final BusinessOperationService businessOperationService;
     private final BusinessDocumentRepository businessDocumentRepository;
+    private final BusinessWorkUnit workUnit;
     private final AtomicInteger sequence = new AtomicInteger();
 
     public MobileIntakeService(
             BusinessOperationService businessOperationService,
             BusinessDocumentRepository businessDocumentRepository
     ) {
+        this(businessOperationService, businessDocumentRepository, null);
+    }
+
+    @Autowired
+    public MobileIntakeService(
+            BusinessOperationService businessOperationService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit
+    ) {
         this.businessOperationService = businessOperationService;
         this.businessDocumentRepository = businessDocumentRepository;
+        this.workUnit = workUnit;
     }
 
     public MobileIntakeLookup lookup(String courierNo) {
@@ -64,9 +81,60 @@ public class MobileIntakeService {
         }
         String customerName = command.customerName().trim();
         assertCustomerAllowed(operator, customerName, command.customerId());
+        if (command.requestId() != null && !command.requestId().isBlank()) {
+            return intakeOnce(command, operator.operator().trim(), courierNo, customerName);
+        }
         return businessDocumentRepository.findMotherOrderByCourierNo(courierNo)
                 .map(record -> resultOf(record, true))
-                .orElseGet(() -> create(command, operator.operator().trim(), courierNo, customerName));
+                .orElseGet(() -> create(command, operator.operator().trim(), courierNo, customerName, null));
+    }
+
+    private MobileIntakeResult intakeOnce(
+            MobileIntakeCommand command,
+            String operator,
+            String courierNo,
+            String customerName
+    ) {
+        if (workUnit == null) {
+            throw new BusinessException("来料回放尚未装配");
+        }
+        long customerId = resolveCustomerId(customerName, command.customerId());
+        try {
+            String text = workUnit.execute(new CommandCall(
+                    command.requestId(),
+                    operator,
+                    "INTAKE_CREATE",
+                    "WAYBILL",
+                    courierNo,
+                    ReceivingResultText.intakePayload(command, customerId, customerName)
+            ), session -> createOrOpen(command, operator, courierNo, customerName, session));
+            return ReceivingResultText.intake(text);
+        } catch (DuplicateCourierException ex) {
+            return openCommitted(courierNo);
+        }
+    }
+
+    private String createOrOpen(
+            MobileIntakeCommand command,
+            String operator,
+            String courierNo,
+            String customerName,
+            WorkSession session
+    ) {
+        Optional<MotherOrderRecord> existing = businessDocumentRepository.findMotherOrderByCourierNo(courierNo, session);
+        if (existing.isPresent()) {
+            return ReceivingResultText.intake(resultOf(existing.get(), true));
+        }
+        try {
+            return ReceivingResultText.intake(create(command, operator, courierNo, customerName, session));
+        } catch (BusinessException ex) {
+            if (ex.getMessage() != null && ex.getMessage().startsWith("快递单号已关联母单")) {
+                MotherOrderRecord opened = businessDocumentRepository.findMotherOrderByCourierNo(courierNo, session)
+                        .orElseThrow(() -> ex);
+                return ReceivingResultText.intake(resultOf(opened, true));
+            }
+            throw ex;
+        }
     }
 
     public MobileIntakeResult view(String motherOrderCode) {
@@ -75,14 +143,31 @@ public class MobileIntakeService {
         return resultOf(record, true);
     }
 
+    private MobileIntakeResult openCommitted(String courierNo) {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            Optional<MotherOrderRecord> found = businessDocumentRepository.findMotherOrderByCourierNo(courierNo);
+            if (found.isPresent()) {
+                return resultOf(found.get(), true);
+            }
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        throw new BusinessException("快递单号已关联母单，请按运单重新打开");
+    }
+
     private MobileIntakeResult create(
             MobileIntakeCommand command,
             String operator,
             String courierNo,
-            String customerName
+            String customerName,
+            WorkSession session
     ) {
         long customerId = resolveCustomerId(customerName, command.customerId());
-        String motherOrderCode = nextMotherOrderCode();
+        String motherOrderCode = nextMotherOrderCode(session);
         String materialCode = command.materialCode() == null || command.materialCode().isBlank()
                 ? "MAT-MOBILE"
                 : command.materialCode().trim();
@@ -92,7 +177,7 @@ public class MobileIntakeService {
         String quantityUnit = command.quantityUnit() == null || command.quantityUnit().isBlank()
                 ? "件"
                 : command.quantityUnit().trim();
-        InboundConfirmationResult confirmed = businessOperationService.confirmInbound(new ConfirmInboundCommand(
+        ConfirmInboundCommand inbound = new ConfirmInboundCommand(
                 motherOrderCode,
                 customerId,
                 customerId,
@@ -117,17 +202,26 @@ public class MobileIntakeService {
                 command.processingRequirement().trim(),
                 command.dueDate().trim(),
                 customerName
-        ));
-        MotherOrderRecord saved = businessDocumentRepository.findMotherOrderByCode(confirmed.motherOrderCode())
-                .orElseThrow(() -> new BusinessException("母单已入账但未能读回：" + confirmed.motherOrderCode()));
+        );
+        InboundConfirmationResult confirmed = session == null
+                ? businessOperationService.confirmInbound(inbound)
+                : businessOperationService.postInboundInSession(inbound, session);
+        MotherOrderRecord saved = session == null
+                ? businessDocumentRepository.findMotherOrderByCode(confirmed.motherOrderCode())
+                    .orElseThrow(() -> new BusinessException("母单已入账但未能读回：" + confirmed.motherOrderCode()))
+                : businessDocumentRepository.findMotherOrderByCode(confirmed.motherOrderCode(), session)
+                    .orElseThrow(() -> new BusinessException("母单已入账但未能读回：" + confirmed.motherOrderCode()));
         return resultOf(saved, false);
     }
 
-    private String nextMotherOrderCode() {
+    private String nextMotherOrderCode(WorkSession session) {
         String day = LocalDate.now().format(DAY);
         for (int attempt = 0; attempt < 20; attempt++) {
             String code = "MD-" + day + "-" + String.format("%03d", sequence.incrementAndGet());
-            if (!businessDocumentRepository.motherOrderExists(code)) {
+            boolean exists = session == null
+                    ? businessDocumentRepository.motherOrderExists(code)
+                    : businessDocumentRepository.motherOrderExists(code, session);
+            if (!exists) {
                 return code;
             }
         }

@@ -1,5 +1,7 @@
 package com.zhubao.erp.inventory.domain;
 
+import com.zhubao.erp.work.domain.WorkSession;
+
 import java.util.List;
 import java.util.Set;
 
@@ -7,6 +9,12 @@ public interface StockLedgerRepository {
 
     /** 原子校验来源足额并保存台账及双方余额；失败时不得留下部分变更。 */
     StockLedgerEntry save(StockLedgerEntry entry);
+
+    /**
+     * 把台账写入当前工作单元，不在这里提交。
+     * 内存实现登记撤销动作；JDBC 必须使用会话上的同一条连接。
+     */
+    StockLedgerEntry save(StockLedgerEntry entry, WorkSession session);
 
     List<StockLedgerEntry> findAllLedgers();
 

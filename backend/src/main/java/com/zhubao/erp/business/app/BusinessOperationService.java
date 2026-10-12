@@ -32,11 +32,15 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.work.app.BusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandCall;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Optional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -52,6 +56,8 @@ public class BusinessOperationService {
     private final StockLedgerService stockLedgerService;
     private final ApprovalService approvalService;
     private final BusinessDocumentRepository businessDocumentRepository;
+    private final BusinessWorkUnit workUnit;
+    private final MotherOrderSaveProbe motherOrderSaveProbe;
 
     public BusinessOperationService(StockLedgerService stockLedgerService) {
         this(stockLedgerService, null, null);
@@ -61,22 +67,72 @@ public class BusinessOperationService {
         this(stockLedgerService, approvalService, null);
     }
 
-    @Autowired
     public BusinessOperationService(
             StockLedgerService stockLedgerService,
             ApprovalService approvalService,
             BusinessDocumentRepository businessDocumentRepository
     ) {
+        this(stockLedgerService, approvalService, businessDocumentRepository, null, MotherOrderSaveProbe.NONE);
+    }
+
+    @Autowired
+    public BusinessOperationService(
+            StockLedgerService stockLedgerService,
+            ApprovalService approvalService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit
+    ) {
+        this(stockLedgerService, approvalService, businessDocumentRepository, workUnit, MotherOrderSaveProbe.NONE);
+    }
+
+    public BusinessOperationService(
+            StockLedgerService stockLedgerService,
+            ApprovalService approvalService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit,
+            MotherOrderSaveProbe motherOrderSaveProbe
+    ) {
         this.stockLedgerService = stockLedgerService;
         this.approvalService = approvalService;
         this.businessDocumentRepository = businessDocumentRepository;
+        this.workUnit = workUnit;
+        this.motherOrderSaveProbe = motherOrderSaveProbe == null ? MotherOrderSaveProbe.NONE : motherOrderSaveProbe;
     }
 
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
+        return postInbound(command, null);
+    }
+
+    /**
+     * 带请求编号的入库确认。母单、来料事实、入库流水和成功结果同一次提交。
+     * 未装配工作单元时拒绝，不能退回各自提交的旧路径。
+     */
+    public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command, String actorId) {
+        if (command.requestId() == null || command.requestId().isBlank()) {
+            return confirmInbound(command);
+        }
+        if (workUnit == null) {
+            throw new BusinessException("入库回放尚未装配");
+        }
+        if (businessDocumentRepository == null) {
+            throw new BusinessException("来料单据仓储尚未装配");
+        }
+        String text = workUnit.execute(new CommandCall(
+                command.requestId(),
+                actorId,
+                "INBOUND_CONFIRM",
+                "MOTHER_ORDER",
+                command.motherOrderCode(),
+                ReceivingResultText.inboundPayload(command)
+        ), session -> ReceivingResultText.inbound(postInbound(command, session)));
+        return ReceivingResultText.inbound(text);
+    }
+
+    private InboundConfirmationResult postInbound(ConfirmInboundCommand command, WorkSession session) {
         assertRequiredText(command.processingRequirement(), "加工要求不能为空");
         assertDueDate(command.dueDate());
-        assertMotherOrderAvailable(command.motherOrderCode());
-        assertCourierAvailable(command.courierNo(), command.motherOrderCode());
+        assertMotherOrderAvailable(command.motherOrderCode(), session);
+        assertCourierAvailable(command.courierNo(), command.motherOrderCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension rawCustomerStock = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -89,8 +145,7 @@ public class BusinessOperationService {
                 StockStatus.RAW_WAITING
         );
 
-        // Business operations append inventory events; balances stay derived from the ledger repository.
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockTransferCommand transfer = new StockTransferCommand(
                 "inbound_confirm",
                 command.motherOrderCode(),
                 null,
@@ -98,7 +153,13 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        );
+        StockLedgerEntry entry = session == null
+                ? stockLedgerService.transfer(transfer)
+                : stockLedgerService.transfer(transfer, session);
+        if (session != null) {
+            motherOrderSaveProbe.beforeMotherSave();
+        }
 
         InboundConfirmationResult result = new InboundConfirmationResult(
                 command.motherOrderCode(),
@@ -110,8 +171,16 @@ public class BusinessOperationService {
                 command.operator(),
                 command.evidenceCode()
         );
-        saveMotherOrder(command, rawCustomerStock, entry);
+        saveMotherOrder(command, rawCustomerStock, entry, session);
         return result;
+    }
+
+    /** 供来料建单在已打开的工作单元里入库，不再套一层请求回放。 */
+    InboundConfirmationResult postInboundInSession(ConfirmInboundCommand command, WorkSession session) {
+        if (session == null) {
+            throw new IllegalStateException("入库写入必须处于业务工作单元");
+        }
+        return postInbound(command, session);
     }
 
     public ProductionReportResult reportProduction(ReportProductionCommand command) {
@@ -595,8 +664,14 @@ public class BusinessOperationService {
         return remark.toString();
     }
 
-    private void assertMotherOrderAvailable(String code) {
-        if (businessDocumentRepository != null && businessDocumentRepository.motherOrderExists(code)) {
+    private void assertMotherOrderAvailable(String code, WorkSession session) {
+        if (businessDocumentRepository == null) {
+            return;
+        }
+        boolean exists = session == null
+                ? businessDocumentRepository.motherOrderExists(code)
+                : businessDocumentRepository.motherOrderExists(code, session);
+        if (exists) {
             throw new BusinessException("结构化母单已存在，不能重复确认入库：" + code);
         }
     }
@@ -610,12 +685,13 @@ public class BusinessOperationService {
     private void saveMotherOrder(
             ConfirmInboundCommand command,
             StockDimension stockDimension,
-            StockLedgerEntry entry
+            StockLedgerEntry entry,
+            WorkSession session
     ) {
         if (businessDocumentRepository == null) {
             return;
         }
-        businessDocumentRepository.saveMotherOrder(new MotherOrderRecord(
+        MotherOrderRecord record = new MotherOrderRecord(
                 command.motherOrderCode(),
                 command.customerId(),
                 stockDimension.ownerCustomerId(),
@@ -646,7 +722,12 @@ public class BusinessOperationService {
                 command.processingRequirement().trim(),
                 command.dueDate().trim(),
                 blankToEmpty(command.customerName())
-        ));
+        );
+        if (session == null) {
+            businessDocumentRepository.saveMotherOrder(record);
+        } else {
+            businessDocumentRepository.saveMotherOrder(record, session);
+        }
     }
 
     private void assertRequiredText(String value, String message) {
@@ -664,12 +745,14 @@ public class BusinessOperationService {
         }
     }
 
-    private void assertCourierAvailable(String courierNo, String motherOrderCode) {
+    private void assertCourierAvailable(String courierNo, String motherOrderCode, WorkSession session) {
         if (businessDocumentRepository == null || courierNo == null || courierNo.isBlank()) {
             return;
         }
-        businessDocumentRepository.findMotherOrderByCourierNo(courierNo.trim())
-                .filter(record -> !record.code().equals(motherOrderCode))
+        Optional<MotherOrderRecord> existing = session == null
+                ? businessDocumentRepository.findMotherOrderByCourierNo(courierNo.trim())
+                : businessDocumentRepository.findMotherOrderByCourierNo(courierNo.trim(), session);
+        existing.filter(record -> !record.code().equals(motherOrderCode))
                 .ifPresent(record -> {
                     throw new BusinessException("快递单号已关联母单：" + record.code());
                 });

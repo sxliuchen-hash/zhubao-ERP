@@ -20,6 +20,23 @@ public record MobileIntakeCommand(
         @NotNull @DecimalMin(value = "0.000", inclusive = false, message = "重量必须大于 0") BigDecimal weight,
         String expressCompany,
         String materialCode,
-        String quantityUnit
+        String quantityUnit,
+        String requestId
 ) {
+    public MobileIntakeCommand(
+            String courierNo,
+            String customerName,
+            Long customerId,
+            String processingRequirement,
+            String dueDate,
+            String goodsName,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String expressCompany,
+            String materialCode,
+            String quantityUnit
+    ) {
+        this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName,
+                quantity, weight, expressCompany, materialCode, quantityUnit, null);
+    }
 }

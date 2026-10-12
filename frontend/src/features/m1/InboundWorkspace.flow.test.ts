@@ -22,6 +22,8 @@ vi.mock('../../services/documentCaptureApi', () => ({
 
 vi.mock('../../services/mobileIntakeApi', () => ({
   fetchMotherOrder: vi.fn(),
+  lookupMobileIntake: vi.fn(),
+  submitMobileIntake: vi.fn(),
 }));
 
 vi.mock('../../services/motherSplitApi', () => ({

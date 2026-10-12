@@ -9,6 +9,7 @@ import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferRules;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -40,11 +41,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             boolean previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
-                insertLedger(connection, entry);
-                if (entry.from() != null) {
-                    debitBalance(connection, entry);
-                }
-                creditBalance(connection, entry.to(), entry.quantity(), entry.weight(), entry.code());
+                writeLedger(connection, entry);
                 connection.commit();
                 return entry;
             } catch (SQLException | RuntimeException ex) {
@@ -56,6 +53,28 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to save stock ledger entry", ex);
         }
+    }
+
+    @Override
+    public StockLedgerEntry save(StockLedgerEntry entry, WorkSession session) {
+        StockTransferRules.verify(entry);
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("库存写入必须使用工作单元连接");
+        }
+        try {
+            writeLedger(session.connection().get(), entry);
+            return entry;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to save stock ledger entry", ex);
+        }
+    }
+
+    private void writeLedger(Connection connection, StockLedgerEntry entry) throws SQLException {
+        insertLedger(connection, entry);
+        if (entry.from() != null) {
+            debitBalance(connection, entry);
+        }
+        creditBalance(connection, entry.to(), entry.quantity(), entry.weight(), entry.code());
     }
 
     @Override
