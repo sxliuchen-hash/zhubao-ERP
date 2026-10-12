@@ -25,6 +25,8 @@ const auditEvents = ref<DocumentAuditEvent[]>([]);
 const loadingError = ref('');
 const selectedFile = ref<File | null>(null);
 const selectedPackageCode = ref('');
+const packageKeyword = ref('');
+const detailOpen = ref(false);
 const uploading = ref(false);
 const uploadResult = ref<EvidenceAttachmentUploadResult | null>(null);
 const uploadError = ref('');
@@ -39,6 +41,20 @@ const activePackage = computed(
 const activeAttachments = computed(() =>
   attachments.value.filter((item) => item.documentCode === activePackage.value?.code),
 );
+const visiblePackages = computed(() => {
+  const text = packageKeyword.value.trim().toLowerCase();
+  if (!text) return packages.value;
+  return packages.value.filter((item) => `${item.code} ${item.title} ${item.businessCode} ${item.owner}`.toLowerCase().includes(text));
+});
+
+function selectPackage(code: string) {
+  selectedPackageCode.value = code;
+  detailOpen.value = true;
+}
+
+function backToPackages() {
+  detailOpen.value = false;
+}
 
 const previewTargetCode = computed(
   () => uploadResult.value?.code ?? activeAttachments.value[0]?.code ?? '',
@@ -144,7 +160,7 @@ async function createPreviewUrl() {
 </script>
 
 <template>
-  <div class="page-stack document-page">
+  <div class="page-stack document-page desk-page" :class="{ 'is-detail': detailOpen }">
     <section class="operations-hero document-hero">
       <div class="hero-copy">
         <h2>附件</h2>
@@ -266,7 +282,11 @@ async function createPreviewUrl() {
             <p>每个业务动作都必须能关联文档包、附件、存储策略和审计事件。</p>
           </div>
         </div>
-        <div class="document-table-wrap">
+        <label>
+          <span>查找文档包</span>
+          <input v-model="packageKeyword" aria-label="查找文档包" placeholder="单号、标题或负责人" />
+        </label>
+        <div class="document-table-wrap desk-table-wrap">
           <table class="document-table">
             <thead>
               <tr>
@@ -279,7 +299,7 @@ async function createPreviewUrl() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in packages" :key="item.code">
+              <tr v-for="item in visiblePackages" :key="item.code" @click="selectPackage(item.code)">
                 <td>
                   <span class="cell-stack">
                     <b>{{ item.title }}</b>
@@ -300,10 +320,22 @@ async function createPreviewUrl() {
             </tbody>
           </table>
         </div>
+        <div class="desk-cards">
+          <p v-if="visiblePackages.length === 0" class="empty-hint">暂无文档包</p>
+          <button v-for="item in visiblePackages" :key="`card-${item.code}`" class="desk-card" type="button" @click="selectPackage(item.code)">
+            <span class="desk-card-top">
+              <strong class="code">{{ item.code }}</strong>
+              <StatusBadge :label="item.status" :tone="item.tone" />
+            </span>
+            <span>{{ item.title }}</span>
+            <span>{{ item.businessCode }} · {{ item.owner }}</span>
+          </button>
+        </div>
       </div>
 
-      <aside v-if="activePackage" class="document-detail">
+      <aside v-if="activePackage" class="document-detail module-side-panel">
         <div class="detail-title">
+          <button class="secondary-button detail-back" type="button" @click="backToPackages">返回列表</button>
           <span>当前缺口</span>
           <strong>{{ activePackage.code }}</strong>
           <StatusBadge :label="activePackage.status" :tone="activePackage.tone" />
@@ -338,7 +370,7 @@ async function createPreviewUrl() {
           <p>当前管理附件元数据、存储位置、校验和与兜底动作，上传内容进入本地存储适配，元数据可切换 JDBC 仓储。</p>
         </div>
       </div>
-      <div class="document-table-wrap">
+      <div class="document-table-wrap desk-table-wrap">
         <table class="document-table attachment-table">
           <thead>
             <tr>
@@ -368,6 +400,16 @@ async function createPreviewUrl() {
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="desk-cards">
+        <article v-for="item in attachments" :key="`att-card-${item.code}`" class="desk-card production-handoff-card">
+          <span class="desk-card-top">
+            <strong class="code">{{ item.code }}</strong>
+            <StatusBadge :label="item.status" :tone="item.tone" />
+          </span>
+          <span>{{ item.fileName }}</span>
+          <span>{{ item.businessCode }} · {{ item.mediaType }}</span>
+        </article>
       </div>
     </section>
 

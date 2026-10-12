@@ -1786,11 +1786,13 @@ button.finance-month-button {
   .inbound-desk:not(.is-detail) .module-side-panel,
   .inbound-desk:not(.is-detail) .evidence-slot-panel,
   .production-desk:not(.is-detail) .module-side-panel,
-  .desk-page:not(.is-detail) .module-side-panel { display: none; }
+  .desk-page:not(.is-detail) .module-side-panel,
+  .desk-page:not(.is-detail) .document-detail { display: none; }
 
   .inbound-desk.is-detail .module-master-panel,
   .production-desk.is-detail .module-master-panel,
-  .desk-page.is-detail .module-master-panel { display: none; }
+  .desk-page.is-detail .module-master-panel,
+  .desk-page.is-detail .document-master { display: none; }
 }
 
 .scan-entry input,
