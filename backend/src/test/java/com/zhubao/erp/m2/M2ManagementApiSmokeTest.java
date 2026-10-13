@@ -503,208 +503,18 @@ class M2ManagementApiSmokeTest {
         prepareKeptMother(mother, "WIP-LINE-01", "300", "683.200");
         reportStation(mother, "雕刻", "carve");
         reportStation(mother, "镶嵌", "inlay");
-        Map<String, Object> command = new LinkedHashMap<>();
-        command.put("motherOrderCode", mother);
-        command.put("workOrderCode", mother);
-        command.put("customerId", 1002L);
-        command.put("materialCode", "MAT-SILVER-CHAIN");
-        command.put("fromWarehouseCode", "WIP-LINE-01");
-        command.put("toWarehouseCode", "WIP-LINE-01");
-        command.put("quantity", new BigDecimal("300"));
-        command.put("weight", new BigDecimal("683.200"));
-        command.put("process", "抛光");
-        command.put("operator", "请求冒名者");
-        command.put("handoffCode", "HO-SMOKE-001");
-        var reported = restTemplate.postForEntity("/api/business/operations/production-reports",
-                new HttpEntity<>(command, sessionHeaders("polish")), String.class);
-        assertThat(reported.getStatusCode().is2xxSuccessful()).as(reported.getBody()).isTrue();
-        assertThat(reported.getBody()).contains(mother, "SEMI_FINISHED", "HO-SMOKE-001", "抛光工 陈刚")
-                .doesNotContain("请求冒名者");
+        reportStation(mother, "抛光", "polish");
         assertThat(signedGet("/api/inventory/balances", String.class).getBody())
                 .contains(mother, "SEMI_FINISHED");
     }
 
     @Test
-    void freezesQualityStockThroughBusinessOperationApiAndMovesSemiFinishedStock() {
-        Map<String, Object> semiFinishedDimension = Map.of(
-                "ownerType", "CUSTOMER",
-                "ownerCustomerId", 1002L,
-                "customerId", 1002L,
-                "motherOrderCode", "MD-SMOKE-20260706-003",
-                "workOrderCode", "ZD-SMOKE-20260706-022",
-                "materialCode", "MAT-SILVER-CHAIN",
-                "warehouseCode", "SEMI-FINISHED",
-                "stockStatus", "SEMI_FINISHED"
-        );
-        Map<String, Object> seedSemiFinished = Map.of(
-                "documentType", "production_report",
-                "documentCode", "ZD-SMOKE-20260706-022",
-                "to", semiFinishedDimension,
-                "quantity", new BigDecimal("80"),
-                "weight", new BigDecimal("121.150"),
-                "remark", "seed semi-finished for quality freeze smoke test"
-        );
-        signedPost("/api/inventory/ledger/transfers", seedSemiFinished, String.class);
-
-        Map<String, Object> request = new LinkedHashMap<>();
-        request.put("qualityCaseCode", "QC-SMOKE-20260706-022");
-        request.put("motherOrderCode", "MD-SMOKE-20260706-003");
-        request.put("workOrderCode", "ZD-SMOKE-20260706-022");
-        request.put("customerId", 1002L);
-        request.put("materialCode", "MAT-SILVER-CHAIN");
-        request.put("fromWarehouseCode", "SEMI-FINISHED");
-        request.put("toWarehouseCode", "FROZEN-QC");
-        request.put("quantity", new BigDecimal("6"));
-        request.put("weight", new BigDecimal("13.660"));
-        request.put("process", "焊接");
-        request.put("inspector", "周娜");
-        request.put("defect", "焊点偏移 6 件");
-        request.put("evidenceCode", "PHOTO-QC-SMOKE-001");
-        request.put("remark", "quality freeze smoke test");
-
-        ResponseEntity<String> frozen = signedPost(
-                "/api/business/operations/quality-freezes",
-                request,
-                String.class
-        );
-        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
-
-        assertThat(frozen.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(frozen.getBody()).contains(
-                "QC-SMOKE-20260706-022",
-                "SEMI_FINISHED",
-                "FROZEN",
-                "PHOTO-QC-SMOKE-001"
-        );
-        assertThat(balances.getBody()).contains(
-                "MD-SMOKE-20260706-003",
-                "ZD-SMOKE-20260706-022",
-                "FROZEN-QC",
-                "FROZEN"
-        );
-    }
-
-    @Test
-    void dispatchesReworkThroughBusinessOperationApiAndMovesFrozenStock() {
-        Map<String, Object> frozenDimension = Map.of(
-                "ownerType", "CUSTOMER",
-                "ownerCustomerId", 1002L,
-                "customerId", 1002L,
-                "motherOrderCode", "MD-SMOKE-20260706-004",
-                "workOrderCode", "ZD-SMOKE-20260706-023",
-                "materialCode", "MAT-SILVER-CHAIN",
-                "warehouseCode", "FROZEN-QC",
-                "stockStatus", "FROZEN"
-        );
-        Map<String, Object> seedFrozen = Map.of(
-                "documentType", "quality_freeze",
-                "documentCode", "QC-SMOKE-20260706-023",
-                "to", frozenDimension,
-                "quantity", new BigDecimal("6"),
-                "weight", new BigDecimal("13.660"),
-                "remark", "seed frozen stock for rework dispatch smoke test"
-        );
-        signedPost("/api/inventory/ledger/transfers", seedFrozen, String.class);
-
-        Map<String, Object> request = new LinkedHashMap<>();
-        request.put("reworkOrderCode", "FG-SMOKE-20260706-023");
-        request.put("qualityCaseCode", "QC-SMOKE-20260706-023");
-        request.put("motherOrderCode", "MD-SMOKE-20260706-004");
-        request.put("workOrderCode", "ZD-SMOKE-20260706-023");
-        request.put("customerId", 1002L);
-        request.put("materialCode", "MAT-SILVER-CHAIN");
-        request.put("fromWarehouseCode", "FROZEN-QC");
-        request.put("toWarehouseCode", "REWORK-LINE-01");
-        request.put("quantity", new BigDecimal("6"));
-        request.put("weight", new BigDecimal("13.660"));
-        request.put("process", "返工焊接");
-        request.put("operator", "车间组长 马杰");
-        request.put("reason", "焊点偏移返工");
-        request.put("evidenceCode", "PHOTO-QC-SMOKE-002");
-        request.put("remark", "rework dispatch smoke test");
-
-        ResponseEntity<String> dispatched = signedPost(
-                "/api/business/operations/rework-dispatches",
-                request,
-                String.class
-        );
-        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
-
-        assertThat(dispatched.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(dispatched.getBody()).contains(
-                "FG-SMOKE-20260706-023",
-                "QC-SMOKE-20260706-023",
-                "FROZEN",
-                "REWORK",
-                "PHOTO-QC-SMOKE-002"
-        );
-        assertThat(balances.getBody()).contains(
-                "MD-SMOKE-20260706-004",
-                "ZD-SMOKE-20260706-023",
-                "REWORK-LINE-01",
-                "REWORK"
-        );
-    }
-
-    @Test
-    void reportsReworkThroughBusinessOperationApiAndMovesReworkStock() {
-        Map<String, Object> reworkDimension = Map.of(
-                "ownerType", "CUSTOMER",
-                "ownerCustomerId", 1002L,
-                "customerId", 1002L,
-                "motherOrderCode", "MD-SMOKE-20260706-005",
-                "workOrderCode", "ZD-SMOKE-20260706-024",
-                "materialCode", "MAT-SILVER-CHAIN",
-                "warehouseCode", "REWORK-LINE-01",
-                "stockStatus", "REWORK"
-        );
-        Map<String, Object> seedRework = Map.of(
-                "documentType", "rework_dispatch",
-                "documentCode", "FG-SMOKE-20260706-024",
-                "to", reworkDimension,
-                "quantity", new BigDecimal("6"),
-                "weight", new BigDecimal("13.660"),
-                "remark", "seed rework stock for rework report smoke test"
-        );
-        signedPost("/api/inventory/ledger/transfers", seedRework, String.class);
-
-        Map<String, Object> request = new LinkedHashMap<>();
-        request.put("reworkOrderCode", "FG-SMOKE-20260706-024");
-        request.put("qualityCaseCode", "QC-SMOKE-20260706-024");
-        request.put("motherOrderCode", "MD-SMOKE-20260706-005");
-        request.put("workOrderCode", "ZD-SMOKE-20260706-024");
-        request.put("customerId", 1002L);
-        request.put("materialCode", "MAT-SILVER-CHAIN");
-        request.put("fromWarehouseCode", "REWORK-LINE-01");
-        request.put("toWarehouseCode", "SEMI-FINISHED");
-        request.put("quantity", new BigDecimal("6"));
-        request.put("weight", new BigDecimal("13.660"));
-        request.put("process", "返工焊接");
-        request.put("operator", "王强");
-        request.put("evidenceCode", "PHOTO-REWORK-SMOKE-001");
-        request.put("remark", "rework report smoke test");
-
-        ResponseEntity<String> reported = signedPost(
-                "/api/business/operations/rework-reports",
-                request,
-                String.class
-        );
-        ResponseEntity<String> balances = signedGet("/api/inventory/balances", String.class);
-
-        assertThat(reported.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(reported.getBody()).contains(
-                "FG-SMOKE-20260706-024",
-                "QC-SMOKE-20260706-024",
-                "REWORK",
-                "SEMI_FINISHED",
-                "PHOTO-REWORK-SMOKE-001"
-        );
-        assertThat(balances.getBody()).contains(
-                "MD-SMOKE-20260706-005",
-                "ZD-SMOKE-20260706-024",
-                "SEMI-FINISHED",
-                "SEMI_FINISHED"
-        );
+    void retiredDirectQualityEntriesAreNotRegistered() {
+        assertThat(signedPost("/api/business/operations/quality-freezes", Map.of(), String.class).getStatusCode().value()).isEqualTo(404);
+        assertThat(signedPost("/api/business/operations/rework-dispatches", Map.of(), String.class).getStatusCode().value()).isEqualTo(404);
+        assertThat(signedPost("/api/business/operations/rework-reports", Map.of(), String.class).getStatusCode().value()).isEqualTo(404);
+        assertThat(signedPost("/api/business/operations/quality-releases", Map.of(), String.class).getStatusCode().value()).isEqualTo(404);
+        assertThat(signedPost("/api/business/operations/production-reports", Map.of(), String.class).getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
@@ -718,27 +528,13 @@ class M2ManagementApiSmokeTest {
                 new HttpEntity<>(Map.of("code", mother, "lines", List.of(Map.of("lineNo", 1, "verdict", "合格", "reason", ""))),
                         sessionHeaders("qc")), String.class);
         assertThat(check.getStatusCode().is2xxSuccessful()).as(check.getBody()).isTrue();
-        Map<String, Object> command = new LinkedHashMap<>();
-        command.put("qualityCaseCode", "QC-" + mother);
-        command.put("motherOrderCode", mother);
-        command.put("workOrderCode", mother);
-        command.put("customerId", 1002L);
-        command.put("materialCode", "MAT-SILVER-CHAIN");
-        command.put("fromWarehouseCode", "SEMI-FINISHED");
-        command.put("toWarehouseCode", "FINISHED-CUSTOMER");
-        command.put("quantity", new BigDecimal("6"));
-        command.put("weight", new BigDecimal("13.660"));
-        command.put("process", "抛光");
-        command.put("inspector", "请求冒名者");
-        command.put("releaseResult", "合格");
-        command.put("evidenceCode", "PHOTO-RELEASE-SMOKE-001");
-        var released = restTemplate.postForEntity("/api/business/operations/quality-releases",
-                new HttpEntity<>(command, sessionHeaders("qc")), String.class);
+        var released = restTemplate.postForEntity("/api/business/operations/quality-checks/releases",
+                new HttpEntity<>(Map.of("code", mother, "requestId", "smoke-release-" + mother), sessionHeaders("qc")), String.class);
         assertThat(released.getStatusCode().is2xxSuccessful()).as(released.getBody()).isTrue();
-        assertThat(released.getBody()).contains(mother, "FINISHED", "PHOTO-RELEASE-SMOKE-001", "质检员 周娜")
+        assertThat(released.getBody()).contains(mother, "\"FINISHED\"", "质检员 周娜")
                 .doesNotContain("请求冒名者");
         assertThat(signedGet("/api/inventory/balances", String.class).getBody())
-                .contains(mother, "FINISHED-CUSTOMER");
+                .contains(mother, "\"FINISHED\"");
     }
 
     @Test
@@ -777,6 +573,7 @@ class M2ManagementApiSmokeTest {
         request.put("operator", "库管员 何琳");
         request.put("evidenceCode", "ATT-OUT-SMOKE-001");
         request.put("remark", "outbound shipment smoke test");
+        request.put("requestId", "smoke-ship-OUT-SMOKE-20260706-026");
 
         ResponseEntity<String> shipped = signedPost(
                 "/api/business/operations/outbound-shipments",

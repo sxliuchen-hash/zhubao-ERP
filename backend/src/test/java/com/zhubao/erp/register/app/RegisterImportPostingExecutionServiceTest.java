@@ -113,21 +113,31 @@ class RegisterImportPostingExecutionServiceTest {
     @Test
     void postsEngravingBatchAndCreatesMachineOutputRecord() {
         seedWipStock("MD-REG-ENG-001", "WO-REG-ENG-001", "MAT-18K-RING", 1001L);
+        ProcessStationService stations = mock(ProcessStationService.class);
+        AuthUserAccount account = new AuthUserAccount("worker", "hash", "会话雕刻员", RoleCode.OPERATOR,
+                DataScope.SELF, true, true).withAllowedProcesses(List.of("雕刻"));
+        when(stations.reportProduction(any(), eq(account))).thenReturn(new ProductionReportResult(
+                "WO-REG-ENG-001", "STK-STATION", "WIP", "SEMI-FINISHED", StockStatus.WIP,
+                StockStatus.SEMI_FINISHED, new BigDecimal("12"), new BigDecimal("4.8"), "雕刻", account.operator(), ""));
+        var secured = new RegisterImportPostingExecutionService(confirmationService, postingPlanService,
+                businessOperationService, machineOutputService, stations);
         RegisterImportBatch batch = confirmationService.confirm(new ConfirmRegisterImportCommand(
                 engravingPreviewWithBusinessKeys(),
                 "车间复核员",
                 "雕刻登记表复核通过"
         ));
 
-        RegisterImportPostingExecutionResult result = service.post(
+        RegisterImportPostingExecutionResult result = secured.post(
                 batch.importBatchNo(),
-                new PostRegisterImportBatchCommand(false, "车间组长 李华", "雕刻设备产量入账")
+                new PostRegisterImportBatchCommand(false, "车间组长 李华", "雕刻设备产量入账"),
+                account
         );
 
         assertThat(result.status()).isEqualTo("POSTED");
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().get(0).message()).contains("已生成设备产量记录 MOR-");
-        assertThat(stockRepository.findAllLedgers()).hasSize(2);
+        assertThat(stockRepository.findAllLedgers()).hasSize(1);
+        verify(stations).reportProduction(any(), eq(account));
         assertThat(machineOutputRepository.findByImportBatchNo(batch.importBatchNo()))
                 .singleElement()
                 .satisfies(record -> {

@@ -15,10 +15,8 @@ import {
 import {
   reviewAfterSalesReturn,
   returnCustomerShipment,
-  shipFinishedStock,
   type AfterSalesReviewResult,
   type CustomerReturnResult,
-  type OutboundShipmentResult,
 } from '../../services/businessOperationApi';
 
 const emptyInventory = (): InventoryWorkspaceModel => ({
@@ -36,9 +34,6 @@ const statusKeyword = ref('');
 const advancedOpen = ref(false);
 const detailOpen = ref(false);
 const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
-const shippingFinishedStock = ref(false);
-const outboundShipmentResult = ref<OutboundShipmentResult | null>(null);
-const outboundShipmentError = ref('');
 const returningCustomerStock = ref(false);
 const customerReturnResult = ref<CustomerReturnResult | null>(null);
 const customerReturnError = ref('');
@@ -114,28 +109,6 @@ async function loadInventoryWorkspace() {
   }
 }
 
-async function shipActiveFinishedStock() {
-  if (!activeBalance.value) return;
-
-  shippingFinishedStock.value = true;
-  outboundShipmentResult.value = null;
-  outboundShipmentError.value = '';
-  customerReturnResult.value = null;
-  customerReturnError.value = '';
-  afterSalesReviewResult.value = null;
-  afterSalesReviewError.value = '';
-
-  try {
-    assertAmounts();
-    outboundShipmentResult.value = await shipFinishedStock(activeBalance.value, operationDraft(operationValues.value));
-    await loadInventoryWorkspace();
-  } catch (error) {
-    outboundShipmentError.value = error instanceof Error ? error.message : '确认出库失败';
-  } finally {
-    shippingFinishedStock.value = false;
-  }
-}
-
 async function returnActiveCustomerShipment() {
   if (!activeBalance.value) return;
 
@@ -183,8 +156,6 @@ function backToList() {
 function selectBalance(item: InventoryBalance) {
   selectedBalanceKey.value = balanceKey(item);
   detailOpen.value = true;
-  outboundShipmentResult.value = null;
-  outboundShipmentError.value = '';
   customerReturnResult.value = null;
   customerReturnError.value = '';
   afterSalesReviewResult.value = null;
@@ -300,29 +271,17 @@ function selectBalance(item: InventoryBalance) {
             <dt>最近台账</dt>
             <dd>{{ latestLedger?.bizCode ?? '暂无' }}</dd>
           </dl>
-          <OperationInputs v-model="operationValues" :fields="[['shipmentCode', '出库单号'], ['logisticsNo', '发货运单号'], ['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
+          <p class="operation-feedback">成品发货使用上方确认发货，必须带请求编号。这里办理退货和售后复核。</p>
+          <OperationInputs v-model="operationValues" :fields="[['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
           <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
           <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
-          <p class="production-legacy-note">库存台旧确认出库不带请求编号，不是回放路径。现场发货请用上方确认发货。</p>
           <div class="detail-actions">
-            <button class="primary-button" type="button" :disabled="shippingFinishedStock" @click="shipActiveFinishedStock">
-              {{ shippingFinishedStock ? '正在出库' : '确认出库' }}
-            </button>
             <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
               {{ returningCustomerStock ? '正在退货' : '退货入库' }}
             </button>
             <button class="secondary-button" type="button" :disabled="reviewingAfterSalesReturn" @click="reviewActiveAfterSalesReturn">
               {{ reviewingAfterSalesReturn ? '正在复核' : '售后复核' }}
             </button>
-          </div>
-          <div v-if="outboundShipmentResult" class="operation-feedback success">
-            <strong>成品出库已写入台账</strong>
-            <span>{{ outboundShipmentResult.ledgerCode }} / {{ outboundShipmentResult.shipmentCode }}</span>
-            <small>{{ outboundShipmentResult.fromStockStatus }} -> {{ outboundShipmentResult.toStockStatus }} / {{ outboundShipmentResult.logisticsNo }}</small>
-          </div>
-          <div v-else-if="outboundShipmentError" class="operation-feedback danger">
-            <strong>确认出库失败</strong>
-            <span>{{ outboundShipmentError }}</span>
           </div>
           <div v-if="customerReturnResult" class="operation-feedback success">
             <strong>客户退货已写入台账</strong>

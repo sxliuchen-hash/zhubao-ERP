@@ -216,11 +216,8 @@ public class DeviceGatewayService {
         if (!postingIntent || !command.hasProductionPosting()) {
             return "";
         }
-        if (businessOperationService == null) {
-            throw new BusinessException("业务操作服务不可用，无法联动入账");
-        }
-        if (account != null && processStationService == null) {
-            throw new BusinessException("岗位报工服务不可用，不能从设备读数绕过工序校验");
+        if (account == null || processStationService == null) {
+            throw new BusinessException("设备读数报工必须登录并经过岗位校验，不能绕过工序");
         }
 
         BigDecimal weight = resolvePostingWeight(command, reading);
@@ -235,9 +232,7 @@ public class DeviceGatewayService {
                 null, null, null, null, "gateway-device", null, null, null, operatorContext.operator(),
                 operatorContext.operator(), reading.readingCode(), "设备网关读数 " + reading.readingCode() + " 联动报工"
         );
-        ProductionReportResult result = account == null
-                ? businessOperationService.reportProduction(production)
-                : processStationService.reportProduction(production, account);
+        ProductionReportResult result = processStationService.reportProduction(production, account);
         return result.ledgerCode();
     }
 

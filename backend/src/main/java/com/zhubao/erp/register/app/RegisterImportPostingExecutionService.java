@@ -159,16 +159,14 @@ public class RegisterImportPostingExecutionService {
             return item(posting.draft(), result.motherOrderCode(), result.ledgerCode(), "已执行 ConfirmInboundCommand");
         }
         if (command instanceof ShipFinishedStockCommand outboundCommand) {
-            OutboundShipmentResult result = businessOperationService.shipFinishedStock(outboundCommand);
+            OutboundShipmentResult result = businessOperationService.shipFinishedStock(outboundCommand, outboundCommand.operator());
             return item(posting.draft(), result.shipmentCode(), result.ledgerCode(), "已执行 ShipFinishedStockCommand");
         }
         if (command instanceof ReportProductionCommand productionCommand) {
-            if (account != null && processStationService == null) {
-                throw new BusinessException("岗位报工服务不可用，不能从登记表绕过工序校验");
+            if (account == null || processStationService == null) {
+                throw new BusinessException("登记表报工必须登录并经过岗位校验，不能绕过工序");
             }
-            ProductionReportResult result = account == null
-                    ? businessOperationService.reportProduction(productionCommand)
-                    : processStationService.reportProduction(productionCommand, account);
+            ProductionReportResult result = processStationService.reportProduction(productionCommand, account);
             String message = "已执行 ReportProductionCommand";
             if ("REG-ENGRAVING".equals(templateCode)) {
                 MachineOutputRecord outputRecord = submitMachineOutput(posting.draft(), result, posting.command());
@@ -293,7 +291,8 @@ public class RegisterImportPostingExecutionService {
                 value(fields, "handler"),
                 operator,
                 value(fields, "evidenceCode"),
-                postingRemark(draft, fields, command)
+                postingRemark(draft, fields, command),
+                "register-outbound:" + value(fields, "shipmentCode") + ":" + sourceLineNo(draft, fields)
         );
     }
 

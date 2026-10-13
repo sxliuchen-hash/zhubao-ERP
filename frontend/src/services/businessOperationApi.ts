@@ -1,4 +1,4 @@
-import type { InboundOrder, InventoryBalance, LossApproval, QualityCase, WorkOrder } from '../data/m1PrototypeData';
+import type { InboundOrder, InventoryBalance, LossApproval } from '../data/m1PrototypeData';
 import { apiPost } from './apiClient';
 import { fetchAuthSession } from './authApi';
 import type { BusinessOperationContext } from '../types/businessOperationContext';
@@ -462,65 +462,6 @@ export function buildConfirmInboundRequest(order: InboundOrder, extra: Partial<C
 
 export async function confirmInbound(order: InboundOrder, extra: Partial<ConfirmInboundRequest> = {}): Promise<InboundConfirmationResult> {
   return apiPost('/api/business/operations/inbound-confirmations', buildConfirmInboundRequest(order, { ...extra, operator: await actor() }));
-}
-
-export function buildProductionReportRequest(order: WorkOrder, handoffCode?: string, extra: Partial<ProductionReportRequest> = {}): ProductionReportRequest {
-  const request = withConfirmedAmounts(order, extra, (stock) => ({
-    toWarehouseCode: stock.fromWarehouseCode, process: order.process,
-    processCategory: order.processCategory, productCategory: order.productCategory, machineNo: order.machineNo,
-    workItemName: order.workItemName, startedAt: order.startedAt, finishedAt: order.finishedAt,
-    handoffCode, operator: '',
-  }));
-  // 目标仓库必须与正式工单一致；库存状态由服务端按是否末道决定，不能把状态名当成仓库。
-  return requireFields({ ...request, toWarehouseCode: request.fromWarehouseCode }, [['operator', '操作人'], ['workOrderCode', '工单号']]);
-}
-
-export async function reportProduction(order: WorkOrder, handoffCode?: string, extra: Partial<ProductionReportRequest> = {}): Promise<ProductionReportResult> {
-  return apiPost('/api/business/operations/production-reports', buildProductionReportRequest(order, handoffCode, { ...extra, operator: await actor() }));
-}
-
-export function buildQualityFreezeRequest(row: QualityCase, extra: Partial<QualityFreezeRequest> = {}): QualityFreezeRequest {
-  return requireFields(withConfirmedAmounts(row, extra, () => ({
-    qualityCaseCode: row.code, toWarehouseCode: 'FROZEN-QC',
-    process: row.process, defect: row.defect === '未判定' ? '' : row.defect, inspector: '',
-  })), [['inspector', '质检员'], ['workOrderCode', '工单号'], ['defect', '缺陷说明']]);
-}
-
-export async function freezeQualityStock(row: QualityCase, extra: Partial<QualityFreezeRequest> = {}): Promise<QualityFreezeResult> {
-  return apiPost('/api/business/operations/quality-freezes', buildQualityFreezeRequest(row, { ...extra, inspector: await actor() }));
-}
-
-export function buildReworkDispatchRequest(row: QualityCase, extra: Partial<ReworkDispatchRequest> = {}): ReworkDispatchRequest {
-  return requireFields(withConfirmedAmounts(row, extra, () => ({
-    qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'REWORK-LINE-01',
-    process: row.process, reason: row.defect === '未判定' ? '' : row.defect, operator: '',
-  })), [['reworkOrderCode', '返工单号'], ['operator', '操作人'], ['reason', '返工原因']]);
-}
-
-export async function dispatchRework(row: QualityCase, extra: Partial<ReworkDispatchRequest> = {}): Promise<ReworkDispatchResult> {
-  return apiPost('/api/business/operations/rework-dispatches', buildReworkDispatchRequest(row, { ...extra, operator: await actor() }));
-}
-
-export function buildReworkReportRequest(row: QualityCase, extra: Partial<ReworkReportRequest> = {}): ReworkReportRequest {
-  return requireFields(withConfirmedAmounts(row, extra, () => ({
-    qualityCaseCode: row.code, reworkOrderCode: '', toWarehouseCode: 'SEMI-FINISHED',
-    process: row.process, operator: '',
-  })), [['reworkOrderCode', '返工单号'], ['operator', '操作人']]);
-}
-
-export async function reportRework(row: QualityCase, extra: Partial<ReworkReportRequest> = {}): Promise<ReworkReportResult> {
-  return apiPost('/api/business/operations/rework-reports', buildReworkReportRequest(row, { ...extra, operator: await actor() }));
-}
-
-export function buildQualityReleaseRequest(row: QualityCase, extra: Partial<QualityReleaseRequest> = {}): QualityReleaseRequest {
-  return requireFields(withConfirmedAmounts(row, extra, () => ({
-    qualityCaseCode: row.code, toWarehouseCode: 'FINISHED-CUSTOMER',
-    process: row.process, inspector: '', releaseResult: '',
-  })), [['inspector', '质检员'], ['releaseResult', '复检结论']]);
-}
-
-export async function releaseQualityStock(row: QualityCase, extra: Partial<QualityReleaseRequest> = {}): Promise<QualityReleaseResult> {
-  return apiPost('/api/business/operations/quality-releases', buildQualityReleaseRequest(row, { ...extra, inspector: await actor() }));
 }
 
 export function buildOutboundShipmentRequest(

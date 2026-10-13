@@ -277,8 +277,8 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('机器档案待匹配');
     expect(wrapper.text()).toContain('机器档案匹配建议');
     expect(wrapper.text()).not.toContain('报工校验规则');
-    expect(wrapper.text()).toContain('提交报工');
-    expect(wrapper.text()).toContain('不是回放路径');
+    expect(wrapper.text()).not.toContain('提交报工');
+    expect(wrapper.text()).not.toContain('不是回放路径');
     expect(wrapper.text()).toContain('审批阻断');
 
     await wrapper.findAll('table.production-dispatch-table tbody tr')[0].trigger('click');
@@ -350,11 +350,11 @@ describe('M1 business workspaces', () => {
     expect(wrapper.findAll('table.quality-dispatch-table tbody tr.is-selected')).toHaveLength(1);
     expect(wrapper.find('.active-object-card > strong').text()).toBe('QC-20260706-021');
     expect(wrapper.text()).toContain('损耗审批');
-    expect(wrapper.text()).toContain('冻结异常库存');
-    expect(wrapper.text()).toContain('生成返工工单');
-    expect(wrapper.text()).toContain('提交返工报工');
-    expect(wrapper.text()).toContain('复检放行入库');
-    expect(wrapper.text()).not.toContain('POST /rework-reports');
+    expect(wrapper.text()).toContain('提交损耗申请');
+    expect(wrapper.text()).toContain('对照加工要求');
+    expect(wrapper.text()).not.toContain('冻结异常库存');
+    expect(wrapper.text()).not.toContain('生成返工工单');
+    expect(wrapper.text()).not.toContain('复检放行入库');
     expect(wrapper.text()).toContain('LOSS-20260706-009');
 
     await wrapper.findAll('table.quality-dispatch-table tbody tr')[1].trigger('click');
@@ -392,8 +392,9 @@ describe('M1 business workspaces', () => {
     expect(wrapper.find('table.inventory-dispatch-table').exists()).toBe(true);
     expect(wrapper.findAll('table.inventory-dispatch-table tbody tr.is-selected')).toHaveLength(1);
     expect(wrapper.find('.active-object-card > strong').text()).toBe('MD-20260706-002');
-    expect(wrapper.text()).toContain('确认出库');
-    expect(wrapper.text()).toContain('不是回放路径');
+    expect(wrapper.text()).toContain('确认发货');
+    expect(wrapper.text()).not.toContain('确认出库');
+    expect(wrapper.text()).not.toContain('不是回放路径');
     expect(wrapper.text()).toContain('退货入库');
     expect(wrapper.text()).toContain('售后复核');
     expect(wrapper.text()).toContain('客户所有权');

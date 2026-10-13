@@ -12,8 +12,6 @@ import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.CustomerReturnCommand;
 import com.zhubao.erp.business.domain.CustomerReturnResult;
-import com.zhubao.erp.business.domain.DispatchReworkCommand;
-import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.app.MobileIntakeService;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
@@ -21,20 +19,14 @@ import com.zhubao.erp.business.domain.MobileIntakeLookup;
 import com.zhubao.erp.business.domain.MobileIntakeResult;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.business.domain.OutboundShipmentResult;
-import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityCheckCommand;
 import com.zhubao.erp.business.domain.QualityCheckResult;
 import com.zhubao.erp.business.domain.QualityCheckView;
 import com.zhubao.erp.business.domain.QualityFollowCommand;
-import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.QualityRecheckCommand;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
 import com.zhubao.erp.business.domain.QualityReworkCommand;
 import com.zhubao.erp.business.domain.QualityReworkResult;
-import com.zhubao.erp.business.domain.ReportProductionCommand;
-import com.zhubao.erp.business.domain.ReportReworkCommand;
-import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
-import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.business.domain.MotherOrderSplitView;
 import com.zhubao.erp.business.domain.ProcessStationReportCommand;
@@ -228,11 +220,6 @@ public class BusinessOperationController {
         ));
     }
 
-    @PostMapping("/production-reports")
-    public ApiResponse<ProductionReportResult> reportProduction(@Valid @RequestBody ReportProductionCommand command, HttpServletRequest request) {
-        return ApiResponse.ok(requireProcessStationService().reportProduction(command, requireStationAccount(request)));
-    }
-
     @GetMapping("/quality-checks")
     public ApiResponse<QualityCheckView> lookupQualityCheck(
             @RequestParam String code,
@@ -285,37 +272,14 @@ public class BusinessOperationController {
         return ApiResponse.ok(requireQualityRequirementService().releaseRound(command, requireQualityAccount(request)));
     }
 
-    @PostMapping("/quality-freezes")
-    public ApiResponse<QualityFreezeResult> freezeQualityStock(@Valid @RequestBody FreezeQualityStockCommand command, HttpServletRequest request) {
-        return ApiResponse.ok(businessOperationService.freezeQualityStock(BusinessCommandActors.withActor(command,
-                commandActor(request, command.customerId(), command.motherOrderCode()))));
-    }
-
-    @PostMapping("/rework-dispatches")
-    public ApiResponse<ReworkDispatchResult> dispatchRework(@Valid @RequestBody DispatchReworkCommand command, HttpServletRequest request) {
-        return ApiResponse.ok(businessOperationService.dispatchRework(BusinessCommandActors.withActor(command,
-                commandActor(request, command.customerId(), command.motherOrderCode()))));
-    }
-
-    @PostMapping("/rework-reports")
-    public ApiResponse<ReworkReportResult> reportRework(@Valid @RequestBody ReportReworkCommand command, HttpServletRequest request) {
-        return ApiResponse.ok(businessOperationService.reportRework(BusinessCommandActors.withActor(command,
-                commandActor(request, command.customerId(), command.motherOrderCode()))));
-    }
-
-    @PostMapping("/quality-releases")
-    public ApiResponse<QualityReleaseResult> releaseQualityStock(@Valid @RequestBody ReleaseQualityStockCommand command, HttpServletRequest request) {
-        return ApiResponse.ok(requireQualityRequirementService().release(command, requireQualityAccount(request)));
-    }
-
     @PostMapping("/outbound-shipments")
     public ApiResponse<OutboundShipmentResult> shipFinishedStock(@Valid @RequestBody ShipFinishedStockCommand command, HttpServletRequest request) {
         String actor = commandActor(request, command.customerId(), command.motherOrderCode());
         ShipFinishedStockCommand shipment = BusinessCommandActors.withActor(command, actor);
-        if (shipment.requestId() != null && !shipment.requestId().isBlank()) {
-            return ApiResponse.ok(businessOperationService.shipFinishedStock(shipment, actor));
+        if (shipment.requestId() == null || shipment.requestId().isBlank()) {
+            throw new BusinessException("确认发货必须带请求编号");
         }
-        return ApiResponse.ok(businessOperationService.shipFinishedStock(shipment));
+        return ApiResponse.ok(businessOperationService.shipFinishedStock(shipment, actor));
     }
 
     @PostMapping("/customer-returns")

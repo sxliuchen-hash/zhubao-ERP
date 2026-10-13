@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import OperationInputs from './OperationInputs.vue';
-import { createAmountForm } from './operationAmounts';
-import { operationDraft } from './operationDraft';
+import { computed, onMounted, ref } from 'vue';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
@@ -12,10 +9,6 @@ import {
   fetchProductionWorkspace,
   type ProductionWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
-import {
-  reportProduction,
-  type ProductionReportResult,
-} from '../../services/businessOperationApi';
 import {
   bindMachineOutput,
   fetchMachineOutputMachineMatchSuggestions,
@@ -34,11 +27,6 @@ const workspace = ref<ProductionWorkspaceModel>(emptyProduction());
 const loadError = ref('');
 const accessDenied = ref(false);
 const loading = ref(false);
-const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
-const reportingProduction = ref(false);
-const reportDenied = ref(false);
-const productionReportResult = ref<ProductionReportResult | null>(null);
-const productionReportError = ref('');
 const selectedWorkOrderCode = ref('');
 const customerKeyword = ref('');
 const statusKeyword = ref('');
@@ -169,8 +157,6 @@ async function loadMachineMatchSuggestions() {
   }
 }
 
-watch(activeWorkOrder, (order) => { resetAmounts(order?.operationContext); });
-
 function workOrderTone(status: string): Tone {
   if (status.includes('称重')) return 'red';
   if (status.includes('待')) return 'amber';
@@ -178,33 +164,9 @@ function workOrderTone(status: string): Tone {
   return 'green';
 }
 
-// 桌面工单池旧报工不带请求编号，不是回放路径。库存和交接单仍各自提交。现场工序交付走上方共用面板。
-async function reportActiveProduction() {
-  if (!activeWorkOrder.value) return;
-
-  reportingProduction.value = true;
-  productionReportResult.value = null;
-  productionReportError.value = '';
-  reportDenied.value = false;
-
-  try {
-    assertAmounts();
-    productionReportResult.value = await reportProduction(activeWorkOrder.value, activeHandoff.value?.code, operationDraft(operationValues.value));
-    await loadProductionWorkspace();
-  } catch (error) {
-    reportDenied.value = denied(error);
-    productionReportError.value = describeFailure(error, '提交报工失败');
-  } finally {
-    reportingProduction.value = false;
-  }
-}
-
 function selectWorkOrder(code: string) {
   selectedWorkOrderCode.value = code;
   detailOpen.value = true;
-  productionReportResult.value = null;
-  productionReportError.value = '';
-  reportDenied.value = false;
 }
 
 function backToList() {
@@ -369,25 +331,7 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
             <span><b :style="{ width: `${activeWorkOrder.progress}%` }" /></span>
             <em>{{ activeWorkOrder.progress }}%</em>
           </div>
-          <OperationInputs v-model="operationValues" :fields="[['quantity', '本次完成数量', 'number'], ['weight', '本次产出重量（克）', 'number'], ['workDate', '报工日期', 'date'], ['evidenceCode', '证据编号']]" />
-          <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
-          <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
-          <p class="production-legacy-note">工单池旧报工不带请求编号，不是回放路径。现场交付请用上方工序交付。</p>
-          <div class="detail-actions three-actions">
-            <button class="primary-button" type="button" :disabled="reportingProduction" :aria-busy="reportingProduction ? 'true' : 'false'" @click="reportActiveProduction">
-              {{ reportingProduction ? '正在入账' : '提交报工' }}
-            </button>
-          </div>
-          <div v-if="productionReportResult" class="operation-feedback success">
-            <strong>生产报工已写入台账</strong>
-            <span>{{ productionReportResult.ledgerCode }} / {{ productionReportResult.workOrderCode }}</span>
-            <small>{{ productionReportResult.fromStockStatus }} -> {{ productionReportResult.toStockStatus }}</small>
-          </div>
-          <div v-else-if="productionReportError" class="operation-feedback danger">
-            <strong>{{ reportDenied ? '无权限' : '提交报工失败' }}</strong>
-            <span>{{ productionReportError }}</span>
-            <small v-if="!reportDenied">请确认该工单已有在制库存，并完成必要称重交接。</small>
-          </div>
+          <p class="operation-feedback">工序交付使用上方现场面板，按单据数量和重量提交，并带回放编号。</p>
         </section>
 
         <section class="handoff-focus-panel">

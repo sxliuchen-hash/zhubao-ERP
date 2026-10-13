@@ -1,16 +1,15 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiRequestError } from '../../services/apiClient';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
 import ProductionWorkspace from './ProductionWorkspace.vue';
 import QualityWorkspace from './QualityWorkspace.vue';
 import { fetchInventoryWorkspace, fetchProductionWorkspace, fetchQualityWorkspace } from '../../services/businessWorkspaceApi';
-import { shipFinishedStock, reportProduction, approveLoss } from '../../services/businessOperationApi';
+import { returnCustomerShipment, approveLoss } from '../../services/businessOperationApi';
 
 vi.mock('../../services/businessWorkspaceApi', () => ({ fetchInventoryWorkspace: vi.fn(), fetchProductionWorkspace: vi.fn(), fetchQualityWorkspace: vi.fn() }));
 vi.mock('../../services/businessOperationApi', () => ({
-  shipFinishedStock: vi.fn(), returnCustomerShipment: vi.fn(), reviewAfterSalesReturn: vi.fn(), reportProduction: vi.fn(),
-  approveLoss: vi.fn(), dispatchRework: vi.fn(), freezeQualityStock: vi.fn(), releaseQualityStock: vi.fn(), reportRework: vi.fn(),
+  shipFinishedStock: vi.fn(), returnCustomerShipment: vi.fn(), reviewAfterSalesReturn: vi.fn(),
+  approveLoss: vi.fn(),
 }));
 vi.mock('../../services/qualityCheckApi', () => ({ lookupQualityCheck: vi.fn(), openQualityRework: vi.fn(), submitQualityCheck: vi.fn() }));
 vi.mock('../../services/machineOutputApi', () => ({
@@ -38,7 +37,7 @@ describe('业务操作真实输入', () => {
     expect(approveLoss).toHaveBeenCalledWith(expect.objectContaining({ code: 'LOSS-REAL', workOrder: 'ZD-REAL', process: '抛光' }), { approvalCode: 'LOSS-REAL', inputWeight: '10' });
   });
 
-  it('出库使用输入的物流、单号和本次数量重量，切换库存清空旧资料', async () => {
+  it('退货使用输入的单号和本次数量重量，页面不再提供旧确认出库', async () => {
     const balances = [
       { owner: '客户甲', batch: 'MD-1', material: '物料甲', location: '库位甲', status: '成品', qty: 12, weight: '25 g', frozen: '0' },
       { owner: '客户甲', batch: 'MD-1', material: '物料甲', location: '库位乙', status: '成品', qty: 4, weight: '8 g', frozen: '0' },
@@ -46,66 +45,28 @@ describe('业务操作真实输入', () => {
     vi.mocked(fetchInventoryWorkspace).mockResolvedValue({ balances, ledgerEntries: [], timeline: [], evidence: [], dataSource: 'LIVE' });
     const wrapper = mount(InventoryTraceWorkspace);
     await flushPromises();
-    await wrapper.get('[aria-label="出库单号"]').setValue('OUT-USER');
-    await wrapper.get('[aria-label="发货运单号"]').setValue('YT-USER');
+    expect(wrapper.text()).not.toContain('确认出库');
+    await wrapper.get('[aria-label="退货单号"]').setValue('RET-USER');
+    await wrapper.get('[aria-label="原出库单号"]').setValue('OUT-USER');
+    await wrapper.get('[aria-label="退货运单号"]').setValue('YT-USER');
+    await wrapper.get('[aria-label="退货原因"]').setValue('客户退回');
     await wrapper.get('[aria-label="本次数量"]').setValue('2');
     await wrapper.get('[aria-label="本次重量（克）"]').setValue('4.25');
-    await wrapper.findAll('button').find(button => button.text() === '确认出库')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '退货入库')!.trigger('click');
     await flushPromises();
-    expect(shipFinishedStock).toHaveBeenCalledWith(balances[0], {
-      shipmentCode: 'OUT-USER', logisticsNo: 'YT-USER', quantity: 2, weight: '4.25',
-    });
-    await wrapper.findAll('button').filter(button => button.text() === '看台账')[1].trigger('click');
-    expect((wrapper.get('[aria-label="出库单号"]').element as HTMLInputElement).value).toBe('');
-    await wrapper.get('[aria-label="出库单号"]').setValue('OUT-SECOND');
-    await wrapper.get('[aria-label="发货运单号"]').setValue('YT-SECOND');
-    await wrapper.findAll('button').find(button => button.text() === '确认出库')!.trigger('click');
-    await flushPromises();
-    expect(shipFinishedStock).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain('留空不会自动沿用整批重量');
-    expect(wrapper.findAll('tbody tr.is-selected')).toHaveLength(1);
-
-  });
-
-  it('报工提交本次输入，而非样例工单预设产量', async () => {
-    const workOrder = { code: 'ZD-REAL', customer: '实际客户', material: '物料', process: '抛光', processCategory: '', productCategory: '',
-      machineNo: '', workItemName: '', startedAt: '', finishedAt: '', completionStatus: '', handoffAuditStatus: '',
-      assignee: '', plannedQty: 10, finishedQty: 0, status: '加工中', progress: 0 };
-    vi.mocked(fetchProductionWorkspace).mockResolvedValue({ stationLoads: [], workOrders: [workOrder], handoffs: [], dataSource: 'LIVE' });
-    const wrapper = mount(ProductionWorkspace);
-    await flushPromises();
-    await wrapper.get('[aria-label="本次完成数量"]').setValue('3');
-    await wrapper.get('[aria-label="本次产出重量（克）"]').setValue('7.125');
-    await wrapper.findAll('button').find(button => button.text() === '提交报工')!.trigger('click');
-    await flushPromises();
-    expect(reportProduction).toHaveBeenCalledWith(workOrder, undefined, { quantity: 3, weight: '7.125' });
-    expect(vi.mocked(reportProduction).mock.calls[0][2]).not.toHaveProperty('requestId');
-  });
-
-  it('旧报工保存中显示正在入账，失败或无权限时保留已填数量重量', async () => {
-    const workOrder = { code: 'ZD-REAL', customer: '实际客户', material: '物料', process: '抛光', processCategory: '', productCategory: '',
-      machineNo: '', workItemName: '', startedAt: '', finishedAt: '', completionStatus: '', handoffAuditStatus: '',
-      assignee: '', plannedQty: 10, finishedQty: 0, status: '加工中', progress: 0 };
-    vi.mocked(fetchProductionWorkspace).mockResolvedValue({ stationLoads: [], workOrders: [workOrder], handoffs: [], dataSource: 'LIVE' });
-    let rejectReport: (reason?: unknown) => void = () => {};
-    vi.mocked(reportProduction).mockReturnValue(new Promise((_resolve, reject) => {
-      rejectReport = reject;
+    expect(returnCustomerShipment).toHaveBeenCalledWith(balances[0], expect.objectContaining({
+      returnCode: 'RET-USER', originalShipmentCode: 'OUT-USER', returnLogisticsNo: 'YT-USER', reason: '客户退回', quantity: 2, weight: '4.25',
     }));
+  });
+
+  it('生产页不再提供工单池旧报工', async () => {
+    const workOrder = { code: 'ZD-REAL', customer: '实际客户', material: '物料', process: '抛光', processCategory: '', productCategory: '',
+      machineNo: '', workItemName: '', startedAt: '', finishedAt: '', completionStatus: '', handoffAuditStatus: '',
+      assignee: '', plannedQty: 10, finishedQty: 0, status: '加工中', progress: 0 };
+    vi.mocked(fetchProductionWorkspace).mockResolvedValue({ stationLoads: [], workOrders: [workOrder], handoffs: [], dataSource: 'LIVE' });
     const wrapper = mount(ProductionWorkspace);
     await flushPromises();
-    await wrapper.get('[aria-label="本次完成数量"]').setValue('3');
-    await wrapper.get('[aria-label="本次产出重量（克）"]').setValue('7.125');
-    const pending = wrapper.findAll('button').find(button => button.text() === '提交报工')!.trigger('click');
-    await flushPromises();
-    expect(wrapper.text()).toContain('正在入账');
-    expect(wrapper.findAll('button').find(button => button.text() === '正在入账')!.attributes('disabled')).toBeDefined();
-
-    rejectReport(new ApiRequestError('无权提交报工', 403, 40301));
-    await pending;
-    await flushPromises();
-    expect(wrapper.text()).toContain('无权限');
-    expect(wrapper.text()).toContain('无权提交报工');
-    expect((wrapper.get('[aria-label="本次完成数量"]').element as HTMLInputElement).value).toBe('3');
-    expect((wrapper.get('[aria-label="本次产出重量（克）"]').element as HTMLInputElement).value).toBe('7.125');
+    expect(wrapper.text()).not.toContain('提交报工');
+    expect(wrapper.find('[aria-label="本次完成数量"]').exists()).toBe(false);
   });
 });

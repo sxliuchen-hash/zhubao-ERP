@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
 import ProductionWorkspace from './ProductionWorkspace.vue';
 import { fetchInventoryWorkspace, fetchProductionWorkspace } from '../../services/businessWorkspaceApi';
-import { reportProduction, shipFinishedStock } from '../../services/businessOperationApi';
+import { returnCustomerShipment } from '../../services/businessOperationApi';
 
 vi.mock('../../services/businessWorkspaceApi', () => ({
   fetchInventoryWorkspace: vi.fn(),
@@ -13,7 +13,6 @@ vi.mock('../../services/businessOperationApi', () => ({
   shipFinishedStock: vi.fn(),
   returnCustomerShipment: vi.fn(),
   reviewAfterSalesReturn: vi.fn(),
-  reportProduction: vi.fn(),
 }));
 vi.mock('../../services/machineOutputApi', () => ({
   fetchMachineOutputSummary: vi.fn().mockRejectedValue(new Error('无产量记录')),
@@ -41,25 +40,27 @@ describe('可见的数量重量', () => {
     expect((wrapper.get('[aria-label="本次重量（克）"]').element as HTMLInputElement).value).toBe('25.75');
     expect(wrapper.text()).toContain('已填入整批 12 件、25.75 克');
 
-    await wrapper.get('[aria-label="出库单号"]').setValue('OUT-PART');
-    await wrapper.get('[aria-label="发货运单号"]').setValue('YT-PART');
+    await wrapper.get('[aria-label="退货单号"]').setValue('RET-PART');
+    await wrapper.get('[aria-label="原出库单号"]').setValue('OUT-PART');
+    await wrapper.get('[aria-label="退货运单号"]').setValue('YT-PART');
+    await wrapper.get('[aria-label="退货原因"]').setValue('退回');
     await wrapper.get('[aria-label="本次数量"]').setValue('2');
-    await wrapper.findAll('button').find((button) => button.text() === '确认出库')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '退货入库')!.trigger('click');
     await flushPromises();
-    expect(shipFinishedStock).not.toHaveBeenCalled();
+    expect(returnCustomerShipment).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('重新确认本次重量');
 
     await wrapper.get('[aria-label="本次重量（克）"]').setValue('6.20');
-    await wrapper.findAll('button').find((button) => button.text() === '确认出库')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '退货入库')!.trigger('click');
     await flushPromises();
-    expect(shipFinishedStock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      quantity: 2, weight: '6.20', shipmentCode: 'OUT-PART', logisticsNo: 'YT-PART',
+    expect(returnCustomerShipment).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      quantity: 2, weight: '6.20', returnCode: 'RET-PART', originalShipmentCode: 'OUT-PART',
     }));
-    const sent = vi.mocked(shipFinishedStock).mock.calls[0][1] as { weight?: string };
+    const sent = vi.mocked(returnCustomerShipment).mock.calls[0][1] as { weight?: string };
     expect(sent.weight).toBe('6.20');
   });
 
-  it('报工只填数量时不提交，两项都填写时原样传出', async () => {
+  it('生产页工单详情不再收集旧报工数量', async () => {
     vi.mocked(fetchProductionWorkspace).mockResolvedValue({
       stationLoads: [],
       workOrders: [{
@@ -72,15 +73,7 @@ describe('可见的数量重量', () => {
     });
     const wrapper = mount(ProductionWorkspace);
     await flushPromises();
-    expect((wrapper.get('[aria-label="本次完成数量"]').element as HTMLInputElement).value).toBe('12');
-    await wrapper.get('[aria-label="本次完成数量"]').setValue('3');
-    await wrapper.findAll('button').find((button) => button.text() === '提交报工')!.trigger('click');
-    await flushPromises();
-    expect(reportProduction).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('重新确认本次重量');
-    await wrapper.get('[aria-label="本次产出重量（克）"]').setValue('7.125');
-    await wrapper.findAll('button').find((button) => button.text() === '提交报工')!.trigger('click');
-    await flushPromises();
-    expect(reportProduction).toHaveBeenCalledWith(expect.anything(), undefined, { quantity: 3, weight: '7.125' });
+    expect(wrapper.find('[aria-label="本次完成数量"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('提交报工');
   });
 });

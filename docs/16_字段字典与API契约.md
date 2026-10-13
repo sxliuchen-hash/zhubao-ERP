@@ -56,12 +56,9 @@
 | 接口 | 页面 | 用途 |
 |---|---|---|
 | `POST /inbound-confirmations` | 来料母单 | 确认客户来料入库，写入库存台账和客户所有原料库存余额 |
-| `POST /production-reports` | 生产工单 | 提交工序报工，将同一子工单的在制库存转为半成品库存 |
-| `POST /quality-freezes` | 质检返工 | 冻结质检异常库存，将同一子工单的半成品库存转为冻结库存 |
-| `POST /rework-dispatches` | 质检返工 | 派发返工库存，将同一子工单的冻结库存转为返工在制库存 |
-| `POST /rework-reports` | 质检返工 | 提交返工报工，将同一子工单的返工在制库存转回半成品库存 |
-| `POST /quality-releases` | 质检返工 | 复检放行，将同一子工单的半成品库存转为成品库存 |
-| `POST /outbound-shipments` | 库存追溯 | 确认成品出库，将同一子工单的成品库存转为已发货库存 |
+| `POST /process-stations` | 生产 | 现场工序交付。旧 `POST /production-reports` 已退出 |
+| `POST /quality-checks` 及 `/rework`、`/rework-reports`、`/rechecks`、`/releases` | 质检 | 条款判定、返工、复检和放行。旧 `/quality-freezes`、`/rework-dispatches`、`/rework-reports`、`/quality-releases` 已退出 |
+| `POST /outbound-shipments` | 库存追溯 | 确认成品出库。必须带 `requestId`，同一次提交并可回放 |
 | `POST /customer-returns` | 库存追溯 | 客户退货入库，将同一子工单的已发货库存转回退货复核库存 |
 | `POST /after-sales-reviews` | 库存追溯 | 售后复核分流，将退货复核库存转为成品、返工、报废或冻结库存 |
 | `POST /loss-approvals` | 质检返工 | 生成损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账，不代表正式工资发放 |
@@ -540,7 +537,7 @@ MySQL 持久化表：
 - `OwnerType` 固定为 `CUSTOMER`，确保客户来料不会进入企业自有库存。
 - `workOrderCode` 为空，表示仍处于母单原料库存，后续子工单拆分再进入在制库存。
 - 带 `requestId` 时，动作记为 `INBOUND_CONFIRM`，目标类型 `MOTHER_ORDER`，目标编号是母单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `InboundConfirmationResult`；换母单、换客户、换数量重量或其他内容会拒绝，必须换新 `requestId`。母单、来料事实、入库流水和成功结果在同一条数据库连接里提交。单据保存失败或结果保存失败时整单回滚。非空运单由 `courier_identity` 唯一约束保证不会建出两张母单。
-- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付、初检、开返工、返工报工、复检和放行已另行接入各自的工作单元，不并进这条入库事务。未带 `requestId` 的岗位交付、通用 `production-reports`、旧质检调用和确认发货仍各自提交。带 `requestId` 的确认发货已另行接入工作单元，不并进这条入库事务。
+- 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付、初检、开返工、返工报工、复检和放行已另行接入各自的工作单元，不并进这条入库事务。未带 `requestId` 的岗位交付仍各自提交。`production-reports` 和旧质检直写 HTTP 已退出。确认发货必须带 `requestId` 并走工作单元。
 
 ---
 
@@ -601,7 +598,7 @@ MySQL 持久化表：
 
 证据只能在交付成功并拿到台账号之后绑定。中间工序的操作类型是 `process_station_report`，末道是 `production_report`，操作编号是返回的 `ledgerCode`。上传或绑定失败只补文件或引用，不重新交付。过程说明仍走 `POST /api/scan/progress-records`，不产生库存、工资或工序完成。
 
-不带 `requestId` 的岗位交付，以及下面的通用 `production-reports`，仍由库存仓储和交接单各自打开连接并提交。这不是回放，也不能当成已经同事务。工序交付没有新迁移：交付唯一键沿用 `V34__m3_process_station.sql`，请求表沿用 `V44__m3_command_request.sql`。
+不带 `requestId` 的岗位交付仍由库存仓储和交接单各自打开连接并提交。这不是回放，也不能当成已经同事务。通用 `production-reports` HTTP 已退出。工序交付没有新迁移：交付唯一键沿用 `V34__m3_process_station.sql`，请求表沿用 `V44__m3_command_request.sql`。
 
 ### 5.2.2 质检轮次与复检
 
@@ -619,7 +616,7 @@ MySQL 持久化表：
 
 初检和复检的结果都是 `QualityCheckResult`。除原有质检单号外，增加 `roundCode`、`roundNo`、`roundType`。`roundType` 为 `INITIAL` 或 `RECHECK`。初检轮次号是 1。复检使用下一个轮次号，并记下返工单号和返工报工台账。原质检对照上的条款、原因、`frozen` 和返工号不因复检而改写。
 
-带 `requestId` 时，本次库存流水、本次轮次或返工事实、成功结果在同一条连接提交。保存失败整单回滚。不带 `requestId` 时仍各自提交，不回放；这时失败可能只留下库存。桌面质检池里的 `quality-freezes`、`rework-dispatches`、`rework-reports` 和 `quality-releases` 仍不接收 `requestId`。
+带 `requestId` 时，本次库存流水、本次轮次或返工事实、成功结果在同一条连接提交。保存失败整单回滚。不带 `requestId` 时质检面板仍各自提交，不回放。桌面质检池不再调用 `quality-freezes`、`rework-dispatches`、旧 `rework-reports` 和 `quality-releases`，这些 HTTP 已退出。
 
 复检前必须已经开返工，并且 `biz_quality_rework_report` 里有这条返工单的报工事实，库存回到半成品，没有未处理冻结。复检不合格会再记一笔冻结。只有最新轮次为合格或让步、半成品余额足够、且没有冻结余额时才能放行。放行不把初检 `frozen` 改成 0。
 
@@ -631,7 +628,7 @@ MySQL 持久化表：
 
 ### 5.3 `ReportProductionCommand`
 
-`POST /api/business/operations/production-reports` 使用该命令模型。该接口不接收 `requestId`。库存流水和工序交付事实仍各自提交，不回放。现场工序交付改走上一节的 `process-stations`。桌面工单池里的「提交报工」仍调用本接口。
+页面和导入不再调用 `POST /api/business/operations/production-reports`，该 HTTP 已退出。现场工序交付走 `process-stations`。登记导入和设备读数仍把数量、重量交给岗位服务 `reportProduction`，但必须登录，不能再绕过工序校验。下面的字段仍是这条内部命令的形状。
 
 | 字段 | 说明 |
 |---|---|
@@ -1434,12 +1431,9 @@ PWA 一期边界：
 | 项目 | 契约 |
 |---|---|
 | 来料确认入库 | `POST /api/business/operations/inbound-confirmations`，`RAW_WAITING` 入账 |
-| 生产报工 | `POST /api/business/operations/production-reports`，`WIP -> SEMI_FINISHED` |
-| 质检冻结 | `POST /api/business/operations/quality-freezes`，`SEMI_FINISHED -> FROZEN` |
-| 返工派发 | `POST /api/business/operations/rework-dispatches`，`FROZEN -> REWORK` |
-| 返工报工 | `POST /api/business/operations/rework-reports`，`REWORK -> SEMI_FINISHED` |
-| 复检放行 | `POST /api/business/operations/quality-releases`，`SEMI_FINISHED -> FINISHED` |
-| 成品出库 | `POST /api/business/operations/outbound-shipments`，`FINISHED -> SHIPPED` |
+| 工序交付 | `POST /api/business/operations/process-stations`，末道 `WIP -> SEMI_FINISHED` |
+| 质检对照 | `POST /api/business/operations/quality-checks`，不合格才 `SEMI_FINISHED -> FROZEN` |
+| 成品出库 | `POST /api/business/operations/outbound-shipments`，必须带 `requestId`，`FINISHED -> SHIPPED` |
 | 客户退货 | `POST /api/business/operations/customer-returns`，`SHIPPED -> FINISHED` |
 | 售后复核 | `POST /api/business/operations/after-sales-reviews`，`FINISHED@RETURN-CHECK -> FINISHED/REWORK/SCRAP/FROZEN` |
 | 损耗审批 | `POST /api/business/operations/loss-approvals`，返回损耗审批与工资试算快照，并创建轻量审批任务；不写库存台账 |
@@ -1543,11 +1537,11 @@ PWA 一期边界：
 |---|---|---|
 | `POST /api/inventory/ledger/transfers` | `INVENTORY_LEDGER_TRANSFER` | `ADMIN`、`GENERAL_MANAGER` |
 | `POST /api/business/operations/inbound-confirmations` | `BUSINESS_INBOUND_CONFIRM` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER` |
-| `POST /api/business/operations/production-reports` | `BUSINESS_PRODUCTION_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
-| `POST /api/business/operations/quality-freezes` | `BUSINESS_QUALITY_FREEZE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
-| `POST /api/business/operations/rework-dispatches` | `BUSINESS_REWORK_DISPATCH` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
-| `POST /api/business/operations/rework-reports` | `BUSINESS_REWORK_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
-| `POST /api/business/operations/quality-releases` | `BUSINESS_QUALITY_RELEASE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/process-stations` | `BUSINESS_PRODUCTION_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/quality-checks` | `BUSINESS_QUALITY_FREEZE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/quality-checks/rework` | `BUSINESS_REWORK_DISPATCH` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/quality-checks/rework-reports` | `BUSINESS_REWORK_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
+| `POST /api/business/operations/quality-checks/releases` | `BUSINESS_QUALITY_RELEASE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
 | `POST /api/business/operations/outbound-shipments` | `BUSINESS_OUTBOUND_SHIPMENT` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`SALES` |
 | `POST /api/business/operations/customer-returns` | `BUSINESS_CUSTOMER_RETURN` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`SALES`、`QUALITY_INSPECTOR` |
 | `POST /api/business/operations/after-sales-reviews` | `BUSINESS_AFTER_SALES_REVIEW` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
@@ -2199,18 +2193,13 @@ PWA 一期边界：
 | `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
 | `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
 | `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。可选 `requestId`。有值时动作是 `PROCESS_HANDOFF`，同账号同请求同内容回放原结果。不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。无 `requestId` 时不回放、不保证同事务 |
-| `POST /api/business/operations/production-reports` | `ApiResponse<ProductionReportResult>`。不接收 `requestId`，库存和交付事实仍各自提交，不回放 |
 | `GET /api/business/operations/quality-checks` | `ApiResponse<QualityCheckView>` |
 | `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>`。可选 `requestId`。有值时动作是 `QUALITY_CHECK`，初检轮次、适用冻结和成功结果同一次提交 |
 | `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>`。可选 `requestId`。有值时动作是 `QUALITY_REWORK` |
 | `POST /api/business/operations/quality-checks/rework-reports` | `ApiResponse<ReworkReportResult>`。可选 `requestId`。有值时动作是 `REWORK_REPORT` |
 | `POST /api/business/operations/quality-checks/rechecks` | `ApiResponse<QualityCheckResult>`。可选 `requestId`。有值时动作是 `QUALITY_RECHECK`，结果用轮次号区分，不覆盖初检 |
 | `POST /api/business/operations/quality-checks/releases` | `ApiResponse<QualityReleaseResult>`。可选 `requestId`。有值时动作是 `QUALITY_RELEASE`，按最新轮次放行 |
-| `POST /api/business/operations/quality-freezes` | `ApiResponse<QualityFreezeResult>` |
-| `POST /api/business/operations/rework-dispatches` | `ApiResponse<ReworkDispatchResult>` |
-| `POST /api/business/operations/rework-reports` | `ApiResponse<ReworkReportResult>` |
-| `POST /api/business/operations/quality-releases` | `ApiResponse<QualityReleaseResult>` |
-| `POST /api/business/operations/outbound-shipments` | `ApiResponse<OutboundShipmentResult>`。可选 `requestId`。有值时动作是 `OUTBOUND_SHIPMENT`，库存流水、出库单和成功结果同一次提交。无 `requestId` 时不回放、不保证同事务 |
+| `POST /api/business/operations/outbound-shipments` | `ApiResponse<OutboundShipmentResult>`。必须带 `requestId`。动作是 `OUTBOUND_SHIPMENT`，库存流水、出库单和成功结果同一次提交。缺编号直接拒绝 |
 | `POST /api/business/operations/customer-returns` | `ApiResponse<CustomerReturnResult>` |
 | `POST /api/business/operations/after-sales-reviews` | `ApiResponse<AfterSalesReviewResult>` |
 | `POST /api/business/operations/loss-approvals` | `ApiResponse<LossApprovalResult>` |

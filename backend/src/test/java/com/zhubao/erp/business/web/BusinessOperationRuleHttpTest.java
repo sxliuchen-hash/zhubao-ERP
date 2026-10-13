@@ -15,6 +15,8 @@ import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 兼容业务 HTTP 接口必须与现场执行相同的会话、工序与质检规则。 */
+/** 现场工序交付和质检放行的 HTTP 入口必须执行会话、工序与轮次规则。 */
 @SpringBootTest
 @AutoConfigureMockMvc
 class BusinessOperationRuleHttpTest {
@@ -52,6 +54,7 @@ class BusinessOperationRuleHttpTest {
     @Autowired private StockLedgerService stocks;
     @Autowired private ProcessStationService stations;
     @Autowired private QualityRequirementService quality;
+    @Autowired private AuthUserAccountRepository accounts;
 
     @Test
     void anonymousHeadersCannotCreateInboundAndSessionIdentityReplacesMissingOrForgedActor() throws Exception {
@@ -76,59 +79,54 @@ class BusinessOperationRuleHttpTest {
     }
 
     @Test
-    void genericProductionEnforcesBindingSequenceAndRecordsCompleteHandoffMetadata() throws Exception {
+    void stationHttpEnforcesBindingSequenceAndSessionOperator() throws Exception {
         String code = keptMother();
-        postAs("polish", "/production-reports", production(code, "抛光", "4"))
+        postAs("polish", "/process-stations", new ProcessStationReportCommand(code, "抛光", "req-early-" + code))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("还没交")));
-        postAs("operator", "/production-reports", production(code, "雕刻", "4"))
+        postAs("operator", "/process-stations", new ProcessStationReportCommand(code, "雕刻", "req-op-" + code))
                 .andExpect(status().isBadRequest());
-        ObjectNode command = mapper.valueToTree(production(code, "雕刻", "4"));
-        command.remove("operator");
-        postAs("carve", "/production-reports", command)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.toStockStatus").value("WIP"))
-                .andExpect(jsonPath("$.data.operator").value("雕刻工 林海"));
+        postAs("carve", "/process-stations", new ProcessStationReportCommand(code, "雕刻", "req-carve-" + code))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.stockStatus").value("WIP"));
         assertThat(documents.findProcessStationHandoff(code, "雕刻").orElseThrow().operator()).isEqualTo("雕刻工 林海");
-        assertThat(stocks.ledgers()).filteredOn(entry -> code.equals(entry.documentCode()) && "process_station_report".equals(entry.documentType()))
-                .singleElement().satisfies(entry -> assertThat(entry.remark())
-                        .contains("机器编号：R05-MACHINE", "工作项目：戒托", "来源登记表：原始登记", "原表行号：7", "纸质序号：A-7", "备注：保留现场备注", "操机签字：原表签字")
-                        .doesNotContain("冒名操作人"));
         assertThat(quantity(code, StockStatus.WIP)).isEqualByComparingTo("4");
         assertThat(quantity(code, StockStatus.SEMI_FINISHED)).isZero();
-        postAs("carve", "/production-reports", production(code, "雕刻", "4")).andExpect(status().isBadRequest());
-        postAs("inlay", "/production-reports", production(code, "镶嵌", "4")).andExpect(status().isOk());
-        postAs("polish", "/production-reports", production(code, "抛光", "4"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.toStockStatus").value("SEMI_FINISHED"));
+        postAs("carve", "/process-stations", new ProcessStationReportCommand(code, "雕刻", "req-carve-again-" + code))
+                .andExpect(status().isBadRequest());
+        postAs("inlay", "/process-stations", new ProcessStationReportCommand(code, "镶嵌", "req-inlay-" + code)).andExpect(status().isOk());
+        postAs("polish", "/process-stations", new ProcessStationReportCommand(code, "抛光", "req-polish-" + code))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.stockStatus").value("SEMI_FINISHED"));
         assertThat(documents.listProcessStationHandoffs(code)).hasSize(3);
     }
 
     @Test
-    void genericProductionRejectsPartialUnreviewedAndForgedFormalDimensions() throws Exception {
+    void registerStyleReportRejectsPartialUnreviewedAndForgedFormalDimensions() {
         String code = keptMother();
-        postAs("carve", "/production-reports", production(code, "雕刻", "2")).andExpect(status().isBadRequest());
-        ObjectNode unreviewed = mapper.valueToTree(production(code, "雕刻", "4"));
-        unreviewed.put("handoffAuditStatus", "待审核");
-        postAs("carve", "/production-reports", unreviewed).andExpect(status().isBadRequest());
-        ObjectNode forged = mapper.valueToTree(production(code, "雕刻", "4"));
-        forged.put("customerId", 1002);
-        postAs("carve", "/production-reports", forged).andExpect(status().isBadRequest());
+        AuthUserAccount carve = accounts.findByUsername("carve").orElseThrow();
+        assertThatThrownBy(() -> stations.reportProduction(production(code, "雕刻", "2"), carve))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> stations.reportProduction(unreviewed(code), carve))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> stations.reportProduction(forged(code), carve))
+                .isInstanceOf(BusinessException.class);
         assertThat(documents.listProcessStationHandoffs(code)).isEmpty();
         assertThat(quantity(code, StockStatus.RAW_WAITING)).isEqualByComparingTo("4");
     }
 
     @Test
-    void genericReleaseRequiresLastStationAndSavedPassingCheckAndUsesSessionInspector() throws Exception {
+    void qualityReleaseRequiresLastStationAndSavedPassingCheckAndUsesSessionInspector() throws Exception {
         String code = keptMother();
-        postAs("qc", "/quality-releases", release(code)).andExpect(status().isBadRequest());
+        postAs("qc", "/quality-checks/releases", new QualityFollowCommand(code, "req-release-early-" + code))
+                .andExpect(status().isBadRequest());
         finish(code);
-        postAs("qc", "/quality-releases", release(code)).andExpect(status().isBadRequest());
+        postAs("qc", "/quality-checks/releases", new QualityFollowCommand(code, "req-release-nocheck-" + code))
+                .andExpect(status().isBadRequest());
         postAs("qc", "/quality-checks", new QualityCheckCommand(code, "冒名质检员", List.of(
                 new QualityCheckLineCommand(1, QualityVerdicts.PASS, ""))))
                 .andExpect(status().isOk());
-        ObjectNode body = mapper.valueToTree(release(code));
-        body.remove("inspector");
-        postAs("qc", "/quality-releases", body).andExpect(status().isOk())
+        postAs("qc", "/quality-checks/releases", new QualityFollowCommand(code, "req-release-" + code))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.inspector").value("质检员 周娜"))
-                .andExpect(jsonPath("$.data.releaseResult").value("复检合格，允许成品入库"));
+                .andExpect(jsonPath("$.data.toStockStatus").value("FINISHED"));
         assertThat(quantity(code, StockStatus.FINISHED)).isEqualByComparingTo("4");
 
         String failed = keptMother();
@@ -136,7 +134,8 @@ class BusinessOperationRuleHttpTest {
         postAs("qc", "/quality-checks", new QualityCheckCommand(failed, null, List.of(
                 new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "内壁漏刻"))))
                 .andExpect(status().isOk());
-        postAs("qc", "/quality-releases", release(failed)).andExpect(status().isBadRequest());
+        postAs("qc", "/quality-checks/releases", new QualityFollowCommand(failed, "req-release-fail-" + failed))
+                .andExpect(status().isBadRequest());
         assertThat(quantity(failed, StockStatus.FINISHED)).isZero();
     }
 
@@ -184,9 +183,16 @@ class BusinessOperationRuleHttpTest {
                 "08:00", "09:00", "已完成", "已审核", "原始登记", 7, "A-7", "冒名操作人", "原表签字", "HO-R05", "保留现场备注");
     }
 
-    private ReleaseQualityStockCommand release(String code) {
-        return new ReleaseQualityStockCommand("QC-" + code, code, code, 1001L, 1001L, "AU9999", WAREHOUSE, "R05-FINISHED",
-                bd("4"), bd("8"), "抛光", "冒名质检员", "复检合格，允许成品入库", "EV-R05", "放行说明");
+    private ReportProductionCommand unreviewed(String code) {
+        return new ReportProductionCommand(code, code, 1001L, 1001L, "AU9999", WAREHOUSE, WAREHOUSE,
+                bd("4"), "件", bd("8"), "2026-10-10", "雕刻", "加工", "戒托", "R05-MACHINE", "戒托",
+                "08:00", "09:00", "已完成", "待审核", "原始登记", 7, "A-7", "冒名操作人", "原表签字", "HO-R05", "保留现场备注");
+    }
+
+    private ReportProductionCommand forged(String code) {
+        return new ReportProductionCommand(code, code, 1002L, 1002L, "AU9999", WAREHOUSE, WAREHOUSE,
+                bd("4"), "件", bd("8"), "2026-10-10", "雕刻", "加工", "戒托", "R05-MACHINE", "戒托",
+                "08:00", "09:00", "已完成", "已审核", "原始登记", 7, "A-7", "冒名操作人", "原表签字", "HO-R05", "保留现场备注");
     }
 
     private BigDecimal quantity(String motherCode, StockStatus status) {

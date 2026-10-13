@@ -14,15 +14,7 @@ import {
 } from '../../services/businessWorkspaceApi';
 import {
   approveLoss,
-  dispatchRework,
-  freezeQualityStock,
-  releaseQualityStock,
-  reportRework,
   type LossApprovalResult,
-  type QualityReleaseResult,
-  type ReworkDispatchResult,
-  type ReworkReportResult,
-  type QualityFreezeResult,
 } from '../../services/businessOperationApi';
 
 const emptyQuality = (): QualityWorkspaceModel => ({
@@ -38,19 +30,7 @@ const loading = ref(false);
 const statusKeyword = ref('');
 const advancedOpen = ref(false);
 const detailOpen = ref(false);
-const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
-const freezingQualityStock = ref(false);
-const qualityFreezeResult = ref<QualityFreezeResult | null>(null);
-const qualityFreezeError = ref('');
-const dispatchingRework = ref(false);
-const reworkDispatchResult = ref<ReworkDispatchResult | null>(null);
-const reworkDispatchError = ref('');
-const reportingRework = ref(false);
-const reworkReportResult = ref<ReworkReportResult | null>(null);
-const reworkReportError = ref('');
-const releasingQualityStock = ref(false);
-const qualityReleaseResult = ref<QualityReleaseResult | null>(null);
-const qualityReleaseError = ref('');
+const { operationValues, resetAmounts } = createAmountForm();
 const approvingLoss = ref(false);
 const lossApprovalResult = ref<LossApprovalResult | null>(null);
 const lossApprovalError = ref('');
@@ -75,13 +55,6 @@ const activeApproval = computed(
   () =>
     workspace.value.lossApprovals.find((item) => item.workOrder === activeCase.value?.workOrder),
 );
-
-const recordedDefect = computed(() => {
-  const value = activeCase.value?.defect?.trim() ?? '';
-  return value && value !== '未判定' ? value : '';
-});
-const effectiveDefect = computed(() => operationValues.value.defect?.trim() || recordedDefect.value);
-const effectiveReason = computed(() => operationValues.value.reason?.trim() || recordedDefect.value);
 
 watch(activeCase, (item) => { resetAmounts(item?.operationContext); });
 
@@ -122,82 +95,6 @@ async function loadQualityWorkspace() {
   }
 }
 
-async function freezeActiveQualityStock() {
-  if (!activeCase.value) return;
-
-  freezingQualityStock.value = true;
-  qualityFreezeResult.value = null;
-  qualityFreezeError.value = '';
-
-  try {
-    if (!effectiveDefect.value) throw new Error('请填写缺陷说明');
-    assertAmounts();
-    qualityFreezeResult.value = await freezeQualityStock(activeCase.value, operationDraft(operationValues.value));
-    await loadQualityWorkspace();
-  } catch (error) {
-    qualityFreezeError.value = error instanceof Error ? error.message : '冻结异常库存失败';
-  } finally {
-    freezingQualityStock.value = false;
-  }
-}
-
-async function dispatchActiveRework() {
-  if (!activeCase.value) return;
-
-  dispatchingRework.value = true;
-  reworkDispatchResult.value = null;
-  reworkDispatchError.value = '';
-
-  try {
-    const draft = operationDraft(operationValues.value);
-    if (!effectiveReason.value) throw new Error('请填写返工原因');
-    if (!String(draft.reworkOrderCode ?? '').trim()) throw new Error('请填写返工单号');
-    assertAmounts();
-    reworkDispatchResult.value = await dispatchRework(activeCase.value, draft);
-    await loadQualityWorkspace();
-  } catch (error) {
-    reworkDispatchError.value = error instanceof Error ? error.message : '生成返工工单失败';
-  } finally {
-    dispatchingRework.value = false;
-  }
-}
-
-async function reportActiveRework() {
-  if (!activeCase.value) return;
-
-  reportingRework.value = true;
-  reworkReportResult.value = null;
-  reworkReportError.value = '';
-
-  try {
-    assertAmounts();
-    reworkReportResult.value = await reportRework(activeCase.value, operationDraft(operationValues.value));
-    await loadQualityWorkspace();
-  } catch (error) {
-    reworkReportError.value = error instanceof Error ? error.message : '提交返工报工失败';
-  } finally {
-    reportingRework.value = false;
-  }
-}
-
-async function releaseActiveQualityStock() {
-  if (!activeCase.value) return;
-
-  releasingQualityStock.value = true;
-  qualityReleaseResult.value = null;
-  qualityReleaseError.value = '';
-
-  try {
-    assertAmounts();
-    qualityReleaseResult.value = await releaseQualityStock(activeCase.value, operationDraft(operationValues.value));
-    await loadQualityWorkspace();
-  } catch (error) {
-    qualityReleaseError.value = error instanceof Error ? error.message : '复检放行失败';
-  } finally {
-    releasingQualityStock.value = false;
-  }
-}
-
 async function approveActiveLoss() {
   if (!activeCase.value) return;
 
@@ -229,15 +126,6 @@ function backToList() {
 function selectQualityCase(code: string) {
   selectedQualityCaseCode.value = code;
   detailOpen.value = true;
-  selectedQualityCaseCode.value = code;
-  qualityFreezeResult.value = null;
-  qualityFreezeError.value = '';
-  reworkDispatchResult.value = null;
-  reworkDispatchError.value = '';
-  reworkReportResult.value = null;
-  reworkReportError.value = '';
-  qualityReleaseResult.value = null;
-  qualityReleaseError.value = '';
   lossApprovalResult.value = null;
   lossApprovalError.value = '';
 }
@@ -351,59 +239,12 @@ function selectQualityCase(code: string) {
             <dt>损耗审批</dt>
             <dd>{{ activeApproval?.code ?? '无' }}</dd>
           </dl>
-          <OperationInputs v-model="operationValues" :fields="[['defect', '缺陷说明'], ['reason', '返工原因'], ['approvalCode', '损耗申请单号'], ['reworkOrderCode', '返工单号'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['releaseResult', '复检结论'], ['evidenceCode', '证据编号'], ['operator', '损耗报工人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量（克）', 'number'], ['outputWeight', '产出重量（克）', 'number'], ['reasonableTransferWeight', '合理转移重量（克）', 'number'], ['standardLossRatePercent', '标准损耗率（%）', 'number'], ['acceptedQuantity', '验收数量', 'number'], ['pieceRate', '计件单价', 'number'], ['lossDeductionUnitPrice', '损耗扣减单价', 'number']]" />
-          <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
-          <p v-if="activeCase.defect === '未判定' && !operationValues.defect?.trim()" class="operation-feedback warning">未判定不能作为缺陷，请填写缺陷说明。</p>
-          <p v-if="!effectiveReason" class="operation-feedback warning">生成返工前请填写返工原因。</p>
-          <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
+          <p class="operation-feedback">冻结、返工、复检和放行走上方质检面板。这里只提交损耗工资试算。</p>
+          <OperationInputs v-model="operationValues" :fields="[['approvalCode', '损耗申请单号'], ['operator', '损耗报工人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量（克）', 'number'], ['outputWeight', '产出重量（克）', 'number'], ['reasonableTransferWeight', '合理转移重量（克）', 'number'], ['standardLossRatePercent', '标准损耗率（%）', 'number'], ['acceptedQuantity', '验收数量', 'number'], ['pieceRate', '计件单价', 'number'], ['lossDeductionUnitPrice', '损耗扣减单价', 'number']]" />
           <div class="detail-actions">
-            <button class="primary-button" type="button" :disabled="freezingQualityStock || !effectiveDefect" @click="freezeActiveQualityStock">
-              {{ freezingQualityStock ? '正在冻结' : '冻结异常库存' }}
-            </button>
-            <button class="secondary-button" type="button" :disabled="dispatchingRework || !effectiveReason" @click="dispatchActiveRework">
-              {{ dispatchingRework ? '正在派发' : '生成返工工单' }}
-            </button>
-            <button class="secondary-button" type="button" :disabled="reportingRework" @click="reportActiveRework">
-              {{ reportingRework ? '正在报工' : '提交返工报工' }}
-            </button>
-            <button class="secondary-button" type="button" :disabled="releasingQualityStock" @click="releaseActiveQualityStock">
-              {{ releasingQualityStock ? '正在放行' : '复检放行入库' }}
-            </button>
             <button class="secondary-button" type="button" :disabled="approvingLoss" @click="approveActiveLoss">
               {{ approvingLoss ? '正在试算' : '提交损耗申请' }}
             </button>
-          </div>
-          <div v-if="qualityFreezeResult" class="operation-feedback success">
-            <strong>质检冻结已写入台账</strong>
-            <span>{{ qualityFreezeResult.ledgerCode }} / {{ qualityFreezeResult.qualityCaseCode }}</span>
-          </div>
-          <div v-else-if="qualityFreezeError" class="operation-feedback danger">
-            <strong>冻结异常库存失败</strong>
-            <span>{{ qualityFreezeError }}</span>
-          </div>
-          <div v-if="reworkDispatchResult" class="operation-feedback success">
-            <strong>返工派发已写入台账</strong>
-            <span>{{ reworkDispatchResult.ledgerCode }} / {{ reworkDispatchResult.reworkOrderCode }}</span>
-          </div>
-          <div v-else-if="reworkDispatchError" class="operation-feedback danger">
-            <strong>生成返工工单失败</strong>
-            <span>{{ reworkDispatchError }}</span>
-          </div>
-          <div v-if="reworkReportResult" class="operation-feedback success">
-            <strong>返工报工已写入台账</strong>
-            <span>{{ reworkReportResult.ledgerCode }} / {{ reworkReportResult.reworkOrderCode }}</span>
-          </div>
-          <div v-else-if="reworkReportError" class="operation-feedback danger">
-            <strong>提交返工报工失败</strong>
-            <span>{{ reworkReportError }}</span>
-          </div>
-          <div v-if="qualityReleaseResult" class="operation-feedback success">
-            <strong>复检放行已写入台账</strong>
-            <span>{{ qualityReleaseResult.ledgerCode }} / {{ qualityReleaseResult.qualityCaseCode }}</span>
-          </div>
-          <div v-else-if="qualityReleaseError" class="operation-feedback danger">
-            <strong>复检放行失败</strong>
-            <span>{{ qualityReleaseError }}</span>
           </div>
           <div v-if="lossApprovalResult" class="operation-feedback success">
             <strong>损耗申请已生成工资试算</strong>
