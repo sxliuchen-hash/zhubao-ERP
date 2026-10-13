@@ -51,7 +51,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/business/operations/mobile-intakes", PermissionCode.BUSINESS_INBOUND_CONFIRM),
             Map.entry("/api/label/generate", PermissionCode.LABEL_PRINT),
             Map.entry("/api/label/templates", PermissionCode.LABEL_PRINT),
-            Map.entry("/api/label/reprints", PermissionCode.LABEL_PRINT)
+            Map.entry("/api/label/reprints", PermissionCode.LABEL_PRINT),
+            Map.entry("/api/label/print-jobs", PermissionCode.LABEL_PRINT)
     );
     private final Pattern motherSplitPath = Pattern.compile("^/api/business/operations/mother-orders/[^/]+/(keep|splits)$");
     private final Pattern documentRetirePath = Pattern.compile("^/api/documents/attachments/[^/]+/retirements$");
@@ -104,6 +105,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         }
         if (gatewayDeviceManagePath.matcher(path).matches()) {
             return PermissionCode.GATEWAY_DEVICE_MANAGE;
+        }
+        if (path.matches("^/api/label/print-jobs/[^/]+/retries$")) {
+            return PermissionCode.LABEL_PRINT;
         }
         if (motherSplitPath.matcher(path).matches()) {
             return PermissionCode.BUSINESS_MOTHER_SPLIT;
