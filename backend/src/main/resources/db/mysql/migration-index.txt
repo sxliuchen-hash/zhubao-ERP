@@ -52,3 +52,4 @@ V51__m3_print_job.sql
 V52__m3_order_change.sql
 V53__m3_order_change_delta.sql
 V54__m3_order_requirement_version.sql
+V55__m3_label_trace.sql

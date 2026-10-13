@@ -116,6 +116,39 @@ public class PrepStockService {
                 });
     }
 
+    /** 从加工母单待加工余额退回原备料批次，追加反向台账。 */
+    public void returnToBatch(
+            Long customerId,
+            String materialCode,
+            String warehouseCode,
+            String batchCode,
+            String motherOrderCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String requestId,
+            AuthUserAccount account
+    ) {
+        requireAccount(account);
+        MotherOrderRecord mother = documents.findMotherOrderByCode(motherOrderCode)
+                .orElseThrow(() -> new BusinessException("加工母单不存在：" + motherOrderCode));
+        if (mother.customerId() == null || !mother.customerId().equals(customerId)) {
+            throw new PermissionDeniedException("不能把其他客户的加工料退回备料");
+        }
+        assertCustomer(account, customerId);
+        StockDimension from = new StockDimension(
+                OwnerType.CUSTOMER, customerId, customerId, mother.code(), null,
+                materialCode, mother.warehouseCode(), StockStatus.RAW_WAITING
+        );
+        StockDimension to = prepDimension(customerId, materialCode, warehouseCode, batchCode);
+        run(requestId, account, "PREP_RETURN", mother.code(), payload(customerId, materialCode, quantity, weight, batchCode, mother.code()),
+                session -> {
+                    stocks.transfer(new StockTransferCommand(
+                            "prep_return", mother.code(), from, to, quantity, weight, "备料从加工单退回"
+                    ), session);
+                    return "prep-returned";
+                });
+    }
+
     public void receiveCompany(
             String materialCode,
             String warehouseCode,
@@ -135,6 +168,64 @@ public class PrepStockService {
                             "company_receipt", batchCode, null, to, quantity, weight, "公司自有生产物料入库"
                     ), session);
                     return "company-received";
+                });
+    }
+
+    /** 公司料领用仍保持公司权属，只把待加工批次转入在制。 */
+    public void issueCompany(
+            String materialCode,
+            String warehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String batchCode,
+            String requestId,
+            AuthUserAccount account
+    ) {
+        moveCompany(materialCode, warehouseCode, quantity, weight, batchCode, requestId, account, true);
+    }
+
+    /** 公司料退回仍保持公司权属，从在制退回待加工批次。 */
+    public void returnCompany(
+            String materialCode,
+            String warehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String batchCode,
+            String requestId,
+            AuthUserAccount account
+    ) {
+        moveCompany(materialCode, warehouseCode, quantity, weight, batchCode, requestId, account, false);
+    }
+
+    private void moveCompany(
+            String materialCode,
+            String warehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String batchCode,
+            String requestId,
+            AuthUserAccount account,
+            boolean issue
+    ) {
+        requireCompanyReader(account);
+        if (batchCode == null || batchCode.isBlank()) {
+            throw new BusinessException("公司料批次不能为空");
+        }
+        StockDimension raw = new StockDimension(
+                OwnerType.COMPANY, null, null, "", null, materialCode, warehouseCode, StockStatus.RAW_WAITING, batchCode.trim()
+        );
+        StockDimension wip = new StockDimension(
+                OwnerType.COMPANY, null, null, "", null, materialCode, warehouseCode, StockStatus.WIP, batchCode.trim()
+        );
+        StockDimension from = issue ? raw : wip;
+        StockDimension to = issue ? wip : raw;
+        String action = issue ? "COMPANY_ISSUE" : "COMPANY_RETURN";
+        String documentType = issue ? "company_issue" : "company_return";
+        String remark = issue ? "公司自有生产物料领用" : "公司自有生产物料退回";
+        run(requestId, account, action, batchCode.trim(), payload(null, materialCode, quantity, weight, batchCode, ""),
+                session -> {
+                    stocks.transfer(new StockTransferCommand(documentType, batchCode.trim(), from, to, quantity, weight, remark), session);
+                    return issue ? "company-issued" : "company-returned";
                 });
     }
 

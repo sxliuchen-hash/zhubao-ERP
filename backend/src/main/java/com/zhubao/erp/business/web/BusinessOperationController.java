@@ -219,13 +219,16 @@ public class BusinessOperationController {
                     command.code(),
                     command.process(),
                     account,
-                    command.requestId()
+                    command.requestId(),
+                    command.labelExceptionReason()
             ));
         }
         return ApiResponse.ok(requireProcessStationService().report(
                 command.code(),
                 command.process(),
-                account
+                account,
+                null,
+                command.labelExceptionReason()
         ));
     }
 

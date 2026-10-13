@@ -79,7 +79,8 @@ class MotherOrderSplitServiceTest {
         assertThat(view.decision()).isEqualTo("KEEP");
         assertThat(view.children()).isEmpty();
         assertThat(view.verificationCode()).isNotBlank();
-        assertThat(sticker.qrContent()).isEqualTo("JG|mother|MD-KEEP-001");
+        assertThat(sticker.qrContent()).startsWith("JG|mother|MD-KEEP-001|0|");
+        assertThat(sticker.qrContent().split("\\|", -1)).hasSize(5);
         assertThat(sticker.fields()).extracting(LabelField::name)
                 .contains("验证码", "客户", "加工要求", "期限", "单号");
         assertThat(value(sticker, "验证码")).isEqualTo(view.verificationCode());
@@ -138,7 +139,8 @@ class MotherOrderSplitServiceTest {
             assertThat(child.processingRequirement()).isEqualTo("内壁刻字");
             assertThat(child.dueDate()).isEqualTo("2026-10-20");
             LabelPayload sticker = labelService.generateWorkOrderLabel(child.code());
-            assertThat(sticker.qrContent()).isEqualTo("JG|work_order|" + child.code());
+            assertThat(sticker.qrContent()).startsWith("JG|work_order|" + child.code() + "|0|");
+            assertThat(sticker.qrContent().split("\\|", -1)).hasSize(5);
             assertThat(value(sticker, "验证码")).isEqualTo(child.verificationCode());
             assertThat(value(sticker, "客户")).isEqualTo("恒信珠宝");
             assertThat(value(sticker, "加工要求")).isEqualTo("内壁刻字");

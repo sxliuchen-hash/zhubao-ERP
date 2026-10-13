@@ -54,6 +54,20 @@ public class ProcessProgressService {
     }
 
     public List<ProcessProgressRow> list(AuthUserAccount account, String query) {
+        return list(account, query, null, null, null, null);
+    }
+
+    /**
+     * 按客户、单号、工序和期限筛选后分页。页码从 1 开始；不传页码时返回全部匹配行。
+     */
+    public List<ProcessProgressRow> list(
+            AuthUserAccount account,
+            String query,
+            String process,
+            String dueBefore,
+            Integer pageIndex,
+            Integer pageSize
+    ) {
         requireAccount(account);
         String needle = query == null ? "" : query.trim();
         List<ProcessProgressRow> rows = new ArrayList<>();
@@ -68,7 +82,7 @@ public class ProcessProgressService {
                 continue;
             }
             MotherSplitState state = documents.findMotherSplitState(mother.code()).orElse(null);
-            if (state == null || !MotherSplitState.KEEP.equals(state.decision())) {
+            if (state != null && MotherSplitState.SPLIT.equals(state.decision())) {
                 continue;
             }
             if (!visible(account, mother.code(), mother.code())) {
@@ -76,17 +90,35 @@ public class ProcessProgressService {
             }
             rows.add(rowOf(mother.code(), mother.code(), mother.customerName(), WorkshopProcesses.join(WorkshopProcesses.DEFAULT_ORDER), mother.dueDate()));
         }
+        return page(rows.stream().filter(row -> matches(row, needle, process, dueBefore)).toList(), pageIndex, pageSize);
+    }
+
+    private boolean matches(ProcessProgressRow row, String needle, String process, String dueBefore) {
+        if (process != null && !process.isBlank() && !process.trim().equals(row.currentProcess())) {
+            return false;
+        }
+        if (dueBefore != null && !dueBefore.isBlank() && row.dueDate() != null && row.dueDate().compareTo(dueBefore.trim()) > 0) {
+            return false;
+        }
         if (needle.isEmpty()) {
+            return true;
+        }
+        return contains(row.orderCode(), needle)
+                || contains(row.motherOrderCode(), needle)
+                || contains(row.customerName(), needle)
+                || contains(row.currentProcess(), needle)
+                || contains(String.valueOf(row.percent()), needle)
+                || contains(row.dueDate(), needle);
+    }
+
+    private List<ProcessProgressRow> page(List<ProcessProgressRow> rows, Integer pageIndex, Integer pageSize) {
+        if (pageIndex == null || pageIndex < 1) {
             return List.copyOf(rows);
         }
-        return rows.stream().filter(row ->
-                contains(row.orderCode(), needle)
-                        || contains(row.motherOrderCode(), needle)
-                        || contains(row.customerName(), needle)
-                        || contains(row.currentProcess(), needle)
-                        || contains(String.valueOf(row.percent()), needle)
-                        || contains(row.dueDate(), needle)
-        ).toList();
+        int size = pageSize == null || pageSize < 1 ? 20 : Math.min(pageSize, 100);
+        int from = Math.min((pageIndex - 1) * size, rows.size());
+        int to = Math.min(from + size, rows.size());
+        return List.copyOf(rows.subList(from, to));
     }
 
     public ProcessProgressTarget open(String code, AuthUserAccount account) {

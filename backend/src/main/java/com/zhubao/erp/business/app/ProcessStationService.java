@@ -22,6 +22,7 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.label.app.LabelVersionGuard;
 import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.scan.domain.ScanObjectType;
 import com.zhubao.erp.scan.domain.ScanResolveResponse;
@@ -63,6 +64,7 @@ public class ProcessStationService {
     private final BusinessWorkUnit workUnit;
     private final HandoffSaveProbe handoffSaveProbe;
     private final OrderRequirementRepository requirements;
+    private LabelVersionGuard labelGuard;
 
     public ProcessStationService(
             BusinessDocumentRepository documents,
@@ -139,6 +141,11 @@ public class ProcessStationService {
         this.requirements = requirements;
     }
 
+    @Autowired(required = false)
+    public void setLabelVersionGuard(LabelVersionGuard labelGuard) {
+        this.labelGuard = labelGuard;
+    }
+
     /**
      * 解析进度报工目标。已拆母单返回子单列表；当前工序取第一道尚未正式交付的工序。
      */
@@ -207,12 +214,23 @@ public class ProcessStationService {
      * 未装配工作单元时，带编号的调用直接拒绝，不能退回旧路径。
      */
     public ProcessStationReportResult report(String rawCode, String requestedProcess, AuthUserAccount account, String requestId) {
+        return report(rawCode, requestedProcess, account, requestId, null);
+    }
+
+    public ProcessStationReportResult report(
+            String rawCode,
+            String requestedProcess,
+            AuthUserAccount account,
+            String requestId,
+            String labelExceptionReason
+    ) {
         requireAccount(account);
         if (requestId == null || requestId.isBlank()) {
             synchronized (this) {
-                StationTicket ticket = resolve(rawCode);
-                assertCustomer(ticket, account);
-                return stationResult(postStation(defaultCommand(ticket, requestedProcess, account.operator()), account, null));
+        StationTicket ticket = resolve(rawCode);
+        assertCustomer(ticket, account);
+        assertLabel(rawCode, ticket, labelExceptionReason, account);
+        return stationResult(postStation(defaultCommand(ticket, requestedProcess, account.operator()), account, null));
             }
         }
         if (workUnit == null) {
@@ -220,6 +238,7 @@ public class ProcessStationService {
         }
         StationTicket ticket = resolve(rawCode);
         assertCustomer(ticket, account);
+        assertLabel(rawCode, ticket, labelExceptionReason, account);
         String process = normalizeRequested(requestedProcess);
         String operator = account.operator().trim();
         String targetType = ticket.keptMother() ? "MOTHER_ORDER" : "WORK_ORDER";
@@ -619,6 +638,12 @@ public class ProcessStationService {
                 requirePositive(mother.weight(), "重量"),
                 WorkshopProcesses.DEFAULT_ORDER
         ));
+    }
+
+    private void assertLabel(String rawCode, StationTicket ticket, String reason, AuthUserAccount account) {
+        if (labelGuard != null) {
+            labelGuard.check(rawCode, ticket.motherOrderCode(), ticket.orderCode(), reason, account);
+        }
     }
 
     private StationTicket overlay(StationTicket ticket) {

@@ -26,6 +26,7 @@ public class PrintJobService {
     private final PrintJobRepository jobs;
     private final String stationToken;
     private final OrderChangeRepository changes;
+    private LabelVersionGuard labelGuard;
 
     public PrintJobService(PrintJobRepository jobs, String stationToken) {
         this(jobs, stationToken, null);
@@ -42,6 +43,11 @@ public class PrintJobService {
         this.changes = changes;
     }
 
+    @Autowired(required = false)
+    public void setLabelVersionGuard(LabelVersionGuard labelGuard) {
+        this.labelGuard = labelGuard;
+    }
+
     public PrintJob create(String requestId, String businessCode, String templateCode, int copies, String operator) {
         requireRequest(requestId);
         if (businessCode == null || businessCode.isBlank() || templateCode == null || templateCode.isBlank()) {
@@ -50,17 +56,10 @@ public class PrintJobService {
         if (copies < 1 || copies > 20) {
             throw new BusinessException("打印份数必须在 1 到 20 之间");
         }
-        PrintJob existing = jobs.findByRequestId(requestId).orElse(null);
         int version = changes == null ? 0 : changes.latestAppliedVersion(businessCode.trim());
-        String snapshot = "LABEL|" + businessCode.trim() + "|" + templateCode.trim() + "|" + copies + "|V" + version;
-        if (existing != null) {
-            if (!snapshot.equals(existing.contentSnapshot())) {
-                throw new BusinessException("同一请求的内容不一致");
-            }
-            return existing;
-        }
+        String snapshot = snapshot(businessCode.trim(), templateCode.trim(), copies, version);
         String now = TIME.format(LocalDateTime.now());
-        return jobs.save(new PrintJob(
+        PrintJob stored = jobs.insertIfAbsent(new PrintJob(
                 "PJ-" + UUID.randomUUID().toString().substring(0, 8),
                 requestId.trim(),
                 businessCode.trim(),
@@ -77,32 +76,74 @@ public class PrintJobService {
                 now,
                 now
         ));
+        if (!snapshot.equals(stored.contentSnapshot())) {
+            throw new BusinessException("同一请求的内容不一致");
+        }
+        if (stored.id().startsWith("PJ-") && labelGuard != null && stored.createdAt().equals(now)) {
+            labelGuard.recordEvent(businessCode.trim(), businessCode.trim(), version == 0 ? "PRINT" : "REISSUE_VERSION",
+                    "V" + version, "", stored.id(), "", operator);
+        }
+        return stored;
     }
 
     public PrintJob get(String id) {
+        expireLeases(TIME.format(LocalDateTime.now()));
         return jobs.findById(id).orElseThrow(() -> new BusinessException("打印任务不存在：" + id));
     }
 
     public PrintJob retry(String id, String requestId, String reason, String operator) {
-        PrintJob original = get(id);
+        PrintJob original = jobs.findById(id).orElseThrow(() -> new BusinessException("打印任务不存在：" + id));
         if (reason == null || reason.isBlank()) {
             throw new BusinessException("补打必须填写原因");
         }
-        PrintJob created = create(requestId, original.businessCode(), original.templateCode(), original.copies(), operator);
-        if (!created.id().equals(original.id()) && !original.contentSnapshot().equals(created.contentSnapshot())) {
-            created = jobs.save(new PrintJob(
-                    created.id(), created.requestId(), created.businessCode(), created.templateCode(), created.copies(),
-                    original.contentSnapshot(), created.status(), created.stationId(), created.leaseUntil(),
-                    created.failureReason(), original.id(), reason.trim(), created.createdBy(), created.createdAt(), created.updatedAt()
-            ));
-        } else if (!created.id().equals(original.id())) {
-            created = jobs.save(new PrintJob(
-                    created.id(), created.requestId(), created.businessCode(), created.templateCode(), created.copies(),
-                    created.contentSnapshot(), created.status(), created.stationId(), created.leaseUntil(),
-                    created.failureReason(), original.id(), reason.trim(), created.createdBy(), created.createdAt(), created.updatedAt()
-            ));
+        requireRequest(requestId);
+        String now = TIME.format(LocalDateTime.now());
+        PrintJob stored = jobs.insertIfAbsent(new PrintJob(
+                "PJ-" + UUID.randomUUID().toString().substring(0, 8),
+                requestId.trim(),
+                original.businessCode(),
+                original.templateCode(),
+                original.copies(),
+                original.contentSnapshot(),
+                PrintJobStatus.PENDING,
+                "",
+                "",
+                "",
+                original.id(),
+                reason.trim(),
+                operator == null ? "" : operator.trim(),
+                now,
+                now
+        ));
+        if (!original.contentSnapshot().equals(stored.contentSnapshot())) {
+            throw new BusinessException("同一请求的内容不一致");
         }
-        return created;
+        if (labelGuard != null && stored.createdAt().equals(now)) {
+            labelGuard.recordEvent(original.businessCode(), original.businessCode(), "REPRINT_SAME", "", "", stored.id(), reason.trim(), operator);
+        }
+        return stored;
+    }
+
+    public PrintJob verifyPaper(String id, String requestId, String note, String operator) {
+        PrintJob job = get(id);
+        if (note == null || note.isBlank()) {
+            throw new BusinessException("出纸核实必须填写结果");
+        }
+        if (labelGuard != null) {
+            labelGuard.recordEvent(job.businessCode(), job.businessCode(), "PAPER_CHECKED", "", "", job.id(), note.trim(), operator);
+        }
+        return job;
+    }
+
+    public PrintJob relabel(String id, String requestId, String note, String operator) {
+        PrintJob job = get(id);
+        if (note == null || note.isBlank()) {
+            throw new BusinessException("实物换贴必须填写结果");
+        }
+        if (labelGuard != null) {
+            labelGuard.recordEvent(job.businessCode(), job.businessCode(), "RELABELED", "", "", job.id(), note.trim(), operator);
+        }
+        return job;
     }
 
     public PrintJob claim(String stationId, String token) {
@@ -141,7 +182,27 @@ public class PrintJobService {
     }
 
     public List<PrintJob> list() {
+        expireLeases(TIME.format(LocalDateTime.now()));
         return jobs.list();
+    }
+
+    /** 结构化标签快照。客户端不能改写其中的单号、版本和二维码。 */
+    static String snapshot(String businessCode, String templateCode, int copies, int version) {
+        String instance = "LI" + Integer.toHexString(Math.abs((businessCode + "|" + templateCode + "|" + version).hashCode()));
+        String scanType = businessCode.startsWith("MD") ? "mother" : "work_order";
+        String qr = "JG|" + scanType + "|" + businessCode + "|" + version + "|" + instance;
+        return "{\"kind\":\"LABEL\",\"businessCode\":\"" + escape(businessCode)
+                + "\",\"templateCode\":\"" + escape(templateCode)
+                + "\",\"copies\":" + copies
+                + ",\"widthMm\":60,\"heightMm\":40"
+                + ",\"version\":\"V" + version
+                + "\",\"instance\":\"" + instance
+                + "\",\"qr\":\"" + qr
+                + "\",\"lines\":[\"单号:" + escape(businessCode) + "\",\"模板:" + escape(templateCode) + "\"]}";
+    }
+
+    private static String escape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private PrintJob replace(PrintJob job, PrintJobStatus status, String leaseUntil, String failureReason) {

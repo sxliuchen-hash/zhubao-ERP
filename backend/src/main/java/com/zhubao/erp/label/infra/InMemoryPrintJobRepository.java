@@ -27,7 +27,17 @@ public class InMemoryPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
-    public PrintJob save(PrintJob job) {
+    public synchronized PrintJob save(PrintJob job) {
+        jobs.put(job.id(), job);
+        return job;
+    }
+
+    @Override
+    public synchronized PrintJob insertIfAbsent(PrintJob job) {
+        PrintJob existing = findByRequestId(job.requestId()).orElse(null);
+        if (existing != null) {
+            return existing;
+        }
         jobs.put(job.id(), job);
         return job;
     }

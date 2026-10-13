@@ -103,7 +103,8 @@ class OrderChangeFinanceTest {
 
         PrintJobService printing = new PrintJobService(new InMemoryPrintJobRepository(), "station-secret", changes);
         PrintJob printed = printing.create("print-change-001", "MD-CHANGE-001", "FLOW", 1, "何琳");
-        assertThat(printed.contentSnapshot()).endsWith("|V1");
+        assertThat(printed.contentSnapshot()).contains("\"version\":\"V1\"");
+        assertThat(printed.contentSnapshot()).contains("\"qr\":\"JG|mother|MD-CHANGE-001|1|");
         PrintJob reprinted = printing.retry(printed.id(), "print-change-002", "同版补打", "何琳");
         assertThat(reprinted.contentSnapshot()).isEqualTo(printed.contentSnapshot());
         assertThat(reprinted.id()).isNotEqualTo(printed.id());

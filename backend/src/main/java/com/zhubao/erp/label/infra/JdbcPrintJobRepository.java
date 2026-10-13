@@ -38,18 +38,38 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
     @Override
     public PrintJob save(PrintJob job) {
         String sql = """
+                update biz_print_job
+                   set status_code = ?, station_id = ?, lease_until = ?, failure_reason = ?,
+                       predecessor_id = ?, retry_reason = ?, content_snapshot = ?, updated_at = ?
+                 where id = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, job.status().name());
+            statement.setString(2, job.stationId());
+            statement.setString(3, job.leaseUntil());
+            statement.setString(4, job.failureReason());
+            statement.setString(5, job.predecessorId());
+            statement.setString(6, job.retryReason());
+            statement.setString(7, job.contentSnapshot());
+            statement.setString(8, job.updatedAt());
+            statement.setString(9, job.id());
+            if (statement.executeUpdate() == 0) {
+                return insertIfAbsent(job);
+            }
+            return findById(job.id()).orElse(job);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存打印任务", ex);
+        }
+    }
+
+    @Override
+    public PrintJob insertIfAbsent(PrintJob job) {
+        String sql = """
                 insert into biz_print_job (
                     id, request_id, business_code, template_code, copies, content_snapshot, status_code,
                     station_id, lease_until, failure_reason, predecessor_id, retry_reason, created_by, created_at, updated_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on duplicate key update
-                    status_code = values(status_code),
-                    station_id = values(station_id),
-                    lease_until = values(lease_until),
-                    failure_reason = values(failure_reason),
-                    predecessor_id = values(predecessor_id),
-                    retry_reason = values(retry_reason),
-                    updated_at = values(updated_at)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -57,6 +77,9 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
             statement.executeUpdate();
             return job;
         } catch (SQLException ex) {
+            if (isDuplicate(ex)) {
+                return findByRequestId(job.requestId()).orElseThrow(() -> new IllegalStateException("无法读取已有打印任务", ex));
+            }
             throw new IllegalStateException("无法保存打印任务", ex);
         }
     }
@@ -176,5 +199,10 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
                 rs.getString("created_at"),
                 rs.getString("updated_at")
         );
+    }
+
+    private boolean isDuplicate(SQLException ex) {
+        return ex.getErrorCode() == 1062 || ex.getErrorCode() == 23505
+                || (ex.getMessage() != null && ex.getMessage().toLowerCase().contains("unique"));
     }
 }

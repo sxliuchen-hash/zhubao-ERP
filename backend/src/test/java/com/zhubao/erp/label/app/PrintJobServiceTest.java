@@ -9,6 +9,10 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,5 +63,43 @@ class PrintJobServiceTest {
         assertThat(retry.id()).isNotEqualTo(created.id());
         assertThat(retry.predecessorId()).isEqualTo(created.id());
         assertThat(service.get(created.id()).status()).isEqualTo(PrintJobStatus.UNCERTAIN);
+        assertThat(retry.contentSnapshot()).isEqualTo(created.contentSnapshot());
+    }
+
+    @Test
+    void getExpiresLeaseWithoutWaitingForTheNextClaim() {
+        PrintJob created = service.create("print-job-0003", "MD-3", "FLOW", 1, "何琳");
+        PrintJob leased = service.claim("STATION-1", "station-secret");
+        repository.save(new PrintJob(
+                leased.id(), leased.requestId(), leased.businessCode(), leased.templateCode(), leased.copies(),
+                leased.contentSnapshot(), PrintJobStatus.LEASED, leased.stationId(),
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(LocalDateTime.now().minusMinutes(5)),
+                "", "", "", leased.createdBy(), leased.createdAt(), leased.updatedAt()
+        ));
+        assertThat(service.get(created.id()).status()).isEqualTo(PrintJobStatus.UNCERTAIN);
+        assertThat(service.list()).allMatch(job -> job.status() != PrintJobStatus.LEASED);
+        assertThatThrownBy(() -> service.claim("STATION-1", "station-secret"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void concurrentSameRequestCreatesOneJob() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<PrintJob> first = pool.submit(() -> {
+                start.await();
+                return service.create("print-job-race", "MD-RACE", "FLOW", 1, "何琳");
+            });
+            Future<PrintJob> second = pool.submit(() -> {
+                start.await();
+                return service.create("print-job-race", "MD-RACE", "FLOW", 1, "何琳");
+            });
+            start.countDown();
+            assertThat(first.get().id()).isEqualTo(second.get().id());
+            assertThat(repository.list()).hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 }

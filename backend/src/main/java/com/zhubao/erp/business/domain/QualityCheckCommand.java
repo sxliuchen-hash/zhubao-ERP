@@ -12,10 +12,15 @@ import java.util.List;
 public record QualityCheckCommand(
         @NotBlank(message = "请先扫贴纸") String code,
         String inspector,
-        @NotNull(message = "每一条加工要求都要有结果才能提交") List<QualityCheckLineCommand> lines,
-        String requestId
+        @NotNull(message = "每一条加工要求都要有结果才能提交")         List<QualityCheckLineCommand> lines,
+        String requestId,
+        String labelExceptionReason
 ) {
     public QualityCheckCommand(String code, String inspector, List<QualityCheckLineCommand> lines) {
-        this(code, inspector, lines, null);
+        this(code, inspector, lines, null, null);
+    }
+
+    public QualityCheckCommand(String code, String inspector, List<QualityCheckLineCommand> lines, String requestId) {
+        this(code, inspector, lines, requestId, null);
     }
 }

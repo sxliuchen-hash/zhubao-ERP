@@ -9,9 +9,14 @@ import jakarta.validation.constraints.NotBlank;
 public record ProcessStationReportCommand(
         @NotBlank String code,
         @NotBlank String process,
-        String requestId
+        String requestId,
+        String labelExceptionReason
 ) {
     public ProcessStationReportCommand(String code, String process) {
-        this(code, process, null);
+        this(code, process, null, null);
+    }
+
+    public ProcessStationReportCommand(String code, String process, String requestId) {
+        this(code, process, requestId, null);
     }
 }

@@ -7,6 +7,8 @@ import javax.print.PrintService;
 import javax.print.PrintServiceLookup;
 import javax.print.SimpleDoc;
 import javax.print.attribute.HashPrintRequestAttributeSet;
+import javax.print.attribute.standard.Copies;
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -66,7 +68,7 @@ public final class PrintAgent {
                 return;
             }
             String jobId = text(response.body(), "id");
-            String snapshot = text(response.body(), "contentSnapshot");
+            String snapshot = LabelRenderer.text(response.body(), "contentSnapshot");
             String outcome = "FAILED";
             String reason = "";
             try {
@@ -93,9 +95,26 @@ public final class PrintAgent {
         if (selected == null) {
             throw new IllegalStateException("本机没有名为 " + printerName + " 的打印队列");
         }
-        Doc doc = new SimpleDoc(snapshot.getBytes(StandardCharsets.UTF_8), DocFlavor.BYTE_ARRAY.AUTOSENSE, null);
+        byte[] png = LabelRenderer.render(snapshot);
+        int copies = Math.max(1, copiesOf(snapshot));
+        Doc doc = new SimpleDoc(new ByteArrayInputStream(png), DocFlavor.INPUT_STREAM.PNG, null);
+        HashPrintRequestAttributeSet attributes = new HashPrintRequestAttributeSet();
+        attributes.add(new Copies(copies));
         DocPrintJob job = selected.createPrintJob();
-        job.print(doc, new HashPrintRequestAttributeSet());
+        job.print(doc, attributes);
+    }
+
+    private static int copiesOf(String snapshot) {
+        int marker = snapshot.indexOf("\"copies\":");
+        if (marker < 0) {
+            return 1;
+        }
+        int from = marker + "\"copies\":".length();
+        int end = from;
+        while (end < snapshot.length() && Character.isDigit(snapshot.charAt(end))) {
+            end++;
+        }
+        return end == from ? 1 : Integer.parseInt(snapshot.substring(from, end));
     }
 
     private static void report(HttpClient client, String baseUrl, String stationId, String token, String jobId, String outcome, String reason) throws Exception {

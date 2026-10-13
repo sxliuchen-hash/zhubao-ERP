@@ -27,6 +27,7 @@ import com.zhubao.erp.business.domain.ReworkReportResult;
 import com.zhubao.erp.business.domain.ShipFinishedStockCommand;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.label.app.LabelVersionGuard;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
@@ -59,6 +60,7 @@ public class BusinessOperationService {
     private final BusinessWorkUnit workUnit;
     private final MotherOrderSaveProbe motherOrderSaveProbe;
     private final OutboundSaveProbe outboundSaveProbe;
+    private LabelVersionGuard labelGuard;
 
     public BusinessOperationService(StockLedgerService stockLedgerService) {
         this(stockLedgerService, null, null);
@@ -110,6 +112,11 @@ public class BusinessOperationService {
         this.workUnit = workUnit;
         this.motherOrderSaveProbe = motherOrderSaveProbe == null ? MotherOrderSaveProbe.NONE : motherOrderSaveProbe;
         this.outboundSaveProbe = outboundSaveProbe == null ? OutboundSaveProbe.NONE : outboundSaveProbe;
+    }
+
+    @Autowired(required = false)
+    public void setLabelVersionGuard(LabelVersionGuard labelGuard) {
+        this.labelGuard = labelGuard;
     }
 
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
@@ -464,7 +471,22 @@ public class BusinessOperationService {
     }
 
     public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command) {
+        assertShipmentLabel(command, command == null ? "" : command.operator());
         return postShipment(command, null);
+    }
+
+    private void assertShipmentLabel(ShipFinishedStockCommand command, String operator) {
+        if (labelGuard == null || command == null) {
+            return;
+        }
+        String raw = command.remark() != null && command.remark().startsWith("JG|") ? command.remark() : command.workOrderCode();
+        if (raw == null || !raw.startsWith("JG|")) {
+            return;
+        }
+        labelGuard.check(raw, command.motherOrderCode(), command.workOrderCode(), "", new com.zhubao.erp.security.domain.AuthUserAccount(
+                operator, "", operator, com.zhubao.erp.security.domain.RoleCode.WAREHOUSE_KEEPER,
+                com.zhubao.erp.security.domain.DataScope.ALL, true, false
+        ));
     }
 
     /**
@@ -473,6 +495,7 @@ public class BusinessOperationService {
      * 未装配工作单元时，带编号的调用直接拒绝，不能退回旧路径。
      */
     public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command, String actorId) {
+        assertShipmentLabel(command, actorId);
         if (command.requestId() == null || command.requestId().isBlank()) {
             return shipFinishedStock(command);
         }

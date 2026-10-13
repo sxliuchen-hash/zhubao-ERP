@@ -6,6 +6,7 @@ import com.zhubao.erp.business.domain.ChildWorkOrderView;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderSplitView;
 import com.zhubao.erp.business.domain.MotherSplitState;
+import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
 import com.zhubao.erp.business.domain.SplitMotherOrderLine;
 import com.zhubao.erp.business.domain.VerificationCodes;
@@ -49,6 +50,7 @@ public class MotherOrderSplitService {
     private final StockLedgerService stockLedgerService;
     private final BusinessWorkUnit workUnit;
     private final AtomicInteger childSequence = new AtomicInteger();
+    private OrderChangeRepository orderChanges;
 
     public MotherOrderSplitService(
             BusinessDocumentRepository documents,
@@ -66,6 +68,11 @@ public class MotherOrderSplitService {
         this.documents = documents;
         this.stockLedgerService = stockLedgerService;
         this.workUnit = workUnit;
+    }
+
+    @Autowired(required = false)
+    public void setOrderChanges(OrderChangeRepository orderChanges) {
+        this.orderChanges = orderChanges;
     }
 
     public MotherOrderSplitView view(String motherOrderCode) {
@@ -314,9 +321,15 @@ public class MotherOrderSplitService {
                 mother.weight(),
                 remaining(mother.quantity(), children, true),
                 remaining(mother.weight(), children, false),
-                "JG|mother|" + mother.code(),
+                sticker("mother", mother.code()),
                 childViews
         );
+    }
+
+    private String sticker(String scanType, String code) {
+        int version = orderChanges == null ? 0 : orderChanges.latestAppliedVersion(code);
+        String instance = "LI" + Integer.toHexString(Math.abs((scanType + "|" + code + "|" + version).hashCode()));
+        return "JG|" + scanType + "|" + code + "|" + version + "|" + instance;
     }
 
     private ChildWorkOrderView childView(ChildWorkOrderRecord record) {
@@ -331,7 +344,7 @@ public class MotherOrderSplitService {
                 record.quantity(),
                 record.weight(),
                 WorkshopProcesses.split(record.processes()),
-                "JG|work_order|" + record.code()
+                sticker("work_order", record.code())
         );
     }
 

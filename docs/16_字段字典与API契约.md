@@ -2330,6 +2330,9 @@ PWA 一期边界：
 | `POST /api/inventory/prep-stock/customer-receipts` | `ApiResponse<String>`。必须带 `requestId`。不建加工母单 |
 | `POST /api/inventory/prep-stock/issues` | `ApiResponse<String>`。必须带 `requestId`。同一客户备料批次领用到真实加工母单 |
 | `POST /api/inventory/prep-stock/company-receipts` | `ApiResponse<String>`。必须带 `requestId`。权属始终为公司 |
+| `POST /api/inventory/prep-stock/returns` | `ApiResponse<String>`。必须带 `requestId`。从加工母单待加工退回原备料批次 |
+| `POST /api/inventory/prep-stock/company-issues` | `ApiResponse<String>`。必须带 `requestId`。公司料领用，权属保持公司，待加工转入在制 |
+| `POST /api/inventory/prep-stock/company-returns` | `ApiResponse<String>`。必须带 `requestId`。公司料从在制退回待加工 |
 | `GET /api/inventory/ledgers` | `ApiResponse<List<StockLedgerEntry>>` |
 | `GET /api/inventory/balances` | `ApiResponse<List<StockBalance>>` |
 

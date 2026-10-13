@@ -42,9 +42,13 @@ public class ProcessProgressController {
     @GetMapping
     public ApiResponse<List<ProcessProgressRow>> list(
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) String process,
+            @RequestParam(required = false) String dueBefore,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             HttpServletRequest request
     ) {
-        return ApiResponse.ok(progressService.list(account(request), query));
+        return ApiResponse.ok(progressService.list(account(request), query, process, dueBefore, page, size));
     }
 
     @GetMapping("/target")

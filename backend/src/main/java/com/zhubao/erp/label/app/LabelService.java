@@ -14,6 +14,7 @@ import com.zhubao.erp.label.domain.LabelTemplate;
 import com.zhubao.erp.label.domain.LabelTemplateField;
 import com.zhubao.erp.label.domain.LabelTemplateRepository;
 import com.zhubao.erp.label.domain.LabelType;
+import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.label.domain.ReprintLabelCommand;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,7 @@ public class LabelService {
 
     private final BusinessDocumentRepository businessDocumentRepository;
     private final LabelTemplateRepository labelTemplateRepository;
+    private OrderChangeRepository orderChanges;
 
     public LabelService() {
         this(null, null);
@@ -62,6 +64,11 @@ public class LabelService {
     ) {
         this.businessDocumentRepository = businessDocumentRepository;
         this.labelTemplateRepository = labelTemplateRepository;
+    }
+
+    @Autowired(required = false)
+    public void setOrderChanges(OrderChangeRepository orderChanges) {
+        this.orderChanges = orderChanges;
     }
 
     /** 通用标签生成：按命令组装载荷。 */
@@ -325,9 +332,11 @@ public class LabelService {
         return value.isBlank() ? fallback : value;
     }
 
-    /** 二维码内容：系统统一扫码格式 JG|类型|编码。 */
+    /** 新标签二维码包含版本和标签实例。没有生效改单时版本为 0。 */
     private String qrContent(LabelType type, String code) {
-        return "JG|" + type.scanType() + "|" + code;
+        int version = orderChanges == null ? 0 : orderChanges.latestAppliedVersion(code);
+        String instance = "LI" + Integer.toHexString(Math.abs((type.scanType() + "|" + code + "|" + version).hashCode()));
+        return "JG|" + type.scanType() + "|" + code + "|" + version + "|" + instance;
     }
 
     private List<LabelField> sanitizeFields(List<LabelField> fields) {

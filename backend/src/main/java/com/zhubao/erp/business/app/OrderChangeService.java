@@ -13,6 +13,7 @@ import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.app.OrderChangePostingService;
+import com.zhubao.erp.label.domain.LabelTraceRepository;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.PermissionCode;
@@ -46,6 +47,7 @@ public class OrderChangeService {
     private final BusinessDataAccess dataAccess;
     private final PermissionGuard permissionGuard;
     private final OrderRequirementRepository requirements;
+    private LabelTraceRepository labelTraces;
 
     public OrderChangeService(OrderChangeRepository changes, BusinessDocumentRepository documents, BusinessWorkUnit workUnit) {
         this(changes, documents, workUnit, null);
@@ -77,6 +79,11 @@ public class OrderChangeService {
         this.dataAccess = dataAccess;
         this.permissionGuard = permissionGuard;
         this.requirements = requirements;
+    }
+
+    @Autowired(required = false)
+    public void setLabelTraces(LabelTraceRepository labelTraces) {
+        this.labelTraces = labelTraces;
     }
 
     public OrderChange draft(
@@ -314,6 +321,10 @@ public class OrderChangeService {
         if (requirements != null) {
             requirements.listByMother(motherOrderCode).forEach(round ->
                     lines.add("执行轮次 " + round.roundWorkOrderCode() + " 承接 " + round.supersedesOrderCode() + " " + round.processName()));
+        }
+        if (labelTraces != null) {
+            labelTraces.listByMother(motherOrderCode).forEach(trace ->
+                    lines.add("标签 " + trace.eventType() + " " + trace.businessCode() + " " + trace.reason()));
         }
         changes.listByMother(motherOrderCode).forEach(change -> lines.add(timelineLine(change, money)));
         return List.copyOf(lines);

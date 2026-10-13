@@ -60,6 +60,28 @@ public class PrintJobController {
                 operatorContextResolver.requireSession(request).operator()));
     }
 
+    @PostMapping("/print-jobs/{id}/paper-checks")
+    public ApiResponse<PrintJob> paper(
+            @PathVariable String id,
+            @RequestBody RetryPrintJobRequest body,
+            HttpServletRequest request
+    ) {
+        require(body);
+        return ApiResponse.ok(printJobService.verifyPaper(id, body.requestId(), body.reason(),
+                operatorContextResolver.requireSession(request).operator()));
+    }
+
+    @PostMapping("/print-jobs/{id}/relabels")
+    public ApiResponse<PrintJob> relabel(
+            @PathVariable String id,
+            @RequestBody RetryPrintJobRequest body,
+            HttpServletRequest request
+    ) {
+        require(body);
+        return ApiResponse.ok(printJobService.relabel(id, body.requestId(), body.reason(),
+                operatorContextResolver.requireSession(request).operator()));
+    }
+
     @PostMapping("/agents/jobs/claim")
     public ApiResponse<PrintJob> claim(
             @RequestHeader("X-Print-Station") String stationId,

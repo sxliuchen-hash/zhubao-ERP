@@ -52,3 +52,4 @@
 52	TABLE	biz_order_change
 53	COLUMN	biz_order_change	worker_name
 54	TABLE	biz_execution_round
+55	TABLE	biz_label_trace

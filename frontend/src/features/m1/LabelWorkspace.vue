@@ -22,6 +22,7 @@ import type { TraceTarget } from '../scan/traceTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import type { ScanRelatedTarget } from '../../services/scanContextApi';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
+import { apiGet, apiPost } from '../../services/apiClient';
 
 // 标签打印工作台。标签只印固定信息，进度靠扫码查看。
 // 前期只做黑白打印：预览和出纸都是白底黑字，按标签纸毫米尺寸单独打印。
@@ -281,6 +282,60 @@ function printLabel() {
   if (preview.value) openLabelPrint(preview.value);
 }
 
+const printJobId = ref('');
+const printJobStatus = ref('');
+const printFailure = ref('');
+const reprintJobReason = ref('');
+
+function printStatusLabel(status: string) {
+  if (status === 'SPOOLED') return '已送入系统队列';
+  if (status === 'PENDING') return '待领取';
+  if (status === 'LEASED') return '已领取';
+  if (status === 'FAILED') return '发送前失败';
+  if (status === 'UNCERTAIN') return '不确定是否出纸';
+  if (status === 'CANCELED') return '已取消';
+  return status;
+}
+
+async function submitPrintJob() {
+  if (!preview.value) return;
+  errorMessage.value = '';
+  const job = await apiPost<{ requestId: string; businessCode: string; templateCode: string; copies: number }, { id: string; status: string; failureReason: string }>(
+    '/api/label/print-jobs',
+    {
+      requestId: `print-${preview.value.primaryCode}-${Date.now()}`,
+      businessCode: preview.value.primaryCode,
+      templateCode: preview.value.templateCode || 'FLOW',
+      copies: preview.value.printerSetting.copies || 1,
+    },
+  );
+  printJobId.value = job.id;
+  printJobStatus.value = printStatusLabel(job.status);
+  printFailure.value = job.failureReason || '';
+  feedback.value = `已提交打印任务 ${job.id}。已送入系统队列不等于已经出纸。`;
+}
+
+async function refreshPrintJob() {
+  if (!printJobId.value) return;
+  const job = await apiGet<{ status: string; failureReason: string }>(`/api/label/print-jobs/${printJobId.value}`);
+  printJobStatus.value = printStatusLabel(job.status);
+  printFailure.value = job.failureReason || '';
+}
+
+async function reprintPrintJob() {
+  if (!printJobId.value || !reprintJobReason.value.trim()) {
+    errorMessage.value = '人工补打必须填写原因';
+    return;
+  }
+  const job = await apiPost<{ requestId: string; reason: string }, { id: string; status: string; failureReason: string }>(
+    `/api/label/print-jobs/${printJobId.value}/retries`,
+    { requestId: `reprint-${Date.now()}`, reason: reprintJobReason.value.trim() },
+  );
+  printJobId.value = job.id;
+  printJobStatus.value = printStatusLabel(job.status);
+  printFailure.value = job.failureReason || '';
+}
+
 // ---- 模板管理 ----
 const showTemplateEditor = ref(false);
 const templateForm = ref<{
@@ -533,7 +588,8 @@ onMounted(loadTemplates);
               {{ preview.printerSetting.copies }} 份
               <template v-if="preview.printerSetting.printerName">· {{ preview.printerSetting.printerName }}</template>
             </span>
-            <button type="button" class="primary-button" @click="printLabel">打印</button>
+            <button type="button" class="primary-button" @click="printLabel">浏览器预览打印</button>
+            <button type="button" class="primary-button" @click="submitPrintJob">提交到打印工位</button>
           </div>
         </div>
 
@@ -544,7 +600,11 @@ onMounted(loadTemplates);
               <div class="label-scale" :style="labelScaleStyle" v-html="labelMarkup"></div>
             </div>
           </div>
-          <p class="qr-content-line">二维码内容：{{ preview.qrContent }}。打印时请关闭页眉页脚，并选择黑白标签机或激光机。</p>
+          <p class="qr-content-line">二维码内容：{{ preview.qrContent }}。浏览器预览打印不等于厂内出纸。</p>
+          <p v-if="printJobId">任务 {{ printJobId }} · {{ printJobStatus }}<template v-if="printFailure"> · {{ printFailure }}</template></p>
+          <button v-if="printJobId" type="button" class="secondary-button" @click="refreshPrintJob">刷新任务状态</button>
+          <label v-if="printJobId">人工补打原因<input v-model="reprintJobReason" aria-label="人工补打原因" /></label>
+          <button v-if="printJobId" type="button" class="secondary-button" @click="reprintPrintJob">人工补打</button>
         </div>
       </section>
       <section v-else class="label-preview"><p class="hint">请先按单号打开贴纸或生成标签，成功后再预览和打印。</p></section>

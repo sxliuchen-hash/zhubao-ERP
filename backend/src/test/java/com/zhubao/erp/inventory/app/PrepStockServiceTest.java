@@ -122,6 +122,30 @@ class PrepStockServiceTest {
         }
     }
 
+    @Test
+    void returnRestoresCustomerBatchAndCompanyMovementKeepsOwnership() {
+        prep.receiveCustomerPrep(1001L, "AU9999", "PREP-WH", new BigDecimal("5"), new BigDecimal("8"),
+                "PREP-RET", "prep-ret-recv", keeper);
+        prep.issueToMother(1001L, "AU9999", "PREP-WH", "PREP-RET", "MD-PREP-001",
+                new BigDecimal("2"), new BigDecimal("3"), "prep-ret-issue", keeper);
+        prep.returnToBatch(1001L, "AU9999", "PREP-WH", "PREP-RET", "MD-PREP-001",
+                new BigDecimal("1"), new BigDecimal("1"), "prep-ret-back", keeper);
+        assertThat(quantity(OwnerType.CUSTOMER, "PREP-RET", "")).isEqualByComparingTo("4");
+        assertThat(ledger.ledgers()).filteredOn(entry -> "prep_return".equals(entry.documentType())).hasSize(1);
+
+        prep.receiveCompany("AU9999", "COMP-WH", new BigDecimal("6"), new BigDecimal("6"), "COMP-1", "comp-recv-0001", keeper);
+        prep.issueCompany("AU9999", "COMP-WH", new BigDecimal("2"), new BigDecimal("2"), "COMP-1", "comp-issue-0001", keeper);
+        prep.returnCompany("AU9999", "COMP-WH", new BigDecimal("1"), new BigDecimal("1"), "COMP-1", "comp-back-0001", keeper);
+        assertThat(ledger.balances().stream()
+                .filter(balance -> balance.dimension().ownerType() == OwnerType.COMPANY)
+                .filter(balance -> "COMP-1".equals(balance.dimension().batchCode()))
+                .filter(balance -> balance.dimension().stockStatus() == StockStatus.RAW_WAITING)
+                .map(balance -> balance.quantity())
+                .findFirst().orElseThrow()).isEqualByComparingTo("5");
+        assertThat(ledger.balances().stream().filter(balance -> balance.dimension().ownerType() == OwnerType.COMPANY)
+                .allMatch(balance -> balance.dimension().customerId() == null)).isTrue();
+    }
+
     private String issueRace(String requestId, CountDownLatch start) throws InterruptedException {
         start.await();
         prep.issueToMother(1001L, "AU9999", "PREP-WH", "PREP-RACE", "MD-PREP-001",

@@ -24,6 +24,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/inventory/prep-stock/customer-receipts", PermissionCode.INVENTORY_LEDGER_TRANSFER),
             Map.entry("/api/inventory/prep-stock/issues", PermissionCode.INVENTORY_LEDGER_TRANSFER),
             Map.entry("/api/inventory/prep-stock/company-receipts", PermissionCode.INVENTORY_LEDGER_TRANSFER),
+            Map.entry("/api/inventory/prep-stock/returns", PermissionCode.INVENTORY_LEDGER_TRANSFER),
+            Map.entry("/api/inventory/prep-stock/company-issues", PermissionCode.INVENTORY_LEDGER_TRANSFER),
+            Map.entry("/api/inventory/prep-stock/company-returns", PermissionCode.INVENTORY_LEDGER_TRANSFER),
             Map.entry("/api/business/operations/inbound-confirmations", PermissionCode.BUSINESS_INBOUND_CONFIRM),
             Map.entry("/api/business/operations/process-stations", PermissionCode.BUSINESS_PRODUCTION_REPORT),
             Map.entry("/api/business/operations/process-progress", PermissionCode.BUSINESS_PRODUCTION_REPORT),
@@ -106,7 +109,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         if (gatewayDeviceManagePath.matcher(path).matches()) {
             return PermissionCode.GATEWAY_DEVICE_MANAGE;
         }
-        if (path.matches("^/api/label/print-jobs/[^/]+/retries$")) {
+        if (path.matches("^/api/label/print-jobs/[^/]+/(retries|paper-checks|relabels)$")) {
             return PermissionCode.LABEL_PRINT;
         }
         if (path.matches("^/api/business/order-changes/[^/]+/finance-(confirmations|rejections)$")) {

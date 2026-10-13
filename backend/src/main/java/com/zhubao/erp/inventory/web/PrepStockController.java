@@ -67,12 +67,36 @@ public class PrepStockController {
         return ApiResponse.ok("已领用到加工单");
     }
 
+    @PostMapping("/returns")
+    public ApiResponse<String> returnPrep(@RequestBody PrepIssueRequest body, HttpServletRequest request) {
+        requireBody(body);
+        prepStockService.returnToBatch(body.customerId(), body.materialCode(), body.warehouseCode(), body.batchCode(),
+                body.motherOrderCode(), body.quantity(), body.weight(), body.requestId(), account(request));
+        return ApiResponse.ok("已退回备料批次");
+    }
+
     @PostMapping("/company-receipts")
     public ApiResponse<String> receiveCompany(@RequestBody CompanyReceiptRequest body, HttpServletRequest request) {
         requireBody(body);
         prepStockService.receiveCompany(body.materialCode(), body.warehouseCode(), body.quantity(), body.weight(),
                 body.batchCode(), body.requestId(), account(request));
         return ApiResponse.ok("已登记公司自有生产物料");
+    }
+
+    @PostMapping("/company-issues")
+    public ApiResponse<String> issueCompany(@RequestBody CompanyReceiptRequest body, HttpServletRequest request) {
+        requireBody(body);
+        prepStockService.issueCompany(body.materialCode(), body.warehouseCode(), body.quantity(), body.weight(),
+                body.batchCode(), body.requestId(), account(request));
+        return ApiResponse.ok("已领用公司自有生产物料");
+    }
+
+    @PostMapping("/company-returns")
+    public ApiResponse<String> returnCompany(@RequestBody CompanyReceiptRequest body, HttpServletRequest request) {
+        requireBody(body);
+        prepStockService.returnCompany(body.materialCode(), body.warehouseCode(), body.quantity(), body.weight(),
+                body.batchCode(), body.requestId(), account(request));
+        return ApiResponse.ok("已退回公司自有生产物料");
     }
 
     private void requireBody(Object body) {

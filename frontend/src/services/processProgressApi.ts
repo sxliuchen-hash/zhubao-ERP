@@ -41,9 +41,19 @@ export interface ProcessProgressRow {
   dueDate: string;
 }
 
-export function fetchProcessProgress(query = ''): Promise<ProcessProgressRow[]> {
-  const suffix = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : '';
-  return apiGet<ProcessProgressRow[]>(`/api/business/operations/process-progress${suffix}`);
+export function fetchProcessProgress(query = '', process = '', dueBefore = '', page = 1, size = 20): Promise<ProcessProgressRow[]> {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set('query', query.trim());
+  if (process.trim()) params.set('process', process.trim());
+  if (dueBefore.trim()) params.set('dueBefore', dueBefore.trim());
+  params.set('page', String(page));
+  params.set('size', String(size));
+  return apiGet<ProcessProgressRow[]>(`/api/business/operations/process-progress?${params.toString()}`);
+}
+
+export function fetchProcessProgressHistory(orderCode: string, process: string): Promise<{ oldPercent: number; newPercent: number; operator: string; createdAt: string; reason: string }[]> {
+  const params = new URLSearchParams({ orderCode, process });
+  return apiGet(`/api/business/operations/process-progress/history?${params.toString()}`);
 }
 
 export function openProcessProgress(code: string): Promise<ProcessProgressTarget> {

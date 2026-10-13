@@ -31,6 +31,7 @@ import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.label.app.LabelVersionGuard;
 import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.scan.domain.ScanObjectType;
 import com.zhubao.erp.scan.domain.ScanResolveResponse;
@@ -81,6 +82,7 @@ public class QualityRequirementService {
     private final BusinessWorkUnit workUnit;
     private final QualityFactSaveProbe factProbe;
     private final OrderRequirementRepository requirements;
+    private LabelVersionGuard labelGuard;
 
     public QualityRequirementService(
             BusinessDocumentRepository documents,
@@ -157,6 +159,11 @@ public class QualityRequirementService {
         this.requirements = requirements;
     }
 
+    @Autowired(required = false)
+    public void setLabelVersionGuard(LabelVersionGuard labelGuard) {
+        this.labelGuard = labelGuard;
+    }
+
     public QualityCheckView lookup(String rawCode, AuthUserAccount account) {
         requireAccount(account);
         Ticket ticket = resolve(rawCode);
@@ -195,6 +202,9 @@ public class QualityRequirementService {
     public QualityCheckResult submit(QualityCheckCommand command, AuthUserAccount account, String requestId) {
         requireAccount(account);
         Ticket ticket = requireTicket(command == null ? null : command.code(), account);
+        if (labelGuard != null && command != null) {
+            labelGuard.check(command.code(), ticket.motherOrderCode(), ticket.orderCode(), command.labelExceptionReason(), account);
+        }
         if (requestId == null || requestId.isBlank()) {
             return postInitial(command, account, ticket, null);
         }
