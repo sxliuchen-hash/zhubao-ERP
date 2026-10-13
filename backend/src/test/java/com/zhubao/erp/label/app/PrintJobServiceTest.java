@@ -1,17 +1,30 @@
 package com.zhubao.erp.label.app;
 
+import com.zhubao.erp.business.app.BusinessDataAccess;
+import com.zhubao.erp.business.app.BusinessOperationService;
+import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.infra.InMemoryPrintJobRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.List;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -101,5 +114,36 @@ class PrintJobServiceTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    void anotherCustomerCannotReadOrCreateTheJob() {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        StockLedgerService ledger = new StockLedgerService(new InMemoryStockLedgerRepository());
+        new BusinessOperationService(ledger, null, documents).confirmInbound(new ConfirmInboundCommand(
+                "MD-PRINT-AUTH", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-PRINT-AUTH", "",
+                "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
+                new BigDecimal("1"), "件", new BigDecimal("1"), "何琳", "", "",
+                "内壁刻字", "2026-10-20", "恒信珠宝"
+        ));
+        PrintJobService guarded = new PrintJobService(repository, "station-secret");
+        guarded.setDocumentAccess(documents, new BusinessDataAccess(documents, ledger));
+        AuthUserAccount owner = account(DataScope.ALL, List.of());
+        AuthUserAccount other = account(DataScope.CUSTOMER_RANGE, List.of("2002"));
+        PrintJob job = guarded.create("print-auth-0001", "MD-PRINT-AUTH", "FLOW", 1, owner);
+        assertThatThrownBy(() -> guarded.get(job.id(), other)).isInstanceOf(PermissionDeniedException.class);
+        assertThat(guarded.list(other)).isEmpty();
+        assertThatThrownBy(() -> guarded.create("print-auth-0002", "MD-PRINT-AUTH", "FLOW", 1, other))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> guarded.create("print-auth-0003", "MD-MISSING", "FLOW", 1, owner))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不存在");
+    }
+
+    private AuthUserAccount account(DataScope scope, List<String> customers) {
+        return new AuthUserAccount(
+                "打印员", "hash", "打印员", RoleCode.WAREHOUSE_KEEPER, scope, true, true,
+                Instant.now(), 0, null, customers, false, false, List.of()
+        );
     }
 }

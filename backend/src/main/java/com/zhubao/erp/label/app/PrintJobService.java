@@ -1,7 +1,10 @@
 package com.zhubao.erp.label.app;
 
+import com.zhubao.erp.business.app.BusinessDataAccess;
+import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
@@ -27,6 +30,8 @@ public class PrintJobService {
     private final String stationToken;
     private final OrderChangeRepository changes;
     private LabelVersionGuard labelGuard;
+    private BusinessDocumentRepository documents;
+    private BusinessDataAccess dataAccess;
 
     public PrintJobService(PrintJobRepository jobs, String stationToken) {
         this(jobs, stationToken, null);
@@ -46,6 +51,27 @@ public class PrintJobService {
     @Autowired(required = false)
     public void setLabelVersionGuard(LabelVersionGuard labelGuard) {
         this.labelGuard = labelGuard;
+    }
+
+    @Autowired(required = false)
+    public void setDocumentAccess(BusinessDocumentRepository documents, BusinessDataAccess dataAccess) {
+        this.documents = documents;
+        this.dataAccess = dataAccess;
+    }
+
+    public PrintJob create(String requestId, String businessCode, String templateCode, int copies, AuthUserAccount account) {
+        assertPrintable(businessCode, account);
+        return create(requestId, businessCode, templateCode, copies, account == null ? "" : account.operator());
+    }
+
+    public PrintJob get(String id, AuthUserAccount account) {
+        PrintJob job = get(id);
+        assertPrintable(job.businessCode(), account);
+        return job;
+    }
+
+    public List<PrintJob> list(AuthUserAccount account) {
+        return list().stream().filter(job -> readable(job.businessCode(), account)).toList();
     }
 
     public PrintJob create(String requestId, String businessCode, String templateCode, int copies, String operator) {
@@ -199,6 +225,31 @@ public class PrintJobService {
                 + "\",\"instance\":\"" + instance
                 + "\",\"qr\":\"" + qr
                 + "\",\"lines\":[\"单号:" + escape(businessCode) + "\",\"模板:" + escape(templateCode) + "\"]}";
+    }
+
+    private void assertPrintable(String businessCode, AuthUserAccount account) {
+        if (!readable(businessCode, account)) {
+            throw new PermissionDeniedException("打印对象不在当前账号的业务数据范围内");
+        }
+    }
+
+    private boolean readable(String businessCode, AuthUserAccount account) {
+        if (documents != null) {
+            boolean known = documents.findMotherOrderByCode(businessCode).isPresent()
+                    || documents.findChildWorkOrderByCode(businessCode).isPresent();
+            if (!known) {
+                throw new BusinessException("打印对象不存在：" + businessCode);
+            }
+        }
+        if (account == null || dataAccess == null) {
+            return true;
+        }
+        try {
+            dataAccess.assertCanRead(BusinessDataAccess.contextOf(account), businessCode);
+            return true;
+        } catch (PermissionDeniedException ex) {
+            return false;
+        }
     }
 
     private static String escape(String value) {

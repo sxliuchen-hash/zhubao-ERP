@@ -4,7 +4,10 @@ import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.app.PrintJobService;
 import com.zhubao.erp.label.domain.PrintJob;
+import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.OperatorContext;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,31 +25,34 @@ public class PrintJobController {
 
     private final PrintJobService printJobService;
     private final OperatorContextResolver operatorContextResolver;
+    private final AuthSessionService authSessionService;
 
-    public PrintJobController(PrintJobService printJobService, OperatorContextResolver operatorContextResolver) {
+    public PrintJobController(
+            PrintJobService printJobService,
+            OperatorContextResolver operatorContextResolver,
+            AuthSessionService authSessionService
+    ) {
         this.printJobService = printJobService;
         this.operatorContextResolver = operatorContextResolver;
+        this.authSessionService = authSessionService;
     }
 
     @PostMapping("/print-jobs")
     public ApiResponse<PrintJob> create(@RequestBody CreatePrintJobRequest body, HttpServletRequest request) {
         require(body);
         return ApiResponse.ok(printJobService.create(
-                body.requestId(), body.businessCode(), body.templateCode(), body.copies(),
-                operatorContextResolver.requireSession(request).operator()
+                body.requestId(), body.businessCode(), body.templateCode(), body.copies(), account(request)
         ));
     }
 
     @GetMapping("/print-jobs/{id}")
     public ApiResponse<PrintJob> get(@PathVariable String id, HttpServletRequest request) {
-        operatorContextResolver.requireSession(request);
-        return ApiResponse.ok(printJobService.get(id));
+        return ApiResponse.ok(printJobService.get(id, account(request)));
     }
 
     @GetMapping("/print-jobs")
     public ApiResponse<List<PrintJob>> list(HttpServletRequest request) {
-        operatorContextResolver.requireSession(request);
-        return ApiResponse.ok(printJobService.list());
+        return ApiResponse.ok(printJobService.list(account(request)));
     }
 
     @PostMapping("/print-jobs/{id}/retries")
@@ -56,8 +62,9 @@ public class PrintJobController {
             HttpServletRequest request
     ) {
         require(body);
-        return ApiResponse.ok(printJobService.retry(id, body.requestId(), body.reason(),
-                operatorContextResolver.requireSession(request).operator()));
+        AuthUserAccount account = account(request);
+        printJobService.get(id, account);
+        return ApiResponse.ok(printJobService.retry(id, body.requestId(), body.reason(), account.operator()));
     }
 
     @PostMapping("/print-jobs/{id}/paper-checks")
@@ -67,8 +74,9 @@ public class PrintJobController {
             HttpServletRequest request
     ) {
         require(body);
-        return ApiResponse.ok(printJobService.verifyPaper(id, body.requestId(), body.reason(),
-                operatorContextResolver.requireSession(request).operator()));
+        AuthUserAccount account = account(request);
+        printJobService.get(id, account);
+        return ApiResponse.ok(printJobService.verifyPaper(id, body.requestId(), body.reason(), account.operator()));
     }
 
     @PostMapping("/print-jobs/{id}/relabels")
@@ -78,8 +86,9 @@ public class PrintJobController {
             HttpServletRequest request
     ) {
         require(body);
-        return ApiResponse.ok(printJobService.relabel(id, body.requestId(), body.reason(),
-                operatorContextResolver.requireSession(request).operator()));
+        AuthUserAccount account = account(request);
+        printJobService.get(id, account);
+        return ApiResponse.ok(printJobService.relabel(id, body.requestId(), body.reason(), account.operator()));
     }
 
     @PostMapping("/agents/jobs/claim")
@@ -99,6 +108,18 @@ public class PrintJobController {
     ) {
         require(body);
         return ApiResponse.ok(printJobService.report(id, stationId, token, body.outcome(), body.failureReason()));
+    }
+
+    private AuthUserAccount account(HttpServletRequest request) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        AuthUserAccount account = authSessionService.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
+                .orElseThrow(() -> new BusinessException("请先登录后再打印"));
+        return new AuthUserAccount(
+                account.username(), account.passwordHash(), account.operator(), account.role(), account.dataScope(),
+                account.enabled(), account.demoAccount(), account.passwordChangedAt(), account.failedLoginCount(),
+                account.lockedUntil(), context.customerScope(), account.passwordChangeRequired(),
+                account.temporaryPasswordConsumed(), account.allowedProcesses()
+        );
     }
 
     private void require(Object body) {
