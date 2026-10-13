@@ -3,11 +3,13 @@ package com.zhubao.erp.finance.app;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OrderChange;
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.Payable;
 import com.zhubao.erp.finance.domain.PayrollLine;
 import com.zhubao.erp.finance.domain.ReceivableLine;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -35,16 +37,20 @@ public class OrderChangePostingService {
         this.documents = documents;
     }
 
-    public void post(OrderChange change, String operator) {
+    public void post(OrderChange change, String operator, WorkSession session) {
         if (change.amountUnchanged() || (change.customerDelta().signum() == 0 && change.workerDelta().signum() == 0)) {
             return;
         }
-        MotherOrderRecord mother = documents.findMotherOrderByCode(change.motherOrderCode()).orElse(null);
-        long customerId = mother == null || mother.customerId() == null ? 0L : mother.customerId();
+        MotherOrderRecord mother = documents.findMotherOrderByCode(change.motherOrderCode())
+                .orElseThrow(() -> new BusinessException("改单母单不存在，不能入账"));
+        long customerId = mother.customerId() == null ? 0L : mother.customerId();
         String customerName = mother == null || mother.customerName() == null ? "" : mother.customerName();
         String orderCode = change.workOrderCode().isBlank() ? change.motherOrderCode() : change.workOrderCode();
         if (change.customerDelta().signum() < 0) {
-            billing.reverseForChange(change.receivableCode(), change.customerDelta().abs(), change.id(), operator);
+            billing.reverseForChange(
+                    change.receivableCode(), change.customerDelta().abs(), change.id(), operator, session,
+                    customerId, change.motherOrderCode(), orderCode
+            );
         } else if (change.customerDelta().signum() > 0) {
             String sourceKey = "CHANGE|" + change.id() + "|" + orderCode + "|" + change.processName();
             if (finance.findReceivableBySourceKey(sourceKey).isEmpty()) {
@@ -66,7 +72,7 @@ public class OrderChangePostingService {
                         "改单 " + change.id(),
                         operator,
                         FinanceTexts.now()
-                ));
+                ), session);
             }
         }
         if (change.workerDelta().signum() != 0) {
@@ -92,7 +98,7 @@ public class OrderChangePostingService {
                         amount,
                         confirmed,
                         sourceKey
-                ));
+                ), session);
                 if (confirmed) {
                     String payableSource = "PAYROLL-ADJ|" + change.id();
                     if (finance.findPayableBySource(payableSource).isEmpty()) {
@@ -108,7 +114,7 @@ public class OrderChangePostingService {
                                 FinanceTexts.ZERO,
                                 operator,
                                 FinanceTexts.now()
-                        ));
+                        ), session);
                     }
                 }
             }

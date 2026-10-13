@@ -33,9 +33,9 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void realCatalogKeepsContiguousVersionsThroughV48() {
+    void realCatalogKeepsContiguousVersionsThroughV54() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(48);
+        assertThat(scripts).hasSize(54);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);
@@ -56,8 +56,72 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(46).fileName()).isEqualTo("V47__m3_label_menu.sql");
         assertThat(scripts.get(47).version()).isEqualTo(48);
         assertThat(scripts.get(47).fileName()).isEqualTo("V48__m3_users_menu.sql");
+        assertThat(scripts.get(48).version()).isEqualTo(49);
+        assertThat(scripts.get(48).fileName()).isEqualTo("V49__m3_process_progress.sql");
+        assertThat(scripts.get(49).version()).isEqualTo(50);
+        assertThat(scripts.get(49).fileName()).isEqualTo("V50__m3_stock_batch_code.sql");
+        assertThat(scripts.get(50).version()).isEqualTo(51);
+        assertThat(scripts.get(50).fileName()).isEqualTo("V51__m3_print_job.sql");
+        assertThat(scripts.get(51).version()).isEqualTo(52);
+        assertThat(scripts.get(51).fileName()).isEqualTo("V52__m3_order_change.sql");
+        assertThat(scripts.get(52).version()).isEqualTo(53);
+        assertThat(scripts.get(52).fileName()).isEqualTo("V53__m3_order_change_delta.sql");
+        assertThat(scripts.get(53).version()).isEqualTo(54);
+        assertThat(scripts.get(53).fileName()).isEqualTo("V54__m3_order_requirement_version.sql");
         assertThat(MigrationCatalog.loadClasspath()).extracting(MigrationScript::version)
                 .containsExactlyElementsOf(scripts.stream().map(MigrationScript::version).toList());
+    }
+
+    @Test
+    void classpathV49ThroughV53ProbesMatchTargetStructure() throws Exception {
+        List<MigrationScript> scripts = MigrationCatalog.loadClasspath();
+        MigrationScript progress = scripts.get(48);
+        MigrationScript batch = scripts.get(49);
+        MigrationScript printJob = scripts.get(50);
+        MigrationScript orderChange = scripts.get(51);
+        MigrationScript delta = scripts.get(52);
+        MigrationScript requirement = scripts.get(53);
+        assertThat(progress.probe().kind()).isEqualTo(SchemaProbe.Kind.TABLE);
+        assertThat(progress.probe().tableName()).isEqualTo("biz_process_progress_event");
+        assertThat(batch.probe().kind()).isEqualTo(SchemaProbe.Kind.COLUMN);
+        assertThat(batch.probe().tableName()).isEqualTo("inv_stock_ledger");
+        assertThat(batch.probe().columnName()).isEqualTo("from_mother_order_code");
+        assertThat(printJob.probe().tableName()).isEqualTo("biz_print_job");
+        assertThat(orderChange.probe().tableName()).isEqualTo("biz_order_change");
+        assertThat(delta.probe().kind()).isEqualTo(SchemaProbe.Kind.COLUMN);
+        assertThat(delta.probe().columnName()).isEqualTo("worker_name");
+        assertThat(requirement.probe().kind()).isEqualTo(SchemaProbe.Kind.TABLE);
+        assertThat(requirement.probe().tableName()).isEqualTo("biz_execution_round");
+
+        DataSource dataSource = dataSource();
+        execute(dataSource, "create table inv_stock_balance (id bigint primary key, stock_status varchar(30) not null)");
+        execute(dataSource, "create table inv_stock_ledger (id bigint primary key, to_stock_status varchar(30) not null)");
+        JdbcSchemaInspector inspector = new JdbcSchemaInspector(dataSource);
+        assertThat(inspector.matches(progress.probe())).isFalse();
+        assertThat(inspector.matches(batch.probe())).isFalse();
+        assertThat(inspector.matches(printJob.probe())).isFalse();
+        assertThat(inspector.matches(orderChange.probe())).isFalse();
+        assertThat(inspector.matches(delta.probe())).isFalse();
+        assertThat(inspector.matches(requirement.probe())).isFalse();
+
+        runTwice(dataSource, progress.sql());
+        runTwice(dataSource, printJob.sql());
+        runTwice(dataSource, orderChange.sql());
+        runOnce(dataSource, batch.sql());
+        runOnce(dataSource, delta.sql());
+        runOnce(dataSource, requirement.sql());
+
+        assertThat(inspector.matches(progress.probe())).isTrue();
+        assertThat(inspector.matches(batch.probe())).isTrue();
+        assertThat(inspector.matches(printJob.probe())).isTrue();
+        assertThat(inspector.matches(orderChange.probe())).isTrue();
+        assertThat(inspector.matches(delta.probe())).isTrue();
+        assertThat(inspector.matches(requirement.probe())).isTrue();
+        assertThat(inspector.tableExists("biz_process_progress")).isTrue();
+        assertThat(inspector.columnExists("inv_stock_balance", "batch_code")).isTrue();
+        assertThat(inspector.columnExists("biz_order_change", "customer_delta")).isTrue();
+        assertThat(inspector.columnExists("biz_order_change", "rework_process")).isTrue();
+        assertThat(inspector.tableExists("biz_order_requirement_version")).isTrue();
     }
 
     @Test
@@ -242,6 +306,39 @@ class DatabaseUpgradeServiceTest {
         dataSource.setUser("sa");
         dataSource.setPassword("");
         return dataSource;
+    }
+
+    private static void runTwice(DataSource dataSource, String sql) throws Exception {
+        for (int repetition = 0; repetition < 2; repetition++) {
+            runOnce(dataSource, sql);
+        }
+    }
+
+    private static void runOnce(DataSource dataSource, String sql) throws Exception {
+        for (String statement : MigrationCatalog.statements(sql)) {
+            // H2 不能在一条 ALTER 里连续加多列。测试按 ADD COLUMN 拆开执行，已发布脚本保持原样。
+            for (String piece : h2AlterPieces(statement)) {
+                execute(dataSource, piece);
+            }
+        }
+    }
+
+    static java.util.List<String> h2AlterPieces(String statement) {
+        String trimmed = statement.trim();
+        int add = trimmed.toLowerCase(java.util.Locale.ROOT).indexOf("add column");
+        if (add < 0) {
+            return java.util.List.of(trimmed);
+        }
+        String prefix = trimmed.substring(0, add).trim();
+        String[] parts = trimmed.substring(add).split(",\\s*(?=ADD COLUMN)");
+        if (parts.length == 1) {
+            return java.util.List.of(trimmed);
+        }
+        java.util.List<String> pieces = new java.util.ArrayList<>();
+        for (String part : parts) {
+            pieces.add(prefix + " " + part.trim());
+        }
+        return pieces;
     }
 
     private static void execute(DataSource dataSource, String sql) throws Exception {

@@ -42,8 +42,19 @@ public class OrderChangeController {
     public ApiResponse<OrderChange> draft(@RequestBody DraftRequest body, HttpServletRequest request) {
         require(body);
         return ApiResponse.ok(orderChangeService.draft(
-                body.motherOrderCode(), body.workOrderCode(), body.newRequirement(), body.newDueDate(), body.requestId(), account(request)
+                body.motherOrderCode(), body.workOrderCode(), body.newRequirement(), body.newDueDate(), body.requestId(),
+                body.newRoute(), body.expectedVersion(), body.reworkProcess(), account(request)
         ));
+    }
+
+    @GetMapping("/{id}")
+    public ApiResponse<OrderChange> detail(@PathVariable String id, HttpServletRequest request) {
+        return ApiResponse.ok(orderChangeService.present(id, account(request)));
+    }
+
+    @GetMapping
+    public ApiResponse<List<OrderChange>> list(@RequestParam String motherOrderCode, HttpServletRequest request) {
+        return ApiResponse.ok(orderChangeService.list(motherOrderCode, account(request)));
     }
 
     @PostMapping("/{id}/finance-submissions")
@@ -70,7 +81,7 @@ public class OrderChangeController {
     @PostMapping("/{id}/applications")
     public ApiResponse<OrderChange> apply(@PathVariable String id, @RequestBody ApplyRequest body, HttpServletRequest request) {
         require(body);
-        return ApiResponse.ok(orderChangeService.apply(id, body.requestId(), account(request)));
+        return ApiResponse.ok(orderChangeService.apply(id, body.requestId(), body.expectedVersion(), account(request)));
     }
 
     @GetMapping("/timeline")
@@ -96,7 +107,16 @@ public class OrderChangeController {
         }
     }
 
-    public record DraftRequest(String motherOrderCode, String workOrderCode, String newRequirement, String newDueDate, String requestId) {
+    public record DraftRequest(
+            String motherOrderCode,
+            String workOrderCode,
+            String newRequirement,
+            String newDueDate,
+            String requestId,
+            String newRoute,
+            Integer expectedVersion,
+            String reworkProcess
+    ) {
     }
 
     public record FinanceRequest(
@@ -112,6 +132,6 @@ public class OrderChangeController {
     ) {
     }
 
-    public record ApplyRequest(String requestId) {
+    public record ApplyRequest(String requestId, Integer expectedVersion) {
     }
 }

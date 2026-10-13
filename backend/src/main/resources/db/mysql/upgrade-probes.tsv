@@ -46,3 +46,9 @@
 46	TABLE	biz_quality_round
 47	ROW	sys_navigation_menu	code	label
 48	ROW	sys_navigation_menu	code	users
+49	TABLE	biz_process_progress_event
+50	COLUMN	inv_stock_ledger	from_mother_order_code
+51	TABLE	biz_print_job
+52	TABLE	biz_order_change
+53	COLUMN	biz_order_change	worker_name
+54	TABLE	biz_execution_round

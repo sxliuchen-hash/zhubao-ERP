@@ -12,6 +12,7 @@ import com.zhubao.erp.business.domain.ProcessStationReportResult;
 import com.zhubao.erp.business.domain.ProcessStationView;
 import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.business.domain.ProductionReportResult;
+import com.zhubao.erp.business.domain.OrderRequirementRepository;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -61,6 +62,7 @@ public class ProcessStationService {
     private final BusinessDataAccess dataAccess;
     private final BusinessWorkUnit workUnit;
     private final HandoffSaveProbe handoffSaveProbe;
+    private final OrderRequirementRepository requirements;
 
     public ProcessStationService(
             BusinessDocumentRepository documents,
@@ -81,7 +83,6 @@ public class ProcessStationService {
         this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, null);
     }
 
-    @Autowired
     public ProcessStationService(
             BusinessDocumentRepository documents,
             StockLedgerService stockLedgerService,
@@ -90,7 +91,20 @@ public class ProcessStationService {
             BusinessDataAccess dataAccess,
             BusinessWorkUnit workUnit
     ) {
-        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, HandoffSaveProbe.NONE);
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, HandoffSaveProbe.NONE, null);
+    }
+
+    @Autowired
+    public ProcessStationService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess,
+            BusinessWorkUnit workUnit,
+            OrderRequirementRepository requirements
+    ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, HandoffSaveProbe.NONE, requirements);
     }
 
     public ProcessStationService(
@@ -102,6 +116,19 @@ public class ProcessStationService {
             BusinessWorkUnit workUnit,
             HandoffSaveProbe handoffSaveProbe
     ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, handoffSaveProbe, null);
+    }
+
+    public ProcessStationService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess,
+            BusinessWorkUnit workUnit,
+            HandoffSaveProbe handoffSaveProbe,
+            OrderRequirementRepository requirements
+    ) {
         this.documents = documents;
         this.stockLedgerService = stockLedgerService;
         this.businessOperationService = businessOperationService;
@@ -109,6 +136,7 @@ public class ProcessStationService {
         this.dataAccess = dataAccess;
         this.workUnit = workUnit;
         this.handoffSaveProbe = handoffSaveProbe == null ? HandoffSaveProbe.NONE : handoffSaveProbe;
+        this.requirements = requirements;
     }
 
     /**
@@ -123,8 +151,10 @@ public class ProcessStationService {
             List<ProcessProgressChildOption> children = documents.listChildWorkOrders(code).stream()
                     .map(child -> new ProcessProgressChildOption(child.code(), blank(child.customerName()), blank(child.processes())))
                     .toList();
+            var version = OrderRequirementLookup.current(requirements, mother.code(), "").orElse(null);
             return new ProcessProgressTarget(true, "", mother.code(), blank(mother.customerName()),
-                    blank(mother.processingRequirement()), blank(mother.dueDate()), "", false, children);
+                    OrderRequirementLookup.requirement(version, blank(mother.processingRequirement())),
+                    OrderRequirementLookup.dueDate(version, blank(mother.dueDate())), "", false, children);
         }
         StationTicket ticket = resolve(rawCode);
         assertCustomer(ticket, account);
@@ -543,7 +573,7 @@ public class ProcessStationService {
         if (stored.isEmpty()) {
             throw new BusinessException("这张子单没有工序");
         }
-        return new StationTicket(
+        return overlay(new StationTicket(
                 child.code(),
                 mother.code(),
                 false,
@@ -559,7 +589,7 @@ public class ProcessStationService {
                 requirePositive(child.quantity(), "数量"),
                 requirePositive(child.weight(), "重量"),
                 WorkshopProcesses.normalize(stored)
-        );
+        ));
     }
 
     private StationTicket motherTicket(String code) {
@@ -572,7 +602,7 @@ public class ProcessStationService {
         if (state == null || !MotherSplitState.KEEP.equals(state.decision())) {
             throw new BusinessException("请先选择不拆，再扫母单贴纸");
         }
-        return new StationTicket(
+        return overlay(new StationTicket(
                 mother.code(),
                 mother.code(),
                 true,
@@ -588,6 +618,32 @@ public class ProcessStationService {
                 requirePositive(mother.quantity(), "数量"),
                 requirePositive(mother.weight(), "重量"),
                 WorkshopProcesses.DEFAULT_ORDER
+        ));
+    }
+
+    private StationTicket overlay(StationTicket ticket) {
+        var version = OrderRequirementLookup.current(
+                requirements, ticket.motherOrderCode(), ticket.keptMother() ? "" : ticket.orderCode()
+        ).orElse(null);
+        if (version == null) {
+            return ticket;
+        }
+        return new StationTicket(
+                ticket.orderCode(),
+                ticket.motherOrderCode(),
+                ticket.keptMother(),
+                ticket.customerId(),
+                ticket.ownerCustomerId(),
+                ticket.ownerType(),
+                ticket.customerName(),
+                OrderRequirementLookup.requirement(version, ticket.processingRequirement()),
+                OrderRequirementLookup.dueDate(version, ticket.dueDate()),
+                ticket.materialCode(),
+                ticket.warehouseCode(),
+                ticket.quantityUnit(),
+                ticket.quantity(),
+                ticket.weight(),
+                OrderRequirementLookup.route(version, ticket.processes())
         );
     }
 

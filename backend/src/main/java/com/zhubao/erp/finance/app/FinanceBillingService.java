@@ -120,38 +120,65 @@ public class FinanceBillingService {
         return new BillingRunResult(month.toString(), created.size(), created, unpriced);
     }
 
-    /** 改单减额。来源键含改单号，重复生效只返回原来的红字。 */
-    public ReceivableLine reverseForChange(String receivableCode, BigDecimal amount, String changeId, String operator) {
+    /** 改单减额。必须核对原应收的客户、母单、工单和来源，重复生效只返回原来的红字。 */
+    public ReceivableLine reverseForChange(
+            String receivableCode,
+            BigDecimal amount,
+            String changeId,
+            String operator,
+            com.zhubao.erp.work.domain.WorkSession session,
+            long customerId,
+            String motherOrderCode,
+            String workOrderCode
+    ) {
         String sourceKey = "CHANGE-RED|" + changeId;
         Optional<ReceivableLine> existing = finance.findReceivableBySourceKey(sourceKey);
         if (existing.isPresent()) {
             return existing.get();
         }
-        ReceivableLine reversed = reverse(new ReverseReceivableCommand(receivableCode, amount, "改单 " + changeId), operator);
-        ReceivableLine linked = new ReceivableLine(
-                reversed.code(),
-                reversed.customerId(),
-                reversed.customerName(),
-                reversed.yearMonth(),
-                reversed.sourceType(),
-                sourceKey,
-                reversed.motherOrderCode(),
-                reversed.workOrderCode(),
-                reversed.processName(),
-                reversed.quantity(),
-                reversed.unit(),
-                reversed.unitPrice(),
-                reversed.amount(),
-                reversed.reversesCode(),
-                reversed.remark(),
-                reversed.operator(),
-                reversed.createdAt()
-        );
-        finance.saveReceivable(linked);
+        ReceivableLine original = finance.findReceivableByCode(receivableCode)
+                .orElseThrow(() -> new BusinessException("找不到要冲销的账单行"));
+        String order = workOrderCode == null || workOrderCode.isBlank() ? motherOrderCode : workOrderCode;
+        if (original.customerId() != customerId) {
+            throw new BusinessException("减额应收不属于该客户");
+        }
+        if (!motherOrderCode.equals(original.motherOrderCode())) {
+            throw new BusinessException("减额应收不属于该母单");
+        }
+        if (!order.equals(original.workOrderCode()) && !motherOrderCode.equals(original.workOrderCode())) {
+            throw new BusinessException("减额应收不属于该工单");
+        }
+        if (original.sourceKey() == null || original.sourceKey().isBlank()
+                || (!original.sourceKey().contains(order) && !original.sourceKey().contains(motherOrderCode))) {
+            throw new BusinessException("减额应收来源与改单不符");
+        }
+        ReceivableLine linked = buildRed(new ReverseReceivableCommand(receivableCode, amount, "改单 " + changeId), operator, sourceKey);
+        if (session == null) {
+            finance.saveReceivable(linked);
+        } else {
+            finance.saveReceivable(linked, session);
+        }
         return linked;
     }
 
     public ReceivableLine reverse(ReverseReceivableCommand command, String operator) {
+        return reverse(command, operator, null);
+    }
+
+    private ReceivableLine reverse(ReverseReceivableCommand command, String operator, com.zhubao.erp.work.domain.WorkSession session) {
+        String code = FinanceTexts.code("FIN-RED", sequence);
+        ReceivableLine original = finance.findReceivableByCode(command.receivableCode())
+                .orElseThrow(() -> new BusinessException("找不到要冲销的账单行"));
+        ReceivableLine red = buildRed(command, operator, "RED|" + original.code() + "|" + code);
+        if (session == null) {
+            finance.saveReceivable(red);
+        } else {
+            finance.saveReceivable(red, session);
+        }
+        return red;
+    }
+
+    private ReceivableLine buildRed(ReverseReceivableCommand command, String operator, String sourceKey) {
         ReceivableLine original = finance.findReceivableByCode(command.receivableCode())
                 .orElseThrow(() -> new BusinessException("找不到要冲销的账单行"));
         if (!original.reversesCode().isBlank() || "RED".equals(original.sourceType())) {
@@ -165,14 +192,14 @@ public class FinanceBillingService {
         BigDecimal quantity = original.unitPrice().signum() == 0
                 ? FinanceTexts.quantity(amount)
                 : FinanceTexts.quantity(amount.divide(original.unitPrice(), 3, java.math.RoundingMode.HALF_UP));
-        String code = FinanceTexts.code("FIN-RED", sequence);
+        String code = sourceKey.startsWith("CHANGE-RED|") ? FinanceTexts.code("FIN-RED", sequence) : sourceKey.substring(sourceKey.lastIndexOf('|') + 1);
         ReceivableLine red = new ReceivableLine(
                 code,
                 original.customerId(),
                 original.customerName(),
                 YearMonth.now().toString(),
                 "RED",
-                "RED|" + original.code() + "|" + code,
+                sourceKey,
                 original.motherOrderCode(),
                 original.workOrderCode(),
                 original.processName(),
@@ -185,7 +212,6 @@ public class FinanceBillingService {
                 operator,
                 FinanceTexts.now()
         );
-        finance.saveReceivable(red);
         return red;
     }
 

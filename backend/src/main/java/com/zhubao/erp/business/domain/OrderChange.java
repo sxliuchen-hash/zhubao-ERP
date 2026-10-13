@@ -28,7 +28,11 @@ public record OrderChange(
         BigDecimal workerDelta,
         String receivableCode,
         String processName,
-        String workerName
+        String workerName,
+        String oldRoute,
+        String newRoute,
+        int expectedVersion,
+        String reworkProcess
 ) {
     public OrderChange {
         customerDelta = customerDelta == null ? BigDecimal.ZERO : customerDelta;
@@ -36,5 +40,18 @@ public record OrderChange(
         receivableCode = receivableCode == null ? "" : receivableCode;
         processName = processName == null ? "" : processName;
         workerName = workerName == null ? "" : workerName;
+        oldRoute = oldRoute == null ? "" : oldRoute;
+        newRoute = newRoute == null ? "" : newRoute;
+        reworkProcess = reworkProcess == null ? "" : reworkProcess;
+    }
+
+    /** 非财务查看时去掉单价、工费、差额和应收编号。 */
+    public OrderChange withoutMoney() {
+        return new OrderChange(
+                id, motherOrderCode, workOrderCode, oldRequirement, newRequirement, oldDueDate, newDueDate,
+                status, versionNo, amountUnchanged, BigDecimal.ZERO, BigDecimal.ZERO, financeNote, confirmedBy,
+                requestId, createdBy, createdAt, updatedAt, BigDecimal.ZERO, BigDecimal.ZERO, "",
+                processName, workerName, oldRoute, newRoute, expectedVersion, reworkProcess
+        );
     }
 }

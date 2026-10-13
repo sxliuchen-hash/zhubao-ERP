@@ -17,6 +17,7 @@ import com.zhubao.erp.finance.domain.PriceAgreement;
 import com.zhubao.erp.finance.domain.ReceiptAllocation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.WorkerRate;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -88,6 +89,27 @@ public class InMemoryFinanceRepository implements FinanceRepository {
             throw new BusinessException("这张单据已经入过账");
         }
         receivablesByCode.put(line.code(), line);
+    }
+
+    @Override
+    public void saveReceivable(ReceivableLine line, WorkSession session) {
+        ReceivableLine previousLine = receivablesByCode.get(line.code());
+        String previousSource = receivableCodeBySource.get(line.sourceKey());
+        saveReceivable(line);
+        if (session != null) {
+            session.onRollback(() -> {
+                if (previousLine == null) {
+                    receivablesByCode.remove(line.code());
+                } else {
+                    receivablesByCode.put(line.code(), previousLine);
+                }
+                if (previousSource == null) {
+                    receivableCodeBySource.remove(line.sourceKey());
+                } else {
+                    receivableCodeBySource.put(line.sourceKey(), previousSource);
+                }
+            });
+        }
     }
 
     @Override
@@ -201,6 +223,21 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public void savePayrollLine(PayrollLine line, WorkSession session) {
+        PayrollLine previous = payrollLines.get(line.code());
+        savePayrollLine(line);
+        if (session != null) {
+            session.onRollback(() -> {
+                if (previous == null) {
+                    payrollLines.remove(line.code());
+                } else {
+                    payrollLines.put(line.code(), previous);
+                }
+            });
+        }
+    }
+
+    @Override
     public List<PayrollLine> listPayrollLines() {
         return payrollLines.values().stream()
                 .sorted(Comparator.comparing(PayrollLine::code))
@@ -276,6 +313,21 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     @Override
     public void savePayable(Payable payable) {
         payables.put(payable.code(), payable);
+    }
+
+    @Override
+    public void savePayable(Payable payable, WorkSession session) {
+        Payable previous = payables.get(payable.code());
+        savePayable(payable);
+        if (session != null) {
+            session.onRollback(() -> {
+                if (previous == null) {
+                    payables.remove(payable.code());
+                } else {
+                    payables.put(payable.code(), previous);
+                }
+            });
+        }
     }
 
     @Override

@@ -51,3 +51,4 @@ V50__m3_stock_batch_code.sql
 V51__m3_print_job.sql
 V52__m3_order_change.sql
 V53__m3_order_change_delta.sql
+V54__m3_order_requirement_version.sql

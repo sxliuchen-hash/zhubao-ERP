@@ -23,6 +23,7 @@ import com.zhubao.erp.business.domain.DispatchReworkCommand;
 import com.zhubao.erp.business.domain.ReportReworkCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
+import com.zhubao.erp.business.domain.OrderRequirementRepository;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -79,6 +80,7 @@ public class QualityRequirementService {
     private final BusinessDataAccess dataAccess;
     private final BusinessWorkUnit workUnit;
     private final QualityFactSaveProbe factProbe;
+    private final OrderRequirementRepository requirements;
 
     public QualityRequirementService(
             BusinessDocumentRepository documents,
@@ -99,7 +101,6 @@ public class QualityRequirementService {
         this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, null);
     }
 
-    @Autowired
     public QualityRequirementService(
             BusinessDocumentRepository documents,
             StockLedgerService stockLedgerService,
@@ -108,7 +109,20 @@ public class QualityRequirementService {
             BusinessDataAccess dataAccess,
             BusinessWorkUnit workUnit
     ) {
-        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, QualityFactSaveProbe.NONE);
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, QualityFactSaveProbe.NONE, null);
+    }
+
+    @Autowired
+    public QualityRequirementService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess,
+            BusinessWorkUnit workUnit,
+            OrderRequirementRepository requirements
+    ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, QualityFactSaveProbe.NONE, requirements);
     }
 
     public QualityRequirementService(
@@ -120,6 +134,19 @@ public class QualityRequirementService {
             BusinessWorkUnit workUnit,
             QualityFactSaveProbe factProbe
     ) {
+        this(documents, stockLedgerService, businessOperationService, scanCodeParser, dataAccess, workUnit, factProbe, null);
+    }
+
+    public QualityRequirementService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessOperationService businessOperationService,
+            ScanCodeParser scanCodeParser,
+            BusinessDataAccess dataAccess,
+            BusinessWorkUnit workUnit,
+            QualityFactSaveProbe factProbe,
+            OrderRequirementRepository requirements
+    ) {
         this.documents = documents;
         this.stockLedgerService = stockLedgerService;
         this.businessOperationService = businessOperationService;
@@ -127,6 +154,7 @@ public class QualityRequirementService {
         this.dataAccess = dataAccess;
         this.workUnit = workUnit;
         this.factProbe = factProbe == null ? QualityFactSaveProbe.NONE : factProbe;
+        this.requirements = requirements;
     }
 
     public QualityCheckView lookup(String rawCode, AuthUserAccount account) {
@@ -1003,6 +1031,10 @@ public class QualityRequirementService {
             String warehouseCode,
             List<String> processes
     ) {
+        var version = OrderRequirementLookup.current(requirements, motherOrderCode, orderCode).orElse(null);
+        processingRequirement = OrderRequirementLookup.requirement(version, processingRequirement);
+        dueDate = OrderRequirementLookup.dueDate(version, dueDate);
+        processes = OrderRequirementLookup.route(version, processes);
         if (customerId == null) {
             throw new BusinessException("这张单没有客户，不能质检");
         }

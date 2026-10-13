@@ -1,5 +1,7 @@
 package com.zhubao.erp.finance.domain;
 
+import com.zhubao.erp.work.domain.WorkSession;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -13,6 +15,9 @@ public interface FinanceRepository {
     List<PriceAgreement> listAgreements();
 
     void saveReceivable(ReceivableLine line);
+
+    /** 在工作会话中追加应收。失败时内存撤销，JDBC 随连接回滚。 */
+    void saveReceivable(ReceivableLine line, WorkSession session);
 
     List<ReceivableLine> listReceivables();
 
@@ -40,6 +45,8 @@ public interface FinanceRepository {
     /** 追加一行工资调整，不删除当月已有工资。 */
     void savePayrollLine(PayrollLine line);
 
+    void savePayrollLine(PayrollLine line, WorkSession session);
+
     List<PayrollLine> listPayrollLines();
 
     Optional<PayrollRun> findPayrollRun(String yearMonth);
@@ -65,6 +72,8 @@ public interface FinanceRepository {
     List<DepreciationEntry> listDepreciations();
 
     void savePayable(Payable payable);
+
+    void savePayable(Payable payable, WorkSession session);
 
     List<Payable> listPayables();
 

@@ -3,6 +3,7 @@ package com.zhubao.erp.business.infra;
 import com.zhubao.erp.business.domain.OrderChange;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.business.domain.OrderChangeStatus;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -20,6 +21,22 @@ public class InMemoryOrderChangeRepository implements OrderChangeRepository {
     public OrderChange save(OrderChange change) {
         changes.put(change.id(), change);
         return change;
+    }
+
+    @Override
+    public OrderChange save(OrderChange change, WorkSession session) {
+        OrderChange previous = changes.get(change.id());
+        OrderChange saved = save(change);
+        if (session != null) {
+            session.onRollback(() -> {
+                if (previous == null) {
+                    changes.remove(change.id());
+                } else {
+                    changes.put(change.id(), previous);
+                }
+            });
+        }
+        return saved;
     }
 
     @Override

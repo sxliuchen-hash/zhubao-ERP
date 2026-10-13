@@ -20,6 +20,7 @@ import com.zhubao.erp.finance.domain.PricingMode;
 import com.zhubao.erp.finance.domain.ReceiptAllocation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.WorkerRate;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -168,6 +169,29 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void saveReceivable(ReceivableLine line) {
+        try (Connection connection = dataSource.getConnection()) {
+            insertReceivable(connection, line);
+        } catch (SQLException ex) {
+            if (isDuplicate(ex)) {
+                throw new BusinessException("这张单据已经入过账");
+            }
+            throw new IllegalStateException("Failed to save receivable: " + line.code(), ex);
+        }
+    }
+
+    @Override
+    public void saveReceivable(ReceivableLine line, WorkSession session) {
+        try {
+            insertReceivable(requireSession(session), line);
+        } catch (SQLException ex) {
+            if (isDuplicate(ex)) {
+                throw new BusinessException("这张单据已经入过账");
+            }
+            throw new IllegalStateException("Failed to save receivable: " + line.code(), ex);
+        }
+    }
+
+    private void insertReceivable(Connection connection, ReceivableLine line) throws SQLException {
         String sql = """
                 insert into fin_receivable_line (
                     code, customer_id, customer_name, `year_month`, source_type, source_key, mother_order_code,
@@ -175,8 +199,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
                     remark, operator_name, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, line.code());
             statement.setLong(2, line.customerId());
             statement.setString(3, line.customerName());
@@ -195,12 +218,14 @@ public class JdbcFinanceRepository implements FinanceRepository {
             statement.setString(16, line.operator());
             statement.setString(17, line.createdAt());
             statement.executeUpdate();
-        } catch (SQLException ex) {
-            if (isDuplicate(ex)) {
-                throw new BusinessException("这张单据已经入过账");
-            }
-            throw new IllegalStateException("Failed to save receivable: " + line.code(), ex);
         }
+    }
+
+    private Connection requireSession(WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("财务写入必须使用工作单元连接");
+        }
+        return session.connection().get();
     }
 
     @Override
@@ -588,14 +613,30 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void savePayrollLine(PayrollLine line) {
+        try (Connection connection = dataSource.getConnection()) {
+            insertPayrollLine(connection, line);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法追加工资调整", ex);
+        }
+    }
+
+    @Override
+    public void savePayrollLine(PayrollLine line, WorkSession session) {
+        try {
+            insertPayrollLine(requireSession(session), line);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法追加工资调整", ex);
+        }
+    }
+
+    private void insertPayrollLine(Connection connection, PayrollLine line) throws SQLException {
         String insert = """
                 insert into fin_payroll_line (
                     code, `year_month`, operator_name, order_code, process_name, mother_order_code, customer_id,
                     quantity, charge_unit, unit_price, gross_amount, loss_deduction, net_amount, confirmed, source_key
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(insert)) {
+        try (PreparedStatement statement = connection.prepareStatement(insert)) {
             statement.setString(1, line.code());
             statement.setString(2, line.yearMonth());
             statement.setString(3, line.operatorName());
@@ -612,8 +653,6 @@ public class JdbcFinanceRepository implements FinanceRepository {
             statement.setBoolean(14, line.confirmed());
             statement.setString(15, line.sourceKey());
             statement.executeUpdate();
-        } catch (SQLException ex) {
-            throw new IllegalStateException("无法追加工资调整", ex);
         }
     }
 
@@ -891,6 +930,23 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void savePayable(Payable payable) {
+        try (Connection connection = dataSource.getConnection()) {
+            writePayable(connection, payable);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to save payable: " + payable.code(), ex);
+        }
+    }
+
+    @Override
+    public void savePayable(Payable payable, WorkSession session) {
+        try {
+            writePayable(requireSession(session), payable);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to save payable: " + payable.code(), ex);
+        }
+    }
+
+    private void writePayable(Connection connection, Payable payable) throws SQLException {
         String update = """
                 update fin_payable
                    set kind = ?, `year_month` = ?, payee = ?, source_code = ?, customer_id = ?, mother_order_code = ?,
@@ -903,20 +959,16 @@ public class JdbcFinanceRepository implements FinanceRepository {
                     operator_name, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = dataSource.getConnection()) {
-            int updated;
-            try (PreparedStatement statement = connection.prepareStatement(update)) {
-                bindPayable(statement, payable, false);
-                updated = statement.executeUpdate();
+        int updated;
+        try (PreparedStatement statement = connection.prepareStatement(update)) {
+            bindPayable(statement, payable, false);
+            updated = statement.executeUpdate();
+        }
+        if (updated == 0) {
+            try (PreparedStatement statement = connection.prepareStatement(insert)) {
+                bindPayable(statement, payable, true);
+                statement.executeUpdate();
             }
-            if (updated == 0) {
-                try (PreparedStatement statement = connection.prepareStatement(insert)) {
-                    bindPayable(statement, payable, true);
-                    statement.executeUpdate();
-                }
-            }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to save payable: " + payable.code(), ex);
         }
     }
 

@@ -3,6 +3,7 @@ package com.zhubao.erp.business.infra;
 import com.zhubao.erp.business.domain.OrderChange;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.business.domain.OrderChangeStatus;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -32,8 +33,9 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
                     id, mother_order_code, work_order_code, old_requirement, new_requirement, old_due_date, new_due_date,
                     status_code, version_no, amount_unchanged, customer_unit_price, worker_fee, finance_note, confirmed_by,
                     request_id, created_by, created_at, updated_at,
-                    customer_delta, worker_delta, receivable_code, process_name, worker_name
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    customer_delta, worker_delta, receivable_code, process_name, worker_name,
+                    old_route, new_route, expected_version, rework_process
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on duplicate key update
                     status_code = values(status_code),
                     amount_unchanged = values(amount_unchanged),
@@ -46,10 +48,61 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
                     worker_delta = values(worker_delta),
                     receivable_code = values(receivable_code),
                     process_name = values(process_name),
-                    worker_name = values(worker_name)
+                    worker_name = values(worker_name),
+                    old_route = values(old_route),
+                    new_route = values(new_route),
+                    expected_version = values(expected_version),
+                    rework_process = values(rework_process)
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection()) {
+            write(connection, sql, change);
+            return change;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存改单", ex);
+        }
+    }
+
+    @Override
+    public OrderChange save(OrderChange change, WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("改单写入必须使用工作单元连接");
+        }
+        String sql = """
+                insert into biz_order_change (
+                    id, mother_order_code, work_order_code, old_requirement, new_requirement, old_due_date, new_due_date,
+                    status_code, version_no, amount_unchanged, customer_unit_price, worker_fee, finance_note, confirmed_by,
+                    request_id, created_by, created_at, updated_at,
+                    customer_delta, worker_delta, receivable_code, process_name, worker_name,
+                    old_route, new_route, expected_version, rework_process
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on duplicate key update
+                    status_code = values(status_code),
+                    amount_unchanged = values(amount_unchanged),
+                    customer_unit_price = values(customer_unit_price),
+                    worker_fee = values(worker_fee),
+                    finance_note = values(finance_note),
+                    confirmed_by = values(confirmed_by),
+                    updated_at = values(updated_at),
+                    customer_delta = values(customer_delta),
+                    worker_delta = values(worker_delta),
+                    receivable_code = values(receivable_code),
+                    process_name = values(process_name),
+                    worker_name = values(worker_name),
+                    old_route = values(old_route),
+                    new_route = values(new_route),
+                    expected_version = values(expected_version),
+                    rework_process = values(rework_process)
+                """;
+        try {
+            write(session.connection().get(), sql, change);
+            return change;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存改单", ex);
+        }
+    }
+
+    private void write(Connection connection, String sql, OrderChange change) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, change.id());
             statement.setString(2, change.motherOrderCode());
             statement.setString(3, change.workOrderCode());
@@ -73,10 +126,11 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
             statement.setString(21, change.receivableCode());
             statement.setString(22, change.processName());
             statement.setString(23, change.workerName());
+            statement.setString(24, change.oldRoute());
+            statement.setString(25, change.newRoute());
+            statement.setInt(26, change.expectedVersion());
+            statement.setString(27, change.reworkProcess());
             statement.executeUpdate();
-            return change;
-        } catch (SQLException ex) {
-            throw new IllegalStateException("无法保存改单", ex);
         }
     }
 
@@ -169,7 +223,11 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
                 rs.getBigDecimal("worker_delta"),
                 rs.getString("receivable_code"),
                 rs.getString("process_name"),
-                rs.getString("worker_name")
+                rs.getString("worker_name"),
+                rs.getString("old_route"),
+                rs.getString("new_route"),
+                rs.getInt("expected_version"),
+                rs.getString("rework_process")
         );
     }
 }

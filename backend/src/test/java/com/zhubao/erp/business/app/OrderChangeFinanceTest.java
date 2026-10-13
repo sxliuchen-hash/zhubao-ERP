@@ -21,7 +21,9 @@ import com.zhubao.erp.label.infra.InMemoryPrintJobRepository;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandResultProbe;
 import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,8 +32,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OrderChangeFinanceTest {
 
@@ -115,6 +122,79 @@ class OrderChangeFinanceTest {
                 .extracting(ReceivableLine::amount)
                 .isEqualTo(new BigDecimal("20.00"));
         assertThat(finance.findReceivableBySourceKey("PROCESS|MD-CHANGE-001|雕刻")).isPresent();
+    }
+
+    @Test
+    void wrongReceivableIsRejectedAndFailureRollsBackTheAdjustment() {
+        finance.saveReceivable(new ReceivableLine(
+                "FIN-OTHER", 2002L, "另一客户", "2026-10", "PROCESS", "PROCESS|MD-OTHER|雕刻",
+                "MD-OTHER", "MD-OTHER", "雕刻", BigDecimal.ONE, ChargeUnit.JOB,
+                new BigDecimal("80.00"), new BigDecimal("80.00"), "", "别人的账", "财务", "2026-10-09T10:00:00"
+        ));
+        AuthUserAccount receiver = account("收货员", RoleCode.RECEIVER);
+        var wrong = service.draft("MD-CHANGE-001", "", "错账", "2026-11-01", "change-wrong-001", receiver);
+        service.submitFinance(wrong.id(), receiver);
+        service.confirmFinance(wrong.id(), false, new BigDecimal("70"), new BigDecimal("8"),
+                new BigDecimal("-10.00"), BigDecimal.ZERO, "FIN-OTHER", "雕刻", "", "错账", financeUser);
+        assertThatThrownBy(() -> service.apply(wrong.id(), "change-wrong-apply", receiver))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不属于该客户");
+        assertThat(finance.findReceivableBySourceKey("CHANGE-RED|" + wrong.id())).isEmpty();
+        assertThat(changes.findById(wrong.id()).orElseThrow().status()).isEqualTo(com.zhubao.erp.business.domain.OrderChangeStatus.FINANCE_CONFIRMED);
+
+        CommandResultProbe probe = () -> {
+            throw new IllegalStateException("结果写入失败");
+        };
+        OrderChangeService failing = new OrderChangeService(
+                changes, documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), probe),
+                new OrderChangePostingService(finance, new FinanceBillingService(finance, documents, new StockLedgerService(new InMemoryStockLedgerRepository())), documents)
+        );
+        var draft = failing.draft("MD-CHANGE-001", "", "回滚", "2026-11-02", "change-rollback-001", receiver);
+        failing.submitFinance(draft.id(), receiver);
+        failing.confirmFinance(draft.id(), false, new BigDecimal("70"), new BigDecimal("8"),
+                new BigDecimal("-30.00"), new BigDecimal("-8.00"), "FIN-1", "雕刻", "雕刻工", "回滚", financeUser);
+        assertThatThrownBy(() -> failing.apply(draft.id(), "change-rollback-apply", receiver))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("结果写入失败");
+        assertThat(changes.findById(draft.id()).orElseThrow().status()).isEqualTo(com.zhubao.erp.business.domain.OrderChangeStatus.FINANCE_CONFIRMED);
+        assertThat(finance.findReceivableByCode("FIN-1").orElseThrow().amount()).isEqualByComparingTo("100.00");
+        assertThat(finance.findReceivableBySourceKey("CHANGE-RED|" + draft.id())).isEmpty();
+        assertThat(finance.listPayrollLines().stream().filter(line -> ("PAY-ADJ|" + draft.id()).equals(line.sourceKey()))).isEmpty();
+    }
+
+    @Test
+    void concurrentReplayPostsTheReductionOnce() throws Exception {
+        AuthUserAccount receiver = account("收货员", RoleCode.RECEIVER);
+        var draft = service.draft("MD-CHANGE-001", "", "并发", "2026-11-01", "change-race-001", receiver);
+        service.submitFinance(draft.id(), receiver);
+        service.confirmFinance(draft.id(), false, new BigDecimal("70"), new BigDecimal("8"),
+                new BigDecimal("-30.00"), BigDecimal.ZERO, "FIN-1", "雕刻", "", "并发", financeUser);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> first = pool.submit(() -> applyTogether(draft.id(), receiver, ready, start));
+            Future<?> second = pool.submit(() -> applyTogether(draft.id(), receiver, ready, start));
+            ready.await();
+            start.countDown();
+            first.get();
+            second.get();
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(finance.listReceivables().stream().filter(line -> ("CHANGE-RED|" + draft.id()).equals(line.sourceKey()))).hasSize(1);
+        assertThat(changes.findById(draft.id()).orElseThrow().status()).isEqualTo(com.zhubao.erp.business.domain.OrderChangeStatus.APPLIED);
+    }
+
+    private void applyTogether(String id, AuthUserAccount receiver, CountDownLatch ready, CountDownLatch start) {
+        ready.countDown();
+        try {
+            start.await();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(ex);
+        }
+        service.apply(id, "change-race-apply", receiver);
     }
 
     private AuthUserAccount account(String operator, RoleCode role) {
