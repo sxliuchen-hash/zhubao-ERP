@@ -23,6 +23,7 @@ const lines = ref<Array<{ quantity: string; weight: string; processes: string[] 
 const loadError = ref('');
 const formError = ref('');
 const submitting = ref(false);
+const requestIds = ref<Record<string, string>>({});
 
 const canKeep = computed(() => view.value != null && view.value.decision !== 'KEEP' && view.value.decision !== 'SPLIT' && view.value.children.length === 0);
 const canSplit = computed(() => {
@@ -81,11 +82,30 @@ function removeLine(index: number) {
   lines.value.splice(index, 1);
 }
 
+function ensureRequestId(key: string, prefix: string) {
+  const current = requestIds.value[key];
+  if (current) return current;
+  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const created = `${prefix}-${random}`.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 64);
+  requestIds.value = { ...requestIds.value, [key]: created };
+  return created;
+}
+
+function clearRequestId(key: string) {
+  if (!requestIds.value[key]) return;
+  const next = { ...requestIds.value };
+  delete next[key];
+  requestIds.value = next;
+}
+
 async function keepWhole() {
   formError.value = '';
   submitting.value = true;
+  const key = `keep|${props.motherOrderCode}`;
+  const requestId = ensureRequestId(key, 'keep');
   try {
-    view.value = await keepMotherOrder(props.motherOrderCode);
+    view.value = await keepMotherOrder(props.motherOrderCode, requestId);
+    clearRequestId(key);
     await loadStickers(view.value);
   } catch (error) {
     formError.value = error instanceof Error ? error.message : '选择不拆失败';
@@ -125,8 +145,12 @@ async function splitMany() {
     return;
   }
   submitting.value = true;
+  const fingerprint = parsed.map((line) => `${line.quantity}:${line.weight}:${line.processes.join(',')}`).join('|');
+  const key = `split|${props.motherOrderCode}|${fingerprint}`;
+  const requestId = ensureRequestId(key, 'split');
   try {
-    view.value = await splitMotherOrder(props.motherOrderCode, parsed);
+    view.value = await splitMotherOrder(props.motherOrderCode, parsed, requestId);
+    clearRequestId(key);
     lines.value = [blankLine(), blankLine()];
     await loadStickers(view.value);
   } catch (error) {

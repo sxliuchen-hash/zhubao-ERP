@@ -376,24 +376,17 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void saveMotherSplitState(MotherSplitState state) {
-        String sql = """
-                insert into biz_mother_order_split (
-                    mother_order_code, split_decision, verification_code, operator, created_at
-                ) values (?, ?, ?, ?, ?)
-                on duplicate key update
-                    split_decision = values(split_decision),
-                    verification_code = values(verification_code),
-                    operator = values(operator),
-                    created_at = values(created_at)
-                """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, state.motherOrderCode());
-            statement.setString(2, state.decision());
-            statement.setString(3, state.verificationCode());
-            statement.setString(4, state.operator());
-            statement.setString(5, state.createdAt());
-            statement.executeUpdate();
+        try (Connection connection = dataSource.getConnection()) {
+            writeMotherSplitState(connection, state);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to save mother split state: " + state.motherOrderCode(), ex);
+        }
+    }
+
+    @Override
+    public void saveMotherSplitState(MotherSplitState state, WorkSession session) {
+        try {
+            writeMotherSplitState(requireConnection(session), state);
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to save mother split state: " + state.motherOrderCode(), ex);
         }
@@ -401,28 +394,36 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public Optional<MotherSplitState> findMotherSplitState(String motherOrderCode) {
-        String sql = """
-                select mother_order_code, split_decision, verification_code, operator, created_at
-                  from biz_mother_order_split
-                 where mother_order_code = ?
-                """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection()) {
+            return findMotherSplitState(connection, motherOrderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load mother split state: " + motherOrderCode, ex);
+        }
+    }
+
+    @Override
+    public Optional<MotherSplitState> findMotherSplitState(String motherOrderCode, WorkSession session) {
+        try {
+            return findMotherSplitState(requireConnection(session), motherOrderCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load mother split state: " + motherOrderCode, ex);
+        }
+    }
+
+    @Override
+    public void lockMotherOrder(String motherOrderCode, WorkSession session) {
+        String sql = "select code from biz_mother_order where code = ? for update";
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
             statement.setString(1, motherOrderCode);
             try (ResultSet rs = statement.executeQuery()) {
                 if (!rs.next()) {
-                    return Optional.empty();
+                    throw new BusinessException("母单不存在：" + motherOrderCode);
                 }
-                return Optional.of(new MotherSplitState(
-                        rs.getString("mother_order_code"),
-                        rs.getString("split_decision"),
-                        rs.getString("verification_code"),
-                        rs.getString("operator"),
-                        rs.getString("created_at")
-                ));
             }
+        } catch (BusinessException ex) {
+            throw ex;
         } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to load mother split state: " + motherOrderCode, ex);
+            throw new IllegalStateException("无法锁定母单：" + motherOrderCode, ex);
         }
     }
 
@@ -458,34 +459,24 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public boolean childWorkOrderExists(String code, WorkSession session) {
+        return exists(requireConnection(session), "select count(*) from biz_work_order where code = ?", code);
+    }
+
+    @Override
     public ChildWorkOrderRecord saveChildWorkOrder(ChildWorkOrderRecord record) {
-        String sql = """
-                insert into biz_work_order (
-                    code, mother_order_code, customer_id, customer_name, processing_requirement, due_date,
-                    material_code, goods_name, quantity, quantity_unit, weight, warehouse_code,
-                    process_names, verification_code, ledger_code, operator, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, record.code());
-            statement.setString(2, record.motherOrderCode());
-            setLong(statement, 3, record.customerId());
-            statement.setString(4, record.customerName());
-            statement.setString(5, record.processingRequirement());
-            statement.setString(6, record.dueDate());
-            statement.setString(7, record.materialCode());
-            statement.setString(8, record.goodsName());
-            statement.setBigDecimal(9, record.quantity());
-            statement.setString(10, record.quantityUnit());
-            statement.setBigDecimal(11, record.weight());
-            statement.setString(12, record.warehouseCode());
-            statement.setString(13, record.processes());
-            statement.setString(14, record.verificationCode());
-            statement.setString(15, record.ledgerCode());
-            statement.setString(16, record.operator());
-            statement.setString(17, record.createdAt());
-            statement.executeUpdate();
+        try (Connection connection = dataSource.getConnection()) {
+            writeChildWorkOrder(connection, record);
+            return record;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to save work order: " + record.code(), ex);
+        }
+    }
+
+    @Override
+    public ChildWorkOrderRecord saveChildWorkOrder(ChildWorkOrderRecord record, WorkSession session) {
+        try {
+            writeChildWorkOrder(requireConnection(session), record);
             return record;
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to save work order: " + record.code(), ex);
@@ -506,6 +497,19 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public List<ChildWorkOrderRecord> listChildWorkOrders(String motherOrderCode, WorkSession session) {
+        try {
+            return queryChildWorkOrders(
+                    requireConnection(session),
+                    childWorkOrderSelect() + " where mother_order_code = ? order by code",
+                    motherOrderCode == null ? List.of() : List.of(motherOrderCode)
+            );
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query work orders", ex);
+        }
+    }
+
+    @Override
     public List<ChildWorkOrderRecord> listAllChildWorkOrders() {
         return queryChildWorkOrders(childWorkOrderSelect() + " order by code", List.of());
     }
@@ -517,6 +521,16 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         }
         return exists("select count(*) from biz_mother_order_split where verification_code = ?", verificationCode)
                 || exists("select count(*) from biz_work_order where verification_code = ?", verificationCode);
+    }
+
+    @Override
+    public boolean verificationCodeExists(String verificationCode, WorkSession session) {
+        if (verificationCode == null || verificationCode.isBlank()) {
+            return false;
+        }
+        Connection connection = requireConnection(session);
+        return exists(connection, "select count(*) from biz_mother_order_split where verification_code = ?", verificationCode)
+                || exists(connection, "select count(*) from biz_work_order where verification_code = ?", verificationCode);
     }
 
     @Override
@@ -1184,13 +1198,98 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
                 """;
     }
 
+    private void writeMotherSplitState(Connection connection, MotherSplitState state) throws SQLException {
+        String sql = """
+                insert into biz_mother_order_split (
+                    mother_order_code, split_decision, verification_code, operator, created_at
+                ) values (?, ?, ?, ?, ?)
+                on duplicate key update
+                    split_decision = values(split_decision),
+                    verification_code = values(verification_code),
+                    operator = values(operator),
+                    created_at = values(created_at)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, state.motherOrderCode());
+            statement.setString(2, state.decision());
+            statement.setString(3, state.verificationCode());
+            statement.setString(4, state.operator());
+            statement.setString(5, state.createdAt());
+            statement.executeUpdate();
+        }
+    }
+
+    private Optional<MotherSplitState> findMotherSplitState(Connection connection, String motherOrderCode) throws SQLException {
+        String sql = """
+                select mother_order_code, split_decision, verification_code, operator, created_at
+                  from biz_mother_order_split
+                 where mother_order_code = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, motherOrderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new MotherSplitState(
+                        rs.getString("mother_order_code"),
+                        rs.getString("split_decision"),
+                        rs.getString("verification_code"),
+                        rs.getString("operator"),
+                        rs.getString("created_at")
+                ));
+            }
+        }
+    }
+
+    private void writeChildWorkOrder(Connection connection, ChildWorkOrderRecord record) throws SQLException {
+        String sql = """
+                insert into biz_work_order (
+                    code, mother_order_code, customer_id, customer_name, processing_requirement, due_date,
+                    material_code, goods_name, quantity, quantity_unit, weight, warehouse_code,
+                    process_names, verification_code, ledger_code, operator, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, record.code());
+            statement.setString(2, record.motherOrderCode());
+            setLong(statement, 3, record.customerId());
+            statement.setString(4, record.customerName());
+            statement.setString(5, record.processingRequirement());
+            statement.setString(6, record.dueDate());
+            statement.setString(7, record.materialCode());
+            statement.setString(8, record.goodsName());
+            statement.setBigDecimal(9, record.quantity());
+            statement.setString(10, record.quantityUnit());
+            statement.setBigDecimal(11, record.weight());
+            statement.setString(12, record.warehouseCode());
+            statement.setString(13, record.processes());
+            statement.setString(14, record.verificationCode());
+            statement.setString(15, record.ledgerCode());
+            statement.setString(16, record.operator());
+            statement.setString(17, record.createdAt());
+            statement.executeUpdate();
+        }
+    }
+
     private List<ChildWorkOrderRecord> queryChildWorkOrders(String sql, String parameter) {
         return queryChildWorkOrders(sql, parameter == null ? List.of() : List.of(parameter));
     }
 
     private List<ChildWorkOrderRecord> queryChildWorkOrders(String sql, List<String> parameters) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection()) {
+            return queryChildWorkOrders(connection, sql, parameters);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query work orders", ex);
+        }
+    }
+
+    private List<ChildWorkOrderRecord> queryChildWorkOrders(
+            Connection connection,
+            String sql,
+            List<String> parameters
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int index = 0; index < parameters.size(); index++) {
                 statement.setString(index + 1, parameters.get(index));
             }
@@ -1201,8 +1300,6 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
                 }
                 return records;
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to query work orders", ex);
         }
     }
 

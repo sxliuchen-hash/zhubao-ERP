@@ -2188,8 +2188,8 @@ PWA 一期边界：
 | `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。可选 `requestId`。有值时动作是 `INTAKE_CREATE`，目标类型 `WAYBILL`，目标编号是规范化运单号。同账号同请求同内容回放原结果；已有运单打开原单，不第二次入库。客户身份写在规范化内容里，换客户不能重放。无 `requestId` 时保持旧行为：先按运单打开，没有才建单，但不回放、不保证同事务 |
 | `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |
 | `GET /api/business/operations/mother-orders/{code}/split` | `ApiResponse<MotherOrderSplitView>` |
-| `POST /api/business/operations/mother-orders/{code}/keep` | `ApiResponse<MotherOrderSplitView>` |
-| `POST /api/business/operations/mother-orders/{code}/splits` | `ApiResponse<MotherOrderSplitView>` |
+| `POST /api/business/operations/mother-orders/{code}/keep` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_KEEP`，拆分决定和成功结果同一次提交。同账号同请求回放后重新读取当前视图。缺编号直接拒绝 |
+| `POST /api/business/operations/mother-orders/{code}/splits` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_SPLIT`，库存转移、子单和母单拆分状态同一次提交。同一请求只生效一次；内容变化必须换新编号。缺编号直接拒绝 |
 | `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
 | `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
 | `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。可选 `requestId`。有值时动作是 `PROCESS_HANDOFF`，同账号同请求同内容回放原结果。不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。无 `requestId` 时不回放、不保证同事务 |

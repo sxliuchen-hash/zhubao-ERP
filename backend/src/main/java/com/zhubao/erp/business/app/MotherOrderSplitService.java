@@ -17,6 +17,10 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.work.app.BusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandCall;
+import com.zhubao.erp.work.domain.WorkSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -26,11 +30,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 母单拆分：不拆仍用母单号；拆开则生成子单，并把对应数量从待加工转入在制。
+ * 带请求编号时，库存、子单和拆分决定进入同一次工作单元。
  */
 @Service
 public class MotherOrderSplitService {
@@ -41,51 +47,132 @@ public class MotherOrderSplitService {
 
     private final BusinessDocumentRepository documents;
     private final StockLedgerService stockLedgerService;
+    private final BusinessWorkUnit workUnit;
     private final AtomicInteger childSequence = new AtomicInteger();
 
     public MotherOrderSplitService(
             BusinessDocumentRepository documents,
             StockLedgerService stockLedgerService
     ) {
+        this(documents, stockLedgerService, null);
+    }
+
+    @Autowired
+    public MotherOrderSplitService(
+            BusinessDocumentRepository documents,
+            StockLedgerService stockLedgerService,
+            BusinessWorkUnit workUnit
+    ) {
         this.documents = documents;
         this.stockLedgerService = stockLedgerService;
+        this.workUnit = workUnit;
     }
 
     public MotherOrderSplitView view(String motherOrderCode) {
         return toView(requireMother(motherOrderCode));
     }
 
-    /** 不拆：生成母单验证码，不移动库存。 */
+    /**
+     * 不拆：生成母单验证码，不移动库存。
+     * 未带请求编号时各自提交，只留给既有夹具；正式入口必须使用带编号的重载。
+     */
     public MotherOrderSplitView keep(String motherOrderCode, String operator) {
-        MotherOrderRecord mother = requireMother(motherOrderCode);
-        if (!documents.listChildWorkOrders(mother.code()).isEmpty()) {
+        return applyKeep(motherOrderCode, operator, null);
+    }
+
+    /**
+     * 带请求编号时，拆分决定同一次提交。
+     * 同账号、同请求、同内容回放后重新读取当前视图。
+     */
+    public MotherOrderSplitView keep(String motherOrderCode, String operator, String requestId) {
+        requireRequest(requestId, "选择不拆必须带请求编号");
+        requireWorkUnit();
+        String actor = operatorOf(operator);
+        String code = motherOrderCode == null ? "" : motherOrderCode.trim();
+        workUnit.execute(new CommandCall(
+                requestId,
+                actor,
+                "MOTHER_KEEP",
+                "MOTHER_ORDER",
+                code,
+                "decision=KEEP"
+        ), session -> {
+            applyKeep(code, actor, session);
+            return "kept";
+        });
+        return view(code);
+    }
+
+    /** 拆成多张子单。未带请求编号时各自提交，只留给既有夹具。 */
+    public MotherOrderSplitView split(SplitMotherOrderCommand command) {
+        return applySplit(command, null);
+    }
+
+    /**
+     * 带请求编号时，库存转移、子单和母单拆分状态同一次提交。
+     * 同一请求重试只生效一次；内容变化必须换新编号。
+     */
+    public MotherOrderSplitView split(SplitMotherOrderCommand command, String requestId) {
+        requireRequest(requestId, "拆分子单必须带请求编号");
+        requireWorkUnit();
+        if (command == null) {
+            throw new BusinessException("拆分命令不能为空");
+        }
+        String actor = operatorOf(command.operator());
+        String code = command.motherOrderCode() == null ? "" : command.motherOrderCode().trim();
+        workUnit.execute(new CommandCall(
+                requestId,
+                actor,
+                "MOTHER_SPLIT",
+                "MOTHER_ORDER",
+                code,
+                splitPayload(command.lines())
+        ), session -> {
+            applySplit(new SplitMotherOrderCommand(code, actor, command.lines()), session);
+            return "split";
+        });
+        return view(code);
+    }
+
+    private MotherOrderSplitView applyKeep(String motherOrderCode, String operator, WorkSession session) {
+        if (session != null) {
+            documents.lockMotherOrder(motherOrderCode == null ? "" : motherOrderCode.trim(), session);
+        }
+        MotherOrderRecord mother = requireMother(motherOrderCode, session);
+        if (!listChildren(mother.code(), session).isEmpty()) {
             throw new BusinessException("这张母单已经拆成子单，不能再选择不拆");
         }
-        MotherSplitState current = documents.findMotherSplitState(mother.code()).orElse(null);
+        MotherSplitState current = findSplit(mother.code(), session).orElse(null);
         if (current != null && MotherSplitState.SPLIT.equals(current.decision())) {
             throw new BusinessException("这张母单已经拆成子单，不能再选择不拆");
         }
         if (current != null && MotherSplitState.KEEP.equals(current.decision()) && !current.verificationCode().isBlank()) {
-            return toView(mother);
+            return toView(mother, session);
         }
-        String verificationCode = VerificationCodes.derive(mother.code(), documents::verificationCodeExists);
-        documents.saveMotherSplitState(new MotherSplitState(
+        String verificationCode = VerificationCodes.derive(
+                mother.code(),
+                candidate -> verificationExists(candidate, session)
+        );
+        saveSplit(new MotherSplitState(
                 mother.code(),
                 MotherSplitState.KEEP,
                 verificationCode,
                 operatorOf(operator),
                 RECORD_TIME.format(LocalDateTime.now())
-        ));
-        return toView(mother);
+        ), session);
+        return toView(mother, session);
     }
 
     /** 拆成多张子单。数量、重量合计不得超过母单剩余，库存走台账从待加工转入在制。 */
-    public MotherOrderSplitView split(SplitMotherOrderCommand command) {
+    private MotherOrderSplitView applySplit(SplitMotherOrderCommand command, WorkSession session) {
         if (command == null) {
             throw new BusinessException("拆分命令不能为空");
         }
-        MotherOrderRecord mother = requireMother(command.motherOrderCode());
-        MotherSplitState current = documents.findMotherSplitState(mother.code()).orElse(null);
+        if (session != null) {
+            documents.lockMotherOrder(command.motherOrderCode() == null ? "" : command.motherOrderCode().trim(), session);
+        }
+        MotherOrderRecord mother = requireMother(command.motherOrderCode(), session);
+        MotherSplitState current = findSplit(mother.code(), session).orElse(null);
         if (current != null && MotherSplitState.KEEP.equals(current.decision())) {
             throw new BusinessException("这张母单已选择不拆，不能再拆子单");
         }
@@ -93,12 +180,13 @@ public class MotherOrderSplitService {
         if (lines.size() < 2) {
             throw new BusinessException("拆成多张至少需要两张子单");
         }
-        List<ChildWorkOrderRecord> existing = documents.listChildWorkOrders(mother.code());
+        List<ChildWorkOrderRecord> existing = listChildren(mother.code(), session);
         BigDecimal remainingQuantity = remaining(mother.quantity(), existing, true);
         BigDecimal remainingWeight = remaining(mother.weight(), existing, false);
         BigDecimal requestedQuantity = ZERO;
         BigDecimal requestedWeight = ZERO;
         List<PreparedLine> prepared = new ArrayList<>();
+        Set<String> reservedChildCodes = new HashSet<>();
         for (SplitMotherOrderLine line : lines) {
             if (line == null || line.quantity() == null || line.weight() == null
                     || line.quantity().compareTo(ZERO) <= 0 || line.weight().compareTo(ZERO) <= 0) {
@@ -107,7 +195,7 @@ public class MotherOrderSplitService {
             requestedQuantity = requestedQuantity.add(line.quantity());
             requestedWeight = requestedWeight.add(line.weight());
             prepared.add(new PreparedLine(
-                    nextChildCode(),
+                    nextChildCode(session, reservedChildCodes),
                     WorkshopProcesses.normalize(line.processes()),
                     line.quantity(),
                     line.weight(),
@@ -125,7 +213,7 @@ public class MotherOrderSplitService {
         for (PreparedLine line : prepared) {
             String verificationCode = VerificationCodes.derive(
                     line.code(),
-                    candidate -> reservedCodes.contains(candidate) || documents.verificationCodeExists(candidate)
+                    candidate -> reservedCodes.contains(candidate) || verificationExists(candidate, session)
             );
             reservedCodes.add(verificationCode);
             withCodes.add(line.withVerification(verificationCode));
@@ -133,8 +221,8 @@ public class MotherOrderSplitService {
         String operator = operatorOf(command.operator());
         String createdAt = RECORD_TIME.format(LocalDateTime.now());
         for (PreparedLine line : withCodes) {
-            StockLedgerEntry entry = moveToWip(mother, line, operator);
-            documents.saveChildWorkOrder(new ChildWorkOrderRecord(
+            StockLedgerEntry entry = moveToWip(mother, line, operator, session);
+            saveChild(new ChildWorkOrderRecord(
                     line.code(),
                     mother.code(),
                     mother.customerId(),
@@ -152,19 +240,19 @@ public class MotherOrderSplitService {
                     entry.code(),
                     operator,
                     createdAt
-            ));
+            ), session);
         }
-        documents.saveMotherSplitState(new MotherSplitState(
+        saveSplit(new MotherSplitState(
                 mother.code(),
                 MotherSplitState.SPLIT,
                 "",
                 operator,
                 createdAt
-        ));
-        return toView(mother);
+        ), session);
+        return toView(mother, session);
     }
 
-    private StockLedgerEntry moveToWip(MotherOrderRecord mother, PreparedLine line, String operator) {
+    private StockLedgerEntry moveToWip(MotherOrderRecord mother, PreparedLine line, String operator, WorkSession session) {
         OwnerType ownerType = ownerTypeOf(mother);
         Long ownerCustomerId = mother.ownerCustomerId() == null ? mother.customerId() : mother.ownerCustomerId();
         StockDimension fromWaiting = new StockDimension(
@@ -187,7 +275,7 @@ public class MotherOrderSplitService {
                 mother.warehouseCode(),
                 StockStatus.WIP
         );
-        return stockLedgerService.transfer(new StockTransferCommand(
+        StockTransferCommand transfer = new StockTransferCommand(
                 "work_order_split",
                 line.code(),
                 fromWaiting,
@@ -195,12 +283,20 @@ public class MotherOrderSplitService {
                 line.quantity(),
                 line.weight(),
                 "拆分子单；工序：" + WorkshopProcesses.join(line.processes()) + "；操作人：" + operator
-        ));
+        );
+        if (session == null) {
+            return stockLedgerService.transfer(transfer);
+        }
+        return stockLedgerService.transfer(transfer, session);
     }
 
     private MotherOrderSplitView toView(MotherOrderRecord mother) {
-        List<ChildWorkOrderRecord> children = documents.listChildWorkOrders(mother.code());
-        MotherSplitState state = documents.findMotherSplitState(mother.code()).orElse(null);
+        return toView(mother, null);
+    }
+
+    private MotherOrderSplitView toView(MotherOrderRecord mother, WorkSession session) {
+        List<ChildWorkOrderRecord> children = listChildren(mother.code(), session);
+        MotherSplitState state = findSplit(mother.code(), session).orElse(null);
         String decision = state == null ? "" : state.decision();
         String verificationCode = state == null ? "" : blank(state.verificationCode());
         List<ChildWorkOrderView> childViews = children.stream().map(this::childView).toList();
@@ -262,22 +358,110 @@ public class MotherOrderSplitService {
     }
 
     private MotherOrderRecord requireMother(String motherOrderCode) {
+        return requireMother(motherOrderCode, null);
+    }
+
+    private MotherOrderRecord requireMother(String motherOrderCode, WorkSession session) {
         if (motherOrderCode == null || motherOrderCode.isBlank()) {
             throw new BusinessException("缺少母单号");
         }
-        return documents.findMotherOrderByCode(motherOrderCode.trim())
-                .orElseThrow(() -> new BusinessException("母单不存在：" + motherOrderCode));
+        String code = motherOrderCode.trim();
+        Optional<MotherOrderRecord> found = session == null
+                ? documents.findMotherOrderByCode(code)
+                : documents.findMotherOrderByCode(code, session);
+        return found.orElseThrow(() -> new BusinessException("母单不存在：" + motherOrderCode));
     }
 
-    private String nextChildCode() {
+    private String nextChildCode(WorkSession session, Set<String> reserved) {
         String day = LocalDate.now().format(DAY);
         for (int attempt = 0; attempt < 50; attempt++) {
             String code = "ZD-" + day + "-" + String.format("%03d", childSequence.incrementAndGet());
-            if (!documents.childWorkOrderExists(code)) {
+            if (!reserved.contains(code) && !childExists(code, session)) {
+                reserved.add(code);
                 return code;
             }
         }
         throw new BusinessException("子单号生成失败，请重试");
+    }
+
+    private void requireRequest(String requestId, String message) {
+        if (requestId == null || requestId.isBlank()) {
+            throw new BusinessException(message);
+        }
+    }
+
+    private void requireWorkUnit() {
+        if (workUnit == null) {
+            throw new BusinessException("拆单回放尚未装配");
+        }
+    }
+
+    private String splitPayload(List<SplitMotherOrderLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return "lines=";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (SplitMotherOrderLine line : lines) {
+            if (builder.length() > 0) {
+                builder.append('|');
+            }
+            if (line == null) {
+                builder.append("empty");
+                continue;
+            }
+            builder.append("q=").append(number(line.quantity()))
+                    .append(";w=").append(number(line.weight()))
+                    .append(";p=").append(String.join(",", WorkshopProcesses.normalize(line.processes())));
+        }
+        return builder.toString();
+    }
+
+    private static String number(BigDecimal value) {
+        return value == null ? "" : value.stripTrailingZeros().toPlainString();
+    }
+
+    private List<ChildWorkOrderRecord> listChildren(String motherOrderCode, WorkSession session) {
+        if (session == null) {
+            return documents.listChildWorkOrders(motherOrderCode);
+        }
+        return documents.listChildWorkOrders(motherOrderCode, session);
+    }
+
+    private Optional<MotherSplitState> findSplit(String motherOrderCode, WorkSession session) {
+        if (session == null) {
+            return documents.findMotherSplitState(motherOrderCode);
+        }
+        return documents.findMotherSplitState(motherOrderCode, session);
+    }
+
+    private void saveSplit(MotherSplitState state, WorkSession session) {
+        if (session == null) {
+            documents.saveMotherSplitState(state);
+            return;
+        }
+        documents.saveMotherSplitState(state, session);
+    }
+
+    private void saveChild(ChildWorkOrderRecord record, WorkSession session) {
+        if (session == null) {
+            documents.saveChildWorkOrder(record);
+            return;
+        }
+        documents.saveChildWorkOrder(record, session);
+    }
+
+    private boolean childExists(String code, WorkSession session) {
+        if (session == null) {
+            return documents.childWorkOrderExists(code);
+        }
+        return documents.childWorkOrderExists(code, session);
+    }
+
+    private boolean verificationExists(String verificationCode, WorkSession session) {
+        if (session == null) {
+            return documents.verificationCodeExists(verificationCode);
+        }
+        return documents.verificationCodeExists(verificationCode, session);
     }
 
     private OwnerType ownerTypeOf(MotherOrderRecord mother) {

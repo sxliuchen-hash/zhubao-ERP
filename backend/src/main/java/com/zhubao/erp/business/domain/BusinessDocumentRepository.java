@@ -43,22 +43,46 @@ public interface BusinessDocumentRepository {
 
     void saveMotherSplitState(MotherSplitState state);
 
+    /** 在当前工作单元里保存拆分决定，不单独提交。 */
+    void saveMotherSplitState(MotherSplitState state, WorkSession session);
+
     Optional<MotherSplitState> findMotherSplitState(String motherOrderCode);
+
+    /** 在当前工作单元连接上读取拆分决定，能看见本事务尚未提交的写入。 */
+    Optional<MotherSplitState> findMotherSplitState(String motherOrderCode, WorkSession session);
+
+    /**
+     * 锁定母单，避免两笔拆单同时通过剩余量校验。
+     * JDBC 对母单行加锁；内存由工作单元串行，这里只确认母单存在。
+     */
+    void lockMotherOrder(String motherOrderCode, WorkSession session);
 
     /** 一次读取全部母单拆分状态，供进度和工作台在单次请求内建索引。 */
     List<MotherSplitState> listAllMotherSplitStates();
 
     boolean childWorkOrderExists(String code);
 
+    /** 在当前工作单元连接上判断子单号。 */
+    boolean childWorkOrderExists(String code, WorkSession session);
+
     ChildWorkOrderRecord saveChildWorkOrder(ChildWorkOrderRecord record);
+
+    /** 在当前工作单元里保存子单，不单独提交。 */
+    ChildWorkOrderRecord saveChildWorkOrder(ChildWorkOrderRecord record, WorkSession session);
 
     Optional<ChildWorkOrderRecord> findChildWorkOrderByCode(String code);
 
     List<ChildWorkOrderRecord> listChildWorkOrders(String motherOrderCode);
 
+    /** 在当前工作单元连接上读取子单，能看见本事务尚未提交的写入。 */
+    List<ChildWorkOrderRecord> listChildWorkOrders(String motherOrderCode, WorkSession session);
+
     List<ChildWorkOrderRecord> listAllChildWorkOrders();
 
     boolean verificationCodeExists(String verificationCode);
+
+    /** 在当前工作单元连接上判断验证码。 */
+    boolean verificationCodeExists(String verificationCode, WorkSession session);
 
     LabelReprintLog saveLabelReprint(LabelReprintLog log);
 

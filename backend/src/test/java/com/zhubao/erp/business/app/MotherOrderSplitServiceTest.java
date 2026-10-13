@@ -12,7 +12,12 @@ import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
+import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
+import com.zhubao.erp.work.domain.WorkSession;
+import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import com.zhubao.erp.label.app.LabelService;
 import com.zhubao.erp.label.domain.LabelField;
 import com.zhubao.erp.label.domain.LabelPayload;
@@ -25,6 +30,14 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,7 +61,11 @@ class MotherOrderSplitServiceTest {
         stockLedgerService = new StockLedgerService(stockRepository);
         documents = new InMemoryBusinessDocumentRepository();
         operations = new BusinessOperationService(stockLedgerService, null, documents);
-        splitService = new MotherOrderSplitService(documents, stockLedgerService);
+        splitService = new MotherOrderSplitService(
+                documents,
+                stockLedgerService,
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository())
+        );
         labelService = new LabelService(documents, new InMemoryLabelTemplateRepository());
     }
 
@@ -176,6 +193,119 @@ class MotherOrderSplitServiceTest {
     }
 
     @Test
+    void replayedSplitCommitsStockChildrenAndDecisionOnce() {
+        inbound("MD-REPLAY-001", "10", "20");
+        SplitMotherOrderCommand splitCommand = command("MD-REPLAY-001",
+                line("4", "8", List.of("雕刻")),
+                line("6", "12", null));
+
+        MotherOrderSplitView first = splitService.split(splitCommand, "split-replay-001");
+        MotherOrderSplitView second = splitService.split(splitCommand, "split-replay-001");
+
+        assertThat(second.children()).extracting(ChildWorkOrderView::code)
+                .containsExactlyElementsOf(first.children().stream().map(ChildWorkOrderView::code).toList());
+        assertThat(documents.listChildWorkOrders("MD-REPLAY-001")).hasSize(2);
+        assertThat(documents.findMotherSplitState("MD-REPLAY-001")).get()
+                .extracting(state -> state.decision())
+                .isEqualTo("SPLIT");
+        assertThat(stockLedgerService.ledgers())
+                .filteredOn(entry -> "work_order_split".equals(entry.documentType()))
+                .hasSize(2);
+        assertThat(rawWaiting("MD-REPLAY-001").quantity()).isEqualByComparingTo("0");
+        assertThatThrownBy(() -> splitService.split(command("MD-REPLAY-001",
+                line("3", "6", null),
+                line("7", "14", null)), "split-replay-001"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("内容不一致");
+        assertThat(documents.listChildWorkOrders("MD-REPLAY-001")).hasSize(2);
+    }
+
+    @Test
+    void keepRequiresRequestIdAndReplaysTheSameDecision() {
+        inbound("MD-KEEP-REQ", "10", "20");
+        assertThatThrownBy(() -> splitService.keep("MD-KEEP-REQ", "何琳", " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须带请求编号");
+        assertThat(documents.findMotherSplitState("MD-KEEP-REQ")).isEmpty();
+
+        MotherOrderSplitView first = splitService.keep("MD-KEEP-REQ", "何琳", "keep-replay-001");
+        MotherOrderSplitView second = splitService.keep("MD-KEEP-REQ", "何琳", "keep-replay-001");
+        assertThat(second.verificationCode()).isEqualTo(first.verificationCode());
+        assertThat(stockLedgerService.ledgers()).extracting(StockLedgerEntry::documentType)
+                .containsExactly("inbound_confirm");
+        assertThatThrownBy(() -> splitService.keep("MD-KEEP-REQ", "别人", "keep-replay-001"))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("跨账号");
+    }
+
+    @Test
+    void failedSplitRollsBackStockChildrenAndDecision() {
+        InMemoryStockLedgerRepository stocks = new InMemoryStockLedgerRepository();
+        StockLedgerService ledger = new StockLedgerService(new SecondSessionSaveFails(stocks));
+        InMemoryBusinessDocumentRepository docs = new InMemoryBusinessDocumentRepository();
+        BusinessOperationService ops = new BusinessOperationService(ledger, null, docs);
+        MotherOrderSplitService splits = new MotherOrderSplitService(
+                docs,
+                ledger,
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository())
+        );
+        ops.confirmInbound(inboundCommand("MD-ROLLBACK-001", "10", "20"));
+
+        assertThatThrownBy(() -> splits.split(command("MD-ROLLBACK-001",
+                line("4", "8", null),
+                line("6", "12", null)), "split-rollback-01"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模拟拆单中途失败");
+
+        assertThat(docs.listChildWorkOrders("MD-ROLLBACK-001")).isEmpty();
+        assertThat(docs.findMotherSplitState("MD-ROLLBACK-001")).isEmpty();
+        assertThat(ledger.ledgers()).extracting(StockLedgerEntry::documentType).containsExactly("inbound_confirm");
+        assertThat(ledger.balances().stream()
+                .filter(balance -> "MD-ROLLBACK-001".equals(balance.dimension().motherOrderCode()))
+                .filter(balance -> balance.dimension().stockStatus() == StockStatus.RAW_WAITING)
+                .findFirst()
+                .orElseThrow()
+                .quantity()).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void concurrentSplitsCannotExceedRemaining() throws Exception {
+        inbound("MD-RACE-001", "10", "20");
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Callable<String> task = () -> {
+                start.await();
+                String requestId = "race-" + Thread.currentThread().getId() + "-0001";
+                splitService.split(command("MD-RACE-001",
+                        line("4", "8", null),
+                        line("6", "12", null)), requestId);
+                return "ok";
+            };
+            List<Future<String>> futures = List.of(pool.submit(task), pool.submit(task));
+            start.countDown();
+            int succeeded = 0;
+            int rejected = 0;
+            for (Future<String> future : futures) {
+                try {
+                    future.get(10, TimeUnit.SECONDS);
+                    succeeded++;
+                } catch (ExecutionException ex) {
+                    assertThat(ex.getCause()).isInstanceOf(BusinessException.class);
+                    rejected++;
+                }
+            }
+            assertThat(succeeded).isEqualTo(1);
+            assertThat(rejected).isEqualTo(1);
+            assertThat(documents.listChildWorkOrders("MD-RACE-001")).hasSize(2);
+            assertThat(rawWaiting("MD-RACE-001").quantity()).isEqualByComparingTo("0");
+            assertThat(wipBalances()).allSatisfy(balance -> assertThat(balance.quantity()).isGreaterThan(BigDecimal.ZERO));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
     void lengthensVerificationCodeWhenTheShortCodeIsAlreadyTaken() {
         String shortCode = VerificationCodes.derive("ZD-SAME", candidate -> false);
         String longer = VerificationCodes.derive("ZD-SAME", candidate -> candidate.length() == 4);
@@ -185,7 +315,11 @@ class MotherOrderSplitServiceTest {
     }
 
     private void inbound(String code, String quantity, String weight) {
-        operations.confirmInbound(new ConfirmInboundCommand(
+        operations.confirmInbound(inboundCommand(code, quantity, weight));
+    }
+
+    private ConfirmInboundCommand inboundCommand(String code, String quantity, String weight) {
+        return new ConfirmInboundCommand(
                 code,
                 1001L,
                 1001L,
@@ -210,7 +344,7 @@ class MotherOrderSplitServiceTest {
                 "内壁刻字",
                 "2026-10-20",
                 "恒信珠宝"
-        ));
+        );
     }
 
     private SplitMotherOrderCommand command(String motherOrderCode, SplitMotherOrderLine... lines) {
@@ -234,6 +368,57 @@ class MotherOrderSplitServiceTest {
                 .filter(balance -> balance.dimension().stockStatus() == StockStatus.WIP)
                 .filter(balance -> balance.quantity().compareTo(BigDecimal.ZERO) > 0)
                 .toList();
+    }
+
+    private static final class SecondSessionSaveFails implements StockLedgerRepository {
+        private final StockLedgerRepository delegate;
+        private int sessionSaves;
+
+        private SecondSessionSaveFails(StockLedgerRepository delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public com.zhubao.erp.inventory.domain.StockLedgerEntry save(com.zhubao.erp.inventory.domain.StockLedgerEntry entry) {
+            return delegate.save(entry);
+        }
+
+        @Override
+        public com.zhubao.erp.inventory.domain.StockLedgerEntry save(
+                com.zhubao.erp.inventory.domain.StockLedgerEntry entry,
+                WorkSession session
+        ) {
+            sessionSaves++;
+            if (sessionSaves >= 2) {
+                throw new BusinessException("模拟拆单中途失败");
+            }
+            return delegate.save(entry, session);
+        }
+
+        @Override
+        public List<com.zhubao.erp.inventory.domain.StockLedgerEntry> findAllLedgers() {
+            return delegate.findAllLedgers();
+        }
+
+        @Override
+        public List<com.zhubao.erp.inventory.domain.StockLedgerEntry> findLedgersByCustomers(Set<Long> customerIds, Set<String> motherOrderCodes) {
+            return delegate.findLedgersByCustomers(customerIds, motherOrderCodes);
+        }
+
+        @Override
+        public List<com.zhubao.erp.inventory.domain.StockBalance> findAllBalances() {
+            return delegate.findAllBalances();
+        }
+
+        @Override
+        public com.zhubao.erp.inventory.domain.StockBalance findBalance(com.zhubao.erp.inventory.domain.StockDimension dimension) {
+            return delegate.findBalance(dimension);
+        }
+
+        @Override
+        public void clear() {
+            delegate.clear();
+        }
     }
 
     private String value(LabelPayload payload, String name) {

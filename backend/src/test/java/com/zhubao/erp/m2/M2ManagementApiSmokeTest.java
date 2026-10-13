@@ -1144,7 +1144,11 @@ class M2ManagementApiSmokeTest {
         command.put("dueDate", "2099-01-01");
         var inbound = signedPost("/api/business/operations/inbound-confirmations", command, String.class);
         assertThat(inbound.getStatusCode().is2xxSuccessful()).as(inbound.getBody()).isTrue();
-        var kept = signedPost("/api/business/operations/mother-orders/" + code + "/keep", Map.of(), String.class);
+        String requestId = "keep-" + code.replaceAll("[^A-Za-z0-9._:-]", "");
+        if (requestId.length() > 64) {
+            requestId = requestId.substring(0, 64);
+        }
+        var kept = signedPost("/api/business/operations/mother-orders/" + code + "/keep", Map.of("requestId", requestId), String.class);
         assertThat(kept.getStatusCode().is2xxSuccessful()).as(kept.getBody()).isTrue();
     }
 

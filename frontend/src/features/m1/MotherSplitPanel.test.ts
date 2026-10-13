@@ -81,7 +81,7 @@ describe('MotherSplitPanel', () => {
     await wrapper.get('button.primary-button').trigger('click');
     await flushPromises();
 
-    expect(keepMotherOrder).toHaveBeenCalledWith('MD-1');
+    expect(keepMotherOrder).toHaveBeenCalledWith('MD-1', expect.stringMatching(/^keep-[A-Za-z0-9._:-]{3,59}$/));
     expect(wrapper.text()).toContain('A3K7');
     expect(wrapper.text()).toContain('恒信珠宝');
     expect(wrapper.text()).toContain('内壁刻字');
@@ -155,10 +155,35 @@ describe('MotherSplitPanel', () => {
     expect(splitMotherOrder).toHaveBeenCalledWith('MD-1', [
       { quantity: 4, weight: 8, processes: ['雕刻', '抛光'] },
       { quantity: 6, weight: 12, processes: ['雕刻', '镶嵌', '抛光'] },
-    ]);
+    ], expect.stringMatching(/^split-[A-Za-z0-9._:-]{3,58}$/));
     expect(wrapper.text()).toContain('A3K7');
     expect(wrapper.text()).toContain('B8N4');
     expect(wrapper.text()).toContain('JG|work_order|ZD-1');
     expect(wrapper.text()).toContain('JG|work_order|ZD-2');
+  });
+
+  it('失败后重试沿用同一请求编号', async () => {
+    vi.mocked(keepMotherOrder)
+      .mockRejectedValueOnce(new Error('超时'))
+      .mockResolvedValueOnce({
+        ...undecided,
+        decision: 'KEEP',
+        decisionLabel: '不拆',
+        verificationCode: 'A3K7',
+      });
+    vi.mocked(fetchMotherLabel).mockResolvedValue(sticker('MD-1', 'A3K7', 'MOTHER'));
+    const wrapper = mount(MotherSplitPanel, { props: { motherOrderCode: 'MD-1' } });
+    await flushPromises();
+
+    await wrapper.get('button.primary-button').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('超时');
+    await wrapper.get('button.primary-button').trigger('click');
+    await flushPromises();
+
+    const ids = vi.mocked(keepMotherOrder).mock.calls.map((call) => call[1]);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[0]).toMatch(/^[A-Za-z0-9._:-]{8,64}$/);
   });
 });

@@ -28,6 +28,7 @@ import com.zhubao.erp.business.domain.QualityReleaseResult;
 import com.zhubao.erp.business.domain.QualityReworkCommand;
 import com.zhubao.erp.business.domain.QualityReworkResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
+import com.zhubao.erp.business.domain.KeepMotherOrderRequest;
 import com.zhubao.erp.business.domain.MotherOrderSplitView;
 import com.zhubao.erp.business.domain.ProcessStationReportCommand;
 import com.zhubao.erp.business.domain.ProcessStationReportResult;
@@ -158,11 +159,16 @@ public class BusinessOperationController {
     @PostMapping("/mother-orders/{code}/keep")
     public ApiResponse<MotherOrderSplitView> keepMotherOrder(
             @PathVariable String code,
+            @RequestBody(required = false) KeepMotherOrderRequest body,
             HttpServletRequest request
     ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         if (dataAccess != null) dataAccess.assertDocumentCustomer(context, code);
-        return ApiResponse.ok(motherOrderSplitService.keep(code, context.operator()));
+        String requestId = body == null ? null : body.requestId();
+        if (requestId == null || requestId.isBlank()) {
+            throw new BusinessException("选择不拆必须带请求编号");
+        }
+        return ApiResponse.ok(motherOrderSplitService.keep(code, context.operator(), requestId));
     }
 
     @PostMapping("/mother-orders/{code}/splits")
@@ -173,11 +179,14 @@ public class BusinessOperationController {
     ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         if (dataAccess != null) dataAccess.assertDocumentCustomer(context, code);
+        if (body.requestId() == null || body.requestId().isBlank()) {
+            throw new BusinessException("拆分子单必须带请求编号");
+        }
         return ApiResponse.ok(motherOrderSplitService.split(new SplitMotherOrderCommand(
                 code,
                 context.operator(),
                 body.lines()
-        )));
+        ), body.requestId()));
     }
 
     @PostMapping("/inbound-confirmations")

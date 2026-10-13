@@ -170,8 +170,37 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public synchronized void saveMotherSplitState(MotherSplitState state, WorkSession session) {
+        requireSession(session);
+        MotherSplitState previous = splitStates.put(state.motherOrderCode(), state);
+        session.onRollback(() -> {
+            synchronized (this) {
+                if (previous == null) {
+                    splitStates.remove(state.motherOrderCode(), state);
+                } else {
+                    splitStates.put(state.motherOrderCode(), previous);
+                }
+            }
+        });
+    }
+
+    @Override
     public Optional<MotherSplitState> findMotherSplitState(String motherOrderCode) {
         return Optional.ofNullable(splitStates.get(motherOrderCode));
+    }
+
+    @Override
+    public Optional<MotherSplitState> findMotherSplitState(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        return findMotherSplitState(motherOrderCode);
+    }
+
+    @Override
+    public synchronized void lockMotherOrder(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        if (motherOrderCode == null || !motherOrders.containsKey(motherOrderCode)) {
+            throw new BusinessException("母单不存在：" + motherOrderCode);
+        }
     }
 
     @Override
@@ -185,8 +214,30 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public boolean childWorkOrderExists(String code, WorkSession session) {
+        requireSession(session);
+        return childWorkOrderExists(code);
+    }
+
+    @Override
     public ChildWorkOrderRecord saveChildWorkOrder(ChildWorkOrderRecord record) {
         childWorkOrders.put(record.code(), record);
+        return record;
+    }
+
+    @Override
+    public synchronized ChildWorkOrderRecord saveChildWorkOrder(ChildWorkOrderRecord record, WorkSession session) {
+        requireSession(session);
+        ChildWorkOrderRecord previous = childWorkOrders.put(record.code(), record);
+        session.onRollback(() -> {
+            synchronized (this) {
+                if (previous == null) {
+                    childWorkOrders.remove(record.code(), record);
+                } else {
+                    childWorkOrders.put(record.code(), previous);
+                }
+            }
+        });
         return record;
     }
 
@@ -201,6 +252,12 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
                 .filter(record -> motherOrderCode.equals(record.motherOrderCode()))
                 .sorted(Comparator.comparing(ChildWorkOrderRecord::code))
                 .toList();
+    }
+
+    @Override
+    public List<ChildWorkOrderRecord> listChildWorkOrders(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        return listChildWorkOrders(motherOrderCode);
     }
 
     @Override
@@ -220,6 +277,12 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
         boolean onChild = childWorkOrders.values().stream()
                 .anyMatch(record -> verificationCode.equals(record.verificationCode()));
         return onMother || onChild;
+    }
+
+    @Override
+    public boolean verificationCodeExists(String verificationCode, WorkSession session) {
+        requireSession(session);
+        return verificationCodeExists(verificationCode);
     }
 
     @Override
