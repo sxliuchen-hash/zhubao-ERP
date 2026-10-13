@@ -2346,9 +2346,11 @@ PWA 一期边界：
 | `GET /api/label/mother-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `GET /api/label/work-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `POST /api/label/reprints` | `ApiResponse<LabelPayload>` |
-| `POST /api/label/print-jobs` | `ApiResponse<PrintJob>`。必须带 `requestId`。快照为 `LABEL|单号|模板|份数|V版本`，版本取已生效改单。同版补打沿用原快照 |
+| `POST /api/label/print-jobs` | `ApiResponse<PrintJob>`。必须带 `requestId`。快照为服务端 JSON，含单号、模板、60×40 mm、份数、二维码、版本和标签实例。同版补打沿用原快照。`SPOOLED` 只表示已送入系统队列 |
 | `GET /api/label/print-jobs/{id}` | `ApiResponse<PrintJob>`。`SPOOLED` 只表示已送入系统队列 |
-| `POST /api/label/print-jobs/{id}/retries` | `ApiResponse<PrintJob>`。必须填写原因，新建关联任务，不改原任务 |
+| `POST /api/label/print-jobs/{id}/retries` | `ApiResponse<PrintJob>`。必须填写原因，新建关联任务并保留原快照，不改原任务 |
+| `POST /api/label/print-jobs/{id}/paper-checks` | `ApiResponse<PrintJob>`。人工核实出纸，不把任务改成已出纸 |
+| `POST /api/label/print-jobs/{id}/relabels` | `ApiResponse<PrintJob>`。记录实物换贴，不表示打印队列已经出纸 |
 | `POST /api/label/agents/jobs/claim` | `ApiResponse<PrintJob>`。工位凭据领取，不复用管理员账号 |
 | `POST /api/label/agents/jobs/{id}/report` | `ApiResponse<PrintJob>`。只能回报 `SPOOLED` 或发送前 `FAILED` |
 | `GET /api/label/templates` | `ApiResponse<List<LabelTemplate>>` |

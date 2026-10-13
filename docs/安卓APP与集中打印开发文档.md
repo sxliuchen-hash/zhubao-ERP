@@ -1,6 +1,6 @@
 # 安卓 APP 与集中标签打印开发文档
 
-**状态：2026-10-14 方案，尚未实施。** 本文用于安卓入口、集中打印及整体排期；改单、财务确认和全链追溯的业务主方案见[订单变更、换标、计费与全链路追溯设计](./订单变更与全链路追溯设计.md)。接口、任务状态和目录安排均为拟议设计，不表示现有系统已经支持 APK、独立客户备料、公司自有生产物料库存、工序百分比报工、订单中途改单与标签版本追溯或远程自动打印。
+**状态：2026-10-14 代码已落地一部分，现场验收未完成。** 本文仍是安卓入口、集中打印和改单追溯的设计基准。仓库里已有 `android-app/`、`print-agent/`、备料、工序百分比、改单版本和打印任务；正式签名 APK、真实 ERP 地址、手机作业和佳博出纸都还没有验收。现行事实以[项目核心](./00_项目核心.md)为准。改单、财务确认和全链追溯的业务规则见[订单变更、换标、计费与全链路追溯设计](./订单变更与全链路追溯设计.md)。
 
 ## 1. 目标与范围
 
@@ -121,13 +121,13 @@
 
 ## 7. 开发与发布环境
 
-以下是 2026-10-13 在当前可见 Windows 开发环境中的检查结果，不能替代其他开发机或厂内电脑的检查。
+以下是 2026-10-14 在当前可见 Windows 开发环境中的检查结果，不能替代其他开发机或厂内电脑的检查。
 
 | 条件 | 当前状态 | 准备动作 |
 |---|---|---|
-| Node.js / pnpm | Node 24.19.0、pnpm 11.25.0 可用 | 沿用现有前端安装与构建流程 |
+| Node.js / pnpm | Node 24.19.0、pnpm 11.28.5 可用 | 沿用现有前端安装与构建流程 |
 | JDK | JDK 21 已安装；命令行 `JAVA_HOME` 指向 JDK 8 | Android 构建使用 Android Studio 自带或兼容的 JDK，不影响既有后端脚本 |
-| Android Studio / SDK / adb | 当前环境未找到 | 安装 Android Studio、SDK 平台与平台工具；在真机启用调试。安装方式见[Android 官方文档](https://developer.android.com/studio/install.html) |
+| Android Studio / SDK / adb | Android Studio 2026.2 位于 `D:\exe\AndroidStudio`。SDK 位于 `D:\exe\AndroidSdk`，含 `adb` 37.0.1、平台 `android-37.2` 和 Build-Tools 37.0.0。用户环境变量 `ANDROID_HOME` 指向该 SDK | 首次打开 Android Studio 时确认 SDK 位置为 `D:\exe\AndroidSdk`。真机调试另需打开 USB 调试。安装方式见[Android 官方文档](https://developer.android.com/studio/install.html) |
 | Android 工程与签名 | 仓库无 Android 工程和签名配置 | 建工程、固定包名与版本规则；发布密钥另行受控保存，不提交 Git |
 | 云端 HTTPS | 已有自签证书；手机信任和摄像头仍待现场验收 | 固定访问域名与可信证书，验证 APK 内 WebView、上传和预览 |
 | 打印工位 | 尚未核定机器铭牌、接口、Windows 驱动、标签纸 | 取得实机与一台固定电脑，先做尺寸及二维码出纸验证 |
