@@ -45,3 +45,4 @@
 45	COLUMN	biz_mother_order	courier_identity
 46	TABLE	biz_quality_round
 47	ROW	sys_navigation_menu	code	label
+48	ROW	sys_navigation_menu	code	users

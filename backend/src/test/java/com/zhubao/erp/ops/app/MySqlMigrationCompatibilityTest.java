@@ -79,7 +79,7 @@ class MySqlMigrationCompatibilityTest {
     }
 
     @Test
-    void exportedInitializationInstallsThroughV47AndAdoptsOriginalChecksums() throws Exception {
+    void exportedInitializationInstallsThroughLatestVersionAndAdoptsOriginalChecksums() throws Exception {
         String directory = System.getProperty("zhubao.test.mysql.init-directory");
         assertThat(directory).as("必须提供由 export-mysql-init.ps1 生成的初始化目录").isNotBlank();
         JdbcMigrationStore store = new JdbcMigrationStore(database);
@@ -96,8 +96,8 @@ class MySqlMigrationCompatibilityTest {
             store.executeScript(sql);
         }
         DatabaseUpgradeService service = new DatabaseUpgradeService(database, scripts);
-        assertThat(service.plan().detectedBaseline()).isEqualTo(47);
-        assertThat(service.adopt(true).applied()).hasSize(47);
+        assertThat(service.plan().detectedBaseline()).isEqualTo(scripts.get(scripts.size() - 1).version());
+        assertThat(service.adopt(true).applied()).hasSize(scripts.size());
         assertCurrentAndRepeatable(service, scripts);
     }
 
@@ -111,7 +111,7 @@ class MySqlMigrationCompatibilityTest {
     }
 
     @Test
-    void directoryUpgradeFromEmptyDatabaseInstallsThroughV47() {
+    void directoryUpgradeFromEmptyDatabaseInstallsThroughLatestVersion() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
         DatabaseUpgradeService service = new DatabaseUpgradeService(database, scripts);
         service.upgrade(true);
@@ -121,11 +121,11 @@ class MySqlMigrationCompatibilityTest {
     private void assertCurrentAndRepeatable(DatabaseUpgradeService service, List<MigrationScript> scripts) {
         assertThat(service.plan().problems()).isEmpty();
         assertThat(service.plan().pending()).isEmpty();
-        assertThat(service.plan().applied()).hasSize(47).allSatisfy(record -> {
+        assertThat(service.plan().applied()).hasSize(scripts.size()).allSatisfy(record -> {
             assertThat(record.status()).isEqualTo(UpgradeStatus.SUCCESS);
             assertThat(record.checksum()).isEqualTo(scripts.get(record.version() - 1).checksum());
         });
-        assertThat(service.upgrade(true).applied()).hasSize(47);
+        assertThat(service.upgrade(true).applied()).hasSize(scripts.size());
         JdbcSchemaInspector inspector = new JdbcSchemaInspector(database);
         for (String table : List.of("fin_receivable_line", "fin_customer_receipt", "fin_payroll_line",
                 "fin_payroll_run", "fin_consumable_movement", "fin_depreciation_entry", "fin_payable")) {

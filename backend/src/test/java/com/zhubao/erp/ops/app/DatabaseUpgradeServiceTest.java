@@ -1,6 +1,7 @@
 package com.zhubao.erp.ops.app;
 
 import com.zhubao.erp.ops.domain.MigrationScript;
+import com.zhubao.erp.ops.domain.SchemaProbe;
 import com.zhubao.erp.ops.domain.UpgradePlan;
 import com.zhubao.erp.ops.domain.UpgradeStatus;
 import com.zhubao.erp.ops.infra.JdbcSchemaInspector;
@@ -32,9 +33,9 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void realCatalogKeepsContiguousVersionsThroughV47() {
+    void realCatalogKeepsContiguousVersionsThroughV48() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(47);
+        assertThat(scripts).hasSize(48);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);
@@ -53,8 +54,51 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(45).fileName()).isEqualTo("V46__m3_quality_round.sql");
         assertThat(scripts.get(46).version()).isEqualTo(47);
         assertThat(scripts.get(46).fileName()).isEqualTo("V47__m3_label_menu.sql");
+        assertThat(scripts.get(47).version()).isEqualTo(48);
+        assertThat(scripts.get(47).fileName()).isEqualTo("V48__m3_users_menu.sql");
         assertThat(MigrationCatalog.loadClasspath()).extracting(MigrationScript::version)
                 .containsExactlyElementsOf(scripts.stream().map(MigrationScript::version).toList());
+    }
+
+    @Test
+    void classpathV48CreatesUsersProbeAndOnlyAdministratorBinding() throws Exception {
+        MigrationScript script = MigrationCatalog.loadClasspath().get(47);
+        assertThat(script.version()).isEqualTo(48);
+        assertThat(script.probe().kind()).isEqualTo(SchemaProbe.Kind.ROW);
+        assertThat(script.probe().tableName()).isEqualTo("sys_navigation_menu");
+        assertThat(script.probe().columnName()).isEqualTo("code");
+        assertThat(script.probe().expectedValue()).isEqualTo("users");
+        assertThat(script.sql()).isEqualTo(Files.readString(
+                Path.of("src/main/resources/db/mysql/V48__m3_users_menu.sql"), StandardCharsets.UTF_8));
+
+        DataSource dataSource = dataSource();
+        execute(dataSource, "create table sys_navigation_menu (code varchar(60) primary key, label varchar(100), "
+                + "module varchar(100), route varchar(100), button_codes varchar(200), sort_order int)");
+        execute(dataSource, "create table sys_role_menu (role_code varchar(60), menu_code varchar(60), "
+                + "primary key (role_code, menu_code))");
+        execute(dataSource, "insert into sys_navigation_menu (code, button_codes) values ('configuration', 'AUTH_ACCOUNT_MANAGE')");
+        execute(dataSource, "insert into sys_role_menu values ('GENERAL_MANAGER', 'users')");
+        JdbcSchemaInspector inspector = new JdbcSchemaInspector(dataSource);
+        assertThat(inspector.matches(script.probe())).isFalse();
+
+        // 使用类路径实际加载的 SQL，重复执行同时验证菜单迁移的幂等性。
+        for (int repetition = 0; repetition < 2; repetition++) {
+            for (String statement : MigrationCatalog.statements(script.sql())) {
+                execute(dataSource, statement);
+            }
+        }
+
+        assertThat(inspector.matches(script.probe())).isTrue();
+        assertThat(count(dataSource, "select count(*) from sys_navigation_menu where code = 'users' "
+                + "and label = '用户管理' and route = '/users' "
+                + "and button_codes = 'AUTH_ACCOUNT_MANAGE,CUSTOMER_AUTHORIZATION_MANAGE'"))
+                .isEqualTo(1);
+        assertThat(count(dataSource, "select count(*) from sys_role_menu where menu_code = 'users'"))
+                .isEqualTo(1);
+        assertThat(count(dataSource, "select count(*) from sys_role_menu where menu_code = 'users' and role_code = 'ADMIN'"))
+                .isEqualTo(1);
+        assertThat(count(dataSource, "select count(*) from sys_navigation_menu where code = 'configuration' and button_codes = ''"))
+                .isEqualTo(1);
     }
 
     @Test
