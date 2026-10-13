@@ -108,12 +108,6 @@ export async function fetchRecentReadings(limit = 50): Promise<DeviceReading[]> 
   return apiGet<DeviceReading[]>(`/api/hardware/gateway/readings?limit=${limit}`);
 }
 
-export async function fetchReadingsByDevice(deviceCode: string, limit = 50): Promise<DeviceReading[]> {
-  return apiGet<DeviceReading[]>(
-    `/api/hardware/gateway/devices/${encodeURIComponent(deviceCode)}/readings?limit=${limit}`,
-  );
-}
-
 export interface RegisterGatewayDeviceRequest {
   deviceCode: string;
   deviceName: string;

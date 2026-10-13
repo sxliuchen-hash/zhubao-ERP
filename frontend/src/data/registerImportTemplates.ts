@@ -491,10 +491,6 @@ export function registerRuleTone(level: RegisterValidationRule['level']): Tone {
   return level === 'BLOCK' ? 'red' : 'amber';
 }
 
-export function registerCoverageTone(status: RegisterFieldCoverage['status']): Tone {
-  return fieldCoverageTone(status);
-}
-
 function field(
   sourceColumn: string,
   targetField: string,

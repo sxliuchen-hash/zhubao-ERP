@@ -7,7 +7,7 @@ export interface ProgressTarget {
   motherOrderCode: string;
 }
 
-export const progressStageLabels: Record<string, string> = {
+const progressStageLabels: Record<string, string> = {
   PRODUCTION: '生产过程',
   QUALITY: '质检过程',
   SHIPPING: '发货准备',
@@ -16,20 +16,6 @@ export const progressStageLabels: Record<string, string> = {
 export function progressStageLabel(stage: string | null | undefined): string {
   const code = stage?.trim() ?? '';
   return progressStageLabels[code] || '未标明阶段';
-}
-
-export function progressTargetOf(
-  context?: { motherOrderCode?: string | null; workOrderCode?: string | null } | null,
-): ProgressTarget | null {
-  const mother = context?.motherOrderCode?.trim() ?? '';
-  const work = context?.workOrderCode?.trim() ?? '';
-  if (work && work !== mother) {
-    return { targetType: 'WORK_ORDER', targetCode: work, motherOrderCode: mother };
-  }
-  if (mother) {
-    return { targetType: 'MOTHER_ORDER', targetCode: mother, motherOrderCode: mother };
-  }
-  return null;
 }
 
 export function progressTargetFromScan(context: ScanContextResponse | null | undefined): ProgressTarget | null {
