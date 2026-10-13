@@ -63,7 +63,7 @@ describe('App', () => {
     expect(wrapper.get('.mobile-tabbar').text()).toContain('工作台');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('现场作业');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('审批');
-    expect(wrapper.get('.mobile-tabbar').text()).toContain('更多');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('全部功能');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('消息');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('扫码');
   });

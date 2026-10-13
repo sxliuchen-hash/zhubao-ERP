@@ -100,6 +100,7 @@ const activeWorkspace = computed(() => {
   });
 });
 const moreOpen = ref(false);
+const moreQuery = ref('');
 const traceQuery = ref('');
 const traceTarget = ref<TraceTarget | null>(null);
 const labelTarget = ref<TraceTarget | null>(null);
@@ -153,9 +154,15 @@ const mobilePrimaryTabs = computed(() => mobilePrimaryKeys
     label: tab.key === 'dashboard' ? '工作台' : tab.key === 'mobile' ? '现场作业' : '审批',
   })));
 const moreTabs = computed(() => visibleTabs.value.filter((tab) => !mobilePrimaryKeys.includes(tab.key)));
+const filteredMoreTabs = computed(() => {
+  const query = moreQuery.value.trim();
+  if (!query) return moreTabs.value;
+  return moreTabs.value.filter((tab) => tab.label.includes(query) || tab.meta.includes(query));
+});
 
 watch(activeTab, () => {
   moreOpen.value = false;
+  moreQuery.value = '';
   void nextTick(() => window.scrollTo(0, 0));
 });
 
@@ -256,11 +263,15 @@ function isTabKey(value: string): value is TabKey {
         @click="moreOpen = !moreOpen"
       >
         <NavIcon name="more" />
-        <span>更多</span>
+        <span>全部功能</span>
       </button>
-      <div v-if="moreOpen" class="mobile-more-sheet" role="dialog" aria-label="更多功能">
+      <div v-if="moreOpen" class="mobile-more-sheet" role="dialog" aria-label="全部功能">
+        <label class="mobile-more-filter">
+          <span class="visually-hidden">筛选功能</span>
+          <input v-model="moreQuery" aria-label="筛选功能" placeholder="筛选功能" />
+        </label>
         <button
-          v-for="tab in moreTabs"
+          v-for="tab in filteredMoreTabs"
           :key="tab.key"
           class="mobile-more-item"
           :data-mobile-tab="tab.key"

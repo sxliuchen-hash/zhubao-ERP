@@ -187,6 +187,25 @@ async function removeAccount(account: AuthUserAccountSummary) {
             </tbody>
           </table>
         </div>
+        <div class="user-cards" aria-label="用户列表">
+          <article v-for="account in visibleAccounts" :key="account.username" class="user-card">
+            <header>
+              <strong>{{ account.username }}</strong>
+              <span>{{ account.operator }}</span>
+            </header>
+            <p>角色 {{ account.roleLabel }}</p>
+            <p>数据权限 {{ account.dataScopeLabel }}<span v-if="account.dataScope === 'CUSTOMER_RANGE'"> · {{ account.customerScope.join('、') || '未授权客户' }}</span></p>
+            <p>工序 {{ account.allowedProcesses?.join('、') || '未绑定工序' }}</p>
+            <p>状态 {{ account.enabled ? '启用' : '停用' }}{{ account.locked ? ' · 已锁定' : '' }}{{ account.passwordChangeRequired ? ' · 待改密' : '' }}</p>
+            <div class="user-actions">
+              <button class="table-action" type="button" :disabled="busy || loading || !!loadError" @click="openEditor(account)">编辑</button>
+              <button class="table-action" type="button" :disabled="busy || loading || !!loadError" @click="openEditor(account, true)">重置密码</button>
+              <button class="table-action" type="button" :disabled="busy || loading || !!loadError || account.username === session?.username" @click="runAction(() => updateAuthAccountStatus(account.username, { enabled: !account.enabled, reason: '管理员用户管理' }), `已${account.enabled ? '停用' : '启用'} ${account.username}`)">{{ account.enabled ? '停用' : '启用' }}</button>
+              <button v-if="account.locked" class="table-action" type="button" :disabled="busy || loading || !!loadError" @click="runAction(() => unlockAuthAccount(account.username, { reason: '管理员解锁' }), `已解锁 ${account.username}`)">解锁</button>
+              <button class="table-action danger" type="button" :disabled="busy || loading || !!loadError || account.username === session?.username" @click="removeAccount(account)">删除</button>
+            </div>
+          </article>
+        </div>
         <p v-if="!loading && !loadError && !visibleAccounts.length" class="empty-hint">暂无符合条件的用户</p>
       </section>
 
@@ -228,7 +247,16 @@ async function removeAccount(account: AuthUserAccountSummary) {
 .user-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px; }
 input:not([type="checkbox"]), select, textarea { width: 100%; box-sizing: border-box; min-width: 0; }
 .user-table-wrap { overflow-x: auto; }
+.user-cards { display: none; }
+.user-card { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.user-card header { display: flex; justify-content: space-between; gap: 8px; }
+.user-card p { margin: 0; }
 table { min-width: 800px; }
+@media (max-width: 900px) {
+  .user-table-wrap { display: none; }
+  .user-cards { display: grid; gap: 10px; }
+  table { min-width: 0; }
+}
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .user-checks, .user-permissions { margin-bottom: 16px; }
 .user-permissions ul { display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }

@@ -1021,6 +1021,27 @@ tr[aria-selected="true"] { background: var(--action-soft); }
     color: #fff;
   }
 
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .mobile-more-filter {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-more-filter input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
   .mobile-more-sheet {
     position: fixed;
     z-index: 41;
