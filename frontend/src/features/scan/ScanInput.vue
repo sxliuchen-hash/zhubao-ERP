@@ -31,9 +31,12 @@ const emit = defineEmits<{
 
 const scanner = useScanner();
 const scanning = scanner.scanning;
+const cameraActive = scanner.cameraActive;
 const scannerHint = scanner.hint;
 const videoEl = scanner.videoRef;
 const photoRef = ref<HTMLInputElement | null>(null);
+const albumRef = ref<HTMLInputElement | null>(null);
+const manualRef = ref<HTMLInputElement | null>(null);
 const objectType = ref<ScanObjectType | ''>('');
 const submitAria = computed(() => props.submitAriaLabel || props.submitLabel);
 let acceptSubmit = true;
@@ -56,6 +59,11 @@ function onType(event: Event) {
 function submitManual(event?: Event) {
   event?.preventDefault();
   if (!acceptSubmit || props.busy || scanning.value) return;
+  if (!props.modelValue.trim()) {
+    scannerHint.value = '请先扫码，或填写单号后再识别';
+    manualRef.value?.focus();
+    return;
+  }
   acceptSubmit = false;
   emit('recognize', draftOf(props.modelValue));
   queueMicrotask(() => {
@@ -64,7 +72,13 @@ function submitManual(event?: Event) {
 }
 
 function openPhoto() {
+  if (props.busy || scanning.value) return;
   photoRef.value?.click();
+}
+
+function stopCamera() {
+  scanner.stop();
+  scannerHint.value = '已停止扫码，可以重新扫码、选图或手输单号';
 }
 
 function publish(raw: string) {
@@ -73,7 +87,9 @@ function publish(raw: string) {
 }
 
 async function onCamera() {
+  if (props.busy || scanning.value) return;
   if (!hasLiveCamera()) {
+    scannerHint.value = '当前浏览器无法实时扫码，请拍照识别，也可以选图或手输单号';
     photoRef.value?.click();
     return;
   }
@@ -85,7 +101,7 @@ async function onPhoto(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = '';
-  if (!file) return;
+  if (!file || props.busy || scanning.value) return;
   const raw = await scanner.scanPhoto(file);
   if (raw) publish(raw);
 }
@@ -93,21 +109,56 @@ async function onPhoto(event: Event) {
 
 <template>
   <form class="scan-entry intake-form" @submit.prevent="submitManual">
+    <div class="scan-start">
+      <button
+        class="primary-button scan-camera-button"
+        type="button"
+        :disabled="busy || scanning"
+        :aria-label="cameraAriaLabel"
+        @click="onCamera"
+      >
+        {{ cameraActive ? '正在扫码…' : '相机扫码' }}
+      </button>
+      <p class="scan-help">对准快递面单或单据标签，识别后自动继续</p>
+    </div>
+    <div v-show="cameraActive" class="scan-camera-panel" role="region" aria-label="扫码取景">
+      <div class="scan-viewfinder">
+        <video ref="videoEl" class="intake-camera" muted playsinline autoplay />
+        <div class="scan-target" aria-hidden="true" />
+      </div>
+      <p class="scan-help">将完整条码放入框内，靠近一些，避开反光</p>
+      <button class="secondary-button" type="button" aria-label="停止扫码" @click="stopCamera">停止扫码</button>
+    </div>
+    <div class="scan-fallback-actions">
+      <button
+        class="secondary-button"
+        type="button"
+        :disabled="busy || scanning"
+        :aria-label="photoAriaLabel"
+        @click="openPhoto"
+      >
+        {{ photoAriaLabel }}
+      </button>
+      <button
+        class="secondary-button"
+        type="button"
+        :disabled="busy || scanning"
+        aria-label="从相册选图"
+        @click="albumRef?.click()"
+      >从相册选图</button>
+    </div>
+    <p v-if="scannerHint" class="operation-feedback scan-feedback" role="status" aria-live="polite">{{ scannerHint }}</p>
     <label class="field">
-      <span>对象类型</span>
-      <select aria-label="对象类型" :value="objectType" @change="onType">
-        <option value="">由系统判断</option>
-        <option v-for="option in scanObjectTypeOptions" :key="option.value" :value="option.value">
-          {{ option.label }}
-        </option>
-      </select>
-    </label>
-    <label class="field">
-      <span>{{ fieldText }}</span>
+      <span>{{ fieldText }}（也可手输）</span>
       <input
+        ref="manualRef"
         :value="modelValue"
         type="text"
         autocomplete="off"
+        autocapitalize="off"
+        :spellcheck="false"
+        enterkeyhint="go"
+        :disabled="scanning"
         :placeholder="placeholder"
         :aria-label="inputAriaLabel"
         @input="onInput"
@@ -115,7 +166,7 @@ async function onPhoto(event: Event) {
     </label>
     <div class="button-row">
       <button
-        class="primary-button"
+        class="secondary-button"
         type="submit"
         :disabled="busy || scanning"
         :aria-label="submitAria"
@@ -123,25 +174,19 @@ async function onPhoto(event: Event) {
       >
         {{ busy ? '正在识别' : submitLabel }}
       </button>
-      <button
-        class="secondary-button"
-        type="button"
-        :disabled="scanning"
-        :aria-label="cameraAriaLabel"
-        @click="onCamera"
-      >
-        {{ scanning ? '正在扫码' : '打开摄像头' }}
-      </button>
-      <button
-        class="secondary-button"
-        type="button"
-        :disabled="scanning"
-        :aria-label="photoAriaLabel"
-        @click="openPhoto"
-      >
-        {{ photoAriaLabel }}
-      </button>
     </div>
+    <details class="scan-options">
+      <summary>对象类型：{{ scanObjectTypeOptions.find(option => option.value === objectType)?.label || '自动判断' }}（可选）</summary>
+      <label class="field">
+        <span>同号无法区分时再选择对象类型</span>
+        <select aria-label="对象类型" :value="objectType" :disabled="scanning" @change="onType">
+          <option value="">由系统判断</option>
+          <option v-for="option in scanObjectTypeOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+    </details>
     <input
       ref="photoRef"
       class="still-capture"
@@ -151,7 +196,98 @@ async function onPhoto(event: Event) {
       aria-label="条码照片"
       @change="onPhoto"
     />
-    <video v-show="scanning" ref="videoEl" class="intake-camera" muted playsinline autoplay />
-    <p v-if="scannerHint" class="operation-feedback">{{ scannerHint }}</p>
+    <input
+      ref="albumRef"
+      class="still-capture"
+      type="file"
+      accept="image/*"
+      aria-label="相册条码照片"
+      @change="onPhoto"
+    />
   </form>
 </template>
+
+<style scoped>
+.scan-entry {
+  min-width: 0;
+}
+
+.scan-entry > *,
+.scan-entry .field {
+  min-width: 0;
+}
+
+.scan-entry input:not([type="file"]),
+.scan-entry select {
+  box-sizing: border-box;
+  max-width: 100%;
+  width: 100%;
+}
+
+.scan-camera-button {
+  width: 100%;
+  min-height: 56px;
+  font-size: 18px;
+}
+
+.scan-help {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted, #64748b);
+  overflow-wrap: anywhere;
+}
+
+.scan-fallback-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scan-fallback-actions button {
+  min-width: 0;
+  min-height: 44px;
+  white-space: normal;
+}
+
+.scan-camera-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.scan-viewfinder {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #0f172a;
+  aspect-ratio: 4 / 3;
+  max-height: 340px;
+}
+
+.scan-viewfinder .intake-camera {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+}
+
+.scan-target {
+  position: absolute;
+  inset: 20% 8%;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.scan-feedback {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.scan-options summary {
+  min-height: 36px;
+  cursor: pointer;
+  color: var(--muted, #64748b);
+  font-size: 13px;
+}
+</style>

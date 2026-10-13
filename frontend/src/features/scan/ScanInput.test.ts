@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryScanContext } from '../../services/scanContextApi';
-import { hasLiveCamera, readBarcodeFromFile } from './cameraBarcode';
+import { hasLiveCamera, openCameraStream, readBarcodeFromFile, readLiveBarcode } from './cameraBarcode';
 import OrderContextCard from './OrderContextCard.vue';
 import ScanInput from './ScanInput.vue';
 import { buildScanContext } from './scanContextFixture';
@@ -22,9 +22,85 @@ beforeEach(() => {
   vi.mocked(queryScanContext).mockReset();
   vi.mocked(hasLiveCamera).mockReturnValue(false);
   vi.mocked(readBarcodeFromFile).mockReset();
+  vi.mocked(openCameraStream).mockReset();
+  vi.mocked(readLiveBarcode).mockReset();
+  HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
 });
 
 describe('扫码输入组件', () => {
+  const inputProps = { modelValue: '', fieldText: '单号', inputAriaLabel: '单号输入', submitLabel: '识别' };
+
+  it('摄像头是首个操作，默认自动判断且扫码后无需再点识别', async () => {
+    vi.mocked(hasLiveCamera).mockReturnValue(true);
+    const stop = vi.fn();
+    vi.mocked(openCameraStream).mockResolvedValue({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+    vi.mocked(readLiveBarcode).mockResolvedValue('JG|mother|MD-1');
+    const wrapper = mount(ScanInput, { props: inputProps });
+    expect(wrapper.findAll('button')[0].text()).toBe('相机扫码');
+    expect(wrapper.get('details').attributes('open')).toBeUndefined();
+    await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('recognize')).toEqual([[{ content: 'JG|mother|MD-1' }]]);
+    expect(wrapper.emitted('update:modelValue')).toEqual([['JG|mother|MD-1']]);
+    expect(stop).toHaveBeenCalled();
+    expect(wrapper.get('[aria-label="扫码取景"]').isVisible()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('取景时可以停止，停止后不再处理迟到的条码', async () => {
+    vi.mocked(hasLiveCamera).mockReturnValue(true);
+    const stop = vi.fn();
+    vi.mocked(openCameraStream).mockResolvedValue({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+    let finish: (value: string) => void = () => {};
+    vi.mocked(readLiveBarcode).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const wrapper = mount(ScanInput, { props: inputProps });
+    await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="扫码取景"]').isVisible()).toBe(true);
+    expect(wrapper.get('[role="status"]').text()).toContain('识别后自动继续');
+    await wrapper.get('[aria-label="停止扫码"]').trigger('click');
+    expect(stop).toHaveBeenCalled();
+    expect(wrapper.get('[aria-label="单号输入"]').attributes('disabled')).toBeUndefined();
+    finish('JG|mother|LATE');
+    await flushPromises();
+    expect(wrapper.emitted('recognize')).toBeUndefined();
+    expect(wrapper.get('[role="status"]').text()).toContain('已停止扫码');
+    wrapper.unmount();
+  });
+
+  it('拍照与相册入口分开，选图识别时不显示空取景框', async () => {
+    const wrapper = mount(ScanInput, { props: inputProps });
+    const photo = wrapper.get('[aria-label="条码照片"]');
+    const album = wrapper.get('[aria-label="相册条码照片"]');
+    const albumClick = vi.spyOn(album.element as HTMLInputElement, 'click').mockImplementation(() => {});
+    expect(photo.attributes('capture')).toBe('environment');
+    expect(album.attributes('capture')).toBeUndefined();
+    await wrapper.get('[aria-label="从相册选图"]').trigger('click');
+    expect(albumClick).toHaveBeenCalledOnce();
+    vi.mocked(readBarcodeFromFile).mockImplementation(() => new Promise(() => {}));
+    Object.defineProperty(album.element, 'files', { configurable: true, value: [new File(['code'], 'code.png')] });
+    await album.trigger('change');
+    expect(wrapper.get('[role="status"]').text()).toContain('正在识别照片');
+    expect(wrapper.get('[aria-label="扫码取景"]').isVisible()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('查询中禁止再次打开相机，空单号在本地提示', async () => {
+    const wrapper = mount(ScanInput, { props: inputProps });
+    await wrapper.get('[aria-label="识别"]').trigger('click');
+    expect(wrapper.emitted('recognize')).toBeUndefined();
+    expect(wrapper.get('[role="status"]').text()).toContain('填写单号');
+    await wrapper.setProps({ busy: true });
+    await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
+    expect(openCameraStream).not.toHaveBeenCalled();
+    expect(wrapper.get('[aria-label="拍照识别"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[aria-label="从相册选图"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[aria-label="单号输入"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[aria-label="单号输入"]').setValue('MD-NEW');
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['MD-NEW']);
+    wrapper.unmount();
+  });
+
   it('相机不可用时改为选照片，并且不查询单据', async () => {
     const clicks = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
     const wrapper = mount(ScanInput, {

@@ -142,14 +142,14 @@ function round3(value: number) {
 
 function sheetStyle(payload: LabelPayload) {
   return {
-    width: `${payload.printerSetting.widthMm * labelPreviewScale}mm`,
-    height: `${payload.printerSetting.heightMm * labelPreviewScale}mm`,
+    width: `calc(${payload.printerSetting.widthMm}mm * var(--sticker-scale, ${labelPreviewScale}))`,
+    height: `calc(${payload.printerSetting.heightMm}mm * var(--sticker-scale, ${labelPreviewScale}))`,
   };
 }
 
 function scaleStyle(payload: LabelPayload) {
   return {
-    transform: `scale(${labelPreviewScale})`,
+    transform: `scale(var(--sticker-scale, ${labelPreviewScale}))`,
     transformOrigin: 'top left',
     width: `${payload.printerSetting.widthMm}mm`,
     height: `${payload.printerSetting.heightMm}mm`,
@@ -169,8 +169,9 @@ function scaleStyle(payload: LabelPayload) {
         剩余 {{ view.remainingQuantity }} {{ view.quantityUnit }} / {{ view.remainingWeight }} 克
       </p>
       <button v-if="canKeep" class="primary-button" type="button" :disabled="submitting" @click="keepWhole">
-        不拆，打一张贴纸
+        不拆，预览流转贴纸
       </button>
+      <p v-if="canKeep" class="split-summary">确认不拆后将按整张母单生产，不能再拆成子单；预览后点击“打印这张”出纸。</p>
 
       <div v-if="canSplit" class="split-form">
         <h4>拆成多张</h4>
@@ -270,9 +271,16 @@ function scaleStyle(payload: LabelPayload) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
 }
 .label-sheet {
   overflow: hidden;
   background: var(--content);
+}
+@media (max-width: 600px) {
+  .sticker-list { --sticker-scale: 1.1; }
 }
 </style>

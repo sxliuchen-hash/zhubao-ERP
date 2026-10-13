@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import {
   fetchLabelTemplates,
   fetchMotherLabel,
@@ -18,6 +18,7 @@ import {
 import OrderContextCard from '../scan/OrderContextCard.vue';
 import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
+import type { TraceTarget } from '../scan/traceTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import type { ScanRelatedTarget } from '../../services/scanContextApi';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
@@ -68,11 +69,11 @@ const motherTemplateCode = ref('');
 
 const labelMarkup = computed(() => preview.value ? buildLabelMarkup(preview.value) : '');
 const sheetStyle = computed(() => ({
-  width: `${(preview.value?.printerSetting.widthMm ?? 60) * labelPreviewScale}mm`,
-  height: `${(preview.value?.printerSetting.heightMm ?? 40) * labelPreviewScale}mm`,
+  width: `calc(${preview.value?.printerSetting.widthMm ?? 60}mm * var(--label-scale, ${labelPreviewScale}))`,
+  height: `calc(${preview.value?.printerSetting.heightMm ?? 40}mm * var(--label-scale, ${labelPreviewScale}))`,
 }));
 const labelScaleStyle = computed(() => ({
-  transform: `scale(${labelPreviewScale})`,
+  transform: `scale(var(--label-scale, ${labelPreviewScale}))`,
   transformOrigin: 'top left',
   width: `${(preview.value?.printerSetting.widthMm ?? 60)}mm`,
   height: `${(preview.value?.printerSetting.heightMm ?? 40)}mm`,
@@ -145,10 +146,18 @@ function clearStickerTarget() {
   labelScan.invalidate();
   preview.value = null;
   loadedSticker.value = null;
+  submitting.value = false;
   if (had) stickerHint.value = '单号已变化，请重新查询';
 }
 
 watch(stickerQuery, () => clearStickerTarget(), { flush: 'sync' });
+
+const incomingLabel = inject<Ref<TraceTarget | null>>('zhubao-label-target', ref(null));
+watch(incomingLabel, (target) => {
+  if (!target?.code) return;
+  stickerQuery.value = target.code;
+  void openFieldSticker({ content: target.code, ...(target.objectType ? { objectType: target.objectType } : {}) });
+}, { immediate: true });
 
 async function openFieldSticker(draft: ScanDraft) {
   feedback.value = '';
@@ -216,7 +225,7 @@ function showSticker(payload: LabelPayload, kind: 'MOTHER' | 'WORK_ORDER') {
   const hasCode = payload.fields.some((field) => field.name === '验证码' && field.value.trim() !== '');
   stickerHint.value = hasCode
     ? (kind === 'WORK_ORDER' ? `已打开子单 ${payload.primaryCode}` : `已打开母单 ${payload.primaryCode}`)
-    : '这张单还没有验证码。不拆的母单要先在来料页选择不拆。';
+    : '收货母单标签可直接打印；用于生产流转前，请在来料页选择不拆或拆成子单，生成验证码。';
   feedback.value = `已从单据生成贴纸：${payload.primaryCode}`;
 }
 
@@ -406,12 +415,11 @@ onMounted(loadTemplates);
 </script>
 
 <template>
-  <div class="label-desk page-stack">
+  <div class="label-desk page-stack" :class="{ 'has-preview': preview }">
     <section class="label-intro">
       <h2>标签打印</h2>
       <p class="label-note">
-        现场贴纸印验证码、客户、加工要求、期限和单号。物料、数量、重量可以一起印。进度用手机扫二维码查看。
-        前期使用<strong>黑白打印</strong>，按标签纸尺寸单独出纸，不使用彩色。
+        核对客户、加工要求、期限和单号后点击打印。按标签纸尺寸<strong>黑白打印</strong>，生产进度可扫二维码查看。
       </p>
     </section>
 
@@ -516,7 +524,7 @@ onMounted(loadTemplates);
         <p v-if="errorMessage" class="feedback error">{{ errorMessage }}</p>
       </section>
 
-      <section v-if="preview" class="label-preview">
+      <section v-if="preview" class="label-preview" aria-label="标签预览">
         <div class="preview-toolbar">
           <span>标签预览</span>
           <div class="toolbar-actions">
@@ -875,6 +883,8 @@ onMounted(loadTemplates);
 }
 
 @media (max-width: 900px) {
+  .label-desk.has-preview .label-preview { order: -1; }
+
   .label-desk,
   .label-layout,
   .label-layout > *,
@@ -905,5 +915,10 @@ onMounted(loadTemplates);
   }
 
   .template-manager { overflow-x: auto; }
+}
+
+@media (max-width: 600px) {
+  .label-preview { --label-scale: 1.1; }
+  .label-mat { padding: 10px; }
 }
 </style>

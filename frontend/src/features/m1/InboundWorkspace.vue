@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, inject, nextTick, onMounted, ref, type Ref } from 'vue';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import type { InboundOrder, Tone } from '../../data/m1PrototypeData';
@@ -16,6 +16,7 @@ import { fetchMotherOrder, type MobileIntakeResult } from '../../services/mobile
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import IntakePanel from '../intake/IntakePanel.vue';
 import MotherSplitPanel from './MotherSplitPanel.vue';
+import { useTraceTarget } from '../scan/useTraceTarget';
 
 const emptyInbound = (): InboundWorkspaceModel => ({
   checkpoints: [],
@@ -42,6 +43,12 @@ const customerKeyword = ref('');
 const statusKeyword = ref('');
 const advancedOpen = ref(false);
 const detailOpen = ref(false);
+const detailPanel = ref<HTMLElement | null>(null);
+let scrollRequested = false;
+let extrasRevision = 0;
+const openLabel = inject<((code: string) => void) | null>('zhubao-open-label', null);
+const visibleTabs = inject<Ref<string[] | null>>('zhubao-visible-tabs', ref(null));
+const canPrintLabel = computed(() => Boolean(openLabel) && (!visibleTabs.value || visibleTabs.value.includes('label')));
 const loading = ref(false);
 const { keyword, filtered: filteredOrders } = useDeskFilter(
   () => workspace.value.orders,
@@ -79,15 +86,17 @@ onMounted(() => {
   void loadInboundWorkspace();
 });
 
+useTraceTarget(['INTAKE'], (target) => {
+  if (target.objectType !== 'MOTHER_ORDER') return;
+  selectInboundOrder(target.code);
+});
+
 async function loadInboundWorkspace() {
   loadError.value = '';
   loading.value = true;
   try {
     const loaded = await fetchInboundWorkspace();
     workspace.value = loaded;
-    if (loaded.orders.length === 0) {
-      loadError.value = '接口没有返回来料单据';
-    }
   } catch (error) {
     workspace.value = emptyInbound();
     loadError.value = error instanceof Error ? error.message : '来料单据加载失败';
@@ -98,6 +107,12 @@ async function loadInboundWorkspace() {
     }
     await loadOrderExtras(selectedOrderCode.value);
   }
+}
+
+async function handleIntakeSaved(result: MobileIntakeResult) {
+  selectedOrderCode.value = result.motherOrderCode;
+  detailOpen.value = true;
+  await loadInboundWorkspace();
 }
 
 function videoTone(video: string): Tone {
@@ -114,24 +129,39 @@ function statusTone(status: string): Tone {
 }
 
 async function loadOrderExtras(code: string) {
+  const revision = ++extrasRevision;
   captures.value = [];
   motherDetail.value = null;
+  captureError.value = '';
   if (!code) {
     return;
   }
   try {
-    motherDetail.value = await fetchMotherOrder(code);
+    const detail = await fetchMotherOrder(code);
+    if (revision !== extrasRevision) return;
+    motherDetail.value = detail;
     processingRequirement.value = motherDetail.value.processingRequirement;
     dueDate.value = motherDetail.value.dueDate;
   } catch {
+    if (revision !== extrasRevision) return;
     motherDetail.value = null;
   }
   try {
-    captures.value = await fetchCaptures(code);
+    const loaded = await fetchCaptures(code);
+    if (revision !== extrasRevision) return;
+    captures.value = loaded;
     captureError.value = '';
   } catch (error) {
+    if (revision !== extrasRevision) return;
     captures.value = [];
     captureError.value = error instanceof Error ? error.message : '视频暂时无法打开';
+  }
+  await nextTick();
+  if (scrollRequested && detailPanel.value && activeOrder.value?.code === selectedOrderCode.value) {
+    scrollRequested = false;
+    if (globalThis.matchMedia?.('(max-width: 900px)').matches) {
+      detailPanel.value.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
   }
 }
 
@@ -197,6 +227,7 @@ async function openStructuredMother() {
 }
 
 function selectInboundOrder(code: string) {
+  scrollRequested = true;
   selectedOrderCode.value = code;
   detailOpen.value = true;
   confirmationResult.value = null;
@@ -217,6 +248,7 @@ function backToList() {
     <IntakePanel
       title="新建来料"
       intro="扫运单建母单并入库。已有运单打开原单。超时先核对运单，不盲目再建。"
+      @saved="handleIntakeSaved"
     />
     <section class="module-work-grid inbound-work-grid" aria-label="来料作业主控台">
       <div class="module-master-panel">
@@ -224,8 +256,8 @@ function backToList() {
           <div>
             <h2>今日母单池</h2>
           </div>
-          <button class="primary-button" type="button" :disabled="!activeOrder || confirmingInbound" @click="confirmActiveInbound">
-            {{ confirmingInbound ? '正在入账' : '确认入库' }}
+          <button class="secondary-button" type="button" :disabled="loading" @click="loadInboundWorkspace">
+            {{ loading ? '正在刷新' : '刷新母单列表' }}
           </button>
         </div>
         <div class="module-tools inbound-filters">
@@ -276,13 +308,13 @@ function backToList() {
                 <td><button class="table-action" type="button" @click.stop="selectInboundOrder(order.code)">处理</button></td>
               </tr>
               <tr v-if="!loading && visibleOrders.length === 0">
-                <td colspan="6">暂无来料单据</td>
+                <td colspan="6">暂无来料单据，请在上方扫码或输入快递单号，填写收货资料后生成第一张母单。</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="inbound-cards">
-          <p v-if="!loading && visibleOrders.length === 0" class="empty-hint">暂无来料单据</p>
+          <p v-if="!loading && visibleOrders.length === 0" class="empty-hint">暂无来料单据，请在上方扫码或输入快递单号，填写收货资料后生成第一张母单。</p>
           <button
             v-for="order in visibleOrders"
             :key="order.code"
@@ -300,13 +332,15 @@ function backToList() {
         </div>
       </div>
 
-      <aside v-if="activeOrder" class="module-side-panel">
+      <aside v-if="activeOrder" ref="detailPanel" class="module-side-panel" aria-label="母单详情">
         <section class="active-object-card tone-amber">
           <div class="panel-title-row">
             <button class="secondary-button detail-back" type="button" @click="backToList">返回列表</button>
             <StatusBadge :label="activeOrder.status" :tone="statusTone(activeOrder.status)" />
           </div>
           <strong>{{ activeOrder.code }}</strong>
+          <button v-if="canPrintLabel" class="secondary-button" type="button" @click="openLabel?.(activeOrder.code)">预览母单标签</button>
+          <MotherSplitPanel v-if="motherDetail" :mother-order-code="motherDetail.motherOrderCode" />
           <dl class="detail-grid">
             <dt>客户</dt>
             <dd>{{ activeOrder.customer }}</dd>
@@ -339,15 +373,16 @@ function backToList() {
               <dd>{{ motherDetail.dueDate }}</dd>
             </template>
           </dl>
-          <label class="field">
+          <p v-if="motherDetail?.ledgerCode" class="operation-feedback success">已收货入库。下一步选择不拆或拆成子单，预览并打印流转贴纸。</p>
+          <label v-if="!motherDetail?.ledgerCode" class="field">
             <span>加工要求</span>
             <textarea v-model="processingRequirement" aria-label="加工要求" />
           </label>
-          <label class="field">
+          <label v-if="!motherDetail?.ledgerCode" class="field">
             <span>完成期限</span>
             <input v-model="dueDate" type="date" aria-label="完成期限" />
           </label>
-          <div class="detail-actions three-actions">
+          <div v-if="!motherDetail?.ledgerCode" class="detail-actions three-actions">
             <button class="primary-button" type="button" :disabled="confirmingInbound" @click="confirmActiveInbound">
               {{ confirmingInbound ? '正在入账' : '确认入库' }}
             </button>
@@ -368,7 +403,6 @@ function backToList() {
           </label>
           <button class="table-action" type="button" @click="openStructuredMother">打开母单</button>
           <p v-if="structuredError" class="operation-feedback danger">{{ structuredError }}</p>
-          <MotherSplitPanel v-if="motherDetail" :mother-order-code="motherDetail.motherOrderCode" />
         </section>
       </aside>
 

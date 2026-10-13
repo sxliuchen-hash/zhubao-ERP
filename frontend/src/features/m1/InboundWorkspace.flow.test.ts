@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InboundWorkspace from './InboundWorkspace.vue';
+import IntakePanel from '../intake/IntakePanel.vue';
 import type { InboundOrder } from '../../data/m1PrototypeData';
 import { fetchInboundWorkspace } from '../../services/businessWorkspaceApi';
 import { fetchCaptures } from '../../services/documentCaptureApi';
@@ -121,7 +122,8 @@ describe('来料列表与详情', () => {
     });
     const empty = mount(InboundWorkspace);
     await flushPromises();
-    expect(empty.text()).toContain('接口没有返回来料单据');
+    expect(empty.find('.operation-feedback.danger').exists()).toBe(false);
+    expect(empty.text()).toContain('生成第一张母单');
     expect(empty.text()).toContain('暂无来料单据');
 
     vi.mocked(fetchInboundWorkspace).mockResolvedValue({
@@ -148,7 +150,7 @@ describe('来料列表与详情', () => {
 
     expect(wrapper.text()).toContain('视频暂时无法打开');
     expect(wrapper.text()).toContain('抛光 / 2026-10-20');
-    expect(wrapper.text()).toContain('不拆，打一张贴纸');
+    expect(wrapper.text()).toContain('不拆，预览流转贴纸');
   });
 
   it('追溯关键字和本页扫码一起过滤', async () => {
@@ -160,5 +162,55 @@ describe('来料列表与详情', () => {
 
     expect(wrapper.text()).toContain('MD-API-002');
     expect(wrapper.text()).not.toContain(first.code);
+  });
+
+  it('新建母单后自动刷新并选中，已入库单据不再提示确认入库', async () => {
+    const wrapper = mount(InboundWorkspace);
+    await flushPromises();
+    const result = {
+      alreadyExists: false, motherOrderCode: 'MD-NEW-1', courierNo: 'SF-NEW-1',
+      customerName: '新客户', processingRequirement: '抛光', dueDate: '2026-10-20',
+      goodsName: '戒托', quantity: 1, weight: 2.5, ledgerCode: 'STK-NEW-1', qrContent: 'JG|mother|MD-NEW-1',
+    };
+    vi.mocked(fetchInboundWorkspace).mockResolvedValueOnce({
+      checkpoints: [], risks: [], orders: [first, { ...second, code: result.motherOrderCode, customer: result.customerName }],
+    });
+    vi.mocked(fetchMotherOrder).mockResolvedValue(result);
+    const countBefore = vi.mocked(fetchInboundWorkspace).mock.calls.length;
+    wrapper.getComponent(IntakePanel).vm.$emit('saved', result);
+    await flushPromises();
+    expect(fetchInboundWorkspace).toHaveBeenCalledTimes(countBefore + 1);
+    expect(wrapper.get('.active-object-card > strong').text()).toBe('MD-NEW-1');
+    expect(wrapper.text()).toContain('已收货入库');
+    expect(wrapper.findAll('button').some((button) => button.text() === '确认入库')).toBe(false);
+  });
+
+  it('从工作台进入时按规范母单目标打开详情', async () => {
+    const target = ref({ objectType: 'MOTHER_ORDER', code: second.code, intent: 'INTAKE', token: 1 });
+    const wrapper = mount(InboundWorkspace, { global: { provide: { 'zhubao-trace-target': target } } });
+    await flushPromises();
+    expect(wrapper.get('.active-object-card > strong').text()).toBe(second.code);
+    expect(wrapper.get('.inbound-desk').classes()).toContain('is-detail');
+  });
+
+  it('快速切换母单时，迟到详情不会替换当前单的拆单或附件目标', async () => {
+    let finishFirst: (value: Awaited<ReturnType<typeof fetchMotherOrder>>) => void = () => {};
+    const detail = {
+      alreadyExists: true, motherOrderCode: second.code, courierNo: 'SF2', customerName: second.customer,
+      processingRequirement: '第二单要求', dueDate: '2026-10-22', goodsName: second.goodsName,
+      quantity: 3, weight: 5, ledgerCode: 'STK-2', qrContent: `JG|mother|${second.code}`,
+    };
+    vi.mocked(fetchMotherOrder).mockImplementation(code => code === first.code
+      ? new Promise(resolve => { finishFirst = resolve; }) : Promise.resolve(detail));
+    const wrapper = mount(InboundWorkspace);
+    await flushPromises();
+    await wrapper.findAll('.inbound-card')[1].trigger('click');
+    await flushPromises();
+    finishFirst({ ...detail, motherOrderCode: first.code, processingRequirement: '迟到的第一单要求' });
+    await flushPromises();
+    expect(wrapper.get('.active-object-card > strong').text()).toBe(second.code);
+    expect(wrapper.text()).toContain('第二单要求');
+    expect(wrapper.text()).not.toContain('迟到的第一单要求');
+    expect(wrapper.getComponent({ name: 'MotherSplitPanel' }).props('motherOrderCode')).toBe(second.code);
   });
 });

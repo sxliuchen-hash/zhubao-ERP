@@ -102,9 +102,16 @@ const activeWorkspace = computed(() => {
 const moreOpen = ref(false);
 const traceQuery = ref('');
 const traceTarget = ref<TraceTarget | null>(null);
+const labelTarget = ref<TraceTarget | null>(null);
 let traceToken = 0;
 provide('zhubao-trace-query', traceQuery);
 provide('zhubao-trace-target', traceTarget);
+provide('zhubao-label-target', labelTarget);
+provide('zhubao-open-label', (code: string) => {
+  if (!code.trim() || !visibleTabs.value.some((tab) => tab.key === 'label')) return;
+  labelTarget.value = { objectType: 'MOTHER_ORDER', code: code.trim(), intent: 'LOOKUP', token: ++traceToken };
+  activateTab('label');
+});
 provide('zhubao-open-tab', (tab: TabKey) => {
   activateTab(tab);
 });
@@ -128,6 +135,7 @@ const visibleTabs = computed(() => {
   const filteredTabs = permittedTabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
   return filteredTabs.length ? filteredTabs : tabs.filter((tab) => tab.key === 'dashboard');
 });
+provide('zhubao-visible-tabs', computed(() => visibleTabs.value.map((tab) => tab.key)));
 const navigationGroups = computed(() => navGroups
   .map((group) => ({
     label: group.label,
@@ -179,6 +187,8 @@ async function restoreAuthSessionForNavigation() {
 async function handleLogout() {
   await logoutAuthSession();
   authSession.value = null;
+  labelTarget.value = null;
+  traceTarget.value = null;
 }
 
 function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) {

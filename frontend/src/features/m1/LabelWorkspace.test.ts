@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import LabelWorkspace from './LabelWorkspace.vue';
 import { openLabelPrint } from './labelPrint';
 import { queryScanContext } from '../../services/scanContextApi';
@@ -139,5 +140,28 @@ describe('LabelWorkspace', () => {
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     expect(wrapper.find('.preview-toolbar .primary-button').exists()).toBe(false);
 
+  });
+
+  it('收货跳转自动带入母单并显示可打印预览，不隐式选择不拆', async () => {
+    const target = ref({ objectType: 'MOTHER_ORDER', code: 'MD-NEW-1', intent: 'LOOKUP', token: 1 });
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'MOTHER_ORDER', code: 'MD-NEW-1' }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => ({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: String(input).includes('/api/label/mother-orders/') ? {
+        type: 'MOTHER', typeLabel: '母单', primaryCode: 'MD-NEW-1', qrContent: 'JG|mother|MD-NEW-1',
+        fields: [{ name: '客户', value: '恒信珠宝' }], footerLeft: '', footerRight: '', printedAt: '',
+        brandTitle: '珠宝来料加工系统', templateCode: '',
+        printerSetting: { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 },
+      } : [] }),
+    } as Response));
+    const wrapper = mount(LabelWorkspace, { global: { provide: { 'zhubao-label-target': target } } });
+    await flushPromises();
+    expect(queryScanContext).toHaveBeenCalledWith({ content: 'MD-NEW-1', objectType: 'MOTHER_ORDER', intent: 'LOOKUP' });
+    expect(wrapper.get('[aria-label="现场贴纸单号"]').element).toHaveProperty('value', 'MD-NEW-1');
+    expect(wrapper.get('[aria-label="标签预览"]').text()).toContain('MD-NEW-1');
+    expect(wrapper.text()).toContain('收货母单标签可直接打印');
+    expect(fetchSpy.mock.calls.every(([url]) => !String(url).includes('/keep'))).toBe(true);
+    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
+    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'MD-NEW-1' }));
   });
 });

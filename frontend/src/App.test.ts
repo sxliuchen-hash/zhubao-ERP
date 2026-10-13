@@ -43,7 +43,7 @@ describe('App', () => {
       '财务经营',
       '协同与系统',
     ]);
-    expect(wrapper.text()).toContain('今日待办');
+    expect(wrapper.text()).toContain('业务单据');
     expect(wrapper.text()).toContain('当前处理单');
     expect(wrapper.find('.ops-scope-ribbon').exists()).toBe(false);
     expect(wrapper.find('.ops-nav').text()).toContain('首页');
@@ -163,7 +163,7 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.find('.finance-workspace').exists()).toBe(true));
     await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
     expect(wrapper.find('.finance-workspace').exists()).toBe(false);
-    expect(wrapper.text()).toContain('今日待办');
+    expect(wrapper.text()).toContain('业务单据');
   });
 
   it('页面文件加载失败时保留导航并提供中文重试入口', async () => {
@@ -174,7 +174,7 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('页面加载失败，请检查网络后重试。'));
     expect(wrapper.get('[role="alert"]').text()).toContain('重新加载页面');
     await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
-    expect(wrapper.text()).toContain('今日待办');
+    expect(wrapper.text()).toContain('业务单据');
   });
 
   it('加载状态用中文反馈并可重试失败页面', async () => {

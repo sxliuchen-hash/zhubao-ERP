@@ -6,6 +6,7 @@ const insecureHint = '当前是 HTTP，手机打不开摄像头。请改用 http
 /** 相机和照片只读出原始文本。查询单据由外层决定，离开页面时关掉媒体流。 */
 export function useScanner() {
   const scanning = ref(false);
+  const cameraActive = ref(false);
   const hint = ref('');
   const videoRef = ref<HTMLVideoElement | null>(null);
   let generation = 0;
@@ -21,6 +22,7 @@ export function useScanner() {
     current = null;
     if (videoRef.value) videoRef.value.srcObject = null;
     scanning.value = false;
+    cameraActive.value = false;
   }
 
   onBeforeUnmount(stop);
@@ -35,7 +37,8 @@ export function useScanner() {
     stopTracks(current);
     current = null;
     scanning.value = true;
-    hint.value = '';
+    cameraActive.value = true;
+    hint.value = '正在打开摄像头，请允许使用相机';
     try {
       const opened = await openCameraStream();
       if (token !== generation) {
@@ -50,16 +53,26 @@ export function useScanner() {
       }
       video.srcObject = opened;
       await video.play();
+      if (token !== generation) return null;
+      hint.value = '对准二维码或条码，保持清晰，识别后自动继续';
       const raw = await readLiveBarcode(video, 20000, () => token !== generation);
       if (token !== generation) return null;
       if (!raw) {
-        hint.value = '没有读到条码，请改拍照或手输';
+        hint.value = '暂未读到条码。请靠近并避开反光，重新扫码；也可以拍照、选图或手输';
         return null;
       }
+      hint.value = '已读到条码，正在识别单号';
       return raw;
-    } catch {
+    } catch (error) {
       if (token !== generation) return null;
-      hint.value = '无法打开摄像头，请改拍照或手输';
+      const name = error instanceof Error ? error.name : '';
+      hint.value = name === 'NotAllowedError'
+        ? '相机权限未开启，请在浏览器设置中允许相机，或改用拍照、选图、手输'
+        : name === 'NotFoundError'
+          ? '没有找到可用摄像头，请改用选图或手输'
+          : name === 'NotReadableError'
+            ? '摄像头可能正被其他应用占用，请关闭后重试，或改用拍照、选图、手输'
+            : '无法打开摄像头，请检查相机权限，或改用拍照、选图、手输';
       return null;
     } finally {
       if (token === generation) {
@@ -67,6 +80,7 @@ export function useScanner() {
         current = null;
         if (videoRef.value) videoRef.value.srcObject = null;
         scanning.value = false;
+        cameraActive.value = false;
       }
     }
   }
@@ -74,7 +88,7 @@ export function useScanner() {
   async function scanPhoto(file: Blob): Promise<string | null> {
     stop();
     const token = generation;
-    hint.value = '';
+    hint.value = '正在识别照片中的二维码或条码';
     scanning.value = true;
     try {
       const raw = await readBarcodeFromFile(file);
@@ -83,6 +97,7 @@ export function useScanner() {
         hint.value = '照片里没有读到条码，请重拍或手输';
         return null;
       }
+      hint.value = '已读到条码，正在识别单号';
       return raw;
     } catch {
       if (token !== generation) return null;
@@ -93,5 +108,5 @@ export function useScanner() {
     }
   }
 
-  return { scanning, hint, videoRef, scanCamera, scanPhoto, stop };
+  return { scanning, cameraActive, hint, videoRef, scanCamera, scanPhoto, stop };
 }

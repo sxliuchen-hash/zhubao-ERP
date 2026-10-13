@@ -77,7 +77,7 @@ describe('MotherSplitPanel', () => {
     const wrapper = mount(MotherSplitPanel, { props: { motherOrderCode: 'MD-1' } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('不拆，打一张贴纸');
+    expect(wrapper.text()).toContain('不拆，预览流转贴纸');
     await wrapper.get('button.primary-button').trigger('click');
     await flushPromises();
 

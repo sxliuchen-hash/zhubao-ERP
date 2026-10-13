@@ -85,3 +85,10 @@ const insecureContext = typeof window !== 'undefined' && window.isSecureContext 
     />
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 900px) {
+  .field-modes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .field-modes button { min-width: 0; padding: 8px 4px; font-size: 14px; }
+}
+</style>

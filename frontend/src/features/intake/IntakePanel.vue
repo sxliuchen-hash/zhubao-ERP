@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, reactive, ref, watch, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import FieldSteps from '../field/FieldSteps.vue';
@@ -9,6 +9,7 @@ import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import { useTraceTarget } from '../scan/useTraceTarget';
+import type { TraceTarget } from '../scan/traceTarget';
 import type { ScanContextResponse, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   fetchMotherOrder,
@@ -26,6 +27,12 @@ withDefaults(defineProps<{
 });
 
 const openTab = inject<((tab: string) => void) | null>('zhubao-open-tab', null);
+const openLabel = inject<((code: string) => void) | null>('zhubao-open-label', null);
+const emit = defineEmits<{ saved: [result: MobileIntakeResult] }>();
+const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
+const visibleTabs = inject<Ref<string[] | null>>('zhubao-visible-tabs', ref(null));
+const canOpenLabel = computed(() => !visibleTabs.value || visibleTabs.value.includes('label'));
+const canOpenInbound = computed(() => !visibleTabs.value || visibleTabs.value.includes('inbound'));
 
 const scanText = ref('');
 const scanHint = ref('');
@@ -38,6 +45,9 @@ const quantity = ref('1');
 const weight = ref('');
 const expressCompany = ref('顺丰');
 const submitting = ref(false);
+const entryPanel = ref<HTMLElement | null>(null);
+const draftPanel = ref<HTMLElement | null>(null);
+const savedPanel = ref<HTMLElement | null>(null);
 const created = ref<MobileIntakeResult | null>(null);
 const requestId = ref('');
 const requestFingerprint = ref('');
@@ -72,8 +82,39 @@ const shownCustomer = computed(() => created.value?.customerName || intakeScan.c
 const shownRequirement = computed(() => created.value?.processingRequirement || intakeScan.context?.order.requirement || '');
 const shownDue = computed(() => created.value?.dueDate || intakeScan.context?.order.dueDate || '');
 
+function showPanel(panel: Ref<HTMLElement | null>) {
+  void nextTick(() => {
+    if (globalThis.matchMedia?.('(max-width: 900px)').matches) {
+      panel.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
+  });
+}
+
 function openLabelPage() {
-  openTab?.('label');
+  if (openLabel) openLabel(intakeMotherCode.value);
+  else openTab?.('label');
+}
+
+function openMotherDetails() {
+  traceTarget.value = {
+    objectType: 'MOTHER_ORDER', code: intakeMotherCode.value, intent: 'INTAKE',
+    token: (traceTarget.value?.token ?? 0) + 1,
+  };
+  openTab?.('inbound');
+}
+
+function startNextIntake() {
+  if (traceTarget.value?.intent === 'INTAKE') traceTarget.value = null;
+  scanText.value = '';
+  clearIntakeTarget();
+  scanHint.value = '';
+  customerName.value = '';
+  processingRequirement.value = '';
+  dueDate.value = '';
+  goodsName.value = '';
+  quantity.value = '1';
+  weight.value = '';
+  showPanel(entryPanel);
 }
 
 function shownText(value: string) {
@@ -108,12 +149,14 @@ function applyIntake(response: ScanContextResponse | null) {
   }
   if (target.objectType === 'EXPRESS_NO' && !target.motherOrderCode) {
     scanHint.value = '这是新的快递，请填写客户、加工要求和期限';
+    showPanel(draftPanel);
     return;
   }
   if (target.objectType === 'MOTHER_ORDER' || target.motherOrderCode) {
     scanHint.value = target.objectType === 'EXPRESS_NO'
       ? `快递单号已对应母单 ${target.motherOrderCode}`
       : `已识别母单 ${target.code}，可以补传拆包证据`;
+    showPanel(savedPanel);
     return;
   }
   scanHint.value = '请扫描快递面单，或系统母单标签';
@@ -179,15 +222,20 @@ function ensureRequestId() {
   return requestId.value;
 }
 
-async function openExistingWaybill(courier: string) {
+async function openExistingWaybill(courier: string, seen: number) {
   const existing = await lookupMobileIntake(courier);
-  if (!existing.found || !existing.motherOrderCode) return false;
-  created.value = await fetchMotherOrder(existing.motherOrderCode);
+  if (intakeScan.revision !== seen || !existing.found || !existing.motherOrderCode) return false;
+  const result = await fetchMotherOrder(existing.motherOrderCode);
+  if (intakeScan.revision !== seen) return false;
+  created.value = result;
+  emit('saved', created.value);
+  showPanel(savedPanel);
   formError.value = '已按运单打开原单，没有再次建单';
   return true;
 }
 
 async function createMotherOrder() {
+  if (submitting.value) return;
   formError.value = '';
   const courier = newExpressCode.value;
   const seen = intakeScan.revision;
@@ -199,7 +247,7 @@ async function createMotherOrder() {
     formError.value = '客户、加工要求和完成期限不能为空';
     return;
   }
-  if (!goodsName.value.trim() || Number(quantity.value) <= 0 || Number(weight.value) <= 0) {
+  if (!goodsName.value.trim() || !Number.isFinite(Number(quantity.value)) || Number(quantity.value) <= 0 || !Number.isFinite(Number(weight.value)) || Number(weight.value) <= 0) {
     formError.value = '请填写货品名称、数量和重量';
     return;
   }
@@ -219,22 +267,24 @@ async function createMotherOrder() {
     });
     if (intakeScan.revision !== seen) return;
     created.value = result;
+    emit('saved', result);
+    showPanel(savedPanel);
   } catch (error) {
     if (intakeScan.revision !== seen) return;
     try {
-      if (await openExistingWaybill(courier)) return;
+      if (await openExistingWaybill(courier, seen)) return;
     } catch {
       // 运单核对失败时保留原来的提交错误，方便原请求重试。
     }
-    formError.value = keptInputFailure(error, '生成母单失败');
+    if (intakeScan.revision === seen) formError.value = keptInputFailure(error, '生成母单失败');
   } finally {
-    if (intakeScan.revision === seen) submitting.value = false;
+    submitting.value = false;
   }
 }
 </script>
 
 <template>
-  <section class="section-block">
+  <section ref="entryPanel" class="section-block">
     <div class="section-heading">
       <div>
         <h2>{{ title }}</h2>
@@ -250,23 +300,23 @@ async function createMotherOrder() {
       submit-label="识别单号"
       submit-aria-label="识别单号"
       photo-aria-label="拍面单"
-      :busy="intakeScan.loading"
+      :busy="intakeScan.loading || submitting"
       @draft="clearIntakeTarget"
       @recognize="recognizeIntake"
     />
     <p v-if="scanHint" class="operation-feedback">{{ scanHint }}</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
-    <OrderContextCard :context="intakeScan.context" @select="chooseIntakeTarget" />
+    <OrderContextCard v-if="!newExpressCode && !savedMother" :context="intakeScan.context" @select="chooseIntakeTarget" />
   </section>
 
-  <section v-if="newExpressCode && !created" class="section-block" aria-label="收货草稿">
+  <section v-if="newExpressCode && !created" ref="draftPanel" class="section-block intake-draft" aria-label="收货草稿">
     <div class="field-card-head">
       <h2>新建母单</h2>
       <StatusBadge v-if="field" label="草稿" tone="gray" />
     </div>
     <p>快递单号 {{ newExpressCode }}</p>
-    <p v-if="field">草稿尚未建单。网络中断、上传失败或登录过期都会保留已填内容。</p>
-    <p>可以先选择照片或视频。建单成功后再上传，失败只补文件，不会再次建单或入库。</p>
+    <p v-if="field">草稿尚未建单，填好资料后点击“生成母单”。</p>
+    <p>照片或视频可稍后补传，不影响建单。</p>
     <div class="intake-form">
       <label class="field">
         <span>客户</span>
@@ -302,9 +352,9 @@ async function createMotherOrder() {
     </div>
   </section>
 
-  <article v-if="field && savedMother" class="field-card" aria-label="已保存母单">
+  <article v-if="savedMother" ref="savedPanel" class="field-card intake-saved" aria-label="已保存母单">
     <div class="field-card-head">
-      <span>已保存</span>
+      <span>收货已保存，下一步打印标签</span>
       <StatusBadge label="已保存" tone="green" />
     </div>
     <strong>{{ intakeMotherCode }}</strong>
@@ -315,19 +365,33 @@ async function createMotherOrder() {
       <dd>{{ shownText(shownRequirement) }}</dd>
       <dt>期限</dt>
       <dd>{{ shownText(shownDue) }}</dd>
+      <template v-if="created">
+        <dt>数量／重量</dt>
+        <dd>{{ created.quantity }} 件 / {{ created.weight }} 克</dd>
+      </template>
     </dl>
-    <button class="secondary-button" type="button" aria-label="打开标签" @click="openLabelPage">打开标签</button>
+    <div class="intake-next-actions">
+      <button v-if="canOpenLabel" class="primary-button" type="button" aria-label="打开标签" @click="openLabelPage">预览并打印母单标签</button>
+      <button v-if="canOpenInbound" class="secondary-button" type="button" @click="openMotherDetails">拆单与流转贴纸</button>
+      <button class="secondary-button" type="button" @click="startNextIntake">继续收下一件</button>
+    </div>
+    <p>单号会自动带入标签页。<template v-if="created?.ledgerCode">收货已入库，无需再次确认入库；</template>生产前可在来料详情选择不拆或拆单。</p>
+    <details v-if="intakeScan.context && !newExpressCode">
+      <summary>查看母单详情与追溯</summary>
+      <OrderContextCard :context="intakeScan.context" @select="chooseIntakeTarget" />
+    </details>
   </article>
 
   <section v-if="newExpressCode || intakeMotherCode" class="section-block">
-    <h2 v-if="field && !created">草稿文件</h2>
-    <h2 v-else-if="field && created">已保存后的拆包证据</h2>
+    <h2 v-if="field && !savedMother">草稿文件</h2>
+    <h2 v-else-if="field && savedMother">已保存后的拆包证据</h2>
     <h2 v-else>拆包证据</h2>
     <p v-if="created">
       母单 {{ created.motherOrderCode }}
       <template v-if="created.qrContent"> / {{ created.qrContent }}</template>
     </p>
     <p v-if="created">业务已保存。照片或视频失败可以单独重试，不会再次建单或入库。</p>
+    <p v-else-if="intakeMotherCode">可直接上传并关联到这张母单。</p>
     <p v-else>文件先留在当前表单。建单成功后上传并关联。</p>
     <EvidenceCapture
       target-type="MOTHER_ORDER"
@@ -345,3 +409,9 @@ async function createMotherOrder() {
     </button>
   </div>
 </template>
+
+<style scoped>
+.intake-draft, .intake-saved { min-width: 0; scroll-margin-top: 20px; overflow-wrap: anywhere; }
+.intake-next-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.intake-next-actions button { min-height: 44px; }
+</style>

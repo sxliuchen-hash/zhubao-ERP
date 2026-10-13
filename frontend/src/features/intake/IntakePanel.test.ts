@@ -204,6 +204,7 @@ describe('收货面板', () => {
 
   it('手机收货区分草稿和已保存，并留下标签入口', async () => {
     const openTab = vi.fn();
+    const openLabel = vi.fn();
     vi.mocked(submitMobileIntake).mockResolvedValue({
       alreadyExists: false,
       motherOrderCode: 'MD-20261012-001',
@@ -219,7 +220,7 @@ describe('收货面板', () => {
     });
     const wrapper = mount(IntakePanel, {
       props: { title: '手机收货', intro: '扫运单后建单', field: true },
-      global: { provide: { 'zhubao-open-tab': openTab } },
+      global: { provide: { 'zhubao-open-tab': openTab, 'zhubao-open-label': openLabel } },
     });
     await fillNewWaybill(wrapper);
     expect(wrapper.text()).toContain('草稿');
@@ -234,7 +235,42 @@ describe('收货面板', () => {
     expect(wrapper.text()).toContain('2026-10-20');
     expect(wrapper.find('[aria-label="收货草稿"]').exists()).toBe(false);
     await wrapper.get('[aria-label="打开标签"]').trigger('click');
-    expect(openTab).toHaveBeenCalledWith('label');
+    expect(openLabel).toHaveBeenCalledWith('MD-20261012-001');
+    expect(wrapper.emitted('saved')?.[0][0]).toEqual(expect.objectContaining({ motherOrderCode: 'MD-20261012-001' }));
     expect(wrapper.text()).not.toContain('收款');
+  });
+
+  it('电脑收货同样显示保存结果和打印入口，继续收货后不残留上一张母单', async () => {
+    vi.mocked(submitMobileIntake).mockResolvedValue({
+      alreadyExists: false, motherOrderCode: 'MD-DESKTOP-1', courierNo: 'SF1048329001',
+      customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20',
+      goodsName: '戒托', quantity: 1, weight: 2.5, ledgerCode: 'STK-1', qrContent: 'JG|mother|MD-DESKTOP-1',
+    });
+    const wrapper = mountPanel();
+    await fillNewWaybill(wrapper);
+    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="已保存母单"]').text()).toContain('MD-DESKTOP-1');
+    expect(wrapper.get('[aria-label="打开标签"]').text()).toContain('预览并打印');
+    await wrapper.findAll('button').find((button) => button.text() === '继续收下一件')!.trigger('click');
+    expect(wrapper.find('[aria-label="已保存母单"]').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="快递单号"]').element).toHaveProperty('value', '');
+  });
+
+  it('超时核对期间改号，不把原运单的母单带到新输入', async () => {
+    vi.mocked(submitMobileIntake).mockRejectedValue(new Error('网络超时'));
+    let finishLookup: (value: Awaited<ReturnType<typeof lookupMobileIntake>>) => void = () => {};
+    vi.mocked(lookupMobileIntake).mockImplementation(() => new Promise(resolve => { finishLookup = resolve; }));
+    const wrapper = mountPanel();
+    await fillNewWaybill(wrapper);
+    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await flushPromises();
+    await wrapper.get('[aria-label="快递单号"]').setValue('SF-NEW');
+    finishLookup({ found: true, motherOrderCode: 'MD-OLD', courierNo: 'SF1048329001', customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20', goodsName: '戒托' });
+    await flushPromises();
+    expect(fetchMotherOrder).not.toHaveBeenCalled();
+    expect(wrapper.emitted('saved')).toBeUndefined();
+    expect(wrapper.find('[aria-label="已保存母单"]').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="识别单号"]').attributes('disabled')).toBeUndefined();
   });
 });
