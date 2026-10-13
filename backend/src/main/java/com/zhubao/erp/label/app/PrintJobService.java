@@ -1,10 +1,12 @@
 package com.zhubao.erp.label.app;
 
+import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -23,10 +25,21 @@ public class PrintJobService {
 
     private final PrintJobRepository jobs;
     private final String stationToken;
+    private final OrderChangeRepository changes;
 
-    public PrintJobService(PrintJobRepository jobs, @Value("${zhubao.print-agent.token:}") String stationToken) {
+    public PrintJobService(PrintJobRepository jobs, String stationToken) {
+        this(jobs, stationToken, null);
+    }
+
+    @Autowired
+    public PrintJobService(
+            PrintJobRepository jobs,
+            @Value("${zhubao.print-agent.token:}") String stationToken,
+            OrderChangeRepository changes
+    ) {
         this.jobs = jobs;
         this.stationToken = stationToken == null ? "" : stationToken.trim();
+        this.changes = changes;
     }
 
     public PrintJob create(String requestId, String businessCode, String templateCode, int copies, String operator) {
@@ -38,7 +51,8 @@ public class PrintJobService {
             throw new BusinessException("打印份数必须在 1 到 20 之间");
         }
         PrintJob existing = jobs.findByRequestId(requestId).orElse(null);
-        String snapshot = "LABEL|" + businessCode.trim() + "|" + templateCode.trim() + "|" + copies;
+        int version = changes == null ? 0 : changes.latestAppliedVersion(businessCode.trim());
+        String snapshot = "LABEL|" + businessCode.trim() + "|" + templateCode.trim() + "|" + copies + "|V" + version;
         if (existing != null) {
             if (!snapshot.equals(existing.contentSnapshot())) {
                 throw new BusinessException("同一请求的内容不一致");
@@ -75,7 +89,13 @@ public class PrintJobService {
             throw new BusinessException("补打必须填写原因");
         }
         PrintJob created = create(requestId, original.businessCode(), original.templateCode(), original.copies(), operator);
-        if (!created.id().equals(original.id())) {
+        if (!created.id().equals(original.id()) && !original.contentSnapshot().equals(created.contentSnapshot())) {
+            created = jobs.save(new PrintJob(
+                    created.id(), created.requestId(), created.businessCode(), created.templateCode(), created.copies(),
+                    original.contentSnapshot(), created.status(), created.stationId(), created.leaseUntil(),
+                    created.failureReason(), original.id(), reason.trim(), created.createdBy(), created.createdAt(), created.updatedAt()
+            ));
+        } else if (!created.id().equals(original.id())) {
             created = jobs.save(new PrintJob(
                     created.id(), created.requestId(), created.businessCode(), created.templateCode(), created.copies(),
                     created.contentSnapshot(), created.status(), created.stationId(), created.leaseUntil(),

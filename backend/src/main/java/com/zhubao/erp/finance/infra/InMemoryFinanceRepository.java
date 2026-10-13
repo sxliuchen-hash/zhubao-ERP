@@ -188,10 +188,16 @@ public class InMemoryFinanceRepository implements FinanceRepository {
 
     @Override
     public void replacePayroll(String yearMonth, List<PayrollLine> lines) {
-        payrollLines.entrySet().removeIf(entry -> yearMonth.equals(entry.getValue().yearMonth()));
+        payrollLines.entrySet().removeIf(entry -> yearMonth.equals(entry.getValue().yearMonth())
+                && (entry.getValue().sourceKey() == null || !entry.getValue().sourceKey().startsWith("PAY-ADJ|")));
         for (PayrollLine line : lines) {
             payrollLines.put(line.code(), line);
         }
+    }
+
+    @Override
+    public void savePayrollLine(PayrollLine line) {
+        payrollLines.put(line.code(), line);
     }
 
     @Override

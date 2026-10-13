@@ -2,6 +2,7 @@ package com.zhubao.erp.business.infra;
 
 import com.zhubao.erp.business.domain.OrderChange;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
+import com.zhubao.erp.business.domain.OrderChangeStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -34,5 +35,15 @@ public class InMemoryOrderChangeRepository implements OrderChangeRepository {
     @Override
     public List<OrderChange> listByMother(String motherOrderCode) {
         return changes.values().stream().filter(change -> motherOrderCode.equals(change.motherOrderCode())).toList();
+    }
+
+    @Override
+    public int latestAppliedVersion(String businessCode) {
+        return changes.values().stream()
+                .filter(change -> change.status() == OrderChangeStatus.APPLIED)
+                .filter(change -> businessCode.equals(change.motherOrderCode()) || businessCode.equals(change.workOrderCode()))
+                .mapToInt(OrderChange::versionNo)
+                .max()
+                .orElse(0);
     }
 }

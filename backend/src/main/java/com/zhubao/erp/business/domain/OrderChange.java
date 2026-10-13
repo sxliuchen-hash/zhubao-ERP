@@ -23,6 +23,18 @@ public record OrderChange(
         String requestId,
         String createdBy,
         String createdAt,
-        String updatedAt
+        String updatedAt,
+        BigDecimal customerDelta,
+        BigDecimal workerDelta,
+        String receivableCode,
+        String processName,
+        String workerName
 ) {
+    public OrderChange {
+        customerDelta = customerDelta == null ? BigDecimal.ZERO : customerDelta;
+        workerDelta = workerDelta == null ? BigDecimal.ZERO : workerDelta;
+        receivableCode = receivableCode == null ? "" : receivableCode;
+        processName = processName == null ? "" : processName;
+        workerName = workerName == null ? "" : workerName;
+    }
 }

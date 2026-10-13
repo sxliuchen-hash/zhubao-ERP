@@ -120,6 +120,37 @@ public class FinanceBillingService {
         return new BillingRunResult(month.toString(), created.size(), created, unpriced);
     }
 
+    /** 改单减额。来源键含改单号，重复生效只返回原来的红字。 */
+    public ReceivableLine reverseForChange(String receivableCode, BigDecimal amount, String changeId, String operator) {
+        String sourceKey = "CHANGE-RED|" + changeId;
+        Optional<ReceivableLine> existing = finance.findReceivableBySourceKey(sourceKey);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        ReceivableLine reversed = reverse(new ReverseReceivableCommand(receivableCode, amount, "改单 " + changeId), operator);
+        ReceivableLine linked = new ReceivableLine(
+                reversed.code(),
+                reversed.customerId(),
+                reversed.customerName(),
+                reversed.yearMonth(),
+                reversed.sourceType(),
+                sourceKey,
+                reversed.motherOrderCode(),
+                reversed.workOrderCode(),
+                reversed.processName(),
+                reversed.quantity(),
+                reversed.unit(),
+                reversed.unitPrice(),
+                reversed.amount(),
+                reversed.reversesCode(),
+                reversed.remark(),
+                reversed.operator(),
+                reversed.createdAt()
+        );
+        finance.saveReceivable(linked);
+        return linked;
+    }
+
     public ReceivableLine reverse(ReverseReceivableCommand command, String operator) {
         ReceivableLine original = finance.findReceivableByCode(command.receivableCode())
                 .orElseThrow(() -> new BusinessException("找不到要冲销的账单行"));

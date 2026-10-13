@@ -12,4 +12,6 @@ public interface OrderChangeRepository {
     Optional<OrderChange> findByRequestId(String requestId);
 
     List<OrderChange> listByMother(String motherOrderCode);
+
+    int latestAppliedVersion(String businessCode);
 }

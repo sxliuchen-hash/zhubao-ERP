@@ -31,8 +31,9 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
                 insert into biz_order_change (
                     id, mother_order_code, work_order_code, old_requirement, new_requirement, old_due_date, new_due_date,
                     status_code, version_no, amount_unchanged, customer_unit_price, worker_fee, finance_note, confirmed_by,
-                    request_id, created_by, created_at, updated_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    request_id, created_by, created_at, updated_at,
+                    customer_delta, worker_delta, receivable_code, process_name, worker_name
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on duplicate key update
                     status_code = values(status_code),
                     amount_unchanged = values(amount_unchanged),
@@ -40,7 +41,12 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
                     worker_fee = values(worker_fee),
                     finance_note = values(finance_note),
                     confirmed_by = values(confirmed_by),
-                    updated_at = values(updated_at)
+                    updated_at = values(updated_at),
+                    customer_delta = values(customer_delta),
+                    worker_delta = values(worker_delta),
+                    receivable_code = values(receivable_code),
+                    process_name = values(process_name),
+                    worker_name = values(worker_name)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -62,6 +68,11 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
             statement.setString(16, change.createdBy());
             statement.setString(17, change.createdAt());
             statement.setString(18, change.updatedAt());
+            statement.setBigDecimal(19, change.customerDelta());
+            statement.setBigDecimal(20, change.workerDelta());
+            statement.setString(21, change.receivableCode());
+            statement.setString(22, change.processName());
+            statement.setString(23, change.workerName());
             statement.executeUpdate();
             return change;
         } catch (SQLException ex) {
@@ -77,6 +88,28 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
     @Override
     public Optional<OrderChange> findByRequestId(String requestId) {
         return queryOne("select * from biz_order_change where request_id = ?", requestId);
+    }
+
+    @Override
+    public int latestAppliedVersion(String businessCode) {
+        String sql = """
+                select max(version_no) from biz_order_change
+                 where status_code = 'APPLIED' and (mother_order_code = ? or work_order_code = ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, businessCode);
+            statement.setString(2, businessCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return 0;
+                }
+                int version = rs.getInt(1);
+                return rs.wasNull() ? 0 : version;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取改单版本", ex);
+        }
     }
 
     @Override
@@ -131,7 +164,12 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
                 rs.getString("request_id"),
                 rs.getString("created_by"),
                 rs.getString("created_at"),
-                rs.getString("updated_at")
+                rs.getString("updated_at"),
+                rs.getBigDecimal("customer_delta"),
+                rs.getBigDecimal("worker_delta"),
+                rs.getString("receivable_code"),
+                rs.getString("process_name"),
+                rs.getString("worker_name")
         );
     }
 }

@@ -37,6 +37,9 @@ public interface FinanceRepository {
 
     void replacePayroll(String yearMonth, List<PayrollLine> lines);
 
+    /** 追加一行工资调整，不删除当月已有工资。 */
+    void savePayrollLine(PayrollLine line);
+
     List<PayrollLine> listPayrollLines();
 
     Optional<PayrollRun> findPayrollRun(String yearMonth);

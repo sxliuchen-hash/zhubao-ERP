@@ -94,26 +94,38 @@ public class FinancePayrollService {
         YearMonth month = FinanceTexts.month(command.yearMonth());
         ensureOpen(month);
         Built built = build(month);
-        finance.replacePayroll(month.toString(), built.lines());
-        return new PayrollGenerateResult(month.toString(), built.lines(), built.missing());
+        List<PayrollLine> merged = withAdjustments(month, built.lines());
+        finance.replacePayroll(month.toString(), merged);
+        return new PayrollGenerateResult(month.toString(), merged, built.missing());
     }
 
     public PayrollRun confirm(PayrollRunCommand command, String operator) {
         YearMonth month = FinanceTexts.month(command.yearMonth());
         ensureOpen(month);
         Built built = build(month);
+        List<PayrollLine> merged = withAdjustments(month, built.lines());
         if (!built.missing().isEmpty()) {
             throw new BusinessException("仍有工序没有工人单价，不能确认工资");
         }
-        if (built.lines().isEmpty()) {
+        if (merged.isEmpty()) {
             throw new BusinessException("本月没有可确认的报工");
         }
-        List<PayrollLine> locked = built.lines().stream().map(PayrollLine::confirm).toList();
+        List<PayrollLine> locked = merged.stream().map(PayrollLine::confirm).toList();
         finance.replacePayroll(month.toString(), locked);
         PayrollRun run = new PayrollRun(month.toString(), true, operator, FinanceTexts.now());
         finance.savePayrollRun(run);
         createPayables(month, locked, operator);
         return run;
+    }
+
+    private List<PayrollLine> withAdjustments(YearMonth month, List<PayrollLine> generated) {
+        List<PayrollLine> adjustments = finance.listPayrollLines().stream()
+                .filter(line -> month.toString().equals(line.yearMonth()))
+                .filter(line -> line.sourceKey() != null && line.sourceKey().startsWith("PAY-ADJ|"))
+                .toList();
+        List<PayrollLine> merged = new ArrayList<>(generated);
+        merged.addAll(adjustments);
+        return merged;
     }
 
     private void ensureOpen(YearMonth month) {

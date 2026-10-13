@@ -548,7 +548,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void replacePayroll(String yearMonth, List<PayrollLine> lines) {
-        String delete = "delete from fin_payroll_line where `year_month` = ?";
+        String delete = "delete from fin_payroll_line where `year_month` = ? and source_key not like 'PAY-ADJ|%'";
         String insert = """
                 insert into fin_payroll_line (
                     code, `year_month`, operator_name, order_code, process_name, mother_order_code, customer_id,
@@ -583,6 +583,37 @@ public class JdbcFinanceRepository implements FinanceRepository {
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to replace payroll: " + yearMonth, ex);
+        }
+    }
+
+    @Override
+    public void savePayrollLine(PayrollLine line) {
+        String insert = """
+                insert into fin_payroll_line (
+                    code, `year_month`, operator_name, order_code, process_name, mother_order_code, customer_id,
+                    quantity, charge_unit, unit_price, gross_amount, loss_deduction, net_amount, confirmed, source_key
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(insert)) {
+            statement.setString(1, line.code());
+            statement.setString(2, line.yearMonth());
+            statement.setString(3, line.operatorName());
+            statement.setString(4, line.orderCode());
+            statement.setString(5, line.processName());
+            statement.setString(6, line.motherOrderCode());
+            statement.setLong(7, line.customerId());
+            statement.setBigDecimal(8, line.quantity());
+            statement.setString(9, line.unit().name());
+            statement.setBigDecimal(10, line.unitPrice());
+            statement.setBigDecimal(11, line.grossAmount());
+            statement.setBigDecimal(12, line.lossDeduction());
+            statement.setBigDecimal(13, line.netAmount());
+            statement.setBoolean(14, line.confirmed());
+            statement.setString(15, line.sourceKey());
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法追加工资调整", ex);
         }
     }
 

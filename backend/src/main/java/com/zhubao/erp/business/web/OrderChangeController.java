@@ -55,7 +55,9 @@ public class OrderChangeController {
     public ApiResponse<OrderChange> confirm(@PathVariable String id, @RequestBody FinanceRequest body, HttpServletRequest request) {
         require(body);
         return ApiResponse.ok(orderChangeService.confirmFinance(
-                id, body.amountUnchanged(), body.customerUnitPrice(), body.workerFee(), body.note(), account(request)
+                id, body.amountUnchanged(), body.customerUnitPrice(), body.workerFee(),
+                body.customerDelta(), body.workerDelta(), body.receivableCode(), body.processName(), body.workerName(),
+                body.note(), account(request)
         ));
     }
 
@@ -97,7 +99,17 @@ public class OrderChangeController {
     public record DraftRequest(String motherOrderCode, String workOrderCode, String newRequirement, String newDueDate, String requestId) {
     }
 
-    public record FinanceRequest(boolean amountUnchanged, BigDecimal customerUnitPrice, BigDecimal workerFee, String note) {
+    public record FinanceRequest(
+            boolean amountUnchanged,
+            BigDecimal customerUnitPrice,
+            BigDecimal workerFee,
+            BigDecimal customerDelta,
+            BigDecimal workerDelta,
+            String receivableCode,
+            String processName,
+            String workerName,
+            String note
+    ) {
     }
 
     public record ApplyRequest(String requestId) {

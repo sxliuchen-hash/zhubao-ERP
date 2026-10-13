@@ -6,11 +6,13 @@ import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.business.domain.OrderChangeStatus;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.finance.app.OrderChangePostingService;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -31,11 +33,23 @@ public class OrderChangeService {
     private final OrderChangeRepository changes;
     private final BusinessDocumentRepository documents;
     private final BusinessWorkUnit workUnit;
+    private final OrderChangePostingService posting;
 
     public OrderChangeService(OrderChangeRepository changes, BusinessDocumentRepository documents, BusinessWorkUnit workUnit) {
+        this(changes, documents, workUnit, null);
+    }
+
+    @Autowired
+    public OrderChangeService(
+            OrderChangeRepository changes,
+            BusinessDocumentRepository documents,
+            BusinessWorkUnit workUnit,
+            OrderChangePostingService posting
+    ) {
         this.changes = changes;
         this.documents = documents;
         this.workUnit = workUnit;
+        this.posting = posting;
     }
 
     public OrderChange draft(String motherOrderCode, String workOrderCode, String newRequirement, String newDueDate, String requestId, AuthUserAccount account) {
@@ -69,7 +83,12 @@ public class OrderChangeService {
                 requestId,
                 account.operator().trim(),
                 now,
-                now
+                now,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "",
+                "",
+                ""
         ));
     }
 
@@ -82,6 +101,22 @@ public class OrderChangeService {
     }
 
     public OrderChange confirmFinance(String id, boolean amountUnchanged, BigDecimal customerUnitPrice, BigDecimal workerFee, String note, AuthUserAccount account) {
+        return confirmFinance(id, amountUnchanged, customerUnitPrice, workerFee, BigDecimal.ZERO, BigDecimal.ZERO, "", "", "", note, account);
+    }
+
+    public OrderChange confirmFinance(
+            String id,
+            boolean amountUnchanged,
+            BigDecimal customerUnitPrice,
+            BigDecimal workerFee,
+            BigDecimal customerDelta,
+            BigDecimal workerDelta,
+            String receivableCode,
+            String processName,
+            String workerName,
+            String note,
+            AuthUserAccount account
+    ) {
         requireFinance(account);
         OrderChange current = require(id);
         if (current.status() != OrderChangeStatus.PENDING_FINANCE) {
@@ -90,11 +125,33 @@ public class OrderChangeService {
         if (!amountUnchanged && (customerUnitPrice == null || workerFee == null)) {
             throw new BusinessException("财务必须确认客户单价和工人工费，或明确选择金额不变");
         }
-        return saveStatus(current, OrderChangeStatus.FINANCE_CONFIRMED, amountUnchanged,
+        BigDecimal customer = customerDelta == null ? BigDecimal.ZERO : customerDelta;
+        BigDecimal worker = workerDelta == null ? BigDecimal.ZERO : workerDelta;
+        if (amountUnchanged && (customer.signum() != 0 || worker.signum() != 0)) {
+            throw new BusinessException("金额不变时不能再填写差额");
+        }
+        if (customer.signum() < 0 && (receivableCode == null || receivableCode.isBlank())) {
+            throw new BusinessException("减额必须指定要冲销的应收行");
+        }
+        if (customer.signum() > 0 && (processName == null || processName.isBlank())) {
+            throw new BusinessException("增额必须指定工序");
+        }
+        if (worker.signum() != 0 && (workerName == null || workerName.isBlank() || processName == null || processName.isBlank())) {
+            throw new BusinessException("工费差额必须指定工人和工序");
+        }
+        return changes.save(new OrderChange(
+                current.id(), current.motherOrderCode(), current.workOrderCode(), current.oldRequirement(), current.newRequirement(),
+                current.oldDueDate(), current.newDueDate(), OrderChangeStatus.FINANCE_CONFIRMED, current.versionNo(), amountUnchanged,
                 amountUnchanged ? BigDecimal.ZERO : customerUnitPrice,
                 amountUnchanged ? BigDecimal.ZERO : workerFee,
                 note == null ? "" : note.trim(),
-                account.operator().trim());
+                account.operator().trim(),
+                current.requestId(), current.createdBy(), current.createdAt(), TIME.format(LocalDateTime.now()),
+                customer, worker,
+                receivableCode == null ? "" : receivableCode.trim(),
+                processName == null ? "" : processName.trim(),
+                workerName == null ? "" : workerName.trim()
+        ));
     }
 
     public OrderChange rejectFinance(String id, String note, AuthUserAccount account) {
@@ -131,6 +188,9 @@ public class OrderChangeService {
             }
             if (latest.status() != OrderChangeStatus.FINANCE_CONFIRMED) {
                 throw new BusinessException("财务确认后才能生效");
+            }
+            if (posting != null) {
+                posting.post(latest, account.operator().trim());
             }
             changes.save(copy(latest, OrderChangeStatus.APPLIED, latest.amountUnchanged(), latest.customerUnitPrice(), latest.workerFee(), latest.financeNote(), latest.confirmedBy()));
             return "applied";
@@ -169,7 +229,8 @@ public class OrderChangeService {
         return new OrderChange(
                 current.id(), current.motherOrderCode(), current.workOrderCode(), current.oldRequirement(), current.newRequirement(),
                 current.oldDueDate(), current.newDueDate(), status, current.versionNo(), unchanged, price, fee, note, confirmedBy,
-                current.requestId(), current.createdBy(), current.createdAt(), TIME.format(LocalDateTime.now())
+                current.requestId(), current.createdBy(), current.createdAt(), TIME.format(LocalDateTime.now()),
+                current.customerDelta(), current.workerDelta(), current.receivableCode(), current.processName(), current.workerName()
         );
     }
 
