@@ -49,3 +49,4 @@ V48__m3_users_menu.sql
 V49__m3_process_progress.sql
 V50__m3_stock_batch_code.sql
 V51__m3_print_job.sql
+V52__m3_order_change.sql

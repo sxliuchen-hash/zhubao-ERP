@@ -36,7 +36,7 @@ public class ScanCodeParser {
 
     private ScanResolveResponse resolveSystemCode(String content, String scene) {
         String[] parts = content.split("\\|", -1);
-        if (parts.length != 3 || !SYSTEM_PREFIX.equals(parts[0])) {
+        if ((parts.length != 3 && parts.length != 5) || !SYSTEM_PREFIX.equals(parts[0])) {
             throw new BusinessException("未识别的二维码内容");
         }
         ScanObjectType objectType = TYPE_MAP.get(parts[1]);
@@ -48,6 +48,22 @@ public class ScanCodeParser {
             throw new BusinessException("未识别的二维码类型");
         }
         return new ScanResolveResponse(objectType, code, nextAction(objectType, scene), true);
+    }
+
+    /** 三段旧码没有版本，返回空字符串，调用方应显示为版本未知。 */
+    public String labelVersion(String content) {
+        String normalized = content == null ? "" : content.trim();
+        if (!normalized.startsWith(SYSTEM_PREFIX + "|")) {
+            return "";
+        }
+        String[] parts = normalized.split("\\|", -1);
+        if (parts.length == 3) {
+            return "";
+        }
+        if (parts.length == 5 && !parts[3].isBlank()) {
+            return parts[3].trim();
+        }
+        throw new BusinessException("未识别的二维码内容");
     }
 
     private String nextAction(ScanObjectType objectType, String scene) {
