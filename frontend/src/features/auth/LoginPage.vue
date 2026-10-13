@@ -37,8 +37,16 @@ function syncDemoPassword() {
 }
 
 async function handleLogin() {
-  busy.value = true;
   message.value = '';
+  if (!username.value.trim()) {
+    message.value = '请输入账号';
+    return;
+  }
+  if (!password.value.trim()) {
+    message.value = '请输入密码';
+    return;
+  }
+  busy.value = true;
   try {
     const session = await loginAuthSession({
       username: username.value.trim(),
@@ -102,10 +110,10 @@ async function handleChangePassword() {
         <input v-model="confirmPassword" type="password" autocomplete="new-password" :disabled="busy" />
       </label>
       <button class="primary-button" type="submit" :disabled="busy">{{ busy ? '提交中' : '更新密码并进入' }}</button>
-      <p v-if="message" class="login-message">{{ message }}</p>
+      <p v-if="message" class="login-message" role="alert">{{ message }}</p>
     </form>
 
-    <form v-else class="login-card" aria-label="登录" @submit.prevent="handleLogin">
+    <form v-else class="login-card" aria-label="登录" novalidate @submit.prevent="handleLogin">
       <div class="login-brand">
         <span class="brand-mark">ZB</span>
         <div>
@@ -121,6 +129,7 @@ async function handleChangePassword() {
           v-model="username"
           :list="demoUsers.length > 0 ? 'login-demo-users' : undefined"
           autocomplete="username"
+          required
           :disabled="busy"
           @change="syncDemoPassword"
         />
@@ -130,10 +139,10 @@ async function handleChangePassword() {
       </label>
       <label>
         <span>密码</span>
-        <input v-model="password" type="password" autocomplete="current-password" :disabled="busy" />
+        <input v-model="password" type="password" autocomplete="current-password" required :disabled="busy" />
       </label>
       <button class="primary-button" type="submit" :disabled="busy">{{ busy ? '登录中' : '登录' }}</button>
-      <p v-if="message" class="login-message">{{ message }}</p>
+      <p v-if="message" class="login-message" role="alert">{{ message }}</p>
     </form>
   </main>
 </template>
