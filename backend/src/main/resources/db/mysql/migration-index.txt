@@ -47,3 +47,4 @@ V46__m3_quality_round.sql
 V47__m3_label_menu.sql
 V48__m3_users_menu.sql
 V49__m3_process_progress.sql
+V50__m3_stock_batch_code.sql

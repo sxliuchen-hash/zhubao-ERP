@@ -2324,6 +2324,12 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `POST /api/inventory/ledger/transfers` | `ApiResponse<StockLedgerEntry>` |
+| `GET /api/inventory/prep-stock/customer` | `ApiResponse<List<StockBalance>>`。客户备料批次，母单为空 |
+| `GET /api/inventory/prep-stock/factory` | `ApiResponse<List<StockBalance>>`。厂内未发货实物，客户范围账号看不到其他客户和公司料 |
+| `GET /api/inventory/prep-stock/company` | `ApiResponse<List<StockBalance>>`。公司自有生产物料，仓库、财务、管理员或总经理可见 |
+| `POST /api/inventory/prep-stock/customer-receipts` | `ApiResponse<String>`。必须带 `requestId`。不建加工母单 |
+| `POST /api/inventory/prep-stock/issues` | `ApiResponse<String>`。必须带 `requestId`。同一客户备料批次领用到真实加工母单 |
+| `POST /api/inventory/prep-stock/company-receipts` | `ApiResponse<String>`。必须带 `requestId`。权属始终为公司 |
 | `GET /api/inventory/ledgers` | `ApiResponse<List<StockLedgerEntry>>` |
 | `GET /api/inventory/balances` | `ApiResponse<List<StockBalance>>` |
 

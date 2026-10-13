@@ -183,7 +183,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     public List<StockBalance> findAllBalances() {
         String sql = """
                 select owner_type, owner_customer_id, customer_id, mother_order_code, work_order_code,
-                       material_code, warehouse_code, stock_status, available_quantity, available_weight
+                       material_code, warehouse_code, stock_status, batch_code, available_quantity, available_weight
                   from inv_stock_balance
                  order by owner_type, customer_id, mother_order_code, work_order_code, material_code, warehouse_code, stock_status
                 """;
@@ -201,7 +201,8 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                                 rs.getString("work_order_code"),
                                 rs.getString("material_code"),
                                 rs.getString("warehouse_code"),
-                                StockStatus.valueOf(rs.getString("stock_status"))
+                                StockStatus.valueOf(rs.getString("stock_status")),
+                                rs.getString("batch_code")
                         ),
                         rs.getBigDecimal("available_quantity"),
                         rs.getBigDecimal("available_weight")
@@ -331,9 +332,9 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
         String sql = """
                 insert into inv_stock_balance (
                     owner_type, owner_customer_id, customer_id, mother_order_code, work_order_code,
-                    material_code, warehouse_code, stock_status, dimension_key,
+                    material_code, warehouse_code, stock_status, batch_code, dimension_key,
                     available_quantity, available_weight, last_ledger_code
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on duplicate key update
                     available_quantity = available_quantity + values(available_quantity),
                     available_weight = available_weight + values(available_weight),
@@ -348,10 +349,11 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             statement.setString(6, dimension.materialCode());
             statement.setString(7, dimension.warehouseCode());
             statement.setString(8, dimension.stockStatus().name());
-            statement.setString(9, dimensionKey(dimension));
-            statement.setBigDecimal(10, quantity);
-            statement.setBigDecimal(11, weight);
-            statement.setString(12, ledgerCode);
+            statement.setString(9, dimension.batchCode());
+            statement.setString(10, dimensionKey(dimension));
+            statement.setBigDecimal(11, quantity);
+            statement.setBigDecimal(12, weight);
+            statement.setString(13, ledgerCode);
             statement.executeUpdate();
         }
     }
@@ -366,7 +368,21 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             String warehouseCode,
             StockStatus stockStatus
     ) {
-        return new StockDimension(ownerType, ownerCustomerId, customerId, motherOrderCode, workOrderCode, materialCode, warehouseCode, stockStatus);
+        return dimension(ownerType, ownerCustomerId, customerId, motherOrderCode, workOrderCode, materialCode, warehouseCode, stockStatus, "");
+    }
+
+    private StockDimension dimension(
+            OwnerType ownerType,
+            Long ownerCustomerId,
+            Long customerId,
+            String motherOrderCode,
+            String workOrderCode,
+            String materialCode,
+            String warehouseCode,
+            StockStatus stockStatus,
+            String batchCode
+    ) {
+        return new StockDimension(ownerType, ownerCustomerId, customerId, motherOrderCode, workOrderCode, materialCode, warehouseCode, stockStatus, batchCode);
     }
 
     private OwnerType ownerType(String value) {
@@ -383,7 +399,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                 dimension.materialCode(),
                 dimension.warehouseCode(),
                 dimension.stockStatus().name()
-        );
+        ) + (dimension.batchCode() == null || dimension.batchCode().isBlank() ? "" : "|" + dimension.batchCode());
     }
 
     private String nullSafe(Object value) {

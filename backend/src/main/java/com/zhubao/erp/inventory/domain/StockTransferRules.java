@@ -32,6 +32,10 @@ public final class StockTransferRules {
             return;
         }
         verifyDimension(entry.from());
+        if (isPrepIssue(entry) || isPrepReturn(entry)) {
+            verifyPrepBridge(entry);
+            return;
+        }
         StockDimension from = entry.from();
         StockDimension to = entry.to();
         if (from.ownerType() != to.ownerType()
@@ -55,6 +59,37 @@ public final class StockTransferRules {
         }
     }
 
+    private static boolean isPrepIssue(StockLedgerEntry entry) {
+        return "prep_issue".equals(entry.documentType());
+    }
+
+    private static boolean isPrepReturn(StockLedgerEntry entry) {
+        return "prep_return".equals(entry.documentType());
+    }
+
+    /** 只允许同一客户、同一物料从备料批次转入真实加工母单，或按原批次退回。 */
+    private static void verifyPrepBridge(StockLedgerEntry entry) {
+        StockDimension from = entry.from();
+        StockDimension to = entry.to();
+        if (from.ownerType() != OwnerType.CUSTOMER || to.ownerType() != OwnerType.CUSTOMER
+                || !Objects.equals(from.customerId(), to.customerId())
+                || !Objects.equals(from.materialCode(), to.materialCode())) {
+            throw new IllegalArgumentException("备料领用不能改变客户或物料");
+        }
+        boolean issue = isPrepIssue(entry);
+        StockDimension batchSide = issue ? from : to;
+        StockDimension orderSide = issue ? to : from;
+        if (batchSide.batchCode().isBlank() || !batchSide.motherOrderCode().isBlank()) {
+            throw new IllegalArgumentException("备料批次必须独立于加工母单");
+        }
+        if (!orderSide.batchCode().isBlank() || orderSide.motherOrderCode().isBlank()) {
+            throw new IllegalArgumentException("备料只能领用到真实加工母单");
+        }
+        if (orderSide.stockStatus() != StockStatus.RAW_WAITING || batchSide.stockStatus() != StockStatus.RAW_WAITING) {
+            throw new IllegalArgumentException("备料领用只转入待加工");
+        }
+    }
+
     private static boolean isInitialWorkOrderSplit(StockLedgerEntry entry) {
         StockDimension from = entry.from();
         StockDimension to = entry.to();
@@ -69,7 +104,11 @@ public final class StockTransferRules {
         Objects.requireNonNull(dimension, "库存维度不能为空");
         Objects.requireNonNull(dimension.ownerType(), "库存权属不能为空");
         Objects.requireNonNull(dimension.stockStatus(), "库存状态不能为空");
-        requireText(dimension.motherOrderCode(), "库存母单不能为空");
+        if (dimension.batchCode() == null || dimension.batchCode().isBlank()) {
+            requireText(dimension.motherOrderCode(), "库存母单不能为空");
+        } else if (dimension.motherOrderCode() != null && !dimension.motherOrderCode().isBlank()) {
+            throw new IllegalArgumentException("批次库存不能同时绑定加工母单");
+        }
         requireText(dimension.materialCode(), "库存物料不能为空");
         requireText(dimension.warehouseCode(), "库存仓库不能为空");
     }

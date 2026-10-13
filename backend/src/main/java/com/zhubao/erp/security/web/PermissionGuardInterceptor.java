@@ -21,6 +21,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
     private final PermissionGuard permissionGuard;
     private final Map<String, PermissionCode> exactPostPermissions = Map.ofEntries(
             Map.entry("/api/inventory/ledger/transfers", PermissionCode.INVENTORY_LEDGER_TRANSFER),
+            Map.entry("/api/inventory/prep-stock/customer-receipts", PermissionCode.INVENTORY_LEDGER_TRANSFER),
+            Map.entry("/api/inventory/prep-stock/issues", PermissionCode.INVENTORY_LEDGER_TRANSFER),
+            Map.entry("/api/inventory/prep-stock/company-receipts", PermissionCode.INVENTORY_LEDGER_TRANSFER),
             Map.entry("/api/business/operations/inbound-confirmations", PermissionCode.BUSINESS_INBOUND_CONFIRM),
             Map.entry("/api/business/operations/process-stations", PermissionCode.BUSINESS_PRODUCTION_REPORT),
             Map.entry("/api/business/operations/process-progress", PermissionCode.BUSINESS_PRODUCTION_REPORT),

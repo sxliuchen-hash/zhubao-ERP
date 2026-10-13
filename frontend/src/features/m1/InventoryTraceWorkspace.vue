@@ -5,6 +5,7 @@ import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
+import PrepStockPanel from './PrepStockPanel.vue';
 import ShippingPanel from '../shipping/ShippingPanel.vue';
 import type { InventoryBalance, Tone } from '../../data/m1PrototypeData';
 import { ApiRequestError } from '../../services/apiClient';
@@ -166,6 +167,7 @@ function selectBalance(item: InventoryBalance) {
 <template>
   <div class="inventory-trace-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
+    <PrepStockPanel />
     <ShippingPanel
       title="确认发货"
       intro="扫成品标签。选择完整库存维度，并填写本次数量、重量和物流。物流扫码只填写运单号。超时用原确认回放，不会另开一次发货。"
