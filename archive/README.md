@@ -22,6 +22,7 @@
 |---|---|---|
 | 账号申请与审批面板及专属测试 | `frontend/src/features/m1/AccountApprovalPanel.vue`、`AccountApprovalPanel.test.ts` | `App.vue`、审批页、配置页、用户管理均不导入；配置页测试断言不展示该面板。用户管理直接保存账号。`authApi` 前置审批函数和后端兼容接口仍保留，本批不删接口、不删表 |
 | 无页面调用的客户授权客户端及专属测试 | `frontend/src/services/customerAuthorizationApi.ts`、`customerAuthorizationApi.test.ts` | 现行用户管理通过账号保存写入客户范围，不导入该客户端。后端 `CustomerAuthorizationController`、服务、仓储和权限仍保留，不能把本批理解成客户授权功能已删除 |
+| 旧扫码 resolve 的前端解析 | `frontend/src/features/scan/scanCode.ts` 中的 `parseScanCode` | 页面查单走 `/api/scan/context`。归档副本含当时的解析函数；现行文件只保留发货面板使用的 `extractCourierNumber`。后端 `POST /api/scan/resolve` 仍注册，本批不删接口 |
 
 同时从 `frontend/src/styles.css`、`frontend/src/system-workspaces.css` 去掉只被该面板使用的 `.account-process-row`、`.account-row-actions`，以及没有任何页面使用的 `.account-admin-form`、`.account-admin-checks`。财务页仍使用 `.account-admin-grid`；配置页仍使用登录会话样式。
 
