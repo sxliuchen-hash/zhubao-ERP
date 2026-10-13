@@ -198,6 +198,19 @@ describe('App', () => {
     expect(wrapper.find('.mobile-tabbar').exists()).toBe(false);
     expect(wrapper.find('.ops-nav').exists()).toBe(false);
   });
+
+  it('用户管理导航仅向拥有菜单的管理员开放', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce({ ...sessionWithMenus(['dashboard', 'users']), role: 'ADMIN' });
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.find('[data-tab="users"]').exists()).toBe(true);
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, {
+      detail: { session: { ...sessionWithMenus(['dashboard', 'users']), role: 'GENERAL_MANAGER' } },
+    }));
+    await flushPromises();
+    expect(wrapper.find('[data-tab="users"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 const allMenuCodes = [

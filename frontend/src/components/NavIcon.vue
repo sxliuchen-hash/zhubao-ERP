@@ -55,6 +55,10 @@ defineProps<{
       <path d="M8 8h8v8H8z" />
       <path d="M10 4.5V8M14 4.5V8M10 16v3.5M14 16v3.5M4.5 10H8M4.5 14H8M16 10h3.5M16 14h3.5" />
     </template>
+    <template v-else-if="name === 'users'">
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 21v-3a7 7 0 0 1 14 0v3" />
+    </template>
     <template v-else-if="name === 'configuration'">
       <path d="M4 7h16M4 12h16M4 17h16" />
       <circle cx="8" cy="7" r="1.7" />

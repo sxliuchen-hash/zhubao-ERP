@@ -334,6 +334,32 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                     throw new com.zhubao.erp.common.error.BusinessException("账号不存在：" + mutation.username());
                 }
             }
+            case DELETE -> {
+                try (PreparedStatement statement = connection.prepareStatement("delete from auth_user_account where username = ?")) {
+                    statement.setString(1, normalize(mutation.username()));
+                    if (statement.executeUpdate() != 1) {
+                        throw new com.zhubao.erp.common.error.BusinessException("账号不存在：" + mutation.username());
+                    }
+                }
+            }
+        }
+    }
+
+    /** 锁住启用管理员集合后检查，防止并发停用或降权把最后的管理员全部移除。 */
+    void assertAdminRemains(Connection connection, com.zhubao.erp.security.domain.AuthAccountMutation mutation) throws SQLException {
+        if (!mutation.removesEnabledAdmin()) return;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select username from auth_user_account where role_code = 'ADMIN' and enabled = true order by username for update");
+             ResultSet result = statement.executeQuery()) {
+            int count = 0;
+            boolean targetAdmin = false;
+            while (result.next()) {
+                count++;
+                targetAdmin |= normalize(mutation.username()).equals(result.getString("username"));
+            }
+            if (targetAdmin && count <= 1) {
+                throw new com.zhubao.erp.common.error.BusinessException("必须保留至少一个启用的系统管理员");
+            }
         }
     }
 

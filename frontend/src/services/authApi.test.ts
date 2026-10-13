@@ -3,6 +3,8 @@ import { clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
 import {
   authSessionChangedEvent,
   changeOwnPassword,
+  deleteAuthAccount,
+  fetchAuthAccountOptions,
   draftAuthAccountPreApproval,
   fetchAuthAccountPreApprovalApplications,
   fetchAuthAccountPreApprovalEvidence,
@@ -50,6 +52,18 @@ describe('authApi', () => {
   beforeEach(() => {
     clearAuthToken();
     vi.restoreAllMocks();
+  });
+
+  it('读取管理员角色权限目录并编码删除目标账号', async () => {
+    setAuthToken('admin-token');
+    const options = { roles: [{ value: 'OPERATOR', label: '操作工', permissions: [] }] };
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(options))
+      .mockResolvedValueOnce(response(null));
+    expect(await fetchAuthAccountOptions()).toEqual(options);
+    await deleteAuthAccount('员工/01');
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/account-options', expect.objectContaining({ headers: { Authorization: 'Bearer admin-token' } }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/auth/accounts/%E5%91%98%E5%B7%A5%2F01/delete', expect.objectContaining({ method: 'POST', body: '{}' }));
   });
 
   it('stores token after login', async () => {

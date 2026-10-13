@@ -34,8 +34,8 @@ public class PermissionGuard {
         allow(PermissionCode.MACHINE_OUTPUT_SUBMIT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.GATEWAY_READING_CONSUME, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER, RoleCode.QUALITY_INSPECTOR, RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER);
         allow(PermissionCode.GATEWAY_DEVICE_MANAGE, RoleCode.ADMIN);
-        allow(PermissionCode.AUTH_ACCOUNT_MANAGE, RoleCode.GENERAL_MANAGER);
-        allow(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, RoleCode.GENERAL_MANAGER);
+        roleMatrix.put(PermissionCode.AUTH_ACCOUNT_MANAGE, EnumSet.of(RoleCode.ADMIN));
+        roleMatrix.put(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, EnumSet.of(RoleCode.ADMIN));
         allow(PermissionCode.APPROVAL_DECISION, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.DOCUMENT_CONTENT_MANAGE, RoleCode.ADMIN);

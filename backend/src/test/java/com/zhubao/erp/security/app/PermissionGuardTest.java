@@ -83,12 +83,12 @@ class PermissionGuardTest {
     }
 
     @Test
-    void limitsCustomerAuthorizationManagementToAdminAndGeneralManager() {
+    void limitsCustomerAuthorizationManagementToAdmin() {
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
         OperatorContext sales = new OperatorContext("业务专员 林岚", RoleCode.SALES, DataScope.CUSTOMER_RANGE);
 
-        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, generalManager))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, generalManager))
+                .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, sales))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("客户授权管理");
@@ -107,15 +107,15 @@ class PermissionGuardTest {
     }
 
     @Test
-    void limitsAuthAccountManagementToAdminAndGeneralManager() {
+    void limitsAuthAccountManagementToAdmin() {
         OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
         OperatorContext finance = new OperatorContext("财务统计", RoleCode.FINANCE_STATISTICIAN, DataScope.DEPARTMENT);
 
         assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, admin))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, generalManager))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, generalManager))
+                .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, finance))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("FINANCE_STATISTICIAN")

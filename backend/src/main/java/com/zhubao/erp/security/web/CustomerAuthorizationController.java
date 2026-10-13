@@ -4,6 +4,9 @@ import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.security.app.CustomerAuthorizationService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.domain.CustomerAuthorization;
+import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,8 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Management surface for the customer authorization table. All mutating endpoints are guarded by
- * {@code CUSTOMER_AUTHORIZATION_MANAGE} via {@link com.zhubao.erp.security.web.PermissionGuardInterceptor}.
+ * 客户授权兼容管理接口，读取和写入均仅允许系统管理员。
  */
 @RestController
 @RequestMapping("/api/security/customer-authorizations")
@@ -35,7 +37,9 @@ public class CustomerAuthorizationController {
     }
 
     @GetMapping
-    public ApiResponse<List<CustomerAuthorization>> list(@RequestParam(required = false) String username) {
+    public ApiResponse<List<CustomerAuthorization>> list(@RequestParam(required = false) String username,
+                                                        HttpServletRequest httpRequest) {
+        manageOperator(httpRequest);
         if (username == null || username.isBlank()) {
             return ApiResponse.ok(service.allAuthorizations());
         }
@@ -47,15 +51,23 @@ public class CustomerAuthorizationController {
             @RequestBody GrantRequest request,
             HttpServletRequest httpRequest
     ) {
-        String grantedBy = operatorContextResolver.resolve(httpRequest).operator();
         return ApiResponse.ok(service.grant(
-                request.username(), request.customerCode(), request.customerName(), grantedBy));
+                request.username(), request.customerCode(), request.customerName(), manageOperator(httpRequest)));
     }
 
     @PostMapping("/revocations")
-    public ApiResponse<RevokeResult> revoke(@RequestBody RevokeRequest request) {
-        boolean removed = service.revoke(request.username(), request.customerCode());
+    public ApiResponse<RevokeResult> revoke(@RequestBody RevokeRequest request, HttpServletRequest httpRequest) {
+        boolean removed = service.revoke(request.username(), request.customerCode(), manageOperator(httpRequest));
         return ApiResponse.ok(new RevokeResult(request.username(), request.customerCode(), removed));
+    }
+
+    private OperatorContext manageOperator(HttpServletRequest request) {
+        OperatorContext operatorContext = operatorContextResolver.resolve(request);
+        if (operatorContext.role() != RoleCode.ADMIN
+                || operatorContext.headerBased() && request.getHeader(OperatorContextResolver.ROLE_HEADER) == null) {
+            throw new PermissionDeniedException("客户授权管理需要系统管理员登录会话或显式评审角色");
+        }
+        return operatorContext;
     }
 
     public record GrantRequest(

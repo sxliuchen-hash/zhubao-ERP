@@ -24,7 +24,8 @@ class ZhubaoErpApplicationTests {
                 .flatMap(mapping -> mapping.getPatternValues().stream())
                 .toList();
 
-        assertThat(paths).contains("/api/auth/accounts", "/api/register-import/templates", "/api/documents/captures");
+        assertThat(paths).contains("/api/auth/accounts", "/api/auth/account-options", "/api/auth/accounts/{username}/delete",
+                "/api/register-import/templates", "/api/documents/captures");
         assertThat(paths)
                 .noneMatch(path -> path.startsWith("/api/configuration/baseline")
                         || path.startsWith("/api/samples")

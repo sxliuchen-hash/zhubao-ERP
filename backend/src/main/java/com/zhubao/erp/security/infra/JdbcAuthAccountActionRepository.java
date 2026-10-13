@@ -4,6 +4,7 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthAccountActionProbe;
 import com.zhubao.erp.security.domain.AuthAccountActionRepository;
 import com.zhubao.erp.security.domain.AuthAccountMutation;
+import com.zhubao.erp.security.domain.CustomerAuthorizationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -26,8 +27,8 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
     private final JdbcAuthAuditRepository auditRepository;
     private final JdbcAuthAccountPreApprovalApplicationRepository applicationRepository;
     private final AuthAccountActionProbe probe;
+    private final JdbcCustomerAuthorizationRepository customerRepository;
 
-    @Autowired
     public JdbcAuthAccountActionRepository(
             DataSource dataSource,
             JdbcAuthUserAccountRepository accountRepository,
@@ -37,6 +38,14 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
         this(dataSource, accountRepository, auditRepository, applicationRepository, AuthAccountActionProbe.NONE);
     }
 
+    @Autowired
+    public JdbcAuthAccountActionRepository(DataSource dataSource, JdbcAuthUserAccountRepository accountRepository,
+                                           JdbcAuthAuditRepository auditRepository,
+                                           JdbcAuthAccountPreApprovalApplicationRepository applicationRepository,
+                                           CustomerAuthorizationRepository customerRepository) {
+        this(dataSource, accountRepository, auditRepository, applicationRepository, customerRepository, AuthAccountActionProbe.NONE);
+    }
+
     public JdbcAuthAccountActionRepository(
             DataSource dataSource,
             JdbcAuthUserAccountRepository accountRepository,
@@ -44,11 +53,22 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
             JdbcAuthAccountPreApprovalApplicationRepository applicationRepository,
             AuthAccountActionProbe probe
     ) {
+        this(dataSource, accountRepository, auditRepository, applicationRepository, null, probe);
+    }
+
+    public JdbcAuthAccountActionRepository(DataSource dataSource, JdbcAuthUserAccountRepository accountRepository,
+                                           JdbcAuthAuditRepository auditRepository,
+                                           JdbcAuthAccountPreApprovalApplicationRepository applicationRepository,
+                                           CustomerAuthorizationRepository customerRepository, AuthAccountActionProbe probe) {
         this.dataSource = dataSource;
         this.accountRepository = accountRepository;
         this.auditRepository = auditRepository;
         this.applicationRepository = applicationRepository;
         this.probe = probe == null ? AuthAccountActionProbe.NONE : probe;
+        if (customerRepository != null && !(customerRepository instanceof JdbcCustomerAuthorizationRepository)) {
+            throw new IllegalArgumentException("JDBC 账号动作必须使用 JDBC 客户授权仓储");
+        }
+        this.customerRepository = (JdbcCustomerAuthorizationRepository) customerRepository;
     }
 
     @Override
@@ -57,6 +77,7 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
             boolean previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
+                accountRepository.assertAdminRemains(connection, mutation);
                 String applicationCode = mutation.application() == null
                         ? null
                         : mutation.application().applicationCode();
@@ -65,6 +86,9 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
                 }
                 probe.beforeAccountWrite();
                 accountRepository.apply(connection, mutation);
+                if (mutation.customerAuthorizations() != null && customerRepository != null) {
+                    customerRepository.replaceOn(connection, mutation.username(), mutation.customerAuthorizations());
+                }
                 probe.beforeAuditWrite();
                 auditRepository.insertOn(connection, mutation.audit());
                 if (applicationCode != null) {

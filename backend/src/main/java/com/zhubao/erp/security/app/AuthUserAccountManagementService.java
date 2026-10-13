@@ -12,6 +12,9 @@ import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.security.domain.AuthAccountActionRepository;
 import com.zhubao.erp.security.domain.AuthAccountMutation;
+import com.zhubao.erp.security.domain.AuthAccountOptions;
+import com.zhubao.erp.security.domain.CustomerAuthorization;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationRepository;
@@ -308,7 +311,9 @@ public class AuthUserAccountManagementService {
                 : new InMemoryAuthAccountActionRepository(
                         accountRepository,
                         authAuditRepository,
-                        preApprovalApplicationRepository
+                        preApprovalApplicationRepository,
+                        customerAuthorizationService == null ? null : customerAuthorizationService.repository(),
+                        null
                 );
     }
 
@@ -319,18 +324,29 @@ public class AuthUserAccountManagementService {
                 .toList();
     }
 
+    public AuthAccountOptions accountOptions(PermissionGuard permissionGuard, OperatorContext operatorContext) {
+        requireAdmin(operatorContext);
+        return new AuthAccountOptions(java.util.Arrays.stream(RoleCode.values())
+                .map(role -> new AuthAccountOptions.RoleOption(role.name(), roleLabel(role),
+                        permissionGuard.allowedPermissionsFor(role).stream()
+                                .sorted()
+                                .map(permission -> new AuthAccountOptions.PermissionOption(permission.name(), permission.label()))
+                                .toList()))
+                .toList());
+    }
+
     public List<AuthAccountPreApprovalReadiness> preApprovalReadiness() {
         return List.of(
                 new AuthAccountPreApprovalReadiness(
                         "AUTH-PRE-CREATE-001",
                         "创建生产账号",
-                        "新增非 demo 账号或授予敏感角色前必须先完成申请与审批",
-                        enforcePreApprovalForAccountActions ? "申请单号和审批通过态强制校验已开启" : "申请单号可校验，默认不强制",
+                        "系统管理员可直接新增账号；显式携带申请单时保留旧审批校验",
+                        enforcePreApprovalForAccountActions ? "管理员直接管理；显式申请单校验审批通过态" : "管理员直接管理；显式申请单可校验",
                         List.of("账号申请单", "直属负责人审批", "系统管理员复核", "角色与数据范围说明", "初始密码交付确认"),
                         preApprovalMissingCapabilities("审批通过态强制校验", "正式电子签字", "审批后自动放行"),
                         List.of("GENERAL_MANAGER", "ADMIN"),
                         "当前可保存前置申请单、生成 ACCOUNT_PRE_APPROVAL 任务，并在强制模式校验任务 APPROVED 后放行账号动作",
-                        "生产上线前禁止直接创建生产账号",
+                        "管理员可直接创建生产账号并保留审计",
                         "补正式电子签字、审批后自动放行和完整 IAM 账号生命周期",
                         "高",
                         "red"
@@ -339,12 +355,12 @@ public class AuthUserAccountManagementService {
                         "AUTH-PRE-ROLE-001",
                         "变更角色/数据范围",
                         "调整角色、dataScope 或 customerScope 会改变可见客户和敏感动作",
-                        "仅事后审批摘要",
+                        "管理员直接管理并保留审计",
                         List.of("变更原因", "原角色/新角色对比", "客户范围清单", "业务负责人确认", "回收计划"),
                         List.of("客户授权表", "审批前差异比对", "变更前冻结快照", "审批拒绝回滚"),
                         List.of("GENERAL_MANAGER", "ADMIN", "业务负责人"),
                         "账号审计会记录目标角色、数据范围和客户范围",
-                        "生产上线前仅允许评审环境通过账号管理直接调整",
+                        "管理员直接调整角色、数据范围和客户范围",
                         "补组织客户授权表和审批前差异校验",
                         "高",
                         "red"
@@ -371,7 +387,7 @@ public class AuthUserAccountManagementService {
                         List.of("启停/解锁原因", "影响岗位", "交接状态", "管理员复核"),
                         List.of("岗位交接附件", "解锁本人确认"),
                         List.of("ADMIN", "GENERAL_MANAGER"),
-                        "当前启停/解锁会写审计并生成事后复核任务；停用账号会吊销现有 Bearer 会话并写 SESSION_REVOKED",
+                        "当前启停/解锁保留审计；停用账号会吊销现有 Bearer 会话并写 SESSION_REVOKED",
                         "试点允许管理员处理，生产需补岗位交接附件和解锁本人确认",
                         "补岗位交接附件和解锁本人确认",
                         "中",
@@ -384,6 +400,7 @@ public class AuthUserAccountManagementService {
             AuthAccountPreApprovalDraftCommand command,
             OperatorContext operatorContext
     ) {
+        requireAdmin(operatorContext);
         PreApprovalAction action = parsePreApprovalAction(command.actionType());
         AuthAccountPreApprovalReadiness readiness = preApprovalReadiness().stream()
                 .filter(item -> item.readinessCode().equals(action.readinessCode))
@@ -446,6 +463,7 @@ public class AuthUserAccountManagementService {
             byte[] content,
             OperatorContext operatorContext
     ) {
+        requireAdmin(operatorContext);
         if (documentManagementService == null || documentManagementRepository == null) {
             throw new BusinessException("账号前置审批证据上传未配置");
         }
@@ -492,6 +510,7 @@ public class AuthUserAccountManagementService {
             AuthAccountPreApprovalApplicationCommand command,
             OperatorContext operatorContext
     ) {
+        requireAdmin(operatorContext);
         AuthAccountPreApprovalDraft draft = preApprovalDraft(command.toDraftCommand(), operatorContext);
         String applicationStatus = applicationStatus(draft);
         AuthAccountPreApprovalApplication application = new AuthAccountPreApprovalApplication(
@@ -533,6 +552,7 @@ public class AuthUserAccountManagementService {
     }
 
     public AuthUserAccountSummary upsert(ManageAuthUserAccountCommand command, OperatorContext operatorContext) {
+        requireAdmin(operatorContext);
         String username = normalize(command.username());
         RoleCode role = parseRole(command.role());
         DataScope dataScope = parseDataScope(command.dataScope());
@@ -581,43 +601,31 @@ public class AuthUserAccountManagementService {
         String auditedAction = action
                 + preApprovalApplicationSuffix(preApprovalApplication)
                 + passwordChangeRequiredSuffix(passwordProvided, passwordChangeRequired);
-        actionRepository.commit(AuthAccountMutation.save(
+        AuthAccountMutation mutation = AuthAccountMutation.save(
                 proposed,
                 newManagementAudit(username, operatorContext, auditedAction),
                 preApprovalApplication
-        ));
+        );
+        if (customerAuthorizationService != null) {
+            mutation = mutation.withCustomerAuthorizations(customerAuthorizations(proposed, operatorContext));
+        }
+        actionRepository.commit(mutation);
         AuthUserAccount saved = requireAccount(username);
-        syncCustomerAuthorizations(saved, operatorContext);
-        recordApprovalSummary(saved, operatorContext, auditedAction);
+        if (existing != null && authSessionService != null) {
+            revokeCredentialsAfterCommit(username, operatorContext, "账号已保存");
+        }
         return summary(saved, Instant.now());
     }
 
-    /**
-     * Keep the customer authorization table in sync with the account's customer scope so that the
-     * authoritative source (M3.130) reflects account management. Grants the account's current
-     * customer scope and revokes rows no longer in scope. No-op when the authorization service is
-     * unavailable (review-only configurations).
-     */
-    private void syncCustomerAuthorizations(AuthUserAccount account, OperatorContext operatorContext) {
-        if (customerAuthorizationService == null) {
-            return;
-        }
-        List<String> desired = account.dataScope() == DataScope.CUSTOMER_RANGE
-                ? account.customerScope()
-                : List.of();
-        List<String> existingCodes = customerAuthorizationService.authorizationsFor(account.username()).stream()
-                .map(com.zhubao.erp.security.domain.CustomerAuthorization::customerCode)
+    /** 客户授权与账号、审计一起提交；保留未变化授权的显示名称和授予记录。 */
+    private List<CustomerAuthorization> customerAuthorizations(AuthUserAccount account, OperatorContext operatorContext) {
+        if (account.dataScope() != DataScope.CUSTOMER_RANGE) return List.of();
+        List<CustomerAuthorization> existing = customerAuthorizationService.authorizationsFor(account.username());
+        return account.customerScope().stream().map(code -> existing.stream()
+                .filter(item -> item.customerCode().equals(code)).findFirst()
+                .orElseGet(() -> new CustomerAuthorization(account.username(), code, "", operatorContext.operator(),
+                        java.time.LocalDateTime.now().toString())))
                 .toList();
-        for (String customerCode : desired) {
-            if (!existingCodes.contains(customerCode)) {
-                customerAuthorizationService.grant(account.username(), customerCode, "", operatorContext.operator());
-            }
-        }
-        for (String customerCode : existingCodes) {
-            if (!desired.contains(customerCode)) {
-                customerAuthorizationService.revoke(account.username(), customerCode);
-            }
-        }
     }
 
     public AuthUserAccountSummary updateEnabled(String username, boolean enabled, String reason, OperatorContext operatorContext) {
@@ -631,6 +639,7 @@ public class AuthUserAccountManagementService {
             String preApprovalApplicationCode,
             OperatorContext operatorContext
     ) {
+        requireAdmin(operatorContext);
         AuthUserAccount account = requireAccount(username);
         AuthAccountPreApprovalApplication preApprovalApplication = validatePreApprovalApplication(
                 preApprovalApplicationCode,
@@ -649,8 +658,7 @@ public class AuthUserAccountManagementService {
                 preApprovalApplication
         ));
         AuthUserAccount updated = requireAccount(account.username());
-        int revokedSessions = revokeAfterCommit(updated, enabled, operatorContext);
-        recordApprovalSummary(updated, operatorContext, action + revokedSessionsSuffix(enabled, revokedSessions));
+        revokeAfterCommit(updated, enabled, operatorContext);
         return summary(updated, Instant.now());
     }
 
@@ -664,6 +672,7 @@ public class AuthUserAccountManagementService {
             String preApprovalApplicationCode,
             OperatorContext operatorContext
     ) {
+        requireAdmin(operatorContext);
         AuthUserAccount account = requireAccount(username);
         AuthAccountPreApprovalApplication preApprovalApplication = validatePreApprovalApplication(
                 preApprovalApplicationCode,
@@ -678,8 +687,45 @@ public class AuthUserAccountManagementService {
                 preApprovalApplication
         ));
         AuthUserAccount updated = requireAccount(account.username());
-        recordApprovalSummary(updated, operatorContext, action);
         return summary(updated, Instant.now());
+    }
+
+    public void delete(String username, OperatorContext operatorContext) {
+        requireAdmin(operatorContext);
+        AuthUserAccount account = requireAccount(username);
+        String ownUsername = operatorContext.headerBased() || authSessionService == null ? ""
+                : authSessionService.session("Bearer " + operatorContext.sessionToken())
+                        .map(com.zhubao.erp.security.domain.AuthSession::username).orElse("");
+        if (account.username().equals(normalize(ownUsername))
+                || operatorContext.headerBased() && (account.operator().equals(operatorContext.operator())
+                || account.username().equals(normalize(operatorContext.operator())))) {
+            throw new BusinessException("不能删除当前登录账号");
+        }
+        actionRepository.commit(AuthAccountMutation.delete(account.username(),
+                newManagementAudit(account.username(), operatorContext, "删除账号；保留业务、审批及审计历史")));
+        if (authSessionService != null) {
+            revokeCredentialsAfterCommit(account.username(), operatorContext, "账号已删除");
+        }
+    }
+
+    /** 账号事务已提交，清理会话失败不把成功结果误报为回滚；旧令牌由解析时的账号状态和权限校验拒绝。 */
+    private void revokeCredentialsAfterCommit(String username, OperatorContext operatorContext, String action) {
+        try {
+            authSessionService.revokeSessionsForUsername(username, action + "；管理员：" + operatorContext.operator());
+        } catch (RuntimeException exception) {
+            try {
+                recordFollowUpAudit(username, operatorContext, "FAILURE",
+                        action + "；会话清理失败，旧令牌由账号状态、密码与权限校验拒绝");
+            } catch (RuntimeException ignored) {
+                // 会话清理审计失败不改变已经提交的账号结果
+            }
+        }
+    }
+
+    private void requireAdmin(OperatorContext operatorContext) {
+        if (operatorContext == null || operatorContext.role() != RoleCode.ADMIN) {
+            throw new PermissionDeniedException("仅系统管理员可以管理登录账号");
+        }
     }
 
     /**
@@ -687,6 +733,7 @@ public class AuthUserAccountManagementService {
      * 会话存放在进程内存，不能加入账号数据库事务；吊销失败时停用结果保持有效。
      */
     public SessionRevocationResult retrySessionRevocation(String username, OperatorContext operatorContext) {
+        requireAdmin(operatorContext);
         AuthUserAccount account = requireAccount(username);
         if (account.enabled()) {
             throw new BusinessException("账号仍处于启用状态，不能单独重试会话吊销：" + account.username());
@@ -723,7 +770,7 @@ public class AuthUserAccountManagementService {
                 roleLabel(account.role()),
                 account.dataScope().name(),
                 dataScopeLabel(account.dataScope()),
-                account.customerScope(),
+                effectiveCustomerScope(account),
                 account.enabled(),
                 account.demoAccount(),
                 displayInstant(account.passwordChangedAt()),
@@ -735,6 +782,12 @@ public class AuthUserAccountManagementService {
                 locked,
                 account.allowedProcesses()
         );
+    }
+
+    private List<String> effectiveCustomerScope(AuthUserAccount account) {
+        return account.dataScope() == DataScope.CUSTOMER_RANGE && customerAuthorizationService != null
+                ? customerAuthorizationService.effectiveCustomerScope(account.username(), account.customerScope())
+                : account.customerScope();
     }
 
     private AuthAuditEvent newManagementAudit(String targetUsername, OperatorContext operatorContext, String reason) {
@@ -794,24 +847,6 @@ public class AuthUserAccountManagementService {
         }
     }
 
-    private void recordApprovalSummary(AuthUserAccount account, OperatorContext operatorContext, String action) {
-        if (approvalService == null) {
-            return;
-        }
-        approvalService.createAccountManagementApprovalTask(
-                account.username(),
-                action,
-                operatorContext.operator(),
-                operatorContext.role().name(),
-                account.operator(),
-                account.role().name(),
-                account.dataScope().name(),
-                String.join("|", account.customerScope()),
-                account.enabled(),
-                account.demoAccount()
-        );
-    }
-
     private RoleCode parseRole(String rawRole) {
         try {
             return RoleCode.valueOf(normalizeEnum(rawRole));
@@ -837,7 +872,7 @@ public class AuthUserAccountManagementService {
             return List.of();
         }
         if (requestedScope == null) {
-            return existing == null ? List.of() : existing.customerScope();
+            return existing == null ? List.of() : effectiveCustomerScope(existing);
         }
         return requestedScope.stream()
                 .map(value -> value == null ? "" : value.trim())
@@ -1082,10 +1117,6 @@ public class AuthUserAccountManagementService {
     ) {
         String normalizedCode = blankToDefault(applicationCode, "");
         if (normalizedCode.isBlank()) {
-            if (enforcePreApprovalForAccountActions) {
-                throw new BusinessException("账号动作已启用前置审批强制开关，必须提供申请单号："
-                        + expectedAction.readinessCode + " / " + normalize(targetUsername));
-            }
             return null;
         }
         AuthAccountPreApprovalApplication application = requirePreApprovalApplicationRepository()
@@ -1181,10 +1212,6 @@ public class AuthUserAccountManagementService {
 
     private String preApprovalApplicationSuffix(AuthAccountPreApprovalApplication application) {
         return application == null ? "" : "；前置申请单：" + application.applicationCode();
-    }
-
-    private String revokedSessionsSuffix(boolean enabled, int revokedSessions) {
-        return enabled || authSessionService == null ? "" : "; revokedSessions=" + revokedSessions;
     }
 
     private String passwordChangeRequiredSuffix(boolean passwordProvided, boolean passwordChangeRequired) {

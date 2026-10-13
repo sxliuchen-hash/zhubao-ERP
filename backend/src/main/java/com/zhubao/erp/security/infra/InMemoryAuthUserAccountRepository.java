@@ -44,9 +44,10 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
     }
 
     /**
-     * 撤销尚未提交完成的新账号。只供同一包内的账号动作补偿使用。
+     * 删除账号凭据；业务、审批及审计记录保持独立保留。
      */
-    void delete(String username) {
+    @Override
+    public void delete(String username) {
         accounts.remove(normalize(username));
     }
 

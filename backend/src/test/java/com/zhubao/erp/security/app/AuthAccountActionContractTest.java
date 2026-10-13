@@ -12,6 +12,8 @@ import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.domain.CustomerAuthorization;
+import com.zhubao.erp.security.domain.CustomerAuthorizationRepository;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -25,6 +27,8 @@ import com.zhubao.erp.security.infra.JdbcAuthAccountActionRepository;
 import com.zhubao.erp.security.infra.JdbcAuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.infra.JdbcAuthAuditRepository;
 import com.zhubao.erp.security.infra.JdbcAuthUserAccountRepository;
+import com.zhubao.erp.security.infra.InMemoryCustomerAuthorizationRepository;
+import com.zhubao.erp.security.infra.JdbcCustomerAuthorizationRepository;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 
@@ -52,6 +56,108 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 申请状态保存失败时账号已停用且已有 1 条管理审计，申请仍可执行。
  */
 class AuthAccountActionContractTest {
+
+    @Test
+    void 缺省账号保存和删除在内存及Jdbc中原子提交授权和审计() throws Exception {
+        for (boolean jdbc : List.of(false, true)) {
+            DirectHarness harness = directHarness(jdbc);
+            harness.accounts().save(enabledAccount("target"));
+            CustomerAuthorization original = new CustomerAuthorization("target", "CUST-OLD", "原客户", "管理员", "2026-10-13T10:00:00");
+            harness.customers().grant(original);
+            AuthUserAccount proposed = new AuthUserAccount("target", "new-hash", "新操作人", RoleCode.SALES,
+                    DataScope.CUSTOMER_RANGE, true, false);
+            harness.failure().set("audit");
+            assertThatThrownBy(() -> harness.actions().commit(AuthAccountMutation.save(proposed, audit("target", "save-rollback"), null)
+                    .withCustomerAuthorizations(List.of(new CustomerAuthorization("target", "CUST-NEW", "新客户", "管理员", "2026-10-13T11:00:00")))))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(harness.accounts().findByUsername("target").orElseThrow().passwordHash()).isEqualTo("hash");
+            assertThat(harness.customers().findByUsername("target")).containsExactly(original);
+            assertThat(harness.audits().findRecent(20)).isEmpty();
+            assertThatThrownBy(() -> harness.actions().commit(AuthAccountMutation.delete("target", audit("target", "delete-rollback"))))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(harness.accounts().findByUsername("target")).isPresent();
+            assertThat(harness.customers().findByUsername("target")).containsExactly(original);
+            assertThat(harness.audits().findRecent(20)).isEmpty();
+            harness.failure().set("none");
+            harness.actions().commit(AuthAccountMutation.delete("target", audit("target", "delete-success")));
+            assertThat(harness.accounts().findByUsername("target")).isEmpty();
+            assertThat(harness.customers().findByUsername("target")).isEmpty();
+            assertThat(harness.audits().findRecent(20)).singleElement()
+                    .satisfies(event -> assertThat(event.eventId()).isEqualTo("delete-success"));
+        }
+    }
+
+    @Test
+    void 内存和Jdbc并发移除管理员仍保留至少一人() throws Exception {
+        for (boolean jdbc : List.of(false, true)) {
+            DirectHarness harness = directHarness(jdbc);
+            harness.accounts().save(new AuthUserAccount("admin", "hash", "管理员一", RoleCode.ADMIN, DataScope.ALL, true, false));
+            harness.accounts().save(new AuthUserAccount("admin2", "hash", "管理员二", RoleCode.ADMIN, DataScope.ALL, true, false));
+            AtomicInteger success = new AtomicInteger();
+            AtomicInteger rejected = new AtomicInteger();
+            CyclicBarrier ready = new CyclicBarrier(2);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                Future<?> first = pool.submit(() -> removeAdmin(harness, "admin", ready, success, rejected));
+                Future<?> second = pool.submit(() -> removeAdmin(harness, "admin2", ready, success, rejected));
+                first.get(8, TimeUnit.SECONDS);
+                second.get(8, TimeUnit.SECONDS);
+            } finally {
+                pool.shutdownNow();
+            }
+            assertThat(success.get()).isEqualTo(1);
+            assertThat(rejected.get()).isEqualTo(1);
+            assertThat(harness.accounts().findAll().stream().filter(account -> account.enabled() && account.role() == RoleCode.ADMIN)).hasSize(1);
+        }
+    }
+
+    private void removeAdmin(DirectHarness harness, String username, CyclicBarrier ready,
+                             AtomicInteger success, AtomicInteger rejected) {
+        try {
+            ready.await(5, TimeUnit.SECONDS);
+            harness.actions().commit(AuthAccountMutation.delete(username, audit(username, "remove-" + username)));
+            success.incrementAndGet();
+        } catch (BusinessException exception) {
+            rejected.incrementAndGet();
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private DirectHarness directHarness(boolean jdbc) throws SQLException {
+        AtomicReference<String> failure = new AtomicReference<>("none");
+        if (!jdbc) {
+            var accounts = new InMemoryAuthUserAccountRepository(new PasswordHasher());
+            var audits = new InMemoryAuthAuditRepository();
+            var customers = new InMemoryCustomerAuthorizationRepository();
+            var applications = new InMemoryAuthAccountPreApprovalApplicationRepository();
+            return new DirectHarness(accounts, audits, customers,
+                    new InMemoryAuthAccountActionRepository(accounts, audits, applications, customers, probe(failure)), failure);
+        }
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:account-direct-" + UUID.randomUUID()
+                + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000");
+        createSchema(dataSource);
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("""
+                    create table sys_customer_authorization (
+                        username varchar(64) not null, customer_code varchar(64) not null,
+                        customer_name varchar(128) not null, granted_by varchar(128) not null,
+                        granted_at varchar(64) not null, primary key (username, customer_code)
+                    )
+                    """);
+        }
+        var accounts = new JdbcAuthUserAccountRepository(dataSource);
+        var audits = new JdbcAuthAuditRepository(dataSource);
+        var customers = new JdbcCustomerAuthorizationRepository(dataSource);
+        var applications = new JdbcAuthAccountPreApprovalApplicationRepository(dataSource);
+        return new DirectHarness(accounts, audits, customers,
+                new JdbcAuthAccountActionRepository(dataSource, accounts, audits, applications, customers, probe(failure)), failure);
+    }
+
+    private record DirectHarness(AuthUserAccountRepository accounts, AuthAuditRepository audits,
+                                 CustomerAuthorizationRepository customers, AuthAccountActionRepository actions,
+                                 AtomicReference<String> failure) { }
 
     @Test
     void memoryAndJdbcShareCommitBehavior() throws Exception {

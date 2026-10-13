@@ -103,4 +103,26 @@ public class JdbcCustomerAuthorizationRepository implements CustomerAuthorizatio
     private String selectSql() {
         return "select username, customer_code, customer_name, granted_by, granted_at from sys_customer_authorization";
     }
+
+    /** 使用账号动作的事务连接替换授权，避免账号与客户范围部分提交。 */
+    void replaceOn(Connection connection, String username, List<CustomerAuthorization> authorizations) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "delete from sys_customer_authorization where username = ?")) {
+            statement.setString(1, username);
+            statement.executeUpdate();
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into sys_customer_authorization (username, customer_code, customer_name, granted_by, granted_at)
+                values (?, ?, ?, ?, ?)
+                """)) {
+            for (CustomerAuthorization authorization : authorizations) {
+                statement.setString(1, username);
+                statement.setString(2, authorization.customerCode());
+                statement.setString(3, authorization.customerName());
+                statement.setString(4, authorization.grantedBy());
+                statement.setString(5, authorization.grantedAt());
+                statement.executeUpdate();
+            }
+        }
+    }
 }

@@ -13,8 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Default in-memory navigation menu source, preserving the original review menu tree and role
- * bindings. Active unless {@code zhubao.security.menu.repository=jdbc}.
+ * 默认内存导航菜单及角色绑定；配置 {@code zhubao.security.menu.repository=jdbc} 时改用持久化实现。
  */
 @Repository
 @ConditionalOnProperty(name = "zhubao.security.menu.repository", havingValue = "memory", matchIfMissing = true)
@@ -54,8 +53,9 @@ public class InMemoryNavigationMenuRepository implements NavigationMenuRepositor
                     PermissionCode.FINANCE_ASSET.name(),
                     PermissionCode.FINANCE_PAYABLE.name()
             )),
-            menu("configuration", "配置基线", "参数 / 构型", "/configuration", List.of(
-                    PermissionCode.AUTH_ACCOUNT_MANAGE.name()
+            menu("configuration", "配置基线", "参数 / 构型", "/configuration", List.of()),
+            menu("users", "用户管理", "账号 / 角色权限", "/users", List.of(
+                    PermissionCode.AUTH_ACCOUNT_MANAGE.name(), PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE.name()
             )),
             menu("documents", "文档附件", "证据 / 归档", "/documents", List.of(
                     PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD.name()
@@ -80,7 +80,7 @@ public class InMemoryNavigationMenuRepository implements NavigationMenuRepositor
 
     public InMemoryNavigationMenuRepository() {
         allow(RoleCode.ADMIN, "dashboard", "inbound", "label", "production", "progress", "quality", "inventory", "approvals", "finance",
-                "configuration", "documents", "sample", "hardware", "operations", "mobile");
+                "configuration", "users", "documents", "sample", "hardware", "operations", "mobile");
         allow(RoleCode.GENERAL_MANAGER, "dashboard", "inbound", "label", "production", "progress", "quality", "inventory", "approvals", "finance",
                 "configuration", "documents", "sample", "hardware", "operations", "mobile");
         allow(RoleCode.SALES, "dashboard", "inbound", "label", "progress", "inventory", "documents", "sample");

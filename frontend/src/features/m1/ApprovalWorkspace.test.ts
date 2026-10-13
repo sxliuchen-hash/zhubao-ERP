@@ -72,7 +72,7 @@ describe('ApprovalWorkspace', () => {
     expect(wrapper.text()).toContain('ACCOUNT_MANAGEMENT');
     expect(wrapper.text()).toContain('生产账号变更审批摘要');
     expect(wrapper.text()).toContain('仅工资试算，不发放');
-    expect(wrapper.text()).toContain('轻量审批不等于完整工作流');
+    expect(wrapper.text()).toContain('账号操作在用户管理页由管理员直接完成');
     expect(wrapper.text()).toContain('审批通过');
     expect(wrapper.text()).toContain('驳回补证');
   });

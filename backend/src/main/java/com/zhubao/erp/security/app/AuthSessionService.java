@@ -442,17 +442,28 @@ public class AuthSessionService {
             );
             throw new PermissionDeniedException("登录会话已过期");
         }
-        rejectDisabledAccount(entry);
+        AuthUserAccount current = rejectDisabledAccount(entry);
+        AuthUserAccount original = entry.user();
+        if (!java.util.Objects.equals(current.passwordHash(), original.passwordHash())
+                || !java.util.Objects.equals(current.passwordChangedAt(), original.passwordChangedAt())
+                || current.role() != original.role() || current.dataScope() != original.dataScope()
+                || !current.operator().equals(original.operator()) || current.demoAccount() != original.demoAccount()
+                || current.passwordChangeRequired() != original.passwordChangeRequired()
+                || !current.customerScope().equals(original.customerScope())
+                || !current.allowedProcesses().equals(original.allowedProcesses())) {
+            sessions.remove(entry.token(), entry);
+            throw new PermissionDeniedException("账号密码或权限已变更，请重新登录");
+        }
         return Optional.of(entry);
     }
 
     /**
      * 停用已提交但会话表吊销失败时，旧令牌仍可能留在内存。解析时以账号启用状态为准并清掉该令牌。
      */
-    private void rejectDisabledAccount(SessionEntry entry) {
+    private AuthUserAccount rejectDisabledAccount(SessionEntry entry) {
         Optional<AuthUserAccount> current = userAccountRepository.findByUsername(entry.user().username());
         if (current.isPresent() && current.get().enabled()) {
-            return;
+            return current.get();
         }
         sessions.remove(entry.token(), entry);
         recordAudit(

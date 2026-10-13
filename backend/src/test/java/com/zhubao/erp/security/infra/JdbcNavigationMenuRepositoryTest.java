@@ -10,16 +10,18 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
+import org.springframework.core.io.ClassPathResource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JdbcNavigationMenuRepositoryTest {
 
     private JdbcNavigationMenuRepository repository;
+    private JdbcDataSource dataSource;
 
     @BeforeEach
     void setUp() throws SQLException {
-        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource = new JdbcDataSource();
         dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1");
         dataSource.setUser("sa");
         dataSource.setPassword("");
@@ -53,6 +55,28 @@ class JdbcNavigationMenuRepositoryTest {
         assertThat(repository.findMenuItems())
                 .extracting(NavigationMenuItem::code)
                 .doesNotContain("legacy");
+    }
+
+    @Test
+    void 用户菜单迁移可重复执行且只授予管理员() throws Exception {
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement();
+             var input = new ClassPathResource("db/mysql/V48__m3_users_menu.sql").getInputStream()) {
+            String script = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            for (int round = 0; round < 2; round++) {
+                for (String sql : script.split(";")) {
+                    if (!sql.isBlank()) statement.execute(sql);
+                }
+            }
+        }
+        assertThat(repository.findMenuItems()).filteredOn(item -> item.code().equals("users"))
+                .singleElement().satisfies(item -> {
+                    assertThat(item.route()).isEqualTo("/users");
+                    assertThat(item.buttonCodes()).containsExactly("AUTH_ACCOUNT_MANAGE", "CUSTOMER_AUTHORIZATION_MANAGE");
+                });
+        assertThat(repository.findRoleMenuBindings().get(RoleCode.ADMIN)).contains("users");
+        repository.findRoleMenuBindings().forEach((role, menus) -> {
+            if (role != RoleCode.ADMIN) assertThat(menus).doesNotContain("users");
+        });
     }
 
     private void createSchema(JdbcDataSource dataSource) throws SQLException {

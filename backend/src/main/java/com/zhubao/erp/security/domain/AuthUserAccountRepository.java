@@ -8,6 +8,10 @@ public interface AuthUserAccountRepository {
 
     AuthUserAccount save(AuthUserAccount account);
 
+    default void delete(String username) {
+        throw new UnsupportedOperationException("当前账号仓储不支持删除");
+    }
+
     List<AuthUserAccount> findAll();
 
     Optional<AuthUserAccount> findByUsername(String username);

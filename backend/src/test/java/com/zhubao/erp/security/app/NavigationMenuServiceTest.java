@@ -30,12 +30,20 @@ class NavigationMenuServiceTest {
     }
 
     @Test
-    void exposesAuthAccountManagementButtonOnConfigurationMenu() {
+    void exposesAuthAccountManagementButtonOnUsersMenu() {
         assertThat(service.menuTreeFor(RoleCode.ADMIN))
                 .anySatisfy(item -> {
-                    assertThat(item.code()).isEqualTo("configuration");
+                    assertThat(item.code()).isEqualTo("users");
                     assertThat(item.buttonCodes()).contains("AUTH_ACCOUNT_MANAGE");
                 });
+    }
+
+    @Test
+    void 用户管理仅系统管理员可见() {
+        assertThat(service.menuCodesFor(RoleCode.ADMIN)).contains("users");
+        for (RoleCode role : RoleCode.values()) {
+            if (role != RoleCode.ADMIN) assertThat(service.menuCodesFor(role)).doesNotContain("users");
+        }
     }
 
     @Test

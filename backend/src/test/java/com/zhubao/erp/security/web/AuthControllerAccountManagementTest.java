@@ -407,6 +407,31 @@ class AuthControllerAccountManagementTest {
         return new LocalAttachmentObjectStorage(properties);
     }
 
+    @Test
+    void 管理员可以读取权限目录并删除账号() {
+        Fixture fixture = fixture();
+        var options = fixture.controller().accountOptions(request(RoleCode.ADMIN)).data();
+        assertThat(options.roles()).extracting(item -> item.value()).containsExactly(
+                "ADMIN", "GENERAL_MANAGER", "SALES", "RECEIVER", "WORKSHOP_LEADER", "OPERATOR",
+                "QUALITY_INSPECTOR", "WAREHOUSE_KEEPER", "FINANCE_STATISTICIAN");
+        assertThat(options.roles()).filteredOn(item -> item.value().equals("GENERAL_MANAGER"))
+                .singleElement().satisfies(item -> assertThat(item.permissions()).extracting(permission -> permission.code())
+                        .doesNotContain("AUTH_ACCOUNT_MANAGE", "CUSTOMER_AUTHORIZATION_MANAGE"));
+        assertThat(fixture.controller().deleteAccount("operator", request(RoleCode.ADMIN)).data()).isNull();
+        assertThat(fixture.accountRepository().findByUsername("operator")).isEmpty();
+    }
+
+    @Test
+    void 总经理不可读取用户列表目录或删除账号() {
+        Fixture fixture = fixture();
+        assertThatThrownBy(() -> fixture.controller().accounts(request(RoleCode.GENERAL_MANAGER)))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> fixture.controller().accountOptions(request(RoleCode.GENERAL_MANAGER)))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> fixture.controller().deleteAccount("operator", request(RoleCode.GENERAL_MANAGER)))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
+
     private MockHttpServletRequest request(RoleCode role) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(OperatorContextResolver.OPERATOR_HEADER, role == RoleCode.ADMIN ? "系统管理员" : "操作工 王强");

@@ -26,6 +26,7 @@ type TabKey =
   | 'finance'
   | 'approvals'
   | 'configuration'
+  | 'users'
   | 'documents'
   | 'sample'
   | 'label'
@@ -58,7 +59,8 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; grou
   { key: 'sample', label: '登记导入', meta: 'Excel 入账', code: 'SA', group: 'system' },
   { key: 'documents', label: '附件', meta: '照片视频', code: 'EV', group: 'system' },
   { key: 'hardware', label: '设备', meta: '读数接入', code: 'HW', group: 'system' },
-  { key: 'configuration', label: '配置', meta: '用户与内容', code: 'CF', group: 'system' },
+  { key: 'users', label: '用户管理', meta: '账号与权限', code: 'US', group: 'system' },
+  { key: 'configuration', label: '配置', meta: '个人与存储', code: 'CF', group: 'system' },
   { key: 'operations', label: '运维', meta: '硬件存储', code: 'OC', group: 'system' },
   { key: 'mobile', label: '手机作业', meta: '收货报工', code: 'PW', group: 'system' },
 ];
@@ -75,6 +77,7 @@ const workspaceLoaders = {
   finance: () => import('./features/m1/FinanceWorkspace.vue'),
   approvals: () => import('./features/m1/ApprovalWorkspace.vue'),
   configuration: () => import('./features/m1/ConfigurationWorkspace.vue'),
+  users: () => import('./features/m1/UserManagementWorkspace.vue'),
   documents: () => import('./features/m1/DocumentManagementWorkspace.vue'),
   sample: () => import('./features/m1/SampleLibraryWorkspace.vue'),
   label: () => import('./features/m1/LabelWorkspace.vue'),
@@ -118,10 +121,11 @@ const authorizedMenuCodes = computed(() => {
   ].filter(isTabKey));
 });
 const visibleTabs = computed(() => {
+  const permittedTabs = tabs.filter(tab => tab.key !== 'users' || authSession.value?.role === 'ADMIN');
   if (!authorizedMenuCodes.value || authorizedMenuCodes.value.size === 0) {
-    return tabs;
+    return permittedTabs;
   }
-  const filteredTabs = tabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
+  const filteredTabs = permittedTabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
   return filteredTabs.length ? filteredTabs : tabs.filter((tab) => tab.key === 'dashboard');
 });
 const navigationGroups = computed(() => navGroups

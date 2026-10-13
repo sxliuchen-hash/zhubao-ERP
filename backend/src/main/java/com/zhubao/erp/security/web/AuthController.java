@@ -6,6 +6,7 @@ import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
+import com.zhubao.erp.security.domain.AuthAccountOptions;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
@@ -108,6 +109,17 @@ public class AuthController {
     public ApiResponse<List<AuthUserAccountSummary>> accounts(HttpServletRequest request) {
         manageAccountOperator(request);
         return ApiResponse.ok(accountManagementService.accounts());
+    }
+
+    @GetMapping("/account-options")
+    public ApiResponse<AuthAccountOptions> accountOptions(HttpServletRequest request) {
+        return ApiResponse.ok(accountManagementService.accountOptions(permissionGuard, manageAccountOperator(request)));
+    }
+
+    @PostMapping("/accounts/{username}/delete")
+    public ApiResponse<Void> deleteAccount(@PathVariable String username, HttpServletRequest request) {
+        accountManagementService.delete(username, manageAccountOperator(request));
+        return ApiResponse.ok(null);
     }
 
     @GetMapping("/accounts/pre-approval-readiness")

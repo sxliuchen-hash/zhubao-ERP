@@ -396,8 +396,8 @@ MySQL 持久化表：
 
 | 接口 | 页面 | 用途 |
 |---|---|---|
-| `GET /tasks` | 首页/审批工作台/账号管理/质检返工 | 查询全部轻量审批任务 |
-| `GET /tasks/pending` | 首页/审批工作台/账号管理/质检返工 | 查询待审批任务 |
+| `GET /tasks` | 首页/审批工作台/质检返工 | 查询全部轻量审批任务，保留历史账号审批任务 |
+| `GET /tasks/pending` | 首页/审批工作台/质检返工 | 查询待审批任务，保留历史账号审批任务 |
 | `GET /tasks/{approvalCode}` | 审批工作台/质检返工 | 查询单个审批任务 |
 | `POST /tasks/{approvalCode}/decisions` | 审批工作台/质检返工 | 审批通过或驳回，并锁定审批快照 |
 
@@ -976,12 +976,12 @@ MySQL 持久化表：
 
 ### 6.13 `ApprovalTask`
 
-轻量审批保存固定场景任务与审计事件，支持内存/JDBC 仓储。账号创建/更新、启停和管理员解锁成功后也会生成 `ACCOUNT_MANAGEMENT` 事后复核摘要任务。前置账号审批使用独立 `ACCOUNT_PRE_APPROVAL` 场景；轻量审批不处理并行会签、复杂条件路由或正式工资锁账。
+轻量审批保存固定场景任务与审计事件，支持内存/JDBC 仓储。账号创建/更新、启停、解锁和删除由管理员直接执行，不再生成新的 `ACCOUNT_MANAGEMENT` 事后复核摘要任务；历史任务保留。兼容显式申请接口仍可生成独立 `ACCOUNT_PRE_APPROVAL` 场景任务。审批页保留业务审批与历史任务；轻量审批不处理并行会签、复杂条件路由或正式工资锁账。
 
 | 字段 | 说明 |
 |---|---|
-| `approvalCode` | 审批任务编码；损耗审批复用损耗审批单号，账号管理摘要使用 `AUTH-ACC-APP-<yyyyMMddHHmmssSSS>-0001` 序列 |
-| `scene` | 审批场景，当前为 `LOSS_APPROVAL` 或 `ACCOUNT_MANAGEMENT` |
+| `approvalCode` | 审批任务编码；损耗审批复用损耗审批单号，历史账号管理摘要使用 `AUTH-ACC-APP-<yyyyMMddHHmmssSSS>-0001` 序列 |
+| `scene` | 审批场景，包含 `LOSS_APPROVAL`、兼容显式申请的 `ACCOUNT_PRE_APPROVAL` 和历史 `ACCOUNT_MANAGEMENT` |
 | `businessCode` | 业务对象编码；损耗审批为工单号，账号管理为 `username` |
 | `title` | 审批标题 |
 | `status` | `WAITING_APPROVAL`、`APPROVED`、`REJECTED`、`AUTO_APPROVED` |
@@ -999,7 +999,7 @@ MySQL 持久化表：
 | `decisionComment` | 审批意见 |
 | `locked` | 审批处理后锁定，后续变更必须产生新任务或新审计事件 |
 
-`ACCOUNT_MANAGEMENT` 任务场景约束：
+历史 `ACCOUNT_MANAGEMENT` 任务场景约束：
 
 | 字段 | 账号管理摘要取值 |
 |---|---|
@@ -1008,7 +1008,7 @@ MySQL 持久化表：
 | `sourceStatus` | `WAITING_ACCOUNT_REVIEW` |
 | `sourceSummary` | `action=...; applicantRole=...; targetOperator=...; targetRole=...; targetDataScope=...; enabled=...; demoAccount=...; boundary=post-action approval summary, not a blocking IAM workflow` |
 
-该任务只用于账号动作成功后的事后复核，不阻断账号创建/更新、启停或管理员解锁，不替代完整 IAM、生产账号前置审批、SSO/JWT、组织客户授权表或复杂审批流。
+该历史任务只记录旧账号动作成功后的事后复核，不阻断当前账号动作；账号管理不再新增此类任务。历史数据和原迁移保留，不替代完整 IAM、SSO/JWT 或复杂审批流。
 
 ### 6.14 `ApprovalDecisionCommand`
 
@@ -1554,7 +1554,8 @@ PWA 一期边界：
 | `POST /api/business/operations/loss-approvals` | `BUSINESS_LOSS_APPROVAL` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER` |
 | `POST /api/approvals/tasks/{approvalCode}/decisions` | `APPROVAL_DECISION` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER`、`FINANCE_STATISTICIAN` |
 | `POST /api/documents/attachments/uploads` | `DOCUMENT_ATTACHMENT_UPLOAD` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
-| `GET /api/auth/accounts`、`GET /api/auth/accounts/pre-approval-readiness`、`POST /api/auth/accounts/pre-approval-drafts`、`GET/POST /api/auth/accounts/pre-approval-applications`、`POST /api/auth/accounts`、`POST /api/auth/accounts/{username}/status`、`POST /api/auth/accounts/{username}/unlock`、`POST /api/auth/accounts/{username}/session-revocations` | `AUTH_ACCOUNT_MANAGE` | `ADMIN`、`GENERAL_MANAGER` |
+| `GET /api/auth/account-options`、`GET /api/auth/accounts`、`GET /api/auth/accounts/pre-approval-readiness`、`POST /api/auth/accounts/pre-approval-drafts`、`GET/POST /api/auth/accounts/pre-approval-applications`、`GET /api/auth/accounts/pre-approval-evidence`、`POST /api/auth/accounts/pre-approval-evidence/uploads`、`POST /api/auth/accounts`、`POST /api/auth/accounts/{username}/status`、`POST /api/auth/accounts/{username}/unlock`、`POST /api/auth/accounts/{username}/delete`、`POST /api/auth/accounts/{username}/session-revocations` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN` |
+| `GET/POST /api/security/customer-authorizations`、`POST /api/security/customer-authorizations/revocations` | `CUSTOMER_AUTHORIZATION_MANAGE` | 仅 `ADMIN` |
 
 ### 13.3 错误响应
 
@@ -1753,10 +1754,13 @@ PWA 一期边界：
 
 ### 14.4 账号管理接口
 
-账号管理仅向具有 `AUTH_ACCOUNT_MANAGE` 的管理员和总经理开放，要求 Bearer 会话或允许的显式评审角色头，不使用匿名管理员兜底。创建/重置密码遵循密码策略；成功管理动作写认证审计和事后复核。启用前置审批强制开关时，账号动作还须提交匹配且已审批通过的申请单。
+独立用户管理页编码为 `users`，仅向具有 `AUTH_ACCOUNT_MANAGE` 的管理员（`ADMIN`）开放；总经理没有账号管理或客户授权管理权限。接口要求 Bearer 会话或允许的显式评审角色头，不使用匿名管理员兜底。管理员在同页直接维护账号、重置密码、分配内置角色、数据范围、授权客户及可操作工序；角色权限由 `PermissionGuard` 定义，不支持自定义 ACL。配置页仅保留登录会话、自助改密和存储管理。
+
+创建/重置密码遵循密码策略；成功管理动作写认证审计，不再生成新的事后账号审批。未传 `preApprovalApplicationCode` 时直接保存，即使旧 `zhubao.auth.pre-approval.enforce-account-actions=true` 也不阻断；显式传入申请单号时保留兼容校验和申请消费。禁止删除当前登录账号，禁止停用、降权或删除最后一个启用管理员。
 
 | API | 权限 | 说明 |
 |---|---|---|
+| `GET /api/auth/account-options` | `AUTH_ACCOUNT_MANAGE` | 返回可分配的内置角色及各角色权限，权限列表来自 `PermissionGuard`；结构见 `AuthAccountOptions` |
 | `GET /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 返回账号状态摘要列表；GET 在控制器内显式调用权限守卫 |
 | `GET /api/auth/accounts/pre-approval-readiness` | `AUTH_ACCOUNT_MANAGE` | 返回账号前置审批就绪度只读清单；用于暴露必备材料和缺失能力，不阻断现有账号动作 |
 | `POST /api/auth/accounts/pre-approval-drafts` | `AUTH_ACCOUNT_MANAGE` | 评估账号前置审批申请草稿；返回已收材料、待补材料、系统缺失能力和阻断状态，不写账号、不创建审批任务 |
@@ -1764,10 +1768,18 @@ PWA 一期边界：
 | `POST /api/auth/accounts/pre-approval-applications` | `AUTH_ACCOUNT_MANAGE` | 将草稿评估结果保存为申请单；可切换 JDBC 仓储持久化；生成 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`；不写账号、不阻断账号动作 |
 | `GET /api/auth/accounts/pre-approval-evidence` | `AUTH_ACCOUNT_MANAGE` | 返回申请单证据摘要，按 `businessType=账号前置审批`、`businessCode=applicationCode` 关联附件元数据 |
 | `POST /api/auth/accounts/pre-approval-evidence/uploads` | `AUTH_ACCOUNT_MANAGE` | multipart 上传申请单证据附件；请求字段 `applicationCode`、`file`，自动创建/更新 `DOC-<applicationCode>` 证据包并绑定 `documentCode=DOC-<applicationCode>`、`businessType=账号前置审批`、`businessCode=<applicationCode>` |
-| `POST /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 新建或更新账号；新建必须提供密码，更新不传密码时保留原密码哈希，传密码时需通过密码策略并重置失败次数和锁定状态；传入 `preApprovalApplicationCode` 时校验申请单放行状态，强制开关开启时该字段必填，强制模式还要求绑定审批任务为 `APPROVED`，提供密码且 `demoAccount=false` 会要求目标账号首次登录先自助改密，并重置临时密码消费状态 |
-| `POST /api/auth/accounts/{username}/status` | `AUTH_ACCOUNT_MANAGE` | 启用或停用账号，停用后登录仍返回通用“用户名或密码错误”；传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，强制开关开启时该字段必填，强制模式还要求绑定审批任务为 `APPROVED`。账号变更、管理审计和申请消费在同一事务提交后再吊销会话；吊销失败时账号保持停用、申请保持已执行，返回“只重试会话吊销”，不要再次提交原申请 |
-| `POST /api/auth/accounts/{username}/unlock` | `AUTH_ACCOUNT_MANAGE` | 管理员清零失败次数并解除临时锁定；传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单，强制开关开启时该字段必填，强制模式还要求绑定审批任务为 `APPROVED`。解锁与申请消费、管理审计同一事务 |
+| `POST /api/auth/accounts` | `AUTH_ACCOUNT_MANAGE` | 新建或更新账号；新建必须提供密码，更新不传密码时保留原密码哈希，传密码时需通过密码策略并重置失败次数和锁定状态；可不传 `preApprovalApplicationCode` 直接保存，显式传入时校验申请单放行状态；提供密码且 `demoAccount=false` 会要求目标账号首次登录先自助改密，并重置临时密码消费状态 |
+| `POST /api/auth/accounts/{username}/status` | `AUTH_ACCOUNT_MANAGE` | 直接启用或停用账号，停用后登录仍返回通用“用户名或密码错误”；显式传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单。账号变更、管理审计和显式申请消费在同一事务提交后再吊销会话；吊销失败时账号保持停用、申请保持已执行，返回“只重试会话吊销”，不要再次提交原申请 |
+| `POST /api/auth/accounts/{username}/unlock` | `AUTH_ACCOUNT_MANAGE` | 管理员直接清零失败次数并解除临时锁定；显式传入 `preApprovalApplicationCode` 时校验 `AUTH-PRE-STATUS-001` 申请单。解锁与显式申请消费、管理审计同一事务 |
+| `POST /api/auth/accounts/{username}/delete` | `AUTH_ACCOUNT_MANAGE` | 事务删除账号及该账号客户授权关系，返回 `null`；保留业务记录、认证审计、历史审批及申请数据。禁止删除自己及最后一个启用管理员；删除后旧会话失效 |
 | `POST /api/auth/accounts/{username}/session-revocations` | `AUTH_ACCOUNT_MANAGE` | 只重试已停用账号的会话吊销，不修改账号、不消费申请。账号仍启用时拒绝。返回 `SessionRevocationResult`：`username`、`revokedSessions` |
+
+返回 `AuthAccountOptions`：
+
+| 字段 | 说明 |
+|---|---|
+| `roles` | 内置角色选项列表；每项包含 `value`（`RoleCode`）、`label`（角色中文名）、`permissions`（`PermissionGuard` 返回的该角色权限） |
+| `roles[].permissions[]` | 权限摘要，包含 `code`（权限码）和 `label`（权限中文名）；用于展示角色能力，不提供自定义权限写入 |
 
 `ManageAuthUserAccountCommand`：
 
@@ -1781,7 +1793,8 @@ PWA 一期边界：
 | `customerScope` | 可选客户范围列表；仅 `dataScope=CUSTOMER_RANGE` 时保存并去重，非客户范围账号会清空；更新账号不传该字段时保留既有范围 |
 | `enabled` | 是否启用 |
 | `demoAccount` | 是否评审 seed 账号；生产账号应为 `false` |
-| `preApprovalApplicationCode` | 前置审批申请单号；显式传入时后端必须能查到申请单，且目标账号、动作 readiness 和 `READY_FOR_BLOCKING_APPROVAL` 状态匹配，否则拒绝账号动作；强制开关开启时必填 |
+| `preApprovalApplicationCode` | 可选兼容前置审批申请单号；未传时直接保存，旧强制开关不使其必填。显式传入时后端必须能查到申请单，且目标账号、动作 readiness 和 `READY_FOR_BLOCKING_APPROVAL` 状态匹配，否则拒绝账号动作 |
+| `allowedProcesses` | 可操作工序列表，限定雕刻、镶嵌、抛光；更新不传时保留既有工序绑定 |
 
 密码策略：
 
@@ -1810,14 +1823,14 @@ PWA 一期边界：
 |---|---|
 | `enabled` | `true` 启用，`false` 停用 |
 | `reason` | 管理原因，写入账号管理审计原因 |
-| `preApprovalApplicationCode` | 前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验申请单目标账号和放行状态；强制开关开启时必填 |
+| `preApprovalApplicationCode` | 可选兼容前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验目标账号和放行状态，未传时直接执行 |
 
 `AuthUserAccountUnlockCommand`：
 
 | 字段 | 说明 |
 |---|---|
 | `reason` | 解锁原因，写入账号管理审计原因 |
-| `preApprovalApplicationCode` | 前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验申请单目标账号和放行状态；强制开关开启时必填 |
+| `preApprovalApplicationCode` | 可选兼容前置审批申请单号；显式传入时按 `AUTH-PRE-STATUS-001` 校验目标账号和放行状态，未传时直接执行 |
 
 返回 `AuthUserAccountSummary`：
 
@@ -1837,6 +1850,7 @@ PWA 一期边界：
 | `failedLoginCount` | 当前连续失败次数 |
 | `lockedUntil` | 锁定到期展示值；未锁定为空字符串 |
 | `locked` | 当前是否仍在锁定时间内 |
+| `allowedProcesses` | 当前可操作工序列表 |
 
 返回 `AuthAccountPreApprovalReadiness`：
 
@@ -1845,7 +1859,7 @@ PWA 一期边界：
 | `readinessCode` | 就绪度项编码，如 `AUTH-PRE-CREATE-001` |
 | `actionType` | 账号动作类型，如创建生产账号、变更角色/数据范围、管理员重置密码、账号启停/解锁 |
 | `scenario` | 触发该前置审批缺口的业务场景 |
-| `enforcementStatus` | 当前执行状态；可显示“申请单号和审批通过态强制校验已开启”或“申请单号可校验，默认不强制”，其他动作仍可能提示电子签字或差异比对缺口 |
+| `enforcementStatus` | 兼容前置审批流程的状态说明；不作为用户管理页直接保存的阻断条件 |
 | `requiredBeforeAction` | 生产前置审批应具备的申请、审批、复核或交付材料 |
 | `missingCapabilities` | 当前缺失的能力，如审批通过态强制校验、客户授权表、正式电子签字、审批后自动放行 |
 | `approverRoles` | 建议审批或复核角色 |
@@ -1855,7 +1869,7 @@ PWA 一期边界：
 | `riskLevel` | 风险等级中文值 |
 | `tone` | 前端展示色调，当前为 `red` 或 `amber` |
 
-账号前置审批按已实现的轻量流程放行：必备材料齐全可提交就绪申请，仍须对应任务批准后执行。`missingCapabilities` 表示完整身份系统、正式电子签字等后续边界，不使当前申请永久无法就绪；强制开关继续有效。账号、角色、客户及工序范围、具体启停/解锁动作必须与批准快照一致，执行后申请为 `EXECUTED`，不得重复使用。新增字段由 V38 持久化，历史状态申请需重新申请。
+以下前置审批模型和接口仅供历史数据及显式申请兼容，不是用户管理页的默认操作步骤。管理员可不传申请单直接保存；显式使用申请时，必备材料齐全可提交就绪申请，账号、角色、客户及工序范围、具体启停/解锁动作须与放行快照一致，执行后申请为 `EXECUTED`，不得重复使用。旧强制开关不再要求直接账号动作必须带申请单；`missingCapabilities` 仍描述完整身份系统、正式电子签字等边界。V38 及其他历史迁移原文保留。
 
 `AuthAccountPreApprovalDraftCommand`：
 
@@ -1896,7 +1910,7 @@ PWA 一期边界：
 
 `AuthAccountPreApprovalApplicationCommand`：
 
-字段与 `AuthAccountPreApprovalDraftCommand` 一致。的 POST 会先复用草稿评估逻辑，再将评估结果保存为申请单；会创建 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`。当前不执行账号创建/更新/启停/解锁，也不等于 `ACCOUNT_MANAGEMENT` 事后审批任务。
+字段与 `AuthAccountPreApprovalDraftCommand` 一致。兼容 POST 接口会先复用草稿评估逻辑，再将评估结果保存为申请单；会创建 `ACCOUNT_PRE_APPROVAL` 轻量审批任务并回写 `approvalTaskCode`。该显式接口不执行账号创建/更新/启停/解锁，不生成 `ACCOUNT_MANAGEMENT` 事后审批任务。
 
 返回 `AuthAccountPreApprovalApplication`：
 
@@ -1953,9 +1967,9 @@ PWA 一期边界：
 | `sourceSummary` | 包含申请单号、目标账号、目标角色、数据范围、客户范围、待补材料、系统缺口和 `not final IAM approval` 边界 |
 | `evidenceCode` | 当前填申请单号，后续可替换为正式审批附件或电子签字证据 |
 
-管理动作会写入 `AuthAuditEvent`，`eventType` 为 `ACCOUNT_MANAGEMENT`，`eventId` 前缀为 `AUTH-ACC-`，`sessionTokenSuffix` 只保留管理员 token 尾号。同一成功动作还会写入 `ApprovalTask` 事后复核摘要，`scene=ACCOUNT_MANAGEMENT`、`businessCode=username`、`sourceStatus=WAITING_ACCOUNT_REVIEW`，`sourceSummary` 包含 action、applicantRole、targetOperator、targetRole、targetDataScope、`targetCustomerScope`、enabled、demoAccount、`passwordChangeRequired` 和 boundary。
+管理动作会写入 `AuthAuditEvent`，`eventType` 为 `ACCOUNT_MANAGEMENT`，`eventId` 前缀为 `AUTH-ACC-`，`sessionTokenSuffix` 只保留管理员 token 尾号。不再同时新增 `ApprovalTask` 事后复核摘要，既有 `ACCOUNT_MANAGEMENT` 审批任务保留。
 
-申请单号校验规则：
+显式传入申请单号时的兼容校验规则：
 
 | 场景 | 校验动作 | 失败条件 |
 |---|---|---|
@@ -1964,11 +1978,11 @@ PWA 一期边界：
 | 变更角色 / 数据范围 / 客户范围 | `AUTH-PRE-ROLE-001` | 同上 |
 | 启用 / 停用 / 管理解锁 | `AUTH-PRE-STATUS-001` | 同上 |
 
-`zhubao.auth.pre-approval.enforce-account-actions` 本地默认 `false`，MySQL profile 默认 `true`。强制模式下，缺失申请单号、申请单不匹配或绑定任务未为 `APPROVED` 均在账号写入和审计前拒绝。创建/重置非 demo 密码要求首次改密。上传证据不自动执行账号动作，审批后仍需显式提交。正式电子签字、审批后自动放行与归档保全仍属后续范围。
+`zhubao.auth.pre-approval.enforce-account-actions` 属于旧兼容配置，不再把未带申请单号的账号管理操作拦截为待审批，即使配置为 `true` 也可直接保存。显式传入申请单号时继续执行匹配、放行及消费校验；旧强制配置为 `true` 时还核对该显式申请的绑定任务为 `APPROVED`。创建/重置非 demo 密码仍要求首次改密。上传证据不自动执行账号动作；正式电子签字、审批后自动放行与归档保全仍属后续范围。
 
-账号创建、更新、启停和解锁在持久化事务内同时完成申请消费、账号变更和 `ACCOUNT_MANAGEMENT` 审计。内存实现用单进程锁；JDBC 在一条连接里用条件更新锁住仍为 `READY_FOR_BLOCKING_APPROVAL` 且 `ready_for_blocking_approval=true` 的申请行，再写账号和审计，最后把申请标为 `EXECUTED`。任一步失败则整笔回滚，申请仍可重试。第二个并发请求得到“尚未具备账号动作放行条件”，不会再改账号。该锁在数据库行上，不依赖单个 JVM 的 `synchronized`。`zhubao.auth.account-action.repository` 本地默认 `memory`，MySQL profile 默认 `jdbc`，并与账号、审计、申请仓储一起切换。
+账号创建、更新、启停和解锁在持久化事务内完成账号变更和 `ACCOUNT_MANAGEMENT` 审计，未提供申请时不消费申请。显式提供申请时，同一事务还消费申请：内存实现用单进程锁；JDBC 在一条连接里用条件更新锁住仍为 `READY_FOR_BLOCKING_APPROVAL` 且 `ready_for_blocking_approval=true` 的申请行，再写账号和审计，最后把申请标为 `EXECUTED`。任一步失败则整笔回滚，申请仍可重试；同一申请不能被并发重复使用。`zhubao.auth.account-action.repository` 本地默认 `memory`，MySQL profile 默认 `jdbc`，并与账号、审计、申请仓储一起切换。账号保存时的客户授权替换、删除账号及客户授权关系均使用同一账号事务，历史业务、审计和审批记录不随账号删除。JDBC 账号动作须搭配 JDBC 客户授权仓储，保证使用同一事务连接。
 
-会话保存在进程内存，不能加入上述数据库事务。停用提交成功后再吊销会话。吊销失败不回滚停用，也不把申请改回可执行；调用 `POST /api/auth/accounts/{username}/session-revocations` 只重试吊销。即便吊销没写完，后续解析 Bearer 会话也会读取账号启用状态，已停用则拒绝并清掉该令牌。客户授权范围同步和事后复核任务仍在这个事务之外：账号动作已经提交后，授权同步失败不能靠再次执行同一申请来补救，应使用客户授权维护接口按当前账号范围重做。
+会话保存在进程内存，不能加入上述数据库事务。停用、删除、密码重置及角色/数据范围/客户范围/工序权限更新后吊销目标账号旧会话。停用吊销失败不回滚账号，也不把显式申请改回可执行；调用 `POST /api/auth/accounts/{username}/session-revocations` 只重试已停用账号吊销。解析 Bearer 会话时仍核对账号存在、启用状态及当前权限快照，已删除、停用或权限快照变化的旧令牌不能继续使用。保存或删除已提交后，会话清理异常只记录失败审计并返回已提交的成功结果；旧令牌仍受账号状态及密码、权限快照校验约束。客户授权范围保存同步与独立维护接口继续保留，不新增事后审批任务。
 
 `AuthAccountPreApprovalEvidenceSummary`：
 
@@ -2001,7 +2015,7 @@ PWA 一期边界：
 | `buttonCodes` | 该菜单关联的敏感按钮权限编码，如 `REGISTER_IMPORT_REVIEW`、`BUSINESS_INBOUND_CONFIRM` |
 | `children` | 子菜单列表；当前 先返回一层菜单，保留树形结构 |
 
-角色菜单来自仓储配置，不能把某次 seed 的完整列表作为固定权限契约。默认菜单包含进度、财务和标签。标签页编码 `label` 由 V47 写入，授予管理员、总经理、业务、收货和仓管，操作工不可见。当前角色绑定见[内存菜单仓储](../backend/src/main/java/com/zhubao/erp/security/infra/InMemoryNavigationMenuRepository.java)，MySQL 部署读取 `sys_navigation_menu/sys_role_menu`。新增或调整角色可见性须与后端动作权限分开验证。已有库需备份后受控执行 V47，不修改已发布迁移。
+角色菜单来自仓储配置，不能把某次 seed 的完整列表作为固定权限契约。默认菜单包含进度、财务、标签和用户管理。标签页编码 `label` 由 V47 写入，授予管理员、总经理、业务、收货和仓管，操作工不可见。用户管理页编码 `users` 由追加迁移 `V48__m3_users_menu.sql` 写入，仅授予 `ADMIN`，对应路由 `/users`。当前角色绑定见[内存菜单仓储](../backend/src/main/java/com/zhubao/erp/security/infra/InMemoryNavigationMenuRepository.java)，MySQL 部署读取 `sys_navigation_menu/sys_role_menu`。新增或调整角色可见性须与后端动作权限分开验证。已有库需备份后受控执行对应迁移，不修改已发布迁移。
 
 菜单与角色可见性使用 `NavigationMenuRepository`，本地默认内存、MySQL profile 默认 JDBC；前端按会话 `menuCodes/menuTree` 过滤导航。导航隐藏不替代后端权限守卫。
 
@@ -2009,11 +2023,11 @@ PWA 一期边界：
 
 - token 保存在内存，服务重启即失效。
 - 默认 seed 是评审账号，正式环境应初始化生产账号并替换评审凭据。
-- 申请单仓储、申请单号校验、强制申请单号开关、`ACCOUNT_PRE_APPROVAL` 轻量审批任务、强制模式审批通过态校验、停用会话吊销、强制首次改密和临时密码一次性消费当前不执行电子签字；会话吊销仅覆盖本服务内存 Bearer token，仍需接入完整 IAM、正式刷新 token、SSO/JWT、完整组织授权体系和不可篡改审计策略。
+- 申请单仓储、显式申请单校验与 `ACCOUNT_PRE_APPROVAL` 任务保留兼容；账号管理默认直接保存，不执行电子签字。会话吊销仅覆盖本服务内存 Bearer token，仍需接入完整 IAM、正式刷新 token、SSO/JWT、完整组织授权体系和不可篡改审计策略。
 - 菜单树与角色可见性已经支持 `sys_navigation_menu`、`sys_role_menu` 持久化；在线菜单编辑和完整组织树仍未完成。
 - 登录审计可切换内存/JDBC 仓储并生成摘要链，但仍不等于生产安全日志平台、归档保全或真正不可篡改审计。
-- 登录后导航按会话菜单过滤；具体动作仍须由后端授权。前端账号管理表单未传前置申请单号时，在 MySQL 默认强制模式下会被拒绝，不能据表单存在视为审批操作流程已闭环。
-- `dataScope` 和账号 `customerScope` 已进入业务工作台 GET 首版过滤，完整组织树、完整组织客户授权表、跨对象关系推导和全系统行级权限仍待固化。
+- 登录后导航按会话菜单过滤；用户管理页与账号、客户授权管理接口仅允许 `ADMIN`，具体动作仍须由后端授权。用户管理页直接保存，不依赖前置审批表单。
+- `dataScope` 和账号 `customerScope` 已进入业务工作台 GET 首版过滤，客户授权表支持独立维护；完整组织树、跨对象关系推导和全系统行级权限仍待固化。
 
 ---
 
@@ -2442,6 +2456,7 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/auth/audit-events` | `ApiResponse<List<AuthAuditEvent>>` |
 | `GET /api/auth/audit-integrity` | `ApiResponse<AuthAuditIntegritySummary>` |
 | `GET /api/auth/accounts` | `ApiResponse<List<AuthUserAccountSummary>>` |
+| `GET /api/auth/account-options` | `ApiResponse<AuthAccountOptions>` |
 | `GET /api/auth/accounts/pre-approval-readiness` | `ApiResponse<List<AuthAccountPreApprovalReadiness>>` |
 | `POST /api/auth/accounts/pre-approval-drafts` | `ApiResponse<AuthAccountPreApprovalDraft>` |
 | `GET /api/auth/accounts/pre-approval-applications` | `ApiResponse<List<AuthAccountPreApprovalApplication>>` |
@@ -2451,6 +2466,7 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `POST /api/auth/accounts` | `ApiResponse<AuthUserAccountSummary>` |
 | `POST /api/auth/accounts/{username}/status` | `ApiResponse<AuthUserAccountSummary>` |
 | `POST /api/auth/accounts/{username}/unlock` | `ApiResponse<AuthUserAccountSummary>` |
+| `POST /api/auth/accounts/{username}/delete` | `ApiResponse<Void>`，`data=null` |
 | `POST /api/auth/accounts/{username}/session-revocations` | `ApiResponse<SessionRevocationResult>` |
 
 ### CustomerAuthorizationController

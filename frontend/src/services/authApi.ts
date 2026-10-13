@@ -211,6 +211,18 @@ export interface ManageAuthUserAccountRequest {
   allowedProcesses?: string[];
 }
 
+export interface AuthAccountOptions {
+  roles: Array<{ value: string; label: string; permissions: Array<{ code: string; label: string }> }>;
+}
+
+export async function fetchAuthAccountOptions(): Promise<AuthAccountOptions> {
+  return apiGet<AuthAccountOptions>('/api/auth/account-options');
+}
+
+export async function deleteAuthAccount(username: string): Promise<void> {
+  return apiPost<Record<string, never>, void>(`/api/auth/accounts/${encodeURIComponent(username)}/delete`, {});
+}
+
 export interface AuthUserAccountStatusRequest {
   enabled: boolean;
   reason?: string;

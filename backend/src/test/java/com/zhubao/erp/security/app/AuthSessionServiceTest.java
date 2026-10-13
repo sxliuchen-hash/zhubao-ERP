@@ -461,6 +461,23 @@ class AuthSessionServiceTest {
         return service(new InMemoryAuthUserAccountRepository(passwordHasher));
     }
 
+    @Test
+    void 会话吊销未执行时也拒绝权限变更和同名重建的旧令牌() {
+        InMemoryAuthUserAccountRepository repository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        AuthSessionService service = service(repository);
+        AuthSession first = service.login(new AuthLoginCommand("operator", "operator123"));
+        repository.save(new AuthUserAccount("operator", passwordHasher.hash("operator123"), "操作工",
+                RoleCode.SALES, DataScope.ALL, true, true));
+        assertThatThrownBy(() -> service.operatorContext("Bearer " + first.token()))
+                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("权限已变更");
+        AuthSession second = service.login(new AuthLoginCommand("operator", "operator123"));
+        repository.delete("operator");
+        repository.save(new AuthUserAccount("operator", passwordHasher.hash("operator123"), "新操作工",
+                RoleCode.SALES, DataScope.ALL, true, true));
+        assertThatThrownBy(() -> service.session("Bearer " + second.token()))
+                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("权限已变更");
+    }
+
     private AuthSessionService service(AuthUserAccountRepository userRepository) {
         return new AuthSessionService(
                 navigationMenuService,

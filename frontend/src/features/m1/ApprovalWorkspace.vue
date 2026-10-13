@@ -23,7 +23,7 @@ const accessDenied = ref(false);
 const decisionSubmitting = ref(false);
 const decisionResult = ref<ApprovalTask | null>(null);
 const decisionError = ref('');
-const decisionComment = ref('确认称重、缺陷照片、账号变更摘要和工资试算快照完整，批准本次轻量审批。');
+const decisionComment = ref('确认称重、缺陷照片和业务证据完整，批准本次审批。');
 const keyword = ref('');
 const detailOpen = ref(false);
 const selectedCode = ref('');
@@ -72,7 +72,7 @@ const approvalStats = computed(() => [
 ]);
 
 const approvalFlow = [
-  { code: 'REQ', name: '业务触发', status: '损耗/账号/异常生成任务', tone: 'blue' },
+  { code: 'REQ', name: '业务触发', status: '损耗/异常生成任务', tone: 'blue' },
   { code: 'EVD', name: '证据校验', status: '称重/照片/附件', tone: 'amber' },
   { code: 'DEC', name: '审批决定', status: '通过或驳回', tone: 'green' },
   { code: 'LOCK', name: '快照锁定', status: '后续变更走新任务', tone: 'red' },
@@ -170,13 +170,13 @@ function taskTone(task: ApprovalTask): Tone {
     <section class="module-command-surface approval-command-surface" aria-label="轻量审批工作台">
       <div class="module-command-main">
         <div class="console-title-line">
-          <StatusBadge label="轻量审批 / 账号复核 / 非正式工资" tone="amber" />
+          <StatusBadge label="业务审批 / 非正式工资" tone="amber" />
         </div>
         <div class="module-command-title">
           <h2>轻量审批工作台</h2>
           <div class="module-date-card">
             <strong>组长审批</strong>
-            <span>损耗 / 账号 / 异常 / 证据</span>
+            <span>损耗 / 异常 / 证据</span>
           </div>
         </div>
 
@@ -367,7 +367,7 @@ function taskTone(task: ApprovalTask): Tone {
           </article>
           <article>
             <strong>当前边界</strong>
-            <span>轻量审批不等于完整工作流、生产账号前置审批、正式工资锁账或财务凭证。</span>
+            <span>账号操作在用户管理页由管理员直接完成。此处保留业务审批与历史任务。</span>
           </article>
         </div>
       </section>

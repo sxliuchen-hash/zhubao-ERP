@@ -10,6 +10,9 @@ import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.domain.CustomerAuthorization;
+import com.zhubao.erp.security.domain.CustomerAuthorizationRepository;
+import com.zhubao.erp.security.domain.RoleCode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -27,8 +30,8 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
     private final AuthAuditRepository auditRepository;
     private final AuthAccountPreApprovalApplicationRepository applicationRepository;
     private final AuthAccountActionProbe probe;
+    private final CustomerAuthorizationRepository customerRepository;
 
-    @Autowired
     public InMemoryAuthAccountActionRepository(
             AuthUserAccountRepository accountRepository,
             AuthAuditRepository auditRepository,
@@ -37,16 +40,33 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
         this(accountRepository, auditRepository, applicationRepository, AuthAccountActionProbe.NONE);
     }
 
+    @Autowired
+    public InMemoryAuthAccountActionRepository(AuthUserAccountRepository accountRepository,
+                                               AuthAuditRepository auditRepository,
+                                               AuthAccountPreApprovalApplicationRepository applicationRepository,
+                                               CustomerAuthorizationRepository customerRepository) {
+        this(accountRepository, auditRepository, applicationRepository, customerRepository, AuthAccountActionProbe.NONE);
+    }
+
     public InMemoryAuthAccountActionRepository(
             AuthUserAccountRepository accountRepository,
             AuthAuditRepository auditRepository,
             AuthAccountPreApprovalApplicationRepository applicationRepository,
             AuthAccountActionProbe probe
     ) {
+        this(accountRepository, auditRepository, applicationRepository, null, probe);
+    }
+
+    public InMemoryAuthAccountActionRepository(AuthUserAccountRepository accountRepository,
+                                               AuthAuditRepository auditRepository,
+                                               AuthAccountPreApprovalApplicationRepository applicationRepository,
+                                               CustomerAuthorizationRepository customerRepository,
+                                               AuthAccountActionProbe probe) {
         this.accountRepository = accountRepository;
         this.auditRepository = auditRepository;
         this.applicationRepository = applicationRepository;
         this.probe = probe == null ? AuthAccountActionProbe.NONE : probe;
+        this.customerRepository = customerRepository;
     }
 
     @Override
@@ -54,12 +74,22 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
         synchronized (lock) {
             AuthAccountPreApprovalApplication currentApplication = lockApplication(mutation);
             AuthUserAccount previousAccount = accountRepository.findByUsername(mutation.username()).orElse(null);
+            if (mutation.removesEnabledAdmin() && previousAccount != null && previousAccount.enabled()
+                    && previousAccount.role() == RoleCode.ADMIN && accountRepository.findAll().stream()
+                    .filter(account -> account.enabled() && account.role() == RoleCode.ADMIN).count() <= 1) {
+                throw new BusinessException("必须保留至少一个启用的系统管理员");
+            }
+            java.util.List<CustomerAuthorization> previousAuthorizations = customerRepository == null ? null
+                    : customerRepository.findByUsername(mutation.username());
             boolean accountWritten = false;
             String auditEventId = null;
             try {
                 probe.beforeAccountWrite();
                 applyAccount(mutation);
                 accountWritten = true;
+                if (mutation.customerAuthorizations() != null && customerRepository != null) {
+                    customerRepository.replace(mutation.username(), mutation.customerAuthorizations());
+                }
                 probe.beforeAuditWrite();
                 AuthAuditEvent savedAudit = auditRepository.save(mutation.audit());
                 auditEventId = savedAudit.eventId();
@@ -69,6 +99,9 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
                 }
             } catch (RuntimeException ex) {
                 restore(mutation.username(), previousAccount, accountWritten, auditEventId, currentApplication);
+                if (mutation.customerAuthorizations() != null && previousAuthorizations != null) {
+                    customerRepository.replace(mutation.username(), previousAuthorizations);
+                }
                 throw ex;
             }
         }
@@ -109,6 +142,12 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
                     throw new BusinessException("账号不存在：" + mutation.username());
                 }
                 accountRepository.unlock(mutation.username());
+            }
+            case DELETE -> {
+                if (accountRepository.findByUsername(mutation.username()).isEmpty()) {
+                    throw new BusinessException("账号不存在：" + mutation.username());
+                }
+                accountRepository.delete(mutation.username());
             }
         }
     }

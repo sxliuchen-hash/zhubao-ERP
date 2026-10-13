@@ -325,9 +325,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(fixture.auditRepository().findRecent(20))
                 .anySatisfy(event -> assertThat(event.reason())
                         .contains("更新账号并重置密码", "passwordChangeRequired=true"));
-        assertThat(fixture.approvalRepository().findAll())
-                .anySatisfy(task -> assertThat(task.sourceSummary())
-                        .contains("action=更新账号并重置密码", "passwordChangeRequired=true"));
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
         assertThatThrownBy(() -> fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Old!")))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("用户名或密码错误");
@@ -378,7 +376,7 @@ class AuthUserAccountManagementServiceTest {
                 .satisfies(item -> {
                     assertThat(item.tone()).isEqualTo("red");
                     assertThat(item.riskLevel()).isEqualTo("高");
-                    assertThat(item.enforcementStatus()).isEqualTo("申请单号可校验，默认不强制");
+                    assertThat(item.enforcementStatus()).isEqualTo("管理员直接管理；显式申请单可校验");
                     assertThat(item.missingCapabilities()).contains("全局强制申请单号", "审批通过态强制校验");
                 });
         assertThat(readiness)
@@ -405,7 +403,7 @@ class AuthUserAccountManagementServiceTest {
                 .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
                 .singleElement()
                 .satisfies(item -> {
-                    assertThat(item.enforcementStatus()).isEqualTo("申请单号和审批通过态强制校验已开启");
+                    assertThat(item.enforcementStatus()).isEqualTo("管理员直接管理；显式申请单校验审批通过态");
                     assertThat(item.missingCapabilities()).doesNotContain("全局强制申请单号");
                     assertThat(item.missingCapabilities()).doesNotContain("审批通过态强制校验");
                     assertThat(item.missingCapabilities()).contains("正式电子签字");
@@ -647,33 +645,24 @@ class AuthUserAccountManagementServiceTest {
         assertThat(fixture.auditRepository().findRecent(10))
                 .anySatisfy(event -> assertThat(event.reason())
                         .contains("创建账号", "前置申请单：AUTH-PRE-APP-READY-001"));
-        assertThat(fixture.approvalRepository().findAll())
-                .singleElement()
-                .satisfies(task -> assertThat(task.sourceSummary())
-                        .contains("action=创建账号；前置申请单：AUTH-PRE-APP-READY-001"));
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
     }
 
     @Test
-    void enforcingPreApprovalApplicationCodeRejectsAccountActionWithoutCode() {
+    void 强制开关开启时管理员仍可直接管理且不生成审批任务() {
         Fixture fixture = fixture(true);
-
-        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
-                "planner",
-                "Secure-2026-Plan!",
-                "计划员 陈敏",
-                "SALES",
-                "CUSTOMER_RANGE",
-                List.of("恒信珠宝"),
-                true,
-                false
-        ), admin))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("前置审批强制开关")
-                .hasMessageContaining("AUTH-PRE-CREATE-001")
-                .hasMessageContaining("planner");
-        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
-        assertThat(fixture.auditRepository().findRecent(10)).isEmpty();
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner", "Secure-2026-Plan!", "计划员 陈敏", "SALES", "CUSTOMER_RANGE",
+                List.of("恒信珠宝"), true, false), admin);
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner", "Secure-2026-New!", "计划员 陈敏", "RECEIVER", "DEPARTMENT", true, false), admin);
+        fixture.managementService().updateEnabled("planner", false, "停用", admin);
+        fixture.managementService().unlock("planner", "解锁", admin);
+        fixture.managementService().updateEnabled("planner", true, "启用", admin);
+        assertThat(fixture.accountRepository().findByUsername("planner").orElseThrow().enabled()).isTrue();
+        assertThat(fixture.auditRepository().findRecent(20)).filteredOn(event -> "ACCOUNT_MANAGEMENT".equals(event.eventType())).hasSize(5);
         assertThat(fixture.approvalRepository().findAll()).isEmpty();
+        assertThat(fixture.preApprovalApplicationRepository().findAll()).isEmpty();
     }
 
     @Test
@@ -843,9 +832,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(fixture.auditRepository().findRecent(20))
                 .anySatisfy(event -> assertThat(event.reason())
                         .contains("停用账号", "revokedSessions=0"));
-        assertThat(fixture.approvalRepository().findAll())
-                .anySatisfy(task -> assertThat(task.sourceSummary())
-                        .contains("action=停用账号", "revokedSessions=0"));
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
     }
 
     @Test
@@ -888,9 +875,7 @@ class AuthUserAccountManagementServiceTest {
         assertThat(fixture.auditRepository().findRecent(20))
                 .anySatisfy(event -> assertThat(event.reason())
                         .contains("停用账号", "revokedSessions=2"));
-        assertThat(fixture.approvalRepository().findAll())
-                .anySatisfy(task -> assertThat(task.sourceSummary())
-                        .contains("action=停用账号", "revokedSessions=2"));
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
     }
 
     @Test
@@ -947,7 +932,7 @@ class AuthUserAccountManagementServiceTest {
     }
 
     @Test
-    void writesAccountManagementApprovalSummaries() {
+    void 常规账号管理不再生成事后审批任务() {
         Fixture fixture = fixture();
 
         fixture.managementService().upsert(new ManageAuthUserAccountCommand(
@@ -962,29 +947,7 @@ class AuthUserAccountManagementServiceTest {
         fixture.managementService().updateEnabled("planner", false, "权限回收", admin);
         fixture.managementService().unlock("planner", "误锁恢复", admin);
 
-        List<ApprovalTask> tasks = fixture.approvalRepository().findAll();
-        assertThat(tasks).hasSize(3);
-        assertThat(tasks).allSatisfy(task -> {
-            assertThat(task.approvalCode()).startsWith("AUTH-ACC-APP-");
-            assertThat(task.scene()).isEqualTo("ACCOUNT_MANAGEMENT");
-            assertThat(task.businessCode()).isEqualTo("planner");
-            assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
-            assertThat(task.applicant()).isEqualTo("系统管理员");
-            assertThat(task.ownerRole()).isEqualTo("GENERAL_MANAGER");
-            assertThat(task.formalPayroll()).isFalse();
-            assertThat(task.locked()).isFalse();
-            assertThat(task.sourceSummary()).contains(
-                    "targetOperator=计划员 陈敏",
-                    "targetRole=SALES",
-                    "targetDataScope=CUSTOMER_RANGE",
-                    "targetCustomerScope=",
-                    "demoAccount=false",
-                    "not a blocking IAM workflow"
-            );
-        });
-        assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=创建账号"));
-        assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=停用账号；原因：权限回收"));
-        assertThat(tasks).anySatisfy(task -> assertThat(task.sourceSummary()).contains("action=管理员解锁账号；原因：误锁恢复"));
+        assertThat(fixture.approvalRepository().findAll()).isEmpty();
     }
 
     private AuthAccountPreApprovalApplication readyPreApprovalApplication(
@@ -1162,6 +1125,121 @@ class AuthUserAccountManagementServiceTest {
 
     private Fixture fixture() {
         return fixture(false);
+    }
+
+    @Test
+    void 服务拒绝非管理员的账号写操作() {
+        Fixture fixture = fixture();
+        OperatorContext manager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner", "Secure-2026-Plan!", "计划员", "SALES", "ALL", true, false), manager))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThatThrownBy(() -> fixture.managementService().updateEnabled("operator", false, "停用", manager))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThatThrownBy(() -> fixture.managementService().unlock("operator", "解锁", manager))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThatThrownBy(() -> fixture.managementService().delete("operator", manager))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+    }
+
+    @Test
+    void 账号摘要与缺省保存保留独立接口的有效客户授权() {
+        Fixture fixture = fixture();
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner", "Secure-2026-Plan!", "计划员", "SALES", "CUSTOMER_RANGE",
+                List.of("旧客户"), true, false), admin);
+        fixture.customerAuthorizationService().revoke("planner", "旧客户");
+        fixture.customerAuthorizationService().grant("planner", "新客户", "客户名称", "系统管理员");
+        assertThat(fixture.managementService().accounts()).filteredOn(item -> item.username().equals("planner"))
+                .singleElement().satisfies(item -> assertThat(item.customerScope()).containsExactly("新客户"));
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner", null, "计划员", "SALES", "CUSTOMER_RANGE", true, false), admin);
+        assertThat(fixture.customerAuthorizationService().authorizationsFor("planner"))
+                .singleElement().satisfies(item -> {
+                    assertThat(item.customerCode()).isEqualTo("新客户");
+                    assertThat(item.customerName()).isEqualTo("客户名称");
+                });
+    }
+
+    @Test
+    void 删除移除凭据客户授权会话并保留管理审计() {
+        Fixture fixture = fixture();
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner", "Secure-2026-Plan!", "计划员", "SALES", "CUSTOMER_RANGE",
+                List.of("恒信珠宝"), true, true), admin);
+        AuthSession target = fixture.sessionService().login(new AuthLoginCommand("planner", "Secure-2026-Plan!"));
+        AuthSession administrator = fixture.sessionService().login(new AuthLoginCommand("admin", "admin123"));
+        OperatorContext context = fixture.sessionService().operatorContext("Bearer " + administrator.token()).orElseThrow();
+        fixture.managementService().delete("planner", context);
+        assertThat(fixture.accountRepository().findByUsername("planner")).isEmpty();
+        assertThat(fixture.customerAuthorizationService().authorizationsFor("planner")).isEmpty();
+        assertThat(fixture.auditRepository().findRecent(20)).anySatisfy(event ->
+                assertThat(event.reason()).contains("删除账号", "保留业务、审批及审计历史"));
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "planner", "Secure-2026-Other!", "新操作人", "SALES", "SELF", true, true), context);
+        assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + target.token()))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+    }
+
+    @Test
+    void 禁止删除当前登录账号() {
+        Fixture fixture = fixture();
+        AuthSession administrator = fixture.sessionService().login(new AuthLoginCommand("admin", "admin123"));
+        OperatorContext context = fixture.sessionService().operatorContext("Bearer " + administrator.token()).orElseThrow();
+        assertThatThrownBy(() -> fixture.managementService().delete("admin", context))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不能删除当前登录账号");
+        assertThat(fixture.accountRepository().findByUsername("admin")).isPresent();
+    }
+
+    @Test
+    void 禁止停用降权或删除最后启用管理员() {
+        Fixture fixture = fixture();
+        assertThatThrownBy(() -> fixture.managementService().updateEnabled("admin", false, "停用", admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("至少一个启用的系统管理员");
+        assertThatThrownBy(() -> fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "admin", null, "系统管理员", "SALES", "ALL", true, true), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("至少一个启用的系统管理员");
+        assertThatThrownBy(() -> fixture.managementService().delete("admin",
+                new OperatorContext("其他管理员", RoleCode.ADMIN, DataScope.ALL)))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("至少一个启用的系统管理员");
+        assertThat(fixture.accountRepository().findByUsername("admin").orElseThrow().enabled()).isTrue();
+    }
+
+    @Test
+    void 更新密码或权限立即吊销原有会话() {
+        Fixture fixture = fixture();
+        AuthSession target = fixture.sessionService().login(new AuthLoginCommand("operator", "operator123"));
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "operator", "Secure-2026-Other!", "操作工 王强", "RECEIVER", "DEPARTMENT", true, true), admin);
+        assertThatThrownBy(() -> fixture.sessionService().operatorContext("Bearer " + target.token()))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+    }
+
+    @Test
+    void 保存或删除已提交后吊销失败仍返回成功且旧令牌被拒绝() {
+        Fixture fixture = fixture();
+        AuthSessionService failingSessions = new AuthSessionService(navigationMenuService, fixture.auditRepository(),
+                fixture.accountRepository(), passwordHasher, passwordExpiryPolicy, passwordPolicy) {
+            @Override
+            public int revokeSessionsForUsername(String username, String reason) {
+                throw new IllegalStateException("会话清理失败");
+            }
+        };
+        AuthSession operator = failingSessions.login(new AuthLoginCommand("operator", "operator123"));
+        AuthSession leader = failingSessions.login(new AuthLoginCommand("leader", "leader123"));
+        AuthUserAccountManagementService service = new AuthUserAccountManagementService(fixture.accountRepository(),
+                passwordHasher, passwordPolicy, passwordExpiryPolicy, fixture.auditRepository(), null, null, failingSessions);
+        assertThat(service.upsert(new ManageAuthUserAccountCommand("operator", null, "新操作工", "SALES", "ALL", true, true), admin).role())
+                .isEqualTo("SALES");
+        service.delete("leader", new OperatorContext("其他管理员", RoleCode.ADMIN, DataScope.ALL));
+        assertThat(fixture.accountRepository().findByUsername("leader")).isEmpty();
+        assertThatThrownBy(() -> failingSessions.operatorContext("Bearer " + operator.token()))
+                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("权限已变更");
+        assertThatThrownBy(() -> failingSessions.session("Bearer " + leader.token()))
+                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("已停用");
+        assertThat(fixture.auditRepository().findRecent(20))
+                .filteredOn(event -> event.eventType().equals("SESSION_REVOCATION") && event.result().equals("FAILURE"))
+                .hasSize(2);
     }
 
     private Fixture fixture(boolean enforcePreApprovalForAccountActions) {

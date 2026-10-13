@@ -13,6 +13,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CustomerAuthorizationServiceTest {
 
+    @Test
+    void 客户授权写操作仅允许管理员上下文() {
+        var service = new CustomerAuthorizationService(new InMemoryCustomerAuthorizationRepository());
+        var manager = new com.zhubao.erp.security.domain.OperatorContext("总经理",
+                com.zhubao.erp.security.domain.RoleCode.GENERAL_MANAGER, com.zhubao.erp.security.domain.DataScope.ALL);
+        assertThatThrownBy(() -> service.grant("sales", "CUST-1", "客户", manager))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThatThrownBy(() -> service.revoke("sales", "CUST-1", manager))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThat(service.allAuthorizations()).isEmpty();
+    }
+
     private CustomerAuthorizationService service;
 
     @BeforeEach
