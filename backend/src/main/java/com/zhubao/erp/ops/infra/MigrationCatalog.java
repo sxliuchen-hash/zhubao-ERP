@@ -21,7 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 从目录或类路径装入迁移。历史文件只读，不在这里改写。
+ * 从目录或类路径装入迁移。历史文件只读，执行文本可应用明确的语法兼容修正。
  */
 public final class MigrationCatalog {
 
@@ -127,7 +127,12 @@ public final class MigrationCatalog {
         if (probe == null) {
             throw new IllegalStateException("迁移 V" + version + " 缺少结构探针，不能把未知结构登记为已升级");
         }
-        return new MigrationScript(version, name, checksum(bytes), new String(bytes, StandardCharsets.UTF_8), probe);
+        String sql = new String(bytes, StandardCharsets.UTF_8);
+        // V36 的月份列与 MySQL 保留字冲突；只修正执行文本，历史文件和版本校验和保持原样。
+        if (version == 36 && name.equals("V36__m3_finance_operations.sql")) {
+            sql = sql.replaceAll("(?<![A-Za-z0-9_`])year_month(?![A-Za-z0-9_`])", "`year_month`");
+        }
+        return new MigrationScript(version, name, checksum(bytes), sql, probe);
     }
 
     private static void validateContiguous(List<MigrationScript> scripts) {

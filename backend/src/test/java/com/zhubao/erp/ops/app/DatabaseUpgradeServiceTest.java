@@ -64,6 +64,35 @@ class DatabaseUpgradeServiceTest {
     }
 
     @Test
+    void v36ExecutionQuotesReservedColumnWithoutChangingHistoricalChecksum() throws Exception {
+        Path source = Path.of("src/main/resources/db/mysql");
+        List<MigrationScript> directoryScripts = MigrationCatalog.loadDirectory(source);
+        List<MigrationScript> classpathScripts = MigrationCatalog.loadClasspath();
+        for (int i = 0; i < directoryScripts.size(); i++) {
+            MigrationScript script = directoryScripts.get(i);
+            byte[] original = Files.readAllBytes(source.resolve(script.fileName()));
+            assertThat(script.checksum()).isEqualTo(MigrationCatalog.checksum(original));
+            assertThat(classpathScripts.get(i).sql()).isEqualTo(script.sql());
+            if (script.version() == 36) {
+                assertThat(script.sql()).contains("`year_month` CHAR(7)", "(customer_id, `year_month`)");
+                assertThat(script.sql().replace("`year_month`", "year_month"))
+                        .isEqualTo(new String(original, StandardCharsets.UTF_8));
+                assertThat(script.probe().tableName()).isEqualTo("fin_payable_payment");
+            } else {
+                assertThat(script.sql()).isEqualTo(new String(original, StandardCharsets.UTF_8));
+            }
+        }
+    }
+
+    @Test
+    void partialV36DoesNotCountAsCompletedBaseline() throws Exception {
+        DataSource dataSource = dataSource();
+        execute(dataSource, "create table fin_price_agreement (code varchar(60) primary key)");
+        var probe = MigrationCatalog.loadClasspath().get(35).probe();
+        assertThat(new JdbcSchemaInspector(dataSource).matches(probe)).isFalse();
+    }
+
+    @Test
     void emptyDatabaseInstallAndRepeatHaveNoExtraSideEffect() throws Exception {
         DataSource dataSource = dataSource();
         write(1, "create table probe_v1 (id int primary key);", "1\tTABLE\tprobe_v1");

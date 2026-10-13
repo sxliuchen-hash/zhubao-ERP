@@ -5,7 +5,7 @@
 
 $ErrorActionPreference = "Stop"
 
-# MySQL 入口按文件名字典序执行；只转换交付副本名，不修改已发布迁移。
+# MySQL 入口按文件名字典序执行；交付副本可修正已知语法冲突，已发布迁移原文只读。
 $migrations = @(Get-ChildItem -LiteralPath $Source -Filter "*.sql" -File | ForEach-Object {
     if ($_.Name -notmatch '^V(\d+)__(.+)\.sql$') {
         throw "无法识别迁移版本：$($_.Name)"
@@ -23,5 +23,13 @@ New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 $width = [Math]::Max(4, ([string]$migrations[-1].Version).Length)
 foreach ($migration in $migrations) {
     $name = "V" + $migration.Version.ToString("D$width") + "__" + $migration.Description + ".sql"
-    Copy-Item -LiteralPath $migration.File.FullName -Destination (Join-Path $Destination $name)
+    $target = Join-Path $Destination $name
+    if ($migration.Version -eq 36 -and $migration.File.Name -ceq 'V36__m3_finance_operations.sql') {
+        # 与 MigrationCatalog 使用相同的定向修正，不修改其他版本或历史源文件。
+        $sql = [IO.File]::ReadAllText($migration.File.FullName, [Text.Encoding]::UTF8)
+        $sql = [regex]::Replace($sql, '(?<![A-Za-z0-9_`])year_month(?![A-Za-z0-9_`])', '`year_month`')
+        [IO.File]::WriteAllText($target, $sql, (New-Object Text.UTF8Encoding($false)))
+    } else {
+        Copy-Item -LiteralPath $migration.File.FullName -Destination $target
+    }
 }

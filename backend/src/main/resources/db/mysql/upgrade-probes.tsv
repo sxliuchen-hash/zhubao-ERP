@@ -33,7 +33,7 @@
 33	TABLE	biz_mother_order_split
 34	TABLE	biz_process_station_handoff
 35	TABLE	biz_quality_requirement_check
-36	TABLE	fin_price_agreement
+36	TABLE	fin_payable_payment
 37	ROW	sys_navigation_menu	code	progress
 38	COLUMN	auth_account_pre_approval_application	target_allowed_processes
 39	COLUMN	inv_stock_ledger	from_work_order_code

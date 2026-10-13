@@ -303,6 +303,8 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 `mysql-init/*.sql` 仍只挂到 `/docker-entrypoint-initdb.d`。MySQL 官方镜像只在数据目录第一次初始化时执行这些 SQL。打包脚本按数字版本生成 `V0001__...sql` 等等宽副本，历史迁移原文件不改。`start.ps1` / `start.sh` 只执行 `docker compose up`，不会升级已有库，也不会重跑初始化目录。
 
+初始化 SQL 必须由 `scripts/export-mysql-init.ps1` 导出，不能直接复制历史目录。导出时仅对 V36 的月份列 `year_month` 加反引号；Java 升级入口的目录与类路径加载应用同一修正。已发布 V36 文件不改写，`schema_migration` 继续记录原文 SHA-256，运行包 `MANIFEST.sha256` 则校验实际导出副本。没有新增结构，因此不以新增 V48 绕过 V36。
+
 已有库使用显式入口：
 
 - 开发机：`scripts/upgrade-database.ps1 -Command plan|adopt|upgrade -Url <jdbc> -Username <用户> -Password <密码> -BackupConfirmed`
@@ -322,7 +324,11 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 升级顺序：备份、`plan`、必要时 `adopt`、`upgrade`、抽查关键表和 `schema_migration`、失败则按备份恢复。结构门禁和 H2 测试不能代替真实 MySQL 演练。
 
-2026-10-10 在独立临时 MySQL 8.4 上，空库执行到 V36 失败：未加引号的 `year_month` 被服务器判为语法错误。V35 之前已成功，`fin_price_agreement` 和 `fin_price_line` 已留下，后续版本没有执行。历史脚本未改。细节见[开发进度](./archive/history/2026-10-13_14_开发进度跟踪.md)。
+2026-10-10 的 V36 `year_month` 安装错误已于 2026-10-13 修复，并在独立 MySQL 8.4.11 上验证导出空库安装到 V47、Java 升级与财务 SQL；验证范围见[项目核心](./00_项目核心.md)。V36 完成探针检查最后创建的 `fin_payable_payment`，不会只凭第一张协议表判定完成。
+
+此前失败的安装库不会随容器重启自动修复。若是确认没有业务数据的可丢弃测试库，应单独重建测试数据库后使用新导出 SQL 安装；有数据或无法确认状态时，按完整备份恢复后执行 `plan` 并核对。不得批量删除 Compose 卷（附件和备份也在卷中），不得删除 `FAILED`／`APPLYING` 记录或手工标记成功以跳过 V36。
+
+复验真实 MySQL 时，可先将初始化 SQL 导出到新的空目录，再运行后端定向测试 `MySqlMigrationCompatibilityTest,JdbcFinanceRepositoryTest`，显式设置 `-Dzhubao.test.mysql.url=jdbc:mysql://127.0.0.1:<测试端口>/`、`-Dzhubao.test.mysql.user=<测试用户>`、`-Dzhubao.test.mysql.password=<测试密码>` 和 `-Dzhubao.test.mysql.init-directory=<导出目录绝对路径>`。使用专用 MySQL 8.4 测试实例及允许创建／删除数据库的测试账号；测试自行创建 UUID 隔离库，结束只清理自己创建的库。默认未设置测试地址时不运行真实 MySQL 迁移测试，财务仓储测试继续使用 H2。
 
 ## 9. 更新与回滚
 
@@ -387,7 +393,6 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 
 尚未完成：
 
-- 历史迁移 V36 在 MySQL 8.4 上因未加引号的 `year_month` 不能执行。空库因此停在失败版本，本批没有改写该历史脚本。
 - 将 MySQL 备份脚本纳入任务计划/cron 和失败告警。
 - 备份恢复演练记录入库归档、系统内告警持久化及确认/关闭流程。外部通知不是一期必选项。
 - 公网证书自动申请。试运行配置使用容器内自签证书，手机完成证书信任后以 HTTPS 核验摄像头；正式域名证书仍需自行替换 `/etc/nginx/certs` 里的证书文件。

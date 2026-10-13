@@ -27,6 +27,27 @@ try {
         $copy = Join-Path $target ("V" + ([int]$Matches[1]).ToString("D4") + "__" + $Matches[2])
         Assert-True ((Get-FileHash -LiteralPath $file.FullName).Hash -eq (Get-FileHash -LiteralPath $copy).Hash) "历史迁移内容被改变"
     }
+
+    # 真实迁移只允许 V36 的交付副本修正保留字，历史原文与其他副本必须保持不变。
+    $realSource = Join-Path $repoRoot 'backend\src\main\resources\db\mysql'
+    $realTarget = Join-Path $testRoot 'real-init'
+    $v36Source = Join-Path $realSource 'V36__m3_finance_operations.sql'
+    $v36Hash = (Get-FileHash -LiteralPath $v36Source).Hash
+    & (Join-Path $PSScriptRoot 'export-mysql-init.ps1') -Source $realSource -Destination $realTarget
+    foreach ($file in Get-ChildItem -LiteralPath $realSource -Filter '*.sql' -File) {
+        $file.Name -match '^V(\d+)__(.+)$' | Out-Null
+        $copy = Join-Path $realTarget ('V' + ([int]$Matches[1]).ToString('D4') + '__' + $Matches[2])
+        if ($file.Name -ceq 'V36__m3_finance_operations.sql') {
+            $converted = [IO.File]::ReadAllText($copy, [Text.Encoding]::UTF8)
+            $original = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
+            Assert-True ($converted.Contains('`year_month` CHAR(7)')) 'V36 月份列没有引用'
+            Assert-True ($converted.Contains('(customer_id, `year_month`)')) 'V36 月份索引没有引用'
+            Assert-True ($converted.Replace('`year_month`', 'year_month') -ceq $original) 'V36 副本包含额外修改'
+        } else {
+            Assert-True ((Get-FileHash -LiteralPath $file.FullName).Hash -eq (Get-FileHash -LiteralPath $copy).Hash) '非 V36 迁移副本被修改'
+        }
+    }
+    Assert-True ((Get-FileHash -LiteralPath $v36Source).Hash -eq $v36Hash) 'V36 历史原文被改写'
     $rejected = $false
     try { & (Join-Path $PSScriptRoot "export-mysql-init.ps1") -Source $source -Destination $target } catch { $rejected = $true }
     Assert-True $rejected "已有初始化目录被覆盖"
@@ -63,7 +84,7 @@ try {
     $ErrorActionPreference = "Stop"
     Assert-True ($LASTEXITCODE -ne 0) "后端失败没有传播退出码"
     Assert-True (($output -join "`n") -notmatch '项目检查通过|执行前端') "后端失败后仍继续检查"
-    Write-Host "维护脚本回归通过：数字排序、内容校验、重复版本、覆盖保护、错序门禁和失败退出。"
+    Write-Host "维护脚本回归通过：数字排序、V36 定向兼容、历史内容校验、重复版本、覆盖保护、错序门禁和失败退出。"
 }
 finally {
     $resolvedRoot = [IO.Path]::GetFullPath($testRoot)

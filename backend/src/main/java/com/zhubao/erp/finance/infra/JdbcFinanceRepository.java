@@ -170,7 +170,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
     public void saveReceivable(ReceivableLine line) {
         String sql = """
                 insert into fin_receivable_line (
-                    code, customer_id, customer_name, year_month, source_type, source_key, mother_order_code,
+                    code, customer_id, customer_name, `year_month`, source_type, source_key, mother_order_code,
                     work_order_code, process_name, quantity, charge_unit, unit_price, amount, reverses_code,
                     remark, operator_name, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -222,7 +222,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
     public void saveReceipt(CustomerReceipt receipt) {
         String sql = """
                 insert into fin_customer_receipt (
-                    code, customer_id, customer_name, year_month, amount, received_on, operator_name, created_at
+                    code, customer_id, customer_name, `year_month`, amount, received_on, operator_name, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         String allocationSql = """
@@ -436,7 +436,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public List<CustomerReceipt> listReceipts() {
         String sql = """
-                select code, customer_id, customer_name, year_month, amount, received_on, operator_name, created_at
+                select code, customer_id, customer_name, `year_month`, amount, received_on, operator_name, created_at
                   from fin_customer_receipt
                  order by code
                 """;
@@ -548,10 +548,10 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void replacePayroll(String yearMonth, List<PayrollLine> lines) {
-        String delete = "delete from fin_payroll_line where year_month = ?";
+        String delete = "delete from fin_payroll_line where `year_month` = ?";
         String insert = """
                 insert into fin_payroll_line (
-                    code, year_month, operator_name, order_code, process_name, mother_order_code, customer_id,
+                    code, `year_month`, operator_name, order_code, process_name, mother_order_code, customer_id,
                     quantity, charge_unit, unit_price, gross_amount, loss_deduction, net_amount, confirmed, source_key
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
@@ -620,7 +620,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public Optional<PayrollRun> findPayrollRun(String yearMonth) {
-        String sql = "select year_month, confirmed, confirmed_by, confirmed_at from fin_payroll_run where year_month = ?";
+        String sql = "select `year_month`, confirmed, confirmed_by, confirmed_at from fin_payroll_run where `year_month` = ?";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, yearMonth);
@@ -642,8 +642,8 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void savePayrollRun(PayrollRun run) {
-        String update = "update fin_payroll_run set confirmed = ?, confirmed_by = ?, confirmed_at = ? where year_month = ?";
-        String insert = "insert into fin_payroll_run (year_month, confirmed, confirmed_by, confirmed_at) values (?, ?, ?, ?)";
+        String update = "update fin_payroll_run set confirmed = ?, confirmed_by = ?, confirmed_at = ? where `year_month` = ?";
+        String insert = "insert into fin_payroll_run (`year_month`, confirmed, confirmed_by, confirmed_at) values (?, ?, ?, ?)";
         try (Connection connection = dataSource.getConnection()) {
             int updated;
             try (PreparedStatement statement = connection.prepareStatement(update)) {
@@ -717,7 +717,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
     public void saveConsumableMovement(ConsumableMovement movement) {
         String sql = """
                 insert into fin_consumable_movement (
-                    code, item_code, direction, quantity, amount, supplier_name, customer_id, year_month,
+                    code, item_code, direction, quantity, amount, supplier_name, customer_id, `year_month`,
                     payable_code, operator_name, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
@@ -821,7 +821,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void saveDepreciation(DepreciationEntry entry) {
-        String sql = "insert into fin_depreciation_entry (code, asset_code, year_month, amount) values (?, ?, ?, ?)";
+        String sql = "insert into fin_depreciation_entry (code, asset_code, `year_month`, amount) values (?, ?, ?, ?)";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entry.code());
@@ -839,7 +839,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public List<DepreciationEntry> listDepreciations() {
-        String sql = "select code, asset_code, year_month, amount from fin_depreciation_entry order by code";
+        String sql = "select code, asset_code, `year_month`, amount from fin_depreciation_entry order by code";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
@@ -862,13 +862,13 @@ public class JdbcFinanceRepository implements FinanceRepository {
     public void savePayable(Payable payable) {
         String update = """
                 update fin_payable
-                   set kind = ?, year_month = ?, payee = ?, source_code = ?, customer_id = ?, mother_order_code = ?,
+                   set kind = ?, `year_month` = ?, payee = ?, source_code = ?, customer_id = ?, mother_order_code = ?,
                        amount = ?, paid_amount = ?, operator_name = ?, created_at = ?
                  where code = ?
                 """;
         String insert = """
                 insert into fin_payable (
-                    code, kind, year_month, payee, source_code, customer_id, mother_order_code, amount, paid_amount,
+                    code, kind, `year_month`, payee, source_code, customer_id, mother_order_code, amount, paid_amount,
                     operator_name, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
