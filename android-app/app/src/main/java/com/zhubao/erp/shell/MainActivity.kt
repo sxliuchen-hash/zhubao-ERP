@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.provider.Settings
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -30,12 +31,13 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
 
 /**
- * 只加载本机配置的 ERP HTTPS 地址。证书错误中止连接，原生桥不向其他来源开放。
+ * 只加载本机配置的 ERP HTTPS 地址。证书错误中止连接，不向网页暴露原生桥。
  */
 class MainActivity : ComponentActivity() {
 
@@ -47,8 +49,11 @@ class MainActivity : ComponentActivity() {
     private var pageTimeout: Runnable? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var pendingWebPermission: PermissionRequest? = null
+    private var pendingCapture: (() -> Unit)? = null
+    private var cameraAsked = false
     private var cameraOutput: Uri? = null
     private var keepErrorVisible = false
+    private var retryAction: () -> Unit = { loadErp() }
     private val allowedOrigin = ShellOrigin.parse(BuildConfig.ERP_BASE_URL)
 
     private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -71,11 +76,23 @@ class MainActivity : ComponentActivity() {
     private val cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val request = pendingWebPermission
         pendingWebPermission = null
-        if (request == null) return@registerForActivityResult
-        if (granted && allowedOrigin?.matches(request.origin) == true) {
-            request.grant(safeMediaResources(request))
-        } else {
-            request.deny()
+        val capture = pendingCapture
+        pendingCapture = null
+        if (request != null) {
+            if (granted && allowedOrigin?.matches(request.origin) == true) {
+                request.grant(safeMediaResources(request))
+            } else {
+                request.deny()
+                explainCameraDenial()
+            }
+        }
+        if (capture != null) {
+            if (granted) {
+                capture()
+            } else {
+                cancelFileChooser()
+                explainCameraDenial()
+            }
         }
     }
 
@@ -86,12 +103,15 @@ class MainActivity : ComponentActivity() {
         errorPanel = findViewById(R.id.error_panel)
         errorTitle = findViewById(R.id.error_title)
         errorBody = findViewById(R.id.error_body)
-        findViewById<Button>(R.id.error_retry).setOnClickListener { loadErp() }
+        findViewById<Button>(R.id.error_retry).setOnClickListener { retryAction() }
         configureWebView()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
-                    errorPanel.visibility == View.VISIBLE -> hideError()
+                    errorPanel.visibility == View.VISIBLE -> {
+                        hideError()
+                        cancelFileChooser()
+                    }
                     webView.canGoBack() -> webView.goBack()
                     else -> finish()
                 }
@@ -119,7 +139,6 @@ class MainActivity : ComponentActivity() {
     private fun loadErp() {
         hideError()
         keepErrorVisible = false
-        detachBridge()
         val origin = allowedOrigin
         if (origin == null) {
             showError("尚未配置地址", "请在 android-app/local.properties 设置 erp.baseUrl，且必须以 https:// 开头。不要把密码写进工程。")
@@ -148,19 +167,6 @@ class MainActivity : ComponentActivity() {
         pageTimeout = null
     }
 
-    private fun attachBridgeIfAllowed(url: String?) {
-        val origin = allowedOrigin
-        if (origin != null && origin.matches(url)) {
-            webView.addJavascriptInterface(ShellBridge(), BRIDGE_NAME)
-        } else {
-            detachBridge()
-        }
-    }
-
-    private fun detachBridge() {
-        webView.removeJavascriptInterface(BRIDGE_NAME)
-    }
-
     private fun openExternal(uri: Uri) {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, uri))
@@ -169,10 +175,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun showError(title: String, body: String) {
+    private fun showError(title: String, body: String, retry: () -> Unit = { loadErp() }) {
         clearTimeout()
         keepErrorVisible = true
-        detachBridge()
+        retryAction = retry
         errorTitle.text = title
         errorBody.text = body
         errorPanel.visibility = View.VISIBLE
@@ -197,7 +203,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         clearTimeout()
-        detachBridge()
         webView.destroy()
         super.onDestroy()
     }
@@ -211,10 +216,6 @@ class MainActivity : ComponentActivity() {
             }
             openExternal(target)
             return true
-        }
-
-        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-            attachBridgeIfAllowed(url)
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
@@ -241,9 +242,8 @@ class MainActivity : ComponentActivity() {
 
         override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
             if (request?.isForMainFrame != true) return
-            if (errorResponse?.statusCode == 401) {
-                showError("登录已失效", "请重新登录后再继续作业。")
-            }
+            val message = ShellPolicies.mainFrameError(errorResponse?.statusCode ?: 0) ?: return
+            showError(message.first, message.second)
         }
     }
 
@@ -280,22 +280,18 @@ class MainActivity : ComponentActivity() {
             }
             val chooser = Intent.createChooser(contentIntent, "选择文件")
             if (fileChooserParams?.isCaptureEnabled == true) {
-                cameraOutput = createCameraUri()
-                val capture = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-                capture.putExtra(MediaStore.EXTRA_OUTPUT, cameraOutput)
-                capture.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(capture))
-            } else {
-                cameraOutput = null
+                ensureCamera {
+                    cameraOutput = createCameraUri()
+                    val capture = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                    capture.putExtra(MediaStore.EXTRA_OUTPUT, cameraOutput)
+                    capture.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(capture))
+                    launchChooser(chooser, filePathCallback)
+                }
+                return true
             }
-            return try {
-                fileChooserLauncher.launch(chooser)
-                true
-            } catch (_: ActivityNotFoundException) {
-                fileCallback = null
-                filePathCallback?.onReceiveValue(null)
-                false
-            }
+            cameraOutput = null
+            return launchChooser(chooser, filePathCallback)
         }
 
         override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
@@ -310,18 +306,63 @@ class MainActivity : ComponentActivity() {
         return FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
     }
 
-    private inner class ShellBridge {
-        @android.webkit.JavascriptInterface
-        fun appVersion(): String = BuildConfig.VERSION_NAME
-
-        @android.webkit.JavascriptInterface
-        fun notifySessionExpired() {
-            runOnUiThread { showError("登录已失效", "请重新登录后再继续作业。") }
+    private fun ensureCamera(onGranted: () -> Unit) {
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val rationale = ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)
+        when (ShellPolicies.cameraNextStep(granted, cameraAsked, rationale)) {
+            "CAPTURE" -> onGranted()
+            "REQUEST" -> {
+                cameraAsked = true
+                pendingCapture = onGranted
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+            "EXPLAIN_AND_REQUEST" -> showError("需要相机权限", "拍照前要允许使用相机。点重试会再次申请。") {
+                hideError()
+                pendingCapture = onGranted
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+            else -> {
+                cancelFileChooser()
+                showError("相机权限被关闭", "请到系统设置里允许相机，回到应用后再拍照。取消后可以改用相册。") {
+                    openAppSettings()
+                }
+            }
         }
     }
 
-    companion object {
-        private const val BRIDGE_NAME = "ZhubaoShell"
+    private fun explainCameraDenial() {
+        val rationale = ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)
+        if (rationale) {
+            showError("相机权限被拒绝", "没有相机权限就不能直接拍照。点重试可以再次申请，也可以改用相册。") {
+                hideError()
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        } else {
+            showError("相机权限被关闭", "请到系统设置里允许相机，回到应用后再拍照。") {
+                openAppSettings()
+            }
+        }
+    }
+
+    private fun openAppSettings() {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    private fun launchChooser(chooser: Intent, filePathCallback: ValueCallback<Array<Uri>>?): Boolean {
+        return try {
+            fileChooserLauncher.launch(chooser)
+            true
+        } catch (_: ActivityNotFoundException) {
+            fileCallback = null
+            filePathCallback?.onReceiveValue(null)
+            false
+        }
+    }
+
+    private fun cancelFileChooser() {
+        fileCallback?.onReceiveValue(null)
+        fileCallback = null
+        cameraOutput = null
     }
 }
 

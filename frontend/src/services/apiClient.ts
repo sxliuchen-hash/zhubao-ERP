@@ -35,6 +35,12 @@ async function readPayload<T>(response: Response): Promise<T> {
   } catch {
     throw new Error('后端接口不可用');
   }
+  if (response.status === 401) {
+    clearAuthToken();
+    if (typeof globalThis.dispatchEvent === 'function' && typeof globalThis.CustomEvent === 'function') {
+      globalThis.dispatchEvent(new CustomEvent('zhubao-auth-session-changed', { detail: { session: null } }));
+    }
+  }
   if (!response.ok || payload.code !== 0) {
     throw new ApiRequestError(payload.message || '请求失败', response.status, payload.code ?? 0);
   }
