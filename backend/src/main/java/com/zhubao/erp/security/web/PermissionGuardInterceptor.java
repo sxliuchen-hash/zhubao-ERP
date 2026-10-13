@@ -23,6 +23,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/inventory/ledger/transfers", PermissionCode.INVENTORY_LEDGER_TRANSFER),
             Map.entry("/api/business/operations/inbound-confirmations", PermissionCode.BUSINESS_INBOUND_CONFIRM),
             Map.entry("/api/business/operations/process-stations", PermissionCode.BUSINESS_PRODUCTION_REPORT),
+            Map.entry("/api/business/operations/process-progress", PermissionCode.BUSINESS_PRODUCTION_REPORT),
             Map.entry("/api/business/operations/quality-checks", PermissionCode.BUSINESS_QUALITY_FREEZE),
             Map.entry("/api/business/operations/quality-checks/rework", PermissionCode.BUSINESS_REWORK_DISPATCH),
             Map.entry("/api/business/operations/quality-checks/rework-reports", PermissionCode.BUSINESS_REWORK_REPORT),

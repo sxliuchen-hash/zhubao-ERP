@@ -4,6 +4,8 @@ import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
+import com.zhubao.erp.business.domain.ProcessProgressChildOption;
+import com.zhubao.erp.business.domain.ProcessProgressTarget;
 import com.zhubao.erp.business.domain.ProcessStationCard;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.ProcessStationReportResult;
@@ -107,6 +109,33 @@ public class ProcessStationService {
         this.dataAccess = dataAccess;
         this.workUnit = workUnit;
         this.handoffSaveProbe = handoffSaveProbe == null ? HandoffSaveProbe.NONE : handoffSaveProbe;
+    }
+
+    /**
+     * 解析进度报工目标。已拆母单返回子单列表；当前工序取第一道尚未正式交付的工序。
+     */
+    public ProcessProgressTarget openProgress(String rawCode, AuthUserAccount account) {
+        requireAccount(account);
+        String code = progressCode(rawCode);
+        if (documents.findMotherOrderByCode(code).isPresent() && !documents.listChildWorkOrders(code).isEmpty()) {
+            MotherOrderRecord mother = requireMother(code);
+            assertMotherCustomer(mother, account);
+            List<ProcessProgressChildOption> children = documents.listChildWorkOrders(code).stream()
+                    .map(child -> new ProcessProgressChildOption(child.code(), blank(child.customerName()), blank(child.processes())))
+                    .toList();
+            return new ProcessProgressTarget(true, "", mother.code(), blank(mother.customerName()),
+                    blank(mother.processingRequirement()), blank(mother.dueDate()), "", false, children);
+        }
+        StationTicket ticket = resolve(rawCode);
+        assertCustomer(ticket, account);
+        String current = unfinishedProcess(ticket);
+        boolean delivered = current == null;
+        String process = delivered ? ticket.processes().get(ticket.processes().size() - 1) : current;
+        if (!boundProcesses(account).contains(process)) {
+            throw new BusinessException("当前账号不能做这道工序");
+        }
+        return new ProcessProgressTarget(false, ticket.orderCode(), ticket.motherOrderCode(), ticket.customerName(),
+                ticket.processingRequirement(), ticket.dueDate(), process, delivered, List.of());
     }
 
     public ProcessStationView lookup(String rawCode, AuthUserAccount account) {
@@ -457,6 +486,29 @@ public class ProcessStationService {
             return documents.findProcessStationHandoff(orderCode, process).isPresent();
         }
         return documents.findProcessStationHandoff(orderCode, process, session).isPresent();
+    }
+
+    private String progressCode(String rawCode) {
+        String text = rawCode == null ? "" : rawCode.trim();
+        if (text.startsWith("JG|")) {
+            return scanCodeParser.resolve(text, "pwa_report").code();
+        }
+        return text;
+    }
+
+    private String unfinishedProcess(StationTicket ticket) {
+        for (String process : ticket.processes()) {
+            if (!submitted(ticket.orderCode(), process)) {
+                return process;
+            }
+        }
+        return null;
+    }
+
+    private void assertMotherCustomer(MotherOrderRecord mother, AuthUserAccount account) {
+        if (dataAccess != null) {
+            dataAccess.assertCustomer(BusinessDataAccess.contextOf(account), mother.customerId(), blank(mother.customerName()));
+        }
     }
 
     private StationTicket resolve(String rawCode) {

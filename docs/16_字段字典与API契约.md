@@ -2224,6 +2224,10 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `GET /api/business/operations/progress` | `ApiResponse<List<ProgressRow>>` |
+| `GET /api/business/operations/process-progress` | `ApiResponse<List<ProcessProgressRow>>`。按账号可见范围列出执行单当前工序百分比，不合成母单总进度 |
+| `GET /api/business/operations/process-progress/target` | `ApiResponse<ProcessProgressTarget>`。已拆母单返回子单选项 |
+| `GET /api/business/operations/process-progress/history` | `ApiResponse<List<ProcessProgressEvent>>` |
+| `POST /api/business/operations/process-progress` | `ApiResponse<ProcessProgressHead>`。必须带 `requestId`。动作 `PROCESS_PROGRESS`。只允许 0/30/60/90/100，回退必须写原因。100% 不交付工序、不质检、不写库存或工资 |
 
 ### DocumentManagementController
 

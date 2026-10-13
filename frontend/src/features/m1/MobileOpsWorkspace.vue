@@ -4,8 +4,9 @@ import IntakePanel from '../intake/IntakePanel.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
 import QualityPanel from '../quality/QualityPanel.vue';
 import ShippingPanel from '../shipping/ShippingPanel.vue';
+import ProcessProgressPanel from './ProcessProgressPanel.vue';
 
-const jobMode = ref<'intake' | 'station' | 'quality' | 'shipping'>('intake');
+const jobMode = ref<'intake' | 'station' | 'progress' | 'quality' | 'shipping'>('intake');
 const insecureContext = typeof window !== 'undefined' && window.isSecureContext === false;
 </script>
 
@@ -34,6 +35,16 @@ const insecureContext = typeof window !== 'undefined' && window.isSecureContext 
         @click="jobMode = 'station'"
       >
         岗位报工
+      </button>
+      <button
+        :class="jobMode === 'progress' ? 'primary-button' : 'secondary-button'"
+        type="button"
+        role="tab"
+        :aria-selected="jobMode === 'progress'"
+        aria-label="进度报工"
+        @click="jobMode = 'progress'"
+      >
+        进度报工
       </button>
       <button
         :class="jobMode === 'quality' ? 'primary-button' : 'secondary-button'"
@@ -69,6 +80,8 @@ const insecureContext = typeof window !== 'undefined' && window.isSecureContext 
       title="手机质检"
       intro="扫子单或不拆母单。逐条判定，不合格和让步要写原因。质检员是当前登录账号。开返工、返工报工、复检和放行仍用这一套。"
     />
+
+    <ProcessProgressPanel v-if="jobMode === 'progress'" />
 
     <ProductionPanel
       v-if="jobMode === 'station'"

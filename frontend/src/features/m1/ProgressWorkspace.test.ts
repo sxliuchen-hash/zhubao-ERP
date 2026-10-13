@@ -10,6 +10,12 @@ vi.mock('../../services/progressApi', () => ({
   fetchProgress: vi.fn(),
 }));
 
+vi.mock('../../services/processProgressApi', () => ({
+  fetchProcessProgress: vi.fn().mockResolvedValue([]),
+  openProcessProgress: vi.fn(),
+  submitProcessProgress: vi.fn(),
+}));
+
 describe('ProgressWorkspace', () => {
   beforeEach(() => {
     vi.mocked(fetchProgress).mockReset();

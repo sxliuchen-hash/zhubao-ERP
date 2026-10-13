@@ -3,6 +3,7 @@ import { computed, inject, onMounted, ref, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import { ApiRequestError } from '../../services/apiClient';
 import { fetchProgress, type ProgressRow } from '../../services/progressApi';
+import ProcessProgressPanel from './ProcessProgressPanel.vue';
 import { progressTraceTarget, type TraceTarget } from '../scan/traceTarget';
 import type { Tone } from '../../data/m1PrototypeData';
 
@@ -94,6 +95,7 @@ function statusTone(row: ProgressRow): Tone {
 
 <template>
   <div class="progress-board page-stack desk-page" :class="{ 'is-detail': detailOpen }">
+    <ProcessProgressPanel />
     <section class="module-work-grid" aria-label="在制进度">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">
