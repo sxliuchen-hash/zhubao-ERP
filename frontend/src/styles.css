@@ -391,23 +391,10 @@ h3 { font-size: 14px; }
   min-height: 40px;
 }
 
-.account-admin-form,
-.account-admin-grid,
-.account-admin-checks,
-.account-row-actions {
+.account-admin-grid {
   display: grid;
   gap: 8px;
-}
-
-.account-admin-grid {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-}
-
-.account-admin-checks,
-.account-row-actions {
-  grid-auto-flow: column;
-  justify-content: start;
-  align-items: center;
 }
 
 .storage-meter {

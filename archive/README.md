@@ -16,6 +16,14 @@
 
 完整文件可显式查询 `rg --files --no-ignore archive/code/2026-10-13`。归档不删除历史数据库迁移、客户数据、当前页面功能或必要底层依赖。
 
+## 2026-10-14 归档
+
+| 内容 | 原位置 | 归档依据 |
+|---|---|---|
+| 账号申请与审批面板及专属测试 | `frontend/src/features/m1/AccountApprovalPanel.vue`、`AccountApprovalPanel.test.ts` | `App.vue`、审批页、配置页、用户管理均不导入；配置页测试断言不展示该面板。用户管理直接保存账号。`authApi` 前置审批函数和后端兼容接口仍保留，本批不删接口、不删表 |
+
+同时从 `frontend/src/styles.css`、`frontend/src/system-workspaces.css` 去掉只被该面板使用的 `.account-process-row`、`.account-row-actions`，以及没有任何页面使用的 `.account-admin-form`、`.account-admin-checks`。财务页仍使用 `.account-admin-grid`；配置页仍使用登录会话样式。
+
 ## 使用边界
 
 - 这里不在 Maven／Vite 的源码与测试根下，也不进入当前 Docker 构建上下文；旧接口不再注册。

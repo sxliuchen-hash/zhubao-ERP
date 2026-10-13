@@ -359,7 +359,7 @@
   background: var(--content);
 }
 
-.system-workspace-shell :is(.account-process-row, .security-customer-auth > article) {
+.system-workspace-shell .security-customer-auth > article {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
@@ -372,21 +372,21 @@
   background: var(--content);
 }
 
-.system-workspace-shell :is(.account-process-row, .security-customer-auth > article) > div:first-child {
+.system-workspace-shell .security-customer-auth > article > div:first-child {
   display: grid;
   flex: 1 1 200px;
   gap: var(--space-1);
   overflow-wrap: anywhere;
 }
 
-.system-workspace-shell :is(.account-row-actions, .auth-session-actions) {
+.system-workspace-shell .auth-session-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
 }
 
-.system-workspace-shell :is(.customer-auth-hint, .customer-auth-message, .auth-session-message, .security-identity-grid span, .security-identity-grid small, .account-process-row span, .account-process-row small) {
+.system-workspace-shell :is(.customer-auth-hint, .customer-auth-message, .auth-session-message, .security-identity-grid span, .security-identity-grid small) {
   color: var(--ink-muted);
   font-size: 12px;
 }
@@ -411,7 +411,7 @@
   max-width: 100%;
 }
 
-.system-workspace-shell .security-context-panel :is(label:has(input[type="checkbox"]), label:has(input[type="radio"]), .account-admin-checks) {
+.system-workspace-shell .security-context-panel :is(label:has(input[type="checkbox"]), label:has(input[type="radio"])) {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
