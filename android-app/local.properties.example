@@ -1,0 +1,4 @@
+# 复制为本目录 local.properties。该文件已忽略，不要提交。
+# sdk.dir 指向本机 Android SDK。erp.baseUrl 必须是 https，且不要写入密码或签名口令。
+sdk.dir=D:\\exe\\AndroidSdk
+erp.baseUrl=https://erp.example.com
