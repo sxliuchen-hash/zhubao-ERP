@@ -155,7 +155,9 @@ public class RegisterImportPostingExecutionService {
     private RegisterImportPostingExecutionItem execute(String templateCode, PreparedPosting posting, AuthUserAccount account) {
         Object command = posting.businessCommand();
         if (command instanceof ConfirmInboundCommand inboundCommand) {
-            InboundConfirmationResult result = businessOperationService.confirmInbound(inboundCommand);
+            InboundConfirmationResult result = account == null
+                    ? businessOperationService.confirmInbound(inboundCommand)
+                    : businessOperationService.confirmInbound(inboundCommand, account.operator());
             return item(posting.draft(), result.motherOrderCode(), result.ledgerCode(), "已执行 ConfirmInboundCommand");
         }
         if (command instanceof ShipFinishedStockCommand outboundCommand) {
@@ -166,7 +168,11 @@ public class RegisterImportPostingExecutionService {
             if (account == null || processStationService == null) {
                 throw new BusinessException("登记表报工必须登录并经过岗位校验，不能绕过工序");
             }
-            ProductionReportResult result = processStationService.reportProduction(productionCommand, account);
+            ProductionReportResult result = processStationService.reportProduction(
+                    productionCommand,
+                    account,
+                    requestId("reg-report", posting.draft().importBatchNo(), posting.draft().sourceLineNo())
+            );
             String message = "已执行 ReportProductionCommand";
             if ("REG-ENGRAVING".equals(templateCode)) {
                 MachineOutputRecord outputRecord = submitMachineOutput(posting.draft(), result, posting.command());
@@ -200,7 +206,7 @@ public class RegisterImportPostingExecutionService {
             PostRegisterImportBatchCommand command
     ) {
         Map<String, String> fields = draft.mappedFields();
-        return machineOutputService.submit(new SubmitMachineOutputCommand(
+        return machineOutputService.submitOrExisting(new SubmitMachineOutputCommand(
                 machineOutputCode(draft),
                 value(fields, "workDate"),
                 longValue(fields, "customerId"),
@@ -258,7 +264,8 @@ public class RegisterImportPostingExecutionService {
                 postingRemark(draft, fields, command),
                 value(fields, "processingRequirement"),
                 value(fields, "dueDate"),
-                value(fields, "customerName")
+                value(fields, "customerName"),
+                requestId("reg-in", draft.importBatchNo(), sourceLineNo(draft, fields))
         );
     }
 
@@ -409,6 +416,15 @@ public class RegisterImportPostingExecutionService {
         } catch (NumberFormatException ex) {
             throw new BusinessException("sourceRegisterLineNo 必须是整数：" + value);
         }
+    }
+
+    private String requestId(String prefix, String batchNo, Integer lineNo) {
+        String raw = prefix + "-" + (batchNo == null ? "" : batchNo) + "-" + (lineNo == null ? "0" : lineNo);
+        String sanitized = raw.replaceAll("[^A-Za-z0-9._:-]", "");
+        if (sanitized.length() < 8) {
+            sanitized = (sanitized + "00000000").substring(0, 8);
+        }
+        return sanitized.length() > 64 ? sanitized.substring(0, 64) : sanitized;
     }
 
     private String machineOutputCode(RegisterImportPostingDraft draft) {

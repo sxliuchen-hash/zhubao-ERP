@@ -1,6 +1,8 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.ProductionReportResult;
+import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.business.domain.ProcessStationCard;
 import com.zhubao.erp.business.domain.ProcessStationReportResult;
 import com.zhubao.erp.business.domain.ProcessStationView;
@@ -17,6 +19,9 @@ import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
+import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -183,6 +188,68 @@ class ProcessStationServiceTest {
     }
 
     @Test
+    void productionReplayCommitsOnceAndRejectsStaleOrForeignRetry() {
+        String childCode = splitOneChild("MD-REPLAY-STATION");
+        ProcessStationService replay = new ProcessStationService(
+                documents,
+                stockLedgerService,
+                operations,
+                new ScanCodeParser(),
+                null,
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository())
+        );
+        AuthUserAccount carving = account("雕刻工 林海", "雕刻");
+        ReportProductionCommand command = production(childCode, "MD-REPLAY-STATION", "4", "8", "雕刻");
+
+        ProductionReportResult first = replay.reportProduction(command, carving, "station-replay-001");
+        ProductionReportResult second = replay.reportProduction(command, carving, "station-replay-001");
+
+        assertThat(second.ledgerCode()).isEqualTo(first.ledgerCode());
+        assertThat(documents.listProcessStationHandoffs(childCode)).hasSize(1);
+        assertThat(stockLedgerService.ledgers())
+                .filteredOn(entry -> "process_station_report".equals(entry.documentType()))
+                .hasSize(1);
+        assertThatThrownBy(() -> replay.reportProduction(
+                production(childCode, "MD-REPLAY-STATION", "3", "6", "雕刻"),
+                carving,
+                "station-replay-001"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("内容不一致");
+        assertThatThrownBy(() -> replay.reportProduction(command, account("别人", "雕刻"), "station-replay-001"))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("跨账号");
+        assertThat(documents.listProcessStationHandoffs(childCode)).hasSize(1);
+    }
+
+    @Test
+    void productionFailureRollsBackHandoffAndStock() {
+        String childCode = splitOneChild("MD-ROLLBACK-STATION");
+        ProcessStationService replay = new ProcessStationService(
+                documents,
+                stockLedgerService,
+                operations,
+                new ScanCodeParser(),
+                null,
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),
+                () -> {
+                    throw new BusinessException("模拟报工中途失败");
+                }
+        );
+        int ledgersBefore = stockLedgerService.ledgers().size();
+
+        assertThatThrownBy(() -> replay.reportProduction(
+                production(childCode, "MD-ROLLBACK-STATION", "4", "8", "雕刻"),
+                account("雕刻工 林海", "雕刻"),
+                "station-rollback-1"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模拟报工中途失败");
+
+        assertThat(documents.listProcessStationHandoffs(childCode)).isEmpty();
+        assertThat(stockLedgerService.ledgers()).hasSize(ledgersBefore);
+        assertThat(quantity(childCode, StockStatus.WIP)).isEqualByComparingTo("4");
+    }
+
+    @Test
     void splitMotherStickerCannotBeReportedAsAStation() {
         String childCode = splitOneChild("MD-ALREADY-SPLIT");
         assertThat(childCode).isNotBlank();
@@ -228,6 +295,38 @@ class ProcessStationServiceTest {
                 "2026-10-20",
                 "恒信珠宝"
         ));
+    }
+
+    private ReportProductionCommand production(String workOrder, String mother, String quantity, String weight, String process) {
+        return new ReportProductionCommand(
+                mother,
+                workOrder,
+                1001L,
+                1001L,
+                "AU9999",
+                "RAW-CUSTOMER",
+                "RAW-CUSTOMER",
+                new BigDecimal(quantity),
+                "件",
+                new BigDecimal(weight),
+                "2026-10-08",
+                process,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "完成",
+                "已审核",
+                null,
+                null,
+                null,
+                "雕刻工 林海",
+                null,
+                null,
+                null
+        );
     }
 
     private AuthUserAccount account(String operator, String... processes) {

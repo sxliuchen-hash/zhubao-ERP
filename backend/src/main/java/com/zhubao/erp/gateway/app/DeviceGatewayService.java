@@ -232,7 +232,11 @@ public class DeviceGatewayService {
                 null, null, null, null, "gateway-device", null, null, null, operatorContext.operator(),
                 operatorContext.operator(), reading.readingCode(), "设备网关读数 " + reading.readingCode() + " 联动报工"
         );
-        ProductionReportResult result = processStationService.reportProduction(production, account);
+        ProductionReportResult result = processStationService.reportProduction(
+                production,
+                account,
+                requestId(reading.readingCode())
+        );
         return result.ledgerCode();
     }
 
@@ -411,6 +415,15 @@ public class DeviceGatewayService {
 
     private int clampLimit(int limit) {
         return Math.max(1, Math.min(limit, RECENT_WINDOW));
+    }
+
+    private String requestId(String readingCode) {
+        String raw = "gw-report-" + (readingCode == null ? "" : readingCode.trim());
+        String sanitized = raw.replaceAll("[^A-Za-z0-9._:-]", "");
+        if (sanitized.length() < 8) {
+            sanitized = (sanitized + "00000000").substring(0, 8);
+        }
+        return sanitized.length() > 64 ? sanitized.substring(0, 64) : sanitized;
     }
 
     private String blankToEmpty(String value) {

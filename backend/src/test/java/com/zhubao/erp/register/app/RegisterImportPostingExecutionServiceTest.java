@@ -116,7 +116,7 @@ class RegisterImportPostingExecutionServiceTest {
         ProcessStationService stations = mock(ProcessStationService.class);
         AuthUserAccount account = new AuthUserAccount("worker", "hash", "会话雕刻员", RoleCode.OPERATOR,
                 DataScope.SELF, true, true).withAllowedProcesses(List.of("雕刻"));
-        when(stations.reportProduction(any(), eq(account))).thenReturn(new ProductionReportResult(
+        when(stations.reportProduction(any(), eq(account), any())).thenReturn(new ProductionReportResult(
                 "WO-REG-ENG-001", "STK-STATION", "WIP", "SEMI-FINISHED", StockStatus.WIP,
                 StockStatus.SEMI_FINISHED, new BigDecimal("12"), new BigDecimal("4.8"), "雕刻", account.operator(), ""));
         var secured = new RegisterImportPostingExecutionService(confirmationService, postingPlanService,
@@ -137,7 +137,7 @@ class RegisterImportPostingExecutionServiceTest {
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().get(0).message()).contains("已生成设备产量记录 MOR-");
         assertThat(stockRepository.findAllLedgers()).hasSize(1);
-        verify(stations).reportProduction(any(), eq(account));
+        verify(stations).reportProduction(any(), eq(account), any());
         assertThat(machineOutputRepository.findByImportBatchNo(batch.importBatchNo()))
                 .singleElement()
                 .satisfies(record -> {
@@ -157,7 +157,7 @@ class RegisterImportPostingExecutionServiceTest {
         ProcessStationService stations = mock(ProcessStationService.class);
         AuthUserAccount account = new AuthUserAccount("worker", "hash", "会话雕刻员", RoleCode.OPERATOR,
                 DataScope.SELF, true, true).withAllowedProcesses(List.of("雕刻"));
-        when(stations.reportProduction(any(), eq(account))).thenReturn(new ProductionReportResult(
+        when(stations.reportProduction(any(), eq(account), any())).thenReturn(new ProductionReportResult(
                 "WO-REG-ENG-001", "STK-STATION", "WIP", "SEMI-FINISHED", StockStatus.WIP,
                 StockStatus.SEMI_FINISHED, new BigDecimal("12"), new BigDecimal("4.8"), "雕刻", account.operator(), ""));
         var secured = new RegisterImportPostingExecutionService(confirmationService, postingPlanService,
@@ -167,7 +167,8 @@ class RegisterImportPostingExecutionServiceTest {
         var result = secured.post(batch.importBatchNo(), new PostRegisterImportBatchCommand(false, "伪造操作人", "来源备注"), account);
 
         ArgumentCaptor<ReportProductionCommand> captured = ArgumentCaptor.forClass(ReportProductionCommand.class);
-        verify(stations).reportProduction(captured.capture(), eq(account));
+        verify(stations).reportProduction(captured.capture(), eq(account), org.mockito.ArgumentMatchers.argThat(id ->
+                id != null && id.startsWith("reg-report-") && id.contains(batch.importBatchNo().replaceAll("[^A-Za-z0-9._:-]", ""))));
         assertThat(captured.getValue().operator()).isEqualTo(account.operator());
         assertThat(captured.getValue().machineNo()).isEqualTo("ENG-03");
         assertThat(captured.getValue().sourceRegisterLineNo()).isEqualTo(6);
@@ -183,7 +184,7 @@ class RegisterImportPostingExecutionServiceTest {
     void stationRejectionDoesNotPostBatchOrCreateMachineOutput() {
         ProcessStationService stations = mock(ProcessStationService.class);
         AuthUserAccount account = new AuthUserAccount("worker", "hash", "未绑定岗位", RoleCode.OPERATOR, DataScope.SELF, true, true);
-        when(stations.reportProduction(any(), eq(account))).thenThrow(new BusinessException("当前账号不能做这道工序"));
+        when(stations.reportProduction(any(), eq(account), any())).thenThrow(new BusinessException("当前账号不能做这道工序"));
         var secured = new RegisterImportPostingExecutionService(confirmationService, postingPlanService,
                 businessOperationService, machineOutputService, stations);
         var batch = confirmationService.confirm(new ConfirmRegisterImportCommand(engravingPreviewWithBusinessKeys(), "复核员", ""));

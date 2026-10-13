@@ -43,7 +43,7 @@ import java.util.Objects;
  * 三个工序岗位扫码。只展示账号绑定的工序，并按单上的顺序交付。
  * 中间工序写入台账但留在在制；最后一道再把在制转入半成品。
  * 带请求编号的交付进入业务工作单元：不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。
- * 未带请求编号的交付，以及通用报工，仍各自提交，不回放。
+ * 未带请求编号的交付和通用报工仍各自提交。带编号的通用报工与现场交付进入同一次回放。
  */
 @Service
 public class ProcessStationService {
@@ -186,10 +186,40 @@ public class ProcessStationService {
 
     /**
      * 通用报工沿用现场整单交付规则，并完整保存请求中的报工登记字段。
-     * 此入口不带请求编号，库存流水和交付事实各自提交，不回放。
+     * 未带请求编号时库存流水和交付事实各自提交，不回放。
      */
-    public synchronized ProductionReportResult reportProduction(ReportProductionCommand submittedCommand, AuthUserAccount account) {
-        return postStation(submittedCommand, account, null);
+    public ProductionReportResult reportProduction(ReportProductionCommand submittedCommand, AuthUserAccount account) {
+        return reportProduction(submittedCommand, account, null);
+    }
+
+    /**
+     * 带请求编号的通用报工与现场交付共用工作单元。
+     * 同账号、同请求、同内容回放原结果；未装配工作单元时拒绝，不能退回旧路径。
+     */
+    public ProductionReportResult reportProduction(
+            ReportProductionCommand submittedCommand,
+            AuthUserAccount account,
+            String requestId
+    ) {
+        requireAccount(account);
+        if (requestId == null || requestId.isBlank()) {
+            synchronized (this) {
+                return postStation(submittedCommand, account, null);
+            }
+        }
+        if (workUnit == null) {
+            throw new BusinessException("工序交付回放尚未装配");
+        }
+        ReportProductionCommand command = BusinessCommandActors.withActor(submittedCommand, account.operator().trim());
+        String text = workUnit.execute(new CommandCall(
+                requestId,
+                account.operator().trim(),
+                "PROCESS_HANDOFF",
+                "WORK_ORDER",
+                command.workOrderCode().trim(),
+                ProductionReportResultText.payload(command)
+        ), session -> ProductionReportResultText.write(postStation(command, account, session)));
+        return ProductionReportResultText.read(text);
     }
 
     private ProductionReportResult postStation(ReportProductionCommand submittedCommand, AuthUserAccount account, WorkSession session) {

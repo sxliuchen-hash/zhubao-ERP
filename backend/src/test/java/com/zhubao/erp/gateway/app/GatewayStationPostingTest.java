@@ -49,14 +49,14 @@ class GatewayStationPostingTest {
     @Test
     void postingUsesStationAndPreservesDeviceWeightAndAuditMetadata() {
         seedReading();
-        when(stations.reportProduction(any(), eq(account))).thenReturn(new ProductionReportResult("ZD-GATEWAY", "STK-STATION",
+        when(stations.reportProduction(any(), eq(account), any())).thenReturn(new ProductionReportResult("ZD-GATEWAY", "STK-STATION",
                 "WIP", "SEMI", StockStatus.WIP, StockStatus.SEMI_FINISHED,
                 new BigDecimal("10"), new BigDecimal("123.45"), "抛光", account.operator(), "DR-STATION"));
 
         var consumed = gateway.consume(command(), context, account);
 
         ArgumentCaptor<ReportProductionCommand> captured = ArgumentCaptor.forClass(ReportProductionCommand.class);
-        verify(stations).reportProduction(captured.capture(), eq(account));
+        verify(stations).reportProduction(captured.capture(), eq(account), eq("gw-report-DR-STATION"));
         assertThat(captured.getValue().weight()).isEqualByComparingTo("123.45");
         assertThat(captured.getValue().machineNo()).isEqualTo("SCALE-STATION");
         assertThat(captured.getValue().handoffCode()).isEqualTo("DR-STATION");
@@ -69,7 +69,7 @@ class GatewayStationPostingTest {
     @Test
     void stationRuleRejectionLeavesReadingUnconsumed() {
         seedReading();
-        when(stations.reportProduction(any(), eq(account))).thenThrow(new BusinessException("上一道工序还没交"));
+        when(stations.reportProduction(any(), eq(account), any())).thenThrow(new BusinessException("上一道工序还没交"));
 
         assertThatThrownBy(() -> gateway.consume(command(), context, account))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("上一道工序还没交");

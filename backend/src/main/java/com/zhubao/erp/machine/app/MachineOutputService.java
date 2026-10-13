@@ -41,6 +41,21 @@ public class MachineOutputService {
         repository.findByCode(code).ifPresent(existing -> {
             throw new BusinessException("设备产量记录已存在：" + existing.code());
         });
+        return saveNew(command, code);
+    }
+
+    /** 同一产量编号再次提交时返回已有记录，避免报工回放成功后重试被挡住。 */
+    public MachineOutputRecord submitOrExisting(SubmitMachineOutputCommand command) {
+        validate(command);
+        String code = normalizeCode(command);
+        MachineOutputRecord existing = repository.findByCode(code).orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+        return saveNew(command, code);
+    }
+
+    private MachineOutputRecord saveNew(SubmitMachineOutputCommand command, String code) {
         String createdAt = CREATED_TIME_FORMATTER.format(LocalDateTime.now());
         MachineOutputRecord record = new MachineOutputRecord(
                 code,
