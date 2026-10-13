@@ -337,46 +337,19 @@
   grid-column: 1 / -1;
 }
 
-.system-workspace-shell :is(.security-account-contract, .security-customer-auth, .security-identity-grid) {
+.system-workspace-shell .security-identity-grid {
   display: grid;
   gap: var(--space-3);
-}
-
-.system-workspace-shell .security-identity-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.system-workspace-shell :is(.security-identity-grid article, .security-account-contract, .security-customer-auth) {
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--soft);
 }
 
 .system-workspace-shell .security-identity-grid article {
   display: grid;
   gap: var(--space-2);
-  background: var(--content);
-}
-
-.system-workspace-shell .security-customer-auth > article {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: start;
-  justify-content: space-between;
-  margin-top: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--content);
-}
-
-.system-workspace-shell .security-customer-auth > article > div:first-child {
-  display: grid;
-  flex: 1 1 200px;
-  gap: var(--space-1);
-  overflow-wrap: anywhere;
 }
 
 .system-workspace-shell .auth-session-actions {
@@ -386,20 +359,20 @@
   align-items: center;
 }
 
-.system-workspace-shell :is(.customer-auth-hint, .customer-auth-message, .auth-session-message, .security-identity-grid span, .security-identity-grid small) {
+.system-workspace-shell :is(.auth-session-message, .security-identity-grid span, .security-identity-grid small) {
   color: var(--ink-muted);
   font-size: 12px;
 }
 
 /* 表单在窄面板内按实际可用宽度换行，复选框保持原生紧凑尺寸。 */
-.system-workspace-shell .security-context-panel :is(.auth-password-strip, .customer-auth-form, .account-admin-grid) {
+.system-workspace-shell .security-context-panel .auth-password-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: var(--space-3);
   align-items: end;
 }
 
-.system-workspace-shell .security-context-panel :is(.auth-password-strip, .customer-auth-form, .account-admin-grid) label {
+.system-workspace-shell .security-context-panel .auth-password-strip label {
   display: grid;
   min-width: 0;
   gap: var(--space-2);
@@ -435,7 +408,7 @@
   grid-column: 1 / -1;
 }
 
-.system-workspace-shell :is(.auth-session-message, .customer-auth-form > strong, .customer-auth-form > p) {
+.system-workspace-shell .auth-session-message {
   grid-column: 1 / -1;
 }
 

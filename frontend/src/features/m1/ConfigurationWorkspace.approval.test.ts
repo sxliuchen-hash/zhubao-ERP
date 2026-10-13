@@ -3,14 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import ConfigurationWorkspace from './ConfigurationWorkspace.vue';
 import { fetchAuthAccounts, fetchAuthAccountPreApprovalApplications, fetchAuthAccountPreApprovalReadiness } from '../../services/authApi';
 import { fetchApprovalTasks } from '../../services/approvalApi';
-import { fetchCustomerAuthorizations } from '../../services/customerAuthorizationApi';
 
 vi.mock('../../services/authApi', () => ({
   fetchAuthSession: vi.fn().mockResolvedValue(null), changeOwnPassword: vi.fn(),
   fetchAuthAccounts: vi.fn(), fetchAuthAccountPreApprovalApplications: vi.fn(), fetchAuthAccountPreApprovalReadiness: vi.fn(),
 }));
 vi.mock('../../services/approvalApi', () => ({ fetchApprovalTasks: vi.fn() }));
-vi.mock('../../services/customerAuthorizationApi', () => ({ fetchCustomerAuthorizations: vi.fn() }));
 vi.mock('../../services/documentManagementApi', () => ({ fetchStoredContent: vi.fn().mockResolvedValue(null), retireStoredContent: vi.fn() }));
 
 describe('配置页与用户管理分离', () => {
@@ -25,7 +23,6 @@ describe('配置页与用户管理分离', () => {
     expect(wrapper.text()).not.toContain('客户授权');
     expect(wrapper.text()).not.toContain('账号申请与审批');
     expect(fetchAuthAccounts).not.toHaveBeenCalled();
-    expect(fetchCustomerAuthorizations).not.toHaveBeenCalled();
     expect(fetchAuthAccountPreApprovalApplications).not.toHaveBeenCalled();
     expect(fetchAuthAccountPreApprovalReadiness).not.toHaveBeenCalled();
     expect(fetchApprovalTasks).not.toHaveBeenCalled();

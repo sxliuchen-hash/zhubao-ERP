@@ -21,8 +21,11 @@
 | 内容 | 原位置 | 归档依据 |
 |---|---|---|
 | 账号申请与审批面板及专属测试 | `frontend/src/features/m1/AccountApprovalPanel.vue`、`AccountApprovalPanel.test.ts` | `App.vue`、审批页、配置页、用户管理均不导入；配置页测试断言不展示该面板。用户管理直接保存账号。`authApi` 前置审批函数和后端兼容接口仍保留，本批不删接口、不删表 |
+| 无页面调用的客户授权客户端及专属测试 | `frontend/src/services/customerAuthorizationApi.ts`、`customerAuthorizationApi.test.ts` | 现行用户管理通过账号保存写入客户范围，不导入该客户端。后端 `CustomerAuthorizationController`、服务、仓储和权限仍保留，不能把本批理解成客户授权功能已删除 |
 
 同时从 `frontend/src/styles.css`、`frontend/src/system-workspaces.css` 去掉只被该面板使用的 `.account-process-row`、`.account-row-actions`，以及没有任何页面使用的 `.account-admin-form`、`.account-admin-checks`。财务页仍使用 `.account-admin-grid`；配置页仍使用登录会话样式。
+
+客户授权客户端归档时，另从 `system-workspaces.css` 去掉没有页面使用的 `.security-customer-auth`、`.security-account-contract`、`.customer-auth-form`、`.customer-auth-hint`、`.customer-auth-message`。配置页的登录身份和改密样式保留。本批不注销 `/api/security/customer-authorizations`。
 
 ## 使用边界
 
