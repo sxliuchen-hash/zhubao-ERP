@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Version = ("m3.62-" + (Get-Date -Format "yyyyMMddHHmm")),
     [switch]$SkipTests,
     [switch]$NoDockerBuild,
@@ -63,6 +63,24 @@ function Write-ChecksumManifest([string]$targetDir) {
 function Write-Utf8NoBomLines([string]$path, [string[]]$lines) {
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllLines($path, $lines, $encoding)
+}
+
+function Write-RuntimeZip([string]$sourceDir, [string]$destinationPath) {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $basePath = (Resolve-Path -LiteralPath $sourceDir).Path.TrimEnd('\', '/')
+    $archive = [IO.Compression.ZipFile]::Open($destinationPath, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        # ZIP 条目统一使用正斜线，确保 Linux 解压后仍能识别 SQL 与镜像子目录。
+        foreach ($file in Get-ChildItem -LiteralPath $basePath -File -Recurse -Force | Sort-Object FullName) {
+            $entryName = $file.FullName.Substring($basePath.Length + 1).Replace('\', '/')
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, $file.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal
+            ) | Out-Null
+        }
+    } finally {
+        $archive.Dispose()
+    }
 }
 
 Assert-InsideRepo $artifactRoot
@@ -166,7 +184,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "== Create zip package =="
-Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -Force
+Write-RuntimeZip $packageDir $zipPath
 $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Utf8NoBomLines "$zipPath.sha256" @("$zipHash  $(Split-Path -Leaf $zipPath)")
 

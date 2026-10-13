@@ -114,17 +114,17 @@ async function handleChangePassword() {
         </div>
       </div>
       <h1>登录</h1>
-      <p class="login-lead">使用管理员分配的账号进入作业台。演示环境可选用下面的账号，密码是账号名加 123。</p>
+      <p class="login-lead">使用管理员分配的账号进入作业台。<template v-if="demoUsers.length > 0">演示环境可选用下面的账号，密码是账号名加 123。</template></p>
       <label>
         <span>账号</span>
         <input
           v-model="username"
-          list="login-demo-users"
+          :list="demoUsers.length > 0 ? 'login-demo-users' : undefined"
           autocomplete="username"
           :disabled="busy"
           @change="syncDemoPassword"
         />
-        <datalist id="login-demo-users">
+        <datalist v-if="demoUsers.length > 0" id="login-demo-users">
           <option v-for="name in demoUsers" :key="name" :value="name" />
         </datalist>
       </label>

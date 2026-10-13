@@ -107,7 +107,17 @@ echo "== Create MySQL backup in Docker volume =="
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T -e "BACKUP_NAME=$remote_sql" mysql sh -c '
 set -eu
 target="/backups/$BACKUP_NAME"
-mysqldump --single-transaction --routines --triggers -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" > "$target"
+dump_stderr="$(mktemp "$target.stderr.XXXXXX")"
+trap '\''rm -f "$dump_stderr"'\'' 0
+dump_status=0
+mysqldump --no-tablespaces --single-transaction --routines --triggers -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" > "$target" 2> "$dump_stderr" || dump_status=$?
+cat "$dump_stderr" >&2
+# 某些版本的表空间权限错误仍返回零，不能将这种导出标记为成功。
+if [ "$dump_status" -ne 0 ] || grep -E "PROCESS privilege.*tablespaces" "$dump_stderr" >/dev/null; then
+  rm -f "$target" "$target.sha256"
+  [ "$dump_status" -ne 0 ] || dump_status=1
+  exit "$dump_status"
+fi
 sha256sum "$target" > "$target.sha256"
 ls -lh "$target" "$target.sha256"
 '

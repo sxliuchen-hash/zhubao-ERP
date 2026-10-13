@@ -1646,7 +1646,7 @@ PWA 一期边界：
 | `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话 |
 | `POST /api/auth/logout` | 注销当前 token；前端无论后端是否可达都清理本地 token |
 | `POST /api/auth/password` | 自助改密/续期；成功后清除强制首次改密标记和临时密码消费标记；只接受 Bearer 登录会话，不使用请求头角色兜底 |
-| `GET /api/auth/demo-users` | 返回可用于评审的演示账号列表 |
+| `GET /api/auth/demo-users` | 仅返回启用且 `demoAccount=true` 的演示账号，按账号名排序；不返回真实账号。无启用演示账号时返回空列表，登录页隐藏演示密码提示和候选列表 |
 | `GET /api/auth/audit-events` | 返回最近登录会话审计事件，默认返回最近审计事件；仓储可切换内存/JDBC |
 | `GET /api/auth/audit-integrity` | 返回最近认证审计事件摘要链校验结果 |
 

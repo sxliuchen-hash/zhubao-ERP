@@ -25,6 +25,23 @@ class AuthSessionServiceTest {
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();
 
     @Test
+    void demoUsernamesExcludesProductionAndDisabledAccounts() {
+        InMemoryAuthUserAccountRepository repository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        repository.save(new AuthUserAccount(
+                "trial-admin", "unused-hash", "试用管理员", RoleCode.ADMIN, DataScope.ALL, true, false
+        ));
+        repository.updateEnabled("leader", false);
+        AuthSessionService service = service(repository);
+
+        assertThat(service.demoUsernames())
+                .containsExactly("admin", "carve", "inlay", "operator", "polish", "qc", "warehouse");
+
+        repository.findAll().stream().filter(AuthUserAccount::demoAccount)
+                .forEach(account -> repository.updateEnabled(account.username(), false));
+        assertThat(service.demoUsernames()).isEmpty();
+    }
+
+    @Test
     void logsInDemoUserAndResolvesOperatorContextFromBearerToken() {
         AuthSessionService service = service();
 

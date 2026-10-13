@@ -75,6 +75,54 @@ try {
     }
     Assert-True $rejected "结构门禁没有拒绝错序 SQL"
 
+    # 只加载实际 ZIP 写入函数，回归不触发前后端构建或镜像打包。
+    $packageScript = Join-Path $PSScriptRoot 'docker-build-package.ps1'
+    $parseTokens = $null
+    $parseErrors = $null
+    $packageAst = [Management.Automation.Language.Parser]::ParseFile($packageScript, [ref]$parseTokens, [ref]$parseErrors)
+    Assert-True ($parseErrors.Count -eq 0) '打包脚本存在语法错误'
+    $zipFunction = $packageAst.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Write-RuntimeZip'
+    }, $true)
+    Assert-True ($null -ne $zipFunction) '打包脚本缺少 ZIP 写入函数'
+    . ([ScriptBlock]::Create($zipFunction.Extent.Text))
+    $zipSource = Join-Path $testRoot 'zip-source'
+    New-Item -ItemType Directory -Force -Path (Join-Path $zipSource 'mysql-init'), (Join-Path $zipSource 'images') | Out-Null
+    foreach ($name in @('.env', '.env.example', 'MANIFEST.sha256', 'start.sh', 'mysql-init/V0001__test.sql', 'images/test.tar')) {
+        [IO.File]::WriteAllText((Join-Path $zipSource $name), "内容：$name", $encoding)
+    }
+    $hiddenEnv = Get-Item -LiteralPath (Join-Path $zipSource '.env') -Force
+    $hiddenEnv.Attributes = $hiddenEnv.Attributes -bor [IO.FileAttributes]::Hidden
+    $runtimeZip = Join-Path $testRoot 'runtime.zip'
+    Write-RuntimeZip $zipSource $runtimeZip
+    $archive = [IO.Compression.ZipFile]::OpenRead($runtimeZip)
+    try {
+        $expectedEntries = @('.env', '.env.example', 'MANIFEST.sha256', 'start.sh', 'mysql-init/V0001__test.sql', 'images/test.tar')
+        Assert-True ($archive.Entries.Count -eq $expectedEntries.Count) 'ZIP 文件数量不一致'
+        foreach ($entry in $archive.Entries) {
+            Assert-True (-not $entry.FullName.Contains('\')) 'ZIP 条目使用了 Windows 路径分隔符'
+            Assert-True ($expectedEntries -ccontains $entry.FullName) "ZIP 条目不正确：$($entry.FullName)"
+            $reader = New-Object IO.StreamReader($entry.Open(), [Text.Encoding]::UTF8)
+            try {
+                Assert-True ($reader.ReadToEnd() -ceq "内容：$($entry.FullName)") "ZIP 文件内容不一致：$($entry.FullName)"
+            } finally {
+                $reader.Dispose()
+            }
+        }
+    } finally {
+        $archive.Dispose()
+    }
+    Remove-Item -LiteralPath (Join-Path $zipSource 'images/test.tar') -Force
+    $emptyImagesZip = Join-Path $testRoot 'empty-images.zip'
+    Write-RuntimeZip $zipSource $emptyImagesZip
+    $archive = [IO.Compression.ZipFile]::OpenRead($emptyImagesZip)
+    try {
+        Assert-True ($archive.Entries.Count -eq 5) '空镜像目录影响 ZIP 生成'
+        Assert-True ($null -ne $archive.GetEntry('mysql-init/V0001__test.sql')) '空镜像目录导致 SQL 丢失'
+    } finally {
+        $archive.Dispose()
+    }
+
     # 用替身模拟失败退出，验证检查入口不会在某一步失败后继续或误报通过。
     $fakeRepo = Join-Path $testRoot "repo"
     New-Item -ItemType Directory -Force -Path (Join-Path $fakeRepo "scripts"), (Join-Path $fakeRepo "node_modules") | Out-Null
@@ -84,7 +132,7 @@ try {
     $ErrorActionPreference = "Stop"
     Assert-True ($LASTEXITCODE -ne 0) "后端失败没有传播退出码"
     Assert-True (($output -join "`n") -notmatch '项目检查通过|执行前端') "后端失败后仍继续检查"
-    Write-Host "维护脚本回归通过：数字排序、V36 定向兼容、历史内容校验、重复版本、覆盖保护、错序门禁和失败退出。"
+    Write-Host "维护脚本回归通过：数字排序、V36 定向兼容、历史内容校验、重复版本、覆盖保护、错序门禁、跨平台 ZIP 和失败退出。"
 }
 finally {
     $resolvedRoot = [IO.Path]::GetFullPath($testRoot)
