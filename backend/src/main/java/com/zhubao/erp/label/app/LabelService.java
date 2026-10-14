@@ -191,8 +191,8 @@ public class LabelService {
         String footerLeft = "";
         String footerRight = "";
         if (motherFallback) {
-            footerLeft = footerValue(template == null ? null : template.footerLeftSource(), facts, facts.express());
-            footerRight = footerValue(template == null ? null : template.footerRightSource(), facts, receiverFooter(facts.receiver()));
+            footerLeft = template == null ? facts.express() : footerValue(template.footerLeftSource(), facts);
+            footerRight = template == null ? receiverFooter(facts.receiver()) : footerValue(template.footerRightSource(), facts);
         }
         return new LabelPayload(
                 type,
@@ -324,12 +324,11 @@ public class LabelService {
         };
     }
 
-    private String footerValue(String source, StickerFacts facts, String fallback) {
+    private String footerValue(String source, StickerFacts facts) {
         if (source == null || source.isBlank()) {
-            return fallback;
+            return "";
         }
-        String value = valueOf(source, facts);
-        return value.isBlank() ? fallback : value;
+        return valueOf(source, facts);
     }
 
     /** 新标签二维码包含版本和标签实例。没有生效改单时版本为 0。 */

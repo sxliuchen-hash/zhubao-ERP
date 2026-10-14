@@ -53,3 +53,4 @@
 53	COLUMN	biz_order_change	worker_name
 54	TABLE	biz_execution_round
 55	TABLE	biz_label_trace
+56	ROW	sys_label_default_revision	revision_code	V56

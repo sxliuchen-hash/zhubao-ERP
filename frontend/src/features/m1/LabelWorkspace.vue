@@ -71,14 +71,14 @@ const motherTemplateCode = ref('');
 
 const labelMarkup = computed(() => preview.value ? buildLabelMarkup(preview.value) : '');
 const sheetStyle = computed(() => ({
-  width: `calc(${preview.value?.printerSetting.widthMm ?? 60}mm * var(--label-scale, ${labelPreviewScale}))`,
-  height: `calc(${preview.value?.printerSetting.heightMm ?? 40}mm * var(--label-scale, ${labelPreviewScale}))`,
+  width: `calc(${preview.value?.printerSetting.widthMm ?? 40}mm * var(--label-scale, ${labelPreviewScale}))`,
+  height: `calc(${preview.value?.printerSetting.heightMm ?? 30}mm * var(--label-scale, ${labelPreviewScale}))`,
 }));
 const labelScaleStyle = computed(() => ({
   transform: `scale(var(--label-scale, ${labelPreviewScale}))`,
   transformOrigin: 'top left',
-  width: `${(preview.value?.printerSetting.widthMm ?? 60)}mm`,
-  height: `${(preview.value?.printerSetting.heightMm ?? 40)}mm`,
+  width: `${(preview.value?.printerSetting.widthMm ?? 40)}mm`,
+  height: `${(preview.value?.printerSetting.heightMm ?? 30)}mm`,
 }));
 
 // 当前类型可选模板
@@ -396,9 +396,9 @@ const templateForm = ref<{
   footerRightSource: '',
   isDefault: false,
   enabled: true,
-  widthMm: 60,
-  heightMm: 40,
-  dpi: 203,
+  widthMm: 40,
+  heightMm: 30,
+  dpi: 300,
   printerName: '',
   copies: 1,
   remark: '',
@@ -417,9 +417,9 @@ function newTemplate() {
     footerRightSource: '',
     isDefault: false,
     enabled: true,
-    widthMm: 60,
-    heightMm: 40,
-    dpi: 203,
+    widthMm: 40,
+    heightMm: 30,
+    dpi: 300,
     printerName: '',
     copies: 1,
     remark: '',
@@ -505,7 +505,7 @@ onMounted(loadTemplates);
     <section class="label-intro">
       <h2>标签打印</h2>
       <p class="label-note">
-        核对客户、加工要求、期限和单号后点击打印。按标签纸尺寸<strong>黑白打印</strong>，生产进度可扫二维码查看。
+        40×30 mm 贴纸保留单号、二维码、验证码、客户、加工要求和期限；详细信息扫码查看。打印时选择佳博 GP-9134T，并核对纸张尺寸和缩放为 100%。
       </p>
     </section>
 

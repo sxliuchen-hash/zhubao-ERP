@@ -94,19 +94,15 @@ public class InMemoryLabelTemplateRepository implements LabelTemplateRepository 
     }
 
     private void seedDefaults() {
-        LabelPrinterSetting mediumLabel = new LabelPrinterSetting(60, 40, 203, "", 1);
+        LabelPrinterSetting smallLabel = LabelPrinterSetting.defaultSetting();
         create(new LabelTemplate(
                 null, "MOTHER-DEFAULT", "母单默认模板", LabelType.MOTHER, "珠宝来料加工系统",
                 List.of(
                         new LabelTemplateField("验证码", "verificationCode", 1),
                         new LabelTemplateField("客户", "customer", 2),
                         new LabelTemplateField("加工要求", "processingRequirement", 3),
-                        new LabelTemplateField("期限", "dueDate", 4),
-                        new LabelTemplateField("单号", "code", 5),
-                        new LabelTemplateField("物料", "goodsName", 6),
-                        new LabelTemplateField("数量", "quantity", 7),
-                        new LabelTemplateField("重量", "weight", 8)),
-                "express", "receiver", true, true, mediumLabel,
+                        new LabelTemplateField("期限", "dueDate", 4)),
+                "", "", true, true, smallLabel,
                 "一期评审 seed", "system", "2026-07-09T10:00:00"));
         create(new LabelTemplate(
                 null, "WORK_ORDER-DEFAULT", "子工单默认模板", LabelType.WORK_ORDER, "珠宝来料加工系统",
@@ -114,28 +110,22 @@ public class InMemoryLabelTemplateRepository implements LabelTemplateRepository 
                         new LabelTemplateField("验证码", "verificationCode", 1),
                         new LabelTemplateField("客户", "customer", 2),
                         new LabelTemplateField("加工要求", "processingRequirement", 3),
-                        new LabelTemplateField("期限", "dueDate", 4),
-                        new LabelTemplateField("单号", "code", 5),
-                        new LabelTemplateField("物料", "goodsName", 6),
-                        new LabelTemplateField("数量", "quantity", 7),
-                        new LabelTemplateField("重量", "weight", 8)),
-                "", "", true, true, mediumLabel,
+                        new LabelTemplateField("期限", "dueDate", 4)),
+                "", "", true, true, smallLabel,
                 "一期评审 seed", "system", "2026-07-09T10:00:00"));
         create(new LabelTemplate(
                 null, "OUTBOUND-DEFAULT", "出货默认模板", LabelType.OUTBOUND, "珠宝来料加工系统",
                 List.of(
                         new LabelTemplateField("客户", "customer", 1),
-                        new LabelTemplateField("数量", "quantity", 2),
-                        new LabelTemplateField("重量", "weight", 3)),
-                "express", "receiver", true, true, mediumLabel,
+                        new LabelTemplateField("数量", "quantity", 2)),
+                "", "", true, true, smallLabel,
                 "一期评审 seed", "system", "2026-07-09T10:00:00"));
         create(new LabelTemplate(
                 null, "REWORK-DEFAULT", "返工默认模板", LabelType.REWORK, "珠宝来料加工系统",
                 List.of(
                         new LabelTemplateField("客户", "customer", 1),
-                        new LabelTemplateField("物料", "goodsName", 2),
-                        new LabelTemplateField("数量", "quantity", 3)),
-                "", "", true, true, mediumLabel,
+                        new LabelTemplateField("数量", "quantity", 2)),
+                "", "", true, true, smallLabel,
                 "一期评审 seed", "system", "2026-07-09T10:00:00"));
     }
 }

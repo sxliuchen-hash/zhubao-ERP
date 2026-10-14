@@ -33,9 +33,9 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void realCatalogKeepsContiguousVersionsThroughV54() {
+    void realCatalogKeepsContiguousVersionsThroughV56() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(55);
+        assertThat(scripts).hasSize(56);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);
@@ -70,6 +70,8 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(53).fileName()).isEqualTo("V54__m3_order_requirement_version.sql");
         assertThat(scripts.get(54).version()).isEqualTo(55);
         assertThat(scripts.get(54).fileName()).isEqualTo("V55__m3_label_trace.sql");
+        assertThat(scripts.get(55).version()).isEqualTo(56);
+        assertThat(scripts.get(55).fileName()).isEqualTo("V56__m3_compact_label_defaults.sql");
         assertThat(MigrationCatalog.loadClasspath()).extracting(MigrationScript::version)
                 .containsExactlyElementsOf(scripts.stream().map(MigrationScript::version).toList());
     }
@@ -124,6 +126,58 @@ class DatabaseUpgradeServiceTest {
         assertThat(inspector.columnExists("biz_order_change", "customer_delta")).isTrue();
         assertThat(inspector.columnExists("biz_order_change", "rework_process")).isTrue();
         assertThat(inspector.tableExists("biz_order_requirement_version")).isTrue();
+    }
+
+    @Test
+    void v56只更新未改动的内置默认模板() throws Exception {
+        MigrationScript script = MigrationCatalog.loadClasspath().get(55);
+        assertThat(script.probe().kind()).isEqualTo(SchemaProbe.Kind.ROW);
+        assertThat(script.probe().tableName()).isEqualTo("sys_label_default_revision");
+        assertThat(script.probe().expectedValue()).isEqualTo("V56");
+        DataSource dataSource = dataSource();
+        execute(dataSource, "create table sys_label_template (template_code varchar(80) primary key, "
+                + "label_type varchar(40), created_by varchar(80), fields_json text, "
+                + "printer_setting_json text, footer_left_source varchar(80), footer_right_source varchar(80))");
+        String oldMotherFields = "[{\"label\":\"验证码\",\"source\":\"verificationCode\",\"sortOrder\":1},"
+                + "{\"label\":\"客户\",\"source\":\"customer\",\"sortOrder\":2},"
+                + "{\"label\":\"加工要求\",\"source\":\"processingRequirement\",\"sortOrder\":3},"
+                + "{\"label\":\"期限\",\"source\":\"dueDate\",\"sortOrder\":4},"
+                + "{\"label\":\"单号\",\"source\":\"code\",\"sortOrder\":5},"
+                + "{\"label\":\"物料\",\"source\":\"goodsName\",\"sortOrder\":6},"
+                + "{\"label\":\"数量\",\"source\":\"quantity\",\"sortOrder\":7},"
+                + "{\"label\":\"重量\",\"source\":\"weight\",\"sortOrder\":8}]";
+        String oldPrinter = "{\"widthMm\":60,\"heightMm\":40,\"dpi\":203,\"printerName\":\"\",\"copies\":1}";
+        execute(dataSource, "insert into sys_label_template values ('MOTHER-DEFAULT','MOTHER','system','"
+                + oldMotherFields + "','" + oldPrinter + "','express','receiver')");
+        execute(dataSource, "insert into sys_label_template values ('WORK_ORDER-DEFAULT','WORK_ORDER','system','自定义字段','"
+                + oldPrinter + "','','')");
+        execute(dataSource, "insert into sys_label_template values ('OUTBOUND-DEFAULT','OUTBOUND','system','"
+                + "[{\"label\":\"客户\",\"source\":\"customer\",\"sortOrder\":1},"
+                + "{\"label\":\"数量\",\"source\":\"quantity\",\"sortOrder\":2},"
+                + "{\"label\":\"重量\",\"source\":\"weight\",\"sortOrder\":3}]','"
+                + oldPrinter + "','自定义脚注','receiver')");
+        execute(dataSource, "insert into sys_label_template values ('REWORK-DEFAULT','REWORK','system','"
+                + "[{\"label\":\"客户\",\"source\":\"customer\",\"sortOrder\":1},"
+                + "{\"label\":\"物料\",\"source\":\"goodsName\",\"sortOrder\":2},"
+                + "{\"label\":\"数量\",\"source\":\"quantity\",\"sortOrder\":3}]',"
+                + "'自定义打印设置','','')");
+        execute(dataSource, "insert into sys_label_template values ('MOTHER-CUSTOM','MOTHER','operator01','"
+                + oldMotherFields + "','" + oldPrinter + "','express','receiver')");
+        JdbcSchemaInspector inspector = new JdbcSchemaInspector(dataSource);
+        assertThat(inspector.matches(script.probe())).isFalse();
+        runTwice(dataSource, script.sql());
+        assertThat(inspector.matches(script.probe())).isTrue();
+        assertThat(value(dataSource, "MOTHER-DEFAULT", "fields_json")).contains("verificationCode").doesNotContain("goodsName");
+        assertThat(value(dataSource, "MOTHER-DEFAULT", "printer_setting_json")).contains("\"widthMm\":40", "\"dpi\":300");
+        assertThat(value(dataSource, "MOTHER-DEFAULT", "footer_left_source")).isEmpty();
+        assertThat(value(dataSource, "WORK_ORDER-DEFAULT", "fields_json")).isEqualTo("自定义字段");
+        assertThat(value(dataSource, "WORK_ORDER-DEFAULT", "printer_setting_json")).contains("\"widthMm\":40");
+        assertThat(value(dataSource, "OUTBOUND-DEFAULT", "fields_json")).doesNotContain("weight");
+        assertThat(value(dataSource, "OUTBOUND-DEFAULT", "footer_left_source")).isEqualTo("自定义脚注");
+        assertThat(value(dataSource, "REWORK-DEFAULT", "fields_json")).doesNotContain("goodsName");
+        assertThat(value(dataSource, "REWORK-DEFAULT", "printer_setting_json")).isEqualTo("自定义打印设置");
+        assertThat(value(dataSource, "MOTHER-CUSTOM", "fields_json")).isEqualTo(oldMotherFields);
+        assertThat(value(dataSource, "MOTHER-CUSTOM", "printer_setting_json")).isEqualTo(oldPrinter);
     }
 
     @Test
@@ -308,6 +362,18 @@ class DatabaseUpgradeServiceTest {
         dataSource.setUser("sa");
         dataSource.setPassword("");
         return dataSource;
+    }
+
+    private static String value(DataSource dataSource, String templateCode, String column) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select " + column + " from sys_label_template where template_code = ?")) {
+            statement.setString(1, templateCode);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getString(1);
+            }
+        }
     }
 
     private static void runTwice(DataSource dataSource, String sql) throws Exception {

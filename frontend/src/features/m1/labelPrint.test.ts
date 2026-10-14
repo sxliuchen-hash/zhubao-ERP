@@ -39,4 +39,29 @@ describe('黑白标签打印', () => {
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('扫码看实时进度');
   });
+
+  it('40×30 贴纸突出识别信息并省去重复单号和脚注', () => {
+    const compact: LabelPayload = {
+      ...payload,
+      fields: [
+        { name: '验证码', value: 'K7M2' },
+        { name: '客户', value: '恒信珠宝' },
+        { name: '加工要求', value: '内壁刻字' },
+        { name: '期限', value: '2026-10-20' },
+        { name: '单号', value: payload.primaryCode },
+        { name: '物料', value: '戒托' },
+      ],
+      printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30, dpi: 300 },
+    };
+    const html = buildLabelPrintDocument(compact);
+
+    expect(html).toContain('@page { size: 40mm 30mm; margin: 0; }');
+    expect(html).toContain('class="bw-label bw-label--compact"');
+    expect(html).toContain('width:40mm;height:30mm');
+    expect(html).toContain('K7M2');
+    expect(html).toContain('内壁刻字');
+    expect(html).not.toContain('<dt>单号</dt>');
+    expect(html).not.toContain('<dt>物料</dt>');
+    expect(html).not.toContain('快递：顺丰');
+  });
 });

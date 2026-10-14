@@ -220,7 +220,7 @@ public class PrintJobService {
         return "{\"kind\":\"LABEL\",\"businessCode\":\"" + escape(businessCode)
                 + "\",\"templateCode\":\"" + escape(templateCode)
                 + "\",\"copies\":" + copies
-                + ",\"widthMm\":60,\"heightMm\":40"
+                + ",\"widthMm\":40,\"heightMm\":30"
                 + ",\"version\":\"V" + version
                 + "\",\"instance\":\"" + instance
                 + "\",\"qr\":\"" + qr

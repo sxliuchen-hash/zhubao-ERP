@@ -33,8 +33,26 @@ class LabelTemplateServiceTest {
     @DisplayName("seed：内存仓储启动即含四类默认模板")
     void 内存仓储应含四类默认模板() {
         assertThat(service.findAll()).hasSize(4);
-        assertThat(repository.findDefaultByType(LabelType.MOTHER)).isPresent();
-        assertThat(repository.findDefaultByType(LabelType.OUTBOUND)).isPresent();
+        assertThat(repository.findDefaultByType(LabelType.MOTHER)).get().satisfies(template -> {
+            assertThat(template.fields()).extracting(LabelTemplateField::source)
+                    .containsExactly("verificationCode", "customer", "processingRequirement", "dueDate");
+            assertThat(template.footerLeftSource()).isEmpty();
+            assertThat(template.footerRightSource()).isEmpty();
+        });
+        assertThat(repository.findDefaultByType(LabelType.WORK_ORDER)).get().satisfies(template ->
+                assertThat(template.fields()).extracting(LabelTemplateField::source)
+                        .containsExactly("verificationCode", "customer", "processingRequirement", "dueDate"));
+        assertThat(repository.findDefaultByType(LabelType.OUTBOUND)).get().satisfies(template ->
+                assertThat(template.fields()).extracting(LabelTemplateField::source)
+                        .containsExactly("customer", "quantity"));
+        assertThat(repository.findDefaultByType(LabelType.REWORK)).get().satisfies(template ->
+                assertThat(template.fields()).extracting(LabelTemplateField::source)
+                        .containsExactly("customer", "quantity"));
+        assertThat(service.findAll()).allSatisfy(template -> {
+            assertThat(template.printerSetting().widthMm()).isEqualTo(40);
+            assertThat(template.printerSetting().heightMm()).isEqualTo(30);
+            assertThat(template.printerSetting().dpi()).isEqualTo(300);
+        });
     }
 
     @Test

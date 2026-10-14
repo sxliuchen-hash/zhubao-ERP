@@ -46,6 +46,7 @@ class PrintJobServiceTest {
         PrintJob first = service.create("print-job-0001", "MD-1", "FLOW", 1, "何琳");
         PrintJob second = service.create("print-job-0001", "MD-1", "FLOW", 1, "何琳");
         assertThat(second.id()).isEqualTo(first.id());
+        assertThat(first.contentSnapshot()).contains("\"widthMm\":40,\"heightMm\":30");
         assertThatThrownBy(() -> service.create("print-job-0001", "MD-1", "FLOW", 2, "何琳"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("内容不一致");

@@ -14,15 +14,15 @@ public record LabelPrinterSetting(
         int copies
 ) {
     public LabelPrinterSetting {
-        widthMm = widthMm <= 0 ? 60 : widthMm;
-        heightMm = heightMm <= 0 ? 40 : heightMm;
-        dpi = dpi <= 0 ? 203 : dpi;
+        widthMm = widthMm <= 0 ? 40 : widthMm;
+        heightMm = heightMm <= 0 ? 30 : heightMm;
+        dpi = dpi <= 0 ? 300 : dpi;
         printerName = printerName == null ? "" : printerName.trim();
         copies = copies <= 0 ? 1 : copies;
     }
 
-    /** 默认标签打印设置：60×40mm、203dpi、未指定打印机、1 份。 */
+    /** 默认标签打印设置：40×30mm、300dpi、未指定打印机、1 份。 */
     public static LabelPrinterSetting defaultSetting() {
-        return new LabelPrinterSetting(60, 40, 203, "", 1);
+        return new LabelPrinterSetting(40, 30, 300, "", 1);
     }
 }

@@ -8,6 +8,7 @@ import com.zhubao.erp.label.domain.GenerateLabelCommand;
 import com.zhubao.erp.label.domain.LabelField;
 import com.zhubao.erp.label.domain.LabelPayload;
 import com.zhubao.erp.label.domain.LabelType;
+import com.zhubao.erp.label.domain.ReprintLabelCommand;
 import com.zhubao.erp.label.infra.InMemoryLabelTemplateRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -166,8 +167,9 @@ class LabelServiceTest {
 
         assertThat(payload.brandTitle()).isEqualTo("珠宝来料加工系统");
         assertThat(payload.templateCode()).isEqualTo("MOTHER-DEFAULT");
-        assertThat(payload.printerSetting().widthMm()).isEqualTo(60);
-        assertThat(payload.printerSetting().dpi()).isEqualTo(203);
+        assertThat(payload.printerSetting().widthMm()).isEqualTo(40);
+        assertThat(payload.printerSetting().heightMm()).isEqualTo(30);
+        assertThat(payload.printerSetting().dpi()).isEqualTo(300);
     }
 
     @Test
@@ -200,10 +202,15 @@ class LabelServiceTest {
 
         assertThat(payload.templateCode()).isEqualTo("MOTHER-DEFAULT");
         assertThat(payload.fields()).extracting(LabelField::name)
-                .containsExactly("验证码", "客户", "加工要求", "期限", "单号", "物料", "数量", "重量");
+                .containsExactly("验证码", "客户", "加工要求", "期限");
         assertThat(payload.fields()).extracting(LabelField::value)
-                .contains("K7M2", "恒信珠宝", "来料加工", "2026-07-20", "MO20260709002");
-        assertThat(payload.footerLeft()).contains("顺丰");
-        assertThat(payload.footerRight()).contains("王收货");
+                .containsExactly("K7M2", "恒信珠宝", "来料加工", "2026-07-20");
+        assertThat(payload.footerLeft()).isEmpty();
+        assertThat(payload.footerRight()).isEmpty();
+        LabelPayload reprinted = service.reprint(new ReprintLabelCommand(
+                "MOTHER", "MO20260709002", "原贴纸遗失", "operator01"));
+        assertThat(reprinted.fields()).extracting(LabelField::value).contains("K7M2");
+        assertThat(businessRepository.listLabelReprints("MOTHER", "MO20260709002"))
+                .singleElement().satisfies(log -> assertThat(log.verificationCode()).isEqualTo("K7M2"));
     }
 }

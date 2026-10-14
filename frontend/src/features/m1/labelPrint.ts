@@ -54,6 +54,7 @@ export const labelFaceCss = `
   row-gap: 0.15mm;
   font-size: 6.5pt;
 }
+.bw-fields div { display: contents; }
 .bw-fields dt, .bw-fields dd { margin: 0; min-width: 0; }
 .bw-fields dd {
   font-weight: 700;
@@ -77,28 +78,92 @@ export const labelFaceCss = `
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.bw-label--compact {
+  padding: 0.8mm;
+  border-width: 0.2mm;
+  grid-template-columns: 17mm minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 0.8mm;
+  row-gap: 0.6mm;
+}
+.bw-label--compact .bw-top {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  gap: 0.8mm;
+  min-width: 0;
+}
+.bw-label--compact .bw-brand,
+.bw-label--compact .bw-foot { display: none; }
+.bw-label--compact .bw-type {
+  padding: 0 0.5mm;
+  font-size: 7.5pt;
+  line-height: 1.2;
+}
+.bw-label--compact .bw-code {
+  margin: 0;
+  min-width: 0;
+  font-size: 8.5pt;
+  line-height: 1.1;
+}
+.bw-label--compact .bw-qr {
+  grid-row: 2;
+  grid-column: 1;
+  align-self: start;
+}
+.bw-label--compact .bw-main {
+  display: contents;
+}
+.bw-label--compact .bw-fields {
+  grid-row: 2;
+  grid-column: 2;
+  display: block;
+  margin: 0;
+  font-size: 7.5pt;
+  line-height: 1.18;
+  overflow: hidden;
+}
+.bw-label--compact .bw-fields div {
+  display: block;
+  margin-bottom: 0.45mm;
+}
+.bw-label--compact .bw-fields dt {
+  display: inline;
+  font-weight: 400;
+}
+.bw-label--compact .bw-fields dd {
+  display: inline;
+  font-weight: 700;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.bw-label--compact .bw-fields dt::after { content: '：'; }
+.bw-label--compact .bw-fields div:first-child dd { font-size: 8.5pt; }
 `;
 
 /** 生成一张黑白标签的 HTML，供预览和打印共用。 */
 export function buildLabelMarkup(payload: LabelPayload): string {
-  const width = positiveMm(payload.printerSetting.widthMm, 60);
-  const height = positiveMm(payload.printerSetting.heightMm, 40);
-  const fields = payload.fields
-    .filter((field) => field.name.trim() !== '')
+  const width = positiveMm(payload.printerSetting.widthMm, 40);
+  const height = positiveMm(payload.printerSetting.heightMm, 30);
+  const compact = width <= 40 && height <= 30;
+  const availableFields = payload.fields.filter((field) => field.name.trim() !== '' && field.value.trim() !== '');
+  const visibleFields = compact
+    ? availableFields.filter((field) => field.name.trim() !== '单号').slice(0, 4)
+    : availableFields;
+  const fields = visibleFields
     .map(
       (field) =>
-        `<dt>${escapeHtml(field.name)}</dt><dd>${escapeHtml(field.value)}</dd>`,
+        `<div><dt>${escapeHtml(compactFieldName(field.name, compact))}</dt><dd>${escapeHtml(field.value)}</dd></div>`,
     )
     .join('');
   const footerLeft = payload.footerLeft.trim();
   const footerRight = payload.footerRight.trim();
   const footer =
-    footerLeft || footerRight
+    !compact && (footerLeft || footerRight)
       ? `<div class="bw-foot"><span>${escapeHtml(footerLeft)}</span><span>${escapeHtml(footerRight)}</span></div>`
       : '';
 
   return [
-    `<article class="bw-label" style="width:${width}mm;height:${height}mm">`,
+    `<article class="bw-label${compact ? ' bw-label--compact' : ''}" style="width:${width}mm;height:${height}mm">`,
     `<div class="bw-qr">${renderQrSvg(payload.qrContent)}</div>`,
     '<div class="bw-main">',
     '<div class="bw-top">',
@@ -115,8 +180,8 @@ export function buildLabelMarkup(payload: LabelPayload): string {
 
 /** 只含标签的打印文档，按纸张毫米尺寸分页，份数各占一页。 */
 export function buildLabelPrintDocument(payload: LabelPayload): string {
-  const width = positiveMm(payload.printerSetting.widthMm, 60);
-  const height = positiveMm(payload.printerSetting.heightMm, 40);
+  const width = positiveMm(payload.printerSetting.widthMm, 40);
+  const height = positiveMm(payload.printerSetting.heightMm, 30);
   const copies = clampCopies(payload.printerSetting.copies);
   const sheet = `<div class="bw-sheet">${buildLabelMarkup(payload)}</div>`;
   return [
@@ -161,6 +226,16 @@ function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function compactFieldName(name: string, compact: boolean): string {
+  if (!compact) return name;
+  switch (name) {
+    case '验证码': return '验码';
+    case '加工要求': return '要求';
+    case '期限': return '交期';
+    default: return name;
+  }
 }
 
 function positiveMm(value: number, fallback: number): number {
