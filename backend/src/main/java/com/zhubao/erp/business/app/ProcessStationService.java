@@ -161,7 +161,7 @@ public class ProcessStationService {
             var version = OrderRequirementLookup.current(requirements, mother.code(), "").orElse(null);
             return new ProcessProgressTarget(true, "", mother.code(), blank(mother.customerName()),
                     OrderRequirementLookup.requirement(version, blank(mother.processingRequirement())),
-                    OrderRequirementLookup.dueDate(version, blank(mother.dueDate())), "", false, children);
+                    OrderRequirementLookup.dueDate(version, blank(mother.dueDate())), "", false, 0, 0, children);
         }
         StationTicket ticket = resolve(rawCode);
         assertCustomer(ticket, account);
@@ -172,7 +172,7 @@ public class ProcessStationService {
             throw new BusinessException("当前账号不能做这道工序");
         }
         return new ProcessProgressTarget(false, ticket.orderCode(), ticket.motherOrderCode(), ticket.customerName(),
-                ticket.processingRequirement(), ticket.dueDate(), process, delivered, List.of());
+                ticket.processingRequirement(), ticket.dueDate(), process, delivered, 0, 0, List.of());
     }
 
     public ProcessStationView lookup(String rawCode, AuthUserAccount account) {

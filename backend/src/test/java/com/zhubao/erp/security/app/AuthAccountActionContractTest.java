@@ -203,7 +203,7 @@ class AuthAccountActionContractTest {
                 .hasMessageContaining("尚未具备账号动作放行条件");
         assertThatThrownBy(() -> sessions.session("Bearer " + login.token()))
                 .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("登录账号已停用");
+                .hasMessage("登录已失效，请重新登录");
 
         AuthSession stillThere = sessions.login(new AuthLoginCommand("leader", "leader123"));
         applications.save(disableApplication("APP-REVOKE-LEADER", "leader"));
@@ -219,7 +219,7 @@ class AuthAccountActionContractTest {
         assertThat(service.retrySessionRevocation("leader", admin).revokedSessions()).isEqualTo(1);
         assertThatThrownBy(() -> sessions.session("Bearer " + stillThere.token()))
                 .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("登录会话不存在或已退出");
+                .hasMessage("登录已失效，请重新登录");
     }
 
     private void assertSharedBehavior(Harness harness) throws Exception {

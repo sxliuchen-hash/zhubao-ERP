@@ -31,7 +31,7 @@ class FinanceReadAuthorizationTest {
         invalidToken.setBearerAuth("invalid-finance-session");
         ResponseEntity<String> fakeBearer = exchange("/api/finance/payroll-lines", HttpMethod.GET, null, invalidToken);
         assertThat(fakeBearer.getStatusCode().value()).isEqualTo(403);
-        assertThat(fakeBearer.getBody()).contains("登录会话不存在或已退出");
+        assertThat(fakeBearer.getBody()).contains("登录已失效，请重新登录").contains("40301");
 
         ResponseEntity<String> operator = exchange(
                 "/api/finance/statements?customerId=91004",

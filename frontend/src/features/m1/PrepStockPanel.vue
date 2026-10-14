@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import { apiGet, apiPost } from '../../services/apiClient';
 
 interface StockView {
@@ -29,20 +30,56 @@ const motherOrderCode = ref('');
 const quantity = ref('1');
 const weight = ref('1');
 const message = ref('');
+const submitting = ref(false);
+const attempts = ref<Record<string, RequestAttempt>>({});
 
-function requestId(prefix: string) {
-  return `${prefix}-${Date.now()}`;
+function fingerprint(prefix: string) {
+  return [
+    prefix,
+    customerId.value.trim(),
+    materialCode.value.trim(),
+    warehouseCode.value.trim(),
+    batchCode.value.trim(),
+    motherOrderCode.value.trim(),
+    quantity.value.trim(),
+    weight.value.trim(),
+  ].join('|');
 }
 
-async function submitPrep(path: string, body: Record<string, unknown>, success: string) {
+function requestIdFor(prefix: string) {
+  const next = nextRequestAttempt(attempts.value[prefix] ?? null, fingerprint(prefix), prefix);
+  if (next !== attempts.value[prefix]) {
+    attempts.value = { ...attempts.value, [prefix]: next };
+  }
+  return next.requestId;
+}
+
+function stockBody(prefix: string, includeMother: boolean) {
+  return {
+    ...(prefix.startsWith('comp-') ? {} : { customerId: Number(customerId.value) }),
+    materialCode: materialCode.value.trim(),
+    warehouseCode: warehouseCode.value.trim(),
+    batchCode: batchCode.value.trim(),
+    ...(includeMother ? { motherOrderCode: motherOrderCode.value.trim() } : {}),
+    quantity: Number(quantity.value),
+    weight: Number(weight.value),
+    requestId: requestIdFor(prefix),
+  };
+}
+
+async function submitPrep(path: string, prefix: string, includeMother: boolean, success: string) {
+  if (submitting.value) return;
   error.value = '';
   message.value = '';
+  submitting.value = true;
   try {
-    await apiPost<Record<string, unknown>, string>(path, body);
+    await apiPost<Record<string, unknown>, string>(path, stockBody(prefix, includeMother));
     message.value = success;
     await load();
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '库存操作失败';
+  } finally {
+    submitting.value = false;
   }
 }
 
@@ -87,12 +124,12 @@ function label(row: StockView) {
       <label>加工母单<input v-model="motherOrderCode" aria-label="领用母单" /></label>
       <label>数量<input v-model="quantity" aria-label="备料数量" /></label>
       <label>重量<input v-model="weight" aria-label="备料重量" /></label>
-      <button class="primary-button" type="button" @click="submitPrep('/api/inventory/prep-stock/customer-receipts', { customerId: Number(customerId), materialCode, warehouseCode, batchCode, quantity: Number(quantity), weight: Number(weight), requestId: requestId('prep-recv') }, '已登记客户备料')">客户备料收货</button>
-      <button class="secondary-button" type="button" @click="submitPrep('/api/inventory/prep-stock/issues', { customerId: Number(customerId), materialCode, warehouseCode, batchCode, motherOrderCode, quantity: Number(quantity), weight: Number(weight), requestId: requestId('prep-issue') }, '已领用到加工单')">分批领用</button>
-      <button class="secondary-button" type="button" @click="submitPrep('/api/inventory/prep-stock/returns', { customerId: Number(customerId), materialCode, warehouseCode, batchCode, motherOrderCode, quantity: Number(quantity), weight: Number(weight), requestId: requestId('prep-return') }, '已退回备料批次')">退回备料</button>
-      <button class="secondary-button" type="button" @click="submitPrep('/api/inventory/prep-stock/company-receipts', { materialCode, warehouseCode, batchCode, quantity: Number(quantity), weight: Number(weight), requestId: requestId('comp-recv') }, '已登记公司料入库')">公司料入库</button>
-      <button class="secondary-button" type="button" @click="submitPrep('/api/inventory/prep-stock/company-issues', { materialCode, warehouseCode, batchCode, quantity: Number(quantity), weight: Number(weight), requestId: requestId('comp-issue') }, '已领用公司料')">公司料领用</button>
-      <button class="secondary-button" type="button" @click="submitPrep('/api/inventory/prep-stock/company-returns', { materialCode, warehouseCode, batchCode, quantity: Number(quantity), weight: Number(weight), requestId: requestId('comp-return') }, '已退回公司料')">公司料退回</button>
+      <button class="primary-button" type="button" :disabled="submitting" @click="submitPrep('/api/inventory/prep-stock/customer-receipts', 'prep-recv', false, '已登记客户备料')">客户备料收货</button>
+      <button class="secondary-button" type="button" :disabled="submitting" @click="submitPrep('/api/inventory/prep-stock/issues', 'prep-issue', true, '已领用到加工单')">分批领用</button>
+      <button class="secondary-button" type="button" :disabled="submitting" @click="submitPrep('/api/inventory/prep-stock/returns', 'prep-return', true, '已退回备料批次')">退回备料</button>
+      <button class="secondary-button" type="button" :disabled="submitting" @click="submitPrep('/api/inventory/prep-stock/company-receipts', 'comp-recv', false, '已登记公司料入库')">公司料入库</button>
+      <button class="secondary-button" type="button" :disabled="submitting" @click="submitPrep('/api/inventory/prep-stock/company-issues', 'comp-issue', false, '已领用公司料')">公司料领用</button>
+      <button class="secondary-button" type="button" :disabled="submitting" @click="submitPrep('/api/inventory/prep-stock/company-returns', 'comp-return', false, '已退回公司料')">公司料退回</button>
     </form>
     <p v-if="message" class="operation-feedback">{{ message }}</p>
     <p v-if="error" class="operation-feedback danger">{{ error }}</p>

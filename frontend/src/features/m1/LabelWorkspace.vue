@@ -22,6 +22,7 @@ import type { TraceTarget } from '../scan/traceTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import type { ScanRelatedTarget } from '../../services/scanContextApi';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
+import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import { apiGet, apiPost } from '../../services/apiClient';
 
 // 标签打印工作台。标签只印固定信息，进度靠扫码查看。
@@ -286,6 +287,9 @@ const printJobId = ref('');
 const printJobStatus = ref('');
 const printFailure = ref('');
 const reprintJobReason = ref('');
+const printAttempt = ref<RequestAttempt | null>(null);
+const reprintAttempt = ref<RequestAttempt | null>(null);
+const printSubmitting = ref(false);
 
 function printStatusLabel(status: string) {
   if (status === 'SPOOLED') return '已送入系统队列';
@@ -297,22 +301,35 @@ function printStatusLabel(status: string) {
   return status;
 }
 
+function printFingerprint() {
+  const current = preview.value;
+  return [current?.primaryCode ?? '', current?.templateCode || 'FLOW', String(current?.printerSetting.copies || 1)].join('|');
+}
+
 async function submitPrintJob() {
-  if (!preview.value) return;
+  if (!preview.value || printSubmitting.value) return;
   errorMessage.value = '';
-  const job = await apiPost<{ requestId: string; businessCode: string; templateCode: string; copies: number }, { id: string; status: string; failureReason: string }>(
-    '/api/label/print-jobs',
-    {
-      requestId: `print-${preview.value.primaryCode}-${Date.now()}`,
-      businessCode: preview.value.primaryCode,
-      templateCode: preview.value.templateCode || 'FLOW',
-      copies: preview.value.printerSetting.copies || 1,
-    },
-  );
-  printJobId.value = job.id;
-  printJobStatus.value = printStatusLabel(job.status);
-  printFailure.value = job.failureReason || '';
-  feedback.value = `已提交打印任务 ${job.id}。已送入系统队列不等于已经出纸。`;
+  printAttempt.value = nextRequestAttempt(printAttempt.value, printFingerprint(), `print-${preview.value.primaryCode}`);
+  printSubmitting.value = true;
+  try {
+    const job = await apiPost<{ requestId: string; businessCode: string; templateCode: string; copies: number }, { id: string; status: string; failureReason: string }>(
+      '/api/label/print-jobs',
+      {
+        requestId: printAttempt.value.requestId,
+        businessCode: preview.value.primaryCode,
+        templateCode: preview.value.templateCode || 'FLOW',
+        copies: preview.value.printerSetting.copies || 1,
+      },
+    );
+    printJobId.value = job.id;
+    printJobStatus.value = printStatusLabel(job.status);
+    printFailure.value = job.failureReason || '';
+    feedback.value = `已提交打印任务 ${job.id}。已送入系统队列不等于已经出纸。`;
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '打印任务提交失败';
+  } finally {
+    printSubmitting.value = false;
+  }
 }
 
 async function refreshPrintJob() {
@@ -323,17 +340,29 @@ async function refreshPrintJob() {
 }
 
 async function reprintPrintJob() {
+  if (printSubmitting.value) return;
   if (!printJobId.value || !reprintJobReason.value.trim()) {
     errorMessage.value = '人工补打必须填写原因';
     return;
   }
-  const job = await apiPost<{ requestId: string; reason: string }, { id: string; status: string; failureReason: string }>(
-    `/api/label/print-jobs/${printJobId.value}/retries`,
-    { requestId: `reprint-${Date.now()}`, reason: reprintJobReason.value.trim() },
-  );
-  printJobId.value = job.id;
-  printJobStatus.value = printStatusLabel(job.status);
-  printFailure.value = job.failureReason || '';
+  const sourceJobId = printJobId.value;
+  const reason = reprintJobReason.value.trim();
+  reprintAttempt.value = nextRequestAttempt(reprintAttempt.value, `${sourceJobId}|${reason}`, 'reprint');
+  printSubmitting.value = true;
+  errorMessage.value = '';
+  try {
+    const job = await apiPost<{ requestId: string; reason: string }, { id: string; status: string; failureReason: string }>(
+      `/api/label/print-jobs/${sourceJobId}/retries`,
+      { requestId: reprintAttempt.value.requestId, reason },
+    );
+    printJobId.value = job.id;
+    printJobStatus.value = printStatusLabel(job.status);
+    printFailure.value = job.failureReason || '';
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '人工补打失败';
+  } finally {
+    printSubmitting.value = false;
+  }
 }
 
 // ---- 模板管理 ----
@@ -589,7 +618,7 @@ onMounted(loadTemplates);
               <template v-if="preview.printerSetting.printerName">· {{ preview.printerSetting.printerName }}</template>
             </span>
             <button type="button" class="primary-button" @click="printLabel">浏览器预览打印</button>
-            <button type="button" class="primary-button" @click="submitPrintJob">提交到打印工位</button>
+            <button type="button" class="primary-button" :disabled="printSubmitting" @click="submitPrintJob">提交到打印工位</button>
           </div>
         </div>
 
@@ -604,7 +633,7 @@ onMounted(loadTemplates);
           <p v-if="printJobId">任务 {{ printJobId }} · {{ printJobStatus }}<template v-if="printFailure"> · {{ printFailure }}</template></p>
           <button v-if="printJobId" type="button" class="secondary-button" @click="refreshPrintJob">刷新任务状态</button>
           <label v-if="printJobId">人工补打原因<input v-model="reprintJobReason" aria-label="人工补打原因" /></label>
-          <button v-if="printJobId" type="button" class="secondary-button" @click="reprintPrintJob">人工补打</button>
+          <button v-if="printJobId" type="button" class="secondary-button" :disabled="printSubmitting" @click="reprintPrintJob">人工补打</button>
         </div>
       </section>
       <section v-else class="label-preview"><p class="hint">请先按单号打开贴纸或生成标签，成功后再预览和打印。</p></section>

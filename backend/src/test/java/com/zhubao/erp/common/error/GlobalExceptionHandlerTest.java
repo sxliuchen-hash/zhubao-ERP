@@ -2,6 +2,8 @@ package com.zhubao.erp.common.error;
 
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
+import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.security.error.SessionInvalidException;
 import com.zhubao.erp.security.web.AuthController;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validation;
@@ -18,6 +20,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GlobalExceptionHandlerTest {
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+    @Test
+    void sessionInvalidBodyStaysDistinctFromOrdinaryDenial() {
+        ApiResponse<Void> invalid = handler.handlePermissionDeniedException(new SessionInvalidException());
+        assertThat(invalid.code()).isEqualTo(40301);
+        assertThat(invalid.message()).isEqualTo(SessionInvalidException.CLIENT_MESSAGE);
+        assertThat(invalid.data()).isNull();
+
+        ApiResponse<Void> denied = handler.handlePermissionDeniedException(new PermissionDeniedException("无权执行 损耗审批试算"));
+        assertThat(denied.code()).isEqualTo(40301);
+        assertThat(denied.message()).isEqualTo("无权执行 损耗审批试算");
+    }
 
     @Test
     void bindingErrorsReturnOnlyDistinctSortedMessages() throws Exception {

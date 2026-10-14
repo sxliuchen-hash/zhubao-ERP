@@ -199,6 +199,20 @@ describe('App', () => {
     expect(wrapper.find('.ops-nav').exists()).toBe(false);
   });
 
+  it('身份失效事件清除会话并回到登录页', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.find('.login-card').exists()).toBe(false);
+
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, { detail: { session: null } }));
+    await flushPromises();
+
+    expect(wrapper.find('.login-card').exists()).toBe(true);
+    expect(wrapper.find('.ops-nav').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('用户管理导航仅向拥有菜单的管理员开放', async () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce({ ...sessionWithMenus(['dashboard', 'users']), role: 'ADMIN' });
     const wrapper = mount(App);

@@ -20,6 +20,22 @@ export class ApiRequestError extends Error {
 const authTokenKey = 'zhubao-auth-token';
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
 
+/** 与后端 SessionInvalidException 对齐。普通 40301 无权限不能使用这句文案。 */
+export const sessionInvalidCode = 40301;
+export const sessionInvalidMessage = '登录已失效，请重新登录';
+
+export function isSessionInvalidResponse(status: number, code: number, message: string): boolean {
+  if (status === 401) return true;
+  return status === 403 && code === sessionInvalidCode && message === sessionInvalidMessage;
+}
+
+function notifySessionCleared(): void {
+  clearAuthToken();
+  if (typeof globalThis.dispatchEvent === 'function' && typeof globalThis.CustomEvent === 'function') {
+    globalThis.dispatchEvent(new CustomEvent('zhubao-auth-session-changed', { detail: { session: null } }));
+  }
+}
+
 async function request(url: string, init?: RequestInit): Promise<Response> {
   try {
     return init ? await fetch(url, init) : await fetch(url);
@@ -29,17 +45,19 @@ async function request(url: string, init?: RequestInit): Promise<Response> {
 }
 
 async function readPayload<T>(response: Response): Promise<T> {
-  let payload: ApiResponse<T>;
+  let payload: ApiResponse<T> | null = null;
   try {
     payload = (await response.json()) as ApiResponse<T>;
   } catch {
-    throw new Error('后端接口不可用');
+    payload = null;
   }
-  if (response.status === 401) {
-    clearAuthToken();
-    if (typeof globalThis.dispatchEvent === 'function' && typeof globalThis.CustomEvent === 'function') {
-      globalThis.dispatchEvent(new CustomEvent('zhubao-auth-session-changed', { detail: { session: null } }));
-    }
+  if (payload && isSessionInvalidResponse(response.status, payload.code ?? 0, payload.message ?? '')) {
+    notifySessionCleared();
+  } else if (!payload && response.status === 401) {
+    notifySessionCleared();
+  }
+  if (!payload) {
+    throw new Error('后端接口不可用');
   }
   if (!response.ok || payload.code !== 0) {
     throw new ApiRequestError(payload.message || '请求失败', response.status, payload.code ?? 0);

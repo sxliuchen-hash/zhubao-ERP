@@ -142,6 +142,61 @@ describe('LabelWorkspace', () => {
 
   });
 
+  it('集中打印和人工补打在响应丢失后复用请求编号', async () => {
+    const printIds: string[] = [];
+    const reprintIds: string[] = [];
+    let prints = 0;
+    let reprints = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/retries') && method === 'POST') {
+        reprints += 1;
+        reprintIds.push(JSON.parse(String(init?.body)).requestId);
+        if (reprints === 1) throw new Error('响应丢失');
+        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: 'JOB-2', status: 'PENDING', failureReason: '' } }) } as Response;
+      }
+      if (url.includes('/api/label/print-jobs') && method === 'POST') {
+        prints += 1;
+        printIds.push(JSON.parse(String(init?.body)).requestId);
+        if (prints === 1) throw new Error('响应丢失');
+        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: 'JOB-1', status: 'PENDING', failureReason: '' } }) } as Response;
+      }
+      const payload = url.includes('/api/label/work-orders/')
+        ? {
+          type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1', qrContent: 'JG|work_order|ZD-1|0|LI1',
+          fields: [{ name: '客户', value: '恒信珠宝' }], footerLeft: '', footerRight: '', printedAt: '',
+          brandTitle: '珠宝来料加工系统', templateCode: 'FLOW',
+          printerSetting: { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 },
+        }
+        : [];
+      return { ok: true, json: async () => ({ code: 0, message: 'ok', data: payload }) } as Response;
+    });
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-1' }));
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('ZD-1');
+    await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
+    await flushPromises();
+    const submit = () => wrapper.findAll('button').find((button) => button.text() === '提交到打印工位')!;
+    await submit().trigger('click');
+    await flushPromises();
+    await submit().trigger('click');
+    await flushPromises();
+    expect(printIds).toHaveLength(2);
+    expect(printIds[1]).toBe(printIds[0]);
+
+    await wrapper.get('[aria-label="人工补打原因"]').setValue('出纸模糊');
+    const reprint = () => wrapper.findAll('button').find((button) => button.text() === '人工补打')!;
+    await reprint().trigger('click');
+    await flushPromises();
+    await reprint().trigger('click');
+    await flushPromises();
+    expect(reprintIds).toHaveLength(2);
+    expect(reprintIds[1]).toBe(reprintIds[0]);
+    wrapper.unmount();
+  });
+
   it('收货跳转自动带入母单并显示可打印预览，不隐式选择不拆', async () => {
     const target = ref({ objectType: 'MOTHER_ORDER', code: 'MD-NEW-1', intent: 'LOOKUP', token: 1 });
     vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'MOTHER_ORDER', code: 'MD-NEW-1' }));

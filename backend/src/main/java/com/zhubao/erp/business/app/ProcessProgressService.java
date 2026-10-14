@@ -126,7 +126,24 @@ public class ProcessProgressService {
         if (!target.selectChild() && !visible(account, target.motherOrderCode(), target.orderCode())) {
             throw new PermissionDeniedException("单号不在当前账号的业务数据范围内");
         }
-        return target;
+        if (target.selectChild()) {
+            return target;
+        }
+        // 当前百分比和版本跟这张单走，页面不能从分页列表里猜。
+        ProcessProgressHead head = progress.find(target.orderCode(), target.currentProcess()).orElse(null);
+        return new ProcessProgressTarget(
+                false,
+                target.orderCode(),
+                target.motherOrderCode(),
+                target.customerName(),
+                target.processingRequirement(),
+                target.dueDate(),
+                target.currentProcess(),
+                target.formallyDelivered(),
+                head == null ? 0 : head.percent(),
+                head == null ? 0 : head.version(),
+                List.of()
+        );
     }
 
     public List<ProcessProgressEvent> history(String orderCode, String processName, AuthUserAccount account) {

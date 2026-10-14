@@ -115,6 +115,7 @@ public class OrderChangeService {
         OrderChange existing = changes.findByRequestId(requestId).orElse(null);
         if (existing != null) {
             assertScope(existing.motherOrderCode(), existing.workOrderCode(), account);
+            assertSameDraft(existing, motherOrderCode, workOrderCode, newRequirement, newDueDate, newRoute, expectedVersion, reworkProcess, account);
             return visible(existing, account);
         }
         String oldRoute = routeOf(mother, workOrderCode);
@@ -405,6 +406,39 @@ public class OrderChangeService {
 
     private OrderChange require(String id) {
         return changes.findById(id).orElseThrow(() -> new BusinessException("改单不存在：" + id));
+    }
+
+    /**
+     * 响应丢失后的重试必须带回同一张草稿。内容或账号变了就拒绝，不能改成另一张申请。
+     */
+    private void assertSameDraft(
+            OrderChange existing,
+            String motherOrderCode,
+            String workOrderCode,
+            String newRequirement,
+            String newDueDate,
+            String newRoute,
+            Integer expectedVersion,
+            String reworkProcess,
+            AuthUserAccount account
+    ) {
+        if (!account.operator().trim().equals(existing.createdBy())) {
+            throw new PermissionDeniedException("该请求不能跨账号重放");
+        }
+        String incomingRequirement = newRequirement == null ? "" : newRequirement.trim();
+        String incomingDue = newDueDate == null ? "" : newDueDate.trim();
+        String incomingRework = normalizeOptionalProcess(reworkProcess);
+        String incomingRoute = normalizeRoute(newRoute, existing.oldRoute());
+        int incomingExpected = expectedVersion == null ? existing.expectedVersion() : expectedVersion;
+        if (!existing.motherOrderCode().equals(motherOrderCode)
+                || !existing.workOrderCode().equals(blank(workOrderCode))
+                || !existing.newRequirement().equals(incomingRequirement)
+                || !existing.newDueDate().equals(incomingDue)
+                || !existing.reworkProcess().equals(incomingRework)
+                || !existing.newRoute().equals(incomingRoute)
+                || existing.expectedVersion() != incomingExpected) {
+            throw new BusinessException("同一请求的内容不一致");
+        }
     }
 
     private void assertScope(String motherOrderCode, String workOrderCode, AuthUserAccount account) {

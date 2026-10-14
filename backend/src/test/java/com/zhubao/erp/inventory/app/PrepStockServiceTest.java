@@ -53,6 +53,38 @@ class PrepStockServiceTest {
     }
 
     @Test
+    void lostResponseRetriesDoNotReceiveIssueOrReturnTwice() {
+        prep.receiveCustomerPrep(1001L, "AU9999", "PREP-WH", new BigDecimal("5"), new BigDecimal("8"),
+                "PREP-LOST", "prep-lost-recv", keeper);
+        prep.receiveCustomerPrep(1001L, "AU9999", "PREP-WH", new BigDecimal("5"), new BigDecimal("8"),
+                "PREP-LOST", "prep-lost-recv", keeper);
+        prep.issueToMother(1001L, "AU9999", "PREP-WH", "PREP-LOST", "MD-PREP-001",
+                new BigDecimal("2"), new BigDecimal("3"), "prep-lost-issue", keeper);
+        prep.issueToMother(1001L, "AU9999", "PREP-WH", "PREP-LOST", "MD-PREP-001",
+                new BigDecimal("2"), new BigDecimal("3"), "prep-lost-issue", keeper);
+        prep.returnToBatch(1001L, "AU9999", "PREP-WH", "PREP-LOST", "MD-PREP-001",
+                new BigDecimal("1"), new BigDecimal("1"), "prep-lost-back", keeper);
+        prep.returnToBatch(1001L, "AU9999", "PREP-WH", "PREP-LOST", "MD-PREP-001",
+                new BigDecimal("1"), new BigDecimal("1"), "prep-lost-back", keeper);
+
+        assertThat(quantity(OwnerType.CUSTOMER, "PREP-LOST", "")).isEqualByComparingTo("4");
+        assertThat(ledger.ledgers()).filteredOn(entry -> "prep_receipt".equals(entry.documentType())).hasSize(1);
+        assertThat(ledger.ledgers()).filteredOn(entry -> "prep_issue".equals(entry.documentType())).hasSize(1);
+        assertThat(ledger.ledgers()).filteredOn(entry -> "prep_return".equals(entry.documentType())).hasSize(1);
+
+        AuthUserAccount other = account("另一库管", RoleCode.WAREHOUSE_KEEPER, DataScope.ALL, List.of());
+        assertThatThrownBy(() -> prep.receiveCustomerPrep(1001L, "AU9999", "PREP-WH", new BigDecimal("5"), new BigDecimal("8"),
+                "PREP-LOST", "prep-lost-recv", other))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("跨账号");
+        assertThatThrownBy(() -> prep.receiveCustomerPrep(1001L, "AU9999", "PREP-WH", new BigDecimal("9"), new BigDecimal("8"),
+                "PREP-LOST", "prep-lost-recv", keeper))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("内容不一致");
+        assertThat(quantity(OwnerType.CUSTOMER, "PREP-LOST", "")).isEqualByComparingTo("4");
+    }
+
+    @Test
     void issueReducesBatchWithoutRewritingTheOriginalMotherReceipt() {
         prep.receiveCustomerPrep(1001L, "AU9999", "PREP-WH", new BigDecimal("5"), new BigDecimal("8"),
                 "PREP-001", "prep-recv-0001", keeper);

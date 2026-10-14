@@ -79,6 +79,11 @@ class ProcessProgressServiceTest {
             assertThat(row.currentProcess()).isEqualTo("雕刻");
         });
         assertThat(service.report(child, 100, 0, "已做完待交付", "", "progress-done-0001", carver).version()).isEqualTo(1);
+        assertThat(service.open(child, carver)).satisfies(opened -> {
+            assertThat(opened.percent()).isEqualTo(100);
+            assertThat(opened.version()).isEqualTo(1);
+            assertThat(opened.orderCode()).isEqualTo(child);
+        });
         assertThat(service.history(child, "雕刻", carver)).hasSize(1);
     }
 

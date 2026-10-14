@@ -9,9 +9,14 @@ import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.security.error.SessionInvalidException;
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
+import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -85,7 +90,7 @@ class AuthSessionServiceTest {
 
         assertThatThrownBy(() -> service.session("Bearer " + session.token()))
                 .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("登录会话不存在或已退出");
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
     }
 
     @Test
@@ -100,10 +105,10 @@ class AuthSessionServiceTest {
         assertThat(revoked).isEqualTo(2);
         assertThatThrownBy(() -> service.session("Bearer " + first.token()))
                 .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("登录会话不存在或已退出");
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
         assertThatThrownBy(() -> service.session("Bearer " + second.token()))
                 .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("登录会话不存在或已退出");
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
         assertThat(service.session("Bearer " + leader.token())).isPresent();
         assertThat(service.auditEvents(10))
                 .filteredOn(event -> event.eventType().equals("SESSION_REVOKED"))
@@ -457,6 +462,56 @@ class AuthSessionServiceTest {
                 .hasMessageContaining("密码长度至少 12 位");
     }
 
+    @Test
+    void expiredRevokedAndChangedSessionsUseTheSameClientContract() throws Exception {
+        InMemoryAuthUserAccountRepository repository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        AuthSessionService service = service(repository);
+        AuthSession expired = service.login(new AuthLoginCommand("operator", "operator123"));
+        expire(service, expired.token());
+        assertSessionInvalid(() -> service.session("Bearer " + expired.token()));
+        assertThat(service.auditEvents(5)).anySatisfy(event -> assertThat(event.reason()).isEqualTo("登录会话已过期"));
+
+        AuthSession revoked = service.login(new AuthLoginCommand("operator", "operator123"));
+        assertThat(service.revokeSessionsForUsername("operator", "account disabled")).isEqualTo(1);
+        assertSessionInvalid(() -> service.session("Bearer " + revoked.token()));
+
+        AuthSession changed = service.login(new AuthLoginCommand("leader", "leader123"));
+        AuthUserAccount leader = repository.findByUsername("leader").orElseThrow();
+        repository.save(new AuthUserAccount(
+                leader.username(), leader.passwordHash(), leader.operator(), RoleCode.ADMIN, leader.dataScope(),
+                true, leader.demoAccount(), leader.passwordChangedAt(), leader.failedLoginCount(), leader.lockedUntil(),
+                leader.customerScope(), leader.passwordChangeRequired(), leader.temporaryPasswordConsumed(),
+                leader.allowedProcesses()
+        ));
+        assertSessionInvalid(() -> service.session("Bearer " + changed.token()));
+        assertThat(service.auditEvents(20)).anySatisfy(event -> assertThat(event.reason()).contains("账号密码或权限已变更"));
+
+        assertThatThrownBy(() -> service.login(new AuthLoginCommand("leader", "wrong")))
+                .isInstanceOf(PermissionDeniedException.class)
+                .isNotInstanceOf(SessionInvalidException.class)
+                .hasMessageContaining("用户名或密码错误");
+    }
+
+    private void assertSessionInvalid(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call)
+                .isInstanceOf(SessionInvalidException.class)
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE)
+                .satisfies(error -> assertThat(((SessionInvalidException) error).code()).isEqualTo(40301));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void expire(AuthSessionService service, String token) throws Exception {
+        Field sessionsField = AuthSessionService.class.getDeclaredField("sessions");
+        sessionsField.setAccessible(true);
+        ConcurrentHashMap<String, Object> sessions = (ConcurrentHashMap<String, Object>) sessionsField.get(service);
+        Object entry = sessions.get(token);
+        Class<?> type = entry.getClass();
+        var constructor = type.getDeclaredConstructor(String.class, AuthUserAccount.class, Instant.class);
+        constructor.setAccessible(true);
+        Object user = type.getDeclaredMethod("user").invoke(entry);
+        sessions.put(token, constructor.newInstance(token, user, Instant.EPOCH));
+    }
+
     private AuthSessionService service() {
         return service(new InMemoryAuthUserAccountRepository(passwordHasher));
     }
@@ -469,13 +524,15 @@ class AuthSessionServiceTest {
         repository.save(new AuthUserAccount("operator", passwordHasher.hash("operator123"), "操作工",
                 RoleCode.SALES, DataScope.ALL, true, true));
         assertThatThrownBy(() -> service.operatorContext("Bearer " + first.token()))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("权限已变更");
+                .isInstanceOf(SessionInvalidException.class)
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
         AuthSession second = service.login(new AuthLoginCommand("operator", "operator123"));
         repository.delete("operator");
         repository.save(new AuthUserAccount("operator", passwordHasher.hash("operator123"), "新操作工",
                 RoleCode.SALES, DataScope.ALL, true, true));
         assertThatThrownBy(() -> service.session("Bearer " + second.token()))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("权限已变更");
+                .isInstanceOf(SessionInvalidException.class)
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
     }
 
     private AuthSessionService service(AuthUserAccountRepository userRepository) {

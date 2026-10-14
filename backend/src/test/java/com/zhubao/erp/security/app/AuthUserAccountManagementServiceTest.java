@@ -26,6 +26,7 @@ import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.security.error.SessionInvalidException;
 import com.zhubao.erp.security.infra.InMemoryAuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
@@ -859,10 +860,10 @@ class AuthUserAccountManagementServiceTest {
 
         assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + changed.token()))
                 .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("登录会话不存在或已退出");
+                .hasMessage("登录已失效，请重新登录");
         assertThatThrownBy(() -> fixture.sessionService().session("Bearer " + second.token()))
                 .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("登录会话不存在或已退出");
+                .hasMessage("登录已失效，请重新登录");
         assertThat(fixture.sessionService().session("Bearer " + leader.token())).isPresent();
         assertThat(fixture.auditRepository().findRecent(20))
                 .filteredOn(event -> event.eventType().equals("SESSION_REVOKED"))
@@ -1234,9 +1235,14 @@ class AuthUserAccountManagementServiceTest {
         service.delete("leader", new OperatorContext("其他管理员", RoleCode.ADMIN, DataScope.ALL));
         assertThat(fixture.accountRepository().findByUsername("leader")).isEmpty();
         assertThatThrownBy(() -> failingSessions.operatorContext("Bearer " + operator.token()))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("权限已变更");
+                .isInstanceOf(SessionInvalidException.class)
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
         assertThatThrownBy(() -> failingSessions.session("Bearer " + leader.token()))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("已停用");
+                .isInstanceOf(SessionInvalidException.class)
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
+        assertThat(fixture.auditRepository().findRecent(30))
+                .anySatisfy(event -> assertThat(event.reason()).contains("账号密码或权限已变更"))
+                .anySatisfy(event -> assertThat(event.reason()).contains("账号已停用"));
         assertThat(fixture.auditRepository().findRecent(20))
                 .filteredOn(event -> event.eventType().equals("SESSION_REVOCATION") && event.result().equals("FAILURE"))
                 .hasSize(2);

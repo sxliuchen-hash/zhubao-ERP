@@ -14,6 +14,7 @@ import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.security.error.SessionInvalidException;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -224,7 +225,7 @@ public class AuthSessionService {
         SessionEntry entry = resolve(rawAuthorizationHeader)
                 .orElseThrow(() -> new PermissionDeniedException("自助改密需要登录会话"));
         AuthUserAccount currentAccount = userAccountRepository.findByUsername(entry.user().username())
-                .orElseThrow(() -> new PermissionDeniedException("登录账号不存在或已停用"));
+                .orElseThrow(SessionInvalidException::new);
         Instant now = Instant.now();
         if (!currentAccount.enabled()) {
             recordAudit(
@@ -236,7 +237,7 @@ public class AuthSessionService {
                     "账号已停用，拒绝自助改密",
                     entry.token()
             );
-            throw new PermissionDeniedException("登录账号已停用");
+            throw new SessionInvalidException();
         }
         if (isLocked(currentAccount, now)) {
             recordAudit(
@@ -427,7 +428,7 @@ public class AuthSessionService {
         SessionEntry entry = sessions.get(token.get());
         if (entry == null) {
             recordAudit("SESSION_RESOLVE", "", "", "", "DENIED", "登录会话不存在或已退出", token.get());
-            throw new PermissionDeniedException("登录会话不存在或已退出");
+            throw new SessionInvalidException();
         }
         if (entry.expiresAt().isBefore(Instant.now())) {
             sessions.remove(entry.token());
@@ -440,7 +441,7 @@ public class AuthSessionService {
                     "登录会话已过期",
                     entry.token()
             );
-            throw new PermissionDeniedException("登录会话已过期");
+            throw new SessionInvalidException();
         }
         AuthUserAccount current = rejectDisabledAccount(entry);
         AuthUserAccount original = entry.user();
@@ -452,7 +453,16 @@ public class AuthSessionService {
                 || !current.customerScope().equals(original.customerScope())
                 || !current.allowedProcesses().equals(original.allowedProcesses())) {
             sessions.remove(entry.token(), entry);
-            throw new PermissionDeniedException("账号密码或权限已变更，请重新登录");
+            recordAudit(
+                    "SESSION_RESOLVE",
+                    original.username(),
+                    original.operator(),
+                    original.role().name(),
+                    "DENIED",
+                    "账号密码或权限已变更，请重新登录",
+                    entry.token()
+            );
+            throw new SessionInvalidException();
         }
         return Optional.of(entry);
     }
@@ -475,7 +485,7 @@ public class AuthSessionService {
                 "账号已停用，拒绝继续使用会话",
                 entry.token()
         );
-        throw new PermissionDeniedException("登录账号已停用");
+        throw new SessionInvalidException();
     }
 
     private AuthSession toSession(SessionEntry entry) {

@@ -15,6 +15,8 @@ export interface ProcessProgressTarget {
   dueDate: string;
   currentProcess: string;
   formallyDelivered: boolean;
+  percent: number;
+  version: number;
   children: ProcessProgressChildOption[];
 }
 

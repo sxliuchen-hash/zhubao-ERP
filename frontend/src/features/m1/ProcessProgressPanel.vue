@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import ScanInput from '../scan/ScanInput.vue';
+import type { ScanDraft } from '../scan/scanDraft';
+import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import { apiGet, apiPost } from '../../services/apiClient';
 import {
   fetchProcessProgress,
@@ -40,18 +42,20 @@ async function reload() {
   }
 }
 
-async function locate() {
+async function locate(draft?: ScanDraft) {
   error.value = '';
   message.value = '';
   target.value = null;
-  if (!code.value.trim()) {
+  const content = (draft?.content ?? code.value).trim();
+  if (!content) {
     error.value = '请先扫码或输入单号';
     return;
   }
   try {
-    target.value = await openProcessProgress(code.value.trim());
-    if (!target.value.selectChild) {
-      percent.value = rows.value.find((row) => row.orderCode === target.value?.orderCode)?.percent ?? 0;
+    const opened = await openProcessProgress(content);
+    target.value = opened;
+    if (opened && !opened.selectChild) {
+      percent.value = opened.percent;
     }
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '无法定位单据';
@@ -60,20 +64,24 @@ async function locate() {
 
 function chooseChild(childCode: string) {
   code.value = childCode;
-  void locate();
+  void locate({ content: childCode });
 }
 
 async function submit() {
   error.value = '';
   message.value = '';
   if (!target.value || target.value.selectChild || target.value.formallyDelivered) return;
+  if (typeof target.value.version !== 'number') {
+    error.value = '没有读到当前进度版本，请重新定位';
+    return;
+  }
   const key = `${target.value.orderCode}|${target.value.currentProcess}|${percent.value}|${note.value}|${reason.value}`;
   const requestId = ensureRequestId(key);
   try {
     const saved = await submitProcessProgress({
       code: target.value.orderCode,
       percent: percent.value,
-      expectedVersion: rows.value.find((row) => row.orderCode === target.value?.orderCode)?.version ?? 0,
+      expectedVersion: target.value.version,
       note: note.value,
       reason: reason.value,
       requestId,
@@ -107,21 +115,40 @@ const changeRequirement = ref('');
 const changeDue = ref('');
 const changeId = ref('');
 const timeline = ref<string[]>([]);
+const changeAttempt = ref<RequestAttempt | null>(null);
+const changeSubmitting = ref(false);
+
+function changeFingerprint() {
+  const mother = target.value?.motherOrderCode || code.value.trim();
+  const work = target.value?.orderCode && target.value.orderCode !== target.value.motherOrderCode ? target.value.orderCode : '';
+  return [mother, work, changeRequirement.value.trim(), changeDue.value.trim()].join('|');
+}
 
 async function draftChange() {
+  if (changeSubmitting.value) return;
   error.value = '';
-  const created = await apiPost<{ motherOrderCode: string; workOrderCode: string; newRequirement: string; newDueDate: string; requestId: string }, { id: string }>(
-    '/api/business/order-changes',
-    {
-      motherOrderCode: target.value?.motherOrderCode || code.value,
-      workOrderCode: target.value?.orderCode === target.value?.motherOrderCode ? '' : target.value?.orderCode || '',
-      newRequirement: changeRequirement.value,
-      newDueDate: changeDue.value,
-      requestId: `change-${Date.now()}`,
-    },
-  );
-  changeId.value = created.id;
-  message.value = `已保存改单 ${created.id}，送财务确认后才会生效`;
+  const mother = target.value?.motherOrderCode || code.value.trim();
+  const work = target.value?.orderCode && target.value.orderCode !== target.value.motherOrderCode ? target.value.orderCode : '';
+  changeAttempt.value = nextRequestAttempt(changeAttempt.value, changeFingerprint(), 'change');
+  changeSubmitting.value = true;
+  try {
+    const created = await apiPost<{ motherOrderCode: string; workOrderCode: string; newRequirement: string; newDueDate: string; requestId: string }, { id: string }>(
+      '/api/business/order-changes',
+      {
+        motherOrderCode: mother,
+        workOrderCode: work,
+        newRequirement: changeRequirement.value.trim(),
+        newDueDate: changeDue.value.trim(),
+        requestId: changeAttempt.value.requestId,
+      },
+    );
+    changeId.value = created.id;
+    message.value = `已保存改单 ${created.id}，送财务确认后才会生效`;
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : '改单申请失败';
+  } finally {
+    changeSubmitting.value = false;
+  }
 }
 
 async function submitChange() {
@@ -142,7 +169,7 @@ async function loadTimeline() {
     <label>查找<input v-model="query" aria-label="进度查找" placeholder="单号、客户、工序或进度" @change="page = 1; reload()" /></label>
     <label>工序<input v-model="processFilter" aria-label="工序筛选" placeholder="雕刻、镶嵌或抛光" @change="page = 1; reload()" /></label>
     <label>期限到<input v-model="dueBefore" aria-label="期限筛选" placeholder="2026-12-31" @change="page = 1; reload()" /></label>
-    <ScanInput v-model="code" field-text="进度单号" input-aria-label="进度单号" submit-label="定位" @draft="locate" />
+    <ScanInput v-model="code" field-text="进度单号" input-aria-label="进度单号" submit-label="定位" @recognize="locate" />
     <button class="secondary-button" type="button" @click="page -= 1; reload()" :disabled="page <= 1">上一页</button>
     <button class="secondary-button" type="button" @click="page += 1; reload()">下一页</button>
     <p v-if="error" class="operation-feedback danger">{{ error }}</p>
@@ -171,7 +198,7 @@ async function loadTimeline() {
       <h3>改单</h3>
       <label>新要求<input v-model="changeRequirement" aria-label="改单新要求" /></label>
       <label>新期限<input v-model="changeDue" aria-label="改单新期限" /></label>
-      <button class="secondary-button" type="button" @click="draftChange">保存改单申请</button>
+      <button class="secondary-button" type="button" :disabled="changeSubmitting" @click="draftChange">保存改单申请</button>
       <button class="secondary-button" type="button" :disabled="!changeId" @click="submitChange">送财务确认</button>
       <button class="secondary-button" type="button" @click="loadTimeline">查看时间线</button>
       <p v-for="(line, index) in timeline" :key="'t' + index">{{ line }}</p>

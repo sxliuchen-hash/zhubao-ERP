@@ -58,6 +58,24 @@ class OrderChangeServiceTest {
     }
 
     @Test
+    void lostDraftResponseReplaysTheSameChange() {
+        var first = service.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-lost-0001", receiver);
+        var second = service.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-lost-0001", receiver);
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(service.list("MD-CHANGE-001", receiver)).hasSize(1);
+
+        AuthUserAccount other = account("另一收货", RoleCode.RECEIVER);
+        assertThatThrownBy(() -> service.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-lost-0001", other))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("跨账号");
+        assertThatThrownBy(() -> service.draft("MD-CHANGE-001", "", "改为另一要求", "2026-11-01", "change-lost-0001", receiver))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("内容不一致");
+        assertThat(service.list("MD-CHANGE-001", receiver)).hasSize(1);
+        assertThat(service.present(first.id(), receiver).newRequirement()).isEqualTo("改为外圈刻字");
+    }
+
+    @Test
     void applyKeepsExistingHandoffAndRequiresFinanceConfirmation() {
         var draft = service.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-draft-001", receiver);
         assertThatThrownBy(() -> service.apply(draft.id(), "change-apply-001", receiver))
