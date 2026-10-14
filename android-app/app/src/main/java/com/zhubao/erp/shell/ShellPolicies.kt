@@ -35,4 +35,15 @@ object ShellPolicies {
         if (shouldShowRationale) return "EXPLAIN_AND_REQUEST"
         return "OPEN_SETTINGS"
     }
+
+    /** 根据网页文件输入的 MIME 类型选择系统拍摄动作。 */
+    fun captureKinds(acceptTypes: Array<String>): List<String> {
+        val types = acceptTypes.flatMap { it.split(',') }.map { it.trim().lowercase() }
+        val image = types.any { it == "image/*" || it.startsWith("image/") }
+        val video = types.any { it == "video/*" || it.startsWith("video/") }
+        return buildList {
+            if (image) add("image")
+            if (video) add("video")
+        }
+    }
 }

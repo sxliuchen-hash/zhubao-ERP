@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static java.util.Arrays.asList;
 
 public class ShellPoliciesTest {
 
@@ -30,5 +31,13 @@ public class ShellPoliciesTest {
         assertEquals("REQUEST", ShellPolicies.INSTANCE.cameraNextStep(false, false, false));
         assertEquals("EXPLAIN_AND_REQUEST", ShellPolicies.INSTANCE.cameraNextStep(false, true, true));
         assertEquals("OPEN_SETTINGS", ShellPolicies.INSTANCE.cameraNextStep(false, true, false));
+    }
+
+    @Test
+    public void captureKindsFollowAcceptedMediaTypes() {
+        assertEquals(asList("image"), ShellPolicies.INSTANCE.captureKinds(new String[] {"image/jpeg,image/png"}));
+        assertEquals(asList("video"), ShellPolicies.INSTANCE.captureKinds(new String[] {"video/mp4"}));
+        assertEquals(asList("image", "video"), ShellPolicies.INSTANCE.captureKinds(new String[] {"image/*", "video/*"}));
+        assertEquals(asList(), ShellPolicies.INSTANCE.captureKinds(new String[] {".xlsx"}));
     }
 }

@@ -3,6 +3,7 @@ package com.zhubao.erp.shell
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.provider.Settings
 import android.net.ConnectivityManager
@@ -51,47 +52,46 @@ class MainActivity : ComponentActivity() {
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingCapture: (() -> Unit)? = null
     private var cameraAsked = false
-    private var cameraOutput: Uri? = null
+    private var captureOutputs: List<CaptureOutput> = emptyList()
     private var keepErrorVisible = false
     private var retryAction: () -> Unit = { loadErp() }
     private val allowedOrigin = ShellOrigin.parse(BuildConfig.ERP_BASE_URL)
+    private data class CaptureOutput(val uri: Uri, val file: File)
 
     private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = fileCallback
         fileCallback = null
-        if (callback == null) return@registerForActivityResult
-        val parsed = FileChooserParams.parseResult(result.resultCode, result.data)
-        if (parsed != null && parsed.isNotEmpty()) {
-            callback.onReceiveValue(parsed)
-            return@registerForActivityResult
-        }
-        val captured = cameraOutput
-        if (result.resultCode == RESULT_OK && captured != null) {
-            callback.onReceiveValue(arrayOf(captured))
-        } else {
-            callback.onReceiveValue(null)
-        }
+        val parsed = if (result.resultCode == RESULT_OK) FileChooserParams.parseResult(result.resultCode, result.data) else null
+        val captured = if (result.resultCode == RESULT_OK) captureOutputs.firstOrNull { it.file.length() > 0L }?.uri else null
+        val selected = captured?.let { arrayOf(it) } ?: parsed?.takeIf { it.isNotEmpty() }
+        callback?.onReceiveValue(selected)
+        clearCaptureOutputs(selected?.toSet().orEmpty())
     }
 
     private val cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        val request = pendingWebPermission
-        pendingWebPermission = null
         val capture = pendingCapture
-        pendingCapture = null
-        if (request != null) {
-            if (granted && allowedOrigin?.matches(request.origin) == true) {
-                request.grant(safeMediaResources(request))
+        if (capture != null) {
+            if (granted) {
+                pendingCapture = null
+                hideError()
+                capture()
             } else {
-                request.deny()
                 explainCameraDenial()
             }
         }
-        if (capture != null) {
-            if (granted) {
-                capture()
+    }
+
+    private val webMediaPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        val request = pendingWebPermission
+        pendingWebPermission = null
+        if (request != null) {
+            val resources = safeMediaResources(request)
+            if (allowedOrigin?.matches(request.origin) == true && allowedOrigin?.matches(webView.url) == true &&
+                resources.isNotEmpty() && canGrantWebResources(resources)
+            ) {
+                request.grant(resources)
             } else {
-                cancelFileChooser()
-                explainCameraDenial()
+                request.deny()
             }
         }
     }
@@ -201,8 +201,22 @@ class MainActivity : ComponentActivity() {
         }.toTypedArray()
     }
 
+    private fun canGrantWebResources(resources: Array<String>): Boolean {
+        return resources.all { resource ->
+            val permission = when (resource) {
+                PermissionRequest.RESOURCE_VIDEO_CAPTURE -> Manifest.permission.CAMERA
+                PermissionRequest.RESOURCE_AUDIO_CAPTURE -> Manifest.permission.RECORD_AUDIO
+                else -> return@all false
+            }
+            ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     override fun onDestroy() {
         clearTimeout()
+        pendingWebPermission?.deny()
+        pendingWebPermission = null
+        cancelFileChooser()
         webView.destroy()
         super.onDestroy()
     }
@@ -251,17 +265,32 @@ class MainActivity : ComponentActivity() {
         override fun onPermissionRequest(request: PermissionRequest?) {
             if (request == null) return
             val resources = safeMediaResources(request)
-            if (resources.isEmpty() || allowedOrigin?.matches(request.origin) != true) {
+            if (resources.isEmpty() || resources.size != request.resources.size ||
+                allowedOrigin?.matches(request.origin) != true || allowedOrigin?.matches(webView.url) != true
+            ) {
                 request.deny()
                 return
             }
-            val needsCamera = resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
-            if (needsCamera && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            if (!canGrantWebResources(resources)) {
+                pendingWebPermission?.deny()
                 pendingWebPermission = request
-                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                val needed = resources.mapNotNull { resource ->
+                    when (resource) {
+                        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> Manifest.permission.CAMERA
+                        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> Manifest.permission.RECORD_AUDIO
+                        else -> null
+                    }
+                }.filter { permission ->
+                    ContextCompat.checkSelfPermission(this@MainActivity, permission) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                }.distinct()
+                webMediaPermissionLauncher.launch(needed.toTypedArray())
                 return
             }
             request.grant(resources)
+        }
+
+        override fun onPermissionRequestCanceled(request: PermissionRequest?) {
+            if (pendingWebPermission == request) pendingWebPermission = null
         }
 
         override fun onShowFileChooser(
@@ -269,7 +298,11 @@ class MainActivity : ComponentActivity() {
             filePathCallback: ValueCallback<Array<Uri>>?,
             fileChooserParams: FileChooserParams?
         ): Boolean {
-            fileCallback?.onReceiveValue(null)
+            cancelFileChooser()
+            if (allowedOrigin?.matches(webView?.url) != true) {
+                filePathCallback?.onReceiveValue(null)
+                return false
+            }
             fileCallback = filePathCallback
             val contentIntent = try {
                 fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
@@ -278,20 +311,28 @@ class MainActivity : ComponentActivity() {
                 filePathCallback?.onReceiveValue(null)
                 return false
             }
-            val chooser = Intent.createChooser(contentIntent, "选择文件")
             if (fileChooserParams?.isCaptureEnabled == true) {
+                val kinds = ShellPolicies.captureKinds(fileChooserParams.acceptTypes)
+                if (kinds.isEmpty()) return launchChooser(Intent.createChooser(contentIntent, "选择文件"))
                 ensureCamera {
-                    cameraOutput = createCameraUri()
-                    val capture = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-                    capture.putExtra(MediaStore.EXTRA_OUTPUT, cameraOutput)
-                    capture.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(capture))
-                    launchChooser(chooser, filePathCallback)
+                    try {
+                        val captures = kinds.map { kind -> createCaptureIntent(kind) }
+                        val intent = if (captures.size == 1) {
+                            captures.single()
+                        } else {
+                            Intent.createChooser(contentIntent, "选择拍摄方式").apply {
+                                putExtra(Intent.EXTRA_INITIAL_INTENTS, captures.toTypedArray())
+                            }
+                        }
+                        launchChooser(intent)
+                    } catch (_: java.io.IOException) {
+                        cancelFileChooser()
+                        showError("无法启动拍摄", "无法创建临时拍摄文件，请检查设备存储空间后重试。")
+                    }
                 }
                 return true
             }
-            cameraOutput = null
-            return launchChooser(chooser, filePathCallback)
+            return launchChooser(Intent.createChooser(contentIntent, "选择文件"))
         }
 
         override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
@@ -300,10 +341,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun createCameraUri(): Uri {
+    private fun createCaptureIntent(kind: String): Intent {
         val dir = File(cacheDir, "camera").apply { mkdirs() }
-        val file = File(dir, "capture-${System.currentTimeMillis()}.jpg")
-        return FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        // 已交给网页的文件可能仍在上传，只清理一天前的拍摄缓存。
+        dir.listFiles()?.filter { it.isFile && it.lastModified() < System.currentTimeMillis() - 24L * 60L * 60L * 1000L }
+            ?.forEach { it.delete() }
+        val extension = if (kind == "video") "mp4" else "jpg"
+        val file = File.createTempFile("capture-", ".$extension", dir)
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        captureOutputs = captureOutputs + CaptureOutput(uri, file)
+        val action = if (kind == "video") MediaStore.ACTION_VIDEO_CAPTURE else MediaStore.ACTION_IMAGE_CAPTURE
+        return Intent(action).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            if (kind == "video") {
+                putExtra(MediaStore.EXTRA_DURATION_LIMIT, 30)
+                putExtra(MediaStore.EXTRA_SIZE_LIMIT, 50L * 1024L * 1024L)
+            }
+            clipData = ClipData.newUri(contentResolver, "拍摄文件", uri)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
     }
 
     private fun ensureCamera(onGranted: () -> Unit) {
@@ -322,8 +378,8 @@ class MainActivity : ComponentActivity() {
                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
             else -> {
-                cancelFileChooser()
-                showError("相机权限被关闭", "请到系统设置里允许相机，回到应用后再拍照。取消后可以改用相册。") {
+                pendingCapture = onGranted
+                showError("相机权限被关闭", "请到系统设置里允许相机，返回应用后点重试继续拍摄。") {
                     openAppSettings()
                 }
             }
@@ -333,13 +389,20 @@ class MainActivity : ComponentActivity() {
     private fun explainCameraDenial() {
         val rationale = ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)
         if (rationale) {
-            showError("相机权限被拒绝", "没有相机权限就不能直接拍照。点重试可以再次申请，也可以改用相册。") {
+            showError("相机权限被拒绝", "没有相机权限就不能直接拍摄。点重试可以再次申请。") {
                 hideError()
                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
         } else {
-            showError("相机权限被关闭", "请到系统设置里允许相机，回到应用后再拍照。") {
-                openAppSettings()
+            showError("相机权限被关闭", "请到系统设置里允许相机，返回应用后点重试继续拍摄。") {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    hideError()
+                    val capture = pendingCapture
+                    pendingCapture = null
+                    capture?.invoke()
+                } else {
+                    openAppSettings()
+                }
             }
         }
     }
@@ -348,21 +411,26 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
     }
 
-    private fun launchChooser(chooser: Intent, filePathCallback: ValueCallback<Array<Uri>>?): Boolean {
+    private fun launchChooser(chooser: Intent): Boolean {
         return try {
             fileChooserLauncher.launch(chooser)
             true
         } catch (_: ActivityNotFoundException) {
-            fileCallback = null
-            filePathCallback?.onReceiveValue(null)
+            cancelFileChooser()
             false
         }
+    }
+
+    private fun clearCaptureOutputs(keep: Set<Uri> = emptySet()) {
+        captureOutputs.forEach { output -> if (output.uri !in keep) output.file.delete() }
+        captureOutputs = emptyList()
     }
 
     private fun cancelFileChooser() {
         fileCallback?.onReceiveValue(null)
         fileCallback = null
-        cameraOutput = null
+        pendingCapture = null
+        clearCaptureOutputs()
     }
 }
 
