@@ -3,6 +3,8 @@ package com.zhubao.erp.document.app;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.OrderChange;
+import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
@@ -53,6 +55,7 @@ public class BusinessEvidenceService {
     private final PermissionGuard permissionGuard;
     private final OperationProgressRepository progressRecords;
     private final AtomicInteger sequence = new AtomicInteger();
+    private OrderChangeRepository orderChanges;
 
     public BusinessEvidenceService(
             DocumentManagementRepository documents,
@@ -85,6 +88,11 @@ public class BusinessEvidenceService {
         this.dataAccess = dataAccess;
         this.permissionGuard = permissionGuard;
         this.progressRecords = progressRecords;
+    }
+
+    @Autowired(required = false)
+    public void setOrderChanges(OrderChangeRepository orderChanges) {
+        this.orderChanges = orderChanges;
     }
 
     public BusinessEvidenceLink bind(BindEvidenceCommand command, OperatorContext operator) {
@@ -264,6 +272,10 @@ public class BusinessEvidenceService {
             assertShipment(operationCode, targetType, targetCode);
             return;
         }
+        if ("ORDER_CHANGE".equals(stage) && "ORDER_CHANGE".equals(operationType)) {
+            assertOrderChange(operationCode, targetType, targetCode);
+            return;
+        }
         if (EvidenceCodes.PROGRESS_NOTE.equals(operationType)) {
             assertProgressNote(stage, operationCode, processName, clauseNo, targetType, targetCode);
             return;
@@ -301,6 +313,22 @@ public class BusinessEvidenceService {
         }
         if (!clauseNo.isEmpty() && !clauseNo.equals(record.clauseNo())) {
             throw new BusinessException("证据条款与过程记录不一致");
+        }
+    }
+
+    private void assertOrderChange(String operationCode, String targetType, String targetCode) {
+        if (orderChanges == null) {
+            throw new BusinessException("改单证据尚未装配");
+        }
+        if (!EvidenceCodes.MOTHER_ORDER.equals(targetType)) {
+            throw new BusinessException("改单证据必须绑到母单");
+        }
+        OrderChange change = orderChanges.findById(operationCode).orElse(null);
+        if (change == null) {
+            throw new BusinessException("改单不存在");
+        }
+        if (!change.motherOrderCode().equals(targetCode)) {
+            throw new BusinessException("改单证据必须绑到这张改单的母单");
         }
     }
 
@@ -441,6 +469,9 @@ public class BusinessEvidenceService {
     }
 
     private PermissionCode permissionFor(String stage, String operationType) {
+        if ("ORDER_CHANGE".equals(stage)) {
+            return PermissionCode.BUSINESS_PRODUCTION_REPORT;
+        }
         if (EvidenceCodes.INTAKE.equals(stage)) {
             return PermissionCode.BUSINESS_INBOUND_CONFIRM;
         }

@@ -636,6 +636,8 @@ MySQL 持久化表：
 
 已完成工序的重做会生成 `RW-` 轮次号。岗位交付和质检按这个轮次号识别；交接和台账单据号用轮次，库存维度仍是原母单或子单。原交付保留，同一道工序可以在新轮次再报一次。
 
+改单证据阶段是 `ORDER_CHANGE`，操作类型同名，操作编号是改单号，目标必须是该改单的母单。
+
 ### 5.3 `ReportProductionCommand`
 
 页面和导入不再调用 `POST /api/business/operations/production-reports`，该 HTTP 已退出。现场工序交付走 `process-stations`。登记导入和设备读数仍把数量、重量交给岗位服务 `reportProduction`，但必须登录，不能再绕过工序校验。下面的字段仍是这条内部命令的形状。

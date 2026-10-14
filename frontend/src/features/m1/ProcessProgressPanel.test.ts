@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProcessProgressPanel from './ProcessProgressPanel.vue';
-import { apiPost } from '../../services/apiClient';
+import { apiGet, apiPost } from '../../services/apiClient';
 import {
   fetchProcessProgress,
   openProcessProgress,
@@ -12,6 +12,11 @@ import {
 const scanCamera = vi.hoisted(() => vi.fn());
 
 vi.mock('../../services/apiClient', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }));
+vi.mock('../../services/evidenceApi', () => ({
+  fetchEvidenceBoard: vi.fn().mockResolvedValue({ links: [], historical: [] }),
+  uploadEvidenceFile: vi.fn(),
+  bindEvidence: vi.fn(),
+}));
 vi.mock('../../services/processProgressApi', () => ({
   fetchProcessProgress: vi.fn(),
   fetchProcessProgressHistory: vi.fn(),
@@ -154,6 +159,63 @@ describe('ProcessProgressPanel', () => {
     await flushPromises();
     const third = (vi.mocked(apiPost).mock.calls[2][1] as { requestId: string }).requestId;
     expect(third).not.toBe(first);
+    wrapper.unmount();
+  });
+
+  it('改单详情可以确认金额、拒绝和按基准版本生效', async () => {
+    const row = {
+      id: 'CHG-1',
+      status: 'PENDING_FINANCE',
+      versionNo: 1,
+      expectedVersion: 0,
+      oldRequirement: '内壁刻字',
+      newRequirement: '外圈刻字',
+      oldDueDate: '2026-10-20',
+      newDueDate: '2026-12-01',
+      oldRoute: '雕刻、镶嵌、抛光',
+      newRoute: '雕刻、镶嵌',
+      reworkProcess: '雕刻',
+      amountUnchanged: false,
+      customerUnitPrice: null,
+      workerFee: null,
+      customerDelta: null,
+      financeNote: '',
+      motherOrderCode: 'MD-CHANGE-1',
+    };
+    vi.mocked(openProcessProgress).mockResolvedValue(located('MD-CHANGE-1', 2, 30));
+    vi.mocked(apiGet).mockResolvedValue([row]);
+    vi.mocked(apiPost).mockImplementation(async (path) => ({ ...row, status: String(path).includes('applications') ? 'APPLIED' : 'FINANCE_CONFIRMED' }));
+    const wrapper = mount(ProcessProgressPanel);
+    await flushPromises();
+    await wrapper.get('[aria-label="进度单号"]').setValue('MD-CHANGE-1');
+    await wrapper.get('button[aria-label="定位"]').trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === '刷新改单')!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text().includes('CHG-1'))!.trigger('click');
+    expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('内壁刻字');
+    expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('外圈刻字');
+    expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('基准版本 0');
+
+    await wrapper.findAll('button').find((button) => button.text() === '确认金额不变')!.trigger('click');
+    await flushPromises();
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/business/order-changes/CHG-1/finance-confirmations',
+      expect.objectContaining({ amountUnchanged: true }),
+    );
+
+    await wrapper.get('[aria-label="改单财务说明"]').setValue('价格不对');
+    await wrapper.findAll('button').find((button) => button.text() === '拒绝改单')!.trigger('click');
+    await flushPromises();
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/business/order-changes/CHG-1/finance-rejections',
+      expect.objectContaining({ note: '价格不对' }),
+    );
+
+    await wrapper.findAll('button').find((button) => button.text() === '生效改单')!.trigger('click');
+    await flushPromises();
+    const applyCall = vi.mocked(apiPost).mock.calls.find((call) => String(call[0]).includes('/applications'));
+    expect(applyCall?.[1]).toEqual(expect.objectContaining({ expectedVersion: 0 }));
     wrapper.unmount();
   });
 });
