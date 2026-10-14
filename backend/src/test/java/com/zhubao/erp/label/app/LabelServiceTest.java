@@ -41,7 +41,12 @@ class LabelServiceTest {
         assertThat(payload.type()).isEqualTo(LabelType.OUTBOUND);
         assertThat(payload.typeLabel()).isEqualTo("出货");
         assertThat(payload.primaryCode()).isEqualTo("CK20260709001");
-        assertThat(payload.qrContent()).isEqualTo("JG|outbound|CK20260709001");
+        assertThat(payload.qrContent()).startsWith("JG|outbound|CK20260709001|0|");
+        assertThat(payload.qrContent().split("\\|", -1)).hasSize(5);
+        com.zhubao.erp.scan.app.ScanCodeParser parser = new com.zhubao.erp.scan.app.ScanCodeParser();
+        assertThat(parser.labelVersion(payload.qrContent())).isEqualTo("0");
+        assertThat(parser.labelVersion("JG|outbound|CK20260709001")).isEmpty();
+        assertThat(parser.resolve("JG|outbound|CK20260709001", "lookup").code()).isEqualTo("CK20260709001");
         assertThat(payload.fields()).singleElement()
                 .satisfies(field -> {
                     assertThat(field.name()).isEqualTo("客户");
@@ -115,7 +120,12 @@ class LabelServiceTest {
 
         assertThat(payload.type()).isEqualTo(LabelType.MOTHER);
         assertThat(payload.primaryCode()).isEqualTo("MO20260709001");
-        assertThat(payload.qrContent()).isEqualTo("JG|mother|MO20260709001");
+        assertThat(payload.qrContent()).startsWith("JG|mother|MO20260709001|0|");
+        assertThat(payload.qrContent().split("\\|", -1)).hasSize(5);
+        com.zhubao.erp.scan.app.ScanCodeParser parser = new com.zhubao.erp.scan.app.ScanCodeParser();
+        assertThat(parser.labelVersion(payload.qrContent())).isEqualTo("0");
+        assertThat(parser.labelVersion("JG|mother|MO20260709001")).isEmpty();
+        assertThat(parser.resolve("JG|mother|MO20260709001", "lookup").code()).isEqualTo("MO20260709001");
         assertThat(payload.fields()).extracting(LabelField::name)
                 .contains("客户", "加工要求", "期限", "单号", "物料", "数量", "重量", "收货日");
         assertThat(payload.fields()).extracting(LabelField::value)

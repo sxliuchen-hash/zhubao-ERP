@@ -11,6 +11,9 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * 共用库存契约场景使用旧版表结构与实际增量迁移，避免手写新列掩盖迁移问题。
@@ -27,22 +30,53 @@ public final class StockRepositoryFixture {
     public static JdbcDataSource jdbcDataSource() throws SQLException {
         JdbcDataSource dataSource = legacyJdbcDataSource();
         migrateSourceWorkOrder(dataSource);
+        migrateBatchCode(dataSource);
         return dataSource;
     }
 
+    /** V50 给余额和流水加批次列。H2 不能一条 ALTER 加多列，按 ADD COLUMN 拆开，已发布脚本不改。 */
+    public static void migrateBatchCode(JdbcDataSource dataSource) throws SQLException {
+        applyMigration(dataSource, "db/mysql/V50__m3_stock_batch_code.sql");
+    }
+
     public static void migrateSourceWorkOrder(JdbcDataSource dataSource) throws SQLException {
-        try (var resource = new ClassPathResource("db/mysql/V39__m3_inventory_source_work_order.sql").getInputStream();
+        applyMigration(dataSource, "db/mysql/V39__m3_inventory_source_work_order.sql");
+    }
+
+    private static void applyMigration(JdbcDataSource dataSource, String classpath) throws SQLException {
+        try (var resource = new ClassPathResource(classpath).getInputStream();
              Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             String sql = new String(resource.readAllBytes(), StandardCharsets.UTF_8).replaceAll("(?m)^--.*$", "");
             for (String command : sql.split(";")) {
-                if (!command.isBlank()) {
-                    statement.execute(command);
+                if (command.isBlank()) {
+                    continue;
+                }
+                for (String piece : h2AlterPieces(command)) {
+                    statement.execute(piece);
                 }
             }
         } catch (IOException ex) {
-            throw new IllegalStateException("无法读取库存来源工单迁移", ex);
+            throw new IllegalStateException("无法读取库存迁移 " + classpath, ex);
         }
+    }
+
+    private static List<String> h2AlterPieces(String statement) {
+        String trimmed = statement.trim();
+        int add = trimmed.toLowerCase(Locale.ROOT).indexOf("add column");
+        if (add < 0) {
+            return List.of(trimmed);
+        }
+        String prefix = trimmed.substring(0, add).trim();
+        String[] parts = trimmed.substring(add).split(",\\s*(?=ADD COLUMN)");
+        if (parts.length == 1) {
+            return List.of(trimmed);
+        }
+        List<String> pieces = new ArrayList<>();
+        for (String part : parts) {
+            pieces.add(prefix + " " + part.trim());
+        }
+        return pieces;
     }
 
     public static JdbcDataSource legacyJdbcDataSource() throws SQLException {
