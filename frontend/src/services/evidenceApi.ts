@@ -32,6 +32,7 @@ export interface HistoricalEvidence {
   status: string;
   uploadedAt: string;
   label: string;
+  sceneCode: string;
   previewUrl: string;
   fileState: string;
 }

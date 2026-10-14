@@ -14,6 +14,7 @@ import {
 import { fetchCaptures, type DocumentCapture } from '../../services/documentCaptureApi';
 import { fetchMotherOrder, type MobileIntakeResult } from '../../services/mobileIntakeApi';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
 import IntakePanel from '../intake/IntakePanel.vue';
 import MotherSplitPanel from './MotherSplitPanel.vue';
 import { useTraceTarget } from '../scan/useTraceTarget';
@@ -424,7 +425,7 @@ function backToList() {
           <article v-for="item in captures" :key="item.code">
             <div>
               <strong>{{ item.fileName }}</strong>
-              <a :href="item.previewUrl" target="_blank" rel="noopener">打开</a>
+              <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.code" />
             </div>
           </article>
           <EvidenceCapture

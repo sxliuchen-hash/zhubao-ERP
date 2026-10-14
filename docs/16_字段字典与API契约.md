@@ -1398,7 +1398,7 @@ PWA 一期边界：
 | `linkedAt` | 绑定时间 |
 | `linkKeyHash` | 上述业务键的 SHA-256。命中后仍核对原始维度 |
 
-查询 `EvidenceBoard` 分两列：`links` 是已经关联的引用，`historical` 是同一单据上尚未关联或来源不确定的附件。来源不确定的旧附件 `label` 为「历史单据证据」，`fileState` 为 `HISTORICAL`，不带工序或操作编号。已上传但还没绑定的文件 `fileState` 为 `UPLOADED_PENDING_LINK`。已绑定为 `LINKED`。
+查询 `EvidenceBoard` 分两列：`links` 是已经关联的引用，`historical` 是同一单据上尚未关联或来源不确定的附件。来源不确定的旧附件 `label` 为「历史单据证据」，`fileState` 为 `HISTORICAL`，`sceneCode` 为空，不带工序或操作编号。已上传但还没绑定的文件 `fileState` 为 `UPLOADED_PENDING_LINK`；新增 `sceneCode` 由已保存的采集场景标签反查，无法确认时为空。页面只有在单据类型、单号、场景与当前作业一致且已有正式操作编号时才提供补关联入口，服务端仍校验操作事实与授权。已绑定为 `LINKED`。
 
 绑定约束：
 

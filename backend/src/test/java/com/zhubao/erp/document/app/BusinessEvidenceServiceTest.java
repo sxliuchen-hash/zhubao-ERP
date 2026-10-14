@@ -149,6 +149,7 @@ class BusinessEvidenceServiceTest {
                     assertThat(item.attachmentCode()).isEqualTo(unpack.code());
                     assertThat(item.fileState()).isEqualTo(EvidenceCodes.UPLOADED_PENDING_LINK);
                     assertThat(item.label()).isEqualTo("已上传待关联");
+                    assertThat(item.sceneCode()).isEqualTo("UNPACK");
                 });
 
         BusinessEvidenceLink unpackLink = fixture.evidence.bind(bind(
@@ -245,6 +246,7 @@ class BusinessEvidenceServiceTest {
             assertThat(item.label()).isEqualTo(EvidenceCodes.HISTORICAL_LABEL);
             assertThat(item.fileState()).isEqualTo(EvidenceCodes.HISTORICAL);
             assertThat(item.objectType()).isEmpty();
+            assertThat(item.sceneCode()).isEmpty();
         });
         assertThat(board.links()).noneMatch(link -> historical.code().equals(link.attachmentCode()));
         assertThatThrownBy(() -> fixture.evidence.bind(bind(

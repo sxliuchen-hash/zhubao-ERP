@@ -27,6 +27,7 @@ const board = {
     status: '已上传',
     uploadedAt: '2026-10-01',
     label: '历史单据证据',
+    sceneCode: '',
     previewUrl: '',
     fileState: 'HISTORICAL',
   }],
@@ -104,6 +105,66 @@ describe('现场证据采集', () => {
     expect(bindEvidence).toHaveBeenCalledTimes(2);
     expect(confirmInbound).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('已关联');
+  });
+
+  it('有单号但尚无操作编号时保留本地文件，完成操作后才上传关联', async () => {
+    const wrapper = mount(EvidenceCapture, {
+      props: {
+        targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK',
+        operationType: 'inbound_confirm', operationCode: '',
+      },
+    });
+    await pick(wrapper, 'a.jpg', 'image/jpeg');
+    await wrapper.get('li button').trigger('click');
+    expect(wrapper.text()).toContain('请先完成当前操作');
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    await wrapper.setProps({ operationCode: 'STK-1' });
+    await wrapper.get('li button').trigger('click');
+    await flushPromises();
+    expect(uploadEvidenceFile).toHaveBeenCalledOnce();
+    expect(bindEvidence).toHaveBeenCalledWith(expect.objectContaining({ operationCode: 'STK-1' }));
+  });
+
+  it('刷新后可将同场景的待关联附件补到当前正式操作', async () => {
+    vi.mocked(fetchEvidenceBoard).mockResolvedValue({
+      links: [], historical: [{
+        ...board.historical[0], attachmentCode: 'ATT-PENDING', businessCode: 'MD-1',
+        objectType: 'MOTHER_ORDER', label: '已上传待关联', sceneCode: 'UNPACK',
+        previewUrl: '/api/documents/attachments/ATT-PENDING/content', fileState: 'UPLOADED_PENDING_LINK',
+      }],
+    });
+    const wrapper = mount(EvidenceCapture, {
+      props: {
+        targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK',
+        operationType: 'inbound_confirm', operationCode: 'STK-1',
+      },
+    });
+    await flushPromises();
+    const recoverButton = wrapper.findAll('button').find(button => button.text().includes('关联到当前操作'))!;
+    await recoverButton.trigger('click');
+    await flushPromises();
+    expect(bindEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      attachmentCode: 'ATT-PENDING', targetCode: 'MD-1', scene: 'UNPACK', operationCode: 'STK-1',
+    }));
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+  });
+
+  it('不同采集场景的待关联附件不能直接补到当前操作', async () => {
+    vi.mocked(fetchEvidenceBoard).mockResolvedValue({
+      links: [], historical: [{
+        ...board.historical[0], attachmentCode: 'ATT-PACK', businessCode: 'MD-1',
+        objectType: 'MOTHER_ORDER', sceneCode: 'PACK', fileState: 'UPLOADED_PENDING_LINK',
+      }],
+    });
+    const wrapper = mount(EvidenceCapture, {
+      props: {
+        targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK',
+        operationType: 'inbound_confirm', operationCode: 'STK-1',
+      },
+    });
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('关联到当前操作');
+    expect(bindEvidence).not.toHaveBeenCalled();
   });
 
   it('切单不把已选文件转挂到新单，取消选择不清草稿', async () => {

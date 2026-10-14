@@ -391,7 +391,7 @@ async function createMotherOrder() {
       <template v-if="created.qrContent"> / {{ created.qrContent }}</template>
     </p>
     <p v-if="created">业务已保存。照片或视频失败可以单独重试，不会再次建单或入库。</p>
-    <p v-else-if="intakeMotherCode">可直接上传并关联到这张母单。</p>
+    <p v-else-if="intakeMotherCode">请先完成入库确认，取得操作编号后再上传并关联。</p>
     <p v-else>文件先留在当前表单。建单成功后上传并关联。</p>
     <EvidenceCapture
       target-type="MOTHER_ORDER"

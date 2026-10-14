@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
+import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
 import {
   type DocumentAuditEvent,
   type DocumentManagementSummary,
@@ -262,7 +263,7 @@ async function createPreviewUrl() {
         </article>
         <article v-if="previewResult" class="operation-feedback success">
           <strong>预览链接已生成</strong>
-          <span>{{ previewResult.url }}</span>
+          <EvidencePreviewLink :attachment-code="previewResult.code" label="打开附件预览" />
           <small>过期时间：{{ previewResult.expiresAt }}</small>
         </article>
         <article v-else-if="previewError" class="operation-feedback danger">

@@ -8,6 +8,7 @@ import {
   type HistoricalEvidence,
   type EvidenceLink,
 } from '../../services/evidenceApi';
+import EvidencePreviewLink from './EvidencePreviewLink.vue';
 
 const props = withDefaults(defineProps<{
   targetType: string;
@@ -63,6 +64,8 @@ const items = ref<DraftFile[]>([]);
 const formMessage = ref('');
 const board = ref<EvidenceBoard>({ links: [], historical: [] });
 const boardError = ref('');
+const recoveringCode = ref('');
+const recoveryErrors = ref<Record<string, string>>({});
 const fileRef = ref<HTMLInputElement | null>(null);
 const cameraRef = ref<HTMLInputElement | null>(null);
 const videoRef = ref<HTMLInputElement | null>(null);
@@ -163,6 +166,13 @@ async function submit(item: DraftFile) {
     item.message = `这份文件属于原单 ${decision.snap.targetCode}，不会转到新单`;
   }
   item.snap = decision.snap;
+  if (!decision.snap.operationType || !decision.snap.operationCode) {
+    item.state = item.attachmentCode ? 'UPLOADED_PENDING_LINK' : 'LOCAL_PENDING';
+    item.message = item.attachmentCode
+      ? '已上传，等正式操作编号后再关联'
+      : '请先完成当前操作，取得编号后再上传并关联';
+    return;
+  }
   item.state = 'UPLOADING';
   try {
     if (!item.attachmentCode) {
@@ -173,13 +183,6 @@ async function submit(item: DraftFile) {
         file: item.file,
       });
       item.attachmentCode = uploaded.code;
-    }
-    if (!decision.snap.operationType || !decision.snap.operationCode) {
-      item.state = 'UPLOADED_PENDING_LINK';
-      item.message = decision.switched
-        ? item.message
-        : '已上传，等正式操作编号后再关联';
-      return;
     }
     await bindEvidence({
       attachmentCode: item.attachmentCode,
@@ -240,6 +243,38 @@ function linkKey(link: EvidenceLink): string {
 
 function historicalKey(item: HistoricalEvidence): string {
   return item.attachmentCode;
+}
+
+function canRecover(item: HistoricalEvidence): boolean {
+  return item.fileState === 'UPLOADED_PENDING_LINK'
+    && item.businessCode === props.targetCode.trim()
+    && item.objectType === props.targetType
+    && item.sceneCode === props.scene
+    && Boolean(props.operationType.trim() && props.operationCode.trim());
+}
+
+async function recover(item: HistoricalEvidence) {
+  if (!canRecover(item) || recoveringCode.value) return;
+  recoveringCode.value = item.attachmentCode;
+  delete recoveryErrors.value[item.attachmentCode];
+  try {
+    await bindEvidence({
+      attachmentCode: item.attachmentCode,
+      targetType: props.targetType,
+      targetCode: props.targetCode.trim(),
+      stage: props.stage,
+      scene: props.scene,
+      operationType: props.operationType.trim(),
+      operationCode: props.operationCode.trim(),
+      processName: props.processName.trim(),
+      clauseNo: props.clauseNo.trim(),
+    });
+    await loadBoard();
+  } catch (error) {
+    recoveryErrors.value[item.attachmentCode] = error instanceof Error ? error.message : '关联失败';
+  } finally {
+    recoveringCode.value = '';
+  }
 }
 
 watch(() => [props.targetType, props.targetCode, props.stage, props.operationType, props.operationCode], () => {
@@ -322,7 +357,7 @@ onBeforeUnmount(() => {
         <strong>{{ link.fileName || link.attachmentCode }}</strong>
         <span>{{ link.sceneLabel }} / 已关联</span>
         <small>{{ link.operationType }} {{ link.operationCode }}</small>
-        <a v-if="link.previewUrl" :href="link.previewUrl" target="_blank" rel="noopener">打开</a>
+        <EvidencePreviewLink v-if="link.previewUrl" :attachment-code="link.attachmentCode" />
         <span v-else-if="link.status === '已下线'">已下线，不能预览</span>
       </li>
     </ul>
@@ -330,7 +365,11 @@ onBeforeUnmount(() => {
       <li v-for="item in board.historical" :key="historicalKey(item)">
         <strong>{{ item.fileName || item.attachmentCode }}</strong>
         <span>{{ item.label }}</span>
-        <a v-if="item.previewUrl" :href="item.previewUrl" target="_blank" rel="noopener">打开</a>
+        <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" />
+        <button v-if="canRecover(item)" class="secondary-button" type="button" :disabled="Boolean(recoveringCode)" @click="recover(item)">
+          {{ recoveringCode === item.attachmentCode ? '正在关联' : '关联到当前操作' }}
+        </button>
+        <small v-if="recoveryErrors[item.attachmentCode]" class="operation-feedback danger" role="alert">{{ recoveryErrors[item.attachmentCode] }}</small>
       </li>
     </ul>
   </section>

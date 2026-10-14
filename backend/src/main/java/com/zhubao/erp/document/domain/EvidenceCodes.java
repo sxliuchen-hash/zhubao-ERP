@@ -65,6 +65,17 @@ public final class EvidenceCodes {
         return SCENE_LABELS.get(scene.trim().toUpperCase(java.util.Locale.ROOT));
     }
 
+    public static String sceneCode(String label) {
+        if (label == null || label.isBlank()) {
+            return "";
+        }
+        return SCENE_LABELS.entrySet().stream()
+                .filter(entry -> entry.getValue().equals(label.trim()))
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse("");
+    }
+
     public static Set<String> scenes() {
         return SCENE_LABELS.keySet();
     }

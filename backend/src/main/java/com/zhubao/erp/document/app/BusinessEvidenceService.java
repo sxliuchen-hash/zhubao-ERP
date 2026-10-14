@@ -538,6 +538,7 @@ public class BusinessEvidenceService {
                 attachment.status(),
                 attachment.uploadedAt(),
                 uncertain ? EvidenceCodes.HISTORICAL_LABEL : "已上传待关联",
+                uncertain ? "" : EvidenceCodes.sceneCode(attachment.businessType()),
                 retired ? "" : previewOrEmpty(attachment),
                 uncertain ? EvidenceCodes.HISTORICAL : EvidenceCodes.UPLOADED_PENDING_LINK
         );
