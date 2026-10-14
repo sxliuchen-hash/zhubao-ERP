@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 调试包额外信任用户手动安装的证书，便于内网试装。校验失败仍然中止，不忽略错误。 -->
+    <!-- 调试包仅额外信任已核对指纹的测试服务器证书，不要求手机全局安装证书。 -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
+            <certificates src="@raw/tencent_test_server" />
         </trust-anchors>
     </base-config>
 </network-security-config>

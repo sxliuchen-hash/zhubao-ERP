@@ -129,7 +129,7 @@
 | JDK | JDK 21 已安装；命令行 `JAVA_HOME` 指向 JDK 8，当前 Android Studio 自带 JDK 为 25 | 安卓命令行构建临时将 `JAVA_HOME` 指向 JDK 21；不要沿用 JDK 8 或当前 JDK 25 |
 | Android Studio / SDK / adb | Android Studio 2026.2 位于 `D:\exe\AndroidStudio`。SDK 位于 `D:\exe\AndroidSdk`，含 `adb` 37.0.1、平台 `android-37.2` 和 Build-Tools 37.0.0。用户环境变量 `ANDROID_HOME` 指向该 SDK | 首次打开 Android Studio 时确认 SDK 位置为 `D:\exe\AndroidSdk`。真机调试另需打开 USB 调试。安装方式见[Android 官方文档](https://developer.android.com/studio/install.html) |
 | Android 工程与签名 | 已有 `android-app/` 和可安装的 debug APK；正式签名材料未配置 | 真机试装 debug APK；发布密钥另行受控保存，不提交 Git，正式包验证同签名覆盖升级 |
-| 云端 HTTPS | 本机测试地址已指向 `https://106.55.226.166/`；现网自签证书含该 IP 的 SAN，目标手机尚未信任和验收 | 专用测试手机经独立核对证书指纹后信任现用公钥证书；正式发行优先改用系统信任的证书 |
+| 云端 HTTPS | 本机测试地址已指向 `https://106.55.226.166/`；现网自签证书含该 IP 的 SAN，服务器端证书指纹已核对并仅内置于 debug APK | 测试 APK 只在本应用内信任当前测试证书；证书更新需重新核对和打包。正式发行优先改用系统信任的证书 |
 | 打印工位 | 尚未核定机器铭牌、接口、Windows 驱动、标签纸 | 取得实机与一台固定电脑，先做尺寸及二维码出纸验证 |
 
 安卓内部直装无需把第一版提交应用商店，但安装源授权、签名和覆盖升级必须在实际目标手机上验证。Android 的[开发者验证时间表](https://developer.android.com/developer-verification)还计划在 2027 年扩大适用范围；长期分发方式应在发布前按目标设备与地区复核。
@@ -138,9 +138,11 @@
 
 1. 在未入库的 `android-app/local.properties` 配置本机 SDK 和真实 HTTPS `erp.baseUrl`。当前工作机已设为腾讯云测试地址；其他机器须自行配置，不把登录凭据写入该文件。
 2. 使用 JDK 21 在 `android-app/` 执行 `./gradlew.bat :app:testDebugUnitTest` 和 `./gradlew.bat :app:assembleDebug`。产物为 `app/build/outputs/apk/debug/app-debug.apk`；debug 签名只供试装，不可充当正式发布密钥。
-3. 当前服务使用自签证书。先从服务器受控取得正在使用的 **`server.crt` 公钥证书**，与服务器端 SHA-256 指纹及 `IP:106.55.226.166` SAN 核对，再在专用测试手机中安装并信任。不要传输 `server.key`，不要通过忽略证书错误继续访问。debug 包允许手机用户证书，正式包仅信任系统证书。
+3. 当前服务使用自签证书。测试服务器的 **`server.crt` 公钥证书**已与服务器端 SHA-256 指纹 `C94C46845DE87704689533CA7B77BC839E2F8F8BB3B0CC78F2A71BB456D030C1` 及 `IP:106.55.226.166` SAN 核对，并只内置在 debug 包的网络信任配置中；手机无需全局安装该证书。证书轮换后须重新核对并重打 debug APK。不要传输 `server.key`，不要忽略证书错误；正式包仅信任系统证书。
 4. 手机连接可访问测试服务器的网络，安装 APK；若用 `adb install -r app/build/outputs/apk/debug/app-debug.apk`，先开启 USB 调试并确认 `adb devices` 能看到设备。依次核验登录、应用内实时扫码、拍照、录像、上传、关联、预览、拒绝授权后的重试与返回页面后的相机释放。当前视频接受 MP4/WebM 且不超过 50MB；系统相机的时长和大小限制只是请求提示，仍以实际文件校验为准。
-5. APK 加载服务器上的网页。前端页面修改必须先按测试环境部署流程发布，真机才能看到新增的“录视频留证”入口和扫码恢复提示；只重打 APK 不会更新网页。
+5. APK 加载服务器上的网页。前端提交 `dc35770` 已于 2026-10-14 部署到测试服务器，手机安装当前 debug APK 后应能看到新增的“录视频留证”入口和扫码恢复提示。此后页面修改仍须先部署服务器；只重打 APK 不会更新网页。
+
+当前已将首版 debug APK 和服务器公钥证书复制到手机 `Download/` 目录；ADB 安装被手机限制，返回 `INSTALL_FAILED_USER_RESTRICTED`。用户从文件管理器安装了首版 APK，随后 ADB 断开。已重新生成只在应用内信任测试证书的新版 APK，待手机重连后覆盖安装；手机下载目录中的旧 APK 应由新版替换，证书文件无需在手机系统安装。真机扫码、拍照、录像与上传尚无验收结论。
 
 ## 8. 整体项目实施顺序与工作量
 
