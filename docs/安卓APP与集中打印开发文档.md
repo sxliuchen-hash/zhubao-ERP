@@ -1,6 +1,6 @@
 # 安卓 APP 与集中标签打印开发文档
 
-**状态：2026-10-14 代码已落地一部分，现场验收未完成。** 本文仍是安卓入口、集中打印和改单追溯的设计基准。仓库里已有 `android-app/`、`print-agent/`、备料、工序百分比、改单版本和打印任务；正式签名 APK、真实 ERP 地址、手机作业和佳博出纸都还没有验收。现行事实以[项目核心](./00_项目核心.md)为准。改单、财务确认和全链追溯的业务规则见[订单变更、换标、计费与全链路追溯设计](./订单变更与全链路追溯设计.md)。
+**状态：2026-10-14 代码已落地一部分，现场验收未完成。** 本文仍是安卓入口、集中打印和改单追溯的设计基准。仓库里已有 `android-app/`、`print-agent/`、备料、工序百分比、改单版本和打印任务；本机已重建指向腾讯云测试地址的 debug APK，网页扫码继续使用应用内实时取景，拍照与录像入口已在本地代码接通。新版网页尚未部署到测试服务器，正式签名 APK、目标手机作业和佳博出纸仍未验收。现行事实以[项目核心](./00_项目核心.md)为准。改单、财务确认和全链追溯的业务规则见[订单变更、换标、计费与全链路追溯设计](./订单变更与全链路追溯设计.md)。
 
 ## 1. 目标与范围
 
@@ -126,13 +126,21 @@
 | 条件 | 当前状态 | 准备动作 |
 |---|---|---|
 | Node.js / pnpm | Node 24.19.0、pnpm 11.28.5 可用 | 沿用现有前端安装与构建流程 |
-| JDK | JDK 21 已安装；命令行 `JAVA_HOME` 指向 JDK 8 | Android 构建使用 Android Studio 自带或兼容的 JDK，不影响既有后端脚本 |
+| JDK | JDK 21 已安装；命令行 `JAVA_HOME` 指向 JDK 8，当前 Android Studio 自带 JDK 为 25 | 安卓命令行构建临时将 `JAVA_HOME` 指向 JDK 21；不要沿用 JDK 8 或当前 JDK 25 |
 | Android Studio / SDK / adb | Android Studio 2026.2 位于 `D:\exe\AndroidStudio`。SDK 位于 `D:\exe\AndroidSdk`，含 `adb` 37.0.1、平台 `android-37.2` 和 Build-Tools 37.0.0。用户环境变量 `ANDROID_HOME` 指向该 SDK | 首次打开 Android Studio 时确认 SDK 位置为 `D:\exe\AndroidSdk`。真机调试另需打开 USB 调试。安装方式见[Android 官方文档](https://developer.android.com/studio/install.html) |
-| Android 工程与签名 | 仓库无 Android 工程和签名配置 | 建工程、固定包名与版本规则；发布密钥另行受控保存，不提交 Git |
-| 云端 HTTPS | 已有自签证书；手机信任和摄像头仍待现场验收 | 固定访问域名与可信证书，验证 APK 内 WebView、上传和预览 |
+| Android 工程与签名 | 已有 `android-app/` 和可安装的 debug APK；正式签名材料未配置 | 真机试装 debug APK；发布密钥另行受控保存，不提交 Git，正式包验证同签名覆盖升级 |
+| 云端 HTTPS | 本机测试地址已指向 `https://106.55.226.166/`；现网自签证书含该 IP 的 SAN，目标手机尚未信任和验收 | 专用测试手机经独立核对证书指纹后信任现用公钥证书；正式发行优先改用系统信任的证书 |
 | 打印工位 | 尚未核定机器铭牌、接口、Windows 驱动、标签纸 | 取得实机与一台固定电脑，先做尺寸及二维码出纸验证 |
 
 安卓内部直装无需把第一版提交应用商店，但安装源授权、签名和覆盖升级必须在实际目标手机上验证。Android 的[开发者验证时间表](https://developer.android.com/developer-verification)还计划在 2027 年扩大适用范围；长期分发方式应在发布前按目标设备与地区复核。
+
+### 7.1 安卓 debug 试装
+
+1. 在未入库的 `android-app/local.properties` 配置本机 SDK 和真实 HTTPS `erp.baseUrl`。当前工作机已设为腾讯云测试地址；其他机器须自行配置，不把登录凭据写入该文件。
+2. 使用 JDK 21 在 `android-app/` 执行 `./gradlew.bat :app:testDebugUnitTest` 和 `./gradlew.bat :app:assembleDebug`。产物为 `app/build/outputs/apk/debug/app-debug.apk`；debug 签名只供试装，不可充当正式发布密钥。
+3. 当前服务使用自签证书。先从服务器受控取得正在使用的 **`server.crt` 公钥证书**，与服务器端 SHA-256 指纹及 `IP:106.55.226.166` SAN 核对，再在专用测试手机中安装并信任。不要传输 `server.key`，不要通过忽略证书错误继续访问。debug 包允许手机用户证书，正式包仅信任系统证书。
+4. 手机连接可访问测试服务器的网络，安装 APK；若用 `adb install -r app/build/outputs/apk/debug/app-debug.apk`，先开启 USB 调试并确认 `adb devices` 能看到设备。依次核验登录、应用内实时扫码、拍照、录像、上传、关联、预览、拒绝授权后的重试与返回页面后的相机释放。当前视频接受 MP4/WebM 且不超过 50MB；系统相机的时长和大小限制只是请求提示，仍以实际文件校验为准。
+5. APK 加载服务器上的网页。前端页面修改必须先按测试环境部署流程发布，真机才能看到新增的“录视频留证”入口和扫码恢复提示；只重打 APK 不会更新网页。
 
 ## 8. 整体项目实施顺序与工作量
 
