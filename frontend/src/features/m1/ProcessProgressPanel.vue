@@ -175,7 +175,7 @@ async function draftChange() {
   changeAttempt.value = nextRequestAttempt(changeAttempt.value, changeFingerprint(), 'change');
   changeSubmitting.value = true;
   try {
-    const created = await apiPost<{ motherOrderCode: string; workOrderCode: string; newRequirement: string; newDueDate: string; requestId: string }, { id: string }>(
+    const created = await apiPost<{ motherOrderCode: string; workOrderCode: string; newRequirement: string; newDueDate: string; newRoute: string; reworkProcess: string; requestId: string }, { id: string }>(
       '/api/business/order-changes',
       {
         motherOrderCode: mother,
