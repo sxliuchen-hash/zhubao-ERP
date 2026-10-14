@@ -65,6 +65,50 @@ describe('扫码媒体', () => {
     wrapper.unmount();
   });
 
+  it('拒绝相机权限后可再次扫码，并在识别完成后关闭新媒体流', async () => {
+    const denied = Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+    const stop = vi.fn();
+    vi.mocked(openCameraStream)
+      .mockRejectedValueOnce(denied)
+      .mockResolvedValueOnce({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+    vi.mocked(readLiveBarcode).mockResolvedValue('JG|mother|MD-RETRY');
+    const { wrapper, api } = mountScanner();
+
+    await expect(api.scanCamera()).resolves.toBeNull();
+    expect(api.hint.value).toContain('重新扫码');
+    expect(api.scanning.value).toBe(false);
+    await expect(api.scanCamera()).resolves.toBe('JG|mother|MD-RETRY');
+    expect(openCameraStream).toHaveBeenCalledTimes(2);
+    expect(readLiveBarcode).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(api.cameraActive.value).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('停止旧取景后重进，相机流独立且旧识别结果不会覆盖新结果', async () => {
+    const oldStop = vi.fn();
+    const newStop = vi.fn();
+    vi.mocked(openCameraStream)
+      .mockResolvedValueOnce({ getTracks: () => [{ stop: oldStop }] } as unknown as MediaStream)
+      .mockResolvedValueOnce({ getTracks: () => [{ stop: newStop }] } as unknown as MediaStream);
+    let finishOld: (value: string) => void = () => {};
+    vi.mocked(readLiveBarcode)
+      .mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+      .mockResolvedValueOnce('JG|mother|MD-NEW');
+    const { wrapper, api } = mountScanner();
+
+    const oldScan = api.scanCamera();
+    await flushPromises();
+    api.stop();
+    expect(oldStop).toHaveBeenCalledOnce();
+    await expect(api.scanCamera()).resolves.toBe('JG|mother|MD-NEW');
+    finishOld('JG|mother|MD-OLD');
+    await expect(oldScan).resolves.toBeNull();
+    expect(newStop).toHaveBeenCalledOnce();
+    expect(api.hint.value).toContain('已读到条码');
+    wrapper.unmount();
+  });
+
   it('相机会话在切页或卸载时停止，迟到的识别结果不再返回', async () => {
     const stop = vi.fn();
     vi.mocked(openCameraStream).mockResolvedValue({

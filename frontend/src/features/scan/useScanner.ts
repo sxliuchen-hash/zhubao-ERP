@@ -67,7 +67,7 @@ export function useScanner() {
       if (token !== generation) return null;
       const name = error instanceof Error ? error.name : '';
       hint.value = name === 'NotAllowedError'
-        ? '相机权限未开启，请在浏览器设置中允许相机，或改用拍照、选图、手输'
+        ? '相机权限未开启，请在手机或浏览器设置中允许相机，然后重新扫码；也可拍照、选图或手输'
         : name === 'NotFoundError'
           ? '没有找到可用摄像头，请改用选图或手输'
           : name === 'NotReadableError'

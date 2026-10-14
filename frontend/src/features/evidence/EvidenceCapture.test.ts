@@ -146,6 +146,46 @@ describe('现场证据采集', () => {
     expect(uploadEvidenceFile).not.toHaveBeenCalled();
   });
 
+  it('拍照和录像分别启动对应采集，录像仍按 50MB 限制上传关联', async () => {
+    const wrapper = mount(EvidenceCapture, {
+      props: {
+        targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK',
+        operationType: 'inbound_confirm', operationCode: 'STK-1',
+      },
+    });
+    const photoInput = wrapper.get('[aria-label="拍摄照片证据"]');
+    const videoInput = wrapper.get('[aria-label="录制视频证据"]');
+    const fileInput = wrapper.get('[aria-label="选择证据文件"]');
+    expect(photoInput.attributes()).toMatchObject({ accept: 'image/jpeg,image/png', capture: 'environment' });
+    expect(videoInput.attributes()).toMatchObject({ accept: 'video/mp4,video/webm', capture: 'environment' });
+    expect(fileInput.attributes('accept')).toBe('image/jpeg,image/png,video/mp4,video/webm');
+    expect(fileInput.attributes('capture')).toBeUndefined();
+
+    const photoClick = vi.spyOn(photoInput.element as HTMLInputElement, 'click');
+    const videoClick = vi.spyOn(videoInput.element as HTMLInputElement, 'click');
+    await wrapper.get('[aria-label="拍照留证"]').trigger('click');
+    expect(photoClick).toHaveBeenCalledOnce();
+    expect(videoClick).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="录视频留证"]').trigger('click');
+    expect(videoClick).toHaveBeenCalledOnce();
+
+    const video = fileOf('现场.mp4', 'video/mp4');
+    Object.defineProperty(videoInput.element, 'files', { configurable: true, value: [video] });
+    await videoInput.trigger('change');
+    expect(wrapper.text()).toContain('现场.mp4');
+    await wrapper.get('li button').trigger('click');
+    await flushPromises();
+    expect(uploadEvidenceFile).toHaveBeenCalledWith(expect.objectContaining({ file: video }));
+    expect(bindEvidence).toHaveBeenCalledOnce();
+
+    const oversized = fileOf('过大.mp4', 'video/mp4');
+    Object.defineProperty(oversized, 'size', { value: 50 * 1024 * 1024 + 1 });
+    Object.defineProperty(videoInput.element, 'files', { configurable: true, value: [oversized] });
+    await videoInput.trigger('change');
+    expect(wrapper.text()).toContain('视频超过 50MB');
+    expect(uploadEvidenceFile).toHaveBeenCalledOnce();
+  });
+
   it('同一文件可以再次选择，预览地址会在卸载时释放', async () => {
     const created: string[] = [];
     const revoked: string[] = [];

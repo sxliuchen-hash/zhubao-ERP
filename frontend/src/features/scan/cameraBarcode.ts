@@ -44,7 +44,11 @@ export async function openCameraStream() {
       audio: false,
       video: { facingMode: { ideal: 'environment' } },
     });
-  } catch {
+  } catch (error) {
+    const name = error instanceof Error ? error.name : '';
+    if (name !== 'OverconstrainedError' && name !== 'NotFoundError') {
+      throw error;
+    }
     return media.getUserMedia({ audio: false, video: true });
   }
 }

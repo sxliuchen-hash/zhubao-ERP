@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Ecc, QrCode } from '../../vendor/qrcodegen';
-import { decodeRaster, resetBarcodeReaderForTests, type Raster } from './cameraBarcode';
+import { decodeRaster, openCameraStream, resetBarcodeReaderForTests, type Raster } from './cameraBarcode';
 
 afterEach(() => {
   resetBarcodeReaderForTests();
   delete (globalThis as { BarcodeDetector?: unknown }).BarcodeDetector;
+  vi.unstubAllGlobals();
 });
 
 describe('decodeRaster', () => {
@@ -25,6 +26,38 @@ describe('decodeRaster', () => {
     data.fill(255);
 
     expect(decodeRaster({ data, width: 80, height: 80 })).toBeNull();
+  });
+});
+
+describe('openCameraStream', () => {
+  it('相机权限被拒绝时只请求一次，并将原错误交给界面', async () => {
+    const denied = Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+    const getUserMedia = vi.fn().mockRejectedValue(denied);
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+
+    await expect(openCameraStream()).rejects.toBe(denied);
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: false, video: { facingMode: { ideal: 'environment' } } });
+  });
+
+  it('后置摄像头约束不兼容时回退到默认摄像头', async () => {
+    const stream = {} as MediaStream;
+    const unavailable = Object.assign(new Error('unavailable'), { name: 'OverconstrainedError' });
+    const getUserMedia = vi.fn().mockRejectedValueOnce(unavailable).mockResolvedValueOnce(stream);
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+
+    await expect(openCameraStream()).resolves.toBe(stream);
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(getUserMedia).toHaveBeenLastCalledWith({ audio: false, video: true });
+  });
+
+  it('相机被占用时不重复请求', async () => {
+    const busy = Object.assign(new Error('busy'), { name: 'NotReadableError' });
+    const getUserMedia = vi.fn().mockRejectedValue(busy);
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+
+    await expect(openCameraStream()).rejects.toBe(busy);
+    expect(getUserMedia).toHaveBeenCalledOnce();
   });
 });
 

@@ -65,6 +65,7 @@ const board = ref<EvidenceBoard>({ links: [], historical: [] });
 const boardError = ref('');
 const fileRef = ref<HTMLInputElement | null>(null);
 const cameraRef = ref<HTMLInputElement | null>(null);
+const videoRef = ref<HTMLInputElement | null>(null);
 let nextId = 1;
 
 function currentSnap(): Snap {
@@ -125,6 +126,10 @@ function cancelSelection() {
 
 function openCamera() {
   cameraRef.value?.click();
+}
+
+function openVideo() {
+  videoRef.value?.click();
 }
 
 function resolveSnap(item: DraftFile): { snap: Snap; switched: boolean; waiting: boolean } {
@@ -253,21 +258,32 @@ onBeforeUnmount(() => {
     <div class="section-heading">
       <div>
         <h3>现场证据</h3>
-        <p>扫码成功不等于已经留证。拍照或选文件后需要上传并关联。</p>
+        <p>扫码成功不等于已经留证。拍照、录视频或选文件后需要上传并关联。</p>
       </div>
     </div>
     <p class="evidence-hint">视频请尽量控制在 30 秒内。系统只检查文件大小，不检查时长。</p>
     <div class="button-row">
       <button class="secondary-button" type="button" aria-label="拍照留证" @click="openCamera">拍照留证</button>
+      <button class="secondary-button" type="button" aria-label="录视频留证" @click="openVideo">录视频留证</button>
       <button class="secondary-button" type="button" aria-label="取消选择" @click="cancelSelection">取消选择</button>
     </div>
     <input
       ref="cameraRef"
       class="still-capture"
       type="file"
-      accept="image/jpeg,image/png,video/mp4,video/webm"
+      accept="image/jpeg,image/png"
       capture="environment"
-      aria-label="拍摄证据"
+      aria-label="拍摄照片证据"
+      @change="onPicked"
+      @cancel="cancelSelection"
+    />
+    <input
+      ref="videoRef"
+      class="still-capture"
+      type="file"
+      accept="video/mp4,video/webm"
+      capture="environment"
+      aria-label="录制视频证据"
       @change="onPicked"
       @cancel="cancelSelection"
     />
