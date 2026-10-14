@@ -78,3 +78,59 @@ Android lint 两项错误为：本机未入库 local.properties:1 的 Windows �
 ## 4. 关闭顺序与验收边界
 
 先补迁移装配、数据权限、改单有效版本与财务原子提交；再补业务页面、真正标签渲染和打印并发／补打；修安卓授权与失效交互，配置真实地址和仓库外发布密钥。定向测试通过后，在隔离 MySQL 验证升级、回滚和重启，再做手机扫码／上传／覆盖升级、佳博尺寸与二维码出纸、断网和不确定任务核实、数据库与附件恢复。前端既有测试通过不能证明未接入入口可用；代码或历史构建不能代替现场结果。
+
+## 5. Cursor 修复后的第二次核验
+
+2026-10-14 复核 `7646bb4`，覆盖 `a5a2c94`、`e70c525`、`90868f7`、`7646bb4` 等修复提交。前四节保留首次核验事实，本节为最新结果。**已有实质修复，上一轮提示词仍未全部完成；剩余内容包含代码和页面问题，不只是等待真实设备。** 本次未修改业务源码。
+
+### 5.1 已确认改善
+
+- V49—V55 迁移目录及探针可装载，升级测试和财务 JDBC 测试通过。
+- 岗位查询已读取有效要求、期限和路线；改单版本、状态及财务写入进入同一工作会话；减额已校验原应收归属。新增 H2 和内存回滚测试有实质覆盖。
+- 备料及公司料已增加收发退回入口，进度增加筛选分页和历史查询代码。
+- 打印已有 PNG／二维码渲染、份数设置、同请求唯一插入、租约过期处理及客户范围校验，不再只是原文占位字符串。
+- 安卓直接拍照前已申请权限，原生桥移除，主文档 500／503 有提示，lint 通过，正式构建有签名和地址校验。
+
+### 5.2 尚未关闭的关键问题
+
+| 优先级 | 问题、触发与证据 | 本次证据类别 |
+|---|---|---|
+| P1 | **进度定位没有执行。** `ProcessProgressPanel.vue:145` 监听 ScanInput 的 draft；真正点击定位和相机成功发的是 recognize（`ScanInput.vue:75`、`:94`）。输入单号后点击定位，目标查询接口调用次数实际为 0 | 组件测试复现 |
+| P1 | **备料失败重试可能重复入账。** `PrepStockPanel.vue:33` 每次点击以 Date.now 生成新请求号，`:90–95` 六种操作均如此。模拟响应丢失后重试，编号从 prep-recv-10000000 变为 prep-recv-10000001，服务端无法将其识别为同请求 | 组件测试复现编号变化；重复记账风险来自幂等契约 |
+| P1 | **集中打印点击重试也更换请求号。** `LabelWorkspace.vue:306`、`:332` 每次生成新号，按钮没有提交中禁用。首次已保存但响应丢失时，重试成为另一条可打印任务 | 静态确认 |
+| P1 | **财务确认和生效仍不能从页面完成。** 全前端改单消费者只在 `ProcessProgressPanel.vue:113–134`，只有申请、送财务和时间线；没有 finance-confirmations／finance-rejections／applications 消费者，亦没有路线及重做工序编辑入口 | 接口／页面调用搜索确认 |
+| P1 | **执行轮次只有记录，不能实际重做报工。** `OrderChangeService.java:343` 保存 RW 轮次；`ProcessStationService.java:563–584` 只解析原母子单，`:316` 仍按原工单＋工序拒绝已交工序。新增测试只验证轮次存在，未交付新轮次 | 静态确认及测试覆盖核对 |
+| P1 | **关键作业丢弃扫码版本。** 生产 `ProductionPanel.vue:168`、`:254` 和质检 `QualityPanel.vue:210`、`:298` 将规范单号提交；发货也未提交原二维码。`LabelVersionGuard.java:35` 对非 JG 原码直接返回，旧标／未知版实际可绕过新校验 | 静态确认实际调用链 |
+| P1 | **实际会话失效仍不回登录。** 后端 `AuthSessionService.java:430`、`:443`、`:455`、`:478` 抛权限异常，经 `GlobalExceptionHandler.java:28` 返回 403；`apiClient.ts:38` 只清 401。模拟该 403 后旧 token 保留。应区分身份失效与普通无权限，不能一律清空所有 403 | 后端契约静态确认＋前端响应测试复现 |
+| P1 | **陈旧改单可覆盖草稿基准版本。** `OrderChangeService.java:247` 优先采纳调用方 expectedVersion，而非固定草稿已确认基准。两张 V0 草稿，第一张生效后第二张传 1 即可绕过基准冲突，无需重新财务确认 | 静态确认；现有测试只传旧值 0 |
+| P1 | **连续改单可能恢复旧路线。** `OrderChangeService.java:120`、`:433–440` 默认路线读取原单；`:136`、`:138` 的旧要求／期限也来自原母单。第一次改路线后第二次只改期限，遗漏 newRoute 会回到原路线，历史前值也不正确 | 静态确认；缺连续改单回归 |
+| P1 | **工序范围与草稿并发仍不完整。** `OrderChangeService.java:123` 仅核验 reworkProcess，没有核验 newRoute 的受影响工序；`:115` 先查请求再存，`:131` 按数量分配版本。JDBC 重复键保存 `JdbcOrderChangeRepository.java:39`、`:59` 仍可能返回未入库的新 ID | 静态确认；现有并发测试仅覆盖既有改单生效 |
+| P1 | **集中标签仍不等于预览模板。** `PrintJobService.java:216–227` 未取实际 LabelService／模板字段，固定 60×40；`LabelRenderer.java:39` 未画客户、要求、期限等预览内容。代理只设 Copies，未设纸张／可打印区域／分辨率；PNG 像素尺寸不能证明实际毫米尺寸 | 静态确认；未实际出纸 |
+| P1 | **换贴未形成页面与母单追溯闭环。** `PrintJobService.java:148`、`:159`、`:170` 把子单业务号同时写成母单号，真正母单查询不到这些标签事件；前端没有 paper-checks／relabels 消费者。时间线仍是部分文字集合，未聚合设计中的库存、质检、发货和照片视频链接 | 静态确认 |
+
+另有两项需处理：代理 `PrintAgent.java:129` 忽略回报 HTTP 状态，失败不记录任务号或重试回报；安卓拒绝相机后已清空待拍照动作和文件回调（`MainActivity.kt:79–93`），重试只重新授权（`:336`），授权成功也不能继续原操作。
+
+### 5.3 本次重新执行的验证
+
+| 检查 | 实际结果 |
+|---|---|
+| 前端原有回归 | 54 文件／260 项通过 |
+| 前端 TypeScript | 通过 |
+| 后端定向测试 | 19 个类／77 项：72 通过、2 断言失败、3 初始化报错 |
+| 额外组件与会话探针 | 2 文件／3 项均复现缺陷：定位未调用、重试换号、403 保留旧会话 |
+| print-agent 渲染测试 | 1 项通过，不代表实际纸张和模板内容验收 |
+| Android 单元测试 | 以 --rerun-tasks 实际重跑，3 项通过；主要为纯函数策略测试，不覆盖授权回调或真实后端失效 |
+| Android lint | 0 错误／8 警告，通过 |
+
+后端失败需要分别解释：`LabelServiceTest` 的 2 项仍断言三段二维码，而新实现返回五段码，应更新为新契约和兼容性断言；`ProcessDeliveryTest`、`QualityDeliveryTest`、`ShippingDeliveryTest` 的 JDBC 夹具未应用 V50，报 BATCH_CODE 列不存在，必须更新夹具后继续验证业务链。这 5 项不是上次缺探针问题的重复，也不能直接推断升级到 V55 后的实际数据库一定存在同样故障。
+
+后端复跑命令：
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-21.0.6.7-hotspot'
+powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml '-Dtest=OrderChangeServiceTest,OrderChangeFinanceTest,OrderChangeJdbcAtomicityTest,OrderChangeHttpTest,ProcessProgressServiceTest,PrepStockServiceTest,PrintJobServiceTest,JdbcPrintJobRepositoryTest,DatabaseUpgradeServiceTest,JdbcFinanceRepositoryTest,ProcessStationServiceTest,ProcessDeliveryTest,QualityRequirementServiceTest,QualityDeliveryTest,ShippingDeliveryTest,MotherOrderSplitServiceTest,LabelServiceTest,ScanContextHttpTest,ZhubaoErpApplicationTests' test
+```
+
+本机额外探针位于 `output/app-recheck/`，已移出默认源码和测试集合，API 全部模拟，没有修改业务数据。复跑：`pnpm --filter zhubao-erp-frontend exec vitest run --config F:/APPkaifa/zhubao-ERP/output/app-recheck/vitest.config.ts`。实际日志为 `.tmp-app-recheck-{frontend,types,backend,print-agent,android,android-unit,probes}.log`，生成物未纳入 Git。
+
+正式 APK 仍依赖真实地址与仓库外签名材料；本次未重新制作发布包、未做真实 MySQL V49—V55 升级／恢复、未做手机和佳博验收。这些外部边界独立于上述仍需修改的代码问题。
