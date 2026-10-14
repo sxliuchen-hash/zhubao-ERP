@@ -303,7 +303,9 @@ function printStatusLabel(status: string) {
 
 function printFingerprint() {
   const current = preview.value;
-  return [current?.primaryCode ?? '', current?.templateCode || 'FLOW', String(current?.printerSetting.copies || 1)].join('|');
+  // 同版刷新预览可能生成新实例，重试仍复用原请求；业务版本变化必须另建打印任务。
+  const version = current?.qrContent.split('|')[3] ?? '';
+  return [current?.primaryCode ?? '', current?.templateCode || 'FLOW', String(current?.printerSetting.copies || 1), version].join('|');
 }
 
 async function submitPrintJob() {

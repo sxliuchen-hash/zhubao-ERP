@@ -197,6 +197,45 @@ describe('LabelWorkspace', () => {
     wrapper.unmount();
   });
 
+  it('同版刷新沿用打印请求，改单换版后创建新请求', async () => {
+    let version = 0;
+    let instance = 0;
+    const requestIds: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/label/print-jobs') && init?.method === 'POST') {
+        requestIds.push(JSON.parse(String(init.body)).requestId);
+        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: `JOB-${requestIds.length}`, status: 'PENDING', failureReason: '' } }) } as Response;
+      }
+      const payload = url.includes('/api/label/work-orders/') ? {
+        type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1',
+        qrContent: `JG|work_order|ZD-1|${version}|LI${++instance}`,
+        fields: [], footerLeft: '', footerRight: '', printedAt: '',
+        brandTitle: '珠宝来料加工系统', templateCode: 'FLOW',
+        printerSetting: { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 },
+      } : [];
+      return { ok: true, json: async () => ({ code: 0, message: 'ok', data: payload }) } as Response;
+    });
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-1' }));
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('ZD-1');
+    const openAndSubmit = async () => {
+      await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
+      await flushPromises();
+      await wrapper.findAll('button').find(button => button.text() === '提交到打印工位')!.trigger('click');
+      await flushPromises();
+    };
+    await openAndSubmit();
+    await openAndSubmit();
+    version = 1;
+    await openAndSubmit();
+    expect(requestIds).toHaveLength(3);
+    expect(requestIds[1]).toBe(requestIds[0]);
+    expect(requestIds[2]).not.toBe(requestIds[0]);
+    wrapper.unmount();
+  });
+
   it('收货跳转自动带入母单并显示可打印预览，不隐式选择不拆', async () => {
     const target = ref({ objectType: 'MOTHER_ORDER', code: 'MD-NEW-1', intent: 'LOOKUP', token: 1 });
     vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'MOTHER_ORDER', code: 'MD-NEW-1' }));
