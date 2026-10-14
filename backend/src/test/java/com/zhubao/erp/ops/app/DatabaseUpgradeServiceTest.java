@@ -33,9 +33,9 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void realCatalogKeepsContiguousVersionsThroughV56() {
+    void realCatalogKeepsContiguousVersionsThroughV57() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(56);
+        assertThat(scripts).hasSize(57);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);
@@ -72,8 +72,31 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(54).fileName()).isEqualTo("V55__m3_label_trace.sql");
         assertThat(scripts.get(55).version()).isEqualTo(56);
         assertThat(scripts.get(55).fileName()).isEqualTo("V56__m3_compact_label_defaults.sql");
+        assertThat(scripts.get(56).version()).isEqualTo(57);
+        assertThat(scripts.get(56).fileName()).isEqualTo("V57__m3_label_layout.sql");
         assertThat(MigrationCatalog.loadClasspath()).extracting(MigrationScript::version)
                 .containsExactlyElementsOf(scripts.stream().map(MigrationScript::version).toList());
+    }
+
+    @Test
+    void v57为旧模板增加可空版式列() throws Exception {
+        MigrationScript script = MigrationCatalog.loadClasspath().get(56);
+        assertThat(script.probe().kind()).isEqualTo(SchemaProbe.Kind.COLUMN);
+        assertThat(script.probe().tableName()).isEqualTo("sys_label_template");
+        assertThat(script.probe().columnName()).isEqualTo("layout_json");
+        DataSource dataSource = dataSource();
+        execute(dataSource, "create table sys_label_template (id bigint primary key, template_code varchar(80))");
+        execute(dataSource, "insert into sys_label_template (id, template_code) values (1, 'MOTHER-DEFAULT')");
+        JdbcSchemaInspector inspector = new JdbcSchemaInspector(dataSource);
+        assertThat(inspector.matches(script.probe())).isFalse();
+        runOnce(dataSource, script.sql());
+        assertThat(inspector.matches(script.probe())).isTrue();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("select layout_json from sys_label_template where id = 1")) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).isNull();
+        }
     }
 
     @Test

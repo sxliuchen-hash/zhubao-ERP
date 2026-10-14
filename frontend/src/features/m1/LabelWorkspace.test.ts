@@ -89,6 +89,57 @@ describe('LabelWorkspace', () => {
     expect(wrapper.text()).toContain('打印机设置');
   });
 
+  it('模板编辑可调整字段顺序和字号，并把版式保存到后端', async () => {
+    const requests: unknown[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/api/label/templates') && init?.method === 'POST') {
+        requests.push(JSON.parse(String(init.body)));
+      }
+      return { ok: true, json: async () => ({ code: 0, message: 'ok', data: init?.method === 'POST'
+        ? { templateName: '现场模板' } : [] }) } as Response;
+    });
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('.manager-head .link-button').trigger('click');
+    await wrapper.get('input[placeholder="如 MOTHER-BOX"]').setValue('MOTHER-SITE');
+    await wrapper.get('input[placeholder="如 母单周转盒模板"]').setValue('现场模板');
+    await wrapper.get('[aria-label="第1个字段名称"]').setValue('客户');
+    await wrapper.get('.template-editor .fields-head button').trigger('click');
+    await wrapper.get('[aria-label="第2个字段名称"]').setValue('验证码');
+    await wrapper.get('[aria-label="第2个字段来源"]').setValue('verificationCode');
+    await wrapper.get('[aria-label="上移第2个字段"]').trigger('click');
+    await wrapper.get('[aria-label="标签版式"]').setValue('COMPACT');
+    await wrapper.get('[aria-label="二维码宽度"]').setValue('15');
+    await wrapper.get('[aria-label="单号字号"]').setValue('10');
+    expect(wrapper.get('[aria-label="模板实时预览"]').html()).toContain('--bw-code-font:10pt;');
+    await wrapper.findAll('button').find((button) => button.text() === '保存模板')!.trigger('click');
+    await flushPromises();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      templateCode: 'MOTHER-SITE',
+      fields: [{ label: '验证码', source: 'verificationCode', sortOrder: 1 },
+        { label: '客户', source: 'customer', sortOrder: 2 }],
+      layout: { mode: 'COMPACT', qrWidthMm: 15, codeFontPt: 10, fieldFontPt: null },
+    });
+  });
+
+  it('通用标签选择模板后按配置带出待填写字段', async () => {
+    mockTemplates([{
+      id: 9, templateCode: 'OUTBOUND-CUSTOM', templateName: '出货模板', labelType: 'OUTBOUND',
+      enabled: true, fields: [
+        { label: '客户', source: 'customer', sortOrder: 2 },
+        { label: '出货批次', source: '', sortOrder: 1 },
+      ], printerSetting: { widthMm: 40, heightMm: 30, dpi: 300, printerName: '', copies: 1 },
+    }]);
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="标签类型"]').setValue('OUTBOUND');
+    const generic = wrapper.findAll('.form-card')[1];
+    await generic.get('select:not([aria-label])').setValue('OUTBOUND-CUSTOM');
+    expect(generic.findAll('input[placeholder="名称，如 客户"]').map((input) => (input.element as HTMLInputElement).value))
+      .toEqual(['出货批次', '客户']);
+  });
+
   it('按单号或二维码从单据打开现场贴纸', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);

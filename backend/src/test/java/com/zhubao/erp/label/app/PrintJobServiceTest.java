@@ -1,8 +1,12 @@
 package com.zhubao.erp.label.app;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.app.BusinessOperationService;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -13,7 +17,11 @@ import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobStatus;
+import com.zhubao.erp.label.domain.LabelLayout;
+import com.zhubao.erp.label.domain.LabelTemplateField;
+import com.zhubao.erp.label.domain.SaveLabelTemplateCommand;
 import com.zhubao.erp.label.infra.InMemoryPrintJobRepository;
+import com.zhubao.erp.label.infra.InMemoryLabelTemplateRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,6 +63,47 @@ class PrintJobServiceTest {
         PrintJob spooled = service.report(leased.id(), "STATION-1", "station-secret", "SPOOLED", "");
         assertThat(spooled.status()).isEqualTo(PrintJobStatus.SPOOLED);
         assertThat(spooled.status()).isNotEqualTo(PrintJobStatus.PENDING);
+    }
+
+    @Test
+    void 打印任务冻结模板版式和业务字段() throws Exception {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        documents.saveMotherOrder(new MotherOrderRecord(
+                "MD-LAYOUT", 8L, 8L, "AU9999", "2026-07-09", "", "",
+                "", "", "", "黄金原料", "CUSTOMER", true, "WH01",
+                BigDecimal.ONE, "件", BigDecimal.ONE, "IN_STOCK", "LG001",
+                null, null, null, "operator01", "EV001", null, "ACTIVE", "2026-07-09 10:00",
+                "来料加工", "2026-07-20", "恒信珠宝"));
+        documents.saveMotherSplitState(new MotherSplitState(
+                "MD-LAYOUT", MotherSplitState.KEEP, "K7M2", "operator01", "2026-07-09T10:00:00"));
+        InMemoryLabelTemplateRepository templates = new InMemoryLabelTemplateRepository();
+        LabelLayout layout = new LabelLayout("COMPACT", 16.0, 10.0, 7.0, null, null, null);
+        new LabelTemplateService(templates).save(new SaveLabelTemplateCommand(
+                null, "MOTHER-CUSTOM", "定制", "MOTHER", "新抬头",
+                List.of(new LabelTemplateField("客户", "customer", 1)), "", "", false, true,
+                48, 32, 300, "", 1, "", "operator01", layout));
+        service.setDocumentAccess(documents, null);
+        service.setLabelService(new LabelService(documents, templates));
+
+        PrintJob job = service.create("print-layout-0001", "MD-LAYOUT", "MOTHER-CUSTOM", 2, "何琳");
+        JsonNode snapshot = new ObjectMapper().readTree(job.contentSnapshot());
+
+        assertThat(snapshot.path("widthMm").asInt()).isEqualTo(48);
+        assertThat(snapshot.path("heightMm").asInt()).isEqualTo(32);
+        assertThat(snapshot.path("dpi").asInt()).isEqualTo(300);
+        assertThat(snapshot.path("brandTitle").asText()).isEqualTo("新抬头");
+        assertThat(snapshot.path("fields").size()).isEqualTo(1);
+        assertThat(snapshot.path("fields").get(0).path("name").asText()).isEqualTo("客户");
+        assertThat(snapshot.path("fields").get(0).path("value").asText()).isEqualTo("恒信珠宝");
+        assertThat(snapshot.path("layout").path("mode").asText()).isEqualTo("COMPACT");
+        assertThat(snapshot.path("layout").path("qrWidthMm").asDouble()).isEqualTo(16.0);
+        assertThat(snapshot.path("qr").asText()).startsWith("JG|mother|MD-LAYOUT|");
+        assertThat(service.retry(job.id(), "print-layout-retry", "纸张损坏", "何琳").contentSnapshot())
+                .isEqualTo(job.contentSnapshot());
+        PrintJob defaultJob = service.create("print-layout-default", "MD-LAYOUT", "FLOW", 1, "何琳");
+        JsonNode defaultSnapshot = new ObjectMapper().readTree(defaultJob.contentSnapshot());
+        assertThat(defaultSnapshot.path("fields").isArray()).isTrue();
+        assertThat(defaultSnapshot.path("qr").asText()).startsWith("JG|mother|MD-LAYOUT|");
     }
 
     @Test

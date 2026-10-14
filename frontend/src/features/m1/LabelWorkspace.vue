@@ -10,6 +10,7 @@ import {
   reprintLabel,
   saveLabelTemplate,
   type LabelField,
+  type LabelLayout,
   type LabelPayload,
   type LabelTemplate,
   type LabelTemplateField,
@@ -93,6 +94,16 @@ const visibleTemplates = computed(() => {
   if (!text) return templates.value;
   return templates.value.filter((template) => `${template.templateCode} ${template.templateName} ${template.labelType}`.toLowerCase().includes(text));
 });
+
+watch(() => form.value.templateCode, (code) => {
+  const template = templates.value.find((item) => item.templateCode === code && item.labelType === form.value.type);
+  if (!template) return;
+  const previous = new Map(form.value.fields.map((field) => [field.name, field.value]));
+  form.value.fields = [...template.fields]
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((field) => ({ name: field.label, value: previous.get(field.label) || '' }));
+});
+watch(() => form.value.type, () => { form.value.templateCode = ''; });
 
 function addField() {
   form.value.fields.push({ name: '', value: '' });
@@ -303,9 +314,13 @@ function printStatusLabel(status: string) {
 
 function printFingerprint() {
   const current = preview.value;
-  // 同版刷新预览可能生成新实例，重试仍复用原请求；业务版本变化必须另建打印任务。
+  // 同版同模板内容重试复用请求；业务版本或模板内容变化后另建打印任务。
   const version = current?.qrContent.split('|')[3] ?? '';
-  return [current?.primaryCode ?? '', current?.templateCode || 'FLOW', String(current?.printerSetting.copies || 1), version].join('|');
+  return JSON.stringify([
+    current?.primaryCode ?? '', current?.templateCode || 'FLOW', version,
+    current?.printerSetting, current?.layout, current?.fields,
+    current?.brandTitle, current?.footerLeft, current?.footerRight,
+  ]);
 }
 
 async function submitPrintJob() {
@@ -369,6 +384,11 @@ async function reprintPrintJob() {
 
 // ---- 模板管理 ----
 const showTemplateEditor = ref(false);
+function emptyLayout(): LabelLayout {
+  return { mode: 'AUTO', qrWidthMm: null, codeFontPt: null, fieldFontPt: null,
+    emphasisFontPt: null, titleFontPt: null, footerFontPt: null };
+}
+
 const templateForm = ref<{
   id?: number;
   templateCode: string;
@@ -386,6 +406,7 @@ const templateForm = ref<{
   printerName: string;
   copies: number;
   remark: string;
+  layout: LabelLayout;
 }>({
   templateCode: '',
   templateName: '',
@@ -402,6 +423,7 @@ const templateForm = ref<{
   printerName: '',
   copies: 1,
   remark: '',
+  layout: emptyLayout(),
 });
 const templateFeedback = ref('');
 const templateError = ref('');
@@ -423,6 +445,7 @@ function newTemplate() {
     printerName: '',
     copies: 1,
     remark: '',
+    layout: emptyLayout(),
   };
   showTemplateEditor.value = true;
   templateFeedback.value = '';
@@ -447,6 +470,7 @@ function editTemplate(template: LabelTemplate) {
     printerName: template.printerSetting.printerName,
     copies: template.printerSetting.copies,
     remark: template.remark,
+    layout: { ...emptyLayout(), ...template.layout },
   };
   showTemplateEditor.value = true;
   templateFeedback.value = '';
@@ -461,6 +485,72 @@ function removeTemplateField(index: number) {
   templateForm.value.fields.splice(index, 1);
 }
 
+function moveTemplateField(index: number, direction: -1 | 1) {
+  const next = index + direction;
+  if (next < 0 || next >= templateForm.value.fields.length) return;
+  [templateForm.value.fields[index], templateForm.value.fields[next]] =
+    [templateForm.value.fields[next], templateForm.value.fields[index]];
+}
+
+const draftFieldExamples: Record<string, string> = {
+  verificationCode: 'K7M2', customer: '示例客户', processingRequirement: '按要求加工',
+  dueDate: '2026-10-20', code: 'MD-2026-001', goodsName: '戒托', materialCode: 'WL-001',
+  quantity: '2 件', weight: '12 克', inboundDate: '2026-10-14', warehouseCode: 'A01',
+  receiver: '收货人', express: '顺丰',
+};
+const templateDraft = computed<LabelPayload>(() => ({
+  type: templateForm.value.labelType,
+  typeLabel: labelTypeOptions.find((item) => item.value === templateForm.value.labelType)?.label ?? '标签',
+  primaryCode: 'MD-2026-001',
+  qrContent: 'JG|mother|MD-2026-001|0|PREVIEW',
+  fields: templateForm.value.fields.filter((field) => field.label.trim()).map((field) => ({
+    name: field.label.trim(), value: draftFieldExamples[field.source] || '示例内容',
+  })),
+  footerLeft: draftFieldExamples[templateForm.value.footerLeftSource] || '',
+  footerRight: draftFieldExamples[templateForm.value.footerRightSource] || '',
+  printedAt: '',
+  brandTitle: templateForm.value.brandTitle,
+  templateCode: templateForm.value.templateCode || 'DRAFT',
+  printerSetting: {
+    widthMm: templateForm.value.widthMm, heightMm: templateForm.value.heightMm,
+    dpi: templateForm.value.dpi, printerName: templateForm.value.printerName,
+    copies: templateForm.value.copies,
+  },
+  layout: templateForm.value.layout,
+}));
+const templateDraftMarkup = computed(() => buildLabelMarkup(templateDraft.value));
+const templateDraftSheetStyle = computed(() => ({
+  width: `calc(${templateForm.value.widthMm}mm * var(--label-scale, ${labelPreviewScale}))`,
+  height: `calc(${templateForm.value.heightMm}mm * var(--label-scale, ${labelPreviewScale}))`,
+}));
+const templateDraftScaleStyle = computed(() => ({
+  transform: `scale(var(--label-scale, ${labelPreviewScale}))`,
+  transformOrigin: 'top left',
+  width: `${templateForm.value.widthMm}mm`,
+  height: `${templateForm.value.heightMm}mm`,
+}));
+
+function normalizedLayout(): LabelLayout | null {
+  const layout = templateForm.value.layout;
+  const result = { ...layout };
+  const limits: Array<[keyof Omit<LabelLayout, 'mode'>, number, number]> = [
+    ['qrWidthMm', 5, 100], ['codeFontPt', 4, 36], ['fieldFontPt', 4, 36],
+    ['emphasisFontPt', 4, 36], ['titleFontPt', 4, 36], ['footerFontPt', 4, 36],
+  ];
+  for (const [key, min, max] of limits) {
+    const value = result[key];
+    if (value === null || String(value).trim() === '') {
+      result[key] = null;
+      continue;
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+      templateError.value = `${key === 'qrWidthMm' ? '二维码宽度' : '字号'}须在 ${min}～${max} 之间`;
+      return null;
+    }
+  }
+  return result;
+}
+
 async function submitTemplate() {
   templateFeedback.value = '';
   templateError.value = '';
@@ -468,6 +558,8 @@ async function submitTemplate() {
     templateError.value = '请填写模板编码和名称';
     return;
   }
+  const layout = normalizedLayout();
+  if (!layout) return;
   try {
     const saved = await saveLabelTemplate({
       id: templateForm.value.id,
@@ -488,6 +580,7 @@ async function submitTemplate() {
       printerName: templateForm.value.printerName.trim(),
       copies: templateForm.value.copies,
       remark: templateForm.value.remark.trim(),
+      layout,
     });
     templateFeedback.value = `已保存模板：${saved.templateName}`;
     showTemplateEditor.value = false;
@@ -505,7 +598,7 @@ onMounted(loadTemplates);
     <section class="label-intro">
       <h2>标签打印</h2>
       <p class="label-note">
-        40×30 mm 贴纸保留单号、二维码、验证码、客户、加工要求和期限；详细信息扫码查看。打印时选择佳博 GP-9134T，并核对纸张尺寸和缩放为 100%。
+        模板可设置字段、顺序、纸张尺寸与字号。二维码和主单号始终保留，详细信息可扫码查看。打印时请核对打印机纸张尺寸和缩放为 100%。
       </p>
     </section>
 
@@ -537,6 +630,7 @@ onMounted(loadTemplates);
 
         <div class="form-card">
           <h3>通用标签生成</h3>
+          <p class="hint">选择模板后会带出字段名称与顺序，填写对应值即可生成。</p>
           <label class="field">
             <span>标签类型</span>
             <select v-model="form.type" aria-label="标签类型">
@@ -644,7 +738,7 @@ onMounted(loadTemplates);
     <!-- 模板与打印机设置管理 -->
     <section class="template-manager">
       <div class="manager-head">
-        <h3>标签模板与打印机设置</h3>
+        <h3>标签模板配置</h3>
         <button type="button" class="link-button" @click="newTemplate">+ 新建模板</button>
       </div>
       <p v-if="!templatesLoaded" class="hint">{{ templatesError || '正在读取标签模板' }}</p>
@@ -716,19 +810,24 @@ onMounted(loadTemplates);
 
         <div class="fields-block">
           <div class="fields-head">
-            <span>模板字段（来源用于母单自动带值）</span>
+            <span>模板字段（母单、子单可自动带值）</span>
             <button type="button" class="link-button" @click="addTemplateField">+ 添加字段</button>
           </div>
           <div v-for="(field, index) in templateForm.fields" :key="index" class="field-row">
-            <input v-model="field.label" type="text" placeholder="字段名，如 客户" />
-            <select v-model="field.source">
-              <option value="">人工填写</option>
+            <input v-model="field.label" :aria-label="`第${index + 1}个字段名称`" type="text" placeholder="字段名，如 客户" />
+            <select v-model="field.source" :aria-label="`第${index + 1}个字段来源`">
+              <option value="">通用标签手动填写</option>
               <option v-for="option in motherFieldSourceOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
             </select>
-            <button type="button" class="link-button danger" @click="removeTemplateField(index)">删除</button>
+            <span class="field-actions">
+              <button type="button" class="link-button" :disabled="index === 0" :aria-label="`上移第${index + 1}个字段`" @click="moveTemplateField(index, -1)">↑</button>
+              <button type="button" class="link-button" :disabled="index === templateForm.fields.length - 1" :aria-label="`下移第${index + 1}个字段`" @click="moveTemplateField(index, 1)">↓</button>
+              <button type="button" class="link-button danger" :aria-label="`删除第${index + 1}个字段`" @click="removeTemplateField(index)">删除</button>
+            </span>
           </div>
+          <p class="hint">从上到下即打印顺序；不添加字段时只印单号和二维码。母单／子单字段须选择单据来源，手动字段用于通用标签生成。</p>
         </div>
 
         <div class="editor-grid">
@@ -774,6 +873,35 @@ onMounted(loadTemplates);
             <span>份数</span>
             <input v-model.number="templateForm.copies" type="number" min="1" />
           </label>
+        </div>
+
+        <h5>标签版式与字号</h5>
+        <div class="editor-grid">
+          <label class="field">
+            <span>版式</span>
+            <select v-model="templateForm.layout.mode" aria-label="标签版式">
+              <option value="AUTO">按纸张尺寸自动</option>
+              <option value="COMPACT">紧凑版</option>
+              <option value="STANDARD">标准版</option>
+            </select>
+          </label>
+          <label class="field"><span>二维码宽度 (mm)</span><input v-model.number="templateForm.layout.qrWidthMm" aria-label="二维码宽度" type="number" min="5" max="100" step="0.5" placeholder="默认" /></label>
+          <label class="field"><span>单号字号 (pt)</span><input v-model.number="templateForm.layout.codeFontPt" aria-label="单号字号" type="number" min="4" max="36" step="0.5" placeholder="默认" /></label>
+          <label class="field"><span>字段字号 (pt)</span><input v-model.number="templateForm.layout.fieldFontPt" aria-label="字段字号" type="number" min="4" max="36" step="0.5" placeholder="默认" /></label>
+          <label class="field"><span>首个字段值字号 (pt)</span><input v-model.number="templateForm.layout.emphasisFontPt" aria-label="首个字段值字号" type="number" min="4" max="36" step="0.5" placeholder="默认" /></label>
+          <label class="field"><span>类型字号 (pt)</span><input v-model.number="templateForm.layout.titleFontPt" aria-label="类型字号" type="number" min="4" max="36" step="0.5" placeholder="默认" /></label>
+          <label class="field"><span>脚注字号 (pt)</span><input v-model.number="templateForm.layout.footerFontPt" aria-label="脚注字号" type="number" min="4" max="36" step="0.5" placeholder="默认" /></label>
+        </div>
+        <p class="hint">留空沿用系统字号。二维码和主单号始终保留，便于扫码追溯。调整后请用实际标签纸试印。</p>
+
+        <div class="template-draft" aria-label="模板实时预览">
+          <strong>模板实时预览（示例数据）</strong>
+          <div class="label-mat">
+            <component :is="'style'">{{ labelFaceCss }}</component>
+            <div class="label-sheet" :style="templateDraftSheetStyle">
+              <div class="label-scale" :style="templateDraftScaleStyle" v-html="templateDraftMarkup"></div>
+            </div>
+          </div>
         </div>
 
         <div class="editor-grid">
@@ -869,6 +997,9 @@ onMounted(loadTemplates);
   gap: 6px;
   margin-bottom: 6px;
 }
+.field-actions { display: flex; align-items: center; gap: 4px; }
+.template-draft { margin-top: 14px; display: grid; gap: 8px; font-size: 13px; }
+.template-draft .label-mat { width: fit-content; max-width: 100%; }
 .field-row input,
 .field-row select {
   padding: 6px 8px;

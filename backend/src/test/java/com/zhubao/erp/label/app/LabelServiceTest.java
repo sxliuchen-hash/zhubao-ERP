@@ -7,6 +7,8 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.GenerateLabelCommand;
 import com.zhubao.erp.label.domain.LabelField;
 import com.zhubao.erp.label.domain.LabelPayload;
+import com.zhubao.erp.label.domain.LabelLayout;
+import com.zhubao.erp.label.domain.SaveLabelTemplateCommand;
 import com.zhubao.erp.label.domain.LabelType;
 import com.zhubao.erp.label.domain.ReprintLabelCommand;
 import com.zhubao.erp.label.infra.InMemoryLabelTemplateRepository;
@@ -211,6 +213,36 @@ class LabelServiceTest {
                 "MOTHER", "MO20260709002", "原贴纸遗失", "operator01"));
         assertThat(reprinted.fields()).extracting(LabelField::value).contains("K7M2");
         assertThat(businessRepository.listLabelReprints("MOTHER", "MO20260709002"))
+                .singleElement().satisfies(log -> assertThat(log.verificationCode()).isEqualTo("K7M2"));
+    }
+
+    @Test
+    void 隐藏验证码字段后仍可按业务事实补打() {
+        InMemoryBusinessDocumentRepository businessRepository = new InMemoryBusinessDocumentRepository();
+        businessRepository.saveMotherOrder(new MotherOrderRecord(
+                "MO-HIDDEN", 8L, 8L, "AU9999", "2026-07-09", "", "",
+                "", "", "", "黄金原料", "CUSTOMER", true, "WH01",
+                BigDecimal.ONE, "件", BigDecimal.ONE, "IN_STOCK", "LG001",
+                null, null, null, "operator01", "EV001", null, "ACTIVE", "2026-07-09 10:00",
+                "来料加工", "2026-07-20", "恒信珠宝"));
+        businessRepository.saveMotherSplitState(new MotherSplitState(
+                "MO-HIDDEN", MotherSplitState.KEEP, "K7M2", "operator01", "2026-07-09T10:00:00"));
+        InMemoryLabelTemplateRepository templates = new InMemoryLabelTemplateRepository();
+        LabelTemplateService templateService = new LabelTemplateService(templates);
+        var original = templates.findDefaultByType(LabelType.MOTHER).orElseThrow();
+        LabelLayout layout = new LabelLayout("COMPACT", 18.0, 9.0, null, null, null, null);
+        templateService.save(new SaveLabelTemplateCommand(
+                original.id(), original.templateCode(), original.templateName(), "MOTHER",
+                original.brandTitle(), List.of(), "", "", true, true,
+                40, 30, 300, "", 1, "", "operator01", layout));
+        LabelService service = new LabelService(businessRepository, templates);
+
+        LabelPayload payload = service.reprint(new ReprintLabelCommand(
+                "MOTHER", "MO-HIDDEN", "重印", "operator01"));
+
+        assertThat(payload.fields()).isEmpty();
+        assertThat(payload.layout()).isEqualTo(layout);
+        assertThat(businessRepository.listLabelReprints("MOTHER", "MO-HIDDEN"))
                 .singleElement().satisfies(log -> assertThat(log.verificationCode()).isEqualTo("K7M2"));
     }
 }

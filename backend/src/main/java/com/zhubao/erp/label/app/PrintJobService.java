@@ -1,5 +1,7 @@
 package com.zhubao.erp.label.app;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
@@ -8,6 +10,8 @@ import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
+import com.zhubao.erp.label.domain.LabelPayload;
+import com.zhubao.erp.label.domain.LabelField;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +20,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -32,6 +38,8 @@ public class PrintJobService {
     private LabelVersionGuard labelGuard;
     private BusinessDocumentRepository documents;
     private BusinessDataAccess dataAccess;
+    private LabelService labelService;
+    private final ObjectMapper snapshotMapper = new ObjectMapper();
 
     public PrintJobService(PrintJobRepository jobs, String stationToken) {
         this(jobs, stationToken, null);
@@ -59,6 +67,11 @@ public class PrintJobService {
         this.dataAccess = dataAccess;
     }
 
+    @Autowired(required = false)
+    public void setLabelService(LabelService labelService) {
+        this.labelService = labelService;
+    }
+
     public PrintJob create(String requestId, String businessCode, String templateCode, int copies, AuthUserAccount account) {
         assertPrintable(businessCode, account);
         return create(requestId, businessCode, templateCode, copies, account == null ? "" : account.operator());
@@ -83,7 +96,7 @@ public class PrintJobService {
             throw new BusinessException("打印份数必须在 1 到 20 之间");
         }
         int version = changes == null ? 0 : changes.latestAppliedVersion(businessCode.trim());
-        String snapshot = snapshot(businessCode.trim(), templateCode.trim(), copies, version);
+        String snapshot = snapshotForJob(businessCode.trim(), templateCode.trim(), copies, version);
         String now = TIME.format(LocalDateTime.now());
         PrintJob stored = jobs.insertIfAbsent(new PrintJob(
                 "PJ-" + UUID.randomUUID().toString().substring(0, 8),
@@ -210,6 +223,51 @@ public class PrintJobService {
     public List<PrintJob> list() {
         expireLeases(TIME.format(LocalDateTime.now()));
         return jobs.list();
+    }
+
+    private String snapshotForJob(String businessCode, String templateCode, int copies, int version) {
+        if (documents == null || labelService == null) {
+            return snapshot(businessCode, templateCode, copies, version);
+        }
+        String selectedTemplate = "FLOW".equals(templateCode) ? null : templateCode;
+        LabelPayload payload;
+        if (documents.findMotherOrderByCode(businessCode).isPresent()) {
+            payload = labelService.generateMotherLabel(businessCode, selectedTemplate);
+        } else if (documents.findChildWorkOrderByCode(businessCode).isPresent()) {
+            payload = labelService.generateWorkOrderLabel(businessCode, selectedTemplate);
+        } else {
+            return snapshot(businessCode, templateCode, copies, version);
+        }
+        String[] qrParts = payload.qrContent().split("\\|", -1);
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("kind", "LABEL");
+        snapshot.put("businessCode", businessCode);
+        snapshot.put("templateCode", payload.templateCode());
+        snapshot.put("copies", copies);
+        snapshot.put("widthMm", payload.printerSetting().widthMm());
+        snapshot.put("heightMm", payload.printerSetting().heightMm());
+        snapshot.put("dpi", payload.printerSetting().dpi());
+        snapshot.put("version", "V" + version);
+        snapshot.put("instance", qrParts.length > 4 ? qrParts[4] : "");
+        snapshot.put("qr", payload.qrContent());
+        snapshot.put("brandTitle", payload.brandTitle());
+        snapshot.put("typeLabel", payload.typeLabel());
+        snapshot.put("primaryCode", payload.primaryCode());
+        snapshot.put("fields", payload.fields());
+        snapshot.put("footerLeft", payload.footerLeft());
+        snapshot.put("footerRight", payload.footerRight());
+        snapshot.put("layout", payload.layout());
+        snapshot.put("lines", payload.fields().stream()
+                .map(this::lineText).toList());
+        try {
+            return snapshotMapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("无法生成标签打印快照", ex);
+        }
+    }
+
+    private String lineText(LabelField field) {
+        return field.name() + ":" + field.value();
     }
 
     /** 结构化标签快照。客户端不能改写其中的单号、版本和二维码。 */

@@ -13,7 +13,7 @@ export const labelFaceCss = `
   border: 0.3mm solid #000;
   padding: 1.1mm 1.3mm 0.9mm;
   display: grid;
-  grid-template-columns: min(18mm, 42%) minmax(0, 1fr);
+  grid-template-columns: min(var(--bw-qr-width, 18mm), 42%) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   column-gap: 1.2mm;
   overflow: hidden;
@@ -35,13 +35,13 @@ export const labelFaceCss = `
   flex: none;
   border: 0.25mm solid #000;
   padding: 0 0.7mm;
-  font-size: 7pt;
+  font-size: var(--bw-title-font, 7pt);
   font-weight: 700;
   line-height: 1.35;
 }
 .bw-code {
   margin-top: 0.5mm;
-  font-size: 9pt;
+  font-size: var(--bw-code-font, 9pt);
   font-weight: 700;
   letter-spacing: 0;
   word-break: break-all;
@@ -52,7 +52,7 @@ export const labelFaceCss = `
   grid-template-columns: 8mm minmax(0, 1fr);
   column-gap: 0.6mm;
   row-gap: 0.15mm;
-  font-size: 6.5pt;
+  font-size: var(--bw-field-font, 6.5pt);
 }
 .bw-fields div { display: contents; }
 .bw-fields dt, .bw-fields dd { margin: 0; min-width: 0; }
@@ -70,7 +70,7 @@ export const labelFaceCss = `
   border-top: 0.2mm solid #000;
   margin-top: 0.5mm;
   padding-top: 0.35mm;
-  font-size: 6pt;
+  font-size: var(--bw-footer-font, 6pt);
 }
 .bw-foot span {
   min-width: 0;
@@ -81,7 +81,7 @@ export const labelFaceCss = `
 .bw-label--compact {
   padding: 0.8mm;
   border-width: 0.2mm;
-  grid-template-columns: 17mm minmax(0, 1fr);
+  grid-template-columns: min(var(--bw-qr-width, 17mm), 50%) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   column-gap: 0.8mm;
   row-gap: 0.6mm;
@@ -92,17 +92,16 @@ export const labelFaceCss = `
   gap: 0.8mm;
   min-width: 0;
 }
-.bw-label--compact .bw-brand,
-.bw-label--compact .bw-foot { display: none; }
+.bw-label--compact .bw-brand { display: none; }
 .bw-label--compact .bw-type {
   padding: 0 0.5mm;
-  font-size: 7.5pt;
+  font-size: var(--bw-title-font, 7.5pt);
   line-height: 1.2;
 }
 .bw-label--compact .bw-code {
   margin: 0;
   min-width: 0;
-  font-size: 8.5pt;
+  font-size: var(--bw-code-font, 8.5pt);
   line-height: 1.1;
 }
 .bw-label--compact .bw-qr {
@@ -118,7 +117,7 @@ export const labelFaceCss = `
   grid-column: 2;
   display: block;
   margin: 0;
-  font-size: 7.5pt;
+  font-size: var(--bw-field-font, 7.5pt);
   line-height: 1.18;
   overflow: hidden;
 }
@@ -137,16 +136,18 @@ export const labelFaceCss = `
   overflow-wrap: anywhere;
 }
 .bw-label--compact .bw-fields dt::after { content: '：'; }
-.bw-label--compact .bw-fields div:first-child dd { font-size: 8.5pt; }
+.bw-label--compact .bw-fields div:first-child dd { font-size: var(--bw-emphasis-font, 8.5pt); }
+.bw-label--compact .bw-foot { grid-row: 3; font-size: var(--bw-footer-font, 6pt); }
 `;
 
 /** 生成一张黑白标签的 HTML，供预览和打印共用。 */
 export function buildLabelMarkup(payload: LabelPayload): string {
   const width = positiveMm(payload.printerSetting.widthMm, 40);
   const height = positiveMm(payload.printerSetting.heightMm, 30);
-  const compact = width <= 40 && height <= 30;
+  const mode = payload.layout?.mode;
+  const compact = mode === 'COMPACT' || (mode !== 'STANDARD' && width <= 40 && height <= 30);
   const availableFields = payload.fields.filter((field) => field.name.trim() !== '' && field.value.trim() !== '');
-  const visibleFields = compact
+  const visibleFields = compact && !payload.templateCode
     ? availableFields.filter((field) => field.name.trim() !== '单号').slice(0, 4)
     : availableFields;
   const fields = visibleFields
@@ -158,12 +159,12 @@ export function buildLabelMarkup(payload: LabelPayload): string {
   const footerLeft = payload.footerLeft.trim();
   const footerRight = payload.footerRight.trim();
   const footer =
-    !compact && (footerLeft || footerRight)
+    (!compact || !!payload.templateCode) && (footerLeft || footerRight)
       ? `<div class="bw-foot"><span>${escapeHtml(footerLeft)}</span><span>${escapeHtml(footerRight)}</span></div>`
       : '';
 
   return [
-    `<article class="bw-label${compact ? ' bw-label--compact' : ''}" style="width:${width}mm;height:${height}mm">`,
+    `<article class="bw-label${compact ? ' bw-label--compact' : ''}" style="width:${width}mm;height:${height}mm;${layoutStyle(payload, compact)}">`,
     `<div class="bw-qr">${renderQrSvg(payload.qrContent)}</div>`,
     '<div class="bw-main">',
     '<div class="bw-top">',
@@ -176,6 +177,28 @@ export function buildLabelMarkup(payload: LabelPayload): string {
     footer,
     '</article>',
   ].join('');
+}
+
+function layoutStyle(payload: LabelPayload, compact: boolean): string {
+  const layout = payload.layout;
+  if (!layout) return '';
+  const values: Array<[string, number | null | undefined, number, number]> = [
+    ['--bw-qr-width', layout.qrWidthMm, 5, 100],
+    ['--bw-code-font', layout.codeFontPt, 4, 36],
+    ['--bw-field-font', layout.fieldFontPt, 4, 36],
+    ['--bw-emphasis-font', layout.emphasisFontPt, 4, 36],
+    ['--bw-title-font', layout.titleFontPt, 4, 36],
+    ['--bw-footer-font', layout.footerFontPt, 4, 36],
+  ];
+  const result = values.flatMap(([name, value, min, max]) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+      ? [`${name}:${value}${name === '--bw-qr-width' ? 'mm' : 'pt'};`]
+      : [],
+  );
+  if (!compact && !result.some((item) => item.startsWith('--bw-qr-width:'))) {
+    result.push('--bw-qr-width:18mm;');
+  }
+  return result.join('');
 }
 
 /** 只含标签的打印文档，按纸张毫米尺寸分页，份数各占一页。 */

@@ -98,7 +98,8 @@ public class LabelService {
                 TIME_FORMATTER.format(LocalDateTime.now()),
                 brand,
                 template != null ? template.templateCode() : "",
-                printerSetting
+                printerSetting,
+                template != null ? template.layout() : null
         );
     }
 
@@ -159,7 +160,10 @@ public class LabelService {
         LabelPayload payload = type == LabelType.MOTHER
                 ? generateMotherLabel(command.primaryCode())
                 : generateWorkOrderLabel(command.primaryCode());
-        String verificationCode = fieldValue(payload.fields(), "验证码");
+        String verificationCode = type == LabelType.MOTHER
+                ? motherFacts(requireMother(command.primaryCode())).verificationCode()
+                : businessDocumentRepository.findChildWorkOrderByCode(command.primaryCode().trim())
+                        .map(ChildWorkOrderRecord::verificationCode).orElse("");
         if (verificationCode.isBlank()) {
             throw new BusinessException("这张贴纸还没有验证码，不能补打");
         }
@@ -205,7 +209,8 @@ public class LabelService {
                 TIME_FORMATTER.format(LocalDateTime.now()),
                 brand,
                 template != null ? template.templateCode() : "",
-                printerSetting
+                printerSetting,
+                template != null ? template.layout() : null
         );
     }
 
@@ -261,7 +266,7 @@ public class LabelService {
 
     private List<LabelField> composeFields(LabelTemplate template, StickerFacts facts, boolean motherFallback) {
         List<LabelField> fields = new ArrayList<>();
-        if (template != null && !template.fields().isEmpty()) {
+        if (template != null) {
             template.fields().stream()
                     .sorted(Comparator.comparingInt(LabelTemplateField::sortOrder))
                     .forEach(field -> addField(fields, field.label(), valueOf(field.source(), facts)));
@@ -352,15 +357,6 @@ public class LabelService {
         if (value != null && !value.isBlank()) {
             fields.add(new LabelField(name, value.trim()));
         }
-    }
-
-    private String fieldValue(List<LabelField> fields, String name) {
-        for (LabelField field : fields) {
-            if (name.equals(field.name())) {
-                return blankToEmpty(field.value());
-            }
-        }
-        return "";
     }
 
     private String customerText(MotherOrderRecord record) {

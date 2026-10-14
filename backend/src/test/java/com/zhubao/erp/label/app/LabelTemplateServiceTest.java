@@ -1,7 +1,9 @@
 package com.zhubao.erp.label.app;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.LabelTemplate;
+import com.zhubao.erp.label.domain.LabelLayout;
 import com.zhubao.erp.label.domain.LabelTemplateField;
 import com.zhubao.erp.label.domain.LabelType;
 import com.zhubao.erp.label.domain.SaveLabelTemplateCommand;
@@ -125,5 +127,28 @@ class LabelTemplateServiceTest {
         assertThat(updated.templateName()).isEqualTo("返工质检模板改名");
         assertThat(updated.enabled()).isFalse();
         assertThat(updated.createdBy()).isEqualTo("质检员");
+    }
+
+    @Test
+    void 版式配置在内存仓储往返且拒绝越界值() {
+        LabelLayout layout = new LabelLayout("COMPACT", 17.5, 10.0, 7.0, 9.0, 8.0, 5.0);
+        LabelTemplate saved = service.save(new SaveLabelTemplateCommand(
+                null, "MOTHER-LAYOUT", "排版模板", "MOTHER", "系统", List.of(),
+                "", "", false, true, 40, 30, 300, "", 1, "", "库管员", layout));
+        assertThat(repository.findById(saved.id())).get()
+                .satisfies(template -> assertThat(template.layout()).isEqualTo(layout));
+        assertThatThrownBy(() -> new LabelLayout("CUSTOM", null, null, null, null, null, null))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> new LabelLayout("AUTO", 101.0, null, null, null, null, null))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> new LabelLayout("AUTO", null, 3.0, null, null, null, null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 版式配置拒绝任意样式属性() {
+        assertThatThrownBy(() -> new ObjectMapper().readValue(
+                "{\"mode\":\"AUTO\",\"css\":\"display:none\"}", LabelLayout.class))
+                .hasRootCauseInstanceOf(BusinessException.class);
     }
 }

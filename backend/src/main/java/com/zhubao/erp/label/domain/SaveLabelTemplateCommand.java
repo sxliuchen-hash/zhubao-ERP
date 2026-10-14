@@ -25,6 +25,16 @@ public record SaveLabelTemplateCommand(
         String printerName,
         Integer copies,
         String remark,
-        String operator
+        String operator,
+        LabelLayout layout
 ) {
+    public SaveLabelTemplateCommand(Long id, String templateCode, String templateName, String labelType,
+            String brandTitle, List<LabelTemplateField> fields, String footerLeftSource,
+            String footerRightSource, Boolean isDefault, Boolean enabled, Integer widthMm,
+            Integer heightMm, Integer dpi, String printerName, Integer copies,
+            String remark, String operator) {
+        this(id, templateCode, templateName, labelType, brandTitle, fields,
+                footerLeftSource, footerRightSource, isDefault, enabled, widthMm, heightMm,
+                dpi, printerName, copies, remark, operator, null);
+    }
 }

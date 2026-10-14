@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -23,6 +24,26 @@ class LabelRendererTest {
         assertTrue(Math.abs(image.getHeight() - 320) <= 2);
         assertTrue(hasBlackPixel(image));
         assertEquals("JG|mother|MD-1|1|LI1", LabelRenderer.text(snapshot, "qr"));
+    }
+
+    @Test
+    void rendersFrozenFieldsAndLayoutForPrintStation() throws Exception {
+        String common = "{\"kind\":\"LABEL\",\"businessCode\":\"MD-1\",\"primaryCode\":\"MD-1\","
+                + "\"templateCode\":\"MOTHER-CUSTOM\",\"copies\":1,\"widthMm\":40,\"heightMm\":30,\"dpi\":300,"
+                + "\"typeLabel\":\"母单\",\"brandTitle\":\"珠宝\",\"qr\":\"JG|mother|MD-1|0|LI1\","
+                + "\"footerLeft\":\"\",\"footerRight\":\"\",\"layout\":{\"mode\":\"COMPACT\","
+                + "\"qrWidthMm\":15,\"codeFontPt\":10,\"fieldFontPt\":8,\"emphasisFontPt\":9,"
+                + "\"titleFontPt\":7,\"footerFontPt\":6},\"fields\":";
+        byte[] withFields = LabelRenderer.render(common + "[{\"name\":\"客户\",\"value\":\"甲\\\"乙\"}]}");
+        byte[] withoutFields = LabelRenderer.render(common + "[]}");
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(withFields));
+        assertTrue(Math.abs(image.getWidth() - 472) <= 2);
+        assertTrue(Math.abs(image.getHeight() - 354) <= 2);
+        assertTrue(hasBlackPixel(image));
+        assertTrue(!Arrays.equals(withFields, withoutFields));
+        assertEquals("甲\"乙", SnapshotJson.parse("{\"value\":\"甲\\\"乙\"}").get("value"));
+        assertEquals("{\"copies\":1}", LabelRenderer.text(
+                "{\"data\":{\"contentSnapshot\":\"{\\\"copies\\\":1}\"}}", "contentSnapshot"));
     }
 
     private boolean hasBlackPixel(BufferedImage image) {

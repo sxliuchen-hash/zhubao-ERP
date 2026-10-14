@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.label.domain.LabelPrinterSetting;
+import com.zhubao.erp.label.domain.LabelLayout;
 import com.zhubao.erp.label.domain.LabelTemplate;
 import com.zhubao.erp.label.domain.LabelTemplateField;
 import com.zhubao.erp.label.domain.LabelTemplateRepository;
@@ -45,8 +46,8 @@ public class JdbcLabelTemplateRepository implements LabelTemplateRepository {
                 insert into sys_label_template (
                     template_code, template_name, label_type, brand_title, fields_json,
                     footer_left_source, footer_right_source, is_default, enabled, printer_setting_json,
-                    remark, created_by, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    remark, created_by, created_at, layout_json
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -67,7 +68,7 @@ public class JdbcLabelTemplateRepository implements LabelTemplateRepository {
                 update sys_label_template
                    set template_code = ?, template_name = ?, label_type = ?, brand_title = ?, fields_json = ?,
                        footer_left_source = ?, footer_right_source = ?, is_default = ?, enabled = ?,
-                       printer_setting_json = ?, remark = ?
+                       printer_setting_json = ?, remark = ?, layout_json = ?
                  where id = ?
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -83,7 +84,8 @@ public class JdbcLabelTemplateRepository implements LabelTemplateRepository {
             statement.setBoolean(9, template.enabled());
             statement.setString(10, toJson(template.printerSetting()));
             statement.setString(11, template.remark());
-            statement.setLong(12, template.id());
+            statement.setString(12, toJson(template.layout()));
+            statement.setLong(13, template.id());
             statement.executeUpdate();
             return template;
         } catch (SQLException ex) {
@@ -176,12 +178,13 @@ public class JdbcLabelTemplateRepository implements LabelTemplateRepository {
         statement.setString(11, template.remark());
         statement.setString(12, template.createdBy());
         statement.setString(13, template.createdAt());
+        statement.setString(14, toJson(template.layout()));
     }
 
     private String selectSql() {
         return "select id, template_code, template_name, label_type, brand_title, fields_json, "
                 + "footer_left_source, footer_right_source, is_default, enabled, printer_setting_json, "
-                + "remark, created_by, created_at from sys_label_template";
+                + "remark, created_by, created_at, layout_json from sys_label_template";
     }
 
     private LabelTemplate mapRow(ResultSet rs) throws SQLException {
@@ -199,7 +202,8 @@ public class JdbcLabelTemplateRepository implements LabelTemplateRepository {
                 readPrinterSetting(rs.getString("printer_setting_json")),
                 rs.getString("remark"),
                 rs.getString("created_by"),
-                rs.getString("created_at")
+                rs.getString("created_at"),
+                readLayout(rs.getString("layout_json"))
         );
     }
 
@@ -233,11 +237,22 @@ public class JdbcLabelTemplateRepository implements LabelTemplateRepository {
         }
     }
 
+    private LabelLayout readLayout(String json) {
+        if (json == null || json.isBlank()) {
+            return LabelLayout.defaultLayout();
+        }
+        try {
+            return objectMapper.readValue(json, LabelLayout.class);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to deserialize label layout", ex);
+        }
+    }
+
     private LabelTemplate withId(LabelTemplate template, Long id) {
         return new LabelTemplate(
                 id, template.templateCode(), template.templateName(), template.labelType(),
                 template.brandTitle(), template.fields(), template.footerLeftSource(),
                 template.footerRightSource(), template.isDefault(), template.enabled(),
-                template.printerSetting(), template.remark(), template.createdBy(), template.createdAt());
+                template.printerSetting(), template.remark(), template.createdBy(), template.createdAt(), template.layout());
     }
 }

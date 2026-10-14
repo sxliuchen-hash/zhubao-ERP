@@ -2360,15 +2360,17 @@ PWA 一期边界：
 | `GET /api/label/mother-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `GET /api/label/work-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `POST /api/label/reprints` | `ApiResponse<LabelPayload>` |
-| `POST /api/label/print-jobs` | `ApiResponse<PrintJob>`。必须带 `requestId`。快照为服务端 JSON，含单号、模板、60×40 mm、份数、二维码、版本和标签实例。同版补打沿用原快照。`SPOOLED` 只表示已送入系统队列 |
+| `POST /api/label/print-jobs` | `ApiResponse<PrintJob>`。必须带 `requestId`。母单／子单快照由服务端按业务事实与模板冻结单号、字段、版式、尺寸、DPI、份数、二维码、版本和标签实例；客户端不上传任意打印内容。同版补打沿用原快照。旧任务仍按旧快照渲染。`SPOOLED` 只表示已送入系统队列 |
 | `GET /api/label/print-jobs/{id}` | `ApiResponse<PrintJob>`。`SPOOLED` 只表示已送入系统队列 |
 | `POST /api/label/print-jobs/{id}/retries` | `ApiResponse<PrintJob>`。必须填写原因，新建关联任务并保留原快照，不改原任务 |
 | `POST /api/label/print-jobs/{id}/paper-checks` | `ApiResponse<PrintJob>`。人工核实出纸，不把任务改成已出纸 |
 | `POST /api/label/print-jobs/{id}/relabels` | `ApiResponse<PrintJob>`。记录实物换贴，不表示打印队列已经出纸 |
 | `POST /api/label/agents/jobs/claim` | `ApiResponse<PrintJob>`。工位凭据领取，不复用管理员账号 |
 | `POST /api/label/agents/jobs/{id}/report` | `ApiResponse<PrintJob>`。只能回报 `SPOOLED` 或发送前 `FAILED` |
-| `GET /api/label/templates` | `ApiResponse<List<LabelTemplate>>` |
-| `POST /api/label/templates` | `ApiResponse<LabelTemplate>` |
+| `GET /api/label/templates` | `ApiResponse<List<LabelTemplate>>`。含字段顺序、打印机设置和 `layout` |
+| `POST /api/label/templates` | `ApiResponse<LabelTemplate>`。`layout` 支持 `mode=AUTO/COMPACT/STANDARD`、`qrWidthMm`（5～100 mm）、`codeFontPt/fieldFontPt/emphasisFontPt/titleFontPt/footerFontPt`（4～36 pt）；数值留空表示沿用版式默认值，不接收任意 CSS |
+
+`LabelPayload` 与 `LabelTemplate` 的 `layout` 结构相同；历史模板的 `layout_json` 为空时按 `AUTO` 和默认字号读取。模板字段列表为空表示不印额外字段，二维码与主单号仍保留。MySQL 通过追加迁移 V57 增加 `sys_label_template.layout_json`，不覆盖既有模板内容。
 
 ### MachineOutputController
 

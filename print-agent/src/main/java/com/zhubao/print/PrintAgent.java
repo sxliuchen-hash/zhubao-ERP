@@ -96,7 +96,7 @@ public final class PrintAgent {
             throw new IllegalStateException("本机没有名为 " + printerName + " 的打印队列");
         }
         byte[] png = LabelRenderer.render(snapshot);
-        int copies = Math.max(1, copiesOf(snapshot));
+        int copies = copiesOf(snapshot);
         Doc doc = new SimpleDoc(new ByteArrayInputStream(png), DocFlavor.INPUT_STREAM.PNG, null);
         HashPrintRequestAttributeSet attributes = new HashPrintRequestAttributeSet();
         attributes.add(new Copies(copies));
@@ -105,16 +105,11 @@ public final class PrintAgent {
     }
 
     private static int copiesOf(String snapshot) {
-        int marker = snapshot.indexOf("\"copies\":");
-        if (marker < 0) {
-            return 1;
+        Object value = SnapshotJson.parse(snapshot).get("copies");
+        if (!(value instanceof Number number) || number.intValue() < 1 || number.intValue() > 20) {
+            throw new IllegalArgumentException("打印份数无效");
         }
-        int from = marker + "\"copies\":".length();
-        int end = from;
-        while (end < snapshot.length() && Character.isDigit(snapshot.charAt(end))) {
-            end++;
-        }
-        return end == from ? 1 : Integer.parseInt(snapshot.substring(from, end));
+        return number.intValue();
     }
 
     private static void report(HttpClient client, String baseUrl, String stationId, String token, String jobId, String outcome, String reason) throws Exception {

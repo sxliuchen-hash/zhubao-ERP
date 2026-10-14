@@ -19,10 +19,19 @@ public record LabelPayload(
         String printedAt,
         String brandTitle,
         String templateCode,
-        LabelPrinterSetting printerSetting
+        LabelPrinterSetting printerSetting,
+        LabelLayout layout
 ) {
     public LabelPayload {
         fields = fields == null ? List.of() : List.copyOf(fields);
         printerSetting = printerSetting == null ? LabelPrinterSetting.defaultSetting() : printerSetting;
+        layout = layout == null ? LabelLayout.defaultLayout() : layout;
+    }
+
+    public LabelPayload(LabelType type, String typeLabel, String primaryCode, String qrContent,
+            List<LabelField> fields, String footerLeft, String footerRight, String printedAt,
+            String brandTitle, String templateCode, LabelPrinterSetting printerSetting) {
+        this(type, typeLabel, primaryCode, qrContent, fields, footerLeft, footerRight,
+                printedAt, brandTitle, templateCode, printerSetting, null);
     }
 }

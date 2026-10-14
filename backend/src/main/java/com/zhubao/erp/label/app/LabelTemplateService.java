@@ -69,7 +69,7 @@ public class LabelTemplateService {
                     null, templateCode, command.templateName().trim(), type, blankToEmpty(command.brandTitle()),
                     fields, blankToEmpty(command.footerLeftSource()), blankToEmpty(command.footerRightSource()),
                     isDefault, enabled, printerSetting, blankToEmpty(command.remark()),
-                    operator, TIME_FORMATTER.format(LocalDateTime.now()));
+                    operator, TIME_FORMATTER.format(LocalDateTime.now()), command.layout());
             saved = repository.create(template);
         } else {
             LabelTemplate existing = repository.findById(command.id())
@@ -78,7 +78,8 @@ public class LabelTemplateService {
                     existing.id(), templateCode, command.templateName().trim(), type, blankToEmpty(command.brandTitle()),
                     fields, blankToEmpty(command.footerLeftSource()), blankToEmpty(command.footerRightSource()),
                     isDefault, enabled, printerSetting, blankToEmpty(command.remark()),
-                    existing.createdBy(), existing.createdAt());
+                    existing.createdBy(), existing.createdAt(),
+                    command.layout() == null ? existing.layout() : command.layout());
             saved = repository.update(template);
         }
 

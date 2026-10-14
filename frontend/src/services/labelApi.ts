@@ -18,6 +18,17 @@ export interface LabelPrinterSetting {
   copies: number;
 }
 
+// 标签版式只接受预设布局和受限的毫米、磅值，避免把任意样式注入打印页。
+export interface LabelLayout {
+  mode: 'AUTO' | 'COMPACT' | 'STANDARD';
+  qrWidthMm: number | null;
+  codeFontPt: number | null;
+  fieldFontPt: number | null;
+  emphasisFontPt: number | null;
+  titleFontPt: number | null;
+  footerFontPt: number | null;
+}
+
 // 可打印标签载荷，前端据此渲染标签并生成二维码
 export interface LabelPayload {
   type: LabelType;
@@ -31,6 +42,7 @@ export interface LabelPayload {
   brandTitle: string;
   templateCode: string;
   printerSetting: LabelPrinterSetting;
+  layout?: LabelLayout;
 }
 
 // 通用标签生成请求
@@ -63,6 +75,7 @@ export interface LabelTemplate {
   isDefault: boolean;
   enabled: boolean;
   printerSetting: LabelPrinterSetting;
+  layout?: LabelLayout;
   remark: string;
   createdBy: string;
   createdAt: string;
@@ -86,6 +99,7 @@ export interface SaveLabelTemplateRequest {
   printerName?: string;
   copies?: number;
   remark?: string;
+  layout?: LabelLayout;
   operator?: string;
 }
 

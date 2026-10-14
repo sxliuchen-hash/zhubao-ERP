@@ -82,7 +82,7 @@ public class InMemoryLabelTemplateRepository implements LabelTemplateRepository 
                 id, template.templateCode(), template.templateName(), template.labelType(),
                 template.brandTitle(), template.fields(), template.footerLeftSource(),
                 template.footerRightSource(), template.isDefault(), template.enabled(),
-                template.printerSetting(), template.remark(), template.createdBy(), template.createdAt());
+                template.printerSetting(), template.remark(), template.createdBy(), template.createdAt(), template.layout());
     }
 
     private LabelTemplate withDefault(LabelTemplate template, boolean isDefault) {
@@ -90,7 +90,7 @@ public class InMemoryLabelTemplateRepository implements LabelTemplateRepository 
                 template.id(), template.templateCode(), template.templateName(), template.labelType(),
                 template.brandTitle(), template.fields(), template.footerLeftSource(),
                 template.footerRightSource(), isDefault, template.enabled(),
-                template.printerSetting(), template.remark(), template.createdBy(), template.createdAt());
+                template.printerSetting(), template.remark(), template.createdBy(), template.createdAt(), template.layout());
     }
 
     private void seedDefaults() {

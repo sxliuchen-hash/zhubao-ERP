@@ -64,4 +64,40 @@ describe('黑白标签打印', () => {
     expect(html).not.toContain('<dt>物料</dt>');
     expect(html).not.toContain('快递：顺丰');
   });
+
+  it('自定义模板在紧凑纸张保留全部选定字段并应用字号版式', () => {
+    const configured: LabelPayload = {
+      ...payload,
+      templateCode: 'MOTHER-CUSTOM',
+      fields: [
+        { name: '客户', value: '甲' }, { name: '要求', value: '乙' },
+        { name: '期限', value: '丙' }, { name: '重量', value: '丁' },
+        { name: '单号', value: '戊' },
+      ],
+      printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30 },
+      layout: { mode: 'COMPACT', qrWidthMm: 15, codeFontPt: 10, fieldFontPt: 8,
+        emphasisFontPt: 9, titleFontPt: 7, footerFontPt: 6 },
+    };
+    const html = buildLabelPrintDocument(configured);
+    expect(html).toContain('--bw-qr-width:15mm;');
+    expect(html).toContain('--bw-code-font:10pt;');
+    expect(html).toContain('--bw-field-font:8pt;');
+    expect(html).toContain('<dt>重量</dt>');
+    expect(html).toContain('<dt>单号</dt>');
+    expect(html).toContain('快递：顺丰');
+    expect(html).toContain('class="bw-label bw-label--compact"');
+  });
+
+  it('版式选择可覆盖纸张尺寸，异常字号不会进入打印样式', () => {
+    const configured: LabelPayload = {
+      ...payload,
+      layout: { mode: 'STANDARD', qrWidthMm: 20, codeFontPt: 500, fieldFontPt: null,
+        emphasisFontPt: null, titleFontPt: null, footerFontPt: null },
+      printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30 },
+    };
+    const html = buildLabelMarkup(configured);
+    expect(html).not.toContain('bw-label--compact');
+    expect(html).toContain('--bw-qr-width:20mm;');
+    expect(html).not.toContain('500pt');
+  });
 });

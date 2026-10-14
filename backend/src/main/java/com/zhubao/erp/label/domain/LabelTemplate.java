@@ -23,10 +23,20 @@ public record LabelTemplate(
         LabelPrinterSetting printerSetting,
         String remark,
         String createdBy,
-        String createdAt
+        String createdAt,
+        LabelLayout layout
 ) {
     public LabelTemplate {
         fields = fields == null ? List.of() : List.copyOf(fields);
         printerSetting = printerSetting == null ? LabelPrinterSetting.defaultSetting() : printerSetting;
+        layout = layout == null ? LabelLayout.defaultLayout() : layout;
+    }
+
+    public LabelTemplate(Long id, String templateCode, String templateName, LabelType labelType,
+            String brandTitle, List<LabelTemplateField> fields, String footerLeftSource,
+            String footerRightSource, boolean isDefault, boolean enabled,
+            LabelPrinterSetting printerSetting, String remark, String createdBy, String createdAt) {
+        this(id, templateCode, templateName, labelType, brandTitle, fields, footerLeftSource,
+                footerRightSource, isDefault, enabled, printerSetting, remark, createdBy, createdAt, null);
     }
 }
