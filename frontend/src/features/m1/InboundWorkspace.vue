@@ -147,22 +147,26 @@ async function loadOrderExtras(code: string) {
     if (revision !== extrasRevision) return;
     motherDetail.value = null;
   }
-  try {
-    const loaded = await fetchCaptures(code);
-    if (revision !== extrasRevision) return;
-    captures.value = loaded;
-    captureError.value = '';
-  } catch (error) {
-    if (revision !== extrasRevision) return;
-    captures.value = [];
-    captureError.value = error instanceof Error ? error.message : '视频暂时无法打开';
-  }
+  await refreshCaptures(code, revision);
   await nextTick();
   if (scrollRequested && detailPanel.value && activeOrder.value?.code === selectedOrderCode.value) {
     scrollRequested = false;
     if (globalThis.matchMedia?.('(max-width: 900px)').matches) {
       detailPanel.value.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     }
+  }
+}
+
+async function refreshCaptures(code: string, revision = extrasRevision) {
+  if (!code) return;
+  try {
+    const loaded = await fetchCaptures(code);
+    if (revision !== extrasRevision || activeOrder.value?.code !== code) return;
+    captures.value = loaded;
+    captureError.value = '';
+  } catch (error) {
+    if (revision !== extrasRevision || activeOrder.value?.code !== code) return;
+    captureError.value = error instanceof Error ? error.message : '现场文件暂时无法打开';
   }
 }
 
@@ -416,10 +420,10 @@ function backToList() {
         <div class="evidence-health compact-evidence-health">
           <article>
             <div>
-              <strong>拆包视频</strong>
+              <strong>现场采集</strong>
               <span v-if="captureError">{{ captureError }}</span>
               <span v-else-if="captures.length === 0">待补</span>
-              <span v-else>已关联 {{ captures.length }} 个文件</span>
+              <span v-else>已采集 {{ captures.length }} 个文件，关联状态见下方</span>
             </div>
           </article>
           <article v-for="item in captures" :key="item.code">
@@ -436,6 +440,7 @@ function backToList() {
             scene="UNPACK"
             operation-type="inbound_confirm"
             :operation-code="evidenceOperationCode"
+            @uploaded="refreshCaptures"
           />
           <article v-for="item in workspace.checkpoints" :key="item.label">
             <div>

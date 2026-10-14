@@ -25,6 +25,7 @@ const props = withDefaults(defineProps<{
   processName: '',
   clauseNo: '',
 });
+const emit = defineEmits<{ uploaded: [targetCode: string] }>();
 
 type FileState = 'LOCAL_PENDING' | 'UPLOADING' | 'FAILED' | 'UPLOADED_PENDING_LINK' | 'LINKED';
 
@@ -183,6 +184,7 @@ async function submit(item: DraftFile) {
         file: item.file,
       });
       item.attachmentCode = uploaded.code;
+      emit('uploaded', decision.snap.targetCode);
     }
     await bindEvidence({
       attachmentCode: item.attachmentCode,
