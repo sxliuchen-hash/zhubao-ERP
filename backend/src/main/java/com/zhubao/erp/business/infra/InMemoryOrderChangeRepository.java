@@ -19,14 +19,17 @@ public class InMemoryOrderChangeRepository implements OrderChangeRepository {
 
     @Override
     public OrderChange save(OrderChange change) {
-        changes.put(change.id(), change);
-        return change;
+        return save(change, null);
     }
 
     @Override
-    public OrderChange save(OrderChange change, WorkSession session) {
+    public synchronized OrderChange save(OrderChange change, WorkSession session) {
+        OrderChange raced = findByRequestId(change.requestId()).orElse(null);
+        if (raced != null && !raced.id().equals(change.id())) {
+            return raced;
+        }
         OrderChange previous = changes.get(change.id());
-        OrderChange saved = save(change);
+        changes.put(change.id(), change);
         if (session != null) {
             session.onRollback(() -> {
                 if (previous == null) {
@@ -36,7 +39,7 @@ public class InMemoryOrderChangeRepository implements OrderChangeRepository {
                 }
             });
         }
-        return saved;
+        return change;
     }
 
     @Override

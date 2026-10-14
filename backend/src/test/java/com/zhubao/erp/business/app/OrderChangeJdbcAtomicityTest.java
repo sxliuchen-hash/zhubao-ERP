@@ -1,6 +1,7 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.OrderChange;
 import com.zhubao.erp.business.domain.OrderChangeStatus;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.JdbcOrderChangeRepository;
@@ -28,6 +29,10 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -88,6 +93,38 @@ class OrderChangeJdbcAtomicityTest {
         return new AuthUserAccount(
                 operator, "hash", operator, role, DataScope.ALL, true, true,
                 Instant.now(), 0, null, List.of(), false, false, List.of()
+        );
+    }
+
+    @Test
+    void duplicateRequestReturnsTheStoredRowAndConcurrentDraftsDoNotOverwriteIt() throws Exception {
+        DataSource source = dataSource();
+        createSchema(source);
+        JdbcOrderChangeRepository repository = new JdbcOrderChangeRepository(source);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<OrderChange> left = pool.submit(() -> repository.save(draftRow("CHG-A", "change-jdbc-race", "甲要求")));
+            Future<OrderChange> right = pool.submit(() -> repository.save(draftRow("CHG-B", "change-jdbc-race", "乙要求")));
+            OrderChange first = left.get(10, TimeUnit.SECONDS);
+            OrderChange second = right.get(10, TimeUnit.SECONDS);
+            assertThat(first.id()).isEqualTo(second.id());
+            OrderChange stored = repository.findByRequestId("change-jdbc-race").orElseThrow();
+            assertThat(stored.id()).isEqualTo(first.id());
+            assertThat(stored.newRequirement()).isIn("甲要求", "乙要求");
+            String loser = "CHG-A".equals(stored.id()) ? "CHG-B" : "CHG-A";
+            assertThat(repository.findById(loser)).isEmpty();
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    private static OrderChange draftRow(String id, String requestId, String requirement) {
+        return new OrderChange(
+                id, "MD-JDBC", "", "旧要求", requirement, "2026-10-20", "2026-11-01",
+                OrderChangeStatus.DRAFT, 1, false, BigDecimal.ZERO, BigDecimal.ZERO, "", "",
+                requestId, "收货员", "2026-10-14T00:00:00", "2026-10-14T00:00:00",
+                BigDecimal.ZERO, BigDecimal.ZERO, "", "", "",
+                "雕刻、镶嵌、抛光", "雕刻、镶嵌、抛光", 0, ""
         );
     }
 

@@ -626,6 +626,14 @@ MySQL 持久化表：
 
 迁移 `V46__m3_quality_round.sql`，新增 `biz_quality_round`、`biz_quality_round_line`、`biz_quality_rework_report`。已有库需备份后受控执行，不修改已发布迁移。H2 测试不是 MySQL 升级验收。
 
+### 5.2.3 中途改单
+
+`POST /api/business/order-changes` 创建草稿。未填写的新要求、新期限和新路线继承当前已生效版本；没有生效版本时才用原母单。`expectedVersion` 不传时取当前已生效版本，传入且不一致则拒绝。`newRoute` 里的每一道工序和 `reworkProcess` 都要落在账号工序授权内。
+
+同一 `requestId` 重复提交返回已经入库的那一张，编号以库里的真实 `id` 为准。内容变化或换账号按「同一请求的内容不一致」「该请求不能跨账号重放」拒绝。
+
+`POST /api/business/order-changes/{id}/applications` 生效时只认草稿在财务确认前固定的 `expectedVersion`。调用方另传一个更新的版本号会被拒绝，不能绕过重新确认。财务确认、拒绝分别是 `finance-confirmations`、`finance-rejections`。金额不变时 `amountUnchanged=true`，不写差额。
+
 ### 5.3 `ReportProductionCommand`
 
 页面和导入不再调用 `POST /api/business/operations/production-reports`，该 HTTP 已退出。现场工序交付走 `process-stations`。登记导入和设备读数仍把数量、重量交给岗位服务 `reportProduction`，但必须登录，不能再绕过工序校验。下面的字段仍是这条内部命令的形状。

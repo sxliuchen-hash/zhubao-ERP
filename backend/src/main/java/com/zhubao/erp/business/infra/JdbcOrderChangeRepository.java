@@ -26,37 +26,20 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
         this.dataSource = dataSource;
     }
 
+    private static final String INSERT_SQL = """
+            insert into biz_order_change (
+                id, mother_order_code, work_order_code, old_requirement, new_requirement, old_due_date, new_due_date,
+                status_code, version_no, amount_unchanged, customer_unit_price, worker_fee, finance_note, confirmed_by,
+                request_id, created_by, created_at, updated_at,
+                customer_delta, worker_delta, receivable_code, process_name, worker_name,
+                old_route, new_route, expected_version, rework_process
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+
     @Override
     public OrderChange save(OrderChange change) {
-        String sql = """
-                insert into biz_order_change (
-                    id, mother_order_code, work_order_code, old_requirement, new_requirement, old_due_date, new_due_date,
-                    status_code, version_no, amount_unchanged, customer_unit_price, worker_fee, finance_note, confirmed_by,
-                    request_id, created_by, created_at, updated_at,
-                    customer_delta, worker_delta, receivable_code, process_name, worker_name,
-                    old_route, new_route, expected_version, rework_process
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on duplicate key update
-                    status_code = values(status_code),
-                    amount_unchanged = values(amount_unchanged),
-                    customer_unit_price = values(customer_unit_price),
-                    worker_fee = values(worker_fee),
-                    finance_note = values(finance_note),
-                    confirmed_by = values(confirmed_by),
-                    updated_at = values(updated_at),
-                    customer_delta = values(customer_delta),
-                    worker_delta = values(worker_delta),
-                    receivable_code = values(receivable_code),
-                    process_name = values(process_name),
-                    worker_name = values(worker_name),
-                    old_route = values(old_route),
-                    new_route = values(new_route),
-                    expected_version = values(expected_version),
-                    rework_process = values(rework_process)
-                """;
         try (Connection connection = dataSource.getConnection()) {
-            write(connection, sql, change);
-            return change;
+            return saveOn(connection, change);
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存改单", ex);
         }
@@ -67,38 +50,78 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
         if (session == null || session.connection().isEmpty()) {
             throw new IllegalStateException("改单写入必须使用工作单元连接");
         }
-        String sql = """
-                insert into biz_order_change (
-                    id, mother_order_code, work_order_code, old_requirement, new_requirement, old_due_date, new_due_date,
-                    status_code, version_no, amount_unchanged, customer_unit_price, worker_fee, finance_note, confirmed_by,
-                    request_id, created_by, created_at, updated_at,
-                    customer_delta, worker_delta, receivable_code, process_name, worker_name,
-                    old_route, new_route, expected_version, rework_process
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on duplicate key update
-                    status_code = values(status_code),
-                    amount_unchanged = values(amount_unchanged),
-                    customer_unit_price = values(customer_unit_price),
-                    worker_fee = values(worker_fee),
-                    finance_note = values(finance_note),
-                    confirmed_by = values(confirmed_by),
-                    updated_at = values(updated_at),
-                    customer_delta = values(customer_delta),
-                    worker_delta = values(worker_delta),
-                    receivable_code = values(receivable_code),
-                    process_name = values(process_name),
-                    worker_name = values(worker_name),
-                    old_route = values(old_route),
-                    new_route = values(new_route),
-                    expected_version = values(expected_version),
-                    rework_process = values(rework_process)
-                """;
         try {
-            write(session.connection().get(), sql, change);
-            return change;
+            return saveOn(session.connection().get(), change);
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存改单", ex);
         }
+    }
+
+    /**
+     * 同一请求编号只保留先入库的那一行。后来的编号不同就返回库里的真实记录，不改它的状态。
+     * 同一编号再次保存才更新状态，供财务确认和生效使用。
+     */
+    private OrderChange saveOn(Connection connection, OrderChange change) throws SQLException {
+        Optional<OrderChange> existing = readByRequest(connection, change.requestId());
+        if (existing.isPresent() && !existing.get().id().equals(change.id())) {
+            return existing.get();
+        }
+        if (existing.isPresent()) {
+            update(connection, change);
+            return readByRequest(connection, change.requestId()).orElse(change);
+        }
+        try {
+            write(connection, INSERT_SQL, change);
+        } catch (SQLException ex) {
+            if (!duplicate(ex)) {
+                throw ex;
+            }
+            return readByRequest(connection, change.requestId()).orElseThrow(() -> ex);
+        }
+        return readByRequest(connection, change.requestId()).orElse(change);
+    }
+
+    private void update(Connection connection, OrderChange change) throws SQLException {
+        String sql = """
+                update biz_order_change
+                   set status_code = ?, amount_unchanged = ?, customer_unit_price = ?, worker_fee = ?,
+                       finance_note = ?, confirmed_by = ?, updated_at = ?, customer_delta = ?, worker_delta = ?,
+                       receivable_code = ?, process_name = ?, worker_name = ?, old_route = ?, new_route = ?,
+                       expected_version = ?, rework_process = ?
+                 where id = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, change.status().name());
+            statement.setBoolean(2, change.amountUnchanged());
+            statement.setBigDecimal(3, change.customerUnitPrice());
+            statement.setBigDecimal(4, change.workerFee());
+            statement.setString(5, change.financeNote());
+            statement.setString(6, change.confirmedBy());
+            statement.setString(7, change.updatedAt());
+            statement.setBigDecimal(8, change.customerDelta());
+            statement.setBigDecimal(9, change.workerDelta());
+            statement.setString(10, change.receivableCode());
+            statement.setString(11, change.processName());
+            statement.setString(12, change.workerName());
+            statement.setString(13, change.oldRoute());
+            statement.setString(14, change.newRoute());
+            statement.setInt(15, change.expectedVersion());
+            statement.setString(16, change.reworkProcess());
+            statement.setString(17, change.id());
+            statement.executeUpdate();
+        }
+    }
+
+    private static boolean duplicate(SQLException ex) {
+        SQLException current = ex;
+        while (current != null) {
+            String state = current.getSQLState() == null ? "" : current.getSQLState();
+            if (current.getErrorCode() == 1062 || current.getErrorCode() == 23505 || state.startsWith("23")) {
+                return true;
+            }
+            current = current.getNextException();
+        }
+        return false;
     }
 
     private void write(Connection connection, String sql, OrderChange change) throws SQLException {
@@ -181,6 +204,19 @@ public class JdbcOrderChangeRepository implements OrderChangeRepository {
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("无法列出改单", ex);
+        }
+    }
+
+    private Optional<OrderChange> readByRequest(Connection connection, String requestId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select * from biz_order_change where request_id = ?")) {
+            statement.setString(1, requestId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(map(rs));
+            }
         }
     }
 

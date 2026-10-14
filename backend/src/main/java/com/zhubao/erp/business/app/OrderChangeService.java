@@ -115,29 +115,26 @@ public class OrderChangeService {
         OrderChange existing = changes.findByRequestId(requestId).orElse(null);
         if (existing != null) {
             assertScope(existing.motherOrderCode(), existing.workOrderCode(), account);
-            assertSameDraft(existing, motherOrderCode, workOrderCode, newRequirement, newDueDate, newRoute, expectedVersion, reworkProcess, account);
+            assertSameDraft(existing, mother, workOrderCode, newRequirement, newDueDate, newRoute, reworkProcess, account);
             return visible(existing, account);
         }
-        String oldRoute = routeOf(mother, workOrderCode);
-        String route = normalizeRoute(newRoute, oldRoute);
-        String rework = normalizeOptionalProcess(reworkProcess);
-        assertProcess(rework, account);
-        String target = versionTarget(motherOrderCode, workOrderCode);
-        int currentVersion = changes.latestAppliedVersion(target);
-        int expected = expectedVersion == null ? currentVersion : expectedVersion;
-        if (expected != currentVersion) {
-            throw new BusinessException("改单基于的版本已过期");
+        DraftFacts facts = facts(mother, workOrderCode, newRequirement, newDueDate, newRoute, reworkProcess, expectedVersion);
+        if (newRoute != null && !newRoute.isBlank()) {
+            for (String step : WorkshopProcesses.split(facts.route())) {
+                assertProcess(step, account);
+            }
         }
+        assertProcess(facts.rework(), account);
         String now = TIME.format(LocalDateTime.now());
         int version = changes.listByMother(motherOrderCode).size() + 1;
         return visible(changes.save(new OrderChange(
                 "CHG-" + UUID.randomUUID().toString().substring(0, 8),
                 motherOrderCode,
                 blank(workOrderCode),
-                blank(mother.processingRequirement()),
-                newRequirement == null ? "" : newRequirement.trim(),
-                blank(mother.dueDate()),
-                newDueDate == null ? "" : newDueDate.trim(),
+                facts.oldRequirement(),
+                facts.requirement(),
+                facts.oldDue(),
+                facts.due(),
                 OrderChangeStatus.DRAFT,
                 version,
                 false,
@@ -154,10 +151,10 @@ public class OrderChangeService {
                 "",
                 "",
                 "",
-                oldRoute,
-                route,
-                expected,
-                rework
+                facts.oldRoute(),
+                facts.route(),
+                facts.expected(),
+                facts.rework()
         )), account);
     }
 
@@ -245,7 +242,10 @@ public class OrderChangeService {
         if (current.status() != OrderChangeStatus.FINANCE_CONFIRMED && current.status() != OrderChangeStatus.APPLIED) {
             throw new BusinessException("财务确认后才能生效");
         }
-        int expected = expectedVersion == null ? current.expectedVersion() : expectedVersion;
+        if (expectedVersion != null && expectedVersion != current.expectedVersion()) {
+            throw new BusinessException("不能改写财务确认时固定的基准版本");
+        }
+        int expected = current.expectedVersion();
         String target = versionTarget(current.motherOrderCode(), current.workOrderCode());
         List<ProcessStationHandoff> before = documents.listProcessStationHandoffs(target);
         workUnit.execute(new CommandCall(
@@ -410,35 +410,75 @@ public class OrderChangeService {
 
     /**
      * 响应丢失后的重试必须带回同一张草稿。内容或账号变了就拒绝，不能改成另一张申请。
+     * 空白字段按保存时的继承结果比较，避免把“沿用当前版本”误判成另一份内容。
      */
     private void assertSameDraft(
             OrderChange existing,
-            String motherOrderCode,
+            MotherOrderRecord mother,
             String workOrderCode,
             String newRequirement,
             String newDueDate,
             String newRoute,
-            Integer expectedVersion,
             String reworkProcess,
             AuthUserAccount account
     ) {
         if (!account.operator().trim().equals(existing.createdBy())) {
             throw new PermissionDeniedException("该请求不能跨账号重放");
         }
-        String incomingRequirement = newRequirement == null ? "" : newRequirement.trim();
-        String incomingDue = newDueDate == null ? "" : newDueDate.trim();
+        String incomingRequirement = newRequirement == null || newRequirement.isBlank()
+                ? existing.newRequirement() : newRequirement.trim();
+        String incomingDue = newDueDate == null || newDueDate.isBlank() ? existing.newDueDate() : newDueDate.trim();
         String incomingRework = normalizeOptionalProcess(reworkProcess);
-        String incomingRoute = normalizeRoute(newRoute, existing.oldRoute());
-        int incomingExpected = expectedVersion == null ? existing.expectedVersion() : expectedVersion;
-        if (!existing.motherOrderCode().equals(motherOrderCode)
+        String incomingRoute = newRoute == null || newRoute.isBlank()
+                ? existing.newRoute() : normalizeRoute(newRoute, existing.oldRoute());
+        if (!existing.motherOrderCode().equals(mother.code())
                 || !existing.workOrderCode().equals(blank(workOrderCode))
                 || !existing.newRequirement().equals(incomingRequirement)
                 || !existing.newDueDate().equals(incomingDue)
                 || !existing.reworkProcess().equals(incomingRework)
-                || !existing.newRoute().equals(incomingRoute)
-                || existing.expectedVersion() != incomingExpected) {
+                || !existing.newRoute().equals(incomingRoute)) {
             throw new BusinessException("同一请求的内容不一致");
         }
+    }
+
+    /**
+     * 没写的要求、期限和路线继承当前有效版本，不退回原母单。基准版本只取已生效版本。
+     */
+    private DraftFacts facts(
+            MotherOrderRecord mother,
+            String workOrderCode,
+            String newRequirement,
+            String newDueDate,
+            String newRoute,
+            String reworkProcess,
+            Integer expectedVersion
+    ) {
+        OrderRequirementVersion current = OrderRequirementLookup.current(requirements, mother.code(), blank(workOrderCode)).orElse(null);
+        String oldRequirement = OrderRequirementLookup.requirement(current, blank(mother.processingRequirement()));
+        String oldDue = OrderRequirementLookup.dueDate(current, blank(mother.dueDate()));
+        String oldRoute = current != null && current.routeText() != null && !current.routeText().isBlank()
+                ? current.routeText() : routeOf(mother, workOrderCode);
+        String route = normalizeRoute(newRoute, oldRoute);
+        String requirement = newRequirement == null || newRequirement.isBlank() ? oldRequirement : newRequirement.trim();
+        String due = newDueDate == null || newDueDate.isBlank() ? oldDue : newDueDate.trim();
+        int latest = changes.latestAppliedVersion(versionTarget(mother.code(), workOrderCode));
+        int expected = expectedVersion == null ? latest : expectedVersion;
+        if (expected != latest) {
+            throw new BusinessException("改单基于的版本已过期");
+        }
+        return new DraftFacts(oldRequirement, requirement, oldDue, due, oldRoute, route, expected, normalizeOptionalProcess(reworkProcess));
+    }
+
+    private record DraftFacts(
+            String oldRequirement,
+            String requirement,
+            String oldDue,
+            String due,
+            String oldRoute,
+            String route,
+            int expected,
+            String rework
+    ) {
     }
 
     private void assertScope(String motherOrderCode, String workOrderCode, AuthUserAccount account) {

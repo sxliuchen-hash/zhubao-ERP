@@ -24,6 +24,10 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -73,6 +77,68 @@ class OrderChangeServiceTest {
                 .hasMessageContaining("内容不一致");
         assertThat(service.list("MD-CHANGE-001", receiver)).hasSize(1);
         assertThat(service.present(first.id(), receiver).newRequirement()).isEqualTo("改为外圈刻字");
+    }
+
+    @Test
+    void applyCannotRewriteTheBaselineConfirmedByFinance() {
+        var first = service.draft("MD-CHANGE-001", "", "第一次", "2026-11-01", "change-base-a001", receiver);
+        var second = service.draft("MD-CHANGE-001", "", "第二次", "2026-11-02", "change-base-b001", receiver);
+        service.submitFinance(first.id(), receiver);
+        service.submitFinance(second.id(), receiver);
+        service.confirmFinance(first.id(), true, null, null, "金额不变", finance);
+        service.confirmFinance(second.id(), true, null, null, "金额不变", finance);
+        service.apply(first.id(), "change-base-apply-a", receiver);
+        assertThatThrownBy(() -> service.apply(second.id(), "change-base-apply-b", 1, receiver))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能改写财务确认时固定的基准版本");
+        assertThat(service.present(second.id(), receiver).status()).isEqualTo(OrderChangeStatus.FINANCE_CONFIRMED);
+    }
+
+    @Test
+    void secondChangeInheritsTheEffectiveRouteInsteadOfTheOriginalOrder() {
+        documents.saveMotherSplitState(new MotherSplitState(
+                "MD-CHANGE-001", MotherSplitState.KEEP, "VC-1", "收货员", "2026-10-08T00:00:00"
+        ));
+        InMemoryOrderRequirementRepository requirements = new InMemoryOrderRequirementRepository();
+        OrderChangeService effect = effectService(requirements, null);
+        var first = effect.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-route-1001", "雕刻、镶嵌", 0, "", receiver);
+        effect.submitFinance(first.id(), receiver);
+        effect.confirmFinance(first.id(), true, null, null, "金额不变", finance);
+        effect.apply(first.id(), "change-route-apply", receiver);
+        var second = effect.draft("MD-CHANGE-001", "", "", "2026-12-01", "change-route-2001", null, null, "", receiver);
+        assertThat(second.oldRequirement()).isEqualTo("改为外圈刻字");
+        assertThat(second.newRequirement()).isEqualTo("改为外圈刻字");
+        assertThat(second.oldRoute()).isEqualTo("雕刻、镶嵌");
+        assertThat(second.newRoute()).isEqualTo("雕刻、镶嵌");
+        assertThat(second.newDueDate()).isEqualTo("2026-12-01");
+        assertThat(second.expectedVersion()).isEqualTo(first.versionNo());
+    }
+
+    @Test
+    void newRouteChecksEveryAffectedProcess() {
+        AuthUserAccount carver = new AuthUserAccount(
+                "雕刻工", "hash", "雕刻工", RoleCode.OPERATOR, DataScope.ALL, true, true,
+                Instant.now(), 0, null, List.of(), false, false, List.of("雕刻")
+        );
+        assertThatThrownBy(() -> service.draft(
+                "MD-CHANGE-001", "", "改路线", "2026-11-03", "change-route-deny", "雕刻、抛光", 0, "", carver))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("抛光");
+    }
+
+    @Test
+    void concurrentDraftsWithTheSameRequestShareOneStoredId() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<String> left = pool.submit(() -> service.draft(
+                    "MD-CHANGE-001", "", "并发改单", "2026-11-04", "change-race-0001", receiver).id());
+            Future<String> right = pool.submit(() -> service.draft(
+                    "MD-CHANGE-001", "", "并发改单", "2026-11-04", "change-race-0001", receiver).id());
+            assertThat(left.get(10, TimeUnit.SECONDS)).isEqualTo(right.get(10, TimeUnit.SECONDS));
+            assertThat(service.list("MD-CHANGE-001", receiver)).hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
