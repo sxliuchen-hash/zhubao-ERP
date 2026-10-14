@@ -10,6 +10,7 @@ import com.zhubao.erp.business.infra.InMemoryOrderChangeRepository;
 import com.zhubao.erp.business.infra.InMemoryOrderRequirementRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -139,6 +140,59 @@ class OrderChangeServiceTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    void reworkRoundCanBeReportedWithoutReplacingTheOriginalHandoff() {
+        InMemoryBusinessDocumentRepository localDocuments = new InMemoryBusinessDocumentRepository();
+        InMemoryStockLedgerRepository stocks = new InMemoryStockLedgerRepository();
+        StockLedgerService ledger = new StockLedgerService(stocks);
+        BusinessOperationService operations = new BusinessOperationService(ledger, null, localDocuments);
+        operations.confirmInbound(new ConfirmInboundCommand(
+                "MD-ROUND-001", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-ROUND-001", "",
+                "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
+                new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单",
+                "内壁刻字", "2026-10-20", "恒信珠宝"
+        ));
+        localDocuments.saveMotherSplitState(new MotherSplitState(
+                "MD-ROUND-001", MotherSplitState.KEEP, "VC-R", "收货员", "2026-10-08T00:00:00"
+        ));
+        InMemoryOrderRequirementRepository requirements = new InMemoryOrderRequirementRepository();
+        MemoryBusinessWorkUnit work = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        OrderChangeService changes = new OrderChangeService(
+                new InMemoryOrderChangeRepository(), localDocuments, work, null, null, null, requirements);
+        ProcessStationService stations = new ProcessStationService(
+                localDocuments, ledger, operations, new ScanCodeParser(), null, work, requirements);
+        AuthUserAccount carver = new AuthUserAccount(
+                "雕刻工", "hash", "雕刻工", RoleCode.OPERATOR, DataScope.ALL, true, true,
+                Instant.now(), 0, null, List.of(), false, false, List.of("雕刻")
+        );
+        stations.report("MD-ROUND-001", "雕刻", carver, "round-origin-report");
+        assertThat(localDocuments.listProcessStationHandoffs("MD-ROUND-001")).hasSize(1);
+
+        var draft = changes.draft("MD-ROUND-001", "", "外圈重刻", "2026-12-01", "round-draft-0001", null, null, "雕刻", receiver);
+        changes.submitFinance(draft.id(), receiver);
+        changes.confirmFinance(draft.id(), true, null, null, "金额不变", finance);
+        changes.apply(draft.id(), "round-apply-0001", receiver);
+        String roundCode = requirements.listByMother("MD-ROUND-001").get(0).roundWorkOrderCode();
+
+        var reported = stations.report(roundCode, "雕刻", carver, "round-rework-report");
+        assertThat(reported.orderCode()).isEqualTo(roundCode);
+        assertThat(localDocuments.listProcessStationHandoffs("MD-ROUND-001")).hasSize(1);
+        assertThat(localDocuments.listProcessStationHandoffs(roundCode)).singleElement()
+                .satisfies(handoff -> assertThat(handoff.processName()).isEqualTo("雕刻"));
+        assertThat(ledger.ledgers()).anyMatch(entry -> roundCode.equals(entry.documentCode()));
+        assertThatThrownBy(() -> stations.report("MD-ROUND-001", "雕刻", carver, "round-origin-again"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已经交过");
+
+        QualityRequirementService quality = new QualityRequirementService(
+                localDocuments, ledger, operations, new ScanCodeParser(), null, work, requirements);
+        AuthUserAccount inspector = account("质检员", RoleCode.QUALITY_INSPECTOR);
+        var view = quality.lookup(roundCode, inspector);
+        assertThat(view.orderCode()).isEqualTo(roundCode);
+        assertThat(view.processingRequirement()).isEqualTo("外圈重刻");
+        assertThat(view.motherOrderCode()).isEqualTo("MD-ROUND-001");
     }
 
     @Test

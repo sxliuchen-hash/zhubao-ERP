@@ -46,6 +46,16 @@ public class InMemoryOrderRequirementRepository implements OrderRequirementRepos
     }
 
     @Override
+    public Optional<ExecutionRound> findRound(String roundWorkOrderCode) {
+        if (roundWorkOrderCode == null || roundWorkOrderCode.isBlank()) {
+            return Optional.empty();
+        }
+        return rounds.values().stream()
+                .filter(round -> roundWorkOrderCode.equals(round.roundWorkOrderCode()))
+                .findFirst();
+    }
+
+    @Override
     public List<ExecutionRound> listByMother(String motherOrderCode) {
         return rounds.values().stream()
                 .filter(round -> motherOrderCode.equals(round.motherOrderCode()))

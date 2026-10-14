@@ -14,4 +14,6 @@ public interface OrderRequirementRepository {
     void saveRound(ExecutionRound round, WorkSession session);
 
     List<ExecutionRound> listByMother(String motherOrderCode);
+
+    Optional<ExecutionRound> findRound(String roundWorkOrderCode);
 }

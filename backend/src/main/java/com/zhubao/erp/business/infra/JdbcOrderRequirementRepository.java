@@ -105,6 +105,35 @@ public class JdbcOrderRequirementRepository implements OrderRequirementRepositor
     }
 
     @Override
+    public Optional<ExecutionRound> findRound(String roundWorkOrderCode) {
+        if (roundWorkOrderCode == null || roundWorkOrderCode.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "select * from biz_execution_round where round_work_order_code = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, roundWorkOrderCode.trim());
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new ExecutionRound(
+                        rs.getString("id"),
+                        rs.getString("mother_order_code"),
+                        rs.getString("source_work_order_code"),
+                        rs.getString("round_work_order_code"),
+                        rs.getString("process_name"),
+                        rs.getString("change_id"),
+                        rs.getString("supersedes_order_code"),
+                        rs.getString("created_at")
+                ));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取执行轮次", ex);
+        }
+    }
+
+    @Override
     public List<ExecutionRound> listByMother(String motherOrderCode) {
         String sql = "select * from biz_execution_round where mother_order_code = ? order by created_at";
         try (Connection connection = dataSource.getConnection();

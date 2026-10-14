@@ -2,6 +2,7 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.business.domain.ExecutionRound;
 import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
@@ -966,6 +967,10 @@ public class QualityRequirementService {
         }
         if (text.startsWith("JG|")) {
             ScanResolveResponse resolved = scanCodeParser.resolve(text, "quality_check");
+            Ticket fromRound = roundTicket(resolved.code());
+            if (fromRound != null) {
+                return fromRound;
+            }
             if (resolved.objectType() == ScanObjectType.WORK_ORDER) {
                 return childTicket(resolved.code());
             }
@@ -974,6 +979,10 @@ public class QualityRequirementService {
             }
             throw new BusinessException(WRONG_STICKER);
         }
+        Ticket round = roundTicket(text);
+        if (round != null) {
+            return round;
+        }
         if (documents.findChildWorkOrderByCode(text).isPresent()) {
             return childTicket(text);
         }
@@ -981,6 +990,33 @@ public class QualityRequirementService {
             return motherTicket(text);
         }
         throw new BusinessException(WRONG_STICKER);
+    }
+
+    /** 质检单号用轮次，库存仍按原单维度，避免重做质检改到原来的质检单。 */
+    private Ticket roundTicket(ExecutionRound round) {
+        boolean motherSource = round.sourceWorkOrderCode().isBlank()
+                || round.sourceWorkOrderCode().equals(round.motherOrderCode());
+        Ticket source = motherSource ? motherTicket(round.motherOrderCode()) : childTicket(round.sourceWorkOrderCode());
+        return new Ticket(
+                round.roundWorkOrderCode(),
+                source.motherOrderCode(),
+                source.customerId(),
+                source.ownerCustomerId(),
+                source.customerName(),
+                source.processingRequirement(),
+                source.dueDate(),
+                source.materialCode(),
+                source.warehouseCode(),
+                List.of(round.processName()),
+                source.stockOrderCode()
+        );
+    }
+
+    private Ticket roundTicket(String code) {
+        if (requirements == null || code == null || code.isBlank()) {
+            return null;
+        }
+        return requirements.findRound(code).map(this::roundTicket).orElse(null);
     }
 
     private Ticket childTicket(String code) {
@@ -1061,7 +1097,8 @@ public class QualityRequirementService {
                 dueDate,
                 materialCode,
                 warehouseCode,
-                processes
+                processes,
+                orderCode
         );
     }
 
@@ -1083,7 +1120,7 @@ public class QualityRequirementService {
                 ticket.ownerCustomerId(),
                 ticket.customerId(),
                 ticket.motherOrderCode(),
-                ticket.orderCode(),
+                ticket.stockOrderCode(),
                 ticket.materialCode(),
                 ticket.warehouseCode(),
                 status
@@ -1135,7 +1172,13 @@ public class QualityRequirementService {
             String dueDate,
             String materialCode,
             String warehouseCode,
-            List<String> processes
+            List<String> processes,
+            String stockOrderCode
     ) {
+        private Ticket {
+            if (stockOrderCode == null || stockOrderCode.isBlank()) {
+                stockOrderCode = orderCode;
+            }
+        }
     }
 }

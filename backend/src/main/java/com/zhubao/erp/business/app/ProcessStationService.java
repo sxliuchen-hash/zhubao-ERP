@@ -1,6 +1,7 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
+import com.zhubao.erp.business.domain.ExecutionRound;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
@@ -322,7 +323,7 @@ public class ProcessStationService {
         }
         String operator = account.operator().trim();
         ensureWipForKeptMother(ticket, operator, session);
-        boolean last = process.equals(ticket.processes().get(ticket.processes().size() - 1));
+        boolean last = process.equals(ticket.routeTail());
         StockDimension from = wipDimension(ticket);
         StockDimension to = last ? new StockDimension(
                 from.ownerType(), from.ownerCustomerId(), from.customerId(), from.motherOrderCode(),
@@ -567,6 +568,10 @@ public class ProcessStationService {
         }
         if (text.startsWith("JG|")) {
             ScanResolveResponse resolved = scanCodeParser.resolve(text, "pwa_report");
+            StationTicket fromCode = roundTicket(resolved.code());
+            if (fromCode != null) {
+                return fromCode;
+            }
             if (resolved.objectType() == ScanObjectType.WORK_ORDER) {
                 return childTicket(resolved.code());
             }
@@ -575,6 +580,10 @@ public class ProcessStationService {
             }
             throw new BusinessException(WRONG_STICKER);
         }
+        StationTicket round = roundTicket(text);
+        if (round != null) {
+            return round;
+        }
         if (documents.findChildWorkOrderByCode(text).isPresent()) {
             return childTicket(text);
         }
@@ -582,6 +591,42 @@ public class ProcessStationService {
             return motherTicket(text);
         }
         throw new BusinessException(WRONG_STICKER);
+    }
+
+    /**
+     * 重做轮次用新的工单号记账，库存维度仍落在原母单或子单上，避免把已有交付和余额改掉。
+     */
+    private StationTicket roundTicket(String code) {
+        if (requirements == null || code == null || code.isBlank()) {
+            return null;
+        }
+        ExecutionRound round = requirements.findRound(code).orElse(null);
+        if (round == null) {
+            return null;
+        }
+        boolean motherSource = round.sourceWorkOrderCode().isBlank()
+                || round.sourceWorkOrderCode().equals(round.motherOrderCode());
+        StationTicket source = motherSource ? motherTicket(round.motherOrderCode()) : childTicket(round.sourceWorkOrderCode());
+        String tail = source.processes().isEmpty() ? round.processName() : source.processes().get(source.processes().size() - 1);
+        return new StationTicket(
+                round.roundWorkOrderCode(),
+                source.motherOrderCode(),
+                source.keptMother(),
+                source.customerId(),
+                source.ownerCustomerId(),
+                source.ownerType(),
+                source.customerName(),
+                source.processingRequirement(),
+                source.dueDate(),
+                source.materialCode(),
+                source.warehouseCode(),
+                source.quantityUnit(),
+                source.quantity(),
+                source.weight(),
+                List.of(round.processName()),
+                source.stockOrderCode(),
+                tail
+        );
     }
 
     private StationTicket childTicket(String code) {
@@ -691,7 +736,7 @@ public class ProcessStationService {
                 ticket.ownerCustomerId(),
                 ticket.customerId(),
                 ticket.motherOrderCode(),
-                ticket.orderCode(),
+                ticket.stockOrderCode(),
                 ticket.materialCode(),
                 ticket.warehouseCode(),
                 StockStatus.WIP
@@ -761,7 +806,40 @@ public class ProcessStationService {
             String quantityUnit,
             BigDecimal quantity,
             BigDecimal weight,
-            List<String> processes
+            List<String> processes,
+            String stockOrderCode,
+            String routeTail
     ) {
+        private StationTicket {
+            processes = processes == null ? List.of() : List.copyOf(processes);
+            if (stockOrderCode == null || stockOrderCode.isBlank()) {
+                stockOrderCode = orderCode;
+            }
+            if (routeTail == null || routeTail.isBlank()) {
+                routeTail = processes.isEmpty() ? "" : processes.get(processes.size() - 1);
+            }
+        }
+
+        private StationTicket(
+                String orderCode,
+                String motherOrderCode,
+                boolean keptMother,
+                Long customerId,
+                Long ownerCustomerId,
+                OwnerType ownerType,
+                String customerName,
+                String processingRequirement,
+                String dueDate,
+                String materialCode,
+                String warehouseCode,
+                String quantityUnit,
+                BigDecimal quantity,
+                BigDecimal weight,
+                List<String> processes
+        ) {
+            this(orderCode, motherOrderCode, keptMother, customerId, ownerCustomerId, ownerType, customerName,
+                    processingRequirement, dueDate, materialCode, warehouseCode, quantityUnit, quantity, weight,
+                    processes, "", "");
+        }
     }
 }
