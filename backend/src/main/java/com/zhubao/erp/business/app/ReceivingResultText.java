@@ -21,7 +21,7 @@ final class ReceivingResultText {
     static String intakePayload(MobileIntakeCommand command, long customerId, String customerName) {
         return join(
                 "customerId=" + customerId,
-                "customerName=" + text(customerName),
+                "customerName=" + (command.customerId() != null && command.customerId() > 0 ? "" : text(customerName)),
                 "sourceType=" + text(command.sourceType()),
                 "courierNo=" + text(command.courierNo()),
                 "requirement=" + text(command.processingRequirement()),

@@ -6,6 +6,7 @@ import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
 import com.zhubao.erp.business.domain.SplitMotherOrderLine;
 import com.zhubao.erp.business.domain.SplitSourceAllocation;
 import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.InMemoryMasterDataRepository;
 import com.zhubao.erp.common.error.BusinessException;
@@ -42,7 +43,9 @@ class MultiMaterialIntakeSplitTest {
                 new MobileIntakeLine("AU9999", "金戒托", amount("3"), "件", amount("4")),
                 new MobileIntakeLine(secondMaterial.materialCode(), "白金戒托", amount("5"), "件", amount("8"))));
         String mother = intake.intake(command, receiver).motherOrderCode();
+        catalog.saveCustomer(new CustomerProfile(1001L, "C-1001", "恒信珠宝新名", "", "", "", "", true));
         assertThat(intake.intake(command, receiver).motherOrderCode()).isEqualTo(mother);
+        assertThat(documents.findMotherOrderByCode(mother).orElseThrow().customerName()).isEqualTo("恒信珠宝");
         assertThat(documents.listReceiptLines(mother)).hasSize(2);
         assertThat(documents.findMotherOrderByCode(mother).orElseThrow().quantity()).isEqualByComparingTo("8");
         assertThat(stock.findAllLedgers()).hasSize(2);
