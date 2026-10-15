@@ -252,7 +252,7 @@ function backToList() {
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <IntakePanel
       title="新建来料"
-      intro="扫运单建母单并入库。已有运单打开原单。超时先核对运单，不盲目再建。"
+      intro="扫运单查看关联母单，也可用同一运单新建另一张母单。提交超时请用原请求号核对或重试。"
       @saved="handleIntakeSaved"
     />
     <section class="module-work-grid inbound-work-grid" aria-label="来料作业主控台">

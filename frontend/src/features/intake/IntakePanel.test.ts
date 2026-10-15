@@ -4,7 +4,7 @@ import { ApiRequestError } from '../../services/apiClient';
 import IntakePanel from './IntakePanel.vue';
 import { queryScanContext } from '../../services/scanContextApi';
 import { fetchMotherOrder, lookupMobileIntake, submitMobileIntake } from '../../services/mobileIntakeApi';
-import { bindEvidence, uploadEvidenceFile } from '../../services/evidenceApi';
+import { bindEvidence, fetchEvidenceBoard, uploadEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
 import { fetchCustomers, fetchMaterials } from '../../services/masterDataApi';
 
@@ -80,6 +80,40 @@ describe('收货面板', () => {
     vi.mocked(fetchMotherOrder).mockReset();
     vi.mocked(uploadEvidenceFile).mockReset();
     vi.mocked(bindEvidence).mockReset();
+    vi.mocked(fetchEvidenceBoard).mockReset();
+    vi.mocked(fetchEvidenceBoard).mockResolvedValue({ links: [], historical: [] });
+  });
+
+  it('同一运单按可见母单分组查看证据且不自动选第一张', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      requiresSelection: true,
+      relatedTargets: [
+        { objectType: 'MOTHER_ORDER', code: 'MD-1', motherOrderCode: 'MD-1', requirement: null, quantity: 3, quantityUnit: '件' },
+        { objectType: 'MOTHER_ORDER', code: 'MD-2', motherOrderCode: 'MD-2', requirement: null, quantity: 5, quantityUnit: '件' },
+        { objectType: 'EXPRESS_NO', code: 'SF1048329001', motherOrderCode: null, requirement: null, quantity: null, quantityUnit: null },
+      ],
+    }));
+    vi.mocked(fetchEvidenceBoard).mockImplementation(async ({ targetCode }) => ({ links: [], historical: [{
+      attachmentCode: `ATT-${targetCode}`, businessCode: targetCode, objectType: 'MOTHER_ORDER',
+      fileName: `${targetCode}-拆包照片.jpg`, mediaType: 'image/jpeg', checksum: '', status: 'ACTIVE',
+      uploadedAt: '', label: '历史证据', sceneCode: 'UNPACK', previewUrl: '', fileState: 'HISTORICAL',
+    }] }));
+    const wrapper = mountPanel();
+    await wrapper.get('[aria-label="快递单号"]').setValue('SF1048329001');
+    await wrapper.get('[aria-label="识别单号"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('关联 2 张可见母单');
+    expect(wrapper.find('[aria-label="已保存母单"]').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '查看关联证据')!.trigger('click');
+    await flushPromises();
+    expect(fetchEvidenceBoard).toHaveBeenCalledTimes(2);
+    expect(fetchEvidenceBoard).toHaveBeenCalledWith({ targetType: 'MOTHER_ORDER', targetCode: 'MD-1' });
+    expect(fetchEvidenceBoard).toHaveBeenCalledWith({ targetType: 'MOTHER_ORDER', targetCode: 'MD-2' });
+    expect(wrapper.text()).toContain('MD-1-拆包照片.jpg');
+    expect(wrapper.text()).toContain('MD-2-拆包照片.jpg');
+    await wrapper.get('[aria-label="快递单号"]').setValue('SF-OTHER');
+    expect(wrapper.find('[aria-label="运单关联证据"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('建单前可以选文件，同一次确认复用请求编号，改内容后换新编号', async () => {

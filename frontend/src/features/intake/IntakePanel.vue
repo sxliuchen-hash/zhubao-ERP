@@ -5,6 +5,8 @@ import { fetchCustomers, fetchMaterials, saveCustomer, saveMaterial,
   type CustomerProfile, type MaterialProfile } from '../../services/masterDataApi';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
+import { fetchEvidenceBoard, type EvidenceBoard } from '../../services/evidenceApi';
 import FieldSteps from '../field/FieldSteps.vue';
 import { keptInputFailure } from '../field/keptInput';
 import OrderContextCard from '../scan/OrderContextCard.vue';
@@ -73,6 +75,11 @@ const created = ref<MobileIntakeResult | null>(null);
 const requestId = ref('');
 const requestFingerprint = ref('');
 const intakeScan = reactive(useScanContext());
+const relatedWaybill = ref('');
+const relatedMotherCodes = ref<string[]>([]);
+const relatedEvidence = ref<Array<{ motherCode: string; board: EvidenceBoard | null; error: string }>>([]);
+const relatedEvidenceLoading = ref(false);
+let relatedEvidenceRequest = 0;
 
 const newExpressCode = computed(() => {
   const target = intakeScan.identity;
@@ -158,6 +165,11 @@ function clearIntakeTarget() {
   requestId.value = '';
   requestFingerprint.value = '';
   formError.value = '';
+  relatedWaybill.value = '';
+  relatedMotherCodes.value = [];
+  relatedEvidence.value = [];
+  relatedEvidenceLoading.value = false;
+  relatedEvidenceRequest += 1;
   if (had) scanHint.value = '单号已变化，请重新识别';
 }
 
@@ -169,6 +181,16 @@ function applyIntake(response: ScanContextResponse | null) {
     return;
   }
   if (response.requiresSelection) {
+    const waybill = response.relatedTargets.find(item => item.objectType === 'EXPRESS_NO' && !item.motherOrderCode)?.code;
+    if (waybill) {
+      relatedEvidenceRequest += 1;
+      relatedEvidenceLoading.value = false;
+      relatedWaybill.value = waybill;
+      relatedMotherCodes.value = [...new Set(response.relatedTargets
+        .filter(item => item.objectType === 'MOTHER_ORDER' && item.code)
+        .map(item => item.code!))];
+      relatedEvidence.value = [];
+    }
     scanHint.value = '请选择具体母单，或选择运单继续新建';
     return;
   }
@@ -191,6 +213,25 @@ function applyIntake(response: ScanContextResponse | null) {
     return;
   }
   scanHint.value = '请扫描快递面单，或系统母单标签';
+}
+
+async function loadRelatedEvidence() {
+  const waybill = relatedWaybill.value;
+  const mothers = [...relatedMotherCodes.value];
+  if (!waybill || !mothers.length || relatedEvidenceLoading.value) return;
+  const revision = intakeScan.revision;
+  const request = ++relatedEvidenceRequest;
+  relatedEvidenceLoading.value = true;
+  try {
+    const settled = await Promise.allSettled(mothers.map(motherCode =>
+      fetchEvidenceBoard({ targetType: 'MOTHER_ORDER', targetCode: motherCode })));
+    if (request !== relatedEvidenceRequest || revision !== intakeScan.revision || waybill !== relatedWaybill.value) return;
+    relatedEvidence.value = settled.map((result, index) => ({
+      motherCode: mothers[index],
+      board: result.status === 'fulfilled' ? result.value : null,
+      error: result.status === 'rejected' ? '证据读取失败或无查看权限' : '',
+    }));
+  } finally { if (request === relatedEvidenceRequest) relatedEvidenceLoading.value = false; }
 }
 
 async function recognizeIntake(draft: ScanDraft) {
@@ -397,6 +438,28 @@ onMounted(loadCatalog);
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
     <p v-if="catalogError" class="operation-feedback danger">{{ catalogError }}</p>
     <OrderContextCard v-if="!newExpressCode && !savedMother" :context="intakeScan.context" @select="chooseIntakeTarget" />
+    <section v-if="relatedWaybill && relatedMotherCodes.length" aria-label="运单关联证据">
+      <h3>运单 {{ relatedWaybill }} 关联证据</h3>
+      <p>关联 {{ relatedMotherCodes.length }} 张可见母单；证据按原母单分组，不改变原始归属。</p>
+      <button type="button" class="secondary-button" :disabled="relatedEvidenceLoading" @click="loadRelatedEvidence">
+        {{ relatedEvidenceLoading ? '正在读取' : '查看关联证据' }}
+      </button>
+      <article v-for="group in relatedEvidence" :key="group.motherCode">
+        <h4>母单 {{ group.motherCode }}</h4>
+        <p v-if="group.error">{{ group.error }}</p>
+        <p v-else-if="!group.board?.links.length && !group.board?.historical.length">暂无证据</p>
+        <ul v-else>
+          <li v-for="item in group.board?.links || []" :key="item.linkCode">
+            {{ item.fileName }} · {{ item.sceneLabel || item.scene }}
+            <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" />
+          </li>
+          <li v-for="item in group.board?.historical || []" :key="item.attachmentCode">
+            {{ item.fileName }} · {{ item.label }}
+            <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" />
+          </li>
+        </ul>
+      </article>
+    </section>
   </section>
 
   <section v-if="draftAvailable && !created" ref="draftPanel" class="section-block intake-draft" aria-label="收货草稿">
