@@ -269,9 +269,11 @@ class ScanContextServiceTest {
         ScanContextResponse intake = context.query(
                 new ScanContextRequest(courier, ScanObjectType.EXPRESS_NO, ScanIntent.INTAKE),
                 receiver());
-        assertThat(intake.target().motherOrderCode()).isEqualTo("MD-20261011-008");
-        assertThat(intake.order().customerName()).isEqualTo("恒信珠宝");
-        assertThat(action(intake, ScanContextService.INTAKE).allowed()).isFalse();
+        assertThat(intake.requiresSelection()).isTrue();
+        assertThat(intake.relatedTargets()).extracting(target -> target.objectType())
+                .contains(ScanObjectType.MOTHER_ORDER, ScanObjectType.EXPRESS_NO);
+        assertThat(intake.relatedTargets()).extracting(target -> target.motherOrderCode())
+                .contains("MD-20261011-008");
 
         ScanContextResponse shipping = context.query(
                 new ScanContextRequest(courier, null, ScanIntent.SHIPPING),

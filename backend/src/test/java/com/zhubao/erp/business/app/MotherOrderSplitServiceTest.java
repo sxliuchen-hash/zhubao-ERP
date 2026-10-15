@@ -82,12 +82,12 @@ class MotherOrderSplitServiceTest {
         assertThat(sticker.qrContent()).startsWith("JG|mother|MD-KEEP-001|0|");
         assertThat(sticker.qrContent().split("\\|", -1)).hasSize(5);
         assertThat(sticker.fields()).extracting(LabelField::name)
-                .contains("验证码", "客户", "加工要求", "期限", "单号");
+                .contains("验证码", "客户", "加工要求", "期限");
+        assertThat(sticker.primaryCode()).isEqualTo("MD-KEEP-001");
         assertThat(value(sticker, "验证码")).isEqualTo(view.verificationCode());
         assertThat(value(sticker, "客户")).isEqualTo("恒信珠宝");
         assertThat(value(sticker, "加工要求")).isEqualTo("内壁刻字");
         assertThat(value(sticker, "期限")).isEqualTo("2026-10-20");
-        assertThat(value(sticker, "单号")).isEqualTo("MD-KEEP-001");
         assertThat(scanCodeParser.resolve(sticker.qrContent(), "lookup").objectType())
                 .isEqualTo(ScanObjectType.MOTHER_ORDER);
         assertThat(scanCodeParser.resolve(sticker.qrContent(), "lookup").code()).isEqualTo("MD-KEEP-001");
@@ -145,7 +145,8 @@ class MotherOrderSplitServiceTest {
             assertThat(value(sticker, "客户")).isEqualTo("恒信珠宝");
             assertThat(value(sticker, "加工要求")).isEqualTo("内壁刻字");
             assertThat(value(sticker, "期限")).isEqualTo("2026-10-20");
-            assertThat(value(sticker, "单号")).isEqualTo(child.code());
+            assertThat(sticker.primaryCode()).isEqualTo(child.code());
+            assertThat(child.code()).matches("ZD-\\d{8}-\\d{4}");
             assertThat(scanCodeParser.resolve(sticker.qrContent(), "lookup").objectType())
                     .isEqualTo(ScanObjectType.WORK_ORDER);
             assertThat(scanCodeParser.resolve(sticker.qrContent(), "lookup").code()).isEqualTo(child.code());

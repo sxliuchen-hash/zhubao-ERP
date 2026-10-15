@@ -84,6 +84,9 @@ public class LabelService {
             throw new BusinessException("缺少标签主编码");
         }
         String code = command.primaryCode().trim();
+        if (type == LabelType.WORK_ORDER && businessDocumentRepository != null) {
+            return generateWorkOrderLabel(code, command.templateCode());
+        }
         LabelTemplate template = resolveTemplate(command.templateCode(), type);
         String brand = template != null && !template.brandTitle().isBlank() ? template.brandTitle() : DEFAULT_BRAND;
         LabelPrinterSetting printerSetting = template != null ? template.printerSetting() : LabelPrinterSetting.defaultSetting();
@@ -242,7 +245,8 @@ public class LabelService {
                 blankToEmpty(record.inboundDate()),
                 blankToEmpty(record.warehouseCode()),
                 firstNonBlank(record.receiverName(), record.unpackSigner()),
-                defaultExpressText(record)
+                defaultExpressText(record),
+                ""
         );
     }
 
@@ -260,7 +264,8 @@ public class LabelService {
                 "",
                 blankToEmpty(record.warehouseCode()),
                 "",
-                ""
+                "",
+                blankToEmpty(record.motherOrderCode())
         );
     }
 
@@ -269,10 +274,13 @@ public class LabelService {
         if (template != null) {
             template.fields().stream()
                     .sorted(Comparator.comparingInt(LabelTemplateField::sortOrder))
+                    .filter(field -> motherFallback || (!"motherOrderCode".equals(field.source()) && !"母单".equals(field.label())))
                     .forEach(field -> addField(fields, field.label(), valueOf(field.source(), facts)));
+            if (!motherFallback) fields.add(Math.min(1, fields.size()), new LabelField("母单", facts.motherOrderCode()));
             return fields;
         }
         addField(fields, "验证码", facts.verificationCode());
+        if (!motherFallback) addField(fields, "母单", facts.motherOrderCode());
         addField(fields, "客户", facts.customer());
         addField(fields, "加工要求", facts.processingRequirement());
         addField(fields, "期限", facts.dueDate());
@@ -325,6 +333,7 @@ public class LabelService {
             case "verificationCode" -> facts.verificationCode();
             case "processingRequirement" -> facts.processingRequirement();
             case "dueDate" -> facts.dueDate();
+            case "motherOrderCode" -> facts.motherOrderCode();
             default -> "";
         };
     }
@@ -421,7 +430,8 @@ public class LabelService {
             String inboundDate,
             String warehouseCode,
             String receiver,
-            String express
+            String express,
+            String motherOrderCode
     ) {
     }
 }

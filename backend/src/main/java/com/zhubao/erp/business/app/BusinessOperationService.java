@@ -152,7 +152,6 @@ public class BusinessOperationService {
         assertRequiredText(command.processingRequirement(), "加工要求不能为空");
         assertDueDate(command.dueDate());
         assertMotherOrderAvailable(command.motherOrderCode(), session);
-        assertCourierAvailable(command.courierNo(), command.motherOrderCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension rawCustomerStock = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -846,19 +845,6 @@ public class BusinessOperationService {
         } catch (DateTimeParseException ex) {
             throw new BusinessException("完成期限需使用 yyyy-MM-dd");
         }
-    }
-
-    private void assertCourierAvailable(String courierNo, String motherOrderCode, WorkSession session) {
-        if (businessDocumentRepository == null || courierNo == null || courierNo.isBlank()) {
-            return;
-        }
-        Optional<MotherOrderRecord> existing = session == null
-                ? businessDocumentRepository.findMotherOrderByCourierNo(courierNo.trim())
-                : businessDocumentRepository.findMotherOrderByCourierNo(courierNo.trim(), session);
-        existing.filter(record -> !record.code().equals(motherOrderCode))
-                .ifPresent(record -> {
-                    throw new BusinessException("快递单号已关联母单：" + record.code());
-                });
     }
 
     private void saveOutboundOrder(ShipFinishedStockCommand command, StockLedgerEntry entry, WorkSession session) {

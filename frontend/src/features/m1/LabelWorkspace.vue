@@ -494,18 +494,23 @@ function moveTemplateField(index: number, direction: -1 | 1) {
 
 const draftFieldExamples: Record<string, string> = {
   verificationCode: 'K7M2', customer: '示例客户', processingRequirement: '按要求加工',
-  dueDate: '2026-10-20', code: 'MD-2026-001', goodsName: '戒托', materialCode: 'WL-001',
+  motherOrderCode: 'MD-20261014-0001',
+  dueDate: '2026-10-20', code: 'MD-20261014-0001', goodsName: '戒托', materialCode: 'WL-001',
   quantity: '2 件', weight: '12 克', inboundDate: '2026-10-14', warehouseCode: 'A01',
   receiver: '收货人', express: '顺丰',
 };
 const templateDraft = computed<LabelPayload>(() => ({
   type: templateForm.value.labelType,
   typeLabel: labelTypeOptions.find((item) => item.value === templateForm.value.labelType)?.label ?? '标签',
-  primaryCode: 'MD-2026-001',
-  qrContent: 'JG|mother|MD-2026-001|0|PREVIEW',
-  fields: templateForm.value.fields.filter((field) => field.label.trim()).map((field) => ({
+  primaryCode: templateForm.value.labelType === 'WORK_ORDER' ? 'ZD-20261014-0001' : 'MD-20261014-0001',
+  qrContent: templateForm.value.labelType === 'WORK_ORDER' ? 'JG|work_order|ZD-20261014-0001|0|PREVIEW' : 'JG|mother|MD-20261014-0001|0|PREVIEW',
+  fields: [
+    ...templateForm.value.fields.filter((field) => field.label.trim() &&
+      !(templateForm.value.labelType === 'WORK_ORDER' && (field.source === 'motherOrderCode' || field.label.trim() === '母单'))).map((field) => ({
     name: field.label.trim(), value: draftFieldExamples[field.source] || '示例内容',
-  })),
+    })),
+    ...(templateForm.value.labelType === 'WORK_ORDER' ? [{ name: '母单', value: 'MD-20261014-0001' }] : []),
+  ],
   footerLeft: draftFieldExamples[templateForm.value.footerLeftSource] || '',
   footerRight: draftFieldExamples[templateForm.value.footerRightSource] || '',
   printedAt: '',
@@ -650,7 +655,7 @@ onMounted(loadTemplates);
           </label>
           <label class="field">
             <span>主编码</span>
-            <input v-model="form.primaryCode" type="text" placeholder="如 CC-20260709-001-JL" />
+            <input v-model="form.primaryCode" type="text" placeholder="如 MD-20261014-0001" />
           </label>
 
           <div class="fields-block">

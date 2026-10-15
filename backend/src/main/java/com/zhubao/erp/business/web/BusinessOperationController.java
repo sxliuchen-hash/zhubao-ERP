@@ -121,9 +121,7 @@ public class BusinessOperationController {
     @GetMapping("/mobile-intakes")
     public ApiResponse<MobileIntakeLookup> lookupMobileIntake(@RequestParam String courierNo, HttpServletRequest request) {
         OperatorContext context = operatorContextResolver.requireSession(request);
-        MobileIntakeLookup lookup = mobileIntakeService.lookup(courierNo);
-        if (lookup.found() && dataAccess != null) dataAccess.assertCanRead(context, lookup.motherOrderCode());
-        return ApiResponse.ok(lookup);
+        return ApiResponse.ok(mobileIntakeService.lookup(courierNo, context));
     }
 
     @PostMapping("/mobile-intakes")
@@ -133,8 +131,6 @@ public class BusinessOperationController {
     ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         if (dataAccess != null) dataAccess.assertCustomer(context, command.customerId(), "");
-        MobileIntakeLookup existing = mobileIntakeService.lookup(command.courierNo());
-        if (existing.found() && dataAccess != null) dataAccess.assertCanRead(context, existing.motherOrderCode());
         return ApiResponse.ok(mobileIntakeService.intake(command, context));
     }
 

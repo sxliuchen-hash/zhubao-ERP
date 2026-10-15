@@ -2,12 +2,12 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
-import com.zhubao.erp.business.domain.DuplicateCourierException;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
 import com.zhubao.erp.business.domain.MobileIntakeLookup;
 import com.zhubao.erp.business.domain.MobileIntakeResult;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.OrderCodes;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.scan.app.CourierNumbers;
 import com.zhubao.erp.security.domain.DataScope;
@@ -19,10 +19,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Set;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 手机收货：按快递单号打开已有母单，或生成新母单并写入库存台账。
@@ -30,7 +31,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class MobileIntakeService {
 
-    private static final DateTimeFormatter DAY = DateTimeFormatter.BASIC_ISO_DATE;
     private static final Map<String, Long> KNOWN_CUSTOMERS = Map.of(
             "恒信珠宝", 1001L,
             "雅辰饰品", 1002L,
@@ -41,7 +41,9 @@ public class MobileIntakeService {
     private final BusinessOperationService businessOperationService;
     private final BusinessDocumentRepository businessDocumentRepository;
     private final BusinessWorkUnit workUnit;
-    private final AtomicInteger sequence = new AtomicInteger();
+    /** 本进程已发出、事务可能尚未提交的母单号，避免并发收货拿到同一个流水。 */
+    private final Set<String> reservedMotherCodes = ConcurrentHashMap.newKeySet();
+    private final Object motherCodeLock = new Object();
 
     public MobileIntakeService(
             BusinessOperationService businessOperationService,
@@ -62,13 +64,24 @@ public class MobileIntakeService {
     }
 
     public MobileIntakeLookup lookup(String courierNo) {
+        return lookup(courierNo, null);
+    }
+
+    public MobileIntakeLookup lookup(String courierNo, OperatorContext operator) {
         String normalized = CourierNumbers.normalize(courierNo);
         if (!CourierNumbers.isWaybill(normalized)) {
             throw new BusinessException("未识别的快递单号");
         }
-        return businessDocumentRepository.findMotherOrderByCourierNo(normalized)
-                .map(this::lookupOf)
-                .orElseGet(() -> MobileIntakeLookup.missing(normalized));
+        List<MotherOrderRecord> found = businessDocumentRepository.listMotherOrdersByCourierNo(normalized).stream()
+                .filter(record -> canRead(operator, record))
+                .toList();
+        if (found.isEmpty()) return MobileIntakeLookup.missing(normalized);
+        MotherOrderRecord only = found.size() == 1 ? found.get(0) : null;
+        return new MobileIntakeLookup(true, only == null ? "" : only.code(), normalized,
+                only == null ? "" : only.customerName(), only == null ? "" : only.processingRequirement(),
+                only == null ? "" : only.dueDate(), only == null ? "" : only.goodsName(),
+                found.stream().map(record -> new MobileIntakeLookup.Candidate(record.code(), record.customerName(),
+                        record.createdAt(), record.goodsName(), record.processingRequirement(), record.dueDate())).toList());
     }
 
     public MobileIntakeResult intake(MobileIntakeCommand command, OperatorContext operator) {
@@ -76,17 +89,19 @@ public class MobileIntakeService {
             throw new BusinessException("请先登录后再收货");
         }
         String courierNo = CourierNumbers.normalize(command.courierNo());
-        if (!CourierNumbers.isWaybill(courierNo)) {
+        String sourceType = command.sourceType() == null || command.sourceType().isBlank() ? "COURIER" : command.sourceType().trim();
+        if (!List.of("COURIER", "CUSTOMER_DELIVERY", "INTERNAL_OTHER").contains(sourceType)) {
+            throw new BusinessException("收货来源无效");
+        }
+        if (!courierNo.isBlank() && !CourierNumbers.isWaybill(courierNo)) {
             throw new BusinessException("未识别的快递单号");
         }
         String customerName = command.customerName().trim();
         assertCustomerAllowed(operator, customerName, command.customerId());
-        if (command.requestId() != null && !command.requestId().isBlank()) {
-            return intakeOnce(command, operator.operator().trim(), courierNo, customerName);
+        if (command.requestId() == null || command.requestId().isBlank()) {
+            throw new BusinessException("建单必须提供请求编号，请升级客户端后重试");
         }
-        return businessDocumentRepository.findMotherOrderByCourierNo(courierNo)
-                .map(record -> resultOf(record, true))
-                .orElseGet(() -> create(command, operator.operator().trim(), courierNo, customerName, null));
+        return intakeOnce(command, operator.operator().trim(), courierNo, customerName);
     }
 
     private MobileIntakeResult intakeOnce(
@@ -99,64 +114,21 @@ public class MobileIntakeService {
             throw new BusinessException("来料回放尚未装配");
         }
         long customerId = resolveCustomerId(customerName, command.customerId());
-        try {
-            String text = workUnit.execute(new CommandCall(
+        String text = workUnit.execute(new CommandCall(
                     command.requestId(),
                     operator,
                     "INTAKE_CREATE",
-                    "WAYBILL",
-                    courierNo,
+                    "REQUEST",
+                    command.requestId(),
                     ReceivingResultText.intakePayload(command, customerId, customerName)
-            ), session -> createOrOpen(command, operator, courierNo, customerName, session));
-            return ReceivingResultText.intake(text);
-        } catch (DuplicateCourierException ex) {
-            return openCommitted(courierNo);
-        }
-    }
-
-    private String createOrOpen(
-            MobileIntakeCommand command,
-            String operator,
-            String courierNo,
-            String customerName,
-            WorkSession session
-    ) {
-        Optional<MotherOrderRecord> existing = businessDocumentRepository.findMotherOrderByCourierNo(courierNo, session);
-        if (existing.isPresent()) {
-            return ReceivingResultText.intake(resultOf(existing.get(), true));
-        }
-        try {
-            return ReceivingResultText.intake(create(command, operator, courierNo, customerName, session));
-        } catch (BusinessException ex) {
-            if (ex.getMessage() != null && ex.getMessage().startsWith("快递单号已关联母单")) {
-                MotherOrderRecord opened = businessDocumentRepository.findMotherOrderByCourierNo(courierNo, session)
-                        .orElseThrow(() -> ex);
-                return ReceivingResultText.intake(resultOf(opened, true));
-            }
-            throw ex;
-        }
+        ), session -> ReceivingResultText.intake(create(command, operator, courierNo, customerName, session)));
+        return ReceivingResultText.intake(text);
     }
 
     public MobileIntakeResult view(String motherOrderCode) {
         MotherOrderRecord record = businessDocumentRepository.findMotherOrderByCode(motherOrderCode)
                 .orElseThrow(() -> new BusinessException("母单不存在：" + motherOrderCode));
         return resultOf(record, true);
-    }
-
-    private MobileIntakeResult openCommitted(String courierNo) {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            Optional<MotherOrderRecord> found = businessDocumentRepository.findMotherOrderByCourierNo(courierNo);
-            if (found.isPresent()) {
-                return resultOf(found.get(), true);
-            }
-            try {
-                Thread.sleep(25);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        throw new BusinessException("快递单号已关联母单，请按运单重新打开");
     }
 
     private MobileIntakeResult create(
@@ -171,9 +143,7 @@ public class MobileIntakeService {
         String materialCode = command.materialCode() == null || command.materialCode().isBlank()
                 ? "MAT-MOBILE"
                 : command.materialCode().trim();
-        String expressCompany = command.expressCompany() == null || command.expressCompany().isBlank()
-                ? "快递"
-                : command.expressCompany().trim();
+        String expressCompany = command.expressCompany() == null ? "" : command.expressCompany().trim();
         String quantityUnit = command.quantityUnit() == null || command.quantityUnit().isBlank()
                 ? "件"
                 : command.quantityUnit().trim();
@@ -189,7 +159,7 @@ public class MobileIntakeService {
                 operator,
                 operator,
                 command.goodsName().trim(),
-                "手机收货",
+                command.sourceType() == null ? "COURIER" : command.sourceType(),
                 null,
                 "",
                 "RAW-CUSTOMER",
@@ -198,7 +168,7 @@ public class MobileIntakeService {
                 command.weight(),
                 operator,
                 courierNo,
-                "手机收货生成母单",
+                "收货生成母单",
                 command.processingRequirement().trim(),
                 command.dueDate().trim(),
                 customerName
@@ -215,17 +185,18 @@ public class MobileIntakeService {
     }
 
     private String nextMotherOrderCode(WorkSession session) {
-        String day = LocalDate.now().format(DAY);
-        for (int attempt = 0; attempt < 20; attempt++) {
-            String code = "MD-" + day + "-" + String.format("%03d", sequence.incrementAndGet());
-            boolean exists = session == null
-                    ? businessDocumentRepository.motherOrderExists(code)
-                    : businessDocumentRepository.motherOrderExists(code, session);
-            if (!exists) {
-                return code;
-            }
+        synchronized (motherCodeLock) {
+            String code = OrderCodes.next(
+                    "MD",
+                    LocalDate.now(),
+                    businessDocumentRepository.listMotherOrders().stream().map(MotherOrderRecord::code).toList(),
+                    candidate -> reservedMotherCodes.contains(candidate) || (session == null
+                            ? businessDocumentRepository.motherOrderExists(candidate)
+                            : businessDocumentRepository.motherOrderExists(candidate, session))
+            );
+            reservedMotherCodes.add(code);
+            return code;
         }
-        throw new BusinessException("母单号生成失败，请重试");
     }
 
     private long resolveCustomerId(String customerName, Long provided) {
@@ -251,16 +222,10 @@ public class MobileIntakeService {
         }
     }
 
-    private MobileIntakeLookup lookupOf(MotherOrderRecord record) {
-        return new MobileIntakeLookup(
-                true,
-                record.code(),
-                record.courierNo(),
-                record.customerName(),
-                record.processingRequirement(),
-                record.dueDate(),
-                record.goodsName()
-        );
+    private boolean canRead(OperatorContext operator, MotherOrderRecord record) {
+        if (operator == null || operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) return true;
+        return operator.customerScope().contains(String.valueOf(record.customerId()))
+                || operator.customerScope().contains(record.customerName());
     }
 
     private MobileIntakeResult resultOf(MotherOrderRecord record, boolean alreadyExists) {

@@ -170,27 +170,26 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
-    public Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo) {
+    public List<MotherOrderRecord> listMotherOrdersByCourierNo(String courierNo) {
         if (courierNo == null || courierNo.isBlank()) {
-            return Optional.empty();
+            return List.of();
         }
-        String sql = motherOrderSelect() + " where inbound_express_no = ?";
-        return queryMotherOrders(sql, courierNo).stream().findFirst();
+        String sql = motherOrderSelect() + " where inbound_express_no = ? order by created_at desc, code";
+        return queryMotherOrders(sql, courierNo);
     }
 
     @Override
-    public Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo, WorkSession session) {
+    public List<MotherOrderRecord> listMotherOrdersByCourierNo(String courierNo, WorkSession session) {
         if (courierNo == null || courierNo.isBlank()) {
-            return Optional.empty();
+            return List.of();
         }
-        String sql = motherOrderSelect() + " where inbound_express_no = ?";
+        String sql = motherOrderSelect() + " where inbound_express_no = ? order by created_at desc, code";
         try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
             statement.setString(1, courierNo);
             try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
-                    return Optional.empty();
-                }
-                return Optional.of(mapMotherOrder(rs));
+                List<MotherOrderRecord> found = new ArrayList<>();
+                while (rs.next()) found.add(mapMotherOrder(rs));
+                return found;
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to query mother orders", ex);

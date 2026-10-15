@@ -8,10 +8,12 @@ export interface MobileIntakeLookup {
   processingRequirement: string;
   dueDate: string;
   goodsName: string;
+  candidates?: Array<{ motherOrderCode: string; customerName: string; createdAt: string; goodsName: string; processingRequirement: string; dueDate: string }>;
 }
 
 export interface MobileIntakeRequest {
   courierNo: string;
+  sourceType: 'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER';
   customerName: string;
   processingRequirement: string;
   dueDate: string;

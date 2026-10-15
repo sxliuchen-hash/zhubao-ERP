@@ -12,8 +12,6 @@ import { useTraceTarget } from '../scan/useTraceTarget';
 import type { TraceTarget } from '../scan/traceTarget';
 import type { ScanContextResponse, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
-  fetchMotherOrder,
-  lookupMobileIntake,
   submitMobileIntake,
   type MobileIntakeResult,
 } from '../../services/mobileIntakeApi';
@@ -43,7 +41,10 @@ const dueDate = ref('');
 const goodsName = ref('');
 const quantity = ref('1');
 const weight = ref('');
-const expressCompany = ref('顺丰');
+const expressCompany = ref('');
+const sourceType = ref<'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER'>('COURIER');
+const manualDraft = ref(false);
+const manualCourier = ref('');
 const submitting = ref(false);
 const entryPanel = ref<HTMLElement | null>(null);
 const draftPanel = ref<HTMLElement | null>(null);
@@ -60,6 +61,7 @@ const newExpressCode = computed(() => {
   if (action && !action.allowed) return '';
   return target.code ?? '';
 });
+const draftAvailable = computed(() => Boolean(newExpressCode.value) || manualDraft.value || sourceType.value !== 'COURIER');
 
 const intakeMotherCode = computed(() => {
   if (created.value?.motherOrderCode) return created.value.motherOrderCode;
@@ -74,7 +76,7 @@ const savedMother = computed(() => Boolean(created.value) || Boolean(intakeMothe
 
 const intakeStep = computed(() => {
   if (savedMother.value) return 2;
-  if (newExpressCode.value) return 1;
+  if (draftAvailable.value) return 1;
   return 0;
 });
 
@@ -114,6 +116,10 @@ function startNextIntake() {
   goodsName.value = '';
   quantity.value = '1';
   weight.value = '';
+  expressCompany.value = '';
+  sourceType.value = 'COURIER';
+  manualDraft.value = false;
+  manualCourier.value = '';
   showPanel(entryPanel);
 }
 
@@ -139,7 +145,7 @@ function applyIntake(response: ScanContextResponse | null) {
     return;
   }
   if (response.requiresSelection) {
-    scanHint.value = '请选择要打开的单据';
+    scanHint.value = '请选择具体母单，或选择运单继续新建';
     return;
   }
   const target = canonicalTarget(response);
@@ -148,7 +154,8 @@ function applyIntake(response: ScanContextResponse | null) {
     return;
   }
   if (target.objectType === 'EXPRESS_NO' && !target.motherOrderCode) {
-    scanHint.value = '这是新的快递，请填写客户、加工要求和期限';
+    sourceType.value = 'COURIER';
+    scanHint.value = '已选运单，可新建一张母单';
     showPanel(draftPanel);
     return;
   }
@@ -201,7 +208,8 @@ async function chooseIntakeTarget(related: ScanRelatedTarget) {
 
 function confirmationFingerprint() {
   return [
-    newExpressCode.value,
+    sourceType.value,
+    newExpressCode.value || manualCourier.value.trim(),
     customerName.value.trim(),
     processingRequirement.value.trim(),
     dueDate.value,
@@ -222,25 +230,13 @@ function ensureRequestId() {
   return requestId.value;
 }
 
-async function openExistingWaybill(courier: string, seen: number) {
-  const existing = await lookupMobileIntake(courier);
-  if (intakeScan.revision !== seen || !existing.found || !existing.motherOrderCode) return false;
-  const result = await fetchMotherOrder(existing.motherOrderCode);
-  if (intakeScan.revision !== seen) return false;
-  created.value = result;
-  emit('saved', created.value);
-  showPanel(savedPanel);
-  formError.value = '已按运单打开原单，没有再次建单';
-  return true;
-}
-
 async function createMotherOrder() {
   if (submitting.value) return;
   formError.value = '';
-  const courier = newExpressCode.value;
+  const courier = sourceType.value === 'COURIER' ? (newExpressCode.value || manualCourier.value.trim()) : '';
   const seen = intakeScan.revision;
-  if (!courier || intakeScan.loading) {
-    formError.value = '请先识别快递单号';
+  if (intakeScan.loading) {
+    formError.value = '请等待扫码识别完成';
     return;
   }
   if (!customerName.value.trim() || !processingRequirement.value.trim() || !dueDate.value.trim()) {
@@ -256,6 +252,7 @@ async function createMotherOrder() {
   try {
     const result = await submitMobileIntake({
       courierNo: courier,
+      sourceType: sourceType.value,
       customerName: customerName.value.trim(),
       processingRequirement: processingRequirement.value.trim(),
       dueDate: dueDate.value,
@@ -271,11 +268,6 @@ async function createMotherOrder() {
     showPanel(savedPanel);
   } catch (error) {
     if (intakeScan.revision !== seen) return;
-    try {
-      if (await openExistingWaybill(courier, seen)) return;
-    } catch {
-      // 运单核对失败时保留原来的提交错误，方便原请求重试。
-    }
     if (intakeScan.revision === seen) formError.value = keptInputFailure(error, '生成母单失败');
   } finally {
     submitting.value = false;
@@ -291,6 +283,15 @@ async function createMotherOrder() {
         <p>{{ intro }}</p>
       </div>
     </div>
+    <label class="field">
+      <span>收货来源</span>
+      <select v-model="sourceType" aria-label="收货来源" @change="clearIntakeTarget">
+        <option value="COURIER">快递寄来</option>
+        <option value="CUSTOMER_DELIVERY">客户送达</option>
+        <option value="INTERNAL_OTHER">厂内接收／其他</option>
+      </select>
+    </label>
+    <button v-if="sourceType === 'COURIER' && !draftAvailable" class="secondary-button" type="button" @click="manualDraft = true">无运单直接建单</button>
     <FieldSteps v-if="field" :steps="['扫码识别', '填写要求', '保存证据']" :current="intakeStep" />
     <ScanInput
       v-model="scanText"
@@ -309,15 +310,19 @@ async function createMotherOrder() {
     <OrderContextCard v-if="!newExpressCode && !savedMother" :context="intakeScan.context" @select="chooseIntakeTarget" />
   </section>
 
-  <section v-if="newExpressCode && !created" ref="draftPanel" class="section-block intake-draft" aria-label="收货草稿">
+  <section v-if="draftAvailable && !created" ref="draftPanel" class="section-block intake-draft" aria-label="收货草稿">
     <div class="field-card-head">
       <h2>新建母单</h2>
       <StatusBadge v-if="field" label="草稿" tone="gray" />
     </div>
-    <p>快递单号 {{ newExpressCode }}</p>
+    <p v-if="newExpressCode">运单号 {{ newExpressCode }}</p>
     <p v-if="field">草稿尚未建单，填好资料后点击“生成母单”。</p>
     <p>照片或视频可稍后补传，不影响建单。</p>
     <div class="intake-form">
+      <label v-if="sourceType === 'COURIER' && !newExpressCode" class="field">
+        <span>运单号（可不填）</span>
+        <input v-model="manualCourier" type="text" aria-label="运单号（可不填）" />
+      </label>
       <label class="field">
         <span>客户</span>
         <input v-model="customerName" type="text" aria-label="客户" />
@@ -330,7 +335,7 @@ async function createMotherOrder() {
         <span>完成期限</span>
         <input v-model="dueDate" type="date" aria-label="完成期限" />
       </label>
-      <label class="field">
+      <label v-if="sourceType === 'COURIER'" class="field">
         <span>快递公司</span>
         <input v-model="expressCompany" type="text" aria-label="快递公司" />
       </label>
@@ -382,7 +387,7 @@ async function createMotherOrder() {
     </details>
   </article>
 
-  <section v-if="newExpressCode || intakeMotherCode" class="section-block">
+  <section v-if="draftAvailable || intakeMotherCode" class="section-block">
     <h2 v-if="field && !savedMother">草稿文件</h2>
     <h2 v-else-if="field && savedMother">已保存后的拆包证据</h2>
     <h2 v-else>拆包证据</h2>
@@ -403,7 +408,7 @@ async function createMotherOrder() {
     />
   </section>
 
-  <div v-if="field && newExpressCode && !created" class="field-dock">
+  <div v-if="field && draftAvailable && !created" class="field-dock">
     <button class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
       {{ submitting ? '正在生成' : '生成母单' }}
     </button>

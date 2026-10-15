@@ -90,10 +90,11 @@ class IntakeReceivingTest {
         assertThat(world.ledgers()).isEqualTo(1);
 
         MobileIntakeResult opened = world.intake().intake(intake("req-intake-02", "恒信珠宝", "另一条要求", "9"), receiver);
-        assertThat(opened.alreadyExists()).isTrue();
-        assertThat(opened.motherOrderCode()).isEqualTo(created.motherOrderCode());
-        assertThat(world.mothers()).isEqualTo(1);
-        assertThat(world.ledgers()).isEqualTo(1);
+        assertThat(opened.alreadyExists()).isFalse();
+        assertThat(opened.motherOrderCode()).isNotEqualTo(created.motherOrderCode());
+        assertThat(world.intake().lookup("SF1048329001").candidates()).hasSize(2);
+        assertThat(world.mothers()).isEqualTo(2);
+        assertThat(world.ledgers()).isEqualTo(2);
 
         World failingMother = world.withProbes(CommandResultProbe.NONE, () -> {
             throw new IllegalStateException("母单保存失败");
@@ -101,8 +102,8 @@ class IntakeReceivingTest {
         assertThatThrownBy(() -> failingMother.intake().intake(intake("req-intake-03", "璟瑞工贸", "镶嵌", "1", "SF2000000001"), receiver))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("母单保存失败");
-        assertThat(world.mothers()).isEqualTo(1);
-        assertThat(world.ledgers()).isEqualTo(1);
+        assertThat(world.mothers()).isEqualTo(2);
+        assertThat(world.ledgers()).isEqualTo(2);
         assertThat(failingMother.requests()).isEqualTo(world.requests());
 
         World failingResult = world.withProbes(() -> {
@@ -111,13 +112,13 @@ class IntakeReceivingTest {
         assertThatThrownBy(() -> failingResult.intake().intake(intake("req-intake-04", "瑞禾珠宝", "抛光", "1", "SF2000000002"), receiver))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("请求结果保存失败");
-        assertThat(world.mothers()).isEqualTo(1);
-        assertThat(world.ledgers()).isEqualTo(1);
+        assertThat(world.mothers()).isEqualTo(2);
+        assertThat(world.ledgers()).isEqualTo(2);
 
         race(world, "req-intake-05", "req-intake-05", "SF3000000001");
         race(world, "req-intake-06", "req-intake-07", "SF3000000002");
-        assertThat(world.mothers()).isEqualTo(3);
-        assertThat(world.ledgers()).isEqualTo(3);
+        assertThat(world.mothers()).isEqualTo(5);
+        assertThat(world.ledgers()).isEqualTo(5);
     }
 
     private void assertInbound(World world) {
@@ -169,8 +170,13 @@ class IntakeReceivingTest {
                 return world.intake().intake(intake(rightRequestId, "恒信珠宝", "并发建单", "2", courier), receiver);
             });
             start.countDown();
-            assertThat(left.get().motherOrderCode()).isEqualTo(right.get().motherOrderCode());
-            assertThat(left.get().ledgerCode()).isEqualTo(right.get().ledgerCode());
+            if (leftRequestId.equals(rightRequestId)) {
+                assertThat(left.get().motherOrderCode()).isEqualTo(right.get().motherOrderCode());
+                assertThat(left.get().ledgerCode()).isEqualTo(right.get().ledgerCode());
+            } else {
+                assertThat(left.get().motherOrderCode()).isNotEqualTo(right.get().motherOrderCode());
+                assertThat(left.get().ledgerCode()).isNotEqualTo(right.get().ledgerCode());
+            }
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
         } finally {
@@ -284,7 +290,7 @@ class IntakeReceivingTest {
         public int requests() {
             int count = 0;
             for (String id : new String[]{
-                    "req-intake-01", "req-intake-02", "req-intake-03", "req-intake-04", "req-intake-05",
+                    "req-intake-01", "req-intake-02", "req-intake-03", "req-intake-04", "req-intake-05", "req-intake-06", "req-intake-07",
                     "req-inbound-01", "req-inbound-02"
             }) {
                 if (requests.findByRequestId(id).isPresent()) {
@@ -364,6 +370,7 @@ class IntakeReceivingTest {
                         """);
                 apply(statement, "src/main/resources/db/mysql/V44__m3_command_request.sql");
                 apply(statement, "src/main/resources/db/mysql/V45__m3_mother_order_courier_identity.sql");
+                apply(statement, "src/main/resources/db/mysql/V58__m3_courier_multi_order.sql");
             }
             documents = new JdbcBusinessDocumentRepository(dataSource);
             stock = new JdbcStockLedgerRepository(dataSource);

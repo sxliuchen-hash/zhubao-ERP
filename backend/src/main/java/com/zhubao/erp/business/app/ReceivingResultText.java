@@ -22,12 +22,14 @@ final class ReceivingResultText {
         return join(
                 "customerId=" + customerId,
                 "customerName=" + text(customerName),
+                "sourceType=" + text(command.sourceType()),
+                "courierNo=" + text(command.courierNo()),
                 "requirement=" + text(command.processingRequirement()),
                 "dueDate=" + text(command.dueDate()),
                 "goodsName=" + text(command.goodsName()),
                 "quantity=" + number(command.quantity()),
                 "weight=" + number(command.weight()),
-                "express=" + text(blankTo(command.expressCompany(), "快递")),
+                "express=" + text(command.expressCompany()),
                 "material=" + text(blankTo(command.materialCode(), "MAT-MOBILE")),
                 "unit=" + text(blankTo(command.quantityUnit(), "件"))
         );

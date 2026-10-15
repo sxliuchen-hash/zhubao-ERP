@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.app.BusinessOperationService;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
+import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
@@ -104,6 +105,26 @@ class PrintJobServiceTest {
         JsonNode defaultSnapshot = new ObjectMapper().readTree(defaultJob.contentSnapshot());
         assertThat(defaultSnapshot.path("fields").isArray()).isTrue();
         assertThat(defaultSnapshot.path("qr").asText()).startsWith("JG|mother|MD-LAYOUT|");
+    }
+
+    @Test
+    void 子单标签固定读取母单关系并冻结到新任务快照() throws Exception {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord(
+                "ZD-20261015-0001", "MD-20261015-0007", 8L, "恒信珠宝", "抛光", "2026-10-20",
+                "AU9999", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW-CUSTOMER",
+                "抛光", "K7M2", "LG-1", "何琳", "2026-10-15T10:00:00"));
+        service.setDocumentAccess(documents, null);
+        service.setLabelService(new LabelService(documents, new InMemoryLabelTemplateRepository()));
+
+        PrintJob job = service.create("print-child-0001", "ZD-20261015-0001", "FLOW", 1, "何琳");
+        JsonNode snapshot = new ObjectMapper().readTree(job.contentSnapshot());
+        assertThat(snapshot.path("primaryCode").asText()).isEqualTo("ZD-20261015-0001");
+        assertThat(snapshot.path("qr").asText()).startsWith("JG|work_order|ZD-20261015-0001|");
+        assertThat(snapshot.path("fields").toString()).contains("\"name\":\"母单\"")
+                .contains("MD-20261015-0007");
+        assertThat(service.retry(job.id(), "print-child-retry", "核纸后补打", "何琳").contentSnapshot())
+                .isEqualTo(job.contentSnapshot());
     }
 
     @Test

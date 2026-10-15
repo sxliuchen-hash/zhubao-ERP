@@ -55,3 +55,4 @@
 55	TABLE	biz_label_trace
 56	ROW	sys_label_default_revision	revision_code	V56
 57	COLUMN	sys_label_template	layout_json
+58	TABLE	biz_courier_multi_order_revision

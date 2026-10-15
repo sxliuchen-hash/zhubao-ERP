@@ -160,6 +160,9 @@ public class ScanContextService {
             if (objectType != null && objectType != parsed.objectType()) {
                 throw new BusinessException("对象类型与贴纸不一致");
             }
+            if (parsed.objectType() == ScanObjectType.EXPRESS_NO && intent != ScanIntent.SHIPPING) {
+                return resolveExpress(parsed.code(), intent, operator);
+            }
             Hit hit = loadExplicit(parsed.objectType(), parsed.code(), intent, operator);
             return Resolution.found(hit);
         }
@@ -168,7 +171,9 @@ public class ScanContextService {
             if (objectType == ScanObjectType.EXPRESS_NO && code.isBlank()) {
                 throw new BusinessException("未识别的快递单号");
             }
-            return Resolution.found(loadExplicit(objectType, code, intent, operator));
+            return objectType == ScanObjectType.EXPRESS_NO && intent != ScanIntent.SHIPPING
+                    ? resolveExpress(code, intent, operator)
+                    : Resolution.found(loadExplicit(objectType, code, intent, operator));
         }
         List<Hit> found = exactHits(content);
         List<Hit> readable = found.stream().filter(hit -> readable(operator, hit)).toList();
@@ -176,7 +181,7 @@ public class ScanContextService {
         if (!readable.isEmpty()) {
             List<Hit> options = new ArrayList<>(readable);
             if (!waybill.isBlank() && intent != ScanIntent.SHIPPING) {
-                addExpressOption(options, waybill, operator);
+                addExpressOption(options, waybill, operator, intent);
             }
             if (intent == ScanIntent.SHIPPING && !waybill.isBlank() && readable.stream().noneMatch(hit -> hit.type() == ScanObjectType.EXPRESS_NO)) {
                 options.add(expressHit(waybill, null));
@@ -191,7 +196,9 @@ public class ScanContextService {
             throw new PermissionDeniedException(OUT_OF_SCOPE);
         }
         if (!waybill.isBlank()) {
-            return Resolution.found(loadExplicit(ScanObjectType.EXPRESS_NO, waybill, intent, operator));
+            return intent == ScanIntent.SHIPPING
+                    ? Resolution.found(loadExplicit(ScanObjectType.EXPRESS_NO, waybill, intent, operator))
+                    : resolveExpress(waybill, intent, operator);
         }
         if (operator.dataScope() == DataScope.ALL) {
             throw new BusinessException("未识别的二维码内容");
@@ -199,12 +206,21 @@ public class ScanContextService {
         throw new PermissionDeniedException(OUT_OF_SCOPE);
     }
 
-    private void addExpressOption(List<Hit> options, String waybill, OperatorContext operator) {
-        MotherOrderRecord mother = documents.findMotherOrderByCourierNo(waybill).orElse(null);
-        if (mother != null && !dataAccess.canRead(operator, mother.code())) {
-            return;
+    private Resolution resolveExpress(String waybill, ScanIntent intent, OperatorContext operator) {
+        List<Hit> options = new ArrayList<>();
+        addExpressOption(options, waybill, operator, intent);
+        if (options.size() == 1) return Resolution.found(options.get(0));
+        return Resolution.choose(options.stream().map(this::relatedOf).toList());
+    }
+
+    private void addExpressOption(List<Hit> options, String waybill, OperatorContext operator, ScanIntent intent) {
+        List<MotherOrderRecord> found = documents.listMotherOrdersByCourierNo(waybill);
+        for (MotherOrderRecord mother : found) {
+            if (dataAccess.canRead(operator, mother.code())) {
+                options.add(new Hit(ScanObjectType.MOTHER_ORDER, mother.code(), mother, null, null, null, false));
+            }
         }
-        options.add(expressHit(waybill, mother));
+        if (intent == ScanIntent.INTAKE || found.isEmpty()) options.add(expressHit(waybill, null));
     }
 
     private Hit loadExplicit(ScanObjectType type, String code, ScanIntent intent, OperatorContext operator) {
@@ -212,11 +228,9 @@ public class ScanContextService {
             if (intent == ScanIntent.SHIPPING) {
                 return expressHit(code, null);
             }
-            MotherOrderRecord mother = documents.findMotherOrderByCourierNo(code).orElse(null);
-            if (mother != null && !dataAccess.canRead(operator, mother.code())) {
-                throw new PermissionDeniedException(OUT_OF_SCOPE);
-            }
-            return expressHit(code, mother);
+            List<MotherOrderRecord> found = documents.listMotherOrdersByCourierNo(code);
+            if (!found.isEmpty()) throw new BusinessException("运单关联母单，请选择具体母单");
+            return expressHit(code, null);
         }
         List<Hit> found = exactHits(code).stream().filter(hit -> hit.type() == type).toList();
         if (found.isEmpty()) {

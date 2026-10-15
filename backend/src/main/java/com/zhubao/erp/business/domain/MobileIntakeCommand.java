@@ -7,10 +7,10 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 /**
- * 手机收货。母单号由系统生成，快递单号用来匹配已有母单。
+ * 收货建单。母单号由系统生成，运单只记录来源。
  */
 public record MobileIntakeCommand(
-        @NotBlank(message = "快递单号不能为空") String courierNo,
+        String courierNo,
         @NotBlank(message = "客户不能为空") String customerName,
         Long customerId,
         @NotBlank(message = "加工要求不能为空") String processingRequirement,
@@ -21,8 +21,17 @@ public record MobileIntakeCommand(
         String expressCompany,
         String materialCode,
         String quantityUnit,
-        String requestId
+        String requestId,
+        String sourceType
 ) {
+    public MobileIntakeCommand(String courierNo, String customerName, Long customerId,
+            String processingRequirement, String dueDate, String goodsName,
+            BigDecimal quantity, BigDecimal weight, String expressCompany,
+            String materialCode, String quantityUnit, String requestId) {
+        this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName,
+                quantity, weight, expressCompany, materialCode, quantityUnit, requestId, "COURIER");
+    }
+
     public MobileIntakeCommand(
             String courierNo,
             String customerName,
@@ -37,6 +46,6 @@ public record MobileIntakeCommand(
             String quantityUnit
     ) {
         this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName,
-                quantity, weight, expressCompany, materialCode, quantityUnit, null);
+                quantity, weight, expressCompany, materialCode, quantityUnit, null, "COURIER");
     }
 }

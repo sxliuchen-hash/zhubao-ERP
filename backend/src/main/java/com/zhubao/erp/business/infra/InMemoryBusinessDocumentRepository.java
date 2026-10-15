@@ -2,7 +2,6 @@ package com.zhubao.erp.business.infra;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
-import com.zhubao.erp.business.domain.DuplicateCourierException;
 import com.zhubao.erp.business.domain.LabelReprintLog;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
@@ -60,13 +59,6 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     @Override
     public synchronized MotherOrderRecord saveMotherOrder(MotherOrderRecord record, WorkSession session) {
         requireSession(session);
-        String identity = courierIdentity(record.courierNo());
-        if (identity != null) {
-            Optional<MotherOrderRecord> occupied = findMotherOrderByCourierNo(identity);
-            if (occupied.isPresent() && !occupied.get().code().equals(record.code())) {
-                throw new DuplicateCourierException();
-            }
-        }
         MotherOrderRecord previous = motherOrders.get(record.code());
         motherOrders.put(record.code(), record);
         session.onRollback(() -> {
@@ -91,32 +83,26 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
-    public Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo) {
+    public List<MotherOrderRecord> listMotherOrdersByCourierNo(String courierNo) {
         if (courierNo == null || courierNo.isBlank()) {
-            return Optional.empty();
+            return List.of();
         }
         return motherOrders.values().stream()
                 .filter(record -> courierNo.equals(record.courierNo()))
-                .findFirst();
+                .sorted(Comparator.comparing(MotherOrderRecord::createdAt).reversed().thenComparing(MotherOrderRecord::code))
+                .toList();
     }
 
     @Override
-    public Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo, WorkSession session) {
+    public List<MotherOrderRecord> listMotherOrdersByCourierNo(String courierNo, WorkSession session) {
         requireSession(session);
-        return findMotherOrderByCourierNo(courierNo);
+        return listMotherOrdersByCourierNo(courierNo);
     }
 
     private static void requireSession(WorkSession session) {
         if (session == null) {
             throw new IllegalStateException("单据写入必须处于业务工作单元");
         }
-    }
-
-    private static String courierIdentity(String courierNo) {
-        if (courierNo == null || courierNo.isBlank()) {
-            return null;
-        }
-        return courierNo.trim();
     }
 
     @Override

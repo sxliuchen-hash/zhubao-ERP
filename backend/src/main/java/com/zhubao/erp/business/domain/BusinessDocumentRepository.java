@@ -21,9 +21,9 @@ public interface BusinessDocumentRepository {
 
     Optional<MotherOrderRecord> findMotherOrderByCode(String code, WorkSession session);
 
-    Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo);
+    List<MotherOrderRecord> listMotherOrdersByCourierNo(String courierNo);
 
-    Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo, WorkSession session);
+    List<MotherOrderRecord> listMotherOrdersByCourierNo(String courierNo, WorkSession session);
 
     List<MotherOrderRecord> listMotherOrders();
 

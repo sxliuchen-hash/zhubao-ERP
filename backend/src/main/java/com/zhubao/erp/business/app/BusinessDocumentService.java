@@ -38,9 +38,9 @@ public class BusinessDocumentService {
         return repository.findMotherOrderByCode(code);
     }
 
-    /** 按来料快递号读母单。没有母单是可新建来料的结果，不是失败。 */
-    public Optional<MotherOrderRecord> findMotherOrderByCourierNo(String courierNo) {
-        return repository.findMotherOrderByCourierNo(courierNo);
+    /** 运单只是来源线索，返回全部关联母单。 */
+    public List<MotherOrderRecord> listMotherOrdersByCourierNo(String courierNo) {
+        return repository.listMotherOrdersByCourierNo(courierNo);
     }
 
     public Optional<ChildWorkOrderRecord> findChildWorkOrder(String code) {

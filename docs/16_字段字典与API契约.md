@@ -498,7 +498,7 @@ MySQL 持久化表：
 | `materialCode` | 物料编码 |
 | `inboundDate` | 现场入库日期，建议保存为 `yyyy-MM-dd`；纸质表只有月日时由业务日期补全年份 |
 | `expressCompany` | 入库快递名称/物流方式 |
-| `courierNo` | 入库快递单号，必须唯一 |
+| `courierNo` | 可空、可重复的来源运单号；业务身份始终是母单号 |
 | `senderName` | 寄货人姓名快照 |
 | `receiverName` | 收货人姓名快照 |
 | `unpackSigner` | 拆箱签字/确认人，一期保存姓名，二期可关联签名附件 |
@@ -536,7 +536,7 @@ MySQL 持久化表：
 - 接口不得直接改库存余额，必须通过 `StockLedgerService.transfer` 追加台账。
 - `OwnerType` 固定为 `CUSTOMER`，确保客户来料不会进入企业自有库存。
 - `workOrderCode` 为空，表示仍处于母单原料库存，后续子工单拆分再进入在制库存。
-- 带 `requestId` 时，动作记为 `INBOUND_CONFIRM`，目标类型 `MOTHER_ORDER`，目标编号是母单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `InboundConfirmationResult`；换母单、换客户、换数量重量或其他内容会拒绝，必须换新 `requestId`。母单、来料事实、入库流水和成功结果在同一条数据库连接里提交。单据保存失败或结果保存失败时整单回滚。非空运单由 `courier_identity` 唯一约束保证不会建出两张母单。
+- 带 `requestId` 时，动作记为 `INBOUND_CONFIRM`，目标类型 `MOTHER_ORDER`，目标编号是母单号。操作人取当前会话，不接受客户端另报账号。同账号、同请求、同规范化内容回放原 `InboundConfirmationResult`；换母单、换客户、换数量重量或其他内容会拒绝，必须换新 `requestId`。母单、来料事实、入库流水和成功结果在同一条数据库连接里提交。单据保存失败或结果保存失败时整单回滚。运单可关联多张母单，查询时须选择具体母单。
 - 不带 `requestId` 的旧调用，以及登记导入调用的确认入库，仍由库存仓储和单据仓储各自打开连接并提交。这不是回放，也不能当成已经同事务。带 `requestId` 的工序交付、初检、开返工、返工报工、复检和放行已另行接入各自的工作单元，不并进这条入库事务。未带 `requestId` 的岗位交付仍各自提交。`production-reports` 和旧质检直写 HTTP 已退出。确认发货必须带 `requestId` 并走工作单元。
 
 ---
@@ -2199,7 +2199,8 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `GET /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeLookup>` |
-| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。可选 `requestId`。有值时动作是 `INTAKE_CREATE`，目标类型 `WAYBILL`，目标编号是规范化运单号。同账号同请求同内容回放原结果；已有运单打开原单，不第二次入库。客户身份写在规范化内容里，换客户不能重放。无 `requestId` 时保持旧行为：先按运单打开，没有才建单，但不回放、不保证同事务 |
+| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。`requestId` 必填；动作为 `INTAKE_CREATE`，目标类型 `REQUEST`。同账号同请求同内容回放原母单；新 `requestId` 可在同运单下新建另一张母单。`sourceType` 为 `COURIER`、`CUSTOMER_DELIVERY` 或 `INTERNAL_OTHER`；运单与快递公司均可空。旧客户端未带 `requestId` 时明确拒绝并提示升级，防止超时重复入账。 |
+| `GET /api/business/operations/mobile-intakes?courierNo=...` | 返回全部可见母单的 `candidates[]`，含母单号、客户、收货时间、货品、要求和期限。兼容字段 `motherOrderCode` 仅在恰好一张候选时有值，多张时为空，调用方不得取第一张。 |
 | `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |
 | `GET /api/business/operations/mother-orders/{code}/split` | `ApiResponse<MotherOrderSplitView>` |
 | `POST /api/business/operations/mother-orders/{code}/keep` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_KEEP`，拆分决定和成功结果同一次提交。同账号同请求回放后重新读取当前视图。缺编号直接拒绝 |

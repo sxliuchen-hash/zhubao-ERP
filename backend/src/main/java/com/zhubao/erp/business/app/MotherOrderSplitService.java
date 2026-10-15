@@ -6,6 +6,7 @@ import com.zhubao.erp.business.domain.ChildWorkOrderView;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderSplitView;
 import com.zhubao.erp.business.domain.MotherSplitState;
+import com.zhubao.erp.business.domain.OrderCodes;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
 import com.zhubao.erp.business.domain.SplitMotherOrderLine;
@@ -33,7 +34,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 母单拆分：不拆仍用母单号；拆开则生成子单，并把对应数量从待加工转入在制。
@@ -42,15 +43,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class MotherOrderSplitService {
 
-    private static final DateTimeFormatter DAY = DateTimeFormatter.BASIC_ISO_DATE;
     private static final DateTimeFormatter RECORD_TIME = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final BusinessDocumentRepository documents;
     private final StockLedgerService stockLedgerService;
     private final BusinessWorkUnit workUnit;
-    private final AtomicInteger childSequence = new AtomicInteger();
     private OrderChangeRepository orderChanges;
+    /** 本进程已发出、事务可能尚未提交的子单号。 */
+    private final Set<String> issuedChildCodes = ConcurrentHashMap.newKeySet();
+    private final Object childCodeLock = new Object();
 
     public MotherOrderSplitService(
             BusinessDocumentRepository documents,
@@ -193,7 +195,6 @@ public class MotherOrderSplitService {
         BigDecimal requestedQuantity = ZERO;
         BigDecimal requestedWeight = ZERO;
         List<PreparedLine> prepared = new ArrayList<>();
-        Set<String> reservedChildCodes = new HashSet<>();
         for (SplitMotherOrderLine line : lines) {
             if (line == null || line.quantity() == null || line.weight() == null
                     || line.quantity().compareTo(ZERO) <= 0 || line.weight().compareTo(ZERO) <= 0) {
@@ -202,7 +203,7 @@ public class MotherOrderSplitService {
             requestedQuantity = requestedQuantity.add(line.quantity());
             requestedWeight = requestedWeight.add(line.weight());
             prepared.add(new PreparedLine(
-                    nextChildCode(session, reservedChildCodes),
+                    "",
                     WorkshopProcesses.normalize(line.processes()),
                     line.quantity(),
                     line.weight(),
@@ -215,6 +216,18 @@ public class MotherOrderSplitService {
         if (requestedWeight.compareTo(remainingWeight) > 0) {
             throw new BusinessException("拆出的重量合计不得超过母单剩余");
         }
+        Set<String> reservedChildCodes = new HashSet<>();
+        List<PreparedLine> numbered = new ArrayList<>();
+        for (PreparedLine line : prepared) {
+            numbered.add(new PreparedLine(
+                    nextChildCode(session, reservedChildCodes),
+                    line.processes(),
+                    line.quantity(),
+                    line.weight(),
+                    ""
+            ));
+        }
+        prepared = numbered;
         Set<String> reservedCodes = new HashSet<>();
         List<PreparedLine> withCodes = new ArrayList<>();
         for (PreparedLine line : prepared) {
@@ -386,15 +399,19 @@ public class MotherOrderSplitService {
     }
 
     private String nextChildCode(WorkSession session, Set<String> reserved) {
-        String day = LocalDate.now().format(DAY);
-        for (int attempt = 0; attempt < 50; attempt++) {
-            String code = "ZD-" + day + "-" + String.format("%03d", childSequence.incrementAndGet());
-            if (!reserved.contains(code) && !childExists(code, session)) {
-                reserved.add(code);
-                return code;
-            }
+        synchronized (childCodeLock) {
+            String code = OrderCodes.next(
+                    "ZD",
+                    LocalDate.now(),
+                    documents.listAllChildWorkOrders().stream().map(ChildWorkOrderRecord::code).toList(),
+                    candidate -> reserved.contains(candidate)
+                            || issuedChildCodes.contains(candidate)
+                            || childExists(candidate, session)
+            );
+            reserved.add(code);
+            issuedChildCodes.add(code);
+            return code;
         }
-        throw new BusinessException("子单号生成失败，请重试");
     }
 
     private void requireRequest(String requestId, String message) {

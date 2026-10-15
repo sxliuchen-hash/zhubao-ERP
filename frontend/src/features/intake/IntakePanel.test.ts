@@ -109,8 +109,8 @@ describe('收货面板', () => {
     expect(third).not.toBe(first);
   });
 
-  it('超时后按运单打开原单，不再提交建单', async () => {
-    vi.mocked(submitMobileIntake).mockRejectedValueOnce(new Error('网络超时'));
+  it('超时后保留原请求号，不按运单猜测母单', async () => {
+    vi.mocked(submitMobileIntake).mockRejectedValue(new Error('网络超时'));
     vi.mocked(lookupMobileIntake).mockResolvedValue({
       found: true,
       motherOrderCode: 'MD-20261012-001',
@@ -140,9 +140,13 @@ describe('收货面板', () => {
     await flushPromises();
 
     expect(submitMobileIntake).toHaveBeenCalledTimes(1);
-    expect(lookupMobileIntake).toHaveBeenCalledWith('SF1048329001');
-    expect(wrapper.text()).toContain('已按运单打开原单，没有再次建单');
-    expect(wrapper.text()).toContain('MD-20261012-001');
+    expect(lookupMobileIntake).not.toHaveBeenCalled();
+    expect(fetchMotherOrder).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('网络超时');
+    await create!.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(submitMobileIntake).mock.calls[1][0].requestId)
+      .toBe(vi.mocked(submitMobileIntake).mock.calls[0][0].requestId);
   });
 
   it('上传失败只重试文件，不再次建单', async () => {

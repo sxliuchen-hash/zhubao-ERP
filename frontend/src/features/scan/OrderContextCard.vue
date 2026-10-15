@@ -113,7 +113,7 @@ const actionLabels: Record<string, string> = {
         :aria-label="`选择${item.code}`"
         @click="emit('select', item)"
       >
-        {{ scanObjectTypeLabel(item.objectType) }} {{ item.code }}
+        {{ item.objectType === 'EXPRESS_NO' && !item.motherOrderCode ? '按此运单新建母单' : scanObjectTypeLabel(item.objectType) }} {{ item.code }}
         <template v-if="item.requirement"> / {{ item.requirement }}</template>
       </button>
     </div>
