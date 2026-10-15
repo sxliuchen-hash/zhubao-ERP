@@ -78,9 +78,9 @@ public class PrintJobService {
     }
 
     public String prepareBatchSnapshot(String businessCode, String templateCode, int copies, AuthUserAccount account) {
-        assertPrintable(businessCode, account);
         if (businessCode == null || businessCode.isBlank() || templateCode == null || templateCode.isBlank()
                 || copies < 1 || copies > 20) throw new BusinessException("打印单号、模板或份数无效");
+        assertPrintable(businessCode, account);
         int version = changes == null ? 0 : changes.latestAppliedVersion(businessCode.trim());
         return snapshotForJob(businessCode.trim(), templateCode.trim(), copies, version);
     }

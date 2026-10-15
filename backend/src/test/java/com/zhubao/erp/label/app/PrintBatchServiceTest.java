@@ -47,6 +47,10 @@ class PrintBatchServiceTest {
         assertThat(repository.batch(first.id()).orElseThrow().jobs()).hasSize(3);
         assertThatThrownBy(() -> service.create("batch-request-0001", "MD-1", "FLOW", 3, targets, account))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("不一致");
+        AuthUserAccount other = new AuthUserAccount("other", "hash", "其他人", RoleCode.WAREHOUSE_KEEPER,
+                DataScope.ALL, true, false, Instant.now(), 0, null, List.of(), false, false, List.of());
+        assertThatThrownBy(() -> service.create("batch-request-0001", "MD-1", "FLOW", 2, targets, other))
+                .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> service.claim("B", tokenA)).isInstanceOf(PermissionDeniedException.class);
         PrintBatchService.ClaimedPrintJob claimedB = service.claim("B", tokenB);
         assertThat(claimedB.job().targetStationId()).isEqualTo("B");

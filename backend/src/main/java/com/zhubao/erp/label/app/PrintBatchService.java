@@ -92,7 +92,7 @@ public class PrintBatchService {
         String key = businessCode.trim() + "|" + templateCode.trim() + "|" + copies + "|" + snapshot + "|" + targets;
         String hash = digest(key);
         PrintBatch existing = repository.batchByRequest(requestId.trim()).orElse(null);
-        if (existing != null) return sameOrReject(existing, hash);
+        if (existing != null) return sameOrReject(existing, hash, account.username());
         validateTargets(targets, snapshot, businessCode);
         String now = TIME.format(LocalDateTime.now());
         String batchId = "PB-" + UUID.randomUUID();
@@ -100,8 +100,8 @@ public class PrintBatchService {
                 "PJ-" + UUID.randomUUID(), batchId, target.stationId(), target.queueId(), copies,
                 PrintJobStatus.PENDING, "", "", "", "", "", "", now, now)).toList();
         PrintBatch inserted = repository.insertBatch(new PrintBatch(batchId, requestId.trim(), businessCode.trim(),
-                templateCode.trim(), copies, hash, snapshot, account.operator(), now, jobs));
-        return sameOrReject(inserted, hash);
+                templateCode.trim(), copies, hash, snapshot, account.username(), now, jobs));
+        return sameOrReject(inserted, hash, account.username());
     }
     public PrintBatch batch(String id, AuthUserAccount account) {
         PrintBatch batch = repository.batch(id).orElseThrow(() -> new BusinessException("打印批次不存在"));
@@ -184,7 +184,8 @@ public class PrintBatchService {
                 station.tokenHash().getBytes(StandardCharsets.UTF_8), digest(token).getBytes(StandardCharsets.UTF_8)))
             throw new PermissionDeniedException("工位凭据无效");
     }
-    private PrintBatch sameOrReject(PrintBatch batch, String hash) {
+    private PrintBatch sameOrReject(PrintBatch batch, String hash, String username) {
+        if (!batch.createdBy().equals(username)) throw new PermissionDeniedException("打印批次请求不能跨账号回放");
         if (!batch.payloadHash().equals(hash)) throw new BusinessException("同一请求的打印目标或内容不一致");
         return batch;
     }
