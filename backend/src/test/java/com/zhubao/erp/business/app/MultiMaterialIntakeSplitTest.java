@@ -96,6 +96,16 @@ class MultiMaterialIntakeSplitTest {
         assertThat(documents.listChildWorkOrders(mother)).isEmpty();
         assertThat(stock.findAllLedgers()).hasSize(2);
 
+        SplitMotherOrderCommand crossMaterialChild = new SplitMotherOrderCommand(mother, "何琳", List.of(
+                new SplitMotherOrderLine(amount("2"), amount("2"), List.of("抛光"), List.of(
+                        new SplitSourceAllocation(1, amount("1"), amount("1")),
+                        new SplitSourceAllocation(2, amount("1"), amount("1")))),
+                split(1, 1, 1)));
+        assertThatThrownBy(() -> splits.split(crossMaterialChild, "multi-split-cross-material"))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("暂不能跨材质");
+        assertThat(documents.listChildWorkOrders(mother)).isEmpty();
+        assertThat(stock.findAllLedgers()).hasSize(2);
+
         SplitMotherOrderCommand valid = new SplitMotherOrderCommand(mother, "何琳", List.of(
                 split(2, 2, 1), split(2, 3, 2)));
         var result = splits.split(valid, "multi-split-good");
