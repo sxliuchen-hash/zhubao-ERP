@@ -2199,7 +2199,7 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `GET /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeLookup>` |
-| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。`requestId` 必填；动作为 `INTAKE_CREATE`，目标类型 `REQUEST`。同账号同请求同内容回放原母单；新 `requestId` 可在同运单下新建另一张母单。`sourceType` 为 `COURIER`、`CUSTOMER_DELIVERY` 或 `INTERNAL_OTHER`；运单与快递公司均可空。新版传稳定 `customerId`、`customerName` 快照及 `lines[]`（`materialCode`、`goodsName`、`quantity`、`quantityUnit`、`weight`）；母单总数量和重量须等于明细合计。每行入对应材质的 `RAW_WAITING` 台账，整单在同一工作单元提交。旧客户端未带 `requestId` 时明确拒绝并提示升级，防止超时重复入账。 |
+| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。`requestId` 必填；动作为 `INTAKE_CREATE`，目标类型 `REQUEST`。同账号同请求同内容回放原母单；新 `requestId` 可在同运单下新建另一张母单。`sourceType` 为 `COURIER`、`CUSTOMER_DELIVERY` 或 `INTERNAL_OTHER`；运单与快递公司均可空。新版传稳定 `customerId`、`customerName` 快照及 `lines[]`（`materialCode`、`goodsName`、`quantity`、`quantityUnit`、`weight`）；母单总数量和重量须等于明细合计。当前母单汇总和后续工序使用单一数量单位，明细单位不一致时拒绝建单。每行入对应材质的 `RAW_WAITING` 台账，整单在同一工作单元提交。旧客户端未带 `requestId` 时明确拒绝并提示升级，防止超时重复入账。 |
 | `GET /api/business/operations/mobile-intakes?courierNo=...` | 返回全部可见母单的 `candidates[]`，含母单号、客户、收货时间、货品、要求和期限。兼容字段 `motherOrderCode` 仅在恰好一张候选时有值，多张时为空，调用方不得取第一张。 |
 | `GET /api/business/master-data/customers` | 返回当前账号客户范围内的启用客户档案，使用稳定客户 ID；改名不回写历史单据快照。 |
 | `POST /api/business/master-data/customers` | 有 `MASTER_DATA_MANAGE` 权限者创建或更新客户；名称归一化后不可重复。 |

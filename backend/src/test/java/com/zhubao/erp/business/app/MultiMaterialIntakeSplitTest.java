@@ -46,6 +46,23 @@ class MultiMaterialIntakeSplitTest {
     }
 
     @Test
+    void 不同数量单位不能混合汇总入同一母单() {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        StockLedgerService ledgers = new StockLedgerService(new InMemoryStockLedgerRepository());
+        MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        MobileIntakeService intake = new MobileIntakeService(
+                new BusinessOperationService(ledgers, null, documents, unit), documents, unit,
+                new MasterDataService(new InMemoryMasterDataRepository()), ledgers);
+        MobileIntakeCommand command = new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
+                "戒托", amount("2"), amount("2"), "", "AU9999", "件", "mixed-units-intake",
+                "CUSTOMER_DELIVERY", List.of(new MobileIntakeLine("AU9999", "戒托", amount("1"), "件", amount("1")),
+                new MobileIntakeLine("AU9999", "散料", amount("1"), "克", amount("1"))));
+        assertThatThrownBy(() -> intake.intake(command, new OperatorContext("何琳", RoleCode.RECEIVER, DataScope.ALL)))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("相同数量单位");
+        assertThat(documents.listMotherOrders()).isEmpty();
+    }
+
+    @Test
     void receiptsPostPerMaterialAndSplitChecksEachSource() {
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         InMemoryStockLedgerRepository stock = new InMemoryStockLedgerRepository();

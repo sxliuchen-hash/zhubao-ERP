@@ -3,6 +3,7 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
+import com.zhubao.erp.business.domain.MobileIntakeLine;
 import com.zhubao.erp.business.domain.MobileIntakeResult;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.JdbcBusinessDocumentRepository;
@@ -37,6 +38,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +50,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class IntakeReceivingTest {
 
     private final OperatorContext receiver = new OperatorContext("收货员甲", RoleCode.RECEIVER, DataScope.ALL);
+
+    @Test
+    void jdbc多材质收货逐行入账且第二行失败全单回滚() throws Exception {
+        JdbcWorld world = new JdbcWorld(CommandResultProbe.NONE, MotherOrderSaveProbe.NONE);
+        BusinessWorkUnit unit = new JdbcBusinessWorkUnit(world.dataSource, world.requests);
+        MobileIntakeService intake = new MobileIntakeService(world.operations, world.documents, unit,
+                null, new StockLedgerService(world.stock));
+        MobileIntakeCommand good = new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
+                "戒托", new BigDecimal("2"), new BigDecimal("3"), "", "AU9999", "件", "jdbc-lines-good",
+                "CUSTOMER_DELIVERY", List.of(
+                new MobileIntakeLine("AU9999", "金戒托", BigDecimal.ONE, "件", BigDecimal.ONE),
+                new MobileIntakeLine("PT950", "铂金戒托", BigDecimal.ONE, "件", new BigDecimal("2"))));
+        String mother = intake.intake(good, receiver).motherOrderCode();
+        assertThat(world.documents.listReceiptLines(mother)).hasSize(2);
+        assertThat(world.ledgers()).isEqualTo(2);
+        assertThat(intake.intake(good, receiver).motherOrderCode()).isEqualTo(mother);
+        assertThat(world.ledgers()).isEqualTo(2);
+        MobileIntakeCommand bad = new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
+                "戒托", new BigDecimal("2"), new BigDecimal("3"), "", "AU9999", "件", "jdbc-lines-bad-1",
+                "CUSTOMER_DELIVERY", List.of(
+                new MobileIntakeLine("AU9999", "金戒托", BigDecimal.ONE, "件", BigDecimal.ONE),
+                new MobileIntakeLine("X".repeat(100), "超长材质", BigDecimal.ONE, "件", new BigDecimal("2"))));
+        assertThatThrownBy(() -> intake.intake(bad, receiver)).isInstanceOf(RuntimeException.class);
+        assertThat(world.mothers()).isEqualTo(1);
+        assertThat(world.ledgers()).isEqualTo(2);
+    }
 
     @Test
     void memoryIntakeAndInboundShareOneCommit() {
@@ -368,9 +396,11 @@ class IntakeReceivingTest {
                             ledger_code varchar(80) not null
                         )
                         """);
+                statement.execute("create table biz_work_order (code varchar(90) primary key)");
                 apply(statement, "src/main/resources/db/mysql/V44__m3_command_request.sql");
                 apply(statement, "src/main/resources/db/mysql/V45__m3_mother_order_courier_identity.sql");
                 apply(statement, "src/main/resources/db/mysql/V58__m3_courier_multi_order.sql");
+                apply(statement, "src/main/resources/db/mysql/V60__m3_receipt_line_allocation.sql");
             }
             documents = new JdbcBusinessDocumentRepository(dataSource);
             stock = new JdbcStockLedgerRepository(dataSource);

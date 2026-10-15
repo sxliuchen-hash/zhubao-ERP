@@ -252,6 +252,7 @@ public class MobileIntakeService {
         List<MobileIntakeLine> result = new ArrayList<>();
         BigDecimal quantity = BigDecimal.ZERO;
         BigDecimal weight = BigDecimal.ZERO;
+        String orderUnit = null;
         for (MobileIntakeLine line : raw) {
             if (line == null || line.quantity() == null || line.weight() == null
                     || line.quantity().signum() <= 0 || line.weight().signum() <= 0
@@ -262,6 +263,10 @@ public class MobileIntakeService {
                     ? "MAT-MOBILE" : line.materialCode().trim();
             if (masterData != null) masterData.materialForIntake(code);
             String unit = line.quantityUnit() == null || line.quantityUnit().isBlank() ? "件" : line.quantityUnit().trim();
+            if (orderUnit != null && !orderUnit.equals(unit)) {
+                throw new BusinessException("同一母单明细须使用相同数量单位，以便汇总和拆单");
+            }
+            orderUnit = unit;
             result.add(new MobileIntakeLine(code, line.goodsName().trim(), line.quantity(), unit, line.weight()));
             quantity = quantity.add(line.quantity());
             weight = weight.add(line.weight());
