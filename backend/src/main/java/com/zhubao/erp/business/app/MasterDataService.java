@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 
 @Service
 public class MasterDataService {
@@ -39,11 +41,40 @@ public class MasterDataService {
         if (input == null) throw new BusinessException("客户档案不能为空");
         String name = required(input.name(), "客户名称");
         if (name.length() > 120) throw new BusinessException("客户名称过长");
-        String code = input.customerId() > 0
-                ? repository.findCustomer(input.customerId()).orElseThrow(() -> new BusinessException("客户档案不存在")).customerCode()
+        CustomerProfile previous = input.customerId() > 0
+                ? repository.findCustomer(input.customerId()).orElseThrow(() -> new BusinessException("客户档案不存在")) : null;
+        String code = previous != null
+                ? previous.customerCode()
                 : "C-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase(Locale.ROOT);
+        LinkedHashSet<String> aliases = new LinkedHashSet<>(tokens(input.aliases()));
+        if (previous != null) {
+            aliases.addAll(tokens(previous.aliases()));
+            if (!previous.name().equals(name)) aliases.add(previous.name());
+        }
+        aliases.remove(name);
         return repository.saveCustomer(new CustomerProfile(input.customerId(), code, name,
-                text(input.aliases()), text(input.contact()), text(input.phone()), text(input.remark()), input.enabled()));
+                String.join("|", aliases), text(input.contact()), text(input.phone()), text(input.remark()), input.enabled()));
+    }
+
+    /** 旧名称授权仅在能唯一匹配档案时转换为稳定 ID；无法确认归属的值不扩大权限。 */
+    public List<String> stableCustomerScope(List<String> savedScope) {
+        if (savedScope == null || savedScope.isEmpty()) return List.of();
+        List<CustomerProfile> profiles = repository.listCustomers();
+        LinkedHashSet<String> resolved = new LinkedHashSet<>();
+        for (String raw : savedScope) {
+            String value = text(raw);
+            if (value.isEmpty()) continue;
+            if (value.matches("[0-9]+")) {
+                resolved.add(value);
+                continue;
+            }
+            List<CustomerProfile> matching = profiles.stream().filter(profile ->
+                    profile.customerCode().equalsIgnoreCase(value)
+                            || profile.name().equalsIgnoreCase(value)
+                            || tokens(profile.aliases()).stream().anyMatch(alias -> alias.equalsIgnoreCase(value))).toList();
+            if (matching.size() == 1) resolved.add(String.valueOf(matching.get(0).customerId()));
+        }
+        return List.copyOf(resolved);
     }
 
     public MaterialProfile saveMaterial(MaterialProfile input) {
@@ -63,4 +94,11 @@ public class MasterDataService {
     }
 
     private String text(String value) { return value == null ? "" : value.trim(); }
+    private List<String> tokens(String value) {
+        List<String> rows = new ArrayList<>();
+        for (String part : text(value).split("[|,，;；\\r\\n]+")) {
+            if (!part.isBlank()) rows.add(part.trim());
+        }
+        return rows;
+    }
 }

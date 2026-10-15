@@ -6,11 +6,13 @@ import {
   logoutAuthSession, unlockAuthAccount, updateAuthAccountStatus, upsertAuthAccount,
   type AuthSession, type AuthUserAccountSummary,
 } from '../../services/authApi';
+import { fetchCustomers } from '../../services/masterDataApi';
 
 vi.mock('../../services/authApi', () => ({
   deleteAuthAccount: vi.fn(), fetchAuthAccountOptions: vi.fn(), fetchAuthAccounts: vi.fn(), fetchAuthSession: vi.fn(),
   logoutAuthSession: vi.fn(), unlockAuthAccount: vi.fn(), updateAuthAccountStatus: vi.fn(), upsertAuthAccount: vi.fn(),
 }));
+vi.mock('../../services/masterDataApi', () => ({ fetchCustomers: vi.fn() }));
 
 const worker = {
   username: 'worker', operator: '张三', role: 'OPERATOR', roleLabel: '操作工', dataScope: 'SELF', dataScopeLabel: '本人任务',
@@ -31,6 +33,10 @@ describe('用户管理', () => {
     vi.resetAllMocks();
     vi.mocked(fetchAuthSession).mockResolvedValue({ username: 'admin', role: 'ADMIN' } as AuthSession);
     vi.mocked(fetchAuthAccounts).mockResolvedValue([admin, worker]);
+    vi.mocked(fetchCustomers).mockResolvedValue([
+      { customerId: 1001, customerCode: 'C-1001', name: '恒信珠宝', aliases: '', contact: '', phone: '', remark: '', enabled: true },
+      { customerId: 1002, customerCode: 'C-1002', name: '雅辰饰品', aliases: '', contact: '', phone: '', remark: '', enabled: true },
+    ]);
     vi.mocked(fetchAuthAccountOptions).mockResolvedValue({ roles: [
       { value: 'ADMIN', label: '系统管理员', permissions: [{ code: 'AUTH_ACCOUNT_MANAGE', label: '管理账号' }] },
       { value: 'OPERATOR', label: '操作工', permissions: [{ code: 'BUSINESS_PRODUCTION_REPORT', label: '生产报工' }] },
@@ -72,13 +78,14 @@ describe('用户管理', () => {
     await wrapper.get('[data-user="worker"]').findAll('button')[0].trigger('click');
     await wrapper.get('[aria-label="用户角色"]').setValue('ADMIN');
     await wrapper.get('[aria-label="用户数据范围"]').setValue('CUSTOMER_RANGE');
-    await wrapper.get('[aria-label="授权客户编码"]').setValue('C001，C002\nC001');
+    await wrapper.get('[aria-label="授权客户恒信珠宝"]').setValue(true);
+    await wrapper.get('[aria-label="授权客户雅辰饰品"]').setValue(true);
     await wrapper.get('input[value="抛光"]').setValue(true);
     await wrapper.get('form').trigger('submit');
     await flushPromises();
     expect(upsertAuthAccount).toHaveBeenCalledWith(expect.objectContaining({
       username: 'worker', password: undefined, role: 'ADMIN', dataScope: 'CUSTOMER_RANGE',
-      customerScope: ['C001', 'C002'], allowedProcesses: ['雕刻', '抛光'],
+      customerScope: ['1001', '1002'], allowedProcesses: ['雕刻', '抛光'],
     }));
     expect(vi.mocked(upsertAuthAccount).mock.calls[0][0]).not.toHaveProperty('preApprovalApplicationCode');
   });

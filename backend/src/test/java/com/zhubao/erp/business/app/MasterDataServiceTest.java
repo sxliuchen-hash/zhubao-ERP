@@ -16,6 +16,7 @@ import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,6 +46,8 @@ class MasterDataServiceTest {
                 "新客户", "", "", "", true));
         assertThat(intake.view(result.motherOrderCode()).customerName()).isEqualTo("新客户");
         assertThat(catalog.customerForIntake(customer.customerId()).name()).isEqualTo("已改名客户");
+        assertThat(catalog.stableCustomerScope(List.of("新客户", customer.customerCode(), "未知客户")))
+                .containsExactly(String.valueOf(customer.customerId()));
         assertThatThrownBy(() -> intake.intake(new MobileIntakeCommand("", "新客户", null, "抛光",
                 "2026-10-20", "戒托", BigDecimal.ONE, BigDecimal.ONE, "", material.materialCode(),
                 "件", "catalog-intake-02", "CUSTOMER_DELIVERY"),

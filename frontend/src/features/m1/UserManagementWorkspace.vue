@@ -5,6 +5,7 @@ import {
   logoutAuthSession, unlockAuthAccount, updateAuthAccountStatus, upsertAuthAccount,
   type AuthAccountOptions, type AuthSession, type AuthUserAccountSummary,
 } from '../../services/authApi';
+import { fetchCustomers, type CustomerProfile } from '../../services/masterDataApi';
 
 const session = ref<AuthSession | null>(null);
 const ready = ref(false);
@@ -15,6 +16,7 @@ const message = ref('');
 const actionError = ref('');
 const accounts = ref<AuthUserAccountSummary[]>([]);
 const options = ref<AuthAccountOptions>({ roles: [] });
+const customers = ref<CustomerProfile[]>([]);
 const keyword = ref('');
 const status = ref('all');
 const editorMode = ref<'create' | 'edit' | 'password' | null>(null);
@@ -32,6 +34,16 @@ const visibleAccounts = computed(() => accounts.value.filter(account => {
   return matchesText && (status.value === 'all' || (status.value === 'enabled' ? account.enabled : !account.enabled));
 }));
 const selectedRole = computed(() => options.value.roles.find(role => role.value === editor.value.role));
+const selectedCustomerCodes = computed(() => editor.value.customerCodes.split(/[\s,，;；]+/).filter(Boolean));
+const unresolvedCustomerCodes = computed(() => selectedCustomerCodes.value.filter(code =>
+  !customers.value.some(customer => String(customer.customerId) === code)));
+
+function toggleCustomerCode(id: number, checked: boolean) {
+  const code = String(id);
+  const values = selectedCustomerCodes.value.filter(item => item !== code);
+  if (checked) values.push(code);
+  editor.value.customerCodes = [...new Set(values)].join('\n');
+}
 
 function emptyEditor() {
   return { username: '', operator: '', password: '', confirmPassword: '', role: 'OPERATOR', dataScope: 'SELF',
@@ -54,9 +66,12 @@ async function reload() {
   loading.value = true;
   loadError.value = '';
   try {
-    const [users, accountOptions] = await Promise.all([fetchAuthAccounts(), fetchAuthAccountOptions()]);
+    const [users, accountOptions, customerProfiles] = await Promise.all([
+      fetchAuthAccounts(), fetchAuthAccountOptions(), fetchCustomers(),
+    ]);
     accounts.value = users;
     options.value = accountOptions;
+    customers.value = customerProfiles;
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : '用户列表加载失败';
   } finally {
@@ -118,7 +133,7 @@ async function saveAccount() {
   }
   const customerScope = [...new Set(form.customerCodes.split(/[\s,，;；]+/).filter(Boolean))];
   if (editorMode.value !== 'password' && form.dataScope === 'CUSTOMER_RANGE' && customerScope.length === 0) {
-    actionError.value = '请填写至少一个授权客户编码';
+    actionError.value = '请至少选择一个客户档案';
     return;
   }
   if (editorMode.value === 'create' && accounts.value.some(account => account.username.toLowerCase() === form.username.trim().toLowerCase())) {
@@ -220,7 +235,16 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <label>姓名<input v-model="editor.operator" aria-label="用户姓名" required /></label>
               <label>角色<select v-model="editor.role" aria-label="用户角色"><option v-for="role in options.roles" :key="role.value" :value="role.value">{{ role.label }}</option></select></label>
               <label>数据范围<select v-model="editor.dataScope" aria-label="用户数据范围"><option v-for="scope in scopes" :key="scope.value" :value="scope.value">{{ scope.label }}</option></select></label>
-              <label v-if="editor.dataScope === 'CUSTOMER_RANGE'">授权客户编码<textarea v-model="editor.customerCodes" aria-label="授权客户编码" placeholder="多个编码用换行或逗号分隔" /></label>
+              <div v-if="editor.dataScope === 'CUSTOMER_RANGE'" class="field" aria-label="授权客户档案">
+                <span>授权客户档案</span>
+                <label v-for="customer in customers" :key="customer.customerId">
+                  <input type="checkbox" :checked="selectedCustomerCodes.includes(String(customer.customerId))"
+                    :aria-label="`授权客户${customer.name}`"
+                    @change="toggleCustomerCode(customer.customerId, ($event.target as HTMLInputElement).checked)" />
+                  {{ customer.name }}（{{ customer.customerCode }} · ID {{ customer.customerId }}）
+                </label>
+                <p v-if="unresolvedCustomerCodes.length">历史授权值待人工核对：{{ unresolvedCustomerCodes.join('、') }}。请选择对应客户档案。</p>
+              </div>
             </div>
             <template v-if="editorMode !== 'password'">
               <p>可操作工序</p><div class="user-checks"><label v-for="process in processes" :key="process"><input v-model="editor.allowedProcesses" type="checkbox" :value="process" />{{ process }}</label></div>

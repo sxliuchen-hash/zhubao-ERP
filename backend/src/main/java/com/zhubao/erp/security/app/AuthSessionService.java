@@ -1,6 +1,7 @@
 package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.business.app.MasterDataService;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditIntegrity;
@@ -49,6 +50,7 @@ public class AuthSessionService {
     private final PasswordExpiryPolicy passwordExpiryPolicy;
     private final PasswordPolicy passwordPolicy;
     private final CustomerAuthorizationService customerAuthorizationService;
+    private MasterDataService masterDataService;
 
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
@@ -79,6 +81,11 @@ public class AuthSessionService {
         this.passwordExpiryPolicy = passwordExpiryPolicy;
         this.passwordPolicy = passwordPolicy;
         this.customerAuthorizationService = customerAuthorizationService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setMasterDataService(MasterDataService masterDataService) {
+        this.masterDataService = masterDataService;
     }
 
     public AuthSession login(AuthLoginCommand command) {
@@ -215,10 +222,10 @@ public class AuthSessionService {
     }
 
     private List<String> effectiveCustomerScope(AuthUserAccount user) {
-        if (user.dataScope() != DataScope.CUSTOMER_RANGE || customerAuthorizationService == null) {
-            return user.customerScope();
-        }
-        return customerAuthorizationService.effectiveCustomerScope(user.username(), user.customerScope());
+        if (user.dataScope() != DataScope.CUSTOMER_RANGE) return user.customerScope();
+        List<String> saved = customerAuthorizationService == null ? user.customerScope()
+                : customerAuthorizationService.effectiveCustomerScope(user.username(), user.customerScope());
+        return masterDataService == null ? saved : masterDataService.stableCustomerScope(saved);
     }
 
     public AuthSession changeOwnPassword(String rawAuthorizationHeader, ChangeOwnPasswordCommand command) {
@@ -504,7 +511,7 @@ public class AuthSessionService {
                 DISPLAY_TIME.format(passwordExpiryPolicy.expiresAt(user)),
                 passwordExpiryPolicy.isExpired(user, Instant.now()),
                 user.passwordChangeRequired(),
-                user.customerScope(),
+                effectiveCustomerScope(user),
                 navigationMenuService.menuCodesFor(user.role()),
                 navigationMenuService.menuTreeFor(user.role()),
                 user.allowedProcesses()

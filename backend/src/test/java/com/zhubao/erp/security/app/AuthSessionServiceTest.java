@@ -1,5 +1,8 @@
 package com.zhubao.erp.security.app;
 
+import com.zhubao.erp.business.app.MasterDataService;
+import com.zhubao.erp.business.domain.CustomerProfile;
+import com.zhubao.erp.business.infra.InMemoryMasterDataRepository;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -17,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -514,6 +518,25 @@ class AuthSessionServiceTest {
 
     private AuthSessionService service() {
         return service(new InMemoryAuthUserAccountRepository(passwordHasher));
+    }
+
+    @Test
+    void 历史客户名称授权转换稳定Id且歧义名称不扩大权限() {
+        InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(passwordHasher);
+        accounts.save(new AuthUserAccount("restricted", passwordHasher.hash("StrongPass2026"), "限定人员",
+                RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, true, false, List.of("恒信珠宝")));
+        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        AuthSessionService auth = service(accounts);
+        auth.setMasterDataService(catalog);
+        AuthSession session = auth.login(new AuthLoginCommand("restricted", "StrongPass2026"));
+        assertThat(session.customerScope()).containsExactly("1001");
+        assertThat(auth.operatorContext("Bearer " + session.token()).orElseThrow().customerScope())
+                .containsExactly("1001");
+        catalog.saveCustomer(new CustomerProfile(1001L, "C-1001", "恒信珠宝新名", "", "", "", "", true));
+        assertThat(auth.operatorContext("Bearer " + session.token()).orElseThrow().customerScope())
+                .containsExactly("1001");
+        catalog.saveCustomer(new CustomerProfile(0, "", "恒信珠宝", "", "", "", "", true));
+        assertThat(auth.operatorContext("Bearer " + session.token()).orElseThrow().customerScope()).isEmpty();
     }
 
     @Test

@@ -2203,6 +2203,7 @@ PWA 一期边界：
 | `GET /api/business/operations/mobile-intakes?courierNo=...` | 返回全部可见母单的 `candidates[]`，含母单号、客户、收货时间、货品、要求和期限。兼容字段 `motherOrderCode` 仅在恰好一张候选时有值，多张时为空，调用方不得取第一张。 |
 | `GET /api/business/master-data/customers` | 返回当前账号客户范围内的启用客户档案，使用稳定客户 ID；改名不回写历史单据快照。 |
 | `POST /api/business/master-data/customers` | 有 `MASTER_DATA_MANAGE` 权限者创建或更新客户；名称归一化后不可重复。 |
+| `customerScope`（登录账号／客户授权） | 新增授权在用户管理按客户档案选择稳定数字 ID。服务端在会话解析时将历史名称或客户编码唯一映射为 ID；客户改名保留旧名别称。无法确认唯一归属的历史值仍留在原授权记录供人工核对，但不授予新单据访问权。 |
 | `GET /api/business/master-data/materials` | 返回启用材质目录，支持前端搜索和多选。 |
 | `POST /api/business/master-data/materials` | 有 `MASTER_DATA_MANAGE` 权限者自定义添加或更新材质；编码稳定，名称去重。 |
 | `GET /api/business/operations/mother-orders/{code}/split` | 新版 `sourceLines[]` 显示收货来源行及逐行剩余数量、重量；无新明细的历史单据保留原汇总视图。 |
