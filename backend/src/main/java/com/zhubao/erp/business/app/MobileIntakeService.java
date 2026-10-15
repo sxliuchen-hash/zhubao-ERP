@@ -179,6 +179,8 @@ public class MobileIntakeService {
         MobileIntakeLine first = lines.get(0);
         String materialCode = first.materialCode();
         String expressCompany = command.expressCompany() == null ? "" : command.expressCompany().trim();
+        String sourceType = command.sourceType() == null || command.sourceType().isBlank()
+                ? "COURIER" : command.sourceType().trim();
         String quantityUnit = first.quantityUnit();
         ConfirmInboundCommand inbound = new ConfirmInboundCommand(
                 motherOrderCode,
@@ -192,8 +194,7 @@ public class MobileIntakeService {
                 operator,
                 operator,
                 first.goodsName(),
-                command.lines().size() > 1 ? "INTAKE_LINES:" + command.sourceType()
-                        : command.sourceType() == null ? "COURIER" : command.sourceType(),
+                !command.lines().isEmpty() ? "INTAKE_LINES:" + sourceType : sourceType,
                 null,
                 "",
                 "RAW-CUSTOMER",

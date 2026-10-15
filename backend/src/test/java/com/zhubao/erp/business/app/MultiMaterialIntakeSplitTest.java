@@ -27,6 +27,25 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MultiMaterialIntakeSplitTest {
     @Test
+    void 单条新版收货明细拆单也保留来源行() {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        StockLedgerService ledgers = new StockLedgerService(new InMemoryStockLedgerRepository());
+        MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        MobileIntakeService intake = new MobileIntakeService(
+                new BusinessOperationService(ledgers, null, documents, unit), documents, unit, catalog, ledgers);
+        MobileIntakeCommand command = new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
+                "戒托", amount("2"), amount("2"), "", "AU9999", "件", "single-line-intake-01",
+                "CUSTOMER_DELIVERY", List.of(new MobileIntakeLine("AU9999", "戒托", amount("2"), "件", amount("2"))));
+        String mother = intake.intake(command, new OperatorContext("何琳", RoleCode.RECEIVER, DataScope.ALL)).motherOrderCode();
+        MotherOrderSplitService splits = new MotherOrderSplitService(documents, ledgers, unit);
+        assertThat(splits.view(mother).sourceLines()).hasSize(1);
+        splits.split(new SplitMotherOrderCommand(mother, "何琳", List.of(split(1, 1, 1), split(1, 1, 1))),
+                "single-line-split-01");
+        assertThat(documents.listChildAllocations(mother, null)).hasSize(2);
+    }
+
+    @Test
     void receiptsPostPerMaterialAndSplitChecksEachSource() {
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         InMemoryStockLedgerRepository stock = new InMemoryStockLedgerRepository();
