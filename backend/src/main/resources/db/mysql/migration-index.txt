@@ -56,3 +56,5 @@ V55__m3_label_trace.sql
 V56__m3_compact_label_defaults.sql
 V57__m3_label_layout.sql
 V58__m3_courier_multi_order.sql
+V59__m3_customer_material_catalog.sql
+V60__m3_receipt_line_allocation.sql

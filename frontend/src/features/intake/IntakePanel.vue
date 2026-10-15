@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, reactive, ref, watch, type Ref } from 'vue';
+import { computed, inject, nextTick, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
+import { fetchCustomers, fetchMaterials, saveCustomer, saveMaterial,
+  type CustomerProfile, type MaterialProfile } from '../../services/masterDataApi';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import FieldSteps from '../field/FieldSteps.vue';
@@ -29,6 +32,8 @@ const openLabel = inject<((code: string) => void) | null>('zhubao-open-label', n
 const emit = defineEmits<{ saved: [result: MobileIntakeResult] }>();
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 const visibleTabs = inject<Ref<string[] | null>>('zhubao-visible-tabs', ref(null));
+const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const canManageData = computed(() => ['ADMIN', 'GENERAL_MANAGER', 'WAREHOUSE_KEEPER', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? ''));
 const canOpenLabel = computed(() => !visibleTabs.value || visibleTabs.value.includes('label'));
 const canOpenInbound = computed(() => !visibleTabs.value || visibleTabs.value.includes('inbound'));
 
@@ -36,11 +41,26 @@ const scanText = ref('');
 const scanHint = ref('');
 const formError = ref('');
 const customerName = ref('');
+const customerId = ref<number | null>(null);
+const customers = ref<CustomerProfile[]>([]);
+const materials = ref<MaterialProfile[]>([]);
+const materialCode = ref('');
+const customerSearch = ref('');
+const materialSearch = ref('');
+const newCustomerName = ref('');
+const newMaterialName = ref('');
+const catalogError = ref('');
+const visibleCustomers = computed(() => customers.value.filter((item) => item.enabled &&
+  `${item.customerCode} ${item.name} ${item.aliases}`.toLowerCase().includes(customerSearch.value.trim().toLowerCase())));
+const visibleMaterials = computed(() => materials.value.filter((item) => item.enabled &&
+  `${item.materialCode} ${item.name} ${item.aliases}`.toLowerCase().includes(materialSearch.value.trim().toLowerCase())));
 const processingRequirement = ref('');
 const dueDate = ref('');
 const goodsName = ref('');
 const quantity = ref('1');
+const quantityUnit = ref('件');
 const weight = ref('');
+const extraLines = ref<Array<{ materialCode: string; goodsName: string; quantity: string; quantityUnit: string; weight: string }>>([]);
 const expressCompany = ref('');
 const sourceType = ref<'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER'>('COURIER');
 const manualDraft = ref(false);
@@ -111,11 +131,15 @@ function startNextIntake() {
   clearIntakeTarget();
   scanHint.value = '';
   customerName.value = '';
+  customerId.value = null;
+  materialCode.value = '';
   processingRequirement.value = '';
   dueDate.value = '';
   goodsName.value = '';
   quantity.value = '1';
+  quantityUnit.value = '件';
   weight.value = '';
+  extraLines.value = [];
   expressCompany.value = '';
   sourceType.value = 'COURIER';
   manualDraft.value = false;
@@ -211,11 +235,15 @@ function confirmationFingerprint() {
     sourceType.value,
     newExpressCode.value || manualCourier.value.trim(),
     customerName.value.trim(),
+    customerId.value,
+    materialCode.value,
     processingRequirement.value.trim(),
     dueDate.value,
     goodsName.value.trim(),
     quantity.value,
+    quantityUnit.value,
     weight.value,
+    JSON.stringify(extraLines.value),
     expressCompany.value.trim(),
   ].join('|');
 }
@@ -239,14 +267,29 @@ async function createMotherOrder() {
     formError.value = '请等待扫码识别完成';
     return;
   }
-  if (!customerName.value.trim() || !processingRequirement.value.trim() || !dueDate.value.trim()) {
-    formError.value = '客户、加工要求和完成期限不能为空';
+  if (!customerId.value || !customerName.value.trim() || !processingRequirement.value.trim() || !dueDate.value.trim()) {
+    formError.value = '请选择客户并填写加工要求和完成期限';
     return;
   }
-  if (!goodsName.value.trim() || !Number.isFinite(Number(quantity.value)) || Number(quantity.value) <= 0 || !Number.isFinite(Number(weight.value)) || Number(weight.value) <= 0) {
-    formError.value = '请填写货品名称、数量和重量';
+  if (!materialCode.value || !goodsName.value.trim() || !quantityUnit.value.trim() || !Number.isFinite(Number(quantity.value)) || Number(quantity.value) <= 0 || !Number.isFinite(Number(weight.value)) || Number(weight.value) <= 0) {
+    formError.value = '请选择材质并填写货品名称、数量和重量';
     return;
   }
+  if (extraLines.value.some((line) => !line.materialCode || !line.goodsName.trim()
+    || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0
+    || !Number.isFinite(Number(line.weight)) || Number(line.weight) <= 0
+    || !line.quantityUnit.trim())) {
+    formError.value = '每条材质明细都要选择材质并填写货品、数量、单位和重量';
+    return;
+  }
+  const lines = [
+    { materialCode: materialCode.value, goodsName: goodsName.value.trim(), quantity: Number(quantity.value),
+      quantityUnit: quantityUnit.value.trim(), weight: weight.value },
+    ...extraLines.value.map((line) => ({ materialCode: line.materialCode, goodsName: line.goodsName.trim(),
+      quantity: Number(line.quantity), quantityUnit: line.quantityUnit.trim(), weight: line.weight })),
+  ];
+  const totalQuantity = lines.reduce((sum, line) => sum + Math.round(line.quantity * 1000), 0) / 1000;
+  const totalWeight = lines.reduce((sum, line) => sum + Math.round(Number(line.weight) * 1000), 0) / 1000;
   const currentRequestId = ensureRequestId();
   submitting.value = true;
   try {
@@ -254,12 +297,15 @@ async function createMotherOrder() {
       courierNo: courier,
       sourceType: sourceType.value,
       customerName: customerName.value.trim(),
+      customerId: customerId.value,
+      materialCode: materialCode.value,
       processingRequirement: processingRequirement.value.trim(),
       dueDate: dueDate.value,
       goodsName: goodsName.value.trim(),
-      quantity: Number(quantity.value),
-      weight: weight.value,
+      quantity: totalQuantity,
+      weight: String(totalWeight),
       expressCompany: expressCompany.value.trim(),
+      lines,
       requestId: currentRequestId,
     });
     if (intakeScan.revision !== seen) return;
@@ -273,6 +319,48 @@ async function createMotherOrder() {
     submitting.value = false;
   }
 }
+
+async function loadCatalog() {
+  try {
+    const [customerRows, materialRows] = await Promise.all([fetchCustomers(), fetchMaterials()]);
+    customers.value = customerRows;
+    materials.value = materialRows;
+    catalogError.value = '';
+  } catch (error) {
+    catalogError.value = error instanceof Error ? error.message : '客户与材质目录加载失败';
+  }
+}
+
+function chooseCustomer() {
+  customerName.value = customers.value.find((item) => item.customerId === Number(customerId.value))?.name ?? '';
+}
+
+async function addCustomer() {
+  if (!newCustomerName.value.trim()) return;
+  try {
+    const saved = await saveCustomer({ customerId: 0, customerCode: '', name: newCustomerName.value.trim(),
+      aliases: '', contact: '', phone: '', remark: '', enabled: true });
+    customers.value = [...customers.value, saved];
+    customerId.value = saved.customerId;
+    customerName.value = saved.name;
+    newCustomerName.value = '';
+    catalogError.value = '';
+  } catch (error) { catalogError.value = error instanceof Error ? error.message : '新增客户失败'; }
+}
+
+async function addMaterial() {
+  if (!newMaterialName.value.trim()) return;
+  try {
+    const saved = await saveMaterial({ materialCode: '', name: newMaterialName.value.trim(),
+      aliases: '', remark: '', enabled: true });
+    materials.value = [...materials.value, saved];
+    materialCode.value = saved.materialCode;
+    newMaterialName.value = '';
+    catalogError.value = '';
+  } catch (error) { catalogError.value = error instanceof Error ? error.message : '新增材质失败'; }
+}
+
+onMounted(loadCatalog);
 </script>
 
 <template>
@@ -307,6 +395,7 @@ async function createMotherOrder() {
     />
     <p v-if="scanHint" class="operation-feedback">{{ scanHint }}</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
+    <p v-if="catalogError" class="operation-feedback danger">{{ catalogError }}</p>
     <OrderContextCard v-if="!newExpressCode && !savedMother" :context="intakeScan.context" @select="chooseIntakeTarget" />
   </section>
 
@@ -324,9 +413,21 @@ async function createMotherOrder() {
         <input v-model="manualCourier" type="text" aria-label="运单号（可不填）" />
       </label>
       <label class="field">
-        <span>客户</span>
-        <input v-model="customerName" type="text" aria-label="客户" />
+        <span>搜索客户</span>
+        <input v-model="customerSearch" type="search" aria-label="搜索客户" />
       </label>
+      <label class="field">
+        <span>客户</span>
+        <select v-model.number="customerId" aria-label="客户" @change="chooseCustomer">
+          <option :value="null">请选择客户</option>
+          <option v-for="item in visibleCustomers" :key="item.customerId" :value="item.customerId">{{ item.customerCode }} · {{ item.name }}</option>
+        </select>
+      </label>
+      <div v-if="canManageData" class="field">
+        <span>新增客户档案</span>
+        <input v-model="newCustomerName" aria-label="新增客户名称" />
+        <button type="button" class="secondary-button" @click="addCustomer">新增客户</button>
+      </div>
       <label class="field">
         <span>加工要求</span>
         <textarea v-model="processingRequirement" aria-label="加工要求" />
@@ -340,17 +441,47 @@ async function createMotherOrder() {
         <input v-model="expressCompany" type="text" aria-label="快递公司" />
       </label>
       <label class="field">
+        <span>搜索材质</span>
+        <input v-model="materialSearch" type="search" aria-label="搜索材质" />
+      </label>
+      <label class="field">
+        <span>材质</span>
+        <select v-model="materialCode" aria-label="材质">
+          <option value="">请选择材质</option>
+          <option v-for="item in visibleMaterials" :key="item.materialCode" :value="item.materialCode">{{ item.name }} · {{ item.materialCode }}</option>
+        </select>
+      </label>
+      <div v-if="canManageData" class="field">
+        <span>新增自定义材质</span>
+        <input v-model="newMaterialName" aria-label="新增材质名称" />
+        <button type="button" class="secondary-button" @click="addMaterial">新增材质</button>
+      </div>
+      <label class="field">
         <span>货品名称</span>
         <input v-model="goodsName" type="text" aria-label="货品名称" />
       </label>
       <label class="field">
         <span>数量</span>
-        <input v-model="quantity" type="number" min="1" step="1" aria-label="数量" />
+        <input v-model="quantity" type="number" min="0" step="0.001" aria-label="数量" />
       </label>
+      <label class="field"><span>单位</span><input v-model="quantityUnit" aria-label="单位" /></label>
       <label class="field">
         <span>重量（克）</span>
         <input v-model="weight" type="number" min="0" step="0.001" aria-label="重量" />
       </label>
+      <div v-for="(line, index) in extraLines" :key="index" class="intake-line">
+        <strong>明细 {{ index + 2 }}</strong>
+        <label class="field"><span>材质</span><select v-model="line.materialCode" :aria-label="`明细${index + 2}材质`">
+          <option value="">请选择材质</option>
+          <option v-for="item in visibleMaterials" :key="item.materialCode" :value="item.materialCode">{{ item.name }} · {{ item.materialCode }}</option>
+        </select></label>
+        <label class="field"><span>货品名称</span><input v-model="line.goodsName" :aria-label="`明细${index + 2}货品名称`" /></label>
+        <label class="field"><span>数量</span><input v-model="line.quantity" type="number" min="0" step="0.001" :aria-label="`明细${index + 2}数量`" /></label>
+        <label class="field"><span>单位</span><input v-model="line.quantityUnit" :aria-label="`明细${index + 2}单位`" /></label>
+        <label class="field"><span>重量（克）</span><input v-model="line.weight" type="number" min="0" step="0.001" :aria-label="`明细${index + 2}重量`" /></label>
+        <button type="button" class="secondary-button" @click="extraLines.splice(index, 1)">移除明细</button>
+      </div>
+      <button type="button" class="secondary-button" @click="extraLines.push({ materialCode: '', goodsName: '', quantity: '1', quantityUnit: '件', weight: '' })">增加材质明细</button>
       <button v-if="!field" class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
         {{ submitting ? '正在生成' : '生成母单' }}
       </button>

@@ -117,6 +117,7 @@ provide('zhubao-open-tab', (tab: TabKey) => {
   activateTab(tab);
 });
 const authSession = ref<AuthSession | null>(null);
+provide('zhubao-auth-session', authSession);
 const authReady = ref(false);
 const tabKeySet = new Set<TabKey>(tabs.map((tab) => tab.key));
 const authorizedMenuCodes = computed(() => {

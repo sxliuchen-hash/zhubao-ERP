@@ -1,0 +1,54 @@
+package com.zhubao.erp.business.app;
+
+import com.zhubao.erp.business.domain.CustomerProfile;
+import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.MobileIntakeCommand;
+import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
+import com.zhubao.erp.business.infra.InMemoryMasterDataRepository;
+import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
+import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class MasterDataServiceTest {
+    @Test
+    void stableIdAndHistoricalSnapshotSurviveRename() {
+        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        CustomerProfile customer = catalog.saveCustomer(new CustomerProfile(0, "", "新客户", "", "", "", "", true));
+        MaterialProfile material = catalog.saveMaterial(new MaterialProfile("", "18K 白金", "", "", true));
+        assertThat(customer.customerId()).isGreaterThan(1004);
+        assertThat(material.materialCode()).startsWith("MAT-");
+        assertThatThrownBy(() -> catalog.saveMaterial(new MaterialProfile("", "18K 白金", "", "", true)))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("材质名称已存在");
+
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        MobileIntakeService intake = new MobileIntakeService(new BusinessOperationService(
+                new StockLedgerService(new InMemoryStockLedgerRepository()), null, documents, unit),
+                documents, unit, catalog);
+        var command = new MobileIntakeCommand("", "客户端旧名称", customer.customerId(), "抛光", "2026-10-20",
+                "戒托", BigDecimal.ONE, BigDecimal.ONE, "", material.materialCode(), "件",
+                "catalog-intake-01", "CUSTOMER_DELIVERY");
+        var result = intake.intake(command, new OperatorContext("何琳", RoleCode.RECEIVER, DataScope.ALL));
+        assertThat(result.customerName()).isEqualTo("新客户");
+        catalog.saveCustomer(new CustomerProfile(customer.customerId(), customer.customerCode(), "已改名客户",
+                "新客户", "", "", "", true));
+        assertThat(intake.view(result.motherOrderCode()).customerName()).isEqualTo("新客户");
+        assertThat(catalog.customerForIntake(customer.customerId()).name()).isEqualTo("已改名客户");
+        assertThatThrownBy(() -> intake.intake(new MobileIntakeCommand("", "新客户", null, "抛光",
+                "2026-10-20", "戒托", BigDecimal.ONE, BigDecimal.ONE, "", material.materialCode(),
+                "件", "catalog-intake-02", "CUSTOMER_DELIVERY"),
+                new OperatorContext("何琳", RoleCode.RECEIVER, DataScope.ALL)))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("请从客户档案选择客户");
+    }
+}

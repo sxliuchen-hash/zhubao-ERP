@@ -27,6 +27,18 @@ public interface BusinessDocumentRepository {
 
     List<MotherOrderRecord> listMotherOrders();
 
+    /** 新单逐行读取；旧单由仓储按单材质快照合成一条只读明细。 */
+    List<ReceiptLine> listReceiptLines(String motherOrderCode);
+
+    void saveReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session);
+
+    void updateMotherOrderSummary(String motherOrderCode, java.math.BigDecimal quantity,
+                                  java.math.BigDecimal weight, WorkSession session);
+
+    List<ChildLineAllocation> listChildAllocations(String motherOrderCode, WorkSession session);
+
+    void saveChildAllocation(ChildLineAllocation allocation, WorkSession session);
+
     boolean outboundOrderExists(String code);
 
     /** 在当前工作单元里判断出货单号，能看见本事务尚未提交的写入。 */

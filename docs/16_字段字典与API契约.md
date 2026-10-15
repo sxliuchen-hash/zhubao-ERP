@@ -2199,8 +2199,14 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `GET /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeLookup>` |
-| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。`requestId` 必填；动作为 `INTAKE_CREATE`，目标类型 `REQUEST`。同账号同请求同内容回放原母单；新 `requestId` 可在同运单下新建另一张母单。`sourceType` 为 `COURIER`、`CUSTOMER_DELIVERY` 或 `INTERNAL_OTHER`；运单与快递公司均可空。旧客户端未带 `requestId` 时明确拒绝并提示升级，防止超时重复入账。 |
+| `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。`requestId` 必填；动作为 `INTAKE_CREATE`，目标类型 `REQUEST`。同账号同请求同内容回放原母单；新 `requestId` 可在同运单下新建另一张母单。`sourceType` 为 `COURIER`、`CUSTOMER_DELIVERY` 或 `INTERNAL_OTHER`；运单与快递公司均可空。新版传稳定 `customerId`、`customerName` 快照及 `lines[]`（`materialCode`、`goodsName`、`quantity`、`quantityUnit`、`weight`）；母单总数量和重量须等于明细合计。每行入对应材质的 `RAW_WAITING` 台账，整单在同一工作单元提交。旧客户端未带 `requestId` 时明确拒绝并提示升级，防止超时重复入账。 |
 | `GET /api/business/operations/mobile-intakes?courierNo=...` | 返回全部可见母单的 `candidates[]`，含母单号、客户、收货时间、货品、要求和期限。兼容字段 `motherOrderCode` 仅在恰好一张候选时有值，多张时为空，调用方不得取第一张。 |
+| `GET /api/business/master-data/customers` | 返回当前账号客户范围内的启用客户档案，使用稳定客户 ID；改名不回写历史单据快照。 |
+| `POST /api/business/master-data/customers` | 有 `MASTER_DATA_MANAGE` 权限者创建或更新客户；名称归一化后不可重复。 |
+| `GET /api/business/master-data/materials` | 返回启用材质目录，支持前端搜索和多选。 |
+| `POST /api/business/master-data/materials` | 有 `MASTER_DATA_MANAGE` 权限者自定义添加或更新材质；编码稳定，名称去重。 |
+| `GET /api/business/operations/mother-orders/{code}/split` | 新版 `sourceLines[]` 显示收货来源行及逐行剩余数量、重量；无新明细的历史单据保留原汇总视图。 |
+| `POST /api/business/operations/mother-orders/{code}/splits` | 新版每张子单的 `allocations[]` 指定 `sourceLineNo`、数量和重量；服务端锁定母单，核对每行剩余，并按真实材质转在制。现有下游工序按单一材质维度处理，一张子单只能分配同一材质的来源行。旧单继续接受原请求形态。 |
 | `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |
 | `GET /api/business/operations/mother-orders/{code}/split` | `ApiResponse<MotherOrderSplitView>` |
 | `POST /api/business/operations/mother-orders/{code}/keep` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_KEEP`，拆分决定和成功结果同一次提交。同账号同请求回放后重新读取当前视图。缺编号直接拒绝 |

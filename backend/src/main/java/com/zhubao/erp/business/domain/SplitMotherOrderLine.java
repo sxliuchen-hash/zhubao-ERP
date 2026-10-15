@@ -9,9 +9,15 @@ import java.util.List;
 public record SplitMotherOrderLine(
         BigDecimal quantity,
         BigDecimal weight,
-        List<String> processes
+        List<String> processes,
+        List<SplitSourceAllocation> allocations
 ) {
     public SplitMotherOrderLine {
         processes = processes == null ? null : List.copyOf(processes);
+        allocations = allocations == null ? List.of() : List.copyOf(allocations);
+    }
+
+    public SplitMotherOrderLine(BigDecimal quantity, BigDecimal weight, List<String> processes) {
+        this(quantity, weight, processes, List.of());
     }
 }

@@ -2,14 +2,18 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.business.domain.ChildLineAllocation;
 import com.zhubao.erp.business.domain.ChildWorkOrderView;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderSplitView;
 import com.zhubao.erp.business.domain.MotherSplitState;
+import com.zhubao.erp.business.domain.ReceiptLine;
+import com.zhubao.erp.business.domain.ReceiptLineBalance;
 import com.zhubao.erp.business.domain.OrderCodes;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
 import com.zhubao.erp.business.domain.SplitMotherOrderLine;
+import com.zhubao.erp.business.domain.SplitSourceAllocation;
 import com.zhubao.erp.business.domain.VerificationCodes;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
@@ -32,6 +36,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -148,6 +154,10 @@ public class MotherOrderSplitService {
             documents.lockMotherOrder(motherOrderCode == null ? "" : motherOrderCode.trim(), session);
         }
         MotherOrderRecord mother = requireMother(motherOrderCode, session);
+        if (mother.sourceRegisterType() != null && mother.sourceRegisterType().startsWith("INTAKE_LINES:")
+                && documents.listReceiptLines(mother.code()).stream().map(ReceiptLine::materialCode).distinct().count() > 1) {
+            throw new BusinessException("多材质母单请按材质拆成子单，不能整单不拆");
+        }
         if (!listChildren(mother.code(), session).isEmpty()) {
             throw new BusinessException("这张母单已经拆成子单，不能再选择不拆");
         }
@@ -190,11 +200,24 @@ public class MotherOrderSplitService {
             throw new BusinessException("拆成多张至少需要两张子单");
         }
         List<ChildWorkOrderRecord> existing = listChildren(mother.code(), session);
+        boolean detailed = mother.sourceRegisterType() != null
+                && mother.sourceRegisterType().startsWith("INTAKE_LINES:");
+        Map<Integer, ReceiptLine> sourceByNo = new HashMap<>();
+        Map<Integer, BigDecimal> allocatedQuantity = new HashMap<>();
+        Map<Integer, BigDecimal> allocatedWeight = new HashMap<>();
+        if (detailed) {
+            for (ReceiptLine source : documents.listReceiptLines(mother.code())) sourceByNo.put(source.lineNo(), source);
+            for (ChildLineAllocation prior : documents.listChildAllocations(mother.code(), session)) {
+                allocatedQuantity.merge(prior.sourceLineNo(), prior.quantity(), BigDecimal::add);
+                allocatedWeight.merge(prior.sourceLineNo(), prior.weight(), BigDecimal::add);
+            }
+        }
         BigDecimal remainingQuantity = remaining(mother.quantity(), existing, true);
         BigDecimal remainingWeight = remaining(mother.weight(), existing, false);
         BigDecimal requestedQuantity = ZERO;
         BigDecimal requestedWeight = ZERO;
         List<PreparedLine> prepared = new ArrayList<>();
+        List<List<SplitSourceAllocation>> allocationGroups = new ArrayList<>();
         for (SplitMotherOrderLine line : lines) {
             if (line == null || line.quantity() == null || line.weight() == null
                     || line.quantity().compareTo(ZERO) <= 0 || line.weight().compareTo(ZERO) <= 0) {
@@ -202,6 +225,39 @@ public class MotherOrderSplitService {
             }
             requestedQuantity = requestedQuantity.add(line.quantity());
             requestedWeight = requestedWeight.add(line.weight());
+            if (detailed) {
+                if (line.allocations().isEmpty()) throw new BusinessException("请按收货来源明细分配子单");
+                BigDecimal lineQuantity = ZERO;
+                BigDecimal lineWeight = ZERO;
+                Set<Integer> uniqueSources = new HashSet<>();
+                for (SplitSourceAllocation allocation : line.allocations()) {
+                    ReceiptLine source = sourceByNo.get(allocation.sourceLineNo());
+                    if (source == null || !uniqueSources.add(allocation.sourceLineNo())
+                            || allocation.quantity() == null || allocation.weight() == null
+                            || allocation.quantity().signum() <= 0 || allocation.weight().signum() <= 0) {
+                        throw new BusinessException("子单来源明细或分配数量无效");
+                    }
+                    if (source.quantityUnit() == null || source.quantityUnit().isBlank()) {
+                        throw new BusinessException("来源明细单位缺失");
+                    }
+                    lineQuantity = lineQuantity.add(allocation.quantity());
+                    lineWeight = lineWeight.add(allocation.weight());
+                    allocatedQuantity.merge(source.lineNo(), allocation.quantity(), BigDecimal::add);
+                    allocatedWeight.merge(source.lineNo(), allocation.weight(), BigDecimal::add);
+                    if (allocatedQuantity.get(source.lineNo()).compareTo(source.quantity()) > 0
+                            || allocatedWeight.get(source.lineNo()).compareTo(source.weight()) > 0) {
+                        throw new BusinessException("来源明细剩余数量或重量不足：第 " + source.lineNo() + " 行");
+                    }
+                }
+                if (lineQuantity.compareTo(line.quantity()) != 0 || lineWeight.compareTo(line.weight()) != 0) {
+                    throw new BusinessException("子单数量和重量必须等于来源分配合计");
+                }
+                if (line.allocations().stream().map(item -> sourceByNo.get(item.sourceLineNo()).materialCode())
+                        .distinct().count() > 1) {
+                    throw new BusinessException("一张子单暂不能跨材质，请按材质分别拆单");
+                }
+                allocationGroups.add(line.allocations());
+            }
             prepared.add(new PreparedLine(
                     "",
                     WorkshopProcesses.normalize(line.processes()),
@@ -240,8 +296,24 @@ public class MotherOrderSplitService {
         }
         String operator = operatorOf(command.operator());
         String createdAt = RECORD_TIME.format(LocalDateTime.now());
-        for (PreparedLine line : withCodes) {
-            StockLedgerEntry entry = moveToWip(mother, line, operator, session);
+        for (int index = 0; index < withCodes.size(); index++) {
+            PreparedLine line = withCodes.get(index);
+            List<ChildLineAllocation> savedAllocations = new ArrayList<>();
+            StockLedgerEntry entry;
+            ReceiptLine firstSource = null;
+            if (detailed) {
+                entry = null;
+                for (SplitSourceAllocation allocation : allocationGroups.get(index)) {
+                    ReceiptLine source = sourceByNo.get(allocation.sourceLineNo());
+                    StockLedgerEntry moved = moveToWip(mother, line.code(), line.processes(), source.materialCode(),
+                            allocation.quantity(), allocation.weight(), operator, session);
+                    if (entry == null) { entry = moved; firstSource = source; }
+                    savedAllocations.add(new ChildLineAllocation(line.code(), mother.code(), source.lineNo(),
+                            source.materialCode(), allocation.quantity(), allocation.weight(), moved.code()));
+                }
+            } else {
+                entry = moveToWip(mother, line, operator, session);
+            }
             saveChild(new ChildWorkOrderRecord(
                     line.code(),
                     mother.code(),
@@ -249,8 +321,8 @@ public class MotherOrderSplitService {
                     blank(mother.customerName()),
                     blank(mother.processingRequirement()),
                     blank(mother.dueDate()),
-                    blank(mother.materialCode()),
-                    blank(mother.goodsName()),
+                    detailed ? firstSource.materialCode() : blank(mother.materialCode()),
+                    detailed ? (savedAllocations.size() > 1 ? "多材质" : firstSource.goodsName()) : blank(mother.goodsName()),
                     line.quantity(),
                     blankToDefault(mother.quantityUnit(), "件"),
                     line.weight(),
@@ -261,6 +333,7 @@ public class MotherOrderSplitService {
                     operator,
                     createdAt
             ), session);
+            for (ChildLineAllocation allocation : savedAllocations) documents.saveChildAllocation(allocation, session);
         }
         saveSplit(new MotherSplitState(
                 mother.code(),
@@ -273,6 +346,13 @@ public class MotherOrderSplitService {
     }
 
     private StockLedgerEntry moveToWip(MotherOrderRecord mother, PreparedLine line, String operator, WorkSession session) {
+        return moveToWip(mother, line.code(), line.processes(), mother.materialCode(),
+                line.quantity(), line.weight(), operator, session);
+    }
+
+    private StockLedgerEntry moveToWip(MotherOrderRecord mother, String childCode, List<String> processes,
+                                       String materialCode, BigDecimal quantity, BigDecimal weight,
+                                       String operator, WorkSession session) {
         OwnerType ownerType = ownerTypeOf(mother);
         Long ownerCustomerId = mother.ownerCustomerId() == null ? mother.customerId() : mother.ownerCustomerId();
         StockDimension fromWaiting = new StockDimension(
@@ -281,7 +361,7 @@ public class MotherOrderSplitService {
                 mother.customerId(),
                 mother.code(),
                 null,
-                mother.materialCode(),
+                materialCode,
                 mother.warehouseCode(),
                 StockStatus.RAW_WAITING
         );
@@ -290,19 +370,19 @@ public class MotherOrderSplitService {
                 ownerCustomerId,
                 mother.customerId(),
                 mother.code(),
-                line.code(),
-                mother.materialCode(),
+                childCode,
+                materialCode,
                 mother.warehouseCode(),
                 StockStatus.WIP
         );
         StockTransferCommand transfer = new StockTransferCommand(
                 "work_order_split",
-                line.code(),
+                childCode,
                 fromWaiting,
                 toWip,
-                line.quantity(),
-                line.weight(),
-                "拆分子单；工序：" + WorkshopProcesses.join(line.processes()) + "；操作人：" + operator
+                quantity,
+                weight,
+                "拆分子单；工序：" + WorkshopProcesses.join(processes) + "；操作人：" + operator
         );
         if (session == null) {
             return stockLedgerService.transfer(transfer);
@@ -316,6 +396,19 @@ public class MotherOrderSplitService {
 
     private MotherOrderSplitView toView(MotherOrderRecord mother, WorkSession session) {
         List<ChildWorkOrderRecord> children = listChildren(mother.code(), session);
+        List<ReceiptLineBalance> sourceLines = new ArrayList<>();
+        if (mother.sourceRegisterType() != null && mother.sourceRegisterType().startsWith("INTAKE_LINES:")) {
+            List<ChildLineAllocation> allocations = documents.listChildAllocations(mother.code(), session);
+            for (ReceiptLine line : documents.listReceiptLines(mother.code())) {
+                BigDecimal usedQuantity = allocations.stream().filter(item -> item.sourceLineNo() == line.lineNo())
+                        .map(ChildLineAllocation::quantity).reduce(ZERO, BigDecimal::add);
+                BigDecimal usedWeight = allocations.stream().filter(item -> item.sourceLineNo() == line.lineNo())
+                        .map(ChildLineAllocation::weight).reduce(ZERO, BigDecimal::add);
+                sourceLines.add(new ReceiptLineBalance(line.lineNo(), line.materialCode(), line.materialName(),
+                        line.goodsName(), line.quantity(), line.quantityUnit(), line.weight(),
+                        line.quantity().subtract(usedQuantity), line.weight().subtract(usedWeight)));
+            }
+        }
         MotherSplitState state = findSplit(mother.code(), session).orElse(null);
         String decision = state == null ? "" : state.decision();
         String verificationCode = state == null ? "" : blank(state.verificationCode());
@@ -335,7 +428,8 @@ public class MotherOrderSplitService {
                 remaining(mother.quantity(), children, true),
                 remaining(mother.weight(), children, false),
                 sticker("mother", mother.code()),
-                childViews
+                childViews,
+                sourceLines
         );
     }
 
@@ -441,7 +535,10 @@ public class MotherOrderSplitService {
             }
             builder.append("q=").append(number(line.quantity()))
                     .append(";w=").append(number(line.weight()))
-                    .append(";p=").append(String.join(",", WorkshopProcesses.normalize(line.processes())));
+                    .append(";p=").append(String.join(",", WorkshopProcesses.normalize(line.processes())))
+                    .append(";a=").append(line.allocations().stream().map(allocation ->
+                            allocation.sourceLineNo() + ":" + number(allocation.quantity()) + ":"
+                                    + number(allocation.weight())).toList());
         }
         return builder.toString();
     }

@@ -2,6 +2,7 @@ package com.zhubao.erp.business.infra;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.business.domain.ChildLineAllocation;
 import com.zhubao.erp.business.domain.LabelReprintLog;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
@@ -10,6 +11,7 @@ import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.business.domain.QualityReworkReport;
 import com.zhubao.erp.business.domain.QualityRound;
+import com.zhubao.erp.business.domain.ReceiptLine;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -29,6 +31,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepository {
 
     private final ConcurrentMap<String, MotherOrderRecord> motherOrders = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, List<ReceiptLine>> receiptLines = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, List<ChildLineAllocation>> childAllocations = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, OutboundOrderRecord> outboundOrders = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, MotherSplitState> splitStates = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ChildWorkOrderRecord> childWorkOrders = new ConcurrentHashMap<>();
@@ -108,6 +112,60 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     @Override
     public List<MotherOrderRecord> listMotherOrders() {
         return List.copyOf(new ArrayList<>(motherOrders.values()));
+    }
+
+    @Override
+    public List<ReceiptLine> listReceiptLines(String motherOrderCode) {
+        List<ReceiptLine> rows = receiptLines.get(motherOrderCode);
+        if (rows != null && !rows.isEmpty()) return List.copyOf(rows);
+        MotherOrderRecord mother = motherOrders.get(motherOrderCode);
+        if (mother == null) return List.of();
+        return List.of(new ReceiptLine(1, mother.materialCode(), mother.materialCode(), mother.goodsName(),
+                mother.quantity(), mother.quantityUnit(), mother.weight(), mother.ledgerCode()));
+    }
+
+    @Override
+    public synchronized void saveReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session) {
+        requireSession(session);
+        List<ReceiptLine> previous = receiptLines.get(motherOrderCode);
+        List<ReceiptLine> next = new ArrayList<>(previous == null ? List.of() : previous);
+        if (next.stream().anyMatch(item -> item.lineNo() == line.lineNo())) throw new BusinessException("收货明细行号重复");
+        next.add(line);
+        receiptLines.put(motherOrderCode, List.copyOf(next));
+        session.onRollback(() -> {
+            if (previous == null) receiptLines.remove(motherOrderCode);
+            else receiptLines.put(motherOrderCode, previous);
+        });
+    }
+
+    @Override
+    public synchronized void updateMotherOrderSummary(String motherOrderCode, java.math.BigDecimal quantity,
+                                                       java.math.BigDecimal weight, WorkSession session) {
+        requireSession(session);
+        MotherOrderRecord previous = motherOrders.get(motherOrderCode);
+        if (previous == null) throw new BusinessException("母单不存在：" + motherOrderCode);
+        motherOrders.put(motherOrderCode, previous.withSummary(quantity, weight));
+        session.onRollback(() -> motherOrders.put(motherOrderCode, previous));
+    }
+
+    @Override
+    public List<ChildLineAllocation> listChildAllocations(String motherOrderCode, WorkSession session) {
+        if (session != null) requireSession(session);
+        return List.copyOf(childAllocations.getOrDefault(motherOrderCode, List.of()));
+    }
+
+    @Override
+    public synchronized void saveChildAllocation(ChildLineAllocation allocation, WorkSession session) {
+        requireSession(session);
+        String mother = allocation.motherOrderCode();
+        List<ChildLineAllocation> previous = childAllocations.get(mother);
+        List<ChildLineAllocation> next = new ArrayList<>(previous == null ? List.of() : previous);
+        next.add(allocation);
+        childAllocations.put(mother, List.copyOf(next));
+        session.onRollback(() -> {
+            if (previous == null) childAllocations.remove(mother);
+            else childAllocations.put(mother, previous);
+        });
     }
 
     @Override

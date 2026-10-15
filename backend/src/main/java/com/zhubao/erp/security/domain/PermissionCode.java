@@ -19,6 +19,7 @@ public enum PermissionCode {
     GATEWAY_DEVICE_MANAGE("设备网关管理"),
     AUTH_ACCOUNT_MANAGE("登录账号管理"),
     CUSTOMER_AUTHORIZATION_MANAGE("客户授权管理"),
+    MASTER_DATA_MANAGE("客户与材质档案维护"),
     APPROVAL_DECISION("审批任务决策"),
     DOCUMENT_ATTACHMENT_UPLOAD("证据附件上传"),
     DOCUMENT_CONTENT_MANAGE("存储内容管理"),

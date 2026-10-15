@@ -19,7 +19,8 @@ const props = defineProps<{
 
 const view = ref<MotherOrderSplitView | null>(null);
 const stickers = ref<LabelPayload[]>([]);
-const lines = ref<Array<{ quantity: string; weight: string; processes: string[] }>>([blankLine(), blankLine()]);
+const lines = ref<Array<{ quantity: string; weight: string; processes: string[];
+  allocations: Array<{ sourceLineNo: number | null; quantity: string; weight: string }> }>>([blankLine(), blankLine()]);
 const loadError = ref('');
 const formError = ref('');
 const submitting = ref(false);
@@ -36,7 +37,8 @@ watch(() => props.motherOrderCode, () => {
 }, { immediate: true });
 
 function blankLine() {
-  return { quantity: '', weight: '', processes: [...processOptions] };
+  return { quantity: '', weight: '', processes: [...processOptions], allocations: [] as Array<{
+    sourceLineNo: number | null; quantity: string; weight: string }> };
 }
 
 async function load() {
@@ -117,10 +119,13 @@ async function keepWhole() {
 async function splitMany() {
   formError.value = '';
   if (!view.value) return;
+  const hasSources = (view.value.sourceLines?.length ?? 0) > 0;
   const parsed = lines.value.map((line) => ({
     quantity: Number(line.quantity),
     weight: Number(line.weight),
     processes: [...line.processes],
+    ...(hasSources ? { allocations: line.allocations.map((allocation) => ({ sourceLineNo: Number(allocation.sourceLineNo),
+      quantity: Number(allocation.quantity), weight: Number(allocation.weight) })) } : {}),
   }));
   if (parsed.length < 2) {
     formError.value = '拆成多张至少需要两张子单';
@@ -134,6 +139,13 @@ async function splitMany() {
     formError.value = '每张子单至少选择一道工序';
     return;
   }
+  if (hasSources && parsed.some((line) => !line.allocations || line.allocations.length === 0
+    || line.allocations.some((item) => !item.sourceLineNo || item.quantity <= 0 || item.weight <= 0)
+    || round3(line.allocations.reduce((sum, item) => sum + item.quantity, 0)) !== round3(line.quantity)
+    || round3(line.allocations.reduce((sum, item) => sum + item.weight, 0)) !== round3(line.weight))) {
+    formError.value = '请逐行分配来源材质，且分配合计须等于子单数量和重量';
+    return;
+  }
   const quantity = round3(parsed.reduce((sum, line) => sum + line.quantity, 0));
   const weight = round3(parsed.reduce((sum, line) => sum + line.weight, 0));
   if (quantity > round3(Number(view.value.remainingQuantity))) {
@@ -145,7 +157,7 @@ async function splitMany() {
     return;
   }
   submitting.value = true;
-  const fingerprint = parsed.map((line) => `${line.quantity}:${line.weight}:${line.processes.join(',')}`).join('|');
+  const fingerprint = parsed.map((line) => `${line.quantity}:${line.weight}:${line.processes.join(',')}:${JSON.stringify(line.allocations)}`).join('|');
   const key = `split|${props.motherOrderCode}|${fingerprint}`;
   const requestId = ensureRequestId(key, 'split');
   try {
@@ -192,6 +204,12 @@ function scaleStyle(payload: LabelPayload) {
       <p class="split-summary">
         剩余 {{ view.remainingQuantity }} {{ view.quantityUnit }} / {{ view.remainingWeight }} 克
       </p>
+      <ul v-if="view.sourceLines?.length" class="child-list">
+        <li v-for="source in view.sourceLines" :key="source.lineNo">
+          来源 {{ source.lineNo }} · {{ source.materialName }}（{{ source.materialCode }}）· {{ source.goodsName }}：
+          剩余 {{ source.remainingQuantity }} {{ source.quantityUnit }} / {{ source.remainingWeight }} 克
+        </li>
+      </ul>
       <button v-if="canKeep" class="primary-button" type="button" :disabled="submitting" @click="keepWhole">
         不拆，预览流转贴纸
       </button>
@@ -209,6 +227,18 @@ function scaleStyle(payload: LabelPayload) {
             <span>重量（克）</span>
             <input v-model="line.weight" inputmode="decimal" :aria-label="`第${index + 1}张重量`" />
           </label>
+          <div v-if="view.sourceLines?.length" class="source-allocations">
+            <div v-for="(allocation, allocationIndex) in line.allocations" :key="allocationIndex" class="split-line">
+              <label class="field"><span>来源明细</span><select v-model.number="allocation.sourceLineNo" :aria-label="`第${index + 1}张来源${allocationIndex + 1}`">
+                <option :value="null">请选择来源</option>
+                <option v-for="source in view.sourceLines" :key="source.lineNo" :value="source.lineNo">第 {{ source.lineNo }} 行 · {{ source.materialName }} · 剩余 {{ source.remainingQuantity }} {{ source.quantityUnit }}</option>
+              </select></label>
+              <label class="field"><span>分配数量</span><input v-model="allocation.quantity" inputmode="decimal" :aria-label="`第${index + 1}张分配数量${allocationIndex + 1}`" /></label>
+              <label class="field"><span>分配重量（克）</span><input v-model="allocation.weight" inputmode="decimal" :aria-label="`第${index + 1}张分配重量${allocationIndex + 1}`" /></label>
+              <button type="button" class="table-action" @click="line.allocations.splice(allocationIndex, 1)">移除来源</button>
+            </div>
+            <button type="button" class="table-action" @click="line.allocations.push({ sourceLineNo: null, quantity: '', weight: '' })">增加来源明细</button>
+          </div>
           <div class="process-checks">
             <label v-for="name in processOptions" :key="name">
               <input

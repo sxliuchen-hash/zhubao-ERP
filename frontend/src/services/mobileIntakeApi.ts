@@ -15,12 +15,16 @@ export interface MobileIntakeRequest {
   courierNo: string;
   sourceType: 'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER';
   customerName: string;
+  customerId?: number;
   processingRequirement: string;
   dueDate: string;
   goodsName: string;
   quantity: number;
   weight: string;
   expressCompany?: string;
+  materialCode?: string;
+  quantityUnit?: string;
+  lines?: Array<{ materialCode: string; goodsName: string; quantity: number; quantityUnit: string; weight: string }>;
   requestId?: string;
 }
 

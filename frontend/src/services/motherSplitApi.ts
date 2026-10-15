@@ -4,6 +4,7 @@ export interface SplitLineRequest {
   quantity: number;
   weight: number;
   processes: string[];
+  allocations?: Array<{ sourceLineNo: number; quantity: number; weight: number }>;
 }
 
 export interface ChildWorkOrderView {
@@ -36,6 +37,8 @@ export interface MotherOrderSplitView {
   remainingWeight: number;
   qrContent: string;
   children: ChildWorkOrderView[];
+  sourceLines?: Array<{ lineNo: number; materialCode: string; materialName: string; goodsName: string;
+    quantity: number; quantityUnit: string; weight: number; remainingQuantity: number; remainingWeight: number }>;
 }
 
 export function fetchMotherSplit(code: string): Promise<MotherOrderSplitView> {

@@ -31,7 +31,10 @@ final class ReceivingResultText {
                 "weight=" + number(command.weight()),
                 "express=" + text(command.expressCompany()),
                 "material=" + text(blankTo(command.materialCode(), "MAT-MOBILE")),
-                "unit=" + text(blankTo(command.quantityUnit(), "件"))
+                "unit=" + text(blankTo(command.quantityUnit(), "件")),
+                "lines=" + command.lines().stream().map(line -> text(line.materialCode()) + "|"
+                        + text(line.goodsName()) + "|" + number(line.quantity()) + "|"
+                        + text(blankTo(line.quantityUnit(), "件")) + "|" + number(line.weight())).toList()
         );
     }
 

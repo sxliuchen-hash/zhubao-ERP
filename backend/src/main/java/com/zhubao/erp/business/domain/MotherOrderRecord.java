@@ -34,4 +34,11 @@ public record MotherOrderRecord(
         String dueDate,
         String customerName
 ) {
+    public MotherOrderRecord withSummary(BigDecimal nextQuantity, BigDecimal nextWeight) {
+        return new MotherOrderRecord(code, customerId, ownerCustomerId, materialCode, inboundDate,
+                expressCompany, courierNo, senderName, receiverName, unpackSigner, goodsName, ownerType,
+                customerOwned, warehouseCode, nextQuantity, quantityUnit, nextWeight, stockStatus, ledgerCode,
+                sourceRegisterType, sourceRegisterLineNo, sourceRegisterSequence, operator, evidenceCode,
+                remark, status, createdAt, processingRequirement, dueDate, customerName);
+    }
 }

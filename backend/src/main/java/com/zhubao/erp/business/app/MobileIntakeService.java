@@ -4,11 +4,19 @@ import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
+import com.zhubao.erp.business.domain.MobileIntakeLine;
 import com.zhubao.erp.business.domain.MobileIntakeLookup;
 import com.zhubao.erp.business.domain.MobileIntakeResult;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OrderCodes;
+import com.zhubao.erp.business.domain.ReceiptLine;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.domain.OwnerType;
+import com.zhubao.erp.inventory.domain.StockDimension;
+import com.zhubao.erp.inventory.domain.StockLedgerEntry;
+import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.scan.app.CourierNumbers;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -19,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -41,6 +51,8 @@ public class MobileIntakeService {
     private final BusinessOperationService businessOperationService;
     private final BusinessDocumentRepository businessDocumentRepository;
     private final BusinessWorkUnit workUnit;
+    private final MasterDataService masterData;
+    private final StockLedgerService stockLedgerService;
     /** 本进程已发出、事务可能尚未提交的母单号，避免并发收货拿到同一个流水。 */
     private final Set<String> reservedMotherCodes = ConcurrentHashMap.newKeySet();
     private final Object motherCodeLock = new Object();
@@ -49,18 +61,39 @@ public class MobileIntakeService {
             BusinessOperationService businessOperationService,
             BusinessDocumentRepository businessDocumentRepository
     ) {
-        this(businessOperationService, businessDocumentRepository, null);
+        this(businessOperationService, businessDocumentRepository, null, null, null);
+    }
+
+    public MobileIntakeService(
+            BusinessOperationService businessOperationService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit
+    ) {
+        this(businessOperationService, businessDocumentRepository, workUnit, null, null);
+    }
+
+    public MobileIntakeService(
+            BusinessOperationService businessOperationService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit,
+            MasterDataService masterData
+    ) {
+        this(businessOperationService, businessDocumentRepository, workUnit, masterData, null);
     }
 
     @Autowired
     public MobileIntakeService(
             BusinessOperationService businessOperationService,
             BusinessDocumentRepository businessDocumentRepository,
-            BusinessWorkUnit workUnit
+            BusinessWorkUnit workUnit,
+            MasterDataService masterData,
+            StockLedgerService stockLedgerService
     ) {
         this.businessOperationService = businessOperationService;
         this.businessDocumentRepository = businessDocumentRepository;
         this.workUnit = workUnit;
+        this.masterData = masterData;
+        this.stockLedgerService = stockLedgerService;
     }
 
     public MobileIntakeLookup lookup(String courierNo) {
@@ -96,8 +129,10 @@ public class MobileIntakeService {
         if (!courierNo.isBlank() && !CourierNumbers.isWaybill(courierNo)) {
             throw new BusinessException("未识别的快递单号");
         }
-        String customerName = command.customerName().trim();
-        assertCustomerAllowed(operator, customerName, command.customerId());
+        String customerName = masterData == null ? command.customerName().trim()
+                : masterData.customerForIntake(command.customerId()).name();
+        long customerId = masterData == null ? resolveCustomerId(customerName, command.customerId()) : command.customerId();
+        assertCustomerAllowed(operator, customerName, customerId);
         if (command.requestId() == null || command.requestId().isBlank()) {
             throw new BusinessException("建单必须提供请求编号，请升级客户端后重试");
         }
@@ -139,14 +174,12 @@ public class MobileIntakeService {
             WorkSession session
     ) {
         long customerId = resolveCustomerId(customerName, command.customerId());
+        List<MobileIntakeLine> lines = normalizedLines(command);
         String motherOrderCode = nextMotherOrderCode(session);
-        String materialCode = command.materialCode() == null || command.materialCode().isBlank()
-                ? "MAT-MOBILE"
-                : command.materialCode().trim();
+        MobileIntakeLine first = lines.get(0);
+        String materialCode = first.materialCode();
         String expressCompany = command.expressCompany() == null ? "" : command.expressCompany().trim();
-        String quantityUnit = command.quantityUnit() == null || command.quantityUnit().isBlank()
-                ? "件"
-                : command.quantityUnit().trim();
+        String quantityUnit = first.quantityUnit();
         ConfirmInboundCommand inbound = new ConfirmInboundCommand(
                 motherOrderCode,
                 customerId,
@@ -158,14 +191,15 @@ public class MobileIntakeService {
                 "",
                 operator,
                 operator,
-                command.goodsName().trim(),
-                command.sourceType() == null ? "COURIER" : command.sourceType(),
+                first.goodsName(),
+                command.lines().size() > 1 ? "INTAKE_LINES:" + command.sourceType()
+                        : command.sourceType() == null ? "COURIER" : command.sourceType(),
                 null,
                 "",
                 "RAW-CUSTOMER",
-                command.quantity(),
+                first.quantity(),
                 quantityUnit,
-                command.weight(),
+                first.weight(),
                 operator,
                 courierNo,
                 "收货生成母单",
@@ -176,12 +210,66 @@ public class MobileIntakeService {
         InboundConfirmationResult confirmed = session == null
                 ? businessOperationService.confirmInbound(inbound)
                 : businessOperationService.postInboundInSession(inbound, session);
+        if (!command.lines().isEmpty()) {
+            if (session == null || stockLedgerService == null) throw new BusinessException("逐材质收货工作单元尚未装配");
+            BigDecimal totalQuantity = BigDecimal.ZERO;
+            BigDecimal totalWeight = BigDecimal.ZERO;
+            for (int index = 0; index < lines.size(); index++) {
+                MobileIntakeLine line = lines.get(index);
+                StockLedgerEntry entry;
+                if (index == 0) {
+                    entry = null;
+                } else {
+                    StockDimension to = new StockDimension(OwnerType.CUSTOMER, customerId, customerId,
+                            motherOrderCode, null, line.materialCode(), "RAW-CUSTOMER", StockStatus.RAW_WAITING);
+                    entry = stockLedgerService.transfer(new StockTransferCommand("inbound_confirm", motherOrderCode,
+                            null, to, line.quantity(), line.weight(), "收货明细第 " + (index + 1) + " 行"), session);
+                }
+                String ledgerCode = index == 0 ? confirmed.ledgerCode() : entry.code();
+                String materialName = masterData == null ? line.materialCode()
+                        : masterData.materialForIntake(line.materialCode()).name();
+                businessDocumentRepository.saveReceiptLine(motherOrderCode, new ReceiptLine(index + 1,
+                        line.materialCode(), materialName, line.goodsName(), line.quantity(), line.quantityUnit(),
+                        line.weight(), ledgerCode), session);
+                totalQuantity = totalQuantity.add(line.quantity());
+                totalWeight = totalWeight.add(line.weight());
+            }
+            businessDocumentRepository.updateMotherOrderSummary(motherOrderCode, totalQuantity, totalWeight, session);
+        }
         MotherOrderRecord saved = session == null
                 ? businessDocumentRepository.findMotherOrderByCode(confirmed.motherOrderCode())
                     .orElseThrow(() -> new BusinessException("母单已入账但未能读回：" + confirmed.motherOrderCode()))
                 : businessDocumentRepository.findMotherOrderByCode(confirmed.motherOrderCode(), session)
                     .orElseThrow(() -> new BusinessException("母单已入账但未能读回：" + confirmed.motherOrderCode()));
         return resultOf(saved, false);
+    }
+
+    private List<MobileIntakeLine> normalizedLines(MobileIntakeCommand command) {
+        List<MobileIntakeLine> raw = command.lines().isEmpty()
+                ? List.of(new MobileIntakeLine(command.materialCode(), command.goodsName(), command.quantity(),
+                        command.quantityUnit(), command.weight())) : command.lines();
+        List<MobileIntakeLine> result = new ArrayList<>();
+        BigDecimal quantity = BigDecimal.ZERO;
+        BigDecimal weight = BigDecimal.ZERO;
+        for (MobileIntakeLine line : raw) {
+            if (line == null || line.quantity() == null || line.weight() == null
+                    || line.quantity().signum() <= 0 || line.weight().signum() <= 0
+                    || line.goodsName() == null || line.goodsName().isBlank()) {
+                throw new BusinessException("每条收货明细都要填写货品、正数数量和重量");
+            }
+            String code = line.materialCode() == null || line.materialCode().isBlank()
+                    ? "MAT-MOBILE" : line.materialCode().trim();
+            if (masterData != null) masterData.materialForIntake(code);
+            String unit = line.quantityUnit() == null || line.quantityUnit().isBlank() ? "件" : line.quantityUnit().trim();
+            result.add(new MobileIntakeLine(code, line.goodsName().trim(), line.quantity(), unit, line.weight()));
+            quantity = quantity.add(line.quantity());
+            weight = weight.add(line.weight());
+        }
+        if (command.lines().size() > 0 && (command.quantity() == null || command.weight() == null
+                || command.quantity().compareTo(quantity) != 0 || command.weight().compareTo(weight) != 0)) {
+            throw new BusinessException("母单数量和重量必须等于明细合计");
+        }
+        return result;
     }
 
     private String nextMotherOrderCode(WorkSession session) {
@@ -211,7 +299,7 @@ public class MobileIntakeService {
     }
 
     private void assertCustomerAllowed(OperatorContext operator, String customerName, Long customerId) {
-        if (operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) {
+        if (operator.dataScope() == DataScope.ALL) {
             return;
         }
         String idText = customerId == null ? "" : String.valueOf(customerId);
@@ -223,7 +311,7 @@ public class MobileIntakeService {
     }
 
     private boolean canRead(OperatorContext operator, MotherOrderRecord record) {
-        if (operator == null || operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) return true;
+        if (operator == null || operator.dataScope() == DataScope.ALL) return true;
         return operator.customerScope().contains(String.valueOf(record.customerId()))
                 || operator.customerScope().contains(record.customerName());
     }

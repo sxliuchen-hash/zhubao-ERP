@@ -6,6 +6,11 @@ import { queryScanContext } from '../../services/scanContextApi';
 import { fetchMotherOrder, lookupMobileIntake, submitMobileIntake } from '../../services/mobileIntakeApi';
 import { bindEvidence, uploadEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
+import { fetchCustomers, fetchMaterials } from '../../services/masterDataApi';
+
+vi.mock('../../services/masterDataApi', () => ({
+  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), saveCustomer: vi.fn(), saveMaterial: vi.fn(),
+}));
 
 vi.mock('../../services/scanContextApi', async () => {
   const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
@@ -56,7 +61,8 @@ async function fillNewWaybill(wrapper: ReturnType<typeof mountPanel>) {
   await wrapper.get('[aria-label="快递单号"]').setValue('SF1048329001');
   await wrapper.get('[aria-label="识别单号"]').trigger('click');
   await flushPromises();
-  await wrapper.get('[aria-label="客户"]').setValue('恒信珠宝');
+  await wrapper.get('[aria-label="客户"]').setValue('1001');
+  await wrapper.get('[aria-label="材质"]').setValue('AU9999');
   await wrapper.get('[aria-label="加工要求"]').setValue('抛光');
   await wrapper.get('[aria-label="完成期限"]').setValue('2026-10-20');
   await wrapper.get('[aria-label="货品名称"]').setValue('戒托');
@@ -66,6 +72,9 @@ async function fillNewWaybill(wrapper: ReturnType<typeof mountPanel>) {
 
 describe('收货面板', () => {
   beforeEach(() => {
+    vi.mocked(fetchCustomers).mockResolvedValue([{ customerId: 1001, customerCode: 'C-1001', name: '恒信珠宝',
+      aliases: '', contact: '', phone: '', remark: '', enabled: true }]);
+    vi.mocked(fetchMaterials).mockResolvedValue([{ materialCode: 'AU9999', name: '足金', aliases: '', remark: '', enabled: true }]);
     vi.mocked(submitMobileIntake).mockReset();
     vi.mocked(lookupMobileIntake).mockReset();
     vi.mocked(fetchMotherOrder).mockReset();
@@ -194,7 +203,7 @@ describe('收货面板', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('登录已过期。已填内容还在');
-    expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toBe('恒信珠宝');
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLSelectElement).value).toBe('1001');
     expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('抛光');
     expect((wrapper.get('[aria-label="完成期限"]').element as HTMLInputElement).value).toBe('2026-10-20');
 
@@ -203,7 +212,7 @@ describe('收货面板', () => {
     const first = vi.mocked(submitMobileIntake).mock.calls[0][0].requestId;
     const second = vi.mocked(submitMobileIntake).mock.calls[1][0].requestId;
     expect(second).toBe(first);
-    expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toBe('恒信珠宝');
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLSelectElement).value).toBe('1001');
   });
 
   it('手机收货区分草稿和已保存，并留下标签入口', async () => {

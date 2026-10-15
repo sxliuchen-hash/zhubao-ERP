@@ -38,6 +38,8 @@ zhubao:
     repository: ${ZHUBAO_LABEL_TEMPLATE_REPOSITORY:jdbc}
   business-document:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
+  master-data:
+    repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:
     repository: ${ZHUBAO_FINANCE_REPOSITORY:jdbc}
   gateway:

@@ -2,6 +2,7 @@ package com.zhubao.erp.business.infra;
 
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.business.domain.ChildLineAllocation;
 import com.zhubao.erp.business.domain.DuplicateCourierException;
 import com.zhubao.erp.business.domain.LabelReprintLog;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
@@ -12,6 +13,7 @@ import com.zhubao.erp.business.domain.QualityCheckLine;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.business.domain.QualityReworkReport;
 import com.zhubao.erp.business.domain.QualityRound;
+import com.zhubao.erp.business.domain.ReceiptLine;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -199,6 +201,102 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     @Override
     public List<MotherOrderRecord> listMotherOrders() {
         return queryMotherOrders(motherOrderSelect() + " order by created_at desc", null);
+    }
+
+    @Override
+    public List<ReceiptLine> listReceiptLines(String motherOrderCode) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     select line_no, material_code, material_name_snapshot, goods_name_snapshot,
+                            quantity, quantity_unit, weight, ledger_code
+                       from biz_receipt_line where mother_order_code = ? order by line_no
+                     """)) {
+            statement.setString(1, motherOrderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<ReceiptLine> rows = new ArrayList<>();
+                while (rs.next()) rows.add(new ReceiptLine(rs.getInt(1), rs.getString(2), rs.getString(3),
+                        rs.getString(4), rs.getBigDecimal(5), rs.getString(6), rs.getBigDecimal(7), rs.getString(8)));
+                if (!rows.isEmpty()) return rows;
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("收货明细读取失败", ex); }
+        return findMotherOrderByCode(motherOrderCode).map(mother -> List.of(new ReceiptLine(1,
+                mother.materialCode(), mother.materialCode(), mother.goodsName(), mother.quantity(),
+                mother.quantityUnit(), mother.weight(), mother.ledgerCode()))).orElse(List.of());
+    }
+
+    @Override
+    public void saveReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement("""
+                insert into biz_receipt_line (mother_order_code, line_no, material_code, material_name_snapshot,
+                goods_name_snapshot, quantity, quantity_unit, weight, ledger_code)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            statement.setString(1, motherOrderCode);
+            statement.setInt(2, line.lineNo());
+            statement.setString(3, line.materialCode());
+            statement.setString(4, line.materialName());
+            statement.setString(5, line.goodsName());
+            statement.setBigDecimal(6, line.quantity());
+            statement.setString(7, line.quantityUnit());
+            statement.setBigDecimal(8, line.weight());
+            statement.setString(9, line.ledgerCode());
+            statement.executeUpdate();
+        } catch (SQLException ex) { throw new IllegalStateException("收货明细保存失败", ex); }
+    }
+
+    @Override
+    public void updateMotherOrderSummary(String motherOrderCode, java.math.BigDecimal quantity,
+                                         java.math.BigDecimal weight, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(
+                "update biz_mother_order set quantity = ?, weight = ? where code = ?")) {
+            statement.setBigDecimal(1, quantity);
+            statement.setBigDecimal(2, weight);
+            statement.setString(3, motherOrderCode);
+            if (statement.executeUpdate() != 1) throw new BusinessException("母单不存在：" + motherOrderCode);
+        } catch (SQLException ex) { throw new IllegalStateException("母单汇总更新失败", ex); }
+    }
+
+    @Override
+    public List<ChildLineAllocation> listChildAllocations(String motherOrderCode, WorkSession session) {
+        String sql = "select child_order_code, mother_order_code, source_line_no, material_code, quantity, weight, ledger_code "
+                + "from biz_child_line_allocation where mother_order_code = ? order by child_order_code, source_line_no";
+        try {
+            if (session == null) {
+                try (Connection connection = dataSource.getConnection()) {
+                    return loadAllocations(connection, sql, motherOrderCode);
+                }
+            }
+            return loadAllocations(requireConnection(session), sql, motherOrderCode);
+        } catch (SQLException ex) { throw new IllegalStateException("子单来源分配读取失败", ex); }
+    }
+
+    private List<ChildLineAllocation> loadAllocations(Connection connection, String sql, String motherOrderCode) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, motherOrderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<ChildLineAllocation> rows = new ArrayList<>();
+                while (rs.next()) rows.add(new ChildLineAllocation(rs.getString(1), rs.getString(2), rs.getInt(3),
+                        rs.getString(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getString(7)));
+                return rows;
+            }
+        }
+    }
+
+    @Override
+    public void saveChildAllocation(ChildLineAllocation allocation, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement("""
+                insert into biz_child_line_allocation (child_order_code, mother_order_code, source_line_no,
+                material_code, quantity, weight, ledger_code) values (?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            statement.setString(1, allocation.childOrderCode());
+            statement.setString(2, allocation.motherOrderCode());
+            statement.setInt(3, allocation.sourceLineNo());
+            statement.setString(4, allocation.materialCode());
+            statement.setBigDecimal(5, allocation.quantity());
+            statement.setBigDecimal(6, allocation.weight());
+            statement.setString(7, allocation.ledgerCode());
+            statement.executeUpdate();
+        } catch (SQLException ex) { throw new IllegalStateException("子单来源分配保存失败", ex); }
     }
 
     private String motherOrderSelect() {
