@@ -88,21 +88,7 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                try (PreparedStatement s = c.prepareStatement("insert into biz_print_batch "
-                        + "(id, request_id, business_code, template_code, copies_per_target, payload_hash, "
-                        + "content_snapshot, created_by, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
-                    s.setString(1, batch.id()); s.setString(2, batch.requestId()); s.setString(3, batch.businessCode());
-                    s.setString(4, batch.templateCode()); s.setInt(5, batch.copiesPerTarget());
-                    s.setString(6, batch.payloadHash()); s.setString(7, batch.contentSnapshot());
-                    s.setString(8, batch.createdBy()); s.setString(9, batch.createdAt()); s.executeUpdate();
-                }
-                try (PreparedStatement s = c.prepareStatement("insert into biz_print_target_job "
-                        + "(id, batch_id, target_station_id, target_queue_id, copies, status_code, claimed_station_id, "
-                        + "lease_until, failure_reason, paper_check_result, predecessor_id, retry_reason, created_at, updated_at) "
-                        + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
-                    for (PrintTargetJob job : batch.jobs()) { bindJob(s, job); s.addBatch(); }
-                    s.executeBatch();
-                }
+                insertBatch(c, batch);
                 c.commit();
                 return batch;
             } catch (SQLException ex) {
@@ -111,6 +97,48 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
                 throw ex;
             }
         } catch (SQLException ex) { throw failed("创建打印批次失败", ex); }
+    }
+    @Override public Optional<PrintBatch> rerouteJob(String originalId, PrintJobStatus expected,
+                                                       PrintBatch replacement, String reason, String now) {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement s = c.prepareStatement("update biz_print_target_job set status_code = 'CANCELED', "
+                        + "retry_reason = ?, updated_at = ? where id = ? and status_code = ? "
+                        + "and (status_code = 'PENDING' or paper_check_result = '确认未出纸')")) {
+                    s.setString(1, reason); s.setString(2, now); s.setString(3, originalId);
+                    s.setString(4, expected.name());
+                    if (s.executeUpdate() != 1) { c.rollback(); return Optional.empty(); }
+                }
+                insertBatch(c, replacement);
+                c.commit();
+                return Optional.of(replacement);
+            } catch (SQLException ex) {
+                c.rollback();
+                if (duplicate(ex)) {
+                    Optional<PrintBatch> existing = batchByRequest(replacement.requestId());
+                    if (existing.isPresent()) return existing;
+                }
+                throw ex;
+            }
+        } catch (SQLException ex) { throw failed("改派打印目标失败", ex); }
+    }
+    private void insertBatch(Connection c, PrintBatch batch) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement("insert into biz_print_batch "
+                + "(id, request_id, business_code, template_code, copies_per_target, payload_hash, "
+                + "content_snapshot, created_by, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+            s.setString(1, batch.id()); s.setString(2, batch.requestId()); s.setString(3, batch.businessCode());
+            s.setString(4, batch.templateCode()); s.setInt(5, batch.copiesPerTarget());
+            s.setString(6, batch.payloadHash()); s.setString(7, batch.contentSnapshot());
+            s.setString(8, batch.createdBy()); s.setString(9, batch.createdAt()); s.executeUpdate();
+        }
+        try (PreparedStatement s = c.prepareStatement("insert into biz_print_target_job "
+                + "(id, batch_id, target_station_id, target_queue_id, copies, status_code, claimed_station_id, "
+                + "lease_until, failure_reason, paper_check_result, predecessor_id, retry_reason, created_at, updated_at) "
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+            for (PrintTargetJob job : batch.jobs()) { bindJob(s, job); s.addBatch(); }
+            s.executeBatch();
+        }
     }
     @Override public Optional<PrintTargetJob> job(String id) {
         try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(
@@ -153,6 +181,15 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
             s.setString(7, job.id()); s.setString(8, expected.name());
             return s.executeUpdate() == 1 ? Optional.of(job) : Optional.empty();
         } catch (SQLException ex) { throw failed("更新目标任务失败", ex); }
+    }
+    @Override public Optional<PrintTargetJob> savePaperCheckIfBlank(PrintTargetJob job, PrintJobStatus expected) {
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(
+                "update biz_print_target_job set paper_check_result = ?, updated_at = ? "
+                        + "where id = ? and status_code = ? and paper_check_result = ''")) {
+            s.setString(1, job.paperCheckResult()); s.setString(2, job.updatedAt());
+            s.setString(3, job.id()); s.setString(4, expected.name());
+            return s.executeUpdate() == 1 ? Optional.of(job) : Optional.empty();
+        } catch (SQLException ex) { throw failed("记录出纸核实失败", ex); }
     }
     @Override public int expireLeases(String now) {
         try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(

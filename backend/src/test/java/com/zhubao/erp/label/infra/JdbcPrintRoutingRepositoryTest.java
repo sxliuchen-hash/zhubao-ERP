@@ -49,6 +49,20 @@ class JdbcPrintRoutingRepositoryTest {
                 job("J-4", "PB-2", "A", "Q1")));
         assertThatThrownBy(() -> repository.insertBatch(bad)).isInstanceOf(IllegalStateException.class);
         assertThat(repository.batchByRequest("req-2")).isEmpty();
+        repository.insertBatch(batch("PB-3", "req-3", List.of(job("J-5", "PB-3", "A", "Q1"))));
+        PrintBatch moved = batch("PB-4", "req-4", List.of(job("J-6", "PB-4", "B", "Q1")));
+        assertThat(repository.rerouteJob("J-5", PrintJobStatus.PENDING, moved, "原工位停机", "later")).isPresent();
+        assertThat(repository.job("J-5").orElseThrow().status()).isEqualTo(PrintJobStatus.CANCELED);
+        assertThat(repository.batchByRequest("req-4").orElseThrow().jobs()).hasSize(1);
+        assertThat(repository.rerouteJob("J-5", PrintJobStatus.PENDING,
+                batch("PB-5", "req-5", List.of(job("J-7", "PB-5", "A", "Q1"))), "再次改派", "later"))
+                .isEmpty();
+        repository.insertBatch(batch("PB-6", "req-6", List.of(job("J-8", "PB-6", "A", "Q1"))));
+        PrintBatch collision = batch("PB-7", "req-7", List.of(job("J-6", "PB-7", "B", "Q1")));
+        assertThatThrownBy(() -> repository.rerouteJob("J-8", PrintJobStatus.PENDING, collision,
+                "测试回滚", "later")).isInstanceOf(IllegalStateException.class);
+        assertThat(repository.job("J-8").orElseThrow().status()).isEqualTo(PrintJobStatus.PENDING);
+        assertThat(repository.batchByRequest("req-7")).isEmpty();
     }
     private PrintBatch batch(String id, String requestId, List<PrintTargetJob> jobs) {
         return new PrintBatch(id, requestId, "MD-1", "FLOW", 1, "hash", "{}", "operator", "now", jobs);

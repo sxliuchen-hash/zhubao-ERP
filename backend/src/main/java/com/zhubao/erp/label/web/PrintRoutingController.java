@@ -81,6 +81,12 @@ public class PrintRoutingController {
         permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
         return ApiResponse.ok(service.paperCheck(id, body.result(), account(request)));
     }
+    @PostMapping("/print-target-jobs/{id}/reroute")
+    public ApiResponse<PrintBatch> reroute(@PathVariable String id, @RequestBody RerouteRequest body,
+                                           HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
+        return ApiResponse.ok(service.reroute(id, body.requestId(), body.target(), body.reason(), account(request)));
+    }
     @PostMapping("/agents/v2/jobs/claim")
     public ApiResponse<PrintBatchService.ClaimedPrintJob> claim(@RequestHeader("X-Print-Station") String station,
                                                                  @RequestHeader("X-Print-Token") String token) {
@@ -105,5 +111,6 @@ public class PrintRoutingController {
     public record CreateBatchRequest(String requestId, String businessCode, String templateCode,
                                      int copiesPerTarget, List<PrintTarget> targets) {}
     public record PaperCheck(String result) {}
+    public record RerouteRequest(String requestId, PrintTarget target, String reason) {}
     public record Report(String outcome, String failureReason) {}
 }

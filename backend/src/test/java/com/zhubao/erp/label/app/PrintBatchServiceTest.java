@@ -112,4 +112,79 @@ class PrintBatchServiceTest {
                 .hasMessageContaining("没有待打印任务");
         assertThat(repository.job(batch.jobs().get(0).id()).orElseThrow().status()).isEqualTo(PrintJobStatus.FAILED);
     }
+
+    @Test
+    void 未领取目标可原子改派且同请求重试只生成一条关联任务() {
+        String tokenA = service.saveStation(new PrintStation("A", "收货", true, "", "")).token();
+        String tokenB = service.saveStation(new PrintStation("B", "包装", true, "", "")).token();
+        service.saveQueue(new PrintQueue("A", "Q1", "原队列", "ALL", 40, 30, true, true));
+        service.saveQueue(new PrintQueue("B", "Q2", "新队列", "ALL", 40, 30, true, true));
+        PrintBatch source = service.create("reroute-source-001", "MD-5", "FLOW", 2,
+                List.of(new PrintTarget("A", "Q1")), account);
+        String originalId = source.jobs().get(0).id();
+        PrintTarget target = new PrintTarget("B", "Q2");
+        PrintBatch next = service.reroute(originalId, "reroute-request-001", target, "原工位停机", account);
+        assertThat(service.reroute(originalId, "reroute-request-001", target, "原工位停机", account).id())
+                .isEqualTo(next.id());
+        assertThat(repository.job(originalId).orElseThrow().status()).isEqualTo(PrintJobStatus.CANCELED);
+        assertThat(next.contentSnapshot()).isEqualTo(source.contentSnapshot());
+        assertThat(next.jobs()).singleElement().satisfies(job -> {
+            assertThat(job.predecessorId()).isEqualTo(originalId);
+            assertThat(job.retryReason()).isEqualTo("原工位停机");
+            assertThat(job.copies()).isEqualTo(2);
+        });
+        assertThatThrownBy(() -> service.claim("A", tokenA)).isInstanceOf(BusinessException.class);
+        assertThat(service.claim("B", tokenB).job().id()).isEqualTo(next.jobs().get(0).id());
+        assertThatThrownBy(() -> service.reroute(originalId, "reroute-request-002", target, "再次改派", account))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不能改派");
+    }
+
+    @Test
+    void 已送队列或状态不明必须确认未出纸后才能改派() {
+        String token = service.saveStation(new PrintStation("A", "收货", true, "", "")).token();
+        service.saveStation(new PrintStation("B", "包装", true, "", ""));
+        service.saveQueue(new PrintQueue("A", "Q1", "原队列", "ALL", 40, 30, true, true));
+        service.saveQueue(new PrintQueue("B", "Q2", "新队列", "ALL", 40, 30, true, true));
+        String id = service.create("reroute-source-002", "MD-6", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account).jobs().get(0).id();
+        service.claim("A", token);
+        assertThatThrownBy(() -> service.reroute(id, "reroute-request-003", new PrintTarget("B", "Q2"),
+                "设备故障", account)).isInstanceOf(BusinessException.class).hasMessageContaining("不能改派");
+        service.report(id, "A", token, "SPOOLED", "");
+        assertThatThrownBy(() -> service.reroute(id, "reroute-request-003", new PrintTarget("B", "Q2"),
+                "设备故障", account)).isInstanceOf(BusinessException.class).hasMessageContaining("核纸");
+        service.paperCheck(id, "确认未出纸", account);
+        assertThatThrownBy(() -> service.paperCheck(id, "已出纸", account))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不得直接改写");
+        assertThat(service.reroute(id, "reroute-request-003", new PrintTarget("B", "Q2"),
+                "设备故障", account).jobs()).hasSize(1);
+    }
+
+    @Test
+    void 并发改派原目标只产生一个后继任务() throws Exception {
+        service.saveStation(new PrintStation("A", "收货", true, "", ""));
+        service.saveStation(new PrintStation("B", "包装", true, "", ""));
+        service.saveQueue(new PrintQueue("A", "Q1", "原队列", "ALL", 40, 30, true, true));
+        service.saveQueue(new PrintQueue("B", "Q2", "新队列", "ALL", 40, 30, true, true));
+        String id = service.create("reroute-source-004", "MD-7", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account).jobs().get(0).id();
+        CountDownLatch start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            var first = pool.submit(() -> {
+                start.await();
+                try { service.reroute(id, "reroute-race-001", new PrintTarget("B", "Q2"), "停机", account); return true; }
+                catch (BusinessException ex) { return false; }
+            });
+            var second = pool.submit(() -> {
+                start.await();
+                try { service.reroute(id, "reroute-race-002", new PrintTarget("B", "Q2"), "停机", account); return true; }
+                catch (BusinessException ex) { return false; }
+            });
+            start.countDown();
+            assertThat(List.of(first.get(), second.get()).stream().filter(Boolean::booleanValue).count()).isEqualTo(1);
+            assertThat(repository.batchByRequest("reroute-race-001").isPresent()
+                    || repository.batchByRequest("reroute-race-002").isPresent()).isTrue();
+        } finally { pool.shutdownNow(); }
+    }
 }

@@ -39,6 +39,19 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
         requests.put(batch.requestId(), batch.id());
         return batch(batch.id()).orElseThrow();
     }
+    @Override public synchronized Optional<PrintBatch> rerouteJob(String originalId, PrintJobStatus expected,
+                                                                   PrintBatch replacement, String reason, String now) {
+        PrintTargetJob original = jobs.get(originalId);
+        if (original == null || original.status() != expected || (expected != PrintJobStatus.PENDING
+                && !"确认未出纸".equals(original.paperCheckResult())))
+            return Optional.empty();
+        if (batchByRequest(replacement.requestId()).isPresent()) return Optional.empty();
+        jobs.put(originalId, new PrintTargetJob(original.id(), original.batchId(), original.targetStationId(),
+                original.targetQueueId(), original.copies(), PrintJobStatus.CANCELED, original.claimedStationId(),
+                original.leaseUntil(), original.failureReason(), original.paperCheckResult(), original.predecessorId(),
+                reason, original.createdAt(), now));
+        return Optional.of(insertBatch(replacement));
+    }
     @Override public Optional<PrintTargetJob> job(String id) { return Optional.ofNullable(jobs.get(id)); }
     @Override public synchronized Optional<PrintTargetJob> claim(String stationId, String leaseUntil, String now) {
         PrintTargetJob pending = jobs.values().stream().filter(job -> job.status() == PrintJobStatus.PENDING
@@ -62,6 +75,13 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
     @Override public synchronized Optional<PrintTargetJob> saveJobIfStatus(PrintTargetJob job, PrintJobStatus expected) {
         PrintTargetJob current = jobs.get(job.id());
         if (current == null || current.status() != expected) return Optional.empty();
+        jobs.put(job.id(), job);
+        return Optional.of(job);
+    }
+    @Override public synchronized Optional<PrintTargetJob> savePaperCheckIfBlank(PrintTargetJob job, PrintJobStatus expected) {
+        PrintTargetJob current = jobs.get(job.id());
+        if (current == null || current.status() != expected || !current.paperCheckResult().isBlank())
+            return Optional.empty();
         jobs.put(job.id(), job);
         return Optional.of(job);
     }

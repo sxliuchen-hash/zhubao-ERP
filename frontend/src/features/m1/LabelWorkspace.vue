@@ -300,7 +300,7 @@ function printLabel() {
 interface PrintQueueView { stationId: string; queueId: string; name: string; labelType: string;
   widthMm: number; heightMm: number; enabled: boolean; defaultQueue: boolean }
 interface PrintTargetJobView { id: string; targetStationId: string; targetQueueId: string; status: string;
-  failureReason: string; paperCheckResult: string; copies: number }
+  failureReason: string; paperCheckResult: string; copies: number; predecessorId: string; retryReason: string }
 interface PrintBatchView { id: string; jobs: PrintTargetJobView[] }
 const printQueues = ref<PrintQueueView[]>([]);
 const allPrintQueues = ref<PrintQueueView[]>([]);
@@ -314,6 +314,10 @@ const selectedTargets = ref<string[]>([]);
 const copiesPerTarget = ref(1);
 const printBatch = ref<PrintBatchView | null>(null);
 const paperChecks = ref<Record<string, string>>({});
+const rerouteTargets = ref<Record<string, string>>({});
+const rerouteReasons = ref<Record<string, string>>({});
+const rerouteAttempts = ref<Record<string, RequestAttempt>>({});
+const reroutedBatches = ref<PrintBatchView[]>([]);
 const printAttempt = ref<RequestAttempt | null>(null);
 const printSubmitting = ref(false);
 const eligibleQueues = computed(() => printQueues.value.filter(queue => preview.value
@@ -359,7 +363,7 @@ async function rotateStationToken(id: string) {
 
 function printStatusLabel(status: string) {
   if (status === 'SPOOLED') return '已送入系统队列';
-  if (status === 'PENDING') return '待领取';
+  if (status === 'PENDING') return '待工位上线或领取';
   if (status === 'LEASED') return '已领取';
   if (status === 'FAILED') return '发送前失败';
   if (status === 'UNCERTAIN') return '不确定是否出纸';
@@ -413,6 +417,8 @@ async function submitPrintJob() {
 async function refreshPrintJob() {
   if (!printBatch.value) return;
   printBatch.value = await apiGet<PrintBatchView>(`/api/label/print-batches/${printBatch.value.id}`);
+  reroutedBatches.value = await Promise.all(reroutedBatches.value.map(batch =>
+    apiGet<PrintBatchView>(`/api/label/print-batches/${batch.id}`)));
 }
 
 async function verifyTargetPaper(jobId: string) {
@@ -424,6 +430,25 @@ async function verifyTargetPaper(jobId: string) {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '出纸核实失败';
   }
+}
+async function rerouteTarget(job: PrintTargetJobView) {
+  const selected = rerouteTargets.value[job.id] || '';
+  const queue = eligibleQueues.value.find(item => `${item.stationId}|${item.queueId}` === selected);
+  const reason = rerouteReasons.value[job.id]?.trim();
+  if (!queue || !reason) { errorMessage.value = '改派须选择新目标并填写原因'; return; }
+  const fingerprint = JSON.stringify([job.id, selected, reason]);
+  const attempt = nextRequestAttempt(rerouteAttempts.value[job.id] || null, fingerprint, `reroute-${job.id}`);
+  rerouteAttempts.value[job.id] = attempt;
+  try {
+    const replacement = await apiPost<{ requestId: string; target: { stationId: string; queueId: string }; reason: string }, PrintBatchView>(
+      `/api/label/print-target-jobs/${encodeURIComponent(job.id)}/reroute`,
+      { requestId: attempt.requestId, target: { stationId: queue.stationId, queueId: queue.queueId }, reason },
+    );
+    await refreshPrintJob();
+    reroutedBatches.value = [...reroutedBatches.value.filter(batch => batch.id !== replacement.id), replacement];
+    feedback.value = `原目标已取消，改派批次 ${replacement.id} 已创建。请核对新目标状态。`;
+    errorMessage.value = '';
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : '改派失败'; }
 }
 
 // ---- 模板管理 ----
@@ -786,17 +811,38 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
             <p>目标 {{ chosenTargets.length }} 个 × 每目标 {{ copiesPerTarget }} 份 = 预计 {{ estimatedSheets }} 张；每个目标都会独立打印。</p>
           </div>
           <div v-if="printBatch" class="print-targets">
-            <p>批次 {{ printBatch.id }} · SPOOLED 仅表示送入系统队列</p>
             <button type="button" class="secondary-button" @click="refreshPrintJob">刷新目标状态</button>
-            <div v-for="job in printBatch.jobs" :key="job.id">
-              <strong>{{ job.targetStationId }} / {{ job.targetQueueId }}</strong> · {{ job.id }} · {{ printStatusLabel(job.status) }}
-              <span v-if="job.failureReason"> · {{ job.failureReason }}</span>
-              <span v-if="job.paperCheckResult"> · 出纸核实：{{ job.paperCheckResult }}</span>
-              <label v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)">核纸结果
-                <input v-model="paperChecks[job.id]" :aria-label="`${job.id}核纸结果`" />
-              </label>
-              <button v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)" type="button"
-                class="secondary-button" @click="verifyTargetPaper(job.id)">记录核纸</button>
+            <div v-for="batch in [printBatch, ...reroutedBatches]" :key="batch.id">
+              <p>批次 {{ batch.id }} · SPOOLED 仅表示送入系统队列</p>
+              <div v-for="job in batch.jobs" :key="job.id">
+                <strong>{{ job.targetStationId }} / {{ job.targetQueueId }}</strong> · {{ job.id }} · {{ printStatusLabel(job.status) }}
+                <span v-if="job.failureReason"> · {{ job.failureReason }}</span>
+                <span v-if="job.paperCheckResult"> · 出纸核实：{{ job.paperCheckResult }}</span>
+                <span v-if="job.predecessorId"> · 来源任务 {{ job.predecessorId }} · {{ job.retryReason }}</span>
+                <label v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)">核纸结果
+                  <select v-model="paperChecks[job.id]" :aria-label="`${job.id}核纸结果`">
+                    <option value="">请选择</option>
+                    <option value="确认未出纸">确认未出纸</option>
+                    <option value="已出纸">已出纸</option>
+                    <option value="仍不确定">仍不确定</option>
+                  </select>
+                </label>
+                <button v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)" type="button"
+                  class="secondary-button" @click="verifyTargetPaper(job.id)">记录核纸</button>
+                <div v-if="job.status === 'PENDING' || (['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status) && job.paperCheckResult === '确认未出纸')">
+                  <label>改派目标
+                    <select v-model="rerouteTargets[job.id]" :aria-label="`${job.id}改派目标`">
+                      <option value="">请选择新工位和队列</option>
+                      <option v-for="queue in eligibleQueues.filter(item => item.stationId !== job.targetStationId || item.queueId !== job.targetQueueId)"
+                        :key="`${queue.stationId}|${queue.queueId}`" :value="`${queue.stationId}|${queue.queueId}`">
+                        {{ queue.stationId }} / {{ queue.queueId }} · {{ queue.name }}
+                      </option>
+                    </select>
+                  </label>
+                  <label>改派原因 <input v-model="rerouteReasons[job.id]" :aria-label="`${job.id}改派原因`" /></label>
+                  <button type="button" class="secondary-button" @click="rerouteTarget(job)">取消原目标并创建关联任务</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

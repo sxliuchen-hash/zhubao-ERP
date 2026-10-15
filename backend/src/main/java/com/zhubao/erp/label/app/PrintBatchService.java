@@ -114,8 +114,46 @@ public class PrintBatchService {
         if (result == null || result.isBlank()) throw new BusinessException("请填写出纸核实结果");
         if (job.status() != PrintJobStatus.SPOOLED && job.status() != PrintJobStatus.UNCERTAIN
                 && job.status() != PrintJobStatus.FAILED) throw new BusinessException("当前任务尚不能核实出纸");
-        return repository.saveJob(job.withStatus(job.status(), job.claimedStationId(), job.leaseUntil(),
-                job.failureReason(), result.trim(), TIME.format(LocalDateTime.now())));
+        if (!job.paperCheckResult().isBlank()) {
+            if (job.paperCheckResult().equals(result.trim())) return job;
+            throw new BusinessException("出纸核实已记录，不得直接改写");
+        }
+        return repository.savePaperCheckIfBlank(job.withStatus(job.status(), job.claimedStationId(), job.leaseUntil(),
+                job.failureReason(), result.trim(), TIME.format(LocalDateTime.now())), job.status())
+                .orElseThrow(() -> new BusinessException("任务状态已变化，请刷新后核实"));
+    }
+    public PrintBatch reroute(String originalId, String requestId, PrintTarget target, String reason,
+                              AuthUserAccount account) {
+        requireRequest(requestId);
+        if (target == null || !validId(target.stationId()) || !validId(target.queueId()))
+            throw new BusinessException("请选择新的工位和队列");
+        if (reason == null || reason.isBlank() || reason.trim().length() > 200)
+            throw new BusinessException("请填写 1 到 200 字改派原因");
+        PrintTargetJob original = repository.job(originalId).orElseThrow(() -> new BusinessException("原目标任务不存在"));
+        PrintBatch source = batch(original.batchId(), account);
+        String hash = digest("reroute|" + originalId + "|" + target + "|" + reason.trim() + "|" + source.contentSnapshot());
+        PrintBatch existing = repository.batchByRequest(requestId.trim()).orElse(null);
+        if (existing != null) return sameOrReject(existing, hash, account.username());
+        if (original.status() != PrintJobStatus.PENDING && original.status() != PrintJobStatus.FAILED
+                && original.status() != PrintJobStatus.SPOOLED && original.status() != PrintJobStatus.UNCERTAIN)
+            throw new BusinessException("当前目标任务不能改派");
+        if (original.status() != PrintJobStatus.PENDING && !"确认未出纸".equals(original.paperCheckResult()))
+            throw new BusinessException("改派前须人工核纸并填写“确认未出纸”");
+        if (original.targetStationId().equals(target.stationId()) && original.targetQueueId().equals(target.queueId()))
+            throw new BusinessException("新目标须不同于原工位和队列");
+        validateTargets(List.of(target), source.contentSnapshot(), source.businessCode());
+        String now = TIME.format(LocalDateTime.now());
+        String batchId = "PB-" + UUID.randomUUID();
+        PrintTargetJob replacement = new PrintTargetJob("PJ-" + UUID.randomUUID(), batchId,
+                target.stationId(), target.queueId(), original.copies(), PrintJobStatus.PENDING,
+                "", "", "", "", original.id(), reason.trim(), now, now);
+        PrintBatch proposed = new PrintBatch(batchId, requestId.trim(), source.businessCode(),
+                source.templateCode(), original.copies(), hash, source.contentSnapshot(), account.username(),
+                now, List.of(replacement));
+        PrintBatch saved = repository.rerouteJob(originalId, original.status(), proposed, reason.trim(), now)
+                .orElseGet(() -> repository.batchByRequest(requestId.trim()).orElseThrow(
+                        () -> new BusinessException("原目标状态已变化，请刷新后核对")));
+        return sameOrReject(saved, hash, account.username());
     }
     public ClaimedPrintJob claim(String stationId, String token) {
         authenticate(stationId, token);

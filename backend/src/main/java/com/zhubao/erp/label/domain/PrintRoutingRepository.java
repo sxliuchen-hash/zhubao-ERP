@@ -12,9 +12,11 @@ public interface PrintRoutingRepository {
     Optional<PrintBatch> batchByRequest(String requestId);
     Optional<PrintBatch> batch(String batchId);
     PrintBatch insertBatch(PrintBatch batch);
+    Optional<PrintBatch> rerouteJob(String originalId, PrintJobStatus expected, PrintBatch replacement, String reason, String now);
     Optional<PrintTargetJob> job(String jobId);
     Optional<PrintTargetJob> claim(String stationId, String leaseUntil, String now);
     int expireLeases(String now);
     PrintTargetJob saveJob(PrintTargetJob job);
     Optional<PrintTargetJob> saveJobIfStatus(PrintTargetJob job, PrintJobStatus expected);
+    Optional<PrintTargetJob> savePaperCheckIfBlank(PrintTargetJob job, PrintJobStatus expected);
 }

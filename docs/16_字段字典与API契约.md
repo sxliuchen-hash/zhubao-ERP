@@ -2380,7 +2380,8 @@ PWA 一期边界：
 | `GET /api/label/print-queues/all`、`POST /api/label/print-queues` | 仅管理员读取全部队列或维护逻辑队列；队列限定标签类型与纸张毫米尺寸。 |
 | `POST /api/label/print-batches` | 请求含 `requestId`、`businessCode`、`templateCode`、`copiesPerTarget`、`targets[]`（`stationId`、`queueId`）。服务端去重目标、核对权限及队列能力、冻结标签快照，并在同一事务创建批次和每目标任务；同请求同内容回放原批次，内容变化拒绝。 |
 | `GET /api/label/print-batches/{id}` | 返回批次和各目标任务的状态、失败原因、核纸结果；`SPOOLED` 仅表示进入系统队列。 |
-| `POST /api/label/print-target-jobs/{id}/paper-checks` | 人工按目标记录 `result`，不把队列状态伪装成已出纸。 |
+| `POST /api/label/print-target-jobs/{id}/paper-checks` | 人工按目标记录一次 `result`；相同结果可重试，不允许直接覆盖已有核纸结论，不把队列状态伪装成已出纸。 |
+| `POST /api/label/print-target-jobs/{id}/reroute` | 请求含新 `requestId`、`target`（`stationId`、`queueId`）和 `reason`。未领取的 `PENDING` 可直接取消；`FAILED`、`SPOOLED`、`UNCERTAIN` 须先核纸并记录精确结果 `确认未出纸`。原任务以条件更新变为 `CANCELED`，同一事务创建保留原快照及份数的新批次／关联目标任务；重复请求回放原改派批次，不允许同一原任务多次改派。`LEASED` 禁止改派。 |
 | `POST /api/label/agents/v2/jobs/claim`、`POST /api/label/agents/v2/jobs/{id}/report` | 以工位 ID 和独立令牌鉴权，只领取目标工位的任务，返回目标队列 ID；厂内程序按 `queue.<队列 ID>` 映射本机 Windows 队列，缺失映射或队列不可用时回报 `FAILED`，不回退系统默认打印机。 |
 
 V61 新增工位、队列、批次和目标任务表；原任务的 `PENDING`／`LEASED` 因无明确目标转为 `UNCERTAIN` 供人工核纸，原快照不改写。旧版打印任务创建、补打、工位领取和回报入口返回升级提示；旧任务仍可查询与人工核纸。新批次需管理员先建立工位、队列并把凭据及队列映射配置到厂内程序。

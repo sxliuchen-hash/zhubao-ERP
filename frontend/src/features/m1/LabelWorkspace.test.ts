@@ -244,6 +244,54 @@ describe('LabelWorkspace', () => {
     wrapper.unmount();
   });
 
+  it('待领取目标改派时提交新工位队列并显示关联任务', async () => {
+    const reroutes: Array<{ requestId: string; target: { stationId: string; queueId: string }; reason: string }> = [];
+    const original = { id: 'J-1', targetStationId: 'A', targetQueueId: 'Q1', status: 'PENDING',
+      failureReason: '', paperCheckResult: '', copies: 1, predecessorId: '', retryReason: '' };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      let data: unknown = [];
+      if (url.includes('/api/label/print-queues')) data = [
+        { stationId: 'A', queueId: 'Q1', name: '原队列', labelType: 'WORK_ORDER', widthMm: 60, heightMm: 40, enabled: true },
+        { stationId: 'B', queueId: 'Q2', name: '新队列', labelType: 'WORK_ORDER', widthMm: 60, heightMm: 40, enabled: true },
+      ];
+      else if (url.includes('/api/label/print-target-jobs/J-1/reroute')) {
+        reroutes.push(JSON.parse(String(init?.body)));
+        data = { id: 'PB-2', jobs: [{ ...original, id: 'J-2', targetStationId: 'B', targetQueueId: 'Q2',
+          predecessorId: 'J-1', retryReason: '原工位停机' }] };
+      } else if (url.includes('/api/label/print-batches/PB-1')) {
+        data = { id: 'PB-1', jobs: [{ ...original, status: 'CANCELED' }] };
+      } else if (url.includes('/api/label/print-batches') && method === 'POST') {
+        data = { id: 'PB-1', jobs: [original] };
+      } else if (url.includes('/api/label/work-orders/')) {
+        data = { type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1',
+          qrContent: 'JG|work_order|ZD-1|0|LI1', fields: [], footerLeft: '', footerRight: '',
+          printedAt: '', brandTitle: '珠宝来料加工系统', templateCode: 'FLOW',
+          printerSetting: { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 } };
+      }
+      return { ok: true, json: async () => ({ code: 0, message: 'ok', data }) } as Response;
+    });
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-1' }));
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('ZD-1');
+    await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
+    await flushPromises();
+    await wrapper.find('.print-targets input[type="checkbox"]').setValue(true);
+    await wrapper.findAll('button').find(button => button.text() === '提交到打印工位')!.trigger('click');
+    await flushPromises();
+    await wrapper.get('[aria-label="J-1改派目标"]').setValue('B|Q2');
+    await wrapper.get('[aria-label="J-1改派原因"]').setValue('原工位停机');
+    await wrapper.findAll('button').find(button => button.text() === '取消原目标并创建关联任务')!.trigger('click');
+    await flushPromises();
+    expect(reroutes).toHaveLength(1);
+    expect(reroutes[0].target).toEqual({ stationId: 'B', queueId: 'Q2' });
+    expect(wrapper.text()).toContain('来源任务 J-1');
+    expect(wrapper.text()).toContain('已取消');
+    wrapper.unmount();
+  });
+
   it('同版刷新沿用打印请求，改单换版后创建新请求', async () => {
     let version = 0;
     let instance = 0;
