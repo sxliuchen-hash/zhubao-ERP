@@ -58,3 +58,4 @@
 58	TABLE	biz_courier_multi_order_revision
 59	TABLE	biz_material_catalog
 60	TABLE	biz_child_line_allocation
+61	TABLE	biz_print_target_job

@@ -79,15 +79,13 @@ export const labelFaceCss = `
   text-overflow: ellipsis;
 }
 .bw-label--compact {
+  display: block;
   padding: 0.8mm;
   border-width: 0.2mm;
-  grid-template-columns: min(var(--bw-qr-width, 17mm), 50%) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
-  column-gap: 0.8mm;
-  row-gap: 0.6mm;
+  overflow: hidden;
 }
 .bw-label--compact .bw-top {
-  grid-column: 1 / -1;
+  margin-bottom: 0.45mm;
   justify-content: flex-start;
   gap: 0.8mm;
   min-width: 0;
@@ -99,27 +97,27 @@ export const labelFaceCss = `
   line-height: 1.2;
 }
 .bw-label--compact .bw-code {
+  flex: 1 1 auto;
   margin: 0;
   min-width: 0;
+  overflow: hidden;
   font-size: var(--bw-code-font, 8.5pt);
   line-height: 1.1;
+  white-space: nowrap;
+  word-break: normal;
+  text-overflow: ellipsis;
 }
 .bw-label--compact .bw-qr {
-  grid-row: 2;
-  grid-column: 1;
-  align-self: start;
-}
-.bw-label--compact .bw-main {
-  display: contents;
+  float: left;
+  width: min(var(--bw-qr-width, 17mm), 46%);
+  margin: 0 0.8mm 0.35mm 0;
 }
 .bw-label--compact .bw-fields {
-  grid-row: 2;
-  grid-column: 2;
   display: block;
   margin: 0;
   font-size: var(--bw-field-font, 7.5pt);
   line-height: 1.18;
-  overflow: hidden;
+  overflow: visible;
 }
 .bw-label--compact .bw-fields div {
   display: block;
@@ -132,12 +130,13 @@ export const labelFaceCss = `
 .bw-label--compact .bw-fields dd {
   display: inline;
   font-weight: 700;
+  overflow: visible;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 .bw-label--compact .bw-fields dt::after { content: '：'; }
 .bw-label--compact .bw-fields div:first-child dd { font-size: var(--bw-emphasis-font, 8.5pt); }
-.bw-label--compact .bw-foot { grid-row: 3; font-size: var(--bw-footer-font, 6pt); }
+.bw-label--compact .bw-foot { clear: both; font-size: var(--bw-footer-font, 6pt); }
 `;
 
 /** 生成一张黑白标签的 HTML，供预览和打印共用。 */
@@ -163,16 +162,30 @@ export function buildLabelMarkup(payload: LabelPayload): string {
       ? `<div class="bw-foot"><span>${escapeHtml(footerLeft)}</span><span>${escapeHtml(footerRight)}</span></div>`
       : '';
 
+  const type = `<span class="bw-type">${escapeHtml(payload.typeLabel)}</span>`;
+  const code = `<span class="bw-code">${escapeHtml(payload.primaryCode)}</span>`;
+  const heading = compact
+      ? `<div class="bw-top">${type}${code}</div>`
+      : `<div class="bw-top"><span class="bw-brand">${escapeHtml(payload.brandTitle)}</span>${type}</div><div class="bw-code">${escapeHtml(payload.primaryCode)}</div>`;
+  const qr = `<div class="bw-qr">${renderQrSvg(payload.qrContent)}</div>`;
+  const fieldList = fields ? `<dl class="bw-fields">${fields}</dl>` : '';
+  const articleStyle = `width:${width}mm;height:${height}mm;${layoutStyle(payload, compact)}`;
+  if (compact) {
+    return [
+      `<article class="bw-label bw-label--compact" style="${articleStyle}">`,
+      heading,
+      qr,
+      fieldList,
+      footer,
+      '</article>',
+    ].join('');
+  }
   return [
-    `<article class="bw-label${compact ? ' bw-label--compact' : ''}" style="width:${width}mm;height:${height}mm;${layoutStyle(payload, compact)}">`,
-    `<div class="bw-qr">${renderQrSvg(payload.qrContent)}</div>`,
+    `<article class="bw-label" style="${articleStyle}">`,
+    qr,
     '<div class="bw-main">',
-    '<div class="bw-top">',
-    `<span class="bw-brand">${escapeHtml(payload.brandTitle)}</span>`,
-    `<span class="bw-type">${escapeHtml(payload.typeLabel)}</span>`,
-    '</div>',
-    `<div class="bw-code">${escapeHtml(payload.primaryCode)}</div>`,
-    fields ? `<dl class="bw-fields">${fields}</dl>` : '',
+    heading,
+    fieldList,
     '</div>',
     footer,
     '</article>',

@@ -25,11 +25,14 @@ import type { ScanRelatedTarget } from '../../services/scanContextApi';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import { apiGet, apiPost } from '../../services/apiClient';
+import type { AuthSession } from '../../services/authApi';
 
 // 标签打印工作台。标签只印固定信息，进度靠扫码查看。
 // 前期只做黑白打印：预览和出纸都是白底黑字，按标签纸毫米尺寸单独打印。
 
 const preview = ref<LabelPayload | null>(null);
+const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const canManageRoutes = computed(() => authSession.value?.role === 'ADMIN');
 const templatesError = ref('');
 const feedback = ref('');
 const errorMessage = ref('');
@@ -294,13 +297,65 @@ function printLabel() {
   if (preview.value) openLabelPrint(preview.value);
 }
 
-const printJobId = ref('');
-const printJobStatus = ref('');
-const printFailure = ref('');
-const reprintJobReason = ref('');
+interface PrintQueueView { stationId: string; queueId: string; name: string; labelType: string;
+  widthMm: number; heightMm: number; enabled: boolean; defaultQueue: boolean }
+interface PrintTargetJobView { id: string; targetStationId: string; targetQueueId: string; status: string;
+  failureReason: string; paperCheckResult: string; copies: number }
+interface PrintBatchView { id: string; jobs: PrintTargetJobView[] }
+const printQueues = ref<PrintQueueView[]>([]);
+const allPrintQueues = ref<PrintQueueView[]>([]);
+const printStations = ref<Array<{ stationId: string; name: string; enabled: boolean; remark: string }>>([]);
+const stationForm = ref({ stationId: '', name: '', enabled: true, remark: '' });
+const queueForm = ref({ stationId: '', queueId: '', name: '', labelType: 'ALL', widthMm: 40, heightMm: 30,
+  enabled: true, defaultQueue: false });
+const newStationToken = ref('');
+const routeFeedback = ref('');
+const selectedTargets = ref<string[]>([]);
+const copiesPerTarget = ref(1);
+const printBatch = ref<PrintBatchView | null>(null);
+const paperChecks = ref<Record<string, string>>({});
 const printAttempt = ref<RequestAttempt | null>(null);
-const reprintAttempt = ref<RequestAttempt | null>(null);
 const printSubmitting = ref(false);
+const eligibleQueues = computed(() => printQueues.value.filter(queue => preview.value
+  && (queue.labelType === 'ALL' || queue.labelType === preview.value.type)
+  && queue.widthMm === preview.value.printerSetting.widthMm
+  && queue.heightMm === preview.value.printerSetting.heightMm));
+const chosenTargets = computed(() => eligibleQueues.value.filter(queue => selectedTargets.value.includes(`${queue.stationId}|${queue.queueId}`)));
+const estimatedSheets = computed(() => chosenTargets.value.length * Number(copiesPerTarget.value || 0));
+
+async function loadPrintQueues() {
+  try {
+    printQueues.value = await apiGet<PrintQueueView[]>('/api/label/print-queues');
+    if (canManageRoutes.value) {
+      printStations.value = await apiGet<typeof printStations.value>('/api/label/print-stations');
+      allPrintQueues.value = await apiGet<PrintQueueView[]>('/api/label/print-queues/all');
+    }
+  }
+  catch (error) { errorMessage.value = error instanceof Error ? error.message : '打印队列加载失败'; }
+}
+async function savePrintStation() {
+  try {
+    const result = await apiPost<typeof stationForm.value, { station: typeof stationForm.value; token: string }>(
+      '/api/label/print-stations', stationForm.value);
+    newStationToken.value = result.token;
+    routeFeedback.value = `工位 ${result.station.stationId} 已保存${result.token ? '，请立即保存下方新凭据' : ''}`;
+    await loadPrintQueues();
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : '工位保存失败'; }
+}
+async function savePrintQueue() {
+  try {
+    await apiPost('/api/label/print-queues', queueForm.value);
+    routeFeedback.value = `队列 ${queueForm.value.queueId} 已保存`;
+    await loadPrintQueues();
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : '队列保存失败'; }
+}
+async function rotateStationToken(id: string) {
+  try {
+    const result = await apiPost<{}, { token: string }>(`/api/label/print-stations/${encodeURIComponent(id)}/rotate-token`, {});
+    newStationToken.value = result.token;
+    routeFeedback.value = `工位 ${id} 凭据已轮换，请更新厂内程序配置`;
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : '凭据轮换失败'; }
+}
 
 function printStatusLabel(status: string) {
   if (status === 'SPOOLED') return '已送入系统队列';
@@ -320,28 +375,34 @@ function printFingerprint() {
     current?.primaryCode ?? '', current?.templateCode || 'FLOW', version,
     current?.printerSetting, current?.layout, current?.fields,
     current?.brandTitle, current?.footerLeft, current?.footerRight,
+    Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(),
   ]);
 }
 
 async function submitPrintJob() {
   if (!preview.value || printSubmitting.value) return;
+  if (!chosenTargets.value.length || !Number.isInteger(Number(copiesPerTarget.value))
+      || Number(copiesPerTarget.value) < 1 || Number(copiesPerTarget.value) > 20) {
+    errorMessage.value = '请选择打印目标并填写每目标 1 到 20 份';
+    return;
+  }
   errorMessage.value = '';
   printAttempt.value = nextRequestAttempt(printAttempt.value, printFingerprint(), `print-${preview.value.primaryCode}`);
   printSubmitting.value = true;
   try {
-    const job = await apiPost<{ requestId: string; businessCode: string; templateCode: string; copies: number }, { id: string; status: string; failureReason: string }>(
-      '/api/label/print-jobs',
+    const batch = await apiPost<{ requestId: string; businessCode: string; templateCode: string;
+      copiesPerTarget: number; targets: Array<{ stationId: string; queueId: string }> }, PrintBatchView>(
+      '/api/label/print-batches',
       {
         requestId: printAttempt.value.requestId,
         businessCode: preview.value.primaryCode,
         templateCode: preview.value.templateCode || 'FLOW',
-        copies: preview.value.printerSetting.copies || 1,
+        copiesPerTarget: Number(copiesPerTarget.value),
+        targets: chosenTargets.value.map(queue => ({ stationId: queue.stationId, queueId: queue.queueId })),
       },
     );
-    printJobId.value = job.id;
-    printJobStatus.value = printStatusLabel(job.status);
-    printFailure.value = job.failureReason || '';
-    feedback.value = `已提交打印任务 ${job.id}。已送入系统队列不等于已经出纸。`;
+    printBatch.value = batch;
+    feedback.value = `已提交打印批次 ${batch.id}，共 ${batch.jobs.length} 个目标、预计 ${estimatedSheets.value} 张。送入系统队列不等于已经出纸。`;
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '打印任务提交失败';
   } finally {
@@ -350,35 +411,18 @@ async function submitPrintJob() {
 }
 
 async function refreshPrintJob() {
-  if (!printJobId.value) return;
-  const job = await apiGet<{ status: string; failureReason: string }>(`/api/label/print-jobs/${printJobId.value}`);
-  printJobStatus.value = printStatusLabel(job.status);
-  printFailure.value = job.failureReason || '';
+  if (!printBatch.value) return;
+  printBatch.value = await apiGet<PrintBatchView>(`/api/label/print-batches/${printBatch.value.id}`);
 }
 
-async function reprintPrintJob() {
-  if (printSubmitting.value) return;
-  if (!printJobId.value || !reprintJobReason.value.trim()) {
-    errorMessage.value = '人工补打必须填写原因';
-    return;
-  }
-  const sourceJobId = printJobId.value;
-  const reason = reprintJobReason.value.trim();
-  reprintAttempt.value = nextRequestAttempt(reprintAttempt.value, `${sourceJobId}|${reason}`, 'reprint');
-  printSubmitting.value = true;
-  errorMessage.value = '';
+async function verifyTargetPaper(jobId: string) {
+  const result = paperChecks.value[jobId]?.trim();
+  if (!result) { errorMessage.value = '请填写该目标的出纸核实结果'; return; }
   try {
-    const job = await apiPost<{ requestId: string; reason: string }, { id: string; status: string; failureReason: string }>(
-      `/api/label/print-jobs/${sourceJobId}/retries`,
-      { requestId: reprintAttempt.value.requestId, reason },
-    );
-    printJobId.value = job.id;
-    printJobStatus.value = printStatusLabel(job.status);
-    printFailure.value = job.failureReason || '';
+    await apiPost(`/api/label/print-target-jobs/${jobId}/paper-checks`, { result });
+    await refreshPrintJob();
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '人工补打失败';
-  } finally {
-    printSubmitting.value = false;
+    errorMessage.value = error instanceof Error ? error.message : '出纸核实失败';
   }
 }
 
@@ -595,7 +639,7 @@ async function submitTemplate() {
   }
 }
 
-onMounted(loadTemplates);
+onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
 </script>
 
 <template>
@@ -719,7 +763,7 @@ onMounted(loadTemplates);
               <template v-if="preview.printerSetting.printerName">· {{ preview.printerSetting.printerName }}</template>
             </span>
             <button type="button" class="primary-button" @click="printLabel">浏览器预览打印</button>
-            <button type="button" class="primary-button" :disabled="printSubmitting" @click="submitPrintJob">提交到打印工位</button>
+            <button type="button" class="primary-button" :disabled="printSubmitting || !chosenTargets.length" @click="submitPrintJob">提交到打印工位</button>
           </div>
         </div>
 
@@ -731,14 +775,71 @@ onMounted(loadTemplates);
             </div>
           </div>
           <p class="qr-content-line">二维码内容：{{ preview.qrContent }}。浏览器预览打印不等于厂内出纸。</p>
-          <p v-if="printJobId">任务 {{ printJobId }} · {{ printJobStatus }}<template v-if="printFailure"> · {{ printFailure }}</template></p>
-          <button v-if="printJobId" type="button" class="secondary-button" @click="refreshPrintJob">刷新任务状态</button>
-          <label v-if="printJobId">人工补打原因<input v-model="reprintJobReason" aria-label="人工补打原因" /></label>
-          <button v-if="printJobId" type="button" class="secondary-button" :disabled="printSubmitting" @click="reprintPrintJob">人工补打</button>
+          <div class="print-targets" aria-label="打印目标">
+            <strong>选择工位和打印队列</strong>
+            <p v-if="!eligibleQueues.length">暂无匹配当前标签类型和纸张尺寸的队列；请由管理员配置工位及队列。</p>
+            <label v-for="queue in eligibleQueues" :key="`${queue.stationId}|${queue.queueId}`">
+              <input v-model="selectedTargets" type="checkbox" :value="`${queue.stationId}|${queue.queueId}`" />
+              {{ queue.stationId }} · {{ queue.name }}（{{ queue.queueId }}）
+            </label>
+            <label>每目标份数 <input v-model.number="copiesPerTarget" type="number" min="1" max="20" aria-label="每目标份数" /></label>
+            <p>目标 {{ chosenTargets.length }} 个 × 每目标 {{ copiesPerTarget }} 份 = 预计 {{ estimatedSheets }} 张；每个目标都会独立打印。</p>
+          </div>
+          <div v-if="printBatch" class="print-targets">
+            <p>批次 {{ printBatch.id }} · SPOOLED 仅表示送入系统队列</p>
+            <button type="button" class="secondary-button" @click="refreshPrintJob">刷新目标状态</button>
+            <div v-for="job in printBatch.jobs" :key="job.id">
+              <strong>{{ job.targetStationId }} / {{ job.targetQueueId }}</strong> · {{ job.id }} · {{ printStatusLabel(job.status) }}
+              <span v-if="job.failureReason"> · {{ job.failureReason }}</span>
+              <span v-if="job.paperCheckResult"> · 出纸核实：{{ job.paperCheckResult }}</span>
+              <label v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)">核纸结果
+                <input v-model="paperChecks[job.id]" :aria-label="`${job.id}核纸结果`" />
+              </label>
+              <button v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)" type="button"
+                class="secondary-button" @click="verifyTargetPaper(job.id)">记录核纸</button>
+            </div>
+          </div>
         </div>
       </section>
       <section v-else class="label-preview"><p class="hint">请先按单号打开贴纸或生成标签，成功后再预览和打印。</p></section>
     </div>
+
+    <section v-if="canManageRoutes" class="template-manager" aria-label="工位与队列维护">
+      <h3>工位与打印队列</h3>
+      <p v-if="routeFeedback">{{ routeFeedback }}</p>
+      <p v-if="newStationToken">新工位凭据（仅此时显示）：<code>{{ newStationToken }}</code></p>
+      <div class="field-row">
+        <label>工位 ID <input v-model="stationForm.stationId" aria-label="工位 ID" /></label>
+        <label>工位名称 <input v-model="stationForm.name" aria-label="工位名称" /></label>
+        <label>备注 <input v-model="stationForm.remark" aria-label="工位备注" /></label>
+        <label><input v-model="stationForm.enabled" type="checkbox" />启用工位</label>
+        <button type="button" class="secondary-button" @click="savePrintStation">保存工位</button>
+      </div>
+      <p v-for="station in printStations" :key="station.stationId">
+        {{ station.stationId }} · {{ station.name }} · {{ station.enabled ? '启用' : '停用' }}
+        <button type="button" class="link-button" @click="stationForm = { ...station }">编辑</button>
+        <button type="button" class="link-button" @click="rotateStationToken(station.stationId)">轮换凭据</button>
+      </p>
+      <div class="field-row">
+        <label>所属工位 <select v-model="queueForm.stationId" aria-label="队列工位">
+          <option value="">选择工位</option><option v-for="station in printStations" :key="station.stationId" :value="station.stationId">{{ station.name }}</option>
+        </select></label>
+        <label>队列 ID <input v-model="queueForm.queueId" aria-label="队列 ID" /></label>
+        <label>显示名称 <input v-model="queueForm.name" aria-label="队列名称" /></label>
+        <label>标签类型 <select v-model="queueForm.labelType" aria-label="队列标签类型">
+          <option value="ALL">母单与子单</option><option value="MOTHER">母单</option><option value="WORK_ORDER">子单</option>
+        </select></label>
+        <label>宽（mm）<input v-model.number="queueForm.widthMm" type="number" aria-label="队列纸宽" /></label>
+        <label>高（mm）<input v-model.number="queueForm.heightMm" type="number" aria-label="队列纸高" /></label>
+        <label><input v-model="queueForm.enabled" type="checkbox" />启用队列</label>
+        <label><input v-model="queueForm.defaultQueue" type="checkbox" />默认队列</label>
+        <button type="button" class="secondary-button" @click="savePrintQueue">保存队列</button>
+      </div>
+      <p v-for="queue in allPrintQueues" :key="`${queue.stationId}|${queue.queueId}`">
+        {{ queue.stationId }} / {{ queue.queueId }} · {{ queue.name }} · {{ queue.enabled ? '启用' : '停用' }}
+        <button type="button" class="link-button" @click="queueForm = { ...queue }">编辑</button>
+      </p>
+    </section>
 
     <!-- 模板与打印机设置管理 -->
     <section class="template-manager">
@@ -1148,4 +1249,14 @@ onMounted(loadTemplates);
   .label-preview { --label-scale: 1.1; }
   .label-mat { padding: 10px; }
 }
+.print-targets {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.print-targets label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.print-targets input[type='number'] { width: 72px; }
 </style>

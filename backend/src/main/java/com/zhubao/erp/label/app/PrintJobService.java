@@ -77,6 +77,18 @@ public class PrintJobService {
         return create(requestId, businessCode, templateCode, copies, account == null ? "" : account.operator());
     }
 
+    public String prepareBatchSnapshot(String businessCode, String templateCode, int copies, AuthUserAccount account) {
+        assertPrintable(businessCode, account);
+        if (businessCode == null || businessCode.isBlank() || templateCode == null || templateCode.isBlank()
+                || copies < 1 || copies > 20) throw new BusinessException("打印单号、模板或份数无效");
+        int version = changes == null ? 0 : changes.latestAppliedVersion(businessCode.trim());
+        return snapshotForJob(businessCode.trim(), templateCode.trim(), copies, version);
+    }
+
+    public void assertBatchReadable(String businessCode, AuthUserAccount account) {
+        assertPrintable(businessCode, account);
+    }
+
     public PrintJob get(String id, AuthUserAccount account) {
         PrintJob job = get(id);
         assertPrintable(job.businessCode(), account);

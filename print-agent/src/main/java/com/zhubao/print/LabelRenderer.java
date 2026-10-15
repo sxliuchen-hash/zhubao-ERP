@@ -84,6 +84,8 @@ public final class LabelRenderer {
             y += pen.getFontMetrics().getDescent() + pixels(0.5, dpi);
         }
         drawQr(pen, string(data, "qr"), pad, qrY, qrWidth);
+        int qrBottom = qrY + qrWidth;
+        int fullWidth = Math.max(1, width - 2 * pad);
         List<?> fields = data.get("fields") instanceof List<?> list ? list : List.of();
         for (int index = 0; index < fields.size(); index++) {
             Map<String, Object> field = object(fields.get(index));
@@ -95,7 +97,8 @@ public final class LabelRenderer {
             y += metrics.getAscent();
             if (y >= height - pad) break;
             if (compact) {
-                y = drawWrapped(pen, name + "：" + value, rightX, y, rightWidth, height - pad, 2);
+                y = drawAround(pen, name + "：" + value, y, rightX, rightWidth, pad, fullWidth,
+                        qrBottom, height - pad, 4);
             } else {
                 drawFit(pen, name + "：" + value, rightX, y, rightWidth);
             }
@@ -161,21 +164,25 @@ public final class LabelRenderer {
         pen.drawString(fitted, x, baseline);
     }
 
-    private static int drawWrapped(Graphics2D pen, String text, int x, int baseline,
-                                   int maxWidth, int bottom, int maxLines) {
+    /** 二维码右侧排不下的行改用整行，避免码下方留白。 */
+    private static int drawAround(Graphics2D pen, String text, int baseline,
+                                  int narrowX, int narrowWidth, int wideX, int wideWidth,
+                                  int qrBottom, int bottom, int maxLines) {
         FontMetrics metrics = pen.getFontMetrics();
         String remaining = text;
         int y = baseline;
         for (int line = 0; line < maxLines && !remaining.isEmpty() && y <= bottom; line++) {
+            boolean beside = y - metrics.getAscent() < qrBottom;
+            int x = beside ? narrowX : wideX;
+            int maxWidth = Math.max(1, beside ? narrowWidth : wideWidth);
             int count = remaining.length();
             while (count > 0 && metrics.stringWidth(remaining.substring(0, count)) > maxWidth) count--;
             if (count == 0) break;
-            String segment = remaining.substring(0, count);
             if (line == maxLines - 1 && count < remaining.length()) {
                 drawFit(pen, remaining, x, y, maxWidth);
                 break;
             }
-            pen.drawString(segment, x, y);
+            pen.drawString(remaining.substring(0, count), x, y);
             remaining = remaining.substring(count);
             if (!remaining.isEmpty()) y += metrics.getHeight();
         }

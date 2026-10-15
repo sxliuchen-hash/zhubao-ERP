@@ -2367,13 +2367,22 @@ PWA 一期边界：
 | `GET /api/label/mother-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `GET /api/label/work-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `POST /api/label/reprints` | `ApiResponse<LabelPayload>` |
-| `POST /api/label/print-jobs` | `ApiResponse<PrintJob>`。必须带 `requestId`。母单／子单快照由服务端按业务事实与模板冻结单号、字段、版式、尺寸、DPI、份数、二维码、版本和标签实例；客户端不上传任意打印内容。同版补打沿用原快照。旧任务仍按旧快照渲染。`SPOOLED` 只表示已送入系统队列 |
+| `POST /api/label/print-jobs` | 旧版创建入口已停止接单，返回升级提示；改用打印批次接口并明确选择工位及队列。旧任务快照仍保留。 |
 | `GET /api/label/print-jobs/{id}` | `ApiResponse<PrintJob>`。`SPOOLED` 只表示已送入系统队列 |
-| `POST /api/label/print-jobs/{id}/retries` | `ApiResponse<PrintJob>`。必须填写原因，新建关联任务并保留原快照，不改原任务 |
+| `POST /api/label/print-jobs/{id}/retries` | 旧版补打入口已停止接单；核纸后以新批次明确选择目标。 |
 | `POST /api/label/print-jobs/{id}/paper-checks` | `ApiResponse<PrintJob>`。人工核实出纸，不把任务改成已出纸 |
 | `POST /api/label/print-jobs/{id}/relabels` | `ApiResponse<PrintJob>`。记录实物换贴，不表示打印队列已经出纸 |
-| `POST /api/label/agents/jobs/claim` | `ApiResponse<PrintJob>`。工位凭据领取，不复用管理员账号 |
-| `POST /api/label/agents/jobs/{id}/report` | `ApiResponse<PrintJob>`。只能回报 `SPOOLED` 或发送前 `FAILED` |
+| `POST /api/label/agents/jobs/claim` | 旧版工位领取入口已停用，返回升级提示。 |
+| `POST /api/label/agents/jobs/{id}/report` | 旧版工位回报入口已停用，返回升级提示。 |
+| `GET /api/label/print-stations`、`GET /api/label/print-queues` | 读取工位公开信息和当前启用队列；不返回工位凭据或 Windows 队列名。 |
+| `POST /api/label/print-stations`、`POST /api/label/print-stations/{id}/rotate-token` | 仅管理员维护工位并轮换独立凭据；新凭据仅在创建／轮换响应中显示一次，服务端保存摘要。 |
+| `GET /api/label/print-queues/all`、`POST /api/label/print-queues` | 仅管理员读取全部队列或维护逻辑队列；队列限定标签类型与纸张毫米尺寸。 |
+| `POST /api/label/print-batches` | 请求含 `requestId`、`businessCode`、`templateCode`、`copiesPerTarget`、`targets[]`（`stationId`、`queueId`）。服务端去重目标、核对权限及队列能力、冻结标签快照，并在同一事务创建批次和每目标任务；同请求同内容回放原批次，内容变化拒绝。 |
+| `GET /api/label/print-batches/{id}` | 返回批次和各目标任务的状态、失败原因、核纸结果；`SPOOLED` 仅表示进入系统队列。 |
+| `POST /api/label/print-target-jobs/{id}/paper-checks` | 人工按目标记录 `result`，不把队列状态伪装成已出纸。 |
+| `POST /api/label/agents/v2/jobs/claim`、`POST /api/label/agents/v2/jobs/{id}/report` | 以工位 ID 和独立令牌鉴权，只领取目标工位的任务，返回目标队列 ID；厂内程序按 `queue.<队列 ID>` 映射本机 Windows 队列，缺失映射或队列不可用时回报 `FAILED`，不回退系统默认打印机。 |
+
+V61 新增工位、队列、批次和目标任务表；原任务的 `PENDING`／`LEASED` 因无明确目标转为 `UNCERTAIN` 供人工核纸，原快照不改写。旧版打印任务创建、补打、工位领取和回报入口返回升级提示；旧任务仍可查询与人工核纸。新批次需管理员先建立工位、队列并把凭据及队列映射配置到厂内程序。
 | `GET /api/label/templates` | `ApiResponse<List<LabelTemplate>>`。含字段顺序、打印机设置和 `layout` |
 | `POST /api/label/templates` | `ApiResponse<LabelTemplate>`。`layout` 支持 `mode=AUTO/COMPACT/STANDARD`、`qrWidthMm`（5～100 mm）、`codeFontPt/fieldFontPt/emphasisFontPt/titleFontPt/footerFontPt`（4～36 pt）；数值留空表示沿用版式默认值，不接收任意 CSS |
 

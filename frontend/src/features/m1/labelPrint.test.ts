@@ -58,6 +58,9 @@ describe('黑白标签打印', () => {
     expect(html).toContain('@page { size: 40mm 30mm; margin: 0; }');
     expect(html).toContain('class="bw-label bw-label--compact"');
     expect(html).toContain('width:40mm;height:30mm');
+    expect(html).toContain('<div class="bw-top"><span class="bw-type">母单</span><span class="bw-code">CC-20260709-001-JL</span></div>');
+    expect(html.indexOf('class="bw-top"')).toBeLessThan(html.indexOf('class="bw-qr"'));
+    expect(html).toContain('float: left');
     expect(html).toContain('K7M2');
     expect(html).toContain('内壁刻字');
     expect(html).not.toContain('<dt>单号</dt>');

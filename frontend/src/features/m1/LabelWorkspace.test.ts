@@ -193,25 +193,26 @@ describe('LabelWorkspace', () => {
 
   });
 
-  it('集中打印和人工补打在响应丢失后复用请求编号', async () => {
+  it('打印批次在响应丢失后复用请求编号并显示各目标', async () => {
     const printIds: string[] = [];
-    const reprintIds: string[] = [];
     let prints = 0;
-    let reprints = 0;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
       const method = init?.method ?? 'GET';
-      if (url.includes('/retries') && method === 'POST') {
-        reprints += 1;
-        reprintIds.push(JSON.parse(String(init?.body)).requestId);
-        if (reprints === 1) throw new Error('响应丢失');
-        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: 'JOB-2', status: 'PENDING', failureReason: '' } }) } as Response;
-      }
-      if (url.includes('/api/label/print-jobs') && method === 'POST') {
+      if (url.includes('/api/label/print-queues')) return { ok: true, json: async () => ({ code: 0, data: [
+        { stationId: 'A', queueId: 'Q1', name: '主队列', labelType: 'WORK_ORDER', widthMm: 60, heightMm: 40, enabled: true },
+        { stationId: 'A', queueId: 'Q2', name: '备用队列', labelType: 'WORK_ORDER', widthMm: 60, heightMm: 40, enabled: true },
+      ] }) } as Response;
+      if (url.includes('/api/label/print-batches') && method === 'POST') {
         prints += 1;
-        printIds.push(JSON.parse(String(init?.body)).requestId);
+        const body = JSON.parse(String(init?.body));
+        printIds.push(body.requestId);
+        expect(body.targets).toHaveLength(2);
         if (prints === 1) throw new Error('响应丢失');
-        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: 'JOB-1', status: 'PENDING', failureReason: '' } }) } as Response;
+        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: 'PB-1', jobs: [
+          { id: 'J1', targetStationId: 'A', targetQueueId: 'Q1', status: 'PENDING', failureReason: '', paperCheckResult: '' },
+          { id: 'J2', targetStationId: 'A', targetQueueId: 'Q2', status: 'FAILED', failureReason: '队列不可用', paperCheckResult: '' },
+        ] } }) } as Response;
       }
       const payload = url.includes('/api/label/work-orders/')
         ? {
@@ -229,6 +230,8 @@ describe('LabelWorkspace', () => {
     await wrapper.get('[aria-label="现场贴纸单号"]').setValue('ZD-1');
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     await flushPromises();
+    await wrapper.findAll('.print-targets input[type="checkbox"]')[0].setValue(true);
+    await wrapper.findAll('.print-targets input[type="checkbox"]')[1].setValue(true);
     const submit = () => wrapper.findAll('button').find((button) => button.text() === '提交到打印工位')!;
     await submit().trigger('click');
     await flushPromises();
@@ -236,15 +239,8 @@ describe('LabelWorkspace', () => {
     await flushPromises();
     expect(printIds).toHaveLength(2);
     expect(printIds[1]).toBe(printIds[0]);
-
-    await wrapper.get('[aria-label="人工补打原因"]').setValue('出纸模糊');
-    const reprint = () => wrapper.findAll('button').find((button) => button.text() === '人工补打')!;
-    await reprint().trigger('click');
-    await flushPromises();
-    await reprint().trigger('click');
-    await flushPromises();
-    expect(reprintIds).toHaveLength(2);
-    expect(reprintIds[1]).toBe(reprintIds[0]);
+    expect(wrapper.text()).toContain('预计 2 张');
+    expect(wrapper.text()).toContain('队列不可用');
     wrapper.unmount();
   });
 
@@ -254,9 +250,12 @@ describe('LabelWorkspace', () => {
     const requestIds: string[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.includes('/api/label/print-jobs') && init?.method === 'POST') {
+      if (url.includes('/api/label/print-queues')) return { ok: true, json: async () => ({ code: 0, data: [
+        { stationId: 'A', queueId: 'Q1', name: '主队列', labelType: 'WORK_ORDER', widthMm: 60, heightMm: 40, enabled: true },
+      ] }) } as Response;
+      if (url.includes('/api/label/print-batches') && init?.method === 'POST') {
         requestIds.push(JSON.parse(String(init.body)).requestId);
-        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: `JOB-${requestIds.length}`, status: 'PENDING', failureReason: '' } }) } as Response;
+        return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: `PB-${requestIds.length}`, jobs: [] } }) } as Response;
       }
       const payload = url.includes('/api/label/work-orders/') ? {
         type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1',
@@ -274,6 +273,7 @@ describe('LabelWorkspace', () => {
     const openAndSubmit = async () => {
       await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
       await flushPromises();
+      await wrapper.find('.print-targets input[type="checkbox"]').setValue(true);
       await wrapper.findAll('button').find(button => button.text() === '提交到打印工位')!.trigger('click');
       await flushPromises();
     };

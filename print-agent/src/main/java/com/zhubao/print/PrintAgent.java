@@ -18,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Properties;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * 厂内打印程序。主动向 ERP 领取任务，提交到本机 Windows 打印队列。
@@ -38,22 +40,27 @@ public final class PrintAgent {
         String baseUrl = required(config, "baseUrl");
         String stationId = required(config, "stationId");
         String token = required(config, "token");
-        String printerName = required(config, "printerName");
+        Map<String, String> queues = queueMappings(config);
         if (!baseUrl.startsWith("https://")) {
             System.err.println("只允许连接 HTTPS 地址");
             System.exit(2);
         }
         HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-        System.out.println("打印工位已启动：" + stationId + "，队列：" + printerName);
+        for (Map.Entry<String, String> queue : queues.entrySet()) {
+            if (findQueue(queue.getValue()) == null) {
+                System.err.println("本机缺少已配置队列：" + queue.getKey() + " → " + queue.getValue());
+            }
+        }
+        System.out.println("打印工位已启动：" + stationId + "，已配置 " + queues.size() + " 条队列映射");
         while (!Thread.currentThread().isInterrupted()) {
-            poll(client, baseUrl, stationId, token, printerName);
+            poll(client, baseUrl, stationId, token, queues);
             Thread.sleep(3000);
         }
     }
 
-    static void poll(HttpClient client, String baseUrl, String stationId, String token, String printerName) {
+    static void poll(HttpClient client, String baseUrl, String stationId, String token, Map<String, String> queues) {
         try {
-            HttpRequest claim = HttpRequest.newBuilder(URI.create(baseUrl + "/api/label/agents/jobs/claim"))
+            HttpRequest claim = HttpRequest.newBuilder(URI.create(baseUrl + "/api/label/agents/v2/jobs/claim"))
                     .timeout(Duration.ofSeconds(20))
                     .header("X-Print-Station", stationId)
                     .header("X-Print-Token", token)
@@ -68,10 +75,12 @@ public final class PrintAgent {
                 return;
             }
             String jobId = text(response.body(), "id");
+            String queueId = text(response.body(), "targetQueueId");
             String snapshot = LabelRenderer.text(response.body(), "contentSnapshot");
             String outcome = "FAILED";
             String reason = "";
             try {
+                String printerName = resolvePrinterName(queues, queueId);
                 submitToQueue(printerName, snapshot);
                 outcome = "SPOOLED";
             } catch (Exception ex) {
@@ -84,14 +93,7 @@ public final class PrintAgent {
     }
 
     static void submitToQueue(String printerName, String snapshot) throws Exception {
-        PrintService[] services = PrintServiceLookup.lookupPrintServices(null, null);
-        PrintService selected = null;
-        for (PrintService service : services) {
-            if (printerName.equals(service.getName())) {
-                selected = service;
-                break;
-            }
-        }
+        PrintService selected = findQueue(printerName);
         if (selected == null) {
             throw new IllegalStateException("本机没有名为 " + printerName + " 的打印队列");
         }
@@ -114,7 +116,7 @@ public final class PrintAgent {
 
     private static void report(HttpClient client, String baseUrl, String stationId, String token, String jobId, String outcome, String reason) throws Exception {
         String body = "{\"outcome\":\"" + outcome + "\",\"failureReason\":\"" + escape(reason) + "\"}";
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/label/agents/jobs/" + jobId + "/report"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/label/agents/v2/jobs/" + jobId + "/report"))
                 .timeout(Duration.ofSeconds(20))
                 .header("Content-Type", "application/json")
                 .header("X-Print-Station", stationId)
@@ -141,6 +143,36 @@ public final class PrintAgent {
             throw new IllegalArgumentException("缺少配置 " + key);
         }
         return value;
+    }
+
+    static Map<String, String> queueMappings(Properties config) {
+        Map<String, String> mappings = new HashMap<>();
+        for (String key : config.stringPropertyNames()) {
+            if (!key.startsWith("queue.")) continue;
+            String id = key.substring("queue.".length());
+            String printer = config.getProperty(key, "").trim();
+            if (!id.matches("[A-Za-z0-9._:-]{1,64}") || printer.isBlank()) {
+                throw new IllegalArgumentException("打印队列映射无效：" + key);
+            }
+            mappings.put(id, printer);
+        }
+        if (mappings.isEmpty()) throw new IllegalArgumentException("请配置至少一条 queue.<队列 ID> 映射");
+        return Map.copyOf(mappings);
+    }
+
+    static String resolvePrinterName(Map<String, String> queues, String queueId) {
+        String printerName = queues.get(queueId);
+        if (printerName == null || printerName.isBlank()) {
+            throw new IllegalStateException("本机未映射打印队列 " + queueId);
+        }
+        return printerName;
+    }
+
+    private static PrintService findQueue(String printerName) {
+        for (PrintService service : PrintServiceLookup.lookupPrintServices(null, null)) {
+            if (printerName.equals(service.getName())) return service;
+        }
+        return null;
     }
 
     private static String escape(String value) {

@@ -39,10 +39,7 @@ public class PrintJobController {
 
     @PostMapping("/print-jobs")
     public ApiResponse<PrintJob> create(@RequestBody CreatePrintJobRequest body, HttpServletRequest request) {
-        require(body);
-        return ApiResponse.ok(printJobService.create(
-                body.requestId(), body.businessCode(), body.templateCode(), body.copies(), account(request)
-        ));
+        throw new BusinessException("旧版打印入口已停止接单，请升级客户端并选择工位及队列");
     }
 
     @GetMapping("/print-jobs/{id}")
@@ -61,10 +58,7 @@ public class PrintJobController {
             @RequestBody RetryPrintJobRequest body,
             HttpServletRequest request
     ) {
-        require(body);
-        AuthUserAccount account = account(request);
-        printJobService.get(id, account);
-        return ApiResponse.ok(printJobService.retry(id, body.requestId(), body.reason(), account.operator()));
+        throw new BusinessException("旧版补打入口已停止接单，请核纸后使用新打印批次");
     }
 
     @PostMapping("/print-jobs/{id}/paper-checks")
@@ -96,7 +90,7 @@ public class PrintJobController {
             @RequestHeader("X-Print-Station") String stationId,
             @RequestHeader("X-Print-Token") String token
     ) {
-        return ApiResponse.ok(printJobService.claim(stationId, token));
+        throw new BusinessException("旧版工位领取入口已停用，请升级厂内打印程序");
     }
 
     @PostMapping("/agents/jobs/{id}/report")
@@ -106,8 +100,7 @@ public class PrintJobController {
             @RequestHeader("X-Print-Token") String token,
             @RequestBody ReportPrintJobRequest body
     ) {
-        require(body);
-        return ApiResponse.ok(printJobService.report(id, stationId, token, body.outcome(), body.failureReason()));
+        throw new BusinessException("旧版工位回报入口已停用，请升级厂内打印程序");
     }
 
     private AuthUserAccount account(HttpServletRequest request) {
