@@ -195,9 +195,12 @@ public class LabelService {
         LabelPrinterSetting printerSetting = template != null ? template.printerSetting() : LabelPrinterSetting.defaultSetting();
         String footerLeft = "";
         String footerRight = "";
-        if (motherFallback) {
-            footerLeft = template == null ? facts.express() : footerValue(template.footerLeftSource(), facts);
-            footerRight = template == null ? receiverFooter(facts.receiver()) : footerValue(template.footerRightSource(), facts);
+        if (template != null) {
+            footerLeft = footerValue(template.footerLeftSource(), facts);
+            footerRight = footerValue(template.footerRightSource(), facts);
+        } else if (motherFallback) {
+            footerLeft = facts.express();
+            footerRight = receiverFooter(facts.receiver());
         }
         return new LabelPayload(
                 type,
@@ -272,9 +275,10 @@ public class LabelService {
         if (template != null) {
             template.fields().stream()
                     .sorted(Comparator.comparingInt(LabelTemplateField::sortOrder))
-                    .filter(field -> motherFallback || (!"motherOrderCode".equals(field.source()) && !"母单".equals(field.label())))
                     .forEach(field -> addField(fields, field.label(), valueOf(field.source(), facts)));
-            if (!motherFallback) fields.add(Math.min(1, fields.size()), new LabelField("母单", facts.motherOrderCode()));
+            if (!motherFallback && !templatePlacesMother(template)) {
+                fields.add(Math.min(1, fields.size()), new LabelField("母单", facts.motherOrderCode()));
+            }
             return fields;
         }
         addField(fields, "验证码", facts.verificationCode());
@@ -290,6 +294,15 @@ public class LabelService {
             addField(fields, "收货日", facts.inboundDate());
         }
         return fields;
+    }
+
+    /** 子单模板已经把所属母单号放进字段或脚注时，按模板位置打印，不再插到固定第二行。 */
+    private boolean templatePlacesMother(LabelTemplate template) {
+        boolean inFields = template.fields().stream()
+                .anyMatch(field -> field != null && "motherOrderCode".equals(field.source()));
+        return inFields
+                || "motherOrderCode".equals(template.footerLeftSource())
+                || "motherOrderCode".equals(template.footerRightSource());
     }
 
     /** 解析要使用的模板：优先按模板编码，其次按类型默认模板；仓储不可用或无匹配时返回 null。 */

@@ -557,11 +557,12 @@ function addTemplateField() {
   templateForm.value.fields.push({ label: '', source: '', sortOrder: templateForm.value.fields.length + 1 });
 }
 
-function useCustomerMark(index: number) {
+function applySourceLabel(index: number) {
   const field = templateForm.value.fields[index];
-  if (field?.source === 'customerInitials' && (field.label.trim() === '' || field.label.trim() === '客户')) {
-    field.label = '暗记';
-  }
+  if (!field) return;
+  const label = field.label.trim();
+  if (field.source === 'customerInitials' && (label === '' || label === '客户')) field.label = '暗记';
+  if (field.source === 'motherOrderCode' && (label === '' || label === '客户')) field.label = '母单';
 }
 
 function removeTemplateField(index: number) {
@@ -582,18 +583,25 @@ const draftFieldExamples: Record<string, string> = {
   quantity: '2 件', weight: '12 克', inboundDate: '2026-10-14', warehouseCode: 'A01',
   receiver: '收货人', express: '顺丰',
 };
+function workOrderDraftFields(): LabelField[] {
+  const placed = templateForm.value.fields
+    .filter((field) => field.label.trim() !== '')
+    .map((field) => ({ name: field.label.trim(), value: draftFieldExamples[field.source] || '示例内容' }));
+  const chosen = templateForm.value.fields.some((field) => field.source === 'motherOrderCode')
+    || templateForm.value.footerLeftSource === 'motherOrderCode'
+    || templateForm.value.footerRightSource === 'motherOrderCode';
+  if (templateForm.value.labelType === 'WORK_ORDER' && !chosen) {
+    placed.splice(Math.min(1, placed.length), 0, { name: '母单', value: 'MD-20261014-0001' });
+  }
+  return placed;
+}
+
 const templateDraft = computed<LabelPayload>(() => ({
   type: templateForm.value.labelType,
   typeLabel: labelTypeOptions.find((item) => item.value === templateForm.value.labelType)?.label ?? '标签',
   primaryCode: templateForm.value.labelType === 'WORK_ORDER' ? 'ZD-20261014-0001' : 'MD-20261014-0001',
   qrContent: templateForm.value.labelType === 'WORK_ORDER' ? 'JG|work_order|ZD-20261014-0001|0|PREVIEW' : 'JG|mother|MD-20261014-0001|0|PREVIEW',
-  fields: [
-    ...templateForm.value.fields.filter((field) => field.label.trim() &&
-      !(templateForm.value.labelType === 'WORK_ORDER' && (field.source === 'motherOrderCode' || field.label.trim() === '母单'))).map((field) => ({
-    name: field.label.trim(), value: draftFieldExamples[field.source] || '示例内容',
-    })),
-    ...(templateForm.value.labelType === 'WORK_ORDER' ? [{ name: '母单', value: 'MD-20261014-0001' }] : []),
-  ],
+  fields: workOrderDraftFields(),
   footerLeft: draftFieldExamples[templateForm.value.footerLeftSource] || '',
   footerRight: draftFieldExamples[templateForm.value.footerRightSource] || '',
   printedAt: '',
@@ -981,7 +989,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
           </div>
           <div v-for="(field, index) in templateForm.fields" :key="index" class="field-row">
             <input v-model="field.label" :aria-label="`第${index + 1}个字段名称`" type="text" placeholder="字段名，如 客户" />
-            <select v-model="field.source" :aria-label="`第${index + 1}个字段来源`" @change="useCustomerMark(index)">
+            <select v-model="field.source" :aria-label="`第${index + 1}个字段来源`" @change="applySourceLabel(index)">
               <option value="">通用标签手动填写</option>
               <option v-for="option in motherFieldSourceOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
@@ -993,7 +1001,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
               <button type="button" class="link-button danger" :aria-label="`删除第${index + 1}个字段`" @click="removeTemplateField(index)">删除</button>
             </span>
           </div>
-          <p class="hint">从上到下即打印顺序；不添加字段时只印单号和二维码。母单／子单字段须选择单据来源，手动字段用于通用标签生成。</p>
+          <p class="hint">从上到下即打印顺序。子单的所属母单号放在哪个字段或脚注，就印在哪个位置；模板没放这项时，仍默认排在第二行。</p>
         </div>
 
         <div class="editor-grid">

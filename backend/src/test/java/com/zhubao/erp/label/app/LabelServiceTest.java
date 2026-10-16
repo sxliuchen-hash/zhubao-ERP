@@ -1,5 +1,6 @@
 package com.zhubao.erp.label.app;
 
+import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
@@ -245,6 +246,42 @@ class LabelServiceTest {
         assertThat(payload.fields()).extracting(LabelField::value).containsExactly("HXZB", "2026-07-20");
         assertThat(payload.footerRight()).isEqualTo("HXZB");
         assertThat(payload.footerLeft()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("子单：模板指定所属母单号的位置，未指定时仍排在第二行")
+    void 子单母单号按模板位置打印() {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord(
+                "ZD-20261016-0001", "MD-20261016-0008", 8L, "恒信珠宝", "抛光", "2026-10-20",
+                "AU9999", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "WH01",
+                "抛光", "K7M2", "LG-1", "何琳", "2026-10-16T09:00:00"));
+        InMemoryLabelTemplateRepository templates = new InMemoryLabelTemplateRepository();
+        templates.create(new LabelTemplate(
+                null, "WORK-MOTHER-LAST", "母单在最后", LabelType.WORK_ORDER, "珠宝来料加工系统",
+                List.of(
+                        new LabelTemplateField("客户", "customer", 1),
+                        new LabelTemplateField("期限", "dueDate", 2),
+                        new LabelTemplateField("母单", "motherOrderCode", 3)),
+                "", "", false, true, LabelPrinterSetting.defaultSetting(),
+                "", "system", "2026-10-16T09:00:00"));
+        LabelService service = new LabelService(documents, templates);
+
+        LabelPayload placed = service.generateWorkOrderLabel("ZD-20261016-0001", "WORK-MOTHER-LAST");
+        assertThat(placed.fields()).extracting(LabelField::name).containsExactly("客户", "期限", "母单");
+        assertThat(placed.fields()).extracting(LabelField::value).containsExactly("恒信珠宝", "2026-10-20", "MD-20261016-0008");
+
+        templates.create(new LabelTemplate(
+                null, "WORK-MOTHER-FOOT", "母单在脚注", LabelType.WORK_ORDER, "珠宝来料加工系统",
+                List.of(new LabelTemplateField("客户", "customer", 1)),
+                "", "motherOrderCode", false, true, LabelPrinterSetting.defaultSetting(),
+                "", "system", "2026-10-16T09:00:00"));
+        LabelPayload footer = service.generateWorkOrderLabel("ZD-20261016-0001", "WORK-MOTHER-FOOT");
+        assertThat(footer.fields()).extracting(LabelField::name).containsExactly("客户");
+        assertThat(footer.footerRight()).isEqualTo("MD-20261016-0008");
+
+        LabelPayload fallback = service.generateWorkOrderLabel("ZD-20261016-0001");
+        assertThat(fallback.fields()).extracting(LabelField::name).containsExactly("验证码", "母单", "客户", "加工要求", "期限");
     }
 
     @Test

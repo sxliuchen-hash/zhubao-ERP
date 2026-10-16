@@ -432,4 +432,25 @@ describe('LabelWorkspace', () => {
     expect(preview).toContain(mark);
     expect(preview).not.toContain('示例客户');
   });
+
+  it('子单模板按字段顺序摆放所属母单号', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: [] }),
+    } as Response);
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('.manager-head .link-button').trigger('click');
+    await wrapper.get('.template-editor select').setValue('WORK_ORDER');
+    const before = wrapper.get('[aria-label="模板实时预览"]').text();
+    expect(before.indexOf('客户')).toBeLessThan(before.indexOf('母单'));
+    await wrapper.get('[aria-label="第1个字段来源"]').setValue('motherOrderCode');
+    await wrapper.get('.template-editor .fields-head button').trigger('click');
+    await wrapper.get('[aria-label="第2个字段名称"]').setValue('客户');
+    await wrapper.get('[aria-label="第2个字段来源"]').setValue('customer');
+    await wrapper.get('[aria-label="下移第1个字段"]').trigger('click');
+    const after = wrapper.get('[aria-label="模板实时预览"]').text();
+    expect(after.indexOf('示例客户')).toBeLessThan(after.indexOf('MD-20261014-0001'));
+    expect(after.match(/母单/g)).toHaveLength(1);
+  });
 });
