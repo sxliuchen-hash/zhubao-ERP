@@ -66,6 +66,7 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; grou
 ];
 
 const mobilePrimaryKeys: TabKey[] = ['dashboard', 'mobile', 'approvals'];
+const fieldRoles = new Set(['ADMIN', 'RECEIVER', 'WAREHOUSE_KEEPER', 'OPERATOR', 'WORKSHOP_LEADER', 'QUALITY_INSPECTOR']);
 
 const activeTab = ref<TabKey>('dashboard');
 const workspaceLoaders = {
@@ -185,6 +186,7 @@ onBeforeUnmount(() => {
 async function restoreAuthSessionForNavigation() {
   try {
     authSession.value = await fetchAuthSession();
+    openMobileWorkspaceForSession(authSession.value);
   } catch {
     authSession.value = null;
   } finally {
@@ -200,7 +202,16 @@ async function handleLogout() {
 }
 
 function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) {
+  const wasSignedOut = !authSession.value;
   authSession.value = event.detail.session;
+  if (event.detail.session && wasSignedOut) openMobileWorkspaceForSession(event.detail.session);
+}
+
+function openMobileWorkspaceForSession(session: AuthSession | null) {
+  if (session && window.innerWidth <= 900 && fieldRoles.has(session.role)
+    && visibleTabs.value.some((tab) => tab.key === 'mobile') && activeTab.value === 'dashboard') {
+    activeTab.value = 'mobile';
+  }
 }
 
 function openTraceDocument() {

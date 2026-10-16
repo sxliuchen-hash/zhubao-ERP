@@ -68,6 +68,22 @@ describe('App', () => {
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('扫码');
   });
 
+  it('opens the permitted field workspace first on a phone', async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+    try {
+      vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'production', 'mobile']));
+      const wrapper = mount(App);
+      await flushPromises();
+
+      expect(wrapper.get('.mobile-tab[data-mobile-tab="mobile"]').classes()).toContain('active');
+      expect(wrapper.get('.mobile-brand strong').text()).toBe('手机作业');
+      wrapper.unmount();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    }
+  });
+
   it('filters sidebar navigation from the authenticated menu contract', async () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'production', 'mobile']));
 
