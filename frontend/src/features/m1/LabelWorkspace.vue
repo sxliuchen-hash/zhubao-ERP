@@ -22,9 +22,8 @@ import type { ScanDraft } from '../scan/scanDraft';
 import type { TraceTarget } from '../scan/traceTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import type { ScanRelatedTarget } from '../../services/scanContextApi';
-import { applyCustomerMark, customerInitials } from './customerInitials';
+import { customerInitials } from './customerInitials';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
-import { fetchCustomers } from '../../services/masterDataApi';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import { apiGet, apiPost } from '../../services/apiClient';
 import type { AuthSession } from '../../services/authApi';
@@ -74,19 +73,8 @@ const form = ref<{
 // 按母单号便捷生成
 const motherOrderCode = ref('');
 const motherTemplateCode = ref('');
-const customerMarkId = ref('');
-const customerMarks = ref<Array<{ customerId: number; name: string; initials: string }>>([]);
-const selectedMark = computed(() => customerMarks.value.find((item) => String(item.customerId) === customerMarkId.value) ?? null);
-const duplicateMark = computed(() => {
-  const current = selectedMark.value;
-  if (!current) return false;
-  return customerMarks.value.some((item) => item.customerId !== current.customerId && item.initials === current.initials);
-});
-const printedPreview = computed(() => preview.value
-  ? applyCustomerMark(preview.value, selectedMark.value?.initials ?? '')
-  : null);
 
-const labelMarkup = computed(() => printedPreview.value ? buildLabelMarkup(printedPreview.value) : '');
+const labelMarkup = computed(() => preview.value ? buildLabelMarkup(preview.value) : '');
 const sheetStyle = computed(() => ({
   width: `calc(${preview.value?.printerSetting.widthMm ?? 40}mm * var(--label-scale, ${labelPreviewScale}))`,
   height: `calc(${preview.value?.printerSetting.heightMm ?? 30}mm * var(--label-scale, ${labelPreviewScale}))`,
@@ -313,28 +301,7 @@ async function loadMotherLabel() {
 }
 
 function printLabel() {
-  if (printedPreview.value) openLabelPrint(printedPreview.value);
-}
-
-async function loadCustomerMarks() {
-  try {
-    const rows = await fetchCustomers();
-    if (!Array.isArray(rows)) {
-      customerMarks.value = [];
-      return;
-    }
-    customerMarks.value = rows
-      .filter((row) => row.enabled !== false && typeof row.name === 'string' && row.name.trim() !== '')
-      .map((row) => ({
-        customerId: row.customerId,
-        name: row.name.trim(),
-        initials: customerInitials(row.name),
-      }))
-      .filter((row) => row.initials !== '')
-      .sort((left, right) => left.initials.localeCompare(right.initials) || left.name.localeCompare(right.name, 'zh-CN'));
-  } catch {
-    customerMarks.value = [];
-  }
+  if (preview.value) openLabelPrint(preview.value);
 }
 
 interface PrintQueueView { stationId: string; queueId: string; name: string; labelType: string;
@@ -412,14 +379,13 @@ function printStatusLabel(status: string) {
 }
 
 function printFingerprint() {
-  const current = printedPreview.value;
-  // 同版同模板内容重试复用请求；换客户暗记后另建打印任务。
+  const current = preview.value;
+  // 同版同模板内容重试复用请求；业务版本或模板内容变化后另建打印任务。
   const version = current?.qrContent.split('|')[3] ?? '';
   return JSON.stringify([
     current?.primaryCode ?? '', current?.templateCode || 'FLOW', version,
     current?.printerSetting, current?.layout, current?.fields,
     current?.brandTitle, current?.footerLeft, current?.footerRight,
-    selectedMark.value?.initials ?? '',
     Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(),
   ]);
 }
@@ -436,7 +402,7 @@ async function submitPrintJob() {
   printSubmitting.value = true;
   try {
     const batch = await apiPost<{ requestId: string; businessCode: string; templateCode: string;
-      copiesPerTarget: number; targets: Array<{ stationId: string; queueId: string }>; customerMark: string }, PrintBatchView>(
+      copiesPerTarget: number; targets: Array<{ stationId: string; queueId: string }> }, PrintBatchView>(
       '/api/label/print-batches',
       {
         requestId: printAttempt.value.requestId,
@@ -444,7 +410,6 @@ async function submitPrintJob() {
         templateCode: preview.value.templateCode || 'FLOW',
         copiesPerTarget: Number(copiesPerTarget.value),
         targets: chosenTargets.value.map(queue => ({ stationId: queue.stationId, queueId: queue.queueId })),
-        customerMark: selectedMark.value?.initials ?? '',
       },
     );
     printBatch.value = batch;
@@ -592,6 +557,13 @@ function addTemplateField() {
   templateForm.value.fields.push({ label: '', source: '', sortOrder: templateForm.value.fields.length + 1 });
 }
 
+function useCustomerMark(index: number) {
+  const field = templateForm.value.fields[index];
+  if (field?.source === 'customerInitials' && (field.label.trim() === '' || field.label.trim() === '客户')) {
+    field.label = '暗记';
+  }
+}
+
 function removeTemplateField(index: number) {
   templateForm.value.fields.splice(index, 1);
 }
@@ -604,7 +576,7 @@ function moveTemplateField(index: number, direction: -1 | 1) {
 }
 
 const draftFieldExamples: Record<string, string> = {
-  verificationCode: 'K7M2', customer: '示例客户', processingRequirement: '按要求加工',
+  verificationCode: 'K7M2', customer: '示例客户', customerInitials: customerInitials('示例客户'), processingRequirement: '按要求加工',
   motherOrderCode: 'MD-20261014-0001',
   dueDate: '2026-10-20', code: 'MD-20261014-0001', goodsName: '戒托', materialCode: 'WL-001',
   quantity: '2 件', weight: '12 克', inboundDate: '2026-10-14', warehouseCode: 'A01',
@@ -706,7 +678,7 @@ async function submitTemplate() {
   }
 }
 
-onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustomerMarks(); });
+onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
 </script>
 
 <template>
@@ -833,18 +805,6 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustome
             <button type="button" class="primary-button" :disabled="printSubmitting || !chosenTargets.length" @click="submitPrintJob">提交到打印工位</button>
           </div>
         </div>
-
-        <label class="customer-mark">
-          <span>页脚客户暗记</span>
-          <select v-model="customerMarkId" aria-label="页脚客户暗记">
-            <option value="">不印暗记</option>
-            <option v-for="item in customerMarks" :key="item.customerId" :value="String(item.customerId)">
-              {{ item.initials }} · {{ item.name }}
-            </option>
-          </select>
-        </label>
-        <p class="hint">选择后，贴纸页脚只印拼音首字母，并去掉客户中文名。下拉中的名称只供内部选择。</p>
-        <p v-if="duplicateMark" class="hint">还有其他客户是同一组首字母，贴纸上无法区分。</p>
 
         <div class="label-print-area">
           <component :is="'style'">{{ labelFaceCss }}</component>
@@ -1021,7 +981,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustome
           </div>
           <div v-for="(field, index) in templateForm.fields" :key="index" class="field-row">
             <input v-model="field.label" :aria-label="`第${index + 1}个字段名称`" type="text" placeholder="字段名，如 客户" />
-            <select v-model="field.source" :aria-label="`第${index + 1}个字段来源`">
+            <select v-model="field.source" :aria-label="`第${index + 1}个字段来源`" @change="useCustomerMark(index)">
               <option value="">通用标签手动填写</option>
               <option v-for="option in motherFieldSourceOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
@@ -1039,7 +999,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustome
         <div class="editor-grid">
           <label class="field">
             <span>左脚注来源</span>
-            <select v-model="templateForm.footerLeftSource">
+            <select v-model="templateForm.footerLeftSource" aria-label="左脚注来源">
               <option value="">无</option>
               <option v-for="option in motherFieldSourceOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
@@ -1048,7 +1008,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustome
           </label>
           <label class="field">
             <span>右脚注来源</span>
-            <select v-model="templateForm.footerRightSource">
+            <select v-model="templateForm.footerRightSource" aria-label="右脚注来源">
               <option value="">无</option>
               <option v-for="option in motherFieldSourceOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
@@ -1056,6 +1016,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustome
             </select>
           </label>
         </div>
+        <p class="hint">字段或脚注选择“客户首字母暗记”后，只印该单客户名称的拼音首字母。若模板里仍保留“客户”来源，中文名会继续印出。</p>
 
         <h5>打印机设置（黑白）</h5>
         <div class="editor-grid">
@@ -1230,18 +1191,6 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustome
   align-items: center;
   margin-bottom: 12px;
   font-weight: 600;
-}
-.customer-mark {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 400;
-}
-.customer-mark select {
-  min-width: 12em;
 }
 .toolbar-actions {
   display: flex;

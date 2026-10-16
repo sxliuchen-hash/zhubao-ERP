@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
+import { customerInitials } from './customerInitials';
 import LabelWorkspace from './LabelWorkspace.vue';
 import { openLabelPrint } from './labelPrint';
 import { queryScanContext } from '../../services/scanContextApi';
@@ -412,42 +413,23 @@ describe('LabelWorkspace', () => {
     expect(fetchSpy.mock.calls.map((call) => String(call[0])).some((url) => url.includes('/api/label/mother-orders/'))).toBe(false);
   });
 
-  it('选择客户暗记后页脚只印拼音首字母，并去掉客户中文名', async () => {
-    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'MOTHER_ORDER', code: 'MD-1' }));
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const url = String(input);
-      const data = url.includes('/api/business/master-data/customers')
-        ? [
-          { customerId: 8, customerCode: 'HX', name: '恒信珠宝', aliases: '', contact: '', phone: '', remark: '', enabled: true },
-          { customerId: 9, customerCode: 'HX2', name: '华信珠宝', aliases: '', contact: '', phone: '', remark: '', enabled: true },
-        ]
-        : url.includes('/api/label/mother-orders/')
-          ? {
-            type: 'MOTHER', typeLabel: '母单', primaryCode: 'MD-1', qrContent: 'JG|mother|MD-1',
-            fields: [{ name: '客户', value: '恒信珠宝' }, { name: '期限', value: '2026-10-20' }],
-            footerLeft: '', footerRight: '', printedAt: '', brandTitle: '珠宝来料加工系统', templateCode: 'MOTHER-DEFAULT',
-            printerSetting: { widthMm: 40, heightMm: 30, dpi: 300, printerName: '', copies: 1 },
-          }
-          : [];
-      return { ok: true, json: async () => ({ code: 0, message: 'ok', data }) } as Response;
-    });
+  it('打印模板的字段和脚注下拉可以选择客户首字母暗记', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: [] }),
+    } as Response);
     const wrapper = mount(LabelWorkspace);
     await flushPromises();
-    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('MD-1');
-    await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
-    await flushPromises();
-    expect(wrapper.get('.label-print-area').text()).toContain('恒信珠宝');
-    await wrapper.get('[aria-label="页脚客户暗记"]').setValue('8');
-    await flushPromises();
-    const printed = wrapper.get('.label-print-area').text();
-    expect(printed).toContain('HXZB');
-    expect(printed).not.toContain('恒信珠宝');
-    expect(printed).toContain('2026-10-20');
-    expect(wrapper.text()).toContain('还有其他客户是同一组首字母');
-    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
-    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({
-      footerRight: 'HXZB',
-      fields: [{ name: '期限', value: '2026-10-20' }],
-    }));
+    await wrapper.get('.manager-head .link-button').trigger('click');
+    const source = wrapper.get('[aria-label="第1个字段来源"]');
+    expect(source.text()).toContain('客户首字母暗记');
+    expect(wrapper.get('[aria-label="左脚注来源"]').text()).toContain('客户首字母暗记');
+    expect(wrapper.get('[aria-label="右脚注来源"]').text()).toContain('客户首字母暗记');
+    await source.setValue('customerInitials');
+    await wrapper.get('[aria-label="右脚注来源"]').setValue('customerInitials');
+    const mark = customerInitials('示例客户');
+    const preview = wrapper.get('[aria-label="模板实时预览"]').text();
+    expect(preview).toContain(mark);
+    expect(preview).not.toContain('示例客户');
   });
 });

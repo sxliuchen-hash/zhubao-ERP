@@ -319,6 +319,7 @@ public class LabelService {
         }
         return switch (source.trim()) {
             case "customer" -> facts.customer();
+            case "customerInitials" -> CustomerInitials.of(facts.customer());
             case "goodsName" -> facts.goodsName();
             case "materialCode" -> facts.materialCode();
             case "quantity" -> facts.quantity();

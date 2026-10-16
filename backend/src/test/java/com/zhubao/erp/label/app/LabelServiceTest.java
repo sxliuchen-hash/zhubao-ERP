@@ -7,6 +7,9 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.GenerateLabelCommand;
 import com.zhubao.erp.label.domain.LabelField;
 import com.zhubao.erp.label.domain.LabelPayload;
+import com.zhubao.erp.label.domain.LabelPrinterSetting;
+import com.zhubao.erp.label.domain.LabelTemplate;
+import com.zhubao.erp.label.domain.LabelTemplateField;
 import com.zhubao.erp.label.domain.LabelLayout;
 import com.zhubao.erp.label.domain.SaveLabelTemplateCommand;
 import com.zhubao.erp.label.domain.LabelType;
@@ -214,6 +217,34 @@ class LabelServiceTest {
         assertThat(reprinted.fields()).extracting(LabelField::value).contains("K7M2");
         assertThat(businessRepository.listLabelReprints("MOTHER", "MO20260709002"))
                 .singleElement().satisfies(log -> assertThat(log.verificationCode()).isEqualTo("K7M2"));
+    }
+
+    @Test
+    @DisplayName("模板：客户首字母暗记从客户名称带出，不印中文名")
+    void 模板客户首字母暗记从客户名称带出() {
+        InMemoryBusinessDocumentRepository businessRepository = new InMemoryBusinessDocumentRepository();
+        businessRepository.saveMotherOrder(new MotherOrderRecord(
+                "MO-MARK", 8L, 8L, "AU9999", "2026-07-09", "顺丰", "SF123456789",
+                "李寄件", "王收货", "赵拆包", "黄金原料", "CUSTOMER", true, "WH01",
+                new BigDecimal("100.000"), "件", new BigDecimal("520.50"), "IN_STOCK", "LG001",
+                null, null, null, "operator01", "EV001", null, "ACTIVE", "2026-07-09 10:00",
+                "来料加工", "2026-07-20", "恒信珠宝"));
+        InMemoryLabelTemplateRepository templates = new InMemoryLabelTemplateRepository();
+        templates.create(new LabelTemplate(
+                null, "MOTHER-MARK", "暗记模板", LabelType.MOTHER, "珠宝来料加工系统",
+                List.of(
+                        new LabelTemplateField("暗记", "customerInitials", 1),
+                        new LabelTemplateField("期限", "dueDate", 2)),
+                "", "customerInitials", false, true, LabelPrinterSetting.defaultSetting(),
+                "", "system", "2026-10-16T09:00:00"));
+        LabelService service = new LabelService(businessRepository, templates);
+
+        LabelPayload payload = service.generateMotherLabel("MO-MARK", "MOTHER-MARK");
+
+        assertThat(payload.fields()).extracting(LabelField::name).containsExactly("暗记", "期限");
+        assertThat(payload.fields()).extracting(LabelField::value).containsExactly("HXZB", "2026-07-20");
+        assertThat(payload.footerRight()).isEqualTo("HXZB");
+        assertThat(payload.footerLeft()).isEmpty();
     }
 
     @Test

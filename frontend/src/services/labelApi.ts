@@ -152,6 +152,7 @@ export const motherFieldSourceOptions: Array<{ value: string; label: string }> =
   { value: 'verificationCode', label: '验证码' },
   { value: 'motherOrderCode', label: '所属母单号（子单固定显示）' },
   { value: 'customer', label: '客户' },
+  { value: 'customerInitials', label: '客户首字母暗记' },
   { value: 'processingRequirement', label: '加工要求' },
   { value: 'dueDate', label: '期限' },
   { value: 'code', label: '单号' },
