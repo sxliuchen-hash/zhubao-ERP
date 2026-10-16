@@ -134,6 +134,19 @@ class MainActivity : ComponentActivity() {
         settings.userAgentString = settings.userAgentString + " ZhubaoErpShell/" + BuildConfig.VERSION_NAME
         webView.webViewClient = ErpWebViewClient()
         webView.webChromeClient = ErpChromeClient()
+        webView.setDownloadListener { url, _, _, _, _ ->
+            val target = Uri.parse(url)
+            if (allowedOrigin?.matches(target) == true &&
+                target.path?.matches(Regex("/api/documents/attachments/[^/]+/content")) == true &&
+                target.getQueryParameter("download") == "true" &&
+                !target.getQueryParameter("token").isNullOrBlank() &&
+                !target.getQueryParameter("expiresAt").isNullOrBlank()
+            ) {
+                openExternal(target)
+            } else {
+                showError("下载地址无效", "请返回证据清单重新点击下载。")
+            }
+        }
     }
 
     private fun loadErp() {
