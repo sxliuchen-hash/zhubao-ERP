@@ -68,6 +68,23 @@ describe('黑白标签打印', () => {
     expect(html).not.toContain('快递：顺丰');
   });
 
+  it('紧凑贴纸在选择客户暗记后显示页脚字母', () => {
+    const marked: LabelPayload = {
+      ...payload,
+      fields: [
+        { name: '期限', value: '2026-10-20' },
+      ],
+      footerLeft: '',
+      footerRight: 'HXZB',
+      templateCode: '',
+      printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30, dpi: 300 },
+    };
+    const html = buildLabelMarkup(marked);
+    expect(html).toContain('class="bw-foot"');
+    expect(html).toContain('HXZB');
+    expect(html).not.toContain('恒信珠宝');
+  });
+
   it('自定义模板在紧凑纸张保留全部选定字段并应用字号版式', () => {
     const configured: LabelPayload = {
       ...payload,

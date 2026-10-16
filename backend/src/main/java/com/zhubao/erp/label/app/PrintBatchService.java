@@ -76,6 +76,11 @@ public class PrintBatchService {
 
     public PrintBatch create(String requestId, String businessCode, String templateCode, int copies,
                              List<PrintTarget> requested, AuthUserAccount account) {
+        return create(requestId, businessCode, templateCode, copies, requested, account, "");
+    }
+
+    public PrintBatch create(String requestId, String businessCode, String templateCode, int copies,
+                             List<PrintTarget> requested, AuthUserAccount account, String customerMark) {
         requireRequest(requestId);
         if (requested == null || requested.isEmpty() || requested.size() > 20)
             throw new BusinessException("请选择 1 到 20 个打印目标");
@@ -88,7 +93,8 @@ public class PrintBatchService {
             if (seen.add(target.stationId() + "|" + target.queueId())) targets.add(target);
         }
         targets.sort(java.util.Comparator.comparing(PrintTarget::stationId).thenComparing(PrintTarget::queueId));
-        String snapshot = labels.prepareBatchSnapshot(businessCode, templateCode, copies, account);
+        String snapshot = labels.withCustomerMark(
+                labels.prepareBatchSnapshot(businessCode, templateCode, copies, account), customerMark);
         String key = businessCode.trim() + "|" + templateCode.trim() + "|" + copies + "|" + snapshot + "|" + targets;
         String hash = digest(key);
         PrintBatch existing = repository.batchByRequest(requestId.trim()).orElse(null);

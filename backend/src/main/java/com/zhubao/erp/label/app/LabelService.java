@@ -111,14 +111,12 @@ public class LabelService {
         return generateMotherLabel(motherOrderCode, null);
     }
 
-    /** 母单标签便捷生成，可指定模板编码。 */
+    /**
+     * 母单标签便捷生成，可指定模板编码。
+     * 已拆母单仍生成周转盒上的母单标签；子单贴纸另行生成，不互相替代。
+     */
     public LabelPayload generateMotherLabel(String motherOrderCode, String templateCode) {
         MotherOrderRecord record = requireMother(motherOrderCode);
-        businessDocumentRepository.findMotherSplitState(record.code())
-                .filter(state -> MotherSplitState.SPLIT.equals(state.decision()))
-                .ifPresent(state -> {
-                    throw new BusinessException("这张母单已拆成子单，请打印子单贴纸");
-                });
         StickerFacts facts = motherFacts(record);
         return payloadOf(LabelType.MOTHER, record.code(), facts, templateCode, true);
     }

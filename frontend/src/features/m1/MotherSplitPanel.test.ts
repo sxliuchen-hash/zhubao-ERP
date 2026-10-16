@@ -139,6 +139,7 @@ describe('MotherSplitPanel', () => {
         },
       ],
     });
+    vi.mocked(fetchMotherLabel).mockResolvedValue(sticker('MD-1', '', 'MOTHER'));
     vi.mocked(fetchWorkOrderLabel).mockImplementation(async (code: string) => (
       code === 'ZD-1' ? sticker('ZD-1', 'A3K7', 'WORK_ORDER') : sticker('ZD-2', 'B8N4', 'WORK_ORDER')
     ));
@@ -156,8 +157,10 @@ describe('MotherSplitPanel', () => {
       { quantity: 4, weight: 8, processes: ['雕刻', '抛光'] },
       { quantity: 6, weight: 12, processes: ['雕刻', '镶嵌', '抛光'] },
     ], expect.stringMatching(/^split-[A-Za-z0-9._:-]{3,58}$/));
+    expect(fetchMotherLabel).toHaveBeenCalledWith('MD-1');
     expect(wrapper.text()).toContain('A3K7');
     expect(wrapper.text()).toContain('B8N4');
+    expect(wrapper.text()).toContain('JG|mother|MD-1');
     expect(wrapper.text()).toContain('JG|work_order|ZD-1');
     expect(wrapper.text()).toContain('JG|work_order|ZD-2');
   });

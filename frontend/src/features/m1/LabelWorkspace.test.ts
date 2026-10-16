@@ -357,4 +357,97 @@ describe('LabelWorkspace', () => {
     await wrapper.get('.preview-toolbar .primary-button').trigger('click');
     expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'MD-NEW-1' }));
   });
+
+  it('已拆母单仍预览并打印母单标签，同时保留子单选择', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      objectType: 'MOTHER_ORDER',
+      code: 'MD-SPLIT-1',
+      requiresSelection: true,
+      relatedTargets: [
+        { objectType: 'WORK_ORDER', code: 'ZD-1', motherOrderCode: 'MD-SPLIT-1', requirement: '内壁刻字', quantity: 4, quantityUnit: '件' },
+        { objectType: 'WORK_ORDER', code: 'ZD-2', motherOrderCode: 'MD-SPLIT-1', requirement: '内壁刻字', quantity: 6, quantityUnit: '件' },
+      ],
+    }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => ({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: String(input).includes('/api/label/mother-orders/') ? {
+        type: 'MOTHER', typeLabel: '母单', primaryCode: 'MD-SPLIT-1', qrContent: 'JG|mother|MD-SPLIT-1',
+        fields: [{ name: '客户', value: '恒信珠宝' }], footerLeft: '', footerRight: '', printedAt: '',
+        brandTitle: '珠宝来料加工系统', templateCode: '',
+        printerSetting: { widthMm: 40, heightMm: 30, dpi: 300, printerName: '', copies: 1 },
+      } : [] }),
+    } as Response));
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('MD-SPLIT-1');
+    await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="标签预览"]').text()).toContain('MD-SPLIT-1');
+    expect(wrapper.text()).toContain('已拆成子单');
+    expect(wrapper.get('[aria-label="选择ZD-1"]').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="选择ZD-2"]').exists()).toBe(true);
+    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
+    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'MD-SPLIT-1', type: 'MOTHER' }));
+  });
+
+  it('单号不明确时不猜测母单标签', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      requiresSelection: true,
+      relatedTargets: [
+        { objectType: 'MOTHER_ORDER', code: 'MD-1', motherOrderCode: 'MD-1', requirement: null, quantity: 1, quantityUnit: '件' },
+        { objectType: 'MOTHER_ORDER', code: 'MD-2', motherOrderCode: 'MD-2', requirement: null, quantity: 1, quantityUnit: '件' },
+      ],
+    }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: [] }),
+    } as Response);
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('SF1048329001');
+    await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('请选择母单或子单');
+    expect(wrapper.find('[aria-label="标签预览"]').exists()).toBe(false);
+    expect(fetchSpy.mock.calls.map((call) => String(call[0])).some((url) => url.includes('/api/label/mother-orders/'))).toBe(false);
+  });
+
+  it('选择客户暗记后页脚只印拼音首字母，并去掉客户中文名', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'MOTHER_ORDER', code: 'MD-1' }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      const data = url.includes('/api/business/master-data/customers')
+        ? [
+          { customerId: 8, customerCode: 'HX', name: '恒信珠宝', aliases: '', contact: '', phone: '', remark: '', enabled: true },
+          { customerId: 9, customerCode: 'HX2', name: '华信珠宝', aliases: '', contact: '', phone: '', remark: '', enabled: true },
+        ]
+        : url.includes('/api/label/mother-orders/')
+          ? {
+            type: 'MOTHER', typeLabel: '母单', primaryCode: 'MD-1', qrContent: 'JG|mother|MD-1',
+            fields: [{ name: '客户', value: '恒信珠宝' }, { name: '期限', value: '2026-10-20' }],
+            footerLeft: '', footerRight: '', printedAt: '', brandTitle: '珠宝来料加工系统', templateCode: 'MOTHER-DEFAULT',
+            printerSetting: { widthMm: 40, heightMm: 30, dpi: 300, printerName: '', copies: 1 },
+          }
+          : [];
+      return { ok: true, json: async () => ({ code: 0, message: 'ok', data }) } as Response;
+    });
+    const wrapper = mount(LabelWorkspace);
+    await flushPromises();
+    await wrapper.get('[aria-label="现场贴纸单号"]').setValue('MD-1');
+    await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.label-print-area').text()).toContain('恒信珠宝');
+    await wrapper.get('[aria-label="页脚客户暗记"]').setValue('8');
+    await flushPromises();
+    const printed = wrapper.get('.label-print-area').text();
+    expect(printed).toContain('HXZB');
+    expect(printed).not.toContain('恒信珠宝');
+    expect(printed).toContain('2026-10-20');
+    expect(wrapper.text()).toContain('还有其他客户是同一组首字母');
+    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
+    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({
+      footerRight: 'HXZB',
+      fields: [{ name: '期限', value: '2026-10-20' }],
+    }));
+  });
 });

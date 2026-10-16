@@ -1,5 +1,6 @@
 import { renderQrSvg } from '../../services/qrcode';
 import type { LabelPayload } from '../../services/labelApi';
+import { customerMarkPattern } from './customerInitials';
 
 /** 屏幕预览相对实物的放大倍数，打印文档仍按 1:1 毫米出纸。 */
 export const labelPreviewScale = 1.65;
@@ -157,8 +158,9 @@ export function buildLabelMarkup(payload: LabelPayload): string {
     .join('');
   const footerLeft = payload.footerLeft.trim();
   const footerRight = payload.footerRight.trim();
+  const hasCustomerMark = customerMarkPattern.test(footerLeft) || customerMarkPattern.test(footerRight);
   const footer =
-    (!compact || !!payload.templateCode) && (footerLeft || footerRight)
+    (footerLeft || footerRight) && (!compact || !!payload.templateCode || hasCustomerMark)
       ? `<div class="bw-foot"><span>${escapeHtml(footerLeft)}</span><span>${escapeHtml(footerRight)}</span></div>`
       : '';
 

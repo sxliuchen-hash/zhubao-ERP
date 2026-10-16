@@ -22,7 +22,9 @@ import type { ScanDraft } from '../scan/scanDraft';
 import type { TraceTarget } from '../scan/traceTarget';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import type { ScanRelatedTarget } from '../../services/scanContextApi';
+import { applyCustomerMark, customerInitials } from './customerInitials';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
+import { fetchCustomers } from '../../services/masterDataApi';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import { apiGet, apiPost } from '../../services/apiClient';
 import type { AuthSession } from '../../services/authApi';
@@ -72,8 +74,19 @@ const form = ref<{
 // 按母单号便捷生成
 const motherOrderCode = ref('');
 const motherTemplateCode = ref('');
+const customerMarkId = ref('');
+const customerMarks = ref<Array<{ customerId: number; name: string; initials: string }>>([]);
+const selectedMark = computed(() => customerMarks.value.find((item) => String(item.customerId) === customerMarkId.value) ?? null);
+const duplicateMark = computed(() => {
+  const current = selectedMark.value;
+  if (!current) return false;
+  return customerMarks.value.some((item) => item.customerId !== current.customerId && item.initials === current.initials);
+});
+const printedPreview = computed(() => preview.value
+  ? applyCustomerMark(preview.value, selectedMark.value?.initials ?? '')
+  : null);
 
-const labelMarkup = computed(() => preview.value ? buildLabelMarkup(preview.value) : '');
+const labelMarkup = computed(() => printedPreview.value ? buildLabelMarkup(printedPreview.value) : '');
 const sheetStyle = computed(() => ({
   width: `calc(${preview.value?.printerSetting.widthMm ?? 40}mm * var(--label-scale, ${labelPreviewScale}))`,
   height: `calc(${preview.value?.printerSetting.heightMm ?? 30}mm * var(--label-scale, ${labelPreviewScale}))`,
@@ -199,13 +212,16 @@ async function openFieldSticker(draft: ScanDraft) {
     return;
   }
   const seen = labelScan.revision;
-  if (response.requiresSelection) {
+  const knownMother = response.target.objectType === 'MOTHER_ORDER' && response.target.code
+    ? { objectType: 'MOTHER_ORDER' as const, code: response.target.code }
+    : null;
+  if (response.requiresSelection && !knownMother) {
     preview.value = null;
     loadedSticker.value = null;
     stickerHint.value = '请选择母单或子单';
     return;
   }
-  const target = canonicalTarget(response);
+  const target = canonicalTarget(response) ?? knownMother;
   if (!target) {
     errorMessage.value = '没有定位到单据';
     return;
@@ -222,6 +238,9 @@ async function openFieldSticker(draft: ScanDraft) {
       : await fetchMotherLabel(target.code);
     if (labelScan.revision !== seen) return;
     showSticker(payload, kind);
+    if (response.requiresSelection && kind === 'MOTHER') {
+      stickerHint.value = `已打开母单 ${payload.primaryCode}。这张母单已拆成子单，母单标签仍可打印；下方可改选子单贴纸。`;
+    }
   } catch (error) {
     if (labelScan.revision !== seen) return;
     errorMessage.value = error instanceof Error ? error.message : '贴纸生成失败';
@@ -294,7 +313,28 @@ async function loadMotherLabel() {
 }
 
 function printLabel() {
-  if (preview.value) openLabelPrint(preview.value);
+  if (printedPreview.value) openLabelPrint(printedPreview.value);
+}
+
+async function loadCustomerMarks() {
+  try {
+    const rows = await fetchCustomers();
+    if (!Array.isArray(rows)) {
+      customerMarks.value = [];
+      return;
+    }
+    customerMarks.value = rows
+      .filter((row) => row.enabled !== false && typeof row.name === 'string' && row.name.trim() !== '')
+      .map((row) => ({
+        customerId: row.customerId,
+        name: row.name.trim(),
+        initials: customerInitials(row.name),
+      }))
+      .filter((row) => row.initials !== '')
+      .sort((left, right) => left.initials.localeCompare(right.initials) || left.name.localeCompare(right.name, 'zh-CN'));
+  } catch {
+    customerMarks.value = [];
+  }
 }
 
 interface PrintQueueView { stationId: string; queueId: string; name: string; labelType: string;
@@ -372,13 +412,14 @@ function printStatusLabel(status: string) {
 }
 
 function printFingerprint() {
-  const current = preview.value;
-  // 同版同模板内容重试复用请求；业务版本或模板内容变化后另建打印任务。
+  const current = printedPreview.value;
+  // 同版同模板内容重试复用请求；换客户暗记后另建打印任务。
   const version = current?.qrContent.split('|')[3] ?? '';
   return JSON.stringify([
     current?.primaryCode ?? '', current?.templateCode || 'FLOW', version,
     current?.printerSetting, current?.layout, current?.fields,
     current?.brandTitle, current?.footerLeft, current?.footerRight,
+    selectedMark.value?.initials ?? '',
     Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(),
   ]);
 }
@@ -395,7 +436,7 @@ async function submitPrintJob() {
   printSubmitting.value = true;
   try {
     const batch = await apiPost<{ requestId: string; businessCode: string; templateCode: string;
-      copiesPerTarget: number; targets: Array<{ stationId: string; queueId: string }> }, PrintBatchView>(
+      copiesPerTarget: number; targets: Array<{ stationId: string; queueId: string }>; customerMark: string }, PrintBatchView>(
       '/api/label/print-batches',
       {
         requestId: printAttempt.value.requestId,
@@ -403,6 +444,7 @@ async function submitPrintJob() {
         templateCode: preview.value.templateCode || 'FLOW',
         copiesPerTarget: Number(copiesPerTarget.value),
         targets: chosenTargets.value.map(queue => ({ stationId: queue.stationId, queueId: queue.queueId })),
+        customerMark: selectedMark.value?.initials ?? '',
       },
     );
     printBatch.value = batch;
@@ -664,7 +706,7 @@ async function submitTemplate() {
   }
 }
 
-onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
+onMounted(() => { void loadTemplates(); void loadPrintQueues(); void loadCustomerMarks(); });
 </script>
 
 <template>
@@ -791,6 +833,18 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
             <button type="button" class="primary-button" :disabled="printSubmitting || !chosenTargets.length" @click="submitPrintJob">提交到打印工位</button>
           </div>
         </div>
+
+        <label class="customer-mark">
+          <span>页脚客户暗记</span>
+          <select v-model="customerMarkId" aria-label="页脚客户暗记">
+            <option value="">不印暗记</option>
+            <option v-for="item in customerMarks" :key="item.customerId" :value="String(item.customerId)">
+              {{ item.initials }} · {{ item.name }}
+            </option>
+          </select>
+        </label>
+        <p class="hint">选择后，贴纸页脚只印拼音首字母，并去掉客户中文名。下拉中的名称只供内部选择。</p>
+        <p v-if="duplicateMark" class="hint">还有其他客户是同一组首字母，贴纸上无法区分。</p>
 
         <div class="label-print-area">
           <component :is="'style'">{{ labelFaceCss }}</component>
@@ -1176,6 +1230,18 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
   align-items: center;
   margin-bottom: 12px;
   font-weight: 600;
+}
+.customer-mark {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 400;
+}
+.customer-mark select {
+  min-width: 12em;
 }
 .toolbar-actions {
   display: flex;

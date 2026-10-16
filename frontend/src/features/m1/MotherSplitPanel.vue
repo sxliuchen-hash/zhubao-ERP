@@ -64,7 +64,11 @@ async function loadStickers(current: MotherOrderSplitView) {
     stickers.value = [];
     return;
   }
-  stickers.value = await Promise.all(current.children.map((child) => fetchWorkOrderLabel(child.code)));
+  const [mother, ...childStickers] = await Promise.all([
+    fetchMotherLabel(current.motherOrderCode),
+    ...current.children.map((child) => fetchWorkOrderLabel(child.code)),
+  ]);
+  stickers.value = [mother, ...childStickers];
 }
 
 function toggleProcess(index: number, name: string) {

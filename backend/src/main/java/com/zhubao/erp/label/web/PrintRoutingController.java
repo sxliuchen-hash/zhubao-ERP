@@ -68,7 +68,7 @@ public class PrintRoutingController {
     public ApiResponse<PrintBatch> create(@RequestBody CreateBatchRequest body, HttpServletRequest request) {
         permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
         return ApiResponse.ok(service.create(body.requestId(), body.businessCode(), body.templateCode(),
-                body.copiesPerTarget(), body.targets(), account(request)));
+                body.copiesPerTarget(), body.targets(), account(request), body.customerMark()));
     }
     @GetMapping("/print-batches/{id}")
     public ApiResponse<PrintBatch> batch(@PathVariable String id, HttpServletRequest request) {
@@ -108,8 +108,28 @@ public class PrintRoutingController {
                 current.failedLoginCount(), current.lockedUntil(), context.customerScope(),
                 current.passwordChangeRequired(), current.temporaryPasswordConsumed(), current.allowedProcesses());
     }
-    public record CreateBatchRequest(String requestId, String businessCode, String templateCode,
-                                     int copiesPerTarget, List<PrintTarget> targets) {}
+    /** 客户暗记可缺省。旧客户端不传时保持空字符串，不改变原标签快照。 */
+    public static final class CreateBatchRequest {
+        private String requestId;
+        private String businessCode;
+        private String templateCode;
+        private int copiesPerTarget;
+        private List<PrintTarget> targets = List.of();
+        private String customerMark = "";
+
+        public String requestId() { return requestId; }
+        public String businessCode() { return businessCode; }
+        public String templateCode() { return templateCode; }
+        public int copiesPerTarget() { return copiesPerTarget; }
+        public List<PrintTarget> targets() { return targets == null ? List.of() : targets; }
+        public String customerMark() { return customerMark == null ? "" : customerMark; }
+        public void setRequestId(String requestId) { this.requestId = requestId; }
+        public void setBusinessCode(String businessCode) { this.businessCode = businessCode; }
+        public void setTemplateCode(String templateCode) { this.templateCode = templateCode; }
+        public void setCopiesPerTarget(int copiesPerTarget) { this.copiesPerTarget = copiesPerTarget; }
+        public void setTargets(List<PrintTarget> targets) { this.targets = targets; }
+        public void setCustomerMark(String customerMark) { this.customerMark = customerMark; }
+    }
     public record PaperCheck(String result) {}
     public record RerouteRequest(String requestId, PrintTarget target, String reason) {}
     public record Report(String outcome, String failureReason) {}

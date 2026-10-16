@@ -1,6 +1,8 @@
 package com.zhubao.erp.label.app;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.label.web.PrintRoutingController;
 import com.zhubao.erp.label.domain.PrintBatch;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.domain.PrintQueue;
@@ -186,5 +188,29 @@ class PrintBatchServiceTest {
             assertThat(repository.batchByRequest("reroute-race-001").isPresent()
                     || repository.batchByRequest("reroute-race-002").isPresent()).isTrue();
         } finally { pool.shutdownNow(); }
+    }
+
+    @Test
+    void 客户暗记写入页脚并去掉客户中文名() throws Exception {
+        PrintJobService labels = new PrintJobService(new InMemoryPrintJobRepository(), "legacy-token");
+        String source = "{\"footerLeft\":\"\",\"footerRight\":\"\","
+                + "\"fields\":[{\"name\":\"客户\",\"value\":\"恒信珠宝\"},{\"name\":\"期限\",\"value\":\"2026-10-20\"}],"
+                + "\"lines\":[\"客户:恒信珠宝\",\"期限:2026-10-20\"]}";
+        String marked = labels.withCustomerMark(source, "HXZB");
+        assertThat(marked).contains("\"footerRight\":\"HXZB\"");
+        assertThat(marked).doesNotContain("恒信珠宝");
+        assertThat(marked).contains("期限");
+        assertThat(labels.withCustomerMark(source, "")).isEqualTo(source);
+        assertThatThrownBy(() -> labels.withCustomerMark(source, "恒信"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("大写字母");
+
+        var body = new ObjectMapper().readValue(
+                "{\"requestId\":\"r\",\"businessCode\":\"MD-1\",\"templateCode\":\"FLOW\",\"copiesPerTarget\":1,"
+                        + "\"targets\":[{\"stationId\":\"A\",\"queueId\":\"Q1\"}]}",
+                PrintRoutingController.CreateBatchRequest.class);
+        assertThat(body.customerMark()).isEmpty();
+        assertThat(body.businessCode()).isEqualTo("MD-1");
+        assertThat(body.targets()).hasSize(1);
     }
 }

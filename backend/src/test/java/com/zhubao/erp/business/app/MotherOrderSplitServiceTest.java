@@ -163,9 +163,17 @@ class MotherOrderSplitServiceTest {
         assertThatThrownBy(() -> splitService.keep("MD-SPLIT-001", "何琳"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能再选择不拆");
-        assertThatThrownBy(() -> labelService.generateMotherLabel("MD-SPLIT-001"))
+        LabelPayload motherSticker = labelService.generateMotherLabel("MD-SPLIT-001");
+        assertThat(motherSticker.primaryCode()).isEqualTo("MD-SPLIT-001");
+        assertThat(motherSticker.qrContent()).startsWith("JG|mother|MD-SPLIT-001|");
+        assertThat(motherSticker.qrContent().split("\\|", -1)).hasSize(5);
+        assertThat(value(motherSticker, "客户")).isEqualTo("恒信珠宝");
+        assertThat(value(motherSticker, "加工要求")).isEqualTo("内壁刻字");
+        assertThat(value(motherSticker, "期限")).isEqualTo("2026-10-20");
+        assertThatThrownBy(() -> labelService.reprint(new ReprintLabelCommand(
+                "MOTHER", "MD-SPLIT-001", "周转盒贴纸丢失", "何琳")))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("请打印子单贴纸");
+                .hasMessageContaining("还没有验证码");
     }
 
     @Test

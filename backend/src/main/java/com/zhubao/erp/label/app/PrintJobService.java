@@ -1,6 +1,9 @@
 package com.zhubao.erp.label.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
@@ -83,6 +86,43 @@ public class PrintJobService {
         assertPrintable(businessCode, account);
         int version = changes == null ? 0 : changes.latestAppliedVersion(businessCode.trim());
         return snapshotForJob(businessCode.trim(), templateCode.trim(), copies, version);
+    }
+
+    /**
+     * 把客户暗记写入页脚，并去掉快照里的客户中文名。空白暗记保持原快照字符串不变。
+     */
+    public String withCustomerMark(String snapshot, String mark) {
+        if (mark == null || mark.isBlank()) return snapshot;
+        String normalized = mark.trim();
+        if (!normalized.matches("[A-Z]{1,8}")) {
+            throw new BusinessException("客户暗记只能是 1 到 8 位大写字母");
+        }
+        try {
+            JsonNode tree = snapshotMapper.readTree(snapshot);
+            if (!(tree instanceof ObjectNode object)) return snapshot;
+            String left = object.path("footerLeft").asText("");
+            String right = object.path("footerRight").asText("");
+            if (!normalized.equals(left) && !normalized.equals(right)) {
+                if (right.isBlank()) object.put("footerRight", normalized);
+                else if (left.isBlank()) object.put("footerLeft", normalized);
+                else object.put("footerRight", right + " " + normalized);
+            }
+            JsonNode fieldsNode = object.get("fields");
+            if (fieldsNode instanceof ArrayNode fields) {
+                for (int index = fields.size() - 1; index >= 0; index--) {
+                    if ("客户".equals(fields.get(index).path("name").asText(""))) fields.remove(index);
+                }
+                ArrayNode lines = object.putArray("lines");
+                for (JsonNode field : fields) {
+                    String name = field.path("name").asText("");
+                    String value = field.path("value").asText("");
+                    if (!name.isBlank() && !value.isBlank()) lines.add(name + ":" + value);
+                }
+            }
+            return snapshotMapper.writeValueAsString(object);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException("标签快照无效");
+        }
     }
 
     public void assertBatchReadable(String businessCode, AuthUserAccount account) {
