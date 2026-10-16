@@ -4,11 +4,12 @@ import com.zhubao.erp.business.app.MasterDataService;
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MaterialProfile;
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
-import com.zhubao.erp.security.domain.PermissionCode;
-import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.PermissionCode;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,25 +25,28 @@ public class MasterDataController {
     private final MasterDataService service;
     private final OperatorContextResolver operators;
     private final PermissionGuard permissions;
+    private final AuthSessionService sessions;
 
-    public MasterDataController(MasterDataService service, OperatorContextResolver operators, PermissionGuard permissions) {
+    public MasterDataController(MasterDataService service, OperatorContextResolver operators, PermissionGuard permissions,
+                                AuthSessionService sessions) {
         this.service = service;
         this.operators = operators;
         this.permissions = permissions;
+        this.sessions = sessions;
     }
 
     @GetMapping("/customers")
     public ApiResponse<List<CustomerProfile>> customers(HttpServletRequest request) {
-        OperatorContext operator = operators.requireSession(request);
-        return ApiResponse.ok(service.customers().stream().filter(profile -> operator.dataScope() == DataScope.ALL
-                || operator.customerScope().contains(String.valueOf(profile.customerId()))
-                || operator.customerScope().contains(profile.name())).toList());
+        return ApiResponse.ok(service.customersFor(operators.requireSession(request)));
     }
 
     @PostMapping("/customers")
     public ApiResponse<CustomerProfile> saveCustomer(@RequestBody CustomerProfile input, HttpServletRequest request) {
-        permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));
-        return ApiResponse.ok(service.saveCustomer(input));
+        OperatorContext operator = operators.requireSession(request);
+        permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operator);
+        String username = sessions.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
+                .map(AuthUserAccount::username).orElse("");
+        return ApiResponse.ok(service.saveCustomer(input, operator, username));
     }
 
     @GetMapping("/materials")

@@ -36,6 +36,11 @@ public class CustomerAuthorizationService {
         return grant(username, customerCode, customerName, operatorContext.operator());
     }
 
+    /** 收货现场新建客户后纳入当前账号已有授权，不替换其他客户。 */
+    public CustomerAuthorization grantForIntake(String username, String customerCode, String customerName, String grantedBy) {
+        return grant(username, customerCode, customerName, grantedBy);
+    }
+
     CustomerAuthorization grant(String username, String customerCode, String customerName, String grantedBy) {
         require(username, "username");
         require(customerCode, "customerCode");

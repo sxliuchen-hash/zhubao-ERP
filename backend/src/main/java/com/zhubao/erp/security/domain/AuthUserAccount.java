@@ -160,6 +160,25 @@ public record AuthUserAccount(
         );
     }
 
+    public AuthUserAccount withCustomerScope(List<String> scope) {
+        return new AuthUserAccount(
+                username,
+                passwordHash,
+                operator,
+                role,
+                dataScope,
+                enabled,
+                demoAccount,
+                passwordChangedAt,
+                failedLoginCount,
+                lockedUntil,
+                scope,
+                passwordChangeRequired,
+                temporaryPasswordConsumed,
+                allowedProcesses
+        );
+    }
+
     public AuthUserAccount withAllowedProcesses(List<String> processes) {
         return new AuthUserAccount(
                 username,

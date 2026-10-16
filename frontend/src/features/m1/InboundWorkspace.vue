@@ -404,7 +404,7 @@ function backToList() {
           </div>
           <label class="field">
             <span>打开母单号</span>
-            <input v-model="structuredCode" aria-label="打开母单号" placeholder="如 MD-20261008-001" />
+            <input v-model="structuredCode" aria-label="打开母单号" placeholder="如 MD-20261014-0001" />
           </label>
           <button class="table-action" type="button" @click="openStructuredMother">打开母单</button>
           <p v-if="structuredError" class="operation-feedback danger">{{ structuredError }}</p>

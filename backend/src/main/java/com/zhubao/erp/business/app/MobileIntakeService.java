@@ -18,7 +18,7 @@ import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.scan.app.CourierNumbers;
-import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
@@ -305,21 +305,13 @@ public class MobileIntakeService {
     }
 
     private void assertCustomerAllowed(OperatorContext operator, String customerName, Long customerId) {
-        if (operator.dataScope() == DataScope.ALL) {
-            return;
-        }
-        String idText = customerId == null ? "" : String.valueOf(customerId);
-        boolean allowed = operator.customerScope().stream()
-                .anyMatch(item -> item.equals(customerName) || (!idText.isBlank() && item.equals(idText)));
-        if (!allowed) {
+        if (!CustomerScopeRules.allowed(operator, customerId, customerName)) {
             throw new BusinessException("客户不在当前账号范围内");
         }
     }
 
     private boolean canRead(OperatorContext operator, MotherOrderRecord record) {
-        if (operator == null || operator.dataScope() == DataScope.ALL) return true;
-        return operator.customerScope().contains(String.valueOf(record.customerId()))
-                || operator.customerScope().contains(record.customerName());
+        return CustomerScopeRules.allowed(operator, record.customerId(), record.customerName());
     }
 
     private MobileIntakeResult resultOf(MotherOrderRecord record, boolean alreadyExists) {

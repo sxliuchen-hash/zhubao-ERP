@@ -4,6 +4,12 @@ import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MasterDataRepository;
 import com.zhubao.erp.business.domain.MaterialProfile;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.app.CustomerAuthorizationService;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.OperatorContext;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,10 +21,29 @@ import java.util.LinkedHashSet;
 @Service
 public class MasterDataService {
     private final MasterDataRepository repository;
+    private final CustomerAuthorizationService authorizations;
+    private final AuthUserAccountRepository accounts;
 
-    public MasterDataService(MasterDataRepository repository) { this.repository = repository; }
+    public MasterDataService(MasterDataRepository repository) {
+        this(repository, null, null);
+    }
+
+    @Autowired
+    public MasterDataService(MasterDataRepository repository, CustomerAuthorizationService authorizations,
+                             AuthUserAccountRepository accounts) {
+        this.repository = repository;
+        this.authorizations = authorizations;
+        this.accounts = accounts;
+    }
 
     public List<CustomerProfile> customers() { return repository.listCustomers(); }
+
+    public List<CustomerProfile> customersFor(OperatorContext operator) {
+        return customers().stream()
+                .filter(profile -> CustomerScopeRules.allowed(operator, profile.customerId(), profile.name()))
+                .toList();
+    }
+
     public List<MaterialProfile> materials() { return repository.listMaterials(); }
 
     public CustomerProfile customerForIntake(Long id) {
@@ -38,6 +63,17 @@ public class MasterDataService {
     }
 
     public CustomerProfile saveCustomer(CustomerProfile input) {
+        return saveCustomer(input, null, "");
+    }
+
+    public CustomerProfile saveCustomer(CustomerProfile input, OperatorContext operator, String username) {
+        boolean creating = input == null || input.customerId() <= 0;
+        CustomerProfile saved = persistCustomer(input);
+        if (creating) includeInCreatorScope(saved, operator, username);
+        return saved;
+    }
+
+    private CustomerProfile persistCustomer(CustomerProfile input) {
         if (input == null) throw new BusinessException("客户档案不能为空");
         String name = required(input.name(), "客户名称");
         if (name.length() > 120) throw new BusinessException("客户名称过长");
@@ -54,6 +90,24 @@ public class MasterDataService {
         aliases.remove(name);
         return repository.saveCustomer(new CustomerProfile(input.customerId(), code, name,
                 String.join("|", aliases), text(input.contact()), text(input.phone()), text(input.remark()), input.enabled()));
+    }
+
+    /** 授权客户范围的账号新建客户后，把该客户纳入本人范围，才能当场用来建母单。 */
+    private void includeInCreatorScope(CustomerProfile saved, OperatorContext operator, String username) {
+        if (operator == null || operator.dataScope() != DataScope.CUSTOMER_RANGE || accounts == null) return;
+        if (username == null || username.isBlank()) return;
+        String id = String.valueOf(saved.customerId());
+        if (CustomerScopeRules.allowed(operator, saved.customerId(), saved.name())) return;
+        if (authorizations != null && !authorizations.authorizationsFor(username).isEmpty()) {
+            authorizations.grantForIntake(username, id, saved.name(), operator.operator());
+            return;
+        }
+        accounts.findByUsername(username).ifPresent(account -> {
+            if (account.customerScope().contains(id)) return;
+            List<String> next = new ArrayList<>(account.customerScope());
+            next.add(id);
+            accounts.save(account.withCustomerScope(next));
+        });
     }
 
     /** 旧名称授权仅在能唯一匹配档案时转换为稳定 ID；无法确认归属的值不扩大权限。 */

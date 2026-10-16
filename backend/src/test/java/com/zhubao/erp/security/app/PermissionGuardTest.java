@@ -123,6 +123,18 @@ class PermissionGuardTest {
     }
 
     @Test
+    void allowsReceiverToMaintainCustomerAndMaterialCatalog() {
+        OperatorContext receiver = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.DEPARTMENT);
+        OperatorContext sales = new OperatorContext("业务", RoleCode.SALES, DataScope.CUSTOMER_RANGE);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, receiver))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, sales))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("客户与材质档案维护");
+    }
+
+    @Test
     void allowsFinanceStatisticianToPostOperatingLedgers() {
         OperatorContext finance = new OperatorContext("财务统计", RoleCode.FINANCE_STATISTICIAN, DataScope.DEPARTMENT);
         OperatorContext operator = new OperatorContext("操作工 王强", RoleCode.OPERATOR, DataScope.SELF);

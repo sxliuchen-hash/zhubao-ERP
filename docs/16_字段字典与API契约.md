@@ -2201,11 +2201,11 @@ PWA 一期边界：
 | `GET /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeLookup>` |
 | `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。`requestId` 必填；动作为 `INTAKE_CREATE`，目标类型 `REQUEST`。同账号同请求同内容回放原母单；新 `requestId` 可在同运单下新建另一张母单。`sourceType` 为 `COURIER`、`CUSTOMER_DELIVERY` 或 `INTERNAL_OTHER`；运单与快递公司均可空。新版传稳定 `customerId`、`customerName` 快照及 `lines[]`（`materialCode`、`goodsName`、`quantity`、`quantityUnit`、`weight`）；母单总数量和重量须等于明细合计。当前母单汇总和后续工序使用单一数量单位，明细单位不一致时拒绝建单。每行入对应材质的 `RAW_WAITING` 台账，整单在同一工作单元提交。旧客户端未带 `requestId` 时明确拒绝并提示升级，防止超时重复入账。 |
 | `GET /api/business/operations/mobile-intakes?courierNo=...` | 返回全部可见母单的 `candidates[]`，含母单号、客户、收货时间、货品、要求和期限。兼容字段 `motherOrderCode` 仅在恰好一张候选时有值，多张时为空，调用方不得取第一张。 |
-| `GET /api/business/master-data/customers` | 返回当前账号客户范围内的启用客户档案，使用稳定客户 ID；改名不回写历史单据快照。 |
-| `POST /api/business/master-data/customers` | 有 `MASTER_DATA_MANAGE` 权限者创建或更新客户；名称归一化后不可重复。 |
+| `GET /api/business/master-data/customers` | 返回当前账号可见的客户档案，使用稳定客户 ID；改名不回写历史单据快照。全部数据范围，以及未填写客户名单的部门、班组或本人范围，返回全部档案；授权客户范围只返回名单内档案。 |
+| `POST /api/business/master-data/customers` | `MASTER_DATA_MANAGE`（管理员、总经理、收货员、库管员、车间组长）创建或更新客户；名称归一化后不可重复。授权客户范围的账号新建客户后，该客户进入本人范围，便于当场建母单。 |
 | `customerScope`（登录账号／客户授权） | 新增授权在用户管理按客户档案选择稳定数字 ID。服务端在会话解析时将历史名称或客户编码唯一映射为 ID；客户改名保留旧名别称。无法确认唯一归属的历史值仍留在原授权记录供人工核对，但不授予新单据访问权。 |
 | `GET /api/business/master-data/materials` | 返回启用材质目录，支持前端搜索和多选。 |
-| `POST /api/business/master-data/materials` | 有 `MASTER_DATA_MANAGE` 权限者自定义添加或更新材质；编码稳定，名称去重。 |
+| `POST /api/business/master-data/materials` | 同上 `MASTER_DATA_MANAGE` 角色可新增或更新材质；编码稳定，名称去重。新建母单页可直接新增并选中。 |
 | `GET /api/business/operations/mother-orders/{code}/split` | 新版 `sourceLines[]` 显示收货来源行及逐行剩余数量、重量；无新明细的历史单据保留原汇总视图。 |
 | `POST /api/business/operations/mother-orders/{code}/splits` | 新版每张子单的 `allocations[]` 指定 `sourceLineNo`、数量和重量；服务端锁定母单，核对每行剩余，并按真实材质转在制。现有下游工序按单一材质维度处理，一张子单只能分配同一材质的来源行。旧单继续接受原请求形态。 |
 | `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |

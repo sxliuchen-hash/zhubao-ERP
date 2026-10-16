@@ -1,12 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import { ApiRequestError } from '../../services/apiClient';
 import IntakePanel from './IntakePanel.vue';
 import { queryScanContext } from '../../services/scanContextApi';
 import { fetchMotherOrder, lookupMobileIntake, submitMobileIntake } from '../../services/mobileIntakeApi';
 import { bindEvidence, fetchEvidenceBoard, uploadEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
-import { fetchCustomers, fetchMaterials } from '../../services/masterDataApi';
+import { fetchCustomers, fetchMaterials, saveCustomer, saveMaterial } from '../../services/masterDataApi';
 
 vi.mock('../../services/masterDataApi', () => ({
   fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), saveCustomer: vi.fn(), saveMaterial: vi.fn(),
@@ -319,5 +320,48 @@ describe('收货面板', () => {
     expect(wrapper.emitted('saved')).toBeUndefined();
     expect(wrapper.find('[aria-label="已保存母单"]').exists()).toBe(false);
     expect(wrapper.get('[aria-label="识别单号"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('收货员新建母单时可用搜索词新增客户和材质并选中', async () => {
+    vi.mocked(saveCustomer).mockResolvedValue({ customerId: 2088, customerCode: 'C-2088', name: '翠玉坊',
+      aliases: '', contact: '', phone: '', remark: '', enabled: true });
+    vi.mocked(saveMaterial).mockResolvedValue({ materialCode: 'MAT-JADE', name: '翡翠', aliases: '', remark: '', enabled: true });
+    const wrapper = mount(IntakePanel, {
+      props: { title: '新建来料', intro: '建单' },
+      global: { provide: { 'zhubao-auth-session': ref({ role: 'RECEIVER' }) } },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
+    expect(wrapper.text()).toContain('新增客户档案');
+    expect(wrapper.text()).toContain('新增材质');
+
+    await wrapper.findAll('button').find((button) => button.text() === '新增客户档案')!.trigger('click');
+    expect(wrapper.text()).toContain('请填写要新增的客户名称');
+
+    await wrapper.get('[aria-label="搜索客户"]').setValue('翠玉坊');
+    await wrapper.findAll('button').find((button) => button.text() === '新增客户档案')!.trigger('click');
+    await flushPromises();
+    expect(saveCustomer).toHaveBeenCalledWith(expect.objectContaining({ name: '翠玉坊', customerId: 0 }));
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLSelectElement).value).toBe('2088');
+    expect(wrapper.text()).toContain('已新增客户档案「翠玉坊」');
+
+    await wrapper.get('[aria-label="搜索材质"]').setValue('翡翠');
+    await wrapper.findAll('button').find((button) => button.text() === '新增材质')!.trigger('click');
+    await flushPromises();
+    expect(saveMaterial).toHaveBeenCalledWith(expect.objectContaining({ name: '翡翠' }));
+    expect((wrapper.get('[aria-label="材质"]').element as HTMLSelectElement).value).toBe('MAT-JADE');
+    wrapper.unmount();
+  });
+
+  it('没有档案维护权限时不显示新增客户和材质', async () => {
+    const wrapper = mount(IntakePanel, {
+      props: { title: '新建来料', intro: '建单' },
+      global: { provide: { 'zhubao-auth-session': ref({ role: 'SALES' }) } },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
+    expect(wrapper.text()).not.toContain('新增客户档案');
+    expect(wrapper.find('[aria-label="新增材质名称"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

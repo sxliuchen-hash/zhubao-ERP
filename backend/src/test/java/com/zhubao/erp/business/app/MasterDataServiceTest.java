@@ -8,9 +8,15 @@ import com.zhubao.erp.business.infra.InMemoryMasterDataRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
+import com.zhubao.erp.security.app.CustomerAuthorizationService;
+import com.zhubao.erp.security.app.PasswordHasher;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.CustomerAuthorization;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
+import com.zhubao.erp.security.infra.InMemoryCustomerAuthorizationRepository;
 import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
 import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import org.junit.jupiter.api.Test;
@@ -53,5 +59,29 @@ class MasterDataServiceTest {
                 "件", "catalog-intake-02", "CUSTOMER_DELIVERY"),
                 new OperatorContext("何琳", RoleCode.RECEIVER, DataScope.ALL)))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("请从客户档案选择客户");
+    }
+
+    @Test
+    void newCustomerJoinsTheCreatorRestrictedScope() {
+        InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(new PasswordHasher());
+        accounts.save(new AuthUserAccount("recv", "hash", "收货员", RoleCode.RECEIVER,
+                DataScope.CUSTOMER_RANGE, true, false, List.of("1001")));
+        CustomerAuthorizationService authorizations = new CustomerAuthorizationService(new InMemoryCustomerAuthorizationRepository());
+        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository(), authorizations, accounts);
+        OperatorContext receiver = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, false, "", List.of("1001"));
+
+        CustomerProfile created = catalog.saveCustomer(new CustomerProfile(0, "", "翠玉坊", "", "", "", "", true), receiver, "recv");
+
+        assertThat(accounts.findByUsername("recv").orElseThrow().customerScope())
+                .containsExactly("1001", String.valueOf(created.customerId()));
+        assertThat(authorizations.authorizationsFor("recv")).isEmpty();
+        assertThat(catalog.customersFor(new OperatorContext("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT)))
+                .hasSize(5);
+
+        authorizations.grant("recv", "1002", "雅辰饰品", new OperatorContext("管理员", RoleCode.ADMIN, DataScope.ALL));
+        CustomerProfile another = catalog.saveCustomer(new CustomerProfile(0, "", "瑞金行", "", "", "", "", true), receiver, "recv");
+        assertThat(authorizations.authorizationsFor("recv"))
+                .extracting(CustomerAuthorization::customerCode)
+                .containsExactly("1002", String.valueOf(another.customerId()));
     }
 }

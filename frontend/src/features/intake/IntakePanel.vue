@@ -35,7 +35,7 @@ const emit = defineEmits<{ saved: [result: MobileIntakeResult] }>();
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 const visibleTabs = inject<Ref<string[] | null>>('zhubao-visible-tabs', ref(null));
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
-const canManageData = computed(() => ['ADMIN', 'GENERAL_MANAGER', 'WAREHOUSE_KEEPER', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? ''));
+const canManageData = computed(() => ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? ''));
 const canOpenLabel = computed(() => !visibleTabs.value || visibleTabs.value.includes('label'));
 const canOpenInbound = computed(() => !visibleTabs.value || visibleTabs.value.includes('inbound'));
 
@@ -52,10 +52,8 @@ const materialSearch = ref('');
 const newCustomerName = ref('');
 const newMaterialName = ref('');
 const catalogError = ref('');
-const visibleCustomers = computed(() => customers.value.filter((item) => item.enabled &&
-  `${item.customerCode} ${item.name} ${item.aliases}`.toLowerCase().includes(customerSearch.value.trim().toLowerCase())));
-const visibleMaterials = computed(() => materials.value.filter((item) => item.enabled &&
-  `${item.materialCode} ${item.name} ${item.aliases}`.toLowerCase().includes(materialSearch.value.trim().toLowerCase())));
+const catalogHint = ref('');
+const catalogSaving = ref(false);
 const processingRequirement = ref('');
 const dueDate = ref('');
 const goodsName = ref('');
@@ -63,6 +61,17 @@ const quantity = ref('1');
 const quantityUnit = ref('件');
 const weight = ref('');
 const extraLines = ref<Array<{ materialCode: string; goodsName: string; quantity: string; quantityUnit: string; weight: string }>>([]);
+const visibleCustomers = computed(() => {
+  const keyword = customerSearch.value.trim().toLowerCase();
+  return customers.value.filter((item) => item.enabled && (item.customerId === customerId.value
+    || `${item.customerCode} ${item.name} ${item.aliases}`.toLowerCase().includes(keyword)));
+});
+const visibleMaterials = computed(() => {
+  const keyword = materialSearch.value.trim().toLowerCase();
+  const selected = new Set([materialCode.value, ...extraLines.value.map((line) => line.materialCode)].filter(Boolean));
+  return materials.value.filter((item) => item.enabled && (selected.has(item.materialCode)
+    || `${item.materialCode} ${item.name} ${item.aliases}`.toLowerCase().includes(keyword)));
+});
 const expressCompany = ref('');
 const sourceType = ref<'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER'>('COURIER');
 const manualDraft = ref(false);
@@ -376,29 +385,68 @@ function chooseCustomer() {
   customerName.value = customers.value.find((item) => item.customerId === Number(customerId.value))?.name ?? '';
 }
 
+function pendingCatalogName(dedicated: string, search: string) {
+  return dedicated.trim() || search.trim();
+}
+
 async function addCustomer() {
-  if (!newCustomerName.value.trim()) return;
+  if (catalogSaving.value) return;
+  const name = pendingCatalogName(newCustomerName.value, customerSearch.value);
+  if (!name) {
+    catalogHint.value = '';
+    catalogError.value = '请填写要新增的客户名称';
+    return;
+  }
+  catalogSaving.value = true;
   try {
-    const saved = await saveCustomer({ customerId: 0, customerCode: '', name: newCustomerName.value.trim(),
+    const saved = await saveCustomer({ customerId: 0, customerCode: '', name,
       aliases: '', contact: '', phone: '', remark: '', enabled: true });
-    customers.value = [...customers.value, saved];
+    customers.value = [...customers.value.filter((item) => item.customerId !== saved.customerId), saved];
     customerId.value = saved.customerId;
     customerName.value = saved.name;
     newCustomerName.value = '';
+    customerSearch.value = '';
     catalogError.value = '';
-  } catch (error) { catalogError.value = error instanceof Error ? error.message : '新增客户失败'; }
+    catalogHint.value = `已新增客户档案「${saved.name}」，并选入本单`;
+  } catch (error) {
+    catalogHint.value = '';
+    catalogError.value = error instanceof Error ? error.message : '新增客户失败';
+  } finally {
+    catalogSaving.value = false;
+  }
 }
 
 async function addMaterial() {
-  if (!newMaterialName.value.trim()) return;
+  if (catalogSaving.value) return;
+  const name = pendingCatalogName(newMaterialName.value, materialSearch.value);
+  if (!name) {
+    catalogHint.value = '';
+    catalogError.value = '请填写要新增的材质名称';
+    return;
+  }
+  catalogSaving.value = true;
   try {
-    const saved = await saveMaterial({ materialCode: '', name: newMaterialName.value.trim(),
-      aliases: '', remark: '', enabled: true });
-    materials.value = [...materials.value, saved];
-    materialCode.value = saved.materialCode;
+    const saved = await saveMaterial({ materialCode: '', name, aliases: '', remark: '', enabled: true });
+    materials.value = [...materials.value.filter((item) => item.materialCode !== saved.materialCode), saved];
+    if (!materialCode.value) {
+      materialCode.value = saved.materialCode;
+      catalogHint.value = `已新增材质「${saved.name}」，并选入本单`;
+    } else {
+      const emptyLine = extraLines.value.find((line) => !line.materialCode);
+      if (emptyLine) emptyLine.materialCode = saved.materialCode;
+      catalogHint.value = emptyLine
+        ? `已新增材质「${saved.name}」，并选入空白明细`
+        : `已新增材质「${saved.name}」，请在材质下拉中选择`;
+    }
     newMaterialName.value = '';
+    materialSearch.value = '';
     catalogError.value = '';
-  } catch (error) { catalogError.value = error instanceof Error ? error.message : '新增材质失败'; }
+  } catch (error) {
+    catalogHint.value = '';
+    catalogError.value = error instanceof Error ? error.message : '新增材质失败';
+  } finally {
+    catalogSaving.value = false;
+  }
 }
 
 onMounted(loadCatalog);
@@ -436,7 +484,7 @@ onMounted(loadCatalog);
     />
     <p v-if="scanHint" class="operation-feedback">{{ scanHint }}</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
-    <p v-if="catalogError" class="operation-feedback danger">{{ catalogError }}</p>
+    <p v-if="catalogError && !draftAvailable" class="operation-feedback danger">{{ catalogError }}</p>
     <OrderContextCard v-if="!newExpressCode && !savedMother" :context="intakeScan.context" @select="chooseIntakeTarget" />
     <section v-if="relatedWaybill && relatedMotherCodes.length" aria-label="运单关联证据">
       <h3>运单 {{ relatedWaybill }} 关联证据</h3>
@@ -471,6 +519,8 @@ onMounted(loadCatalog);
     <p v-if="field">草稿尚未建单，填好资料后点击“生成母单”。</p>
     <p>照片或视频可稍后补传，不影响建单。</p>
     <div class="intake-form">
+      <p v-if="catalogHint" class="operation-feedback">{{ catalogHint }}</p>
+      <p v-if="catalogError" class="operation-feedback danger">{{ catalogError }}</p>
       <label v-if="sourceType === 'COURIER' && !newExpressCode" class="field">
         <span>运单号（可不填）</span>
         <input v-model="manualCourier" type="text" aria-label="运单号（可不填）" />
@@ -486,10 +536,10 @@ onMounted(loadCatalog);
           <option v-for="item in visibleCustomers" :key="item.customerId" :value="item.customerId">{{ item.customerCode }} · {{ item.name }}</option>
         </select>
       </label>
-      <div v-if="canManageData" class="field">
+      <div v-if="canManageData" class="catalog-create">
         <span>新增客户档案</span>
-        <input v-model="newCustomerName" aria-label="新增客户名称" />
-        <button type="button" class="secondary-button" @click="addCustomer">新增客户</button>
+        <input v-model="newCustomerName" aria-label="新增客户名称" placeholder="没有这家客户时填写名称，或直接用上方搜索词" />
+        <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addCustomer">新增客户档案</button>
       </div>
       <label class="field">
         <span>加工要求</span>
@@ -514,10 +564,10 @@ onMounted(loadCatalog);
           <option v-for="item in visibleMaterials" :key="item.materialCode" :value="item.materialCode">{{ item.name }} · {{ item.materialCode }}</option>
         </select>
       </label>
-      <div v-if="canManageData" class="field">
-        <span>新增自定义材质</span>
-        <input v-model="newMaterialName" aria-label="新增材质名称" />
-        <button type="button" class="secondary-button" @click="addMaterial">新增材质</button>
+      <div v-if="canManageData" class="catalog-create">
+        <span>新增材质</span>
+        <input v-model="newMaterialName" aria-label="新增材质名称" placeholder="没有这种材质时填写名称，或直接用上方搜索词" />
+        <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addMaterial">新增材质</button>
       </div>
       <label class="field">
         <span>货品名称</span>
@@ -611,6 +661,8 @@ onMounted(loadCatalog);
 
 <style scoped>
 .intake-draft, .intake-saved { min-width: 0; scroll-margin-top: 20px; overflow-wrap: anywhere; }
+.catalog-create { display: grid; gap: 8px; }
+.catalog-create span { color: var(--muted); font-size: 12px; }
 .intake-next-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .intake-next-actions button { min-height: 44px; }
 </style>

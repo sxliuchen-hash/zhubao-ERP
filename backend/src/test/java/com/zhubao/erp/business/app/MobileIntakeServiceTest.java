@@ -65,6 +65,17 @@ class MobileIntakeServiceTest {
     }
 
     @Test
+    void departmentWithoutCustomerListCanCreateMother() {
+        OperatorContext keeper = new OperatorContext("库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT);
+
+        MobileIntakeResult created = service.intake(new MobileIntakeCommand(
+                "SF1048329002", "恒信珠宝", null, "抛光", "2026-10-20", "戒托",
+                new BigDecimal("1"), new BigDecimal("2"), "", "", "件", "dept-intake-01"), keeper);
+
+        assertThat(created.customerName()).isEqualTo("恒信珠宝");
+    }
+
+    @Test
     void rejectsCustomerOutsideAccountScope() {
         OperatorContext scoped = new OperatorContext(
                 "收货员 何琴",
