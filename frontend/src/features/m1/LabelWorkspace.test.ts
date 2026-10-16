@@ -384,8 +384,8 @@ describe('LabelWorkspace', () => {
     await flushPromises();
     expect(wrapper.get('[aria-label="标签预览"]').text()).toContain('MD-SPLIT-1');
     expect(wrapper.text()).toContain('已拆成子单');
-    expect(wrapper.get('[aria-label="选择ZD-1"]').exists()).toBe(true);
-    expect(wrapper.get('[aria-label="选择ZD-2"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="选择ZD-1"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="选择ZD-2"]').exists()).toBe(true);
     await wrapper.get('.preview-toolbar .primary-button').trigger('click');
     expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'MD-SPLIT-1', type: 'MOTHER' }));
   });
