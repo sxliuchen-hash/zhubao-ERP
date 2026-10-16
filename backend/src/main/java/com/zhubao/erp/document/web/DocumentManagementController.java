@@ -25,6 +25,7 @@ import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.common.error.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import com.zhubao.erp.security.app.OperatorContextResolver;
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -237,12 +239,14 @@ public class DocumentManagementController {
     }
 
     @GetMapping("/attachments/{code}/preview-url")
-    public ApiResponse<AttachmentPreviewUrl> previewUrl(@PathVariable String code, HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<AttachmentPreviewUrl>> previewUrl(@PathVariable String code, HttpServletRequest request) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         EvidenceAttachment attachment = documentManagementService.attachments().stream().filter(row -> code.equals(row.code())).findFirst()
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
         dataAccess.assertCanRead(context, attachment.businessCode());
-        return ApiResponse.ok(documentManagementService.previewUrl(code));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(ApiResponse.ok(documentManagementService.previewUrl(code)));
     }
 
     private List<DocumentPackage> visiblePackages(OperatorContext context) {
@@ -263,12 +267,16 @@ public class DocumentManagementController {
     public ResponseEntity<byte[]> content(
             @PathVariable String code,
             @RequestParam long expiresAt,
-            @RequestParam String token
+            @RequestParam String token,
+            @RequestParam(defaultValue = "false") boolean download
     ) {
         AttachmentContent content = documentManagementService.previewContent(code, expiresAt, token);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(content.mediaType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + content.fileName() + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.builder(download ? "attachment" : "inline")
+                        .filename(content.fileName(), StandardCharsets.UTF_8)
+                        .build().toString())
                 .body(content.content());
     }
 }

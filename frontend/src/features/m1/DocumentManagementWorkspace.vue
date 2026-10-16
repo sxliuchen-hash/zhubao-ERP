@@ -9,13 +9,11 @@ import {
   type EvidenceAttachment,
 } from '../../data/documentManagementData';
 import {
-  fetchAttachmentPreviewUrl,
   fetchDocumentAuditEvents,
   fetchDocumentPackages,
   fetchDocumentSummary,
   fetchEvidenceAttachments,
   uploadEvidenceAttachment,
-  type AttachmentPreviewUrl,
   type EvidenceAttachmentUploadResult,
 } from '../../services/documentManagementApi';
 
@@ -31,9 +29,6 @@ const detailOpen = ref(false);
 const uploading = ref(false);
 const uploadResult = ref<EvidenceAttachmentUploadResult | null>(null);
 const uploadError = ref('');
-const previewing = ref(false);
-const previewResult = ref<AttachmentPreviewUrl | null>(null);
-const previewError = ref('');
 
 const activePackage = computed(
   () => packages.value.find((item) => item.code === selectedPackageCode.value) ?? packages.value.find((item) => item.status.includes('缺') || item.status.includes('待')) ?? packages.value[0],
@@ -57,14 +52,8 @@ function backToPackages() {
   detailOpen.value = false;
 }
 
-const previewTargetCode = computed(
-  () => uploadResult.value?.code ?? activeAttachments.value[0]?.code ?? '',
-);
-
 watch(selectedPackageCode, () => {
   uploadResult.value = null;
-  previewResult.value = null;
-  previewError.value = '';
 });
 
 const evidenceCoverage = computed(() => {
@@ -143,21 +132,6 @@ async function uploadEvidence() {
   }
 }
 
-async function createPreviewUrl() {
-  if (!previewTargetCode.value) return;
-
-  previewing.value = true;
-  previewResult.value = null;
-  previewError.value = '';
-
-  try {
-    previewResult.value = await fetchAttachmentPreviewUrl(previewTargetCode.value);
-  } catch (error) {
-    previewError.value = error instanceof Error ? error.message : '生成预览链接失败';
-  } finally {
-    previewing.value = false;
-  }
-}
 </script>
 
 <template>
@@ -237,16 +211,13 @@ async function createPreviewUrl() {
         <div>
           <span class="eyebrow">Upload & Preview</span>
           <h2>上传附件</h2>
-          <p>选择文件后上传，并生成短期预览链接。</p>
+          <p>选择文件后上传；在下方附件清单中直接预览或下载。</p>
         </div>
         <div class="button-row">
           <label>文档包<select v-model="selectedPackageCode" :disabled="uploading" aria-label="上传文档包"><option value="">当前待补文档包</option><option v-for="item in packages" :key="item.code" :value="item.code">{{ item.code }} / {{ item.title }}</option></select></label>
           <label>附件文件<input type="file" aria-label="附件文件" :disabled="uploading" @change="selectFile" /></label>
           <button class="primary-button" type="button" :disabled="uploading || !activePackage || !selectedFile" @click="uploadEvidence">
             {{ uploading ? '正在上传' : '上传所选文件' }}
-          </button>
-          <button class="secondary-button" type="button" :disabled="previewing || !previewTargetCode" @click="createPreviewUrl">
-            {{ previewing ? '正在生成' : '生成预览链接' }}
           </button>
         </div>
       </div>
@@ -260,16 +231,6 @@ async function createPreviewUrl() {
           <strong>附件上传失败</strong>
           <span>{{ uploadError }}</span>
           <small>请检查文件和网络后重试。</small>
-        </article>
-        <article v-if="previewResult" class="operation-feedback success">
-          <strong>预览链接已生成</strong>
-          <EvidencePreviewLink :attachment-code="previewResult.code" label="打开附件预览" />
-          <small>过期时间：{{ previewResult.expiresAt }}</small>
-        </article>
-        <article v-else-if="previewError" class="operation-feedback danger">
-          <strong>生成预览链接失败</strong>
-          <span>{{ previewError }}</span>
-          <small>只有后端已登记的附件才能生成真实预览链接。</small>
         </article>
       </div>
     </section>
@@ -358,6 +319,7 @@ async function createPreviewUrl() {
           <article v-for="attachment in activeAttachments" :key="attachment.code" :class="`tone-${attachment.tone}`">
             <span>{{ attachment.fileName }}</span>
             <StatusBadge :label="attachment.status" :tone="attachment.tone" />
+            <EvidencePreviewLink v-if="attachment.status !== '已下线'" :attachment-code="attachment.code" />
           </article>
         </div>
       </aside>
@@ -390,6 +352,7 @@ async function createPreviewUrl() {
                 <span class="cell-stack">
                   <b>{{ item.code }}</b>
                   <small>{{ item.fileName }}</small>
+                  <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" />
                 </span>
               </td>
               <td>{{ item.businessType }} / {{ item.businessCode }}</td>
@@ -410,6 +373,7 @@ async function createPreviewUrl() {
           </span>
           <span>{{ item.fileName }}</span>
           <span>{{ item.businessCode }} · {{ item.mediaType }}</span>
+          <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" />
         </article>
       </div>
     </section>

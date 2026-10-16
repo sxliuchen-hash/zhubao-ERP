@@ -15,7 +15,7 @@ describe('documentManagementApi', () => {
 
   it('loads document management endpoints through the shared api client', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
+      const url = String(input).split('?')[0];
       const dataByUrl: Record<string, unknown> = {
         '/api/documents/summary': {
           packages: 4,
@@ -124,5 +124,6 @@ describe('documentManagementApi', () => {
       url: '/api/documents/attachments/ATT-UP-001/content?expiresAt=1783374000&token=signed-preview-token',
     });
     expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(String(fetchMock.mock.calls[5][0])).toContain('/preview-url?requestId=');
   });
 });

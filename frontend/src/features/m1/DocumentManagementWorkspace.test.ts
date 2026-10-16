@@ -33,9 +33,7 @@ describe('DocumentManagementWorkspace', () => {
     const wrapper = mount(DocumentManagementWorkspace);
     await flushPromises();
     await wrapper.get('select[aria-label="上传文档包"]').setValue(documentPackages[1].code);
-    const preview = wrapper.findAll('button').find(button => button.text().includes('生成预览链接'))!;
-    expect(preview.attributes('disabled')).toBeDefined();
-    await preview.trigger('click');
+    expect(wrapper.find('.document-detail .evidence-media-viewer').exists()).toBe(false);
     expect(fetchAttachmentPreviewUrl).not.toHaveBeenCalled();
   });
 

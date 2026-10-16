@@ -85,7 +85,9 @@ class BusinessReadAuthorizationTest {
         JsonNode summary = body(get("/api/documents/summary", scoped));
         assertThat(summary.path("packages").asInt()).isEqualTo(1);
         assertThat(summary.path("attachments").asInt()).isEqualTo(1);
-        assertThat(get("/api/documents/attachments/ATT-R03-A/preview-url", scoped).getStatusCode().value()).isEqualTo(200);
+        ResponseEntity<String> preview = get("/api/documents/attachments/ATT-R03-A/preview-url", scoped);
+        assertThat(preview.getStatusCode().value()).isEqualTo(200);
+        assertThat(preview.getHeaders().getCacheControl()).isEqualTo("no-store");
         assertThat(get("/api/documents/captures?businessCode=MD-R03-A", scoped).getBody()).contains("expiresAt=");
         assertThat(get("/api/documents/attachments/ATT-R03-B/preview-url", scoped).getStatusCode().value()).isEqualTo(403);
         assertThat(get("/api/documents/captures?businessCode=MD-R03-B", scoped).getStatusCode().value()).isEqualTo(403);

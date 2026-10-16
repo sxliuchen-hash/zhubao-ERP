@@ -425,8 +425,8 @@ MySQL 持久化表：
 | `GET /attachments` | 文档附件 | 返回附件元数据、存储位置、校验和和兜底动作 |
 | `GET /audit-events` | 文档附件 | 返回上传、补传、归档、审批锁定审计事件 |
 | `POST /attachments/uploads` | 文档附件 | multipart 上传附件，生成附件元数据、checksum、审计事件和预览 URL |
-| `GET /attachments/{code}/preview-url` | 文档附件 | 返回带 `expiresAt` 与 HMAC `token` 的短期附件预览 URL |
-| `GET /attachments/{code}/content?expiresAt=<epoch>&token=<hmac>` | 文档附件 | 校验附件编码、过期时间和 HMAC token 后读取当前存储适配器的附件内容；后续生产环境继续替换为 NAS/S3/COS 对象存储签名 URL |
+| `GET /attachments/{code}/preview-url` | 文档附件 | 返回带 `expiresAt` 与 HMAC `token` 的短期附件地址，响应禁止缓存；页面每次预览或下载都重新获取 |
+| `GET /attachments/{code}/content?expiresAt=<epoch>&token=<hmac>[&download=true]` | 文档附件 | 校验附件编码、过期时间和 HMAC token 后读取当前存储适配器的附件内容；默认页内展示，`download=true` 时按原文件名下载，内容响应禁止缓存；后续生产环境继续替换为 NAS/S3/COS 对象存储签名 URL |
 
 运维中心接口前缀：
 
@@ -1368,7 +1368,7 @@ PWA 一期边界：
 | `url` | 返回 `/api/documents/attachments/{code}/content?expiresAt=<epoch>&token=<hmac>` 格式的短期签名 URL |
 | `expiresAt` | 过期时间展示值，默认 15 分钟后过期，可由 `zhubao.documents.preview.ttl-minutes` 调整 |
 
-附件预览使用短期 HMAC 令牌。`zhubao.documents.preview.secret` 签名 `attachmentCode:expiresAt`，`zhubao.documents.preview.ttl-minutes` 控制默认 15 分钟有效期；内容读取验证附件编码、有效期与签名。该机制不替代按登录账号授权的细粒度预览权限或对象存储归档策略。
+附件预览使用短期 HMAC 令牌。`zhubao.documents.preview.secret` 签名 `attachmentCode:expiresAt`，`zhubao.documents.preview.ttl-minutes` 控制默认 15 分钟有效期；内容读取验证附件编码、有效期与签名。页面不保留旧签名地址，每次预览、重试或下载都重新请求；媒体加载失败时自动重新取址一次。该机制不替代按登录账号授权的细粒度预览权限或对象存储归档策略。
 
 文档附件约束：
 

@@ -105,5 +105,5 @@ export async function retireStoredContent(code: string): Promise<StoredContentIt
 }
 
 export async function fetchAttachmentPreviewUrl(code: string): Promise<AttachmentPreviewUrl> {
-  return apiGet<AttachmentPreviewUrl>(`/api/documents/attachments/${code}/preview-url`);
+  return apiGet<AttachmentPreviewUrl>(`/api/documents/attachments/${encodeURIComponent(code)}/preview-url?requestId=${Date.now()}-${Math.random()}`);
 }
