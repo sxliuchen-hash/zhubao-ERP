@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
+import type { ScanObjectType } from '../../services/scanContextApi';
+import type { TraceTarget } from '../scan/traceTarget';
 import IntakePanel from '../intake/IntakePanel.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
 import QualityPanel from '../quality/QualityPanel.vue';
 import ShippingPanel from '../shipping/ShippingPanel.vue';
+import MobileOrderDetail from './MobileOrderDetail.vue';
 import ProcessProgressPanel from './ProcessProgressPanel.vue';
 
-type JobMode = 'intake' | 'station' | 'progress' | 'quality' | 'shipping';
+type JobMode = 'detail' | 'intake' | 'station' | 'progress' | 'quality' | 'shipping';
 
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
-const jobMode = ref<JobMode>('intake');
+const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
+const jobMode = ref<JobMode>('detail');
+const lastTarget = ref<{ code: string; objectType: ScanObjectType } | null>(null);
+const progressCode = ref('');
 const insecureContext = typeof window !== 'undefined' && window.isSecureContext === false;
 
 const primaryModes = computed(() => {
@@ -35,10 +41,22 @@ const extraModes = computed(() => {
 });
 
 watch([primaryModes, extraModes], () => {
-  if (![...primaryModes.value, ...extraModes.value].some((mode) => mode.key === jobMode.value)) {
-    jobMode.value = primaryModes.value[0]?.key ?? extraModes.value[0]?.key ?? 'intake';
+  if (jobMode.value !== 'detail' && ![...primaryModes.value, ...extraModes.value].some((mode) => mode.key === jobMode.value)) {
+    jobMode.value = 'detail';
+    lastTarget.value = null;
   }
-}, { immediate: true });
+});
+
+function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objectType: ScanObjectType }) {
+  if (![...primaryModes.value, ...extraModes.value].some((mode) => mode.key === action)) return;
+  if (target) lastTarget.value = target;
+  progressCode.value = target?.code ?? '';
+  if (target && action !== 'progress') {
+    const intent = action === 'intake' ? 'INTAKE' : action === 'station' ? 'PRODUCTION' : action === 'quality' ? 'QUALITY' : 'SHIPPING';
+    traceTarget.value = { ...target, intent, token: (traceTarget.value?.token ?? 0) + 1 };
+  }
+  jobMode.value = action;
+}
 </script>
 
 <template>
@@ -46,36 +64,14 @@ watch([primaryModes, extraModes], () => {
     <p v-if="insecureContext" class="operation-feedback danger">
       当前是 HTTP，手机打不开摄像头。请改用 https:// 加服务器地址打开本页。浏览器提示证书不受信任时，选择继续访问。
     </p>
-    <div v-if="primaryModes.length > 1 || extraModes.length" class="field-modes" role="tablist" aria-label="现场作业">
-      <button
-        v-for="mode in primaryModes"
-        :key="mode.key"
-        :class="jobMode === mode.key ? 'primary-button' : 'secondary-button'"
-        type="button"
-        role="tab"
-        :aria-selected="jobMode === mode.key"
-        :aria-label="mode.label"
-        @click="jobMode = mode.key"
-      >
-        {{ mode.label }}
-      </button>
-    </div>
-    <details v-if="extraModes.length" class="field-extra-modes" :open="extraModes.some((mode) => mode.key === jobMode) || undefined">
-      <summary>其他现场操作</summary>
-      <div class="field-extra-actions">
-        <button
-          v-for="mode in extraModes"
-          :key="mode.key"
-          :class="jobMode === mode.key ? 'primary-button' : 'secondary-button'"
-          type="button"
-          :aria-pressed="jobMode === mode.key"
-          @click="jobMode = mode.key"
-        >
-          {{ mode.label }}
-        </button>
-      </div>
-    </details>
     <p v-if="!primaryModes.length && !extraModes.length" class="operation-feedback">当前岗位没有现场提交操作，请到工作台查看可处理的单据。</p>
+    <MobileOrderDetail
+      v-if="jobMode === 'detail' && (primaryModes.length || extraModes.length)"
+      :role="authSession?.role || ''"
+      :initial-target="lastTarget"
+      @open="open"
+    />
+    <button v-if="jobMode !== 'detail'" class="secondary-button mobile-order-back" type="button" @click="jobMode = 'detail'">返回订单详情</button>
 
     <ShippingPanel
       v-if="jobMode === 'shipping' && extraModes.some((mode) => mode.key === 'shipping')"
@@ -90,7 +86,7 @@ watch([primaryModes, extraModes], () => {
       intro="扫码核对加工要求，逐条判定后提交。"
     />
 
-    <ProcessProgressPanel v-if="jobMode === 'progress' && extraModes.some((mode) => mode.key === 'progress')" />
+    <ProcessProgressPanel v-if="jobMode === 'progress' && extraModes.some((mode) => mode.key === 'progress')" :initial-code="progressCode" />
 
     <ProductionPanel
       v-if="jobMode === 'station' && primaryModes.some((mode) => mode.key === 'station')"
@@ -109,28 +105,5 @@ watch([primaryModes, extraModes], () => {
 </template>
 
 <style scoped>
-.field-modes {
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-}
-
-.field-extra-modes {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--content);
-  padding: 8px 12px;
-}
-
-.field-extra-modes summary {
-  min-height: 36px;
-  align-content: center;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.field-extra-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 8px;
-  padding-top: 8px;
-}
+.mobile-order-back { justify-self: start; }
 </style>

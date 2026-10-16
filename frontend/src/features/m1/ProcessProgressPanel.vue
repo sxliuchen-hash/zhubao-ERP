@@ -14,6 +14,7 @@ import {
   type ProcessProgressTarget,
 } from '../../services/processProgressApi';
 
+const props = defineProps<{ initialCode?: string }>();
 const percents = [0, 30, 60, 90, 100];
 const query = ref('');
 const processFilter = ref('');
@@ -32,6 +33,10 @@ const requestIds = ref<Record<string, string>>({});
 
 onMounted(() => {
   void reload();
+  if (props.initialCode?.trim()) {
+    code.value = props.initialCode.trim();
+    void locate({ content: code.value });
+  }
 });
 
 async function reload() {

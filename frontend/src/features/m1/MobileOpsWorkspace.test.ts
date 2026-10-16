@@ -9,6 +9,11 @@ vi.mock('../production/ProductionPanel.vue', () => ({ default: { template: '<div
 vi.mock('../quality/QualityPanel.vue', () => ({ default: { template: '<div data-job="quality" />' } }));
 vi.mock('../shipping/ShippingPanel.vue', () => ({ default: { template: '<div data-job="shipping" />' } }));
 vi.mock('./ProcessProgressPanel.vue', () => ({ default: { template: '<div data-job="progress" />' } }));
+vi.mock('./MobileOrderDetail.vue', () => ({
+  default: {
+    template: '<div data-job="detail"><button data-open="intake" @click="$emit(\'open\', \'intake\')" /><button data-open="station" @click="$emit(\'open\', \'station\')" /><button data-open="progress" @click="$emit(\'open\', \'progress\')" /><button data-open="quality" @click="$emit(\'open\', \'quality\')" /><button data-open="shipping" @click="$emit(\'open\', \'shipping\')" /></div>',
+  },
+}));
 
 function forRole(role: string) {
   return mount(MobileOpsWorkspace, {
@@ -17,32 +22,39 @@ function forRole(role: string) {
 }
 
 describe('MobileOpsWorkspace', () => {
-  it('shows the receiver only the collection flow', () => {
+  it('starts the receiver at the scan detail and opens collection', async () => {
     const wrapper = forRole('RECEIVER');
+    expect(wrapper.find('[data-job="detail"]').exists()).toBe(true);
+    await wrapper.get('[data-open="intake"]').trigger('click');
     expect(wrapper.find('[data-job="intake"]').exists()).toBe(true);
-    expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
-    expect(wrapper.find('.field-extra-modes').exists()).toBe(false);
+    await wrapper.get('.mobile-order-back').trigger('click');
+    expect(wrapper.find('[data-job="detail"]').exists()).toBe(true);
   });
 
-  it('opens reporting for operators and keeps progress reporting secondary', async () => {
+  it('opens reporting and progress from the operator detail', async () => {
     const wrapper = forRole('OPERATOR');
+    await wrapper.get('[data-open="station"]').trigger('click');
     expect(wrapper.find('[data-job="station"]').exists()).toBe(true);
     expect(wrapper.find('[data-job="intake"]').exists()).toBe(false);
     expect(wrapper.find('[data-job="quality"]').exists()).toBe(false);
-    await wrapper.get('.field-extra-actions button').trigger('click');
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await wrapper.get('[data-open="progress"]').trigger('click');
     expect(wrapper.find('[data-job="progress"]').exists()).toBe(true);
   });
 
-  it('opens inspection directly for inspectors', () => {
+  it('opens inspection from the inspector detail', async () => {
     const wrapper = forRole('QUALITY_INSPECTOR');
+    await wrapper.get('[data-open="quality"]').trigger('click');
     expect(wrapper.find('[data-job="quality"]').exists()).toBe(true);
     expect(wrapper.find('[data-job="station"]').exists()).toBe(false);
   });
 
-  it('keeps shipping available to warehouse staff without putting it beside collection', async () => {
+  it('keeps shipping available to warehouse staff', async () => {
     const wrapper = forRole('WAREHOUSE_KEEPER');
+    await wrapper.get('[data-open="intake"]').trigger('click');
     expect(wrapper.find('[data-job="intake"]').exists()).toBe(true);
-    await wrapper.get('.field-extra-actions button').trigger('click');
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await wrapper.get('[data-open="shipping"]').trigger('click');
     expect(wrapper.find('[data-job="shipping"]').exists()).toBe(true);
   });
 
