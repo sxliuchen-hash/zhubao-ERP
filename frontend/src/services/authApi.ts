@@ -272,10 +272,6 @@ export async function changeOwnPassword(request: ChangeOwnPasswordRequest): Prom
   return session;
 }
 
-export async function fetchAuthDemoUsers(): Promise<string[]> {
-  return apiGet<string[]>('/api/auth/demo-users');
-}
-
 export async function fetchAuthAuditEvents(): Promise<AuthAuditEvent[]> {
   return apiGet<AuthAuditEvent[]>('/api/auth/audit-events');
 }

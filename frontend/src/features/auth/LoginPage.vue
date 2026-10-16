@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import {
   changeOwnPassword,
-  fetchAuthDemoUsers,
   loginAuthSession,
   type AuthSession,
 } from '../../services/authApi';
@@ -11,7 +10,6 @@ const props = defineProps<{
   session: AuthSession | null;
 }>();
 
-const demoUsers = ref<string[]>([]);
 const username = ref('');
 const password = ref('');
 const busy = ref(false);
@@ -21,20 +19,6 @@ const newPassword = ref('');
 const confirmPassword = ref('');
 
 const mustChangePassword = computed(() => props.session?.passwordChangeRequired === true);
-
-onMounted(async () => {
-  try {
-    demoUsers.value = await fetchAuthDemoUsers();
-  } catch {
-    demoUsers.value = [];
-  }
-});
-
-function syncDemoPassword() {
-  if (demoUsers.value.includes(username.value)) {
-    password.value = `${username.value}123`;
-  }
-}
 
 async function handleLogin() {
   message.value = '';
@@ -122,20 +106,15 @@ async function handleChangePassword() {
         </div>
       </div>
       <h1>登录</h1>
-      <p class="login-lead">使用管理员分配的账号进入作业台。<template v-if="demoUsers.length > 0">演示环境可选用下面的账号，密码是账号名加 123。</template></p>
+      <p class="login-lead">使用管理员分配的账号进入作业台。</p>
       <label>
         <span>账号</span>
         <input
           v-model="username"
-          :list="demoUsers.length > 0 ? 'login-demo-users' : undefined"
           autocomplete="username"
           required
           :disabled="busy"
-          @change="syncDemoPassword"
         />
-        <datalist v-if="demoUsers.length > 0" id="login-demo-users">
-          <option v-for="name in demoUsers" :key="name" :value="name" />
-        </datalist>
       </label>
       <label>
         <span>密码</span>
