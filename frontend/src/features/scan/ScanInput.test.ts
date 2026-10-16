@@ -68,6 +68,28 @@ describe('扫码输入组件', () => {
     wrapper.unmount();
   });
 
+  it('取景时可切换二维码和条形码框，摄像头保持开启', async () => {
+    vi.mocked(hasLiveCamera).mockReturnValue(true);
+    const stop = vi.fn();
+    vi.mocked(openCameraStream).mockResolvedValue({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+    vi.mocked(readLiveBarcode).mockImplementation(() => new Promise(() => {}));
+    const wrapper = mount(ScanInput, { props: inputProps });
+    await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('.scan-target').classes()).toContain('scan-target--qr');
+    expect(wrapper.get('[aria-label="扫码取景"]').text()).toContain('完整二维码');
+    await wrapper.get('.scan-guide-switch button:nth-child(2)').trigger('click');
+    expect(wrapper.get('.scan-target').classes()).toContain('scan-target--barcode');
+    expect(wrapper.get('.scan-guide-switch button:nth-child(2)').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('[aria-label="扫码取景"]').text()).toContain('完整条形码');
+    expect(openCameraStream).toHaveBeenCalledOnce();
+    expect(stop).not.toHaveBeenCalled();
+
+    await wrapper.get('[aria-label="停止扫码"]').trigger('click');
+    wrapper.unmount();
+  });
+
   it('拍照与相册入口分开，选图识别时不显示空取景框', async () => {
     const wrapper = mount(ScanInput, { props: inputProps });
     const photo = wrapper.get('[aria-label="条码照片"]');

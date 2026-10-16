@@ -38,6 +38,7 @@ const photoRef = ref<HTMLInputElement | null>(null);
 const albumRef = ref<HTMLInputElement | null>(null);
 const manualRef = ref<HTMLInputElement | null>(null);
 const objectType = ref<ScanObjectType | ''>('');
+const guideType = ref<'qr' | 'barcode'>('qr');
 const submitAria = computed(() => props.submitAriaLabel || props.submitLabel);
 let acceptSubmit = true;
 
@@ -122,11 +123,15 @@ async function onPhoto(event: Event) {
       <p class="scan-help">对准快递面单或单据标签，识别后自动继续</p>
     </div>
     <div v-show="cameraActive" class="scan-camera-panel" role="region" aria-label="扫码取景">
+      <div class="scan-guide-switch" role="group" aria-label="取景框类型">
+        <button type="button" :aria-pressed="guideType === 'qr'" @click="guideType = 'qr'">二维码框</button>
+        <button type="button" :aria-pressed="guideType === 'barcode'" @click="guideType = 'barcode'">条形码框</button>
+      </div>
       <div class="scan-viewfinder">
         <video ref="videoEl" class="intake-camera" muted playsinline autoplay />
-        <div class="scan-target" aria-hidden="true" />
+        <div class="scan-target" :class="`scan-target--${guideType}`" aria-hidden="true" />
       </div>
-      <p class="scan-help">将完整条码放入框内，靠近一些，避开反光</p>
+      <p class="scan-help">{{ guideType === 'qr' ? '将完整二维码放入方框内' : '将完整条形码放入宽框内' }}，靠近一些，避开反光</p>
       <button class="secondary-button" type="button" aria-label="停止扫码" @click="stopCamera">停止扫码</button>
     </div>
     <div class="scan-fallback-actions">
@@ -254,13 +259,34 @@ async function onPhoto(event: Event) {
   gap: 10px;
 }
 
+.scan-guide-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scan-guide-switch button {
+  min-height: 44px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+}
+
+.scan-guide-switch button[aria-pressed="true"] {
+  border-color: #0f766e;
+  background: #ccfbf1;
+  color: #115e59;
+  font-weight: 700;
+}
+
 .scan-viewfinder {
   position: relative;
   overflow: hidden;
   border-radius: 12px;
   background: #0f172a;
-  aspect-ratio: 4 / 3;
-  max-height: 340px;
+  height: clamp(240px, 78vw, 380px);
 }
 
 .scan-viewfinder .intake-camera {
@@ -268,15 +294,31 @@ async function onPhoto(event: Event) {
   width: 100%;
   height: 100%;
   max-height: none;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .scan-target {
   position: absolute;
-  inset: 20% 8%;
-  border: 2px solid #fff;
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  border: 3px solid #facc15;
   border-radius: 10px;
+  box-shadow: 0 0 0 999px rgb(15 23 42 / 34%), 0 0 0 1px #0f172a inset;
   pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.scan-target--qr {
+  width: min(62%, 240px);
+  aspect-ratio: 1;
+}
+
+.scan-target--barcode {
+  width: calc(100% - 32px);
+  max-width: 460px;
+  aspect-ratio: 4 / 1;
+  max-height: 100px;
 }
 
 .scan-feedback {
