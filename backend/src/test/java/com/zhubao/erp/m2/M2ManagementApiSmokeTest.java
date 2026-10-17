@@ -27,6 +27,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.zhubao.erp.document.AttachmentTestMedia.jpeg;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "zhubao.business.workspace.demo-enabled=true")
@@ -332,12 +333,16 @@ class M2ManagementApiSmokeTest {
         body.add("source", "API smoke 上传");
         body.add("owner", "库管员 何琳");
         body.add("fallbackAction", "无");
-        body.add("file", new ByteArrayResource("smoke upload content".getBytes()) {
+        byte[] media = jpeg("smoke upload content");
+        ByteArrayResource file = new ByteArrayResource(media) {
             @Override
             public String getFilename() {
-                return "smoke-weight.txt";
+                return "smoke-weight.jpg";
             }
-        });
+        };
+        HttpHeaders fileHeaders = new HttpHeaders();
+        fileHeaders.setContentType(MediaType.IMAGE_JPEG);
+        body.add("file", new HttpEntity<>(file, fileHeaders));
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
@@ -349,7 +354,7 @@ class M2ManagementApiSmokeTest {
 
         assertThat(uploaded.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(uploaded.getBody())
-                .contains("ATT-UP-", "smoke-weight.txt", "sha256:", "expiresAt=", "token=")
+                .contains("ATT-UP-", "smoke-weight.jpg", "sha256:", "expiresAt=", "token=")
                 .doesNotContain("preview-demo");
 
         String uploadedCode = uploaded.getBody().replaceAll(".*\"code\":\"([^\"]+)\".*", "$1");
@@ -365,7 +370,7 @@ class M2ManagementApiSmokeTest {
         String previewUrl = preview.getBody().replaceAll(".*\"url\":\"([^\"]+)\".*", "$1");
         ResponseEntity<byte[]> content = restTemplate.getForEntity(previewUrl, byte[].class);
         assertThat(content.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(new String(content.getBody())).isEqualTo("smoke upload content");
+        assertThat(content.getBody()).isEqualTo(media);
     }
 
     @Test

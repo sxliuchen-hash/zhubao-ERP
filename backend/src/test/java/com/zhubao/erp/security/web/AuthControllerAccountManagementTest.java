@@ -232,7 +232,7 @@ class AuthControllerAccountManagementTest {
                                 "file",
                                 "planner-identity-check.pdf",
                                 "application/pdf",
-                                "identity-check".getBytes()
+                                "%PDF-1.7 identity-check".getBytes()
                         ),
                         request
                 );

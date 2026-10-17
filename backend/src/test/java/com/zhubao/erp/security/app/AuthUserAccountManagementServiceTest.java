@@ -588,7 +588,7 @@ class AuthUserAccountManagementServiceTest {
                 application.applicationCode(),
                 "identity-check.pdf",
                 "application/pdf",
-                "identity check content".getBytes(),
+                "%PDF-1.7 identity check content".getBytes(),
                 admin
         );
 
