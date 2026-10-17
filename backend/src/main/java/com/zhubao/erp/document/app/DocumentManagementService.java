@@ -5,6 +5,7 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.AttachmentContent;
 import com.zhubao.erp.document.domain.AttachmentIntegrityIssue;
 import com.zhubao.erp.document.domain.AttachmentIntegrityReport;
+import com.zhubao.erp.document.domain.AttachmentMediaPolicy;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
@@ -17,6 +18,7 @@ import com.zhubao.erp.document.domain.StoredAttachmentObject;
 import com.zhubao.erp.document.domain.StoredContentInventory;
 import com.zhubao.erp.document.domain.StoredContentItem;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
+import com.zhubao.erp.document.infra.DocumentCaptureProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -25,7 +27,9 @@ import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -61,6 +65,7 @@ public class DocumentManagementService {
     private final DocumentPreviewTokenProperties previewTokenProperties;
     private final AttachmentStorageProperties storageProperties;
     private final BusinessDocumentRepository businessDocuments;
+    private final DocumentCaptureProperties captureProperties;
     private final Clock clock;
     private final AtomicInteger uploadSequence = new AtomicInteger(1);
     private final Map<String, String> uploadedStorageKeys = new ConcurrentHashMap<>();
@@ -89,7 +94,6 @@ public class DocumentManagementService {
         this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), storageProperties, null);
     }
 
-    @Autowired
     public DocumentManagementService(
             DocumentManagementRepository repository,
             AttachmentObjectStorage attachmentObjectStorage,
@@ -98,6 +102,19 @@ public class DocumentManagementService {
             BusinessDocumentRepository businessDocuments
     ) {
         this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(), storageProperties, businessDocuments);
+    }
+
+    @Autowired
+    public DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties,
+            AttachmentStorageProperties storageProperties,
+            BusinessDocumentRepository businessDocuments,
+            DocumentCaptureProperties captureProperties
+    ) {
+        this(repository, attachmentObjectStorage, previewTokenProperties, Clock.systemDefaultZone(),
+                storageProperties, businessDocuments, captureProperties);
     }
 
     DocumentManagementService(
@@ -127,11 +144,25 @@ public class DocumentManagementService {
             AttachmentStorageProperties storageProperties,
             BusinessDocumentRepository businessDocuments
     ) {
+        this(repository, attachmentObjectStorage, previewTokenProperties, clock,
+                storageProperties, businessDocuments, null);
+    }
+
+    private DocumentManagementService(
+            DocumentManagementRepository repository,
+            AttachmentObjectStorage attachmentObjectStorage,
+            DocumentPreviewTokenProperties previewTokenProperties,
+            Clock clock,
+            AttachmentStorageProperties storageProperties,
+            BusinessDocumentRepository businessDocuments,
+            DocumentCaptureProperties captureProperties
+    ) {
         this.repository = repository;
         this.attachmentObjectStorage = attachmentObjectStorage;
         this.previewTokenProperties = previewTokenProperties == null ? new DocumentPreviewTokenProperties() : previewTokenProperties;
         this.storageProperties = storageProperties;
         this.businessDocuments = businessDocuments;
+        this.captureProperties = captureProperties == null ? new DocumentCaptureProperties() : captureProperties;
         this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
@@ -339,6 +370,22 @@ public class DocumentManagementService {
         if (content == null || content.length == 0) {
             throw new BusinessException("附件内容不能为空");
         }
+        return uploadAttachment(documentCode, businessType, businessCode, fileName, mediaType,
+                source, owner, fallbackAction, new ByteArrayInputStream(content), content.length);
+    }
+
+    public EvidenceAttachmentUploadResult uploadAttachment(
+            String documentCode,
+            String businessType,
+            String businessCode,
+            String fileName,
+            String mediaType,
+            String source,
+            String owner,
+            String fallbackAction,
+            InputStream input,
+            long declaredSize
+    ) {
         if (repository.packages().stream().noneMatch(documentPackage -> documentPackage.code().equals(documentCode))) {
             throw new BusinessException("文档包不存在：" + documentCode);
         }
@@ -347,15 +394,18 @@ public class DocumentManagementService {
         String code = "ATT-UP-" + now.replace("-", "").replace(":", "").replace(" ", "-")
                 + "-" + String.format("%03d", uploadSequence.getAndIncrement());
         String sanitizedFileName = sanitizeFileName(fileName);
-        String safeMediaType = mediaType == null || mediaType.isBlank() ? "application/octet-stream" : mediaType;
+        String safeMediaType = AttachmentMediaPolicy.canonicalType(mediaType, true);
         String safeFallbackAction = fallbackAction == null || fallbackAction.isBlank() ? "无" : fallbackAction;
         String objectType = AttachmentOrigins.onlyHit(businessDocuments, businessCode);
-        StoredAttachmentObject storedObject = attachmentObjectStorage.put(
+        StoredAttachmentObject storedObject = attachmentObjectStorage.putStream(
                 documentCode,
                 code,
                 sanitizedFileName,
                 safeMediaType,
-                content
+                input,
+                declaredSize,
+                AttachmentMediaPolicy.isVideo(safeMediaType)
+                        ? captureProperties.getVideoMaxBytes() : captureProperties.getPhotoMaxBytes()
         );
 
         EvidenceAttachment attachment = new EvidenceAttachment(

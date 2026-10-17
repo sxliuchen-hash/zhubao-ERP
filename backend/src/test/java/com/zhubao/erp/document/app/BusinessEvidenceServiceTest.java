@@ -56,6 +56,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.zhubao.erp.document.AttachmentTestMedia.jpeg;
 
 /**
  * 证据引用的内存与 JDBC 行为。绑定不写库存，也不把同客户的母子单当成同一张单据。
@@ -104,7 +105,7 @@ class BusinessEvidenceServiceTest {
         business.saveMotherOrder(mother(MOTHER, INBOUND_LEDGER));
         DocumentCaptureService capture = capture(business, repository, 8, 32);
         OperatorContext receiver = receiver();
-        byte[] photo = "photo".getBytes(StandardCharsets.UTF_8);
+        byte[] photo = jpeg("photo");
 
         assertThatThrownBy(() -> capture.capture(
                 "mother", MOTHER, "UNPACK", "a.jpg", "image/jpeg",
@@ -312,9 +313,10 @@ class BusinessEvidenceServiceTest {
 
     private EvidenceAttachmentUploadResult upload(Fixture fixture, String objectType, String businessCode, String scene, byte[] content) {
         OperatorContext actor = fixture.admin;
+        byte[] media = jpeg(new String(content, StandardCharsets.UTF_8));
         return fixture.capture.storeVerified(
                 objectType, businessCode, scene, "evidence.jpg", "image/jpeg",
-                new java.io.ByteArrayInputStream(content), content.length, actor
+                new java.io.ByteArrayInputStream(media), media.length, actor
         );
     }
 

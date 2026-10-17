@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
+import static com.zhubao.erp.document.AttachmentTestMedia.mp4;
 
 class DocumentCaptureServiceTest {
 
@@ -38,7 +39,7 @@ class DocumentCaptureServiceTest {
         InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
         DocumentCaptureService service = service(documents, repository, 8, 32);
         OperatorContext receiver = new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.ALL);
-        byte[] video = "unpack-video".getBytes(StandardCharsets.UTF_8);
+        byte[] video = mp4("unpack-video");
 
         EvidenceAttachmentUploadResult uploaded = service.capture(
                 "mother",
@@ -115,7 +116,7 @@ class DocumentCaptureServiceTest {
         doThrow(new IllegalStateException("提交结果未知"))
                 .when(repository).saveAttachment(argThat(attachment -> attachment.code().startsWith("ATT-CAP-")));
         DocumentCaptureService service = service(documents, repository, 8, 32);
-        byte[] video = "unpack-video".getBytes(StandardCharsets.UTF_8);
+        byte[] video = mp4("unpack-video");
 
         assertThatThrownBy(() -> service.capture("mother", "MD-CAP-001", "UNPACK", "unpack.mp4",
                 "video/mp4", new java.io.ByteArrayInputStream(video), video.length,

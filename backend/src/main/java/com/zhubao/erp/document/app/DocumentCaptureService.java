@@ -13,6 +13,7 @@ import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
 import com.zhubao.erp.document.domain.StoredAttachmentObject;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
+import com.zhubao.erp.document.domain.AttachmentMediaPolicy;
 import com.zhubao.erp.document.infra.DocumentCaptureProperties;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -113,11 +114,8 @@ public class DocumentCaptureService {
                     .orElseThrow(() -> new BusinessException("母单不存在：" + code));
             assertCustomerAllowed(operator, motherOrder);
         }
-        boolean video = isVideo(mediaType);
-        boolean photo = isPhoto(mediaType);
-        if (!video && !photo) {
-            throw new BusinessException("只接受 jpg、png、mp4、webm");
-        }
+        String canonicalMediaType = AttachmentMediaPolicy.canonicalType(mediaType, false);
+        boolean video = AttachmentMediaPolicy.isVideo(canonicalMediaType);
         String origin = AttachmentOrigins.uniqueMatch(businessDocumentRepository, canonicalType, code);
         if (requireVerified && origin.isEmpty()) {
             throw new BusinessException("无法确认这份文件属于哪张单据");
@@ -132,7 +130,7 @@ public class DocumentCaptureService {
                 packageCode,
                 attachmentCode,
                 sanitizeFileName(fileName, video),
-                mediaType,
+                canonicalMediaType,
                 input,
                 declaredSize,
                 maxBytes
@@ -299,22 +297,6 @@ public class DocumentCaptureService {
                 attachment.owner(),
                 documentManagementService.previewUrl(attachment.code()).url()
         );
-    }
-
-    private boolean isVideo(String mediaType) {
-        if (mediaType == null) {
-            return false;
-        }
-        String normalized = mediaType.toLowerCase(Locale.ROOT);
-        return normalized.equals("video/mp4") || normalized.equals("video/webm");
-    }
-
-    private boolean isPhoto(String mediaType) {
-        if (mediaType == null) {
-            return false;
-        }
-        String normalized = mediaType.toLowerCase(Locale.ROOT);
-        return normalized.equals("image/jpeg") || normalized.equals("image/jpg") || normalized.equals("image/png");
     }
 
     private String required(String value, String message) {

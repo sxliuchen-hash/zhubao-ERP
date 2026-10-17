@@ -2,6 +2,7 @@ package com.zhubao.erp.document.infra;
 
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
+import com.zhubao.erp.document.domain.AttachmentMediaPolicy;
 import com.zhubao.erp.document.domain.StoredAttachmentObject;
 import org.springframework.stereotype.Component;
 
@@ -57,7 +58,7 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
         if (declaredSize > maxBytes || maxBytes <= 0) {
             throw new BusinessException("文件超过大小限制");
         }
-        String safeMediaType = mediaType == null || mediaType.isBlank() ? "application/octet-stream" : mediaType;
+        String safeMediaType = AttachmentMediaPolicy.canonicalType(mediaType, true);
         String storageKey = storageKey(documentCode, attachmentCode, fileName);
         Path target = resolveStorageKey(storageKey);
         try {
@@ -66,6 +67,8 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
             throw new BusinessException("附件写入本地存储失败：" + exception.getMessage());
         }
         MessageDigest digest = sha256Digest();
+        byte[] header = new byte[12];
+        int headerLength = 0;
         long written = 0;
         Path pending;
         try {
@@ -82,12 +85,18 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
                     if (written > maxBytes) {
                         throw new BusinessException("文件超过大小限制");
                     }
+                    int captured = Math.min(read, header.length - headerLength);
+                    System.arraycopy(buffer, 0, header, headerLength, captured);
+                    headerLength += captured;
                     digest.update(buffer, 0, read);
                     output.write(buffer, 0, read);
                 }
             }
             if (written == 0) {
                 throw new BusinessException("附件内容不能为空");
+            }
+            if (!AttachmentMediaPolicy.matchesHeader(safeMediaType, header, headerLength)) {
+                throw new BusinessException("文件内容与声明类型不符");
             }
             if (Files.exists(target)) {
                 throw new BusinessException("附件存储对象已存在：" + storageKey);

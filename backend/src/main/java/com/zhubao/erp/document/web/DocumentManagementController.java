@@ -228,7 +228,8 @@ public class DocumentManagementController {
                 source,
                 context.operator(),
                 fallbackAction,
-                file.getBytes()
+                file.getInputStream(),
+                file.getSize()
         ));
     }
 
