@@ -197,6 +197,8 @@ function Test-RuntimePackage([string]$packageRoot) {
         "start.sh",
         "backup-mysql.ps1",
         "backup-mysql.sh",
+        "backup-bundle.sh",
+        "verify-bundle.sh",
         "verify-restore.ps1",
         "verify-restore.sh",
         "upgrade-database.ps1",

@@ -234,10 +234,10 @@ Compose 卷：
 - 手机上传使用 `POST /api/documents/captures`，按单查询使用 `GET /api/documents/captures`；权限、请求字段与短期签名预览以[16 现行契约](./16_字段字典与API契约.md)为准。
 - 图片允许 JPEG/PNG，单张不超过 8MB；视频允许 MP4/WebM，单个不超过 50MB。30 秒是前端提示，服务器按文件大小校验，当前不校验视频时长。
 - 网页入口单次请求不超过 55MB，上传等待 300 秒；请求上限不放宽图片和视频各自的文件限额。
-- 采集文件流式写入本地目录，保留 SHA-256，重复校验和返回已有附件。Docker 使用 `evidence-data` 卷的 `/app/evidence`；本地开发由 `zhubao.documents.storage.local-root` 指定，默认 `target/zhubao-evidence`。
+- 采集文件先写同目录临时文件，核对类型、文件头及大小后原子发布，保留 SHA-256；同一业务单据的相同原件返回已上传附件，待核对原件先由管理员处理。Docker 使用 `evidence-data` 卷的 `/app/evidence`；本地开发由 `zhubao.documents.storage.local-root` 指定，默认 `target/zhubao-evidence`。
 - 试运行不切换 NAS/S3/COS 对象存储。弱网支持保留本次文件并重试，当前不提供完整离线采集队列。
 
-数据库备份只覆盖业务表与附件元数据，不包含上述照片和视频文件。现场需另外确认 `evidence-data` 或本机附件目录的拷贝范围、保存位置、保留周期与责任人，并在试运行结束前完成附件恢复样例验证。NAS/S3/COS 增量附件备份尚未落地，不能用数据库恢复成功代替附件恢复验收。
+单独执行数据库备份仍只覆盖业务表与附件元数据，不包含照片和视频。数据库及 `evidence-data` 成套备份见 7.3；现场仍需确认保存位置、保留周期与责任人，并完成附件恢复样例验证。NAS/S3/COS 增量附件备份尚未落地，不能用数据库恢复成功代替附件恢复验收。
 
 ### 7.2 数据库备份与 COS 目标
 
@@ -298,6 +298,21 @@ M3.60 起，运维中心会只读扫描 `ZHUBAO_BACKUP_ROOT` / `/backups` 下的
 - 恢复演练记录入库归档、告警持久化及确认/关闭流程。当前已支持 JSON 证据展示和系统内快照告警；一期不接企业微信、短信或电话，外部通知后续按需决定。
 - 备份保留周期和清理策略。
 - 附件证据目录的 NAS/S3/COS 增量备份。
+
+### 7.3 数据库与附件成套备份和隔离核验
+
+Linux 运行包新增 `backup-bundle.sh` 与 `verify-bundle.sh`。在维护窗口先停止 `backend`，并确认没有其他写入附件卷或业务库的程序；脚本要求后端容器已停止，不会自行停服或修改业务数据。MySQL 容器保持运行。执行：
+
+```bash
+docker compose --env-file .env -f docker-compose.yml stop backend
+sh ./backup-bundle.sh --name zhubao_bundle_20261018_010000
+docker compose --env-file .env -f docker-compose.yml start backend
+sh ./verify-bundle.sh --manifest runtime-backups/zhubao_bundle_20261018_010000.manifest
+```
+
+同一批次导出 SQL、`evidence-data` 压缩包、逐文件 SHA-256 清单和 `.manifest`（批次、时间、SQL／附件包／文件清单校验和、表数、元数据数、原件数），各文件附 `.sha256`。备份时再次扫描文件哈希，发现窗口内变化则失败；清单初始 `restoreStatus=not-verified`，不能仅凭备份完成就宣称可恢复。`verify-bundle.sh` 在宿主临时目录解压并逐文件核验，再把 SQL 导入唯一临时数据库，核对表数、附件元数据数以及所有活跃本地附件引用的原件与 SHA-256；成功才写同批次 `.restore.txt` 与校验和，临时库与解压目录在退出时清理。核验失败须查看输出、保留原备份并重新安排成套快照；不可把失败批次作为升级前备份确认。
+
+脚本当前只在 Linux 路径提供，Windows 管理员可在 Linux 服务器上执行；没有自动任务计划、COS 上传或异地恢复结果。先在隔离环境完成一次真实成套备份和恢复，再讨论异地目标与清理策略。旧 `backup-mysql.*` 和 `verify-restore.*` 仍可用于数据库单独检查，其通过结果不代表附件恢复通过。
 
 ---
 

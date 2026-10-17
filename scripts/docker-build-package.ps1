@@ -126,6 +126,8 @@ Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\start.ps1") -Destination $pa
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\start.sh") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\backup-mysql.ps1") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\backup-mysql.sh") -Destination $packageDir
+Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\backup-bundle.sh") -Destination $packageDir
+Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\verify-bundle.sh") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\verify-restore.ps1") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\verify-restore.sh") -Destination $packageDir
 Copy-Item -LiteralPath (Join-Path $repoRoot "deploy\upgrade-database.ps1") -Destination $packageDir
