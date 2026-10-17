@@ -1,6 +1,7 @@
 package com.zhubao.erp.document.web;
 
 import com.zhubao.erp.document.domain.AttachmentContent;
+import com.zhubao.erp.document.domain.AttachmentIntegrityReport;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.document.app.BusinessEvidenceService;
@@ -191,6 +192,12 @@ public class DocumentManagementController {
     public ApiResponse<StoredContentInventory> storage(HttpServletRequest request) {
         assertManager(operatorContextResolver.requireSession(request));
         return ApiResponse.ok(documentManagementService.storageInventory());
+    }
+
+    @GetMapping("/storage/integrity")
+    public ApiResponse<AttachmentIntegrityReport> storageIntegrity(HttpServletRequest request) {
+        assertManager(operatorContextResolver.requireSession(request));
+        return ApiResponse.ok(documentManagementService.storageIntegrity());
     }
 
     @GetMapping("/audit-events")

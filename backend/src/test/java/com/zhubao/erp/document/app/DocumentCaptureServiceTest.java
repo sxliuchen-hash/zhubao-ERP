@@ -16,11 +16,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 class DocumentCaptureServiceTest {
 
@@ -101,6 +105,27 @@ class DocumentCaptureServiceTest {
                 2,
                 scoped
         )).isInstanceOf(BusinessException.class).hasMessageContaining("客户范围");
+    }
+
+    @Test
+    void uncertainMetadataWriteKeepsCaptureOriginalForReconciliation() throws Exception {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        documents.saveMotherOrder(motherOrder());
+        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        doThrow(new IllegalStateException("提交结果未知"))
+                .when(repository).saveAttachment(argThat(attachment -> attachment.code().startsWith("ATT-CAP-")));
+        DocumentCaptureService service = service(documents, repository, 8, 32);
+        byte[] video = "unpack-video".getBytes(StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> service.capture("mother", "MD-CAP-001", "UNPACK", "unpack.mp4",
+                "video/mp4", new java.io.ByteArrayInputStream(video), video.length,
+                new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.ALL)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("原件已保存")
+                .hasMessageContaining("核对后处理");
+        try (var paths = Files.walk(tempDir)) {
+            assertThat(paths.filter(Files::isRegularFile)).hasSize(1);
+        }
     }
 
     private DocumentCaptureService service(

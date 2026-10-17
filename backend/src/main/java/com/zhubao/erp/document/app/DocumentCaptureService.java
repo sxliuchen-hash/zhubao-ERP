@@ -169,8 +169,7 @@ public class DocumentCaptureService {
             try {
                 repository.saveAttachment(attachment);
             } catch (RuntimeException ex) {
-                storage.delete(stored.storageKey());
-                throw new BusinessException("证据元数据没有保存，可以重新上传");
+                throw new BusinessException("附件原件已保存，元数据结果未确认；请按编号 " + attachmentCode + " 核对后处理");
             }
             try {
                 repository.saveAuditEvent(new DocumentAuditEvent(
@@ -183,14 +182,13 @@ public class DocumentCaptureService {
                         "green"
                 ));
             } catch (RuntimeException ex) {
-                throw new BusinessException("文件已上传，审计没有记下，可以重试");
+                throw new BusinessException("附件 " + attachmentCode + " 已保存，审计记录结果未确认；请核对后处理");
             }
             return resultOf(attachment, stored.size());
         } catch (BusinessException ex) {
             throw ex;
         } catch (RuntimeException ex) {
-            storage.delete(stored.storageKey());
-            throw new BusinessException("证据元数据没有保存，可以重新上传");
+            throw new BusinessException("附件原件已保存，登记结果未确认；请按编号 " + attachmentCode + " 核对后处理");
         }
     }
 

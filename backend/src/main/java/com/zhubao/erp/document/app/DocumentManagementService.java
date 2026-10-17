@@ -3,6 +3,8 @@ package com.zhubao.erp.document.app;
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.AttachmentContent;
+import com.zhubao.erp.document.domain.AttachmentIntegrityIssue;
+import com.zhubao.erp.document.domain.AttachmentIntegrityReport;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
@@ -16,13 +18,17 @@ import com.zhubao.erp.document.domain.StoredContentInventory;
 import com.zhubao.erp.document.domain.StoredContentItem;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -32,6 +38,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +51,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class DocumentManagementService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(DocumentManagementService.class);
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final String SIGNING_ALGORITHM = "HmacSHA256";
     private static final Base64.Encoder TOKEN_ENCODER = Base64.getUrlEncoder().withoutPadding();
@@ -185,6 +195,89 @@ public class DocumentManagementService {
     }
 
     /**
+     * 逐一核对活跃元数据、原件和 SHA-256，并列出无元数据文件及未发布的临时文件。
+     */
+    public AttachmentIntegrityReport storageIntegrity() {
+        Path root = storageRoot().toAbsolutePath().normalize();
+        List<EvidenceAttachment> attachments = repository.attachments();
+        List<AttachmentIntegrityIssue> issues = new ArrayList<>();
+        Map<String, EvidenceAttachment> registered = new HashMap<>();
+        for (EvidenceAttachment attachment : attachments) {
+            Optional<String> key = localStorageKey(attachment.storageLocation());
+            if (key.isEmpty()) {
+                continue;
+            }
+            registered.put(key.get(), attachment);
+            if ("已下线".equals(attachment.status())) {
+                continue;
+            }
+            Path file = root.resolve(key.get()).normalize();
+            if (!file.startsWith(root) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+                issues.add(new AttachmentIntegrityIssue("MISSING_ORIGINAL", attachment.code(), key.get(), "活跃附件原件不存在"));
+                continue;
+            }
+            try {
+                String actual = "sha256:" + checksum(file);
+                if (!actual.equalsIgnoreCase(attachment.checksum())) {
+                    issues.add(new AttachmentIntegrityIssue("CHECKSUM_MISMATCH", attachment.code(), key.get(), "原件 SHA-256 与元数据不一致"));
+                }
+            } catch (IOException exception) {
+                issues.add(new AttachmentIntegrityIssue("READ_ERROR", attachment.code(), key.get(), "原件无法读取或计算校验和"));
+            }
+        }
+        int originalCount = 0;
+        if (!Files.isDirectory(root)) {
+            issues.add(new AttachmentIntegrityIssue("ROOT_MISSING", "", "", "附件存储目录不存在"));
+        } else {
+            try (var paths = Files.walk(root)) {
+                for (Path file : paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) {
+                    String key = root.relativize(file).toString().replace('\\', '/');
+                    if (file.getFileName().toString().endsWith(".pending")) {
+                        issues.add(new AttachmentIntegrityIssue("PENDING_OBJECT", "", key, "上传中断遗留临时文件"));
+                    } else {
+                        originalCount++;
+                        if (!registered.containsKey(key)) {
+                            issues.add(new AttachmentIntegrityIssue("UNREGISTERED_ORIGINAL", "", key, "原件没有附件元数据"));
+                        }
+                    }
+                }
+            } catch (IOException exception) {
+                issues.add(new AttachmentIntegrityIssue("SCAN_ERROR", "", "", "附件目录无法完整扫描"));
+            }
+        }
+        return new AttachmentIntegrityReport(LocalDateTime.now(clock).format(DATE_TIME_FORMATTER),
+                attachments.size(), originalCount, issues);
+    }
+
+    @Scheduled(cron = "${zhubao.documents.integrity.cron:0 0 3 * * *}")
+    public void checkStorageIntegrityOnSchedule() {
+        try {
+            AttachmentIntegrityReport report = storageIntegrity();
+            if (!report.issues().isEmpty()) {
+                LOGGER.warn("附件对账发现 {} 项异常，请在管理员存储完整性接口核对", report.issues().size());
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.error("附件定时对账失败", exception);
+        }
+    }
+
+    private String checksum(Path file) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (var input = Files.newInputStream(file)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) >= 0) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("当前运行环境不支持 SHA-256", exception);
+        }
+    }
+
+    /**
      * 管理员下线一条存储内容：先关闭访问，保留原件供受控恢复。
      */
     public StoredContentItem retireStoredContent(String code, String operator) {
@@ -283,17 +376,25 @@ public class DocumentManagementService {
                 "green",
                 objectType.isEmpty() ? null : objectType
         );
-        repository.saveAttachment(attachment);
+        try {
+            repository.saveAttachment(attachment);
+        } catch (RuntimeException ex) {
+            throw new BusinessException("附件原件已保存，元数据结果未确认；请按编号 " + code + " 核对后处理");
+        }
         uploadedStorageKeys.put(code, storedObject.storageKey());
-        repository.saveAuditEvent(new DocumentAuditEvent(
-                now,
-                "DOC-AUD-" + code,
-                documentCode,
-                "上传附件",
-                owner,
-                "上传 " + sanitizedFileName + " 并生成校验和 " + storedObject.checksum() + "。",
-                "green"
-        ));
+        try {
+            repository.saveAuditEvent(new DocumentAuditEvent(
+                    now,
+                    "DOC-AUD-" + code,
+                    documentCode,
+                    "上传附件",
+                    owner,
+                    "上传 " + sanitizedFileName + " 并生成校验和 " + storedObject.checksum() + "。",
+                    "green"
+            ));
+        } catch (RuntimeException ex) {
+            throw new BusinessException("附件 " + code + " 已保存，审计记录结果未确认；请核对后处理");
+        }
 
         return new EvidenceAttachmentUploadResult(
                 code,

@@ -166,6 +166,51 @@ class DocumentManagementServiceTest {
     }
 
     @Test
+    void uncertainMetadataWriteKeepsPublishedOriginalForReconciliation() throws Exception {
+        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        doThrow(new IllegalStateException("提交结果未知"))
+                .when(repository).saveAttachment(argThat(attachment -> attachment.code().startsWith("ATT-UP-")));
+        DocumentManagementService service = new DocumentManagementService(repository, localStorage());
+
+        assertThatThrownBy(() -> service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接",
+                "HO-20260706-014", "weight-photo.jpg", "image/jpeg", "PC 后台上传", "库管员", "无",
+                "original".getBytes()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("原件已保存")
+                .hasMessageContaining("核对后处理");
+        try (var paths = Files.walk(tempDir)) {
+            assertThat(paths.filter(Files::isRegularFile)).hasSize(1);
+        }
+    }
+
+    @Test
+    void reportsMissingTamperedUnregisteredAndPendingObjectsWithoutChangingFiles() throws Exception {
+        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        AttachmentStorageProperties properties = new AttachmentStorageProperties();
+        properties.setLocalRoot(tempDir.toString());
+        DocumentManagementService service = new DocumentManagementService(repository,
+                new LocalAttachmentObjectStorage(properties), new DocumentPreviewTokenProperties(),
+                Clock.systemDefaultZone(), properties);
+        var missing = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-1",
+                "missing.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", "first".getBytes());
+        var tampered = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-1",
+                "tampered.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", "second".getBytes());
+        Files.delete(tempDir.resolve(missing.storageLocation().replace("local://", "")));
+        Files.writeString(tempDir.resolve(tampered.storageLocation().replace("local://", "")), "changed");
+        Path orphan = tempDir.resolve("evidence/orphan.jpg");
+        Files.writeString(orphan, "orphan");
+        Path pending = tempDir.resolve("evidence/.attachment-interrupted.pending");
+        Files.writeString(pending, "partial");
+
+        var report = service.storageIntegrity();
+
+        assertThat(report.issues()).extracting("category")
+                .contains("MISSING_ORIGINAL", "CHECKSUM_MISMATCH", "UNREGISTERED_ORIGINAL", "PENDING_OBJECT");
+        assertThat(Files.exists(orphan)).isTrue();
+        assertThat(Files.exists(pending)).isTrue();
+    }
+
+    @Test
     void savesDynamicDocumentPackageForPreApprovalEvidence() {
         DocumentManagementService service = newService();
 

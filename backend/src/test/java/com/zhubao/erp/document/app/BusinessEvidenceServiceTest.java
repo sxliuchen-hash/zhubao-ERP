@@ -97,7 +97,7 @@ class BusinessEvidenceServiceTest {
     }
 
     @Test
-    void metadataFailureRemovesTheNewFileAndRetryCanSave() throws Exception {
+    void metadataFailureKeepsOriginalForReconciliationAndRetryCanSave() throws Exception {
         InMemoryDocumentManagementRepository delegate = new InMemoryDocumentManagementRepository();
         FailOnceRepository repository = new FailOnceRepository(delegate);
         InMemoryBusinessDocumentRepository business = new InMemoryBusinessDocumentRepository();
@@ -109,8 +109,8 @@ class BusinessEvidenceServiceTest {
         assertThatThrownBy(() -> capture.capture(
                 "mother", MOTHER, "UNPACK", "a.jpg", "image/jpeg",
                 new java.io.ByteArrayInputStream(photo), photo.length, receiver
-        )).isInstanceOf(BusinessException.class).hasMessageContaining("可以重新上传");
-        assertThat(fileCount()).isZero();
+        )).isInstanceOf(BusinessException.class).hasMessageContaining("原件已保存");
+        assertThat(fileCount()).isEqualTo(1);
         assertThat(delegate.attachments()).noneMatch(item -> MOTHER.equals(item.businessCode()) && "手机采集".equals(item.source()));
 
         EvidenceAttachmentUploadResult saved = capture.capture(
@@ -118,7 +118,7 @@ class BusinessEvidenceServiceTest {
                 new java.io.ByteArrayInputStream(photo), photo.length, receiver
         );
         assertThat(saved.code()).startsWith("ATT-CAP-");
-        assertThat(fileCount()).isEqualTo(1);
+        assertThat(fileCount()).isEqualTo(2);
         assertThat(delegate.attachments())
                 .filteredOn(item -> saved.code().equals(item.code()))
                 .singleElement()

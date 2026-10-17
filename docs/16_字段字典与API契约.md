@@ -424,9 +424,12 @@ MySQL 持久化表：
 | `GET /packages` | 文档附件 | 返回业务文档包和证据完整度 |
 | `GET /attachments` | 文档附件 | 返回附件元数据、存储位置、校验和和兜底动作 |
 | `GET /audit-events` | 文档附件 | 返回上传、补传、归档、审批锁定审计事件 |
+| `GET /storage/integrity` | 文档附件 | 仅公司范围管理员／总经理可读取原件与元数据的只读对账结果，列出缺原件、SHA-256 不符、无元数据原件和上传中断临时文件；不清理文件 |
 | `POST /attachments/uploads` | 文档附件 | multipart 上传附件，生成附件元数据、checksum、审计事件和预览 URL |
 | `GET /attachments/{code}/preview-url` | 文档附件 | 返回带 `expiresAt` 与 HMAC `token` 的短期附件地址，响应禁止缓存；页面每次预览或下载都重新获取 |
 | `GET /attachments/{code}/content?expiresAt=<epoch>&token=<hmac>[&download=true]` | 文档附件 | 校验附件编码、过期时间和 HMAC token 后读取当前存储适配器的附件内容；默认页内展示，`download=true` 时按原文件名下载，内容响应禁止缓存；后续生产环境继续替换为 NAS/S3/COS 对象存储签名 URL |
+
+附件上传若在原件发布后遇到元数据或审计写入结果不确定，错误会包含附件编号并要求核对；原件保留，不能把错误解释为“文件不存在，可以直接重传”。本地原件先写同目录临时文件并原子发布。下线先保存「已下线」并立即拒绝访问，原件保留供受控恢复。每日默认 03:00 执行只读完整性检查，异常数量写入服务日志；管理员可随时读取上述明细接口。时间可用 `zhubao.documents.integrity.cron` 配置。
 
 运维中心接口前缀：
 
