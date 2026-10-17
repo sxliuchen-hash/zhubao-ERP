@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
 
 /**
  * 手机采集。按单号自动建证据包，照片和短视频流式落盘，相同校验和不存第二份。
@@ -40,7 +40,6 @@ public class DocumentCaptureService {
     private final DocumentManagementService documentManagementService;
     private final BusinessDocumentRepository businessDocumentRepository;
     private final DocumentCaptureProperties properties;
-    private final AtomicInteger sequence = new AtomicInteger();
 
     public DocumentCaptureService(
             DocumentManagementRepository repository,
@@ -125,7 +124,7 @@ public class DocumentCaptureService {
         ensurePackage(packageCode, code, sceneLabel, operator.operator());
         String attachmentCode = "ATT-CAP-"
                 + DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS").format(LocalDateTime.now())
-                + "-" + sequence.incrementAndGet();
+                + "-" + UUID.randomUUID().toString().replace("-", "");
         StoredAttachmentObject stored = storage.putStream(
                 packageCode,
                 attachmentCode,

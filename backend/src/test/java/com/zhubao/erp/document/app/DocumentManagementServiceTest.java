@@ -167,6 +167,27 @@ class DocumentManagementServiceTest {
     }
 
     @Test
+    void restartInSameMinuteCannotReplaceEarlierAttachmentMetadata() {
+        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-10-18T00:00:00Z"), ZoneId.of("UTC"));
+        DocumentManagementService firstProcess = new DocumentManagementService(
+                repository, localStorage(), new DocumentPreviewTokenProperties(), fixedClock);
+        byte[] firstContent = jpeg("first-original");
+        var first = firstProcess.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-1",
+                "first.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", firstContent);
+
+        DocumentManagementService restarted = new DocumentManagementService(
+                repository, localStorage(), new DocumentPreviewTokenProperties(), fixedClock);
+        var second = restarted.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-1",
+                "second.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", jpeg("second-original"));
+
+        assertThat(second.code()).isNotEqualTo(first.code());
+        assertThat(repository.attachments()).filteredOn(row -> row.code().equals(first.code())).hasSize(1);
+        assertThat(restarted.content(first.code()).content()).isEqualTo(firstContent);
+        assertThat(Files.exists(tempDir.resolve(first.storageLocation().replace("local://", "")))).isTrue();
+    }
+
+    @Test
     void interruptedRetirementAuditReportsAppliedStateAndKeepsOriginal() {
         InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());

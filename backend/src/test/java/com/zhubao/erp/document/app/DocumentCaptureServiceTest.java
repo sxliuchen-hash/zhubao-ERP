@@ -62,7 +62,7 @@ class DocumentCaptureServiceTest {
                 receiver
         );
 
-        assertThat(uploaded.code()).startsWith("ATT-CAP-");
+        assertThat(uploaded.code()).matches("ATT-CAP-[0-9]{17}-[0-9a-f]{32}");
         assertThat(again.code()).isEqualTo(uploaded.code());
         assertThat(service.list("MD-CAP-001")).hasSize(1);
         assertThat(service.list("MD-CAP-001").get(0).scene()).isEqualTo("拆包");

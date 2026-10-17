@@ -49,8 +49,8 @@ import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class DocumentManagementService {
@@ -67,7 +67,6 @@ public class DocumentManagementService {
     private final BusinessDocumentRepository businessDocuments;
     private final DocumentCaptureProperties captureProperties;
     private final Clock clock;
-    private final AtomicInteger uploadSequence = new AtomicInteger(1);
     private final Map<String, String> uploadedStorageKeys = new ConcurrentHashMap<>();
 
     public DocumentManagementService(
@@ -397,9 +396,9 @@ public class DocumentManagementService {
             throw new BusinessException("文档包不存在：" + documentCode);
         }
 
-        String now = LocalDateTime.now().format(DATE_TIME_FORMATTER);
+        String now = LocalDateTime.now(clock).format(DATE_TIME_FORMATTER);
         String code = "ATT-UP-" + now.replace("-", "").replace(":", "").replace(" ", "-")
-                + "-" + String.format("%03d", uploadSequence.getAndIncrement());
+                + "-" + UUID.randomUUID().toString().replace("-", "");
         String sanitizedFileName = sanitizeFileName(fileName);
         String safeMediaType = AttachmentMediaPolicy.canonicalType(mediaType, true);
         String safeFallbackAction = fallbackAction == null || fallbackAction.isBlank() ? "无" : fallbackAction;
