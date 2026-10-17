@@ -185,7 +185,7 @@ public class DocumentManagementService {
     }
 
     /**
-     * 管理员下线一条存储内容：删除本地对象，台账保留为已下线。
+     * 管理员下线一条存储内容：先关闭访问，保留原件供受控恢复。
      */
     public StoredContentItem retireStoredContent(String code, String operator) {
         EvidenceAttachment attachment = findAttachment(code)
@@ -193,10 +193,6 @@ public class DocumentManagementService {
         if ("已下线".equals(attachment.status())) {
             throw new BusinessException("内容已下线：" + code);
         }
-        localStorageKey(attachment.storageLocation()).ifPresent(storageKey -> {
-            attachmentObjectStorage.delete(storageKey);
-            uploadedStorageKeys.remove(code);
-        });
         String now = LocalDateTime.now(clock).format(DATE_TIME_FORMATTER);
         EvidenceAttachment retired = new EvidenceAttachment(
                 attachment.code(),
@@ -217,6 +213,7 @@ public class DocumentManagementService {
                 attachment.objectType()
         );
         repository.saveAttachment(retired);
+        uploadedStorageKeys.remove(code);
         String actor = operator == null || operator.isBlank() ? "系统管理员" : operator.trim();
         repository.saveAuditEvent(new DocumentAuditEvent(
                 now,
@@ -224,7 +221,7 @@ public class DocumentManagementService {
                 attachment.documentCode(),
                 "下线存储内容",
                 actor,
-                "下线 " + attachment.fileName() + "，并删除本地对象。",
+                "下线 " + attachment.fileName() + "，原件保留供受控恢复。",
                 "amber"
         ));
         return toStoredContentItem(retired);

@@ -8,8 +8,11 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.ByteArrayInputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -34,22 +37,8 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
         if (content == null || content.length == 0) {
             throw new BusinessException("附件内容不能为空");
         }
-        String safeMediaType = mediaType == null || mediaType.isBlank() ? "application/octet-stream" : mediaType;
-        String storageKey = storageKey(documentCode, attachmentCode, fileName);
-        Path target = resolveStorageKey(storageKey);
-        try {
-            Files.createDirectories(target.getParent());
-            Files.write(target, content.clone());
-        } catch (IOException exception) {
-            throw new BusinessException("附件写入本地存储失败：" + exception.getMessage());
-        }
-        return new StoredAttachmentObject(
-                storageKey,
-                "local://" + storageKey,
-                safeMediaType,
-                content.length,
-                "sha256:" + sha256(content)
-        );
+        return putStream(documentCode, attachmentCode, fileName, mediaType,
+                new ByteArrayInputStream(content), content.length, content.length);
     }
 
     @Override
@@ -78,27 +67,44 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
         }
         MessageDigest digest = sha256Digest();
         long written = 0;
-        try (InputStream source = input; OutputStream output = Files.newOutputStream(target)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = source.read(buffer)) >= 0) {
-                written += read;
-                if (written > maxBytes) {
-                    throw new BusinessException("文件超过大小限制");
-                }
-                digest.update(buffer, 0, read);
-                output.write(buffer, 0, read);
-            }
-        } catch (BusinessException exception) {
-            deleteQuietly(target);
-            throw exception;
+        Path pending;
+        try {
+            pending = Files.createTempFile(target.getParent(), ".attachment-", ".pending");
         } catch (IOException exception) {
-            deleteQuietly(target);
             throw new BusinessException("附件写入本地存储失败：" + exception.getMessage());
         }
-        if (written == 0) {
-            deleteQuietly(target);
-            throw new BusinessException("附件内容不能为空");
+        try {
+            try (InputStream source = input; OutputStream output = Files.newOutputStream(pending)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = source.read(buffer)) >= 0) {
+                    written += read;
+                    if (written > maxBytes) {
+                        throw new BusinessException("文件超过大小限制");
+                    }
+                    digest.update(buffer, 0, read);
+                    output.write(buffer, 0, read);
+                }
+            }
+            if (written == 0) {
+                throw new BusinessException("附件内容不能为空");
+            }
+            if (Files.exists(target)) {
+                throw new BusinessException("附件存储对象已存在：" + storageKey);
+            }
+            try {
+                Files.move(pending, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException exception) {
+                throw new BusinessException("附件存储不支持原子发布");
+            }
+        } catch (IOException exception) {
+            throw new BusinessException("附件写入本地存储失败：" + exception.getMessage());
+        } finally {
+            try {
+                Files.deleteIfExists(pending);
+            } catch (IOException ignored) {
+                // 未发布的临时对象留待存储对账报告，不覆盖原始失败。
+            }
         }
         return new StoredAttachmentObject(
                 storageKey,
@@ -163,11 +169,6 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
                 .replace("/", "_")
                 .replace("..", "_")
                 .replaceAll("[\\p{Cntrl}]", "_");
-    }
-
-    private String sha256(byte[] content) {
-        MessageDigest digest = sha256Digest();
-        return HexFormat.of().formatHex(digest.digest(content));
     }
 
     private MessageDigest sha256Digest() {

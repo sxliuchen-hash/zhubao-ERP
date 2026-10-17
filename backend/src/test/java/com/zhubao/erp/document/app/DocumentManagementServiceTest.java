@@ -17,6 +17,9 @@ import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 class DocumentManagementServiceTest {
 
@@ -132,12 +135,34 @@ class DocumentManagementServiceTest {
         var retired = service.retireStoredContent(uploaded.code(), "系统管理员");
 
         assertThat(retired.status()).isEqualTo("已下线");
-        assertThat(retired.sizeBytes()).isEqualTo(-1);
-        assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isFalse();
+        assertThat(retired.sizeBytes()).isEqualTo(content.length);
+        assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
+        assertThatThrownBy(() -> service.content(uploaded.code()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已下线");
+        DocumentManagementService reloaded = new DocumentManagementService(repository, new LocalAttachmentObjectStorage(properties));
+        assertThatThrownBy(() -> reloaded.content(uploaded.code()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已下线");
         assertThat(service.auditEvents()).extracting("action").contains("下线存储内容");
         assertThatThrownBy(() -> service.retireStoredContent(uploaded.code(), "系统管理员"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已下线");
+    }
+
+    @Test
+    void failedRetirementKeepsActiveMetadataAndOriginal() {
+        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        DocumentManagementService service = new DocumentManagementService(repository, localStorage());
+        var uploaded = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-20260706-014",
+                "weight-photo.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", "original".getBytes());
+        doThrow(new IllegalStateException("数据库中断"))
+                .when(repository).saveAttachment(argThat(attachment -> "已下线".equals(attachment.status())));
+
+        assertThatThrownBy(() -> service.retireStoredContent(uploaded.code(), "系统管理员"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(service.content(uploaded.code()).content()).isEqualTo("original".getBytes());
+        assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
     }
 
     @Test
