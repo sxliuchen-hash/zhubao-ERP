@@ -48,5 +48,7 @@ class DocumentManagementControllerTest {
 
         assertThatThrownBy(() -> controller.storageIntegrity(request))
                 .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> controller.reconcileAttachment("ATT-1", request))
+                .isInstanceOf(PermissionDeniedException.class);
     }
 }

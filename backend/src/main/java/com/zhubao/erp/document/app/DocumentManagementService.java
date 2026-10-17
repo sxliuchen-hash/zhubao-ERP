@@ -242,6 +242,9 @@ public class DocumentManagementService {
             if ("已下线".equals(attachment.status())) {
                 continue;
             }
+            if ("待核对".equals(attachment.status())) {
+                issues.add(new AttachmentIntegrityIssue("PENDING_METADATA", attachment.code(), key.get(), "附件等待原件与审计核对"));
+            }
             Path file = root.resolve(key.get()).normalize();
             if (!file.startsWith(root) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
                 issues.add(new AttachmentIntegrityIssue("MISSING_ORIGINAL", attachment.code(), key.get(), "活跃附件原件不存在"));
@@ -418,12 +421,12 @@ public class DocumentManagementService {
                 storedObject.storageLocation(),
                 defaultStoragePolicy(safeMediaType),
                 source,
-                "已上传",
+                "待核对",
                 owner,
                 storedObject.checksum(),
                 now,
                 safeFallbackAction,
-                "green",
+                "amber",
                 objectType.isEmpty() ? null : objectType
         );
         try {
@@ -444,6 +447,11 @@ public class DocumentManagementService {
             ));
         } catch (RuntimeException ex) {
             throw new BusinessException("附件 " + code + " 已保存，审计记录结果未确认；请核对后处理");
+        }
+        try {
+            repository.saveAttachment(attachment.withStatus("已上传", "green"));
+        } catch (RuntimeException ex) {
+            throw new BusinessException("附件 " + code + " 已登记待核对，启用结果未确认；请核对后处理");
         }
 
         return new EvidenceAttachmentUploadResult(
@@ -498,6 +506,45 @@ public class DocumentManagementService {
 
     private void assertActive(EvidenceAttachment attachment) {
         if ("已下线".equals(attachment.status())) throw new BusinessException("内容已下线：" + attachment.code());
+        if ("待核对".equals(attachment.status())) throw new BusinessException("附件待核对，暂不可访问：" + attachment.code());
+    }
+
+    /**
+     * 管理员核实原件校验和后，补记审计并启用中断的上传。
+     */
+    public EvidenceAttachment reconcilePendingAttachment(String code, String operator) {
+        EvidenceAttachment attachment = findAttachment(code)
+                .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        if (!"待核对".equals(attachment.status())) {
+            throw new BusinessException("附件不处于待核对状态：" + code);
+        }
+        String key = localStorageKey(attachment.storageLocation())
+                .orElseThrow(() -> new BusinessException("附件没有本地原件：" + code));
+        Path root = storageRoot().toAbsolutePath().normalize();
+        Path file = root.resolve(key).normalize();
+        if (!file.startsWith(root) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+            throw new BusinessException("附件原件不存在：" + code);
+        }
+        try {
+            if (!("sha256:" + checksum(file)).equalsIgnoreCase(attachment.checksum())) {
+                throw new BusinessException("附件原件校验和不一致：" + code);
+            }
+        } catch (IOException exception) {
+            throw new BusinessException("附件原件无法核验：" + code);
+        }
+        String actor = operator == null || operator.isBlank() ? "系统管理员" : operator.trim();
+        repository.saveAuditEvent(new DocumentAuditEvent(
+                LocalDateTime.now(clock).format(DATE_TIME_FORMATTER),
+                "DOC-AUD-RECONCILE-" + code,
+                attachment.documentCode(),
+                "核对附件原件",
+                actor,
+                "核对原件 SHA-256 后启用附件 " + code,
+                "green"
+        ));
+        EvidenceAttachment available = attachment.withStatus("已上传", "green");
+        repository.saveAttachment(available);
+        return available;
     }
 
     private Optional<EvidenceAttachment> findAttachment(String code) {

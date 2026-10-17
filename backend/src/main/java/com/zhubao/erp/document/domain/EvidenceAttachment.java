@@ -18,4 +18,9 @@ public record EvidenceAttachment(
         String tone,
         String objectType
 ) {
+    public EvidenceAttachment withStatus(String nextStatus, String nextTone) {
+        return new EvidenceAttachment(code, documentCode, businessType, businessCode, fileName,
+                mediaType, storageLocation, storagePolicy, source, nextStatus, owner,
+                checksum, uploadedAt, fallbackAction, nextTone, objectType);
+    }
 }

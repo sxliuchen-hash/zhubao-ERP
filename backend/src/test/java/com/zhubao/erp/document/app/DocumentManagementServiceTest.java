@@ -212,6 +212,39 @@ class DocumentManagementServiceTest {
     }
 
     @Test
+    void auditInterruptionLeavesPendingUntilAdministratorVerifiesOriginalAfterRestart() {
+        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        doThrow(new IllegalStateException("审计库中断"))
+                .when(repository).saveAuditEvent(argThat(event -> event.eventCode().startsWith("DOC-AUD-ATT-UP-")));
+        AttachmentStorageProperties properties = new AttachmentStorageProperties();
+        properties.setLocalRoot(tempDir.toString());
+        LocalAttachmentObjectStorage storage = new LocalAttachmentObjectStorage(properties);
+        DocumentManagementService service = new DocumentManagementService(repository, storage,
+                new DocumentPreviewTokenProperties(), Clock.systemDefaultZone(), properties);
+        byte[] content = jpeg("pending");
+
+        assertThatThrownBy(() -> service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-1",
+                "pending.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", content))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("审计记录结果未确认");
+        var pending = repository.attachments().stream()
+                .filter(attachment -> attachment.code().startsWith("ATT-UP-"))
+                .findFirst().orElseThrow();
+        assertThat(pending.status()).isEqualTo("待核对");
+        DocumentManagementService restarted = new DocumentManagementService(repository, storage,
+                new DocumentPreviewTokenProperties(), Clock.systemDefaultZone(), properties);
+        assertThatThrownBy(() -> restarted.previewUrl(pending.code()))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("待核对");
+        assertThat(restarted.storageIntegrity().issues()).extracting("category").contains("PENDING_METADATA");
+
+        var available = restarted.reconcilePendingAttachment(pending.code(), "系统管理员");
+
+        assertThat(available.status()).isEqualTo("已上传");
+        assertThat(restarted.content(pending.code()).content()).isEqualTo(content);
+        assertThat(repository.auditEvents()).extracting("eventCode")
+                .contains("DOC-AUD-RECONCILE-" + pending.code());
+    }
+
+    @Test
     void savesDynamicDocumentPackageForPreApprovalEvidence() {
         DocumentManagementService service = newService();
 

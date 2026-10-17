@@ -132,6 +132,9 @@ public class BusinessEvidenceService {
         if (RETIRED.equals(attachment.status())) {
             throw new BusinessException("附件已下线，不能再绑定：" + attachmentCode);
         }
+        if ("待核对".equals(attachment.status())) {
+            throw new BusinessException("附件待核对，不能绑定：" + attachmentCode);
+        }
         String origin = EvidenceLinkKey.text(attachment.objectType());
         if (origin.isEmpty()) {
             throw new BusinessException("旧附件来源不确定，只能回看，不能绑定");

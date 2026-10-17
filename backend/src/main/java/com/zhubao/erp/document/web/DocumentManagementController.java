@@ -246,6 +246,16 @@ public class DocumentManagementController {
         ));
     }
 
+    @PostMapping("/attachments/{code}/reconciliations")
+    public ApiResponse<EvidenceAttachment> reconcileAttachment(
+            @PathVariable String code,
+            HttpServletRequest request
+    ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        assertManager(context);
+        return ApiResponse.ok(documentManagementService.reconcilePendingAttachment(code, context.operator()));
+    }
+
     @GetMapping("/attachments/{code}/preview-url")
     public ResponseEntity<ApiResponse<AttachmentPreviewUrl>> previewUrl(@PathVariable String code, HttpServletRequest request) {
         OperatorContext context = operatorContextResolver.requireSession(request);

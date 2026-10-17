@@ -142,6 +142,9 @@ public class DocumentCaptureService {
                     .orElse(null);
             if (existing != null) {
                 storage.delete(stored.storageKey());
+                if ("待核对".equals(existing.status())) {
+                    throw new BusinessException("同一原件已登记待核对：" + existing.code());
+                }
                 EvidenceAttachment kept = backfillOrigin(existing, origin);
                 return resultOf(kept, stored.size());
             }
@@ -156,12 +159,12 @@ public class DocumentCaptureService {
                     stored.storageLocation(),
                     video ? "hot 90d -> archive" : "hot 180d -> archive",
                     "手机采集",
-                    "已上传",
+                    "待核对",
                     operator.operator(),
                     stored.checksum(),
                     now,
                     "无",
-                    "green",
+                    "amber",
                     origin.isEmpty() ? null : origin
             );
             try {
@@ -182,7 +185,13 @@ public class DocumentCaptureService {
             } catch (RuntimeException ex) {
                 throw new BusinessException("附件 " + attachmentCode + " 已保存，审计记录结果未确认；请核对后处理");
             }
-            return resultOf(attachment, stored.size());
+            EvidenceAttachment available = attachment.withStatus("已上传", "green");
+            try {
+                repository.saveAttachment(available);
+            } catch (RuntimeException ex) {
+                throw new BusinessException("附件 " + attachmentCode + " 已登记待核对，启用结果未确认；请核对后处理");
+            }
+            return resultOf(available, stored.size());
         } catch (BusinessException ex) {
             throw ex;
         } catch (RuntimeException ex) {
@@ -195,13 +204,16 @@ public class DocumentCaptureService {
         return repository.attachments().stream()
                 .filter(attachment -> code.equals(attachment.businessCode()))
                 .filter(attachment -> "手机采集".equals(attachment.source()))
-                .filter(attachment -> !"已下线".equals(attachment.status()))
+                .filter(attachment -> !"已下线".equals(attachment.status()) && !"待核对".equals(attachment.status()))
                 .map(this::viewOf)
                 .toList();
     }
 
     private boolean sameFile(EvidenceAttachment attachment, String businessCode, String checksum, String origin) {
         if (!businessCode.equals(attachment.businessCode()) || !checksum.equals(attachment.checksum())) {
+            return false;
+        }
+        if ("已下线".equals(attachment.status())) {
             return false;
         }
         String current = EvidenceLinkKey.text(attachment.objectType());
