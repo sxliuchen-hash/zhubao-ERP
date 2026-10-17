@@ -27,14 +27,12 @@ root="$(dirname "$MANIFEST")"
 sql="$root/$batch.sql"
 archive="$root/$batch.evidence.tar.gz"
 file_list="$root/$batch.evidence.files.sha256"
-for file in "$sql" "$archive" "$file_list" "$MANIFEST"; do
+for file in "$sql" "$archive" "$file_list" "$MANIFEST" "$MANIFEST.sha256"; do
   [ -f "$file" ] || { echo "成套文件缺失：$file" >&2; exit 1; }
 done
-if [ -f "$MANIFEST.sha256" ]; then
-  manifest_hash="$(awk 'NR == 1 { print tolower($1) }' "$MANIFEST.sha256")"
-  actual="$(sha256sum "$MANIFEST" | awk '{ print tolower($1) }')"
-  [ "$manifest_hash" = "$actual" ] || { echo '清单校验和不符' >&2; exit 1; }
-fi
+manifest_hash="$(awk 'NR == 1 { print tolower($1) }' "$MANIFEST.sha256")"
+actual="$(sha256sum "$MANIFEST" | awk '{ print tolower($1) }')"
+[ "$manifest_hash" = "$actual" ] || { echo '清单校验和不符' >&2; exit 1; }
 check_hash() {
   expected="$(field "$1")"
   actual="$(sha256sum "$2" | awk '{ print tolower($1) }')"

@@ -310,7 +310,9 @@ docker compose --env-file .env -f docker-compose.yml start backend
 sh ./verify-bundle.sh --manifest runtime-backups/zhubao_bundle_20261018_010000.manifest
 ```
 
-同一批次导出 SQL、`evidence-data` 压缩包、逐文件 SHA-256 清单和 `.manifest`（批次、时间、SQL／附件包／文件清单校验和、表数、元数据数、原件数），各文件附 `.sha256`。备份时再次扫描文件哈希，发现窗口内变化则失败；清单初始 `restoreStatus=not-verified`，不能仅凭备份完成就宣称可恢复。`verify-bundle.sh` 在宿主临时目录解压并逐文件核验，再把 SQL 导入唯一临时数据库，核对表数、附件元数据数以及所有活跃本地附件引用的原件与 SHA-256；成功才写同批次带时间戳的 `.restore-*.txt` 与校验和，临时库与解压目录在退出时清理。核验失败须查看输出、保留原备份并重新安排成套快照；不可把失败批次作为升级前备份确认。
+同一批次导出 SQL、`evidence-data` 压缩包、逐文件 SHA-256 清单和 `.manifest`（批次、时间、SQL／附件包／文件清单校验和、表数、元数据数、原件数），各文件附 `.sha256`；缺少清单校验文件即拒绝恢复核验。同批次任何目标文件已存在时，备份脚本拒绝覆盖。备份时再次扫描文件哈希，发现窗口内变化则失败；清单初始 `restoreStatus=not-verified`，不能仅凭备份完成就宣称可恢复。`verify-bundle.sh` 在宿主临时目录解压并逐文件核验，再把 SQL 导入唯一临时数据库，核对表数、附件元数据数以及所有活跃本地附件引用的原件与 SHA-256；成功才写同批次带时间戳的 `.restore-*.txt` 与校验和，临时库与解压目录在退出时清理。核验失败须查看输出、保留原备份并重新安排成套快照；不可把失败批次作为升级前备份确认。
+
+管理员在 `GET /api/documents/storage/integrity` 查看对账异常后，按类别处理：`PENDING_METADATA` 先核对原件和 SHA-256，再调用 `POST /api/documents/attachments/{code}/reconciliations` 补记审计并启用；`MISSING_ORIGINAL`、`CHECKSUM_MISMATCH` 从已验证的成套备份核对同一附件，制定受控恢复步骤；`UNREGISTERED_ORIGINAL`、`PENDING_OBJECT` 保留文件并查上传编号、数据库与审计记录，确认归属后再决定处置；`ROOT_MISSING`、`SCAN_ERROR`、`READ_ERROR` 先检查卷挂载与读取权限。对账接口只报告，不执行删除、覆盖或自动恢复。审计结果未确认的下线操作应核对元数据状态与审计记录；已下线原件仍在备份覆盖范围内。
 
 脚本当前只在 Linux 路径提供，Windows 管理员可在 Linux 服务器上执行；没有自动任务计划、COS 上传或异地恢复结果。先在隔离环境完成一次真实成套备份和恢复，再讨论异地目标与清理策略。旧 `backup-mysql.*` 和 `verify-restore.*` 仍可用于数据库单独检查，其通过结果不代表附件恢复通过。
 

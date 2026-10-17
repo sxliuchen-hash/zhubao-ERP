@@ -32,7 +32,8 @@ fi
 backend_image="$(docker inspect -f '{{.Config.Image}}' zhubao-erp-backend)"
 mkdir -p "$EXPORT_DIR"
 export_root="$(cd "$EXPORT_DIR" && pwd)"
-for suffix in sql sql.sha256 evidence.tar.gz evidence.files.sha256 manifest; do
+for suffix in sql sql.sha256 evidence.tar.gz evidence.tar.gz.sha256 \
+  evidence.files.sha256 evidence.files.sha256.sha256 manifest manifest.sha256; do
   if [ -e "$export_root/$BATCH.$suffix" ]; then
     echo "批次已存在：$BATCH" >&2
     exit 1
