@@ -123,7 +123,7 @@ done < "$tmp/references.tsv"
 
 cleanup || { echo '隔离恢复结果无法确认清理完成' >&2; exit 1; }
 trap - 0
-result="$root/$batch.restore.txt"
+result="$root/$batch.restore-$(date +%Y%m%d_%H%M%S)-$$.txt"
 {
   echo 'status=passed'
   echo "batchId=$batch"
