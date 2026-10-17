@@ -167,6 +167,25 @@ class DocumentManagementServiceTest {
     }
 
     @Test
+    void interruptedRetirementAuditReportsAppliedStateAndKeepsOriginal() {
+        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        DocumentManagementService service = new DocumentManagementService(repository, localStorage());
+        var uploaded = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-20260706-014",
+                "weight-photo.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", jpeg("original"));
+        doThrow(new IllegalStateException("审计库中断"))
+                .when(repository).saveAuditEvent(argThat(event -> "下线存储内容".equals(event.action())));
+
+        assertThatThrownBy(() -> service.retireStoredContent(uploaded.code(), "系统管理员"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已下线且原件保留")
+                .hasMessageContaining("审计记录结果未确认");
+        assertThatThrownBy(() -> service.content(uploaded.code()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已下线");
+        assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
+    }
+
+    @Test
     void uncertainMetadataWriteKeepsPublishedOriginalForReconciliation() throws Exception {
         InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
         doThrow(new IllegalStateException("提交结果未知"))

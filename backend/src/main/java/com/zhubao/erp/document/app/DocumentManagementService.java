@@ -342,15 +342,19 @@ public class DocumentManagementService {
         repository.saveAttachment(retired);
         uploadedStorageKeys.remove(code);
         String actor = operator == null || operator.isBlank() ? "系统管理员" : operator.trim();
-        repository.saveAuditEvent(new DocumentAuditEvent(
-                now,
-                "DOC-AUD-RETIRE-" + attachment.code(),
-                attachment.documentCode(),
-                "下线存储内容",
-                actor,
-                "下线 " + attachment.fileName() + "，原件保留供受控恢复。",
-                "amber"
-        ));
+        try {
+            repository.saveAuditEvent(new DocumentAuditEvent(
+                    now,
+                    "DOC-AUD-RETIRE-" + attachment.code(),
+                    attachment.documentCode(),
+                    "下线存储内容",
+                    actor,
+                    "下线 " + attachment.fileName() + "，原件保留供受控恢复。",
+                    "amber"
+            ));
+        } catch (RuntimeException exception) {
+            throw new BusinessException("附件 " + code + " 已下线且原件保留，审计记录结果未确认；请核对后处理");
+        }
         return toStoredContentItem(retired);
     }
 
