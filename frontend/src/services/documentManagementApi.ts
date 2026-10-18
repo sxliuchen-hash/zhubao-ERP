@@ -77,6 +77,7 @@ export interface EvidenceAttachmentPage {
 export interface DocumentPackagePageQuery {
   afterId?: number;
   limit?: number;
+  keyword?: string;
 }
 
 export interface DocumentPackagePage {
@@ -99,6 +100,8 @@ export async function fetchDocumentPackagesPage(
   const params = new URLSearchParams();
   if (query.afterId !== undefined) params.set('afterId', String(query.afterId));
   if (query.limit !== undefined) params.set('limit', String(query.limit));
+  const keyword = query.keyword?.trim();
+  if (keyword) params.set('keyword', keyword);
   const suffix = params.toString();
   return apiGet<DocumentPackagePage>(`/api/documents/packages/page${suffix ? `?${suffix}` : ''}`);
 }

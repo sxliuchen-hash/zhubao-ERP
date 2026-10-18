@@ -185,6 +185,29 @@ describe('documentManagementApi', () => {
 
   it('loads a continuation package page with cursor and limit parameters', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        '/api/documents/packages/page?afterId=17&limit=20&keyword=%E7%8F%A0%E5%AE%9D+%25_%26',
+      );
+      return {
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: { items: [], nextCursor: null, hasMore: false },
+        }),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchDocumentPackagesPage({ afterId: 17, limit: 20, keyword: '珠宝 %_&' })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+  });
+
+  it('omits a whitespace-only package keyword from the request URL', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe('/api/documents/packages/page?afterId=17&limit=20');
       return {
         ok: true,
@@ -197,7 +220,7 @@ describe('documentManagementApi', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(fetchDocumentPackagesPage({ afterId: 17, limit: 20 })).resolves.toEqual({
+    await expect(fetchDocumentPackagesPage({ afterId: 17, limit: 20, keyword: '   ' })).resolves.toEqual({
       items: [],
       nextCursor: null,
       hasMore: false,
