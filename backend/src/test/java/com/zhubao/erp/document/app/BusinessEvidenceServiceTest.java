@@ -25,6 +25,7 @@ import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
 import com.zhubao.erp.document.domain.EvidenceLinkPage;
 import com.zhubao.erp.document.domain.EvidenceLinkView;
+import com.zhubao.erp.document.domain.EvidencePageFilter;
 import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.DocumentCaptureProperties;
@@ -324,6 +325,144 @@ class BusinessEvidenceServiceTest {
         assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
                 EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 101, fixture.admin
         )).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void queryLinkedPageFiltersAttachmentMetadataAcrossBatchesAndHidesExternalRows() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingPagedLinkRepository links = new QueryTrackingPagedLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+
+        EvidenceAttachment beforeRange = linkedAttachment(
+                fixture, "ATT-FILTER-BEFORE", MOTHER, "image/jpeg", "收货员 何琴", "2026-10-17 09:00:00"
+        );
+        EvidenceAttachment external = linkedAttachment(
+                fixture, "ATT-FILTER-EXTERNAL", CHILD, "image/jpeg", "收货员 何琴", "2026-10-18 09:00:00"
+        );
+        EvidenceAttachment match = linkedAttachment(
+                fixture, "ATT-FILTER-MATCH", MOTHER, "image/jpeg", "收货员 何琴", "2026-10-18 10:00:00"
+        );
+        EvidenceAttachment wrongOwner = linkedAttachment(
+                fixture, "ATT-FILTER-OWNER", MOTHER, "image/jpeg", "库管员 何琳", "2026-10-18 11:00:00"
+        );
+        links.insert(linkRecord(
+                "LINK-FILTER-BEFORE", beforeRange.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        links.insert(linkRecord(
+                "LINK-FILTER-EXTERNAL", external.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        links.insert(linkRecord(
+                "LINK-FILTER-MATCH", match.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        links.insert(linkRecord(
+                "LINK-FILTER-OWNER", wrongOwner.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        documents.resetCounters();
+        links.resetCounters();
+
+        EvidenceLinkPage page = fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER,
+                MOTHER,
+                "",
+                "",
+                "",
+                0,
+                1,
+                fixture.admin,
+                new EvidencePageFilter("2026-10-18", "2026-10-18", "image", "何琴")
+        );
+
+        assertThat(page.items()).extracting(EvidenceLinkView::attachmentCode)
+                .containsExactly(match.code());
+        assertThat(page.hasMore()).isFalse();
+        assertThat(page.nextCursor()).isNull();
+        assertThat(links.pageCalls).isGreaterThanOrEqualTo(2);
+        assertThat(documents.findAttachmentByCodeCalls).isGreaterThanOrEqualTo(4);
+        assertThat(documents.attachmentsCalls).isZero();
+    }
+
+    @Test
+    void queryLinkedPageSupportsInclusiveDateAndAllMediaCategories() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingPagedLinkRepository links = new QueryTrackingPagedLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+        EvidenceAttachment image = linkedAttachment(
+                fixture, "ATT-FILTER-IMAGE", MOTHER, "image/jpeg", "测试员", "2026-10-18 00:00:00"
+        );
+        EvidenceAttachment video = linkedAttachment(
+                fixture, "ATT-FILTER-VIDEO", MOTHER, "video/mp4", "测试员", "2026-10-18 12:00:00"
+        );
+        EvidenceAttachment pdf = linkedAttachment(
+                fixture, "ATT-FILTER-PDF", MOTHER, "application/pdf", "测试员", "2026-10-18 23:59:59"
+        );
+        links.insert(linkRecord(
+                "LINK-FILTER-IMAGE", image.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        links.insert(linkRecord(
+                "LINK-FILTER-VIDEO", video.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        links.insert(linkRecord(
+                "LINK-FILTER-PDF", pdf.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+
+        EvidenceLinkPage imagePage = fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 100, fixture.admin,
+                new EvidencePageFilter("2026-10-18", "2026-10-18", "image", "")
+        );
+        EvidenceLinkPage videoPage = fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 100, fixture.admin,
+                new EvidencePageFilter("2026-10-18", "2026-10-18", "video", "")
+        );
+        EvidenceLinkPage pdfPage = fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 100, fixture.admin,
+                new EvidencePageFilter("2026-10-18", "2026-10-18", "pdf", "")
+        );
+
+        assertThat(imagePage.items()).extracting(EvidenceLinkView::attachmentCode)
+                .containsExactly(image.code());
+        assertThat(videoPage.items()).extracting(EvidenceLinkView::attachmentCode)
+                .containsExactly(video.code());
+        assertThat(pdfPage.items()).extracting(EvidenceLinkView::attachmentCode)
+                .containsExactly(pdf.code());
+    }
+
+    @Test
+    void queryLinkedPageChecksScopeAndRejectsInvalidAttachmentFilters() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingPagedLinkRepository links = new QueryTrackingPagedLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 2, fixture.admin,
+                new EvidencePageFilter("2026/10/18", "", "", "")
+        )).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 2, fixture.admin,
+                new EvidencePageFilter("2026-10-19", "2026-10-18", "", "")
+        )).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 2, fixture.admin,
+                new EvidencePageFilter("", "", "audio", "")
+        )).isInstanceOf(BusinessException.class);
+        assertThat(links.pageCalls).isZero();
+        assertThat(documents.findAttachmentByCodeCalls).isZero();
+
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 2, fixture.outsider,
+                new EvidencePageFilter("2026-10-18", "2026-10-18", "image", "何琴")
+        )).isInstanceOf(PermissionDeniedException.class);
+        assertThat(links.pageCalls).isZero();
+        assertThat(documents.findAttachmentByCodeCalls).isZero();
     }
 
     @Test
@@ -652,6 +791,23 @@ class BusinessEvidenceServiceTest {
                 code, "DOC-" + businessCode, "来料母单", businessCode, "old.jpg", "image/jpeg",
                 "local://evidence/old.jpg", "hot 180d -> archive", "PWA 拍照上传", "已上传",
                 "收货员 何琴", "sha256:old-" + code, "2026-10-01 08:00:00", "无", "green", null
+        );
+        fixture.documents.saveAttachment(attachment);
+        return attachment;
+    }
+
+    private EvidenceAttachment linkedAttachment(
+            Fixture fixture,
+            String code,
+            String businessCode,
+            String mediaType,
+            String owner,
+            String uploadedAt
+    ) {
+        EvidenceAttachment attachment = new EvidenceAttachment(
+                code, "DOC-" + code, "来料母单", businessCode, code + ".bin", mediaType,
+                "local://evidence/" + code, "hot 180d -> archive", "PWA 拍照上传", "已上传",
+                owner, "sha256:" + code, uploadedAt, "无", "green", EvidenceCodes.MOTHER_ORDER
         );
         fixture.documents.saveAttachment(attachment);
         return attachment;

@@ -22,6 +22,7 @@ import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
 import com.zhubao.erp.document.domain.EvidenceLinkPage;
 import com.zhubao.erp.document.domain.EvidenceLinkView;
+import com.zhubao.erp.document.domain.EvidencePageFilter;
 import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.domain.HistoricalEvidenceView;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -36,10 +37,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -249,6 +253,30 @@ public class BusinessEvidenceService {
             int limit,
             OperatorContext operator
     ) {
+        return queryLinkedPage(
+                targetType,
+                targetCode,
+                stage,
+                operationType,
+                operationCode,
+                afterId,
+                limit,
+                operator,
+                EvidencePageFilter.empty()
+        );
+    }
+
+    public EvidenceLinkPage queryLinkedPage(
+            String targetType,
+            String targetCode,
+            String stage,
+            String operationType,
+            String operationCode,
+            long afterId,
+            int limit,
+            OperatorContext operator,
+            EvidencePageFilter filter
+    ) {
         String type = requiredObjectType(targetType);
         String code = required(targetCode, "单据编号不能为空");
         if (operator == null || operator.operator() == null || operator.operator().isBlank()) {
@@ -262,6 +290,7 @@ public class BusinessEvidenceService {
             throw new BusinessException("证据引用分页大小必须在 1 到 100 之间");
         }
 
+        NormalizedEvidencePageFilter attachmentFilter = normalizeFilter(filter);
         String stageFilter = EvidenceLinkKey.text(stage);
         String operationTypeFilter = EvidenceLinkKey.text(operationType);
         String operationCodeFilter = EvidenceLinkKey.text(operationCode);
@@ -281,9 +310,15 @@ public class BusinessEvidenceService {
                 if (!matches(link, stageFilter, operationTypeFilter, operationCodeFilter)) {
                     continue;
                 }
-                documents.findAttachmentByCode(link.attachmentCode())
-                        .filter(attachment -> code.equals(attachment.businessCode()))
-                        .ifPresent(attachment -> attachmentsByCode.putIfAbsent(attachment.code(), attachment));
+                EvidenceAttachment attachment = documents.findAttachmentByCode(link.attachmentCode()).orElse(null);
+                boolean sameBusiness = attachment != null && code.equals(attachment.businessCode());
+                if (attachmentFilter.active()
+                        && (!sameBusiness || !matches(attachment, attachmentFilter))) {
+                    continue;
+                }
+                if (sameBusiness) {
+                    attachmentsByCode.putIfAbsent(attachment.code(), attachment);
+                }
                 visible.add(entry);
                 if (visible.size() > limit) {
                     break;
@@ -316,6 +351,93 @@ public class BusinessEvidenceService {
         return (stageFilter.isEmpty() || stageFilter.equals(link.stage()))
                 && (operationTypeFilter.isEmpty() || operationTypeFilter.equals(link.operationType()))
                 && (operationCodeFilter.isEmpty() || operationCodeFilter.equals(link.operationCode()));
+    }
+
+    private boolean matches(EvidenceAttachment attachment, NormalizedEvidencePageFilter filter) {
+        if (filter.uploadedFrom() != null || filter.uploadedTo() != null) {
+            LocalDate uploadedDate = uploadedDate(attachment.uploadedAt());
+            if (uploadedDate == null) {
+                return false;
+            }
+            if (filter.uploadedFrom() != null && uploadedDate.isBefore(filter.uploadedFrom())) {
+                return false;
+            }
+            if (filter.uploadedTo() != null && uploadedDate.isAfter(filter.uploadedTo())) {
+                return false;
+            }
+        }
+        if (!filter.mediaCategory().isEmpty() && !matchesMediaCategory(attachment.mediaType(), filter.mediaCategory())) {
+            return false;
+        }
+        return filter.ownerKeyword().isEmpty()
+                || EvidenceLinkKey.text(attachment.owner()).toLowerCase(Locale.ROOT)
+                .contains(filter.ownerKeyword());
+    }
+
+    private boolean matchesMediaCategory(String mediaType, String category) {
+        String type = EvidenceLinkKey.text(mediaType).toLowerCase(Locale.ROOT);
+        return switch (category) {
+            case "image" -> type.startsWith("image/");
+            case "video" -> type.startsWith("video/");
+            case "pdf" -> "application/pdf".equals(type);
+            default -> false;
+        };
+    }
+
+    private LocalDate uploadedDate(String uploadedAt) {
+        String text = EvidenceLinkKey.text(uploadedAt);
+        if (text.length() < 10) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(text.substring(0, 10), DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
+    }
+
+    private NormalizedEvidencePageFilter normalizeFilter(EvidencePageFilter filter) {
+        EvidencePageFilter source = filter == null ? EvidencePageFilter.empty() : filter;
+        LocalDate uploadedFrom = parseDate(source.uploadedFrom(), "上传开始日期");
+        LocalDate uploadedTo = parseDate(source.uploadedTo(), "上传结束日期");
+        if (uploadedFrom != null && uploadedTo != null && uploadedFrom.isAfter(uploadedTo)) {
+            throw new BusinessException("上传日期起止范围无效");
+        }
+        String mediaCategory = EvidenceLinkKey.text(source.mediaCategory()).toLowerCase(Locale.ROOT);
+        if (!mediaCategory.isEmpty() && !Set.of("image", "video", "pdf").contains(mediaCategory)) {
+            throw new BusinessException("媒体分类只支持 image、video、pdf");
+        }
+        String ownerKeyword = EvidenceLinkKey.text(source.ownerKeyword()).toLowerCase(Locale.ROOT);
+        return new NormalizedEvidencePageFilter(uploadedFrom, uploadedTo, mediaCategory, ownerKeyword);
+    }
+
+    private LocalDate parseDate(String raw, String label) {
+        String text = EvidenceLinkKey.text(raw);
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (!text.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            throw new BusinessException(label + "必须是 yyyy-MM-dd");
+        }
+        try {
+            return LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException(label + "不是有效日期");
+        }
+    }
+
+    private record NormalizedEvidencePageFilter(
+            LocalDate uploadedFrom,
+            LocalDate uploadedTo,
+            String mediaCategory,
+            String ownerKeyword
+    ) {
+        private boolean active() {
+            return uploadedFrom != null
+                    || uploadedTo != null
+                    || !mediaCategory.isEmpty()
+                    || !ownerKeyword.isEmpty();
+        }
     }
 
     public HistoricalEvidencePage queryHistoricalPage(
