@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
 import type { AuthSession } from '../../services/authApi';
@@ -19,6 +19,7 @@ import {
 } from '../../services/documentManagementApi';
 
 const DOCUMENT_PACKAGE_PAGE_SIZE = 50;
+const PACKAGE_SEARCH_DEBOUNCE_MS = 280;
 const summary = ref<DocumentManagementSummary>({ packages: 0, attachments: 0, missingEvidence: 0, manualFallbacks: 0, auditEvents: 0 });
 const packages = ref<DocumentPackage[]>([]);
 const packageNextCursor = ref<number | null>(null);
@@ -43,6 +44,7 @@ const canViewAudit = computed(() =>
 );
 const selectedPackageSnapshot = ref<DocumentPackage | null>(null);
 let packageQueryVersion = 0;
+let packageSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const activePackage = computed(
   () => selectedPackageCode.value
@@ -54,6 +56,7 @@ const activeAttachments = computed(() =>
   attachments.value.filter((item) => item.documentCode === activePackage.value?.code),
 );
 const visiblePackages = computed(() => packages.value);
+const hasPackageSearch = computed(() => packageKeyword.value.trim().length > 0);
 const packageOptions = computed(() => {
   if (!selectedPackageSnapshot.value || packages.value.some((item) => item.code === selectedPackageSnapshot.value?.code)) {
     return packages.value;
@@ -106,8 +109,28 @@ const missingPackages = computed(() =>
 );
 
 onMounted(loadDocuments);
+function clearPackageSearchTimer() {
+  if (packageSearchTimer !== null) clearTimeout(packageSearchTimer);
+  packageSearchTimer = null;
+}
+
 watch(packageKeyword, () => {
-  void loadPackagePage(true);
+  clearPackageSearchTimer();
+  packageQueryVersion += 1;
+  packageLoading.value = true;
+  packageLoadingMore.value = false;
+  packages.value = [];
+  packageNextCursor.value = null;
+  packageHasMore.value = false;
+  packageLoadError.value = '';
+  packageSearchTimer = setTimeout(() => {
+    packageSearchTimer = null;
+    void loadPackagePage(true);
+  }, PACKAGE_SEARCH_DEBOUNCE_MS);
+});
+onBeforeUnmount(() => {
+  clearPackageSearchTimer();
+  packageQueryVersion += 1;
 });
 
 function packageErrorMessage(error: unknown, fallback: string) {
@@ -191,7 +214,7 @@ async function loadDocuments() {
     return;
   }
 
-  await loadPackagePage(true);
+  if (packageSearchTimer === null) await loadPackagePage(true);
 
   if (!canViewAudit.value) {
     auditEvents.value = [];
@@ -271,6 +294,7 @@ async function uploadEvidence() {
 
     <p v-if="loadingError" class="operation-feedback danger" role="alert">{{ loadingError }}</p>
     <p v-else-if="packageLoading && packages.length === 0" class="empty-hint" role="status">正在加载文档包…</p>
+    <p v-else-if="!packageLoadError && packages.length === 0 && hasPackageSearch" class="empty-hint">没有匹配的文档包。</p>
     <p v-else-if="!packageLoadError && packages.length === 0" class="empty-hint">暂无文档包，请从业务单据建立证据关联。</p>
 
     <section class="document-control-board" aria-label="文档证据运营板">
@@ -395,7 +419,6 @@ async function uploadEvidence() {
           </table>
         </div>
         <div class="desk-cards">
-          <p v-if="visiblePackages.length === 0" class="empty-hint">暂无文档包</p>
           <button v-for="item in visiblePackages" :key="`card-${item.code}`" class="desk-card" type="button" @click="selectPackage(item.code)">
             <span class="desk-card-top">
               <strong class="code">{{ item.code }}</strong>

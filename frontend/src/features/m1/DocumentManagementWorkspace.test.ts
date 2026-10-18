@@ -49,24 +49,112 @@ describe('DocumentManagementWorkspace', () => {
   });
 
   it('首屏限制 50 条并将台账关键词交给服务端检索', async () => {
+    vi.useFakeTimers();
     vi.mocked(fetchDocumentPackagesPage).mockImplementation(async (query) => ({
       items: query?.keyword ? [documentPackages[1]] : [documentPackages[0]],
       nextCursor: null,
       hasMore: false,
     }));
     const wrapper = mountWorkspace();
+    try {
+      await flushPromises();
+
+      expect(fetchDocumentPackagesPage).toHaveBeenNthCalledWith(1, { limit: 50 });
+      await wrapper.get('input[aria-label="查找文档包"]').setValue('质检返工');
+      await vi.advanceTimersByTimeAsync(280);
+      await flushPromises();
+
+      expect(fetchDocumentPackagesPage).toHaveBeenLastCalledWith({ limit: 50, keyword: '质检返工' });
+      const ledger = wrapper.get('.document-master');
+      expect(ledger.text()).toContain(documentPackages[1].code);
+      expect(ledger.text()).not.toContain(documentPackages[0].code);
+      expect(wrapper.text()).toContain('覆盖率（已加载）');
+      expect(wrapper.text()).toContain('仅统计当前已加载的文档包');
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('连续输入只在防抖后发起最后一次检索', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchDocumentPackagesPage).mockResolvedValue({ items: [documentPackages[0]], nextCursor: null, hasMore: false });
+    const wrapper = mountWorkspace();
+    try {
+      await flushPromises();
+      const input = wrapper.get('input[aria-label="查找文档包"]');
+      await input.setValue('质');
+      await input.setValue('质检');
+      await input.setValue('质检返工');
+      await flushPromises();
+
+      expect(fetchDocumentPackagesPage).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(279);
+      await flushPromises();
+      expect(fetchDocumentPackagesPage).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await flushPromises();
+
+      expect(fetchDocumentPackagesPage).toHaveBeenLastCalledWith({ limit: 50, keyword: '质检返工' });
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('检索无结果时提示匹配范围，清空后恢复完整台账', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchDocumentPackagesPage).mockImplementation(async (query) => ({
+      items: query?.keyword ? [] : documentPackages,
+      nextCursor: null,
+      hasMore: false,
+    }));
+    const wrapper = mountWorkspace();
+    try {
+      await flushPromises();
+      const input = wrapper.get('input[aria-label="查找文档包"]');
+      await input.setValue('不存在的文档包');
+      await flushPromises();
+      expect(wrapper.text()).not.toContain('没有匹配的文档包');
+      await vi.advanceTimersByTimeAsync(280);
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('没有匹配的文档包');
+      expect(wrapper.text()).not.toContain('暂无文档包，请从业务单据建立证据关联');
+      await input.setValue('');
+      await vi.advanceTimersByTimeAsync(280);
+      await flushPromises();
+
+      expect(fetchDocumentPackagesPage).toHaveBeenLastCalledWith({ limit: 50 });
+      expect(wrapper.text()).toContain(documentPackages[0].code);
+      expect(wrapper.text()).not.toContain('没有匹配的文档包');
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('真正没有文档包时仍显示原空台账提示', async () => {
+    vi.mocked(fetchDocumentPackagesPage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
+    const wrapper = mountWorkspace();
     await flushPromises();
 
-    expect(fetchDocumentPackagesPage).toHaveBeenNthCalledWith(1, { limit: 50 });
-    await wrapper.get('input[aria-label="查找文档包"]').setValue('质检返工');
+    expect(wrapper.text()).toContain('暂无文档包，请从业务单据建立证据关联');
+    expect(wrapper.text()).not.toContain('没有匹配的文档包');
+  });
+
+  it('卸载时清理未触发的检索计时器', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchDocumentPackagesPage).mockResolvedValue({ items: [documentPackages[0]], nextCursor: null, hasMore: false });
+    const wrapper = mountWorkspace();
+    await flushPromises();
+    await wrapper.get('input[aria-label="查找文档包"]').setValue('卸载前查询');
+    wrapper.unmount();
+    await vi.advanceTimersByTimeAsync(280);
     await flushPromises();
 
-    expect(fetchDocumentPackagesPage).toHaveBeenLastCalledWith({ limit: 50, keyword: '质检返工' });
-    const ledger = wrapper.get('.document-master');
-    expect(ledger.text()).toContain(documentPackages[1].code);
-    expect(ledger.text()).not.toContain(documentPackages[0].code);
-    expect(wrapper.text()).toContain('覆盖率（已加载）');
-    expect(wrapper.text()).toContain('仅统计当前已加载的文档包');
+    expect(fetchDocumentPackagesPage).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it('加载更多文档包使用游标并去除跨页重复记录', async () => {
@@ -89,6 +177,7 @@ describe('DocumentManagementWorkspace', () => {
   });
 
   it('新关键词的结果优先，迟到的旧请求不能覆盖台账', async () => {
+    vi.useFakeTimers();
     const slow = deferred<{ items: typeof documentPackages; nextCursor: number | null; hasMore: boolean }>();
     const fast = deferred<{ items: typeof documentPackages; nextCursor: number | null; hasMore: boolean }>();
     vi.mocked(fetchDocumentPackagesPage).mockImplementation(async (query) => {
@@ -98,22 +187,29 @@ describe('DocumentManagementWorkspace', () => {
       return fast.promise;
     });
     const wrapper = mountWorkspace();
-    await flushPromises();
-    const input = wrapper.get('input[aria-label="查找文档包"]');
+    try {
+      await flushPromises();
+      const input = wrapper.get('input[aria-label="查找文档包"]');
 
-    await input.setValue('慢查询');
-    await flushPromises();
-    await input.setValue('快速查询');
-    await flushPromises();
-    fast.resolve({ items: [documentPackages[2]], nextCursor: null, hasMore: false });
-    await flushPromises();
-    slow.resolve({ items: [documentPackages[1]], nextCursor: null, hasMore: false });
-    await flushPromises();
+      await input.setValue('慢查询');
+      await vi.advanceTimersByTimeAsync(280);
+      await flushPromises();
+      await input.setValue('快速查询');
+      await vi.advanceTimersByTimeAsync(280);
+      await flushPromises();
+      fast.resolve({ items: [documentPackages[2]], nextCursor: null, hasMore: false });
+      await flushPromises();
+      slow.resolve({ items: [documentPackages[1]], nextCursor: null, hasMore: false });
+      await flushPromises();
 
-    const ledger = wrapper.get('.document-master');
-    expect(ledger.text()).toContain(documentPackages[2].code);
-    expect(ledger.text()).not.toContain(documentPackages[1].code);
-    expect(wrapper.text()).not.toContain('慢查询失败');
+      const ledger = wrapper.get('.document-master');
+      expect(ledger.text()).toContain(documentPackages[2].code);
+      expect(ledger.text()).not.toContain(documentPackages[1].code);
+      expect(wrapper.text()).not.toContain('慢查询失败');
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it('查询和上传刷新后仍使用已选文档包，不静默切换业务对象', async () => {
