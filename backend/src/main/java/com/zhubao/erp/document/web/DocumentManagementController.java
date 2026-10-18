@@ -19,6 +19,8 @@ import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
+import com.zhubao.erp.document.domain.EvidenceLinkPage;
+import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.domain.StoredContentInventory;
 import com.zhubao.erp.document.domain.StoredContentItem;
 import com.zhubao.erp.business.app.BusinessDataAccess;
@@ -172,6 +174,50 @@ public class DocumentManagementController {
                 stage,
                 operationType,
                 operationCode,
+                context
+        ));
+    }
+
+    @GetMapping("/evidence-links/page")
+    public ApiResponse<EvidenceLinkPage> evidenceLinksPage(
+            @RequestParam String targetType,
+            @RequestParam String targetCode,
+            @RequestParam(required = false) String stage,
+            @RequestParam(required = false) String operationType,
+            @RequestParam(required = false) String operationCode,
+            @RequestParam(defaultValue = "0") long afterId,
+            @RequestParam(defaultValue = "30") int limit,
+            HttpServletRequest request
+    ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        dataAccess.assertCanRead(context, targetCode);
+        return ApiResponse.ok(businessEvidenceService.queryLinkedPage(
+                targetType,
+                targetCode,
+                stage,
+                operationType,
+                operationCode,
+                afterId,
+                limit,
+                context
+        ));
+    }
+
+    @GetMapping("/evidence-links/historical/page")
+    public ApiResponse<HistoricalEvidencePage> historicalEvidencePage(
+            @RequestParam String targetType,
+            @RequestParam String targetCode,
+            @RequestParam(defaultValue = "0") long afterId,
+            @RequestParam(defaultValue = "30") int limit,
+            HttpServletRequest request
+    ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        dataAccess.assertCanRead(context, targetCode);
+        return ApiResponse.ok(businessEvidenceService.queryHistoricalPage(
+                targetType,
+                targetCode,
+                afterId,
+                limit,
                 context
         ));
     }

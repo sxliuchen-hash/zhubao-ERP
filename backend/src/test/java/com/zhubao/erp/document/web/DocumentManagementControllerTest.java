@@ -1,11 +1,14 @@
 package com.zhubao.erp.document.web;
 
+import com.zhubao.erp.document.app.BusinessEvidenceService;
 import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.AttachmentStreamContent;
 import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.document.domain.EvidenceLinkPage;
+import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.security.app.OperatorContextResolver;
@@ -31,8 +34,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 class DocumentManagementControllerTest {
 
@@ -182,6 +190,106 @@ class DocumentManagementControllerTest {
                 .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> controller.reconcileAttachment("ATT-1", request))
                 .isInstanceOf(PermissionDeniedException.class);
+    }
+
+    @Test
+    void evidenceLinkPagePassesFiltersAndChecksBusinessScopeBeforeService() {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        BusinessEvidenceService evidence = mock(BusinessEvidenceService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        EvidenceLinkPage page = new EvidenceLinkPage(List.of(), 18L, true);
+        when(resolver.requireSession(request)).thenReturn(operator);
+        when(evidence.queryLinkedPage(
+                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, operator
+        )).thenReturn(page);
+        DocumentManagementController controller = new DocumentManagementController(
+                service, null, resolver, access, evidence
+        );
+
+        var result = controller.evidenceLinksPage(
+                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, request
+        );
+
+        assertThat(result.data()).isSameAs(page);
+        var order = inOrder(resolver, access, evidence);
+        order.verify(resolver).requireSession(request);
+        order.verify(access).assertCanRead(operator, "MD-11E");
+        order.verify(evidence).queryLinkedPage(
+                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, operator
+        );
+    }
+
+    @Test
+    void historicalEvidencePageUsesStableDefaultsAndBindsMvcRoute() throws Exception {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        BusinessEvidenceService evidence = mock(BusinessEvidenceService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        HistoricalEvidencePage page = new HistoricalEvidencePage(List.of(), null, false);
+        when(resolver.requireSession(any(HttpServletRequest.class))).thenReturn(operator);
+        when(evidence.queryHistoricalPage("MOTHER_ORDER", "MD-11E", 0L, 30, operator)).thenReturn(page);
+        var mvc = MockMvcBuilders.standaloneSetup(new DocumentManagementController(
+                service, null, resolver, access, evidence
+        )).build();
+
+        mvc.perform(get("/api/documents/evidence-links/historical/page")
+                        .param("targetType", "MOTHER_ORDER")
+                        .param("targetCode", "MD-11E"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.hasMore").value(false));
+
+        verify(access).assertCanRead(operator, "MD-11E");
+        verify(evidence).queryHistoricalPage("MOTHER_ORDER", "MD-11E", 0L, 30, operator);
+    }
+
+    @Test
+    void evidenceLinkPageRejectsOutOfScopeBeforeCallingService() {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        BusinessEvidenceService evidence = mock(BusinessEvidenceService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        when(resolver.requireSession(request)).thenReturn(operator);
+        doThrow(new PermissionDeniedException("无权读取该单据"))
+                .when(access).assertCanRead(operator, "MD-OUTSIDE");
+        DocumentManagementController controller = new DocumentManagementController(
+                service, null, resolver, access, evidence
+        );
+
+        assertThatThrownBy(() -> controller.evidenceLinksPage(
+                "MOTHER_ORDER", "MD-OUTSIDE", "", "", "", 0L, 30, request
+        )).isInstanceOf(PermissionDeniedException.class);
+        verify(evidence, never()).queryLinkedPage(
+                "MOTHER_ORDER", "MD-OUTSIDE", "", "", "", 0L, 30, operator
+        );
+    }
+
+    @Test
+    void historicalEvidencePageDelegatesInvalidCursorAndLimitToService() {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        BusinessEvidenceService evidence = mock(BusinessEvidenceService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        when(resolver.requireSession(request)).thenReturn(operator);
+        when(evidence.queryHistoricalPage("MOTHER_ORDER", "MD-11E", -1L, 101, operator))
+                .thenThrow(new com.zhubao.erp.common.error.BusinessException("分页参数无效"));
+        DocumentManagementController controller = new DocumentManagementController(
+                service, null, resolver, access, evidence
+        );
+
+        assertThatThrownBy(() -> controller.historicalEvidencePage(
+                "MOTHER_ORDER", "MD-11E", -1L, 101, request
+        )).isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
+        verify(evidence).queryHistoricalPage("MOTHER_ORDER", "MD-11E", -1L, 101, operator);
     }
 
     @Test
