@@ -1620,13 +1620,21 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void replaceMotherOrder(MotherOrderRecord record) {
+        try (Connection connection = dataSource.getConnection()) {
+            updateMotherOrder(connection, record);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("修改母单失败", ex);
+        }
+    }
+
+    private void updateMotherOrder(Connection connection, MotherOrderRecord record) throws SQLException {
         String sql = """
                 update biz_mother_order
                    set customer_id = ?, customer_name = ?, material_code = ?, goods_name_snapshot = ?,
                        quantity = ?, weight = ?, processing_requirement = ?, due_date = ?, inbound_remark = ?
                  where code = ?
                 """;
-        updateOne(sql, statement -> {
+        updateOne(connection, sql, statement -> {
             setLong(statement, 1, record.customerId());
             statement.setString(2, record.customerName());
             statement.setString(3, record.materialCode());
@@ -1642,13 +1650,21 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void replaceChildWorkOrder(ChildWorkOrderRecord record) {
+        try (Connection connection = dataSource.getConnection()) {
+            updateChildWorkOrder(connection, record);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("修改子单失败", ex);
+        }
+    }
+
+    private void updateChildWorkOrder(Connection connection, ChildWorkOrderRecord record) throws SQLException {
         String sql = """
                 update biz_work_order
                    set customer_id = ?, customer_name = ?, material_code = ?, goods_name = ?,
                        quantity = ?, weight = ?, processing_requirement = ?, due_date = ?, process_names = ?
                  where code = ?
                 """;
-        updateOne(sql, statement -> {
+        updateOne(connection, sql, statement -> {
             setLong(statement, 1, record.customerId());
             statement.setString(2, record.customerName());
             statement.setString(3, record.materialCode());
@@ -1660,6 +1676,35 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setString(9, record.processes());
             statement.setString(10, record.code());
         }, "子单不存在");
+    }
+
+    @Override
+    public void correctMotherOrder(MotherOrderRecord record, OrderAdjustment adjustment) {
+        correctOrder(connection -> updateMotherOrder(connection, record), adjustment);
+    }
+
+    @Override
+    public void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment) {
+        correctOrder(connection -> updateChildWorkOrder(connection, record), adjustment);
+    }
+
+    private void correctOrder(SqlCorrection correction, OrderAdjustment adjustment) {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                correction.apply(connection);
+                insertOrderAdjustment(connection, adjustment);
+                connection.commit();
+            } catch (SQLException | RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("改单与调整记录保存失败", ex);
+        }
     }
 
     @Override
@@ -1713,13 +1758,20 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void saveOrderAdjustment(OrderAdjustment adjustment) {
+        try (Connection connection = dataSource.getConnection()) {
+            insertOrderAdjustment(connection, adjustment);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("保存单据调整记录失败", ex);
+        }
+    }
+
+    private void insertOrderAdjustment(Connection connection, OrderAdjustment adjustment) throws SQLException {
         String sql = """
                 insert into biz_order_adjustment (
                     target_type, target_code, before_text, after_text, reason, operator_name, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, adjustment.targetType());
             statement.setString(2, adjustment.code());
             statement.setString(3, adjustment.beforeText());
@@ -1728,8 +1780,6 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setString(6, adjustment.operatorName());
             statement.setString(7, adjustment.createdAt());
             statement.executeUpdate();
-        } catch (SQLException ex) {
-            throw new IllegalStateException("保存单据调整记录失败", ex);
         }
     }
 
@@ -1814,17 +1864,27 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     private void updateOne(String sql, SqlBinder binder, String missing) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            if (statement.executeUpdate() != 1) {
-                throw new BusinessException(missing);
-            }
+        try (Connection connection = dataSource.getConnection()) {
+            updateOne(connection, sql, binder, missing);
         } catch (BusinessException ex) {
             throw ex;
         } catch (SQLException ex) {
             throw new IllegalStateException(missing, ex);
         }
+    }
+
+    private void updateOne(Connection connection, String sql, SqlBinder binder, String missing) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException(missing);
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface SqlCorrection {
+        void apply(Connection connection) throws SQLException;
     }
 
     @FunctionalInterface

@@ -159,6 +159,12 @@ public interface BusinessDocumentRepository {
 
     void replaceChildWorkOrder(ChildWorkOrderRecord record);
 
+    /** 同次保存改单字段与调整记录；任一步失败不得留下半次改单。 */
+    void correctMotherOrder(MotherOrderRecord record, OrderAdjustment adjustment);
+
+    /** 同次保存改单字段与调整记录；任一步失败不得留下半次改单。 */
+    void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment);
+
     void recycleMother(String code, String operator, String at, String batch, String reason);
 
     void recycleChild(String code, String operator, String at, String batch, String reason);

@@ -113,8 +113,8 @@ public class OrderMaintenanceService {
                 current.sourceRegisterSequence(), current.operator(), current.evidenceCode(), text(command.remark()),
                 current.status(), current.createdAt(), text(command.requirement()), text(command.dueDate()),
                 required(command.customerName(), "请填写客户"));
-        documents.replaceMotherOrder(next);
-        remember("MOTHER", current.code(), motherText(current), motherText(next), reason, operator);
+        documents.correctMotherOrder(next, adjustment("MOTHER", current.code(), motherText(current),
+                motherText(next), reason, operator));
         return toMother(next);
     }
 
@@ -130,8 +130,8 @@ public class OrderMaintenanceService {
                 requireQuantity(command.quantity()), current.quantityUnit(), requireWeight(command.weight()),
                 current.warehouseCode(), required(command.processes(), "请填写工序"), current.verificationCode(),
                 current.ledgerCode(), current.operator(), current.createdAt());
-        documents.replaceChildWorkOrder(next);
-        remember("WORK_ORDER", current.code(), childText(current), childText(next), reason, operator);
+        documents.correctChildWorkOrder(next, adjustment("WORK_ORDER", current.code(), childText(current),
+                childText(next), reason, operator));
         return toChild(next);
     }
 
@@ -309,7 +309,12 @@ public class OrderMaintenanceService {
     }
 
     private void remember(String type, String code, String before, String after, String reason, OperatorContext operator) {
-        documents.saveOrderAdjustment(new OrderAdjustment(type, code, clip(before), clip(after), reason, operator.operator(), now()));
+        documents.saveOrderAdjustment(adjustment(type, code, before, after, reason, operator));
+    }
+
+    private OrderAdjustment adjustment(String type, String code, String before, String after,
+                                       String reason, OperatorContext operator) {
+        return new OrderAdjustment(type, code, clip(before), clip(after), reason, operator.operator(), now());
     }
 
     private void requireAdmin(OperatorContext operator) {

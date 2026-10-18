@@ -594,6 +594,24 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public synchronized void correctMotherOrder(MotherOrderRecord record, OrderAdjustment adjustment) {
+        if (!motherOrders.containsKey(record.code())) {
+            throw new BusinessException("母单不存在");
+        }
+        orderAdjustments.add(adjustment);
+        motherOrders.put(record.code(), record);
+    }
+
+    @Override
+    public synchronized void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment) {
+        if (!childWorkOrders.containsKey(record.code())) {
+            throw new BusinessException("子单不存在");
+        }
+        orderAdjustments.add(adjustment);
+        childWorkOrders.put(record.code(), record);
+    }
+
+    @Override
     public void recycleMother(String code, String operator, String at, String batch, String reason) {
         if (!motherOrders.containsKey(code)) {
             throw new BusinessException("母单不存在");
