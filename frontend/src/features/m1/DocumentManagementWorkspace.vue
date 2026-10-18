@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
+import type { AuthSession } from '../../services/authApi';
 import {
   type DocumentAuditEvent,
   type DocumentManagementSummary,
@@ -22,6 +23,7 @@ const packages = ref<DocumentPackage[]>([]);
 const attachments = ref<EvidenceAttachment[]>([]);
 const auditEvents = ref<DocumentAuditEvent[]>([]);
 const loadingError = ref('');
+const auditLoadError = ref('');
 const selectedFile = ref<File | null>(null);
 const selectedPackageCode = ref('');
 const packageKeyword = ref('');
@@ -29,6 +31,10 @@ const detailOpen = ref(false);
 const uploading = ref(false);
 const uploadResult = ref<EvidenceAttachmentUploadResult | null>(null);
 const uploadError = ref('');
+const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const canViewAudit = computed(() =>
+  ['ADMIN', 'GENERAL_MANAGER'].includes(authSession.value?.role ?? '') && authSession.value?.dataScope === 'ALL',
+);
 
 const activePackage = computed(
   () => packages.value.find((item) => item.code === selectedPackageCode.value) ?? packages.value.find((item) => item.status.includes('缺') || item.status.includes('待')) ?? packages.value[0],
@@ -82,19 +88,32 @@ onMounted(loadDocuments);
 
 async function loadDocuments() {
   loadingError.value = '';
+  auditLoadError.value = '';
+
   try {
-    const [nextSummary, nextPackages, nextAttachments, nextAuditEvents] = await Promise.all([
+    const [nextSummary, nextPackages, nextAttachments] = await Promise.all([
       fetchDocumentSummary(),
       fetchDocumentPackages(),
       fetchEvidenceAttachments(),
-      fetchDocumentAuditEvents(),
     ]);
     summary.value = nextSummary;
     packages.value = nextPackages;
     attachments.value = nextAttachments;
-    auditEvents.value = nextAuditEvents;
   } catch (error) {
-    loadingError.value = error instanceof Error ? error.message : '附件数据读取失败';
+    loadingError.value = error instanceof Error ? `附件数据读取失败：${error.message}` : '附件数据读取失败';
+    return;
+  }
+
+  if (!canViewAudit.value) {
+    auditEvents.value = [];
+    return;
+  }
+
+  try {
+    auditEvents.value = await fetchDocumentAuditEvents();
+  } catch (error) {
+    auditEvents.value = [];
+    auditLoadError.value = error instanceof Error ? error.message : '审计数据读取失败';
   }
 }
 
@@ -161,7 +180,7 @@ async function uploadEvidence() {
       </div>
     </section>
 
-    <p v-if="loadingError" class="operation-feedback danger" role="alert">附件数据读取失败：{{ loadingError }}</p>
+    <p v-if="loadingError" class="operation-feedback danger" role="alert">{{ loadingError }}</p>
     <p v-else-if="packages.length === 0" class="empty-hint">暂无文档包，请从业务单据建立证据关联。</p>
 
     <section class="document-control-board" aria-label="文档证据运营板">
@@ -378,7 +397,7 @@ async function uploadEvidence() {
       </div>
     </section>
 
-    <section class="split-layout">
+    <section v-if="canViewAudit" class="split-layout">
       <div class="section-block">
         <div class="section-heading">
           <div>
@@ -386,6 +405,7 @@ async function uploadEvidence() {
             <p>上传、补传、归档、审批锁定都必须留下审计事件。</p>
           </div>
         </div>
+        <p v-if="auditLoadError" class="operation-feedback danger" role="alert">审计数据读取失败：{{ auditLoadError }}</p>
         <div class="document-audit-list">
           <article v-for="event in auditEvents" :key="event.eventCode" :class="`tone-${event.tone}`">
             <time>{{ event.time }}</time>
