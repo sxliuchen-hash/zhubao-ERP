@@ -477,7 +477,7 @@ onBeforeUnmount(() => {
         <strong>{{ link.fileName || link.attachmentCode }}</strong>
         <span>{{ link.sceneLabel }} / 已关联</span>
         <small>{{ link.operationType }} {{ link.operationCode }}</small>
-        <EvidencePreviewLink v-if="link.previewUrl" :attachment-code="link.attachmentCode" />
+        <EvidencePreviewLink v-if="link.previewUrl" :attachment-code="link.attachmentCode" :media-type-hint="link.mediaType" />
         <span v-else-if="link.status === '已下线'">已下线，不能预览</span>
       </li>
     </ul>
@@ -488,7 +488,7 @@ onBeforeUnmount(() => {
       <li v-for="item in board.historical" :key="historicalKey(item)">
         <strong>{{ item.fileName || item.attachmentCode }}</strong>
         <span>{{ item.label }}</span>
-        <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" />
+        <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" :media-type-hint="item.mediaType" />
         <button v-if="canRecover(item)" class="secondary-button" type="button" :disabled="Boolean(recoveringCode)" @click="recover(item)">
           {{ recoveringCode === item.attachmentCode ? '正在关联' : '关联到当前操作' }}
         </button>

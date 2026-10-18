@@ -552,7 +552,7 @@ async function uploadEvidence() {
           <article v-for="attachment in activeAttachments" :key="attachment.code" :class="`tone-${attachment.tone}`">
             <span>{{ attachment.fileName }}</span>
             <StatusBadge :label="attachment.status" :tone="attachment.tone" />
-            <EvidencePreviewLink v-if="attachment.status !== '已下线'" :attachment-code="attachment.code" />
+            <EvidencePreviewLink v-if="attachment.status !== '已下线'" :attachment-code="attachment.code" :media-type-hint="attachment.mediaType" />
           </article>
         </div>
       </aside>
@@ -589,7 +589,7 @@ async function uploadEvidence() {
                 <span class="cell-stack">
                   <b>{{ item.code }}</b>
                   <small>{{ item.fileName }}</small>
-                  <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" />
+                  <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" :media-type-hint="item.mediaType" />
                 </span>
               </td>
               <td>{{ item.businessType }} / {{ item.businessCode }}</td>
@@ -610,7 +610,7 @@ async function uploadEvidence() {
           </span>
           <span>{{ item.fileName }}</span>
           <span>{{ item.businessCode }} · {{ item.mediaType }}</span>
-          <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" />
+          <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" :media-type-hint="item.mediaType" />
         </article>
       </div>
       <div class="document-package-pagination" aria-live="polite">

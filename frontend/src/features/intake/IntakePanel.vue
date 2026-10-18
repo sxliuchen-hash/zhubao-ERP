@@ -499,11 +499,11 @@ onMounted(loadCatalog);
         <ul v-else>
           <li v-for="item in group.board?.links || []" :key="item.linkCode">
             {{ item.fileName }} · {{ item.sceneLabel || item.scene }}
-            <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" />
+            <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" :media-type-hint="item.mediaType" />
           </li>
           <li v-for="item in group.board?.historical || []" :key="item.attachmentCode">
             {{ item.fileName }} · {{ item.label }}
-            <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" />
+            <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.attachmentCode" :media-type-hint="item.mediaType" />
           </li>
         </ul>
       </article>

@@ -429,7 +429,7 @@ function backToList() {
           <article v-for="item in captures" :key="item.code">
             <div>
               <strong>{{ item.fileName }}</strong>
-              <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.code" />
+              <EvidencePreviewLink v-if="item.previewUrl" :attachment-code="item.code" :media-type-hint="item.mediaType" />
             </div>
           </article>
           <EvidenceCapture

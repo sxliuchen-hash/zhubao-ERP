@@ -29,7 +29,7 @@ describe('证据媒体预览与下载', () => {
     await wrapper.get('button').trigger('click');
     await flushPromises();
     expect(fetchAttachmentPreviewUrl).toHaveBeenCalledTimes(2);
-    expect(fetchAttachmentPreviewUrl).toHaveBeenCalledWith('ATT-1', 'preview');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenCalledWith('ATT-1', 'preview', 'original');
   });
 
   it('视频加载失败时重新获取一次地址', async () => {
@@ -59,7 +59,7 @@ describe('证据媒体预览与下载', () => {
     await wrapper.findAll('button')[1].trigger('click');
     await flushPromises();
     expect(fetchAttachmentPreviewUrl).toHaveBeenCalledTimes(2);
-    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(2, 'ATT-1', 'download');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(2, 'ATT-1', 'download', 'original');
     expect(click).toHaveBeenCalledOnce();
     expect(downloaded[0]).toMatchObject({ name: '现场.jpg' });
     expect(downloaded[0].href).toContain('purpose=download&resolution=original');
@@ -92,7 +92,7 @@ describe('证据媒体预览与下载', () => {
     expect(document.querySelector('.evidence-media-overlay')).toBeNull();
     await wrapper.findAll('button')[1].trigger('click');
     await flushPromises();
-    expect(fetchAttachmentPreviewUrl).toHaveBeenLastCalledWith('ATT-1', 'download');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenLastCalledWith('ATT-1', 'download', 'original');
     expect(click).toHaveBeenCalledOnce();
   });
 
@@ -102,5 +102,31 @@ describe('证据媒体预览与下载', () => {
     await wrapper.get('button').trigger('click');
     await flushPromises();
     expect(wrapper.get('[role="alert"]').text()).toContain('附件地址无效');
+  });
+
+  it('图片先取缩略，点开轻量预览，再显式查看原图', async () => {
+    vi.mocked(fetchAttachmentPreviewUrl).mockImplementation(async (_code, purpose, resolution = 'original') => ({
+      ...image,
+      url: image.url.replace('purpose=preview', `purpose=${purpose}`)
+        .replace('resolution=original', `resolution=${resolution}`),
+    }));
+    const wrapper = mount(EvidencePreviewLink, {
+      props: { attachmentCode: 'ATT-1', mediaTypeHint: 'image/jpeg' },
+    });
+    await flushPromises();
+    expect(wrapper.get('.evidence-thumbnail').attributes('src')).toContain('resolution=thumbnail');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(1, 'ATT-1', 'preview', 'thumbnail');
+
+    await wrapper.get('button').trigger('click');
+    await flushPromises();
+    expect(document.querySelector('.evidence-media-overlay img')?.getAttribute('src')).toContain('resolution=preview');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(2, 'ATT-1', 'preview', 'preview');
+
+    const originalButton = Array.from(document.querySelectorAll('.evidence-media-overlay button'))
+      .find(button => button.textContent?.includes('查看原图')) as HTMLButtonElement;
+    originalButton.click();
+    await flushPromises();
+    expect(document.querySelector('.evidence-media-overlay img')?.getAttribute('src')).toContain('resolution=original');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(3, 'ATT-1', 'preview', 'original');
   });
 });
