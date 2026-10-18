@@ -14,6 +14,7 @@ import com.zhubao.erp.document.domain.BusinessEvidenceLink;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkPage;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkRepository;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
+import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceBoard;
@@ -21,6 +22,7 @@ import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
 import com.zhubao.erp.document.domain.EvidenceLinkPage;
 import com.zhubao.erp.document.domain.EvidenceLinkView;
+import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.domain.HistoricalEvidenceView;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
@@ -314,6 +316,71 @@ public class BusinessEvidenceService {
         return (stageFilter.isEmpty() || stageFilter.equals(link.stage()))
                 && (operationTypeFilter.isEmpty() || operationTypeFilter.equals(link.operationType()))
                 && (operationCodeFilter.isEmpty() || operationCodeFilter.equals(link.operationCode()));
+    }
+
+    public HistoricalEvidencePage queryHistoricalPage(
+            String targetType,
+            String targetCode,
+            long afterId,
+            int limit,
+            OperatorContext operator
+    ) {
+        String type = requiredObjectType(targetType);
+        String code = required(targetCode, "单据编号不能为空");
+        if (operator == null || operator.operator() == null || operator.operator().isBlank()) {
+            throw new BusinessException("请先登录后再查看证据");
+        }
+        assertReadable(operator, code);
+        if (afterId < 0) {
+            throw new BusinessException("附件游标不能小于 0");
+        }
+        if (limit < 1 || limit > 100) {
+            throw new BusinessException("历史证据分页大小必须在 1 到 100 之间");
+        }
+
+        Set<String> linkedAttachments = links.findByTarget(type, code).stream()
+                .map(BusinessEvidenceLink::attachmentCode)
+                .collect(java.util.stream.Collectors.toSet());
+        int batchLimit = limit + 1;
+        long scanAfterId = afterId;
+        List<DocumentAttachmentPage.Entry> visible = new ArrayList<>();
+        while (visible.size() <= limit) {
+            DocumentAttachmentPage page = documents.attachmentsPageByBusinessCode(code, scanAfterId, batchLimit);
+            if (page.entries().isEmpty()) {
+                break;
+            }
+            long lastScannedId = scanAfterId;
+            for (DocumentAttachmentPage.Entry entry : page.entries()) {
+                lastScannedId = entry.id();
+                EvidenceAttachment attachment = entry.attachment();
+                if (linkedAttachments.contains(attachment.code())) {
+                    continue;
+                }
+                String origin = EvidenceLinkKey.text(attachment.objectType());
+                if (!origin.isEmpty() && !origin.equals(type)) {
+                    continue;
+                }
+                visible.add(entry);
+                if (visible.size() > limit) {
+                    break;
+                }
+            }
+            if (visible.size() > limit) {
+                break;
+            }
+            scanAfterId = lastScannedId;
+            if (!page.hasMore()) {
+                break;
+            }
+        }
+
+        int itemCount = Math.min(limit, visible.size());
+        List<HistoricalEvidenceView> items = visible.subList(0, itemCount).stream()
+                .map(entry -> historicalOf(entry.attachment()))
+                .toList();
+        boolean hasMore = visible.size() > limit;
+        Long nextCursor = hasMore && itemCount > 0 ? visible.get(itemCount - 1).id() : null;
+        return new HistoricalEvidencePage(items, nextCursor, hasMore);
     }
 
     private void assertOperation(

@@ -15,6 +15,7 @@ import com.zhubao.erp.document.domain.BusinessEvidenceLink;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkPage;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkRepository;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
+import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
@@ -24,6 +25,7 @@ import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
 import com.zhubao.erp.document.domain.EvidenceLinkPage;
 import com.zhubao.erp.document.domain.EvidenceLinkView;
+import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.DocumentCaptureProperties;
 import com.zhubao.erp.document.infra.InMemoryBusinessEvidenceLinkRepository;
@@ -76,6 +78,7 @@ class BusinessEvidenceServiceTest {
     private static final String REWORK_LEDGER = "STK-RW-S3";
     private static final String SHIPMENT = "OUT-S3-001";
     private static final String SHIP_LEDGER = "STK-OUT-S3";
+    private static final String RETIRED = "已下线";
 
     @TempDir
     Path tempDir;
@@ -324,6 +327,98 @@ class BusinessEvidenceServiceTest {
     }
 
     @Test
+    void queryHistoricalPageFiltersSparseAttachmentsAcrossBatchesAndKeepsStates() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingLinkRepository links = new QueryTrackingLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+
+        EvidenceAttachment bound = historicalAttachment(fixture, "ATT-HIST-BOUND", MOTHER);
+        EvidenceAttachment historical = historicalAttachment(fixture, "ATT-HIST-001", MOTHER);
+        EvidenceAttachment pending = historicalAttachmentWithObjectType(
+                fixture, "ATT-HIST-PENDING", "DOC-MOTHER-PENDING", MOTHER, EvidenceCodes.MOTHER_ORDER, "已上传"
+        );
+        EvidenceAttachment retired = historicalAttachmentWithObjectType(
+                fixture, "ATT-HIST-RETIRED", "DOC-MOTHER-RETIRED", MOTHER, EvidenceCodes.MOTHER_ORDER, RETIRED
+        );
+        historicalAttachmentWithObjectType(
+                fixture, "ATT-HIST-WRONG-TYPE", "DOC-MOTHER-WRONG", MOTHER, EvidenceCodes.WORK_ORDER, "已上传"
+        );
+        historicalAttachmentWithObjectType(
+                fixture, "ATT-HIST-EXTERNAL", "DOC-CHILD-EXTERNAL", CHILD, EvidenceCodes.WORK_ORDER, "已上传"
+        );
+        links.insert(linkRecord(
+                "LINK-HIST-BOUND", bound.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        documents.resetCounters();
+        links.resetCounters();
+
+        HistoricalEvidencePage firstPage = fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, 0, 2, fixture.admin
+        );
+
+        assertThat(firstPage.items()).extracting(item -> item.attachmentCode())
+                .containsExactly(historical.code(), pending.code());
+        assertThat(firstPage.items()).extracting(item -> item.fileState())
+                .containsExactly(EvidenceCodes.HISTORICAL, EvidenceCodes.UPLOADED_PENDING_LINK);
+        assertThat(firstPage.items().get(0).previewUrl()).isNotEmpty();
+        assertThat(firstPage.nextCursor()).isNotNull();
+        assertThat(firstPage.hasMore()).isTrue();
+        assertThat(links.findByTargetCalls).isEqualTo(1);
+        assertThat(links.findAllCalls).isZero();
+        assertThat(documents.attachmentsPageByBusinessCodeCalls).isGreaterThanOrEqualTo(2);
+        assertThat(documents.attachmentsCalls).isZero();
+        assertThat(documents.attachmentsByBusinessCodeCalls).isZero();
+
+        HistoricalEvidencePage lastPage = fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, firstPage.nextCursor(), 2, fixture.admin
+        );
+
+        assertThat(lastPage.items()).extracting(item -> item.attachmentCode())
+                .containsExactly(retired.code());
+        assertThat(lastPage.items().get(0).fileState()).isEqualTo(EvidenceCodes.UPLOADED_PENDING_LINK);
+        assertThat(lastPage.items().get(0).previewUrl()).isEmpty();
+        assertThat(lastPage.nextCursor()).isNull();
+        assertThat(lastPage.hasMore()).isFalse();
+    }
+
+    @Test
+    void queryHistoricalPageChecksTargetScopeBeforeReadingLinksOrAttachments() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingLinkRepository links = new QueryTrackingLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+        documents.resetCounters();
+        links.resetCounters();
+
+        assertThatThrownBy(() -> fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, 0, 2, fixture.outsider
+        )).isInstanceOf(PermissionDeniedException.class);
+        assertThat(links.findByTargetCalls).isZero();
+        assertThat(links.findAllCalls).isZero();
+        assertThat(documents.attachmentsPageByBusinessCodeCalls).isZero();
+        assertThat(documents.attachmentsCalls).isZero();
+        assertThat(documents.attachmentsByBusinessCodeCalls).isZero();
+    }
+
+    @Test
+    void queryHistoricalPageRejectsInvalidCursorAndLimit() {
+        Fixture fixture = memoryFixture();
+        prepareFacts(fixture);
+
+        assertThatThrownBy(() -> fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, -1, 1, fixture.admin
+        )).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, 0, 0, fixture.admin
+        )).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, 0, 101, fixture.admin
+        )).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void metadataFailureKeepsOriginalForReconciliationAndRetryCanSave() throws Exception {
         InMemoryDocumentManagementRepository delegate = new InMemoryDocumentManagementRepository();
         FailOnceRepository repository = new FailOnceRepository(delegate);
@@ -557,6 +652,30 @@ class BusinessEvidenceServiceTest {
                 code, "DOC-" + businessCode, "来料母单", businessCode, "old.jpg", "image/jpeg",
                 "local://evidence/old.jpg", "hot 180d -> archive", "PWA 拍照上传", "已上传",
                 "收货员 何琴", "sha256:old-" + code, "2026-10-01 08:00:00", "无", "green", null
+        );
+        fixture.documents.saveAttachment(attachment);
+        return attachment;
+    }
+
+    private EvidenceAttachment historicalAttachmentWithObjectType(
+            Fixture fixture,
+            String code,
+            String documentCode,
+            String businessCode,
+            String objectType,
+            String status
+    ) {
+        if (fixture.documents.packages().stream().noneMatch(item -> item.code().equals(documentCode))) {
+            fixture.documents.savePackage(new DocumentPackage(
+                    documentCode, businessCode, "来料", businessCode, "收货员", "旧证据",
+                    0, 0, "采集中", "本地", "2026-10-01 08:00:00", "green"
+            ));
+        }
+        EvidenceAttachment attachment = new EvidenceAttachment(
+                code, documentCode, "来料母单", businessCode, code + ".jpg", "image/jpeg",
+                "local://evidence/" + code + ".jpg", "hot 180d -> archive", "PWA 拍照上传", status,
+                "收货员 何琴", "sha256:" + code, "2026-10-01 08:00:00", "无",
+                RETIRED.equals(status) ? "gray" : "green", objectType
         );
         fixture.documents.saveAttachment(attachment);
         return attachment;
@@ -837,6 +956,7 @@ class BusinessEvidenceServiceTest {
     private static final class QueryTrackingDocumentRepository extends InMemoryDocumentManagementRepository {
         private int attachmentsCalls;
         private int attachmentsByBusinessCodeCalls;
+        private int attachmentsPageByBusinessCodeCalls;
         private int findAttachmentByCodeCalls;
 
         @Override
@@ -852,6 +972,16 @@ class BusinessEvidenceServiceTest {
         }
 
         @Override
+        public synchronized DocumentAttachmentPage attachmentsPageByBusinessCode(
+                String businessCode,
+                long afterId,
+                int limit
+        ) {
+            attachmentsPageByBusinessCodeCalls++;
+            return super.attachmentsPageByBusinessCode(businessCode, afterId, limit);
+        }
+
+        @Override
         public synchronized Optional<EvidenceAttachment> findAttachmentByCode(String code) {
             findAttachmentByCodeCalls++;
             return super.findAttachmentByCode(code);
@@ -860,6 +990,7 @@ class BusinessEvidenceServiceTest {
         private void resetCounters() {
             attachmentsCalls = 0;
             attachmentsByBusinessCodeCalls = 0;
+            attachmentsPageByBusinessCodeCalls = 0;
             findAttachmentByCodeCalls = 0;
         }
     }
