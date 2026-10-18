@@ -62,6 +62,51 @@ export interface EvidenceTarget {
   operationCode?: string;
 }
 
+export interface EvidencePageQuery extends EvidenceTarget {
+  uploadedFrom?: string;
+  uploadedTo?: string;
+  mediaCategory?: 'image' | 'video' | 'pdf' | '';
+  ownerKeyword?: string;
+  afterId?: number;
+  limit?: number;
+}
+
+export interface EvidencePage<T> {
+  items: T[];
+  nextCursor: number | null;
+  hasMore: boolean;
+}
+
+function evidencePageParams(query: EvidencePageQuery, includeOperation: boolean): URLSearchParams {
+  const params = new URLSearchParams();
+  params.set('targetType', query.targetType);
+  params.set('targetCode', query.targetCode);
+  if (includeOperation) {
+    if (query.stage) params.set('stage', query.stage);
+    if (query.operationType) params.set('operationType', query.operationType);
+    if (query.operationCode) params.set('operationCode', query.operationCode);
+  }
+  if (query.uploadedFrom) params.set('uploadedFrom', query.uploadedFrom);
+  if (query.uploadedTo) params.set('uploadedTo', query.uploadedTo);
+  if (query.mediaCategory) params.set('mediaCategory', query.mediaCategory);
+  if (query.ownerKeyword) params.set('ownerKeyword', query.ownerKeyword);
+  if (query.afterId !== undefined) params.set('afterId', String(query.afterId));
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  return params;
+}
+
+export function fetchLinkedEvidencePage(query: EvidencePageQuery): Promise<EvidencePage<EvidenceLink>> {
+  return apiGet<EvidencePage<EvidenceLink>>(
+    `/api/documents/evidence-links/page?${evidencePageParams(query, true).toString()}`,
+  );
+}
+
+export function fetchHistoricalEvidencePage(query: EvidencePageQuery): Promise<EvidencePage<HistoricalEvidence>> {
+  return apiGet<EvidencePage<HistoricalEvidence>>(
+    `/api/documents/evidence-links/historical/page?${evidencePageParams(query, false).toString()}`,
+  );
+}
+
 export function fetchEvidenceBoard(query: EvidenceTarget): Promise<EvidenceBoard> {
   const params = new URLSearchParams();
   params.set('targetType', query.targetType);
