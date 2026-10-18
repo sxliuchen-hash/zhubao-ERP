@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Repository
@@ -40,11 +41,17 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
 
     @Override
     public synchronized DocumentPackagePage packagesPage(long afterId, int limit) {
+        return packagesPage("", afterId, limit);
+    }
+
+    @Override
+    public synchronized DocumentPackagePage packagesPage(String keyword, long afterId, int limit) {
         validatePage(afterId, limit);
+        String normalizedKeyword = normalizeKeyword(keyword);
         List<DocumentPackagePage.Entry> page = new ArrayList<>();
         boolean hasMore = false;
         for (PackageEntry entry : packages.values()) {
-            if (entry.id() <= afterId) continue;
+            if (entry.id() <= afterId || !matches(entry.documentPackage(), normalizedKeyword)) continue;
             if (page.size() >= limit) {
                 hasMore = true;
                 break;
@@ -109,6 +116,22 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
     private void validatePage(long afterId, int limit) {
         if (afterId < 0) throw new IllegalArgumentException("文档包游标不能小于 0");
         if (limit < 1 || limit > 101) throw new IllegalArgumentException("文档包分页大小必须在 1 到 101 之间");
+    }
+
+    private String normalizeKeyword(String keyword) {
+        return keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean matches(DocumentPackage documentPackage, String keyword) {
+        if (keyword.isEmpty()) return true;
+        return contains(documentPackage.code(), keyword)
+                || contains(documentPackage.title(), keyword)
+                || contains(documentPackage.businessCode(), keyword)
+                || contains(documentPackage.owner(), keyword);
+    }
+
+    private boolean contains(String value, String keyword) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(keyword);
     }
 
     private record PackageEntry(long id, DocumentPackage documentPackage) {

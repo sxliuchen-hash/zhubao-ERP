@@ -200,6 +200,10 @@ public class DocumentManagementService {
         return repository.packagesPage(afterId, limit);
     }
 
+    public DocumentPackagePage packagesPage(String keyword, long afterId, int limit) {
+        return repository.packagesPage(keyword, afterId, limit);
+    }
+
     public List<EvidenceAttachment> attachments() {
         return repository.attachments();
     }

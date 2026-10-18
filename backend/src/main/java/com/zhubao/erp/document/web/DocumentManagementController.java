@@ -195,10 +195,12 @@ public class DocumentManagementController {
 
     @GetMapping("/packages/page")
     public ApiResponse<PackagePageResponse> packagePage(
+            @RequestParam(defaultValue = "") String keyword,
             @RequestParam(defaultValue = "0") long afterId,
             @RequestParam(defaultValue = "50") int limit,
             HttpServletRequest request
     ) {
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
         if (afterId < 0) throw new BusinessException("文档包游标不能小于 0");
         if (limit < 1 || limit > MAX_PACKAGE_PAGE_SIZE) {
             throw new BusinessException("文档包分页大小必须在 1 到 " + MAX_PACKAGE_PAGE_SIZE + " 之间");
@@ -210,7 +212,9 @@ public class DocumentManagementController {
         boolean hasMore = false;
         int scanLimit = limit + 1;
         while (visible.size() <= limit) {
-            DocumentPackagePage page = documentManagementService.packagesPage(scanAfterId, scanLimit);
+            DocumentPackagePage page = normalizedKeyword.isEmpty()
+                    ? documentManagementService.packagesPage(scanAfterId, scanLimit)
+                    : documentManagementService.packagesPage(normalizedKeyword, scanAfterId, scanLimit);
             if (page.entries().isEmpty()) {
                 hasMore = false;
                 break;
@@ -241,6 +245,14 @@ public class DocumentManagementController {
                 .toList();
         Long nextCursor = hasMore && itemCount > 0 ? visible.get(itemCount - 1).id() : null;
         return ApiResponse.ok(new PackagePageResponse(items, nextCursor, hasMore));
+    }
+
+    public ApiResponse<PackagePageResponse> packagePage(
+            long afterId,
+            int limit,
+            HttpServletRequest request
+    ) {
+        return packagePage("", afterId, limit, request);
     }
 
     @GetMapping("/attachments")

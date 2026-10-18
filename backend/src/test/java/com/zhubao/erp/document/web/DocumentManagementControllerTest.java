@@ -273,6 +273,72 @@ class DocumentManagementControllerTest {
     }
 
     @Test
+    void filtersPackagePagesByKeywordBeforeApplyingBusinessReadScope() {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        DocumentPackage deniedFirst = packageEntry("DOC-命中-拒绝", "BUS-DENY-001");
+        DocumentPackage allowedFirst = packageEntry("DOC-命中-允许-001", "BUS-ALLOW-001");
+        DocumentPackage deniedMiddle = packageEntry("DOC-命中-拒绝-002", "BUS-DENY-002");
+        DocumentPackage allowedSecond = packageEntry("DOC-命中-允许-002", "BUS-ALLOW-002");
+        DocumentPackage allowedThird = packageEntry("DOC-命中-允许-003", "BUS-ALLOW-003");
+        when(resolver.requireSession(request)).thenReturn(operator);
+        when(access.canRead(operator, "BUS-DENY-001")).thenReturn(false);
+        when(access.canRead(operator, "BUS-DENY-002")).thenReturn(false);
+        when(access.canRead(operator, "BUS-ALLOW-001")).thenReturn(true);
+        when(access.canRead(operator, "BUS-ALLOW-002")).thenReturn(true);
+        when(access.canRead(operator, "BUS-ALLOW-003")).thenReturn(true);
+        when(service.packagesPage("命中", 0, 3)).thenReturn(new DocumentPackagePage(List.of(
+                new DocumentPackagePage.Entry(1, deniedFirst),
+                new DocumentPackagePage.Entry(2, allowedFirst),
+                new DocumentPackagePage.Entry(3, deniedMiddle)
+        ), true));
+        when(service.packagesPage("命中", 3, 3)).thenReturn(new DocumentPackagePage(List.of(
+                new DocumentPackagePage.Entry(4, allowedSecond),
+                new DocumentPackagePage.Entry(5, allowedThird)
+        ), false));
+        DocumentManagementController controller = new DocumentManagementController(service, null, resolver, access);
+
+        var first = controller.packagePage(" 命中 ", 0, 2, request).data();
+        assertThat(first.items()).extracting(DocumentPackage::code)
+                .containsExactly("DOC-命中-允许-001", "DOC-命中-允许-002");
+        assertThat(first.nextCursor()).isEqualTo(4L);
+        assertThat(first.hasMore()).isTrue();
+
+        when(service.packagesPage("命中", 4, 3)).thenReturn(new DocumentPackagePage(List.of(
+                new DocumentPackagePage.Entry(5, allowedThird)
+        ), false));
+        var last = controller.packagePage("命中", first.nextCursor(), 2, request).data();
+        assertThat(last.items()).extracting(DocumentPackage::code)
+                .containsExactly("DOC-命中-允许-003");
+        assertThat(last.nextCursor()).isNull();
+        assertThat(last.hasMore()).isFalse();
+    }
+
+    @Test
+    void treatsBlankPackageKeywordAsNoFilter() {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        DocumentPackage firstPackage = packageEntry("DOC-BLANK-001", "BUS-BLANK-001");
+        when(resolver.requireSession(request)).thenReturn(operator);
+        when(access.canRead(operator, "BUS-BLANK-001")).thenReturn(true);
+        when(service.packagesPage(0, 3)).thenReturn(new DocumentPackagePage(List.of(
+                new DocumentPackagePage.Entry(1, firstPackage)
+        ), false));
+        DocumentManagementController controller = new DocumentManagementController(service, null, resolver, access);
+
+        var page = controller.packagePage("  ", 0, 2, request).data();
+        assertThat(page.items()).extracting(DocumentPackage::code).containsExactly("DOC-BLANK-001");
+        assertThat(page.nextCursor()).isNull();
+        assertThat(page.hasMore()).isFalse();
+    }
+
+    @Test
     void rejectsInvalidAttachmentPageLimitAndCursor() {
         DocumentManagementController controller = new DocumentManagementController(mock(DocumentManagementService.class), null, null, mock(BusinessDataAccess.class));
         HttpServletRequest request = mock(HttpServletRequest.class);

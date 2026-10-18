@@ -142,6 +142,68 @@ class JdbcDocumentManagementRepositoryTest {
     }
 
     @Test
+    void filtersPackagePagesByKeywordBeforeLimitAndEscapesLikeCharacters() throws SQLException {
+        DocumentPackage codeMatch = pagePackageWithFields(
+                "DOC-命中-编码", "普通标题", "BUS-PAGE-CODE", "普通负责人");
+        DocumentPackage titleMatch = pagePackageWithFields(
+                "DOC-PAGE-TITLE", "标题命中", "BUS-PAGE-TITLE", "普通负责人");
+        DocumentPackage businessMatch = pagePackageWithFields(
+                "DOC-PAGE-BUSINESS", "普通标题", "BUS-命中-业务", "普通负责人");
+        DocumentPackage ownerMatch = pagePackageWithFields(
+                "DOC-PAGE-OWNER", "普通标题", "BUS-PAGE-OWNER", "命中负责人");
+        insertPackage(codeMatch);
+        insertPackage(pagePackage("DOC-PAGE-NONE-001", "BUS-PAGE-NONE-001"));
+        insertPackage(titleMatch);
+        insertPackage(pagePackage("DOC-PAGE-NONE-002", "BUS-PAGE-NONE-002"));
+        insertPackage(businessMatch);
+        insertPackage(pagePackage("DOC-PAGE-NONE-003", "BUS-PAGE-NONE-003"));
+        insertPackage(ownerMatch);
+        String literalKeyword = "%_" + "\\";
+        insertPackage(pagePackageWithFields(
+                "DOC-PAGE-SPECIAL", "字面量" + literalKeyword + "值", "BUS-PAGE-SPECIAL", "普通负责人"));
+
+        DocumentPackagePage first = repository.packagesPage("命中", 1, 2);
+        assertThat(first.entries()).extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly(codeMatch.code(), titleMatch.code());
+        assertThat(first.hasMore()).isTrue();
+        DocumentPackagePage second = repository.packagesPage("命中", first.entries().get(1).id(), 2);
+        assertThat(second.entries()).extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly(businessMatch.code(), ownerMatch.code());
+        assertThat(second.hasMore()).isFalse();
+
+        DocumentPackagePage special = repository.packagesPage(literalKeyword, 1, 10);
+        assertThat(special.entries()).extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly("DOC-PAGE-SPECIAL");
+
+        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        memory.savePackage(codeMatch);
+        memory.savePackage(pagePackage("DOC-PAGE-NONE-001", "BUS-PAGE-NONE-001"));
+        memory.savePackage(titleMatch);
+        memory.savePackage(pagePackage("DOC-PAGE-NONE-002", "BUS-PAGE-NONE-002"));
+        memory.savePackage(businessMatch);
+        memory.savePackage(pagePackage("DOC-PAGE-NONE-003", "BUS-PAGE-NONE-003"));
+        memory.savePackage(ownerMatch);
+        memory.savePackage(pagePackageWithFields(
+                "DOC-PAGE-SPECIAL", "字面量" + literalKeyword + "值", "BUS-PAGE-SPECIAL", "普通负责人"));
+        assertThat(memory.packagesPage("命中", 0, 2).entries())
+                .extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly(codeMatch.code(), titleMatch.code());
+        assertThat(memory.packagesPage(literalKeyword, 0, 10).entries())
+                .extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly("DOC-PAGE-SPECIAL");
+
+        assertThat(repository.packagesPage("   ", 1, 2).entries())
+                .extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly(codeMatch.code(), "DOC-PAGE-NONE-001");
+    }
+
+    @Test
     void savesAndReloadsUploadedAttachmentMetadataAndAuditEvent() {
         EvidenceAttachment uploaded = new EvidenceAttachment(
                 "ATT-JDBC-UP-001",
@@ -396,12 +458,32 @@ class JdbcDocumentManagementRepositoryTest {
     }
 
     private DocumentPackage pagePackage(String code, String businessCode, String status, String tone) {
+        return pagePackageWithFields(code, "分页文档包", businessCode, "测试员", status, tone);
+    }
+
+    private DocumentPackage pagePackageWithFields(
+            String code,
+            String title,
+            String businessCode,
+            String owner
+    ) {
+        return pagePackageWithFields(code, title, businessCode, owner, "待补附件", "amber");
+    }
+
+    private DocumentPackage pagePackageWithFields(
+            String code,
+            String title,
+            String businessCode,
+            String owner,
+            String status,
+            String tone
+    ) {
         return new DocumentPackage(
                 code,
-                "分页文档包",
+                title,
                 "分页测试",
                 businessCode,
-                "测试员",
+                owner,
                 "验证文档包稳定游标分页。",
                 2,
                 1,

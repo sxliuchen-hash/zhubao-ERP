@@ -10,6 +10,10 @@ public interface DocumentManagementRepository {
         throw new UnsupportedOperationException("文档包分页未实现");
     }
 
+    default DocumentPackagePage packagesPage(String keyword, long afterId, int limit) {
+        throw new UnsupportedOperationException("文档包关键字分页未实现");
+    }
+
     List<EvidenceAttachment> attachments();
 
     default DocumentAttachmentPage attachmentsPage(String documentCode, long afterId, int limit) {

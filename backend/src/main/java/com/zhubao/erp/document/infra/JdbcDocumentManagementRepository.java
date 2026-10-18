@@ -16,6 +16,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.documents.repository", havingValue = "jdbc")
@@ -52,19 +53,39 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
 
     @Override
     public DocumentPackagePage packagesPage(long afterId, int limit) {
+        return packagesPage("", afterId, limit);
+    }
+
+    @Override
+    public DocumentPackagePage packagesPage(String keyword, long afterId, int limit) {
         validatePage(afterId, limit);
+        String normalizedKeyword = normalizeKeyword(keyword);
+        String keywordFilter = normalizedKeyword.isEmpty() ? "" : """
+                 and (
+                        lower(code) like ? escape '!'
+                     or lower(title) like ? escape '!'
+                     or lower(business_code) like ? escape '!'
+                     or lower(owner_name) like ? escape '!'
+                 )
+                """;
         String sql = """
                 select id, code, title, category, business_code, owner_name, purpose, required_evidence,
                        linked_evidence, status, retention_policy, last_updated, tone
                   from doc_package
                  where id > ?
+                """ + keywordFilter + """
                  order by id
                  limit ?
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, afterId);
-            statement.setInt(2, limit + 1);
+            int parameter = 2;
+            if (!normalizedKeyword.isEmpty()) {
+                String pattern = likePattern(normalizedKeyword);
+                for (int index = 0; index < 4; index++) statement.setString(parameter++, pattern);
+            }
+            statement.setInt(parameter, limit + 1);
             List<DocumentPackagePage.Entry> entries = new ArrayList<>();
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
@@ -427,6 +448,17 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
     private void validatePage(long afterId, int limit) {
         if (afterId < 0) throw new IllegalArgumentException("文档包游标不能小于 0");
         if (limit < 1 || limit > 101) throw new IllegalArgumentException("文档包分页大小必须在 1 到 101 之间");
+    }
+
+    private String normalizeKeyword(String keyword) {
+        return keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String likePattern(String keyword) {
+        return "%" + keyword
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_") + "%";
     }
 
     @FunctionalInterface
