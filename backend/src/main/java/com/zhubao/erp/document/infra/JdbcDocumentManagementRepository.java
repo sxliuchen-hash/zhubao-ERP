@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.documents.repository", havingValue = "jdbc")
@@ -121,24 +122,45 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
                        uploaded_at, fallback_action, tone, object_type
                   from doc_evidence_attachment
                  order by id
-                """, mapper((rs) -> new EvidenceAttachment(
-                rs.getString("code"),
-                rs.getString("document_code"),
-                rs.getString("business_type"),
-                rs.getString("business_code"),
-                rs.getString("file_name"),
-                rs.getString("media_type"),
-                rs.getString("storage_location"),
-                rs.getString("storage_policy"),
-                rs.getString("source"),
-                rs.getString("status"),
-                rs.getString("owner_name"),
-                rs.getString("checksum"),
-                rs.getString("uploaded_at"),
-                rs.getString("fallback_action"),
-                rs.getString("tone"),
-                rs.getString("object_type")
-        )));
+                """, this::mapAttachment);
+    }
+
+    @Override
+    public List<EvidenceAttachment> attachmentsByBusinessCode(String businessCode) {
+        if (businessCode == null) {
+            return List.of();
+        }
+        return queryAttachments("""
+                select code, document_code, business_type, business_code, file_name, media_type,
+                       storage_location, storage_policy, source, status, owner_name, checksum,
+                       uploaded_at, fallback_action, tone, object_type
+                  from doc_evidence_attachment
+                 where business_code = ?
+                 order by id
+                """, businessCode);
+    }
+
+    @Override
+    public Optional<EvidenceAttachment> findAttachmentByCode(String code) {
+        if (code == null) {
+            return Optional.empty();
+        }
+        String sql = """
+                select code, document_code, business_type, business_code, file_name, media_type,
+                       storage_location, storage_policy, source, status, owner_name, checksum,
+                       uploaded_at, fallback_action, tone, object_type
+                  from doc_evidence_attachment
+                 where code = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next() ? Optional.of(mapAttachment(rs)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query document attachment: " + code, ex);
+        }
     }
 
     @Override
@@ -433,6 +455,43 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to query document management repository", ex);
         }
+    }
+
+    private List<EvidenceAttachment> queryAttachments(String sql, String businessCode) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, businessCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<EvidenceAttachment> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(mapAttachment(rs));
+                }
+                return List.copyOf(rows);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query document attachments by business code", ex);
+        }
+    }
+
+    private EvidenceAttachment mapAttachment(ResultSet rs) throws SQLException {
+        return new EvidenceAttachment(
+                rs.getString("code"),
+                rs.getString("document_code"),
+                rs.getString("business_type"),
+                rs.getString("business_code"),
+                rs.getString("file_name"),
+                rs.getString("media_type"),
+                rs.getString("storage_location"),
+                rs.getString("storage_policy"),
+                rs.getString("source"),
+                rs.getString("status"),
+                rs.getString("owner_name"),
+                rs.getString("checksum"),
+                rs.getString("uploaded_at"),
+                rs.getString("fallback_action"),
+                rs.getString("tone"),
+                rs.getString("object_type")
+        );
     }
 
     private <T> JdbcRowMapper<T> mapper(JdbcRowMapper<T> mapper) {

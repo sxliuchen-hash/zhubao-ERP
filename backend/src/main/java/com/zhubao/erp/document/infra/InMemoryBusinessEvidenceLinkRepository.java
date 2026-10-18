@@ -22,6 +22,16 @@ public class InMemoryBusinessEvidenceLinkRepository implements BusinessEvidenceL
     }
 
     @Override
+    public synchronized List<BusinessEvidenceLink> findByTarget(String targetType, String targetCode) {
+        if (targetType == null || targetCode == null) {
+            return List.of();
+        }
+        return links.stream()
+                .filter(link -> targetType.equals(link.targetType()) && targetCode.equals(link.targetCode()))
+                .toList();
+    }
+
+    @Override
     public synchronized Optional<BusinessEvidenceLink> findByKeyHash(String linkKeyHash) {
         return links.stream().filter(link -> link.linkKeyHash().equals(linkKeyHash)).findFirst();
     }

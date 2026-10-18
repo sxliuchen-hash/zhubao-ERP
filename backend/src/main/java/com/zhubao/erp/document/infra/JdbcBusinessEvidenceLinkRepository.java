@@ -47,6 +47,35 @@ public class JdbcBusinessEvidenceLinkRepository implements BusinessEvidenceLinkR
     }
 
     @Override
+    public List<BusinessEvidenceLink> findByTarget(String targetType, String targetCode) {
+        String sql = """
+                select link_code, attachment_code, target_type, target_code, stage, scene,
+                       operation_type, operation_code, process_name, clause_no, operator_name,
+                       linked_at, link_key_hash
+                  from doc_business_evidence_link
+                 where target_type = ? and target_code = ?
+                 order by id
+                """;
+        if (targetType == null || targetCode == null) {
+            return List.of();
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, targetType);
+            statement.setString(2, targetCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<BusinessEvidenceLink> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(map(rs));
+                }
+                return List.copyOf(rows);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法按业务单据读取业务证据引用", ex);
+        }
+    }
+
+    @Override
     public Optional<BusinessEvidenceLink> findByKeyHash(String linkKeyHash) {
         String sql = """
                 select link_code, attachment_code, target_type, target_code, stage, scene,

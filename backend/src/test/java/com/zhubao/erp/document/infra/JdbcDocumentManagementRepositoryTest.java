@@ -48,6 +48,35 @@ class JdbcDocumentManagementRepositoryTest {
     }
 
     @Test
+    void findsAttachmentsByBusinessCodeAndCodeWithoutMixingBusinessRows() throws SQLException {
+        EvidenceAttachment first = pageAttachment("ATT-BIZ-001", "BUS-PAGE-001");
+        EvidenceAttachment second = pageAttachment("ATT-BIZ-002", "BUS-PAGE-001");
+        EvidenceAttachment otherBusiness = pageAttachment("ATT-BIZ-003", "BUS-PAGE-002");
+        insertAttachment(first);
+        insertAttachment(second);
+        insertAttachment(otherBusiness);
+
+        assertThat(repository.attachmentsByBusinessCode("BUS-PAGE-001"))
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-001", "ATT-BIZ-002");
+        assertThat(repository.attachmentsByBusinessCode("BUS-NOT-FOUND")).isEmpty();
+        assertThat(repository.findAttachmentByCode("ATT-BIZ-002")).contains(second);
+        assertThat(repository.findAttachmentByCode("ATT-BIZ-003")).contains(otherBusiness);
+        assertThat(repository.findAttachmentByCode("ATT-NOT-FOUND")).isEmpty();
+
+        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        memory.saveAttachment(first);
+        memory.saveAttachment(second);
+        memory.saveAttachment(otherBusiness);
+        assertThat(memory.attachmentsByBusinessCode("BUS-PAGE-001"))
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-001", "ATT-BIZ-002");
+        assertThat(memory.attachmentsByBusinessCode("BUS-NOT-FOUND")).isEmpty();
+        assertThat(memory.findAttachmentByCode("ATT-BIZ-002")).contains(second);
+        assertThat(memory.findAttachmentByCode("ATT-NOT-FOUND")).isEmpty();
+    }
+
+    @Test
     void pagesAttachmentsByDocumentAndStableIdLikeMemoryRepository() throws SQLException {
         insertAttachment(pageAttachment("ATT-PAGE-001", "BUS-PAGE-001"));
         insertAttachment(pageAttachment("ATT-PAGE-002", "BUS-PAGE-002"));

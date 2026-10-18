@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 @Repository
 @ConditionalOnProperty(name = "zhubao.documents.repository", havingValue = "memory", matchIfMissing = true)
@@ -64,6 +65,26 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
     @Override
     public synchronized List<EvidenceAttachment> attachments() {
         return attachments.values().stream().map(AttachmentEntry::attachment).toList();
+    }
+
+    @Override
+    public synchronized List<EvidenceAttachment> attachmentsByBusinessCode(String businessCode) {
+        if (businessCode == null) {
+            return List.of();
+        }
+        return attachments.values().stream()
+                .map(AttachmentEntry::attachment)
+                .filter(attachment -> businessCode.equals(attachment.businessCode()))
+                .toList();
+    }
+
+    @Override
+    public synchronized Optional<EvidenceAttachment> findAttachmentByCode(String code) {
+        if (code == null) {
+            return Optional.empty();
+        }
+        AttachmentEntry entry = attachments.get(code);
+        return entry == null ? Optional.empty() : Optional.of(entry.attachment());
     }
 
     @Override
