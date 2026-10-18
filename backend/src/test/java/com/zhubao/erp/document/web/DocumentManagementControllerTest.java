@@ -8,6 +8,7 @@ import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceLinkPage;
+import com.zhubao.erp.document.domain.EvidencePageFilter;
 import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.business.app.BusinessDataAccess;
@@ -201,16 +202,18 @@ class DocumentManagementControllerTest {
         HttpServletRequest request = mock(HttpServletRequest.class);
         OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
         EvidenceLinkPage page = new EvidenceLinkPage(List.of(), 18L, true);
+        EvidencePageFilter filter = new EvidencePageFilter("2026-10-01", "2026-10-18", "image", "何琴");
         when(resolver.requireSession(request)).thenReturn(operator);
         when(evidence.queryLinkedPage(
-                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, operator
+                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, operator, filter
         )).thenReturn(page);
         DocumentManagementController controller = new DocumentManagementController(
                 service, null, resolver, access, evidence
         );
 
         var result = controller.evidenceLinksPage(
-                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, request
+                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E",
+                "2026-10-01", "2026-10-18", "image", "何琴", 17L, 7, request
         );
 
         assertThat(result.data()).isSameAs(page);
@@ -218,7 +221,7 @@ class DocumentManagementControllerTest {
         order.verify(resolver).requireSession(request);
         order.verify(access).assertCanRead(operator, "MD-11E");
         order.verify(evidence).queryLinkedPage(
-                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, operator
+                "MOTHER_ORDER", "MD-11E", "INTAKE", "inbound_confirm", "OP-11E", 17L, 7, operator, filter
         );
     }
 
@@ -231,7 +234,8 @@ class DocumentManagementControllerTest {
         OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
         HistoricalEvidencePage page = new HistoricalEvidencePage(List.of(), null, false);
         when(resolver.requireSession(any(HttpServletRequest.class))).thenReturn(operator);
-        when(evidence.queryHistoricalPage("MOTHER_ORDER", "MD-11E", 0L, 30, operator)).thenReturn(page);
+        when(evidence.queryHistoricalPage("MOTHER_ORDER", "MD-11E", 0L, 30, operator,
+                EvidencePageFilter.empty())).thenReturn(page);
         var mvc = MockMvcBuilders.standaloneSetup(new DocumentManagementController(
                 service, null, resolver, access, evidence
         )).build();
@@ -245,7 +249,8 @@ class DocumentManagementControllerTest {
                 .andExpect(jsonPath("$.data.hasMore").value(false));
 
         verify(access).assertCanRead(operator, "MD-11E");
-        verify(evidence).queryHistoricalPage("MOTHER_ORDER", "MD-11E", 0L, 30, operator);
+        verify(evidence).queryHistoricalPage("MOTHER_ORDER", "MD-11E", 0L, 30, operator,
+                EvidencePageFilter.empty());
     }
 
     @Test
@@ -264,10 +269,10 @@ class DocumentManagementControllerTest {
         );
 
         assertThatThrownBy(() -> controller.evidenceLinksPage(
-                "MOTHER_ORDER", "MD-OUTSIDE", "", "", "", 0L, 30, request
+                "MOTHER_ORDER", "MD-OUTSIDE", "", "", "", "", "", "", "", 0L, 30, request
         )).isInstanceOf(PermissionDeniedException.class);
         verify(evidence, never()).queryLinkedPage(
-                "MOTHER_ORDER", "MD-OUTSIDE", "", "", "", 0L, 30, operator
+                "MOTHER_ORDER", "MD-OUTSIDE", "", "", "", 0L, 30, operator, EvidencePageFilter.empty()
         );
     }
 
@@ -280,16 +285,18 @@ class DocumentManagementControllerTest {
         HttpServletRequest request = mock(HttpServletRequest.class);
         OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
         when(resolver.requireSession(request)).thenReturn(operator);
-        when(evidence.queryHistoricalPage("MOTHER_ORDER", "MD-11E", -1L, 101, operator))
+        when(evidence.queryHistoricalPage("MOTHER_ORDER", "MD-11E", -1L, 101, operator,
+                EvidencePageFilter.empty()))
                 .thenThrow(new com.zhubao.erp.common.error.BusinessException("分页参数无效"));
         DocumentManagementController controller = new DocumentManagementController(
                 service, null, resolver, access, evidence
         );
 
         assertThatThrownBy(() -> controller.historicalEvidencePage(
-                "MOTHER_ORDER", "MD-11E", -1L, 101, request
+                "MOTHER_ORDER", "MD-11E", "", "", "", "", -1L, 101, request
         )).isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
-        verify(evidence).queryHistoricalPage("MOTHER_ORDER", "MD-11E", -1L, 101, operator);
+        verify(evidence).queryHistoricalPage("MOTHER_ORDER", "MD-11E", -1L, 101, operator,
+                EvidencePageFilter.empty());
     }
 
     @Test

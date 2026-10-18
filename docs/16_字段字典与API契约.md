@@ -2285,8 +2285,8 @@ PWA 一期边界：
 | `POST /api/documents/evidence-files` | `ApiResponse<EvidenceAttachmentUploadResult>` |
 | `POST /api/documents/evidence-links` | `ApiResponse<BusinessEvidenceLink>` |
 | `GET /api/documents/evidence-links` | `ApiResponse<EvidenceBoard>` |
-| `GET /api/documents/evidence-links/page?targetType=&targetCode=&stage=&operationType=&operationCode=&afterId=&limit=` | `ApiResponse<EvidenceLinkPage>`；目标类型和单号必填，阶段／操作筛选可选，`afterId` 默认 0，`limit` 默认 30、范围 1—100。先校验会话和目标单据数据范围，再按稳定 ID 分批读取已关联证据，过滤后返回 `items`、`hasMore`、`nextCursor`；末页游标为 `null` |
-| `GET /api/documents/evidence-links/historical/page?targetType=&targetCode=&afterId=&limit=` | `ApiResponse<HistoricalEvidencePage>`；目标类型和单号必填，`afterId` 默认 0，`limit` 默认 30、范围 1—100。先校验数据范围，再分批返回未绑定的待关联／历史证据，保留历史只读及下线状态；返回 `items`、`hasMore`、`nextCursor` |
+| `GET /api/documents/evidence-links/page?targetType=&targetCode=&stage=&operationType=&operationCode=&uploadedFrom=&uploadedTo=&mediaCategory=&ownerKeyword=&afterId=&limit=` | `ApiResponse<EvidenceLinkPage>`；目标类型和单号必填，阶段／操作筛选可选；上传日期采用 `yyyy-MM-dd` 含边界，媒体分类可用 `image`、`video`、`pdf`，上传人按附件 `owner` 做大小写不敏感的文字包含匹配。`afterId` 默认 0，`limit` 默认 30、范围 1—100。先校验会话和目标单据范围，再按稳定 ID 分批读取并筛选有权证据，返回 `items`、`hasMore`、`nextCursor`；末页游标为 `null` |
+| `GET /api/documents/evidence-links/historical/page?targetType=&targetCode=&uploadedFrom=&uploadedTo=&mediaCategory=&ownerKeyword=&afterId=&limit=` | `ApiResponse<HistoricalEvidencePage>`；目标类型和单号必填，日期／媒体／上传人筛选同上，`afterId` 默认 0，`limit` 默认 30、范围 1—100。先校验数据范围，再分批返回未绑定的待关联／历史证据，保留历史只读及下线状态；返回 `items`、`hasMore`、`nextCursor` |
 | `GET /api/documents/summary` | `ApiResponse<DocumentManagementSummary>` |
 | `GET /api/documents/packages` | `ApiResponse<List<DocumentPackage>>` |
 | `GET /api/documents/packages/page?keyword=&afterId=&limit=` | `ApiResponse<PackagePageResponse>`；`keyword` 可选，按编号、标题、业务单号或负责人做大小写不敏感的文字包含检索，`%`、`_` 按字面匹配；`afterId` 默认 0，`limit` 默认 50、范围 1—100。仓储先按检索条件和稳定 ID 有界读取，接口逐条按业务范围过滤后返回有权 `items`、`hasMore` 与下一页 `nextCursor`；末页游标为 `null`。旧全量接口保留兼容 |

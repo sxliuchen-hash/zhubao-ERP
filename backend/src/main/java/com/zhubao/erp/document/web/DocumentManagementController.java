@@ -20,6 +20,7 @@ import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.EvidenceLinkPage;
+import com.zhubao.erp.document.domain.EvidencePageFilter;
 import com.zhubao.erp.document.domain.HistoricalEvidencePage;
 import com.zhubao.erp.document.domain.StoredContentInventory;
 import com.zhubao.erp.document.domain.StoredContentItem;
@@ -185,6 +186,10 @@ public class DocumentManagementController {
             @RequestParam(required = false) String stage,
             @RequestParam(required = false) String operationType,
             @RequestParam(required = false) String operationCode,
+            @RequestParam(defaultValue = "") String uploadedFrom,
+            @RequestParam(defaultValue = "") String uploadedTo,
+            @RequestParam(defaultValue = "") String mediaCategory,
+            @RequestParam(defaultValue = "") String ownerKeyword,
             @RequestParam(defaultValue = "0") long afterId,
             @RequestParam(defaultValue = "30") int limit,
             HttpServletRequest request
@@ -199,7 +204,8 @@ public class DocumentManagementController {
                 operationCode,
                 afterId,
                 limit,
-                context
+                context,
+                new EvidencePageFilter(uploadedFrom, uploadedTo, mediaCategory, ownerKeyword)
         ));
     }
 
@@ -207,6 +213,10 @@ public class DocumentManagementController {
     public ApiResponse<HistoricalEvidencePage> historicalEvidencePage(
             @RequestParam String targetType,
             @RequestParam String targetCode,
+            @RequestParam(defaultValue = "") String uploadedFrom,
+            @RequestParam(defaultValue = "") String uploadedTo,
+            @RequestParam(defaultValue = "") String mediaCategory,
+            @RequestParam(defaultValue = "") String ownerKeyword,
             @RequestParam(defaultValue = "0") long afterId,
             @RequestParam(defaultValue = "30") int limit,
             HttpServletRequest request
@@ -218,7 +228,8 @@ public class DocumentManagementController {
                 targetCode,
                 afterId,
                 limit,
-                context
+                context,
+                new EvidencePageFilter(uploadedFrom, uploadedTo, mediaCategory, ownerKeyword)
         ));
     }
 
