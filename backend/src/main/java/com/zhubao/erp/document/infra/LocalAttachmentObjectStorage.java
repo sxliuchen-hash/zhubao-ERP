@@ -4,6 +4,8 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
 import com.zhubao.erp.document.domain.AttachmentMediaPolicy;
 import com.zhubao.erp.document.domain.StoredAttachmentObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -15,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -22,6 +25,7 @@ import java.util.HexFormat;
 @Component
 public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(LocalAttachmentObjectStorage.class);
     private final AttachmentStorageProperties properties;
 
     public LocalAttachmentObjectStorage(AttachmentStorageProperties properties) {
@@ -116,6 +120,14 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
                 // 未发布的临时对象留待存储对账报告，不覆盖原始失败。
             }
         }
+        if ("image/jpeg".equals(safeMediaType) || "image/png".equals(safeMediaType)) {
+            try {
+                ensureImageDerivative(storageKey, "thumbnail");
+                ensureImageDerivative(storageKey, "preview");
+            } catch (RuntimeException exception) {
+                LOGGER.warn("附件 {} 的派生图可按需重建：{}", attachmentCode, exception.getMessage());
+            }
+        }
         return new StoredAttachmentObject(
                 storageKey,
                 "local://" + storageKey,
@@ -156,6 +168,49 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
         } catch (IOException exception) {
             throw new BusinessException("附件读取本地存储失败：" + exception.getMessage());
         }
+    }
+
+    @Override
+    public synchronized String ensureImageDerivative(String storageKey, String resolution) {
+        int maxEdge = switch (resolution) {
+            case "thumbnail" -> 320;
+            case "preview" -> 1280;
+            default -> throw new BusinessException("图片派生图清晰度不支持");
+        };
+        Path source = existingObject(storageKey);
+        String key = derivativeStorageKey(storageKey, resolution);
+        Path target = resolveStorageKey(key);
+        if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+            return key;
+        }
+        Path pending = null;
+        try {
+            Files.createDirectories(target.getParent());
+            pending = Files.createTempFile(target.getParent(), ".derivative-", ".pending");
+            ImageDerivativeGenerator.write(source, pending, maxEdge);
+            try {
+                Files.move(pending, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException exception) {
+                throw new BusinessException("派生图存储不支持原子发布");
+            }
+            return key;
+        } catch (IOException exception) {
+            if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) return key;
+            throw new BusinessException("图片派生图写入失败：" + exception.getMessage());
+        } finally {
+            if (pending != null) {
+                try {
+                    Files.deleteIfExists(pending);
+                } catch (IOException exception) {
+                    LOGGER.warn("派生图临时文件保留待核对：{}", pending);
+                }
+            }
+        }
+    }
+
+    private String derivativeStorageKey(String storageKey, String resolution) {
+        String digest = HexFormat.of().formatHex(sha256Digest().digest(storageKey.getBytes(StandardCharsets.UTF_8)));
+        return "derived-images/" + digest + "/" + resolution + ".jpg";
     }
 
     private Path existingObject(String storageKey) {

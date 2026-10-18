@@ -31,5 +31,10 @@ public interface AttachmentObjectStorage {
 
     InputStream open(String storageKey);
 
+    /** 从可恢复的原件生成指定清晰度图片，返回派生对象的存储键。 */
+    default String ensureImageDerivative(String storageKey, String resolution) {
+        throw new UnsupportedOperationException("当前附件存储不支持图片派生图");
+    }
+
     void delete(String storageKey);
 }
