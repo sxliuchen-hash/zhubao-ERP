@@ -13,12 +13,13 @@ import {
   fetchDocumentAuditEvents,
   fetchDocumentPackagesPage,
   fetchDocumentSummary,
-  fetchEvidenceAttachments,
+  fetchEvidenceAttachmentsPage,
   uploadEvidenceAttachment,
   type EvidenceAttachmentUploadResult,
 } from '../../services/documentManagementApi';
 
 const DOCUMENT_PACKAGE_PAGE_SIZE = 50;
+const EVIDENCE_ATTACHMENT_PAGE_SIZE = 50;
 const PACKAGE_SEARCH_DEBOUNCE_MS = 280;
 const summary = ref<DocumentManagementSummary>({ packages: 0, attachments: 0, missingEvidence: 0, manualFallbacks: 0, auditEvents: 0 });
 const packages = ref<DocumentPackage[]>([]);
@@ -28,6 +29,11 @@ const packageLoading = ref(false);
 const packageLoadingMore = ref(false);
 const packageLoadError = ref('');
 const attachments = ref<EvidenceAttachment[]>([]);
+const attachmentNextCursor = ref<number | null>(null);
+const attachmentHasMore = ref(false);
+const attachmentLoading = ref(false);
+const attachmentLoadingMore = ref(false);
+const attachmentLoadError = ref('');
 const auditEvents = ref<DocumentAuditEvent[]>([]);
 const loadingError = ref('');
 const auditLoadError = ref('');
@@ -45,6 +51,8 @@ const canViewAudit = computed(() =>
 const selectedPackageSnapshot = ref<DocumentPackage | null>(null);
 let packageQueryVersion = 0;
 let packageSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let attachmentQueryVersion = 0;
+let suppressAttachmentWatch = false;
 
 const activePackage = computed(
   () => selectedPackageCode.value
@@ -198,23 +206,103 @@ async function loadPackagePage(reset = false) {
   }
 }
 
-async function loadDocuments() {
+function mergeAttachmentPage(nextItems: EvidenceAttachment[], reset: boolean, documentCode: string) {
+  const nextAttachments = reset ? [] : [...attachments.value];
+  const existingCodes = new Set(nextAttachments.map((item) => item.code));
+
+  for (const item of nextItems) {
+    if (item.documentCode !== documentCode || existingCodes.has(item.code)) continue;
+    existingCodes.add(item.code);
+    nextAttachments.push(item);
+  }
+
+  attachments.value = nextAttachments;
+}
+
+async function loadAttachmentPage(reset = false, documentCode = activePackage.value?.code) {
+  const code = documentCode ?? activePackage.value?.code;
+  if (!code) {
+    attachmentQueryVersion += 1;
+    attachments.value = [];
+    attachmentNextCursor.value = null;
+    attachmentHasMore.value = false;
+    attachmentLoading.value = false;
+    attachmentLoadingMore.value = false;
+    attachmentLoadError.value = '';
+    return;
+  }
+  if (!reset && (attachmentLoading.value || attachmentLoadingMore.value || !attachmentHasMore.value || attachmentNextCursor.value === null)) return;
+
+  const requestVersion = reset ? ++attachmentQueryVersion : attachmentQueryVersion;
+  const afterId = reset ? undefined : attachmentNextCursor.value ?? undefined;
+
+  if (reset) {
+    attachmentLoading.value = true;
+    attachmentLoadingMore.value = false;
+    attachments.value = [];
+    attachmentNextCursor.value = null;
+    attachmentHasMore.value = false;
+  } else {
+    attachmentLoadingMore.value = true;
+  }
+  attachmentLoadError.value = '';
+
+  try {
+    const page = await fetchEvidenceAttachmentsPage({
+      documentCode: code,
+      ...(afterId === undefined ? {} : { afterId }),
+      limit: EVIDENCE_ATTACHMENT_PAGE_SIZE,
+    });
+    if (requestVersion !== attachmentQueryVersion || activePackage.value?.code !== code) return;
+
+    mergeAttachmentPage(page.items, reset, code);
+    attachmentNextCursor.value = page.nextCursor;
+    attachmentHasMore.value = page.hasMore && page.nextCursor !== null;
+  } catch (error) {
+    if (requestVersion !== attachmentQueryVersion || activePackage.value?.code !== code) return;
+    attachmentLoadError.value = packageErrorMessage(error, '附件读取失败');
+    if (reset) {
+      attachments.value = [];
+      attachmentNextCursor.value = null;
+      attachmentHasMore.value = false;
+    }
+  } finally {
+    if (requestVersion !== attachmentQueryVersion || activePackage.value?.code !== code) return;
+    if (reset) attachmentLoading.value = false;
+    else attachmentLoadingMore.value = false;
+  }
+}
+
+watch(
+  () => activePackage.value?.code,
+  (code, previousCode) => {
+    if (code === previousCode || suppressAttachmentWatch) return;
+    void loadAttachmentPage(true, code);
+  },
+  { flush: 'sync' },
+);
+
+async function loadDocuments(refreshSelectedAttachments = false) {
   loadingError.value = '';
   auditLoadError.value = '';
 
   try {
-    const [nextSummary, nextAttachments] = await Promise.all([
-      fetchDocumentSummary(),
-      fetchEvidenceAttachments(),
-    ]);
-    summary.value = nextSummary;
-    attachments.value = nextAttachments;
+    summary.value = await fetchDocumentSummary();
   } catch (error) {
     loadingError.value = error instanceof Error ? `附件数据读取失败：${error.message}` : '附件数据读取失败';
-    return;
   }
 
-  if (packageSearchTimer === null) await loadPackagePage(true);
+  if (refreshSelectedAttachments) {
+    suppressAttachmentWatch = true;
+    try {
+      if (packageSearchTimer === null) await loadPackagePage(true);
+    } finally {
+      suppressAttachmentWatch = false;
+    }
+    await loadAttachmentPage(true, activePackage.value?.code);
+  } else if (packageSearchTimer === null) {
+    await loadPackagePage(true);
+  }
 
   if (!canViewAudit.value) {
     auditEvents.value = [];
@@ -255,7 +343,7 @@ async function uploadEvidence() {
       file: selectedFile.value,
     });
     uploadResult.value = result;
-    await loadDocuments();
+    await loadDocuments(true);
   } catch (error) {
     uploadError.value = error instanceof Error ? error.message : '上传附件失败';
   } finally {
@@ -457,7 +545,10 @@ async function uploadEvidence() {
           <dd>{{ activePackage.lastUpdated }}</dd>
         </dl>
         <div class="document-linked-list">
-          <strong>关联附件</strong>
+          <strong>关联附件（当前包）</strong>
+          <p v-if="attachmentLoadError" class="operation-feedback danger" role="alert">附件数据读取失败：{{ attachmentLoadError }}</p>
+          <p v-else-if="attachmentLoading" class="operation-feedback" role="status">正在加载当前文档包附件…</p>
+          <p v-else-if="attachments.length === 0" class="empty-hint">当前文档包暂无附件。</p>
           <article v-for="attachment in activeAttachments" :key="attachment.code" :class="`tone-${attachment.tone}`">
             <span>{{ attachment.fileName }}</span>
             <StatusBadge :label="attachment.status" :tone="attachment.tone" />
@@ -472,9 +563,13 @@ async function uploadEvidence() {
         <div>
           <span class="eyebrow">Attachment Register</span>
           <h2>附件与证据清单</h2>
-          <p>当前管理附件元数据、存储位置、校验和与兜底动作，上传内容进入本地存储适配，元数据可切换 JDBC 仓储。</p>
+          <p>仅显示当前文档包 {{ activePackage?.code ?? '（未选择）' }} 的附件；当前管理附件元数据、存储位置、校验和与兜底动作。</p>
         </div>
       </div>
+      <p v-if="attachmentLoadError" class="operation-feedback danger" role="alert">附件数据读取失败：{{ attachmentLoadError }}</p>
+      <p v-else-if="attachmentLoading || (packageLoading && !activePackage)" class="operation-feedback" role="status">正在加载当前文档包附件…</p>
+      <p v-else-if="activePackage && attachments.length === 0" class="empty-hint">当前文档包暂无附件。</p>
+      <p v-else-if="!activePackage" class="empty-hint">暂无当前文档包，无法读取附件。</p>
       <div class="document-table-wrap desk-table-wrap">
         <table class="document-table attachment-table">
           <thead>
@@ -517,6 +612,13 @@ async function uploadEvidence() {
           <span>{{ item.businessCode }} · {{ item.mediaType }}</span>
           <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" />
         </article>
+      </div>
+      <div class="document-package-pagination" aria-live="polite">
+        <p v-if="attachmentLoadingMore" role="status">正在加载更多当前包附件…</p>
+        <p v-else-if="attachmentLoading && attachments.length > 0" role="status">正在刷新当前包附件…</p>
+        <button v-if="attachmentHasMore" class="secondary-button" type="button" aria-label="加载更多附件" :disabled="attachmentLoading || attachmentLoadingMore" @click="loadAttachmentPage(false)">
+          {{ attachmentLoadingMore ? '正在加载更多附件…' : '加载更多附件' }}
+        </button>
       </div>
     </section>
 
