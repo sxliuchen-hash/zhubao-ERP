@@ -125,9 +125,7 @@ public class BusinessEvidenceService {
         permissionGuard.assertAllowed(permissionFor(stage, operationType), operator);
         assertReadable(operator, targetCode);
 
-        EvidenceAttachment attachment = documents.attachments().stream()
-                .filter(item -> attachmentCode.equals(item.code()))
-                .findFirst()
+        EvidenceAttachment attachment = documents.findAttachmentByCode(attachmentCode)
                 .orElse(null);
         if (attachment == null || !canReadQuietly(operator, attachment.businessCode())) {
             throw new PermissionDeniedException("单号不在当前账号的业务数据范围内");
@@ -173,7 +171,7 @@ public class BusinessEvidenceService {
         try {
             links.insert(candidate);
         } catch (RuntimeException ex) {
-            BusinessEvidenceLink again = links.findAll().stream()
+            BusinessEvidenceLink again = links.findByTarget(targetType, targetCode).stream()
                     .filter(row -> EvidenceLinkKey.sameDimensions(row, candidate))
                     .findFirst()
                     .orElse(null);

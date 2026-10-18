@@ -147,6 +147,56 @@ class BusinessEvidenceServiceTest {
     }
 
     @Test
+    void bindUsesTargetedAttachmentLookupWithoutReadingAllAttachments() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingLinkRepository links = new QueryTrackingLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+        EvidenceAttachmentUploadResult uploaded = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "UNPACK", "a".getBytes(StandardCharsets.UTF_8));
+        documents.resetCounters();
+        links.resetCounters();
+
+        BusinessEvidenceLink result = fixture.evidence.bind(bind(
+                uploaded.code(), EvidenceCodes.MOTHER_ORDER, MOTHER, EvidenceCodes.INTAKE, "UNPACK",
+                EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER, "", ""
+        ), fixture.receiver);
+
+        assertThat(result.attachmentCode()).isEqualTo(uploaded.code());
+        assertThat(documents.findAttachmentByCodeCalls).isEqualTo(1);
+        assertThat(documents.attachmentsCalls).isZero();
+        assertThat(links.findAllCalls).isZero();
+    }
+
+    @Test
+    void bindInsertFailureRechecksTargetAndReturnsOnlyMatchingDimensions() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        InsertFailingLinkRepository links = new InsertFailingLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+        EvidenceAttachmentUploadResult uploaded = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "UNPACK", "b".getBytes(StandardCharsets.UTF_8));
+        links.seed(linkRecord(
+                "LINK-OTHER-DIM", uploaded.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "WEIGH", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        documents.resetCounters();
+        links.resetCounters();
+
+        BusinessEvidenceLink result = fixture.evidence.bind(bind(
+                uploaded.code(), EvidenceCodes.MOTHER_ORDER, MOTHER, EvidenceCodes.INTAKE, "UNPACK",
+                EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER, "", ""
+        ), fixture.receiver);
+
+        assertThat(result.scene()).isEqualTo("UNPACK");
+        assertThat(result.linkCode()).isNotEqualTo("LINK-OTHER-DIM");
+        assertThat(links.findByTargetCalls).isEqualTo(1);
+        assertThat(links.findAllCalls).isZero();
+        assertThat(documents.findAttachmentByCodeCalls).isEqualTo(1);
+        assertThat(documents.attachmentsCalls).isZero();
+    }
+
+    @Test
     void metadataFailureKeepsOriginalForReconciliationAndRetryCanSave() throws Exception {
         InMemoryDocumentManagementRepository delegate = new InMemoryDocumentManagementRepository();
         FailOnceRepository repository = new FailOnceRepository(delegate);
@@ -660,6 +710,7 @@ class BusinessEvidenceServiceTest {
     private static final class QueryTrackingDocumentRepository extends InMemoryDocumentManagementRepository {
         private int attachmentsCalls;
         private int attachmentsByBusinessCodeCalls;
+        private int findAttachmentByCodeCalls;
 
         @Override
         public synchronized List<EvidenceAttachment> attachments() {
@@ -673,9 +724,16 @@ class BusinessEvidenceServiceTest {
             return super.attachmentsByBusinessCode(businessCode);
         }
 
+        @Override
+        public synchronized Optional<EvidenceAttachment> findAttachmentByCode(String code) {
+            findAttachmentByCodeCalls++;
+            return super.findAttachmentByCode(code);
+        }
+
         private void resetCounters() {
             attachmentsCalls = 0;
             attachmentsByBusinessCodeCalls = 0;
+            findAttachmentByCodeCalls = 0;
         }
     }
 
@@ -704,6 +762,44 @@ class BusinessEvidenceServiceTest {
         @Override
         public void insert(BusinessEvidenceLink link) {
             delegate.insert(link);
+        }
+
+        private void resetCounters() {
+            findAllCalls = 0;
+            findByTargetCalls = 0;
+        }
+    }
+
+    private static final class InsertFailingLinkRepository implements BusinessEvidenceLinkRepository {
+        private final InMemoryBusinessEvidenceLinkRepository delegate = new InMemoryBusinessEvidenceLinkRepository();
+        private int findAllCalls;
+        private int findByTargetCalls;
+
+        private void seed(BusinessEvidenceLink link) {
+            delegate.insert(link);
+        }
+
+        @Override
+        public List<BusinessEvidenceLink> findAll() {
+            findAllCalls++;
+            throw new AssertionError("绑定异常回查不应读取全部证据引用");
+        }
+
+        @Override
+        public List<BusinessEvidenceLink> findByTarget(String targetType, String targetCode) {
+            findByTargetCalls++;
+            return delegate.findByTarget(targetType, targetCode);
+        }
+
+        @Override
+        public Optional<BusinessEvidenceLink> findByKeyHash(String linkKeyHash) {
+            return delegate.findByKeyHash(linkKeyHash);
+        }
+
+        @Override
+        public void insert(BusinessEvidenceLink link) {
+            delegate.insert(link);
+            throw new IllegalStateException("写入结果未知");
         }
 
         private void resetCounters() {
