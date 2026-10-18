@@ -62,6 +62,18 @@ export interface StoredContentInventory {
   items: StoredContentItem[];
 }
 
+export interface EvidenceAttachmentPageQuery {
+  documentCode: string;
+  afterId?: number;
+  limit?: number;
+}
+
+export interface EvidenceAttachmentPage {
+  items: EvidenceAttachment[];
+  nextCursor: number | null;
+  hasMore: boolean;
+}
+
 export async function fetchDocumentSummary(): Promise<DocumentManagementSummary> {
   return apiGet<DocumentManagementSummary>('/api/documents/summary');
 }
@@ -72,6 +84,16 @@ export async function fetchDocumentPackages(): Promise<DocumentPackage[]> {
 
 export async function fetchEvidenceAttachments(): Promise<EvidenceAttachment[]> {
   return apiGet<EvidenceAttachment[]>('/api/documents/attachments');
+}
+
+export async function fetchEvidenceAttachmentsPage(
+  query: EvidenceAttachmentPageQuery,
+): Promise<EvidenceAttachmentPage> {
+  const params = new URLSearchParams();
+  params.set('documentCode', query.documentCode);
+  if (query.afterId !== undefined) params.set('afterId', String(query.afterId));
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  return apiGet<EvidenceAttachmentPage>(`/api/documents/attachments/page?${params.toString()}`);
 }
 
 export async function fetchDocumentAuditEvents(): Promise<DocumentAuditEvent[]> {

@@ -4,6 +4,7 @@ import {
   fetchDocumentPackages,
   fetchDocumentSummary,
   fetchEvidenceAttachments,
+  fetchEvidenceAttachmentsPage,
   fetchAttachmentPreviewUrl,
   uploadEvidenceAttachment,
 } from './documentManagementApi';
@@ -127,5 +128,53 @@ describe('documentManagementApi', () => {
     expect(String(fetchMock.mock.calls[5][0])).toContain('/preview-url?purpose=preview&requestId=');
     await fetchAttachmentPreviewUrl('ATT-UP-001', 'download');
     expect(String(fetchMock.mock.calls[6][0])).toContain('/preview-url?purpose=download&requestId=');
+  });
+
+  it('loads the first attachment page with encoded document code and parses the page response', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        '/api/documents/attachments/page?documentCode=DOC-%E7%8F%A0+%26+%E5%AE%A2%3F%2F%E4%B8%AD%E6%96%87',
+      );
+      return {
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: {
+            items: [{ code: 'ATT-PAGE-001', documentCode: 'DOC-珠 & 客?/中文' }],
+            nextCursor: 42,
+            hasMore: true,
+          },
+        }),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchEvidenceAttachmentsPage({ documentCode: 'DOC-珠 & 客?/中文' })).resolves.toEqual({
+      items: [{ code: 'ATT-PAGE-001', documentCode: 'DOC-珠 & 客?/中文' }],
+      nextCursor: 42,
+      hasMore: true,
+    });
+  });
+
+  it('loads a continuation attachment page with cursor and limit parameters', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('/api/documents/attachments/page?documentCode=DOC-PAGE-001&afterId=42&limit=20');
+      return {
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: { items: [], nextCursor: null, hasMore: false },
+        }),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchEvidenceAttachmentsPage({ documentCode: 'DOC-PAGE-001', afterId: 42, limit: 20 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
   });
 });
