@@ -11,15 +11,21 @@ import {
 } from '../../data/documentManagementData';
 import {
   fetchDocumentAuditEvents,
-  fetchDocumentPackages,
+  fetchDocumentPackagesPage,
   fetchDocumentSummary,
   fetchEvidenceAttachments,
   uploadEvidenceAttachment,
   type EvidenceAttachmentUploadResult,
 } from '../../services/documentManagementApi';
 
+const DOCUMENT_PACKAGE_PAGE_SIZE = 50;
 const summary = ref<DocumentManagementSummary>({ packages: 0, attachments: 0, missingEvidence: 0, manualFallbacks: 0, auditEvents: 0 });
 const packages = ref<DocumentPackage[]>([]);
+const packageNextCursor = ref<number | null>(null);
+const packageHasMore = ref(false);
+const packageLoading = ref(false);
+const packageLoadingMore = ref(false);
+const packageLoadError = ref('');
 const attachments = ref<EvidenceAttachment[]>([]);
 const auditEvents = ref<DocumentAuditEvent[]>([]);
 const loadingError = ref('');
@@ -35,21 +41,30 @@ const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(n
 const canViewAudit = computed(() =>
   ['ADMIN', 'GENERAL_MANAGER'].includes(authSession.value?.role ?? '') && authSession.value?.dataScope === 'ALL',
 );
+const selectedPackageSnapshot = ref<DocumentPackage | null>(null);
+let packageQueryVersion = 0;
 
 const activePackage = computed(
-  () => packages.value.find((item) => item.code === selectedPackageCode.value) ?? packages.value.find((item) => item.status.includes('缺') || item.status.includes('待')) ?? packages.value[0],
+  () => selectedPackageCode.value
+    ? packages.value.find((item) => item.code === selectedPackageCode.value) ?? selectedPackageSnapshot.value ?? undefined
+    : packages.value.find((item) => item.status.includes('缺') || item.status.includes('待')) ?? packages.value[0],
 );
 
 const activeAttachments = computed(() =>
   attachments.value.filter((item) => item.documentCode === activePackage.value?.code),
 );
-const visiblePackages = computed(() => {
-  const text = packageKeyword.value.trim().toLowerCase();
-  if (!text) return packages.value;
-  return packages.value.filter((item) => `${item.code} ${item.title} ${item.businessCode} ${item.owner}`.toLowerCase().includes(text));
+const visiblePackages = computed(() => packages.value);
+const packageOptions = computed(() => {
+  if (!selectedPackageSnapshot.value || packages.value.some((item) => item.code === selectedPackageSnapshot.value?.code)) {
+    return packages.value;
+  }
+  return [selectedPackageSnapshot.value, ...packages.value];
 });
 
 function selectPackage(code: string) {
+  const selected = packages.value.find((item) => item.code === code);
+  if (!selected) return;
+  selectedPackageSnapshot.value = selected;
   selectedPackageCode.value = code;
   detailOpen.value = true;
 }
@@ -59,6 +74,12 @@ function backToPackages() {
 }
 
 watch(selectedPackageCode, () => {
+  if (!selectedPackageCode.value) {
+    selectedPackageSnapshot.value = null;
+  } else {
+    const selected = packages.value.find((item) => item.code === selectedPackageCode.value);
+    if (selected) selectedPackageSnapshot.value = selected;
+  }
   uploadResult.value = null;
 });
 
@@ -85,24 +106,92 @@ const missingPackages = computed(() =>
 );
 
 onMounted(loadDocuments);
+watch(packageKeyword, () => {
+  void loadPackagePage(true);
+});
+
+function packageErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function mergePackagePage(nextItems: DocumentPackage[], reset: boolean) {
+  const nextPackages = reset ? [] : [...packages.value];
+  const existingCodes = new Set(nextPackages.map((item) => item.code));
+
+  for (const item of nextItems) {
+    if (existingCodes.has(item.code)) continue;
+    existingCodes.add(item.code);
+    nextPackages.push(item);
+  }
+
+  packages.value = nextPackages;
+  if (selectedPackageCode.value) {
+    const selected = nextPackages.find((item) => item.code === selectedPackageCode.value);
+    if (selected) selectedPackageSnapshot.value = selected;
+  }
+}
+
+async function loadPackagePage(reset = false) {
+  if (!reset && (packageLoading.value || packageLoadingMore.value || !packageHasMore.value || packageNextCursor.value === null)) return;
+
+  const requestVersion = reset ? ++packageQueryVersion : packageQueryVersion;
+  const afterId = reset ? undefined : packageNextCursor.value ?? undefined;
+  const keyword = packageKeyword.value.trim();
+
+  if (reset) {
+    packageLoading.value = true;
+    packageLoadingMore.value = false;
+    packages.value = [];
+    packageNextCursor.value = null;
+    packageHasMore.value = false;
+  } else {
+    packageLoadingMore.value = true;
+  }
+  packageLoadError.value = '';
+
+  try {
+    const page = await fetchDocumentPackagesPage({
+      ...(afterId === undefined ? {} : { afterId }),
+      limit: DOCUMENT_PACKAGE_PAGE_SIZE,
+      ...(keyword ? { keyword } : {}),
+    });
+    if (requestVersion !== packageQueryVersion) return;
+
+    mergePackagePage(page.items, reset);
+    packageNextCursor.value = page.nextCursor;
+    packageHasMore.value = page.hasMore && page.nextCursor !== null;
+  } catch (error) {
+    if (requestVersion !== packageQueryVersion) return;
+    packageLoadError.value = packageErrorMessage(error, '文档包读取失败');
+    if (reset) {
+      packages.value = [];
+      packageNextCursor.value = null;
+      packageHasMore.value = false;
+    }
+  } finally {
+    if (requestVersion !== packageQueryVersion) return;
+    if (reset) packageLoading.value = false;
+    else packageLoadingMore.value = false;
+  }
+}
 
 async function loadDocuments() {
   loadingError.value = '';
   auditLoadError.value = '';
 
   try {
-    const [nextSummary, nextPackages, nextAttachments] = await Promise.all([
+    const [nextSummary, nextAttachments] = await Promise.all([
       fetchDocumentSummary(),
-      fetchDocumentPackages(),
       fetchEvidenceAttachments(),
     ]);
     summary.value = nextSummary;
-    packages.value = nextPackages;
     attachments.value = nextAttachments;
   } catch (error) {
     loadingError.value = error instanceof Error ? `附件数据读取失败：${error.message}` : '附件数据读取失败';
     return;
   }
+
+  await loadPackagePage(true);
 
   if (!canViewAudit.value) {
     auditEvents.value = [];
@@ -170,7 +259,7 @@ async function uploadEvidence() {
           <strong>{{ summary.attachments }}</strong>
         </article>
         <article>
-          <span>覆盖率</span>
+          <span>覆盖率（已加载）</span>
           <strong>{{ evidenceCoverage }}%</strong>
         </article>
         <article>
@@ -181,7 +270,8 @@ async function uploadEvidence() {
     </section>
 
     <p v-if="loadingError" class="operation-feedback danger" role="alert">{{ loadingError }}</p>
-    <p v-else-if="packages.length === 0" class="empty-hint">暂无文档包，请从业务单据建立证据关联。</p>
+    <p v-else-if="packageLoading && packages.length === 0" class="empty-hint" role="status">正在加载文档包…</p>
+    <p v-else-if="!packageLoadError && packages.length === 0" class="empty-hint">暂无文档包，请从业务单据建立证据关联。</p>
 
     <section class="document-control-board" aria-label="文档证据运营板">
       <article v-if="activePackage" class="document-active-case" :class="`tone-${activePackage.tone}`">
@@ -213,6 +303,7 @@ async function uploadEvidence() {
           <div>
             <span class="eyebrow">Evidence Gaps</span>
             <h2>待补证据</h2>
+            <small>仅统计当前已加载的文档包</small>
           </div>
           <StatusBadge :label="`${missingPackages.length} 项`" tone="amber" />
         </div>
@@ -233,7 +324,7 @@ async function uploadEvidence() {
           <p>选择文件后上传；在下方附件清单中直接预览或下载。</p>
         </div>
         <div class="button-row">
-          <label>文档包<select v-model="selectedPackageCode" :disabled="uploading" aria-label="上传文档包"><option value="">当前待补文档包</option><option v-for="item in packages" :key="item.code" :value="item.code">{{ item.code }} / {{ item.title }}</option></select></label>
+          <label>文档包<select v-model="selectedPackageCode" :disabled="uploading" aria-label="上传文档包"><option value="">当前待补文档包</option><option v-for="item in packageOptions" :key="item.code" :value="item.code">{{ item.code }} / {{ item.title }}</option></select></label>
           <label>附件文件<input type="file" aria-label="附件文件" :disabled="uploading" @change="selectFile" /></label>
           <button class="primary-button" type="button" :disabled="uploading || !activePackage || !selectedFile" @click="uploadEvidence">
             {{ uploading ? '正在上传' : '上传所选文件' }}
@@ -260,9 +351,11 @@ async function uploadEvidence() {
           <div>
             <span class="eyebrow">Package Ledger</span>
             <h2>文档包台账</h2>
-            <p>每个业务动作都必须能关联文档包、附件、存储策略和审计事件。</p>
+            <p>每个业务动作都必须能关联文档包、附件、存储策略和审计事件。覆盖率和待补统计仅代表当前已加载范围。</p>
           </div>
         </div>
+        <p v-if="packageLoadError" class="operation-feedback danger" role="alert">文档包读取失败：{{ packageLoadError }}</p>
+        <p v-else-if="packageLoading && packages.length === 0" class="operation-feedback" role="status">正在加载文档包…</p>
         <label>
           <span>查找文档包</span>
           <input v-model="packageKeyword" aria-label="查找文档包" placeholder="单号、标题或负责人" />
@@ -310,6 +403,13 @@ async function uploadEvidence() {
             </span>
             <span>{{ item.title }}</span>
             <span>{{ item.businessCode }} · {{ item.owner }}</span>
+          </button>
+        </div>
+        <div class="document-package-pagination" aria-live="polite">
+          <p v-if="packageLoadingMore" role="status">正在加载更多文档包…</p>
+          <p v-else-if="packageLoading && packages.length > 0" role="status">正在刷新文档包…</p>
+          <button v-if="packageHasMore" class="secondary-button" type="button" aria-label="加载更多文档包" :disabled="packageLoading || packageLoadingMore" @click="loadPackagePage(false)">
+            {{ packageLoadingMore ? '正在加载更多文档包…' : '加载更多文档包' }}
           </button>
         </div>
       </div>

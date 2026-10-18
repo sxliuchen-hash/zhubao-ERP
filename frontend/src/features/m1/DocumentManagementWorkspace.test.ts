@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import DocumentManagementWorkspace from './DocumentManagementWorkspace.vue';
 import { documentAuditEvents, documentPackages, documentSummary, evidenceAttachments } from '../../data/documentManagementData';
-import { fetchAttachmentPreviewUrl, fetchDocumentAuditEvents, fetchDocumentPackages, fetchDocumentSummary, fetchEvidenceAttachments, uploadEvidenceAttachment } from '../../services/documentManagementApi';
+import { fetchAttachmentPreviewUrl, fetchDocumentAuditEvents, fetchDocumentPackagesPage, fetchDocumentSummary, fetchEvidenceAttachments, uploadEvidenceAttachment } from '../../services/documentManagementApi';
 import type { AuthSession } from '../../services/authApi';
 
 vi.mock('../../services/documentManagementApi', () => ({
-  fetchDocumentAuditEvents: vi.fn(), fetchDocumentPackages: vi.fn(), fetchDocumentSummary: vi.fn(),
+  fetchDocumentAuditEvents: vi.fn(), fetchDocumentPackagesPage: vi.fn(), fetchDocumentSummary: vi.fn(),
   fetchEvidenceAttachments: vi.fn(), uploadEvidenceAttachment: vi.fn(), fetchAttachmentPreviewUrl: vi.fn(),
 }));
 
@@ -21,23 +21,132 @@ function mountWorkspace(role = 'ADMIN', dataScope = 'ALL') {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('DocumentManagementWorkspace', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(fetchDocumentSummary).mockResolvedValue(documentSummary);
-    vi.mocked(fetchDocumentPackages).mockResolvedValue(documentPackages);
+    vi.mocked(fetchDocumentPackagesPage).mockResolvedValue({ items: documentPackages, nextCursor: null, hasMore: false });
     vi.mocked(fetchEvidenceAttachments).mockResolvedValue(evidenceAttachments);
     vi.mocked(fetchDocumentAuditEvents).mockResolvedValue(documentAuditEvents);
   });
 
   it('读取失败显示错误并保持空台账，禁止上传', async () => {
-    vi.mocked(fetchDocumentPackages).mockRejectedValue(new Error('附件服务不可用'));
+    vi.mocked(fetchDocumentPackagesPage).mockRejectedValue(new Error('附件服务不可用'));
     const wrapper = mountWorkspace();
     await flushPromises();
-    expect(wrapper.text()).toContain('附件服务不可用');
-    expect(wrapper.text()).not.toContain('DOC-QC-20260706-021');
-    expect(wrapper.findAll('table.document-table tbody tr')).toHaveLength(0);
+    expect(wrapper.text()).toContain('文档包读取失败：附件服务不可用');
+    expect(wrapper.findAll('.document-master table.document-table tbody tr')).toHaveLength(0);
+    expect(wrapper.findAll('.attachment-table tbody tr')).toHaveLength(evidenceAttachments.length);
     expect(wrapper.get('button.primary-button').attributes('disabled')).toBeDefined();
+  });
+
+  it('首屏限制 50 条并将台账关键词交给服务端检索', async () => {
+    vi.mocked(fetchDocumentPackagesPage).mockImplementation(async (query) => ({
+      items: query?.keyword ? [documentPackages[1]] : [documentPackages[0]],
+      nextCursor: null,
+      hasMore: false,
+    }));
+    const wrapper = mountWorkspace();
+    await flushPromises();
+
+    expect(fetchDocumentPackagesPage).toHaveBeenNthCalledWith(1, { limit: 50 });
+    await wrapper.get('input[aria-label="查找文档包"]').setValue('质检返工');
+    await flushPromises();
+
+    expect(fetchDocumentPackagesPage).toHaveBeenLastCalledWith({ limit: 50, keyword: '质检返工' });
+    const ledger = wrapper.get('.document-master');
+    expect(ledger.text()).toContain(documentPackages[1].code);
+    expect(ledger.text()).not.toContain(documentPackages[0].code);
+    expect(wrapper.text()).toContain('覆盖率（已加载）');
+    expect(wrapper.text()).toContain('仅统计当前已加载的文档包');
+  });
+
+  it('加载更多文档包使用游标并去除跨页重复记录', async () => {
+    vi.mocked(fetchDocumentPackagesPage)
+      .mockResolvedValueOnce({ items: documentPackages.slice(0, 2), nextCursor: 2, hasMore: true })
+      .mockResolvedValueOnce({ items: [documentPackages[1], documentPackages[2]], nextCursor: null, hasMore: false });
+    const wrapper = mountWorkspace();
+    await flushPromises();
+
+    const loadMore = wrapper.findAll('button').find((button) => button.text().includes('加载更多文档包'));
+    expect(loadMore).toBeDefined();
+    await loadMore!.trigger('click');
+    await flushPromises();
+
+    expect(fetchDocumentPackagesPage).toHaveBeenNthCalledWith(1, { limit: 50 });
+    expect(fetchDocumentPackagesPage).toHaveBeenNthCalledWith(2, { afterId: 2, limit: 50 });
+    expect(wrapper.findAll('.document-master table tbody tr')).toHaveLength(3);
+    expect(wrapper.get('.document-master').text()).toContain(documentPackages[2].code);
+    expect(wrapper.findAll('button').some((button) => button.text().includes('加载更多文档包'))).toBe(false);
+  });
+
+  it('新关键词的结果优先，迟到的旧请求不能覆盖台账', async () => {
+    const slow = deferred<{ items: typeof documentPackages; nextCursor: number | null; hasMore: boolean }>();
+    const fast = deferred<{ items: typeof documentPackages; nextCursor: number | null; hasMore: boolean }>();
+    vi.mocked(fetchDocumentPackagesPage).mockImplementation(async (query) => {
+      const keyword = query?.keyword;
+      if (!keyword) return { items: [documentPackages[0]], nextCursor: null, hasMore: false };
+      if (keyword === '慢查询') return slow.promise;
+      return fast.promise;
+    });
+    const wrapper = mountWorkspace();
+    await flushPromises();
+    const input = wrapper.get('input[aria-label="查找文档包"]');
+
+    await input.setValue('慢查询');
+    await flushPromises();
+    await input.setValue('快速查询');
+    await flushPromises();
+    fast.resolve({ items: [documentPackages[2]], nextCursor: null, hasMore: false });
+    await flushPromises();
+    slow.resolve({ items: [documentPackages[1]], nextCursor: null, hasMore: false });
+    await flushPromises();
+
+    const ledger = wrapper.get('.document-master');
+    expect(ledger.text()).toContain(documentPackages[2].code);
+    expect(ledger.text()).not.toContain(documentPackages[1].code);
+    expect(wrapper.text()).not.toContain('慢查询失败');
+  });
+
+  it('查询和上传刷新后仍使用已选文档包，不静默切换业务对象', async () => {
+    vi.mocked(fetchDocumentPackagesPage).mockImplementation(async (query) => ({
+      items: query?.keyword ? [documentPackages[2]] : [documentPackages[0], documentPackages[1]],
+      nextCursor: null,
+      hasMore: false,
+    }));
+    const wrapper = mountWorkspace();
+    await flushPromises();
+    await wrapper.get('select[aria-label="上传文档包"]').setValue(documentPackages[1].code);
+    await wrapper.get('input[aria-label="查找文档包"]').setValue('硬件');
+    await flushPromises();
+
+    expect(wrapper.get('.document-detail').text()).toContain(documentPackages[1].code);
+    const file = new File(['照片'], '指定包照片.jpg', { type: 'image/jpeg' });
+    const fileInput = wrapper.get('input[type="file"]');
+    Object.defineProperty(fileInput.element, 'files', { value: [file], configurable: true });
+    await fileInput.trigger('change');
+    vi.mocked(uploadEvidenceAttachment).mockResolvedValueOnce({
+      code: 'ATT-SELECTED-001', documentCode: documentPackages[1].code, fileName: file.name,
+      mediaType: file.type, size: 6, storageLocation: 'local://selected-photo', checksum: 'sha256-selected',
+      uploadedAt: '2026-10-10 12:00:00', previewUrl: '',
+    });
+    await wrapper.get('button.primary-button').trigger('click');
+    await flushPromises();
+
+    expect(uploadEvidenceAttachment).toHaveBeenCalledWith(expect.objectContaining({
+      documentCode: documentPackages[1].code,
+      businessCode: documentPackages[1].businessCode,
+    }));
+    expect(wrapper.get('.document-detail').text()).toContain(documentPackages[1].code);
+    expect(wrapper.get('.document-detail').text()).not.toContain(documentPackages[2].code);
   });
 
   it('所选文档包没有附件时，不预览其他包的附件', async () => {
