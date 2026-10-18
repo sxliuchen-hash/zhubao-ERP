@@ -7,6 +7,15 @@ public interface BusinessEvidenceLinkRepository {
 
     List<BusinessEvidenceLink> findAll();
 
+    default BusinessEvidenceLinkPage findPageByTarget(
+            String targetType,
+            String targetCode,
+            long afterId,
+            int limit
+    ) {
+        throw new UnsupportedOperationException("业务证据引用分页未实现");
+    }
+
     default List<BusinessEvidenceLink> findByTarget(String targetType, String targetCode) {
         if (targetType == null || targetCode == null) {
             return List.of();

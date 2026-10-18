@@ -1,6 +1,7 @@
 package com.zhubao.erp.document.infra;
 
 import com.zhubao.erp.document.domain.BusinessEvidenceLink;
+import com.zhubao.erp.document.domain.BusinessEvidenceLinkPage;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -43,6 +44,48 @@ public class JdbcBusinessEvidenceLinkRepository implements BusinessEvidenceLinkR
             return List.copyOf(rows);
         } catch (SQLException ex) {
             throw new IllegalStateException("无法读取业务证据引用", ex);
+        }
+    }
+
+    @Override
+    public BusinessEvidenceLinkPage findPageByTarget(
+            String targetType,
+            String targetCode,
+            long afterId,
+            int limit
+    ) {
+        validatePage(afterId, limit);
+        if (targetType == null || targetCode == null) {
+            return new BusinessEvidenceLinkPage(List.of(), false);
+        }
+        String sql = """
+                select id, link_code, attachment_code, target_type, target_code, stage, scene,
+                       operation_type, operation_code, process_name, clause_no, operator_name,
+                       linked_at, link_key_hash
+                  from doc_business_evidence_link
+                 where target_type = ? and target_code = ? and id > ?
+                 order by id
+                 limit ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, targetType);
+            statement.setString(2, targetCode);
+            statement.setLong(3, afterId);
+            statement.setInt(4, limit + 1);
+            List<BusinessEvidenceLinkPage.Entry> entries = new ArrayList<>();
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    entries.add(new BusinessEvidenceLinkPage.Entry(rs.getLong("id"), map(rs)));
+                }
+            }
+            boolean hasMore = entries.size() > limit;
+            if (hasMore) {
+                entries = new ArrayList<>(entries.subList(0, limit));
+            }
+            return new BusinessEvidenceLinkPage(entries, hasMore);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法按业务单据分页读取业务证据引用", ex);
         }
     }
 
@@ -144,5 +187,14 @@ public class JdbcBusinessEvidenceLinkRepository implements BusinessEvidenceLinkR
                 rs.getString("linked_at"),
                 rs.getString("link_key_hash")
         );
+    }
+
+    private void validatePage(long afterId, int limit) {
+        if (afterId < 0) {
+            throw new IllegalArgumentException("证据引用游标不能小于 0");
+        }
+        if (limit < 1 || limit > 101) {
+            throw new IllegalArgumentException("证据引用分页大小必须在 1 到 101 之间");
+        }
     }
 }
