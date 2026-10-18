@@ -36,5 +36,10 @@ public interface AttachmentObjectStorage {
         throw new UnsupportedOperationException("当前附件存储不支持图片派生图");
     }
 
+    /** 从视频原件重建封面，返回派生对象的存储键。 */
+    default String ensureVideoPoster(String storageKey) {
+        throw new UnsupportedOperationException("当前附件存储不支持视频封面");
+    }
+
     void delete(String storageKey);
 }

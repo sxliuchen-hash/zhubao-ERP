@@ -160,6 +160,8 @@ class DocumentManagementServiceTest {
         assertThat(stream.mediaType()).isEqualTo("image/jpeg");
         assertThat(ImageIO.read(new java.io.ByteArrayInputStream(derivative.toByteArray())).getWidth()).isEqualTo(320);
         assertThat(service.content(uploaded.code()).content()).isEqualTo(original);
+        assertThat(service.storageIntegrity().issues())
+                .noneMatch(issue -> issue.storageKey().startsWith("derived-images/"));
         assertThatThrownBy(() -> service.previewContentStream(uploaded.code(), expiresAt(thumbnail.url()),
                 token(thumbnail.url()), "preview", "original")).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.previewUrl(uploaded.code(), "download", "thumbnail"))
@@ -177,6 +179,26 @@ class DocumentManagementServiceTest {
         service.retireStoredContent(uploaded.code(), "系统管理员");
         assertThatThrownBy(() -> service.previewContentStream(uploaded.code(), expiresAt(thumbnail.url()),
                 token(thumbnail.url()), "preview", "thumbnail")).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void videoPosterUrlUsesPreviewOnlyAndCannotAuthorizeOriginal() {
+        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        DocumentManagementService service = new DocumentManagementService(repository, localStorage());
+        byte[] incompleteMp4 = new byte[]{0, 0, 0, 12, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
+        var uploaded = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-20260706-014",
+                "现场.mp4", "video/mp4", "PC 后台上传", "库管员 何琳", "无", incompleteMp4);
+
+        var poster = service.previewUrl(uploaded.code(), "preview", "poster");
+        assertThat(poster.url()).contains("&purpose=preview&resolution=poster");
+        assertThat(poster.mediaType()).isEqualTo("image/jpeg");
+        assertThatThrownBy(() -> service.previewUrl(uploaded.code(), "download", "poster"))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.previewContentStream(uploaded.code(), expiresAt(poster.url()),
+                token(poster.url()), "preview", "original")).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.previewUrl(uploaded.code(), "preview", "thumbnail"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(service.content(uploaded.code()).content()).isEqualTo(incompleteMp4);
     }
 
     @Test

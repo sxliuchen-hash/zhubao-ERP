@@ -147,4 +147,19 @@ class LocalAttachmentObjectStorageTest {
         assertThat(thumbnail.getHeight()).isEqualTo(2);
         assertThat(storage.get(stored.storageKey())).isEqualTo(original);
     }
+
+    @Test
+    void posterFailureKeepsPublishedVideoOriginal() {
+        AttachmentStorageProperties properties = new AttachmentStorageProperties();
+        properties.setLocalRoot(tempDir.toString());
+        LocalAttachmentObjectStorage storage = new LocalAttachmentObjectStorage(properties);
+        byte[] incompleteMp4 = new byte[]{0, 0, 0, 12, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
+
+        var stored = storage.put("DOC-1", "ATT-VIDEO", "clip.mp4", "video/mp4", incompleteMp4);
+
+        assertThat(storage.get(stored.storageKey())).isEqualTo(incompleteMp4);
+        assertThatThrownBy(() -> storage.ensureVideoPoster(stored.storageKey()))
+                .isInstanceOf(BusinessException.class);
+        assertThat(storage.get(stored.storageKey())).isEqualTo(incompleteMp4);
+    }
 }

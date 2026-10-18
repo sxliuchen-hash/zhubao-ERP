@@ -127,6 +127,12 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
             } catch (RuntimeException exception) {
                 LOGGER.warn("附件 {} 的派生图可按需重建：{}", attachmentCode, exception.getMessage());
             }
+        } else if ("video/mp4".equals(safeMediaType) || "video/webm".equals(safeMediaType)) {
+            try {
+                ensureVideoPoster(storageKey);
+            } catch (RuntimeException exception) {
+                LOGGER.warn("附件 {} 的视频封面可按需重建：{}", attachmentCode, exception.getMessage());
+            }
         }
         return new StoredAttachmentObject(
                 storageKey,
@@ -211,6 +217,38 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
     private String derivativeStorageKey(String storageKey, String resolution) {
         String digest = HexFormat.of().formatHex(sha256Digest().digest(storageKey.getBytes(StandardCharsets.UTF_8)));
         return "derived-images/" + digest + "/" + resolution + ".jpg";
+    }
+
+    @Override
+    public synchronized String ensureVideoPoster(String storageKey) {
+        Path source = existingObject(storageKey);
+        String digest = HexFormat.of().formatHex(sha256Digest().digest(storageKey.getBytes(StandardCharsets.UTF_8)));
+        String key = "derived-videos/" + digest + "/poster.jpg";
+        Path target = resolveStorageKey(key);
+        if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) return key;
+        Path pending = null;
+        try {
+            Files.createDirectories(target.getParent());
+            pending = Files.createTempFile(target.getParent(), ".poster-", ".jpg");
+            VideoPosterGenerator.write(source, pending);
+            try {
+                Files.move(pending, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException exception) {
+                throw new BusinessException("视频封面存储不支持原子发布");
+            }
+            return key;
+        } catch (IOException exception) {
+            if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) return key;
+            throw new BusinessException("视频封面写入失败：" + exception.getMessage());
+        } finally {
+            if (pending != null) {
+                try {
+                    Files.deleteIfExists(pending);
+                } catch (IOException exception) {
+                    LOGGER.warn("视频封面临时文件保留待核对：{}", pending);
+                }
+            }
+        }
     }
 
     private Path existingObject(String storageKey) {

@@ -79,7 +79,15 @@ mkdir -p "$tmp/evidence"
 tar -xzf "$archive" -C "$tmp/evidence"
 (cd "$tmp/evidence" && sha256sum -c "$file_list" > "$tmp/files-verified.log")
 actual_files="$(find "$tmp/evidence" -type f | wc -l | tr -d ' ')"
-[ "$actual_files" = "$(field originalCount)" ] || { echo '附件文件数不符' >&2; exit 1; }
+expected_files="$(field fileCount)"
+[ -n "$expected_files" ] || expected_files="$(field originalCount)"
+[ "$actual_files" = "$expected_files" ] || { echo '附件文件数不符' >&2; exit 1; }
+actual_derived="$(find "$tmp/evidence/derived-images" "$tmp/evidence/derived-videos" -type f 2>/dev/null | wc -l | tr -d ' ')"
+actual_original="$((actual_files - actual_derived))"
+if [ -n "$(field fileCount)" ]; then
+  [ "$actual_original" = "$(field originalCount)" ] || { echo '附件原件数不符' >&2; exit 1; }
+  [ "$actual_derived" = "$(field derivedCount)" ] || { echo '附件派生对象数不符' >&2; exit 1; }
+fi
 
 docker cp "$sql" "zhubao-erp-mysql:$remote_sql"
 existing_db="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T \
@@ -130,7 +138,8 @@ result="$root/$batch.restore-$(date +%Y%m%d_%H%M%S)-$$.txt"
   echo "checkedAt=$(date -Iseconds)"
   echo "restoredTableCount=$table_count"
   echo "restoredMetadataCount=$metadata_count"
-  echo "verifiedOriginalCount=$actual_files"
+  echo "verifiedOriginalCount=$actual_original"
+  echo "verifiedDerivedCount=$actual_derived"
   echo "verifiedActiveReferences=$reference_count"
   echo "temporaryDatabase=$restore_db"
   echo 'temporaryDatabaseCleanup=on-exit'

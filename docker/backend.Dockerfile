@@ -12,7 +12,8 @@ ENV TZ=Asia/Shanghai \
 
 WORKDIR /app
 
-RUN mkdir -p /app/evidence /logs /backups \
+RUN apk add --no-cache ffmpeg \
+    && mkdir -p /app/evidence /logs /backups \
     && addgroup -S zhubao \
     && adduser -S zhubao -G zhubao \
     && chown -R zhubao:zhubao /app /logs /backups

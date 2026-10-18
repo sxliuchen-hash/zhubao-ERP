@@ -68,6 +68,7 @@ public class DocumentManagementService {
     private static final String RESOLUTION_ORIGINAL = "original";
     private static final String RESOLUTION_THUMBNAIL = "thumbnail";
     private static final String RESOLUTION_PREVIEW = "preview";
+    private static final String RESOLUTION_POSTER = "poster";
 
     private final DocumentManagementRepository repository;
     private final AttachmentObjectStorage attachmentObjectStorage;
@@ -288,6 +289,8 @@ public class DocumentManagementService {
                     String key = root.relativize(file).toString().replace('\\', '/');
                     if (file.getFileName().toString().endsWith(".pending")) {
                         issues.add(new AttachmentIntegrityIssue("PENDING_OBJECT", "", key, "上传中断遗留临时文件"));
+                    } else if (key.startsWith("derived-images/") || key.startsWith("derived-videos/")) {
+                        continue;
                     } else {
                         originalCount++;
                         if (!registered.containsKey(key)) {
@@ -532,7 +535,7 @@ public class DocumentManagementService {
             String code, long expiresAt, String token, String purpose, String resolution
     ) {
         String accessPurpose = requiredPurpose(purpose);
-        if (!List.of(RESOLUTION_ORIGINAL, RESOLUTION_THUMBNAIL, RESOLUTION_PREVIEW).contains(resolution)) {
+        if (!List.of(RESOLUTION_ORIGINAL, RESOLUTION_THUMBNAIL, RESOLUTION_PREVIEW, RESOLUTION_POSTER).contains(resolution)) {
             throw new BusinessException("附件清晰度不支持");
         }
         validatePreviewToken(code, expiresAt, token, accessPurpose, resolution);
@@ -544,7 +547,9 @@ public class DocumentManagementService {
         String fileName = attachment.fileName();
         String mediaType = attachment.mediaType();
         if (!RESOLUTION_ORIGINAL.equals(resolution)) {
-            storageKey = attachmentObjectStorage.ensureImageDerivative(storageKey, resolution);
+            storageKey = RESOLUTION_POSTER.equals(resolution)
+                    ? attachmentObjectStorage.ensureVideoPoster(storageKey)
+                    : attachmentObjectStorage.ensureImageDerivative(storageKey, resolution);
             fileName = attachment.code() + "-" + resolution + ".jpg";
             mediaType = "image/jpeg";
         }
@@ -682,9 +687,11 @@ public class DocumentManagementService {
 
     private void requiredResolution(String purpose, String resolution, String mediaType) {
         if (RESOLUTION_ORIGINAL.equals(resolution)) return;
-        if (!PURPOSE_PREVIEW.equals(purpose)
-                || !List.of(RESOLUTION_THUMBNAIL, RESOLUTION_PREVIEW).contains(resolution)
-                || !List.of("image/jpeg", "image/png").contains(mediaType)) {
+        boolean image = List.of(RESOLUTION_THUMBNAIL, RESOLUTION_PREVIEW).contains(resolution)
+                && List.of("image/jpeg", "image/png").contains(mediaType);
+        boolean video = RESOLUTION_POSTER.equals(resolution)
+                && List.of("video/mp4", "video/webm").contains(mediaType);
+        if (!PURPOSE_PREVIEW.equals(purpose) || !image && !video) {
             throw new BusinessException("附件清晰度或用途不支持");
         }
     }

@@ -72,6 +72,8 @@ check_hash "$export_root/$BATCH.evidence.tar.gz"
 check_hash "$export_root/$BATCH.evidence.files.sha256"
 
 file_count="$(wc -l < "$export_root/$BATCH.evidence.files.sha256" | tr -d ' ')"
+derived_count="$(awk '$2 ~ /^\.\/derived-images\// || $2 ~ /^\.\/derived-videos\// { count++ } END { print count+0 }' "$export_root/$BATCH.evidence.files.sha256")"
+original_count="$((file_count - derived_count))"
 metadata_count="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T mysql sh -c \
   'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -N "$MYSQL_DATABASE" -e "select count(*) from doc_evidence_attachment"')"
 table_count="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T mysql sh -c \
@@ -86,7 +88,9 @@ manifest="$export_root/$BATCH.manifest"
   echo "fileListSha256=$(sha256sum "$export_root/$BATCH.evidence.files.sha256" | awk '{ print $1 }')"
   echo "tableCount=$table_count"
   echo "metadataCount=$metadata_count"
-  echo "originalCount=$file_count"
+  echo "fileCount=$file_count"
+  echo "originalCount=$original_count"
+  echo "derivedCount=$derived_count"
   echo 'restoreStatus=not-verified'
 } > "$manifest"
 sha256sum "$manifest" > "$manifest.sha256"
