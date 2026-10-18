@@ -11,6 +11,7 @@ import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.BindEvidenceCommand;
 import com.zhubao.erp.document.domain.BusinessEvidenceLink;
+import com.zhubao.erp.document.domain.BusinessEvidenceLinkPage;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkRepository;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
@@ -18,6 +19,7 @@ import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceBoard;
 import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
+import com.zhubao.erp.document.domain.EvidenceLinkPage;
 import com.zhubao.erp.document.domain.EvidenceLinkView;
 import com.zhubao.erp.document.domain.HistoricalEvidenceView;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -33,6 +35,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -232,6 +235,85 @@ public class BusinessEvidenceService {
                 .map(this::historicalOf)
                 .toList();
         return new EvidenceBoard(views, historical);
+    }
+
+    public EvidenceLinkPage queryLinkedPage(
+            String targetType,
+            String targetCode,
+            String stage,
+            String operationType,
+            String operationCode,
+            long afterId,
+            int limit,
+            OperatorContext operator
+    ) {
+        String type = requiredObjectType(targetType);
+        String code = required(targetCode, "单据编号不能为空");
+        if (operator == null || operator.operator() == null || operator.operator().isBlank()) {
+            throw new BusinessException("请先登录后再查看证据");
+        }
+        assertReadable(operator, code);
+        if (afterId < 0) {
+            throw new BusinessException("证据引用游标不能小于 0");
+        }
+        if (limit < 1 || limit > 100) {
+            throw new BusinessException("证据引用分页大小必须在 1 到 100 之间");
+        }
+
+        String stageFilter = EvidenceLinkKey.text(stage);
+        String operationTypeFilter = EvidenceLinkKey.text(operationType);
+        String operationCodeFilter = EvidenceLinkKey.text(operationCode);
+        int batchLimit = limit + 1;
+        long scanAfterId = afterId;
+        List<BusinessEvidenceLinkPage.Entry> visible = new ArrayList<>();
+        Map<String, EvidenceAttachment> attachmentsByCode = new HashMap<>();
+        while (visible.size() <= limit) {
+            BusinessEvidenceLinkPage page = links.findPageByTarget(type, code, scanAfterId, batchLimit);
+            if (page.entries().isEmpty()) {
+                break;
+            }
+            long lastScannedId = scanAfterId;
+            for (BusinessEvidenceLinkPage.Entry entry : page.entries()) {
+                lastScannedId = entry.id();
+                BusinessEvidenceLink link = entry.link();
+                if (!matches(link, stageFilter, operationTypeFilter, operationCodeFilter)) {
+                    continue;
+                }
+                documents.findAttachmentByCode(link.attachmentCode())
+                        .filter(attachment -> code.equals(attachment.businessCode()))
+                        .ifPresent(attachment -> attachmentsByCode.putIfAbsent(attachment.code(), attachment));
+                visible.add(entry);
+                if (visible.size() > limit) {
+                    break;
+                }
+            }
+            if (visible.size() > limit) {
+                break;
+            }
+            scanAfterId = lastScannedId;
+            if (!page.hasMore()) {
+                break;
+            }
+        }
+
+        int itemCount = Math.min(limit, visible.size());
+        List<EvidenceLinkView> items = visible.subList(0, itemCount).stream()
+                .map(entry -> viewOf(entry.link(), attachmentsByCode))
+                .toList();
+        boolean hasMore = visible.size() > limit;
+        Long nextCursor = hasMore && itemCount > 0 ? visible.get(itemCount - 1).id() : null;
+        return new EvidenceLinkPage(items, nextCursor, hasMore);
+    }
+
+    private boolean matches(
+            BusinessEvidenceLink link,
+            String stageFilter,
+            String operationTypeFilter,
+            String operationCodeFilter
+    ) {
+        return (stageFilter.isEmpty() || stageFilter.equals(link.stage()))
+                && (operationTypeFilter.isEmpty() || operationTypeFilter.equals(link.operationType()))
+                && (operationCodeFilter.isEmpty() || operationCodeFilter.equals(link.operationCode()));
     }
 
     private void assertOperation(

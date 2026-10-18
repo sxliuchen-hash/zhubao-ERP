@@ -12,6 +12,7 @@ import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.BindEvidenceCommand;
 import com.zhubao.erp.document.domain.BusinessEvidenceLink;
+import com.zhubao.erp.document.domain.BusinessEvidenceLinkPage;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkRepository;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
@@ -21,6 +22,8 @@ import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.EvidenceBoard;
 import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
+import com.zhubao.erp.document.domain.EvidenceLinkPage;
+import com.zhubao.erp.document.domain.EvidenceLinkView;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.DocumentCaptureProperties;
 import com.zhubao.erp.document.infra.InMemoryBusinessEvidenceLinkRepository;
@@ -194,6 +197,130 @@ class BusinessEvidenceServiceTest {
         assertThat(links.findAllCalls).isZero();
         assertThat(documents.findAttachmentByCodeCalls).isEqualTo(1);
         assertThat(documents.attachmentsCalls).isZero();
+    }
+
+    @Test
+    void queryLinkedPageFiltersAcrossBatchesAndUsesVisibleLinkCursor() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingPagedLinkRepository links = new QueryTrackingPagedLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+
+        EvidenceAttachmentUploadResult first = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "UNPACK", "a".getBytes(StandardCharsets.UTF_8));
+        EvidenceAttachmentUploadResult filteredOne = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "WEIGH", "b".getBytes(StandardCharsets.UTF_8));
+        EvidenceAttachmentUploadResult second = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "WEIGH", "c".getBytes(StandardCharsets.UTF_8));
+        EvidenceAttachmentUploadResult filteredTwo = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "UNPACK", "d".getBytes(StandardCharsets.UTF_8));
+        EvidenceAttachmentUploadResult third = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "UNPACK", "e".getBytes(StandardCharsets.UTF_8));
+        links.insert(linkRecord(
+                "LINK-PAGE-001", first.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        links.insert(linkRecord(
+                "LINK-PAGE-FILTERED-001", filteredOne.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.PRODUCTION, "PROCESS", EvidenceCodes.PROCESS_STATION_REPORT, "FILTERED-001"
+        ));
+        links.insert(linkRecord(
+                "LINK-PAGE-002", second.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "WEIGH", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        links.insert(linkRecord(
+                "LINK-PAGE-FILTERED-002", filteredTwo.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.QUALITY, "CHECK", EvidenceCodes.QUALITY_CHECK, "FILTERED-002"
+        ));
+        links.insert(linkRecord(
+                "LINK-PAGE-003", third.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        documents.resetCounters();
+        links.resetCounters();
+
+        EvidenceLinkPage firstPage = fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, EvidenceCodes.INTAKE,
+                EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER, 0, 2, fixture.admin
+        );
+
+        assertThat(firstPage.items()).extracting(EvidenceLinkView::linkCode)
+                .containsExactly("LINK-PAGE-001", "LINK-PAGE-002");
+        assertThat(firstPage.nextCursor()).isNotNull();
+        assertThat(firstPage.hasMore()).isTrue();
+        assertThat(links.pageCalls).isGreaterThanOrEqualTo(2);
+        assertThat(links.findAllCalls).isZero();
+        assertThat(documents.findAttachmentByCodeCalls).isGreaterThanOrEqualTo(3);
+        assertThat(documents.attachmentsCalls).isZero();
+        assertThat(documents.attachmentsByBusinessCodeCalls).isZero();
+
+        EvidenceLinkPage lastPage = fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, EvidenceCodes.INTAKE,
+                EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER, firstPage.nextCursor(), 2, fixture.admin
+        );
+        assertThat(lastPage.items()).extracting(EvidenceLinkView::linkCode)
+                .containsExactly("LINK-PAGE-003");
+        assertThat(lastPage.nextCursor()).isNull();
+        assertThat(lastPage.hasMore()).isFalse();
+    }
+
+    @Test
+    void queryLinkedPageChecksTargetScopeBeforeReadingLinks() {
+        QueryTrackingPagedLinkRepository links = new QueryTrackingPagedLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(),
+                new QueryTrackingDocumentRepository(), links);
+        prepareFacts(fixture);
+
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 2, fixture.outsider
+        )).isInstanceOf(PermissionDeniedException.class);
+        assertThat(links.pageCalls).isZero();
+        assertThat(links.findAllCalls).isZero();
+    }
+
+    @Test
+    void queryLinkedPageDoesNotExposeExternalAttachmentMetadata() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingPagedLinkRepository links = new QueryTrackingPagedLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+        EvidenceAttachmentUploadResult external = upload(fixture, EvidenceCodes.WORK_ORDER, CHILD,
+                "PROCESS", "a".getBytes(StandardCharsets.UTF_8));
+        links.insert(linkRecord(
+                "LINK-EXTERNAL", external.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        documents.resetCounters();
+        links.resetCounters();
+
+        EvidenceLinkPage page = fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 100, fixture.admin
+        );
+
+        EvidenceLinkView view = page.items().get(0);
+        assertThat(view.attachmentCode()).isEqualTo(external.code());
+        assertThat(view.fileName()).isEmpty();
+        assertThat(view.mediaType()).isEmpty();
+        assertThat(view.checksum()).isEmpty();
+        assertThat(view.status()).isEmpty();
+        assertThat(view.previewUrl()).isEmpty();
+        assertThat(documents.findAttachmentByCodeCalls).isEqualTo(1);
+    }
+
+    @Test
+    void queryLinkedPageRejectsInvalidCursorAndLimit() {
+        Fixture fixture = memoryFixture();
+        prepareFacts(fixture);
+
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", -1, 1, fixture.admin
+        )).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 0, fixture.admin
+        )).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> fixture.evidence.queryLinkedPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", 0, 101, fixture.admin
+        )).isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -767,6 +894,33 @@ class BusinessEvidenceServiceTest {
         private void resetCounters() {
             findAllCalls = 0;
             findByTargetCalls = 0;
+        }
+    }
+
+    private static final class QueryTrackingPagedLinkRepository extends InMemoryBusinessEvidenceLinkRepository {
+        private int pageCalls;
+        private int findAllCalls;
+
+        @Override
+        public synchronized BusinessEvidenceLinkPage findPageByTarget(
+                String targetType,
+                String targetCode,
+                long afterId,
+                int limit
+        ) {
+            pageCalls++;
+            return super.findPageByTarget(targetType, targetCode, afterId, limit);
+        }
+
+        @Override
+        public synchronized List<BusinessEvidenceLink> findAll() {
+            findAllCalls++;
+            return super.findAll();
+        }
+
+        private void resetCounters() {
+            pageCalls = 0;
+            findAllCalls = 0;
         }
     }
 
