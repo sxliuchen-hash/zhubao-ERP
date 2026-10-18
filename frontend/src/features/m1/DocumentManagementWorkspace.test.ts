@@ -326,7 +326,9 @@ describe('DocumentManagementWorkspace', () => {
     }));
     const wrapper = mountWorkspace();
     await flushPromises();
+    vi.mocked(fetchAttachmentPreviewUrl).mockClear();
     await wrapper.get('select[aria-label="上传文档包"]').setValue(documentPackages[1].code);
+    await flushPromises();
     expect(wrapper.find('.document-detail .evidence-media-viewer').exists()).toBe(false);
     expect(fetchAttachmentPreviewUrl).not.toHaveBeenCalled();
   });
