@@ -305,6 +305,30 @@ describe('现场证据采集', () => {
     expect(wrapper.text()).not.toContain('ATT-OLD.jpg');
   });
 
+  it('按整单、关联状态和附件条件筛选并仅查询所选列表', async () => {
+    const wrapper = mount(EvidenceCapture, {
+      props: { targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK',
+        operationType: 'inbound_confirm', operationCode: 'OP-1' },
+    });
+    await flushPromises();
+    vi.mocked(fetchLinkedEvidencePage).mockClear();
+    vi.mocked(fetchHistoricalEvidencePage).mockClear();
+
+    await wrapper.get('[aria-label="证据范围"]').setValue('all');
+    await wrapper.get('[aria-label="关联状态"]').setValue('linked');
+    await wrapper.get('[aria-label="上传日期起"]').setValue('2026-10-01');
+    await wrapper.get('[aria-label="媒体类型"]').setValue('image');
+    await wrapper.get('[aria-label="上传人"]').setValue('何琴');
+    await wrapper.findAll('button').find(button => button.text() === '筛选证据')!.trigger('click');
+    await flushPromises();
+
+    expect(fetchLinkedEvidencePage).toHaveBeenCalledWith(expect.objectContaining({
+      targetCode: 'MD-1', stage: '', operationType: '', operationCode: '',
+      uploadedFrom: '2026-10-01', mediaCategory: 'image', ownerKeyword: '何琴',
+    }));
+    expect(fetchHistoricalEvidencePage).not.toHaveBeenCalled();
+  });
+
   it('同一文件可以再次选择，预览地址会在卸载时释放', async () => {
     const created: string[] = [];
     const revoked: string[] = [];

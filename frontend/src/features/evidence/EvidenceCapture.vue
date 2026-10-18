@@ -73,6 +73,15 @@ const linksHasMore = ref(false);
 const historicalHasMore = ref(false);
 const loadingMoreLinks = ref(false);
 const loadingMoreHistorical = ref(false);
+const searchScope = ref<'operation' | 'stage' | 'all'>(
+  props.operationType && props.operationCode ? 'operation' : 'stage',
+);
+const evidenceState = ref<'all' | 'linked' | 'unlinked'>('all');
+const activeState = ref<'all' | 'linked' | 'unlinked'>('all');
+const uploadedFrom = ref('');
+const uploadedTo = ref('');
+const mediaCategory = ref<'' | 'image' | 'video' | 'pdf'>('');
+const ownerKeyword = ref('');
 const recoveringCode = ref('');
 const recoveryErrors = ref<Record<string, string>>({});
 const fileRef = ref<HTMLInputElement | null>(null);
@@ -80,6 +89,7 @@ const cameraRef = ref<HTMLInputElement | null>(null);
 const videoRef = ref<HTMLInputElement | null>(null);
 let nextId = 1;
 let boardGeneration = 0;
+let activeQuery: EvidencePageQuery | null = null;
 let linksPageRequest = 0;
 let historicalPageRequest = 0;
 
@@ -227,14 +237,22 @@ function boardQuery(): EvidencePageQuery {
   return {
     targetType: props.targetType,
     targetCode: props.targetCode.trim(),
-    stage: props.stage,
-    operationType: props.operationType,
-    operationCode: props.operationCode,
+    stage: searchScope.value === 'all' ? '' : props.stage,
+    operationType: searchScope.value === 'operation' ? props.operationType : '',
+    operationCode: searchScope.value === 'operation' ? props.operationCode : '',
+    uploadedFrom: uploadedFrom.value,
+    uploadedTo: uploadedTo.value,
+    mediaCategory: mediaCategory.value,
+    ownerKeyword: ownerKeyword.value.trim(),
   };
 }
 
 async function loadBoard() {
   const generation = ++boardGeneration;
+  const query = boardQuery();
+  const state = evidenceState.value;
+  activeQuery = query;
+  activeState.value = state;
   linksPageRequest += 1;
   historicalPageRequest += 1;
   loadingMoreLinks.value = false;
@@ -249,10 +267,13 @@ async function loadBoard() {
     return;
   }
   try {
-    const query = boardQuery();
     const [linked, historical] = await Promise.all([
-      fetchLinkedEvidencePage(query),
-      fetchHistoricalEvidencePage(query),
+      state === 'unlinked'
+        ? Promise.resolve({ items: [], nextCursor: null, hasMore: false })
+        : fetchLinkedEvidencePage(query),
+      state === 'linked'
+        ? Promise.resolve({ items: [], nextCursor: null, hasMore: false })
+        : fetchHistoricalEvidencePage(query),
     ]);
     if (generation !== boardGeneration) return;
     board.value = { links: linked.items, historical: historical.items };
@@ -267,12 +288,12 @@ async function loadBoard() {
 }
 
 async function loadMoreLinks() {
-  if (!linksHasMore.value || linksCursor.value === null || loadingMoreLinks.value) return;
+  if (!activeQuery || !linksHasMore.value || linksCursor.value === null || loadingMoreLinks.value) return;
   const generation = boardGeneration;
   const requestId = ++linksPageRequest;
   loadingMoreLinks.value = true;
   try {
-    const page = await fetchLinkedEvidencePage({ ...boardQuery(), afterId: linksCursor.value });
+    const page = await fetchLinkedEvidencePage({ ...activeQuery, afterId: linksCursor.value });
     if (generation !== boardGeneration) return;
     board.value = { ...board.value, links: [...board.value.links, ...page.items] };
     linksCursor.value = page.nextCursor;
@@ -286,12 +307,12 @@ async function loadMoreLinks() {
 }
 
 async function loadMoreHistorical() {
-  if (!historicalHasMore.value || historicalCursor.value === null || loadingMoreHistorical.value) return;
+  if (!activeQuery || !historicalHasMore.value || historicalCursor.value === null || loadingMoreHistorical.value) return;
   const generation = boardGeneration;
   const requestId = ++historicalPageRequest;
   loadingMoreHistorical.value = true;
   try {
-    const page = await fetchHistoricalEvidencePage({ ...boardQuery(), afterId: historicalCursor.value });
+    const page = await fetchHistoricalEvidencePage({ ...activeQuery, afterId: historicalCursor.value });
     if (generation !== boardGeneration) return;
     board.value = { ...board.value, historical: [...board.value.historical, ...page.items] };
     historicalCursor.value = page.nextCursor;
@@ -425,8 +446,33 @@ onBeforeUnmount(() => {
         </button>
       </li>
     </ul>
+    <div class="evidence-filters">
+      <label class="field"><span>证据范围</span>
+        <select v-model="searchScope" aria-label="证据范围">
+          <option value="operation">当前操作</option>
+          <option value="stage">当前阶段</option>
+          <option value="all">整单</option>
+        </select>
+      </label>
+      <label class="field"><span>关联状态</span>
+        <select v-model="evidenceState" aria-label="关联状态">
+          <option value="all">全部</option>
+          <option value="linked">已关联</option>
+          <option value="unlinked">待关联／历史</option>
+        </select>
+      </label>
+      <label class="field"><span>上传日期起</span><input v-model="uploadedFrom" type="date" aria-label="上传日期起" /></label>
+      <label class="field"><span>上传日期止</span><input v-model="uploadedTo" type="date" aria-label="上传日期止" /></label>
+      <label class="field"><span>媒体类型</span>
+        <select v-model="mediaCategory" aria-label="媒体类型">
+          <option value="">全部</option><option value="image">照片</option><option value="video">视频</option><option value="pdf">PDF</option>
+        </select>
+      </label>
+      <label class="field"><span>上传人</span><input v-model="ownerKeyword" type="search" aria-label="上传人" /></label>
+      <button class="secondary-button" type="button" @click="loadBoard">筛选证据</button>
+    </div>
     <p v-if="boardError" class="operation-feedback danger">{{ boardError }}</p>
-    <ul v-if="board.links.length" class="evidence-file-list">
+    <ul v-if="activeState !== 'unlinked' && board.links.length" class="evidence-file-list">
       <li v-for="link in board.links" :key="linkKey(link)">
         <strong>{{ link.fileName || link.attachmentCode }}</strong>
         <span>{{ link.sceneLabel }} / 已关联</span>
@@ -435,10 +481,10 @@ onBeforeUnmount(() => {
         <span v-else-if="link.status === '已下线'">已下线，不能预览</span>
       </li>
     </ul>
-    <button v-if="linksHasMore" class="secondary-button" type="button" :disabled="loadingMoreLinks" @click="loadMoreLinks">
+    <button v-if="activeState !== 'unlinked' && linksHasMore" class="secondary-button" type="button" :disabled="loadingMoreLinks" @click="loadMoreLinks">
       {{ loadingMoreLinks ? '正在加载' : '加载更多已关联证据' }}
     </button>
-    <ul v-if="board.historical.length" class="evidence-file-list">
+    <ul v-if="activeState !== 'linked' && board.historical.length" class="evidence-file-list">
       <li v-for="item in board.historical" :key="historicalKey(item)">
         <strong>{{ item.fileName || item.attachmentCode }}</strong>
         <span>{{ item.label }}</span>
@@ -449,8 +495,14 @@ onBeforeUnmount(() => {
         <small v-if="recoveryErrors[item.attachmentCode]" class="operation-feedback danger" role="alert">{{ recoveryErrors[item.attachmentCode] }}</small>
       </li>
     </ul>
-    <button v-if="historicalHasMore" class="secondary-button" type="button" :disabled="loadingMoreHistorical" @click="loadMoreHistorical">
+    <button v-if="activeState !== 'linked' && historicalHasMore" class="secondary-button" type="button" :disabled="loadingMoreHistorical" @click="loadMoreHistorical">
       {{ loadingMoreHistorical ? '正在加载' : '加载更多待关联证据' }}
     </button>
   </section>
 </template>
+
+<style scoped>
+.evidence-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .6rem; align-items: end; margin: 1rem 0; }
+.evidence-filters .field { min-width: 0; }
+.evidence-filters input, .evidence-filters select { width: 100%; }
+</style>
