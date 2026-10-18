@@ -5,6 +5,9 @@ import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
 import com.zhubao.erp.business.domain.MobileIntakeLine;
 import com.zhubao.erp.business.domain.MobileIntakeResult;
+import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
+import com.zhubao.erp.business.domain.SplitMotherOrderLine;
+import com.zhubao.erp.business.domain.SplitSourceAllocation;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.JdbcBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
@@ -75,6 +78,57 @@ class IntakeReceivingTest {
         assertThatThrownBy(() -> intake.intake(bad, receiver)).isInstanceOf(RuntimeException.class);
         assertThat(world.mothers()).isEqualTo(1);
         assertThat(world.ledgers()).isEqualTo(2);
+    }
+
+    @Test
+    void jdbc逐行收货拆单中途失败回滚且重试只生效一次() throws Exception {
+        JdbcWorld world = new JdbcWorld(CommandResultProbe.NONE, MotherOrderSaveProbe.NONE);
+        BusinessWorkUnit unit = new JdbcBusinessWorkUnit(world.dataSource, world.requests);
+        StockLedgerService ledgers = world.stockLedgerService;
+        MobileIntakeService intake = new MobileIntakeService(world.operations, world.documents, unit,
+                null, ledgers);
+        String mother = intake.intake(new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
+                "戒托", new BigDecimal("8"), new BigDecimal("12"), "", "AU9999", "件", "jdbc-split-intake-01",
+                "CUSTOMER_DELIVERY", List.of(
+                new MobileIntakeLine("AU9999", "金戒托", new BigDecimal("3"), "件", new BigDecimal("4")),
+                new MobileIntakeLine("PT950", "铂金戒托", new BigDecimal("5"), "件", new BigDecimal("8")))),
+                receiver).motherOrderCode();
+        MotherOrderSplitService splits = new MotherOrderSplitService(world.documents, ledgers, unit);
+        SplitMotherOrderCommand command = new SplitMotherOrderCommand(mother, receiver.operator(), List.of(
+                new SplitMotherOrderLine(new BigDecimal("2"), new BigDecimal("2"), List.of("抛光"),
+                        List.of(new SplitSourceAllocation(1, new BigDecimal("2"), new BigDecimal("2")))),
+                new SplitMotherOrderLine(new BigDecimal("2"), new BigDecimal("3"), List.of("抛光"),
+                        List.of(new SplitSourceAllocation(2, new BigDecimal("2"), new BigDecimal("3"))))));
+        assertThat(world.documents.listReceiptLines(mother)).hasSize(2);
+        assertThat(world.count("biz_mother_order_item")).isEqualTo(1);
+        assertThat(world.ledgers()).isEqualTo(2);
+
+        try (Connection connection = world.dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("alter table biz_child_line_allocation add constraint fail_second_source check (source_line_no <> 2)");
+        }
+        assertThatThrownBy(() -> splits.split(command, "jdbc-split-failed-01"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("子单来源分配保存失败");
+        assertThat(world.documents.listChildWorkOrders(mother)).isEmpty();
+        assertThat(world.documents.listChildAllocations(mother, null)).isEmpty();
+        assertThat(world.documents.findMotherSplitState(mother)).isEmpty();
+        assertThat(world.ledgers()).isEqualTo(2);
+        assertThat(world.stockQuantity(mother, "RAW_WAITING")).isEqualByComparingTo("8");
+        assertThat(world.stockQuantity(mother, "WIP")).isEqualByComparingTo("0");
+
+        try (Connection connection = world.dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("alter table biz_child_line_allocation drop constraint fail_second_source");
+        }
+        var created = splits.split(command, "jdbc-split-failed-01");
+        assertThat(created.children()).hasSize(2);
+        assertThat(created.sourceLines()).extracting(line -> line.remainingQuantity())
+                .containsExactly(new BigDecimal("1.000"), new BigDecimal("3.000"));
+        assertThat(world.documents.listChildAllocations(mother, null)).hasSize(2);
+        assertThat(world.ledgers()).isEqualTo(4);
+        assertThat(world.stockQuantity(mother, "RAW_WAITING")).isEqualByComparingTo("4");
+        assertThat(world.stockQuantity(mother, "WIP")).isEqualByComparingTo("4");
+        assertThat(splits.split(command, "jdbc-split-failed-01").children()).hasSize(2);
+        assertThat(world.ledgers()).isEqualTo(4);
     }
 
     @Test
@@ -341,6 +395,7 @@ class IntakeReceivingTest {
         private final JdbcDataSource dataSource;
         private final JdbcBusinessDocumentRepository documents;
         private final JdbcStockLedgerRepository stock;
+        private final StockLedgerService stockLedgerService;
         private final JdbcCommandRequestRepository requests;
         private final MobileIntakeService intake;
         private final BusinessOperationService operations;
@@ -400,7 +455,37 @@ class IntakeReceivingTest {
                             ledger_code varchar(80) not null
                         )
                         """);
-                statement.execute("create table biz_work_order (code varchar(90) primary key)");
+                statement.execute("""
+                        create table biz_mother_order_split (
+                            mother_order_code varchar(80) primary key,
+                            split_decision varchar(20) not null,
+                            verification_code varchar(16) not null,
+                            operator varchar(80) not null,
+                            created_at varchar(40) not null
+                        )
+                        """);
+                statement.execute("""
+                        create table biz_work_order (
+                            code varchar(90) primary key,
+                            mother_order_code varchar(80) not null,
+                            customer_id bigint,
+                            customer_name varchar(120) not null,
+                            processing_requirement varchar(500) not null,
+                            due_date varchar(20) not null,
+                            material_code varchar(80) not null,
+                            goods_name varchar(160) not null,
+                            quantity decimal(18,3) not null,
+                            quantity_unit varchar(20) not null,
+                            weight decimal(18,3) not null,
+                            warehouse_code varchar(50) not null,
+                            process_names varchar(80) not null,
+                            verification_code varchar(16) not null unique,
+                            ledger_code varchar(80) not null,
+                            operator varchar(80) not null,
+                            created_at varchar(40) not null,
+                            recycled_at varchar(40)
+                        )
+                        """);
                 apply(statement, "src/main/resources/db/mysql/V44__m3_command_request.sql");
                 apply(statement, "src/main/resources/db/mysql/V45__m3_mother_order_courier_identity.sql");
                 apply(statement, "src/main/resources/db/mysql/V58__m3_courier_multi_order.sql");
@@ -408,9 +493,10 @@ class IntakeReceivingTest {
             }
             documents = new JdbcBusinessDocumentRepository(dataSource);
             stock = new JdbcStockLedgerRepository(dataSource);
+            stockLedgerService = new StockLedgerService(stock);
             requests = new JdbcCommandRequestRepository(dataSource);
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            operations = new BusinessOperationService(new StockLedgerService(stock), null, documents, unit, motherProbe);
+            operations = new BusinessOperationService(stockLedgerService, null, documents, unit, motherProbe);
             intake = new MobileIntakeService(operations, documents, unit);
         }
 
@@ -432,6 +518,34 @@ class IntakeReceivingTest {
         @Override
         public int ledgers() {
             return stock.findAllLedgers().size();
+        }
+
+        private int count(String table) {
+            try (Connection connection = dataSource.getConnection();
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("select count(*) from " + table)) {
+                rs.next();
+                return rs.getInt(1);
+            } catch (SQLException ex) {
+                throw new IllegalStateException(ex);
+            }
+        }
+
+        private BigDecimal stockQuantity(String mother, String status) {
+            try (Connection connection = dataSource.getConnection();
+                 var statement = connection.prepareStatement("""
+                         select coalesce(sum(available_quantity), 0) from inv_stock_balance
+                          where mother_order_code = ? and stock_status = ?
+                         """)) {
+                statement.setString(1, mother);
+                statement.setString(2, status);
+                try (ResultSet rs = statement.executeQuery()) {
+                    rs.next();
+                    return rs.getBigDecimal(1);
+                }
+            } catch (SQLException ex) {
+                throw new IllegalStateException(ex);
+            }
         }
 
         @Override
