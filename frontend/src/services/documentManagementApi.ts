@@ -74,12 +74,33 @@ export interface EvidenceAttachmentPage {
   hasMore: boolean;
 }
 
+export interface DocumentPackagePageQuery {
+  afterId?: number;
+  limit?: number;
+}
+
+export interface DocumentPackagePage {
+  items: DocumentPackage[];
+  nextCursor: number | null;
+  hasMore: boolean;
+}
+
 export async function fetchDocumentSummary(): Promise<DocumentManagementSummary> {
   return apiGet<DocumentManagementSummary>('/api/documents/summary');
 }
 
 export async function fetchDocumentPackages(): Promise<DocumentPackage[]> {
   return apiGet<DocumentPackage[]>('/api/documents/packages');
+}
+
+export async function fetchDocumentPackagesPage(
+  query: DocumentPackagePageQuery = {},
+): Promise<DocumentPackagePage> {
+  const params = new URLSearchParams();
+  if (query.afterId !== undefined) params.set('afterId', String(query.afterId));
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  const suffix = params.toString();
+  return apiGet<DocumentPackagePage>(`/api/documents/packages/page${suffix ? `?${suffix}` : ''}`);
 }
 
 export async function fetchEvidenceAttachments(): Promise<EvidenceAttachment[]> {

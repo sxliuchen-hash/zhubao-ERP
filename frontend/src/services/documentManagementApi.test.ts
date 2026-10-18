@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchDocumentAuditEvents,
   fetchDocumentPackages,
+  fetchDocumentPackagesPage,
   fetchDocumentSummary,
   fetchEvidenceAttachments,
   fetchEvidenceAttachmentsPage,
@@ -154,6 +155,52 @@ describe('documentManagementApi', () => {
       items: [{ code: 'ATT-PAGE-001', documentCode: 'DOC-珠 & 客?/中文' }],
       nextCursor: 42,
       hasMore: true,
+    });
+  });
+
+  it('loads the first package page without optional parameters and parses the page response', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('/api/documents/packages/page');
+      return {
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: {
+            items: [{ code: 'DOC-PAGE-001', title: '分页文档包' }],
+            nextCursor: 17,
+            hasMore: true,
+          },
+        }),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchDocumentPackagesPage()).resolves.toEqual({
+      items: [{ code: 'DOC-PAGE-001', title: '分页文档包' }],
+      nextCursor: 17,
+      hasMore: true,
+    });
+  });
+
+  it('loads a continuation package page with cursor and limit parameters', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('/api/documents/packages/page?afterId=17&limit=20');
+      return {
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: 'ok',
+          data: { items: [], nextCursor: null, hasMore: false },
+        }),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchDocumentPackagesPage({ afterId: 17, limit: 20 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
     });
   });
 
