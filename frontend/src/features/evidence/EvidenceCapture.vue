@@ -2,8 +2,10 @@
 import { onBeforeUnmount, ref, watch } from 'vue';
 import {
   bindEvidence,
-  fetchEvidenceBoard,
+  fetchHistoricalEvidencePage,
+  fetchLinkedEvidencePage,
   uploadEvidenceFile,
+  type EvidencePageQuery,
   type EvidenceBoard,
   type HistoricalEvidence,
   type EvidenceLink,
@@ -65,12 +67,21 @@ const items = ref<DraftFile[]>([]);
 const formMessage = ref('');
 const board = ref<EvidenceBoard>({ links: [], historical: [] });
 const boardError = ref('');
+const linksCursor = ref<number | null>(null);
+const historicalCursor = ref<number | null>(null);
+const linksHasMore = ref(false);
+const historicalHasMore = ref(false);
+const loadingMoreLinks = ref(false);
+const loadingMoreHistorical = ref(false);
 const recoveringCode = ref('');
 const recoveryErrors = ref<Record<string, string>>({});
 const fileRef = ref<HTMLInputElement | null>(null);
 const cameraRef = ref<HTMLInputElement | null>(null);
 const videoRef = ref<HTMLInputElement | null>(null);
 let nextId = 1;
+let boardGeneration = 0;
+let linksPageRequest = 0;
+let historicalPageRequest = 0;
 
 function currentSnap(): Snap {
   return {
@@ -212,24 +223,84 @@ async function submit(item: DraftFile) {
   }
 }
 
+function boardQuery(): EvidencePageQuery {
+  return {
+    targetType: props.targetType,
+    targetCode: props.targetCode.trim(),
+    stage: props.stage,
+    operationType: props.operationType,
+    operationCode: props.operationCode,
+  };
+}
+
 async function loadBoard() {
+  const generation = ++boardGeneration;
+  linksPageRequest += 1;
+  historicalPageRequest += 1;
+  loadingMoreLinks.value = false;
+  loadingMoreHistorical.value = false;
+  board.value = { links: [], historical: [] };
+  linksCursor.value = null;
+  historicalCursor.value = null;
+  linksHasMore.value = false;
+  historicalHasMore.value = false;
+  boardError.value = '';
   if (!props.targetType || !props.targetCode.trim()) {
-    board.value = { links: [], historical: [] };
-    boardError.value = '';
     return;
   }
   try {
-    board.value = await fetchEvidenceBoard({
-      targetType: props.targetType,
-      targetCode: props.targetCode.trim(),
-      stage: props.stage,
-      operationType: props.operationType,
-      operationCode: props.operationCode,
-    });
+    const query = boardQuery();
+    const [linked, historical] = await Promise.all([
+      fetchLinkedEvidencePage(query),
+      fetchHistoricalEvidencePage(query),
+    ]);
+    if (generation !== boardGeneration) return;
+    board.value = { links: linked.items, historical: historical.items };
+    linksCursor.value = linked.nextCursor;
+    historicalCursor.value = historical.nextCursor;
+    linksHasMore.value = linked.hasMore;
+    historicalHasMore.value = historical.hasMore;
+  } catch (error) {
+    if (generation !== boardGeneration) return;
+    boardError.value = error instanceof Error ? error.message : '证据暂时无法打开';
+  }
+}
+
+async function loadMoreLinks() {
+  if (!linksHasMore.value || linksCursor.value === null || loadingMoreLinks.value) return;
+  const generation = boardGeneration;
+  const requestId = ++linksPageRequest;
+  loadingMoreLinks.value = true;
+  try {
+    const page = await fetchLinkedEvidencePage({ ...boardQuery(), afterId: linksCursor.value });
+    if (generation !== boardGeneration) return;
+    board.value = { ...board.value, links: [...board.value.links, ...page.items] };
+    linksCursor.value = page.nextCursor;
+    linksHasMore.value = page.hasMore;
     boardError.value = '';
   } catch (error) {
-    board.value = { links: [], historical: [] };
-    boardError.value = error instanceof Error ? error.message : '证据暂时无法打开';
+    if (generation === boardGeneration) boardError.value = error instanceof Error ? error.message : '已关联证据加载失败';
+  } finally {
+    if (requestId === linksPageRequest) loadingMoreLinks.value = false;
+  }
+}
+
+async function loadMoreHistorical() {
+  if (!historicalHasMore.value || historicalCursor.value === null || loadingMoreHistorical.value) return;
+  const generation = boardGeneration;
+  const requestId = ++historicalPageRequest;
+  loadingMoreHistorical.value = true;
+  try {
+    const page = await fetchHistoricalEvidencePage({ ...boardQuery(), afterId: historicalCursor.value });
+    if (generation !== boardGeneration) return;
+    board.value = { ...board.value, historical: [...board.value.historical, ...page.items] };
+    historicalCursor.value = page.nextCursor;
+    historicalHasMore.value = page.hasMore;
+    boardError.value = '';
+  } catch (error) {
+    if (generation === boardGeneration) boardError.value = error instanceof Error ? error.message : '待关联证据加载失败';
+  } finally {
+    if (requestId === historicalPageRequest) loadingMoreHistorical.value = false;
   }
 }
 
@@ -284,6 +355,7 @@ watch(() => [props.targetType, props.targetCode, props.stage, props.operationTyp
 }, { immediate: true });
 
 onBeforeUnmount(() => {
+  boardGeneration += 1;
   for (const item of items.value) {
     if (item.previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(item.previewUrl);
   }
@@ -363,6 +435,9 @@ onBeforeUnmount(() => {
         <span v-else-if="link.status === '已下线'">已下线，不能预览</span>
       </li>
     </ul>
+    <button v-if="linksHasMore" class="secondary-button" type="button" :disabled="loadingMoreLinks" @click="loadMoreLinks">
+      {{ loadingMoreLinks ? '正在加载' : '加载更多已关联证据' }}
+    </button>
     <ul v-if="board.historical.length" class="evidence-file-list">
       <li v-for="item in board.historical" :key="historicalKey(item)">
         <strong>{{ item.fileName || item.attachmentCode }}</strong>
@@ -374,5 +449,8 @@ onBeforeUnmount(() => {
         <small v-if="recoveryErrors[item.attachmentCode]" class="operation-feedback danger" role="alert">{{ recoveryErrors[item.attachmentCode] }}</small>
       </li>
     </ul>
+    <button v-if="historicalHasMore" class="secondary-button" type="button" :disabled="loadingMoreHistorical" @click="loadMoreHistorical">
+      {{ loadingMoreHistorical ? '正在加载' : '加载更多待关联证据' }}
+    </button>
   </section>
 </template>

@@ -1,11 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bindEvidence, fetchEvidenceBoard, uploadEvidenceFile } from '../../services/evidenceApi';
+import { bindEvidence, fetchHistoricalEvidencePage, fetchLinkedEvidencePage, uploadEvidenceFile } from '../../services/evidenceApi';
+import type { EvidenceLink, EvidencePage } from '../../services/evidenceApi';
 import { confirmInbound } from '../../services/businessOperationApi';
 import EvidenceCapture from './EvidenceCapture.vue';
 
 vi.mock('../../services/evidenceApi', () => ({
-  fetchEvidenceBoard: vi.fn(),
+  fetchHistoricalEvidencePage: vi.fn(),
+  fetchLinkedEvidencePage: vi.fn(),
   uploadEvidenceFile: vi.fn(),
   bindEvidence: vi.fn(),
 }));
@@ -33,6 +35,16 @@ const board = {
   }],
 };
 
+function linked(code: string): EvidenceLink {
+  return {
+    linkCode: `LINK-${code}`, attachmentCode: code, targetType: 'MOTHER_ORDER', targetCode: 'MD-1',
+    stage: 'INTAKE', scene: 'UNPACK', sceneLabel: '拆包', operationType: 'inbound_confirm',
+    operationCode: 'OP-1', processName: '', clauseNo: '', operatorName: '收货员',
+    linkedAt: '2026-10-18 08:00:00', fileName: `${code}.jpg`, mediaType: 'image/jpeg',
+    checksum: `sha256:${code}`, status: '已上传', previewUrl: '', fileState: 'LINKED',
+  };
+}
+
 function fileOf(name: string, type: string, size = 4): File {
   const content = new Uint8Array(size);
   return new File([content], name, { type });
@@ -46,11 +58,13 @@ async function pick(wrapper: ReturnType<typeof mount>, name: string, type: strin
 
 describe('现场证据采集', () => {
   beforeEach(() => {
-    vi.mocked(fetchEvidenceBoard).mockReset();
+    vi.mocked(fetchHistoricalEvidencePage).mockReset();
+    vi.mocked(fetchLinkedEvidencePage).mockReset();
     vi.mocked(uploadEvidenceFile).mockReset();
     vi.mocked(bindEvidence).mockReset();
     vi.mocked(confirmInbound).mockReset();
-    vi.mocked(fetchEvidenceBoard).mockResolvedValue({ links: [], historical: [] });
+    vi.mocked(fetchHistoricalEvidencePage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
+    vi.mocked(fetchLinkedEvidencePage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
     vi.mocked(uploadEvidenceFile).mockResolvedValue({
       code: 'ATT-1', documentCode: 'DOC-MD-1', fileName: 'a.jpg', mediaType: 'image/jpeg',
       size: 4, storageLocation: 'local://a', checksum: 'sha256:a', uploadedAt: '2026-10-12', previewUrl: '/preview',
@@ -126,12 +140,12 @@ describe('现场证据采集', () => {
   });
 
   it('刷新后可将同场景的待关联附件补到当前正式操作', async () => {
-    vi.mocked(fetchEvidenceBoard).mockResolvedValue({
-      links: [], historical: [{
+    vi.mocked(fetchHistoricalEvidencePage).mockResolvedValue({
+      items: [{
         ...board.historical[0], attachmentCode: 'ATT-PENDING', businessCode: 'MD-1',
         objectType: 'MOTHER_ORDER', label: '已上传待关联', sceneCode: 'UNPACK',
         previewUrl: '/api/documents/attachments/ATT-PENDING/content', fileState: 'UPLOADED_PENDING_LINK',
-      }],
+      }], nextCursor: null, hasMore: false,
     });
     const wrapper = mount(EvidenceCapture, {
       props: {
@@ -150,11 +164,11 @@ describe('现场证据采集', () => {
   });
 
   it('不同采集场景的待关联附件不能直接补到当前操作', async () => {
-    vi.mocked(fetchEvidenceBoard).mockResolvedValue({
-      links: [], historical: [{
+    vi.mocked(fetchHistoricalEvidencePage).mockResolvedValue({
+      items: [{
         ...board.historical[0], attachmentCode: 'ATT-PACK', businessCode: 'MD-1',
         objectType: 'MOTHER_ORDER', sceneCode: 'PACK', fileState: 'UPLOADED_PENDING_LINK',
-      }],
+      }], nextCursor: null, hasMore: false,
     });
     const wrapper = mount(EvidenceCapture, {
       props: {
@@ -189,7 +203,9 @@ describe('现场证据采集', () => {
   });
 
   it('拒绝过大或错误格式，并展示历史单据证据', async () => {
-    vi.mocked(fetchEvidenceBoard).mockResolvedValue(board);
+    vi.mocked(fetchHistoricalEvidencePage).mockResolvedValue({
+      items: board.historical, nextCursor: null, hasMore: false,
+    });
     const wrapper = mount(EvidenceCapture, {
       props: { targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK' },
     });
@@ -245,6 +261,48 @@ describe('现场证据采集', () => {
     await videoInput.trigger('change');
     expect(wrapper.text()).toContain('视频超过 50MB');
     expect(uploadEvidenceFile).toHaveBeenCalledOnce();
+  });
+
+  it('已关联与待关联列表分别续页且传递上页游标', async () => {
+    vi.mocked(fetchLinkedEvidencePage)
+      .mockResolvedValueOnce({ items: [linked('ATT-L1')], nextCursor: 11, hasMore: true })
+      .mockResolvedValueOnce({ items: [linked('ATT-L2')], nextCursor: null, hasMore: false });
+    vi.mocked(fetchHistoricalEvidencePage)
+      .mockResolvedValueOnce({ items: [board.historical[0]], nextCursor: 21, hasMore: true })
+      .mockResolvedValueOnce({ items: [{ ...board.historical[0], attachmentCode: 'ATT-H2', fileName: 'ATT-H2.jpg' }], nextCursor: null, hasMore: false });
+    const wrapper = mount(EvidenceCapture, {
+      props: { targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK' },
+    });
+    await flushPromises();
+
+    await wrapper.findAll('button').find(button => button.text().includes('加载更多已关联证据'))!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text().includes('加载更多待关联证据'))!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('ATT-L1.jpg');
+    expect(wrapper.text()).toContain('ATT-L2.jpg');
+    expect(wrapper.text()).toContain('ATT-H2');
+    expect(vi.mocked(fetchLinkedEvidencePage).mock.calls[1][0].afterId).toBe(11);
+    expect(vi.mocked(fetchHistoricalEvidencePage).mock.calls[1][0].afterId).toBe(21);
+    expect(wrapper.text()).not.toContain('加载更多已关联证据');
+    expect(wrapper.text()).not.toContain('加载更多待关联证据');
+  });
+
+  it('切单后忽略旧单分页响应', async () => {
+    let resolveOld!: (page: EvidencePage<EvidenceLink>) => void;
+    vi.mocked(fetchLinkedEvidencePage).mockImplementation(query => query.targetCode === 'MD-A'
+      ? new Promise<EvidencePage<EvidenceLink>>(resolve => { resolveOld = resolve; })
+      : Promise.resolve({ items: [linked('ATT-NEW')], nextCursor: null, hasMore: false }));
+    const wrapper = mount(EvidenceCapture, {
+      props: { targetType: 'MOTHER_ORDER', targetCode: 'MD-A', stage: 'INTAKE', scene: 'UNPACK' },
+    });
+    await wrapper.setProps({ targetCode: 'MD-B' });
+    await flushPromises();
+    resolveOld({ items: [linked('ATT-OLD')], nextCursor: null, hasMore: false });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('ATT-NEW.jpg');
+    expect(wrapper.text()).not.toContain('ATT-OLD.jpg');
   });
 
   it('同一文件可以再次选择，预览地址会在卸载时释放', async () => {
