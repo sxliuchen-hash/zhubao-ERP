@@ -1,7 +1,7 @@
 package com.zhubao.erp.document.web;
 
 import com.zhubao.erp.document.app.DocumentManagementService;
-import com.zhubao.erp.document.domain.AttachmentContent;
+import com.zhubao.erp.document.domain.AttachmentStreamContent;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.security.app.OperatorContextResolver;
@@ -12,32 +12,42 @@ import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class DocumentManagementControllerTest {
 
     @Test
-    void servesSignedContentWithPurposeAndSafeHeaders() {
+    void servesSignedContentWithPurposeAndSafeHeaders() throws Exception {
         DocumentManagementService service = mock(DocumentManagementService.class);
         byte[] bytes = new byte[]{(byte) 0xff, (byte) 0xd8, (byte) 0xff, 1};
-        when(service.previewContent("ATT-1", 123L, "signed", "preview", "original"))
-                .thenReturn(new AttachmentContent("ATT-1", "现场照片.jpg", "image/jpeg", bytes));
-        when(service.previewContent("ATT-1", 123L, "download-signed", "download", "original"))
-                .thenReturn(new AttachmentContent("ATT-1", "现场照片.jpg", "image/jpeg", bytes));
+        when(service.previewContentStream("ATT-1", 123L, "signed", "preview", "original"))
+                .thenReturn(stream("ATT-1", "现场照片.jpg", "image/jpeg", bytes));
+        when(service.previewContentStream("ATT-1", 123L, "download-signed", "download", "original"))
+                .thenReturn(stream("ATT-1", "现场照片.jpg", "image/jpeg", bytes));
         DocumentManagementController controller = new DocumentManagementController(service, null, null);
 
-        var preview = controller.content("ATT-1", 123L, "signed", "preview", "original");
+        var preview = controller.content("ATT-1", 123L, "signed", "preview", "original", null);
         assertThat(preview.getHeaders().getFirst(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store");
         assertThat(preview.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
         assertThat(preview.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).startsWith("inline;");
-        assertThat(preview.getBody()).isEqualTo(bytes);
+        assertThat(bodyOf(preview)).isEqualTo(bytes);
 
-        var download = controller.content("ATT-1", 123L, "download-signed", "download", "original");
+        var download = controller.content("ATT-1", 123L, "download-signed", "download", "original", null);
         assertThat(download.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).startsWith("attachment;");
         assertThat(download.getHeaders().getContentDisposition().getFilename()).isEqualTo("现场照片.jpg");
         assertThat(download.getHeaders().getFirst(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store");
@@ -46,24 +56,92 @@ class DocumentManagementControllerTest {
     @Test
     void treatsPdfAndUnknownTypeAsAttachment() {
         DocumentManagementService service = mock(DocumentManagementService.class);
-        when(service.previewContent("PDF-1", 123L, "signed", "preview", "original"))
-                .thenReturn(new AttachmentContent("PDF-1", "证据.pdf", "application/pdf", "%PDF-1.7".getBytes()));
-        when(service.previewContent("HTML-1", 123L, "signed", "preview", "original"))
-                .thenReturn(new AttachmentContent("HTML-1", "旧附件.html", "text/html", new byte[]{2}));
-        when(service.previewContent("FALSE-JPEG", 123L, "signed", "preview", "original"))
-                .thenReturn(new AttachmentContent("FALSE-JPEG", "伪装照片.jpg", "image/jpeg", "<html>".getBytes()));
+        when(service.previewContentStream("PDF-1", 123L, "signed", "preview", "original"))
+                .thenReturn(stream("PDF-1", "证据.pdf", "application/pdf", "%PDF-1.7".getBytes()));
+        when(service.previewContentStream("HTML-1", 123L, "signed", "preview", "original"))
+                .thenReturn(stream("HTML-1", "旧附件.html", "text/html", new byte[]{2}));
+        when(service.previewContentStream("FALSE-JPEG", 123L, "signed", "preview", "original"))
+                .thenReturn(stream("FALSE-JPEG", "伪装照片.jpg", "image/jpeg", "<html>".getBytes()));
         DocumentManagementController controller = new DocumentManagementController(service, null, null);
 
-        var pdf = controller.content("PDF-1", 123L, "signed", "preview", "original");
+        var pdf = controller.content("PDF-1", 123L, "signed", "preview", "original", null);
         assertThat(pdf.getHeaders().getContentDisposition().getType()).isEqualTo("attachment");
         assertThat(pdf.getHeaders().getContentType().toString()).isEqualTo("application/pdf");
-        var unknown = controller.content("HTML-1", 123L, "signed", "preview", "original");
+        var unknown = controller.content("HTML-1", 123L, "signed", "preview", "original", null);
         assertThat(unknown.getHeaders().getContentDisposition().getType()).isEqualTo("attachment");
         assertThat(unknown.getHeaders().getContentType().toString()).isEqualTo("application/octet-stream");
         assertThat(unknown.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
-        var disguised = controller.content("FALSE-JPEG", 123L, "signed", "preview", "original");
+        var disguised = controller.content("FALSE-JPEG", 123L, "signed", "preview", "original", null);
         assertThat(disguised.getHeaders().getContentDisposition().getType()).isEqualTo("attachment");
         assertThat(disguised.getHeaders().getContentType().toString()).isEqualTo("application/octet-stream");
+    }
+
+    @Test
+    void streamsVideoAndSupportsSingleByteRange() throws Exception {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        byte[] bytes = new byte[]{0, 0, 0, 16, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 1, 2, 3, 4};
+        when(service.previewContentStream("VIDEO-1", 123L, "signed", "preview", "original"))
+                .thenReturn(stream("VIDEO-1", "现场.mp4", "video/mp4", bytes));
+        DocumentManagementController controller = new DocumentManagementController(service, null, null);
+
+        var full = controller.content("VIDEO-1", 123L, "signed", "preview", "original", null);
+        assertThat(full.getStatusCode().value()).isEqualTo(200);
+        assertThat(full.getHeaders().getContentLength()).isEqualTo(bytes.length);
+        assertThat(full.getHeaders().getFirst(HttpHeaders.ACCEPT_RANGES)).isEqualTo("bytes");
+        assertThat(bodyOf(full)).isEqualTo(bytes);
+
+        var range = controller.content("VIDEO-1", 123L, "signed", "preview", "original", "bytes=4-7");
+        assertThat(range.getStatusCode().value()).isEqualTo(206);
+        assertThat(range.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE)).isEqualTo("bytes 4-7/16");
+        assertThat(range.getHeaders().getContentLength()).isEqualTo(4);
+        assertThat(bodyOf(range)).isEqualTo(Arrays.copyOfRange(bytes, 4, 8));
+
+        var suffix = controller.content("VIDEO-1", 123L, "signed", "preview", "original", "bytes=-4");
+        assertThat(suffix.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE)).isEqualTo("bytes 12-15/16");
+        assertThat(bodyOf(suffix)).isEqualTo(Arrays.copyOfRange(bytes, 12, 16));
+
+        var invalid = controller.content("VIDEO-1", 123L, "signed", "preview", "original", "bytes=16-");
+        assertThat(invalid.getStatusCode().value()).isEqualTo(416);
+        assertThat(invalid.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE)).isEqualTo("bytes */16");
+        assertThat(invalid.getBody()).isNull();
+        assertThat(controller.content("VIDEO-1", 123L, "signed", "preview", "original", "bytes=0-1,4-5")
+                .getStatusCode().value()).isEqualTo(416);
+    }
+
+    @Test
+    void bindsRangeHeaderAndStreamsPartialResponseThroughMvc() throws Exception {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        byte[] bytes = new byte[]{0, 0, 0, 16, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 1, 2, 3, 4};
+        when(service.previewContentStream("VIDEO-1", 123L, "signed", "preview", "original"))
+                .thenReturn(stream("VIDEO-1", "现场.mp4", "video/mp4", bytes));
+        var mvc = MockMvcBuilders.standaloneSetup(new DocumentManagementController(service, null, null)).build();
+        var pending = mvc.perform(get("/api/documents/attachments/VIDEO-1/content")
+                        .param("expiresAt", "123")
+                        .param("token", "signed")
+                        .param("purpose", "preview")
+                        .param("resolution", "original")
+                        .header(HttpHeaders.RANGE, "bytes=4-7"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mvc.perform(asyncDispatch(pending))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes 4-7/16"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(content().bytes(Arrays.copyOfRange(bytes, 4, 8)));
+    }
+
+    private AttachmentStreamContent stream(String code, String fileName, String mediaType, byte[] bytes) {
+        return new AttachmentStreamContent(code, fileName, mediaType, bytes.length,
+                Arrays.copyOf(bytes, Math.min(12, bytes.length)),
+                (offset, length, output) -> output.write(bytes, (int) offset, (int) length));
+    }
+
+    private byte[] bodyOf(org.springframework.http.ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> response)
+            throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        response.getBody().writeTo(output);
+        return output.toByteArray();
     }
 
     @Test

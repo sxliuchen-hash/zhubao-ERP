@@ -428,7 +428,7 @@ MySQL 持久化表：
 | `POST /attachments/{code}/reconciliations` | 文档附件 | 仅公司范围管理员／总经理可核对「待核对」附件的原件 SHA-256，补记核对审计并启用；原件缺失或校验不符时拒绝 |
 | `POST /attachments/uploads` | 文档附件 | multipart 上传附件，生成附件元数据、checksum、审计事件和预览 URL |
 | `GET /attachments/{code}/preview-url?purpose=<purpose>` | 文档附件 | 登录后按附件单据校验业务数据范围，返回短期签名地址；默认 `preview`，下载须另行申请 `download`，响应禁止缓存 |
-| `GET /attachments/{code}/content?expiresAt=<epoch>&purpose=<purpose>&resolution=original&token=<hmac>` | 文档附件 | 签名绑定附件、期限、用途与清晰度；仅文件头与元数据相符的 JPEG、PNG、MP4、WebM 可内联，其余按原文件名下载；响应 `no-store`、`nosniff`。当前仍整文件读取，Range 与派生图留待 A2 后续增量 |
+| `GET /attachments/{code}/content?expiresAt=<epoch>&purpose=<purpose>&resolution=original&token=<hmac>` | 文档附件 | 签名绑定附件、期限、用途与清晰度；仅文件头与元数据相符的 JPEG、PNG、MP4、WebM 可内联，其余按原文件名下载；响应 `no-store`、`nosniff`。原件按流输出；视频支持单段 `Range: bytes=...`，有效区间返回 `206` 与 `Content-Range`，越界或多段返回 `416`，非视频忽略 Range。派生图留待后续增量 |
 
 附件上传若在原件发布后遇到元数据或审计写入结果不确定，错误会包含附件编号并要求核对；原件保留，不能把错误解释为“文件不存在，可以直接重传”。本地原件先写同目录临时文件并原子发布。下线先保存「已下线」并立即拒绝访问，原件保留供受控恢复。每日默认 03:00 执行只读完整性检查，异常数量写入服务日志；管理员可随时读取上述明细接口。时间可用 `zhubao.documents.integrity.cron` 配置。
 
@@ -2278,7 +2278,7 @@ PWA 一期边界：
 | `POST /api/documents/attachments/uploads` | `ApiResponse<EvidenceAttachmentUploadResult>` |
 | `POST /api/documents/attachments/{code}/retirements` | `ApiResponse<StoredContentItem>` |
 | `GET /api/documents/attachments/{code}/preview-url` | `ApiResponse<AttachmentPreviewUrl>` |
-| `GET /api/documents/attachments/{code}/content` | `ResponseEntity<byte[]>` |
+| `GET /api/documents/attachments/{code}/content` | `ResponseEntity<StreamingResponseBody>`；视频原件支持单段 Range |
 
 ### FinanceController
 

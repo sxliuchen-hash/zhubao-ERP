@@ -7,6 +7,7 @@ import com.zhubao.erp.document.domain.AttachmentIntegrityIssue;
 import com.zhubao.erp.document.domain.AttachmentIntegrityReport;
 import com.zhubao.erp.document.domain.AttachmentMediaPolicy;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
+import com.zhubao.erp.document.domain.AttachmentStreamContent;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
@@ -30,6 +31,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -505,15 +507,53 @@ public class DocumentManagementService {
         return content(code);
     }
 
+    public AttachmentStreamContent previewContentStream(
+            String code, long expiresAt, String token, String purpose, String resolution
+    ) {
+        String accessPurpose = requiredPurpose(purpose);
+        if (!RESOLUTION_ORIGINAL.equals(resolution)) {
+            throw new BusinessException("附件清晰度不支持");
+        }
+        validatePreviewToken(code, expiresAt, token, accessPurpose, resolution);
+        EvidenceAttachment attachment = findAttachment(code)
+                .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        assertActive(attachment);
+        String storageKey = storageKeyOf(attachment);
+        long size = attachmentObjectStorage.size(storageKey);
+        byte[] header;
+        try (InputStream input = attachmentObjectStorage.open(storageKey)) {
+            header = input.readNBytes(12);
+        } catch (IOException exception) {
+            throw new BusinessException("附件读取本地存储失败：" + exception.getMessage());
+        }
+        return new AttachmentStreamContent(code, attachment.fileName(), attachment.mediaType(), size, header,
+                (offset, length, output) -> writeContentRange(code, storageKey, offset, length, output));
+    }
+
+    private void writeContentRange(String code, String storageKey, long offset, long length, OutputStream output) throws IOException {
+        EvidenceAttachment current = findAttachment(code)
+                .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        assertActive(current);
+        try (InputStream input = attachmentObjectStorage.open(storageKey)) {
+            input.skipNBytes(offset);
+            byte[] buffer = new byte[8192];
+            long remaining = length;
+            while (remaining > 0) {
+                int read = input.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+                if (read <= 0) {
+                    throw new IOException("附件读取中断");
+                }
+                output.write(buffer, 0, read);
+                remaining -= read;
+            }
+        }
+    }
+
     public AttachmentContent content(String code) {
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
         assertActive(attachment);
-        String storageKey = uploadedStorageKeys.get(code);
-        if (storageKey == null) {
-            storageKey = localStorageKey(attachment.storageLocation())
-                    .orElseThrow(() -> new BusinessException("附件尚未进入本地对象存储：" + code));
-        }
+        String storageKey = storageKeyOf(attachment);
         byte[] content = attachmentObjectStorage.get(storageKey);
         return new AttachmentContent(
                 attachment.code(),
@@ -526,6 +566,15 @@ public class DocumentManagementService {
     private void assertActive(EvidenceAttachment attachment) {
         if ("已下线".equals(attachment.status())) throw new BusinessException("内容已下线：" + attachment.code());
         if ("待核对".equals(attachment.status())) throw new BusinessException("附件待核对，暂不可访问：" + attachment.code());
+    }
+
+    private String storageKeyOf(EvidenceAttachment attachment) {
+        String storageKey = uploadedStorageKeys.get(attachment.code());
+        if (storageKey != null) {
+            return storageKey;
+        }
+        return localStorageKey(attachment.storageLocation())
+                .orElseThrow(() -> new BusinessException("附件尚未进入本地对象存储：" + attachment.code()));
     }
 
     /**

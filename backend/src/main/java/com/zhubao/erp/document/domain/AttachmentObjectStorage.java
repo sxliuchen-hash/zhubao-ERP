@@ -27,5 +27,9 @@ public interface AttachmentObjectStorage {
 
     byte[] get(String storageKey);
 
+    long size(String storageKey);
+
+    InputStream open(String storageKey);
+
     void delete(String storageKey);
 }

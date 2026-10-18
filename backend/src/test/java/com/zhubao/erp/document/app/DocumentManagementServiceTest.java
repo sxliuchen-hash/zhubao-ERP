@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.io.ByteArrayOutputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -45,7 +46,7 @@ class DocumentManagementServiceTest {
     }
 
     @Test
-    void uploadsAttachmentAndExposesPreviewContent() {
+    void uploadsAttachmentAndExposesPreviewContent() throws Exception {
         InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());
         byte[] content = jpeg("weight photo demo");
@@ -80,6 +81,14 @@ class DocumentManagementServiceTest {
         long expiresAt = expiresAt(previewUrl.url());
         String token = token(previewUrl.url());
         assertThat(service.previewContent(uploaded.code(), expiresAt, token).content()).isEqualTo(content);
+        var streamed = service.previewContentStream(uploaded.code(), expiresAt, token, "preview", "original");
+        assertThat(streamed.size()).isEqualTo(content.length);
+        ByteArrayOutputStream partial = new ByteArrayOutputStream();
+        streamed.write(1, 3, partial);
+        assertThat(partial.toByteArray()).isEqualTo(java.util.Arrays.copyOfRange(content, 1, 4));
+        assertThatThrownBy(() -> service.previewContentStream(uploaded.code(), expiresAt, token,
+                "download", "original"))
+                .isInstanceOf(BusinessException.class);
         var downloadUrl = service.previewUrl(uploaded.code(), "download");
         assertThat(downloadUrl.url()).contains("&purpose=download&resolution=original");
         assertThat(service.previewContent(uploaded.code(), expiresAt(downloadUrl.url()), token(downloadUrl.url()),
@@ -147,12 +156,17 @@ class DocumentManagementServiceTest {
                     assertThat(item.status()).isEqualTo("已上传");
                 });
 
+        var signed = service.previewUrl(uploaded.code());
         var retired = service.retireStoredContent(uploaded.code(), "系统管理员");
 
         assertThat(retired.status()).isEqualTo("已下线");
         assertThat(retired.sizeBytes()).isEqualTo(content.length);
         assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
         assertThatThrownBy(() -> service.content(uploaded.code()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已下线");
+        assertThatThrownBy(() -> service.previewContentStream(uploaded.code(), expiresAt(signed.url()),
+                token(signed.url()), "preview", "original"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已下线");
         DocumentManagementService reloaded = new DocumentManagementService(repository, new LocalAttachmentObjectStorage(properties));

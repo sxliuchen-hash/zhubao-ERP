@@ -19,7 +19,7 @@ class LocalAttachmentObjectStorageTest {
     Path tempDir;
 
     @Test
-    void storesAttachmentBySafeObjectKeyAndReadsItBack() {
+    void storesAttachmentBySafeObjectKeyAndReadsItBack() throws IOException {
         AttachmentStorageProperties properties = new AttachmentStorageProperties();
         properties.setLocalRoot(tempDir.toString());
         LocalAttachmentObjectStorage storage = new LocalAttachmentObjectStorage(properties);
@@ -39,6 +39,10 @@ class LocalAttachmentObjectStorageTest {
         assertThat(stored.checksum()).startsWith("sha256:");
         assertThat(Files.exists(tempDir.resolve(stored.storageKey()))).isTrue();
         assertThat(storage.get(stored.storageKey())).isEqualTo(content);
+        assertThat(storage.size(stored.storageKey())).isEqualTo(content.length);
+        try (InputStream input = storage.open(stored.storageKey())) {
+            assertThat(input.readAllBytes()).isEqualTo(content);
+        }
     }
 
     @Test

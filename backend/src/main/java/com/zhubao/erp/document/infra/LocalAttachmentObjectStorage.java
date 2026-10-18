@@ -12,6 +12,7 @@ import java.io.OutputStream;
 import java.io.ByteArrayInputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
@@ -135,6 +136,34 @@ public class LocalAttachmentObjectStorage implements AttachmentObjectStorage {
         } catch (IOException exception) {
             throw new BusinessException("附件读取本地存储失败：" + exception.getMessage());
         }
+    }
+
+    @Override
+    public long size(String storageKey) {
+        Path target = existingObject(storageKey);
+        try {
+            return Files.size(target);
+        } catch (IOException exception) {
+            throw new BusinessException("附件读取本地存储失败：" + exception.getMessage());
+        }
+    }
+
+    @Override
+    public InputStream open(String storageKey) {
+        Path target = existingObject(storageKey);
+        try {
+            return Files.newInputStream(target);
+        } catch (IOException exception) {
+            throw new BusinessException("附件读取本地存储失败：" + exception.getMessage());
+        }
+    }
+
+    private Path existingObject(String storageKey) {
+        Path target = resolveStorageKey(storageKey);
+        if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+            throw new BusinessException("附件存储对象不存在：" + storageKey);
+        }
+        return target;
     }
 
     @Override
