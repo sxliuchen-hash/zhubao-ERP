@@ -1,6 +1,7 @@
 FROM eclipse-temurin:17-jre-alpine
 
 ARG JAR_FILE=backend/target/zhubao-erp-backend-0.0.1-SNAPSHOT.jar
+ARG ALPINE_MIRROR=
 
 ENV TZ=Asia/Shanghai \
     SERVER_PORT=8080 \
@@ -12,7 +13,8 @@ ENV TZ=Asia/Shanghai \
 
 WORKDIR /app
 
-RUN apk add --no-cache ffmpeg \
+RUN if [ -n "$ALPINE_MIRROR" ]; then sed -i "s#https://dl-cdn.alpinelinux.org/alpine#$ALPINE_MIRROR#g" /etc/apk/repositories; fi \
+    && apk add --no-cache ffmpeg \
     && mkdir -p /app/evidence /logs /backups \
     && addgroup -S zhubao \
     && adduser -S zhubao -G zhubao \

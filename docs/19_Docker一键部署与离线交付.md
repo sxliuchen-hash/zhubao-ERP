@@ -85,6 +85,7 @@ powershell -ExecutionPolicy Bypass -File scripts\docker-build-package.ps1 -Versi
 首次构建需要构建机能访问 Docker Hub 或企业镜像仓库，以拉取 `eclipse-temurin:17-jre-alpine`、`nginx:1.27-alpine` 和 `mysql:8.4`。如果现场网络无法访问外部仓库，需要提前配置镜像加速、企业仓库或预加载基础镜像。
 
 A2 视频封面由后端运行镜像内的 `ffmpeg` 提取首帧；镜像构建需从 Alpine 软件源安装该包。视频原件仍按原格式保存并支持 Range，封面只作为可重建派生文件，提帧失败不回滚已保存原件。发布时需在实际镜像中验证 `ffmpeg` 可运行，并用代表性 MP4／WebM 核对封面。
+构建环境若访问默认 Alpine 源缓慢，可给后端镜像传入 `--build-arg ALPINE_MIRROR=<可信 Alpine 镜像源前缀>`；默认值为空，仍使用基础镜像内的软件源。选择镜像源时先核对与基础镜像的 Alpine 版本一致。
 
 只验证包结构、不构建镜像时可执行：
 
