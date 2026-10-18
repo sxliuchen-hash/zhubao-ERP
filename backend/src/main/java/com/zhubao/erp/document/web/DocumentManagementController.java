@@ -446,6 +446,7 @@ public class DocumentManagementController {
     public ResponseEntity<ApiResponse<AttachmentPreviewUrl>> previewUrl(
             @PathVariable String code,
             @RequestParam(defaultValue = "preview") String purpose,
+            @RequestParam(defaultValue = "original") String resolution,
             HttpServletRequest request
     ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
@@ -454,7 +455,7 @@ public class DocumentManagementController {
         dataAccess.assertCanRead(context, attachment.businessCode());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(ApiResponse.ok(documentManagementService.previewUrl(code, purpose)));
+                .body(ApiResponse.ok(documentManagementService.previewUrl(code, purpose, resolution)));
     }
 
     private List<DocumentPackage> visiblePackages(OperatorContext context) {

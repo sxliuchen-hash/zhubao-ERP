@@ -2296,8 +2296,8 @@ PWA 一期边界：
 | `GET /api/documents/audit-events` | `ApiResponse<List<DocumentAuditEvent>>` |
 | `POST /api/documents/attachments/uploads` | `ApiResponse<EvidenceAttachmentUploadResult>` |
 | `POST /api/documents/attachments/{code}/retirements` | `ApiResponse<StoredContentItem>` |
-| `GET /api/documents/attachments/{code}/preview-url` | `ApiResponse<AttachmentPreviewUrl>` |
-| `GET /api/documents/attachments/{code}/content` | `ResponseEntity<StreamingResponseBody>`；视频原件支持单段 Range |
+| `GET /api/documents/attachments/{code}/preview-url?purpose=&resolution=` | `ApiResponse<AttachmentPreviewUrl>`；`purpose` 默认 `preview`，`resolution` 默认 `original`。图片可申请 `thumbnail`（最长边 320）或 `preview`（最长边 1280）的 JPEG 派生图地址；派生图只允许 `preview` 用途，`download` 只允许 `original`。取址前按附件业务单号校验会话数据范围，签名绑定附件、用途、清晰度和期限 |
+| `GET /api/documents/attachments/{code}/content` | `ResponseEntity<StreamingResponseBody>`；按签名的用途和清晰度流式读取，图片派生对象缺失时从原件重建；视频原件支持单段 Range，附件下线后旧签名失效 |
 
 ### FinanceController
 

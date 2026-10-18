@@ -66,6 +66,8 @@ public class DocumentManagementService {
     private static final String PURPOSE_PREVIEW = "preview";
     private static final String PURPOSE_DOWNLOAD = "download";
     private static final String RESOLUTION_ORIGINAL = "original";
+    private static final String RESOLUTION_THUMBNAIL = "thumbnail";
+    private static final String RESOLUTION_PREVIEW = "preview";
 
     private final DocumentManagementRepository repository;
     private final AttachmentObjectStorage attachmentObjectStorage;
@@ -494,16 +496,21 @@ public class DocumentManagementService {
     }
 
     public AttachmentPreviewUrl previewUrl(String code, String purpose) {
+        return previewUrl(code, purpose, RESOLUTION_ORIGINAL);
+    }
+
+    public AttachmentPreviewUrl previewUrl(String code, String purpose, String resolution) {
         String accessPurpose = requiredPurpose(purpose);
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
         assertActive(attachment);
-        PreviewToken previewToken = newPreviewToken(attachment.code(), accessPurpose);
+        requiredResolution(accessPurpose, resolution, attachment.mediaType());
+        PreviewToken previewToken = newPreviewToken(attachment.code(), accessPurpose, resolution);
         return new AttachmentPreviewUrl(
                 attachment.code(),
                 attachment.fileName(),
-                attachment.mediaType(),
-                previewContentUrl(attachment.code(), accessPurpose, previewToken),
+                RESOLUTION_ORIGINAL.equals(resolution) ? attachment.mediaType() : "image/jpeg",
+                previewContentUrl(attachment.code(), accessPurpose, resolution, previewToken),
                 displayExpiresAt(previewToken.expiresAtEpoch())
         );
     }
@@ -525,14 +532,22 @@ public class DocumentManagementService {
             String code, long expiresAt, String token, String purpose, String resolution
     ) {
         String accessPurpose = requiredPurpose(purpose);
-        if (!RESOLUTION_ORIGINAL.equals(resolution)) {
+        if (!List.of(RESOLUTION_ORIGINAL, RESOLUTION_THUMBNAIL, RESOLUTION_PREVIEW).contains(resolution)) {
             throw new BusinessException("附件清晰度不支持");
         }
         validatePreviewToken(code, expiresAt, token, accessPurpose, resolution);
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
         assertActive(attachment);
+        requiredResolution(accessPurpose, resolution, attachment.mediaType());
         String storageKey = storageKeyOf(attachment);
+        String fileName = attachment.fileName();
+        String mediaType = attachment.mediaType();
+        if (!RESOLUTION_ORIGINAL.equals(resolution)) {
+            storageKey = attachmentObjectStorage.ensureImageDerivative(storageKey, resolution);
+            fileName = attachment.code() + "-" + resolution + ".jpg";
+            mediaType = "image/jpeg";
+        }
         long size = attachmentObjectStorage.size(storageKey);
         byte[] header;
         try (InputStream input = attachmentObjectStorage.open(storageKey)) {
@@ -540,8 +555,9 @@ public class DocumentManagementService {
         } catch (IOException exception) {
             throw new BusinessException("附件读取本地存储失败：" + exception.getMessage());
         }
-        return new AttachmentStreamContent(code, attachment.fileName(), attachment.mediaType(), size, header,
-                (offset, length, output) -> writeContentRange(code, storageKey, offset, length, output));
+        String selectedStorageKey = storageKey;
+        return new AttachmentStreamContent(code, fileName, mediaType, size, header,
+                (offset, length, output) -> writeContentRange(code, selectedStorageKey, offset, length, output));
     }
 
     private void writeContentRange(String code, String storageKey, long offset, long length, OutputStream output) throws IOException {
@@ -645,22 +661,32 @@ public class DocumentManagementService {
     }
 
     private String previewContentUrl(String code) {
-        return previewContentUrl(code, PURPOSE_PREVIEW, newPreviewToken(code, PURPOSE_PREVIEW));
+        return previewContentUrl(code, PURPOSE_PREVIEW, RESOLUTION_ORIGINAL,
+                newPreviewToken(code, PURPOSE_PREVIEW, RESOLUTION_ORIGINAL));
     }
 
-    private String previewContentUrl(String code, String purpose, PreviewToken previewToken) {
+    private String previewContentUrl(String code, String purpose, String resolution, PreviewToken previewToken) {
         return "/api/documents/attachments/" + code
                 + "/content?expiresAt=" + previewToken.expiresAtEpoch()
                 + "&purpose=" + purpose
-                + "&resolution=" + RESOLUTION_ORIGINAL
+                + "&resolution=" + resolution
                 + "&token=" + previewToken.signature();
     }
 
-    private PreviewToken newPreviewToken(String code, String purpose) {
+    private PreviewToken newPreviewToken(String code, String purpose, String resolution) {
         long expiresAtEpoch = Instant.now(clock)
                 .plus(previewTokenProperties.ttl())
                 .getEpochSecond();
-        return new PreviewToken(expiresAtEpoch, signPreviewToken(code, expiresAtEpoch, purpose, RESOLUTION_ORIGINAL));
+        return new PreviewToken(expiresAtEpoch, signPreviewToken(code, expiresAtEpoch, purpose, resolution));
+    }
+
+    private void requiredResolution(String purpose, String resolution, String mediaType) {
+        if (RESOLUTION_ORIGINAL.equals(resolution)) return;
+        if (!PURPOSE_PREVIEW.equals(purpose)
+                || !List.of(RESOLUTION_THUMBNAIL, RESOLUTION_PREVIEW).contains(resolution)
+                || !List.of("image/jpeg", "image/png").contains(mediaType)) {
+            throw new BusinessException("附件清晰度或用途不支持");
+        }
     }
 
     private void validatePreviewToken(String code, long expiresAtEpoch, String token, String purpose, String resolution) {

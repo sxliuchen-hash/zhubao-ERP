@@ -13,6 +13,9 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.ByteArrayOutputStream;
+import java.awt.image.BufferedImage;
+import java.awt.Color;
+import javax.imageio.ImageIO;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -128,6 +131,52 @@ class DocumentManagementServiceTest {
         assertThat(Files.exists(tempDir.resolve(uploaded.storageLocation().replace("local://", "")))).isTrue();
         assertThat(service.summary().attachments()).isEqualTo(6);
         assertThat(service.auditEvents()).extracting("action").contains("上传附件");
+    }
+
+    @Test
+    void signsImageResolutionAndRebuildsMissingDerivativeWithoutChangingOriginal() throws Exception {
+        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        DocumentManagementService service = new DocumentManagementService(repository, localStorage());
+        BufferedImage image = new BufferedImage(900, 450, BufferedImage.TYPE_INT_RGB);
+        var graphics = image.createGraphics();
+        graphics.setColor(Color.BLUE);
+        graphics.fillRect(0, 0, 900, 450);
+        graphics.dispose();
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", bytes);
+        byte[] original = bytes.toByteArray();
+        var uploaded = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-20260706-014",
+                "现场.png", "image/png", "PC 后台上传", "库管员 何琳", "无", original);
+        var thumbnail = service.previewUrl(uploaded.code(), "preview", "thumbnail");
+        var preview = service.previewUrl(uploaded.code(), "preview", "preview");
+        assertThat(thumbnail.url()).contains("&purpose=preview&resolution=thumbnail");
+        assertThat(thumbnail.mediaType()).isEqualTo("image/jpeg");
+        assertThat(preview.url()).contains("&resolution=preview");
+
+        var stream = service.previewContentStream(uploaded.code(), expiresAt(thumbnail.url()),
+                token(thumbnail.url()), "preview", "thumbnail");
+        ByteArrayOutputStream derivative = new ByteArrayOutputStream();
+        stream.write(0, stream.size(), derivative);
+        assertThat(stream.mediaType()).isEqualTo("image/jpeg");
+        assertThat(ImageIO.read(new java.io.ByteArrayInputStream(derivative.toByteArray())).getWidth()).isEqualTo(320);
+        assertThat(service.content(uploaded.code()).content()).isEqualTo(original);
+        assertThatThrownBy(() -> service.previewContentStream(uploaded.code(), expiresAt(thumbnail.url()),
+                token(thumbnail.url()), "preview", "original")).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.previewUrl(uploaded.code(), "download", "thumbnail"))
+                .isInstanceOf(BusinessException.class);
+
+        Path derivativePath;
+        try (var paths = Files.walk(tempDir)) {
+            derivativePath = paths.filter(path -> path.getFileName().toString().equals("thumbnail.jpg"))
+                    .findFirst().orElseThrow();
+        }
+        Files.delete(derivativePath);
+        assertThat(service.previewContentStream(uploaded.code(), expiresAt(thumbnail.url()),
+                token(thumbnail.url()), "preview", "thumbnail").size()).isGreaterThan(0);
+        assertThat(Files.isRegularFile(derivativePath)).isTrue();
+        service.retireStoredContent(uploaded.code(), "系统管理员");
+        assertThatThrownBy(() -> service.previewContentStream(uploaded.code(), expiresAt(thumbnail.url()),
+                token(thumbnail.url()), "preview", "thumbnail")).isInstanceOf(BusinessException.class);
     }
 
     @Test

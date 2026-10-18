@@ -172,9 +172,9 @@ class DocumentManagementControllerTest {
                 .when(access).assertCanRead(operator, attachment.businessCode());
         DocumentManagementController controller = new DocumentManagementController(service, null, resolver, access);
 
-        assertThatThrownBy(() -> controller.previewUrl(attachment.code(), "preview", request))
+        assertThatThrownBy(() -> controller.previewUrl(attachment.code(), "preview", "original", request))
                 .isInstanceOf(PermissionDeniedException.class);
-        assertThatThrownBy(() -> controller.previewUrl(attachment.code(), "download", request))
+        assertThatThrownBy(() -> controller.previewUrl(attachment.code(), "download", "original", request))
                 .isInstanceOf(PermissionDeniedException.class);
     }
 
