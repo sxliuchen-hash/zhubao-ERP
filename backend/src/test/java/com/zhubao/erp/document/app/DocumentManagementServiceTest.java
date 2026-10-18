@@ -56,7 +56,8 @@ class DocumentManagementServiceTest {
 
         assertThat(service.previewUrl("ATT-IN-20260706-001").fileName())
                 .isEqualTo("SF1048329001-waybill.jpg");
-        assertThat(repository.findAttachmentByCodeCalls).isEqualTo(1);
+        assertThat(service.attachmentByCode("ATT-IN-20260706-001").code()).isEqualTo("ATT-IN-20260706-001");
+        assertThat(repository.findAttachmentByCodeCalls).isEqualTo(2);
         assertThat(repository.attachmentsCalls).isZero();
     }
 

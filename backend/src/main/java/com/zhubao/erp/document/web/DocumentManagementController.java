@@ -450,8 +450,7 @@ public class DocumentManagementController {
             HttpServletRequest request
     ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
-        EvidenceAttachment attachment = documentManagementService.attachments().stream().filter(row -> code.equals(row.code())).findFirst()
-                .orElseThrow(() -> new BusinessException("附件不存在：" + code));
+        EvidenceAttachment attachment = documentManagementService.attachmentByCode(code);
         dataAccess.assertCanRead(context, attachment.businessCode());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")

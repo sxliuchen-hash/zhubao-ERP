@@ -167,7 +167,7 @@ class DocumentManagementControllerTest {
         OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
         var attachment = new InMemoryDocumentManagementRepository().attachments().get(0);
         when(resolver.requireSession(request)).thenReturn(operator);
-        when(service.attachments()).thenReturn(java.util.List.of(attachment));
+        when(service.attachmentByCode(attachment.code())).thenReturn(attachment);
         doThrow(new PermissionDeniedException("无权读取其他客户附件"))
                 .when(access).assertCanRead(operator, attachment.businessCode());
         DocumentManagementController controller = new DocumentManagementController(service, null, resolver, access);
@@ -176,6 +176,8 @@ class DocumentManagementControllerTest {
                 .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> controller.previewUrl(attachment.code(), "download", "original", request))
                 .isInstanceOf(PermissionDeniedException.class);
+        verify(service, never()).attachments();
+        verify(service, never()).previewUrl(attachment.code(), "preview", "original");
     }
 
     @Test

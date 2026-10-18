@@ -654,6 +654,10 @@ public class DocumentManagementService {
         return repository.findAttachmentByCode(code);
     }
 
+    public EvidenceAttachment attachmentByCode(String code) {
+        return findAttachment(code).orElseThrow(() -> new BusinessException("附件不存在：" + code));
+    }
+
     private Optional<String> localStorageKey(String storageLocation) {
         if (storageLocation == null || !storageLocation.startsWith("local://")) {
             return Optional.empty();
