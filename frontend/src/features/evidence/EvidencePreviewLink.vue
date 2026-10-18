@@ -14,21 +14,22 @@ const fileName = ref('');
 const errorMessage = ref('');
 const refreshedAfterError = ref(false);
 
-function contentUrl(raw: string): string {
+function contentUrl(raw: string, purpose: 'preview' | 'download'): string {
   const url = new URL(raw, window.location.href);
   const expectedPath = `/api/documents/attachments/${encodeURIComponent(props.attachmentCode)}/content`;
   if (url.origin !== window.location.origin || url.pathname !== expectedPath
-    || !url.searchParams.has('expiresAt') || !url.searchParams.has('token')) {
+    || !url.searchParams.has('expiresAt') || !url.searchParams.has('token')
+    || url.searchParams.get('purpose') !== purpose || url.searchParams.get('resolution') !== 'original') {
     throw new Error('附件地址无效');
   }
   return url.href;
 }
 
-async function freshContentUrl(): Promise<string> {
-  const preview = await fetchAttachmentPreviewUrl(props.attachmentCode);
+async function freshContentUrl(purpose: 'preview' | 'download' = 'preview'): Promise<string> {
+  const preview = await fetchAttachmentPreviewUrl(props.attachmentCode, purpose);
   mediaType.value = preview.mediaType.toLowerCase();
   fileName.value = preview.fileName;
-  return contentUrl(preview.url);
+  return contentUrl(preview.url, purpose);
 }
 
 async function togglePreview() {
@@ -42,7 +43,7 @@ async function togglePreview() {
   refreshedAfterError.value = false;
   try {
     const url = await freshContentUrl();
-    if (!mediaType.value.startsWith('image/') && !mediaType.value.startsWith('video/')) {
+    if (!['image/jpeg', 'image/png', 'video/mp4', 'video/webm'].includes(mediaType.value)) {
       throw new Error('此文件无法在页面内预览，请下载查看');
     }
     previewUrl.value = url;
@@ -76,10 +77,9 @@ async function download() {
   busy.value = true;
   errorMessage.value = '';
   try {
-    const url = new URL(await freshContentUrl());
-    url.searchParams.set('download', 'true');
+    const url = await freshContentUrl('download');
     const link = document.createElement('a');
-    link.href = url.href;
+    link.href = url;
     link.download = fileName.value;
     document.body.appendChild(link);
     link.click();

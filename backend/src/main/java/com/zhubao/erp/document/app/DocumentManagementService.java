@@ -59,6 +59,9 @@ public class DocumentManagementService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final String SIGNING_ALGORITHM = "HmacSHA256";
     private static final Base64.Encoder TOKEN_ENCODER = Base64.getUrlEncoder().withoutPadding();
+    private static final String PURPOSE_PREVIEW = "preview";
+    private static final String PURPOSE_DOWNLOAD = "download";
+    private static final String RESOLUTION_ORIGINAL = "original";
 
     private final DocumentManagementRepository repository;
     private final AttachmentObjectStorage attachmentObjectStorage;
@@ -471,21 +474,34 @@ public class DocumentManagementService {
     }
 
     public AttachmentPreviewUrl previewUrl(String code) {
+        return previewUrl(code, PURPOSE_PREVIEW);
+    }
+
+    public AttachmentPreviewUrl previewUrl(String code, String purpose) {
+        String accessPurpose = requiredPurpose(purpose);
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
         assertActive(attachment);
-        PreviewToken previewToken = newPreviewToken(attachment.code());
+        PreviewToken previewToken = newPreviewToken(attachment.code(), accessPurpose);
         return new AttachmentPreviewUrl(
                 attachment.code(),
                 attachment.fileName(),
                 attachment.mediaType(),
-                previewContentUrl(attachment.code(), previewToken),
+                previewContentUrl(attachment.code(), accessPurpose, previewToken),
                 displayExpiresAt(previewToken.expiresAtEpoch())
         );
     }
 
     public AttachmentContent previewContent(String code, long expiresAt, String token) {
-        validatePreviewToken(code, expiresAt, token);
+        return previewContent(code, expiresAt, token, PURPOSE_PREVIEW, RESOLUTION_ORIGINAL);
+    }
+
+    public AttachmentContent previewContent(String code, long expiresAt, String token, String purpose, String resolution) {
+        String accessPurpose = requiredPurpose(purpose);
+        if (!RESOLUTION_ORIGINAL.equals(resolution)) {
+            throw new BusinessException("附件清晰度不支持");
+        }
+        validatePreviewToken(code, expiresAt, token, accessPurpose, resolution);
         return content(code);
     }
 
@@ -568,30 +584,32 @@ public class DocumentManagementService {
     }
 
     private String previewContentUrl(String code) {
-        return previewContentUrl(code, newPreviewToken(code));
+        return previewContentUrl(code, PURPOSE_PREVIEW, newPreviewToken(code, PURPOSE_PREVIEW));
     }
 
-    private String previewContentUrl(String code, PreviewToken previewToken) {
+    private String previewContentUrl(String code, String purpose, PreviewToken previewToken) {
         return "/api/documents/attachments/" + code
                 + "/content?expiresAt=" + previewToken.expiresAtEpoch()
+                + "&purpose=" + purpose
+                + "&resolution=" + RESOLUTION_ORIGINAL
                 + "&token=" + previewToken.signature();
     }
 
-    private PreviewToken newPreviewToken(String code) {
+    private PreviewToken newPreviewToken(String code, String purpose) {
         long expiresAtEpoch = Instant.now(clock)
                 .plus(previewTokenProperties.ttl())
                 .getEpochSecond();
-        return new PreviewToken(expiresAtEpoch, signPreviewToken(code, expiresAtEpoch));
+        return new PreviewToken(expiresAtEpoch, signPreviewToken(code, expiresAtEpoch, purpose, RESOLUTION_ORIGINAL));
     }
 
-    private void validatePreviewToken(String code, long expiresAtEpoch, String token) {
+    private void validatePreviewToken(String code, long expiresAtEpoch, String token, String purpose, String resolution) {
         if (expiresAtEpoch <= Instant.now(clock).getEpochSecond()) {
             throw new BusinessException("附件预览链接已过期");
         }
         if (token == null || token.isBlank()) {
             throw new BusinessException("附件预览令牌不能为空");
         }
-        String expected = signPreviewToken(code, expiresAtEpoch);
+        String expected = signPreviewToken(code, expiresAtEpoch, purpose, resolution);
         if (!MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.UTF_8),
                 token.getBytes(StandardCharsets.UTF_8)
@@ -600,18 +618,25 @@ public class DocumentManagementService {
         }
     }
 
-    private String signPreviewToken(String code, long expiresAtEpoch) {
+    private String signPreviewToken(String code, long expiresAtEpoch, String purpose, String resolution) {
         try {
             Mac mac = Mac.getInstance(SIGNING_ALGORITHM);
             mac.init(new SecretKeySpec(
                     previewTokenProperties.signingSecret().getBytes(StandardCharsets.UTF_8),
                     SIGNING_ALGORITHM
             ));
-            String payload = code + ":" + expiresAtEpoch;
+            String payload = code + ":" + expiresAtEpoch + ":" + purpose + ":" + resolution;
             return TOKEN_ENCODER.encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
         } catch (GeneralSecurityException ex) {
             throw new IllegalStateException("Failed to sign attachment preview token", ex);
         }
+    }
+
+    private String requiredPurpose(String purpose) {
+        if (PURPOSE_PREVIEW.equals(purpose) || PURPOSE_DOWNLOAD.equals(purpose)) {
+            return purpose;
+        }
+        throw new BusinessException("附件访问用途不支持");
     }
 
     private String displayExpiresAt(long expiresAtEpoch) {

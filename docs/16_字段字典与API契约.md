@@ -427,8 +427,8 @@ MySQL 持久化表：
 | `GET /storage/integrity` | 文档附件 | 仅公司范围管理员／总经理可读取原件与元数据的只读对账结果，列出缺原件、SHA-256 不符、无元数据原件和上传中断临时文件；不清理文件 |
 | `POST /attachments/{code}/reconciliations` | 文档附件 | 仅公司范围管理员／总经理可核对「待核对」附件的原件 SHA-256，补记核对审计并启用；原件缺失或校验不符时拒绝 |
 | `POST /attachments/uploads` | 文档附件 | multipart 上传附件，生成附件元数据、checksum、审计事件和预览 URL |
-| `GET /attachments/{code}/preview-url` | 文档附件 | 返回带 `expiresAt` 与 HMAC `token` 的短期附件地址，响应禁止缓存；页面每次预览或下载都重新获取 |
-| `GET /attachments/{code}/content?expiresAt=<epoch>&token=<hmac>[&download=true]` | 文档附件 | 校验附件编码、过期时间和 HMAC token 后读取当前存储适配器的附件内容；默认页内展示，`download=true` 时按原文件名下载，内容响应禁止缓存；后续生产环境继续替换为 NAS/S3/COS 对象存储签名 URL |
+| `GET /attachments/{code}/preview-url?purpose=<purpose>` | 文档附件 | 登录后按附件单据校验业务数据范围，返回短期签名地址；默认 `preview`，下载须另行申请 `download`，响应禁止缓存 |
+| `GET /attachments/{code}/content?expiresAt=<epoch>&purpose=<purpose>&resolution=original&token=<hmac>` | 文档附件 | 签名绑定附件、期限、用途与清晰度；仅文件头与元数据相符的 JPEG、PNG、MP4、WebM 可内联，其余按原文件名下载；响应 `no-store`、`nosniff`。当前仍整文件读取，Range 与派生图留待 A2 后续增量 |
 
 附件上传若在原件发布后遇到元数据或审计写入结果不确定，错误会包含附件编号并要求核对；原件保留，不能把错误解释为“文件不存在，可以直接重传”。本地原件先写同目录临时文件并原子发布。下线先保存「已下线」并立即拒绝访问，原件保留供受控恢复。每日默认 03:00 执行只读完整性检查，异常数量写入服务日志；管理员可随时读取上述明细接口。时间可用 `zhubao.documents.integrity.cron` 配置。
 
@@ -1364,7 +1364,7 @@ PWA 一期边界：
 | `storageLocation` | 当前存储位置，默认对象内容仍可为 `local://evidence/{documentCode}/{attachmentCode}/{fileName}`，附件元数据可写入内存或 JDBC 仓储，后续对象内容迁移为 NAS/S3 签名访问 |
 | `checksum` | `sha256` 校验和 |
 | `uploadedAt` | 上传时间 |
-| `previewUrl` | 为短期签名预览内容地址，包含 `expiresAt` 与 HMAC `token` |
+| `previewUrl` | 为短期签名预览内容地址，包含 `expiresAt`、`purpose=preview`、`resolution=original` 与 HMAC `token` |
 
 ### 9.5 `AttachmentPreviewUrl`
 
@@ -1373,10 +1373,10 @@ PWA 一期边界：
 | `code` | 附件编码 |
 | `fileName` | 文件名 |
 | `mediaType` | MIME 类型 |
-| `url` | 返回 `/api/documents/attachments/{code}/content?expiresAt=<epoch>&token=<hmac>` 格式的短期签名 URL |
+| `url` | 返回含 `expiresAt`、`purpose`、`resolution=original`、`token` 的短期签名 URL；`purpose` 与取址请求一致 |
 | `expiresAt` | 过期时间展示值，默认 15 分钟后过期，可由 `zhubao.documents.preview.ttl-minutes` 调整 |
 
-附件预览使用短期 HMAC 令牌。`zhubao.documents.preview.secret` 签名 `attachmentCode:expiresAt`，`zhubao.documents.preview.ttl-minutes` 控制默认 15 分钟有效期；内容读取验证附件编码、有效期与签名。页面不保留旧签名地址，每次预览、重试或下载都重新请求；媒体加载失败时自动重新取址一次。该机制不替代按登录账号授权的细粒度预览权限或对象存储归档策略。
+附件预览使用短期 HMAC 令牌。`zhubao.documents.preview.secret` 签名 `attachmentCode:expiresAt:purpose:resolution`，`zhubao.documents.preview.ttl-minutes` 控制默认 15 分钟有效期。旧的仅绑定附件与期限的令牌不再适用；更改用途或清晰度会使签名失效。页面每次预览、重试或下载都重新请求，下载不通过追加 `download=true` 切换。内容地址仍是有效期内可复用的短期持有者地址，内容请求不重新校验登录账号的客户范围；申请地址时按单据校验范围。媒体加载失败时自动重新取址一次。该机制不替代按登录账号授权的细粒度预览权限或对象存储归档策略。
 
 文档附件约束：
 

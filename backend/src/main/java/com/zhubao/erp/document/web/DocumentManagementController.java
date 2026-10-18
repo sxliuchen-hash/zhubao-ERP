@@ -1,6 +1,7 @@
 package com.zhubao.erp.document.web;
 
 import com.zhubao.erp.document.domain.AttachmentContent;
+import com.zhubao.erp.document.domain.AttachmentMediaPolicy;
 import com.zhubao.erp.document.domain.AttachmentIntegrityReport;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.common.api.ApiResponse;
@@ -257,14 +258,18 @@ public class DocumentManagementController {
     }
 
     @GetMapping("/attachments/{code}/preview-url")
-    public ResponseEntity<ApiResponse<AttachmentPreviewUrl>> previewUrl(@PathVariable String code, HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<AttachmentPreviewUrl>> previewUrl(
+            @PathVariable String code,
+            @RequestParam(defaultValue = "preview") String purpose,
+            HttpServletRequest request
+    ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         EvidenceAttachment attachment = documentManagementService.attachments().stream().filter(row -> code.equals(row.code())).findFirst()
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
         dataAccess.assertCanRead(context, attachment.businessCode());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(ApiResponse.ok(documentManagementService.previewUrl(code)));
+                .body(ApiResponse.ok(documentManagementService.previewUrl(code, purpose)));
     }
 
     private List<DocumentPackage> visiblePackages(OperatorContext context) {
@@ -286,15 +291,30 @@ public class DocumentManagementController {
             @PathVariable String code,
             @RequestParam long expiresAt,
             @RequestParam String token,
-            @RequestParam(defaultValue = "false") boolean download
+            @RequestParam String purpose,
+            @RequestParam String resolution
     ) {
-        AttachmentContent content = documentManagementService.previewContent(code, expiresAt, token);
+        AttachmentContent content = documentManagementService.previewContent(code, expiresAt, token, purpose, resolution);
+        boolean verifiedType = isVerifiedMediaType(content);
+        boolean download = "download".equals(purpose) || !verifiedType || !isInlineMediaType(content.mediaType());
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(content.mediaType()))
+                .contentType(verifiedType
+                        ? MediaType.parseMediaType(content.mediaType()) : MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header("X-Content-Type-Options", "nosniff")
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.builder(download ? "attachment" : "inline")
                         .filename(content.fileName(), StandardCharsets.UTF_8)
                         .build().toString())
                 .body(content.content());
+    }
+
+    private boolean isInlineMediaType(String mediaType) {
+        return mediaType != null && List.of("image/jpeg", "image/png", "video/mp4", "video/webm").contains(mediaType);
+    }
+
+    private boolean isVerifiedMediaType(AttachmentContent content) {
+        String mediaType = content.mediaType();
+        return (isInlineMediaType(mediaType) || "application/pdf".equals(mediaType))
+                && AttachmentMediaPolicy.matchesHeader(mediaType, content.content(), content.content().length);
     }
 }

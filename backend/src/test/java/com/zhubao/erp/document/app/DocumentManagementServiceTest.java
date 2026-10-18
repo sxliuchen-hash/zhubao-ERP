@@ -68,16 +68,30 @@ class DocumentManagementServiceTest {
         assertThat(uploaded.previewUrl()).contains(uploaded.code());
         assertThat(uploaded.previewUrl())
                 .contains("/content?expiresAt=")
+                .contains("&purpose=preview&resolution=original")
                 .contains("&token=")
                 .doesNotContain("preview-demo");
         var previewUrl = service.previewUrl(uploaded.code());
         assertThat(previewUrl.url())
                 .contains("/content?expiresAt=")
+                .contains("&purpose=preview&resolution=original")
                 .contains("&token=")
                 .doesNotContain("preview-demo");
         long expiresAt = expiresAt(previewUrl.url());
         String token = token(previewUrl.url());
         assertThat(service.previewContent(uploaded.code(), expiresAt, token).content()).isEqualTo(content);
+        var downloadUrl = service.previewUrl(uploaded.code(), "download");
+        assertThat(downloadUrl.url()).contains("&purpose=download&resolution=original");
+        assertThat(service.previewContent(uploaded.code(), expiresAt(downloadUrl.url()), token(downloadUrl.url()),
+                "download", "original").content()).isEqualTo(content);
+        assertThatThrownBy(() -> service.previewContent(uploaded.code(), expiresAt, token,
+                "download", "original"))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.previewContent(uploaded.code(), expiresAt, token,
+                "preview", "thumbnail"))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.previewUrl(uploaded.code(), "unknown"))
+                .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.previewContent(uploaded.code(), expiresAt, "invalid-token"))
                 .isInstanceOf(BusinessException.class);
         DocumentManagementService expiredPreviewService = new DocumentManagementService(

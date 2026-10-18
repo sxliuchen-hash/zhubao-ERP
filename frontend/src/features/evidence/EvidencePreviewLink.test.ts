@@ -7,7 +7,7 @@ vi.mock('../../services/documentManagementApi', () => ({ fetchAttachmentPreviewU
 
 const image = {
   code: 'ATT-1', fileName: '现场.jpg', mediaType: 'image/jpeg',
-  url: '/api/documents/attachments/ATT-1/content?expiresAt=99&token=abc', expiresAt: '稍后',
+  url: '/api/documents/attachments/ATT-1/content?expiresAt=99&purpose=preview&resolution=original&token=abc', expiresAt: '稍后',
 };
 
 describe('证据媒体预览与下载', () => {
@@ -29,6 +29,7 @@ describe('证据媒体预览与下载', () => {
     await wrapper.get('button').trigger('click');
     await flushPromises();
     expect(fetchAttachmentPreviewUrl).toHaveBeenCalledTimes(2);
+    expect(fetchAttachmentPreviewUrl).toHaveBeenCalledWith('ATT-1', 'preview');
   });
 
   it('视频加载失败时重新获取一次地址', async () => {
@@ -43,8 +44,11 @@ describe('证据媒体预览与下载', () => {
     expect(fetchAttachmentPreviewUrl).toHaveBeenCalledTimes(2);
   });
 
-  it('下载时单独获取新地址并设置下载参数和文件名', async () => {
-    vi.mocked(fetchAttachmentPreviewUrl).mockResolvedValue(image);
+  it('下载时申请专用签名地址并保留原文件名', async () => {
+    vi.mocked(fetchAttachmentPreviewUrl).mockImplementation(async (_code, purpose) => ({
+      ...image,
+      url: image.url.replace('purpose=preview', `purpose=${purpose}`),
+    }));
     const downloaded: { href: string; name: string }[] = [];
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloaded.push({ href: this.href, name: this.download });
@@ -55,10 +59,41 @@ describe('证据媒体预览与下载', () => {
     await wrapper.findAll('button')[1].trigger('click');
     await flushPromises();
     expect(fetchAttachmentPreviewUrl).toHaveBeenCalledTimes(2);
+    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(2, 'ATT-1', 'download');
     expect(click).toHaveBeenCalledOnce();
     expect(downloaded[0]).toMatchObject({ name: '现场.jpg' });
-    expect(downloaded[0].href).toContain('download=true');
-    expect(document.querySelector('a[href*="download=true"]')).toBeNull();
+    expect(downloaded[0].href).toContain('purpose=download&resolution=original');
+    expect(downloaded[0].href).not.toContain('download=true');
+    expect(document.querySelector('a[href*="purpose=download"]')).toBeNull();
+  });
+
+  it('拒绝将预览地址充当下载地址', async () => {
+    vi.mocked(fetchAttachmentPreviewUrl).mockResolvedValue(image);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
+    const wrapper = mount(EvidencePreviewLink, { props: { attachmentCode: 'ATT-1' } });
+    await wrapper.findAll('button')[1].trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('附件地址无效');
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('PDF 不在页面内预览，但可使用下载用途地址', async () => {
+    vi.mocked(fetchAttachmentPreviewUrl).mockImplementation(async (_code, purpose) => ({
+      ...image,
+      fileName: '报告.pdf',
+      mediaType: 'application/pdf',
+      url: image.url.replace('purpose=preview', `purpose=${purpose}`),
+    }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const wrapper = mount(EvidencePreviewLink, { props: { attachmentCode: 'ATT-1' } });
+    await wrapper.get('button').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('请下载查看');
+    expect(document.querySelector('.evidence-media-overlay')).toBeNull();
+    await wrapper.findAll('button')[1].trigger('click');
+    await flushPromises();
+    expect(fetchAttachmentPreviewUrl).toHaveBeenLastCalledWith('ATT-1', 'download');
+    expect(click).toHaveBeenCalledOnce();
   });
 
   it('拒绝非本站附件地址并显示错误', async () => {
