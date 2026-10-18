@@ -4,6 +4,7 @@ import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.DocumentPackage;
+import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -47,6 +48,48 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
                 rs.getString("last_updated"),
                 rs.getString("tone")
         )));
+    }
+
+    @Override
+    public DocumentPackagePage packagesPage(long afterId, int limit) {
+        validatePage(afterId, limit);
+        String sql = """
+                select id, code, title, category, business_code, owner_name, purpose, required_evidence,
+                       linked_evidence, status, retention_policy, last_updated, tone
+                  from doc_package
+                 where id > ?
+                 order by id
+                 limit ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, afterId);
+            statement.setInt(2, limit + 1);
+            List<DocumentPackagePage.Entry> entries = new ArrayList<>();
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    entries.add(new DocumentPackagePage.Entry(rs.getLong("id"), new DocumentPackage(
+                            rs.getString("code"),
+                            rs.getString("title"),
+                            rs.getString("category"),
+                            rs.getString("business_code"),
+                            rs.getString("owner_name"),
+                            rs.getString("purpose"),
+                            rs.getInt("required_evidence"),
+                            rs.getInt("linked_evidence"),
+                            rs.getString("status"),
+                            rs.getString("retention_policy"),
+                            rs.getString("last_updated"),
+                            rs.getString("tone")
+                    )));
+                }
+            }
+            boolean hasMore = entries.size() > limit;
+            if (hasMore) entries = new ArrayList<>(entries.subList(0, limit));
+            return new DocumentPackagePage(entries, hasMore);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query document package page", ex);
+        }
     }
 
     @Override
@@ -379,6 +422,11 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
         if (documentCode == null || documentCode.isBlank()) throw new IllegalArgumentException("文档包编号不能为空");
         if (afterId < 0) throw new IllegalArgumentException("附件游标不能小于 0");
         if (limit < 1 || limit > 101) throw new IllegalArgumentException("附件分页大小必须在 1 到 101 之间");
+    }
+
+    private void validatePage(long afterId, int limit) {
+        if (afterId < 0) throw new IllegalArgumentException("文档包游标不能小于 0");
+        if (limit < 1 || limit > 101) throw new IllegalArgumentException("文档包分页大小必须在 1 到 101 之间");
     }
 
     @FunctionalInterface

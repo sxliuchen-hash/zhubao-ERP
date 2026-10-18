@@ -4,6 +4,7 @@ import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.DocumentPackage;
+import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -17,12 +18,16 @@ import java.util.Map;
 @ConditionalOnProperty(name = "zhubao.documents.repository", havingValue = "memory", matchIfMissing = true)
 public class InMemoryDocumentManagementRepository implements DocumentManagementRepository {
 
-    private final List<DocumentPackage> packages = new ArrayList<>(DocumentManagementSeedData.packages());
+    private final Map<String, PackageEntry> packages = new LinkedHashMap<>();
     private final Map<String, AttachmentEntry> attachments = new LinkedHashMap<>();
     private final List<DocumentAuditEvent> auditEvents = new ArrayList<>(DocumentManagementSeedData.auditEvents());
+    private long nextPackageId = 1;
     private long nextAttachmentId = 1;
 
     public InMemoryDocumentManagementRepository() {
+        for (DocumentPackage documentPackage : DocumentManagementSeedData.packages()) {
+            packages.put(documentPackage.code(), new PackageEntry(nextPackageId++, documentPackage));
+        }
         for (EvidenceAttachment attachment : DocumentManagementSeedData.attachments()) {
             attachments.put(attachment.code(), new AttachmentEntry(nextAttachmentId++, attachment));
         }
@@ -30,7 +35,23 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
 
     @Override
     public synchronized List<DocumentPackage> packages() {
-        return List.copyOf(packages);
+        return packages.values().stream().map(PackageEntry::documentPackage).toList();
+    }
+
+    @Override
+    public synchronized DocumentPackagePage packagesPage(long afterId, int limit) {
+        validatePage(afterId, limit);
+        List<DocumentPackagePage.Entry> page = new ArrayList<>();
+        boolean hasMore = false;
+        for (PackageEntry entry : packages.values()) {
+            if (entry.id() <= afterId) continue;
+            if (page.size() >= limit) {
+                hasMore = true;
+                break;
+            }
+            page.add(new DocumentPackagePage.Entry(entry.id(), entry.documentPackage()));
+        }
+        return new DocumentPackagePage(page, hasMore);
     }
 
     @Override
@@ -61,8 +82,9 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
 
     @Override
     public synchronized void savePackage(DocumentPackage documentPackage) {
-        packages.removeIf(existing -> existing.code().equals(documentPackage.code()));
-        packages.add(documentPackage);
+        PackageEntry existing = packages.get(documentPackage.code());
+        long id = existing == null ? nextPackageId++ : existing.id();
+        packages.put(documentPackage.code(), new PackageEntry(id, documentPackage));
     }
 
     @Override
@@ -82,6 +104,14 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
         if (documentCode == null || documentCode.isBlank()) throw new IllegalArgumentException("文档包编号不能为空");
         if (afterId < 0) throw new IllegalArgumentException("附件游标不能小于 0");
         if (limit < 1 || limit > 101) throw new IllegalArgumentException("附件分页大小必须在 1 到 101 之间");
+    }
+
+    private void validatePage(long afterId, int limit) {
+        if (afterId < 0) throw new IllegalArgumentException("文档包游标不能小于 0");
+        if (limit < 1 || limit > 101) throw new IllegalArgumentException("文档包分页大小必须在 1 到 101 之间");
+    }
+
+    private record PackageEntry(long id, DocumentPackage documentPackage) {
     }
 
     private record AttachmentEntry(long id, EvidenceAttachment attachment) {

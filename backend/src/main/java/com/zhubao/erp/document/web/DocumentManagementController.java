@@ -16,6 +16,7 @@ import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentCaptureView;
 import com.zhubao.erp.document.domain.DocumentManagementSummary;
 import com.zhubao.erp.document.domain.DocumentPackage;
+import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.StoredContentInventory;
@@ -55,6 +56,7 @@ import java.util.List;
 public class DocumentManagementController {
 
     private static final int MAX_ATTACHMENT_PAGE_SIZE = 100;
+    private static final int MAX_PACKAGE_PAGE_SIZE = 100;
 
     private final DocumentManagementService documentManagementService;
     private final DocumentCaptureService documentCaptureService;
@@ -189,6 +191,56 @@ public class DocumentManagementController {
     @GetMapping("/packages")
     public ApiResponse<List<DocumentPackage>> packages(HttpServletRequest request) {
         return ApiResponse.ok(visiblePackages(operatorContextResolver.requireSession(request)));
+    }
+
+    @GetMapping("/packages/page")
+    public ApiResponse<PackagePageResponse> packagePage(
+            @RequestParam(defaultValue = "0") long afterId,
+            @RequestParam(defaultValue = "50") int limit,
+            HttpServletRequest request
+    ) {
+        if (afterId < 0) throw new BusinessException("文档包游标不能小于 0");
+        if (limit < 1 || limit > MAX_PACKAGE_PAGE_SIZE) {
+            throw new BusinessException("文档包分页大小必须在 1 到 " + MAX_PACKAGE_PAGE_SIZE + " 之间");
+        }
+
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        List<DocumentPackagePage.Entry> visible = new ArrayList<>();
+        long scanAfterId = afterId;
+        boolean hasMore = false;
+        int scanLimit = limit + 1;
+        while (visible.size() <= limit) {
+            DocumentPackagePage page = documentManagementService.packagesPage(scanAfterId, scanLimit);
+            if (page.entries().isEmpty()) {
+                hasMore = false;
+                break;
+            }
+
+            long lastScannedId = scanAfterId;
+            for (DocumentPackagePage.Entry entry : page.entries()) {
+                lastScannedId = entry.id();
+                if (dataAccess.canRead(context, entry.documentPackage().businessCode())) {
+                    visible.add(entry);
+                    if (visible.size() > limit) {
+                        hasMore = true;
+                        break;
+                    }
+                }
+            }
+            if (visible.size() > limit) break;
+            scanAfterId = lastScannedId;
+            if (!page.hasMore()) {
+                hasMore = false;
+                break;
+            }
+        }
+
+        int itemCount = Math.min(limit, visible.size());
+        List<DocumentPackage> items = visible.subList(0, itemCount).stream()
+                .map(DocumentPackagePage.Entry::documentPackage)
+                .toList();
+        Long nextCursor = hasMore && itemCount > 0 ? visible.get(itemCount - 1).id() : null;
+        return ApiResponse.ok(new PackagePageResponse(items, nextCursor, hasMore));
     }
 
     @GetMapping("/attachments")
@@ -434,6 +486,16 @@ public class DocumentManagementController {
             boolean hasMore
     ) {
         public AttachmentPageResponse {
+            items = List.copyOf(items);
+        }
+    }
+
+    public record PackagePageResponse(
+            List<DocumentPackage> items,
+            Long nextCursor,
+            boolean hasMore
+    ) {
+        public PackagePageResponse {
             items = List.copyOf(items);
         }
     }

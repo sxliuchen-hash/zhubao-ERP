@@ -3,6 +3,8 @@ package com.zhubao.erp.document.web;
 import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.AttachmentStreamContent;
 import com.zhubao.erp.document.domain.DocumentAttachmentPage;
+import com.zhubao.erp.document.domain.DocumentPackage;
+import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.business.app.BusinessDataAccess;
@@ -227,6 +229,50 @@ class DocumentManagementControllerTest {
     }
 
     @Test
+    void pagesOnlyAuthorizedPackagesAcrossInterleavedRowsAndKeepsCursorOnLastVisibleRow() {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        DocumentPackage deniedFirst = packageEntry("DOC-DENY-001", "BUS-DENY-001");
+        DocumentPackage allowedFirst = packageEntry("DOC-ALLOW-001", "BUS-ALLOW-001");
+        DocumentPackage deniedMiddle = packageEntry("DOC-DENY-002", "BUS-DENY-002");
+        DocumentPackage allowedSecond = packageEntry("DOC-ALLOW-002", "BUS-ALLOW-002");
+        DocumentPackage allowedThird = packageEntry("DOC-ALLOW-003", "BUS-ALLOW-003");
+        when(resolver.requireSession(request)).thenReturn(operator);
+        when(access.canRead(operator, "BUS-DENY-001")).thenReturn(false);
+        when(access.canRead(operator, "BUS-DENY-002")).thenReturn(false);
+        when(access.canRead(operator, "BUS-ALLOW-001")).thenReturn(true);
+        when(access.canRead(operator, "BUS-ALLOW-002")).thenReturn(true);
+        when(access.canRead(operator, "BUS-ALLOW-003")).thenReturn(true);
+        when(service.packagesPage(0, 3)).thenReturn(new DocumentPackagePage(List.of(
+                new DocumentPackagePage.Entry(1, deniedFirst),
+                new DocumentPackagePage.Entry(2, allowedFirst),
+                new DocumentPackagePage.Entry(3, deniedMiddle)
+        ), true));
+        when(service.packagesPage(3, 3)).thenReturn(new DocumentPackagePage(List.of(
+                new DocumentPackagePage.Entry(4, allowedSecond),
+                new DocumentPackagePage.Entry(5, allowedThird)
+        ), false));
+        DocumentManagementController controller = new DocumentManagementController(service, null, resolver, access);
+
+        var first = controller.packagePage(0, 2, request).data();
+        assertThat(first.items()).extracting(DocumentPackage::code)
+                .containsExactly("DOC-ALLOW-001", "DOC-ALLOW-002");
+        assertThat(first.nextCursor()).isEqualTo(4L);
+        assertThat(first.hasMore()).isTrue();
+
+        when(service.packagesPage(4, 3)).thenReturn(new DocumentPackagePage(List.of(
+                new DocumentPackagePage.Entry(5, allowedThird)
+        ), false));
+        var last = controller.packagePage(first.nextCursor(), 2, request).data();
+        assertThat(last.items()).extracting(DocumentPackage::code).containsExactly("DOC-ALLOW-003");
+        assertThat(last.nextCursor()).isNull();
+        assertThat(last.hasMore()).isFalse();
+    }
+
+    @Test
     void rejectsInvalidAttachmentPageLimitAndCursor() {
         DocumentManagementController controller = new DocumentManagementController(mock(DocumentManagementService.class), null, null, mock(BusinessDataAccess.class));
         HttpServletRequest request = mock(HttpServletRequest.class);
@@ -234,6 +280,17 @@ class DocumentManagementControllerTest {
         assertThatThrownBy(() -> controller.attachmentPage("DOC-PAGE-001", -1, 2, request))
                 .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
         assertThatThrownBy(() -> controller.attachmentPage("DOC-PAGE-001", 0, 101, request))
+                .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
+    }
+
+    @Test
+    void rejectsInvalidPackagePageLimitAndCursor() {
+        DocumentManagementController controller = new DocumentManagementController(mock(DocumentManagementService.class), null, null, mock(BusinessDataAccess.class));
+        HttpServletRequest request = mock(HttpServletRequest.class);
+
+        assertThatThrownBy(() -> controller.packagePage(-1, 2, request))
+                .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
+        assertThatThrownBy(() -> controller.packagePage(0, 101, request))
                 .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
     }
 
@@ -255,6 +312,23 @@ class DocumentManagementControllerTest {
                 "无",
                 "green",
                 null
+        );
+    }
+
+    private DocumentPackage packageEntry(String code, String businessCode) {
+        return new DocumentPackage(
+                code,
+                "分页文档包",
+                "分页测试",
+                businessCode,
+                "测试员",
+                "验证文档包稳定游标分页。",
+                2,
+                1,
+                "待补附件",
+                "保留 3 年",
+                "2026-10-18 10:00",
+                "amber"
         );
     }
 }

@@ -14,6 +14,7 @@ import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.DocumentManagementSummary;
 import com.zhubao.erp.document.domain.DocumentPackage;
+import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.StoredAttachmentObject;
@@ -193,6 +194,10 @@ public class DocumentManagementService {
 
     public List<DocumentPackage> packages() {
         return repository.packages();
+    }
+
+    public DocumentPackagePage packagesPage(long afterId, int limit) {
+        return repository.packagesPage(afterId, limit);
     }
 
     public List<EvidenceAttachment> attachments() {

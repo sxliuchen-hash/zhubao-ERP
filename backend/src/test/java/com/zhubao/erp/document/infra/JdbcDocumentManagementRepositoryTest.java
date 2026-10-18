@@ -3,6 +3,7 @@ package com.zhubao.erp.document.infra;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
 import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentPackage;
+import com.zhubao.erp.document.domain.DocumentPackagePage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
@@ -91,6 +92,52 @@ class JdbcDocumentManagementRepositoryTest {
         assertThatThrownBy(() -> repository.attachmentsPage("DOC-PAGE-001", -1, 2))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> memory.attachmentsPage("DOC-PAGE-001", 0, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void pagesDocumentPackagesByStableIdLikeMemoryRepository() throws SQLException {
+        insertPackage(pagePackage("DOC-PAGE-PKG-001", "BUS-PAGE-PKG-001"));
+        insertPackage(pagePackage("DOC-PAGE-PKG-002", "BUS-PAGE-PKG-002"));
+        insertPackage(pagePackage("DOC-PAGE-PKG-003", "BUS-PAGE-PKG-003"));
+
+        DocumentPackagePage first = repository.packagesPage(1, 2);
+        assertThat(first.entries()).extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly("DOC-PAGE-PKG-001", "DOC-PAGE-PKG-002");
+        assertThat(first.hasMore()).isTrue();
+
+        DocumentPackagePage last = repository.packagesPage(first.entries().get(1).id(), 2);
+        assertThat(last.entries()).extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly("DOC-PAGE-PKG-003");
+        assertThat(last.hasMore()).isFalse();
+
+        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        memory.savePackage(pagePackage("DOC-PAGE-PKG-001", "BUS-PAGE-PKG-001"));
+        memory.savePackage(pagePackage("DOC-PAGE-PKG-002", "BUS-PAGE-PKG-002"));
+        memory.savePackage(pagePackage("DOC-PAGE-PKG-003", "BUS-PAGE-PKG-003"));
+        DocumentPackagePage memoryFirst = memory.packagesPage(4, 2);
+        assertThat(memoryFirst.entries()).extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly("DOC-PAGE-PKG-001", "DOC-PAGE-PKG-002");
+
+        long stableCursor = first.entries().get(0).id();
+        long memoryStableCursor = memoryFirst.entries().get(0).id();
+        repository.savePackage(pagePackage("DOC-PAGE-PKG-002", "BUS-PAGE-PKG-002", "已归档", "green"));
+        memory.savePackage(pagePackage("DOC-PAGE-PKG-002", "BUS-PAGE-PKG-002", "已归档", "green"));
+        assertThat(repository.packagesPage(stableCursor, 1).entries())
+                .extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly("DOC-PAGE-PKG-002");
+        assertThat(memory.packagesPage(memoryStableCursor, 1).entries())
+                .extracting(DocumentPackagePage.Entry::documentPackage)
+                .extracting(DocumentPackage::code)
+                .containsExactly("DOC-PAGE-PKG-002");
+
+        assertThatThrownBy(() -> repository.packagesPage(-1, 2))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> memory.packagesPage(0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -341,6 +388,27 @@ class JdbcDocumentManagementRepositoryTest {
                 "无",
                 "green",
                 null
+        );
+    }
+
+    private DocumentPackage pagePackage(String code, String businessCode) {
+        return pagePackage(code, businessCode, "待补附件", "amber");
+    }
+
+    private DocumentPackage pagePackage(String code, String businessCode, String status, String tone) {
+        return new DocumentPackage(
+                code,
+                "分页文档包",
+                "分页测试",
+                businessCode,
+                "测试员",
+                "验证文档包稳定游标分页。",
+                2,
+                1,
+                status,
+                "保留 3 年",
+                "2026-10-18 10:00",
+                tone
         );
     }
 

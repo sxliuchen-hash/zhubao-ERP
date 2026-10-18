@@ -6,6 +6,10 @@ public interface DocumentManagementRepository {
 
     List<DocumentPackage> packages();
 
+    default DocumentPackagePage packagesPage(long afterId, int limit) {
+        throw new UnsupportedOperationException("文档包分页未实现");
+    }
+
     List<EvidenceAttachment> attachments();
 
     default DocumentAttachmentPage attachmentsPage(String documentCode, long afterId, int limit) {
