@@ -212,6 +212,37 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
     }
 
     @Override
+    public DocumentAttachmentPage attachmentsPageByBusinessCode(String businessCode, long afterId, int limit) {
+        validateBusinessCodePage(businessCode, afterId, limit);
+        String sql = """
+                select id, code, document_code, business_type, business_code, file_name, media_type,
+                       storage_location, storage_policy, source, status, owner_name, checksum,
+                       uploaded_at, fallback_action, tone, object_type
+                  from doc_evidence_attachment
+                 where business_code = ? and id > ?
+                 order by id
+                 limit ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, businessCode);
+            statement.setLong(2, afterId);
+            statement.setInt(3, limit + 1);
+            List<DocumentAttachmentPage.Entry> entries = new ArrayList<>();
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    entries.add(new DocumentAttachmentPage.Entry(rs.getLong("id"), mapAttachment(rs)));
+                }
+            }
+            boolean hasMore = entries.size() > limit;
+            if (hasMore) entries = new ArrayList<>(entries.subList(0, limit));
+            return new DocumentAttachmentPage(entries, hasMore);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query document attachment page by business code", ex);
+        }
+    }
+
+    @Override
     public List<DocumentAuditEvent> auditEvents() {
         return query("""
                 select event_time, event_code, document_code, action, operator_name, detail, tone
@@ -500,6 +531,12 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
 
     private void validatePage(String documentCode, long afterId, int limit) {
         if (documentCode == null || documentCode.isBlank()) throw new IllegalArgumentException("文档包编号不能为空");
+        if (afterId < 0) throw new IllegalArgumentException("附件游标不能小于 0");
+        if (limit < 1 || limit > 101) throw new IllegalArgumentException("附件分页大小必须在 1 到 101 之间");
+    }
+
+    private void validateBusinessCodePage(String businessCode, long afterId, int limit) {
+        if (businessCode == null || businessCode.isBlank()) throw new IllegalArgumentException("业务单号不能为空");
         if (afterId < 0) throw new IllegalArgumentException("附件游标不能小于 0");
         if (limit < 1 || limit > 101) throw new IllegalArgumentException("附件分页大小必须在 1 到 101 之间");
     }

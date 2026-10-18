@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -121,6 +122,76 @@ class JdbcDocumentManagementRepositoryTest {
         assertThatThrownBy(() -> repository.attachmentsPage("DOC-PAGE-001", -1, 2))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> memory.attachmentsPage("DOC-PAGE-001", 0, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void pagesAttachmentsByBusinessCodeAcrossDocumentsAndStableCursorAfterInsert() throws SQLException {
+        InMemoryDocumentManagementRepository memoryRepository = new InMemoryDocumentManagementRepository();
+        List<EvidenceAttachment> initial = List.of(
+                pageAttachment("ATT-BIZ-PAGE-001", "BUS-PAGE-001", "DOC-PAGE-001"),
+                pageAttachment("ATT-BIZ-PAGE-002", "BUS-PAGE-002", "DOC-PAGE-OTHER"),
+                pageAttachment("ATT-BIZ-PAGE-003", "BUS-PAGE-001", "DOC-PAGE-002"),
+                pageAttachment("ATT-BIZ-PAGE-004", "BUS-PAGE-001", "DOC-PAGE-001"),
+                pageAttachment("ATT-BIZ-PAGE-005", "BUS-PAGE-001", "DOC-PAGE-003")
+        );
+        initial.forEach(attachment -> {
+            insertAttachmentUnchecked(attachment);
+            memoryRepository.saveAttachment(attachment);
+        });
+
+        DocumentAttachmentPage jdbcFirst = repository.attachmentsPageByBusinessCode("BUS-PAGE-001", 0, 2);
+        DocumentAttachmentPage memoryFirst = memoryRepository.attachmentsPageByBusinessCode("BUS-PAGE-001", 0, 2);
+        assertThat(jdbcFirst.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-PAGE-001", "ATT-BIZ-PAGE-003");
+        assertThat(memoryFirst.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-PAGE-001", "ATT-BIZ-PAGE-003");
+        assertThat(jdbcFirst.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::documentCode)
+                .containsExactly("DOC-PAGE-001", "DOC-PAGE-002");
+        assertThat(jdbcFirst.hasMore()).isTrue();
+        assertThat(memoryFirst.hasMore()).isTrue();
+
+        EvidenceAttachment insertedAfterFirstPage =
+                pageAttachment("ATT-BIZ-PAGE-006", "BUS-PAGE-001", "DOC-PAGE-004");
+        insertAttachmentUnchecked(insertedAfterFirstPage);
+        memoryRepository.saveAttachment(insertedAfterFirstPage);
+
+        DocumentAttachmentPage jdbcSecond = repository.attachmentsPageByBusinessCode(
+                "BUS-PAGE-001", jdbcFirst.entries().get(1).id(), 2);
+        DocumentAttachmentPage memorySecond = memoryRepository.attachmentsPageByBusinessCode(
+                "BUS-PAGE-001", memoryFirst.entries().get(1).id(), 2);
+        assertThat(jdbcSecond.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-PAGE-004", "ATT-BIZ-PAGE-005");
+        assertThat(memorySecond.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-PAGE-004", "ATT-BIZ-PAGE-005");
+        assertThat(jdbcSecond.hasMore()).isTrue();
+        assertThat(memorySecond.hasMore()).isTrue();
+
+        DocumentAttachmentPage jdbcLast = repository.attachmentsPageByBusinessCode(
+                "BUS-PAGE-001", jdbcSecond.entries().get(1).id(), 2);
+        DocumentAttachmentPage memoryLast = memoryRepository.attachmentsPageByBusinessCode(
+                "BUS-PAGE-001", memorySecond.entries().get(1).id(), 2);
+        assertThat(jdbcLast.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-PAGE-006");
+        assertThat(memoryLast.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-BIZ-PAGE-006");
+        assertThat(jdbcLast.hasMore()).isFalse();
+        assertThat(memoryLast.hasMore()).isFalse();
+
+        assertThatThrownBy(() -> repository.attachmentsPageByBusinessCode("", 0, 1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> memoryRepository.attachmentsPageByBusinessCode("BUS-PAGE-001", -1, 1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> repository.attachmentsPageByBusinessCode("BUS-PAGE-001", 0, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> memoryRepository.attachmentsPageByBusinessCode("BUS-PAGE-001", 0, 102))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -434,6 +505,10 @@ class JdbcDocumentManagementRepositoryTest {
     }
 
     private void insertAttachment(EvidenceAttachment attachment) throws SQLException {
+        insertAttachmentUnchecked(attachment);
+    }
+
+    private void insertAttachmentUnchecked(EvidenceAttachment attachment) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      insert into doc_evidence_attachment (
@@ -458,13 +533,19 @@ class JdbcDocumentManagementRepositoryTest {
             statement.setString(14, attachment.fallbackAction());
             statement.setString(15, attachment.tone());
             statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException(ex);
         }
     }
 
     private EvidenceAttachment pageAttachment(String code, String businessCode) {
+        return pageAttachment(code, businessCode, "DOC-PAGE-001");
+    }
+
+    private EvidenceAttachment pageAttachment(String code, String businessCode, String documentCode) {
         return new EvidenceAttachment(
                 code,
-                "DOC-PAGE-001",
+                documentCode,
                 "分页测试",
                 businessCode,
                 code + ".jpg",

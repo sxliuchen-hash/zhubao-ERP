@@ -104,6 +104,26 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
     }
 
     @Override
+    public synchronized DocumentAttachmentPage attachmentsPageByBusinessCode(
+            String businessCode,
+            long afterId,
+            int limit
+    ) {
+        validateBusinessCodePage(businessCode, afterId, limit);
+        List<DocumentAttachmentPage.Entry> page = new ArrayList<>();
+        boolean hasMore = false;
+        for (AttachmentEntry entry : attachments.values()) {
+            if (entry.id() <= afterId || !businessCode.equals(entry.attachment().businessCode())) continue;
+            if (page.size() >= limit) {
+                hasMore = true;
+                break;
+            }
+            page.add(new DocumentAttachmentPage.Entry(entry.id(), entry.attachment()));
+        }
+        return new DocumentAttachmentPage(page, hasMore);
+    }
+
+    @Override
     public synchronized List<DocumentAuditEvent> auditEvents() {
         return List.copyOf(auditEvents);
     }
@@ -130,6 +150,12 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
 
     private void validatePage(String documentCode, long afterId, int limit) {
         if (documentCode == null || documentCode.isBlank()) throw new IllegalArgumentException("文档包编号不能为空");
+        if (afterId < 0) throw new IllegalArgumentException("附件游标不能小于 0");
+        if (limit < 1 || limit > 101) throw new IllegalArgumentException("附件分页大小必须在 1 到 101 之间");
+    }
+
+    private void validateBusinessCodePage(String businessCode, long afterId, int limit) {
+        if (businessCode == null || businessCode.isBlank()) throw new IllegalArgumentException("业务单号不能为空");
         if (afterId < 0) throw new IllegalArgumentException("附件游标不能小于 0");
         if (limit < 1 || limit > 101) throw new IllegalArgumentException("附件分页大小必须在 1 到 101 之间");
     }

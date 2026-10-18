@@ -39,6 +39,10 @@ public interface DocumentManagementRepository {
         throw new UnsupportedOperationException("附件分页未实现");
     }
 
+    default DocumentAttachmentPage attachmentsPageByBusinessCode(String businessCode, long afterId, int limit) {
+        throw new UnsupportedOperationException("按业务单号的附件分页未实现");
+    }
+
     List<DocumentAuditEvent> auditEvents();
 
     void savePackage(DocumentPackage documentPackage);
