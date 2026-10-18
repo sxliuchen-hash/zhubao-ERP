@@ -33,8 +33,11 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -208,19 +211,20 @@ public class BusinessEvidenceService {
         String stageFilter = EvidenceLinkKey.text(stage);
         String operationTypeFilter = EvidenceLinkKey.text(operationType);
         String operationCodeFilter = EvidenceLinkKey.text(operationCode);
-        List<BusinessEvidenceLink> matched = links.findAll().stream()
-                .filter(link -> type.equals(link.targetType()) && code.equals(link.targetCode()))
+        List<BusinessEvidenceLink> targetLinks = links.findByTarget(type, code);
+        List<EvidenceAttachment> targetAttachments = documents.attachmentsByBusinessCode(code);
+        Map<String, EvidenceAttachment> attachmentsByCode = new HashMap<>();
+        targetAttachments.forEach(attachment -> attachmentsByCode.putIfAbsent(attachment.code(), attachment));
+        List<BusinessEvidenceLink> matched = targetLinks.stream()
                 .filter(link -> stageFilter.isEmpty() || stageFilter.equals(link.stage()))
                 .filter(link -> operationTypeFilter.isEmpty() || operationTypeFilter.equals(link.operationType()))
                 .filter(link -> operationCodeFilter.isEmpty() || operationCodeFilter.equals(link.operationCode()))
                 .toList();
-        List<EvidenceLinkView> views = matched.stream().map(this::viewOf).toList();
-        List<String> linkedAttachments = links.findAll().stream()
-                .filter(link -> type.equals(link.targetType()) && code.equals(link.targetCode()))
+        List<EvidenceLinkView> views = matched.stream().map(link -> viewOf(link, attachmentsByCode)).toList();
+        Set<String> linkedAttachments = targetLinks.stream()
                 .map(BusinessEvidenceLink::attachmentCode)
-                .distinct()
-                .toList();
-        List<HistoricalEvidenceView> historical = documents.attachments().stream()
+                .collect(java.util.stream.Collectors.toSet());
+        List<HistoricalEvidenceView> historical = targetAttachments.stream()
                 .filter(attachment -> code.equals(attachment.businessCode()))
                 .filter(attachment -> !linkedAttachments.contains(attachment.code()))
                 .filter(attachment -> {
@@ -499,11 +503,8 @@ public class BusinessEvidenceService {
         throw new BusinessException("当前阶段不能绑定这种操作");
     }
 
-    private EvidenceLinkView viewOf(BusinessEvidenceLink link) {
-        EvidenceAttachment attachment = documents.attachments().stream()
-                .filter(item -> link.attachmentCode().equals(item.code()))
-                .findFirst()
-                .orElse(null);
+    private EvidenceLinkView viewOf(BusinessEvidenceLink link, Map<String, EvidenceAttachment> attachmentsByCode) {
+        EvidenceAttachment attachment = attachmentsByCode.get(link.attachmentCode());
         boolean retired = attachment != null && RETIRED.equals(attachment.status());
         return new EvidenceLinkView(
                 link.linkCode(),

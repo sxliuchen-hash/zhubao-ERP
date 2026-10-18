@@ -3,6 +3,7 @@ package com.zhubao.erp.document.app;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.StoredContentInventory;
+import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
@@ -43,6 +44,17 @@ class DocumentManagementServiceTest {
         assertThat(service.summary().missingEvidence()).isEqualTo(3);
         assertThat(service.summary().manualFallbacks()).isEqualTo(3);
         assertThat(service.auditEvents()).extracting("eventCode").contains("DOC-AUD-004");
+    }
+
+    @Test
+    void previewLookupUsesAttachmentCodeQueryWithoutLoadingAllAttachments() {
+        QueryTrackingDocumentRepository repository = new QueryTrackingDocumentRepository();
+        DocumentManagementService service = new DocumentManagementService(repository, localStorage());
+
+        assertThat(service.previewUrl("ATT-IN-20260706-001").fileName())
+                .isEqualTo("SF1048329001-waybill.jpg");
+        assertThat(repository.findAttachmentByCodeCalls).isEqualTo(1);
+        assertThat(repository.attachmentsCalls).isZero();
     }
 
     @Test
@@ -371,5 +383,22 @@ class DocumentManagementServiceTest {
 
     private String token(String previewUrl) {
         return previewUrl.replaceAll(".*[?&]token=([^&]+).*", "$1");
+    }
+
+    private static final class QueryTrackingDocumentRepository extends InMemoryDocumentManagementRepository {
+        private int attachmentsCalls;
+        private int findAttachmentByCodeCalls;
+
+        @Override
+        public synchronized java.util.List<EvidenceAttachment> attachments() {
+            attachmentsCalls++;
+            return super.attachments();
+        }
+
+        @Override
+        public synchronized java.util.Optional<EvidenceAttachment> findAttachmentByCode(String code) {
+            findAttachmentByCodeCalls++;
+            return super.findAttachmentByCode(code);
+        }
     }
 }

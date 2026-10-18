@@ -630,9 +630,7 @@ public class DocumentManagementService {
     }
 
     private Optional<EvidenceAttachment> findAttachment(String code) {
-        return repository.attachments().stream()
-                .filter(attachment -> attachment.code().equals(code))
-                .findFirst();
+        return repository.findAttachmentByCode(code);
     }
 
     private Optional<String> localStorageKey(String storageLocation) {

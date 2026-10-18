@@ -20,6 +20,7 @@ import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.domain.EvidenceAttachmentUploadResult;
 import com.zhubao.erp.document.domain.EvidenceBoard;
 import com.zhubao.erp.document.domain.EvidenceCodes;
+import com.zhubao.erp.document.domain.EvidenceLinkKey;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.DocumentCaptureProperties;
 import com.zhubao.erp.document.infra.InMemoryBusinessEvidenceLinkRepository;
@@ -52,6 +53,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -95,6 +97,53 @@ class BusinessEvidenceServiceTest {
         BusinessEvidenceLink first = fixture.links.findAll().get(0);
         assertThatThrownBy(() -> fixture.links.insert(first))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void queryUsesTargetScopedReadsAndKeepsFilteredLinksOutOfHistoricalResults() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingLinkRepository links = new QueryTrackingLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+
+        EvidenceAttachmentUploadResult primary = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "UNPACK", "a".getBytes(StandardCharsets.UTF_8));
+        EvidenceAttachmentUploadResult filteredOut = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "WEIGH", "b".getBytes(StandardCharsets.UTF_8));
+        fixture.evidence.bind(bind(
+                primary.code(), EvidenceCodes.MOTHER_ORDER, MOTHER, EvidenceCodes.INTAKE, "UNPACK",
+                EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER, "", ""
+        ), fixture.receiver);
+        links.insert(linkRecord(
+                "LINK-FILTERED", filteredOut.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.PRODUCTION, "PROCESS", EvidenceCodes.PROCESS_STATION_REPORT, "OP-FILTERED"
+        ));
+        links.insert(linkRecord(
+                "LINK-OTHER-TYPE", filteredOut.code(), EvidenceCodes.WORK_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER
+        ));
+        documents.resetCounters();
+        links.resetCounters();
+
+        EvidenceBoard board = fixture.evidence.query(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, EvidenceCodes.INTAKE,
+                EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER, fixture.admin
+        );
+
+        assertThat(board.links()).extracting(view -> view.attachmentCode()).containsExactly(primary.code());
+        assertThat(board.historical()).noneMatch(item -> filteredOut.code().equals(item.attachmentCode()));
+        assertThat(links.findByTargetCalls).isEqualTo(1);
+        assertThat(links.findAllCalls).isZero();
+        assertThat(documents.attachmentsByBusinessCodeCalls).isEqualTo(1);
+        assertThat(documents.attachmentsCalls).isZero();
+
+        links.resetCounters();
+        documents.resetCounters();
+        assertThatThrownBy(() -> fixture.evidence.query(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, "", "", "", fixture.outsider
+        )).isInstanceOf(PermissionDeniedException.class);
+        assertThat(links.findByTargetCalls).isZero();
+        assertThat(documents.attachmentsByBusinessCodeCalls).isZero();
     }
 
     @Test
@@ -379,6 +428,40 @@ class BusinessEvidenceServiceTest {
         );
     }
 
+    private BusinessEvidenceLink linkRecord(
+            String linkCode,
+            String attachmentCode,
+            String targetType,
+            String targetCode,
+            String stage,
+            String scene,
+            String operationType,
+            String operationCode
+    ) {
+        String processName = "";
+        String clauseNo = "";
+        return new BusinessEvidenceLink(
+                linkCode,
+                attachmentCode,
+                targetType,
+                targetCode,
+                stage,
+                scene,
+                operationType,
+                operationCode,
+                processName,
+                clauseNo,
+                fixtureOperatorName(),
+                "2026-10-18 10:00:00",
+                EvidenceLinkKey.hash(targetType, targetCode, stage, scene, operationType, operationCode,
+                        processName, clauseNo, attachmentCode)
+        );
+    }
+
+    private String fixtureOperatorName() {
+        return "测试管理员";
+    }
+
     private Fixture memoryFixture() {
         return fixture(
                 new InMemoryBusinessDocumentRepository(),
@@ -572,6 +655,61 @@ class BusinessEvidenceServiceTest {
             OperatorContext leader,
             OperatorContext outsider
     ) {
+    }
+
+    private static final class QueryTrackingDocumentRepository extends InMemoryDocumentManagementRepository {
+        private int attachmentsCalls;
+        private int attachmentsByBusinessCodeCalls;
+
+        @Override
+        public synchronized List<EvidenceAttachment> attachments() {
+            attachmentsCalls++;
+            return super.attachments();
+        }
+
+        @Override
+        public synchronized List<EvidenceAttachment> attachmentsByBusinessCode(String businessCode) {
+            attachmentsByBusinessCodeCalls++;
+            return super.attachmentsByBusinessCode(businessCode);
+        }
+
+        private void resetCounters() {
+            attachmentsCalls = 0;
+            attachmentsByBusinessCodeCalls = 0;
+        }
+    }
+
+    private static final class QueryTrackingLinkRepository implements BusinessEvidenceLinkRepository {
+        private final InMemoryBusinessEvidenceLinkRepository delegate = new InMemoryBusinessEvidenceLinkRepository();
+        private int findAllCalls;
+        private int findByTargetCalls;
+
+        @Override
+        public List<BusinessEvidenceLink> findAll() {
+            findAllCalls++;
+            return delegate.findAll();
+        }
+
+        @Override
+        public List<BusinessEvidenceLink> findByTarget(String targetType, String targetCode) {
+            findByTargetCalls++;
+            return delegate.findByTarget(targetType, targetCode);
+        }
+
+        @Override
+        public Optional<BusinessEvidenceLink> findByKeyHash(String linkKeyHash) {
+            return delegate.findByKeyHash(linkKeyHash);
+        }
+
+        @Override
+        public void insert(BusinessEvidenceLink link) {
+            delegate.insert(link);
+        }
+
+        private void resetCounters() {
+            findAllCalls = 0;
+            findByTargetCalls = 0;
+        }
     }
 
     private static final class FailOnceRepository implements DocumentManagementRepository {
