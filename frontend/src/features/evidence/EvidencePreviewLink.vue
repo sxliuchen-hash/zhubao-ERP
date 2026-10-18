@@ -21,7 +21,7 @@ let observer: IntersectionObserver | null = null;
 let thumbnailRequested = false;
 let thumbnailGeneration = 0;
 
-function contentUrl(raw: string, purpose: 'preview' | 'download', resolution: 'original' | 'thumbnail' | 'preview'): string {
+function contentUrl(raw: string, purpose: 'preview' | 'download', resolution: 'original' | 'thumbnail' | 'preview' | 'poster'): string {
   const url = new URL(raw, window.location.href);
   const expectedPath = `/api/documents/attachments/${encodeURIComponent(props.attachmentCode)}/content`;
   if (url.origin !== window.location.origin || url.pathname !== expectedPath
@@ -34,7 +34,7 @@ function contentUrl(raw: string, purpose: 'preview' | 'download', resolution: 'o
 
 async function freshContentUrl(
   purpose: 'preview' | 'download' = 'preview',
-  resolution: 'original' | 'thumbnail' | 'preview' = 'original',
+  resolution: 'original' | 'thumbnail' | 'preview' | 'poster' = 'original',
 ): Promise<string> {
   const preview = await fetchAttachmentPreviewUrl(props.attachmentCode, purpose, resolution);
   mediaType.value = preview.mediaType.toLowerCase();
@@ -42,16 +42,24 @@ async function freshContentUrl(
   return contentUrl(preview.url, purpose, resolution);
 }
 
+function coverResolution(): 'thumbnail' | 'poster' | null {
+  const hint = props.mediaTypeHint?.toLowerCase() ?? '';
+  if (hint.startsWith('image/')) return 'thumbnail';
+  if (hint.startsWith('video/')) return 'poster';
+  return null;
+}
+
 async function loadThumbnail() {
-  if (thumbnailRequested || !props.mediaTypeHint?.toLowerCase().startsWith('image/')) return;
+  const resolution = coverResolution();
+  if (thumbnailRequested || !resolution) return;
   thumbnailRequested = true;
   const generation = thumbnailGeneration;
   const code = props.attachmentCode;
   try {
-    const signed = await fetchAttachmentPreviewUrl(code, 'preview', 'thumbnail');
+    const signed = await fetchAttachmentPreviewUrl(code, 'preview', resolution);
     if (generation !== thumbnailGeneration || code !== props.attachmentCode) return;
     if (signed.mediaType.toLowerCase() !== 'image/jpeg') throw new Error('缩略图类型无效');
-    thumbnailUrl.value = contentUrl(signed.url, 'preview', 'thumbnail');
+    thumbnailUrl.value = contentUrl(signed.url, 'preview', resolution);
   } catch {
     if (generation === thumbnailGeneration) thumbnailUrl.value = '';
   }
@@ -60,7 +68,7 @@ async function loadThumbnail() {
 function observeThumbnail() {
   observer?.disconnect();
   observer = null;
-  if (!props.mediaTypeHint?.toLowerCase().startsWith('image/') || !viewerRef.value) return;
+  if (!coverResolution() || !viewerRef.value) return;
   if (typeof IntersectionObserver === 'undefined') {
     void loadThumbnail();
     return;
@@ -177,7 +185,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="viewerRef" class="evidence-media-viewer" @click.stop>
-    <img v-if="thumbnailUrl" class="evidence-thumbnail" :src="thumbnailUrl" loading="lazy" alt="附件缩略图" @error="thumbnailUrl = ''" />
+    <img v-if="thumbnailUrl" class="evidence-thumbnail" :src="thumbnailUrl" loading="lazy" alt="附件缩略图或视频封面" @error="thumbnailUrl = ''" />
     <div class="evidence-media-actions">
       <button class="table-action" type="button" :disabled="busy" @click="togglePreview">
         {{ busy ? '正在读取' : previewUrl ? '收起预览' : label }}
@@ -195,7 +203,7 @@ onBeforeUnmount(() => {
           <button class="table-action" type="button" aria-label="关闭证据预览" @click="previewUrl = ''">关闭</button>
         </div>
         <img v-if="mediaType.startsWith('image/')" class="evidence-media-content" :src="previewUrl" :alt="fileName || '证据照片'" @error="refreshAfterMediaError" />
-        <video v-else-if="mediaType.startsWith('video/')" class="evidence-media-content" :src="previewUrl" controls playsinline @error="refreshAfterMediaError" />
+        <video v-else-if="mediaType.startsWith('video/')" class="evidence-media-content" :src="previewUrl" :poster="thumbnailUrl || undefined" controls playsinline @error="refreshAfterMediaError" />
       </div>
     </div>
   </Teleport>

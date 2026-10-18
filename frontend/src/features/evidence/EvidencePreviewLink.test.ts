@@ -129,4 +129,25 @@ describe('证据媒体预览与下载', () => {
     expect(document.querySelector('.evidence-media-overlay img')?.getAttribute('src')).toContain('resolution=original');
     expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(3, 'ATT-1', 'preview', 'original');
   });
+
+  it('视频列表取封面，播放仍取支持分段的原件地址', async () => {
+    vi.mocked(fetchAttachmentPreviewUrl).mockImplementation(async (_code, purpose, resolution = 'original') => ({
+      ...image,
+      mediaType: resolution === 'poster' ? 'image/jpeg' : 'video/mp4',
+      url: image.url.replace('purpose=preview', `purpose=${purpose}`)
+        .replace('resolution=original', `resolution=${resolution}`),
+    }));
+    const wrapper = mount(EvidencePreviewLink, {
+      props: { attachmentCode: 'ATT-1', mediaTypeHint: 'video/mp4' },
+    });
+    await flushPromises();
+    expect(wrapper.get('.evidence-thumbnail').attributes('src')).toContain('resolution=poster');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(1, 'ATT-1', 'preview', 'poster');
+
+    await wrapper.get('button').trigger('click');
+    await flushPromises();
+    expect(document.querySelector('.evidence-media-overlay video')?.getAttribute('src')).toContain('resolution=original');
+    expect(document.querySelector('.evidence-media-overlay video')?.getAttribute('poster')).toContain('resolution=poster');
+    expect(fetchAttachmentPreviewUrl).toHaveBeenNthCalledWith(2, 'ATT-1', 'preview', 'original');
+  });
 });

@@ -131,6 +131,8 @@ describe('documentManagementApi', () => {
     expect(String(fetchMock.mock.calls[6][0])).toContain('/preview-url?purpose=download&requestId=');
     await fetchAttachmentPreviewUrl('ATT-UP-001', 'preview', 'thumbnail');
     expect(String(fetchMock.mock.calls[7][0])).toContain('/preview-url?purpose=preview&resolution=thumbnail&requestId=');
+    await fetchAttachmentPreviewUrl('ATT-UP-001', 'preview', 'poster');
+    expect(String(fetchMock.mock.calls[8][0])).toContain('/preview-url?purpose=preview&resolution=poster&requestId=');
   });
 
   it('loads the first attachment page with encoded document code and parses the page response', async () => {

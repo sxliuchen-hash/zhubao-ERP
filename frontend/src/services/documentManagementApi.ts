@@ -153,7 +153,7 @@ export async function retireStoredContent(code: string): Promise<StoredContentIt
 export async function fetchAttachmentPreviewUrl(
   code: string,
   purpose: 'preview' | 'download' = 'preview',
-  resolution: 'original' | 'thumbnail' | 'preview' = 'original',
+  resolution: 'original' | 'thumbnail' | 'preview' | 'poster' = 'original',
 ): Promise<AttachmentPreviewUrl> {
   const params = new URLSearchParams({ purpose });
   if (resolution !== 'original') params.set('resolution', resolution);
