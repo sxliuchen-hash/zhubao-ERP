@@ -10,6 +10,7 @@ import com.zhubao.erp.document.domain.AttachmentObjectStorage;
 import com.zhubao.erp.document.domain.AttachmentStreamContent;
 import com.zhubao.erp.document.domain.AttachmentPreviewUrl;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
+import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.DocumentManagementSummary;
 import com.zhubao.erp.document.domain.DocumentPackage;
@@ -196,6 +197,10 @@ public class DocumentManagementService {
 
     public List<EvidenceAttachment> attachments() {
         return repository.attachments();
+    }
+
+    public DocumentAttachmentPage attachmentsPage(String documentCode, long afterId, int limit) {
+        return repository.attachmentsPage(documentCode, afterId, limit);
     }
 
     public List<DocumentAuditEvent> auditEvents() {

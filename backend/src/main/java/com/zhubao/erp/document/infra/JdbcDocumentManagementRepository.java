@@ -1,6 +1,7 @@
 package com.zhubao.erp.document.infra;
 
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
+import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
@@ -74,6 +75,54 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
                 rs.getString("tone"),
                 rs.getString("object_type")
         )));
+    }
+
+    @Override
+    public DocumentAttachmentPage attachmentsPage(String documentCode, long afterId, int limit) {
+        validatePage(documentCode, afterId, limit);
+        String sql = """
+                select id, code, document_code, business_type, business_code, file_name, media_type,
+                       storage_location, storage_policy, source, status, owner_name, checksum,
+                       uploaded_at, fallback_action, tone, object_type
+                  from doc_evidence_attachment
+                 where document_code = ? and id > ?
+                 order by id
+                 limit ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, documentCode);
+            statement.setLong(2, afterId);
+            statement.setInt(3, limit + 1);
+            List<DocumentAttachmentPage.Entry> entries = new ArrayList<>();
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    entries.add(new DocumentAttachmentPage.Entry(rs.getLong("id"), new EvidenceAttachment(
+                            rs.getString("code"),
+                            rs.getString("document_code"),
+                            rs.getString("business_type"),
+                            rs.getString("business_code"),
+                            rs.getString("file_name"),
+                            rs.getString("media_type"),
+                            rs.getString("storage_location"),
+                            rs.getString("storage_policy"),
+                            rs.getString("source"),
+                            rs.getString("status"),
+                            rs.getString("owner_name"),
+                            rs.getString("checksum"),
+                            rs.getString("uploaded_at"),
+                            rs.getString("fallback_action"),
+                            rs.getString("tone"),
+                            rs.getString("object_type")
+                    )));
+                }
+            }
+            boolean hasMore = entries.size() > limit;
+            if (hasMore) entries = new ArrayList<>(entries.subList(0, limit));
+            return new DocumentAttachmentPage(entries, hasMore);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to query document attachment page", ex);
+        }
     }
 
     @Override
@@ -324,6 +373,12 @@ public class JdbcDocumentManagementRepository implements DocumentManagementRepos
 
     private <T> JdbcRowMapper<T> mapper(JdbcRowMapper<T> mapper) {
         return mapper;
+    }
+
+    private void validatePage(String documentCode, long afterId, int limit) {
+        if (documentCode == null || documentCode.isBlank()) throw new IllegalArgumentException("文档包编号不能为空");
+        if (afterId < 0) throw new IllegalArgumentException("附件游标不能小于 0");
+        if (limit < 1 || limit > 101) throw new IllegalArgumentException("附件分页大小必须在 1 到 101 之间");
     }
 
     @FunctionalInterface

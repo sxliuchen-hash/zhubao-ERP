@@ -12,6 +12,7 @@ import com.zhubao.erp.document.domain.BindEvidenceCommand;
 import com.zhubao.erp.document.domain.EvidenceBoard;
 import com.zhubao.erp.document.domain.BusinessEvidenceLink;
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
+import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentCaptureView;
 import com.zhubao.erp.document.domain.DocumentManagementSummary;
 import com.zhubao.erp.document.domain.DocumentPackage;
@@ -45,12 +46,15 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/documents")
 public class DocumentManagementController {
+
+    private static final int MAX_ATTACHMENT_PAGE_SIZE = 100;
 
     private final DocumentManagementService documentManagementService;
     private final DocumentCaptureService documentCaptureService;
@@ -190,6 +194,63 @@ public class DocumentManagementController {
     @GetMapping("/attachments")
     public ApiResponse<List<EvidenceAttachment>> attachments(HttpServletRequest request) {
         return ApiResponse.ok(visibleAttachments(operatorContextResolver.requireSession(request)));
+    }
+
+    @GetMapping("/attachments/page")
+    public ApiResponse<AttachmentPageResponse> attachmentPage(
+            @RequestParam String documentCode,
+            @RequestParam(defaultValue = "0") long afterId,
+            @RequestParam(defaultValue = "50") int limit,
+            HttpServletRequest request
+    ) {
+        String normalizedDocumentCode = documentCode == null ? "" : documentCode.trim();
+        if (normalizedDocumentCode.isEmpty()) throw new BusinessException("文档包编号不能为空");
+        if (afterId < 0) throw new BusinessException("附件游标不能小于 0");
+        if (limit < 1 || limit > MAX_ATTACHMENT_PAGE_SIZE) {
+            throw new BusinessException("附件分页大小必须在 1 到 " + MAX_ATTACHMENT_PAGE_SIZE + " 之间");
+        }
+
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        List<DocumentAttachmentPage.Entry> visible = new ArrayList<>();
+        long scanAfterId = afterId;
+        boolean hasMore = false;
+        int scanLimit = limit + 1;
+        while (visible.size() <= limit) {
+            DocumentAttachmentPage page = documentManagementService.attachmentsPage(
+                    normalizedDocumentCode,
+                    scanAfterId,
+                    scanLimit
+            );
+            if (page.entries().isEmpty()) {
+                hasMore = false;
+                break;
+            }
+
+            long lastScannedId = scanAfterId;
+            for (DocumentAttachmentPage.Entry entry : page.entries()) {
+                lastScannedId = entry.id();
+                if (dataAccess.canRead(context, entry.attachment().businessCode())) {
+                    visible.add(entry);
+                    if (visible.size() > limit) {
+                        hasMore = true;
+                        break;
+                    }
+                }
+            }
+            if (visible.size() > limit) break;
+            scanAfterId = lastScannedId;
+            if (!page.hasMore()) {
+                hasMore = false;
+                break;
+            }
+        }
+
+        int itemCount = Math.min(limit, visible.size());
+        List<EvidenceAttachment> items = visible.subList(0, itemCount).stream()
+                .map(DocumentAttachmentPage.Entry::attachment)
+                .toList();
+        Long nextCursor = hasMore && itemCount > 0 ? visible.get(itemCount - 1).id() : null;
+        return ApiResponse.ok(new AttachmentPageResponse(items, nextCursor, hasMore));
     }
 
     @GetMapping("/storage")
@@ -365,5 +426,15 @@ public class DocumentManagementController {
     }
 
     private record ByteRange(long start, long end) {
+    }
+
+    public record AttachmentPageResponse(
+            List<EvidenceAttachment> items,
+            Long nextCursor,
+            boolean hasMore
+    ) {
+        public AttachmentPageResponse {
+            items = List.copyOf(items);
+        }
     }
 }

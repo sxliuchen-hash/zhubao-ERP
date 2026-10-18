@@ -2,6 +2,8 @@ package com.zhubao.erp.document.web;
 
 import com.zhubao.erp.document.app.DocumentManagementService;
 import com.zhubao.erp.document.domain.AttachmentStreamContent;
+import com.zhubao.erp.document.domain.DocumentAttachmentPage;
+import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.security.app.OperatorContextResolver;
@@ -16,6 +18,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -177,5 +180,81 @@ class DocumentManagementControllerTest {
                 .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> controller.reconcileAttachment("ATT-1", request))
                 .isInstanceOf(PermissionDeniedException.class);
+    }
+
+    @Test
+    void pagesOnlyAuthorizedAttachmentsAcrossInterleavedRowsAndKeepsCursorOnLastVisibleRow() {
+        DocumentManagementService service = mock(DocumentManagementService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
+        EvidenceAttachment deniedFirst = attachment("ATT-DENY-001", "BUS-DENY-001");
+        EvidenceAttachment allowedFirst = attachment("ATT-ALLOW-001", "BUS-ALLOW-001");
+        EvidenceAttachment deniedMiddle = attachment("ATT-DENY-002", "BUS-DENY-002");
+        EvidenceAttachment allowedSecond = attachment("ATT-ALLOW-002", "BUS-ALLOW-002");
+        EvidenceAttachment allowedThird = attachment("ATT-ALLOW-003", "BUS-ALLOW-003");
+        when(resolver.requireSession(request)).thenReturn(operator);
+        when(access.canRead(operator, "BUS-DENY-001")).thenReturn(false);
+        when(access.canRead(operator, "BUS-DENY-002")).thenReturn(false);
+        when(access.canRead(operator, "BUS-ALLOW-001")).thenReturn(true);
+        when(access.canRead(operator, "BUS-ALLOW-002")).thenReturn(true);
+        when(access.canRead(operator, "BUS-ALLOW-003")).thenReturn(true);
+        when(service.attachmentsPage("DOC-PAGE-001", 0, 3)).thenReturn(new DocumentAttachmentPage(List.of(
+                new DocumentAttachmentPage.Entry(1, deniedFirst),
+                new DocumentAttachmentPage.Entry(2, allowedFirst),
+                new DocumentAttachmentPage.Entry(3, deniedMiddle)
+        ), true));
+        when(service.attachmentsPage("DOC-PAGE-001", 3, 3)).thenReturn(new DocumentAttachmentPage(List.of(
+                new DocumentAttachmentPage.Entry(4, allowedSecond),
+                new DocumentAttachmentPage.Entry(5, allowedThird)
+        ), false));
+        DocumentManagementController controller = new DocumentManagementController(service, null, resolver, access);
+
+        var first = controller.attachmentPage("DOC-PAGE-001", 0, 2, request).data();
+        assertThat(first.items()).extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-ALLOW-001", "ATT-ALLOW-002");
+        assertThat(first.nextCursor()).isEqualTo(4L);
+        assertThat(first.hasMore()).isTrue();
+
+        when(service.attachmentsPage("DOC-PAGE-001", 4, 3)).thenReturn(new DocumentAttachmentPage(List.of(
+                new DocumentAttachmentPage.Entry(5, allowedThird)
+        ), false));
+        var last = controller.attachmentPage("DOC-PAGE-001", first.nextCursor(), 2, request).data();
+        assertThat(last.items()).extracting(EvidenceAttachment::code).containsExactly("ATT-ALLOW-003");
+        assertThat(last.nextCursor()).isNull();
+        assertThat(last.hasMore()).isFalse();
+    }
+
+    @Test
+    void rejectsInvalidAttachmentPageLimitAndCursor() {
+        DocumentManagementController controller = new DocumentManagementController(mock(DocumentManagementService.class), null, null, mock(BusinessDataAccess.class));
+        HttpServletRequest request = mock(HttpServletRequest.class);
+
+        assertThatThrownBy(() -> controller.attachmentPage("DOC-PAGE-001", -1, 2, request))
+                .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
+        assertThatThrownBy(() -> controller.attachmentPage("DOC-PAGE-001", 0, 101, request))
+                .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class);
+    }
+
+    private EvidenceAttachment attachment(String code, String businessCode) {
+        return new EvidenceAttachment(
+                code,
+                "DOC-PAGE-001",
+                "分页测试",
+                businessCode,
+                code + ".jpg",
+                "image/jpeg",
+                "local://" + code,
+                "hot 180d -> archive",
+                "测试上传",
+                "已上传",
+                "测试员",
+                "sha256:" + code,
+                "2026-10-18 10:00",
+                "无",
+                "green",
+                null
+        );
     }
 }

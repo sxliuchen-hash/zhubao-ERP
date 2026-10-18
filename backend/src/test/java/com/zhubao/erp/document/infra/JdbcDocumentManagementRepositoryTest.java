@@ -1,6 +1,7 @@
 package com.zhubao.erp.document.infra;
 
 import com.zhubao.erp.document.domain.DocumentAuditEvent;
+import com.zhubao.erp.document.domain.DocumentAttachmentPage;
 import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import org.h2.jdbcx.JdbcDataSource;
@@ -14,6 +15,7 @@ import java.sql.Statement;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcDocumentManagementRepositoryTest {
 
@@ -42,6 +44,54 @@ class JdbcDocumentManagementRepositoryTest {
         assertThat(repository.auditEvents())
                 .extracting(DocumentAuditEvent::eventCode)
                 .containsExactly("DOC-AUD-001");
+    }
+
+    @Test
+    void pagesAttachmentsByDocumentAndStableIdLikeMemoryRepository() throws SQLException {
+        insertAttachment(pageAttachment("ATT-PAGE-001", "BUS-PAGE-001"));
+        insertAttachment(pageAttachment("ATT-PAGE-002", "BUS-PAGE-002"));
+        insertAttachment(pageAttachment("ATT-PAGE-003", "BUS-PAGE-003"));
+
+        DocumentAttachmentPage first = repository.attachmentsPage("DOC-PAGE-001", 0, 2);
+        assertThat(first.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-PAGE-001", "ATT-PAGE-002");
+        assertThat(first.hasMore()).isTrue();
+
+        DocumentAttachmentPage last = repository.attachmentsPage(
+                "DOC-PAGE-001", first.entries().get(1).id(), 2);
+        assertThat(last.entries()).extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-PAGE-003");
+        assertThat(last.hasMore()).isFalse();
+
+        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        memory.saveAttachment(pageAttachment("ATT-PAGE-001", "BUS-PAGE-001"));
+        memory.saveAttachment(pageAttachment("ATT-PAGE-002", "BUS-PAGE-002"));
+        memory.saveAttachment(pageAttachment("ATT-PAGE-003", "BUS-PAGE-003"));
+        DocumentAttachmentPage memoryFirst = memory.attachmentsPage("DOC-PAGE-001", 0, 2);
+        assertThat(memoryFirst.entries())
+                .extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-PAGE-001", "ATT-PAGE-002");
+
+        long stableCursor = first.entries().get(0).id();
+        long memoryStableCursor = memoryFirst.entries().get(0).id();
+        repository.saveAttachment(pageAttachment("ATT-PAGE-002", "BUS-PAGE-002").withStatus("已归档", "green"));
+        memory.saveAttachment(pageAttachment("ATT-PAGE-002", "BUS-PAGE-002").withStatus("已归档", "green"));
+        assertThat(repository.attachmentsPage("DOC-PAGE-001", stableCursor, 1).entries())
+                .extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-PAGE-002");
+        assertThat(memory.attachmentsPage("DOC-PAGE-001", memoryStableCursor, 1).entries())
+                .extracting(DocumentAttachmentPage.Entry::attachment)
+                .extracting(EvidenceAttachment::code)
+                .containsExactly("ATT-PAGE-002");
+
+        assertThatThrownBy(() -> repository.attachmentsPage("DOC-PAGE-001", -1, 2))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> memory.attachmentsPage("DOC-PAGE-001", 0, 0))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -271,6 +321,27 @@ class JdbcDocumentManagementRepositoryTest {
             statement.setString(15, attachment.tone());
             statement.executeUpdate();
         }
+    }
+
+    private EvidenceAttachment pageAttachment(String code, String businessCode) {
+        return new EvidenceAttachment(
+                code,
+                "DOC-PAGE-001",
+                "分页测试",
+                businessCode,
+                code + ".jpg",
+                "image/jpeg",
+                "local://" + code,
+                "hot 180d -> archive",
+                "测试上传",
+                "已上传",
+                "测试员",
+                "sha256:" + code,
+                "2026-10-18 10:00",
+                "无",
+                "green",
+                null
+        );
     }
 
     private void insertAuditEvent(DocumentAuditEvent auditEvent) throws SQLException {

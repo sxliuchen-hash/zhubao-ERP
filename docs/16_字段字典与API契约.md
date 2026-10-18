@@ -2288,6 +2288,7 @@ PWA 一期边界：
 | `GET /api/documents/summary` | `ApiResponse<DocumentManagementSummary>` |
 | `GET /api/documents/packages` | `ApiResponse<List<DocumentPackage>>` |
 | `GET /api/documents/attachments` | `ApiResponse<List<EvidenceAttachment>>` |
+| `GET /api/documents/attachments/page?documentCode=&afterId=&limit=` | `ApiResponse<AttachmentPageResponse>`；`documentCode` 必填，`afterId` 默认 0，`limit` 默认 50、范围 1—100。按数据库稳定 ID 顺序读取并逐条按业务范围过滤，返回有权 `items`、`hasMore` 和下一页 `nextCursor`；末页游标为 `null`。旧全量接口保留兼容 |
 | `GET /api/documents/storage` | `ApiResponse<StoredContentInventory>` |
 | `GET /api/documents/audit-events` | `ApiResponse<List<DocumentAuditEvent>>` |
 | `POST /api/documents/attachments/uploads` | `ApiResponse<EvidenceAttachmentUploadResult>` |
