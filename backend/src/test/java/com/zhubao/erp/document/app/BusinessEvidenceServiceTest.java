@@ -523,6 +523,59 @@ class BusinessEvidenceServiceTest {
     }
 
     @Test
+    void queryHistoricalPageFiltersUploadMetadataAfterExcludingBoundAndForeignRows() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingLinkRepository links = new QueryTrackingLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+        EvidenceAttachment old = linkedAttachment(fixture, "ATT-HF-OLD", MOTHER,
+                "image/jpeg", "收货员 何琴", "2026-10-17 09:00:00");
+        EvidenceAttachment bound = linkedAttachment(fixture, "ATT-HF-BOUND", MOTHER,
+                "image/jpeg", "收货员 何琴", "2026-10-18 09:00:00");
+        linkedAttachment(fixture, "ATT-HF-FOREIGN", CHILD,
+                "image/jpeg", "收货员 何琴", "2026-10-18 10:00:00");
+        EvidenceAttachment match = linkedAttachment(fixture, "ATT-HF-MATCH", MOTHER,
+                "image/jpeg", "收货员 何琴", "2026-10-18 11:00:00");
+        EvidenceAttachment next = linkedAttachment(fixture, "ATT-HF-NEXT", MOTHER,
+                "image/jpeg", "收货员 何琴", "2026-10-18 12:00:00");
+        links.insert(linkRecord("LINK-HF-BOUND", bound.code(), EvidenceCodes.MOTHER_ORDER, MOTHER,
+                EvidenceCodes.INTAKE, "UNPACK", EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER));
+        EvidencePageFilter filter = new EvidencePageFilter("2026-10-18", "2026-10-18", "image", "何琴");
+
+        HistoricalEvidencePage first = fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, 0, 1, fixture.admin, filter);
+        HistoricalEvidencePage second = fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, first.nextCursor(), 1, fixture.admin, filter);
+
+        assertThat(first.items()).extracting(item -> item.attachmentCode()).containsExactly(match.code());
+        assertThat(first.hasMore()).isTrue();
+        assertThat(second.items()).extracting(item -> item.attachmentCode()).containsExactly(next.code());
+        assertThat(second.hasMore()).isFalse();
+        assertThat(first.items()).extracting(item -> item.attachmentCode()).doesNotContain(old.code());
+        assertThat(documents.attachmentsCalls).isZero();
+        assertThat(links.findAllCalls).isZero();
+    }
+
+    @Test
+    void queryHistoricalPageRejectsInvalidMetadataFilterBeforeScanning() {
+        QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
+        QueryTrackingLinkRepository links = new QueryTrackingLinkRepository();
+        Fixture fixture = fixture(new InMemoryBusinessDocumentRepository(), documents, links);
+        prepareFacts(fixture);
+
+        assertThatThrownBy(() -> fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, 0, 1, fixture.admin,
+                new EvidencePageFilter("2026-10-32", "", "", "")))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> fixture.evidence.queryHistoricalPage(
+                EvidenceCodes.MOTHER_ORDER, MOTHER, 0, 1, fixture.admin,
+                new EvidencePageFilter("", "", "audio", "")))
+                .isInstanceOf(BusinessException.class);
+        assertThat(links.findByTargetCalls).isZero();
+        assertThat(documents.attachmentsPageByBusinessCodeCalls).isZero();
+    }
+
+    @Test
     void queryHistoricalPageChecksTargetScopeBeforeReadingLinksOrAttachments() {
         QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
         QueryTrackingLinkRepository links = new QueryTrackingLinkRepository();

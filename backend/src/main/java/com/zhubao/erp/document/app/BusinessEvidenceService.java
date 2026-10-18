@@ -447,6 +447,17 @@ public class BusinessEvidenceService {
             int limit,
             OperatorContext operator
     ) {
+        return queryHistoricalPage(targetType, targetCode, afterId, limit, operator, EvidencePageFilter.empty());
+    }
+
+    public HistoricalEvidencePage queryHistoricalPage(
+            String targetType,
+            String targetCode,
+            long afterId,
+            int limit,
+            OperatorContext operator,
+            EvidencePageFilter filter
+    ) {
         String type = requiredObjectType(targetType);
         String code = required(targetCode, "单据编号不能为空");
         if (operator == null || operator.operator() == null || operator.operator().isBlank()) {
@@ -460,6 +471,7 @@ public class BusinessEvidenceService {
             throw new BusinessException("历史证据分页大小必须在 1 到 100 之间");
         }
 
+        NormalizedEvidencePageFilter attachmentFilter = normalizeFilter(filter);
         Set<String> linkedAttachments = links.findByTarget(type, code).stream()
                 .map(BusinessEvidenceLink::attachmentCode)
                 .collect(java.util.stream.Collectors.toSet());
@@ -480,6 +492,9 @@ public class BusinessEvidenceService {
                 }
                 String origin = EvidenceLinkKey.text(attachment.objectType());
                 if (!origin.isEmpty() && !origin.equals(type)) {
+                    continue;
+                }
+                if (!matches(attachment, attachmentFilter)) {
                     continue;
                 }
                 visible.add(entry);
