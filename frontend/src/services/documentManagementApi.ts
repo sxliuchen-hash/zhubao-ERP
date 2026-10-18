@@ -150,6 +150,13 @@ export async function retireStoredContent(code: string): Promise<StoredContentIt
   );
 }
 
-export async function fetchAttachmentPreviewUrl(code: string, purpose: 'preview' | 'download' = 'preview'): Promise<AttachmentPreviewUrl> {
-  return apiGet<AttachmentPreviewUrl>(`/api/documents/attachments/${encodeURIComponent(code)}/preview-url?purpose=${purpose}&requestId=${Date.now()}-${Math.random()}`);
+export async function fetchAttachmentPreviewUrl(
+  code: string,
+  purpose: 'preview' | 'download' = 'preview',
+  resolution: 'original' | 'thumbnail' | 'preview' = 'original',
+): Promise<AttachmentPreviewUrl> {
+  const params = new URLSearchParams({ purpose });
+  if (resolution !== 'original') params.set('resolution', resolution);
+  params.set('requestId', `${Date.now()}-${Math.random()}`);
+  return apiGet<AttachmentPreviewUrl>(`/api/documents/attachments/${encodeURIComponent(code)}/preview-url?${params.toString()}`);
 }
