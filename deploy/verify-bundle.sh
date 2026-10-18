@@ -19,11 +19,13 @@ done
 
 cd "$(dirname "$0")"
 [ -f "$MANIFEST" ] || { echo '成套清单不存在' >&2; exit 1; }
+manifest_name="$(basename "$MANIFEST")"
+root="$(cd "$(dirname "$MANIFEST")" && pwd)"
+MANIFEST="$root/$manifest_name"
 field() { sed -n "s/^$1=//p" "$MANIFEST" | tail -n 1; }
 batch="$(field batchId)"
 case "$batch" in *[!A-Za-z0-9_.-]*|"") echo '批次名非法' >&2; exit 2 ;; esac
 [ "$(field format)" = 'zhubao-attachment-bundle-v1' ] || { echo '清单格式不支持' >&2; exit 1; }
-root="$(dirname "$MANIFEST")"
 sql="$root/$batch.sql"
 archive="$root/$batch.evidence.tar.gz"
 file_list="$root/$batch.evidence.files.sha256"
