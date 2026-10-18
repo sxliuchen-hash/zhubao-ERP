@@ -6,6 +6,8 @@ import com.zhubao.erp.business.domain.ChildLineAllocation;
 import com.zhubao.erp.business.domain.DuplicateCourierException;
 import com.zhubao.erp.business.domain.LabelReprintLog;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.OrderAdjustment;
+import com.zhubao.erp.business.domain.OrderRecycleMark;
 import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
@@ -159,7 +161,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     private Optional<MotherOrderRecord> findMotherOrderByCode(Connection connection, String code) throws SQLException {
-        String sql = motherOrderSelect() + " where code = ?";
+        String sql = visibleMotherOrderSelect() + " and code = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, code);
             try (ResultSet rs = statement.executeQuery()) {
@@ -176,7 +178,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         if (courierNo == null || courierNo.isBlank()) {
             return List.of();
         }
-        String sql = motherOrderSelect() + " where inbound_express_no = ? order by created_at desc, code";
+        String sql = visibleMotherOrderSelect() + " and inbound_express_no = ? order by created_at desc, code";
         return queryMotherOrders(sql, courierNo);
     }
 
@@ -185,7 +187,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         if (courierNo == null || courierNo.isBlank()) {
             return List.of();
         }
-        String sql = motherOrderSelect() + " where inbound_express_no = ? order by created_at desc, code";
+        String sql = visibleMotherOrderSelect() + " and inbound_express_no = ? order by created_at desc, code";
         try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
             statement.setString(1, courierNo);
             try (ResultSet rs = statement.executeQuery()) {
@@ -200,7 +202,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public List<MotherOrderRecord> listMotherOrders() {
-        return queryMotherOrders(motherOrderSelect() + " order by created_at desc", null);
+        return queryMotherOrders(visibleMotherOrderSelect() + " order by created_at desc", null);
     }
 
     @Override
@@ -297,6 +299,10 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setString(7, allocation.ledgerCode());
             statement.executeUpdate();
         } catch (SQLException ex) { throw new IllegalStateException("子单来源分配保存失败", ex); }
+    }
+
+    private String visibleMotherOrderSelect() {
+        return motherOrderSelect() + " where recycled_at is null";
     }
 
     private String motherOrderSelect() {
@@ -582,13 +588,13 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public Optional<ChildWorkOrderRecord> findChildWorkOrderByCode(String code) {
-        return queryChildWorkOrders(childWorkOrderSelect() + " where code = ?", code).stream().findFirst();
+        return queryChildWorkOrders(visibleChildWorkOrderSelect() + " and code = ?", code).stream().findFirst();
     }
 
     @Override
     public List<ChildWorkOrderRecord> listChildWorkOrders(String motherOrderCode) {
         return queryChildWorkOrders(
-                childWorkOrderSelect() + " where mother_order_code = ? order by code",
+                visibleChildWorkOrderSelect() + " and mother_order_code = ? order by code",
                 motherOrderCode
         );
     }
@@ -598,7 +604,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         try {
             return queryChildWorkOrders(
                     requireConnection(session),
-                    childWorkOrderSelect() + " where mother_order_code = ? order by code",
+                    visibleChildWorkOrderSelect() + " and mother_order_code = ? order by code",
                     motherOrderCode == null ? List.of() : List.of(motherOrderCode)
             );
         } catch (SQLException ex) {
@@ -608,7 +614,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public List<ChildWorkOrderRecord> listAllChildWorkOrders() {
-        return queryChildWorkOrders(childWorkOrderSelect() + " order by code", List.of());
+        return queryChildWorkOrders(visibleChildWorkOrderSelect() + " order by code", List.of());
     }
 
     @Override
@@ -1286,6 +1292,15 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         return state != null && state.startsWith("23");
     }
 
+    private String visibleChildWorkOrderSelect() {
+        return childWorkOrderSelect() + """
+                 where recycled_at is null
+                   and mother_order_code not in (
+                       select code from biz_mother_order where recycled_at is not null
+                   )
+                """;
+    }
+
     private String childWorkOrderSelect() {
         return """
                 select code, mother_order_code, customer_id, customer_name, processing_requirement, due_date,
@@ -1586,5 +1601,234 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     private Integer nullableInteger(ResultSet rs, String column) throws SQLException {
         int value = rs.getInt(column);
         return rs.wasNull() ? null : value;
+    }
+
+    @Override
+    public Optional<MotherOrderRecord> findMotherOrderAny(String code) {
+        return queryMotherOrders(motherOrderSelect() + " where code = ?", code).stream().findFirst();
+    }
+
+    @Override
+    public Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code) {
+        return queryChildWorkOrders(childWorkOrderSelect() + " where code = ?", code).stream().findFirst();
+    }
+
+    @Override
+    public List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode) {
+        return queryChildWorkOrders(childWorkOrderSelect() + " where mother_order_code = ? order by code", motherOrderCode);
+    }
+
+    @Override
+    public void replaceMotherOrder(MotherOrderRecord record) {
+        String sql = """
+                update biz_mother_order
+                   set customer_id = ?, customer_name = ?, material_code = ?, goods_name_snapshot = ?,
+                       quantity = ?, weight = ?, processing_requirement = ?, due_date = ?, inbound_remark = ?
+                 where code = ?
+                """;
+        updateOne(sql, statement -> {
+            setLong(statement, 1, record.customerId());
+            statement.setString(2, record.customerName());
+            statement.setString(3, record.materialCode());
+            statement.setString(4, record.goodsName());
+            statement.setBigDecimal(5, record.quantity());
+            statement.setBigDecimal(6, record.weight());
+            statement.setString(7, record.processingRequirement());
+            statement.setString(8, record.dueDate());
+            statement.setString(9, record.remark());
+            statement.setString(10, record.code());
+        }, "母单不存在");
+    }
+
+    @Override
+    public void replaceChildWorkOrder(ChildWorkOrderRecord record) {
+        String sql = """
+                update biz_work_order
+                   set customer_id = ?, customer_name = ?, material_code = ?, goods_name = ?,
+                       quantity = ?, weight = ?, processing_requirement = ?, due_date = ?, process_names = ?
+                 where code = ?
+                """;
+        updateOne(sql, statement -> {
+            setLong(statement, 1, record.customerId());
+            statement.setString(2, record.customerName());
+            statement.setString(3, record.materialCode());
+            statement.setString(4, record.goodsName());
+            statement.setBigDecimal(5, record.quantity());
+            statement.setBigDecimal(6, record.weight());
+            statement.setString(7, record.processingRequirement());
+            statement.setString(8, record.dueDate());
+            statement.setString(9, record.processes());
+            statement.setString(10, record.code());
+        }, "子单不存在");
+    }
+
+    @Override
+    public void recycleMother(String code, String operator, String at, String batch, String reason) {
+        recycle("biz_mother_order", code, operator, at, batch, reason, "母单不存在或已在回收站");
+    }
+
+    @Override
+    public void recycleChild(String code, String operator, String at, String batch, String reason) {
+        recycle("biz_work_order", code, operator, at, batch, reason, "子单不存在或已在回收站");
+    }
+
+    @Override
+    public Optional<OrderRecycleMark> motherRecycle(String code) {
+        return recycleMark("MOTHER", "biz_mother_order", code);
+    }
+
+    @Override
+    public Optional<OrderRecycleMark> childRecycle(String code) {
+        return recycleMark("WORK_ORDER", "biz_work_order", code);
+    }
+
+    @Override
+    public List<OrderRecycleMark> listMotherRecycles() {
+        return listRecycles("MOTHER", "biz_mother_order");
+    }
+
+    @Override
+    public List<OrderRecycleMark> listChildRecycles() {
+        return listRecycles("WORK_ORDER", "biz_work_order");
+    }
+
+    @Override
+    public void clearChildRecycle(String code) {
+        updateOne("""
+                update biz_work_order
+                   set recycled_at = null, recycled_by = null, recycle_batch = null, recycle_reason = null
+                 where code = ? and recycled_at is not null
+                """, statement -> statement.setString(1, code), "子单不在回收站");
+    }
+
+    @Override
+    public void clearRecycleBatch(String batch) {
+        try (Connection connection = dataSource.getConnection()) {
+            clearBatch(connection, "biz_mother_order", batch);
+            clearBatch(connection, "biz_work_order", batch);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("恢复回收站失败", ex);
+        }
+    }
+
+    @Override
+    public void saveOrderAdjustment(OrderAdjustment adjustment) {
+        String sql = """
+                insert into biz_order_adjustment (
+                    target_type, target_code, before_text, after_text, reason, operator_name, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, adjustment.targetType());
+            statement.setString(2, adjustment.code());
+            statement.setString(3, adjustment.beforeText());
+            statement.setString(4, adjustment.afterText());
+            statement.setString(5, adjustment.reason());
+            statement.setString(6, adjustment.operatorName());
+            statement.setString(7, adjustment.createdAt());
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("保存单据调整记录失败", ex);
+        }
+    }
+
+    @Override
+    public List<OrderAdjustment> listOrderAdjustments(String targetType, String code) {
+        String sql = """
+                select before_text, after_text, reason, operator_name, created_at
+                  from biz_order_adjustment
+                 where target_type = ? and target_code = ?
+                 order by id desc
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, targetType);
+            statement.setString(2, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<OrderAdjustment> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(new OrderAdjustment(targetType, code, rs.getString("before_text"), rs.getString("after_text"),
+                            rs.getString("reason"), rs.getString("operator_name"), rs.getString("created_at")));
+                }
+                return rows;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取单据调整记录失败", ex);
+        }
+    }
+
+    private void recycle(String table, String code, String operator, String at, String batch, String reason, String missing) {
+        updateOne("update " + table + " set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                + "where code = ? and recycled_at is null", statement -> {
+            statement.setString(1, at);
+            statement.setString(2, operator);
+            statement.setString(3, batch);
+            statement.setString(4, reason);
+            statement.setString(5, code);
+        }, missing);
+    }
+
+    private Optional<OrderRecycleMark> recycleMark(String type, String table, String code) {
+        String sql = "select recycled_at, recycled_by, recycle_batch, recycle_reason from " + table
+                + " where code = ? and recycled_at is not null";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new OrderRecycleMark(type, code, rs.getString("recycled_at"), rs.getString("recycled_by"),
+                        rs.getString("recycle_batch"), rs.getString("recycle_reason")));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取回收站失败", ex);
+        }
+    }
+
+    private List<OrderRecycleMark> listRecycles(String type, String table) {
+        String sql = "select code, recycled_at, recycled_by, recycle_batch, recycle_reason from " + table
+                + " where recycled_at is not null order by recycled_at desc";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rs = statement.executeQuery()) {
+            List<OrderRecycleMark> rows = new ArrayList<>();
+            while (rs.next()) {
+                rows.add(new OrderRecycleMark(type, rs.getString("code"), rs.getString("recycled_at"),
+                        rs.getString("recycled_by"), rs.getString("recycle_batch"), rs.getString("recycle_reason")));
+            }
+            return rows;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("列出回收站失败", ex);
+        }
+    }
+
+    private void clearBatch(Connection connection, String table, String batch) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("update " + table
+                + " set recycled_at = null, recycled_by = null, recycle_batch = null, recycle_reason = null "
+                + "where recycle_batch = ?")) {
+            statement.setString(1, batch);
+            statement.executeUpdate();
+        }
+    }
+
+    private void updateOne(String sql, SqlBinder binder, String missing) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException(missing);
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException(missing, ex);
+        }
+    }
+
+    @FunctionalInterface
+    private interface SqlBinder {
+        void bind(PreparedStatement statement) throws SQLException;
     }
 }

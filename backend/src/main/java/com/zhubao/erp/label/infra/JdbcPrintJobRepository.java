@@ -1,6 +1,8 @@
 package com.zhubao.erp.label.infra;
 
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.PrintJob;
+import com.zhubao.erp.label.domain.PrintRecycle;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,7 +29,7 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
 
     @Override
     public Optional<PrintJob> findById(String id) {
-        return queryOne("select * from biz_print_job where id = ?", id);
+        return queryOne("select * from biz_print_job where id = ? and recycled_at is null", id);
     }
 
     @Override
@@ -90,7 +92,7 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
             boolean previous = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
-                String select = "select * from biz_print_job where status_code = 'PENDING' order by created_at limit 1 for update";
+                String select = "select * from biz_print_job where status_code = 'PENDING' and recycled_at is null order by created_at limit 1 for update";
                 PrintJob pending;
                 try (PreparedStatement statement = connection.prepareStatement(select);
                      ResultSet rs = statement.executeQuery()) {
@@ -134,7 +136,7 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
 
     @Override
     public List<PrintJob> list() {
-        String sql = "select * from biz_print_job order by created_at";
+        String sql = "select * from biz_print_job where recycled_at is null order by created_at";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
@@ -204,5 +206,162 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
     private boolean isDuplicate(SQLException ex) {
         return ex.getErrorCode() == 1062 || ex.getErrorCode() == 23505
                 || (ex.getMessage() != null && ex.getMessage().toLowerCase().contains("unique"));
+    }
+
+    @Override
+    public Optional<PrintJob> findAny(String id) {
+        return queryOne("select * from biz_print_job where id = ?", id);
+    }
+
+    @Override
+    public List<PrintJob> listByBusinessAny(String businessCode) {
+        String sql = "select * from biz_print_job where business_code = ? order by created_at";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, businessCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<PrintJob> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(map(rs));
+                }
+                return rows;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法列出打印任务", ex);
+        }
+    }
+
+    @Override
+    public void recycle(String id, String operator, String at, String batch, String reason) {
+        if (findAny(id).isEmpty()) {
+            throw new BusinessException("打印任务不存在");
+        }
+        updateRecycle("update biz_print_job set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                + "where id = ? and recycled_at is null", operator, at, batch, reason, id, "打印任务已在回收站");
+    }
+
+    @Override
+    public int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason) {
+        String sql = "update biz_print_job set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                + "where business_code = ? and recycled_at is null";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, at);
+            statement.setString(2, operator);
+            statement.setString(3, batch);
+            statement.setString(4, reason);
+            statement.setString(5, businessCode);
+            return statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("回收打印任务失败", ex);
+        }
+    }
+
+    @Override
+    public void restore(String id) {
+        updateNullable("update biz_print_job set recycled_at = null, recycled_by = null, recycle_batch = null, recycle_reason = null "
+                + "where id = ? and recycled_at is not null", id, "打印任务不在回收站");
+    }
+
+    @Override
+    public void restoreBatch(String batch) {
+        String sql = "update biz_print_job set recycled_at = null, recycled_by = null, recycle_batch = null, recycle_reason = null "
+                + "where recycle_batch = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, batch);
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("恢复打印任务失败", ex);
+        }
+    }
+
+    @Override
+    public Optional<PrintRecycle> recycleMark(String id) {
+        String sql = "select id, business_code, recycled_at, recycled_by, recycle_batch, recycle_reason from biz_print_job "
+                + "where id = ? and recycled_at is not null";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, id);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next() ? Optional.of(mapRecycle(rs)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取打印回收站失败", ex);
+        }
+    }
+
+    @Override
+    public List<PrintRecycle> recycled() {
+        String sql = "select id, business_code, recycled_at, recycled_by, recycle_batch, recycle_reason from biz_print_job "
+                + "where recycled_at is not null order by recycled_at desc";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rs = statement.executeQuery()) {
+            List<PrintRecycle> rows = new ArrayList<>();
+            while (rs.next()) {
+                rows.add(mapRecycle(rs));
+            }
+            return rows;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("列出打印回收站失败", ex);
+        }
+    }
+
+    @Override
+    public PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt) {
+        String sql = "update biz_print_job set copies = ?, station_id = ?, updated_at = ? where id = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, copies);
+            statement.setString(2, stationId);
+            statement.setString(3, updatedAt);
+            statement.setString(4, id);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("打印任务不存在");
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("修改打印任务失败", ex);
+        }
+        return findAny(id).orElseThrow(() -> new BusinessException("打印任务不存在"));
+    }
+
+    private void updateRecycle(String sql, String operator, String at, String batch, String reason, String id, String missing) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, at);
+            statement.setString(2, operator);
+            statement.setString(3, batch);
+            statement.setString(4, reason);
+            statement.setString(5, id);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException(missing);
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException(missing, ex);
+        }
+    }
+
+    private void updateNullable(String sql, String id, String missing) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, id);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException(missing);
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException(missing, ex);
+        }
+    }
+
+    private PrintRecycle mapRecycle(ResultSet rs) throws SQLException {
+        return new PrintRecycle(rs.getString("id"), rs.getString("business_code"), rs.getString("recycled_at"),
+                rs.getString("recycled_by"), rs.getString("recycle_batch"), rs.getString("recycle_reason"));
     }
 }

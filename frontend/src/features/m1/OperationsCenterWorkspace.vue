@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, inject, onMounted, ref, type Ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
+import OrderMaintenancePanel from './OrderMaintenancePanel.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   type ErrorSummary,
@@ -9,6 +11,8 @@ import {
 import type { Tone } from '../../data/m1PrototypeData';
 import { fetchOperationsCenterSnapshot } from '../../services/operationsCenterApi';
 
+const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const isAdmin = computed(() => authSession.value?.role === 'ADMIN');
 const snapshot = ref<OperationsCenterSnapshot>({
   generatedAt: '',
   summary: { overallStatus: '未知', serviceCount: 0, degradedServices: 0, openErrors: 0, criticalErrors: 0, openAlerts: 0, criticalAlerts: 0, backupStatus: '未知', uptimeMinutes: 0 },
@@ -102,6 +106,7 @@ function errorTone(error: ErrorSummary): Tone {
 
 <template>
   <div class="operations-center-page page-stack">
+    <OrderMaintenancePanel v-if="isAdmin" />
     <section class="operations-command-surface" aria-label="运维中心总览">
       <div class="operations-command-main">
         <div class="console-title-line">

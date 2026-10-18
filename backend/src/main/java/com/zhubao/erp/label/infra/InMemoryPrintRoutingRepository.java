@@ -1,6 +1,8 @@
 package com.zhubao.erp.label.infra;
 
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.PrintBatch;
+import com.zhubao.erp.label.domain.PrintRecycle;
 import com.zhubao.erp.label.domain.PrintQueue;
 import com.zhubao.erp.label.domain.PrintRoutingRepository;
 import com.zhubao.erp.label.domain.PrintStation;
@@ -23,6 +25,7 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
     private final Map<String, PrintBatch> batches = new ConcurrentHashMap<>();
     private final Map<String, String> requests = new ConcurrentHashMap<>();
     private final Map<String, PrintTargetJob> jobs = new ConcurrentHashMap<>();
+    private final Map<String, PrintRecycle> recycled = new ConcurrentHashMap<>();
 
     @Override public List<PrintStation> stations() { return stations.values().stream().sorted(Comparator.comparing(PrintStation::stationId)).toList(); }
     @Override public Optional<PrintStation> station(String id) { return Optional.ofNullable(stations.get(id)); }
@@ -30,7 +33,7 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
     @Override public List<PrintQueue> queues() { return queues.values().stream().sorted(Comparator.comparing(PrintQueue::stationId).thenComparing(PrintQueue::queueId)).toList(); }
     @Override public synchronized PrintQueue saveQueue(PrintQueue queue) { queues.put(queue.stationId() + "|" + queue.queueId(), queue); return queue; }
     @Override public Optional<PrintBatch> batchByRequest(String requestId) { return Optional.ofNullable(requests.get(requestId)).flatMap(this::batch); }
-    @Override public Optional<PrintBatch> batch(String id) { return Optional.ofNullable(batches.get(id)).map(batch -> batch.withJobs(jobs.values().stream().filter(job -> id.equals(job.batchId())).sorted(Comparator.comparing(PrintTargetJob::id)).toList())); }
+    @Override public Optional<PrintBatch> batch(String id) { return Optional.ofNullable(batches.get(id)).map(batch -> batch.withJobs(jobs.values().stream().filter(job -> id.equals(job.batchId()) && !recycled.containsKey(job.id())).sorted(Comparator.comparing(PrintTargetJob::id)).toList())); }
     @Override public synchronized PrintBatch insertBatch(PrintBatch batch) {
         PrintBatch existing = batchByRequest(batch.requestId()).orElse(null);
         if (existing != null) return existing;
@@ -52,10 +55,14 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
                 reason, original.createdAt(), now));
         return Optional.of(insertBatch(replacement));
     }
-    @Override public Optional<PrintTargetJob> job(String id) { return Optional.ofNullable(jobs.get(id)); }
+    @Override public Optional<PrintTargetJob> job(String id) {
+        PrintTargetJob job = jobs.get(id);
+        return job == null || recycled.containsKey(id) ? Optional.empty() : Optional.of(job);
+    }
     @Override public synchronized Optional<PrintTargetJob> claim(String stationId, String leaseUntil, String now) {
         PrintTargetJob pending = jobs.values().stream().filter(job -> job.status() == PrintJobStatus.PENDING
-                && stationId.equals(job.targetStationId())).min(Comparator.comparing(PrintTargetJob::createdAt).thenComparing(PrintTargetJob::id)).orElse(null);
+                && stationId.equals(job.targetStationId()) && !recycled.containsKey(job.id()))
+                .min(Comparator.comparing(PrintTargetJob::createdAt).thenComparing(PrintTargetJob::id)).orElse(null);
         if (pending == null) return Optional.empty();
         return Optional.of(saveJob(pending.withStatus(PrintJobStatus.LEASED, stationId, leaseUntil, "", "", now)));
     }
@@ -84,5 +91,46 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
             return Optional.empty();
         jobs.put(job.id(), job);
         return Optional.of(job);
+    }
+    @Override public Optional<PrintTargetJob> jobAny(String id) { return Optional.ofNullable(jobs.get(id)); }
+    @Override public List<PrintTargetJob> jobsForBusinessAny(String businessCode) {
+        return batches.values().stream().filter(batch -> businessCode.equals(batch.businessCode()))
+                .flatMap(batch -> jobs.values().stream().filter(job -> batch.id().equals(job.batchId()))).toList();
+    }
+    @Override public synchronized void recycleJob(String id, String operator, String at, String batch, String reason) {
+        PrintTargetJob job = jobs.get(id);
+        if (job == null) throw new BusinessException("打印任务不存在");
+        if (recycled.containsKey(id)) throw new BusinessException("打印任务已在回收站");
+        recycled.put(id, new PrintRecycle(id, businessCodeOf(job), at, operator, batch, reason));
+    }
+    @Override public synchronized int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason) {
+        int count = 0;
+        for (PrintTargetJob job : List.copyOf(jobs.values())) {
+            if (businessCode.equals(businessCodeOf(job)) && !recycled.containsKey(job.id())) {
+                recycled.put(job.id(), new PrintRecycle(job.id(), businessCode, at, operator, batch, reason));
+                count++;
+            }
+        }
+        return count;
+    }
+    @Override public synchronized void restoreJob(String id) {
+        if (recycled.remove(id) == null) throw new BusinessException("打印任务不在回收站");
+    }
+    @Override public synchronized void restoreBatch(String batch) {
+        recycled.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));
+    }
+    @Override public Optional<PrintRecycle> jobRecycle(String id) { return Optional.ofNullable(recycled.get(id)); }
+    @Override public List<PrintRecycle> recycledJobs() { return List.copyOf(recycled.values()); }
+    @Override public synchronized PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId, String updatedAt) {
+        PrintTargetJob current = jobs.get(id);
+        if (current == null) throw new BusinessException("打印任务不存在");
+        PrintTargetJob next = new PrintTargetJob(current.id(), current.batchId(), stationId, queueId, copies, current.status(),
+                current.claimedStationId(), current.leaseUntil(), current.failureReason(), current.paperCheckResult(),
+                current.predecessorId(), current.retryReason(), current.createdAt(), updatedAt);
+        jobs.put(id, next);
+        return next;
+    }
+    private String businessCodeOf(PrintTargetJob job) {
+        return batches.values().stream().filter(batch -> job.batchId().equals(batch.id())).map(PrintBatch::businessCode).findFirst().orElse("");
     }
 }

@@ -59,3 +59,5 @@ V58__m3_courier_multi_order.sql
 V59__m3_customer_material_catalog.sql
 V60__m3_receipt_line_allocation.sql
 V61__m3_print_routing_batch.sql
+V62__m3_order_recycle.sql
+V63__m3_auth_login_session.sql

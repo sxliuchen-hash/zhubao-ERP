@@ -1650,7 +1650,7 @@ PWA 一期边界：
 | `operator` | 操作人快照 |
 | `role` / `roleLabel` | 角色编码和中文名 |
 | `dataScope` / `dataScopeLabel` | 数据范围编码和中文名 |
-| `expiresAt` | 会话过期时间展示值 |
+| `expiresAt` | 会话过期时间展示值。新建会话 30 天；剩余不足 7 天时再次使用，从当前时间再延 30 天。退出、过期、停用、重置密码或权限变更后失效 |
 | `demoAccount` | 是否评审/演示账号，来自账号仓储记录；生产账号应为 `false` |
 | `passwordChangedAt` | 密码最近变更时间展示值；未知为空字符串 |
 | `passwordExpiresAt` | 密码到期时间展示值；`passwordChangedAt` 为空时返回 epoch 对应展示值 |
@@ -1664,8 +1664,8 @@ PWA 一期边界：
 
 | API | 说明 |
 |---|---|
-| `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话 |
-| `POST /api/auth/logout` | 注销当前 token；前端无论后端是否可达都清理本地 token |
+| `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话。设备上仍有令牌时，打开应用会自动恢复登录 |
+| `POST /api/auth/logout` | 注销当前 token，服务端删除该会话；前端无论后端是否可达都清理本地 token。退出后可以登录其他账号 |
 | `POST /api/auth/password` | 自助改密/续期；成功后清除强制首次改密标记和临时密码消费标记；只接受 Bearer 登录会话，不使用请求头角色兜底 |
 | `GET /api/auth/demo-users` | 仅返回启用且 `demoAccount=true` 的演示账号，按账号名排序；不返回真实账号。无启用演示账号时返回空列表，登录页隐藏演示密码提示和候选列表 |
 | `GET /api/auth/audit-events` | 返回最近登录会话审计事件，默认返回最近审计事件；仓储可切换内存/JDBC |
@@ -2002,7 +2002,7 @@ PWA 一期边界：
 
 账号创建、更新、启停和解锁在持久化事务内完成账号变更和 `ACCOUNT_MANAGEMENT` 审计，未提供申请时不消费申请。显式提供申请时，同一事务还消费申请：内存实现用单进程锁；JDBC 在一条连接里用条件更新锁住仍为 `READY_FOR_BLOCKING_APPROVAL` 且 `ready_for_blocking_approval=true` 的申请行，再写账号和审计，最后把申请标为 `EXECUTED`。任一步失败则整笔回滚，申请仍可重试；同一申请不能被并发重复使用。`zhubao.auth.account-action.repository` 本地默认 `memory`，MySQL profile 默认 `jdbc`，并与账号、审计、申请仓储一起切换。账号保存时的客户授权替换、删除账号及客户授权关系均使用同一账号事务，历史业务、审计和审批记录不随账号删除。JDBC 账号动作须搭配 JDBC 客户授权仓储，保证使用同一事务连接。
 
-会话保存在进程内存，不能加入上述数据库事务。停用、删除、密码重置及角色/数据范围/客户范围/工序权限更新后吊销目标账号旧会话。停用吊销失败不回滚账号，也不把显式申请改回可执行；调用 `POST /api/auth/accounts/{username}/session-revocations` 只重试已停用账号吊销。解析 Bearer 会话时仍核对账号存在、启用状态及当前权限快照，已删除、停用或权限快照变化的旧令牌不能继续使用。保存或删除已提交后，会话清理异常只记录失败审计并返回已提交的成功结果；旧令牌仍受账号状态及密码、权限快照校验约束。客户授权范围保存同步与独立维护接口继续保留，不新增事后审批任务。
+登录会话跟随账号仓储：内存模式仍在进程内，重启丢失；JDBC 模式写入 `auth_login_session`，只存令牌摘要，服务重启后原令牌可继续使用，直到退出、过期或吊销。会话不能加入上述数据库事务。停用、删除、密码重置及角色/数据范围/客户范围/工序权限更新后吊销目标账号旧会话。停用吊销失败不回滚账号，也不把显式申请改回可执行；调用 `POST /api/auth/accounts/{username}/session-revocations` 只重试已停用账号吊销。解析 Bearer 会话时仍核对账号存在、启用状态及当前权限快照，已删除、停用或权限快照变化的旧令牌不能继续使用。保存或删除已提交后，会话清理异常只记录失败审计并返回已提交的成功结果；旧令牌仍受账号状态及密码、权限快照校验约束。客户授权范围保存同步与独立维护接口继续保留，不新增事后审批任务。
 
 `AuthAccountPreApprovalEvidenceSummary`：
 
@@ -2041,9 +2041,9 @@ PWA 一期边界：
 
 ### 14.6 当前限制
 
-- token 保存在内存，服务重启即失效。
+- 登录令牌只保存在使用设备的 localStorage。服务端只存 SHA-256 摘要，不保存密码。内存模式重启丢失；MySQL 下随 `zhubao.auth.users.repository=jdbc` 写入 `auth_login_session`，服务重启后原令牌可继续使用，直到退出、过期或吊销。已有库需备份后执行 `V63__m3_auth_login_session.sql`。
 - 默认 seed 是评审账号，正式环境应初始化生产账号并替换评审凭据。
-- 申请单仓储、显式申请单校验与 `ACCOUNT_PRE_APPROVAL` 任务保留兼容；账号管理默认直接保存，不执行电子签字。会话吊销仅覆盖本服务内存 Bearer token，仍需接入完整 IAM、正式刷新 token、SSO/JWT、完整组织授权体系和不可篡改审计策略。
+- 申请单仓储、显式申请单校验与 `ACCOUNT_PRE_APPROVAL` 任务保留兼容；账号管理默认直接保存，不执行电子签字。会话吊销会删除该账号在 `auth_login_session` 中的记录；内存模式则删除进程内记录。仍需接入完整 IAM、正式刷新 token、SSO/JWT、完整组织授权体系和不可篡改审计策略。
 - 菜单树与角色可见性已经支持 `sys_navigation_menu`、`sys_role_menu` 持久化；在线菜单编辑和完整组织树仍未完成。
 - 登录审计可切换内存/JDBC 仓储并生成摘要链，但仍不等于生产安全日志平台、归档保全或真正不可篡改审计。
 - 登录后导航按会话菜单过滤；用户管理页与账号、客户授权管理接口仅允许 `ADMIN`，具体动作仍须由后端授权。用户管理页直接保存，不依赖前置审批表单。
@@ -2233,6 +2233,21 @@ PWA 一期边界：
 | `POST /api/business/operations/customer-returns` | `ApiResponse<CustomerReturnResult>` |
 | `POST /api/business/operations/after-sales-reviews` | `ApiResponse<AfterSalesReviewResult>` |
 | `POST /api/business/operations/loss-approvals` | `ApiResponse<LossApprovalResult>` |
+
+### OrderMaintenanceController
+
+来源：[OrderMaintenanceController](../backend/src/main/java/com/zhubao/erp/business/web/OrderMaintenanceController.java)。仅 `ORDER_ADMIN_MAINTAIN`，也就是管理员。总经理和其他角色拒绝。已开工、已领取的单据可以改正。回收不删除库存流水和已入账账单。已有库需备份后执行 `V62__m3_order_recycle.sql`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/business/order-maintenance?code=` | 按母单号、子单号或打印任务编号返回相关单据，包括已在回收站的 |
+| `GET /api/business/order-maintenance/recycle-bin` | 回收站中的母单、子单和打印任务 |
+| `POST /api/business/order-maintenance/mother-orders/{code}` | 改正客户、材质、货品、数量、重量、要求、期限。原因必填 |
+| `POST /api/business/order-maintenance/work-orders/{code}` | 改正子单，并包括工序。原因必填 |
+| `POST /api/business/order-maintenance/print-jobs/{id}` | 改正旧版打印任务的份数和工位 |
+| `POST /api/business/order-maintenance/print-targets/{id}` | 改正工位打印任务的份数、工位和队列。不改已领取状态 |
+| `POST /api/business/order-maintenance/recycle` | `targetType` 为 `MOTHER`、`WORK_ORDER`、`PRINT_JOB` 或 `PRINT_TARGET`。回收母单会同时隐藏其子单和相关打印任务 |
+| `POST /api/business/order-maintenance/restore` | 恢复母单会带回同一次放入回收站的子单和打印任务。母单仍在回收站时，不能单独恢复子单或打印任务 |
 
 ### BusinessWorkspaceController
 

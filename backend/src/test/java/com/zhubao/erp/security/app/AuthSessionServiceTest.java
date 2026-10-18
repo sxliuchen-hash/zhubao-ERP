@@ -4,7 +4,9 @@ import com.zhubao.erp.business.app.MasterDataService;
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.infra.InMemoryMasterDataRepository;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
+import com.zhubao.erp.security.domain.AuthLoginSessionRepository;
 import com.zhubao.erp.security.domain.AuthSession;
+import com.zhubao.erp.security.domain.AuthTokenDigest;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
@@ -14,12 +16,12 @@ import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.security.error.SessionInvalidException;
 import com.zhubao.erp.security.infra.InMemoryAuthAuditRepository;
+import com.zhubao.erp.security.infra.InMemoryAuthLoginSessionRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
+import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -393,6 +395,7 @@ class AuthSessionServiceTest {
         );
 
         assertThat(changed.token()).isEqualTo(session.token());
+        assertThat(service.operatorContext("Bearer " + changed.token())).isPresent();
         assertThat(changed.passwordChangedAt()).isNotEqualTo(session.passwordChangedAt());
         assertThat(changed.passwordExpired()).isFalse();
         assertThat(userRepository.findByUsername("planner"))
@@ -469,9 +472,10 @@ class AuthSessionServiceTest {
     @Test
     void expiredRevokedAndChangedSessionsUseTheSameClientContract() throws Exception {
         InMemoryAuthUserAccountRepository repository = new InMemoryAuthUserAccountRepository(passwordHasher);
-        AuthSessionService service = service(repository);
+        InMemoryAuthLoginSessionRepository sessions = new InMemoryAuthLoginSessionRepository();
+        AuthSessionService service = service(repository, sessions);
         AuthSession expired = service.login(new AuthLoginCommand("operator", "operator123"));
-        expire(service, expired.token());
+        sessions.updateExpiry(AuthTokenDigest.sha256(expired.token()), Instant.EPOCH);
         assertSessionInvalid(() -> service.session("Bearer " + expired.token()));
         assertThat(service.auditEvents(5)).anySatisfy(event -> assertThat(event.reason()).isEqualTo("登录会话已过期"));
 
@@ -503,17 +507,32 @@ class AuthSessionServiceTest {
                 .satisfies(error -> assertThat(((SessionInvalidException) error).code()).isEqualTo(40301));
     }
 
-    @SuppressWarnings("unchecked")
-    private void expire(AuthSessionService service, String token) throws Exception {
-        Field sessionsField = AuthSessionService.class.getDeclaredField("sessions");
-        sessionsField.setAccessible(true);
-        ConcurrentHashMap<String, Object> sessions = (ConcurrentHashMap<String, Object>) sessionsField.get(service);
-        Object entry = sessions.get(token);
-        Class<?> type = entry.getClass();
-        var constructor = type.getDeclaredConstructor(String.class, AuthUserAccount.class, Instant.class);
-        constructor.setAccessible(true);
-        Object user = type.getDeclaredMethod("user").invoke(entry);
-        sessions.put(token, constructor.newInstance(token, user, Instant.EPOCH));
+    @Test
+    void 服务重启后保持登录临近过期会顺延退出后可换账号() {
+        InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthLoginSessionRepository sessions = new InMemoryAuthLoginSessionRepository();
+        AuthSessionService first = service(accounts, sessions);
+        AuthSession operator = first.login(new AuthLoginCommand("operator", "operator123"));
+        String hash = AuthTokenDigest.sha256(operator.token());
+        Instant originalExpiry = sessions.findByTokenHash(hash).orElseThrow().expiresAt();
+
+        AuthSessionService restarted = service(accounts, sessions);
+        assertThat(restarted.session("Bearer " + operator.token()).orElseThrow().username()).isEqualTo("operator");
+        assertThat(sessions.findByTokenHash(hash).orElseThrow().expiresAt()).isEqualTo(originalExpiry);
+        assertThat(sessions.findByTokenHash(operator.token())).isEmpty();
+
+        sessions.updateExpiry(hash, Instant.now().plus(Duration.ofDays(1)));
+        restarted.session("Bearer " + operator.token()).orElseThrow();
+        assertThat(sessions.findByTokenHash(hash).orElseThrow().expiresAt())
+                .isAfter(Instant.now().plus(Duration.ofDays(29)));
+
+        restarted.logout("Bearer " + operator.token());
+        assertThatThrownBy(() -> first.session("Bearer " + operator.token()))
+                .isInstanceOf(SessionInvalidException.class)
+                .hasMessage(SessionInvalidException.CLIENT_MESSAGE);
+
+        AuthSession leader = restarted.login(new AuthLoginCommand("leader", "leader123"));
+        assertThat(first.session("Bearer " + leader.token()).orElseThrow().username()).isEqualTo("leader");
     }
 
     private AuthSessionService service() {
@@ -559,13 +578,19 @@ class AuthSessionServiceTest {
     }
 
     private AuthSessionService service(AuthUserAccountRepository userRepository) {
+        return service(userRepository, new InMemoryAuthLoginSessionRepository());
+    }
+
+    private AuthSessionService service(AuthUserAccountRepository userRepository, AuthLoginSessionRepository loginSessions) {
         return new AuthSessionService(
                 navigationMenuService,
                 new InMemoryAuthAuditRepository(),
                 userRepository,
                 passwordHasher,
                 passwordExpiryPolicy,
-                passwordPolicy
+                passwordPolicy,
+                null,
+                loginSessions
         );
     }
 }

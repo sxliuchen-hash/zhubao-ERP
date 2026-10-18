@@ -381,7 +381,11 @@ class IntakeReceivingTest {
                             created_at varchar(40) not null,
                             processing_requirement varchar(500) not null,
                             due_date varchar(20) not null,
-                            customer_name varchar(120) not null
+                            customer_name varchar(120) not null,
+                            recycled_at varchar(40),
+                            recycled_by varchar(80),
+                            recycle_batch varchar(40),
+                            recycle_reason varchar(200)
                         )
                         """);
                 statement.execute("""

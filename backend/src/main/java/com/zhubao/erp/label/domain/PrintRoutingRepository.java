@@ -19,4 +19,13 @@ public interface PrintRoutingRepository {
     PrintTargetJob saveJob(PrintTargetJob job);
     Optional<PrintTargetJob> saveJobIfStatus(PrintTargetJob job, PrintJobStatus expected);
     Optional<PrintTargetJob> savePaperCheckIfBlank(PrintTargetJob job, PrintJobStatus expected);
+    Optional<PrintTargetJob> jobAny(String jobId);
+    List<PrintTargetJob> jobsForBusinessAny(String businessCode);
+    void recycleJob(String id, String operator, String at, String batch, String reason);
+    int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason);
+    void restoreJob(String id);
+    void restoreBatch(String batch);
+    Optional<PrintRecycle> jobRecycle(String id);
+    List<PrintRecycle> recycledJobs();
+    PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId, String updatedAt);
 }

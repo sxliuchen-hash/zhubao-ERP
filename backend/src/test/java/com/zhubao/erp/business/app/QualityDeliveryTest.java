@@ -576,7 +576,11 @@ class QualityDeliveryTest {
                             created_at varchar(40) not null,
                             processing_requirement varchar(500) not null,
                             due_date varchar(20) not null,
-                            customer_name varchar(120) not null
+                            customer_name varchar(120) not null,
+                            recycled_at varchar(40),
+                            recycled_by varchar(80),
+                            recycle_batch varchar(40),
+                            recycle_reason varchar(200)
                         )
                         """);
                 statement.execute("""
@@ -619,7 +623,11 @@ class QualityDeliveryTest {
                             verification_code varchar(16) not null unique,
                             ledger_code varchar(80) not null,
                             operator varchar(80) not null,
-                            created_at varchar(40) not null
+                            created_at varchar(40) not null,
+                            recycled_at varchar(40),
+                            recycled_by varchar(80),
+                            recycle_batch varchar(40),
+                            recycle_reason varchar(200)
                         )
                         """);
                 statement.execute("""

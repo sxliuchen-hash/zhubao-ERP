@@ -5,6 +5,8 @@ import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.ChildLineAllocation;
 import com.zhubao.erp.business.domain.LabelReprintLog;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.OrderAdjustment;
+import com.zhubao.erp.business.domain.OrderRecycleMark;
 import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
@@ -36,6 +38,9 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     private final ConcurrentMap<String, OutboundOrderRecord> outboundOrders = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, MotherSplitState> splitStates = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ChildWorkOrderRecord> childWorkOrders = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, OrderRecycleMark> recycledMothers = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, OrderRecycleMark> recycledChildren = new ConcurrentHashMap<>();
+    private final List<OrderAdjustment> orderAdjustments = new CopyOnWriteArrayList<>();
     private final List<LabelReprintLog> reprintLogs = new CopyOnWriteArrayList<>();
     private final ConcurrentMap<String, ProcessStationHandoff> processHandoffs = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, QualityRequirementCheck> qualityChecks = new ConcurrentHashMap<>();
@@ -77,7 +82,11 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
 
     @Override
     public Optional<MotherOrderRecord> findMotherOrderByCode(String code) {
-        return Optional.ofNullable(motherOrders.get(code));
+        MotherOrderRecord record = motherOrders.get(code);
+        if (record == null || recycledMothers.containsKey(code)) {
+            return Optional.empty();
+        }
+        return Optional.of(record);
     }
 
     @Override
@@ -93,6 +102,7 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
         }
         return motherOrders.values().stream()
                 .filter(record -> courierNo.equals(record.courierNo()))
+                .filter(record -> !recycledMothers.containsKey(record.code()))
                 .sorted(Comparator.comparing(MotherOrderRecord::createdAt).reversed().thenComparing(MotherOrderRecord::code))
                 .toList();
     }
@@ -111,7 +121,9 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
 
     @Override
     public List<MotherOrderRecord> listMotherOrders() {
-        return List.copyOf(new ArrayList<>(motherOrders.values()));
+        return motherOrders.values().stream()
+                .filter(record -> !recycledMothers.containsKey(record.code()))
+                .toList();
     }
 
     @Override
@@ -287,13 +299,18 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
 
     @Override
     public Optional<ChildWorkOrderRecord> findChildWorkOrderByCode(String code) {
-        return Optional.ofNullable(childWorkOrders.get(code));
+        ChildWorkOrderRecord record = childWorkOrders.get(code);
+        if (!childVisible(record)) {
+            return Optional.empty();
+        }
+        return Optional.of(record);
     }
 
     @Override
     public List<ChildWorkOrderRecord> listChildWorkOrders(String motherOrderCode) {
         return childWorkOrders.values().stream()
                 .filter(record -> motherOrderCode.equals(record.motherOrderCode()))
+                .filter(this::childVisible)
                 .sorted(Comparator.comparing(ChildWorkOrderRecord::code))
                 .toList();
     }
@@ -307,6 +324,7 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     @Override
     public List<ChildWorkOrderRecord> listAllChildWorkOrders() {
         return childWorkOrders.values().stream()
+                .filter(this::childVisible)
                 .sorted(Comparator.comparing(ChildWorkOrderRecord::code))
                 .toList();
     }
@@ -533,5 +551,114 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
 
     private String handoffKey(String orderCode, String processName) {
         return orderCode + "\n" + processName;
+    }
+
+    private boolean childVisible(ChildWorkOrderRecord record) {
+        return record != null
+                && !recycledChildren.containsKey(record.code())
+                && !recycledMothers.containsKey(record.motherOrderCode());
+    }
+
+    @Override
+    public Optional<MotherOrderRecord> findMotherOrderAny(String code) {
+        return Optional.ofNullable(motherOrders.get(code));
+    }
+
+    @Override
+    public Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code) {
+        return Optional.ofNullable(childWorkOrders.get(code));
+    }
+
+    @Override
+    public List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode) {
+        return childWorkOrders.values().stream()
+                .filter(record -> motherOrderCode.equals(record.motherOrderCode()))
+                .sorted(Comparator.comparing(ChildWorkOrderRecord::code))
+                .toList();
+    }
+
+    @Override
+    public void replaceMotherOrder(MotherOrderRecord record) {
+        if (!motherOrders.containsKey(record.code())) {
+            throw new BusinessException("母单不存在");
+        }
+        motherOrders.put(record.code(), record);
+    }
+
+    @Override
+    public void replaceChildWorkOrder(ChildWorkOrderRecord record) {
+        if (!childWorkOrders.containsKey(record.code())) {
+            throw new BusinessException("子单不存在");
+        }
+        childWorkOrders.put(record.code(), record);
+    }
+
+    @Override
+    public void recycleMother(String code, String operator, String at, String batch, String reason) {
+        if (!motherOrders.containsKey(code)) {
+            throw new BusinessException("母单不存在");
+        }
+        if (recycledMothers.containsKey(code)) {
+            throw new BusinessException("母单已在回收站");
+        }
+        recycledMothers.put(code, new OrderRecycleMark("MOTHER", code, at, operator, batch, reason));
+    }
+
+    @Override
+    public void recycleChild(String code, String operator, String at, String batch, String reason) {
+        if (!childWorkOrders.containsKey(code)) {
+            throw new BusinessException("子单不存在");
+        }
+        if (recycledChildren.containsKey(code)) {
+            throw new BusinessException("子单已在回收站");
+        }
+        recycledChildren.put(code, new OrderRecycleMark("WORK_ORDER", code, at, operator, batch, reason));
+    }
+
+    @Override
+    public Optional<OrderRecycleMark> motherRecycle(String code) {
+        return Optional.ofNullable(recycledMothers.get(code));
+    }
+
+    @Override
+    public Optional<OrderRecycleMark> childRecycle(String code) {
+        return Optional.ofNullable(recycledChildren.get(code));
+    }
+
+    @Override
+    public List<OrderRecycleMark> listMotherRecycles() {
+        return List.copyOf(recycledMothers.values());
+    }
+
+    @Override
+    public List<OrderRecycleMark> listChildRecycles() {
+        return List.copyOf(recycledChildren.values());
+    }
+
+    @Override
+    public void clearChildRecycle(String code) {
+        if (recycledChildren.remove(code) == null) {
+            throw new BusinessException("子单不在回收站");
+        }
+    }
+
+    @Override
+    public void clearRecycleBatch(String batch) {
+        recycledMothers.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));
+        recycledChildren.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));
+    }
+
+    @Override
+    public void saveOrderAdjustment(OrderAdjustment adjustment) {
+        orderAdjustments.add(adjustment);
+    }
+
+    @Override
+    public List<OrderAdjustment> listOrderAdjustments(String targetType, String code) {
+        List<OrderAdjustment> matched = new ArrayList<>(orderAdjustments.stream()
+                .filter(item -> targetType.equals(item.targetType()) && code.equals(item.code()))
+                .toList());
+        java.util.Collections.reverse(matched);
+        return matched;
     }
 }

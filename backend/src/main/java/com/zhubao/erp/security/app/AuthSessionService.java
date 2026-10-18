@@ -2,14 +2,19 @@ package com.zhubao.erp.security.app;
 
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.business.app.MasterDataService;
+import com.zhubao.erp.security.domain.AuthAccountSnapshot;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditIntegrity;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
+import com.zhubao.erp.security.domain.AuthLoginSession;
+import com.zhubao.erp.security.domain.AuthLoginSessionRepository;
 import com.zhubao.erp.security.domain.AuthSession;
+import com.zhubao.erp.security.domain.AuthTokenDigest;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.infra.InMemoryAuthLoginSessionRepository;
 import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -27,7 +32,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
@@ -37,12 +41,14 @@ public class AuthSessionService {
     private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.systemDefault());
-    private static final Duration SESSION_TTL = Duration.ofHours(8);
+    /** 打开应用可恢复登录的最长时间。剩余不足 7 天时，继续使用会从当前时间再延这么久。 */
+    private static final Duration SESSION_TTL = Duration.ofDays(30);
+    private static final Duration SESSION_RENEW_WITHIN = Duration.ofDays(7);
     private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(15);
     private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
     private static final SecureRandom RANDOM = new SecureRandom();
-    private final ConcurrentHashMap<String, SessionEntry> sessions = new ConcurrentHashMap<>();
     private final AtomicLong auditSequence = new AtomicLong();
+    private final AuthLoginSessionRepository loginSessions;
     private final NavigationMenuService navigationMenuService;
     private final AuthAuditRepository authAuditRepository;
     private final AuthUserAccountRepository userAccountRepository;
@@ -64,7 +70,6 @@ public class AuthSessionService {
                 passwordHasher, passwordExpiryPolicy, passwordPolicy, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
             AuthAuditRepository authAuditRepository,
@@ -74,6 +79,22 @@ public class AuthSessionService {
             PasswordPolicy passwordPolicy,
             CustomerAuthorizationService customerAuthorizationService
     ) {
+        this(navigationMenuService, authAuditRepository, userAccountRepository,
+                passwordHasher, passwordExpiryPolicy, passwordPolicy, customerAuthorizationService,
+                new InMemoryAuthLoginSessionRepository());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthSessionService(
+            NavigationMenuService navigationMenuService,
+            AuthAuditRepository authAuditRepository,
+            AuthUserAccountRepository userAccountRepository,
+            PasswordHasher passwordHasher,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            PasswordPolicy passwordPolicy,
+            CustomerAuthorizationService customerAuthorizationService,
+            AuthLoginSessionRepository loginSessions
+    ) {
         this.navigationMenuService = navigationMenuService;
         this.authAuditRepository = authAuditRepository;
         this.userAccountRepository = userAccountRepository;
@@ -81,6 +102,7 @@ public class AuthSessionService {
         this.passwordExpiryPolicy = passwordExpiryPolicy;
         this.passwordPolicy = passwordPolicy;
         this.customerAuthorizationService = customerAuthorizationService;
+        this.loginSessions = loginSessions;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -122,11 +144,20 @@ public class AuthSessionService {
             throw new PermissionDeniedException("临时密码已使用，请使用首次登录会话自助改密");
         }
 
+        AuthUserAccount user = account.get();
         String token = newToken();
         Instant expiresAt = now.plus(SESSION_TTL);
-        SessionEntry entry = new SessionEntry(token, account.get(), expiresAt);
-        sessions.put(token, entry);
-        userAccountRepository.recordLoginSuccess(account.get().username());
+        loginSessions.save(new AuthLoginSession(
+                AuthTokenDigest.sha256(token),
+                user.username(),
+                user.operator() == null ? "" : user.operator(),
+                user.role().name(),
+                expiresAt,
+                AuthAccountSnapshot.fingerprint(user),
+                tokenSuffix(token)
+        ));
+        SessionEntry entry = new SessionEntry(token, user, expiresAt);
+        userAccountRepository.recordLoginSuccess(user.username());
         recordAudit(
                 "LOGIN",
                 account.get().username(),
@@ -313,8 +344,11 @@ public class AuthSessionService {
                 false,
                 currentAccount.allowedProcesses()
         ));
-        SessionEntry updatedEntry = new SessionEntry(entry.token(), updated, entry.expiresAt());
-        sessions.put(entry.token(), updatedEntry);
+        AuthUserAccount persisted = userAccountRepository.findByUsername(updated.username()).orElseThrow(SessionInvalidException::new);
+        if (!loginSessions.updateFingerprint(AuthTokenDigest.sha256(entry.token()), AuthAccountSnapshot.fingerprint(persisted))) {
+            throw new SessionInvalidException();
+        }
+        SessionEntry updatedEntry = new SessionEntry(entry.token(), persisted, entry.expiresAt());
         recordAudit(
                 "PASSWORD_CHANGE",
                 updated.username(),
@@ -329,16 +363,17 @@ public class AuthSessionService {
 
     public void logout(String rawAuthorizationHeader) {
         bearerToken(rawAuthorizationHeader).ifPresent(token -> {
-            SessionEntry removed = sessions.remove(token);
-            if (removed == null) {
+            Optional<AuthLoginSession> removed = loginSessions.removeByTokenHash(AuthTokenDigest.sha256(token));
+            if (removed.isEmpty()) {
                 recordAudit("LOGOUT", "", "", "", "DENIED", "登录会话不存在或已退出", token);
                 return;
             }
+            AuthLoginSession session = removed.get();
             recordAudit(
                     "LOGOUT",
-                    removed.user().username(),
-                    removed.user().operator(),
-                    removed.user().role().name(),
+                    session.username(),
+                    session.operator(),
+                    session.role(),
                     "SUCCESS",
                     "退出登录会话",
                     token
@@ -351,23 +386,18 @@ public class AuthSessionService {
         if (normalizedUsername.isBlank()) {
             return 0;
         }
-        List<SessionEntry> revoked = sessions.values().stream()
-                .filter(entry -> normalize(entry.user().username()).equals(normalizedUsername))
-                .toList();
         int revokedCount = 0;
-        for (SessionEntry entry : revoked) {
-            if (sessions.remove(entry.token(), entry)) {
-                recordAudit(
-                        "SESSION_REVOKED",
-                        entry.user().username(),
-                        entry.user().operator(),
-                        entry.user().role().name(),
-                        "SUCCESS",
-                        reason == null || reason.isBlank() ? "Account session revoked" : reason.trim(),
-                        entry.token()
-                );
-                revokedCount++;
-            }
+        for (AuthLoginSession removed : loginSessions.removeByUsername(normalizedUsername)) {
+            recordAudit(
+                    "SESSION_REVOKED",
+                    removed.username(),
+                    removed.operator(),
+                    removed.role(),
+                    "SUCCESS",
+                    reason == null || reason.isBlank() ? "Account session revoked" : reason.trim(),
+                    removed.tokenSuffix()
+            );
+            revokedCount++;
         }
         return revokedCount;
     }
@@ -432,65 +462,72 @@ public class AuthSessionService {
         if (token.isEmpty()) {
             return Optional.empty();
         }
-        SessionEntry entry = sessions.get(token.get());
-        if (entry == null) {
-            recordAudit("SESSION_RESOLVE", "", "", "", "DENIED", "登录会话不存在或已退出", token.get());
+        String rawToken = token.get();
+        String tokenHash = AuthTokenDigest.sha256(rawToken);
+        Optional<AuthLoginSession> stored = loginSessions.findByTokenHash(tokenHash);
+        if (stored.isEmpty()) {
+            recordAudit("SESSION_RESOLVE", "", "", "", "DENIED", "登录会话不存在或已退出", rawToken);
             throw new SessionInvalidException();
         }
-        if (entry.expiresAt().isBefore(Instant.now())) {
-            sessions.remove(entry.token());
+        AuthLoginSession session = stored.get();
+        Instant now = Instant.now();
+        if (session.expiresAt().isBefore(now)) {
+            loginSessions.removeByTokenHash(tokenHash);
             recordAudit(
                     "SESSION_RESOLVE",
-                    entry.user().username(),
-                    entry.user().operator(),
-                    entry.user().role().name(),
+                    session.username(),
+                    session.operator(),
+                    session.role(),
                     "DENIED",
                     "登录会话已过期",
-                    entry.token()
+                    rawToken
             );
             throw new SessionInvalidException();
         }
-        AuthUserAccount current = rejectDisabledAccount(entry);
-        AuthUserAccount original = entry.user();
-        if (!java.util.Objects.equals(current.passwordHash(), original.passwordHash())
-                || !java.util.Objects.equals(current.passwordChangedAt(), original.passwordChangedAt())
-                || current.role() != original.role() || current.dataScope() != original.dataScope()
-                || !current.operator().equals(original.operator()) || current.demoAccount() != original.demoAccount()
-                || current.passwordChangeRequired() != original.passwordChangeRequired()
-                || !current.customerScope().equals(original.customerScope())
-                || !current.allowedProcesses().equals(original.allowedProcesses())) {
-            sessions.remove(entry.token(), entry);
+        AuthUserAccount current = rejectDisabledAccount(rawToken, session);
+        if (!AuthAccountSnapshot.fingerprint(current).equals(session.accountFingerprint())) {
+            loginSessions.removeByTokenHash(tokenHash);
             recordAudit(
                     "SESSION_RESOLVE",
-                    original.username(),
-                    original.operator(),
-                    original.role().name(),
+                    session.username(),
+                    session.operator(),
+                    session.role(),
                     "DENIED",
                     "账号密码或权限已变更，请重新登录",
-                    entry.token()
+                    rawToken
             );
             throw new SessionInvalidException();
         }
-        return Optional.of(entry);
+        Instant expiresAt = renewIfCloseToExpiry(session, now);
+        return Optional.of(new SessionEntry(rawToken, current, expiresAt));
+    }
+
+    private Instant renewIfCloseToExpiry(AuthLoginSession session, Instant now) {
+        if (Duration.between(now, session.expiresAt()).compareTo(SESSION_RENEW_WITHIN) >= 0) {
+            return session.expiresAt();
+        }
+        Instant renewed = now.plus(SESSION_TTL);
+        loginSessions.updateExpiry(session.tokenHash(), renewed);
+        return renewed;
     }
 
     /**
-     * 停用已提交但会话表吊销失败时，旧令牌仍可能留在内存。解析时以账号启用状态为准并清掉该令牌。
+     * 停用已提交但会话吊销失败时，旧令牌仍可能留着。解析时以账号启用状态为准并清掉该令牌。
      */
-    private AuthUserAccount rejectDisabledAccount(SessionEntry entry) {
-        Optional<AuthUserAccount> current = userAccountRepository.findByUsername(entry.user().username());
+    private AuthUserAccount rejectDisabledAccount(String rawToken, AuthLoginSession session) {
+        Optional<AuthUserAccount> current = userAccountRepository.findByUsername(session.username());
         if (current.isPresent() && current.get().enabled()) {
             return current.get();
         }
-        sessions.remove(entry.token(), entry);
+        loginSessions.removeByTokenHash(session.tokenHash());
         recordAudit(
                 "SESSION_RESOLVE",
-                entry.user().username(),
-                entry.user().operator(),
-                entry.user().role().name(),
+                session.username(),
+                session.operator(),
+                session.role(),
                 "DENIED",
                 "账号已停用，拒绝继续使用会话",
-                entry.token()
+                rawToken
         );
         throw new SessionInvalidException();
     }

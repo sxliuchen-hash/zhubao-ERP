@@ -28,6 +28,10 @@ class JdbcPrintRoutingRepositoryTest {
             s.execute("create table biz_print_job (status_code varchar(20), failure_reason varchar(255), content_snapshot varchar(1000))");
             s.execute("insert into biz_print_job values ('PENDING', '', 'old snapshot')");
             for (String part : sql.split(";")) if (!part.isBlank()) s.execute(part);
+            s.execute("alter table biz_print_target_job add column recycled_at varchar(40)");
+            s.execute("alter table biz_print_target_job add column recycled_by varchar(80)");
+            s.execute("alter table biz_print_target_job add column recycle_batch varchar(40)");
+            s.execute("alter table biz_print_target_job add column recycle_reason varchar(200)");
         }
         try (Connection c = source.getConnection(); Statement s = c.createStatement();
              var r = s.executeQuery("select status_code, content_snapshot from biz_print_job")) {

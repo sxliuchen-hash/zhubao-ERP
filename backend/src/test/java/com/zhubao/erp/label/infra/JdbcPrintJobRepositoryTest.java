@@ -40,6 +40,10 @@ class JdbcPrintJobRepositoryTest {
                         created_by varchar(64) not null,
                         created_at varchar(40) not null,
                         updated_at varchar(40) not null,
+                        recycled_at varchar(40),
+                        recycled_by varchar(80),
+                        recycle_batch varchar(40),
+                        recycle_reason varchar(200),
                         unique key uk_print_job_request (request_id)
                     )
                     """);

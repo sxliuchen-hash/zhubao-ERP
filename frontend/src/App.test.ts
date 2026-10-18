@@ -29,6 +29,19 @@ describe('App', () => {
     expect(wrapper.find('.ops-nav').exists()).toBe(false);
   });
 
+  it('keeps the saved login when the server is temporarily unreachable', async () => {
+    localStorage.setItem('zhubao-auth-token', 'saved-token');
+    vi.mocked(fetchAuthSession).mockRejectedValueOnce(new Error('后端接口不可用'));
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('暂时连不上服务器');
+    expect(wrapper.text()).toContain('登录信息还在这台设备上');
+    expect(localStorage.getItem('zhubao-auth-token')).toBe('saved-token');
+    expect(wrapper.find('.ops-nav').exists()).toBe(false);
+  });
+
   it('starts on the M1 business workbench and exposes core modules', async () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
     const wrapper = mount(App);

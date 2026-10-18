@@ -33,9 +33,9 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void realCatalogKeepsContiguousVersionsThroughV61() {
+    void realCatalogKeepsContiguousVersionsThroughV63() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(61);
+        assertThat(scripts).hasSize(63);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);
@@ -78,8 +78,24 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(58).fileName()).isEqualTo("V59__m3_customer_material_catalog.sql");
         assertThat(scripts.get(59).fileName()).isEqualTo("V60__m3_receipt_line_allocation.sql");
         assertThat(scripts.get(60).fileName()).isEqualTo("V61__m3_print_routing_batch.sql");
+        assertThat(scripts.get(61).version()).isEqualTo(62);
+        assertThat(scripts.get(61).fileName()).isEqualTo("V62__m3_order_recycle.sql");
+        assertThat(scripts.get(61).probe().tableName()).isEqualTo("biz_order_adjustment");
+        assertThat(scripts.get(62).version()).isEqualTo(63);
+        assertThat(scripts.get(62).fileName()).isEqualTo("V63__m3_auth_login_session.sql");
+        assertThat(scripts.get(62).probe().tableName()).isEqualTo("auth_login_session");
         assertThat(MigrationCatalog.loadClasspath()).extracting(MigrationScript::version)
                 .containsExactlyElementsOf(scripts.stream().map(MigrationScript::version).toList());
+    }
+
+    @Test
+    void v63建立登录会话表且重复执行不失败() throws Exception {
+        MigrationScript script = MigrationCatalog.loadClasspath().get(62);
+        DataSource dataSource = dataSource();
+        JdbcSchemaInspector inspector = new JdbcSchemaInspector(dataSource);
+        assertThat(inspector.matches(script.probe())).isFalse();
+        runTwice(dataSource, script.sql());
+        assertThat(inspector.matches(script.probe())).isTrue();
     }
 
     @Test

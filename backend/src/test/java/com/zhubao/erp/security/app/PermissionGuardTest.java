@@ -107,6 +107,18 @@ class PermissionGuardTest {
     }
 
     @Test
+    void 只有管理员可以维护工单() {
+        OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
+        OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.ORDER_ADMIN_MAINTAIN, admin))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.ORDER_ADMIN_MAINTAIN, generalManager))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("管理员维护工单");
+    }
+
+    @Test
     void limitsAuthAccountManagementToAdmin() {
         OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);

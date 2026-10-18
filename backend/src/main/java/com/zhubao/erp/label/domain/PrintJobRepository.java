@@ -20,4 +20,22 @@ public interface PrintJobRepository {
     Optional<PrintJob> claim(String stationId, String leaseUntil, String now);
 
     List<PrintJob> list();
+
+    Optional<PrintJob> findAny(String id);
+
+    List<PrintJob> listByBusinessAny(String businessCode);
+
+    void recycle(String id, String operator, String at, String batch, String reason);
+
+    int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason);
+
+    void restore(String id);
+
+    void restoreBatch(String batch);
+
+    Optional<PrintRecycle> recycleMark(String id);
+
+    List<PrintRecycle> recycled();
+
+    PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt);
 }

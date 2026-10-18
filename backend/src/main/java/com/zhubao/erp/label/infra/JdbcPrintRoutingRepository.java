@@ -1,6 +1,8 @@
 package com.zhubao.erp.label.infra;
 
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.PrintBatch;
+import com.zhubao.erp.label.domain.PrintRecycle;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.domain.PrintQueue;
 import com.zhubao.erp.label.domain.PrintRoutingRepository;
@@ -142,7 +144,7 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
     }
     @Override public Optional<PrintTargetJob> job(String id) {
         try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(
-                "select * from biz_print_target_job where id = ?")) {
+                "select * from biz_print_target_job where id = ? and recycled_at is null")) {
             s.setString(1, id);
             try (ResultSet r = s.executeQuery()) { return r.next() ? Optional.of(mapJob(r)) : Optional.empty(); }
         } catch (SQLException ex) { throw failed("读取目标任务失败", ex); }
@@ -153,7 +155,7 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
             try {
                 PrintTargetJob pending;
                 try (PreparedStatement s = c.prepareStatement("select * from biz_print_target_job where target_station_id = ? "
-                        + "and status_code = 'PENDING' order by created_at, id limit 1 for update")) {
+                        + "and status_code = 'PENDING' and recycled_at is null order by created_at, id limit 1 for update")) {
                     s.setString(1, stationId);
                     try (ResultSet r = s.executeQuery()) {
                         if (!r.next()) { c.rollback(); return Optional.empty(); }
@@ -210,7 +212,7 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
         }
     }
     private List<PrintTargetJob> jobsForBatch(Connection c, String id) throws SQLException {
-        try (PreparedStatement s = c.prepareStatement("select * from biz_print_target_job where batch_id = ? order by id")) {
+        try (PreparedStatement s = c.prepareStatement("select * from biz_print_target_job where batch_id = ? and recycled_at is null order by id")) {
             s.setString(1, id);
             try (ResultSet r = s.executeQuery()) {
                 List<PrintTargetJob> rows = new ArrayList<>();
@@ -239,4 +241,91 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
     private boolean duplicate(SQLException ex) { return ex.getErrorCode() == 1062 || ex.getErrorCode() == 23505
             || (ex.getMessage() != null && ex.getMessage().toLowerCase().contains("unique")); }
     private IllegalStateException failed(String message, SQLException ex) { return new IllegalStateException(message, ex); }
+
+    @Override public Optional<PrintTargetJob> jobAny(String id) {
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(
+                "select * from biz_print_target_job where id = ?")) {
+            s.setString(1, id);
+            try (ResultSet r = s.executeQuery()) { return r.next() ? Optional.of(mapJob(r)) : Optional.empty(); }
+        } catch (SQLException ex) { throw failed("读取目标任务失败", ex); }
+    }
+    @Override public List<PrintTargetJob> jobsForBusinessAny(String businessCode) {
+        String sql = "select j.* from biz_print_target_job j join biz_print_batch b on b.id = j.batch_id "
+                + "where b.business_code = ? order by j.id";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, businessCode);
+            try (ResultSet r = s.executeQuery()) {
+                List<PrintTargetJob> rows = new ArrayList<>();
+                while (r.next()) rows.add(mapJob(r));
+                return rows;
+            }
+        } catch (SQLException ex) { throw failed("读取目标任务失败", ex); }
+    }
+    @Override public void recycleJob(String id, String operator, String at, String batch, String reason) {
+        if (jobAny(id).isEmpty()) throw new BusinessException("打印任务不存在");
+        String sql = "update biz_print_target_job set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                + "where id = ? and recycled_at is null";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, at); s.setString(2, operator); s.setString(3, batch); s.setString(4, reason); s.setString(5, id);
+            if (s.executeUpdate() != 1) throw new BusinessException("打印任务已在回收站");
+        } catch (BusinessException ex) { throw ex; }
+        catch (SQLException ex) { throw failed("回收打印任务失败", ex); }
+    }
+    @Override public int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason) {
+        String sql = "update biz_print_target_job set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                + "where recycled_at is null and batch_id in (select id from biz_print_batch where business_code = ?)";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, at); s.setString(2, operator); s.setString(3, batch); s.setString(4, reason); s.setString(5, businessCode);
+            return s.executeUpdate();
+        } catch (SQLException ex) { throw failed("回收打印任务失败", ex); }
+    }
+    @Override public void restoreJob(String id) {
+        String sql = "update biz_print_target_job set recycled_at = null, recycled_by = null, recycle_batch = null, "
+                + "recycle_reason = null where id = ? and recycled_at is not null";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, id);
+            if (s.executeUpdate() != 1) throw new BusinessException("打印任务不在回收站");
+        } catch (BusinessException ex) { throw ex; }
+        catch (SQLException ex) { throw failed("恢复打印任务失败", ex); }
+    }
+    @Override public void restoreBatch(String batch) {
+        String sql = "update biz_print_target_job set recycled_at = null, recycled_by = null, recycle_batch = null, "
+                + "recycle_reason = null where recycle_batch = ?";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, batch);
+            s.executeUpdate();
+        } catch (SQLException ex) { throw failed("恢复打印任务失败", ex); }
+    }
+    @Override public Optional<PrintRecycle> jobRecycle(String id) {
+        String sql = "select j.id, b.business_code, j.recycled_at, j.recycled_by, j.recycle_batch, j.recycle_reason "
+                + "from biz_print_target_job j join biz_print_batch b on b.id = j.batch_id "
+                + "where j.id = ? and j.recycled_at is not null";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, id);
+            try (ResultSet r = s.executeQuery()) { return r.next() ? Optional.of(mapRecycle(r)) : Optional.empty(); }
+        } catch (SQLException ex) { throw failed("读取打印回收站失败", ex); }
+    }
+    @Override public List<PrintRecycle> recycledJobs() {
+        String sql = "select j.id, b.business_code, j.recycled_at, j.recycled_by, j.recycle_batch, j.recycle_reason "
+                + "from biz_print_target_job j join biz_print_batch b on b.id = j.batch_id "
+                + "where j.recycled_at is not null order by j.recycled_at desc";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql); ResultSet r = s.executeQuery()) {
+            List<PrintRecycle> rows = new ArrayList<>();
+            while (r.next()) rows.add(mapRecycle(r));
+            return rows;
+        } catch (SQLException ex) { throw failed("列出打印回收站失败", ex); }
+    }
+    @Override public PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId, String updatedAt) {
+        String sql = "update biz_print_target_job set copies = ?, target_station_id = ?, target_queue_id = ?, updated_at = ? where id = ?";
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setInt(1, copies); s.setString(2, stationId); s.setString(3, queueId); s.setString(4, updatedAt); s.setString(5, id);
+            if (s.executeUpdate() != 1) throw new BusinessException("打印任务不存在");
+        } catch (BusinessException ex) { throw ex; }
+        catch (SQLException ex) { throw failed("修改打印任务失败", ex); }
+        return jobAny(id).orElseThrow(() -> new BusinessException("打印任务不存在"));
+    }
+    private PrintRecycle mapRecycle(ResultSet r) throws SQLException {
+        return new PrintRecycle(r.getString("id"), r.getString("business_code"), r.getString("recycled_at"),
+                r.getString("recycled_by"), r.getString("recycle_batch"), r.getString("recycle_reason"));
+    }
 }

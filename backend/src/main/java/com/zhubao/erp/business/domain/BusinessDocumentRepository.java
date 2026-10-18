@@ -147,4 +147,36 @@ public interface BusinessDocumentRepository {
     Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode);
 
     Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode, WorkSession session);
+
+    /** 管理员维护时读取母单，包括已在回收站的。 */
+    Optional<MotherOrderRecord> findMotherOrderAny(String code);
+
+    Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code);
+
+    List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode);
+
+    void replaceMotherOrder(MotherOrderRecord record);
+
+    void replaceChildWorkOrder(ChildWorkOrderRecord record);
+
+    void recycleMother(String code, String operator, String at, String batch, String reason);
+
+    void recycleChild(String code, String operator, String at, String batch, String reason);
+
+    Optional<OrderRecycleMark> motherRecycle(String code);
+
+    Optional<OrderRecycleMark> childRecycle(String code);
+
+    List<OrderRecycleMark> listMotherRecycles();
+
+    List<OrderRecycleMark> listChildRecycles();
+
+    void clearChildRecycle(String code);
+
+    /** 恢复同一次放入回收站的母单和子单。 */
+    void clearRecycleBatch(String batch);
+
+    void saveOrderAdjustment(OrderAdjustment adjustment);
+
+    List<OrderAdjustment> listOrderAdjustments(String targetType, String code);
 }

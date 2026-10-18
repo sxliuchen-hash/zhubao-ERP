@@ -7,6 +7,7 @@ import LoginPage from './features/auth/LoginPage.vue';
 import ChainReview from './features/scan/ChainReview.vue';
 import type { TraceTarget } from './features/scan/traceTarget';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
+import { getAuthToken } from './services/apiClient';
 import {
   authSessionChangedEvent,
   fetchAuthSession,
@@ -120,6 +121,7 @@ provide('zhubao-open-tab', (tab: TabKey) => {
 const authSession = ref<AuthSession | null>(null);
 provide('zhubao-auth-session', authSession);
 const authReady = ref(false);
+const authRestoreError = ref('');
 const tabKeySet = new Set<TabKey>(tabs.map((tab) => tab.key));
 const authorizedMenuCodes = computed(() => {
   if (!authSession.value) {
@@ -184,11 +186,15 @@ onBeforeUnmount(() => {
 });
 
 async function restoreAuthSessionForNavigation() {
+  authReady.value = false;
+  authRestoreError.value = '';
   try {
     authSession.value = await fetchAuthSession();
     openMobileWorkspaceForSession(authSession.value);
   } catch {
     authSession.value = null;
+    // 会话失效时接口层已经清掉令牌，这里回到登录页。令牌还在只说明服务器暂时没响应。
+    authRestoreError.value = getAuthToken() ? '登录信息还在这台设备上，但服务器暂时没有响应。' : '';
   } finally {
     authReady.value = true;
   }
@@ -204,7 +210,10 @@ async function handleLogout() {
 function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) {
   const wasSignedOut = !authSession.value;
   authSession.value = event.detail.session;
-  if (event.detail.session && wasSignedOut) openMobileWorkspaceForSession(event.detail.session);
+  if (event.detail.session) {
+    authRestoreError.value = '';
+    if (wasSignedOut) openMobileWorkspaceForSession(event.detail.session);
+  }
 }
 
 function openMobileWorkspaceForSession(session: AuthSession | null) {
@@ -243,6 +252,13 @@ function isTabKey(value: string): value is TabKey {
 
 <template>
   <p v-if="!authReady" class="login-page">正在恢复登录</p>
+  <div v-else-if="authRestoreError" class="login-page">
+    <section class="login-card">
+      <h1>暂时连不上服务器</h1>
+      <p>{{ authRestoreError }}</p>
+      <button class="primary-button" type="button" @click="restoreAuthSessionForNavigation">重试</button>
+    </section>
+  </div>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
   <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': activeTabMeta?.group === 'system' }" @open-trace="openTraceDocument">
     <template #session>
