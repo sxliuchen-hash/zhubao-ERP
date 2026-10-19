@@ -33,6 +33,7 @@ describe('单据维护', () => {
       recycleReason: '',
       adjustments: [],
       revision: 'revision-1',
+      postedFactsLocked: true,
     }]);
     vi.mocked(recycleMaintainedOrder).mockResolvedValue();
   });
@@ -69,7 +70,8 @@ describe('单据维护', () => {
     const first = vi.mocked(correctMaintainedOrder).mock.calls[0][2];
     const second = vi.mocked(correctMaintainedOrder).mock.calls[1][2];
     expect(first).toBe(second);
-    await wrapper.get('[aria-label="MD-1 货品"]').setValue('改正货品');
+    expect(wrapper.get('[aria-label="MD-1 货品"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[aria-label="MD-1 要求"]').setValue('改正要求');
     await save();
     await flushPromises();
     expect(vi.mocked(correctMaintainedOrder).mock.calls[2][2]).not.toBe(first);

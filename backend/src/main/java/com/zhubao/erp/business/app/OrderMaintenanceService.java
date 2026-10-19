@@ -24,10 +24,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 管理员改正或回收母单、子单和打印任务。已开工的单也可以改。
+ * 管理员改正或回收母单、子单和打印任务。已入账事实不能直接覆盖。
  * 回收后其他人看不到；库存流水和已入账账单保持原样。
  */
 @Service
@@ -151,6 +152,7 @@ public class OrderMaintenanceService {
                 current.sourceRegisterSequence(), current.operator(), current.evidenceCode(), text(command.remark()),
                 current.status(), current.createdAt(), text(command.requirement()), text(command.dueDate()),
                 required(command.customerName(), "请填写客户"));
+        assertPostedMotherFactsUnchanged(current, next);
         OrderAdjustment adjustment = adjustment("MOTHER", current.code(), motherText(current),
                 motherText(next), reason, operator);
         if (session == null) {
@@ -198,6 +200,7 @@ public class OrderMaintenanceService {
                 requireQuantity(command.quantity()), current.quantityUnit(), requireWeight(command.weight()),
                 current.warehouseCode(), required(command.processes(), "请填写工序"), current.verificationCode(),
                 current.ledgerCode(), current.operator(), current.createdAt());
+        assertPostedChildFactsUnchanged(current, next);
         OrderAdjustment adjustment = adjustment("WORK_ORDER", current.code(), childText(current),
                 childText(next), reason, operator);
         if (session == null) {
@@ -345,7 +348,7 @@ public class OrderMaintenanceService {
         return new MaintainedOrder("MOTHER", record.code(), record.code(), record.customerName(), record.materialCode(),
                 record.goodsName(), record.processingRequirement(), record.dueDate(), plain(record.quantity()),
                 plain(record.weight()), "", null, "", "", mark != null, mark == null ? "" : mark.reason(),
-                lines("MOTHER", record.code()), OrderMaintenanceRevision.of(record));
+                lines("MOTHER", record.code()), OrderMaintenanceRevision.of(record), isPosted(record.ledgerCode()));
     }
 
     private MaintainedOrder toChild(ChildWorkOrderRecord record) {
@@ -355,14 +358,14 @@ public class OrderMaintenanceService {
                 record.materialCode(), record.goodsName(), record.processingRequirement(), record.dueDate(),
                 plain(record.quantity()), plain(record.weight()), record.processes(), null, "", "",
                 mark != null || motherRecycled, mark == null ? "" : mark.reason(), lines("WORK_ORDER", record.code()),
-                OrderMaintenanceRevision.of(record));
+                OrderMaintenanceRevision.of(record), isPosted(record.ledgerCode()));
     }
 
     private MaintainedOrder toPrintJob(PrintJob job) {
         PrintRecycle mark = printJobs.recycleMark(job.id()).orElse(null);
         return new MaintainedOrder("PRINT_JOB", job.id(), job.businessCode(), "", "", "", "", "", "", "", "",
                 job.copies(), job.stationId(), "", mark != null, mark == null ? "" : mark.reason(),
-                lines("PRINT_JOB", job.id()), "");
+                lines("PRINT_JOB", job.id()), "", false);
     }
 
     private MaintainedOrder toTarget(PrintTargetJob job) {
@@ -370,7 +373,7 @@ public class OrderMaintenanceService {
         String business = routing.batch(job.batchId()).map(batch -> batch.businessCode()).orElse("");
         return new MaintainedOrder("PRINT_TARGET", job.id(), business, "", "", "", "", "", "", "", "",
                 job.copies(), job.targetStationId(), job.targetQueueId(), mark != null,
-                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()), "");
+                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()), "", false);
     }
 
     private List<String> lines(String type, String code) {
@@ -419,6 +422,37 @@ public class OrderMaintenanceService {
         return record.customerName() + " " + record.materialCode() + " " + record.goodsName()
                 + " " + plain(record.quantity()) + "/" + plain(record.weight())
                 + " " + record.processingRequirement() + " " + record.dueDate() + " " + record.processes();
+    }
+
+    private static void assertPostedMotherFactsUnchanged(MotherOrderRecord current, MotherOrderRecord next) {
+        if (isPosted(current.ledgerCode()) && (!Objects.equals(current.customerId(), next.customerId())
+                || !Objects.equals(current.customerName(), next.customerName())
+                || !Objects.equals(current.materialCode(), next.materialCode())
+                || !Objects.equals(current.goodsName(), next.goodsName())
+                || !sameAmount(current.quantity(), next.quantity())
+                || !sameAmount(current.weight(), next.weight()))) {
+            throw new BusinessException("已入账母单的客户、材质、货品、数量和重量须走差额或冲正，不能直接覆盖");
+        }
+    }
+
+    private static void assertPostedChildFactsUnchanged(ChildWorkOrderRecord current, ChildWorkOrderRecord next) {
+        if (isPosted(current.ledgerCode()) && (!Objects.equals(current.customerId(), next.customerId())
+                || !Objects.equals(current.customerName(), next.customerName())
+                || !Objects.equals(current.materialCode(), next.materialCode())
+                || !Objects.equals(current.goodsName(), next.goodsName())
+                || !sameAmount(current.quantity(), next.quantity())
+                || !sameAmount(current.weight(), next.weight())
+                || !Objects.equals(current.processes(), next.processes()))) {
+            throw new BusinessException("已入账子单的客户、材质、货品、数量、重量和工序须走差额或冲正，不能直接覆盖");
+        }
+    }
+
+    private static boolean isPosted(String ledgerCode) {
+        return ledgerCode != null && !ledgerCode.isBlank();
+    }
+
+    private static boolean sameAmount(BigDecimal left, BigDecimal right) {
+        return left == null ? right == null : right != null && left.compareTo(right) == 0;
     }
 
     private static String plain(BigDecimal value) {

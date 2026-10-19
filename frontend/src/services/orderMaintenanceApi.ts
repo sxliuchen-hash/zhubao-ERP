@@ -19,6 +19,7 @@ export interface MaintainedOrder {
   recycleReason: string;
   adjustments: string[];
   revision: string;
+  postedFactsLocked?: boolean;
 }
 
 export function searchMaintainedOrders(code: string): Promise<MaintainedOrder[]> {

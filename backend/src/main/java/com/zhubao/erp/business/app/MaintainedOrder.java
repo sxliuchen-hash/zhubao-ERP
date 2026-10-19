@@ -21,6 +21,7 @@ public record MaintainedOrder(
         boolean recycled,
         String recycleReason,
         List<String> adjustments,
-        String revision
+        String revision,
+        boolean postedFactsLocked
 ) {
 }

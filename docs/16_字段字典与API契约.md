@@ -2242,14 +2242,16 @@ PWA 一期边界：
 |---|---|
 | `GET /api/business/order-maintenance?code=` | 按母单号、子单号或打印任务编号返回相关单据，包括已在回收站的 |
 | `GET /api/business/order-maintenance/recycle-bin` | 回收站中的母单、子单和打印任务 |
-| `POST /api/business/order-maintenance/mother-orders/{code}` | 改正客户、材质、货品、数量、重量、要求、期限。原因必填 |
-| `POST /api/business/order-maintenance/work-orders/{code}` | 改正子单，并包括工序。原因必填 |
+| `POST /api/business/order-maintenance/mother-orders/{code}` | 改正母单；已有库存流水编号时，客户、材质、货品、数量、重量只能经后续差额／冲正流程调整，当前接口仅允许说明、期限等非入账字段。原因必填 |
+| `POST /api/business/order-maintenance/work-orders/{code}` | 改正子单；已有库存流水编号时同样保护入账字段，工序也不可原地覆盖。原因必填 |
 | `POST /api/business/order-maintenance/print-jobs/{id}` | 改正旧版打印任务的份数和工位 |
 | `POST /api/business/order-maintenance/print-targets/{id}` | 改正工位打印任务的份数、工位和队列。不改已领取状态 |
 | `POST /api/business/order-maintenance/recycle` | `targetType` 为 `MOTHER`、`WORK_ORDER`、`PRINT_JOB` 或 `PRINT_TARGET`。回收母单会同时隐藏其子单和相关打印任务 |
 | `POST /api/business/order-maintenance/restore` | 恢复母单会带回同一次放入回收站的子单和打印任务。母单仍在回收站时，不能单独恢复子单或打印任务 |
 
 母单、子单的查找响应新增 `revision`，由当前完整单据快照计算。对应改正请求必须携带本次确认的 `requestId` 和查找时的 `expectedRevision`；同账号、同编号、同内容重试不重复写入，接口重新读取并返回当前单据视图，改变内容却复用编号会拒绝。另一笔改正或业务写入改变单据后，旧 `expectedRevision` 会被拒绝，页面须重新查找并核对。此规则仅适用于母单／子单改正；打印任务改正、回收及恢复尚未接入同一命令边界。库存、财务和旧明细仍不会因管理员改正自动冲正。
+
+母单、子单的查找响应还返回 `postedFactsLocked`；有库存流水编号时为 `true`，页面据此将入账事实字段设为只读。服务端仍独立校验，直接调用接口也不能绕过。若旧单缺失流水编号但已有实际账务，须先核对来源后才能开放更正；本字段不是历史账务完整性的证明。
 
 ### BusinessWorkspaceController
 

@@ -89,8 +89,8 @@ class A4MysqlOrderCorrectionIntegrationTest {
         String retryReason = "A4_RETRY_FAIL_" + suffix;
         String retryConstraint = "chk_a4_retry_" + suffix;
         String requestId = "a4-retry-" + suffix;
-        var retry = new OrderMaintenanceCommands.MotherCorrection(null, "恒信珠宝", "AU9999", "A4 事务重试货品",
-                BigDecimal.ONE, new BigDecimal("2"), "抛光", "2026-10-20", "", retryReason,
+        var retry = new OrderMaintenanceCommands.MotherCorrection(null, "恒信珠宝", "AU9999", "A4 改正货品",
+                BigDecimal.ONE, new BigDecimal("2"), "A4 事务重试要求", "2026-10-20", "", retryReason,
                 requestId, revision);
         installed = false;
         try {
@@ -106,7 +106,7 @@ class A4MysqlOrderCorrectionIntegrationTest {
         }
         service.correctMother(motherCode, retry, admin);
         service.correctMother(motherCode, retry, admin);
-        assertThat(goodsName(source, motherCode)).isEqualTo("A4 事务重试货品");
+        assertThat(documents.findMotherOrderAny(motherCode).orElseThrow().processingRequirement()).isEqualTo("A4 事务重试要求");
         assertThat(adjustmentCount(source, motherCode)).isEqualTo(2);
     }
 
@@ -163,9 +163,9 @@ class A4MysqlOrderCorrectionIntegrationTest {
         }
     }
 
-    private OrderMaintenanceCommands.MotherCorrection correction(String goodsName, String requestId, String revision) {
-        return new OrderMaintenanceCommands.MotherCorrection(null, "恒信珠宝", "AU9999", goodsName,
-                BigDecimal.ONE, new BigDecimal("2"), "抛光", "2026-10-20", "", "并发核对", requestId, revision);
+    private OrderMaintenanceCommands.MotherCorrection correction(String requirement, String requestId, String revision) {
+        return new OrderMaintenanceCommands.MotherCorrection(null, "恒信珠宝", "AU9999", "A4 并发原货品",
+                BigDecimal.ONE, new BigDecimal("2"), requirement, "2026-10-20", "", "并发核对", requestId, revision);
     }
 
     private MysqlDataSource source() throws SQLException {

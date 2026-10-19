@@ -52,10 +52,10 @@ class OrderMaintenanceServiceTest {
         printJobs.save(legacyJob());
 
         MaintainedOrder corrected = service.correctChild("ZD-1", new OrderMaintenanceCommands.ChildCorrection(
-                1L, "张三", "PT", "铂金戒", new BigDecimal("1"), new BigDecimal("8"),
-                "改镶嵌", "2026-12-01", "镶嵌", "客户改了要求"), admin);
+                1L, "张三", "AU", "戒指", new BigDecimal("2"), new BigDecimal("10"),
+                "改镶嵌", "2026-12-01", "抛光", "客户改了要求"), admin);
         assertThat(corrected.requirement()).isEqualTo("改镶嵌");
-        assertThat(documents.findChildWorkOrderByCode("ZD-1").orElseThrow().materialCode()).isEqualTo("PT");
+        assertThat(documents.findChildWorkOrderByCode("ZD-1").orElseThrow().materialCode()).isEqualTo("AU");
         assertThat(corrected.adjustments()).anyMatch(line -> line.contains("客户改了要求"));
 
         service.recycle(new OrderMaintenanceCommands.RecycleCommand("MOTHER", "MD-1", "整单录错"), admin);
@@ -70,7 +70,7 @@ class OrderMaintenanceServiceTest {
 
         service.restore(new OrderMaintenanceCommands.RestoreCommand("MOTHER", "MD-1"), admin);
         assertThat(documents.findMotherOrderByCode("MD-1")).isPresent();
-        assertThat(documents.findChildWorkOrderByCode("ZD-1").orElseThrow().materialCode()).isEqualTo("PT");
+        assertThat(documents.findChildWorkOrderByCode("ZD-1").orElseThrow().materialCode()).isEqualTo("AU");
         assertThat(routing.claim("A", "lease", "now").orElseThrow().id()).isEqualTo("J-1");
     }
 
@@ -126,6 +126,45 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
+    void 已入账母子单事实不能直接覆盖且失败请求不占号() {
+        documents.saveMotherOrder(mother());
+        documents.saveChildWorkOrder(child());
+        OrderMaintenanceService replay = replayService();
+        String motherRevision = replay.search("MD-1", admin).get(0).revision();
+        String childRevision = replay.search("ZD-1", admin).stream()
+                .filter(row -> "WORK_ORDER".equals(row.targetType())).findFirst().orElseThrow().revision();
+        assertThat(replay.search("MD-1", admin).get(0).postedFactsLocked()).isTrue();
+
+        var motherChange = new OrderMaintenanceCommands.MotherCorrection(null, "张三", "PT", "戒指",
+                new BigDecimal("3"), new BigDecimal("10"), "抛光", "2026-11-01", "", "材质数量核对",
+                "req-posted-mother", motherRevision);
+        assertThatThrownBy(() -> replay.correctMother("MD-1", motherChange, admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
+        assertThatThrownBy(() -> replay.correctMother("MD-1", new OrderMaintenanceCommands.MotherCorrection(
+                2L, "张三", "AU", "戒指", new BigDecimal("2"), new BigDecimal("10"),
+                "抛光", "2026-11-01", "", "客户核对", "req-posted-customer", motherRevision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
+        assertThatThrownBy(() -> replay.correctMother("MD-1", new OrderMaintenanceCommands.MotherCorrection(
+                null, "张三", "AU", "戒指", new BigDecimal("2"), new BigDecimal("11"),
+                "抛光", "2026-11-01", "", "重量核对", "req-posted-weight", motherRevision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
+        var childChange = new OrderMaintenanceCommands.ChildCorrection(null, "张三", "AU", "戒指",
+                new BigDecimal("2"), new BigDecimal("10"), "抛光", "2026-11-01", "镶嵌", "工序核对",
+                "req-posted-child", childRevision);
+        assertThatThrownBy(() -> replay.correctChild("ZD-1", childChange, admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
+        assertThat(documents.findMotherOrderAny("MD-1").orElseThrow().quantity()).isEqualByComparingTo("2");
+        assertThat(documents.findChildWorkOrderAny("ZD-1").orElseThrow().processes()).isEqualTo("抛光");
+        assertThat(documents.listOrderAdjustments("MOTHER", "MD-1")).isEmpty();
+        assertThat(documents.listOrderAdjustments("WORK_ORDER", "ZD-1")).isEmpty();
+
+        replay.correctMother("MD-1", new OrderMaintenanceCommands.MotherCorrection(null, "张三", "AU", "戒指",
+                new BigDecimal("2"), new BigDecimal("10"), "修改要求", "2026-11-01", "", "核对描述",
+                "req-posted-mother", motherRevision), admin);
+        assertThat(documents.listOrderAdjustments("MOTHER", "MD-1")).hasSize(1);
+    }
+
+    @Test
     void 并发子单改正只有一个旧页面快照可以提交() throws Exception {
         documents.saveMotherOrder(mother());
         documents.saveChildWorkOrder(child());
@@ -166,15 +205,15 @@ class OrderMaintenanceServiceTest {
 
     private OrderMaintenanceCommands.MotherCorrection motherCorrection(String goodsName, String requestId,
                                                                         String revision) {
-        return new OrderMaintenanceCommands.MotherCorrection(null, "张三", "AU", goodsName,
-                new BigDecimal("2"), new BigDecimal("10"), "抛光", "2026-11-01", "", "核对后改正",
+        return new OrderMaintenanceCommands.MotherCorrection(null, "张三", "AU", "戒指",
+                new BigDecimal("2"), new BigDecimal("10"), goodsName, "2026-11-01", "", "核对后改正",
                 requestId, revision);
     }
 
     private OrderMaintenanceCommands.ChildCorrection childCorrection(String goodsName, String requestId,
                                                                       String revision) {
-        return new OrderMaintenanceCommands.ChildCorrection(null, "张三", "AU", goodsName,
-                new BigDecimal("2"), new BigDecimal("10"), "抛光", "2026-11-01", "抛光", "核对后改正",
+        return new OrderMaintenanceCommands.ChildCorrection(null, "张三", "AU", "戒指",
+                new BigDecimal("2"), new BigDecimal("10"), goodsName, "2026-11-01", "抛光", "核对后改正",
                 requestId, revision);
     }
 

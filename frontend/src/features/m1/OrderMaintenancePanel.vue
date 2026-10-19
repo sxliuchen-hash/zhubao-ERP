@@ -100,7 +100,7 @@ function isOrder(order: MaintainedOrder) {
 <template>
   <section class="order-maintenance" aria-label="单据维护">
     <h2>单据维护</h2>
-    <p>管理员可以修改母单、子单和打印任务，已经开工的也能改。放入回收站后，其他人在列表、扫码和打印领取里看不到。已入账的库存和账单不会自动改写。</p>
+    <p>管理员可改正单据说明和打印任务。已入账的客户、材质、货品、数量、重量及子单工序须另走差额或冲正，不能在这里直接覆盖。回收不会自动冲正库存和账单。</p>
     <label>单号<input v-model="code" aria-label="维护单号" /></label>
     <label>原因<input v-model="reason" aria-label="维护原因" placeholder="修改或删除时必填" /></label>
     <button class="secondary-button" type="button" :disabled="busy" @click="search">查找</button>
@@ -109,15 +109,16 @@ function isOrder(order: MaintainedOrder) {
     <article v-for="order in rows" :key="`${order.targetType}-${order.code}`" :aria-label="`${typeLabel[order.targetType]} ${order.code}`">
       <h3>{{ typeLabel[order.targetType] }} {{ order.code }}<span v-if="order.recycled">（回收站）</span></h3>
       <p v-if="order.motherOrderCode && order.motherOrderCode !== order.code">所属 {{ order.motherOrderCode }}</p>
+      <p v-if="isOrder(order) && order.postedFactsLocked">这张单已入账；客户、材质、货品、数量、重量和工序暂不可直接修改。</p>
       <template v-if="isOrder(order)">
-        <label>客户<input v-model="order.customerName" :aria-label="`${order.code} 客户`" /></label>
-        <label>材质<input v-model="order.materialCode" :aria-label="`${order.code} 材质`" /></label>
-        <label>货品<input v-model="order.goodsName" :aria-label="`${order.code} 货品`" /></label>
-        <label>数量<input v-model="order.quantity" :aria-label="`${order.code} 数量`" /></label>
-        <label>重量<input v-model="order.weight" :aria-label="`${order.code} 重量`" /></label>
+        <label>客户<input v-model="order.customerName" :aria-label="`${order.code} 客户`" :disabled="order.postedFactsLocked" /></label>
+        <label>材质<input v-model="order.materialCode" :aria-label="`${order.code} 材质`" :disabled="order.postedFactsLocked" /></label>
+        <label>货品<input v-model="order.goodsName" :aria-label="`${order.code} 货品`" :disabled="order.postedFactsLocked" /></label>
+        <label>数量<input v-model="order.quantity" :aria-label="`${order.code} 数量`" :disabled="order.postedFactsLocked" /></label>
+        <label>重量<input v-model="order.weight" :aria-label="`${order.code} 重量`" :disabled="order.postedFactsLocked" /></label>
         <label>要求<input v-model="order.requirement" :aria-label="`${order.code} 要求`" /></label>
         <label>期限<input v-model="order.dueDate" :aria-label="`${order.code} 期限`" /></label>
-        <label v-if="order.targetType === 'WORK_ORDER'">工序<input v-model="order.processes" :aria-label="`${order.code} 工序`" /></label>
+        <label v-if="order.targetType === 'WORK_ORDER'">工序<input v-model="order.processes" :aria-label="`${order.code} 工序`" :disabled="order.postedFactsLocked" /></label>
       </template>
       <template v-else>
         <label>份数<input v-model.number="order.copies" :aria-label="`${order.code} 份数`" /></label>
