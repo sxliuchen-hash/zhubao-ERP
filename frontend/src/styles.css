@@ -111,14 +111,12 @@ h3 { font-size: 14px; }
 }
 
 .brand-mark {
-  display: grid;
+  display: block;
   width: 34px;
   height: 34px;
-  place-items: center;
   border-radius: var(--radius-control);
-  background: var(--brand-gold);
-  color: var(--ink);
-  font-weight: 700;
+  background: #15191f;
+  object-fit: cover;
 }
 
 .brand strong,

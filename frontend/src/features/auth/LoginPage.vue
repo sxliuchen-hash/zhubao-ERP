@@ -74,7 +74,7 @@ async function handleChangePassword() {
   <main class="login-page">
     <form v-if="mustChangePassword" class="login-card" aria-label="首次修改密码" @submit.prevent="handleChangePassword">
       <div class="login-brand">
-        <span class="brand-mark">ZB</span>
+        <img class="brand-mark" src="/favicon.svg" alt="珠宝 ERP 图标" />
         <div>
           <strong>来料加工</strong>
           <span>请先更换临时密码</span>
@@ -99,7 +99,7 @@ async function handleChangePassword() {
 
     <form v-else class="login-card" aria-label="登录" novalidate @submit.prevent="handleLogin">
       <div class="login-brand">
-        <span class="brand-mark">ZB</span>
+        <img class="brand-mark" src="/favicon.svg" alt="珠宝 ERP 图标" />
         <div>
           <strong>来料加工</strong>
           <span>收货 · 生产 · 质检 · 库存</span>

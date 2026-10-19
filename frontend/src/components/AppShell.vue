@@ -42,7 +42,7 @@ function toggleCollapsed() {
   <div class="app-shell ops-shell review-shell" :class="{ 'is-collapsed': collapsed }">
     <aside id="app-sidebar" class="sidebar ops-sidebar review-sidebar">
       <div class="brand ops-brand">
-        <span class="brand-mark">ZB</span>
+        <img class="brand-mark" src="/favicon.svg" alt="珠宝 ERP 图标" />
         <div class="brand-copy">
           <strong>来料加工</strong>
           <span>收货 · 生产 · 质检 · 库存</span>
@@ -74,7 +74,7 @@ function toggleCollapsed() {
     <main class="workspace ops-workspace review-workspace">
       <div class="top-strip ops-topbar review-topbar">
         <div class="mobile-brand">
-          <span class="brand-mark">ZB</span>
+          <img class="brand-mark" src="/favicon.svg" alt="珠宝 ERP 图标" />
           <div>
             <strong>{{ title }}</strong>
             <span v-if="location">{{ location }}</span>
