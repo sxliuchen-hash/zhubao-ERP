@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ZB ERP">
-  <rect width="64" height="64" rx="12" fill="#101923"/>
-  <path d="M12 18h40v8H25l27 22H12v-8h27L12 18Z" fill="#35c6d9"/>
-  <path d="M17 34h30" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="珠宝 ERP 字母 Z 标识">
+  <rect width="1024" height="1024" rx="224" fill="#15191f"/>
+  <path d="M296 304h432v67L391 653h337v67H296v-67l337-282H296Z" fill="#ded2bb"/>
+  <path d="M633 371h95L391 653h-95Z" fill="#b99f77"/>
+  <path d="M618 371h35L316 653h-20Z" fill="#eee6d7"/>
 </svg>
