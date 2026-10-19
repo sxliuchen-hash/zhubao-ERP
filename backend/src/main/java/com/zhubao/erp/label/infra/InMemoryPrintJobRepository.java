@@ -101,6 +101,13 @@ public class InMemoryPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
+    public synchronized void recycle(String id, String operator, String at, String batch, String reason,
+                                     WorkSession session) {
+        recycle(id, operator, at, batch, reason);
+        session.onRollback(() -> recycledJobs.remove(id));
+    }
+
+    @Override
     public synchronized int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason) {
         int count = 0;
         for (PrintJob job : List.copyOf(jobs.values())) {
@@ -129,6 +136,13 @@ public class InMemoryPrintJobRepository implements PrintJobRepository {
         if (recycledJobs.remove(id) == null) {
             throw new BusinessException("打印任务不在回收站");
         }
+    }
+
+    @Override
+    public synchronized void restore(String id, WorkSession session) {
+        PrintRecycle previous = recycledJobs.get(id);
+        restore(id);
+        session.onRollback(() -> recycledJobs.put(id, previous));
     }
 
     @Override

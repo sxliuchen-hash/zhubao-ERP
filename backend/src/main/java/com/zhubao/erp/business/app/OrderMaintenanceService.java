@@ -301,8 +301,30 @@ public class OrderMaintenanceService {
                     });
                 }
             }
-            case "PRINT_JOB" -> printJobs.recycle(code, operator.operator(), at, batch, reason);
-            case "PRINT_TARGET" -> routing.recycleJob(code, operator.operator(), at, batch, reason);
+            case "PRINT_JOB" -> {
+                if (workUnit == null) {
+                    printJobs.recycle(code, operator.operator(), at, batch, reason);
+                } else {
+                    workUnit.execute(new CommandCall(required(command.requestId(), "回收必须带请求编号"),
+                            operator.operator(), "ADMIN_RECYCLE_PRINT_JOB", type, code,
+                            OrderMaintenanceRevision.of(payload(reason))), session -> {
+                        printJobs.recycle(code, operator.operator(), at, batch, reason, session);
+                        return code;
+                    });
+                }
+            }
+            case "PRINT_TARGET" -> {
+                if (workUnit == null) {
+                    routing.recycleJob(code, operator.operator(), at, batch, reason);
+                } else {
+                    workUnit.execute(new CommandCall(required(command.requestId(), "回收必须带请求编号"),
+                            operator.operator(), "ADMIN_RECYCLE_PRINT_TARGET", type, code,
+                            OrderMaintenanceRevision.of(payload(reason))), session -> {
+                        routing.recycleJob(code, operator.operator(), at, batch, reason, session);
+                        return code;
+                    });
+                }
+            }
             default -> throw new BusinessException("不能回收这种单据");
         }
     }
@@ -353,14 +375,38 @@ public class OrderMaintenanceService {
                 }
             }
             case "PRINT_JOB" -> {
-                PrintJob job = printJobs.findAny(code).orElseThrow(() -> new BusinessException("打印任务不存在"));
-                assertOrderVisible(job.businessCode());
-                printJobs.restore(code);
+                if (workUnit == null) {
+                    PrintJob job = printJobs.findAny(code).orElseThrow(() -> new BusinessException("打印任务不存在"));
+                    assertOrderVisible(job.businessCode());
+                    printJobs.restore(code);
+                } else {
+                    workUnit.execute(new CommandCall(required(command.requestId(), "恢复必须带请求编号"),
+                            operator.operator(), "ADMIN_RESTORE_PRINT_JOB", type, code,
+                            OrderMaintenanceRevision.of(payload(type, code))), session -> {
+                        PrintJob job = printJobs.lockAny(code, session)
+                                .orElseThrow(() -> new BusinessException("打印任务不存在"));
+                        assertOrderVisible(job.businessCode());
+                        printJobs.restore(code, session);
+                        return code;
+                    });
+                }
             }
             case "PRINT_TARGET" -> {
-                PrintTargetJob job = routing.jobAny(code).orElseThrow(() -> new BusinessException("打印任务不存在"));
-                routing.batch(job.batchId()).ifPresent(batch -> assertOrderVisible(batch.businessCode()));
-                routing.restoreJob(code);
+                if (workUnit == null) {
+                    PrintTargetJob job = routing.jobAny(code).orElseThrow(() -> new BusinessException("打印任务不存在"));
+                    routing.batch(job.batchId()).ifPresent(batch -> assertOrderVisible(batch.businessCode()));
+                    routing.restoreJob(code);
+                } else {
+                    workUnit.execute(new CommandCall(required(command.requestId(), "恢复必须带请求编号"),
+                            operator.operator(), "ADMIN_RESTORE_PRINT_TARGET", type, code,
+                            OrderMaintenanceRevision.of(payload(type, code))), session -> {
+                        PrintTargetJob job = routing.lockJobAny(code, session)
+                                .orElseThrow(() -> new BusinessException("打印任务不存在"));
+                        routing.batch(job.batchId()).ifPresent(item -> assertOrderVisible(item.businessCode()));
+                        routing.restoreJob(code, session);
+                        return code;
+                    });
+                }
             }
             default -> throw new BusinessException("不能恢复这种单据");
         }

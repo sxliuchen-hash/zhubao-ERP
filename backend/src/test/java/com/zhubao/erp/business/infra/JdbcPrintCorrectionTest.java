@@ -22,11 +22,40 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcPrintCorrectionTest {
+    @Test
+    void 单独目标任务回收与恢复同请求结果一起提交() throws Exception {
+        JdbcDataSource source = new JdbcDataSource();
+        source.setURL("jdbc:h2:mem:a4_print_recycle_" + UUID.randomUUID().toString().replace("-", "")
+                + ";MODE=MySQL;DB_CLOSE_DELAY=-1");
+        createTables(source);
+        AtomicBoolean fail = new AtomicBoolean(true);
+        OrderMaintenanceService service = new OrderMaintenanceService(
+                new JdbcBusinessDocumentRepository(source), new JdbcPrintJobRepository(source),
+                new JdbcPrintRoutingRepository(source), new PermissionGuard(),
+                new JdbcBusinessWorkUnit(source, new JdbcCommandRequestRepository(source), () -> {
+                    if (fail.getAndSet(false)) throw new IllegalStateException("请求结果写入失败");
+                }));
+        OperatorContext admin = new OperatorContext("管理员", RoleCode.ADMIN, DataScope.ALL);
+        var recycle = new OrderMaintenanceCommands.RecycleCommand("PRINT_TARGET", "J-1", "核纸后作废", "req-target-r");
+        assertThatThrownBy(() -> service.recycle(recycle, admin)).isInstanceOf(IllegalStateException.class);
+        assertThat(count(source, "select count(*) from biz_print_target_job where recycled_at is not null")).isZero();
+        assertThat(count(source, "select count(*) from biz_command_request")).isZero();
+        service.recycle(recycle, admin);
+        service.recycle(recycle, admin);
+        assertThat(count(source, "select count(*) from biz_print_target_job where recycled_at is not null")).isEqualTo(1);
+        var restore = new OrderMaintenanceCommands.RestoreCommand("PRINT_TARGET", "J-1", "req-target-restore");
+        service.restore(restore, admin);
+        service.restore(restore, admin);
+        assertThat(count(source, "select count(*) from biz_print_target_job where recycled_at is not null")).isZero();
+        assertThat(count(source, "select count(*) from biz_command_request")).isEqualTo(2);
+    }
+
     @Test
     void 调整记录失败时目标任务和请求编号一起回滚() throws Exception {
         JdbcDataSource source = new JdbcDataSource();
@@ -90,6 +119,10 @@ class JdbcPrintCorrectionTest {
                     target_code varchar(90), payload_hash char(64), result_text varchar(2000),
                     created_at timestamp default current_timestamp)
                 """);
+        execute(source, "create table biz_mother_order (code varchar(90) primary key, recycled_at varchar(40), "
+                + "recycled_by varchar(80), recycle_batch varchar(90), recycle_reason varchar(200))");
+        execute(source, "create table biz_work_order (code varchar(90) primary key, recycled_at varchar(40), "
+                + "recycled_by varchar(80), recycle_batch varchar(90), recycle_reason varchar(200))");
         execute(source, "insert into biz_print_batch values ('B-1', 'P-1', 'MD-1', 'WORK', 1, 'hash', 'snapshot', '管理员', 'now')");
         execute(source, """
                 insert into biz_print_target_job (id, batch_id, target_station_id, target_queue_id, copies,

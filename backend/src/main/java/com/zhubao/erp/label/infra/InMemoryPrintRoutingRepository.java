@@ -107,6 +107,11 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
         if (recycled.containsKey(id)) throw new BusinessException("打印任务已在回收站");
         recycled.put(id, new PrintRecycle(id, businessCodeOf(job), at, operator, batch, reason));
     }
+    @Override public synchronized void recycleJob(String id, String operator, String at, String batch,
+                                                  String reason, WorkSession session) {
+        recycleJob(id, operator, at, batch, reason);
+        session.onRollback(() -> recycled.remove(id));
+    }
     @Override public synchronized int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason) {
         int count = 0;
         for (PrintTargetJob job : List.copyOf(jobs.values())) {
@@ -129,6 +134,11 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
     }
     @Override public synchronized void restoreJob(String id) {
         if (recycled.remove(id) == null) throw new BusinessException("打印任务不在回收站");
+    }
+    @Override public synchronized void restoreJob(String id, WorkSession session) {
+        PrintRecycle previous = recycled.get(id);
+        restoreJob(id);
+        session.onRollback(() -> recycled.put(id, previous));
     }
     @Override public synchronized void restoreBatch(String batch) {
         recycled.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));

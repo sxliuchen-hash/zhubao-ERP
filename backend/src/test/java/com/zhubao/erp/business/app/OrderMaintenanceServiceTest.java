@@ -143,6 +143,37 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
+    void 单独打印任务回收恢复按请求回放且失败撤销标记() {
+        printJobs.save(legacyJob());
+        routing.insertBatch(batch());
+        AtomicBoolean fail = new AtomicBoolean(true);
+        OrderMaintenanceService atomic = new OrderMaintenanceService(documents, printJobs, routing,
+                new PermissionGuard(), new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), () -> {
+                    if (fail.getAndSet(false)) throw new IllegalStateException("请求结果写入失败");
+                }));
+        var recycle = new OrderMaintenanceCommands.RecycleCommand("PRINT_JOB", "P-1", "核纸后作废", "req-print-recycle");
+        assertThatThrownBy(() -> atomic.recycle(recycle, admin)).isInstanceOf(IllegalStateException.class);
+        assertThat(printJobs.recycleMark("P-1")).isEmpty();
+        atomic.recycle(recycle, admin);
+        atomic.recycle(recycle, admin);
+        assertThat(printJobs.recycleMark("P-1")).isPresent();
+        var restore = new OrderMaintenanceCommands.RestoreCommand("PRINT_JOB", "P-1", "req-print-restore");
+        atomic.restore(restore, admin);
+        atomic.restore(restore, admin);
+        assertThat(printJobs.recycleMark("P-1")).isEmpty();
+
+        var targetRecycle = new OrderMaintenanceCommands.RecycleCommand("PRINT_TARGET", "J-1", "核纸后作废",
+                "req-target-recycle");
+        atomic.recycle(targetRecycle, admin);
+        atomic.recycle(targetRecycle, admin);
+        assertThat(routing.jobRecycle("J-1")).isPresent();
+        var targetRestore = new OrderMaintenanceCommands.RestoreCommand("PRINT_TARGET", "J-1", "req-target-restore");
+        atomic.restore(targetRestore, admin);
+        atomic.restore(targetRestore, admin);
+        assertThat(routing.jobRecycle("J-1")).isEmpty();
+    }
+
+    @Test
     void 已领取的目标任务拒绝直接改单() {
         routing.insertBatch(batch());
         PrintTargetJob leased = routing.claim("A", "lease", "now").orElseThrow();

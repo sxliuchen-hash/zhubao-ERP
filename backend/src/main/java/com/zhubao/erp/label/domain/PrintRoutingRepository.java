@@ -26,9 +26,11 @@ public interface PrintRoutingRepository {
     Optional<PrintTargetJob> lockJobAny(String jobId, WorkSession session);
     List<PrintTargetJob> jobsForBusinessAny(String businessCode);
     void recycleJob(String id, String operator, String at, String batch, String reason);
+    void recycleJob(String id, String operator, String at, String batch, String reason, WorkSession session);
     int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason);
     int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason, WorkSession session);
     void restoreJob(String id);
+    void restoreJob(String id, WorkSession session);
     void restoreBatch(String batch);
     void restoreBatch(String batch, WorkSession session);
     Optional<PrintRecycle> jobRecycle(String id);
