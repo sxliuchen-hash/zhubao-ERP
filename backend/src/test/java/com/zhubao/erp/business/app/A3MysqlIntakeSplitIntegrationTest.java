@@ -41,7 +41,7 @@ class A3MysqlIntakeSplitIntegrationTest {
     @Test
     void 逐行收货和多来源拆单在真实MySQL回滚重试与对账() throws Exception {
         MysqlDataSource dataSource = dataSource();
-        assertThat(queryNumber(dataSource, "select max(version) from schema_migration", null)).isEqualTo(63);
+        assertThat(queryNumber(dataSource, "select max(version) from schema_migration", null)).isGreaterThanOrEqualTo(63);
 
         JdbcBusinessDocumentRepository documents = new JdbcBusinessDocumentRepository(dataSource);
         JdbcStockLedgerRepository stock = new JdbcStockLedgerRepository(dataSource);
@@ -210,7 +210,7 @@ class A3MysqlIntakeSplitIntegrationTest {
         dataSource.setURL(url);
         dataSource.setUser(user);
         dataSource.setPassword(password);
-        assertThat(queryNumber(dataSource, "select max(version) from schema_migration", null)).isEqualTo(63);
+        assertThat(queryNumber(dataSource, "select max(version) from schema_migration", null)).isGreaterThanOrEqualTo(63);
         return dataSource;
     }
 

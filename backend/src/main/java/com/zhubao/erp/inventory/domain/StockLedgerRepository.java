@@ -16,6 +16,14 @@ public interface StockLedgerRepository {
      */
     StockLedgerEntry save(StockLedgerEntry entry, WorkSession session);
 
+    /**
+     * 追加一条没有去向的收货冲正，只扣减原收货余额，并记录原流水号。
+     * 必须留在当前工作单元里，失败时由工作单元整单回滚。
+     */
+    default StockLedgerEntry appendInboundReversal(StockLedgerEntry entry, WorkSession session) {
+        throw new UnsupportedOperationException("当前仓储未实现收货冲正");
+    }
+
     List<StockLedgerEntry> findAllLedgers();
 
     /**

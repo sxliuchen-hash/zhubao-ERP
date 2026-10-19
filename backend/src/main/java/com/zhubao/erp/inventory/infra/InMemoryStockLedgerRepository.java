@@ -30,6 +30,32 @@ public class InMemoryStockLedgerRepository implements StockLedgerRepository {
     }
 
     @Override
+    public synchronized StockLedgerEntry appendInboundReversal(StockLedgerEntry entry, WorkSession session) {
+        if (session == null) {
+            throw new IllegalStateException("收货冲正必须处于业务工作单元");
+        }
+        if (entry.to() != null || entry.from() == null || entry.sourceLedgerCode() == null
+                || entry.sourceLedgerCode().isBlank() || !"inbound_reversal".equals(entry.documentType())) {
+            throw new IllegalArgumentException("收货冲正只能扣减原收货余额，不能转入其他库存状态");
+        }
+        Map<StockDimension, StockBalance> balancesBefore = new LinkedHashMap<>(balances);
+        List<StockLedgerEntry> ledgersBefore = new ArrayList<>(ledgers);
+        StockBalance source = findBalance(entry.from());
+        StockTransferRules.requireSufficient(source, entry);
+        balances.put(entry.from(), nextBalance(source, entry.quantity().negate(), entry.weight().negate()));
+        ledgers.add(entry);
+        session.onRollback(() -> {
+            synchronized (this) {
+                balances.clear();
+                balances.putAll(balancesBefore);
+                ledgers.clear();
+                ledgers.addAll(ledgersBefore);
+            }
+        });
+        return entry;
+    }
+
+    @Override
     public synchronized StockLedgerEntry save(StockLedgerEntry entry, WorkSession session) {
         if (session == null) {
             throw new IllegalStateException("库存写入必须处于业务工作单元");

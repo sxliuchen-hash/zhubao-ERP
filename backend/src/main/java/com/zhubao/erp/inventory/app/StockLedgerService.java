@@ -1,5 +1,7 @@
 package com.zhubao.erp.inventory.app;
 
+import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.domain.ReceiptEntryReversal;
 import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
@@ -41,6 +43,42 @@ public class StockLedgerService {
     /** 在当前工作单元连接上读取余额，能看见本事务尚未提交的转入。 */
     public StockBalance balance(StockDimension dimension, WorkSession session) {
         return repository.findBalance(dimension, session);
+    }
+
+    /**
+     * 为收货录入错误追加冲正流水。只扣原收货去向，不写入新的库存状态。
+     * 调用方须把单据数量、审计和请求结果放在同一个工作单元里。
+     */
+    public StockLedgerEntry reverseInbound(ReceiptEntryReversal reversal, WorkSession session) {
+        if (session == null) {
+            throw new BusinessException("收货冲正必须处于业务工作单元");
+        }
+        if (reversal == null || reversal.sourceLedgerCode() == null || reversal.sourceLedgerCode().isBlank()) {
+            throw new BusinessException("收货冲正必须关联原库存流水");
+        }
+        if (reversal.motherOrderCode() == null || reversal.motherOrderCode().isBlank()) {
+            throw new BusinessException("收货冲正必须指定母单");
+        }
+        if (reversal.originalDestination() == null) {
+            throw new BusinessException("收货冲正必须指定原收货库存");
+        }
+        if (reversal.quantity() == null || reversal.weight() == null
+                || reversal.quantity().signum() <= 0 || reversal.weight().signum() <= 0) {
+            throw new BusinessException("收货冲正的数量和重量必须为正数");
+        }
+        StockLedgerEntry entry = new StockLedgerEntry(
+                nextCode(),
+                Instant.now(),
+                "inbound_reversal",
+                reversal.motherOrderCode().trim(),
+                reversal.originalDestination(),
+                null,
+                reversal.quantity(),
+                reversal.weight(),
+                reversal.remark() == null ? "" : reversal.remark().trim(),
+                reversal.sourceLedgerCode().trim()
+        );
+        return repository.appendInboundReversal(entry, session);
     }
 
     private StockLedgerEntry newEntry(StockTransferCommand command) {

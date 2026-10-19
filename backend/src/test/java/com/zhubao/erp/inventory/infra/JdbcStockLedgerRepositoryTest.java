@@ -105,6 +105,7 @@ class JdbcStockLedgerRepositoryTest {
         }
 
         StockRepositoryFixture.migrateSourceWorkOrder(legacy);
+        StockRepositoryFixture.migrateReversal(legacy);
 
         var ledgers = new JdbcStockLedgerRepository(legacy).findAllLedgers();
         assertThat(ledgers).filteredOn(entry -> "OLD-INBOUND".equals(entry.code())).singleElement()

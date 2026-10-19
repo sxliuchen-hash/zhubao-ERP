@@ -61,3 +61,4 @@ V60__m3_receipt_line_allocation.sql
 V61__m3_print_routing_batch.sql
 V62__m3_order_recycle.sql
 V63__m3_auth_login_session.sql
+V64__m3_stock_ledger_reversal.sql

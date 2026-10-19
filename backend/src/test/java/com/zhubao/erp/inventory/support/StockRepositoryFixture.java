@@ -31,7 +31,13 @@ public final class StockRepositoryFixture {
         JdbcDataSource dataSource = legacyJdbcDataSource();
         migrateSourceWorkOrder(dataSource);
         migrateBatchCode(dataSource);
+        migrateReversal(dataSource);
         return dataSource;
+    }
+
+    /** V64 允许收货冲正只扣原余额，并记录原流水号。 */
+    public static void migrateReversal(JdbcDataSource dataSource) throws SQLException {
+        applyMigration(dataSource, "db/mysql/V64__m3_stock_ledger_reversal.sql");
     }
 
     /** V50 给余额和流水加批次列。H2 不能一条 ALTER 加多列，按 ADD COLUMN 拆开，已发布脚本不改。 */

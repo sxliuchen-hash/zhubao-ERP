@@ -70,11 +70,33 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     }
 
     private void writeLedger(Connection connection, StockLedgerEntry entry) throws SQLException {
+        if (entry.to() == null || entry.sourceLedgerCode() != null) {
+            throw new IllegalArgumentException("普通库存转移必须写明去向，冲正请使用收货冲正");
+        }
         insertLedger(connection, entry);
         if (entry.from() != null) {
             debitBalance(connection, entry);
         }
         creditBalance(connection, entry.to(), entry.quantity(), entry.weight(), entry.code());
+    }
+
+    @Override
+    public StockLedgerEntry appendInboundReversal(StockLedgerEntry entry, WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("收货冲正必须使用工作单元连接");
+        }
+        if (entry.to() != null || entry.from() == null || entry.sourceLedgerCode() == null
+                || entry.sourceLedgerCode().isBlank() || !"inbound_reversal".equals(entry.documentType())) {
+            throw new IllegalArgumentException("收货冲正只能扣减原收货余额，不能转入其他库存状态");
+        }
+        Connection connection = session.connection().get();
+        try {
+            insertLedger(connection, entry);
+            debitBalance(connection, entry);
+            return entry;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("收货冲正写入失败", ex);
+        }
     }
 
     @Override
@@ -145,7 +167,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
 
     private List<StockLedgerEntry> queryLedgers(String whereSql, List<Object> parameters) {
         String sql = """
-                select code, biz_time, document_type, document_code, owner_type, owner_customer_id,
+                select code, source_ledger_code, biz_time, document_type, document_code, owner_type, owner_customer_id,
                        customer_id, mother_order_code, work_order_code, from_work_order_code, material_code,
                        quantity, weight, from_warehouse_code, to_warehouse_code,
                        from_stock_status, to_stock_status, remark
@@ -159,25 +181,27 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             }
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    StockDimension to = dimension(
-                            ownerType(rs.getString("owner_type")),
-                            nullableLong(rs, "owner_customer_id"),
-                            nullableLong(rs, "customer_id"),
-                            rs.getString("mother_order_code"),
-                            rs.getString("work_order_code"),
-                            rs.getString("material_code"),
-                            rs.getString("to_warehouse_code"),
-                            StockStatus.valueOf(rs.getString("to_stock_status"))
+                    OwnerType owner = ownerType(rs.getString("owner_type"));
+                    Long ownerCustomerId = nullableLong(rs, "owner_customer_id");
+                    Long customerId = nullableLong(rs, "customer_id");
+                    String motherOrderCode = rs.getString("mother_order_code");
+                    String materialCode = rs.getString("material_code");
+                    String toWarehouse = rs.getString("to_warehouse_code");
+                    String toStatus = rs.getString("to_stock_status");
+                    StockDimension to = toWarehouse == null || toStatus == null ? null : dimension(
+                            owner, ownerCustomerId, customerId, motherOrderCode,
+                            rs.getString("work_order_code"), materialCode, toWarehouse, StockStatus.valueOf(toStatus)
                     );
                     String fromWarehouse = rs.getString("from_warehouse_code");
                     String fromStatus = rs.getString("from_stock_status");
+                    StockDimension anchor = to == null ? null : to;
                     StockDimension from = fromWarehouse == null || fromStatus == null ? null : dimension(
-                            to.ownerType(),
-                            to.ownerCustomerId(),
-                            to.customerId(),
-                            to.motherOrderCode(),
-                            rs.getString("from_work_order_code"),
-                            to.materialCode(),
+                            anchor == null ? owner : anchor.ownerType(),
+                            anchor == null ? ownerCustomerId : anchor.ownerCustomerId(),
+                            anchor == null ? customerId : anchor.customerId(),
+                            anchor == null ? motherOrderCode : anchor.motherOrderCode(),
+                            to == null ? rs.getString("work_order_code") : rs.getString("from_work_order_code"),
+                            anchor == null ? materialCode : anchor.materialCode(),
                             fromWarehouse,
                             StockStatus.valueOf(fromStatus)
                     );
@@ -190,7 +214,8 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                             to,
                             rs.getBigDecimal("quantity"),
                             rs.getBigDecimal("weight"),
-                            rs.getString("remark")
+                            rs.getString("remark"),
+                            rs.getString("source_ledger_code")
                     ));
                 }
             }
@@ -292,31 +317,32 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     private void insertLedger(Connection connection, StockLedgerEntry entry) throws SQLException {
         String sql = """
                 insert into inv_stock_ledger (
-                    code, biz_time, document_type, document_code, owner_type, owner_customer_id, customer_id,
-                    mother_order_code, work_order_code, from_work_order_code, material_code, quantity, weight,
+                    code, source_ledger_code, biz_time, document_type, document_code, owner_type, owner_customer_id,
+                    customer_id, mother_order_code, work_order_code, from_work_order_code, material_code, quantity, weight,
                     from_warehouse_code, to_warehouse_code, from_stock_status, to_stock_status, remark
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        StockDimension to = entry.to();
+        StockDimension anchor = entry.to() == null ? entry.from() : entry.to();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entry.code());
-            statement.setTimestamp(2, Timestamp.from(entry.bizTime()));
-            statement.setString(3, entry.documentType());
-            statement.setString(4, entry.documentCode());
-            statement.setString(5, to.ownerType().name());
-            setNullableLong(statement, 6, to.ownerCustomerId());
-            setNullableLong(statement, 7, to.customerId());
-            statement.setString(8, to.motherOrderCode());
-            statement.setString(9, to.workOrderCode());
-            statement.setString(10, entry.from() == null ? null : entry.from().workOrderCode());
-            statement.setString(11, to.materialCode());
-            statement.setBigDecimal(12, entry.quantity());
-            statement.setBigDecimal(13, entry.weight());
-            statement.setString(14, entry.from() == null ? null : entry.from().warehouseCode());
-            statement.setString(15, to.warehouseCode());
-            statement.setString(16, entry.from() == null ? null : entry.from().stockStatus().name());
-            statement.setString(17, to.stockStatus().name());
-            statement.setString(18, entry.remark());
+            statement.setString(2, entry.sourceLedgerCode());
+            statement.setTimestamp(3, Timestamp.from(entry.bizTime()));
+            statement.setString(4, entry.documentType());
+            statement.setString(5, entry.documentCode());
+            statement.setString(6, anchor.ownerType().name());
+            setNullableLong(statement, 7, anchor.ownerCustomerId());
+            setNullableLong(statement, 8, anchor.customerId());
+            statement.setString(9, anchor.motherOrderCode());
+            statement.setString(10, entry.to() == null ? anchor.workOrderCode() : entry.to().workOrderCode());
+            statement.setString(11, entry.to() == null || entry.from() == null ? null : entry.from().workOrderCode());
+            statement.setString(12, anchor.materialCode());
+            statement.setBigDecimal(13, entry.quantity());
+            statement.setBigDecimal(14, entry.weight());
+            statement.setString(15, entry.from() == null ? null : entry.from().warehouseCode());
+            statement.setString(16, entry.to() == null ? null : entry.to().warehouseCode());
+            statement.setString(17, entry.from() == null ? null : entry.from().stockStatus().name());
+            statement.setString(18, entry.to() == null ? null : entry.to().stockStatus().name());
+            statement.setString(19, entry.remark());
             statement.executeUpdate();
         }
     }
