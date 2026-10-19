@@ -24,6 +24,9 @@ public interface PrintRoutingRepository {
     Optional<PrintTargetJob> jobAny(String jobId);
     /** 在当前工作单元里锁定读取目标任务。 */
     Optional<PrintTargetJob> lockJobAny(String jobId, WorkSession session);
+
+    /** 按任务编号顺序锁定这些业务单的目标任务，须晚于母单和子单。 */
+    void lockByBusinessCodes(List<String> businessCodes, WorkSession session);
     List<PrintTargetJob> jobsForBusinessAny(String businessCode);
     void recycleJob(String id, String operator, String at, String batch, String reason);
     void recycleJob(String id, String operator, String at, String batch, String reason, WorkSession session);

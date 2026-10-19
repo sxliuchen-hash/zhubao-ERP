@@ -515,16 +515,19 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public void lockMotherOrder(String motherOrderCode, WorkSession session) {
+        if (!lockMotherOrderIfPresent(motherOrderCode, session)) {
+            throw new BusinessException("母单不存在：" + motherOrderCode);
+        }
+    }
+
+    @Override
+    public boolean lockMotherOrderIfPresent(String motherOrderCode, WorkSession session) {
         String sql = "select code from biz_mother_order where code = ? for update";
         try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
             statement.setString(1, motherOrderCode);
             try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
-                    throw new BusinessException("母单不存在：" + motherOrderCode);
-                }
+                return rs.next();
             }
-        } catch (BusinessException ex) {
-            throw ex;
         } catch (SQLException ex) {
             throw new IllegalStateException("无法锁定母单：" + motherOrderCode, ex);
         }
@@ -1657,6 +1660,31 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public Optional<String> childMotherCode(String childCode) {
+        String sql = "select mother_order_code from biz_work_order where code = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, childCode);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? Optional.ofNullable(result.getString(1)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取子单所属母单失败", ex);
+        }
+    }
+
+    @Override
+    public List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode, WorkSession session) {
+        try {
+            return queryChildWorkOrders(requireConnection(session),
+                    childWorkOrderSelect() + " where mother_order_code = ? order by code for update",
+                    List.of(motherOrderCode));
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取子单失败", ex);
+        }
+    }
+
+    @Override
     public void replaceMotherOrder(MotherOrderRecord record) {
         try (Connection connection = dataSource.getConnection()) {
             updateMotherOrder(connection, record);
@@ -1793,8 +1821,18 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public Optional<OrderRecycleMark> motherRecycle(String code, WorkSession session) {
+        return recycleMark("MOTHER", "biz_mother_order", code, session);
+    }
+
+    @Override
     public Optional<OrderRecycleMark> childRecycle(String code) {
         return recycleMark("WORK_ORDER", "biz_work_order", code);
+    }
+
+    @Override
+    public Optional<OrderRecycleMark> childRecycle(String code, WorkSession session) {
+        return recycleMark("WORK_ORDER", "biz_work_order", code, session);
     }
 
     @Override
@@ -1934,6 +1972,23 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             }, missing);
         } catch (SQLException ex) {
             throw new IllegalStateException("回收单据失败", ex);
+        }
+    }
+
+    private Optional<OrderRecycleMark> recycleMark(String type, String table, String code, WorkSession session) {
+        String sql = "select recycled_at, recycled_by, recycle_batch, recycle_reason from " + table
+                + " where code = ? for update";
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next() || rs.getString("recycled_at") == null) {
+                    return Optional.empty();
+                }
+                return Optional.of(new OrderRecycleMark(type, code, rs.getString("recycled_at"), rs.getString("recycled_by"),
+                        rs.getString("recycle_batch"), rs.getString("recycle_reason")));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取回收站失败", ex);
         }
     }
 

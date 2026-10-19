@@ -371,6 +371,29 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
+    public void lockByBusinessCodes(List<String> businessCodes, WorkSession session) {
+        List<String> codes = distinctCodes(businessCodes);
+        if (codes.isEmpty()) {
+            return;
+        }
+        StringBuilder sql = new StringBuilder("select id from biz_print_job where business_code in (");
+        appendPlaceholders(sql, codes.size());
+        sql.append(") order by id for update");
+        try (PreparedStatement statement = session.connection().orElseThrow().prepareStatement(sql.toString())) {
+            for (int index = 0; index < codes.size(); index++) {
+                statement.setString(index + 1, codes.get(index));
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    result.getString(1);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("锁定打印任务失败", ex);
+        }
+    }
+
+    @Override
     public Optional<PrintJob> lockAny(String id, WorkSession session) {
         try (PreparedStatement statement = session.connection().orElseThrow().prepareStatement(
                 "select * from biz_print_job where id = ? for update")) {
@@ -400,6 +423,28 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
             throw ex;
         } catch (SQLException ex) {
             throw new IllegalStateException("修改打印任务失败", ex);
+        }
+    }
+
+    private static List<String> distinctCodes(List<String> businessCodes) {
+        if (businessCodes == null || businessCodes.isEmpty()) {
+            return List.of();
+        }
+        List<String> codes = new ArrayList<>();
+        for (String code : businessCodes) {
+            if (code != null && !code.isBlank() && !codes.contains(code)) {
+                codes.add(code);
+            }
+        }
+        return codes;
+    }
+
+    private static void appendPlaceholders(StringBuilder sql, int count) {
+        for (int index = 0; index < count; index++) {
+            if (index > 0) {
+                sql.append(',');
+            }
+            sql.append('?');
         }
     }
 

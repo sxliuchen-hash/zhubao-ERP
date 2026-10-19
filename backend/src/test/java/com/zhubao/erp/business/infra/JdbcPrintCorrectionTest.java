@@ -121,7 +121,11 @@ class JdbcPrintCorrectionTest {
                 """);
         execute(source, "create table biz_mother_order (code varchar(90) primary key, recycled_at varchar(40), "
                 + "recycled_by varchar(80), recycle_batch varchar(90), recycle_reason varchar(200))");
-        execute(source, "create table biz_work_order (code varchar(90) primary key, recycled_at varchar(40), "
+        execute(source, "create table biz_work_order (code varchar(90) primary key, mother_order_code varchar(90), "
+                + "customer_id bigint, customer_name varchar(80), processing_requirement varchar(200), due_date varchar(40), "
+                + "material_code varchar(40), goods_name varchar(80), quantity decimal(18,3), quantity_unit varchar(20), "
+                + "weight decimal(18,3), warehouse_code varchar(40), process_names varchar(200), verification_code varchar(40), "
+                + "ledger_code varchar(90), operator varchar(80), created_at varchar(40), recycled_at varchar(40), "
                 + "recycled_by varchar(80), recycle_batch varchar(90), recycle_reason varchar(200))");
         execute(source, "insert into biz_print_batch values ('B-1', 'P-1', 'MD-1', 'WORK', 1, 'hash', 'snapshot', '管理员', 'now')");
         execute(source, """

@@ -79,6 +79,13 @@ public class InMemoryPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
+    public synchronized void lockByBusinessCodes(List<String> businessCodes, WorkSession session) {
+        if (session == null) {
+            throw new IllegalStateException("打印任务锁定必须处于业务工作单元");
+        }
+    }
+
+    @Override
     public synchronized Optional<PrintJob> lockAny(String id, WorkSession session) {
         return findAny(id);
     }

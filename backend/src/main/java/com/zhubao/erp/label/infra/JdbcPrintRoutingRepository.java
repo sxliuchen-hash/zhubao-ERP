@@ -250,6 +250,30 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
             try (ResultSet r = s.executeQuery()) { return r.next() ? Optional.of(mapJob(r)) : Optional.empty(); }
         } catch (SQLException ex) { throw failed("读取目标任务失败", ex); }
     }
+    @Override public void lockByBusinessCodes(List<String> businessCodes, WorkSession session) {
+        List<String> codes = new ArrayList<>();
+        if (businessCodes != null) {
+            for (String code : businessCodes) {
+                if (code != null && !code.isBlank() && !codes.contains(code)) codes.add(code);
+            }
+        }
+        if (codes.isEmpty()) return;
+        StringBuilder placeholders = new StringBuilder();
+        for (int index = 0; index < codes.size(); index++) {
+            if (index > 0) placeholders.append(',');
+            placeholders.append('?');
+        }
+        String sql = "select j.id from biz_print_target_job j join biz_print_batch b on b.id = j.batch_id "
+                + "where b.business_code in (" + placeholders + ") order by j.id for update";
+        try (PreparedStatement statement = session.connection().orElseThrow().prepareStatement(sql)) {
+            for (int index = 0; index < codes.size(); index++) statement.setString(index + 1, codes.get(index));
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) result.getString(1);
+            }
+        } catch (SQLException ex) {
+            throw failed("锁定目标任务失败", ex);
+        }
+    }
     @Override public Optional<PrintTargetJob> lockJobAny(String id, WorkSession session) {
         try (PreparedStatement s = session.connection().orElseThrow().prepareStatement(
                 "select * from biz_print_target_job where id = ? for update")) {

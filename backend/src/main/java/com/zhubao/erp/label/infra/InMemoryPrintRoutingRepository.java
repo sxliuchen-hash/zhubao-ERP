@@ -97,6 +97,9 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
     @Override public synchronized Optional<PrintTargetJob> lockJobAny(String id, WorkSession session) {
         return jobAny(id);
     }
+    @Override public synchronized void lockByBusinessCodes(List<String> businessCodes, WorkSession session) {
+        if (session == null) throw new IllegalStateException("打印任务锁定必须处于业务工作单元");
+    }
     @Override public List<PrintTargetJob> jobsForBusinessAny(String businessCode) {
         return batches.values().stream().filter(batch -> businessCode.equals(batch.businessCode()))
                 .flatMap(batch -> jobs.values().stream().filter(job -> batch.id().equals(job.batchId()))).toList();

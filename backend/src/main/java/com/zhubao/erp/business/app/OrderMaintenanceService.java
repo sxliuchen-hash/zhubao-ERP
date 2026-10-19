@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -305,6 +306,11 @@ public class OrderMaintenanceService {
                     workUnit.execute(new CommandCall(required(command.requestId(), "回收必须带请求编号"),
                             operator.operator(), "ADMIN_RECYCLE_CHILD", type, code,
                             OrderMaintenanceRevision.of(payload(reason))), session -> {
+                        String mother = documents.childMotherCode(code)
+                                .orElseThrow(() -> new BusinessException("子单不存在"));
+                        documents.lockMotherOrder(mother, session);
+                        documents.lockChildWorkOrder(code, session);
+                        lockPrints(List.of(code), session);
                         documents.recycleChild(code, operator.operator(), at, batch, reason, session);
                         hidePrints(code, operator.operator(), at, batch, reason, session);
                         return code;
@@ -354,11 +360,7 @@ public class OrderMaintenanceService {
                     workUnit.execute(new CommandCall(required(command.requestId(), "恢复必须带请求编号"),
                             operator.operator(), "ADMIN_RESTORE_MOTHER", type, code,
                             OrderMaintenanceRevision.of(payload(type, code))), session -> {
-                        OrderRecycleMark mark = documents.motherRecycle(code)
-                                .orElseThrow(() -> new BusinessException("母单不在回收站"));
-                        documents.clearRecycleBatch(mark.batch(), session);
-                        printJobs.restoreBatch(mark.batch(), session);
-                        routing.restoreBatch(mark.batch(), session);
+                        restoreMother(code, session);
                         return code;
                     });
                 }
@@ -370,13 +372,16 @@ public class OrderMaintenanceService {
                     workUnit.execute(new CommandCall(required(command.requestId(), "恢复必须带请求编号"),
                             operator.operator(), "ADMIN_RESTORE_CHILD", type, code,
                             OrderMaintenanceRevision.of(payload(type, code))), session -> {
-                        ChildWorkOrderRecord child = documents.findChildWorkOrderAny(code)
+                        String mother = documents.childMotherCode(code)
                                 .orElseThrow(() -> new BusinessException("子单不存在"));
-                        OrderRecycleMark mark = documents.childRecycle(code)
-                                .orElseThrow(() -> new BusinessException("子单不在回收站"));
-                        if (documents.motherRecycle(child.motherOrderCode()).isPresent()) {
+                        documents.lockMotherOrder(mother, session);
+                        documents.lockChildWorkOrder(code, session);
+                        lockPrints(List.of(code), session);
+                        if (documents.motherRecycle(mother, session).isPresent()) {
                             throw new BusinessException("请先恢复母单");
                         }
+                        OrderRecycleMark mark = documents.childRecycle(code, session)
+                                .orElseThrow(() -> new BusinessException("子单不在回收站"));
                         documents.clearChildRecycle(code, session);
                         printJobs.restoreBatch(mark.batch(), session);
                         routing.restoreBatch(mark.batch(), session);
@@ -393,9 +398,12 @@ public class OrderMaintenanceService {
                     workUnit.execute(new CommandCall(required(command.requestId(), "恢复必须带请求编号"),
                             operator.operator(), "ADMIN_RESTORE_PRINT_JOB", type, code,
                             OrderMaintenanceRevision.of(payload(type, code))), session -> {
+                        PrintJob peeked = printJobs.findAny(code)
+                                .orElseThrow(() -> new BusinessException("打印任务不存在"));
+                        lockOrdersAndPrints(peeked.businessCode(), session);
                         PrintJob job = printJobs.lockAny(code, session)
                                 .orElseThrow(() -> new BusinessException("打印任务不存在"));
-                        assertOrderVisible(job.businessCode());
+                        assertOrderVisible(job.businessCode(), session);
                         printJobs.restore(code, session);
                         return code;
                     });
@@ -410,9 +418,13 @@ public class OrderMaintenanceService {
                     workUnit.execute(new CommandCall(required(command.requestId(), "恢复必须带请求编号"),
                             operator.operator(), "ADMIN_RESTORE_PRINT_TARGET", type, code,
                             OrderMaintenanceRevision.of(payload(type, code))), session -> {
-                        PrintTargetJob job = routing.lockJobAny(code, session)
+                        PrintTargetJob peeked = routing.jobAny(code)
                                 .orElseThrow(() -> new BusinessException("打印任务不存在"));
-                        routing.batch(job.batchId()).ifPresent(item -> assertOrderVisible(item.businessCode()));
+                        String business = routing.batch(peeked.batchId()).map(item -> item.businessCode()).orElse("");
+                        lockOrdersAndPrints(business, session);
+                        routing.lockJobAny(code, session)
+                                .orElseThrow(() -> new BusinessException("打印任务不存在"));
+                        routing.batch(peeked.batchId()).ifPresent(item -> assertOrderVisible(item.businessCode(), session));
                         routing.restoreJob(code, session);
                         return code;
                     });
@@ -434,14 +446,41 @@ public class OrderMaintenanceService {
     }
 
     private void recycleMother(String code, String operator, String at, String batch, String reason, WorkSession session) {
+        if (!documents.lockMotherOrderIfPresent(code, session)) {
+            throw new BusinessException("母单不存在");
+        }
+        List<ChildWorkOrderRecord> children = documents.listChildWorkOrdersAny(code, session);
+        List<String> codes = new ArrayList<>();
+        codes.add(code);
+        for (ChildWorkOrderRecord child : children) {
+            codes.add(child.code());
+        }
+        lockPrints(codes, session);
         documents.recycleMother(code, operator, at, batch, reason, session);
-        for (ChildWorkOrderRecord child : documents.listChildWorkOrdersAny(code)) {
-            if (documents.childRecycle(child.code()).isEmpty()) {
+        for (ChildWorkOrderRecord child : children) {
+            if (documents.childRecycle(child.code(), session).isEmpty()) {
                 documents.recycleChild(child.code(), operator, at, batch, reason, session);
             }
             hidePrints(child.code(), operator, at, batch, reason, session);
         }
         hidePrints(code, operator, at, batch, reason, session);
+    }
+
+    private void restoreMother(String code, WorkSession session) {
+        if (!documents.lockMotherOrderIfPresent(code, session)) {
+            throw new BusinessException("母单不在回收站");
+        }
+        List<String> codes = new ArrayList<>();
+        codes.add(code);
+        for (ChildWorkOrderRecord child : documents.listChildWorkOrdersAny(code, session)) {
+            codes.add(child.code());
+        }
+        lockPrints(codes, session);
+        OrderRecycleMark mark = documents.motherRecycle(code, session)
+                .orElseThrow(() -> new BusinessException("母单不在回收站"));
+        documents.clearRecycleBatch(mark.batch(), session);
+        printJobs.restoreBatch(mark.batch(), session);
+        routing.restoreBatch(mark.batch(), session);
     }
 
     private void restoreChild(String code) {
@@ -466,10 +505,58 @@ public class OrderMaintenanceService {
         routing.recycleByBusinessCode(businessCode, operator, at, batch, reason, session);
     }
 
+    private void lockOrdersAndPrints(String businessCode, WorkSession session) {
+        if (businessCode == null || businessCode.isBlank()) {
+            return;
+        }
+        if (documents.lockMotherOrderIfPresent(businessCode, session)) {
+            List<String> codes = new ArrayList<>();
+            codes.add(businessCode);
+            for (ChildWorkOrderRecord child : documents.listChildWorkOrdersAny(businessCode, session)) {
+                codes.add(child.code());
+            }
+            lockPrints(codes, session);
+            return;
+        }
+        Optional<String> motherOfChild = documents.childMotherCode(businessCode);
+        if (motherOfChild.isEmpty()) {
+            return;
+        }
+        documents.lockMotherOrder(motherOfChild.get(), session);
+        documents.lockChildWorkOrder(businessCode, session);
+        lockPrints(List.of(businessCode), session);
+    }
+
+    private void lockPrints(List<String> businessCodes, WorkSession session) {
+        printJobs.lockByBusinessCodes(businessCodes, session);
+        routing.lockByBusinessCodes(businessCodes, session);
+    }
+
     private void assertOrderVisible(String businessCode) {
-        if (documents.motherRecycle(businessCode).isPresent() || documents.childRecycle(businessCode).isPresent()) {
+        if (orderRecycled(businessCode, null)) {
             throw new BusinessException("请先恢复对应单据");
         }
+    }
+
+    private void assertOrderVisible(String businessCode, WorkSession session) {
+        if (orderRecycled(businessCode, session)) {
+            throw new BusinessException("请先恢复对应单据");
+        }
+    }
+
+    private boolean orderRecycled(String businessCode, WorkSession session) {
+        boolean mother = session == null
+                ? documents.motherRecycle(businessCode).isPresent()
+                : documents.motherRecycle(businessCode, session).isPresent();
+        boolean child = session == null
+                ? documents.childRecycle(businessCode).isPresent()
+                : documents.childRecycle(businessCode, session).isPresent();
+        if (mother || child) {
+            return true;
+        }
+        return documents.childMotherCode(businessCode).map(motherCode -> session == null
+                ? documents.motherRecycle(motherCode).isPresent()
+                : documents.motherRecycle(motherCode, session).isPresent()).orElse(false);
     }
 
     private void attachBusiness(List<MaintainedOrder> rows, String businessCode) {

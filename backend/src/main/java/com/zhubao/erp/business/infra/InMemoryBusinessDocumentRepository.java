@@ -590,11 +590,29 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public synchronized boolean lockMotherOrderIfPresent(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        return motherOrders.containsKey(motherOrderCode);
+    }
+
+    @Override
+    public synchronized Optional<String> childMotherCode(String childCode) {
+        ChildWorkOrderRecord child = childWorkOrders.get(childCode);
+        return child == null ? Optional.empty() : Optional.of(child.motherOrderCode());
+    }
+
+    @Override
     public List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode) {
         return childWorkOrders.values().stream()
                 .filter(record -> motherOrderCode.equals(record.motherOrderCode()))
                 .sorted(Comparator.comparing(ChildWorkOrderRecord::code))
                 .toList();
+    }
+
+    @Override
+    public synchronized List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        return listChildWorkOrdersAny(motherOrderCode);
     }
 
     @Override
@@ -705,8 +723,20 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public synchronized Optional<OrderRecycleMark> motherRecycle(String code, WorkSession session) {
+        requireSession(session);
+        return motherRecycle(code);
+    }
+
+    @Override
     public Optional<OrderRecycleMark> childRecycle(String code) {
         return Optional.ofNullable(recycledChildren.get(code));
+    }
+
+    @Override
+    public synchronized Optional<OrderRecycleMark> childRecycle(String code, WorkSession session) {
+        requireSession(session);
+        return childRecycle(code);
     }
 
     @Override

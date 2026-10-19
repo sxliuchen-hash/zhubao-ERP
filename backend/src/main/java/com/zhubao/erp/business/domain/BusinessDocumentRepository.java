@@ -162,7 +162,18 @@ public interface BusinessDocumentRepository {
     /** 锁定待改正的子单，串行核对页面快照与写入。 */
     void lockChildWorkOrder(String code, WorkSession session);
 
+    /**
+     * 母单存在时锁定该行。回收和恢复先锁母单，再锁子单和打印任务。
+     */
+    boolean lockMotherOrderIfPresent(String motherOrderCode, WorkSession session);
+
+    /** 不加锁读取子单所属母单，只用于决定后续加锁顺序。 */
+    Optional<String> childMotherCode(String childCode);
+
     List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode);
+
+    /** 在当前工作单元里按子单号顺序锁定读取，包含回收站中的子单。 */
+    List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode, WorkSession session);
 
     void replaceMotherOrder(MotherOrderRecord record);
 
@@ -188,7 +199,13 @@ public interface BusinessDocumentRepository {
 
     Optional<OrderRecycleMark> motherRecycle(String code);
 
+    /** 锁定读取母单回收标记，避免沿用命令事务开始时的旧快照。 */
+    Optional<OrderRecycleMark> motherRecycle(String code, WorkSession session);
+
     Optional<OrderRecycleMark> childRecycle(String code);
+
+    /** 锁定读取子单回收标记，避免沿用命令事务开始时的旧快照。 */
+    Optional<OrderRecycleMark> childRecycle(String code, WorkSession session);
 
     List<OrderRecycleMark> listMotherRecycles();
 

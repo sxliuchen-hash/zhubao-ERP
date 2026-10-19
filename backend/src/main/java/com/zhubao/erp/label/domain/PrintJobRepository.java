@@ -28,6 +28,9 @@ public interface PrintJobRepository {
     /** 在当前工作单元里锁定读取旧打印任务。 */
     Optional<PrintJob> lockAny(String id, WorkSession session);
 
+    /** 按任务编号顺序锁定这些业务单的旧打印任务，须晚于母单和子单。 */
+    void lockByBusinessCodes(List<String> businessCodes, WorkSession session);
+
     List<PrintJob> listByBusinessAny(String businessCode);
 
     void recycle(String id, String operator, String at, String batch, String reason);

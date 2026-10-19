@@ -149,6 +149,23 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
+    void 母单已回收时不能单独恢复子单名下的打印任务() {
+        documents.saveMotherOrder(mother());
+        documents.saveChildWorkOrder(child());
+        documents.recycleMother("MD-1", "管理员", "2026-10-19T12:00", "batch-mother", "整单作废");
+        routing.insertBatch(batch());
+        routing.recycleJob("J-1", "管理员", "2026-10-19T12:00", "batch-print", "先收打印");
+        OrderMaintenanceService atomic = replayService();
+        assertThatThrownBy(() -> atomic.restore(new OrderMaintenanceCommands.RestoreCommand(
+                "PRINT_TARGET", "J-1", "req-restore-child-print"), admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请先恢复对应单据");
+        assertThat(routing.jobRecycle("J-1")).isPresent();
+        assertThat(documents.childRecycle("ZD-1")).isEmpty();
+        assertThat(documents.motherRecycle("MD-1")).isPresent();
+    }
+
+    @Test
     void 单独打印任务回收恢复按请求回放且失败撤销标记() {
         printJobs.save(legacyJob());
         routing.insertBatch(batch());
