@@ -724,6 +724,13 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public void saveOrderAdjustment(OrderAdjustment adjustment, WorkSession session) {
+        requireSession(session);
+        orderAdjustments.add(adjustment);
+        session.onRollback(() -> orderAdjustments.remove(adjustment));
+    }
+
+    @Override
     public List<OrderAdjustment> listOrderAdjustments(String targetType, String code) {
         List<OrderAdjustment> matched = new ArrayList<>(orderAdjustments.stream()
                 .filter(item -> targetType.equals(item.targetType()) && code.equals(item.code()))

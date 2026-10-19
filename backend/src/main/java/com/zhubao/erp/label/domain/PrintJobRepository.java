@@ -1,5 +1,7 @@
 package com.zhubao.erp.label.domain;
 
+import com.zhubao.erp.work.domain.WorkSession;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +25,9 @@ public interface PrintJobRepository {
 
     Optional<PrintJob> findAny(String id);
 
+    /** 在当前工作单元里锁定读取旧打印任务。 */
+    Optional<PrintJob> lockAny(String id, WorkSession session);
+
     List<PrintJob> listByBusinessAny(String businessCode);
 
     void recycle(String id, String operator, String at, String batch, String reason);
@@ -37,5 +42,6 @@ public interface PrintJobRepository {
 
     List<PrintRecycle> recycled();
 
-    PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt);
+    /** 仅改正未领取任务，并与调整记录共用工作单元。 */
+    PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt, WorkSession session);
 }

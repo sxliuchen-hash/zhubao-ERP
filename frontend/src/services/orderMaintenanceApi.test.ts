@@ -25,4 +25,19 @@ describe('orderMaintenanceApi', () => {
     expect(motherBody).toMatchObject({ requestId: 'req-maint-0001', expectedRevision: 'snapshot-hash' });
     expect(childBody).toMatchObject({ requestId: 'req-maint-0002', expectedRevision: 'snapshot-hash' });
   });
+
+  it('打印任务保存也带请求编号和旧快照版本', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: {} }),
+    } as Response);
+    await correctMaintainedOrder({
+      targetType: 'PRINT_TARGET', code: 'J-1', motherOrderCode: 'MD-1', customerName: '',
+      materialCode: '', goodsName: '', requirement: '', dueDate: '', quantity: '', weight: '',
+      processes: '', copies: 2, stationId: 'A', queueId: 'Q1', recycled: false,
+      recycleReason: '', adjustments: [], revision: 'print-snapshot',
+    }, '改派核对', 'req-print-1');
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).toMatchObject({ requestId: 'req-print-1', expectedRevision: 'print-snapshot' });
+  });
 });

@@ -199,5 +199,8 @@ public interface BusinessDocumentRepository {
 
     void saveOrderAdjustment(OrderAdjustment adjustment);
 
+    /** 调整记录与本次业务变更共用工作单元。 */
+    void saveOrderAdjustment(OrderAdjustment adjustment, WorkSession session);
+
     List<OrderAdjustment> listOrderAdjustments(String targetType, String code);
 }

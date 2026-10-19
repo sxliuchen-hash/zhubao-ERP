@@ -1,5 +1,7 @@
 package com.zhubao.erp.label.domain;
 
+import com.zhubao.erp.work.domain.WorkSession;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +22,8 @@ public interface PrintRoutingRepository {
     Optional<PrintTargetJob> saveJobIfStatus(PrintTargetJob job, PrintJobStatus expected);
     Optional<PrintTargetJob> savePaperCheckIfBlank(PrintTargetJob job, PrintJobStatus expected);
     Optional<PrintTargetJob> jobAny(String jobId);
+    /** 在当前工作单元里锁定读取目标任务。 */
+    Optional<PrintTargetJob> lockJobAny(String jobId, WorkSession session);
     List<PrintTargetJob> jobsForBusinessAny(String businessCode);
     void recycleJob(String id, String operator, String at, String batch, String reason);
     int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason);
@@ -27,5 +31,7 @@ public interface PrintRoutingRepository {
     void restoreBatch(String batch);
     Optional<PrintRecycle> jobRecycle(String id);
     List<PrintRecycle> recycledJobs();
-    PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId, String updatedAt);
+    /** 仅改正未领取目标任务，并与调整记录共用工作单元。 */
+    PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId, String updatedAt,
+                                 WorkSession session);
 }

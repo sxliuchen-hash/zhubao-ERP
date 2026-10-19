@@ -8,6 +8,7 @@ import com.zhubao.erp.label.domain.PrintRoutingRepository;
 import com.zhubao.erp.label.domain.PrintStation;
 import com.zhubao.erp.label.domain.PrintTargetJob;
 import com.zhubao.erp.label.domain.PrintJobStatus;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -93,6 +94,9 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
         return Optional.of(job);
     }
     @Override public Optional<PrintTargetJob> jobAny(String id) { return Optional.ofNullable(jobs.get(id)); }
+    @Override public synchronized Optional<PrintTargetJob> lockJobAny(String id, WorkSession session) {
+        return jobAny(id);
+    }
     @Override public List<PrintTargetJob> jobsForBusinessAny(String businessCode) {
         return batches.values().stream().filter(batch -> businessCode.equals(batch.businessCode()))
                 .flatMap(batch -> jobs.values().stream().filter(job -> batch.id().equals(job.batchId()))).toList();
@@ -121,13 +125,17 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
     }
     @Override public Optional<PrintRecycle> jobRecycle(String id) { return Optional.ofNullable(recycled.get(id)); }
     @Override public List<PrintRecycle> recycledJobs() { return List.copyOf(recycled.values()); }
-    @Override public synchronized PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId, String updatedAt) {
-        PrintTargetJob current = jobs.get(id);
-        if (current == null) throw new BusinessException("打印任务不存在");
-        PrintTargetJob next = new PrintTargetJob(current.id(), current.batchId(), stationId, queueId, copies, current.status(),
-                current.claimedStationId(), current.leaseUntil(), current.failureReason(), current.paperCheckResult(),
-                current.predecessorId(), current.retryReason(), current.createdAt(), updatedAt);
+    @Override public synchronized PrintTargetJob replaceTarget(String id, int copies, String stationId,
+                                                                String queueId, String updatedAt, WorkSession session) {
+        PrintTargetJob previous = jobs.get(id);
+        if (previous == null || previous.status() != PrintJobStatus.PENDING || recycled.containsKey(id)) {
+            throw new BusinessException("任务已领取、状态不明或已回收，不能直接改单");
+        }
+        PrintTargetJob next = new PrintTargetJob(previous.id(), previous.batchId(), stationId, queueId, copies,
+                previous.status(), previous.claimedStationId(), previous.leaseUntil(), previous.failureReason(),
+                previous.paperCheckResult(), previous.predecessorId(), previous.retryReason(), previous.createdAt(), updatedAt);
         jobs.put(id, next);
+        session.onRollback(() -> jobs.put(id, previous));
         return next;
     }
     private String businessCodeOf(PrintTargetJob job) {

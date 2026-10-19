@@ -5,6 +5,7 @@ import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintRecycle;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -309,23 +310,36 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
-    public PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt) {
-        String sql = "update biz_print_job set copies = ?, station_id = ?, updated_at = ? where id = ?";
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+    public Optional<PrintJob> lockAny(String id, WorkSession session) {
+        try (PreparedStatement statement = session.connection().orElseThrow().prepareStatement(
+                "select * from biz_print_job where id = ? for update")) {
+            statement.setString(1, id);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? Optional.of(map(result)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("锁定打印任务失败", ex);
+        }
+    }
+
+    @Override
+    public PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt, WorkSession session) {
+        String sql = "update biz_print_job set copies = ?, station_id = ?, updated_at = ? "
+                + "where id = ? and status_code = 'PENDING' and recycled_at is null";
+        try (PreparedStatement statement = session.connection().orElseThrow().prepareStatement(sql)) {
             statement.setInt(1, copies);
             statement.setString(2, stationId);
             statement.setString(3, updatedAt);
             statement.setString(4, id);
             if (statement.executeUpdate() != 1) {
-                throw new BusinessException("打印任务不存在");
+                throw new BusinessException("任务已领取、状态不明或已回收，不能直接改单");
             }
+            return lockAny(id, session).orElseThrow(() -> new BusinessException("打印任务不存在"));
         } catch (BusinessException ex) {
             throw ex;
         } catch (SQLException ex) {
             throw new IllegalStateException("修改打印任务失败", ex);
         }
-        return findAny(id).orElseThrow(() -> new BusinessException("打印任务不存在"));
     }
 
     private void updateRecycle(String sql, String operator, String at, String batch, String reason, String id, String missing) {

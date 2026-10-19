@@ -2,6 +2,7 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.OrderAdjustment;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.PrintBatch;
@@ -17,6 +18,7 @@ import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
 import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -96,15 +99,80 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
-    void 已领取的打印任务仍可改份数和工位() {
+    void 已领取的目标任务拒绝直接改单() {
         routing.insertBatch(batch());
         PrintTargetJob leased = routing.claim("A", "lease", "now").orElseThrow();
-        MaintainedOrder updated = service.correctPrintTarget(leased.id(), new OrderMaintenanceCommands.PrintCorrection(
-                3, "B", "Q2", "补打两份"), admin);
-        assertThat(updated.copies()).isEqualTo(3);
-        assertThat(updated.stationId()).isEqualTo("B");
-        assertThat(routing.jobAny(leased.id()).orElseThrow().targetQueueId()).isEqualTo("Q2");
+        OrderMaintenanceService replay = replayService();
+        String revision = replay.search(leased.id(), admin).stream()
+                .filter(row -> "PRINT_TARGET".equals(row.targetType())).findFirst().orElseThrow().revision();
+        assertThatThrownBy(() -> replay.correctPrintTarget(leased.id(), new OrderMaintenanceCommands.PrintCorrection(
+                3, "B", "Q2", "补打两份", "req-print-leased", revision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("已领取");
         assertThat(routing.jobAny(leased.id()).orElseThrow().status()).isEqualTo(PrintJobStatus.LEASED);
+        assertThat(documents.listOrderAdjustments("PRINT_TARGET", leased.id())).isEmpty();
+    }
+
+    @Test
+    void 未领取目标任务改单与审计同次提交且请求回放() {
+        routing.insertBatch(batch());
+        OrderMaintenanceService replay = replayService();
+        String revision = replay.search("J-1", admin).stream()
+                .filter(row -> "PRINT_TARGET".equals(row.targetType())).findFirst().orElseThrow().revision();
+        assertThatThrownBy(() -> replay.correctPrintTarget("J-1", new OrderMaintenanceCommands.PrintCorrection(
+                3, "B", "Q2", "改派", "req-print-reroute", revision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("打印批次改派");
+        var command = new OrderMaintenanceCommands.PrintCorrection(3, "A", "Q1", "核对份数",
+                "req-print-target-1", revision);
+        replay.correctPrintTarget("J-1", command, admin);
+        replay.correctPrintTarget("J-1", command, admin);
+        assertThat(routing.jobAny("J-1").orElseThrow().copies()).isEqualTo(3);
+        assertThat(documents.listOrderAdjustments("PRINT_TARGET", "J-1")).hasSize(1);
+        assertThatThrownBy(() -> replay.correctPrintTarget("J-1", new OrderMaintenanceCommands.PrintCorrection(
+                2, "A", "Q1", "旧页面", "req-print-target-2", revision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("已被修改");
+    }
+
+    @Test
+    void 旧打印任务仅能在未领取时改份数而不能改领取工位() {
+        printJobs.save(legacyJob());
+        OrderMaintenanceService replay = replayService();
+        String revision = replay.search("P-1", admin).stream()
+                .filter(row -> "PRINT_JOB".equals(row.targetType())).findFirst().orElseThrow().revision();
+        assertThatThrownBy(() -> replay.correctPrintJob("P-1", new OrderMaintenanceCommands.PrintCorrection(
+                2, "B", "", "改工位", "req-legacy-station", revision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("领取记录");
+        assertThat(printJobs.findAny("P-1").orElseThrow().copies()).isEqualTo(1);
+        replay.correctPrintJob("P-1", new OrderMaintenanceCommands.PrintCorrection(
+                2, "", "", "份数核对", "req-legacy-copies", revision), admin);
+        assertThat(printJobs.findAny("P-1").orElseThrow().copies()).isEqualTo(2);
+        assertThat(documents.listOrderAdjustments("PRINT_JOB", "P-1")).hasSize(1);
+    }
+
+    @Test
+    void 内存打印审计失败会撤销份数且原请求编号可重试() {
+        AtomicBoolean failOnce = new AtomicBoolean(true);
+        InMemoryBusinessDocumentRepository failingDocuments = new InMemoryBusinessDocumentRepository() {
+            @Override
+            public void saveOrderAdjustment(OrderAdjustment adjustment, WorkSession session) {
+                if (failOnce.getAndSet(false)) throw new IllegalStateException("调整记录失败");
+                super.saveOrderAdjustment(adjustment, session);
+            }
+        };
+        InMemoryPrintRoutingRepository targets = new InMemoryPrintRoutingRepository();
+        targets.insertBatch(batch());
+        OrderMaintenanceService replay = new OrderMaintenanceService(failingDocuments,
+                new InMemoryPrintJobRepository(), targets, new PermissionGuard(),
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+        String revision = replay.search("J-1", admin).stream()
+                .filter(row -> "PRINT_TARGET".equals(row.targetType())).findFirst().orElseThrow().revision();
+        var command = new OrderMaintenanceCommands.PrintCorrection(2, "A", "Q1", "核对份数",
+                "req-print-memory-rollback", revision);
+        assertThatThrownBy(() -> replay.correctPrintTarget("J-1", command, admin))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("调整记录失败");
+        assertThat(targets.jobAny("J-1").orElseThrow().copies()).isEqualTo(1);
+        assertThat(failingDocuments.listOrderAdjustments("PRINT_TARGET", "J-1")).isEmpty();
+        replay.correctPrintTarget("J-1", command, admin);
+        assertThat(targets.jobAny("J-1").orElseThrow().copies()).isEqualTo(2);
     }
 
     @Test

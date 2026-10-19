@@ -76,4 +76,21 @@ describe('单据维护', () => {
     await flushPromises();
     expect(vi.mocked(correctMaintainedOrder).mock.calls[2][2]).not.toBe(first);
   });
+
+  it('打印目标只能在维护页修改份数', async () => {
+    vi.mocked(searchMaintainedOrders).mockResolvedValueOnce([{
+      targetType: 'PRINT_TARGET', code: 'J-1', motherOrderCode: 'MD-1', customerName: '',
+      materialCode: '', goodsName: '', requirement: '', dueDate: '', quantity: '', weight: '',
+      processes: '', copies: 1, stationId: 'A', queueId: 'Q1', recycled: false,
+      recycleReason: '', adjustments: [], revision: 'print-revision',
+    }]);
+    const wrapper = mount(OrderMaintenancePanel);
+    await flushPromises();
+    await wrapper.get('[aria-label="维护单号"]').setValue('J-1');
+    await wrapper.findAll('button').find((button) => button.text() === '查找')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="J-1 份数"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('[aria-label="J-1 工位"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[aria-label="J-1 队列"]').attributes('disabled')).toBeDefined();
+  });
 });

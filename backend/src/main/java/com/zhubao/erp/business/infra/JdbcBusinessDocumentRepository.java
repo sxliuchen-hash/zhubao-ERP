@@ -1825,6 +1825,15 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         }
     }
 
+    @Override
+    public void saveOrderAdjustment(OrderAdjustment adjustment, WorkSession session) {
+        try {
+            insertOrderAdjustment(session.connection().orElseThrow(), adjustment);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("保存单据调整记录失败", ex);
+        }
+    }
+
     private void insertOrderAdjustment(Connection connection, OrderAdjustment adjustment) throws SQLException {
         String sql = """
                 insert into biz_order_adjustment (

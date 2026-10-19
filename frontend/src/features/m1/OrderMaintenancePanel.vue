@@ -100,7 +100,7 @@ function isOrder(order: MaintainedOrder) {
 <template>
   <section class="order-maintenance" aria-label="单据维护">
     <h2>单据维护</h2>
-    <p>管理员可改正单据说明和打印任务。已入账的客户、材质、货品、数量、重量及子单工序须另走差额或冲正，不能在这里直接覆盖。回收不会自动冲正库存和账单。</p>
+    <p>管理员可改正单据说明和未领取打印任务的份数。打印目标须使用批次改派，保留原任务关联；已领取、出队或状态不明的任务须先核纸。已入账事实不能直接覆盖；回收不会自动冲正库存和账单。</p>
     <label>单号<input v-model="code" aria-label="维护单号" /></label>
     <label>原因<input v-model="reason" aria-label="维护原因" placeholder="修改或删除时必填" /></label>
     <button class="secondary-button" type="button" :disabled="busy" @click="search">查找</button>
@@ -122,8 +122,8 @@ function isOrder(order: MaintainedOrder) {
       </template>
       <template v-else>
         <label>份数<input v-model.number="order.copies" :aria-label="`${order.code} 份数`" /></label>
-        <label>工位<input v-model="order.stationId" :aria-label="`${order.code} 工位`" /></label>
-        <label v-if="order.targetType === 'PRINT_TARGET'">队列<input v-model="order.queueId" :aria-label="`${order.code} 队列`" /></label>
+        <label>工位<input v-model="order.stationId" :aria-label="`${order.code} 工位`" disabled /></label>
+        <label v-if="order.targetType === 'PRINT_TARGET'">队列<input v-model="order.queueId" :aria-label="`${order.code} 队列`" disabled /></label>
       </template>
       <button class="secondary-button" type="button" :disabled="busy" @click="save(order)">保存修改</button>
       <button v-if="!order.recycled" class="secondary-button" type="button" :disabled="busy" @click="recycle(order)">放入回收站</button>

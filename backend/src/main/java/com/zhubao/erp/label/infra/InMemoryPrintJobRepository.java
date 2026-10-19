@@ -5,6 +5,7 @@ import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.domain.PrintRecycle;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -78,6 +79,11 @@ public class InMemoryPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
+    public synchronized Optional<PrintJob> lockAny(String id, WorkSession session) {
+        return findAny(id);
+    }
+
+    @Override
     public List<PrintJob> listByBusinessAny(String businessCode) {
         return jobs.values().stream().filter(job -> businessCode.equals(job.businessCode())).toList();
     }
@@ -129,15 +135,18 @@ public class InMemoryPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
-    public synchronized PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt) {
-        PrintJob current = jobs.get(id);
-        if (current == null) {
-            throw new BusinessException("打印任务不存在");
+    public synchronized PrintJob replaceCopies(String id, int copies, String stationId, String updatedAt,
+                                                WorkSession session) {
+        PrintJob previous = jobs.get(id);
+        if (previous == null || previous.status() != PrintJobStatus.PENDING || recycledJobs.containsKey(id)) {
+            throw new BusinessException("任务已领取、状态不明或已回收，不能直接改单");
         }
-        PrintJob next = new PrintJob(current.id(), current.requestId(), current.businessCode(), current.templateCode(),
-                copies, current.contentSnapshot(), current.status(), stationId, current.leaseUntil(), current.failureReason(),
-                current.predecessorId(), current.retryReason(), current.createdBy(), current.createdAt(), updatedAt);
+        PrintJob next = new PrintJob(previous.id(), previous.requestId(), previous.businessCode(),
+                previous.templateCode(), copies, previous.contentSnapshot(), previous.status(), stationId,
+                previous.leaseUntil(), previous.failureReason(), previous.predecessorId(), previous.retryReason(),
+                previous.createdBy(), previous.createdAt(), updatedAt);
         jobs.put(id, next);
+        session.onRollback(() -> jobs.put(id, previous));
         return next;
     }
 }

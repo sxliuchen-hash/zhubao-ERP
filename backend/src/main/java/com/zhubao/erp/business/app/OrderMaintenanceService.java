@@ -8,6 +8,7 @@ import com.zhubao.erp.business.domain.OrderRecycleMark;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
+import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.domain.PrintRecycle;
 import com.zhubao.erp.label.domain.PrintRoutingRepository;
 import com.zhubao.erp.label.domain.PrintTargetJob;
@@ -213,25 +214,56 @@ public class OrderMaintenanceService {
 
     public MaintainedOrder correctPrintJob(String id, OrderMaintenanceCommands.PrintCorrection command, OperatorContext operator) {
         requireAdmin(operator);
-        PrintJob current = printJobs.findAny(required(id, "请填写打印任务")).orElseThrow(() -> new BusinessException("打印任务不存在"));
+        String key = required(id, "请填写打印任务");
+        if (workUnit == null) throw new BusinessException("打印改单工作单元尚未装配");
         String reason = requireReason(command.reason());
         int copies = requireCopies(command.copies());
-        PrintJob next = printJobs.replaceCopies(current.id(), copies, text(command.stationId()), now());
-        remember("PRINT_JOB", current.id(), current.copies() + "份 " + current.stationId(),
-                next.copies() + "份 " + next.stationId(), reason, operator);
-        return toPrintJob(next);
+        String expected = required(command.expectedRevision(), "请重新查找打印任务后再保存");
+        workUnit.execute(new CommandCall(required(command.requestId(), "改单必须带请求编号"),
+                operator.operator(), "ADMIN_CORRECT_PRINT_JOB", "PRINT_JOB", key,
+                OrderMaintenanceRevision.of(payload(copies, command.stationId(), reason, expected))), session -> {
+            PrintJob current = printJobs.lockAny(key, session)
+                    .orElseThrow(() -> new BusinessException("打印任务不存在"));
+            assertPrintRevision(current, expected);
+            assertPending(current.status());
+            if (!text(command.stationId()).equals(text(current.stationId()))) {
+                throw new BusinessException("旧打印任务的工位是领取记录，不能直接改目标；请核纸后新建打印批次");
+            }
+            PrintJob next = printJobs.replaceCopies(key, copies, current.stationId(), now(), session);
+            documents.saveOrderAdjustment(adjustment("PRINT_JOB", key,
+                    current.copies() + "份 " + current.stationId(),
+                    next.copies() + "份 " + next.stationId(), reason, operator), session);
+            return key;
+        });
+        return toPrintJob(printJobs.findAny(key).orElseThrow(() -> new BusinessException("打印任务不存在")));
     }
 
     public MaintainedOrder correctPrintTarget(String id, OrderMaintenanceCommands.PrintCorrection command, OperatorContext operator) {
         requireAdmin(operator);
-        PrintTargetJob current = routing.jobAny(required(id, "请填写打印任务")).orElseThrow(() -> new BusinessException("打印任务不存在"));
+        String key = required(id, "请填写打印任务");
+        if (workUnit == null) throw new BusinessException("打印改单工作单元尚未装配");
         String reason = requireReason(command.reason());
-        PrintTargetJob next = routing.replaceTarget(current.id(), requireCopies(command.copies()),
-                required(command.stationId(), "请填写工位"), required(command.queueId(), "请填写队列"), now());
-        remember("PRINT_TARGET", current.id(),
-                current.copies() + "份 " + current.targetStationId() + "/" + current.targetQueueId(),
-                next.copies() + "份 " + next.targetStationId() + "/" + next.targetQueueId(), reason, operator);
-        return toTarget(next);
+        int copies = requireCopies(command.copies());
+        String station = required(command.stationId(), "请填写工位");
+        String queue = required(command.queueId(), "请填写队列");
+        String expected = required(command.expectedRevision(), "请重新查找打印任务后再保存");
+        workUnit.execute(new CommandCall(required(command.requestId(), "改单必须带请求编号"),
+                operator.operator(), "ADMIN_CORRECT_PRINT_TARGET", "PRINT_TARGET", key,
+                OrderMaintenanceRevision.of(payload(copies, station, queue, reason, expected))), session -> {
+            PrintTargetJob current = routing.lockJobAny(key, session)
+                    .orElseThrow(() -> new BusinessException("打印任务不存在"));
+            assertPrintRevision(current, expected);
+            assertPending(current.status());
+            if (!station.equals(current.targetStationId()) || !queue.equals(current.targetQueueId())) {
+                throw new BusinessException("目标工位和队列不能原地覆盖，请使用打印批次改派并保留原任务关联");
+            }
+            PrintTargetJob next = routing.replaceTarget(key, copies, station, queue, now(), session);
+            documents.saveOrderAdjustment(adjustment("PRINT_TARGET", key,
+                    current.copies() + "份 " + current.targetStationId() + "/" + current.targetQueueId(),
+                    next.copies() + "份 " + next.targetStationId() + "/" + next.targetQueueId(), reason, operator), session);
+            return key;
+        });
+        return toTarget(routing.jobAny(key).orElseThrow(() -> new BusinessException("打印任务不存在")));
     }
 
     public void recycle(OrderMaintenanceCommands.RecycleCommand command, OperatorContext operator) {
@@ -365,7 +397,7 @@ public class OrderMaintenanceService {
         PrintRecycle mark = printJobs.recycleMark(job.id()).orElse(null);
         return new MaintainedOrder("PRINT_JOB", job.id(), job.businessCode(), "", "", "", "", "", "", "", "",
                 job.copies(), job.stationId(), "", mark != null, mark == null ? "" : mark.reason(),
-                lines("PRINT_JOB", job.id()), "", false);
+                lines("PRINT_JOB", job.id()), OrderMaintenanceRevision.of(job), false);
     }
 
     private MaintainedOrder toTarget(PrintTargetJob job) {
@@ -373,7 +405,7 @@ public class OrderMaintenanceService {
         String business = routing.batch(job.batchId()).map(batch -> batch.businessCode()).orElse("");
         return new MaintainedOrder("PRINT_TARGET", job.id(), business, "", "", "", "", "", "", "", "",
                 job.copies(), job.targetStationId(), job.targetQueueId(), mark != null,
-                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()), "", false);
+                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()), OrderMaintenanceRevision.of(job), false);
     }
 
     private List<String> lines(String type, String code) {
@@ -383,10 +415,6 @@ public class OrderMaintenanceService {
                     + "：" + item.beforeText() + " → " + item.afterText());
         }
         return lines;
-    }
-
-    private void remember(String type, String code, String before, String after, String reason, OperatorContext operator) {
-        documents.saveOrderAdjustment(adjustment(type, code, before, after, reason, operator));
     }
 
     private OrderAdjustment adjustment(String type, String code, String before, String after,
@@ -453,6 +481,18 @@ public class OrderMaintenanceService {
 
     private static boolean sameAmount(BigDecimal left, BigDecimal right) {
         return left == null ? right == null : right != null && left.compareTo(right) == 0;
+    }
+
+    private static void assertPrintRevision(Object current, String expected) {
+        if (!OrderMaintenanceRevision.of(current).equals(expected)) {
+            throw new BusinessException("打印任务已被修改，请重新查找后再保存");
+        }
+    }
+
+    private static void assertPending(PrintJobStatus status) {
+        if (status != PrintJobStatus.PENDING) {
+            throw new BusinessException("任务已领取、状态不明或已出队，不能直接改单；请核纸后使用改派或新批次");
+        }
     }
 
     private static String plain(BigDecimal value) {

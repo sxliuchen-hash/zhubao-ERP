@@ -8,6 +8,7 @@ import com.zhubao.erp.label.domain.PrintQueue;
 import com.zhubao.erp.label.domain.PrintRoutingRepository;
 import com.zhubao.erp.label.domain.PrintStation;
 import com.zhubao.erp.label.domain.PrintTargetJob;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -249,6 +250,13 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
             try (ResultSet r = s.executeQuery()) { return r.next() ? Optional.of(mapJob(r)) : Optional.empty(); }
         } catch (SQLException ex) { throw failed("读取目标任务失败", ex); }
     }
+    @Override public Optional<PrintTargetJob> lockJobAny(String id, WorkSession session) {
+        try (PreparedStatement s = session.connection().orElseThrow().prepareStatement(
+                "select * from biz_print_target_job where id = ? for update")) {
+            s.setString(1, id);
+            try (ResultSet r = s.executeQuery()) { return r.next() ? Optional.of(mapJob(r)) : Optional.empty(); }
+        } catch (SQLException ex) { throw failed("锁定目标任务失败", ex); }
+    }
     @Override public List<PrintTargetJob> jobsForBusinessAny(String businessCode) {
         String sql = "select j.* from biz_print_target_job j join biz_print_batch b on b.id = j.batch_id "
                 + "where b.business_code = ? order by j.id";
@@ -315,14 +323,17 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
             return rows;
         } catch (SQLException ex) { throw failed("列出打印回收站失败", ex); }
     }
-    @Override public PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId, String updatedAt) {
-        String sql = "update biz_print_target_job set copies = ?, target_station_id = ?, target_queue_id = ?, updated_at = ? where id = ?";
-        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
-            s.setInt(1, copies); s.setString(2, stationId); s.setString(3, queueId); s.setString(4, updatedAt); s.setString(5, id);
-            if (s.executeUpdate() != 1) throw new BusinessException("打印任务不存在");
+    @Override public PrintTargetJob replaceTarget(String id, int copies, String stationId, String queueId,
+                                                   String updatedAt, WorkSession session) {
+        String sql = "update biz_print_target_job set copies = ?, target_station_id = ?, target_queue_id = ?, "
+                + "updated_at = ? where id = ? and status_code = 'PENDING' and recycled_at is null";
+        try (PreparedStatement s = session.connection().orElseThrow().prepareStatement(sql)) {
+            s.setInt(1, copies); s.setString(2, stationId); s.setString(3, queueId);
+            s.setString(4, updatedAt); s.setString(5, id);
+            if (s.executeUpdate() != 1) throw new BusinessException("任务已领取、状态不明或已回收，不能直接改单");
+            return lockJobAny(id, session).orElseThrow(() -> new BusinessException("打印任务不存在"));
         } catch (BusinessException ex) { throw ex; }
         catch (SQLException ex) { throw failed("修改打印任务失败", ex); }
-        return jobAny(id).orElseThrow(() -> new BusinessException("打印任务不存在"));
     }
     private PrintRecycle mapRecycle(ResultSet r) throws SQLException {
         return new PrintRecycle(r.getString("id"), r.getString("business_code"), r.getString("recycled_at"),

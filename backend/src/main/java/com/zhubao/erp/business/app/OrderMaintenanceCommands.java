@@ -28,7 +28,11 @@ public final class OrderMaintenanceCommands {
         }
     }
 
-    public record PrintCorrection(int copies, String stationId, String queueId, String reason) {
+    public record PrintCorrection(int copies, String stationId, String queueId, String reason,
+                                  String requestId, String expectedRevision) {
+        public PrintCorrection(int copies, String stationId, String queueId, String reason) {
+            this(copies, stationId, queueId, reason, null, null);
+        }
     }
 
     public record RecycleCommand(String targetType, String code, String reason) {

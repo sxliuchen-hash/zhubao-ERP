@@ -67,6 +67,8 @@ export function correctMaintainedOrder(order: MaintainedOrder, reason: string, r
     stationId: order.stationId,
     queueId: order.queueId,
     reason,
+    requestId,
+    expectedRevision: order.revision,
   });
 }
 
