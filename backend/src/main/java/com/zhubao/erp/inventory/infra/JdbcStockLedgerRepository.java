@@ -165,7 +165,28 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
         }
     }
 
+    @Override
+    public List<StockLedgerEntry> ledgersForMother(String motherOrderCode, WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("库存读取必须使用工作单元连接");
+        }
+        try {
+            return queryLedgers(session.connection().get(), " where mother_order_code = ?", List.of(motherOrderCode));
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load stock ledger entries", ex);
+        }
+    }
+
     private List<StockLedgerEntry> queryLedgers(String whereSql, List<Object> parameters) {
+        try (Connection connection = dataSource.getConnection()) {
+            return queryLedgers(connection, whereSql, parameters);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load stock ledger entries", ex);
+        }
+    }
+
+    private List<StockLedgerEntry> queryLedgers(Connection connection, String whereSql, List<Object> parameters)
+            throws SQLException {
         String sql = """
                 select code, source_ledger_code, biz_time, document_type, document_code, owner_type, owner_customer_id,
                        customer_id, mother_order_code, work_order_code, from_work_order_code, material_code,
@@ -174,8 +195,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                   from inv_stock_ledger
                 """ + whereSql + " order by biz_time, id";
         List<StockLedgerEntry> entries = new ArrayList<>();
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int i = 0; i < parameters.size(); i++) {
                 statement.setObject(i + 1, parameters.get(i));
             }
@@ -219,8 +239,6 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                     ));
                 }
             }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("Failed to load stock ledger entries", ex);
         }
         return entries;
     }

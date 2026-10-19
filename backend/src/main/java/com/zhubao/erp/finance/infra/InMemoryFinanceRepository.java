@@ -113,6 +113,13 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public boolean hasMotherPosting(String motherOrderCode) {
+        return receivablesByCode.values().stream().anyMatch(line -> motherOrderCode.equals(line.motherOrderCode()))
+                || payrollLines.values().stream().anyMatch(line -> motherOrderCode.equals(line.motherOrderCode()))
+                || payables.values().stream().anyMatch(line -> motherOrderCode.equals(line.motherOrderCode()));
+    }
+
+    @Override
     public List<ReceivableLine> listReceivables() {
         return receivablesByCode.values().stream()
                 .sorted(Comparator.comparing(ReceivableLine::code))

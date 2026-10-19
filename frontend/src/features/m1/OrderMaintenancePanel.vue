@@ -120,13 +120,13 @@ function isOrder(order: MaintainedOrder) {
     <article v-for="order in rows" :key="`${order.targetType}-${order.code}`" :aria-label="`${typeLabel[order.targetType]} ${order.code}`">
       <h3>{{ typeLabel[order.targetType] }} {{ order.code }}<span v-if="order.recycled">（回收站）</span></h3>
       <p v-if="order.motherOrderCode && order.motherOrderCode !== order.code">所属 {{ order.motherOrderCode }}</p>
-      <p v-if="isOrder(order) && order.postedFactsLocked">这张单已入账；客户、材质、货品、数量、重量和工序暂不可直接修改。</p>
+      <p v-if="isOrder(order) && order.postedFactsLocked">已入账。客户、材质、货品和子单工序不能直接改。尚未拆单、交付或发货的母单可以改正收货数量和重量，系统会追加冲正流水。要求、期限和金额仍走进度页改单。</p>
       <template v-if="isOrder(order)">
         <label>客户<input v-model="order.customerName" :aria-label="`${order.code} 客户`" :disabled="order.postedFactsLocked" /></label>
         <label>材质<input v-model="order.materialCode" :aria-label="`${order.code} 材质`" :disabled="order.postedFactsLocked" /></label>
         <label>货品<input v-model="order.goodsName" :aria-label="`${order.code} 货品`" :disabled="order.postedFactsLocked" /></label>
-        <label>数量<input v-model="order.quantity" :aria-label="`${order.code} 数量`" :disabled="order.postedFactsLocked" /></label>
-        <label>重量<input v-model="order.weight" :aria-label="`${order.code} 重量`" :disabled="order.postedFactsLocked" /></label>
+        <label>数量<input v-model="order.quantity" :aria-label="`${order.code} 数量`" :disabled="order.postedFactsLocked && order.targetType !== 'MOTHER'" /></label>
+        <label>重量<input v-model="order.weight" :aria-label="`${order.code} 重量`" :disabled="order.postedFactsLocked && order.targetType !== 'MOTHER'" /></label>
         <label>要求<input v-model="order.requirement" :aria-label="`${order.code} 要求`" /></label>
         <label>期限<input v-model="order.dueDate" :aria-label="`${order.code} 期限`" /></label>
         <label v-if="order.targetType === 'WORK_ORDER'">工序<input v-model="order.processes" :aria-label="`${order.code} 工序`" :disabled="order.postedFactsLocked" /></label>

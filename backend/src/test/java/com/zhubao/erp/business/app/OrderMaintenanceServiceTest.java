@@ -403,6 +403,57 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
+    void 未拆单母单改正数量会冲正原收货并回放一次() {
+        documents.saveMotherOrder(mother());
+        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
+        StockLedgerService stocks = new StockLedgerService(repository);
+        StockDimension raw = new StockDimension(OwnerType.CUSTOMER, 1L, 1L, "MD-1", null, "AU", "WH", StockStatus.RAW_WAITING);
+        stocks.transfer(new StockTransferCommand("inbound_confirm", "MD-1", null, raw,
+                new BigDecimal("2"), new BigDecimal("10"), "收货"));
+        MotherOrderRecord current = documents.findMotherOrderAny("MD-1").orElseThrow();
+        documents.saveMotherOrder(new MotherOrderRecord(current.code(), current.customerId(), current.ownerCustomerId(),
+                current.materialCode(), current.inboundDate(), current.expressCompany(), current.courierNo(),
+                current.senderName(), current.receiverName(), current.unpackSigner(), current.goodsName(),
+                current.ownerType(), current.customerOwned(), current.warehouseCode(), current.quantity(),
+                current.quantityUnit(), current.weight(), current.stockStatus(), stocks.ledgers().get(0).code(),
+                current.sourceRegisterType(), current.sourceRegisterLineNo(), current.sourceRegisterSequence(),
+                current.operator(), current.evidenceCode(), current.remark(), current.status(), current.createdAt(),
+                current.processingRequirement(), current.dueDate(), current.customerName()));
+        OrderMaintenanceService service = new OrderMaintenanceService(documents, printJobs, routing, new PermissionGuard(),
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), stocks,
+                new com.zhubao.erp.finance.infra.InMemoryFinanceRepository(null, null));
+        String revision = service.search("MD-1", admin).get(0).revision();
+        var command = new OrderMaintenanceCommands.MotherCorrection(null, "张三", "AU", "戒指",
+                new BigDecimal("3"), new BigDecimal("10"), "抛光", "2026-11-01", "", "录错数量",
+                "req-reverse-qty", revision);
+        service.correctMother("MD-1", command, admin);
+        service.correctMother("MD-1", command, admin);
+        assertThat(documents.findMotherOrderAny("MD-1").orElseThrow().quantity()).isEqualByComparingTo("3");
+        assertThat(repository.findBalance(raw).quantity()).isEqualByComparingTo("3");
+        assertThat(stocks.ledgers()).extracting(com.zhubao.erp.inventory.domain.StockLedgerEntry::documentType)
+                .containsExactly("inbound_confirm", "inbound_reversal", "inbound_confirm");
+        assertThat(documents.listOrderAdjustments("MOTHER", "MD-1")).hasSize(1);
+    }
+
+    @Test
+    void 已拆单母单不能按收货录入错误冲正() {
+        documents.saveMotherOrder(mother());
+        documents.saveChildWorkOrder(child());
+        StockLedgerService stocks = new StockLedgerService(new InMemoryStockLedgerRepository());
+        StockDimension raw = new StockDimension(OwnerType.CUSTOMER, 1L, 1L, "MD-1", null, "AU", "WH", StockStatus.RAW_WAITING);
+        stocks.transfer(new StockTransferCommand("inbound_confirm", "MD-1", null, raw,
+                new BigDecimal("2"), new BigDecimal("10"), "收货"));
+        OrderMaintenanceService service = new OrderMaintenanceService(documents, printJobs, routing, new PermissionGuard(),
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), stocks);
+        String revision = service.search("MD-1", admin).get(0).revision();
+        assertThatThrownBy(() -> service.correctMother("MD-1", new OrderMaintenanceCommands.MotherCorrection(
+                null, "张三", "AU", "戒指", new BigDecimal("3"), new BigDecimal("10"), "抛光", "2026-11-01", "",
+                "录错数量", "req-reverse-child", revision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不能按收货录入错误冲正");
+        assertThat(documents.findMotherOrderAny("MD-1").orElseThrow().quantity()).isEqualByComparingTo("2");
+    }
+
+    @Test
     void 并发子单改正只有一个旧页面快照可以提交() throws Exception {
         documents.saveMotherOrder(mother());
         documents.saveChildWorkOrder(child());

@@ -50,12 +50,6 @@ class A4MysqlPostedFactQueryTest {
             clear.setString(2, shipment);
             clear.executeUpdate();
         }
-        try (Connection connection = source.getConnection();
-             PreparedStatement blank = connection.prepareStatement(
-                     "update biz_mother_order set ledger_code = '' where code = ?")) {
-            blank.setString(1, mother);
-            assertThat(blank.executeUpdate()).isEqualTo(1);
-        }
         OrderMaintenanceService service = service(source);
         OperatorContext admin = new OperatorContext("A4 管理员", RoleCode.ADMIN, DataScope.ALL);
         var motherView = service.search(mother, admin).stream()
@@ -67,12 +61,51 @@ class A4MysqlPostedFactQueryTest {
         assertThatThrownBy(() -> service.correctMother(mother, new OrderMaintenanceCommands.MotherCorrection(
                 null, "恒信珠宝", "AU9999", "A4 查询货品", new BigDecimal("3"), new BigDecimal("2"),
                 "抛光", "2026-10-20", "", "数量核对", "a4-query-mother-" + suffix, motherView.revision()), admin))
-                .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不能按收货录入错误冲正");
         assertThatThrownBy(() -> service.correctChild(child, new OrderMaintenanceCommands.ChildCorrection(
                 null, "恒信珠宝", "AU9999", "A4 查询货品", BigDecimal.ONE, new BigDecimal("2"),
                 "抛光", "2026-10-20", "镶嵌", "工序核对", "a4-query-child-" + suffix, childView.revision()), admin))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
         assertThat(explainKey(source, mother, child)).isEqualTo("idx_stock_ledger_mother_time");
+    }
+
+    @Test
+    void 未拆单母单改正数量会追加冲正且同请求不重复() throws Exception {
+        MysqlDataSource source = source();
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String mother = intake(source, suffix);
+        OrderMaintenanceService service = service(source);
+        OperatorContext admin = new OperatorContext("A4 管理员", RoleCode.ADMIN, DataScope.ALL);
+        var view = service.search(mother, admin).get(0);
+        var command = new OrderMaintenanceCommands.MotherCorrection(1001L, "恒信珠宝", "AU9999", "A4 查询货品",
+                new BigDecimal("3"), new BigDecimal("2"), "抛光", "2026-10-20", "", "录错数量",
+                "a4-reverse-" + suffix, view.revision());
+        service.correctMother(mother, command, admin);
+        service.correctMother(mother, command, admin);
+        assertThat(queryNumber(source, "select quantity from biz_mother_order where code = ?", mother))
+                .isEqualByComparingTo("3");
+        assertThat(queryNumber(source, """
+                select count(*) from inv_stock_ledger
+                 where mother_order_code = ? and document_type = 'inbound_reversal'
+                """, mother)).isEqualByComparingTo("1");
+        assertThat(queryNumber(source, """
+                select count(*) from inv_stock_ledger where mother_order_code = ? and document_type = 'inbound_confirm'
+                """, mother)).isEqualByComparingTo("2");
+        assertThat(queryNumber(source, """
+                select available_quantity from inv_stock_balance
+                 where mother_order_code = ? and stock_status = 'RAW_WAITING'
+                """, mother)).isEqualByComparingTo("3");
+    }
+
+    private BigDecimal queryNumber(MysqlDataSource source, String sql, String code) throws SQLException {
+        try (Connection connection = source.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getBigDecimal(1);
+            }
+        }
     }
 
     private String explainKey(MysqlDataSource source, String mother, String child) throws SQLException {

@@ -229,6 +229,27 @@ public class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public boolean hasMotherPosting(String motherOrderCode) {
+        String sql = """
+                select 1 from fin_receivable_line where mother_order_code = ?
+                union all select 1 from fin_payroll_line where mother_order_code = ?
+                union all select 1 from fin_payable where mother_order_code = ?
+                limit 1
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, motherOrderCode);
+            statement.setString(2, motherOrderCode);
+            statement.setString(3, motherOrderCode);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法核对母单财务记录", ex);
+        }
+    }
+
+    @Override
     public List<ReceivableLine> listReceivables() {
         return queryReceivables("select * from fin_receivable_line order by code");
     }

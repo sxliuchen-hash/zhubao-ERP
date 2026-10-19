@@ -32,6 +32,14 @@ public interface StockLedgerRepository {
      */
     List<StockLedgerEntry> findLedgersByCustomers(Set<Long> customerIds, Set<String> motherOrderCodes);
 
+    /** 在当前工作单元里读取一张母单的流水，能看见尚未提交的冲正。 */
+    default List<StockLedgerEntry> ledgersForMother(String motherOrderCode, WorkSession session) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("库存读取必须使用工作单元连接");
+        }
+        return findLedgersByCustomers(Set.of(), motherOrderCode == null ? Set.of() : Set.of(motherOrderCode));
+    }
+
     /**
      * 母单号与单据号相同时，该母单下任意流水都算已入账。
      * 子单还要看单据号、目标工单号或来源工单号，避免把发货单号误当成没有流水。

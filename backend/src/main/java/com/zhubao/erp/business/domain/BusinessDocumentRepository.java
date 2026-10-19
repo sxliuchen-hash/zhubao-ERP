@@ -30,6 +30,14 @@ public interface BusinessDocumentRepository {
     /** 新单逐行读取；旧单由仓储按单材质快照合成一条只读明细。 */
     List<ReceiptLine> listReceiptLines(String motherOrderCode);
 
+    /** 只返回已经保存的收货明细，不把母单汇总行伪装成明细。 */
+    List<ReceiptLine> listStoredReceiptLines(String motherOrderCode, WorkSession session);
+
+    void replaceReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session);
+
+    /** 母单是否已有子单、来源分配、工序交付或发货。 */
+    boolean motherHasDownstream(String motherOrderCode, WorkSession session);
+
     void saveReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session);
 
     void updateMotherOrderSummary(String motherOrderCode, java.math.BigDecimal quantity,

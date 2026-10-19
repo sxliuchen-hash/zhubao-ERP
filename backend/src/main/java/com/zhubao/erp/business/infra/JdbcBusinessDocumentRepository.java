@@ -206,6 +206,71 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public List<ReceiptLine> listStoredReceiptLines(String motherOrderCode, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement("""
+                select line_no, material_code, material_name_snapshot, goods_name_snapshot,
+                       quantity, quantity_unit, weight, ledger_code
+                  from biz_receipt_line where mother_order_code = ? order by line_no
+                """)) {
+            statement.setString(1, motherOrderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<ReceiptLine> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(new ReceiptLine(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                            rs.getBigDecimal(5), rs.getString(6), rs.getBigDecimal(7), rs.getString(8)));
+                }
+                return rows;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("收货明细读取失败", ex);
+        }
+    }
+
+    @Override
+    public void replaceReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement("""
+                update biz_receipt_line
+                   set quantity = ?, weight = ?, ledger_code = ?
+                 where mother_order_code = ? and line_no = ?
+                """)) {
+            statement.setBigDecimal(1, line.quantity());
+            statement.setBigDecimal(2, line.weight());
+            statement.setString(3, line.ledgerCode());
+            statement.setString(4, motherOrderCode);
+            statement.setInt(5, line.lineNo());
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("收货明细不存在");
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("收货明细更新失败", ex);
+        }
+    }
+
+    @Override
+    public boolean motherHasDownstream(String motherOrderCode, WorkSession session) {
+        String sql = """
+                select case when exists (select 1 from biz_work_order where mother_order_code = ?)
+                    or exists (select 1 from biz_child_line_allocation where mother_order_code = ?)
+                    or exists (select 1 from biz_process_station_handoff where order_code = ?)
+                    or exists (select 1 from biz_outbound_order where mother_order_code = ?)
+                    or exists (select 1 from biz_outbound_order_item where mother_order_code = ?)
+                    then 1 else 0 end
+                """;
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
+            for (int index = 1; index <= 5; index++) {
+                statement.setString(index, motherOrderCode);
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() && result.getInt(1) == 1;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法核对母单下游事实", ex);
+        }
+    }
+
+    @Override
     public List<ReceiptLine> listReceiptLines(String motherOrderCode) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""

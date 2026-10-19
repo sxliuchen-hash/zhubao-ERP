@@ -71,6 +71,8 @@ describe('单据维护', () => {
     const second = vi.mocked(correctMaintainedOrder).mock.calls[1][2];
     expect(first).toBe(second);
     expect(wrapper.get('[aria-label="MD-1 货品"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[aria-label="MD-1 数量"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('[aria-label="MD-1 重量"]').attributes('disabled')).toBeUndefined();
     await wrapper.get('[aria-label="MD-1 要求"]').setValue('改正要求');
     await save();
     await flushPromises();

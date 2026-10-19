@@ -127,6 +127,42 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public List<ReceiptLine> listStoredReceiptLines(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        return List.copyOf(receiptLines.getOrDefault(motherOrderCode, List.of()));
+    }
+
+    @Override
+    public synchronized void replaceReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session) {
+        requireSession(session);
+        List<ReceiptLine> previous = receiptLines.get(motherOrderCode);
+        if (previous == null || previous.stream().noneMatch(item -> item.lineNo() == line.lineNo())) {
+            throw new BusinessException("收货明细不存在");
+        }
+        List<ReceiptLine> next = new ArrayList<>();
+        for (ReceiptLine item : previous) {
+            next.add(item.lineNo() == line.lineNo() ? line : item);
+        }
+        receiptLines.put(motherOrderCode, next);
+        session.onRollback(() -> receiptLines.put(motherOrderCode, previous));
+    }
+
+    @Override
+    public synchronized boolean motherHasDownstream(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        if (!listChildWorkOrdersAny(motherOrderCode).isEmpty()) {
+            return true;
+        }
+        if (!childAllocations.getOrDefault(motherOrderCode, List.of()).isEmpty()) {
+            return true;
+        }
+        if (processHandoffs.values().stream().anyMatch(handoff -> motherOrderCode.equals(handoff.orderCode()))) {
+            return true;
+        }
+        return outboundOrders.values().stream().anyMatch(order -> motherOrderCode.equals(order.motherOrderCode()));
+    }
+
+    @Override
     public List<ReceiptLine> listReceiptLines(String motherOrderCode) {
         List<ReceiptLine> rows = receiptLines.get(motherOrderCode);
         if (rows != null && !rows.isEmpty()) return List.copyOf(rows);

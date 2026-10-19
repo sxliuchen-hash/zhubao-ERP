@@ -5,7 +5,12 @@ import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OrderAdjustment;
 import com.zhubao.erp.business.domain.OrderRecycleMark;
+import com.zhubao.erp.business.domain.ReceiptLine;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.finance.domain.FinanceRepository;
+import com.zhubao.erp.inventory.domain.ReceiptEntryReversal;
+import com.zhubao.erp.inventory.domain.StockLedgerEntry;
+import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
@@ -42,6 +47,7 @@ public class OrderMaintenanceService {
     private final PermissionGuard permissions;
     private final BusinessWorkUnit workUnit;
     private final StockLedgerService stocks;
+    private final FinanceRepository finance;
 
     public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
                                    PrintRoutingRepository routing, PermissionGuard permissions) {
@@ -54,16 +60,23 @@ public class OrderMaintenanceService {
         this(documents, printJobs, routing, permissions, workUnit, null);
     }
 
-    @Autowired
     public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
                                    PrintRoutingRepository routing, PermissionGuard permissions,
                                    BusinessWorkUnit workUnit, StockLedgerService stocks) {
+        this(documents, printJobs, routing, permissions, workUnit, stocks, null);
+    }
+
+    @Autowired
+    public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
+                                   PrintRoutingRepository routing, PermissionGuard permissions,
+                                   BusinessWorkUnit workUnit, StockLedgerService stocks, FinanceRepository finance) {
         this.documents = documents;
         this.printJobs = printJobs;
         this.routing = routing;
         this.permissions = permissions;
         this.workUnit = workUnit;
         this.stocks = stocks;
+        this.finance = finance;
     }
 
     public List<MaintainedOrder> search(String code, OperatorContext operator) {
@@ -153,17 +166,15 @@ public class OrderMaintenanceService {
         String reason = requireReason(command.reason());
         BigDecimal quantity = requireQuantity(command.quantity());
         BigDecimal weight = requireWeight(command.weight());
-        MotherOrderRecord next = new MotherOrderRecord(current.code(),
-                command.customerId() == null ? current.customerId() : command.customerId(),
-                current.ownerCustomerId(), required(command.materialCode(), "请填写材质"), current.inboundDate(),
-                current.expressCompany(), current.courierNo(), current.senderName(), current.receiverName(),
-                current.unpackSigner(), required(command.goodsName(), "请填写货品"), current.ownerType(),
-                current.customerOwned(), current.warehouseCode(), quantity, current.quantityUnit(), weight,
-                current.stockStatus(), current.ledgerCode(), current.sourceRegisterType(), current.sourceRegisterLineNo(),
-                current.sourceRegisterSequence(), current.operator(), current.evidenceCode(), text(command.remark()),
-                current.status(), current.createdAt(), text(command.requirement()), text(command.dueDate()),
-                required(command.customerName(), "请填写客户"));
-        assertPostedMotherFactsUnchanged(current, next);
+        String ledgerCode = current.ledgerCode();
+        MotherOrderRecord proposed = motherCorrection(current, command, quantity, weight, ledgerCode);
+        assertPostedMotherIdentityUnchanged(current, proposed);
+        if (isPosted(current.ledgerCode(), current.code(), current.code())
+                && (!sameAmount(current.quantity(), quantity) || !sameAmount(current.weight(), weight))) {
+            ledgerCode = reverseReceiptEntry(current, quantity, weight, session);
+            proposed = motherCorrection(current, command, quantity, weight, ledgerCode);
+        }
+        MotherOrderRecord next = proposed;
         OrderAdjustment adjustment = adjustment("MOTHER", current.code(), motherText(current),
                 motherText(next), reason, operator);
         if (session == null) {
@@ -668,14 +679,71 @@ public class OrderMaintenanceService {
                 + " " + record.processingRequirement() + " " + record.dueDate() + " " + record.processes();
     }
 
-    private void assertPostedMotherFactsUnchanged(MotherOrderRecord current, MotherOrderRecord next) {
+    private MotherOrderRecord motherCorrection(MotherOrderRecord current, OrderMaintenanceCommands.MotherCorrection command,
+                                               BigDecimal quantity, BigDecimal weight, String ledgerCode) {
+        return new MotherOrderRecord(current.code(),
+                command.customerId() == null ? current.customerId() : command.customerId(),
+                current.ownerCustomerId(), required(command.materialCode(), "请填写材质"), current.inboundDate(),
+                current.expressCompany(), current.courierNo(), current.senderName(), current.receiverName(),
+                current.unpackSigner(), required(command.goodsName(), "请填写货品"), current.ownerType(),
+                current.customerOwned(), current.warehouseCode(), quantity, current.quantityUnit(), weight,
+                current.stockStatus(), ledgerCode, current.sourceRegisterType(), current.sourceRegisterLineNo(),
+                current.sourceRegisterSequence(), current.operator(), current.evidenceCode(), text(command.remark()),
+                current.status(), current.createdAt(), text(command.requirement()), text(command.dueDate()),
+                required(command.customerName(), "请填写客户"));
+    }
+
+    private String reverseReceiptEntry(MotherOrderRecord current, BigDecimal quantity, BigDecimal weight, WorkSession session) {
+        if (session == null || stocks == null) {
+            throw new BusinessException("已入账数量和重量须走差额或冲正，不能直接覆盖");
+        }
+        if (documents.motherHasDownstream(current.code(), session)
+                || (finance != null && finance.hasMotherPosting(current.code()))) {
+            throw new BusinessException("母单已有拆单、交付、发货或财务记录，不能按收货录入错误冲正");
+        }
+        List<StockLedgerEntry> inbound = stocks.ledgersForMother(current.code(), session).stream()
+                .filter(entry -> "inbound_confirm".equals(entry.documentType()) && current.code().equals(entry.documentCode())
+                        && entry.to() != null)
+                .toList();
+        boolean otherFacts = stocks.ledgersForMother(current.code(), session).stream()
+                .anyMatch(entry -> !"inbound_confirm".equals(entry.documentType()));
+        if (otherFacts || inbound.size() != 1) {
+            throw new BusinessException("收货流水不唯一或已有其他库存事实，不能按录入错误冲正");
+        }
+        StockLedgerEntry original = inbound.get(0);
+        if ((current.ledgerCode() != null && !current.ledgerCode().isBlank() && !current.ledgerCode().equals(original.code()))
+                || !sameAmount(original.quantity(), current.quantity())
+                || !sameAmount(original.weight(), current.weight())
+                || !current.materialCode().equals(original.to().materialCode())) {
+            throw new BusinessException("母单数量与收货流水不一致，不能按录入错误冲正");
+        }
+        List<ReceiptLine> lines = documents.listStoredReceiptLines(current.code(), session);
+        if (lines.size() > 1) {
+            throw new BusinessException("多条收货明细不能按整单录入错误冲正");
+        }
+        if (lines.size() == 1 && (!sameAmount(lines.get(0).quantity(), current.quantity())
+                || !sameAmount(lines.get(0).weight(), current.weight())
+                || !current.materialCode().equals(lines.get(0).materialCode()))) {
+            throw new BusinessException("收货明细与母单不一致，不能按录入错误冲正");
+        }
+        stocks.reverseInbound(new ReceiptEntryReversal(original.code(), current.code(), original.to(),
+                original.quantity(), original.weight(), "收货录入错误冲正"), session);
+        StockLedgerEntry corrected = stocks.transfer(new StockTransferCommand("inbound_confirm", current.code(), null,
+                original.to(), quantity, weight, "收货录入错误更正"), session);
+        if (lines.size() == 1) {
+            ReceiptLine line = lines.get(0);
+            documents.replaceReceiptLine(current.code(), new ReceiptLine(line.lineNo(), line.materialCode(),
+                    line.materialName(), line.goodsName(), quantity, line.quantityUnit(), weight, corrected.code()), session);
+        }
+        return corrected.code();
+    }
+
+    private void assertPostedMotherIdentityUnchanged(MotherOrderRecord current, MotherOrderRecord next) {
         if (isPosted(current.ledgerCode(), current.code(), current.code()) && (!Objects.equals(current.customerId(), next.customerId())
                 || !Objects.equals(current.customerName(), next.customerName())
                 || !Objects.equals(current.materialCode(), next.materialCode())
-                || !Objects.equals(current.goodsName(), next.goodsName())
-                || !sameAmount(current.quantity(), next.quantity())
-                || !sameAmount(current.weight(), next.weight()))) {
-            throw new BusinessException("已入账母单的客户、材质、货品、数量和重量须走差额或冲正，不能直接覆盖");
+                || !Objects.equals(current.goodsName(), next.goodsName()))) {
+            throw new BusinessException("已入账母单的客户、材质和货品不能直接覆盖，须另行办理差额或冲正");
         }
     }
 

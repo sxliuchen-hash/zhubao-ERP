@@ -21,6 +21,11 @@ public interface FinanceRepository {
 
     List<ReceivableLine> listReceivables();
 
+    /** 母单是否已有应收、工资或应付，这些不能靠收货冲正改写。 */
+    default boolean hasMotherPosting(String motherOrderCode) {
+        return listReceivables().stream().anyMatch(line -> motherOrderCode.equals(line.motherOrderCode()));
+    }
+
     Optional<ReceivableLine> findReceivableByCode(String code);
 
     Optional<ReceivableLine> findReceivableBySourceKey(String sourceKey);
