@@ -101,6 +101,42 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
             }
         } catch (SQLException ex) { throw failed("创建打印批次失败", ex); }
     }
+    @Override public PrintBatch insertOriginalBatch(PrintBatch batch) {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                rejectUnresolved(c, batch.businessCode());
+                insertBatch(c, batch);
+                c.commit();
+                return batch;
+            } catch (BusinessException ex) {
+                c.rollback();
+                throw ex;
+            } catch (SQLException ex) {
+                c.rollback();
+                if (duplicate(ex)) return batchByRequest(batch.requestId()).orElseThrow(() -> failed("无法读回打印批次", ex));
+                throw ex;
+            }
+        } catch (BusinessException ex) { throw ex; }
+        catch (SQLException ex) { throw failed("创建打印批次失败", ex); }
+    }
+    private void rejectUnresolved(Connection c, String businessCode) throws SQLException {
+        String sql = "select j.status_code, j.paper_check_result from biz_print_target_job j "
+                + "join biz_print_batch b on b.id = j.batch_id "
+                + "where b.business_code = ? and j.recycled_at is null for update";
+        try (PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, businessCode);
+            try (ResultSet r = s.executeQuery()) {
+                while (r.next()) {
+                    String status = r.getString("status_code");
+                    String paper = r.getString("paper_check_result");
+                    if (("FAILED".equals(status) || "UNCERTAIN".equals(status)) && (paper == null || paper.isBlank())) {
+                        throw new BusinessException("该单有失败或不确定的打印任务，请先核纸，不能直接再建批次");
+                    }
+                }
+            }
+        }
+    }
     @Override public Optional<PrintBatch> rerouteJob(String originalId, PrintJobStatus expected,
                                                        PrintBatch replacement, String reason, String now) {
         try (Connection c = dataSource.getConnection()) {

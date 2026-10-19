@@ -43,6 +43,18 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
         requests.put(batch.requestId(), batch.id());
         return batch(batch.id()).orElseThrow();
     }
+    @Override public synchronized PrintBatch insertOriginalBatch(PrintBatch batch) {
+        PrintBatch existing = batchByRequest(batch.requestId()).orElse(null);
+        if (existing != null) return existing;
+        for (PrintTargetJob job : jobsForBusinessAny(batch.businessCode())) {
+            if (recycled.containsKey(job.id())) continue;
+            if ((job.status() == PrintJobStatus.FAILED || job.status() == PrintJobStatus.UNCERTAIN)
+                    && (job.paperCheckResult() == null || job.paperCheckResult().isBlank())) {
+                throw new BusinessException("该单有失败或不确定的打印任务，请先核纸，不能直接再建批次");
+            }
+        }
+        return insertBatch(batch);
+    }
     @Override public synchronized Optional<PrintBatch> rerouteJob(String originalId, PrintJobStatus expected,
                                                                    PrintBatch replacement, String reason, String now) {
         PrintTargetJob original = jobs.get(originalId);

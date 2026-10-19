@@ -14,6 +14,12 @@ public interface PrintRoutingRepository {
     Optional<PrintBatch> batchByRequest(String requestId);
     Optional<PrintBatch> batch(String batchId);
     PrintBatch insertBatch(PrintBatch batch);
+
+    /**
+     * 新建原始批次。先锁定该业务单尚未回收的目标任务；失败或不确定且未核纸时拒绝，避免再生成可领取任务。
+     * 改派不走这里，以免取消原任务和插入后继任务被这次检查拆开。
+     */
+    PrintBatch insertOriginalBatch(PrintBatch batch);
     Optional<PrintBatch> rerouteJob(String originalId, PrintJobStatus expected, PrintBatch replacement, String reason, String now);
     Optional<PrintTargetJob> job(String jobId);
     Optional<PrintTargetJob> claim(String stationId, String leaseUntil, String now);
