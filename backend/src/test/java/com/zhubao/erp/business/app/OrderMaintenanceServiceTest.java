@@ -5,6 +5,12 @@ import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OrderAdjustment;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.domain.OwnerType;
+import com.zhubao.erp.inventory.domain.StockDimension;
+import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.label.domain.PrintBatch;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobStatus;
@@ -305,6 +311,47 @@ class OrderMaintenanceServiceTest {
                 new BigDecimal("2"), new BigDecimal("10"), "修改要求", "2026-11-01", "", "核对描述",
                 "req-posted-mother", motherRevision), admin);
         assertThat(documents.listOrderAdjustments("MOTHER", "MD-1")).hasSize(1);
+    }
+
+    @Test
+    void 旧单缺失流水编号时仍按实际库存流水保护入账事实() {
+        MotherOrderRecord original = mother();
+        documents.saveMotherOrder(new MotherOrderRecord(original.code(), original.customerId(),
+                original.ownerCustomerId(), original.materialCode(), original.inboundDate(),
+                original.expressCompany(), original.courierNo(), original.senderName(), original.receiverName(),
+                original.unpackSigner(), original.goodsName(), original.ownerType(), original.customerOwned(),
+                original.warehouseCode(), original.quantity(), original.quantityUnit(), original.weight(),
+                original.stockStatus(), "", original.sourceRegisterType(), original.sourceRegisterLineNo(),
+                original.sourceRegisterSequence(), original.operator(), original.evidenceCode(), original.remark(),
+                original.status(), original.createdAt(), original.processingRequirement(), original.dueDate(),
+                original.customerName()));
+        ChildWorkOrderRecord split = child();
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord(split.code(), split.motherOrderCode(), split.customerId(),
+                split.customerName(), split.processingRequirement(), split.dueDate(), split.materialCode(),
+                split.goodsName(), split.quantity(), split.quantityUnit(), split.weight(), split.warehouseCode(),
+                split.processes(), split.verificationCode(), "", split.operator(), split.createdAt()));
+        StockLedgerService stocks = new StockLedgerService(new InMemoryStockLedgerRepository());
+        StockDimension raw = new StockDimension(OwnerType.CUSTOMER, 1L, 1L, "MD-1", null, "AU", "WH", StockStatus.RAW_WAITING);
+        StockDimension wip = new StockDimension(OwnerType.CUSTOMER, 1L, 1L, "MD-1", "ZD-1", "AU", "WH", StockStatus.WIP);
+        stocks.transfer(new StockTransferCommand("inbound_confirm", "MD-1", null, raw,
+                new BigDecimal("2"), new BigDecimal("10"), "历史收货"));
+        stocks.transfer(new StockTransferCommand("work_order_split", "ZD-1", raw, wip,
+                new BigDecimal("2"), new BigDecimal("10"), "历史拆单"));
+        OrderMaintenanceService guarded = new OrderMaintenanceService(documents, printJobs, routing,
+                new PermissionGuard(), new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), stocks);
+        MaintainedOrder motherView = guarded.search("MD-1", admin).get(0);
+        MaintainedOrder childView = guarded.search("ZD-1", admin).stream()
+                .filter(row -> "WORK_ORDER".equals(row.targetType())).findFirst().orElseThrow();
+        assertThat(motherView.postedFactsLocked()).isTrue();
+        assertThat(childView.postedFactsLocked()).isTrue();
+        assertThatThrownBy(() -> guarded.correctMother("MD-1", new OrderMaintenanceCommands.MotherCorrection(
+                null, "张三", "PT", "戒指", new BigDecimal("2"), new BigDecimal("10"), "抛光", "2026-11-01", "",
+                "材质核对", "req-legacy-mother", motherView.revision()), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
+        assertThatThrownBy(() -> guarded.correctChild("ZD-1", new OrderMaintenanceCommands.ChildCorrection(
+                null, "张三", "AU", "戒指", new BigDecimal("2"), new BigDecimal("10"), "抛光", "2026-11-01", "镶嵌",
+                "工序核对", "req-legacy-child", childView.revision()), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("差额或冲正");
     }
 
     @Test

@@ -111,7 +111,7 @@ function isOrder(order: MaintainedOrder) {
 <template>
   <section class="order-maintenance" aria-label="单据维护">
     <h2>单据维护</h2>
-    <p>管理员可改正单据说明和未领取打印任务的份数。打印目标须使用批次改派，保留原任务关联；已领取、出队或状态不明的任务须先核纸。已入账事实不能直接覆盖；回收不会自动冲正库存和账单。</p>
+    <p>管理员可改正单据说明和未领取打印任务的份数。打印目标须使用批次改派，保留原任务关联；已领取、出队或状态不明的任务须先核纸。已入账的要求、期限及金额变化请走进度页改单申请和财务确认；客户、材质、数量及重量须核对库存来源后办理对应冲正。回收不会自动冲正库存和账单。</p>
     <label>单号<input v-model="code" aria-label="维护单号" /></label>
     <label>原因<input v-model="reason" aria-label="维护原因" placeholder="修改或删除时必填" /></label>
     <button class="secondary-button" type="button" :disabled="busy" @click="search">查找</button>

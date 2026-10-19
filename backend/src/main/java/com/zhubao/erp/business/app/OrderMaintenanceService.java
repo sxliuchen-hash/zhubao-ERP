@@ -12,6 +12,7 @@ import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.domain.PrintRecycle;
 import com.zhubao.erp.label.domain.PrintRoutingRepository;
 import com.zhubao.erp.label.domain.PrintTargetJob;
+import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
@@ -26,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,21 +41,29 @@ public class OrderMaintenanceService {
     private final PrintRoutingRepository routing;
     private final PermissionGuard permissions;
     private final BusinessWorkUnit workUnit;
+    private final StockLedgerService stocks;
 
     public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
                                    PrintRoutingRepository routing, PermissionGuard permissions) {
         this(documents, printJobs, routing, permissions, null);
     }
 
-    @Autowired
     public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
                                    PrintRoutingRepository routing, PermissionGuard permissions,
                                    BusinessWorkUnit workUnit) {
+        this(documents, printJobs, routing, permissions, workUnit, null);
+    }
+
+    @Autowired
+    public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
+                                   PrintRoutingRepository routing, PermissionGuard permissions,
+                                   BusinessWorkUnit workUnit, StockLedgerService stocks) {
         this.documents = documents;
         this.printJobs = printJobs;
         this.routing = routing;
         this.permissions = permissions;
         this.workUnit = workUnit;
+        this.stocks = stocks;
     }
 
     public List<MaintainedOrder> search(String code, OperatorContext operator) {
@@ -499,7 +509,8 @@ public class OrderMaintenanceService {
         return new MaintainedOrder("MOTHER", record.code(), record.code(), record.customerName(), record.materialCode(),
                 record.goodsName(), record.processingRequirement(), record.dueDate(), plain(record.quantity()),
                 plain(record.weight()), "", null, "", "", mark != null, mark == null ? "" : mark.reason(),
-                lines("MOTHER", record.code()), OrderMaintenanceRevision.of(record), isPosted(record.ledgerCode()));
+                lines("MOTHER", record.code()), OrderMaintenanceRevision.of(record),
+                isPosted(record.ledgerCode(), record.code(), record.code()));
     }
 
     private MaintainedOrder toChild(ChildWorkOrderRecord record) {
@@ -509,7 +520,7 @@ public class OrderMaintenanceService {
                 record.materialCode(), record.goodsName(), record.processingRequirement(), record.dueDate(),
                 plain(record.quantity()), plain(record.weight()), record.processes(), null, "", "",
                 mark != null || motherRecycled, mark == null ? "" : mark.reason(), lines("WORK_ORDER", record.code()),
-                OrderMaintenanceRevision.of(record), isPosted(record.ledgerCode()));
+                OrderMaintenanceRevision.of(record), isPosted(record.ledgerCode(), record.motherOrderCode(), record.code()));
     }
 
     private MaintainedOrder toPrintJob(PrintJob job) {
@@ -571,8 +582,8 @@ public class OrderMaintenanceService {
                 + " " + record.processingRequirement() + " " + record.dueDate() + " " + record.processes();
     }
 
-    private static void assertPostedMotherFactsUnchanged(MotherOrderRecord current, MotherOrderRecord next) {
-        if (isPosted(current.ledgerCode()) && (!Objects.equals(current.customerId(), next.customerId())
+    private void assertPostedMotherFactsUnchanged(MotherOrderRecord current, MotherOrderRecord next) {
+        if (isPosted(current.ledgerCode(), current.code(), current.code()) && (!Objects.equals(current.customerId(), next.customerId())
                 || !Objects.equals(current.customerName(), next.customerName())
                 || !Objects.equals(current.materialCode(), next.materialCode())
                 || !Objects.equals(current.goodsName(), next.goodsName())
@@ -582,8 +593,9 @@ public class OrderMaintenanceService {
         }
     }
 
-    private static void assertPostedChildFactsUnchanged(ChildWorkOrderRecord current, ChildWorkOrderRecord next) {
-        if (isPosted(current.ledgerCode()) && (!Objects.equals(current.customerId(), next.customerId())
+    private void assertPostedChildFactsUnchanged(ChildWorkOrderRecord current, ChildWorkOrderRecord next) {
+        if (isPosted(current.ledgerCode(), current.motherOrderCode(), current.code())
+                && (!Objects.equals(current.customerId(), next.customerId())
                 || !Objects.equals(current.customerName(), next.customerName())
                 || !Objects.equals(current.materialCode(), next.materialCode())
                 || !Objects.equals(current.goodsName(), next.goodsName())
@@ -594,8 +606,10 @@ public class OrderMaintenanceService {
         }
     }
 
-    private static boolean isPosted(String ledgerCode) {
-        return ledgerCode != null && !ledgerCode.isBlank();
+    private boolean isPosted(String ledgerCode, String motherCode, String code) {
+        if (ledgerCode != null && !ledgerCode.isBlank()) return true;
+        return stocks != null && stocks.ledgersForCustomers(Set.of(), Set.of(motherCode)).stream()
+                .anyMatch(entry -> code.equals(entry.documentCode()));
     }
 
     private static boolean sameAmount(BigDecimal left, BigDecimal right) {
