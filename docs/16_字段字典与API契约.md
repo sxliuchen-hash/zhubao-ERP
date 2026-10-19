@@ -2249,6 +2249,8 @@ PWA 一期边界：
 | `POST /api/business/order-maintenance/recycle` | `targetType` 为 `MOTHER`、`WORK_ORDER`、`PRINT_JOB` 或 `PRINT_TARGET`。回收母单会同时隐藏其子单和相关打印任务 |
 | `POST /api/business/order-maintenance/restore` | 恢复母单会带回同一次放入回收站的子单和打印任务。母单仍在回收站时，不能单独恢复子单或打印任务 |
 
+母单、子单的查找响应新增 `revision`，由当前完整单据快照计算。对应改正请求必须携带本次确认的 `requestId` 和查找时的 `expectedRevision`；同账号、同编号、同内容重试不重复写入，接口重新读取并返回当前单据视图，改变内容却复用编号会拒绝。另一笔改正或业务写入改变单据后，旧 `expectedRevision` 会被拒绝，页面须重新查找并核对。此规则仅适用于母单／子单改正；打印任务改正、回收及恢复尚未接入同一命令边界。库存、财务和旧明细仍不会因管理员改正自动冲正。
+
 ### BusinessWorkspaceController
 
 来源：[BusinessWorkspaceController](../backend/src/main/java/com/zhubao/erp/business/web/BusinessWorkspaceController.java)。

@@ -14,6 +14,10 @@ import com.zhubao.erp.label.domain.PrintTargetJob;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
+import com.zhubao.erp.work.app.BusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandCall;
+import com.zhubao.erp.work.domain.WorkSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -32,13 +36,22 @@ public class OrderMaintenanceService {
     private final PrintJobRepository printJobs;
     private final PrintRoutingRepository routing;
     private final PermissionGuard permissions;
+    private final BusinessWorkUnit workUnit;
 
     public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
                                    PrintRoutingRepository routing, PermissionGuard permissions) {
+        this(documents, printJobs, routing, permissions, null);
+    }
+
+    @Autowired
+    public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
+                                   PrintRoutingRepository routing, PermissionGuard permissions,
+                                   BusinessWorkUnit workUnit) {
         this.documents = documents;
         this.printJobs = printJobs;
         this.routing = routing;
         this.permissions = permissions;
+        this.workUnit = workUnit;
     }
 
     public List<MaintainedOrder> search(String code, OperatorContext operator) {
@@ -98,8 +111,33 @@ public class OrderMaintenanceService {
 
     public MaintainedOrder correctMother(String code, OrderMaintenanceCommands.MotherCorrection command, OperatorContext operator) {
         requireAdmin(operator);
-        MotherOrderRecord current = documents.findMotherOrderAny(required(code, "请填写母单号"))
+        String key = required(code, "请填写母单号");
+        if (workUnit != null) {
+            required(command.expectedRevision(), "请重新查找母单后再保存");
+            workUnit.execute(new CommandCall(required(command.requestId(), "改单必须带请求编号"),
+                    operator.operator(), "ADMIN_CORRECT_MOTHER", "MOTHER", key,
+                    OrderMaintenanceRevision.of(payload(command.customerId(), command.customerName(), command.materialCode(), command.goodsName(),
+                            command.quantity(), command.weight(), command.requirement(), command.dueDate(),
+                            command.remark(), command.reason(), command.expectedRevision()))), session -> {
+                applyMotherCorrection(key, command, operator, session);
+                return key;
+            });
+            return toMother(documents.findMotherOrderAny(key).orElseThrow(() -> new BusinessException("母单不存在")));
+        }
+        return toMother(applyMotherCorrection(key, command, operator, null));
+    }
+
+    private MotherOrderRecord applyMotherCorrection(String code, OrderMaintenanceCommands.MotherCorrection command,
+                                                     OperatorContext operator, WorkSession session) {
+        if (session != null) {
+            documents.lockMotherOrder(code, session);
+        }
+        MotherOrderRecord current = (session == null ? documents.findMotherOrderAny(code)
+                : documents.findMotherOrderAny(code, session))
                 .orElseThrow(() -> new BusinessException("母单不存在"));
+        if (session != null && !OrderMaintenanceRevision.of(current).equals(command.expectedRevision())) {
+            throw new BusinessException("母单已被修改，请重新查找后再保存");
+        }
         String reason = requireReason(command.reason());
         BigDecimal quantity = requireQuantity(command.quantity());
         BigDecimal weight = requireWeight(command.weight());
@@ -113,15 +151,45 @@ public class OrderMaintenanceService {
                 current.sourceRegisterSequence(), current.operator(), current.evidenceCode(), text(command.remark()),
                 current.status(), current.createdAt(), text(command.requirement()), text(command.dueDate()),
                 required(command.customerName(), "请填写客户"));
-        documents.correctMotherOrder(next, adjustment("MOTHER", current.code(), motherText(current),
-                motherText(next), reason, operator));
-        return toMother(next);
+        OrderAdjustment adjustment = adjustment("MOTHER", current.code(), motherText(current),
+                motherText(next), reason, operator);
+        if (session == null) {
+            documents.correctMotherOrder(next, adjustment);
+        } else {
+            documents.correctMotherOrder(next, adjustment, session);
+        }
+        return next;
     }
 
     public MaintainedOrder correctChild(String code, OrderMaintenanceCommands.ChildCorrection command, OperatorContext operator) {
         requireAdmin(operator);
-        ChildWorkOrderRecord current = documents.findChildWorkOrderAny(required(code, "请填写子单号"))
+        String key = required(code, "请填写子单号");
+        if (workUnit != null) {
+            required(command.expectedRevision(), "请重新查找子单后再保存");
+            workUnit.execute(new CommandCall(required(command.requestId(), "改单必须带请求编号"),
+                    operator.operator(), "ADMIN_CORRECT_CHILD", "WORK_ORDER", key,
+                    OrderMaintenanceRevision.of(payload(command.customerId(), command.customerName(), command.materialCode(), command.goodsName(),
+                            command.quantity(), command.weight(), command.requirement(), command.dueDate(),
+                            command.processes(), command.reason(), command.expectedRevision()))), session -> {
+                applyChildCorrection(key, command, operator, session);
+                return key;
+            });
+            return toChild(documents.findChildWorkOrderAny(key).orElseThrow(() -> new BusinessException("子单不存在")));
+        }
+        return toChild(applyChildCorrection(key, command, operator, null));
+    }
+
+    private ChildWorkOrderRecord applyChildCorrection(String code, OrderMaintenanceCommands.ChildCorrection command,
+                                                       OperatorContext operator, WorkSession session) {
+        if (session != null) {
+            documents.lockChildWorkOrder(code, session);
+        }
+        ChildWorkOrderRecord current = (session == null ? documents.findChildWorkOrderAny(code)
+                : documents.findChildWorkOrderAny(code, session))
                 .orElseThrow(() -> new BusinessException("子单不存在"));
+        if (session != null && !OrderMaintenanceRevision.of(current).equals(command.expectedRevision())) {
+            throw new BusinessException("子单已被修改，请重新查找后再保存");
+        }
         String reason = requireReason(command.reason());
         ChildWorkOrderRecord next = new ChildWorkOrderRecord(current.code(), current.motherOrderCode(),
                 command.customerId() == null ? current.customerId() : command.customerId(),
@@ -130,9 +198,14 @@ public class OrderMaintenanceService {
                 requireQuantity(command.quantity()), current.quantityUnit(), requireWeight(command.weight()),
                 current.warehouseCode(), required(command.processes(), "请填写工序"), current.verificationCode(),
                 current.ledgerCode(), current.operator(), current.createdAt());
-        documents.correctChildWorkOrder(next, adjustment("WORK_ORDER", current.code(), childText(current),
-                childText(next), reason, operator));
-        return toChild(next);
+        OrderAdjustment adjustment = adjustment("WORK_ORDER", current.code(), childText(current),
+                childText(next), reason, operator);
+        if (session == null) {
+            documents.correctChildWorkOrder(next, adjustment);
+        } else {
+            documents.correctChildWorkOrder(next, adjustment, session);
+        }
+        return next;
     }
 
     public MaintainedOrder correctPrintJob(String id, OrderMaintenanceCommands.PrintCorrection command, OperatorContext operator) {
@@ -272,7 +345,7 @@ public class OrderMaintenanceService {
         return new MaintainedOrder("MOTHER", record.code(), record.code(), record.customerName(), record.materialCode(),
                 record.goodsName(), record.processingRequirement(), record.dueDate(), plain(record.quantity()),
                 plain(record.weight()), "", null, "", "", mark != null, mark == null ? "" : mark.reason(),
-                lines("MOTHER", record.code()));
+                lines("MOTHER", record.code()), OrderMaintenanceRevision.of(record));
     }
 
     private MaintainedOrder toChild(ChildWorkOrderRecord record) {
@@ -281,14 +354,15 @@ public class OrderMaintenanceService {
         return new MaintainedOrder("WORK_ORDER", record.code(), record.motherOrderCode(), record.customerName(),
                 record.materialCode(), record.goodsName(), record.processingRequirement(), record.dueDate(),
                 plain(record.quantity()), plain(record.weight()), record.processes(), null, "", "",
-                mark != null || motherRecycled, mark == null ? "" : mark.reason(), lines("WORK_ORDER", record.code()));
+                mark != null || motherRecycled, mark == null ? "" : mark.reason(), lines("WORK_ORDER", record.code()),
+                OrderMaintenanceRevision.of(record));
     }
 
     private MaintainedOrder toPrintJob(PrintJob job) {
         PrintRecycle mark = printJobs.recycleMark(job.id()).orElse(null);
         return new MaintainedOrder("PRINT_JOB", job.id(), job.businessCode(), "", "", "", "", "", "", "", "",
                 job.copies(), job.stationId(), "", mark != null, mark == null ? "" : mark.reason(),
-                lines("PRINT_JOB", job.id()));
+                lines("PRINT_JOB", job.id()), "");
     }
 
     private MaintainedOrder toTarget(PrintTargetJob job) {
@@ -296,7 +370,7 @@ public class OrderMaintenanceService {
         String business = routing.batch(job.batchId()).map(batch -> batch.businessCode()).orElse("");
         return new MaintainedOrder("PRINT_TARGET", job.id(), business, "", "", "", "", "", "", "", "",
                 job.copies(), job.targetStationId(), job.targetQueueId(), mark != null,
-                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()));
+                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()), "");
     }
 
     private List<String> lines(String type, String code) {
@@ -315,6 +389,20 @@ public class OrderMaintenanceService {
     private OrderAdjustment adjustment(String type, String code, String before, String after,
                                        String reason, OperatorContext operator) {
         return new OrderAdjustment(type, code, clip(before), clip(after), reason, operator.operator(), now());
+    }
+
+    private static String payload(Object... fields) {
+        StringBuilder result = new StringBuilder();
+        for (Object field : fields) {
+            if (field == null) {
+                result.append("-1:");
+            } else {
+                String value = field instanceof BigDecimal amount
+                        ? amount.stripTrailingZeros().toPlainString() : field.toString();
+                result.append(value.length()).append(':').append(value);
+            }
+        }
+        return result.toString();
     }
 
     private void requireAdmin(OperatorContext operator) {

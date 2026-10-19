@@ -565,8 +565,28 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public Optional<MotherOrderRecord> findMotherOrderAny(String code, WorkSession session) {
+        requireSession(session);
+        return findMotherOrderAny(code);
+    }
+
+    @Override
     public Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code) {
         return Optional.ofNullable(childWorkOrders.get(code));
+    }
+
+    @Override
+    public Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code, WorkSession session) {
+        requireSession(session);
+        return findChildWorkOrderAny(code);
+    }
+
+    @Override
+    public void lockChildWorkOrder(String code, WorkSession session) {
+        requireSession(session);
+        if (!childWorkOrders.containsKey(code)) {
+            throw new BusinessException("子单不存在：" + code);
+        }
     }
 
     @Override
@@ -603,12 +623,44 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public synchronized void correctMotherOrder(MotherOrderRecord record, OrderAdjustment adjustment,
+                                                WorkSession session) {
+        requireSession(session);
+        MotherOrderRecord previous = motherOrders.get(record.code());
+        if (previous == null) {
+            throw new BusinessException("母单不存在");
+        }
+        orderAdjustments.add(adjustment);
+        motherOrders.put(record.code(), record);
+        session.onRollback(() -> {
+            motherOrders.put(record.code(), previous);
+            orderAdjustments.remove(adjustment);
+        });
+    }
+
+    @Override
     public synchronized void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment) {
         if (!childWorkOrders.containsKey(record.code())) {
             throw new BusinessException("子单不存在");
         }
         orderAdjustments.add(adjustment);
         childWorkOrders.put(record.code(), record);
+    }
+
+    @Override
+    public synchronized void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment,
+                                                   WorkSession session) {
+        requireSession(session);
+        ChildWorkOrderRecord previous = childWorkOrders.get(record.code());
+        if (previous == null) {
+            throw new BusinessException("子单不存在");
+        }
+        orderAdjustments.add(adjustment);
+        childWorkOrders.put(record.code(), record);
+        session.onRollback(() -> {
+            childWorkOrders.put(record.code(), previous);
+            orderAdjustments.remove(adjustment);
+        });
     }
 
     @Override

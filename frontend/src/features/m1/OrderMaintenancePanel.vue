@@ -16,6 +16,7 @@ const bin = ref<MaintainedOrder[]>([]);
 const message = ref('');
 const error = ref('');
 const busy = ref(false);
+const correctionRequests = new Map<string, string>();
 
 const typeLabel: Record<MaintainedOrder['targetType'], string> = {
   MOTHER: '母单',
@@ -60,7 +61,18 @@ function search() {
 
 function save(order: MaintainedOrder) {
   return run(async () => {
-    await correctMaintainedOrder(order, reason.value.trim());
+    const fingerprint = JSON.stringify([
+      order.targetType, order.code, order.revision, order.customerName, order.materialCode,
+      order.goodsName, order.quantity, order.weight, order.requirement, order.dueDate,
+      order.processes, order.copies, order.stationId, order.queueId, reason.value.trim(),
+    ]);
+    let requestId = correctionRequests.get(fingerprint);
+    if (!requestId) {
+      const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      requestId = `maint-${random}`.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 64);
+      correctionRequests.set(fingerprint, requestId);
+    }
+    await correctMaintainedOrder(order, reason.value.trim(), requestId);
     rows.value = await searchMaintainedOrders(order.code);
   }, '已保存修改');
 }

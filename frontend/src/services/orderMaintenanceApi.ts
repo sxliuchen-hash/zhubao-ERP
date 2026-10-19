@@ -18,6 +18,7 @@ export interface MaintainedOrder {
   recycled: boolean;
   recycleReason: string;
   adjustments: string[];
+  revision: string;
 }
 
 export function searchMaintainedOrders(code: string): Promise<MaintainedOrder[]> {
@@ -28,7 +29,7 @@ export function fetchRecycleBin(): Promise<MaintainedOrder[]> {
   return apiGet<MaintainedOrder[]>('/api/business/order-maintenance/recycle-bin');
 }
 
-export function correctMaintainedOrder(order: MaintainedOrder, reason: string): Promise<MaintainedOrder> {
+export function correctMaintainedOrder(order: MaintainedOrder, reason: string, requestId: string): Promise<MaintainedOrder> {
   if (order.targetType === 'MOTHER') {
     return apiPost(`/api/business/order-maintenance/mother-orders/${encodeURIComponent(order.code)}`, {
       customerName: order.customerName,
@@ -40,6 +41,8 @@ export function correctMaintainedOrder(order: MaintainedOrder, reason: string): 
       dueDate: order.dueDate,
       remark: '',
       reason,
+      requestId,
+      expectedRevision: order.revision,
     });
   }
   if (order.targetType === 'WORK_ORDER') {
@@ -53,6 +56,8 @@ export function correctMaintainedOrder(order: MaintainedOrder, reason: string): 
       dueDate: order.dueDate,
       processes: order.processes,
       reason,
+      requestId,
+      expectedRevision: order.revision,
     });
   }
   const path = order.targetType === 'PRINT_JOB' ? 'print-jobs' : 'print-targets';

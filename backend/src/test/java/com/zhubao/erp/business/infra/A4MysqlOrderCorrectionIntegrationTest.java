@@ -3,11 +3,17 @@ package com.zhubao.erp.business.infra;
 import com.mysql.cj.jdbc.MysqlDataSource;
 import com.zhubao.erp.business.app.BusinessOperationService;
 import com.zhubao.erp.business.app.MobileIntakeService;
+import com.zhubao.erp.business.app.OrderMaintenanceCommands;
+import com.zhubao.erp.business.app.OrderMaintenanceService;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OrderAdjustment;
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.infra.JdbcStockLedgerRepository;
+import com.zhubao.erp.label.infra.JdbcPrintJobRepository;
+import com.zhubao.erp.label.infra.JdbcPrintRoutingRepository;
+import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -25,6 +31,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -72,6 +81,91 @@ class A4MysqlOrderCorrectionIntegrationTest {
         documents.correctMotherOrder(next, adjustment(motherCode, "A4 已核对"));
         assertThat(goodsName(source, motherCode)).isEqualTo("A4 改正货品");
         assertThat(adjustmentCount(source, motherCode)).isEqualTo(1);
+
+        OrderMaintenanceService service = new OrderMaintenanceService(documents, new JdbcPrintJobRepository(source),
+                new JdbcPrintRoutingRepository(source), new PermissionGuard(), unit);
+        OperatorContext admin = new OperatorContext("A4 管理员", RoleCode.ADMIN, DataScope.ALL);
+        String revision = service.search(motherCode, admin).get(0).revision();
+        String retryReason = "A4_RETRY_FAIL_" + suffix;
+        String retryConstraint = "chk_a4_retry_" + suffix;
+        String requestId = "a4-retry-" + suffix;
+        var retry = new OrderMaintenanceCommands.MotherCorrection(null, "恒信珠宝", "AU9999", "A4 事务重试货品",
+                BigDecimal.ONE, new BigDecimal("2"), "抛光", "2026-10-20", "", retryReason,
+                requestId, revision);
+        installed = false;
+        try {
+            execute(source, "alter table biz_order_adjustment add constraint " + retryConstraint
+                    + " check (reason <> '" + retryReason + "')");
+            installed = true;
+            assertThatThrownBy(() -> service.correctMother(motherCode, retry, admin))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(goodsName(source, motherCode)).isEqualTo("A4 改正货品");
+            assertThat(adjustmentCount(source, motherCode)).isEqualTo(1);
+        } finally {
+            if (installed) execute(source, "alter table biz_order_adjustment drop check " + retryConstraint);
+        }
+        service.correctMother(motherCode, retry, admin);
+        service.correctMother(motherCode, retry, admin);
+        assertThat(goodsName(source, motherCode)).isEqualTo("A4 事务重试货品");
+        assertThat(adjustmentCount(source, motherCode)).isEqualTo(2);
+    }
+
+    @Test
+    void 真实MySQL中并发旧快照仅提交一次且同请求回放() throws Exception {
+        MysqlDataSource source = source();
+        JdbcBusinessDocumentRepository documents = new JdbcBusinessDocumentRepository(source);
+        StockLedgerService stock = new StockLedgerService(new JdbcStockLedgerRepository(source));
+        JdbcBusinessWorkUnit unit = new JdbcBusinessWorkUnit(source, new JdbcCommandRequestRepository(source));
+        BusinessOperationService operations = new BusinessOperationService(stock, null, documents, unit);
+        MobileIntakeService intake = new MobileIntakeService(operations, documents, unit, null, stock);
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String motherCode = intake.intake(new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
+                "A4 并发原货品", BigDecimal.ONE, new BigDecimal("2"), "", "AU9999", "件", "a4-con-intake-" + suffix,
+                "CUSTOMER_DELIVERY", List.of()),
+                new OperatorContext("A4 收货员", RoleCode.RECEIVER, DataScope.ALL)).motherOrderCode();
+        OrderMaintenanceService service = new OrderMaintenanceService(documents, new JdbcPrintJobRepository(source),
+                new JdbcPrintRoutingRepository(source), new PermissionGuard(), unit);
+        OperatorContext admin = new OperatorContext("A4 管理员", RoleCode.ADMIN, DataScope.ALL);
+        String revision = service.search(motherCode, admin).get(0).revision();
+        var first = correction("A4 改正甲", "a4-correct-a-" + suffix, revision);
+        var second = correction("A4 改正乙", "a4-correct-b-" + suffix, revision);
+        CountDownLatch start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        boolean firstSuccess;
+        boolean secondSuccess;
+        try {
+            Future<Boolean> firstResult = pool.submit(() -> correctAfterStart(service, motherCode, first, admin, start));
+            Future<Boolean> secondResult = pool.submit(() -> correctAfterStart(service, motherCode, second, admin, start));
+            start.countDown();
+            firstSuccess = firstResult.get();
+            secondSuccess = secondResult.get();
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(List.of(firstSuccess, secondSuccess)).containsExactlyInAnyOrder(true, false);
+        assertThat(adjustmentCount(source, motherCode)).isEqualTo(1);
+        service.correctMother(motherCode, firstSuccess ? first : second, admin);
+        assertThat(adjustmentCount(source, motherCode)).isEqualTo(1);
+        assertThatThrownBy(() -> service.correctMother(motherCode, firstSuccess ? second : first, admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("已被修改");
+    }
+
+    private boolean correctAfterStart(OrderMaintenanceService service, String code,
+                                      OrderMaintenanceCommands.MotherCorrection command, OperatorContext admin,
+                                      CountDownLatch start) throws InterruptedException {
+        start.await();
+        try {
+            service.correctMother(code, command, admin);
+            return true;
+        } catch (BusinessException ex) {
+            assertThat(ex).hasMessageContaining("已被修改");
+            return false;
+        }
+    }
+
+    private OrderMaintenanceCommands.MotherCorrection correction(String goodsName, String requestId, String revision) {
+        return new OrderMaintenanceCommands.MotherCorrection(null, "恒信珠宝", "AU9999", goodsName,
+                BigDecimal.ONE, new BigDecimal("2"), "抛光", "2026-10-20", "", "并发核对", requestId, revision);
     }
 
     private MysqlDataSource source() throws SQLException {

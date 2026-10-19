@@ -20,6 +20,7 @@ public record MaintainedOrder(
         String queueId,
         boolean recycled,
         String recycleReason,
-        List<String> adjustments
+        List<String> adjustments,
+        String revision
 ) {
 }

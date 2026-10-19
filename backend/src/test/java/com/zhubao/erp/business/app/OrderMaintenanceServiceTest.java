@@ -15,10 +15,15 @@ import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
+import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -100,6 +105,77 @@ class OrderMaintenanceServiceTest {
         assertThat(updated.stationId()).isEqualTo("B");
         assertThat(routing.jobAny(leased.id()).orElseThrow().targetQueueId()).isEqualTo("Q2");
         assertThat(routing.jobAny(leased.id()).orElseThrow().status()).isEqualTo(PrintJobStatus.LEASED);
+    }
+
+    @Test
+    void 母单相同请求回放一次且旧页面和改内容请求被拒绝() {
+        documents.saveMotherOrder(mother());
+        OrderMaintenanceService replay = replayService();
+        String revision = replay.search("MD-1", admin).get(0).revision();
+        var command = motherCorrection("新货品", "req-maint-mother-001", revision);
+
+        replay.correctMother("MD-1", command, admin);
+        replay.correctMother("MD-1", command, admin);
+        assertThat(documents.listOrderAdjustments("MOTHER", "MD-1")).hasSize(1);
+        assertThatThrownBy(() -> replay.correctMother("MD-1",
+                motherCorrection("另一货品", "req-maint-mother-001", revision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("内容不一致");
+        assertThatThrownBy(() -> replay.correctMother("MD-1",
+                motherCorrection("另一货品", "req-maint-mother-002", revision), admin))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("已被修改");
+    }
+
+    @Test
+    void 并发子单改正只有一个旧页面快照可以提交() throws Exception {
+        documents.saveMotherOrder(mother());
+        documents.saveChildWorkOrder(child());
+        OrderMaintenanceService replay = replayService();
+        String revision = replay.search("ZD-1", admin).stream()
+                .filter(row -> "WORK_ORDER".equals(row.targetType())).findFirst().orElseThrow().revision();
+        CountDownLatch start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first = pool.submit(() -> correctChildAfterStart(replay, start,
+                    childCorrection("改正甲", "req-maint-child-001", revision)));
+            Future<Boolean> second = pool.submit(() -> correctChildAfterStart(replay, start,
+                    childCorrection("改正乙", "req-maint-child-002", revision)));
+            start.countDown();
+            assertThat(List.of(first.get(), second.get())).containsExactlyInAnyOrder(true, false);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(documents.listOrderAdjustments("WORK_ORDER", "ZD-1")).hasSize(1);
+    }
+
+    private boolean correctChildAfterStart(OrderMaintenanceService replay, CountDownLatch start,
+                                           OrderMaintenanceCommands.ChildCorrection command) throws InterruptedException {
+        start.await();
+        try {
+            replay.correctChild("ZD-1", command, admin);
+            return true;
+        } catch (BusinessException ex) {
+            assertThat(ex).hasMessageContaining("已被修改");
+            return false;
+        }
+    }
+
+    private OrderMaintenanceService replayService() {
+        return new OrderMaintenanceService(documents, printJobs, routing, new PermissionGuard(),
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+    }
+
+    private OrderMaintenanceCommands.MotherCorrection motherCorrection(String goodsName, String requestId,
+                                                                        String revision) {
+        return new OrderMaintenanceCommands.MotherCorrection(null, "张三", "AU", goodsName,
+                new BigDecimal("2"), new BigDecimal("10"), "抛光", "2026-11-01", "", "核对后改正",
+                requestId, revision);
+    }
+
+    private OrderMaintenanceCommands.ChildCorrection childCorrection(String goodsName, String requestId,
+                                                                      String revision) {
+        return new OrderMaintenanceCommands.ChildCorrection(null, "张三", "AU", goodsName,
+                new BigDecimal("2"), new BigDecimal("10"), "抛光", "2026-11-01", "抛光", "核对后改正",
+                requestId, revision);
     }
 
     private MotherOrderRecord mother() {

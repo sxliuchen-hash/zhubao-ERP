@@ -1609,8 +1609,46 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public Optional<MotherOrderRecord> findMotherOrderAny(String code, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(
+                motherOrderSelect() + " where code = ? for update")) {
+            statement.setString(1, code);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? Optional.of(mapMotherOrder(result)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取母单失败", ex);
+        }
+    }
+
+    @Override
     public Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code) {
         return queryChildWorkOrders(childWorkOrderSelect() + " where code = ?", code).stream().findFirst();
+    }
+
+    @Override
+    public Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code, WorkSession session) {
+        try {
+            return queryChildWorkOrders(requireConnection(session), childWorkOrderSelect() + " where code = ? for update",
+                    List.of(code)).stream().findFirst();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("读取子单失败", ex);
+        }
+    }
+
+    @Override
+    public void lockChildWorkOrder(String code, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(
+                "select code from biz_work_order where code = ? for update")) {
+            statement.setString(1, code);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new BusinessException("子单不存在：" + code);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定子单", ex);
+        }
     }
 
     @Override
@@ -1684,8 +1722,30 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public void correctMotherOrder(MotherOrderRecord record, OrderAdjustment adjustment, WorkSession session) {
+        try {
+            Connection connection = requireConnection(session);
+            updateMotherOrder(connection, record);
+            insertOrderAdjustment(connection, adjustment);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("改单与调整记录保存失败", ex);
+        }
+    }
+
+    @Override
     public void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment) {
         correctOrder(connection -> updateChildWorkOrder(connection, record), adjustment);
+    }
+
+    @Override
+    public void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment, WorkSession session) {
+        try {
+            Connection connection = requireConnection(session);
+            updateChildWorkOrder(connection, record);
+            insertOrderAdjustment(connection, adjustment);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("改单与调整记录保存失败", ex);
+        }
     }
 
     private void correctOrder(SqlCorrection correction, OrderAdjustment adjustment) {

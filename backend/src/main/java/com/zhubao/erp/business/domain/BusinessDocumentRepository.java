@@ -151,7 +151,16 @@ public interface BusinessDocumentRepository {
     /** 管理员维护时读取母单，包括已在回收站的。 */
     Optional<MotherOrderRecord> findMotherOrderAny(String code);
 
+    /** 在当前工作单元里读取母单，包括回收站记录。 */
+    Optional<MotherOrderRecord> findMotherOrderAny(String code, WorkSession session);
+
     Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code);
+
+    /** 在当前工作单元里读取子单，包括回收站记录。 */
+    Optional<ChildWorkOrderRecord> findChildWorkOrderAny(String code, WorkSession session);
+
+    /** 锁定待改正的子单，串行核对页面快照与写入。 */
+    void lockChildWorkOrder(String code, WorkSession session);
 
     List<ChildWorkOrderRecord> listChildWorkOrdersAny(String motherOrderCode);
 
@@ -162,8 +171,14 @@ public interface BusinessDocumentRepository {
     /** 同次保存改单字段与调整记录；任一步失败不得留下半次改单。 */
     void correctMotherOrder(MotherOrderRecord record, OrderAdjustment adjustment);
 
+    /** 在当前工作单元里保存母单字段与调整记录，不单独提交。 */
+    void correctMotherOrder(MotherOrderRecord record, OrderAdjustment adjustment, WorkSession session);
+
     /** 同次保存改单字段与调整记录；任一步失败不得留下半次改单。 */
     void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment);
+
+    /** 在当前工作单元里保存子单字段与调整记录，不单独提交。 */
+    void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment, WorkSession session);
 
     void recycleMother(String code, String operator, String at, String batch, String reason);
 

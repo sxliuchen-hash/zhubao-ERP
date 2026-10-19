@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderMaintenancePanel from './OrderMaintenancePanel.vue';
-import { fetchRecycleBin, recycleMaintainedOrder, searchMaintainedOrders } from '../../services/orderMaintenanceApi';
+import { correctMaintainedOrder, fetchRecycleBin, recycleMaintainedOrder, searchMaintainedOrders } from '../../services/orderMaintenanceApi';
 
 vi.mock('../../services/orderMaintenanceApi', () => ({
   searchMaintainedOrders: vi.fn(),
@@ -32,6 +32,7 @@ describe('单据维护', () => {
       recycled: false,
       recycleReason: '',
       adjustments: [],
+      revision: 'revision-1',
     }]);
     vi.mocked(recycleMaintainedOrder).mockResolvedValue();
   });
@@ -49,5 +50,28 @@ describe('单据维护', () => {
     await recycle!.trigger('click');
     await flushPromises();
     expect(recycleMaintainedOrder).toHaveBeenCalledWith('MOTHER', 'MD-1', '录错');
+  });
+
+  it('相同内容重试沿用请求编号，修改内容后换编号', async () => {
+    vi.mocked(correctMaintainedOrder).mockRejectedValueOnce(new Error('网络中断'))
+      .mockResolvedValue({} as Awaited<ReturnType<typeof correctMaintainedOrder>>);
+    const wrapper = mount(OrderMaintenancePanel);
+    await flushPromises();
+    await wrapper.get('[aria-label="维护单号"]').setValue('MD-1');
+    await wrapper.get('[aria-label="维护原因"]').setValue('核对后改正');
+    await wrapper.findAll('button').find((button) => button.text() === '查找')!.trigger('click');
+    await flushPromises();
+    const save = () => wrapper.findAll('button').find((button) => button.text() === '保存修改')!.trigger('click');
+    await save();
+    await flushPromises();
+    await save();
+    await flushPromises();
+    const first = vi.mocked(correctMaintainedOrder).mock.calls[0][2];
+    const second = vi.mocked(correctMaintainedOrder).mock.calls[1][2];
+    expect(first).toBe(second);
+    await wrapper.get('[aria-label="MD-1 货品"]').setValue('改正货品');
+    await save();
+    await flushPromises();
+    expect(vi.mocked(correctMaintainedOrder).mock.calls[2][2]).not.toBe(first);
   });
 });
