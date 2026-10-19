@@ -53,9 +53,13 @@ public class LabelController {
         this.dataAccess = dataAccess;
     }
 
-    /** 通用标签生成。 */
+    /** 通用标签生成。已保存单据使用与母单、子单标签相同的客户范围。 */
     @PostMapping("/generate")
-    public ApiResponse<LabelPayload> generate(@Valid @RequestBody GenerateLabelCommand command) {
+    public ApiResponse<LabelPayload> generate(@Valid @RequestBody GenerateLabelCommand command, HttpServletRequest request) {
+        OperatorContext operator = operatorContextResolver.requireSession(request);
+        if (command != null && command.primaryCode() != null) {
+            dataAccess.assertCanReadIfStored(operator, command.primaryCode());
+        }
         return ApiResponse.ok(labelService.generate(command));
     }
 

@@ -3,6 +3,7 @@ package com.zhubao.erp.label.web;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.label.app.LabelService;
 import com.zhubao.erp.label.app.LabelTemplateService;
+import com.zhubao.erp.label.domain.GenerateLabelCommand;
 import com.zhubao.erp.label.domain.ReprintLabelCommand;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.domain.DataScope;
@@ -45,5 +46,28 @@ class LabelReadAuthorizationTest {
         assertThatThrownBy(() -> controller.reprint(new ReprintLabelCommand("WORK_ORDER", "ZD-X", "补打", "业务员"), request))
                 .isInstanceOf(PermissionDeniedException.class);
         verify(labels, never()).reprint(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void genericGenerateChecksStoredOrdersAndStillBuildsUnknownCodes() {
+        LabelService labels = mock(LabelService.class);
+        OperatorContextResolver resolver = mock(OperatorContextResolver.class);
+        BusinessDataAccess access = mock(BusinessDataAccess.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        OperatorContext allowed = new OperatorContext("业务员", RoleCode.SALES, DataScope.CUSTOMER_RANGE, false, "", java.util.List.of("1001"));
+        when(resolver.requireSession(request)).thenReturn(allowed);
+        LabelController controller = new LabelController(labels, mock(LabelTemplateService.class), resolver, access);
+        GenerateLabelCommand stored = new GenerateLabelCommand("WORK_ORDER", "ZD-1", java.util.List.of(), null, null, null);
+        GenerateLabelCommand unknown = new GenerateLabelCommand("OUTBOUND", "CK-NEW", java.util.List.of(), null, null, null);
+
+        assertThat(controller.generate(unknown, request).code()).isZero();
+        verify(access).assertCanReadIfStored(allowed, "CK-NEW");
+        verify(labels).generate(unknown);
+
+        doThrow(new PermissionDeniedException("单号不在当前账号的业务数据范围内"))
+                .when(access).assertCanReadIfStored(allowed, "ZD-1");
+        assertThatThrownBy(() -> controller.generate(stored, request))
+                .isInstanceOf(PermissionDeniedException.class);
+        verify(labels, never()).generate(stored);
     }
 }

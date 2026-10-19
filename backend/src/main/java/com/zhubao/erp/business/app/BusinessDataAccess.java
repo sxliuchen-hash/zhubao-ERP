@@ -54,6 +54,16 @@ public class BusinessDataAccess {
         if (!canRead(context, businessCode)) throw new PermissionDeniedException("单号不在当前账号的业务数据范围内");
     }
 
+    /**
+     * 通用标签只在单号已经是单据时核对客户范围。尚未建档的编码不读取客户事实。
+     */
+    public void assertCanReadIfStored(OperatorContext context, String businessCode) {
+        String code = text(businessCode);
+        if (code.isEmpty()) return;
+        if (context == null) throw new PermissionDeniedException("请先登录后再打印");
+        if (ownershipConflicts(code) || ownerOf(code) != null) assertCanRead(context, code);
+    }
+
     public void assertCustomer(OperatorContext context, Long customerId, String customerName) {
         if (context == null || !customerVisible(context, customerId, customerName)) {
             throw new PermissionDeniedException("客户不在当前账号的授权范围内");
