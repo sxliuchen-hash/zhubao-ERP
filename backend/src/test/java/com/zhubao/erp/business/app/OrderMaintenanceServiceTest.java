@@ -247,6 +247,42 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
+    void 已领取已入队失败不确定和已取消都不能原地改份数() {
+        for (PrintJobStatus status : List.of(PrintJobStatus.LEASED, PrintJobStatus.SPOOLED,
+                PrintJobStatus.FAILED, PrintJobStatus.UNCERTAIN, PrintJobStatus.CANCELED)) {
+            InMemoryPrintRoutingRepository targets = new InMemoryPrintRoutingRepository();
+            String jobId = "J-" + status.name();
+            targets.insertBatch(new PrintBatch("B-" + status.name(), "R-" + status.name(), "ZD-1", "WORK", 1,
+                    "hash", "snapshot", "收货员", "2026-10-16T12:00", List.of(new PrintTargetJob(
+                    jobId, "B-" + status.name(), "A", "Q1", 1, status, "", "", "", "", "", "",
+                    "2026-10-16T12:00", "2026-10-16T12:00"))));
+            OrderMaintenanceService service = new OrderMaintenanceService(documents, printJobs, targets,
+                    new PermissionGuard(), new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+            String revision = service.search(jobId, admin).stream()
+                    .filter(row -> "PRINT_TARGET".equals(row.targetType())).findFirst().orElseThrow().revision();
+            assertThatThrownBy(() -> service.correctPrintTarget(jobId, new OrderMaintenanceCommands.PrintCorrection(
+                    4, "A", "Q1", "改份数", "req-keep-" + status.name(), revision), admin))
+                    .isInstanceOf(BusinessException.class).hasMessageContaining("不能直接改单");
+            PrintTargetJob kept = targets.jobAny(jobId).orElseThrow();
+            assertThat(kept.copies()).isEqualTo(1);
+            assertThat(kept.status()).isEqualTo(status);
+            assertThat(kept.targetStationId()).isEqualTo("A");
+            assertThat(kept.targetQueueId()).isEqualTo("Q1");
+
+            printJobs.save(new PrintJob("P-" + status.name(), "REQ-" + status.name(), "MD-1", "MOTHER", 1,
+                    "snapshot", status, "", "", "", "", "", "收货员", "2026-10-16T12:00", "2026-10-16T12:00"));
+            String legacyRevision = service.search("P-" + status.name(), admin).stream()
+                    .filter(row -> "PRINT_JOB".equals(row.targetType())).findFirst().orElseThrow().revision();
+            assertThatThrownBy(() -> service.correctPrintJob("P-" + status.name(),
+                    new OrderMaintenanceCommands.PrintCorrection(4, "", "", "改份数",
+                            "req-legacy-keep-" + status.name(), legacyRevision), admin))
+                    .isInstanceOf(BusinessException.class).hasMessageContaining("不能直接改单");
+            assertThat(printJobs.findAny("P-" + status.name()).orElseThrow().copies()).isEqualTo(1);
+            assertThat(printJobs.findAny("P-" + status.name()).orElseThrow().status()).isEqualTo(status);
+        }
+    }
+
+    @Test
     void 内存打印审计失败会撤销份数且原请求编号可重试() {
         AtomicBoolean failOnce = new AtomicBoolean(true);
         InMemoryBusinessDocumentRepository failingDocuments = new InMemoryBusinessDocumentRepository() {
