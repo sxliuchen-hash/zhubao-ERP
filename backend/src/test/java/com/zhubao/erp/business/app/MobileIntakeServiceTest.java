@@ -2,6 +2,7 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
 import com.zhubao.erp.business.domain.MobileIntakeResult;
+import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -42,9 +43,17 @@ class MobileIntakeServiceTest {
         assertThat(created.customerName()).isEqualTo("恒信珠宝");
         assertThat(created.processingRequirement()).isEqualTo("戒托抛光，保留原石");
         assertThat(created.qrContent()).isEqualTo("JG|mother|" + created.motherOrderCode());
+        assertThat(documents.findMotherOrderByCode(created.motherOrderCode()).orElseThrow().evidenceCode()).isBlank();
         assertThat(stock.findAllLedgers()).hasSize(1);
+        assertThat(stock.findAllLedgers().get(0).remark()).doesNotContain("证据：");
         assertThat(service.lookup("sf 1048329001").found()).isTrue();
         assertThat(service.lookup("sf 1048329001").motherOrderCode()).isEqualTo(created.motherOrderCode());
+    }
+
+    @Test
+    void waybillStaysOnCourierFieldAndNotEvidenceCode() {
+        assertWaybillNotUsedAsEvidence("SF1234567890123", "evidence-gap-15");
+        assertWaybillNotUsedAsEvidence("YT12345678901", "evidence-gap-13");
     }
 
     @Test
@@ -103,6 +112,21 @@ class MobileIntakeServiceTest {
         assertThat(stock.findAllLedgers()).hasSize(1);
         assertThat(documents.findMotherOrderByCode(first.motherOrderCode()).orElseThrow().expressCompany()).isBlank();
         assertThat(documents.findMotherOrderByCode(first.motherOrderCode()).orElseThrow().courierNo()).isBlank();
+    }
+
+    private void assertWaybillNotUsedAsEvidence(String waybill, String requestId) {
+        MobileIntakeResult created = service.intake(new MobileIntakeCommand(
+                waybill, "恒信珠宝", null, "抛光", "2026-10-20", "戒托",
+                new BigDecimal("1"), new BigDecimal("2.5"), "顺丰", "MAT-MOBILE", "件", requestId), receiver);
+        MotherOrderRecord saved = documents.findMotherOrderByCode(created.motherOrderCode()).orElseThrow();
+        assertThat(saved.courierNo()).isEqualTo(waybill);
+        assertThat(saved.evidenceCode()).isBlank();
+        String remark = stock.findAllLedgers().stream()
+                .filter(entry -> entry.documentCode().equals(created.motherOrderCode()))
+                .findFirst()
+                .orElseThrow()
+                .remark();
+        assertThat(remark).contains("快递单号：" + waybill).doesNotContain("证据：");
     }
 
     private MobileIntakeCommand command(String requirement, String dueDate) {
