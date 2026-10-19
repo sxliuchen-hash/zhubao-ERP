@@ -23,4 +23,11 @@ public final class CustomerScopeRules {
                 .anyMatch(value -> !value.isEmpty()
                         && (value.equals(name) || value.equals(idText) || value.equals(prefixed)));
     }
+
+    /**
+     * 两边都写了客户编号且不相同。缺编号的旧单据不据此判成另一家客户。
+     */
+    public static boolean identityConflicts(Long left, Long right) {
+        return left != null && right != null && !left.equals(right);
+    }
 }

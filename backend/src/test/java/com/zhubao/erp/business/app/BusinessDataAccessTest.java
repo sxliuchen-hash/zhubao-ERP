@@ -75,6 +75,40 @@ class BusinessDataAccessTest {
     }
 
     @Test
+    void refusesChildWhenItsCustomerDiffersFromTheMother() {
+        seed();
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord("ZD-OTHER", "MD-ACCESS", 102L, "另一客户", "抛光", "2026-10-20",
+                "MAT", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW", "抛光", "verify-2", "ledger", "开单员", "2026-10-10"));
+        OperatorContext company = context("管理员", RoleCode.ADMIN, DataScope.ALL);
+        OperatorContext motherSide = context("查看人", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, "101");
+        OperatorContext childSide = context("查看人", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, "102");
+        assertThat(access.canRead(company, "MD-ACCESS")).isTrue();
+        assertThat(access.canRead(company, "ZD-OTHER")).isFalse();
+        assertThat(access.canRead(motherSide, "ZD-OTHER")).isFalse();
+        assertThat(access.canRead(childSide, "ZD-OTHER")).isFalse();
+
+        documents.saveMotherOrder(mother("SAME-1", 101L));
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord("SAME-1", "MD-ACCESS", 102L, "另一客户", "抛光", "2026-10-20",
+                "MAT", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW", "抛光", "verify-3", "ledger", "开单员", "2026-10-10"));
+        assertThat(access.canRead(company, "SAME-1")).isFalse();
+    }
+
+    @Test
+    void genericLabelScopeChecksStoredOrdersOnly() {
+        seed();
+        OperatorContext allowed = context("查看人", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, "101");
+        OperatorContext denied = context("查看人", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, "102");
+        assertThatCode(() -> access.assertCanReadIfStored(allowed, "MD-ACCESS")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> access.assertCanReadIfStored(denied, "MD-ACCESS"))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatCode(() -> access.assertCanReadIfStored(denied, "CK-NOT-STORED")).doesNotThrowAnyException();
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord("ZD-OTHER", "MD-ACCESS", 102L, "另一客户", "抛光", "2026-10-20",
+                "MAT", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW", "抛光", "verify-4", "ledger", "开单员", "2026-10-10"));
+        assertThatThrownBy(() -> access.assertCanReadIfStored(context("管理员", RoleCode.ADMIN, DataScope.ALL), "ZD-OTHER"))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
+
+    @Test
     void checksCommandCustomerAgainstStoredMotherAndAllowsUnknownOnlyForCompanyScope() {
         seed();
         OperatorContext allowed = context("查看人", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, "真实客户");

@@ -106,6 +106,33 @@ class DocumentCaptureServiceTest {
                 2,
                 scoped
         )).isInstanceOf(BusinessException.class).hasMessageContaining("客户范围");
+
+        OperatorContext emptyRange = new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE);
+        assertThatThrownBy(() -> service.capture(
+                "mother", "MD-CAP-001", "UNPACK", "empty.mp4", "video/mp4",
+                new java.io.ByteArrayInputStream("ok".getBytes(StandardCharsets.UTF_8)), 2, emptyRange
+        )).isInstanceOf(BusinessException.class).hasMessageContaining("客户范围");
+    }
+
+    @Test
+    void workOrderCaptureFollowsMotherCustomerAndRejectsAConflictingChild() {
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        documents.saveMotherOrder(motherOrder());
+        documents.saveChildWorkOrder(new com.zhubao.erp.business.domain.ChildWorkOrderRecord(
+                "ZD-CAP-1", "MD-CAP-001", 1001L, "恒信珠宝", "抛光", "2026-10-20",
+                "MAT", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW", "抛光", "V1", "", "收货员 何琴", "2026-10-08"));
+        DocumentCaptureService service = service(documents, new InMemoryDocumentManagementRepository(), 8, 32);
+        OperatorContext receiver = new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.ALL);
+        byte[] video = mp4("child-ok");
+        assertThat(service.capture("work_order", "ZD-CAP-1", "PROCESS", "a.mp4", "video/mp4",
+                new java.io.ByteArrayInputStream(video), video.length, receiver).code()).startsWith("ATT-CAP-");
+
+        documents.saveChildWorkOrder(new com.zhubao.erp.business.domain.ChildWorkOrderRecord(
+                "ZD-CAP-X", "MD-CAP-001", 1002L, "另一客户", "抛光", "2026-10-20",
+                "MAT", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW", "抛光", "V2", "", "收货员 何琴", "2026-10-08"));
+        assertThatThrownBy(() -> service.capture("work_order", "ZD-CAP-X", "PROCESS", "b.jpg", "image/jpeg",
+                new java.io.ByteArrayInputStream("ok".getBytes(StandardCharsets.UTF_8)), 2, receiver))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不一致");
     }
 
     @Test

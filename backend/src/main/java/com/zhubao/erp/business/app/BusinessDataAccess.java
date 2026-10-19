@@ -4,7 +4,9 @@ import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockDimension;
+import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -32,7 +34,7 @@ public class BusinessDataAccess {
     }
 
     public boolean canRead(OperatorContext context, String businessCode) {
-        if (context == null) return false;
+        if (context == null || ownershipConflicts(text(businessCode))) return false;
         if (context.dataScope() == DataScope.ALL) return true;
         BusinessOwner owner = ownerOf(text(businessCode));
         return owner != null && customerVisible(context, owner.mother().customerId(), owner.mother().customerName())
@@ -50,6 +52,16 @@ public class BusinessDataAccess {
 
     public void assertCanRead(OperatorContext context, String businessCode) {
         if (!canRead(context, businessCode)) throw new PermissionDeniedException("单号不在当前账号的业务数据范围内");
+    }
+
+    /**
+     * 通用标签只在单号已经是单据时核对客户范围。尚未建档的编码不读取客户事实。
+     */
+    public void assertCanReadIfStored(OperatorContext context, String businessCode) {
+        String code = text(businessCode);
+        if (code.isEmpty()) return;
+        if (context == null) throw new PermissionDeniedException("请先登录后再打印");
+        if (ownershipConflicts(code) || ownerOf(code) != null) assertCanRead(context, code);
     }
 
     public void assertCustomer(OperatorContext context, Long customerId, String customerName) {
@@ -79,11 +91,21 @@ public class BusinessDataAccess {
     }
 
     private boolean customerVisible(OperatorContext context, Long customerId, String customerName) {
-        if (context.dataScope() == DataScope.ALL) return true;
-        if (context.customerScope().isEmpty()) return context.dataScope() != DataScope.CUSTOMER_RANGE;
-        return context.customerScope().stream().map(BusinessDataAccess::text).anyMatch(value ->
-                !value.isEmpty() && (value.equals(text(customerName)) || customerId != null
-                        && (value.equals(customerId.toString()) || value.equals("客户#" + customerId))));
+        return CustomerScopeRules.allowed(context, customerId, customerName);
+    }
+
+    /** 子单与所属母单客户不一致，或同一单号同时落到不同客户时，不挑选其中一边。 */
+    private boolean ownershipConflicts(String code) {
+        if (code.isEmpty()) return false;
+        ChildWorkOrderRecord child = documents.findChildWorkOrderByCode(code).orElse(null);
+        MotherOrderRecord sameCodeMother = documents.findMotherOrderByCode(code).orElse(null);
+        if (child != null && sameCodeMother != null
+                && CustomerScopeRules.identityConflicts(child.customerId(), sameCodeMother.customerId())) {
+            return true;
+        }
+        if (child == null) return false;
+        MotherOrderRecord parent = documents.findMotherOrderByCode(text(child.motherOrderCode())).orElse(null);
+        return parent != null && CustomerScopeRules.identityConflicts(child.customerId(), parent.customerId());
     }
 
     private boolean areaVisible(OperatorContext context, String area) {

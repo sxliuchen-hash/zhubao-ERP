@@ -47,6 +47,7 @@ import com.zhubao.erp.scan.domain.OperationProgressRepository;
 import com.zhubao.erp.document.domain.EvidenceCodes;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
@@ -362,14 +363,16 @@ public class ScanContextService {
         MotherOrderRecord mother = hit.mother();
         boolean split = splitMother(mother.code());
         List<ChildWorkOrderRecord> children = documents.listChildWorkOrders(mother.code());
-        List<ScanRelatedTarget> related = children.stream().map(child -> new ScanRelatedTarget(
-                ScanObjectType.WORK_ORDER,
-                child.code(),
-                child.motherOrderCode(),
-                emptyToNull(child.processingRequirement()),
-                child.quantity(),
-                emptyToNull(child.quantityUnit())
-        )).toList();
+        List<ScanRelatedTarget> related = children.stream()
+                .filter(child -> !CustomerScopeRules.identityConflicts(child.customerId(), mother.customerId()))
+                .map(child -> new ScanRelatedTarget(
+                        ScanObjectType.WORK_ORDER,
+                        child.code(),
+                        child.motherOrderCode(),
+                        emptyToNull(child.processingRequirement()),
+                        child.quantity(),
+                        emptyToNull(child.quantityUnit())
+                )).toList();
         ScanContextTarget target = hit.type() == ScanObjectType.EXPRESS_NO
                 ? target(ScanObjectType.EXPRESS_NO, hit.code(), mother.code(), null, null, null)
                 : target(ScanObjectType.MOTHER_ORDER, mother.code(), mother.code(), null, null, null);
