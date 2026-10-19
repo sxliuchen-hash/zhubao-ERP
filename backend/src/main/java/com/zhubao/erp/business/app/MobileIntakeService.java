@@ -202,7 +202,8 @@ public class MobileIntakeService {
                 quantityUnit,
                 first.weight(),
                 operator,
-                courierNo,
+                // 运单号只留在快递单号。证据编号要对上附件；现场文件改由业务证据引用关联。
+                "",
                 "收货生成母单",
                 command.processingRequirement().trim(),
                 command.dueDate().trim(),
