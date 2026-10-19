@@ -66,6 +66,11 @@ public class StockLedgerService {
         return repository.findLedgersByCustomers(customerIds, motherOrderCodes);
     }
 
+    /** 按母单范围判断单据是否已有库存流水，不把整本台账载入内存。 */
+    public boolean hasOrderMovement(String motherOrderCode, String orderCode) {
+        return repository.hasOrderMovement(motherOrderCode, orderCode);
+    }
+
     public List<StockBalance> balances() {
         return repository.findAllBalances();
     }

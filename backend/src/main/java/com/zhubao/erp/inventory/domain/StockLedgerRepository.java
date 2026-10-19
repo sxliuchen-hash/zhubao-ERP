@@ -24,6 +24,18 @@ public interface StockLedgerRepository {
      */
     List<StockLedgerEntry> findLedgersByCustomers(Set<Long> customerIds, Set<String> motherOrderCodes);
 
+    /**
+     * 母单号与单据号相同时，该母单下任意流水都算已入账。
+     * 子单还要看单据号、目标工单号或来源工单号，避免把发货单号误当成没有流水。
+     */
+    default boolean hasOrderMovement(String motherOrderCode, String orderCode) {
+        if (motherOrderCode == null || motherOrderCode.isBlank() || orderCode == null || orderCode.isBlank()) {
+            return false;
+        }
+        return findLedgersByCustomers(Set.of(), Set.of(motherOrderCode)).stream()
+                .anyMatch(entry -> OrderMovementQuery.matches(entry, motherOrderCode, orderCode));
+    }
+
     List<StockBalance> findAllBalances();
 
     StockBalance findBalance(StockDimension dimension);

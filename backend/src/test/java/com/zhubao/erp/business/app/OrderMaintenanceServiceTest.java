@@ -372,6 +372,37 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
+    void 发货单号流水仍保护缺失流水编号的母单和子单() {
+        MotherOrderRecord original = mother();
+        documents.saveMotherOrder(new MotherOrderRecord(original.code(), original.customerId(),
+                original.ownerCustomerId(), original.materialCode(), original.inboundDate(),
+                original.expressCompany(), original.courierNo(), original.senderName(), original.receiverName(),
+                original.unpackSigner(), original.goodsName(), original.ownerType(), original.customerOwned(),
+                original.warehouseCode(), original.quantity(), original.quantityUnit(), original.weight(),
+                original.stockStatus(), "", original.sourceRegisterType(), original.sourceRegisterLineNo(),
+                original.sourceRegisterSequence(), original.operator(), original.evidenceCode(), original.remark(),
+                original.status(), original.createdAt(), original.processingRequirement(), original.dueDate(),
+                original.customerName()));
+        ChildWorkOrderRecord split = child();
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord(split.code(), split.motherOrderCode(), split.customerId(),
+                split.customerName(), split.processingRequirement(), split.dueDate(), split.materialCode(),
+                split.goodsName(), split.quantity(), split.quantityUnit(), split.weight(), split.warehouseCode(),
+                split.processes(), split.verificationCode(), "", split.operator(), split.createdAt()));
+        StockLedgerService stocks = new StockLedgerService(new InMemoryStockLedgerRepository());
+        StockDimension shipped = new StockDimension(OwnerType.CUSTOMER, 1L, 1L, "MD-1", "ZD-1", "AU", "WH",
+                StockStatus.SHIPPED);
+        stocks.transfer(new StockTransferCommand("outbound_shipment", "OUT-1", null, shipped,
+                new BigDecimal("2"), new BigDecimal("10"), "历史发货"));
+        OrderMaintenanceService guarded = new OrderMaintenanceService(documents, printJobs, routing,
+                new PermissionGuard(), new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), stocks);
+        MaintainedOrder motherView = guarded.search("MD-1", admin).get(0);
+        MaintainedOrder childView = guarded.search("ZD-1", admin).stream()
+                .filter(row -> "WORK_ORDER".equals(row.targetType())).findFirst().orElseThrow();
+        assertThat(motherView.postedFactsLocked()).isTrue();
+        assertThat(childView.postedFactsLocked()).isTrue();
+    }
+
+    @Test
     void 并发子单改正只有一个旧页面快照可以提交() throws Exception {
         documents.saveMotherOrder(mother());
         documents.saveChildWorkOrder(child());

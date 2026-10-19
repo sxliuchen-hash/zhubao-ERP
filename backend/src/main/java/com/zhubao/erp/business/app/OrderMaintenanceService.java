@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -695,8 +694,7 @@ public class OrderMaintenanceService {
 
     private boolean isPosted(String ledgerCode, String motherCode, String code) {
         if (ledgerCode != null && !ledgerCode.isBlank()) return true;
-        return stocks != null && stocks.ledgersForCustomers(Set.of(), Set.of(motherCode)).stream()
-                .anyMatch(entry -> code.equals(entry.documentCode()));
+        return stocks != null && stocks.hasOrderMovement(motherCode, code);
     }
 
     private static boolean sameAmount(BigDecimal left, BigDecimal right) {

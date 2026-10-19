@@ -113,6 +113,36 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
         return queryLedgers(where.toString(), parameters);
     }
 
+    @Override
+    public boolean hasOrderMovement(String motherOrderCode, String orderCode) {
+        if (motherOrderCode == null || motherOrderCode.isBlank() || orderCode == null || orderCode.isBlank()) {
+            return false;
+        }
+        boolean mother = motherOrderCode.equals(orderCode);
+        String sql = mother
+                ? "select 1 from inv_stock_ledger where mother_order_code = ? limit 1"
+                : """
+                select 1 from inv_stock_ledger
+                 where mother_order_code = ?
+                   and (document_code = ? or work_order_code = ? or from_work_order_code = ?)
+                 limit 1
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, motherOrderCode);
+            if (!mother) {
+                statement.setString(2, orderCode);
+                statement.setString(3, orderCode);
+                statement.setString(4, orderCode);
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法核对库存流水", ex);
+        }
+    }
+
     private List<StockLedgerEntry> queryLedgers(String whereSql, List<Object> parameters) {
         String sql = """
                 select code, biz_time, document_type, document_code, owner_type, owner_customer_id,
