@@ -10,9 +10,11 @@ import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.label.domain.LabelEdition;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
+import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.label.domain.LabelPayload;
 import com.zhubao.erp.label.domain.LabelField;
 import com.zhubao.erp.security.error.PermissionDeniedException;
@@ -182,8 +184,28 @@ public class PrintJobService {
         return jobs.findById(id).orElseThrow(() -> new BusinessException("打印任务不存在：" + id));
     }
 
+    /** 从冻结快照的二维码读出版本和实例。三段旧码的版本和实例都为空。 */
+    public LabelEdition readEdition(String snapshot) {
+        try {
+            JsonNode root = snapshotMapper.readTree(snapshot);
+            String qr = root.path("qr").asText("");
+            ScanCodeParser parser = new ScanCodeParser();
+            String code = root.path("businessCode").asText("");
+            if (code.isBlank()) {
+                String[] parts = qr.split("\\|", -1);
+                code = parts.length > 2 ? parts[2] : "";
+            }
+            return new LabelEdition(code, parser.labelVersion(qr), parser.labelInstance(qr));
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException("标签快照无效");
+        }
+    }
+
     public PrintJob retry(String id, String requestId, String reason, String operator) {
         PrintJob original = jobs.findById(id).orElseThrow(() -> new BusinessException("打印任务不存在：" + id));
+        if (original.status() == PrintJobStatus.FAILED || original.status() == PrintJobStatus.UNCERTAIN) {
+            throw new BusinessException("失败或不确定的任务不能直接补打，请先核纸后再建立打印批次");
+        }
         if (reason == null || reason.isBlank()) {
             throw new BusinessException("补打必须填写原因");
         }

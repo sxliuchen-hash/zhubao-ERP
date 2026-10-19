@@ -142,12 +142,23 @@ class PrintJobServiceTest {
         assertThatThrownBy(() -> service.claim("STATION-1", "station-secret"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("没有待打印任务");
-
-        PrintJob retry = service.retry(created.id(), "print-retry-001", "核对后纸上没有", "何琳");
-        assertThat(retry.id()).isNotEqualTo(created.id());
-        assertThat(retry.predecessorId()).isEqualTo(created.id());
+        assertThatThrownBy(() -> service.retry(created.id(), "print-retry-001", "核对后纸上没有", "何琳"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能直接补打");
+        assertThat(repository.list()).hasSize(1);
         assertThat(service.get(created.id()).status()).isEqualTo(PrintJobStatus.UNCERTAIN);
-        assertThat(retry.contentSnapshot()).isEqualTo(created.contentSnapshot());
+    }
+
+    @Test
+    void 发送前失败不能再生成一条待领取任务() {
+        PrintJob created = service.create("print-job-failed", "MD-FAILED", "FLOW", 1, "何琳");
+        PrintJob leased = service.claim("STATION-1", "station-secret");
+        service.report(leased.id(), "STATION-1", "station-secret", "FAILED", "发送前失败");
+        assertThatThrownBy(() -> service.retry(created.id(), "print-failed-retry", "再打一次", "何琳"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能直接补打");
+        assertThat(repository.list()).hasSize(1);
+        assertThat(service.get(created.id()).status()).isEqualTo(PrintJobStatus.FAILED);
     }
 
     @Test

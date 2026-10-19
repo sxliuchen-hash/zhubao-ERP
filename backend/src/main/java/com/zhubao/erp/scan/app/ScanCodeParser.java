@@ -66,6 +66,22 @@ public class ScanCodeParser {
         throw new BusinessException("未识别的二维码内容");
     }
 
+    /** 五段新码的标签实例。三段旧码没有实例，不能据此区分两次打印。 */
+    public String labelInstance(String content) {
+        String normalized = content == null ? "" : content.trim();
+        if (!normalized.startsWith(SYSTEM_PREFIX + "|")) {
+            return "";
+        }
+        String[] parts = normalized.split("\\|", -1);
+        if (parts.length == 3) {
+            return "";
+        }
+        if (parts.length == 5) {
+            return parts[4].trim();
+        }
+        throw new BusinessException("未识别的二维码内容");
+    }
+
     private String nextAction(ScanObjectType objectType, String scene) {
         if (objectType == ScanObjectType.WORK_ORDER && "pwa_report".equals(scene)) {
             return "report";

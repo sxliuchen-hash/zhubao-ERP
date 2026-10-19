@@ -1,7 +1,11 @@
 package com.zhubao.erp.label.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhubao.erp.business.domain.OrderChange;
+import com.zhubao.erp.business.domain.OrderChangeStatus;
+import com.zhubao.erp.business.infra.InMemoryOrderChangeRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.label.domain.LabelEdition;
 import com.zhubao.erp.label.web.PrintRoutingController;
 import com.zhubao.erp.label.domain.PrintBatch;
 import com.zhubao.erp.label.domain.PrintJobStatus;
@@ -16,6 +20,9 @@ import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.junit.jupiter.api.Test;
 
+import com.zhubao.erp.scan.app.ScanCodeParser;
+
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -212,5 +219,118 @@ class PrintBatchServiceTest {
         assertThat(body.customerMark()).isEmpty();
         assertThat(body.businessCode()).isEqualTo("MD-1");
         assertThat(body.targets()).hasSize(1);
+    }
+
+    @Test
+    void 失败和不确定任务未核纸时不能再建可领取批次且改派能回到原批次() {
+        String tokenA = service.saveStation(new PrintStation("A", "收货", true, "", "")).token();
+        String tokenB = service.saveStation(new PrintStation("B", "包装", true, "", "")).token();
+        service.saveQueue(new PrintQueue("A", "Q1", "原队列", "ALL", 40, 30, true, true));
+        service.saveQueue(new PrintQueue("B", "Q2", "新队列", "ALL", 40, 30, true, true));
+        PrintBatch failedSource = service.create("guard-failed-0001", "MD-FAILED", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account);
+        String failedId = failedSource.jobs().get(0).id();
+        service.claim("A", tokenA);
+        service.report(failedId, "A", tokenA, "FAILED", "队列不可用");
+        assertThatThrownBy(() -> service.create("guard-failed-0002", "MD-FAILED", "FLOW", 1,
+                List.of(new PrintTarget("B", "Q2")), account))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("请先核纸");
+        assertThat(repository.batchByRequest("guard-failed-0002")).isEmpty();
+        assertThatThrownBy(() -> service.claim("A", tokenA)).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("没有待打印任务");
+        assertThat(repository.job(failedId).orElseThrow().status()).isEqualTo(PrintJobStatus.FAILED);
+        service.paperCheck(failedId, "确认未出纸", account);
+        PrintBatch moved = service.reroute(failedId, "guard-reroute-0001", new PrintTarget("B", "Q2"),
+                "原队列不可用", account);
+        PrintBatchService.PrintLineage lineage = service.lineage(moved.jobs().get(0).id(), account);
+        assertThat(lineage.sourceJobId()).isEqualTo(failedId);
+        assertThat(lineage.sourceBatchId()).isEqualTo(failedSource.id());
+        assertThat(lineage.labelVersion()).isEqualTo("0").isEqualTo(lineage.sourceLabelVersion());
+        assertThat(repository.job(failedId).orElseThrow().status()).isEqualTo(PrintJobStatus.CANCELED);
+        assertThat(service.claim("B", tokenB).job().id()).isEqualTo(moved.jobs().get(0).id());
+
+        PrintBatch spooled = service.create("guard-spooled-0001", "MD-SPOOLED", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account);
+        String spooledId = spooled.jobs().get(0).id();
+        service.claim("A", tokenA);
+        service.report(spooledId, "A", tokenA, "SPOOLED", "");
+        PrintBatch another = service.create("guard-spooled-0002", "MD-SPOOLED", "FLOW", 1,
+                List.of(new PrintTarget("B", "Q2")), account);
+        assertThat(another.id()).isNotEqualTo(spooled.id());
+        assertThat(repository.job(spooledId).orElseThrow().status()).isEqualTo(PrintJobStatus.SPOOLED);
+        assertThat(repository.job(spooledId).orElseThrow().paperCheckResult()).isBlank();
+
+        PrintBatch uncertainSource = service.create("guard-uncertain-0001", "MD-UNCERTAIN", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account);
+        String uncertainId = uncertainSource.jobs().get(0).id();
+        service.claim("A", tokenA);
+        String expired = DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(LocalDateTime.now().minusMinutes(3));
+        repository.saveJob(repository.job(uncertainId).orElseThrow()
+                .withStatus(PrintJobStatus.LEASED, "A", expired, "", "", expired));
+        assertThat(service.expireLeases(DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(LocalDateTime.now()))).isEqualTo(1);
+        assertThatThrownBy(() -> service.create("guard-uncertain-0002", "MD-UNCERTAIN", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("请先核纸");
+        assertThatThrownBy(() -> service.claim("A", tokenA)).isInstanceOf(BusinessException.class);
+        assertThat(repository.job(uncertainId).orElseThrow().status()).isEqualTo(PrintJobStatus.UNCERTAIN);
+        repository.recycleJob(uncertainId, "操作员", expired, "recycle-uncertain", "核纸后不再使用");
+        PrintBatch afterRecycle = service.create("guard-uncertain-0003", "MD-UNCERTAIN", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account);
+        assertThat(afterRecycle.jobs()).hasSize(1);
+        assertThat(afterRecycle.jobs().get(0).status()).isEqualTo(PrintJobStatus.PENDING);
+    }
+
+    @Test
+    void 同一单据的新旧版本标签可以区分且改派沿用旧快照() {
+        InMemoryOrderChangeRepository changes = new InMemoryOrderChangeRepository();
+        PrintJobService versionedLabels = new PrintJobService(new InMemoryPrintJobRepository(), "legacy-token", changes);
+        PrintBatchService versioned = new PrintBatchService(repository, versionedLabels);
+        versioned.saveStation(new PrintStation("A", "收货", true, "", ""));
+        versioned.saveStation(new PrintStation("B", "包装", true, "", ""));
+        versioned.saveQueue(new PrintQueue("A", "Q1", "原队列", "ALL", 40, 30, true, true));
+        versioned.saveQueue(new PrintQueue("B", "Q2", "新队列", "ALL", 40, 30, true, true));
+        PrintBatch oldBatch = versioned.create("edition-old-0001", "MD-EDITION", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account);
+        LabelEdition oldEdition = versionedLabels.readEdition(oldBatch.contentSnapshot());
+        assertThat(oldEdition.businessCode()).isEqualTo("MD-EDITION");
+        assertThat(oldEdition.version()).isEqualTo("0");
+        assertThat(oldEdition.instance()).isNotBlank();
+        changes.save(appliedChange("MD-EDITION", 1));
+        PrintBatch fresh = versioned.create("edition-new-0001", "MD-EDITION", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account);
+        LabelEdition freshEdition = versionedLabels.readEdition(fresh.contentSnapshot());
+        assertThat(oldEdition.distinguishes(freshEdition)).isTrue();
+        assertThat(freshEdition.instance()).isNotEqualTo(oldEdition.instance());
+        assertThat(versionedLabels.readEdition(repository.batch(oldBatch.id()).orElseThrow().contentSnapshot())
+                .version()).isEqualTo("0");
+        ScanCodeParser parser = new ScanCodeParser();
+        assertThat(parser.labelVersion("JG|mother|MD-EDITION")).isEmpty();
+        assertThat(parser.labelInstance("JG|mother|MD-EDITION")).isEmpty();
+        assertThat(parser.labelVersion(qrOf(oldBatch))).isEqualTo("0");
+        assertThat(parser.labelVersion(qrOf(fresh))).isEqualTo("1");
+
+        PrintBatch moved = versioned.reroute(oldBatch.jobs().get(0).id(), "edition-reroute-0001",
+                new PrintTarget("B", "Q2"), "换队列", account);
+        assertThat(moved.contentSnapshot()).isEqualTo(oldBatch.contentSnapshot());
+        PrintBatchService.PrintLineage lineage = versioned.lineage(moved.jobs().get(0).id(), account);
+        assertThat(lineage.sourceBatchId()).isEqualTo(oldBatch.id());
+        assertThat(lineage.labelVersion()).isEqualTo("0");
+        assertThat(versionedLabels.readEdition(moved.contentSnapshot()).distinguishes(freshEdition)).isTrue();
+    }
+
+    private static String qrOf(PrintBatch batch) {
+        int start = batch.contentSnapshot().indexOf("\"qr\":\"") + 6;
+        int end = batch.contentSnapshot().indexOf('"', start);
+        return batch.contentSnapshot().substring(start, end);
+    }
+
+    private static OrderChange appliedChange(String mother, int version) {
+        return new OrderChange(
+                "CHG-" + mother + "-" + version, mother, "", "旧要求", "新要求", "2026-10-20", "2026-11-01",
+                OrderChangeStatus.APPLIED, version, true, BigDecimal.ZERO, BigDecimal.ZERO, "", "财务",
+                "change-" + mother + "-" + version, "收货员", "2026-10-20T00:00:00", "2026-10-20T00:00:00",
+                BigDecimal.ZERO, BigDecimal.ZERO, "", "", "",
+                "抛光", "抛光", version - 1, ""
+        );
     }
 }

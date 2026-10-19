@@ -3,6 +3,7 @@ package com.zhubao.erp.label.app;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.label.domain.LabelEdition;
 import com.zhubao.erp.label.domain.PrintBatch;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.domain.PrintQueue;
@@ -105,9 +106,37 @@ public class PrintBatchService {
         List<PrintTargetJob> jobs = targets.stream().map(target -> new PrintTargetJob(
                 "PJ-" + UUID.randomUUID(), batchId, target.stationId(), target.queueId(), copies,
                 PrintJobStatus.PENDING, "", "", "", "", "", "", now, now)).toList();
-        PrintBatch inserted = repository.insertBatch(new PrintBatch(batchId, requestId.trim(), businessCode.trim(),
+        PrintBatch inserted = repository.insertOriginalBatch(new PrintBatch(batchId, requestId.trim(), businessCode.trim(),
                 templateCode.trim(), copies, hash, snapshot, account.username(), now, jobs));
         return sameOrReject(inserted, hash, account.username());
+    }
+
+    /**
+     * 改派后继任务回到原批次。原任务取消后仍保留，回收后也能按任务编号读到原批次。
+     * 标签版本取冻结快照里的二维码，不把已送队列当成已出纸。
+     */
+    public PrintLineage lineage(String jobId, AuthUserAccount account) {
+        PrintTargetJob job = repository.jobAny(jobId).orElseThrow(() -> new BusinessException("目标任务不存在"));
+        PrintBatch current = batch(job.batchId(), account);
+        LabelEdition edition = labels.readEdition(current.contentSnapshot());
+        String sourceJobId = job.predecessorId() == null ? "" : job.predecessorId().trim();
+        String sourceBatchId = "";
+        String sourceVersion = "";
+        String sourceInstance = "";
+        if (!sourceJobId.isBlank()) {
+            PrintTargetJob sourceJob = repository.jobAny(sourceJobId).orElse(null);
+            if (sourceJob != null) {
+                sourceBatchId = sourceJob.batchId();
+                PrintBatch source = repository.batch(sourceJob.batchId()).orElse(null);
+                if (source != null) {
+                    LabelEdition sourceEdition = labels.readEdition(source.contentSnapshot());
+                    sourceVersion = sourceEdition.version();
+                    sourceInstance = sourceEdition.instance();
+                }
+            }
+        }
+        return new PrintLineage(job.id(), current.id(), edition.version(), edition.instance(),
+                sourceJobId, sourceBatchId, sourceVersion, sourceInstance);
     }
     public PrintBatch batch(String id, AuthUserAccount account) {
         PrintBatch batch = repository.batch(id).orElseThrow(() -> new BusinessException("打印批次不存在"));
@@ -243,4 +272,7 @@ public class PrintBatchService {
     }
     public record StationCredential(PrintStation station, String token) {}
     public record ClaimedPrintJob(PrintTargetJob job, String contentSnapshot) {}
+    public record PrintLineage(String jobId, String batchId, String labelVersion, String labelInstance,
+                               String sourceJobId, String sourceBatchId, String sourceLabelVersion,
+                               String sourceLabelInstance) {}
 }

@@ -70,6 +70,11 @@ public class PrintRoutingController {
         return ApiResponse.ok(service.create(body.requestId(), body.businessCode(), body.templateCode(),
                 body.copiesPerTarget(), body.targets(), account(request), body.customerMark()));
     }
+    @GetMapping("/print-target-jobs/{id}/lineage")
+    public ApiResponse<PrintBatchService.PrintLineage> lineage(@PathVariable String id, HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
+        return ApiResponse.ok(service.lineage(id, account(request)));
+    }
     @GetMapping("/print-batches/{id}")
     public ApiResponse<PrintBatch> batch(@PathVariable String id, HttpServletRequest request) {
         permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
