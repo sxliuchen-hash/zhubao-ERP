@@ -12,6 +12,7 @@ import com.zhubao.erp.scan.domain.ScanResolveRequest;
 import com.zhubao.erp.scan.domain.ScanResolveResponse;
 import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -53,9 +54,7 @@ public class ScanController {
             @Valid @RequestBody ScanContextRequest request,
             HttpServletRequest httpRequest
     ) {
-        AuthUserAccount account = authSessionService.currentAccount(httpRequest.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
-                .orElseThrow(() -> new PermissionDeniedException("请先登录后再访问业务数据"));
-        return ApiResponse.ok(scanContextService.query(request, account));
+        return ApiResponse.ok(scanContextService.query(request, scopedAccount(httpRequest, "请先登录后再访问业务数据")));
     }
 
     /**
@@ -67,8 +66,16 @@ public class ScanController {
             @RequestBody SaveOperationProgressCommand command,
             HttpServletRequest httpRequest
     ) {
-        AuthUserAccount account = authSessionService.currentAccount(httpRequest.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
-                .orElseThrow(() -> new PermissionDeniedException("请先登录后再记录过程"));
-        return ApiResponse.ok(operationProgressService.save(command, account));
+        return ApiResponse.ok(operationProgressService.save(command, scopedAccount(httpRequest, "请先登录后再记录过程")));
+    }
+
+    /** 扫码和过程说明使用会话里已经收成客户编号的范围，不用账号上的原始名称。 */
+    private AuthUserAccount scopedAccount(HttpServletRequest httpRequest, String deniedMessage) {
+        String header = httpRequest.getHeader(AuthSessionService.AUTHORIZATION_HEADER);
+        OperatorContext context = authSessionService.operatorContext(header)
+                .orElseThrow(() -> new PermissionDeniedException(deniedMessage));
+        AuthUserAccount account = authSessionService.currentAccount(header)
+                .orElseThrow(() -> new PermissionDeniedException(deniedMessage));
+        return account.withCustomerScope(context.customerScope());
     }
 }
