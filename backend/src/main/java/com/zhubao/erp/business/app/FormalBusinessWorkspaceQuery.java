@@ -9,6 +9,7 @@ import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 
@@ -292,16 +293,32 @@ final class FormalBusinessWorkspaceQuery {
         if (documents == null) return false;
         ChildWorkOrderRecord child = snapshot.child(code);
         MotherOrderRecord mother = snapshot.mother(child == null ? code : child.motherOrderCode());
+        if (child != null && mother != null
+                && CustomerScopeRules.identityConflicts(child.customerId(), mother.customerId())) {
+            return false;
+        }
         if (mother == null) {
+            String onlyMother = null;
+            Long onlyCustomer = null;
+            boolean ambiguous = false;
             for (StockBalance balance : snapshot.balances) {
                 StockDimension dimension = balance.dimension();
                 if (!code.equals(dimension.workOrderCode())) {
                     continue;
                 }
-                mother = snapshot.mother(dimension.motherOrderCode());
-                if (mother != null) {
+                if (onlyMother == null) {
+                    onlyMother = dimension.motherOrderCode();
+                    onlyCustomer = dimension.customerId();
+                } else if (!onlyMother.equals(dimension.motherOrderCode())
+                        || CustomerScopeRules.identityConflicts(onlyCustomer, dimension.customerId())) {
+                    ambiguous = true;
                     break;
                 }
+            }
+            if (ambiguous) return false;
+            if (onlyMother != null) {
+                mother = snapshot.mother(onlyMother);
+                if (mother != null && CustomerScopeRules.identityConflicts(onlyCustomer, mother.customerId())) return false;
             }
         }
         if (mother != null && visible(mother, operator, area)) return true;
@@ -356,12 +373,15 @@ final class FormalBusinessWorkspaceQuery {
     }
 
     private String firstMotherCode(String code, Snapshot snapshot) {
+        String only = null;
         for (StockBalance balance : snapshot.balances) {
-            if (code.equals(balance.dimension().workOrderCode())) {
-                return balance.dimension().motherOrderCode();
-            }
+            if (!code.equals(balance.dimension().workOrderCode())) continue;
+            String candidate = balance.dimension().motherOrderCode();
+            if (candidate == null || candidate.isBlank()) continue;
+            if (only == null) only = candidate;
+            else if (!only.equals(candidate)) return "";
         }
-        return code;
+        return only == null ? code : only;
     }
 
     private OperationContext context(String motherCode, String orderCode, Set<StockStatus> statuses, Snapshot snapshot) {

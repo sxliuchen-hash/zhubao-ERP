@@ -15,7 +15,8 @@ import com.zhubao.erp.document.domain.StoredAttachmentObject;
 import com.zhubao.erp.document.domain.AttachmentObjectStorage;
 import com.zhubao.erp.document.domain.AttachmentMediaPolicy;
 import com.zhubao.erp.document.infra.DocumentCaptureProperties;
-import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.OperatorContext;
 import org.springframework.stereotype.Service;
 
@@ -112,6 +113,8 @@ public class DocumentCaptureService {
             MotherOrderRecord motherOrder = businessDocumentRepository.findMotherOrderByCode(code)
                     .orElseThrow(() -> new BusinessException("母单不存在：" + code));
             assertCustomerAllowed(operator, motherOrder);
+        } else if (EvidenceCodes.WORK_ORDER.equals(canonicalType)) {
+            assertChildCustomer(operator, code);
         }
         String canonicalMediaType = AttachmentMediaPolicy.canonicalType(mediaType, false);
         boolean video = AttachmentMediaPolicy.isVideo(canonicalMediaType);
@@ -268,16 +271,18 @@ public class DocumentCaptureService {
         ));
     }
 
-    private void assertCustomerAllowed(OperatorContext operator, MotherOrderRecord motherOrder) {
-        if (operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) {
-            return;
+    private void assertChildCustomer(OperatorContext operator, String code) {
+        ChildWorkOrderRecord child = businessDocumentRepository.findChildWorkOrderByCode(code).orElse(null);
+        if (child == null) return;
+        MotherOrderRecord mother = businessDocumentRepository.findMotherOrderByCode(child.motherOrderCode()).orElse(null);
+        if (mother != null && CustomerScopeRules.identityConflicts(child.customerId(), mother.customerId())) {
+            throw new BusinessException("子单客户与母单不一致，请人工核对后再办理");
         }
-        String customerId = motherOrder.customerId() == null ? "" : String.valueOf(motherOrder.customerId());
-        boolean allowed = operator.customerScope().stream().anyMatch(item ->
-                item.equals(motherOrder.customerName())
-                        || item.equals(customerId)
-                        || item.equals("客户#" + customerId));
-        if (!allowed) {
+        if (mother != null) assertCustomerAllowed(operator, mother);
+    }
+
+    private void assertCustomerAllowed(OperatorContext operator, MotherOrderRecord motherOrder) {
+        if (!CustomerScopeRules.allowed(operator, motherOrder.customerId(), motherOrder.customerName())) {
             throw new BusinessException("单号不在当前账号的客户范围内");
         }
     }

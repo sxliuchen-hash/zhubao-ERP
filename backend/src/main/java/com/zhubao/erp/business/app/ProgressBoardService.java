@@ -9,7 +9,7 @@ import com.zhubao.erp.business.domain.ProgressRow;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.business.domain.QualityVerdicts;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
-import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.OperatorContext;
 import org.springframework.stereotype.Service;
 
@@ -117,7 +117,8 @@ public class ProgressBoardService {
                 continue;
             }
             for (ChildWorkOrderRecord child : family) {
-                if (!withinScope(operator, child.customerId() == null ? mother.customerId() : child.customerId(), child.customerName())) {
+                // 子单客户编号与母单冲突时不自动归到任何一边。
+                if (CustomerScopeRules.identityConflicts(child.customerId(), mother.customerId())) {
                     continue;
                 }
                 rows.add(stationRow(
@@ -210,13 +211,7 @@ public class ProgressBoardService {
     }
 
     private boolean withinScope(OperatorContext operator, Long customerId, String customerName) {
-        if (operator == null || operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) {
-            return true;
-        }
-        String idText = customerId == null ? "" : String.valueOf(customerId);
-        String name = blank(customerName);
-        return operator.customerScope().stream()
-                .anyMatch(item -> item.equals(name) || (!idText.isEmpty() && item.equals(idText)));
+        return CustomerScopeRules.allowed(operator, customerId, customerName);
     }
 
     private boolean overdue(String dueDate, String status, String outcome) {

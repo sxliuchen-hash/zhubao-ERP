@@ -113,6 +113,20 @@ class FormalBusinessWorkspaceQueryTest {
     }
 
     @Test
+    void sharedWorkOrderCodeAcrossCustomersIsNotAssignedToTheFirstMother() {
+        receipt("MD-A", 7001L, "甲", "收货员");
+        receipt("MD-B", 7002L, "乙", "收货员");
+        stocks.transfer(new StockTransferCommand("inbound_confirm", "L1", null,
+                new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, "MD-A", "ZD-SHARED", "MAT-REAL", "RAW", StockStatus.WIP),
+                BigDecimal.ONE, BigDecimal.ONE, "甲"));
+        stocks.transfer(new StockTransferCommand("inbound_confirm", "L2", null,
+                new StockDimension(OwnerType.CUSTOMER, 7002L, 7002L, "MD-B", "ZD-SHARED", "MAT-REAL", "RAW", StockStatus.WIP),
+                BigDecimal.ONE, BigDecimal.ONE, "乙"));
+        assertThat(service.production().workOrders()).noneMatch(order -> "ZD-SHARED".equals(order.code()));
+        assertThat(service.inventory().balances()).extracting("batch").contains("MD-A", "MD-B");
+    }
+
+    @Test
     void ambiguousInventoryDoesNotChooseAnOperationSource() {
         receipt("MD-A", 7001L, "真实客户", "收货员");
         StockDimension otherWarehouse = new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, "MD-A", null, "MAT-REAL", "RAW-OTHER", StockStatus.RAW_WAITING);

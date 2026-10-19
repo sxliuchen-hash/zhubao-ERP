@@ -180,6 +180,21 @@ class ScanContextServiceTest {
     }
 
     @Test
+    void conflictingChildIsNeitherListedNorOpened() {
+        inbound("MD-SCAN-FOREIGN", "1", "1", "母单要求");
+        repository.saveChildWorkOrder(new ChildWorkOrderRecord(
+                "ZD-FOREIGN", "MD-SCAN-FOREIGN", 1002L, "另一客户", "抛光", "2026-10-20",
+                "AU9999", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW", "抛光", "VF", "", "何琳", "2026-10-08"));
+
+        ScanContextResponse mother = context.query(
+                new ScanContextRequest("JG|mother|MD-SCAN-FOREIGN", null, ScanIntent.LOOKUP), admin());
+        assertThat(mother.relatedTargets()).extracting(target -> target.code()).doesNotContain("ZD-FOREIGN");
+        assertThatThrownBy(() -> context.query(
+                new ScanContextRequest("JG|work_order|ZD-FOREIGN", null, ScanIntent.LOOKUP), admin()))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
+
+    @Test
     void reworkTraceKeepsTheOriginalFailureAndDoesNotClaimReinspection() {
         String childCode = finishedChild("MD-SCAN-REWORK");
         String sticker = "JG|work_order|" + childCode;

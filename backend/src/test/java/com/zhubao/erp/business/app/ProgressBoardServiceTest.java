@@ -87,6 +87,27 @@ class ProgressBoardServiceTest {
         assertThat(service.list(office, "", "", "", "")).isEmpty();
     }
 
+    @Test
+    void emptyCustomerRangeSeesNothingAndCrossCustomerChildIsOmitted() {
+        documents.saveMotherOrder(mother("MD-1", 1001L, "恒信珠宝", "2099-01-01"));
+        documents.saveMotherSplitState(new MotherSplitState("MD-1", MotherSplitState.SPLIT, "V1", "收货", "2026-10-09T08:00:00"));
+        documents.saveChildWorkOrder(child("ZD-1", "MD-1", 1001L, "2099-01-01", "抛光"));
+        documents.saveChildWorkOrder(child("ZD-X", "MD-1", 1002L, "2099-01-01", "抛光"));
+
+        OperatorContext empty = new OperatorContext("业务员", RoleCode.SALES, DataScope.CUSTOMER_RANGE);
+        assertThat(service.list(empty, "", "", "", "")).isEmpty();
+
+        OperatorContext department = new OperatorContext("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT);
+        assertThat(service.list(department, "", "", "", ""))
+                .extracting(row -> row.workOrderCode())
+                .containsExactly("ZD-1");
+
+        OperatorContext scoped = new OperatorContext("业务员", RoleCode.SALES, DataScope.CUSTOMER_RANGE, false, "", List.of("1001"));
+        assertThat(service.list(scoped, "", "", "", ""))
+                .extracting(row -> row.workOrderCode())
+                .containsExactly("ZD-1");
+    }
+
     private MotherOrderRecord mother(String code, Long customerId, String name, String dueDate) {
         return new MotherOrderRecord(
                 code,

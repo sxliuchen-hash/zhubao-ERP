@@ -122,6 +122,13 @@ public class MasterDataService {
                 resolved.add(value);
                 continue;
             }
+            if (value.startsWith("客户#")) {
+                String id = value.substring("客户#".length()).trim();
+                if (id.matches("[0-9]+") && profiles.stream().anyMatch(profile -> id.equals(String.valueOf(profile.customerId())))) {
+                    resolved.add(id);
+                }
+                continue;
+            }
             List<CustomerProfile> matching = profiles.stream().filter(profile ->
                     profile.customerCode().equalsIgnoreCase(value)
                             || profile.name().equalsIgnoreCase(value)

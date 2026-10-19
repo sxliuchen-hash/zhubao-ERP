@@ -52,7 +52,13 @@ class MasterDataServiceTest {
                 "新客户", "", "", "", true));
         assertThat(intake.view(result.motherOrderCode()).customerName()).isEqualTo("新客户");
         assertThat(catalog.customerForIntake(customer.customerId()).name()).isEqualTo("已改名客户");
-        assertThat(catalog.stableCustomerScope(List.of("新客户", customer.customerCode(), "未知客户")))
+        CustomerProfile renamed = catalog.saveCustomer(new CustomerProfile(customer.customerId(), customer.customerCode(), "已改名客户",
+                "", "", "", "", true));
+        assertThat(renamed.aliases()).contains("新客户");
+        assertThat(catalog.stableCustomerScope(List.of("新客户", customer.customerCode(), "客户#" + customer.customerId(), "客户#999999", "未知客户")))
+                .containsExactly(String.valueOf(customer.customerId()));
+        catalog.saveCustomer(new CustomerProfile(0, "", "新客户", "", "", "", "", true));
+        assertThat(catalog.stableCustomerScope(List.of("新客户", "客户#" + customer.customerId())))
                 .containsExactly(String.valueOf(customer.customerId()));
         assertThatThrownBy(() -> intake.intake(new MobileIntakeCommand("", "新客户", null, "抛光",
                 "2026-10-20", "戒托", BigDecimal.ONE, BigDecimal.ONE, "", material.materialCode(),
