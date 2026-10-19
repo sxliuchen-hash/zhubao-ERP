@@ -33,10 +33,12 @@ public interface PrintJobRepository {
     void recycle(String id, String operator, String at, String batch, String reason);
 
     int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason);
+    int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason, WorkSession session);
 
     void restore(String id);
 
     void restoreBatch(String batch);
+    void restoreBatch(String batch, WorkSession session);
 
     Optional<PrintRecycle> recycleMark(String id);
 

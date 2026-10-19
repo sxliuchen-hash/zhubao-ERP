@@ -1773,8 +1773,18 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public void recycleMother(String code, String operator, String at, String batch, String reason, WorkSession session) {
+        recycle("biz_mother_order", code, operator, at, batch, reason, "母单不存在或已在回收站", session);
+    }
+
+    @Override
     public void recycleChild(String code, String operator, String at, String batch, String reason) {
         recycle("biz_work_order", code, operator, at, batch, reason, "子单不存在或已在回收站");
+    }
+
+    @Override
+    public void recycleChild(String code, String operator, String at, String batch, String reason, WorkSession session) {
+        recycle("biz_work_order", code, operator, at, batch, reason, "子单不存在或已在回收站", session);
     }
 
     @Override
@@ -1807,8 +1817,30 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public void clearChildRecycle(String code, WorkSession session) {
+        try {
+            updateOne(session.connection().orElseThrow(), "update biz_work_order set recycled_at = null, recycled_by = null, "
+                    + "recycle_batch = null, recycle_reason = null where code = ? and recycled_at is not null",
+                    statement -> statement.setString(1, code), "子单不在回收站");
+        } catch (SQLException ex) {
+            throw new IllegalStateException("恢复子单失败", ex);
+        }
+    }
+
+    @Override
     public void clearRecycleBatch(String batch) {
         try (Connection connection = dataSource.getConnection()) {
+            clearBatch(connection, "biz_mother_order", batch);
+            clearBatch(connection, "biz_work_order", batch);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("恢复回收站失败", ex);
+        }
+    }
+
+    @Override
+    public void clearRecycleBatch(String batch, WorkSession session) {
+        try {
+            Connection connection = session.connection().orElseThrow();
             clearBatch(connection, "biz_mother_order", batch);
             clearBatch(connection, "biz_work_order", batch);
         } catch (SQLException ex) {
@@ -1886,6 +1918,23 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setString(4, reason);
             statement.setString(5, code);
         }, missing);
+    }
+
+    private void recycle(String table, String code, String operator, String at, String batch, String reason,
+                         String missing, WorkSession session) {
+        try {
+            updateOne(session.connection().orElseThrow(), "update " + table
+                    + " set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                    + "where code = ? and recycled_at is null", statement -> {
+                statement.setString(1, at);
+                statement.setString(2, operator);
+                statement.setString(3, batch);
+                statement.setString(4, reason);
+                statement.setString(5, code);
+            }, missing);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("回收单据失败", ex);
+        }
     }
 
     private Optional<OrderRecycleMark> recycleMark(String type, String table, String code) {

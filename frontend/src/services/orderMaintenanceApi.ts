@@ -72,10 +72,10 @@ export function correctMaintainedOrder(order: MaintainedOrder, reason: string, r
   });
 }
 
-export function recycleMaintainedOrder(targetType: string, code: string, reason: string): Promise<void> {
-  return apiPost('/api/business/order-maintenance/recycle', { targetType, code, reason });
+export function recycleMaintainedOrder(targetType: string, code: string, reason: string, requestId: string): Promise<void> {
+  return apiPost('/api/business/order-maintenance/recycle', { targetType, code, reason, requestId });
 }
 
-export function restoreMaintainedOrder(targetType: string, code: string): Promise<void> {
-  return apiPost('/api/business/order-maintenance/restore', { targetType, code });
+export function restoreMaintainedOrder(targetType: string, code: string, requestId: string): Promise<void> {
+  return apiPost('/api/business/order-maintenance/restore', { targetType, code, requestId });
 }

@@ -287,6 +287,16 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
             return s.executeUpdate();
         } catch (SQLException ex) { throw failed("回收打印任务失败", ex); }
     }
+    @Override public int recycleByBusinessCode(String businessCode, String operator, String at, String batch,
+                                                String reason, WorkSession session) {
+        String sql = "update biz_print_target_job set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                + "where recycled_at is null and batch_id in (select id from biz_print_batch where business_code = ?)";
+        try (PreparedStatement s = session.connection().orElseThrow().prepareStatement(sql)) {
+            s.setString(1, at); s.setString(2, operator); s.setString(3, batch); s.setString(4, reason);
+            s.setString(5, businessCode);
+            return s.executeUpdate();
+        } catch (SQLException ex) { throw failed("回收打印任务失败", ex); }
+    }
     @Override public void restoreJob(String id) {
         String sql = "update biz_print_target_job set recycled_at = null, recycled_by = null, recycle_batch = null, "
                 + "recycle_reason = null where id = ? and recycled_at is not null";
@@ -300,6 +310,14 @@ public class JdbcPrintRoutingRepository implements PrintRoutingRepository {
         String sql = "update biz_print_target_job set recycled_at = null, recycled_by = null, recycle_batch = null, "
                 + "recycle_reason = null where recycle_batch = ?";
         try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(sql)) {
+            s.setString(1, batch);
+            s.executeUpdate();
+        } catch (SQLException ex) { throw failed("恢复打印任务失败", ex); }
+    }
+    @Override public void restoreBatch(String batch, WorkSession session) {
+        String sql = "update biz_print_target_job set recycled_at = null, recycled_by = null, recycle_batch = null, "
+                + "recycle_reason = null where recycle_batch = ?";
+        try (PreparedStatement s = session.connection().orElseThrow().prepareStatement(sql)) {
             s.setString(1, batch);
             s.executeUpdate();
         } catch (SQLException ex) { throw failed("恢复打印任务失败", ex); }

@@ -259,6 +259,23 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
+    public int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason,
+                                     WorkSession session) {
+        String sql = "update biz_print_job set recycled_at = ?, recycled_by = ?, recycle_batch = ?, recycle_reason = ? "
+                + "where business_code = ? and recycled_at is null";
+        try (PreparedStatement statement = session.connection().orElseThrow().prepareStatement(sql)) {
+            statement.setString(1, at);
+            statement.setString(2, operator);
+            statement.setString(3, batch);
+            statement.setString(4, reason);
+            statement.setString(5, businessCode);
+            return statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("回收打印任务失败", ex);
+        }
+    }
+
+    @Override
     public void restore(String id) {
         updateNullable("update biz_print_job set recycled_at = null, recycled_by = null, recycle_batch = null, recycle_reason = null "
                 + "where id = ? and recycled_at is not null", id, "打印任务不在回收站");
@@ -270,6 +287,18 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
                 + "where recycle_batch = ?";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, batch);
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("恢复打印任务失败", ex);
+        }
+    }
+
+    @Override
+    public void restoreBatch(String batch, WorkSession session) {
+        String sql = "update biz_print_job set recycled_at = null, recycled_by = null, recycle_batch = null, "
+                + "recycle_reason = null where recycle_batch = ?";
+        try (PreparedStatement statement = session.connection().orElseThrow().prepareStatement(sql)) {
             statement.setString(1, batch);
             statement.executeUpdate();
         } catch (SQLException ex) {

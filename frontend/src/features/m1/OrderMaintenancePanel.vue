@@ -17,6 +17,17 @@ const message = ref('');
 const error = ref('');
 const busy = ref(false);
 const correctionRequests = new Map<string, string>();
+const recycleRequests = new Map<string, string>();
+
+function requestFor(cache: Map<string, string>, fingerprint: string): string {
+  let requestId = cache.get(fingerprint);
+  if (!requestId) {
+    const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    requestId = `maint-${random}`.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 64);
+    cache.set(fingerprint, requestId);
+  }
+  return requestId;
+}
 
 const typeLabel: Record<MaintainedOrder['targetType'], string> = {
   MOTHER: '母单',
@@ -66,12 +77,7 @@ function save(order: MaintainedOrder) {
       order.goodsName, order.quantity, order.weight, order.requirement, order.dueDate,
       order.processes, order.copies, order.stationId, order.queueId, reason.value.trim(),
     ]);
-    let requestId = correctionRequests.get(fingerprint);
-    if (!requestId) {
-      const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      requestId = `maint-${random}`.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 64);
-      correctionRequests.set(fingerprint, requestId);
-    }
+    const requestId = requestFor(correctionRequests, fingerprint);
     await correctMaintainedOrder(order, reason.value.trim(), requestId);
     rows.value = await searchMaintainedOrders(order.code);
   }, '已保存修改');
@@ -79,7 +85,10 @@ function save(order: MaintainedOrder) {
 
 function recycle(order: MaintainedOrder) {
   return run(async () => {
-    await recycleMaintainedOrder(order.targetType, order.code, reason.value.trim());
+    const reasonText = reason.value.trim();
+    const fingerprint = JSON.stringify(['recycle', order.targetType, order.code, reasonText]);
+    await recycleMaintainedOrder(order.targetType, order.code, reasonText, requestFor(recycleRequests, fingerprint));
+    recycleRequests.delete(fingerprint);
     if (code.value.trim()) {
       rows.value = await searchMaintainedOrders(code.value.trim());
     }
@@ -88,7 +97,9 @@ function recycle(order: MaintainedOrder) {
 
 function restore(order: MaintainedOrder) {
   return run(async () => {
-    await restoreMaintainedOrder(order.targetType, order.code);
+    const fingerprint = JSON.stringify(['restore', order.targetType, order.code, order.recycleReason]);
+    await restoreMaintainedOrder(order.targetType, order.code, requestFor(recycleRequests, fingerprint));
+    recycleRequests.delete(fingerprint);
   }, '已从回收站恢复');
 }
 

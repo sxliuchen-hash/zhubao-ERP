@@ -35,9 +35,15 @@ public final class OrderMaintenanceCommands {
         }
     }
 
-    public record RecycleCommand(String targetType, String code, String reason) {
+    public record RecycleCommand(String targetType, String code, String reason, String requestId) {
+        public RecycleCommand(String targetType, String code, String reason) {
+            this(targetType, code, reason, null);
+        }
     }
 
-    public record RestoreCommand(String targetType, String code) {
+    public record RestoreCommand(String targetType, String code, String requestId) {
+        public RestoreCommand(String targetType, String code) {
+            this(targetType, code, null);
+        }
     }
 }

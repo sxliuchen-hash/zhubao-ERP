@@ -27,8 +27,10 @@ public interface PrintRoutingRepository {
     List<PrintTargetJob> jobsForBusinessAny(String businessCode);
     void recycleJob(String id, String operator, String at, String batch, String reason);
     int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason);
+    int recycleByBusinessCode(String businessCode, String operator, String at, String batch, String reason, WorkSession session);
     void restoreJob(String id);
     void restoreBatch(String batch);
+    void restoreBatch(String batch, WorkSession session);
     Optional<PrintRecycle> jobRecycle(String id);
     List<PrintRecycle> recycledJobs();
     /** 仅改正未领取目标任务，并与调整记录共用工作单元。 */

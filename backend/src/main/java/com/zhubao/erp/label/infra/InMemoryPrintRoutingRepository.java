@@ -117,11 +117,30 @@ public class InMemoryPrintRoutingRepository implements PrintRoutingRepository {
         }
         return count;
     }
+    @Override public synchronized int recycleByBusinessCode(String businessCode, String operator, String at,
+                                                            String batch, String reason, WorkSession session) {
+        int count = recycleByBusinessCode(businessCode, operator, at, batch, reason);
+        session.onRollback(() -> {
+            synchronized (this) {
+                recycled.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));
+            }
+        });
+        return count;
+    }
     @Override public synchronized void restoreJob(String id) {
         if (recycled.remove(id) == null) throw new BusinessException("打印任务不在回收站");
     }
     @Override public synchronized void restoreBatch(String batch) {
         recycled.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));
+    }
+    @Override public synchronized void restoreBatch(String batch, WorkSession session) {
+        var previous = recycled.values().stream().filter(mark -> batch.equals(mark.batch())).toList();
+        restoreBatch(batch);
+        session.onRollback(() -> {
+            synchronized (this) {
+                previous.forEach(mark -> recycled.put(mark.id(), mark));
+            }
+        });
     }
     @Override public Optional<PrintRecycle> jobRecycle(String id) { return Optional.ofNullable(recycled.get(id)); }
     @Override public List<PrintRecycle> recycledJobs() { return List.copyOf(recycled.values()); }

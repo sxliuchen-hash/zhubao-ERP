@@ -2246,10 +2246,10 @@ PWA 一期边界：
 | `POST /api/business/order-maintenance/work-orders/{code}` | 改正子单；已有库存流水编号时同样保护入账字段，工序也不可原地覆盖。原因必填 |
 | `POST /api/business/order-maintenance/print-jobs/{id}` | 仅未领取旧任务可改份数；`stationId` 是领取记录，不可改为目标工位 |
 | `POST /api/business/order-maintenance/print-targets/{id}` | 仅未领取目标任务可改份数；工位和队列变更须走打印批次改派，已领取、出队或状态不明须先核纸 |
-| `POST /api/business/order-maintenance/recycle` | `targetType` 为 `MOTHER`、`WORK_ORDER`、`PRINT_JOB` 或 `PRINT_TARGET`。回收母单会同时隐藏其子单和相关打印任务 |
-| `POST /api/business/order-maintenance/restore` | 恢复母单会带回同一次放入回收站的子单和打印任务。母单仍在回收站时，不能单独恢复子单或打印任务 |
+| `POST /api/business/order-maintenance/recycle` | `targetType` 为 `MOTHER`、`WORK_ORDER`、`PRINT_JOB` 或 `PRINT_TARGET`。母／子单回收须带 `requestId`，母单会同时隐藏其子单和相关打印任务 |
+| `POST /api/business/order-maintenance/restore` | 母／子单恢复须带 `requestId`；恢复母单会带回同一次放入回收站的子单和打印任务。母单仍在回收站时，不能单独恢复子单或打印任务 |
 
-母单、子单的查找响应新增 `revision`，由当前完整单据快照计算。对应改正请求必须携带本次确认的 `requestId` 和查找时的 `expectedRevision`；同账号、同编号、同内容重试不重复写入，接口重新读取并返回当前单据视图，改变内容却复用编号会拒绝。另一笔改正或业务写入改变单据后，旧 `expectedRevision` 会被拒绝，页面须重新查找并核对。此规则仅适用于母单／子单改正；打印任务改正、回收及恢复尚未接入同一命令边界。库存、财务和旧明细仍不会因管理员改正自动冲正。
+母单、子单及打印任务的查找响应返回当前完整记录的 `revision`。改正请求必须携带本次确认的 `requestId` 和查找时的 `expectedRevision`；同账号、同编号、同内容重试不重复写入，接口重新读取并返回当前视图，改变内容却复用编号会拒绝。另一笔改正或业务写入改变记录后，旧 `expectedRevision` 会被拒绝，页面须重新查找并核对。母／子单整批回收与恢复也要求 `requestId` 并同批提交；单独打印任务的回收恢复尚未接入该事务。库存、财务和旧明细仍不会因管理员改单或回收自动冲正。
 
 母单、子单的查找响应还返回 `postedFactsLocked`；有库存流水编号时为 `true`，页面据此将入账事实字段设为只读。服务端仍独立校验，直接调用接口也不能绕过。若旧单缺失流水编号但已有实际账务，须先核对来源后才能开放更正；本字段不是历史账务完整性的证明。
 

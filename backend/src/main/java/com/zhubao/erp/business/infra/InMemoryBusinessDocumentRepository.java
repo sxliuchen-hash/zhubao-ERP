@@ -675,6 +675,13 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public void recycleMother(String code, String operator, String at, String batch, String reason, WorkSession session) {
+        requireSession(session);
+        recycleMother(code, operator, at, batch, reason);
+        session.onRollback(() -> recycledMothers.remove(code));
+    }
+
+    @Override
     public void recycleChild(String code, String operator, String at, String batch, String reason) {
         if (!childWorkOrders.containsKey(code)) {
             throw new BusinessException("子单不存在");
@@ -683,6 +690,13 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
             throw new BusinessException("子单已在回收站");
         }
         recycledChildren.put(code, new OrderRecycleMark("WORK_ORDER", code, at, operator, batch, reason));
+    }
+
+    @Override
+    public void recycleChild(String code, String operator, String at, String batch, String reason, WorkSession session) {
+        requireSession(session);
+        recycleChild(code, operator, at, batch, reason);
+        session.onRollback(() -> recycledChildren.remove(code));
     }
 
     @Override
@@ -713,9 +727,29 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public void clearChildRecycle(String code, WorkSession session) {
+        requireSession(session);
+        OrderRecycleMark previous = recycledChildren.get(code);
+        clearChildRecycle(code);
+        session.onRollback(() -> recycledChildren.put(code, previous));
+    }
+
+    @Override
     public void clearRecycleBatch(String batch) {
         recycledMothers.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));
         recycledChildren.entrySet().removeIf(entry -> batch.equals(entry.getValue().batch()));
+    }
+
+    @Override
+    public void clearRecycleBatch(String batch, WorkSession session) {
+        requireSession(session);
+        var mothers = recycledMothers.values().stream().filter(mark -> batch.equals(mark.batch())).toList();
+        var children = recycledChildren.values().stream().filter(mark -> batch.equals(mark.batch())).toList();
+        clearRecycleBatch(batch);
+        session.onRollback(() -> {
+            mothers.forEach(mark -> recycledMothers.put(mark.code(), mark));
+            children.forEach(mark -> recycledChildren.put(mark.code(), mark));
+        });
     }
 
     @Override

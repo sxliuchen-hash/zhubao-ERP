@@ -181,8 +181,10 @@ public interface BusinessDocumentRepository {
     void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment, WorkSession session);
 
     void recycleMother(String code, String operator, String at, String batch, String reason);
+    void recycleMother(String code, String operator, String at, String batch, String reason, WorkSession session);
 
     void recycleChild(String code, String operator, String at, String batch, String reason);
+    void recycleChild(String code, String operator, String at, String batch, String reason, WorkSession session);
 
     Optional<OrderRecycleMark> motherRecycle(String code);
 
@@ -193,9 +195,11 @@ public interface BusinessDocumentRepository {
     List<OrderRecycleMark> listChildRecycles();
 
     void clearChildRecycle(String code);
+    void clearChildRecycle(String code, WorkSession session);
 
     /** 恢复同一次放入回收站的母单和子单。 */
     void clearRecycleBatch(String batch);
+    void clearRecycleBatch(String batch, WorkSession session);
 
     void saveOrderAdjustment(OrderAdjustment adjustment);
 

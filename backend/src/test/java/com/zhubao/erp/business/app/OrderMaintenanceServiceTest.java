@@ -99,6 +99,50 @@ class OrderMaintenanceServiceTest {
     }
 
     @Test
+    void 回收中途失败撤销母子单及打印标记并允许同请求重试() {
+        documents.saveMotherOrder(mother());
+        documents.saveChildWorkOrder(child());
+        printJobs.save(legacyJob());
+        routing.insertBatch(batch());
+        AtomicBoolean fail = new AtomicBoolean(true);
+        InMemoryPrintRoutingRepository failingRouting = new InMemoryPrintRoutingRepository() {
+            @Override
+            public synchronized int recycleByBusinessCode(String businessCode, String operator, String at,
+                                                           String batchId, String reason, WorkSession session) {
+                if (fail.getAndSet(false)) throw new IllegalStateException("目标任务回收失败");
+                return super.recycleByBusinessCode(businessCode, operator, at, batchId, reason, session);
+            }
+        };
+        failingRouting.insertBatch(batch());
+        OrderMaintenanceService atomic = new OrderMaintenanceService(documents, printJobs, failingRouting,
+                new PermissionGuard(), new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+        var command = new OrderMaintenanceCommands.RecycleCommand("MOTHER", "MD-1", "整单核对", "req-recycle-mother");
+        assertThatThrownBy(() -> atomic.recycle(command, admin)).isInstanceOf(IllegalStateException.class);
+        assertThat(documents.motherRecycle("MD-1")).isEmpty();
+        assertThat(documents.childRecycle("ZD-1")).isEmpty();
+        assertThat(printJobs.recycleMark("P-1")).isEmpty();
+        assertThat(failingRouting.jobRecycle("J-1")).isEmpty();
+
+        atomic.recycle(command, admin);
+        atomic.recycle(command, admin);
+        assertThat(documents.motherRecycle("MD-1")).isPresent();
+        assertThat(documents.childRecycle("ZD-1")).isPresent();
+        assertThat(printJobs.recycleMark("P-1")).isPresent();
+        assertThat(failingRouting.jobRecycle("J-1")).isPresent();
+        assertThatThrownBy(() -> atomic.recycle(new OrderMaintenanceCommands.RecycleCommand(
+                "MOTHER", "MD-1", "换一个原因", "req-recycle-mother"), admin))
+                .isInstanceOf(BusinessException.class);
+
+        var restore = new OrderMaintenanceCommands.RestoreCommand("MOTHER", "MD-1", "req-restore-mother");
+        atomic.restore(restore, admin);
+        atomic.restore(restore, admin);
+        assertThat(documents.motherRecycle("MD-1")).isEmpty();
+        assertThat(documents.childRecycle("ZD-1")).isEmpty();
+        assertThat(printJobs.recycleMark("P-1")).isEmpty();
+        assertThat(failingRouting.jobRecycle("J-1")).isEmpty();
+    }
+
+    @Test
     void 已领取的目标任务拒绝直接改单() {
         routing.insertBatch(batch());
         PrintTargetJob leased = routing.claim("A", "lease", "now").orElseThrow();

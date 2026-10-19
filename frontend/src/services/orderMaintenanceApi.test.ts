@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { correctMaintainedOrder, type MaintainedOrder } from './orderMaintenanceApi';
+import { correctMaintainedOrder, recycleMaintainedOrder, restoreMaintainedOrder, type MaintainedOrder } from './orderMaintenanceApi';
 
 describe('orderMaintenanceApi', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -39,5 +39,18 @@ describe('orderMaintenanceApi', () => {
     }, '改派核对', 'req-print-1');
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body).toMatchObject({ requestId: 'req-print-1', expectedRevision: 'print-snapshot' });
+  });
+
+  it('回收与恢复发送请求编号', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: {} }),
+    } as Response);
+    await recycleMaintainedOrder('MOTHER', 'MD-1', '录错', 'req-recycle-1');
+    await restoreMaintainedOrder('MOTHER', 'MD-1', 'req-restore-1');
+    const recycleBody = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const restoreBody = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(recycleBody).toMatchObject({ requestId: 'req-recycle-1', reason: '录错' });
+    expect(restoreBody).toMatchObject({ requestId: 'req-restore-1' });
   });
 });

@@ -50,7 +50,7 @@ describe('单据维护', () => {
     const recycle = wrapper.findAll('button').find((button) => button.text() === '放入回收站');
     await recycle!.trigger('click');
     await flushPromises();
-    expect(recycleMaintainedOrder).toHaveBeenCalledWith('MOTHER', 'MD-1', '录错');
+    expect(recycleMaintainedOrder).toHaveBeenCalledWith('MOTHER', 'MD-1', '录错', expect.stringMatching(/^maint-/));
   });
 
   it('相同内容重试沿用请求编号，修改内容后换编号', async () => {
