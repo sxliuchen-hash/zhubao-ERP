@@ -759,7 +759,8 @@ public class ProcessStationService {
         if (account == null || account.operator() == null || account.operator().isBlank()) {
             throw new BusinessException("请先登录后再做岗位报工");
         }
-        if (!List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.WORKSHOP_LEADER, RoleCode.OPERATOR).contains(account.role())) {
+        if (!List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.WORKSHOP_LEADER, RoleCode.OPERATOR).contains(account.role())
+                && !(account.role() == RoleCode.BUSINESS_MANAGER && com.zhubao.erp.security.domain.CoverDuties.contains(account.coverDuties(), com.zhubao.erp.security.domain.CoverDuties.REPORT))) {
             throw new PermissionDeniedException("当前账号不是报工岗位");
         }
     }

@@ -59,6 +59,7 @@ public class SecurityCurrentContextService {
         return switch (role) {
             case ADMIN -> "系统管理员";
             case GENERAL_MANAGER -> "总经理";
+            case BUSINESS_MANAGER -> "业务管理";
             case SALES -> "业务员";
             case RECEIVER -> "收货员";
             case WORKSHOP_LEADER -> "车间组长";

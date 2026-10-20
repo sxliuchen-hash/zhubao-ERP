@@ -1,5 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
 import { queryScanContext } from '../../services/scanContextApi';
 import { hasLiveCamera, openCameraStream, readLiveBarcode } from '../scan/cameraBarcode';
 import { buildScanContext } from '../scan/scanContextFixture';
@@ -10,6 +12,19 @@ import { fetchQualityWorkspace } from '../../services/businessWorkspaceApi';
 import { submitMobileIntake } from '../../services/mobileIntakeApi';
 import { lookupProcessStation, submitProcessStation } from '../../services/processStationApi';
 import { lookupQualityCheck, submitQualityCheck } from '../../services/qualityCheckApi';
+import { fetchCustomers, fetchMaterials, fetchShortcuts } from '../../services/masterDataApi';
+
+function mountMobileOps() {
+  return mount(MobileOpsWorkspace, {
+    global: { provide: { 'zhubao-auth-session': ref({ role: 'ADMIN' } as AuthSession) } },
+  });
+}
+
+async function openMobileAction(wrapper: ReturnType<typeof mountMobileOps>, label: string) {
+  const button = wrapper.findAll('.mobile-order-shortcuts button').find((item) => item.text() === label);
+  expect(button).toBeTruthy();
+  await button!.trigger('click');
+}
 
 vi.mock('../../services/scanContextApi', async () => {
   const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
@@ -36,6 +51,10 @@ vi.mock('../../services/mobileIntakeApi', () => ({
 vi.mock('../../services/processStationApi', () => ({
   lookupProcessStation: vi.fn(),
   submitProcessStation: vi.fn(),
+}));
+vi.mock('../../services/masterDataApi', () => ({
+  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(),
+  saveCustomer: vi.fn(), saveMaterial: vi.fn(), saveShortcut: vi.fn(), removeShortcut: vi.fn(),
 }));
 vi.mock('../../services/evidenceApi', () => ({
   fetchEvidenceBoard: vi.fn().mockResolvedValue({ links: [], historical: [] }),
@@ -74,8 +93,12 @@ function stationView(orderCode: string) {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   vi.mocked(hasLiveCamera).mockReturnValue(false);
+  vi.mocked(fetchCustomers).mockResolvedValue([{ customerId: 1001, customerCode: 'C-1001', name: '恒信珠宝',
+    aliases: '', contact: '', phone: '', remark: '', enabled: true }]);
+  vi.mocked(fetchMaterials).mockResolvedValue([{ materialCode: 'AU9999', name: '足金', aliases: '', remark: '', enabled: true }]);
+  vi.mocked(fetchShortcuts).mockResolvedValue([]);
   vi.mocked(fetchQualityWorkspace).mockResolvedValue({
     metrics: [],
     cases: [{
@@ -101,8 +124,8 @@ describe('现场入口防串单', () => {
       customerName: '恒信珠宝',
     }));
     vi.mocked(lookupProcessStation).mockResolvedValue(stationView('ZD-100'));
-    const wrapper = mount(MobileOpsWorkspace);
-    await wrapper.get('[aria-label="岗位报工"]').trigger('click');
+    const wrapper = mountMobileOps();
+    await openMobileAction(wrapper, '岗位报工');
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('  JG|work_order|ZD-100  ');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -138,8 +161,8 @@ describe('现场入口防串单', () => {
         { objectType: 'WORK_ORDER', code: 'ZD-2', motherOrderCode: 'MD-1', requirement: '乙', quantity: 1, quantityUnit: '件' },
       ],
     }));
-    const wrapper = mount(MobileOpsWorkspace);
-    await wrapper.get('[aria-label="岗位报工"]').trigger('click');
+    const wrapper = mountMobileOps();
+    await openMobileAction(wrapper, '岗位报工');
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|mother|MD-1');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -170,7 +193,8 @@ describe('现场入口防串单', () => {
 
   it('收货失败不会打开新建母单，成功时用规范化运单号而不是原始输入', async () => {
     vi.mocked(queryScanContext).mockRejectedValueOnce(new Error('未找到对应单据'));
-    const wrapper = mount(MobileOpsWorkspace);
+    const wrapper = mountMobileOps();
+    await wrapper.get('.mobile-order-create').trigger('click');
     await wrapper.get('[aria-label="快递单号"]').setValue('CC20261012001');
     await wrapper.get('[aria-label="识别单号"]').trigger('click');
     await flushPromises();
@@ -188,8 +212,9 @@ describe('现场入口防串单', () => {
     await wrapper.get('[aria-label="识别单号"]').trigger('click');
     await flushPromises();
     expect(queryScanContext).toHaveBeenLastCalledWith({ content: 'sf 1048329001', intent: 'INTAKE' });
-    expect(wrapper.text()).toContain('快递单号 SF1048329001');
-    await wrapper.get('[aria-label="客户"]').setValue('恒信珠宝');
+    expect(wrapper.text()).toContain('运单号 SF1048329001');
+    await wrapper.get('[aria-label="客户"]').setValue('1001');
+    await wrapper.get('[aria-label="材质"]').setValue('AU9999');
     await wrapper.get('[aria-label="加工要求"]').setValue('抛光');
     await wrapper.get('[aria-label="完成期限"]').setValue('2026-10-20');
     await wrapper.get('[aria-label="货品名称"]').setValue('戒托');
@@ -211,10 +236,12 @@ describe('现场入口防串单', () => {
     vi.mocked(readLiveBarcode).mockImplementation(() => new Promise((resolve) => {
       finish = resolve;
     }));
-    const wrapper = mount(MobileOpsWorkspace);
+    const wrapper = mountMobileOps();
+    await wrapper.get('.mobile-order-create').trigger('click');
     await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[aria-label="岗位报工"]').trigger('click');
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await openMobileAction(wrapper, '岗位报工');
     expect(stop).toHaveBeenCalled();
     finish('JG|mother|MD-LATE');
     await flushPromises();

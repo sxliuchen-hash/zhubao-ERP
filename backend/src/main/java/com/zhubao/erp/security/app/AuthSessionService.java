@@ -13,6 +13,7 @@ import com.zhubao.erp.security.domain.AuthLoginSessionRepository;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthTokenDigest;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthLoginSessionRepository;
 import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
@@ -224,7 +225,8 @@ public class AuthSessionService {
                 value.user().dataScope(),
                 false,
                 value.token(),
-                effectiveCustomerScope(value.user())
+                effectiveCustomerScope(value.user()),
+                value.user().coverDuties()
         ));
     }
 
@@ -342,7 +344,8 @@ public class AuthSessionService {
                 currentAccount.customerScope(),
                 false,
                 false,
-                currentAccount.allowedProcesses()
+                currentAccount.allowedProcesses(),
+                currentAccount.coverDuties()
         ));
         AuthUserAccount persisted = userAccountRepository.findByUsername(updated.username()).orElseThrow(SessionInvalidException::new);
         if (!loginSessions.updateFingerprint(AuthTokenDigest.sha256(entry.token()), AuthAccountSnapshot.fingerprint(persisted))) {
@@ -534,6 +537,7 @@ public class AuthSessionService {
 
     private AuthSession toSession(SessionEntry entry) {
         AuthUserAccount user = entry.user();
+        List<String> menuCodes = coverMenus(navigationMenuService.menuCodesFor(user.role()), user);
         return new AuthSession(
                 entry.token(),
                 user.username(),
@@ -549,9 +553,12 @@ public class AuthSessionService {
                 passwordExpiryPolicy.isExpired(user, Instant.now()),
                 user.passwordChangeRequired(),
                 effectiveCustomerScope(user),
-                navigationMenuService.menuCodesFor(user.role()),
-                navigationMenuService.menuTreeFor(user.role()),
-                user.allowedProcesses()
+                menuCodes,
+                navigationMenuService.menuTreeFor(user.role()).stream()
+                        .filter(item -> menuCodes.contains(item.code()))
+                        .toList(),
+                user.allowedProcesses(),
+                user.coverDuties()
         );
     }
 
@@ -612,10 +619,29 @@ public class AuthSessionService {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
+    private List<String> coverMenus(List<String> menus, AuthUserAccount user) {
+        if (user.role() != RoleCode.BUSINESS_MANAGER) {
+            return menus;
+        }
+        return menus.stream().filter(code -> switch (code) {
+            case "inbound" -> CoverDuties.contains(user.coverDuties(), CoverDuties.INTAKE);
+            case "production", "progress" -> CoverDuties.contains(user.coverDuties(), CoverDuties.REPORT);
+            case "quality" -> CoverDuties.contains(user.coverDuties(), CoverDuties.QUALITY);
+            case "label" -> CoverDuties.contains(user.coverDuties(), CoverDuties.LABEL);
+            case "sample" -> CoverDuties.contains(user.coverDuties(), CoverDuties.REGISTER);
+            case "approvals" -> CoverDuties.contains(user.coverDuties(), CoverDuties.LOSS);
+            case "inventory" -> CoverDuties.contains(user.coverDuties(), CoverDuties.SHIP)
+                    || CoverDuties.contains(user.coverDuties(), CoverDuties.RETURN)
+                    || CoverDuties.contains(user.coverDuties(), CoverDuties.QUALITY);
+            default -> true;
+        }).toList();
+    }
+
     private String roleLabel(RoleCode role) {
         return switch (role) {
             case ADMIN -> "系统管理员";
             case GENERAL_MANAGER -> "总经理";
+            case BUSINESS_MANAGER -> "业务管理";
             case SALES -> "业务员";
             case RECEIVER -> "收货员";
             case WORKSHOP_LEADER -> "车间组长";

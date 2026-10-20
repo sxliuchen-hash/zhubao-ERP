@@ -60,6 +60,16 @@ class NavigationMenuServiceTest {
     }
 
     @Test
+    void showsCustomerArchiveToOfficeRolesAndNotOperators() {
+        assertThat(service.menuCodesFor(RoleCode.ADMIN)).contains("customers");
+        assertThat(service.menuCodesFor(RoleCode.RECEIVER)).contains("customers");
+        assertThat(service.menuCodesFor(RoleCode.FINANCE_STATISTICIAN)).contains("customers");
+        assertThat(service.menuCodesFor(RoleCode.BUSINESS_MANAGER)).contains("customers");
+        assertThat(service.menuCodesFor(RoleCode.OPERATOR)).doesNotContain("customers");
+        assertThat(service.menuCodesFor(RoleCode.QUALITY_INSPECTOR)).doesNotContain("customers");
+    }
+
+    @Test
     void showsLabelMenuToInboundRolesAndNotOperators() {
         assertThat(service.menuCodesFor(RoleCode.ADMIN)).contains("label");
         assertThat(service.menuCodesFor(RoleCode.RECEIVER)).contains("label");

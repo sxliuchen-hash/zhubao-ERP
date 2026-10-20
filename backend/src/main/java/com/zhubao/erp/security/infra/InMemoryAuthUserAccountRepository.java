@@ -88,7 +88,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.customerScope(),
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
-                account.allowedProcesses()
+                account.allowedProcesses(),
+                account.coverDuties()
         ));
     }
 
@@ -108,7 +109,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.customerScope(),
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
-                account.allowedProcesses()
+                account.allowedProcesses(),
+                account.coverDuties()
         ));
     }
 
@@ -128,7 +130,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.customerScope(),
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
-                account.allowedProcesses()
+                account.allowedProcesses(),
+                account.coverDuties()
         ));
     }
 
@@ -148,7 +151,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.customerScope(),
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
-                account.allowedProcesses()
+                account.allowedProcesses(),
+                account.coverDuties()
         ));
     }
 
@@ -174,7 +178,8 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                     account.customerScope(),
                     true,
                     true,
-                    account.allowedProcesses()
+                    account.allowedProcesses(),
+                    account.coverDuties()
             );
         });
         return consumed.get();

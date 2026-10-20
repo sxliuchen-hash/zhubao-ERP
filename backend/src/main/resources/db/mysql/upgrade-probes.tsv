@@ -62,3 +62,7 @@
 62	TABLE	biz_order_adjustment
 63	TABLE	auth_login_session
 64	COLUMN	inv_stock_ledger	source_ledger_code
+65	ROW	sys_role_menu	role_code	BUSINESS_MANAGER
+66	COLUMN	auth_user_account	cover_duties
+67	TABLE	biz_requirement_shortcut
+68	ROW	sys_navigation_menu	code	customers

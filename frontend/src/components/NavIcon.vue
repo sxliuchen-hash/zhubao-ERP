@@ -7,6 +7,11 @@ defineProps<{
 <template>
   <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
     <path v-if="name === 'dashboard'" d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" />
+    <template v-else-if="name === 'customers'">
+      <circle cx="9" cy="8" r="2.4" />
+      <path d="M4.5 18v-1.2a4.5 4.5 0 0 1 9 0V18" />
+      <path d="M15 7.5h5M15 11h5M15 14.5h3.5" />
+    </template>
     <template v-else-if="name === 'inbound'">
       <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5z" />
       <path d="M3 8.5V16l9 4.5L21 16V8.5" />

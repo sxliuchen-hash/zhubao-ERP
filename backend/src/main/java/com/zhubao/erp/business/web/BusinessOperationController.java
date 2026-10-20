@@ -145,7 +145,9 @@ public class BusinessOperationController {
     public ApiResponse<MotherOrderSplitView> motherSplit(@PathVariable String code, HttpServletRequest request) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         if (!java.util.List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.RECEIVER,
-                RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER).contains(context.role())) {
+                RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER).contains(context.role())
+                && !(context.role() == RoleCode.BUSINESS_MANAGER
+                && com.zhubao.erp.security.domain.CoverDuties.contains(context.coverDuties(), com.zhubao.erp.security.domain.CoverDuties.SPLIT))) {
             throw new PermissionDeniedException("当前账号不是收货或拆单岗位");
         }
         if (dataAccess != null) dataAccess.assertDocumentCustomer(context, code);

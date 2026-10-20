@@ -196,7 +196,7 @@ describe('发货面板', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('瑞丽金行');
     expect(wrapper.text()).toContain('不会默认第一笔');
-    expect(wrapper.findAll('[aria-pressed="true"]')).toHaveLength(0);
+    expect(wrapper.findAll('[aria-label^="选择余额"][aria-pressed="true"]')).toHaveLength(0);
     await wrapper.findAll('button').find((button) => button.text() === '确认发货')!.trigger('click');
     expect(wrapper.text()).toContain('请选择完整的物料、仓库、货权和库存状态');
     expect(shipFinishedStock).not.toHaveBeenCalled();

@@ -3,15 +3,23 @@ import { onMounted, ref } from 'vue';
 import {
   correctMaintainedOrder,
   fetchRecycleBin,
+  listMaintainedMothers,
   recycleMaintainedOrder,
   restoreMaintainedOrder,
   searchMaintainedOrders,
+  type MaintainedMotherSummary,
   type MaintainedOrder,
 } from '../../services/orderMaintenanceApi';
 
 const code = ref('');
 const reason = ref('');
+const fromDate = ref('');
+const toDate = ref('');
+const customer = ref('');
+const operatorName = ref('');
 const rows = ref<MaintainedOrder[]>([]);
+const mothers = ref<MaintainedMotherSummary[]>([]);
+const listNote = ref('');
 const bin = ref<MaintainedOrder[]>([]);
 const message = ref('');
 const error = ref('');
@@ -38,6 +46,7 @@ const typeLabel: Record<MaintainedOrder['targetType'], string> = {
 
 onMounted(() => {
   void loadBin();
+  void loadMothers();
 });
 
 async function loadBin() {
@@ -46,6 +55,19 @@ async function loadBin() {
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '回收站读取失败';
   }
+}
+
+async function loadMothers() {
+  const page = await listMaintainedMothers({
+    from: fromDate.value,
+    to: toDate.value,
+    customer: customer.value,
+    operator: operatorName.value,
+  });
+  mothers.value = page.items;
+  listNote.value = page.truncated
+    ? `共 ${page.total} 张，这里显示最近 ${page.items.length} 张。缩小日期可以看全。`
+    : `共 ${page.total} 张未回收母单`;
 }
 
 async function run(action: () => Promise<void>, success: string) {
@@ -63,11 +85,20 @@ async function run(action: () => Promise<void>, success: string) {
   }
 }
 
+function applyFilter() {
+  return run(loadMothers, '');
+}
+
 function search() {
   return run(async () => {
     rows.value = await searchMaintainedOrders(code.value.trim());
     message.value = `找到 ${rows.value.length} 条`;
   }, '');
+}
+
+function openMother(orderCode: string) {
+  code.value = orderCode;
+  return search();
 }
 
 function save(order: MaintainedOrder) {
@@ -92,6 +123,7 @@ function recycle(order: MaintainedOrder) {
     if (code.value.trim()) {
       rows.value = await searchMaintainedOrders(code.value.trim());
     }
+    await loadMothers();
   }, '已放入回收站');
 }
 
@@ -100,6 +132,10 @@ function restore(order: MaintainedOrder) {
     const fingerprint = JSON.stringify(['restore', order.targetType, order.code, order.recycleReason]);
     await restoreMaintainedOrder(order.targetType, order.code, requestFor(recycleRequests, fingerprint));
     recycleRequests.delete(fingerprint);
+    if (code.value.trim()) {
+      rows.value = await searchMaintainedOrders(code.value.trim());
+    }
+    await loadMothers();
   }, '已从回收站恢复');
 }
 
@@ -110,44 +146,114 @@ function isOrder(order: MaintainedOrder) {
 
 <template>
   <section class="order-maintenance" aria-label="单据维护">
-    <h2>单据维护</h2>
-    <p>管理员可改正单据说明和未领取打印任务的份数。打印目标须使用批次改派，保留原任务关联；已领取、出队或状态不明的任务须先核纸。已入账的要求、期限及金额变化请走进度页改单申请和财务确认；客户、材质、数量及重量须核对库存来源后办理对应冲正。回收不会自动冲正库存和账单。</p>
-    <label>单号<input v-model="code" aria-label="维护单号" /></label>
-    <label>原因<input v-model="reason" aria-label="维护原因" placeholder="修改或删除时必填" /></label>
-    <button class="secondary-button" type="button" :disabled="busy" @click="search">查找</button>
+    <header class="maintenance-heading">
+      <h2>单据维护</h2>
+      <p>先在列表里按日期、客户或建单人找到母单，再打开改正或放入回收站。回收后别人在列表、扫码和打印领取里看不到；库存和账单不会自动冲掉。已入账的客户、材质和货品不能在这里直接改。</p>
+    </header>
+
+    <div class="maintenance-filters">
+      <label><span>开始日期</span><input v-model="fromDate" type="date" aria-label="开始日期" @keydown.enter.prevent="applyFilter" /></label>
+      <label><span>结束日期</span><input v-model="toDate" type="date" aria-label="结束日期" @keydown.enter.prevent="applyFilter" /></label>
+      <label><span>客户</span><input v-model="customer" aria-label="客户筛选" placeholder="客户名称" @keydown.enter.prevent="applyFilter" /></label>
+      <label><span>建单人</span><input v-model="operatorName" aria-label="建单人筛选" placeholder="收货或建单账号" @keydown.enter.prevent="applyFilter" /></label>
+      <button class="secondary-button" type="button" :disabled="busy" aria-label="筛选母单" @click="applyFilter">筛选</button>
+    </div>
+    <p v-if="listNote" class="maintenance-count">{{ listNote }}</p>
+    <div class="module-table-wrap refined-table-wrap">
+      <table class="module-table">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>母单</th>
+            <th>客户</th>
+            <th>建单人</th>
+            <th>货品</th>
+            <th>数量 / 重量</th>
+            <th>动作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="mothers.length === 0">
+            <td colspan="7">没有符合条件的未回收母单。</td>
+          </tr>
+          <tr v-for="mother in mothers" :key="mother.code" :class="{ 'is-selected': code === mother.code }">
+            <td>{{ mother.orderDate || '—' }}</td>
+            <td class="code"><strong>{{ mother.code }}</strong></td>
+            <td>{{ mother.customerName || '—' }}</td>
+            <td>{{ mother.operator || '—' }}</td>
+            <td>{{ mother.goodsName || mother.materialCode || '—' }}</td>
+            <td>{{ mother.quantity || '—' }} / {{ mother.weight || '—' }}</td>
+            <td><button class="secondary-button" type="button" :disabled="busy" :aria-label="`打开 ${mother.code}`" @click="openMother(mother.code)">打开</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="maintenance-lookup">
+      <label><span>单号</span><input v-model="code" aria-label="维护单号" placeholder="母单、子单或打印任务" @keydown.enter.prevent="search" /></label>
+      <label><span>原因</span><input v-model="reason" aria-label="维护原因" placeholder="修改或删除时必填" /></label>
+      <button class="secondary-button" type="button" :disabled="busy" @click="search">查找</button>
+    </div>
     <p v-if="message">{{ message }}</p>
     <p v-if="error" role="alert">{{ error }}</p>
-    <article v-for="order in rows" :key="`${order.targetType}-${order.code}`" :aria-label="`${typeLabel[order.targetType]} ${order.code}`">
-      <h3>{{ typeLabel[order.targetType] }} {{ order.code }}<span v-if="order.recycled">（回收站）</span></h3>
-      <p v-if="order.motherOrderCode && order.motherOrderCode !== order.code">所属 {{ order.motherOrderCode }}</p>
-      <p v-if="isOrder(order) && order.postedFactsLocked">已入账。客户、材质、货品和子单工序不能直接改。尚未拆单、交付或发货的母单可以改正收货数量和重量，系统会追加冲正流水。要求、期限和金额仍走进度页改单。</p>
-      <template v-if="isOrder(order)">
-        <label>客户<input v-model="order.customerName" :aria-label="`${order.code} 客户`" :disabled="order.postedFactsLocked" /></label>
-        <label>材质<input v-model="order.materialCode" :aria-label="`${order.code} 材质`" :disabled="order.postedFactsLocked" /></label>
-        <label>货品<input v-model="order.goodsName" :aria-label="`${order.code} 货品`" :disabled="order.postedFactsLocked" /></label>
-        <label>数量<input v-model="order.quantity" :aria-label="`${order.code} 数量`" :disabled="order.postedFactsLocked && order.targetType !== 'MOTHER'" /></label>
-        <label>重量<input v-model="order.weight" :aria-label="`${order.code} 重量`" :disabled="order.postedFactsLocked && order.targetType !== 'MOTHER'" /></label>
-        <label>要求<input v-model="order.requirement" :aria-label="`${order.code} 要求`" /></label>
-        <label>期限<input v-model="order.dueDate" :aria-label="`${order.code} 期限`" /></label>
-        <label v-if="order.targetType === 'WORK_ORDER'">工序<input v-model="order.processes" :aria-label="`${order.code} 工序`" :disabled="order.postedFactsLocked" /></label>
-      </template>
-      <template v-else>
-        <label>份数<input v-model.number="order.copies" :aria-label="`${order.code} 份数`" /></label>
-        <label>工位<input v-model="order.stationId" :aria-label="`${order.code} 工位`" disabled /></label>
-        <label v-if="order.targetType === 'PRINT_TARGET'">队列<input v-model="order.queueId" :aria-label="`${order.code} 队列`" disabled /></label>
-      </template>
-      <button class="secondary-button" type="button" :disabled="busy" @click="save(order)">保存修改</button>
-      <button v-if="!order.recycled" class="secondary-button" type="button" :disabled="busy" @click="recycle(order)">放入回收站</button>
+
+    <article
+      v-for="order in rows"
+      :key="`${order.targetType}-${order.code}`"
+      class="maintenance-card"
+      :class="{ 'is-child': order.targetType !== 'MOTHER' }"
+      :aria-label="`${typeLabel[order.targetType]} ${order.code}`"
+    >
+      <header>
+        <h3>{{ typeLabel[order.targetType] }} {{ order.code }}<span v-if="order.recycled">（回收站）</span></h3>
+        <p v-if="order.motherOrderCode && order.motherOrderCode !== order.code">所属 {{ order.motherOrderCode }}</p>
+      </header>
+      <p v-if="isOrder(order) && order.postedFactsLocked" class="maintenance-note">已入账。客户、材质、货品和子单工序不能直接改。尚未拆单、交付或发货的母单可以改正收货数量和重量，系统会追加冲正流水。要求、期限和金额仍走进度页改单。</p>
+      <div v-if="isOrder(order)" class="maintenance-fields">
+        <label><span>客户</span><input v-model="order.customerName" :aria-label="`${order.code} 客户`" :disabled="order.postedFactsLocked" /></label>
+        <label><span>材质</span><input v-model="order.materialCode" :aria-label="`${order.code} 材质`" :disabled="order.postedFactsLocked" /></label>
+        <label><span>货品</span><input v-model="order.goodsName" :aria-label="`${order.code} 货品`" :disabled="order.postedFactsLocked" /></label>
+        <label><span>数量</span><input v-model="order.quantity" :aria-label="`${order.code} 数量`" :disabled="order.postedFactsLocked && order.targetType !== 'MOTHER'" /></label>
+        <label><span>重量</span><input v-model="order.weight" :aria-label="`${order.code} 重量`" :disabled="order.postedFactsLocked && order.targetType !== 'MOTHER'" /></label>
+        <label><span>要求</span><input v-model="order.requirement" :aria-label="`${order.code} 要求`" /></label>
+        <label><span>期限</span><input v-model="order.dueDate" :aria-label="`${order.code} 期限`" /></label>
+        <label v-if="order.targetType === 'WORK_ORDER'"><span>工序</span><input v-model="order.processes" :aria-label="`${order.code} 工序`" :disabled="order.postedFactsLocked" /></label>
+      </div>
+      <div v-else class="maintenance-fields">
+        <label><span>份数</span><input v-model.number="order.copies" :aria-label="`${order.code} 份数`" /></label>
+        <label><span>工位</span><input v-model="order.stationId" :aria-label="`${order.code} 工位`" disabled /></label>
+        <label v-if="order.targetType === 'PRINT_TARGET'"><span>队列</span><input v-model="order.queueId" :aria-label="`${order.code} 队列`" disabled /></label>
+      </div>
+      <div class="maintenance-actions">
+        <button class="secondary-button" type="button" :disabled="busy" @click="save(order)">保存修改</button>
+        <button v-if="!order.recycled" class="secondary-button" type="button" :disabled="busy" @click="recycle(order)">放入回收站</button>
+      </div>
       <ul v-if="order.adjustments.length">
         <li v-for="line in order.adjustments" :key="line">{{ line }}</li>
       </ul>
     </article>
+
     <h3>回收站</h3>
-    <p v-if="bin.length === 0">回收站是空的。</p>
-    <article v-for="order in bin" :key="`bin-${order.targetType}-${order.code}`">
-      <span>{{ typeLabel[order.targetType] }} {{ order.code }}</span>
-      <span v-if="order.recycleReason"> {{ order.recycleReason }}</span>
-      <button class="secondary-button" type="button" :disabled="busy" @click="restore(order)">恢复</button>
-    </article>
+    <p v-if="bin.length === 0" class="empty-hint">回收站是空的。</p>
+    <div v-else class="module-table-wrap refined-table-wrap">
+      <table class="module-table">
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>单号</th>
+            <th>原因</th>
+            <th>动作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="order in bin" :key="`bin-${order.targetType}-${order.code}`">
+            <td>{{ typeLabel[order.targetType] }}</td>
+            <td class="code">{{ order.code }}</td>
+            <td>{{ order.recycleReason || '—' }}</td>
+            <td><button class="secondary-button" type="button" :disabled="busy" @click="restore(order)">恢复</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 </template>

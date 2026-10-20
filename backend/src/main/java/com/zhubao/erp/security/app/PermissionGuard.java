@@ -1,5 +1,6 @@
 package com.zhubao.erp.security.app;
 
+import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -54,6 +55,26 @@ public class PermissionGuard {
         allow(PermissionCode.FINANCE_PAYABLE, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.FINANCE_CUSTOMER_READ, RoleCode.FINANCE_STATISTICIAN);
         allow(PermissionCode.FINANCE_COMPANY_READ, RoleCode.FINANCE_STATISTICIAN);
+        // 业务管理可分给多人，只顶上收货、报工和质检，不带财务入账、发货和账号管理。
+        grant(PermissionCode.BUSINESS_INBOUND_CONFIRM, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_PRODUCTION_REPORT, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_REWORK_REPORT, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_QUALITY_FREEZE, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_REWORK_DISPATCH, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_QUALITY_RELEASE, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_AFTER_SALES_REVIEW, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_CUSTOMER_RETURN, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.REGISTER_IMPORT_REVIEW, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.REGISTER_IMPORT_POSTING, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.MACHINE_OUTPUT_SUBMIT, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.GATEWAY_READING_CONSUME, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.MASTER_DATA_MANAGE, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.DOCUMENT_CAPTURE, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.LABEL_PRINT, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_MOTHER_SPLIT, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, RoleCode.BUSINESS_MANAGER);
+        grant(PermissionCode.BUSINESS_LOSS_APPROVAL, RoleCode.BUSINESS_MANAGER);
     }
 
     public void assertAllowed(PermissionCode permission, OperatorContext operatorContext) {
@@ -61,7 +82,8 @@ public class PermissionGuard {
             return;
         }
         Set<RoleCode> allowedRoles = roleMatrix.getOrDefault(permission, Set.of());
-        if (!allowedRoles.contains(operatorContext.role())) {
+        if (!allowedRoles.contains(operatorContext.role())
+                || operatorContext.role() == RoleCode.BUSINESS_MANAGER && !coverAllows(permission, operatorContext.coverDuties())) {
             throw new PermissionDeniedException(
                     "角色 " + operatorContext.role() + " 无权执行 " + permission.label()
             );
@@ -88,5 +110,31 @@ public class PermissionGuard {
         roles.add(RoleCode.ADMIN);
         roles.add(RoleCode.GENERAL_MANAGER);
         roleMatrix.put(permission, roles);
+    }
+
+    private static boolean coverAllows(PermissionCode permission, java.util.List<String> duties) {
+        String duty = switch (permission) {
+            case BUSINESS_INBOUND_CONFIRM -> CoverDuties.INTAKE;
+            case BUSINESS_PRODUCTION_REPORT, BUSINESS_REWORK_REPORT, MACHINE_OUTPUT_SUBMIT -> CoverDuties.REPORT;
+            case BUSINESS_QUALITY_FREEZE, BUSINESS_REWORK_DISPATCH, BUSINESS_QUALITY_RELEASE,
+                    BUSINESS_AFTER_SALES_REVIEW -> CoverDuties.QUALITY;
+            case BUSINESS_MOTHER_SPLIT -> CoverDuties.SPLIT;
+            case LABEL_PRINT -> CoverDuties.LABEL;
+            case MASTER_DATA_MANAGE -> CoverDuties.MASTER;
+            case BUSINESS_OUTBOUND_SHIPMENT -> CoverDuties.SHIP;
+            case BUSINESS_CUSTOMER_RETURN -> CoverDuties.RETURN;
+            case REGISTER_IMPORT_REVIEW, REGISTER_IMPORT_POSTING -> CoverDuties.REGISTER;
+            case BUSINESS_LOSS_APPROVAL -> CoverDuties.LOSS;
+            case GATEWAY_READING_CONSUME, DOCUMENT_ATTACHMENT_UPLOAD, DOCUMENT_CAPTURE -> null;
+            default -> "";
+        };
+        if (duty == null) {
+            return duties != null && !duties.isEmpty();
+        }
+        return !duty.isEmpty() && CoverDuties.contains(duties, duty);
+    }
+
+    private void grant(PermissionCode permission, RoleCode role) {
+        roleMatrix.computeIfAbsent(permission, ignored -> EnumSet.noneOf(RoleCode.class)).add(role);
     }
 }

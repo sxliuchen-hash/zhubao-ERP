@@ -139,6 +139,7 @@ class BusinessWorkspaceDataScopeFilter {
     private List<String> teamKeywords(RoleCode role) {
         return switch (role) {
             case ADMIN, GENERAL_MANAGER -> List.of();
+            case BUSINESS_MANAGER -> List.of("收货", "来料", "入库", "报工", "工序", "质检", "返工");
             case SALES -> List.of("客户", "母单", "恒信珠宝", "雅辰饰品", "瑞禾珠宝", "璟瑞工贸");
             case RECEIVER, WAREHOUSE_KEEPER -> List.of("收货", "来料", "拆包", "入库", "出库", "库存", "台账", "库管员", "视频", "异常", "失败");
             case WORKSHOP_LEADER, OPERATOR -> List.of("工序", "抛光", "雕刻", "焊接", "返工", "交接", "报工", "操机");
@@ -150,6 +151,7 @@ class BusinessWorkspaceDataScopeFilter {
     private List<String> departmentKeywords(RoleCode role) {
         return switch (role) {
             case ADMIN, GENERAL_MANAGER -> List.of();
+            case BUSINESS_MANAGER -> List.of("收货", "来料", "入库", "报工", "工序", "质检", "返工", "生产");
             case SALES -> List.of("客户", "母单", "出货", "售后", "恒信珠宝", "雅辰饰品", "瑞禾珠宝", "璟瑞工贸");
             case RECEIVER, WAREHOUSE_KEEPER -> List.of("收货", "来料", "拆包", "入库", "出库", "库存", "台账", "库管员", "仓库", "视频", "异常", "失败");
             case WORKSHOP_LEADER, OPERATOR -> List.of("工序", "抛光", "雕刻", "焊接", "返工", "交接", "报工", "操机", "生产");

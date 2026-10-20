@@ -2,6 +2,7 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.RequirementShortcut;
 import com.zhubao.erp.business.domain.MobileIntakeCommand;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.InMemoryMasterDataRepository;
@@ -89,5 +90,23 @@ class MasterDataServiceTest {
         assertThat(authorizations.authorizationsFor("recv"))
                 .extracting(CustomerAuthorization::customerCode)
                 .containsExactly("1002", String.valueOf(another.customerId()));
+    }
+
+    @Test
+    void requirementShortcutsStaySharedAndRejectDuplicates() {
+        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        RequirementShortcut first = catalog.saveShortcut(new RequirementShortcut(0, "镜面抛光", 0));
+        RequirementShortcut second = catalog.saveShortcut(new RequirementShortcut(0, "改圈", 0));
+        assertThat(first.shortcutId()).isPositive();
+        assertThat(second.sortOrder()).isGreaterThan(first.sortOrder());
+        assertThat(catalog.shortcuts()).extracting(RequirementShortcut::phrase).containsExactly("镜面抛光", "改圈");
+        assertThatThrownBy(() -> catalog.saveShortcut(new RequirementShortcut(0, " 镜面抛光 ", 0)))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("已存在");
+        assertThatThrownBy(() -> catalog.saveShortcut(new RequirementShortcut(0, "抛光、电镀", 0)))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("顿号");
+        assertThat(catalog.removeShortcut(first.shortcutId()).phrase()).isEqualTo("镜面抛光");
+        assertThat(catalog.shortcuts()).extracting(RequirementShortcut::phrase).containsExactly("改圈");
+        assertThatThrownBy(() -> catalog.removeShortcut(first.shortcutId()))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不存在");
     }
 }

@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
     private fun configureWebView() {
         val settings = webView.settings
         settings.javaScriptEnabled = true
+        // 登录令牌写在网页 localStorage。启动时不要清缓存或存储，否则每次打开都要重新登录。
         settings.domStorageEnabled = true
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         settings.allowFileAccess = false

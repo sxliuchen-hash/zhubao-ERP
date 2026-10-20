@@ -345,9 +345,12 @@ final class FormalBusinessWorkspaceQuery {
         // 尚无真实组织关系时，只按明确岗位职责开放队组/部门视图，其他岗位仅看本人关联记录。
         return switch (area) {
             case "inbound", "inventory" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.RECEIVER
-                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.WAREHOUSE_KEEPER;
-            case "production" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.WORKSHOP_LEADER;
-            case "quality" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.QUALITY_INSPECTOR;
+                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.WAREHOUSE_KEEPER
+                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.BUSINESS_MANAGER;
+            case "production" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.WORKSHOP_LEADER
+                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.BUSINESS_MANAGER;
+            case "quality" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.QUALITY_INSPECTOR
+                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.BUSINESS_MANAGER;
             case "loss" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.WORKSHOP_LEADER
                     || operator.role() == com.zhubao.erp.security.domain.RoleCode.QUALITY_INSPECTOR
                     || operator.role() == com.zhubao.erp.security.domain.RoleCode.FINANCE_STATISTICIAN;

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { correctMaintainedOrder, recycleMaintainedOrder, restoreMaintainedOrder, type MaintainedOrder } from './orderMaintenanceApi';
+import { correctMaintainedOrder, listMaintainedMothers, recycleMaintainedOrder, restoreMaintainedOrder, type MaintainedOrder } from './orderMaintenanceApi';
 
 describe('orderMaintenanceApi', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -39,6 +39,20 @@ describe('orderMaintenanceApi', () => {
     }, '改派核对', 'req-print-1');
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body).toMatchObject({ requestId: 'req-print-1', expectedRevision: 'print-snapshot' });
+  });
+
+  it('母单列表只带已填写的筛选条件', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ code: 0, message: 'ok', data: { items: [], total: 0, truncated: false } }),
+    } as Response);
+    await listMaintainedMothers({ from: '2026-10-01', to: '', customer: ' 马洋 ', operator: '' });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/business/order-maintenance/mothers?');
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain('from=2026-10-01');
+    expect(url).toContain(`${encodeURIComponent('马洋')}`);
+    expect(url).not.toContain('operator=');
+    expect(url).not.toContain('to=');
   });
 
   it('回收与恢复发送请求编号', async () => {

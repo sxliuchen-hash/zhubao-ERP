@@ -3,7 +3,10 @@ package com.zhubao.erp.business.web;
 import com.zhubao.erp.business.app.MasterDataService;
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.RemoveRequirementShortcutCommand;
+import com.zhubao.erp.business.domain.RequirementShortcut;
 import com.zhubao.erp.common.api.ApiResponse;
+import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
@@ -59,5 +62,27 @@ public class MasterDataController {
     public ApiResponse<MaterialProfile> saveMaterial(@RequestBody MaterialProfile input, HttpServletRequest request) {
         permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));
         return ApiResponse.ok(service.saveMaterial(input));
+    }
+
+    @GetMapping("/requirement-shortcuts")
+    public ApiResponse<List<RequirementShortcut>> shortcuts(HttpServletRequest request) {
+        operators.requireSession(request);
+        return ApiResponse.ok(service.shortcuts());
+    }
+
+    @PostMapping("/requirement-shortcuts")
+    public ApiResponse<RequirementShortcut> saveShortcut(@RequestBody RequirementShortcut input, HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));
+        return ApiResponse.ok(service.saveShortcut(input));
+    }
+
+    @PostMapping("/requirement-shortcuts/removals")
+    public ApiResponse<RequirementShortcut> removeShortcut(@RequestBody RemoveRequirementShortcutCommand command,
+                                                           HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));
+        if (command == null) {
+            throw new BusinessException("请选择要删除的快捷词");
+        }
+        return ApiResponse.ok(service.removeShortcut(command.shortcutId()));
     }
 }

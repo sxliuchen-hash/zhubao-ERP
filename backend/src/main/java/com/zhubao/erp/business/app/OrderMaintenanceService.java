@@ -28,8 +28,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -41,6 +44,8 @@ import java.util.UUID;
  */
 @Service
 public class OrderMaintenanceService {
+    private static final int MOTHER_LIST_LIMIT = 200;
+
     private final BusinessDocumentRepository documents;
     private final PrintJobRepository printJobs;
     private final PrintRoutingRepository routing;
@@ -114,6 +119,32 @@ public class OrderMaintenanceService {
             throw new BusinessException("没有这张单据：" + key);
         }
         return rows;
+    }
+
+    /**
+     * 列出尚未回收的母单。日期按建单时间的日历日筛选，没有建单时间时用入库日。
+     * 客户和建单人按名称包含匹配。结果按日期从新到旧，最多返回 200 张。
+     */
+    public MaintainedMotherBrowse listMothers(String from, String to, String customer, String operatorName,
+                                               OperatorContext operator) {
+        requireAdmin(operator);
+        String fromDay = parseDay(from, "开始日期");
+        String toDay = parseDay(to, "结束日期");
+        if (!fromDay.isBlank() && !toDay.isBlank() && fromDay.compareTo(toDay) > 0) {
+            throw new BusinessException("开始日期不能晚于结束日期");
+        }
+        String customerKey = text(customer);
+        String operatorKey = text(operatorName);
+        List<MotherOrderRecord> matched = documents.listMotherOrders().stream()
+                .filter(record -> matchesMother(record, fromDay, toDay, customerKey, operatorKey))
+                .sorted(Comparator.comparing(OrderMaintenanceService::calendarDay).reversed()
+                        .thenComparing(MotherOrderRecord::code, Comparator.reverseOrder()))
+                .toList();
+        List<MaintainedMotherSummary> items = matched.stream()
+                .limit(MOTHER_LIST_LIMIT)
+                .map(this::toSummary)
+                .toList();
+        return new MaintainedMotherBrowse(items, matched.size(), matched.size() > items.size());
     }
 
     public List<MaintainedOrder> recycleBin(OperatorContext operator) {
@@ -599,6 +630,56 @@ public class OrderMaintenanceService {
             rows.add(toTarget(job));
         }
         return rows;
+    }
+
+    private MaintainedMotherSummary toSummary(MotherOrderRecord record) {
+        return new MaintainedMotherSummary(record.code(), text(record.customerName()), text(record.operator()),
+                calendarDay(record), text(record.goodsName()), text(record.materialCode()),
+                plain(record.quantity()), plain(record.weight()));
+    }
+
+    private static boolean matchesMother(MotherOrderRecord record, String fromDay, String toDay,
+                                          String customer, String operatorName) {
+        String day = calendarDay(record);
+        if (!fromDay.isBlank() && (day.isBlank() || day.compareTo(fromDay) < 0)) {
+            return false;
+        }
+        if (!toDay.isBlank() && (day.isBlank() || day.compareTo(toDay) > 0)) {
+            return false;
+        }
+        if (!customer.isBlank() && !contains(record.customerName(), customer)) {
+            return false;
+        }
+        return operatorName.isBlank() || contains(record.operator(), operatorName);
+    }
+
+    private static boolean contains(String value, String keyword) {
+        return text(value).toLowerCase().contains(keyword.toLowerCase());
+    }
+
+    private static String calendarDay(MotherOrderRecord record) {
+        String created = dayPrefix(record.createdAt());
+        return created.isBlank() ? dayPrefix(record.inboundDate()) : created;
+    }
+
+    private static String dayPrefix(String value) {
+        String text = text(value).replace('T', ' ');
+        if (text.length() >= 10 && text.charAt(4) == '-' && text.charAt(7) == '-') {
+            return text.substring(0, 10);
+        }
+        return "";
+    }
+
+    private static String parseDay(String value, String label) {
+        String text = text(value);
+        if (text.isBlank()) {
+            return "";
+        }
+        try {
+            return LocalDate.parse(text).toString();
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException(label + "请用年-月-日");
+        }
     }
 
     private MaintainedOrder toMother(MotherOrderRecord record) {

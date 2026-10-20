@@ -3,6 +3,7 @@ package com.zhubao.erp.business.infra;
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MasterDataRepository;
 import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.RequirementShortcut;
 import com.zhubao.erp.common.error.BusinessException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -137,5 +138,57 @@ public class JdbcMasterDataRepository implements MasterDataRepository {
     private MaterialProfile material(ResultSet rs) throws SQLException {
         return new MaterialProfile(rs.getString("material_code"), rs.getString("display_name"),
                 rs.getString("aliases"), rs.getString("remark"), rs.getBoolean("enabled"));
+    }
+
+    @Override
+    public List<RequirementShortcut> listShortcuts() {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "select shortcut_id, phrase, sort_order from biz_requirement_shortcut order by sort_order, shortcut_id");
+             ResultSet rs = statement.executeQuery()) {
+            List<RequirementShortcut> rows = new ArrayList<>();
+            while (rs.next()) {
+                rows.add(new RequirementShortcut(rs.getLong("shortcut_id"), rs.getString("phrase"), rs.getInt("sort_order")));
+            }
+            return rows;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工要求快捷词读取失败", ex);
+        }
+    }
+
+    @Override
+    public RequirementShortcut saveShortcut(RequirementShortcut shortcut) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     insert into biz_requirement_shortcut (phrase, normalized_phrase, sort_order) values (?, ?, ?)
+                     """, Statement.RETURN_GENERATED_KEYS)) {
+            statement.setString(1, shortcut.phrase());
+            statement.setString(2, shortcut.phrase().trim().toLowerCase(java.util.Locale.ROOT));
+            statement.setInt(3, shortcut.sortOrder());
+            statement.executeUpdate();
+            try (ResultSet keys = statement.getGeneratedKeys()) {
+                if (!keys.next()) throw new IllegalStateException("快捷词编号生成失败");
+                long id = keys.getLong(1);
+                return listShortcuts().stream().filter(item -> item.shortcutId() == id).findFirst().orElseThrow();
+            }
+        } catch (SQLException ex) {
+            throw new BusinessException("快捷词已存在");
+        }
+    }
+
+    @Override
+    public Optional<RequirementShortcut> deleteShortcut(long shortcutId) {
+        RequirementShortcut existing = listShortcuts().stream()
+                .filter(item -> item.shortcutId() == shortcutId).findFirst().orElse(null);
+        if (existing == null) return Optional.empty();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "delete from biz_requirement_shortcut where shortcut_id = ?")) {
+            statement.setLong(1, shortcutId);
+            if (statement.executeUpdate() != 1) return Optional.empty();
+            return Optional.of(existing);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工要求快捷词删除失败", ex);
+        }
     }
 }

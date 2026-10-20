@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
-import { fetchCustomers, fetchMaterials, saveCustomer, saveMaterial,
-  type CustomerProfile, type MaterialProfile } from '../../services/masterDataApi';
+import { canManageMasterData } from '../../services/masterDataAccess';
+import { fetchCustomers, fetchMaterials, fetchShortcuts, removeShortcut, saveCustomer, saveMaterial, saveShortcut,
+  type CustomerProfile, type MaterialProfile, type RequirementShortcut } from '../../services/masterDataApi';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
@@ -35,7 +36,7 @@ const emit = defineEmits<{ saved: [result: MobileIntakeResult] }>();
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 const visibleTabs = inject<Ref<string[] | null>>('zhubao-visible-tabs', ref(null));
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
-const canManageData = computed(() => ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? ''));
+const canManageData = computed(() => canManageMasterData(authSession.value));
 const canOpenLabel = computed(() => !visibleTabs.value || visibleTabs.value.includes('label'));
 const canOpenInbound = computed(() => !visibleTabs.value || visibleTabs.value.includes('inbound'));
 
@@ -55,6 +56,8 @@ const catalogError = ref('');
 const catalogHint = ref('');
 const catalogSaving = ref(false);
 const processingRequirement = ref('');
+const shortcuts = ref<RequirementShortcut[]>([]);
+const newShortcut = ref('');
 const dueDate = ref('');
 const goodsName = ref('');
 const quantity = ref('1');
@@ -372,12 +375,66 @@ async function createMotherOrder() {
 
 async function loadCatalog() {
   try {
-    const [customerRows, materialRows] = await Promise.all([fetchCustomers(), fetchMaterials()]);
+    const [customerRows, materialRows, shortcutRows] = await Promise.all([
+      fetchCustomers(), fetchMaterials(), fetchShortcuts(),
+    ]);
     customers.value = customerRows;
     materials.value = materialRows;
+    shortcuts.value = shortcutRows;
     catalogError.value = '';
   } catch (error) {
     catalogError.value = error instanceof Error ? error.message : '客户与材质目录加载失败';
+  }
+}
+
+function applyShortcut(phrase: string) {
+  const current = processingRequirement.value.trim();
+  if (!current) {
+    processingRequirement.value = phrase;
+    return;
+  }
+  const parts = current.split(/[、,，;；]+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.includes(phrase)) return;
+  processingRequirement.value = `${current}、${phrase}`;
+}
+
+async function addShortcut() {
+  if (!canManageData.value || catalogSaving.value) return;
+  const phrase = newShortcut.value.trim();
+  if (!phrase) {
+    catalogHint.value = '';
+    catalogError.value = '请填写快捷词';
+    return;
+  }
+  catalogSaving.value = true;
+  try {
+    const saved = await saveShortcut(phrase);
+    shortcuts.value = [...shortcuts.value.filter((item) => item.shortcutId !== saved.shortcutId), saved]
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.shortcutId - right.shortcutId);
+    newShortcut.value = '';
+    catalogError.value = '';
+    catalogHint.value = `已添加快捷词「${saved.phrase}」`;
+  } catch (error) {
+    catalogHint.value = '';
+    catalogError.value = error instanceof Error ? error.message : '添加快捷词失败';
+  } finally {
+    catalogSaving.value = false;
+  }
+}
+
+async function deleteShortcut(item: RequirementShortcut) {
+  if (!canManageData.value || catalogSaving.value) return;
+  catalogSaving.value = true;
+  try {
+    await removeShortcut(item.shortcutId);
+    shortcuts.value = shortcuts.value.filter((row) => row.shortcutId !== item.shortcutId);
+    catalogError.value = '';
+    catalogHint.value = `已删除快捷词「${item.phrase}」`;
+  } catch (error) {
+    catalogHint.value = '';
+    catalogError.value = error instanceof Error ? error.message : '删除快捷词失败';
+  } finally {
+    catalogSaving.value = false;
   }
 }
 
@@ -545,6 +602,20 @@ onMounted(loadCatalog);
         <span>加工要求</span>
         <textarea v-model="processingRequirement" aria-label="加工要求" />
       </label>
+      <div class="requirement-shortcuts" aria-label="加工要求快捷词">
+        <div class="shortcut-list">
+          <span v-for="item in shortcuts" :key="item.shortcutId" class="shortcut-chip">
+            <button type="button" :aria-label="`填入快捷词 ${item.phrase}`" @click="applyShortcut(item.phrase)">{{ item.phrase }}</button>
+            <button v-if="canManageData" type="button" :aria-label="`删除快捷词 ${item.phrase}`" @click="deleteShortcut(item)">移除</button>
+          </span>
+          <p v-if="!shortcuts.length" class="empty-hint">还没有快捷词。有档案维护权限时可以添加常用加工要求。</p>
+        </div>
+        <div v-if="canManageData" class="catalog-create">
+          <span>自定义快捷词</span>
+          <input v-model="newShortcut" aria-label="新快捷词" placeholder="例如：镜面抛光" />
+          <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addShortcut">添加快捷词</button>
+        </div>
+      </div>
       <label class="field">
         <span>完成期限</span>
         <input v-model="dueDate" type="date" aria-label="完成期限" />
@@ -663,6 +734,10 @@ onMounted(loadCatalog);
 .intake-draft, .intake-saved { min-width: 0; scroll-margin-top: 20px; overflow-wrap: anywhere; }
 .catalog-create { display: grid; gap: 8px; }
 .catalog-create span { color: var(--muted); font-size: 12px; }
+.requirement-shortcuts { display: grid; gap: 8px; }
+.shortcut-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.shortcut-chip { display: inline-flex; gap: 4px; align-items: center; }
+.shortcut-list .empty-hint { flex: 1 1 100%; margin: 0; }
 .intake-next-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .intake-next-actions button { min-height: 44px; }
 </style>

@@ -14,10 +14,27 @@ public record ManageAuthUserAccountCommand(
         boolean enabled,
         boolean demoAccount,
         String preApprovalApplicationCode,
-        List<String> allowedProcesses
+        List<String> allowedProcesses,
+        List<String> coverDuties
 ) {
     public ManageAuthUserAccountCommand {
         allowedProcesses = allowedProcesses == null ? null : List.copyOf(allowedProcesses);
+        coverDuties = coverDuties == null ? null : List.copyOf(coverDuties);
+    }
+
+    public ManageAuthUserAccountCommand(
+            String username,
+            String password,
+            String operator,
+            String role,
+            String dataScope,
+            List<String> customerScope,
+            boolean enabled,
+            boolean demoAccount,
+            String preApprovalApplicationCode,
+            List<String> allowedProcesses
+    ) {
+        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, preApprovalApplicationCode, allowedProcesses, null);
     }
 
     public ManageAuthUserAccountCommand(
@@ -31,7 +48,7 @@ public record ManageAuthUserAccountCommand(
             boolean demoAccount,
             String preApprovalApplicationCode
     ) {
-        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, preApprovalApplicationCode, null);
+        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, preApprovalApplicationCode, null, null);
     }
 
     public ManageAuthUserAccountCommand(
@@ -44,7 +61,7 @@ public record ManageAuthUserAccountCommand(
             boolean enabled,
             boolean demoAccount
     ) {
-        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, null, null);
+        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, null, null, null);
     }
 
     public ManageAuthUserAccountCommand(
@@ -56,6 +73,6 @@ public record ManageAuthUserAccountCommand(
             boolean enabled,
             boolean demoAccount
     ) {
-        this(username, password, operator, role, dataScope, null, enabled, demoAccount, null, null);
+        this(username, password, operator, role, dataScope, null, enabled, demoAccount, null, null, null);
     }
 }

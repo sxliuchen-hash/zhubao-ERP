@@ -3,6 +3,7 @@ package com.zhubao.erp.business.infra;
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MasterDataRepository;
 import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.RequirementShortcut;
 import com.zhubao.erp.common.error.BusinessException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -18,7 +19,9 @@ import java.util.concurrent.atomic.AtomicLong;
 public class InMemoryMasterDataRepository implements MasterDataRepository {
     private final ConcurrentHashMap<Long, CustomerProfile> customers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, MaterialProfile> materials = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, RequirementShortcut> shortcuts = new ConcurrentHashMap<>();
     private final AtomicLong nextCustomerId = new AtomicLong(1004);
+    private final AtomicLong nextShortcutId = new AtomicLong(0);
 
     public InMemoryMasterDataRepository() {
         saveCustomer(new CustomerProfile(1001, "C-1001", "恒信珠宝", "", "", "", "", true));
@@ -69,5 +72,25 @@ public class InMemoryMasterDataRepository implements MasterDataRepository {
         }
         materials.put(profile.materialCode(), profile);
         return profile;
+    }
+
+    @Override
+    public List<RequirementShortcut> listShortcuts() {
+        return shortcuts.values().stream()
+                .sorted(Comparator.comparingInt(RequirementShortcut::sortOrder).thenComparingLong(RequirementShortcut::shortcutId))
+                .toList();
+    }
+
+    @Override
+    public synchronized RequirementShortcut saveShortcut(RequirementShortcut shortcut) {
+        long id = shortcut.shortcutId() > 0 ? shortcut.shortcutId() : nextShortcutId.incrementAndGet();
+        RequirementShortcut saved = new RequirementShortcut(id, shortcut.phrase(), shortcut.sortOrder());
+        shortcuts.put(id, saved);
+        return saved;
+    }
+
+    @Override
+    public synchronized Optional<RequirementShortcut> deleteShortcut(long shortcutId) {
+        return Optional.ofNullable(shortcuts.remove(shortcutId));
     }
 }

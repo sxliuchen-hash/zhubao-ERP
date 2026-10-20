@@ -2,6 +2,7 @@ package com.zhubao.erp.security.infra;
 
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -44,8 +45,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 insert into auth_user_account (
                     username, password_hash, operator, role_code, data_scope, enabled, demo_account,
                     password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
-                    temporary_password_consumed, allowed_processes
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    temporary_password_consumed, allowed_processes, cover_duties
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -63,6 +64,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setBoolean(12, account.passwordChangeRequired());
             statement.setBoolean(13, account.temporaryPasswordConsumed());
             statement.setString(14, WorkshopProcesses.join(account.allowedProcesses()));
+            statement.setString(15, CoverDuties.join(account.coverDuties()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -85,7 +87,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                        customer_scope = ?,
                        password_change_required = ?,
                        temporary_password_consumed = ?,
-                       allowed_processes = ?
+                       allowed_processes = ?,
+                       cover_duties = ?
                  where username = ?
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -103,7 +106,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setBoolean(11, account.passwordChangeRequired());
             statement.setBoolean(12, account.temporaryPasswordConsumed());
             statement.setString(13, WorkshopProcesses.join(account.allowedProcesses()));
-            statement.setString(14, normalize(account.username()));
+            statement.setString(14, CoverDuties.join(account.coverDuties()));
+            statement.setString(15, normalize(account.username()));
             statement.executeUpdate();
             return account;
         } catch (SQLException ex) {
@@ -116,7 +120,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
                        password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
-                       temporary_password_consumed, allowed_processes
+                       temporary_password_consumed, allowed_processes, cover_duties
                   from auth_user_account
                  order by username
                 """;
@@ -138,7 +142,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         String sql = """
                 select username, password_hash, operator, role_code, data_scope, enabled, demo_account,
                        password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
-                       temporary_password_consumed, allowed_processes
+                       temporary_password_consumed, allowed_processes, cover_duties
                   from auth_user_account
                  where username = ?
                 """;
@@ -282,7 +286,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 parseCustomerScope(rs.getString("customer_scope")),
                 rs.getBoolean("password_change_required"),
                 rs.getBoolean("temporary_password_consumed"),
-                WorkshopProcesses.bind(WorkshopProcesses.split(rs.getString("allowed_processes")))
+                WorkshopProcesses.bind(WorkshopProcesses.split(rs.getString("allowed_processes"))),
+                CoverDuties.split(rs.getString("cover_duties"))
         );
     }
 
@@ -389,8 +394,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                 insert into auth_user_account (
                     username, password_hash, operator, role_code, data_scope, enabled, demo_account,
                     password_changed_at, failed_login_count, locked_until, customer_scope, password_change_required,
-                    temporary_password_consumed, allowed_processes
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    temporary_password_consumed, allowed_processes, cover_duties
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, normalize(account.username()));
@@ -407,6 +412,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setBoolean(12, account.passwordChangeRequired());
             statement.setBoolean(13, account.temporaryPasswordConsumed());
             statement.setString(14, WorkshopProcesses.join(account.allowedProcesses()));
+            statement.setString(15, CoverDuties.join(account.coverDuties()));
             statement.executeUpdate();
         }
     }
@@ -426,7 +432,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
                        customer_scope = ?,
                        password_change_required = ?,
                        temporary_password_consumed = ?,
-                       allowed_processes = ?
+                       allowed_processes = ?,
+                       cover_duties = ?
                  where username = ?
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -443,7 +450,8 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
             statement.setBoolean(11, account.passwordChangeRequired());
             statement.setBoolean(12, account.temporaryPasswordConsumed());
             statement.setString(13, WorkshopProcesses.join(account.allowedProcesses()));
-            statement.setString(14, normalize(account.username()));
+            statement.setString(14, CoverDuties.join(account.coverDuties()));
+            statement.setString(15, normalize(account.username()));
             if (statement.executeUpdate() != 1) {
                 throw new com.zhubao.erp.common.error.BusinessException("账号不存在：" + account.username());
             }

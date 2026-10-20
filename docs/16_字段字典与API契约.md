@@ -2213,7 +2213,10 @@ PWA 一期边界：
 | `POST /api/business/master-data/customers` | `MASTER_DATA_MANAGE`（管理员、总经理、业务管理、收货员、库管员、车间组长）创建或更新客户；名称归一化后不可重复。授权客户范围的账号新建客户后，该客户进入本人范围，便于当场建母单。 |
 | `customerScope`（登录账号／客户授权） | 新增授权在用户管理按客户档案选择稳定数字 ID。服务端在会话解析时将历史名称或客户编码唯一映射为 ID；客户改名保留旧名别称。无法确认唯一归属的历史值仍留在原授权记录供人工核对，但不授予新单据访问权。 |
 | `GET /api/business/master-data/materials` | 返回启用材质目录，支持前端搜索和多选。 |
-| `POST /api/business/master-data/materials` | 同上 `MASTER_DATA_MANAGE` 角色可新增或更新材质；编码稳定，名称去重。新建母单页可直接新增并选中。 |
+| `POST /api/business/master-data/materials` | 同上 `MASTER_DATA_MANAGE` 角色可新增或更新材质；编码稳定，名称去重。客户档案的材质页和新建母单页都可以新增并选中，写的是同一份目录。 |
+| `GET /api/business/master-data/requirement-shortcuts` | 已登录即可读取全厂共用的加工要求快捷词，按排序返回。 |
+| `POST /api/business/master-data/requirement-shortcuts` | `MASTER_DATA_MANAGE` 新增一条快捷词。短语去首尾空白后最长 40 字，不区分大小写不可重复，且不能包含顿号、逗号或分号。 |
+| `POST /api/business/master-data/requirement-shortcuts/removals` | 请求体 `{ shortcutId }`。同上权限删除快捷词。已写入母单的加工要求文本不改。 |
 | `GET /api/business/operations/mother-orders/{code}/split` | 新版 `sourceLines[]` 显示收货来源行及逐行剩余数量、重量；无新明细的历史单据保留原汇总视图。 |
 | `POST /api/business/operations/mother-orders/{code}/splits` | 新版每张子单的 `allocations[]` 指定 `sourceLineNo`、数量和重量；服务端锁定母单，核对每行剩余，并按真实材质转在制。现有下游工序按单一材质维度处理，一张子单只能分配同一材质的来源行。旧单继续接受原请求形态。 |
 | `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |

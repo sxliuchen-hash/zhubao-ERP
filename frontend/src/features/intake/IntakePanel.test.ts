@@ -7,10 +7,11 @@ import { queryScanContext } from '../../services/scanContextApi';
 import { fetchMotherOrder, lookupMobileIntake, submitMobileIntake } from '../../services/mobileIntakeApi';
 import { bindEvidence, fetchEvidenceBoard, uploadEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
-import { fetchCustomers, fetchMaterials, saveCustomer, saveMaterial } from '../../services/masterDataApi';
+import { fetchCustomers, fetchMaterials, fetchShortcuts, removeShortcut, saveCustomer, saveMaterial, saveShortcut } from '../../services/masterDataApi';
 
 vi.mock('../../services/masterDataApi', () => ({
-  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), saveCustomer: vi.fn(), saveMaterial: vi.fn(),
+  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(),
+  saveCustomer: vi.fn(), saveMaterial: vi.fn(), saveShortcut: vi.fn(), removeShortcut: vi.fn(),
 }));
 
 vi.mock('../../services/scanContextApi', async () => {
@@ -76,6 +77,7 @@ describe('收货面板', () => {
     vi.mocked(fetchCustomers).mockResolvedValue([{ customerId: 1001, customerCode: 'C-1001', name: '恒信珠宝',
       aliases: '', contact: '', phone: '', remark: '', enabled: true }]);
     vi.mocked(fetchMaterials).mockResolvedValue([{ materialCode: 'AU9999', name: '足金', aliases: '', remark: '', enabled: true }]);
+    vi.mocked(fetchShortcuts).mockResolvedValue([]);
     vi.mocked(submitMobileIntake).mockReset();
     vi.mocked(lookupMobileIntake).mockReset();
     vi.mocked(fetchMotherOrder).mockReset();
@@ -362,6 +364,60 @@ describe('收货面板', () => {
     await wrapper.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
     expect(wrapper.text()).not.toContain('新增客户档案');
     expect(wrapper.find('[aria-label="新增材质名称"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="新快捷词"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('业务管理只有客户档案顶岗时才能新增客户和快捷词', async () => {
+    const blocked = mount(IntakePanel, {
+      props: { title: '新建来料', intro: '建单' },
+      global: { provide: { 'zhubao-auth-session': ref({ role: 'BUSINESS_MANAGER', coverDuties: ['INTAKE'] }) } },
+    });
+    await flushPromises();
+    await blocked.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
+    expect(blocked.text()).not.toContain('新增客户档案');
+    expect(blocked.find('[aria-label="新快捷词"]').exists()).toBe(false);
+    blocked.unmount();
+
+    const allowed = mount(IntakePanel, {
+      props: { title: '新建来料', intro: '建单' },
+      global: { provide: { 'zhubao-auth-session': ref({ role: 'BUSINESS_MANAGER', coverDuties: ['MASTER'] }) } },
+    });
+    await flushPromises();
+    await allowed.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
+    expect(allowed.text()).toContain('新增客户档案');
+    expect(allowed.find('[aria-label="新快捷词"]').exists()).toBe(true);
+    allowed.unmount();
+  });
+
+  it('加工要求可以点选并维护快捷词', async () => {
+    vi.mocked(fetchShortcuts).mockResolvedValue([{ shortcutId: 3, phrase: '镜面抛光', sortOrder: 1 }]);
+    vi.mocked(saveShortcut).mockResolvedValue({ shortcutId: 4, phrase: '改圈', sortOrder: 2 });
+    vi.mocked(removeShortcut).mockResolvedValue({ shortcutId: 3, phrase: '镜面抛光', sortOrder: 1 });
+    const wrapper = mount(IntakePanel, {
+      props: { title: '新建来料', intro: '建单' },
+      global: { provide: { 'zhubao-auth-session': ref({ role: 'RECEIVER' }) } },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
+    await wrapper.get('[aria-label="填入快捷词 镜面抛光"]').trigger('click');
+    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('镜面抛光');
+    await wrapper.get('[aria-label="填入快捷词 镜面抛光"]').trigger('click');
+    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('镜面抛光');
+    await wrapper.get('[aria-label="加工要求"]').setValue('倒模');
+    await wrapper.get('[aria-label="填入快捷词 镜面抛光"]').trigger('click');
+    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('倒模、镜面抛光');
+
+    await wrapper.get('[aria-label="新快捷词"]').setValue('改圈');
+    await wrapper.findAll('button').find((button) => button.text() === '添加快捷词')!.trigger('click');
+    await flushPromises();
+    expect(saveShortcut).toHaveBeenCalledWith('改圈');
+    expect(wrapper.text()).toContain('已添加快捷词「改圈」');
+
+    await wrapper.get('[aria-label="删除快捷词 镜面抛光"]').trigger('click');
+    await flushPromises();
+    expect(removeShortcut).toHaveBeenCalledWith(3);
+    expect(wrapper.find('[aria-label="填入快捷词 镜面抛光"]').exists()).toBe(false);
     wrapper.unmount();
   });
 });

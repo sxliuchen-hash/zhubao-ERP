@@ -19,9 +19,16 @@ const lastTarget = ref<{ code: string; objectType: ScanObjectType } | null>(null
 const progressCode = ref('');
 const insecureContext = typeof window !== 'undefined' && window.isSecureContext === false;
 
+const coverDuties = computed(() => authSession.value?.coverDuties ?? []);
+
 const primaryModes = computed(() => {
   switch (authSession.value?.role) {
     case 'ADMIN': return [{ key: 'intake', label: '收货' }, { key: 'station', label: '报工' }, { key: 'quality', label: '质检' }] as const;
+    case 'BUSINESS_MANAGER': return [
+      ...(coverDuties.value.includes('INTAKE') ? [{ key: 'intake' as const, label: '收货' }] : []),
+      ...(coverDuties.value.includes('REPORT') ? [{ key: 'station' as const, label: '报工' }] : []),
+      ...(coverDuties.value.includes('QUALITY') ? [{ key: 'quality' as const, label: '质检' }] : []),
+    ];
     case 'RECEIVER':
     case 'WAREHOUSE_KEEPER': return [{ key: 'intake', label: '收货' }] as const;
     case 'OPERATOR': return [{ key: 'station', label: '报工' }] as const;
@@ -35,6 +42,10 @@ const extraModes = computed(() => {
     case 'ADMIN': return [{ key: 'progress', label: '进度报工' }, { key: 'shipping', label: '发货' }] as const;
     case 'OPERATOR':
     case 'WORKSHOP_LEADER': return [{ key: 'progress', label: '进度报工' }] as const;
+    case 'BUSINESS_MANAGER': return [
+      ...(coverDuties.value.includes('REPORT') ? [{ key: 'progress' as const, label: '进度报工' }] : []),
+      ...(coverDuties.value.includes('SHIP') ? [{ key: 'shipping' as const, label: '发货' }] : []),
+    ];
     case 'WAREHOUSE_KEEPER': return [{ key: 'shipping', label: '发货' }] as const;
     default: return [];
   }
@@ -68,6 +79,7 @@ function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objec
     <MobileOrderDetail
       v-if="jobMode === 'detail' && (primaryModes.length || extraModes.length)"
       :role="authSession?.role || ''"
+      :cover-duties="authSession?.coverDuties ?? []"
       :initial-target="lastTarget"
       @open="open"
     />

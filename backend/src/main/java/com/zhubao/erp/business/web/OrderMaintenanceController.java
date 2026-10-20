@@ -1,5 +1,6 @@
 package com.zhubao.erp.business.web;
 
+import com.zhubao.erp.business.app.MaintainedMotherBrowse;
 import com.zhubao.erp.business.app.MaintainedOrder;
 import com.zhubao.erp.business.app.OrderMaintenanceCommands;
 import com.zhubao.erp.business.app.OrderMaintenanceService;
@@ -30,6 +31,15 @@ public class OrderMaintenanceController {
     @GetMapping
     public ApiResponse<List<MaintainedOrder>> search(@RequestParam String code, HttpServletRequest request) {
         return ApiResponse.ok(service.search(code, operators.requireSession(request)));
+    }
+
+    @GetMapping("/mothers")
+    public ApiResponse<MaintainedMotherBrowse> mothers(@RequestParam(required = false) String from,
+                                                        @RequestParam(required = false) String to,
+                                                        @RequestParam(required = false) String customer,
+                                                        @RequestParam(required = false) String operator,
+                                                        HttpServletRequest request) {
+        return ApiResponse.ok(service.listMothers(from, to, customer, operator, operators.requireSession(request)));
     }
 
     @GetMapping("/recycle-bin")

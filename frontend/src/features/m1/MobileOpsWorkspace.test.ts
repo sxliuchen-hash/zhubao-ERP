@@ -15,9 +15,9 @@ vi.mock('./MobileOrderDetail.vue', () => ({
   },
 }));
 
-function forRole(role: string) {
+function forRole(role: string, coverDuties?: string[]) {
   return mount(MobileOpsWorkspace, {
-    global: { provide: { 'zhubao-auth-session': ref({ role } as AuthSession) } },
+    global: { provide: { 'zhubao-auth-session': ref({ role, coverDuties } as AuthSession) } },
   });
 }
 
@@ -56,6 +56,25 @@ describe('MobileOpsWorkspace', () => {
     await wrapper.get('.mobile-order-back').trigger('click');
     await wrapper.get('[data-open="shipping"]').trigger('click');
     expect(wrapper.find('[data-job="shipping"]').exists()).toBe(true);
+  });
+
+  it('lets business managers cover receiving, reporting and inspection', async () => {
+    const wrapper = forRole('BUSINESS_MANAGER', ['INTAKE', 'REPORT', 'QUALITY']);
+    expect(wrapper.find('[data-job="detail"]').exists()).toBe(true);
+    await wrapper.get('[data-open="intake"]').trigger('click');
+    expect(wrapper.find('[data-job="intake"]').exists()).toBe(true);
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await wrapper.get('[data-open="station"]').trigger('click');
+    expect(wrapper.find('[data-job="station"]').exists()).toBe(true);
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await wrapper.get('[data-open="quality"]').trigger('click');
+    expect(wrapper.find('[data-job="quality"]').exists()).toBe(true);
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await wrapper.get('[data-open="progress"]').trigger('click');
+    expect(wrapper.find('[data-job="progress"]').exists()).toBe(true);
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await wrapper.get('[data-open="shipping"]').trigger('click');
+    expect(wrapper.find('[data-job="shipping"]').exists()).toBe(false);
   });
 
   it('does not offer submissions to a management role without field permissions', () => {

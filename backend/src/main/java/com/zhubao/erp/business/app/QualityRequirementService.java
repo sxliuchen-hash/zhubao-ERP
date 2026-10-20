@@ -1150,7 +1150,8 @@ public class QualityRequirementService {
         if (account == null || account.operator() == null || account.operator().isBlank()) {
             throw new BusinessException(LOGIN_REQUIRED);
         }
-        if (!List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.WORKSHOP_LEADER, RoleCode.QUALITY_INSPECTOR).contains(account.role())) {
+        if (!List.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.WORKSHOP_LEADER, RoleCode.QUALITY_INSPECTOR).contains(account.role())
+                && !(account.role() == RoleCode.BUSINESS_MANAGER && com.zhubao.erp.security.domain.CoverDuties.contains(account.coverDuties(), com.zhubao.erp.security.domain.CoverDuties.QUALITY))) {
             throw new PermissionDeniedException("当前账号不是质检岗位");
         }
     }

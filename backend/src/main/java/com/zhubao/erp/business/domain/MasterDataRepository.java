@@ -10,4 +10,7 @@ public interface MasterDataRepository {
     List<MaterialProfile> listMaterials();
     Optional<MaterialProfile> findMaterial(String code);
     MaterialProfile saveMaterial(MaterialProfile profile);
+    List<RequirementShortcut> listShortcuts();
+    RequirementShortcut saveShortcut(RequirementShortcut shortcut);
+    Optional<RequirementShortcut> deleteShortcut(long shortcutId);
 }

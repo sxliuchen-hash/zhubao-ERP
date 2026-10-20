@@ -1,7 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { nextTick, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../services/apiClient';
+import type { AuthSession } from '../../services/authApi';
 import type {
   InboundOrder,
   InventoryBalance,
@@ -26,6 +27,18 @@ import { queryScanContext } from '../../services/scanContextApi';
 import { contextForQuery } from '../scan/scanContextFixture';
 import ProductionWorkspace from './ProductionWorkspace.vue';
 import QualityWorkspace from './QualityWorkspace.vue';
+
+function mountMobileOps() {
+  return mount(MobileOpsWorkspace, {
+    global: { provide: { 'zhubao-auth-session': ref({ role: 'ADMIN' } as AuthSession) } },
+  });
+}
+
+async function openMobileAction(wrapper: ReturnType<typeof mountMobileOps>, label: string) {
+  const button = wrapper.findAll('.mobile-order-shortcuts button').find((item) => item.text() === label);
+  expect(button).toBeTruthy();
+  await button!.trigger('click');
+}
 
 vi.mock('../../services/businessWorkspaceApi', () => ({
   fetchInboundWorkspace: vi.fn(),
@@ -427,7 +440,8 @@ describe('M1 business workspaces', () => {
   });
 
   it('renders the mobile intake form', async () => {
-    const wrapper = mount(MobileOpsWorkspace);
+    const wrapper = mountMobileOps();
+    await wrapper.get('.mobile-order-create').trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain('手机收货');
@@ -440,7 +454,8 @@ describe('M1 business workspaces', () => {
     const clicks = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
     const media = navigator.mediaDevices;
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
-    const wrapper = mount(MobileOpsWorkspace);
+    const wrapper = mountMobileOps();
+    await wrapper.get('.mobile-order-create').trigger('click');
     await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
 
     expect(wrapper.text()).not.toContain('当前浏览器不能直接扫码');
@@ -455,7 +470,8 @@ describe('M1 business workspaces', () => {
     const getUserMedia = vi.fn();
     const media = navigator.mediaDevices;
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
-    const wrapper = mount(MobileOpsWorkspace);
+    const wrapper = mountMobileOps();
+    await wrapper.get('.mobile-order-create').trigger('click');
     await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
 
     expect(wrapper.text()).toContain('请改用 https://');
@@ -480,8 +496,8 @@ describe('M1 business workspaces', () => {
       }],
       message: '',
     });
-    const wrapper = mount(MobileOpsWorkspace);
-    await wrapper.get('[aria-label="岗位报工"]').trigger('click');
+    const wrapper = mountMobileOps();
+    await openMobileAction(wrapper, '岗位报工');
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -525,8 +541,8 @@ describe('M1 business workspaces', () => {
       message: '',
     });
     vi.mocked(submitProcessStation).mockRejectedValue(new Error('上一道「雕刻」还没交，不能交「镶嵌」'));
-    const wrapper = mount(MobileOpsWorkspace);
-    await wrapper.get('[aria-label="岗位报工"]').trigger('click');
+    const wrapper = mountMobileOps();
+    await openMobileAction(wrapper, '岗位报工');
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -655,13 +671,14 @@ describe('M1 business workspaces', () => {
       releaseBlock: '',
       rounds: [],
     });
-    const wrapper = mount(MobileOpsWorkspace);
+    const wrapper = mountMobileOps();
     expect(wrapper.text()).not.toContain('收款');
-    await wrapper.get('[aria-label="发货"]').trigger('click');
+    await openMobileAction(wrapper, '发货');
     expect(wrapper.text()).toContain('确认发货');
     expect(wrapper.text()).not.toContain('收款');
 
-    await wrapper.get('[aria-label="质检"]').trigger('click');
+    await wrapper.get('.mobile-order-back').trigger('click');
+    await openMobileAction(wrapper, '质检');
     await wrapper.get('[aria-label="质检贴纸"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别质检贴纸"]').trigger('click');
     await flushPromises();

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import UpgradeNotice from './UpgradeNotice.vue';
 
 defineProps<{
   title: string;
@@ -95,6 +96,8 @@ function toggleCollapsed() {
           <button class="secondary-button" type="button" aria-label="打开追溯单据" @click="emit('openTrace')">打开单据</button>
         </label>
       </div>
+
+      <UpgradeNotice />
 
       <header class="workspace-header ops-page-header review-page-header lean-header">
         <p v-if="location" class="page-location">{{ location }}</p>

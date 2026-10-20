@@ -61,6 +61,7 @@ describe('App', () => {
     expect(wrapper.find('.ops-scope-ribbon').exists()).toBe(false);
     expect(wrapper.find('.ops-nav').text()).toContain('首页');
     expect(wrapper.find('.ops-nav').text()).toContain('来料');
+    expect(wrapper.find('.ops-nav').text()).toContain('客户档案');
     expect(wrapper.find('.ops-nav').text()).toContain('生产');
     expect(wrapper.find('.ops-nav').text()).toContain('质检');
     expect(wrapper.find('.ops-nav').text()).toContain('库存');
@@ -79,6 +80,10 @@ describe('App', () => {
     expect(wrapper.get('.mobile-tabbar').text()).toContain('全部功能');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('消息');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('扫码');
+    expect(wrapper.get('[aria-label="版本升级通知"]').text()).toContain('单据维护会列出未回收母单');
+    await wrapper.get('[aria-label="版本升级通知"] button').trigger('click');
+    expect(wrapper.find('[aria-label="版本升级通知"]').exists()).toBe(false);
+    expect(localStorage.getItem('zhubao-upgrade-notice-20261020')).toBe('1');
   });
 
   it('opens the permitted field workspace first on a phone', async () => {
@@ -136,7 +141,7 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(15);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(allMenuCodes.length);
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('true');
     expect(wrapper.get('.app-shell').classes()).not.toContain('is-collapsed');
 
@@ -146,7 +151,7 @@ describe('App', () => {
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('false');
     expect(wrapper.get('.sidebar-toggle').attributes('aria-label')).toBe('展开侧边栏');
     expect(localStorage.getItem('zhubao-sidebar-collapsed')).toBe('1');
-    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(15);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(allMenuCodes.length);
 
     await wrapper.get('.sidebar-toggle').trigger('click');
 
@@ -259,6 +264,7 @@ describe('App', () => {
 const allMenuCodes = [
   'dashboard',
   'inbound',
+  'customers',
   'production',
   'progress',
   'quality',

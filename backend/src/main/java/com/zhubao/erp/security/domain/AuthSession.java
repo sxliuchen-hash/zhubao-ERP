@@ -19,12 +19,14 @@ public record AuthSession(
         List<String> customerScope,
         List<String> menuCodes,
         List<NavigationMenuItem> menuTree,
-        List<String> allowedProcesses
+        List<String> allowedProcesses,
+        List<String> coverDuties
 ) {
     public AuthSession {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
         menuCodes = List.copyOf(menuCodes);
         menuTree = List.copyOf(menuTree);
         allowedProcesses = allowedProcesses == null ? List.of() : List.copyOf(allowedProcesses);
+        coverDuties = coverDuties == null ? List.of() : List.copyOf(coverDuties);
     }
 }

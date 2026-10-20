@@ -30,7 +30,8 @@ public class BusinessDataAccess {
 
     public static OperatorContext contextOf(AuthUserAccount account) {
         if (account == null) throw new PermissionDeniedException("请先登录后再操作业务");
-        return new OperatorContext(account.operator(), account.role(), account.dataScope(), false, "", account.customerScope());
+        return new OperatorContext(account.operator(), account.role(), account.dataScope(), false, "",
+                account.customerScope(), account.coverDuties());
     }
 
     public boolean canRead(OperatorContext context, String businessCode) {
@@ -112,9 +113,10 @@ public class BusinessDataAccess {
         if (context.dataScope() == DataScope.CUSTOMER_RANGE) return true;
         if (context.dataScope() == DataScope.SELF) return false;
         return switch (area) {
-            case "inbound", "inventory" -> context.role() == RoleCode.RECEIVER || context.role() == RoleCode.WAREHOUSE_KEEPER;
-            case "production" -> context.role() == RoleCode.WORKSHOP_LEADER;
-            case "quality" -> context.role() == RoleCode.QUALITY_INSPECTOR;
+            case "inbound", "inventory" -> context.role() == RoleCode.RECEIVER || context.role() == RoleCode.WAREHOUSE_KEEPER
+                    || context.role() == RoleCode.BUSINESS_MANAGER;
+            case "production" -> context.role() == RoleCode.WORKSHOP_LEADER || context.role() == RoleCode.BUSINESS_MANAGER;
+            case "quality" -> context.role() == RoleCode.QUALITY_INSPECTOR || context.role() == RoleCode.BUSINESS_MANAGER;
             default -> false;
         };
     }

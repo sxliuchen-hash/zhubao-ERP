@@ -46,6 +46,39 @@ class OrderMaintenanceServiceTest {
     private final OperatorContext keeper = new OperatorContext("库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.TEAM);
 
     @Test
+    void 可按日期客户和建单人列出未回收母单() {
+        documents.saveMotherOrder(mother());
+        documents.saveMotherOrder(new MotherOrderRecord("MD-2", 2L, null, "AG", "2026-09-01", "", "", "", "", "",
+                "手链", "CUSTOMER", true, "WH", new BigDecimal("1"), "件", new BigDecimal("3"),
+                "RAW_WAITING", "", null, null, null, "王强", "", "", "OPEN", "2026-09-01 08:00:00",
+                "", "2026-09-10", "李四"));
+        documents.saveMotherOrder(new MotherOrderRecord("MD-3", 1L, null, "AU", "2026-10-20", "", "", "", "", "",
+                "吊坠", "CUSTOMER", true, "WH", new BigDecimal("1"), "件", new BigDecimal("1"),
+                "RAW_WAITING", "", null, null, null, "收货员", "", "", "OPEN", "2026-10-20T09:00",
+                "", "2026-11-01", "张三"));
+        service.recycle(new OrderMaintenanceCommands.RecycleCommand("MOTHER", "MD-3", "测试单作废"), admin);
+
+        MaintainedMotherBrowse october = service.listMothers("2026-10-01", "2026-10-31", "张", "", admin);
+        assertThat(october.items()).extracting(MaintainedMotherSummary::code).containsExactly("MD-1");
+        assertThat(october.total()).isEqualTo(1);
+        assertThat(october.truncated()).isFalse();
+        assertThat(october.items().get(0).orderDate()).isEqualTo("2026-10-16");
+
+        assertThat(service.listMothers("", "", "", "王强", admin).items())
+                .extracting(MaintainedMotherSummary::code).containsExactly("MD-2");
+        assertThat(service.listMothers("", "", "", "", admin).items())
+                .extracting(MaintainedMotherSummary::code).containsExactly("MD-1", "MD-2");
+        assertThatThrownBy(() -> service.listMothers("2026/10/01", "", "", "", admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("年-月-日");
+        assertThatThrownBy(() -> service.listMothers("2026-11-01", "2026-10-01", "", "", admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("开始日期不能晚于结束日期");
+        assertThatThrownBy(() -> service.listMothers("", "", "", "", keeper))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
+
+    @Test
     void 非管理员不能查找或回收() {
         documents.saveMotherOrder(mother());
         assertThatThrownBy(() -> service.search("MD-1", keeper)).isInstanceOf(PermissionDeniedException.class);

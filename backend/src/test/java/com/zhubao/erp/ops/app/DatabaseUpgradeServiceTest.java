@@ -33,9 +33,9 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void realCatalogKeepsContiguousVersionsThroughV64() {
+    void realCatalogKeepsContiguousVersionsThroughV68() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(64);
+        assertThat(scripts).hasSize(68);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);
@@ -87,6 +87,17 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(63).version()).isEqualTo(64);
         assertThat(scripts.get(63).fileName()).isEqualTo("V64__m3_stock_ledger_reversal.sql");
         assertThat(scripts.get(63).probe().columnName()).isEqualTo("source_ledger_code");
+        assertThat(scripts.get(64).version()).isEqualTo(65);
+        assertThat(scripts.get(64).fileName()).isEqualTo("V65__m3_business_manager_menu.sql");
+        assertThat(scripts.get(65).version()).isEqualTo(66);
+        assertThat(scripts.get(65).fileName()).isEqualTo("V66__m3_business_manager_cover_duties.sql");
+        assertThat(scripts.get(65).probe().columnName()).isEqualTo("cover_duties");
+        assertThat(scripts.get(66).version()).isEqualTo(67);
+        assertThat(scripts.get(66).fileName()).isEqualTo("V67__m3_requirement_shortcut.sql");
+        assertThat(scripts.get(66).probe().tableName()).isEqualTo("biz_requirement_shortcut");
+        assertThat(scripts.get(67).version()).isEqualTo(68);
+        assertThat(scripts.get(67).fileName()).isEqualTo("V68__m3_customer_archive_menu.sql");
+        assertThat(scripts.get(67).probe().expectedValue()).isEqualTo("customers");
         assertThat(MigrationCatalog.loadClasspath()).extracting(MigrationScript::version)
                 .containsExactlyElementsOf(scripts.stream().map(MigrationScript::version).toList());
     }

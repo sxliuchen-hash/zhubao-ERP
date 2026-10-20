@@ -79,6 +79,27 @@ class JdbcNavigationMenuRepositoryTest {
         });
     }
 
+    @Test
+    void 客户档案菜单可重复执行且不给操作工() throws Exception {
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement();
+             var input = new ClassPathResource("db/mysql/V68__m3_customer_archive_menu.sql").getInputStream()) {
+            String script = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            for (int round = 0; round < 2; round++) {
+                for (String sql : script.split(";")) {
+                    if (!sql.isBlank()) statement.execute(sql);
+                }
+            }
+        }
+        assertThat(repository.findMenuItems()).filteredOn(item -> item.code().equals("customers"))
+                .singleElement().satisfies(item -> {
+                    assertThat(item.label()).isEqualTo("客户档案");
+                    assertThat(item.buttonCodes()).containsExactly("MASTER_DATA_MANAGE");
+                });
+        assertThat(repository.findRoleMenuBindings().get(RoleCode.ADMIN)).contains("customers");
+        assertThat(repository.findRoleMenuBindings().get(RoleCode.FINANCE_STATISTICIAN)).contains("customers");
+        assertThat(repository.findRoleMenuBindings().get(RoleCode.OPERATOR)).doesNotContain("customers");
+    }
+
     private void createSchema(JdbcDataSource dataSource) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {

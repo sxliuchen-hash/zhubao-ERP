@@ -9,7 +9,11 @@ import { scanObjectTypeLabel, type ScanContextResponse, type ScanProgressRecord,
 
 type MobileAction = 'intake' | 'station' | 'progress' | 'quality' | 'shipping';
 
-const props = defineProps<{ role: string; initialTarget?: { code: string; objectType: NonNullable<ScanContextResponse['target']['objectType']> } | null }>();
+const props = defineProps<{
+  role: string;
+  coverDuties?: string[];
+  initialTarget?: { code: string; objectType: NonNullable<ScanContextResponse['target']['objectType']> } | null;
+}>();
 const emit = defineEmits<{ open: [action: MobileAction, target?: { code: string; objectType: NonNullable<ScanContextResponse['target']['objectType']> }] }>();
 const code = ref('');
 const locatedInput = ref('');
@@ -17,10 +21,12 @@ const qualityProgressOpen = ref(false);
 const scan = reactive(useScanContext());
 const identity = computed(() => canonicalTarget(scan.context));
 const qualityProgressTarget = computed(() => progressTargetFromScan(scan.context));
-const isReceiving = computed(() => ['ADMIN', 'RECEIVER', 'WAREHOUSE_KEEPER'].includes(props.role));
-const isProduction = computed(() => ['ADMIN', 'OPERATOR', 'WORKSHOP_LEADER'].includes(props.role));
-const isQuality = computed(() => ['ADMIN', 'QUALITY_INSPECTOR', 'WORKSHOP_LEADER'].includes(props.role));
-const isWarehouse = computed(() => ['ADMIN', 'WAREHOUSE_KEEPER'].includes(props.role));
+const hasDuty = (code: string) => props.role !== 'BUSINESS_MANAGER' || (props.coverDuties ?? []).includes(code);
+const isReceiving = computed(() => hasDuty('INTAKE') && ['ADMIN', 'BUSINESS_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER'].includes(props.role));
+const isProduction = computed(() => hasDuty('REPORT') && ['ADMIN', 'BUSINESS_MANAGER', 'OPERATOR', 'WORKSHOP_LEADER'].includes(props.role));
+const isQuality = computed(() => hasDuty('QUALITY') && ['ADMIN', 'BUSINESS_MANAGER', 'QUALITY_INSPECTOR', 'WORKSHOP_LEADER'].includes(props.role));
+const isWarehouse = computed(() => ['ADMIN', 'WAREHOUSE_KEEPER'].includes(props.role)
+  || (props.role === 'BUSINESS_MANAGER' && (props.coverDuties ?? []).includes('SHIP')));
 const isWorkTarget = computed(() => ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.value?.objectType ?? ''));
 const isQualityTarget = computed(() => isWorkTarget.value || identity.value?.objectType === 'REWORK');
 const formalReport = computed(() => scan.context?.actions.find((item) => item.code === 'REPORT_PROCESS'));

@@ -18,7 +18,8 @@ public final class AuthAccountSnapshot {
                 Boolean.toString(user.demoAccount()),
                 Boolean.toString(user.passwordChangeRequired()),
                 String.join("|", user.customerScope()),
-                String.join("|", user.allowedProcesses())
+                String.join("|", user.allowedProcesses()),
+                String.join("|", user.coverDuties())
         );
         return AuthTokenDigest.sha256(canonical);
     }

@@ -20,6 +20,7 @@ import {
 type TabKey =
   | 'dashboard'
   | 'inbound'
+  | 'customers'
   | 'production'
   | 'progress'
   | 'quality'
@@ -50,6 +51,7 @@ const navGroups: Array<{ id: NavGroupId; label: string }> = [
 const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; group: NavGroupId }> = [
   { key: 'dashboard', label: '首页', meta: '今日待办', code: 'OP', group: 'desk' },
   { key: 'inbound', label: '来料', meta: '收货入库', code: 'IN', group: 'inbound' },
+  { key: 'customers', label: '客户档案', meta: '账单与进度', code: 'CU', group: 'inbound' },
   { key: 'label', label: '标签', meta: '打印补打', code: 'LB', group: 'inbound' },
   { key: 'production', label: '生产', meta: '派工报工', code: 'MO', group: 'production' },
   { key: 'progress', label: '进度', meta: '在制筛选', code: 'PG', group: 'production' },
@@ -67,11 +69,12 @@ const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; grou
 ];
 
 const mobilePrimaryKeys: TabKey[] = ['dashboard', 'mobile', 'approvals'];
-const fieldRoles = new Set(['ADMIN', 'RECEIVER', 'WAREHOUSE_KEEPER', 'OPERATOR', 'WORKSHOP_LEADER', 'QUALITY_INSPECTOR']);
+const fieldRoles = new Set(['ADMIN', 'BUSINESS_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER', 'OPERATOR', 'WORKSHOP_LEADER', 'QUALITY_INSPECTOR']);
 
 const activeTab = ref<TabKey>('dashboard');
 const workspaceLoaders = {
   inbound: () => import('./features/m1/InboundWorkspace.vue'),
+  customers: () => import('./features/m1/CustomerArchiveWorkspace.vue'),
   production: () => import('./features/m1/ProductionWorkspace.vue'),
   progress: () => import('./features/m1/ProgressWorkspace.vue'),
   quality: () => import('./features/m1/QualityWorkspace.vue'),

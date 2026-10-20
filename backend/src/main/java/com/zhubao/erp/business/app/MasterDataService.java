@@ -3,6 +3,7 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MasterDataRepository;
 import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.RequirementShortcut;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.app.CustomerAuthorizationService;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
@@ -146,6 +147,29 @@ public class MasterDataService {
                 ? "MAT-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase(Locale.ROOT)
                 : input.materialCode().trim();
         return repository.saveMaterial(new MaterialProfile(code, name, text(input.aliases()), text(input.remark()), input.enabled()));
+    }
+
+    public List<RequirementShortcut> shortcuts() {
+        return repository.listShortcuts();
+    }
+
+    public RequirementShortcut saveShortcut(RequirementShortcut input) {
+        if (input == null) throw new BusinessException("快捷词不能为空");
+        String phrase = required(input.phrase(), "快捷词");
+        if (phrase.length() > 40) throw new BusinessException("快捷词过长");
+        if (phrase.chars().anyMatch(ch -> ch == '、' || ch == ',' || ch == '，' || ch == ';' || ch == '；')) {
+            throw new BusinessException("快捷词不要包含顿号或逗号");
+        }
+        String normalized = phrase.toLowerCase(Locale.ROOT);
+        boolean duplicated = repository.listShortcuts().stream()
+                .anyMatch(existing -> existing.phrase().trim().toLowerCase(Locale.ROOT).equals(normalized));
+        if (duplicated) throw new BusinessException("快捷词已存在");
+        int sort = repository.listShortcuts().stream().mapToInt(RequirementShortcut::sortOrder).max().orElse(0) + 1;
+        return repository.saveShortcut(new RequirementShortcut(0, phrase, sort));
+    }
+
+    public RequirementShortcut removeShortcut(long shortcutId) {
+        return repository.deleteShortcut(shortcutId).orElseThrow(() -> new BusinessException("快捷词不存在"));
     }
 
     private String required(String value, String label) {

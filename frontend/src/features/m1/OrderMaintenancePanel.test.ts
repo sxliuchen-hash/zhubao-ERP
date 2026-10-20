@@ -1,10 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderMaintenancePanel from './OrderMaintenancePanel.vue';
-import { correctMaintainedOrder, fetchRecycleBin, recycleMaintainedOrder, searchMaintainedOrders } from '../../services/orderMaintenanceApi';
+import { correctMaintainedOrder, fetchRecycleBin, listMaintainedMothers, recycleMaintainedOrder, searchMaintainedOrders } from '../../services/orderMaintenanceApi';
 
 vi.mock('../../services/orderMaintenanceApi', () => ({
   searchMaintainedOrders: vi.fn(),
+  listMaintainedMothers: vi.fn(),
   fetchRecycleBin: vi.fn(),
   correctMaintainedOrder: vi.fn(),
   recycleMaintainedOrder: vi.fn(),
@@ -13,6 +14,7 @@ vi.mock('../../services/orderMaintenanceApi', () => ({
 
 describe('单据维护', () => {
   beforeEach(() => {
+    vi.mocked(listMaintainedMothers).mockResolvedValue({ items: [], total: 0, truncated: false });
     vi.mocked(fetchRecycleBin).mockResolvedValue([]);
     vi.mocked(searchMaintainedOrders).mockResolvedValue([{
       targetType: 'MOTHER',
@@ -36,6 +38,32 @@ describe('单据维护', () => {
       postedFactsLocked: true,
     }]);
     vi.mocked(recycleMaintainedOrder).mockResolvedValue();
+  });
+
+  it('打开页面列出母单，并可按客户筛选后打开', async () => {
+    vi.mocked(listMaintainedMothers).mockResolvedValue({
+      items: [{
+        code: 'MD-9', customerName: '马洋', operator: '收货员', orderDate: '2026-10-14',
+        goodsName: '龙纹桃核', materialCode: 'MAT-MOBILE', quantity: '30', weight: '100',
+      }],
+      total: 1,
+      truncated: false,
+    });
+    const wrapper = mount(OrderMaintenancePanel);
+    await flushPromises();
+    expect(wrapper.text()).toContain('MD-9');
+    expect(wrapper.text()).toContain('马洋');
+    expect(wrapper.text()).toContain('共 1 张未回收母单');
+    await wrapper.get('[aria-label="客户筛选"]').setValue('马洋');
+    await wrapper.get('[aria-label="开始日期"]').setValue('2026-10-01');
+    await wrapper.get('[aria-label="筛选母单"]').trigger('click');
+    await flushPromises();
+    expect(listMaintainedMothers).toHaveBeenLastCalledWith({
+      from: '2026-10-01', to: '', customer: '马洋', operator: '',
+    });
+    await wrapper.get('[aria-label="打开 MD-9"]').trigger('click');
+    await flushPromises();
+    expect(searchMaintainedOrders).toHaveBeenCalledWith('MD-9');
   });
 
   it('按单号查找后可以把母单放入回收站', async () => {

@@ -22,6 +22,38 @@ export interface MaintainedOrder {
   postedFactsLocked?: boolean;
 }
 
+export interface MaintainedMotherSummary {
+  code: string;
+  customerName: string;
+  operator: string;
+  orderDate: string;
+  goodsName: string;
+  materialCode: string;
+  quantity: string;
+  weight: string;
+}
+
+export interface MaintainedMotherBrowse {
+  items: MaintainedMotherSummary[];
+  total: number;
+  truncated: boolean;
+}
+
+export function listMaintainedMothers(query: {
+  from?: string;
+  to?: string;
+  customer?: string;
+  operator?: string;
+}): Promise<MaintainedMotherBrowse> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    const text = value?.trim();
+    if (text) params.set(key, text);
+  }
+  const suffix = params.toString();
+  return apiGet<MaintainedMotherBrowse>(`/api/business/order-maintenance/mothers${suffix ? `?${suffix}` : ''}`);
+}
+
 export function searchMaintainedOrders(code: string): Promise<MaintainedOrder[]> {
   return apiGet<MaintainedOrder[]>(`/api/business/order-maintenance?code=${encodeURIComponent(code)}`);
 }

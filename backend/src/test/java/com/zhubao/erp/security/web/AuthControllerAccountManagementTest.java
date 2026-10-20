@@ -412,7 +412,7 @@ class AuthControllerAccountManagementTest {
         Fixture fixture = fixture();
         var options = fixture.controller().accountOptions(request(RoleCode.ADMIN)).data();
         assertThat(options.roles()).extracting(item -> item.value()).containsExactly(
-                "ADMIN", "GENERAL_MANAGER", "SALES", "RECEIVER", "WORKSHOP_LEADER", "OPERATOR",
+                "ADMIN", "GENERAL_MANAGER", "BUSINESS_MANAGER", "SALES", "RECEIVER", "WORKSHOP_LEADER", "OPERATOR",
                 "QUALITY_INSPECTOR", "WAREHOUSE_KEEPER", "FINANCE_STATISTICIAN");
         assertThat(options.roles()).filteredOn(item -> item.value().equals("GENERAL_MANAGER"))
                 .singleElement().satisfies(item -> assertThat(item.permissions()).extracting(permission -> permission.code())

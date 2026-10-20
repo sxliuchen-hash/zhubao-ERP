@@ -107,6 +107,35 @@ class PermissionGuardTest {
     }
 
     @Test
+    void 业务管理可以顶上收货报工和质检() {
+        OperatorContext cover = new OperatorContext("顶岗同事", RoleCode.BUSINESS_MANAGER, DataScope.ALL, false, "",
+                java.util.List.of(), java.util.List.of("INTAKE", "REPORT", "QUALITY", "LABEL"));
+        OperatorContext reportOnly = new OperatorContext("只报工", RoleCode.BUSINESS_MANAGER, DataScope.ALL, false, "",
+                java.util.List.of(), java.util.List.of("REPORT"));
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_INBOUND_CONFIRM, cover))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_PRODUCTION_REPORT, cover))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_QUALITY_RELEASE, cover))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.LABEL_PRINT, cover))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, cover))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.FINANCE_PAYROLL, cover))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.AUTH_ACCOUNT_MANAGE, cover))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.ORDER_ADMIN_MAINTAIN, cover))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_INBOUND_CONFIRM, reportOnly))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_PRODUCTION_REPORT, reportOnly))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void 只有管理员可以维护工单() {
         OperatorContext admin = new OperatorContext("系统管理员", RoleCode.ADMIN, DataScope.ALL);
         OperatorContext generalManager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);

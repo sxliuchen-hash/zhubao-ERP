@@ -19,10 +19,12 @@ public record AuthUserAccountSummary(
         int failedLoginCount,
         String lockedUntil,
         boolean locked,
-        List<String> allowedProcesses
+        List<String> allowedProcesses,
+        List<String> coverDuties
 ) {
     public AuthUserAccountSummary {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
         allowedProcesses = allowedProcesses == null ? List.of() : List.copyOf(allowedProcesses);
+        coverDuties = coverDuties == null ? List.of() : List.copyOf(coverDuties);
     }
 }

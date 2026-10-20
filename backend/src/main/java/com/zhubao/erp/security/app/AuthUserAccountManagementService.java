@@ -25,6 +25,7 @@ import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.AuthUserAccountSummary;
 import com.zhubao.erp.security.domain.DataScope;
@@ -567,6 +568,7 @@ public class AuthUserAccountManagementService {
         List<String> allowedProcesses = command.allowedProcesses() == null
                 ? (existing == null ? List.of() : existing.allowedProcesses())
                 : WorkshopProcesses.bind(command.allowedProcesses());
+        List<String> coverDuties = resolveCoverDuties(role, command.coverDuties(), existing);
         validateTargetSnapshot(preApprovalApplication, command, role, dataScope, customerScope, allowedProcesses);
         if (existing == null && !passwordProvided) {
             throw new BusinessException("新建账号必须提供初始密码");
@@ -595,7 +597,8 @@ public class AuthUserAccountManagementService {
                 customerScope,
                 passwordChangeRequired,
                 temporaryPasswordConsumed,
-                allowedProcesses
+                allowedProcesses,
+                coverDuties
         );
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
         String auditedAction = action
@@ -780,8 +783,22 @@ public class AuthUserAccountManagementService {
                 account.failedLoginCount(),
                 account.lockedUntil() == null ? "" : DISPLAY_TIME.format(account.lockedUntil()),
                 locked,
-                account.allowedProcesses()
+                account.allowedProcesses(),
+                account.coverDuties()
         );
+    }
+
+    private List<String> resolveCoverDuties(RoleCode role, List<String> requested, AuthUserAccount existing) {
+        if (role != RoleCode.BUSINESS_MANAGER) {
+            return List.of();
+        }
+        List<String> duties = requested == null
+                ? (existing == null || existing.coverDuties().isEmpty() ? CoverDuties.packageDefaults() : existing.coverDuties())
+                : CoverDuties.normalize(requested);
+        if (duties.isEmpty()) {
+            throw new BusinessException("业务管理至少保留一项权限");
+        }
+        return duties;
     }
 
     private List<String> effectiveCustomerScope(AuthUserAccount account) {
@@ -1297,6 +1314,7 @@ public class AuthUserAccountManagementService {
         return switch (role) {
             case ADMIN -> "系统管理员";
             case GENERAL_MANAGER -> "总经理";
+            case BUSINESS_MANAGER -> "业务管理";
             case SALES -> "业务员";
             case RECEIVER -> "收货员";
             case WORKSHOP_LEADER -> "车间组长";

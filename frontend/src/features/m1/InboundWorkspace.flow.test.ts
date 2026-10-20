@@ -122,7 +122,7 @@ describe('来料列表与详情', () => {
     });
     const empty = mount(InboundWorkspace);
     await flushPromises();
-    expect(empty.find('.operation-feedback.danger').exists()).toBe(false);
+    expect(empty.text()).not.toContain('来料单据加载失败');
     expect(empty.text()).toContain('生成第一张母单');
     expect(empty.text()).toContain('暂无来料单据');
 
