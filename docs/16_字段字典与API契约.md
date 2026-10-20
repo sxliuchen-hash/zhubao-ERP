@@ -1774,7 +1774,7 @@ PWA 一期边界：
 
 ### 14.4 账号管理接口
 
-独立用户管理页编码为 `users`，仅向具有 `AUTH_ACCOUNT_MANAGE` 的管理员（`ADMIN`）开放；总经理没有账号管理或客户授权管理权限。接口要求 Bearer 会话或允许的显式评审角色头，不使用匿名管理员兜底。管理员在同页直接维护账号、重置密码、分配内置角色、数据范围、授权客户及可操作工序；角色权限由 `PermissionGuard` 定义，不支持自定义 ACL。配置页仅保留登录会话、自助改密和存储管理。
+独立用户管理页编码为 `users`，仅向具有 `AUTH_ACCOUNT_MANAGE` 的管理员（`ADMIN`）开放；总经理没有账号管理或客户授权管理权限。`BUSINESS_MANAGER` 界面名称是「业务管理」，可分给多个账号，用于顶上收货、报工和质检，不含发货、财务入账和账号管理。接口要求 Bearer 会话或允许的显式评审角色头，不使用匿名管理员兜底。管理员在同页直接维护账号、重置密码、分配内置角色、数据范围、授权客户及可操作工序；角色权限由 `PermissionGuard` 定义，不支持自定义 ACL。配置页仅保留登录会话、自助改密和存储管理。
 
 创建/重置密码遵循密码策略；成功管理动作写认证审计，不再生成新的事后账号审批。未传 `preApprovalApplicationCode` 时直接保存，即使旧 `zhubao.auth.pre-approval.enforce-account-actions=true` 也不阻断；显式传入申请单号时保留兼容校验和申请消费。禁止删除当前登录账号，禁止停用、降权或删除最后一个启用管理员。
 
@@ -1820,7 +1820,7 @@ PWA 一期边界：
 
 | 规则 | 说明 |
 |---|---|
-| 最小长度 | 至少 12 位 |
+| 最小长度 | 至少 8 位 |
 | 字符类型 | 必须同时包含字母和数字 |
 | 空白字符 | 不允许首尾空白 |
 | 账号相同 | 密码不得与账号名相同，比较时忽略大小写和账号首尾空白 |
@@ -2210,7 +2210,7 @@ PWA 一期边界：
 | `POST /api/business/operations/mobile-intakes` | `ApiResponse<MobileIntakeResult>`。`requestId` 必填；动作为 `INTAKE_CREATE`，目标类型 `REQUEST`。同账号同请求同内容回放原母单；新 `requestId` 可在同运单下新建另一张母单。`sourceType` 为 `COURIER`、`CUSTOMER_DELIVERY` 或 `INTERNAL_OTHER`；运单与快递公司均可空。新版传稳定 `customerId`、`customerName` 快照及 `lines[]`（`materialCode`、`goodsName`、`quantity`、`quantityUnit`、`weight`）；母单总数量和重量须等于明细合计。当前母单汇总和后续工序使用单一数量单位，明细单位不一致时拒绝建单。每行入对应材质的 `RAW_WAITING` 台账，整单在同一工作单元提交。旧客户端未带 `requestId` 时明确拒绝并提示升级，防止超时重复入账。 |
 | `GET /api/business/operations/mobile-intakes?courierNo=...` | 返回全部可见母单的 `candidates[]`，含母单号、客户、收货时间、货品、要求和期限。兼容字段 `motherOrderCode` 仅在恰好一张候选时有值，多张时为空，调用方不得取第一张。 |
 | `GET /api/business/master-data/customers` | 返回当前账号可见的客户档案，使用稳定客户 ID；改名不回写历史单据快照。全部数据范围，以及未填写客户名单的部门、班组或本人范围，返回全部档案；授权客户范围只返回名单内档案。 |
-| `POST /api/business/master-data/customers` | `MASTER_DATA_MANAGE`（管理员、总经理、收货员、库管员、车间组长）创建或更新客户；名称归一化后不可重复。授权客户范围的账号新建客户后，该客户进入本人范围，便于当场建母单。 |
+| `POST /api/business/master-data/customers` | `MASTER_DATA_MANAGE`（管理员、总经理、业务管理、收货员、库管员、车间组长）创建或更新客户；名称归一化后不可重复。授权客户范围的账号新建客户后，该客户进入本人范围，便于当场建母单。 |
 | `customerScope`（登录账号／客户授权） | 新增授权在用户管理按客户档案选择稳定数字 ID。服务端在会话解析时将历史名称或客户编码唯一映射为 ID；客户改名保留旧名别称。无法确认唯一归属的历史值仍留在原授权记录供人工核对，但不授予新单据访问权。 |
 | `GET /api/business/master-data/materials` | 返回启用材质目录，支持前端搜索和多选。 |
 | `POST /api/business/master-data/materials` | 同上 `MASTER_DATA_MANAGE` 角色可新增或更新材质；编码稳定，名称去重。新建母单页可直接新增并选中。 |
@@ -2240,6 +2240,7 @@ PWA 一期边界：
 
 | 方法与完整路径 | 返回类型 |
 |---|---|
+| `GET /api/business/order-maintenance/mothers` | 未回收母单列表。可选 `from`、`to`（年-月-日，含当天，按建单日期，缺建单时间时用入库日）、`customer`、`operator`。按日期从新到旧，最多 200 张；响应含 `items`、`total`、`truncated` |
 | `GET /api/business/order-maintenance?code=` | 按母单号、子单号或打印任务编号返回相关单据，包括已在回收站的 |
 | `GET /api/business/order-maintenance/recycle-bin` | 回收站中的母单、子单和打印任务 |
 | `POST /api/business/order-maintenance/mother-orders/{code}` | 改正母单；已有库存流水编号时，客户、材质、货品、数量、重量只能经后续差额／冲正流程调整，当前接口仅允许说明、期限等非入账字段。原因必填 |
