@@ -4,6 +4,11 @@ import { bindEvidence, fetchHistoricalEvidencePage, fetchLinkedEvidencePage, upl
 import type { EvidenceLink, EvidencePage } from '../../services/evidenceApi';
 import { confirmInbound } from '../../services/businessOperationApi';
 import EvidenceCapture from './EvidenceCapture.vue';
+import { stampPhotoTimestamp } from './photoStamp';
+
+vi.mock('./photoStamp', () => ({
+  stampPhotoTimestamp: vi.fn(async (file: File) => file),
+}));
 
 vi.mock('../../services/evidenceApi', () => ({
   fetchHistoricalEvidencePage: vi.fn(),
@@ -54,6 +59,7 @@ async function pick(wrapper: ReturnType<typeof mount>, name: string, type: strin
   const input = wrapper.get('[aria-label="选择证据文件"]');
   Object.defineProperty(input.element, 'files', { configurable: true, value: [fileOf(name, type, size)] });
   await input.trigger('change');
+  await flushPromises();
 }
 
 describe('现场证据采集', () => {
@@ -63,6 +69,8 @@ describe('现场证据采集', () => {
     vi.mocked(uploadEvidenceFile).mockReset();
     vi.mocked(bindEvidence).mockReset();
     vi.mocked(confirmInbound).mockReset();
+    vi.mocked(stampPhotoTimestamp).mockReset();
+    vi.mocked(stampPhotoTimestamp).mockImplementation(async (file: File) => file);
     vi.mocked(fetchHistoricalEvidencePage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
     vi.mocked(fetchLinkedEvidencePage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
     vi.mocked(uploadEvidenceFile).mockResolvedValue({
@@ -211,7 +219,8 @@ describe('现场证据采集', () => {
     });
     await flushPromises();
     expect(wrapper.text()).toContain('历史单据证据');
-    expect(wrapper.text()).toContain('30 秒');
+    expect(wrapper.text()).toContain('拆包照片');
+    expect(wrapper.text()).not.toContain('筛选证据');
     expect(wrapper.text()).not.toContain('工序');
 
     await pick(wrapper, 'note.jpg', 'text/plain');
@@ -307,8 +316,8 @@ describe('现场证据采集', () => {
 
   it('按整单、关联状态和附件条件筛选并仅查询所选列表', async () => {
     const wrapper = mount(EvidenceCapture, {
-      props: { targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK',
-        operationType: 'inbound_confirm', operationCode: 'OP-1' },
+      props: { targetType: 'WORK_ORDER', targetCode: 'ZD-1', stage: 'PRODUCTION', scene: 'PROCESS',
+        operationType: 'process_station_report', operationCode: 'OP-1' },
     });
     await flushPromises();
     vi.mocked(fetchLinkedEvidencePage).mockClear();
@@ -323,10 +332,35 @@ describe('现场证据采集', () => {
     await flushPromises();
 
     expect(fetchLinkedEvidencePage).toHaveBeenCalledWith(expect.objectContaining({
-      targetCode: 'MD-1', stage: '', operationType: '', operationCode: '',
+      targetCode: 'ZD-1', stage: '', operationType: '', operationCode: '',
       uploadedFrom: '2026-10-01', mediaCategory: 'image', ownerKeyword: '何琴',
     }));
     expect(fetchHistoricalEvidencePage).not.toHaveBeenCalled();
+  });
+
+  it('拆包照片不筛选，上传文件是印过时间的照片', async () => {
+    const stamped = new File([new Uint8Array([7])], '拆包.jpg', { type: 'image/jpeg' });
+    vi.mocked(stampPhotoTimestamp).mockResolvedValueOnce(stamped);
+    const wrapper = mount(EvidenceCapture, {
+      props: {
+        targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK',
+        operationType: 'inbound_confirm', operationCode: 'STK-1',
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find('[aria-label="证据范围"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('拆包照片');
+    expect(wrapper.text()).not.toContain('筛选证据');
+    expect(fetchLinkedEvidencePage).toHaveBeenCalledWith(expect.objectContaining({
+      targetCode: 'MD-1', stage: 'INTAKE', operationType: '', operationCode: '',
+    }));
+
+    await pick(wrapper, '现场.png', 'image/png');
+    expect(wrapper.text()).toContain('拆包.jpg');
+    await wrapper.get('li button').trigger('click');
+    await flushPromises();
+    expect(stampPhotoTimestamp).toHaveBeenCalled();
+    expect(uploadEvidenceFile).toHaveBeenCalledWith(expect.objectContaining({ file: stamped, scene: 'UNPACK' }));
   });
 
   it('同一文件可以再次选择，预览地址会在卸载时释放', async () => {

@@ -11,6 +11,7 @@ import {
   type EvidenceLink,
 } from '../../services/evidenceApi';
 import EvidencePreviewLink from './EvidencePreviewLink.vue';
+import { stampPhotoTimestamp } from './photoStamp';
 
 const props = withDefaults(defineProps<{
   targetType: string;
@@ -141,8 +142,30 @@ function remember(file: File) {
 function onPicked(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (file) remember(file);
   input.value = '';
+  if (!file) return;
+  const problem = problemOf(file);
+  if (problem) {
+    formMessage.value = problem;
+    return;
+  }
+  if (props.scene === 'UNPACK' && file.type.toLowerCase().startsWith('image/')) {
+    void acceptStampedPhoto(file);
+    return;
+  }
+  remember(file);
+}
+
+async function acceptStampedPhoto(file: File) {
+  const stamped = await stampPhotoTimestamp(file);
+  if (stamped !== file) {
+    const problem = problemOf(stamped);
+    if (problem) {
+      formMessage.value = problem;
+      return;
+    }
+  }
+  remember(stamped);
 }
 
 function cancelSelection() {
@@ -233,7 +256,22 @@ async function submit(item: DraftFile) {
   }
 }
 
+const plainUnpack = () => props.scene === 'UNPACK';
+
 function boardQuery(): EvidencePageQuery {
+  if (plainUnpack()) {
+    return {
+      targetType: props.targetType,
+      targetCode: props.targetCode.trim(),
+      stage: props.stage,
+      operationType: '',
+      operationCode: '',
+      uploadedFrom: '',
+      uploadedTo: '',
+      mediaCategory: '',
+      ownerKeyword: '',
+    };
+  }
   return {
     targetType: props.targetType,
     targetCode: props.targetCode.trim(),
@@ -387,11 +425,12 @@ onBeforeUnmount(() => {
   <section class="evidence-capture">
     <div class="section-heading">
       <div>
-        <h3>现场证据</h3>
-        <p>扫码成功不等于已经留证。拍照、录视频或选文件后需要上传并关联。</p>
+        <h3>{{ plainUnpack() ? '拆包照片' : '现场证据' }}</h3>
+        <p v-if="plainUnpack()">拍下或选好后上传。照片会印上当时的时间，点开即可查看。</p>
+        <p v-else>扫码成功不等于已经留证。拍照、录视频或选文件后需要上传并关联。</p>
       </div>
     </div>
-    <p class="evidence-hint">视频请尽量控制在 30 秒内。系统只检查文件大小，不检查时长。</p>
+    <p v-if="!plainUnpack()" class="evidence-hint">视频请尽量控制在 30 秒内。系统只检查文件大小，不检查时长。</p>
     <div class="button-row">
       <button class="secondary-button" type="button" aria-label="拍照留证" @click="openCamera">拍照留证</button>
       <button class="secondary-button" type="button" aria-label="录视频留证" @click="openVideo">录视频留证</button>
@@ -446,7 +485,7 @@ onBeforeUnmount(() => {
         </button>
       </li>
     </ul>
-    <div class="evidence-filters">
+    <div v-if="!plainUnpack()" class="evidence-filters">
       <label class="field"><span>证据范围</span>
         <select v-model="searchScope" aria-label="证据范围">
           <option value="operation">当前操作</option>
@@ -472,11 +511,11 @@ onBeforeUnmount(() => {
       <button class="secondary-button" type="button" @click="loadBoard">筛选证据</button>
     </div>
     <p v-if="boardError" class="operation-feedback danger">{{ boardError }}</p>
-    <ul v-if="activeState !== 'unlinked' && board.links.length" class="evidence-file-list">
+    <ul v-if="activeState !== 'unlinked' && board.links.length" class="evidence-file-list" :class="{ 'evidence-photo-board': plainUnpack() }">
       <li v-for="link in board.links" :key="linkKey(link)">
         <strong>{{ link.fileName || link.attachmentCode }}</strong>
-        <span>{{ link.sceneLabel }} / 已关联</span>
-        <small>{{ link.operationType }} {{ link.operationCode }}</small>
+        <span v-if="!plainUnpack()">{{ link.sceneLabel }} / 已关联</span>
+        <small v-if="!plainUnpack()">{{ link.operationType }} {{ link.operationCode }}</small>
         <EvidencePreviewLink v-if="link.previewUrl" :attachment-code="link.attachmentCode" :media-type-hint="link.mediaType" />
         <span v-else-if="link.status === '已下线'">已下线，不能预览</span>
       </li>
@@ -505,4 +544,5 @@ onBeforeUnmount(() => {
 .evidence-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .6rem; align-items: end; margin: 1rem 0; }
 .evidence-filters .field { min-width: 0; }
 .evidence-filters input, .evidence-filters select { width: 100%; }
+.evidence-photo-board { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }
 </style>

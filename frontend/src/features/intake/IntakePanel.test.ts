@@ -41,6 +41,7 @@ async function pickEvidence(wrapper: ReturnType<typeof mount>, name: string, typ
   const input = wrapper.get('[aria-label="选择证据文件"]');
   Object.defineProperty(input.element, 'files', { configurable: true, value: [fileOf(name, type)] });
   await input.trigger('change');
+  await flushPromises();
 }
 
 function mountPanel(field = false) {
@@ -53,6 +54,14 @@ function mountPanel(field = false) {
   });
 }
 
+async function chooseFilterOption(wrapper: ReturnType<typeof mount>, label: string, text?: string) {
+  await wrapper.get(`[aria-label="${label}"]`).trigger('focus');
+  const options = wrapper.get(`[aria-label="${label}选项"]`).findAll('[role="option"]');
+  const option = text ? options.find((item) => item.text().includes(text)) : options[0];
+  expect(option, `${label} ${text ?? ''}`).toBeTruthy();
+  await option!.trigger('click');
+}
+
 async function fillNewWaybill(wrapper: ReturnType<typeof mountPanel>) {
   vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
     objectType: 'EXPRESS_NO',
@@ -63,8 +72,8 @@ async function fillNewWaybill(wrapper: ReturnType<typeof mountPanel>) {
   await wrapper.get('[aria-label="快递单号"]').setValue('SF1048329001');
   await wrapper.get('[aria-label="识别单号"]').trigger('click');
   await flushPromises();
-  await wrapper.get('[aria-label="客户"]').setValue('1001');
-  await wrapper.get('[aria-label="材质"]').setValue('AU9999');
+  await chooseFilterOption(wrapper, '客户', '恒信珠宝');
+  await chooseFilterOption(wrapper, '材质', '足金');
   await wrapper.get('[aria-label="加工要求"]').setValue('抛光');
   await wrapper.get('[aria-label="完成期限"]').setValue('2026-10-20');
   await wrapper.get('[aria-label="货品名称"]').setValue('戒托');
@@ -147,6 +156,7 @@ describe('收货面板', () => {
     const second = vi.mocked(submitMobileIntake).mock.calls[1][0].requestId;
     expect(first).toMatch(/^intake-/);
     expect(second).toBe(first);
+    expect(vi.mocked(submitMobileIntake).mock.calls[0][0].expressCompany).toBe('');
 
     await wrapper.get('[aria-label="数量"]').setValue('2');
     await create()!.trigger('click');
@@ -240,7 +250,7 @@ describe('收货面板', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('登录已过期。已填内容还在');
-    expect((wrapper.get('[aria-label="客户"]').element as HTMLSelectElement).value).toBe('1001');
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toContain('恒信珠宝');
     expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('抛光');
     expect((wrapper.get('[aria-label="完成期限"]').element as HTMLInputElement).value).toBe('2026-10-20');
 
@@ -249,7 +259,7 @@ describe('收货面板', () => {
     const first = vi.mocked(submitMobileIntake).mock.calls[0][0].requestId;
     const second = vi.mocked(submitMobileIntake).mock.calls[1][0].requestId;
     expect(second).toBe(first);
-    expect((wrapper.get('[aria-label="客户"]').element as HTMLSelectElement).value).toBe('1001');
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toContain('恒信珠宝');
   });
 
   it('手机收货区分草稿和已保存，并留下标签入口', async () => {
@@ -340,18 +350,18 @@ describe('收货面板', () => {
     await wrapper.findAll('button').find((button) => button.text() === '新增客户档案')!.trigger('click');
     expect(wrapper.text()).toContain('请填写要新增的客户名称');
 
-    await wrapper.get('[aria-label="搜索客户"]').setValue('翠玉坊');
+    await wrapper.get('[aria-label="客户"]').setValue('翠玉坊');
     await wrapper.findAll('button').find((button) => button.text() === '新增客户档案')!.trigger('click');
     await flushPromises();
     expect(saveCustomer).toHaveBeenCalledWith(expect.objectContaining({ name: '翠玉坊', customerId: 0 }));
-    expect((wrapper.get('[aria-label="客户"]').element as HTMLSelectElement).value).toBe('2088');
+    expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toContain('翠玉坊');
     expect(wrapper.text()).toContain('已新增客户档案「翠玉坊」');
 
-    await wrapper.get('[aria-label="搜索材质"]').setValue('翡翠');
+    await wrapper.get('[aria-label="材质"]').setValue('翡翠');
     await wrapper.findAll('button').find((button) => button.text() === '新增材质')!.trigger('click');
     await flushPromises();
     expect(saveMaterial).toHaveBeenCalledWith(expect.objectContaining({ name: '翡翠' }));
-    expect((wrapper.get('[aria-label="材质"]').element as HTMLSelectElement).value).toBe('MAT-JADE');
+    expect((wrapper.get('[aria-label="材质"]').element as HTMLInputElement).value).toContain('翡翠');
     wrapper.unmount();
   });
 
@@ -390,6 +400,49 @@ describe('收货面板', () => {
     allowed.unmount();
   });
 
+  it('客户和材质在同一个框里按关键字筛选', async () => {
+    vi.mocked(fetchCustomers).mockResolvedValue([
+      { customerId: 1001, customerCode: 'C-1001', name: '恒信珠宝', aliases: '恒信', contact: '', phone: '', remark: '', enabled: true },
+      { customerId: 1002, customerCode: 'C-1002', name: '翠玉坊', aliases: '', contact: '', phone: '', remark: '', enabled: true },
+    ]);
+    vi.mocked(fetchMaterials).mockResolvedValue([
+      { materialCode: 'AU9999', name: '足金', aliases: '黄金', remark: '', enabled: true },
+      { materialCode: 'PT950', name: '铂金', aliases: '', remark: '', enabled: true },
+    ]);
+    const wrapper = mountPanel();
+    await flushPromises();
+    await wrapper.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
+    expect(wrapper.find('[aria-label="搜索客户"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="搜索材质"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="快递公司"]').exists()).toBe(false);
+
+    const customer = wrapper.get('[aria-label="客户"]');
+    await customer.trigger('focus');
+    expect(wrapper.get('[aria-label="客户选项"]').text()).toContain('恒信珠宝');
+    expect(wrapper.get('[aria-label="客户选项"]').text()).toContain('翠玉坊');
+    await customer.setValue('翠玉');
+    expect(wrapper.get('[aria-label="客户选项"]').text()).toContain('翠玉坊');
+    expect(wrapper.get('[aria-label="客户选项"]').text()).not.toContain('恒信珠宝');
+    await wrapper.get('[aria-label="客户选项"]').get('[role="option"]').trigger('click');
+    expect((customer.element as HTMLInputElement).value).toContain('翠玉坊');
+
+    const material = wrapper.get('[aria-label="材质"]');
+    await material.trigger('focus');
+    await material.setValue('黄金');
+    expect(wrapper.get('[aria-label="材质选项"]').text()).toContain('足金');
+    expect(wrapper.get('[aria-label="材质选项"]').text()).not.toContain('铂金');
+    await wrapper.get('[aria-label="材质选项"]').get('[role="option"]').trigger('click');
+    expect((material.element as HTMLInputElement).value).toContain('AU9999');
+
+    await wrapper.findAll('button').find((button) => button.text() === '增加材质明细')!.trigger('click');
+    const line = wrapper.get('[aria-label="明细2材质"]');
+    await line.trigger('focus');
+    await line.setValue('铂');
+    expect(wrapper.get('[aria-label="明细2材质选项"]').text()).toContain('铂金');
+    expect(wrapper.get('[aria-label="明细2材质选项"]').text()).not.toContain('足金');
+    wrapper.unmount();
+  });
+
   it('加工要求可以点选并维护快捷词', async () => {
     vi.mocked(fetchShortcuts).mockResolvedValue([{ shortcutId: 3, phrase: '镜面抛光', sortOrder: 1 }]);
     vi.mocked(saveShortcut).mockResolvedValue({ shortcutId: 4, phrase: '改圈', sortOrder: 2 });
@@ -414,6 +467,8 @@ describe('收货面板', () => {
     expect(saveShortcut).toHaveBeenCalledWith('改圈');
     expect(wrapper.text()).toContain('已添加快捷词「改圈」');
 
+    expect(wrapper.get('[aria-label="删除快捷词 镜面抛光"]').text()).toBe('×');
+    expect(wrapper.text()).not.toContain('移除');
     await wrapper.get('[aria-label="删除快捷词 镜面抛光"]').trigger('click');
     await flushPromises();
     expect(removeShortcut).toHaveBeenCalledWith(3);

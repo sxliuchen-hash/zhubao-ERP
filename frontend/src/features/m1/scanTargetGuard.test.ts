@@ -213,8 +213,10 @@ describe('现场入口防串单', () => {
     await flushPromises();
     expect(queryScanContext).toHaveBeenLastCalledWith({ content: 'sf 1048329001', intent: 'INTAKE' });
     expect(wrapper.text()).toContain('运单号 SF1048329001');
-    await wrapper.get('[aria-label="客户"]').setValue('1001');
-    await wrapper.get('[aria-label="材质"]').setValue('AU9999');
+    await wrapper.get('[aria-label="客户"]').trigger('focus');
+    await wrapper.get('[aria-label="客户选项"]').findAll('[role="option"]')[0].trigger('click');
+    await wrapper.get('[aria-label="材质"]').trigger('focus');
+    await wrapper.get('[aria-label="材质选项"]').findAll('[role="option"]')[0].trigger('click');
     await wrapper.get('[aria-label="加工要求"]').setValue('抛光');
     await wrapper.get('[aria-label="完成期限"]').setValue('2026-10-20');
     await wrapper.get('[aria-label="货品名称"]').setValue('戒托');

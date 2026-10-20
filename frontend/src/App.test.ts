@@ -65,7 +65,7 @@ describe('App', () => {
     expect(wrapper.find('.ops-nav').text()).toContain('生产');
     expect(wrapper.find('.ops-nav').text()).toContain('质检');
     expect(wrapper.find('.ops-nav').text()).toContain('库存');
-    expect(wrapper.find('.ops-nav').text()).toContain('审批');
+    expect(wrapper.find('.ops-nav').text()).not.toContain('审批');
     expect(wrapper.find('.ops-nav').text()).toContain('标签');
     expect(wrapper.find('.ops-nav').text()).toContain('登记导入');
     expect(wrapper.find('.ops-nav').text()).toContain('附件');
@@ -76,7 +76,7 @@ describe('App', () => {
     expect(wrapper.get('.page-location').text()).toBe('工作台');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('工作台');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('现场作业');
-    expect(wrapper.get('.mobile-tabbar').text()).toContain('审批');
+    expect(wrapper.get('.mobile-tabbar').text()).not.toContain('审批');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('全部功能');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('消息');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('扫码');
@@ -140,8 +140,9 @@ describe('App', () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
     const wrapper = mount(App);
     await flushPromises();
+    const operatorMenus = allMenuCodes.filter((code) => code !== 'approvals');
 
-    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(allMenuCodes.length);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(operatorMenus.length);
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('true');
     expect(wrapper.get('.app-shell').classes()).not.toContain('is-collapsed');
 
@@ -151,7 +152,7 @@ describe('App', () => {
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('false');
     expect(wrapper.get('.sidebar-toggle').attributes('aria-label')).toBe('展开侧边栏');
     expect(localStorage.getItem('zhubao-sidebar-collapsed')).toBe('1');
-    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(allMenuCodes.length);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(operatorMenus.length);
 
     await wrapper.get('.sidebar-toggle').trigger('click');
 
@@ -244,6 +245,25 @@ describe('App', () => {
 
     expect(wrapper.find('.login-card').exists()).toBe(true);
     expect(wrapper.find('.ops-nav').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('审批栏目只向管理员开放', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce({ ...sessionWithMenus(['dashboard', 'approvals', 'mobile', 'label']), role: 'ADMIN' });
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.find('[data-tab="approvals"]').exists()).toBe(true);
+    expect(wrapper.find('[data-mobile-tab="approvals"]').exists()).toBe(true);
+
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, {
+      detail: { session: { ...sessionWithMenus(['dashboard', 'approvals', 'mobile', 'label']), role: 'WORKSHOP_LEADER' } },
+    }));
+    await flushPromises();
+    expect(wrapper.find('[data-tab="approvals"]').exists()).toBe(false);
+    expect(wrapper.find('[data-mobile-tab="approvals"]').exists()).toBe(false);
+    await wrapper.get('[aria-haspopup="dialog"]').trigger('click');
+    expect(wrapper.get('.mobile-more-sheet').text()).toContain('标签');
+    expect(wrapper.get('.mobile-more-sheet').text()).not.toContain('审批');
     wrapper.unmount();
   });
 

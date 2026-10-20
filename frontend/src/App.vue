@@ -136,7 +136,11 @@ const authorizedMenuCodes = computed(() => {
   ].filter(isTabKey));
 });
 const visibleTabs = computed(() => {
-  const permittedTabs = tabs.filter(tab => tab.key !== 'users' || authSession.value?.role === 'ADMIN');
+  // 用户管理和审批暂时只给管理员。当前没有需要其他岗位处理的审批。
+  const permittedTabs = tabs.filter((tab) => {
+    if (tab.key === 'users' || tab.key === 'approvals') return authSession.value?.role === 'ADMIN';
+    return true;
+  });
   if (!authorizedMenuCodes.value || authorizedMenuCodes.value.size === 0) {
     return permittedTabs;
   }

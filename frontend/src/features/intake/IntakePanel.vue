@@ -4,6 +4,7 @@ import type { AuthSession } from '../../services/authApi';
 import { canManageMasterData } from '../../services/masterDataAccess';
 import { fetchCustomers, fetchMaterials, fetchShortcuts, removeShortcut, saveCustomer, saveMaterial, saveShortcut,
   type CustomerProfile, type MaterialProfile, type RequirementShortcut } from '../../services/masterDataApi';
+import FilterSelect from '../../components/FilterSelect.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
@@ -64,18 +65,23 @@ const quantity = ref('1');
 const quantityUnit = ref('件');
 const weight = ref('');
 const extraLines = ref<Array<{ materialCode: string; goodsName: string; quantity: string; quantityUnit: string; weight: string }>>([]);
-const visibleCustomers = computed(() => {
-  const keyword = customerSearch.value.trim().toLowerCase();
-  return customers.value.filter((item) => item.enabled && (item.customerId === customerId.value
-    || `${item.customerCode} ${item.name} ${item.aliases}`.toLowerCase().includes(keyword)));
-});
-const visibleMaterials = computed(() => {
-  const keyword = materialSearch.value.trim().toLowerCase();
+const customerOptions = computed(() => customers.value
+  .filter((item) => item.enabled || item.customerId === customerId.value)
+  .map((item) => ({
+    value: String(item.customerId),
+    label: `${item.customerCode} · ${item.name}`,
+    searchText: `${item.customerCode} ${item.name} ${item.aliases}`,
+  })));
+const materialOptions = computed(() => {
   const selected = new Set([materialCode.value, ...extraLines.value.map((line) => line.materialCode)].filter(Boolean));
-  return materials.value.filter((item) => item.enabled && (selected.has(item.materialCode)
-    || `${item.materialCode} ${item.name} ${item.aliases}`.toLowerCase().includes(keyword)));
+  return materials.value
+    .filter((item) => item.enabled || selected.has(item.materialCode))
+    .map((item) => ({
+      value: item.materialCode,
+      label: `${item.name} · ${item.materialCode}`,
+      searchText: `${item.materialCode} ${item.name} ${item.aliases}`,
+    }));
 });
-const expressCompany = ref('');
 const sourceType = ref<'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER'>('COURIER');
 const manualDraft = ref(false);
 const manualCourier = ref('');
@@ -159,7 +165,8 @@ function startNextIntake() {
   quantityUnit.value = '件';
   weight.value = '';
   extraLines.value = [];
-  expressCompany.value = '';
+  customerSearch.value = '';
+  materialSearch.value = '';
   sourceType.value = 'COURIER';
   manualDraft.value = false;
   manualCourier.value = '';
@@ -297,7 +304,6 @@ function confirmationFingerprint() {
     quantityUnit.value,
     weight.value,
     JSON.stringify(extraLines.value),
-    expressCompany.value.trim(),
   ].join('|');
 }
 
@@ -357,7 +363,7 @@ async function createMotherOrder() {
       goodsName: goodsName.value.trim(),
       quantity: totalQuantity,
       weight: String(totalWeight),
-      expressCompany: expressCompany.value.trim(),
+      expressCompany: '',
       lines,
       requestId: currentRequestId,
     });
@@ -438,8 +444,10 @@ async function deleteShortcut(item: RequirementShortcut) {
   }
 }
 
-function chooseCustomer() {
-  customerName.value = customers.value.find((item) => item.customerId === Number(customerId.value))?.name ?? '';
+function selectCustomer(value: string) {
+  const id = Number(value);
+  customerId.value = value && Number.isInteger(id) ? id : null;
+  customerName.value = customers.value.find((item) => item.customerId === customerId.value)?.name ?? '';
 }
 
 function pendingCatalogName(dedicated: string, search: string) {
@@ -510,7 +518,7 @@ onMounted(loadCatalog);
 </script>
 
 <template>
-  <section ref="entryPanel" class="section-block">
+  <section ref="entryPanel" class="section-block intake-create">
     <div class="section-heading">
       <div>
         <h2>{{ title }}</h2>
@@ -567,7 +575,7 @@ onMounted(loadCatalog);
     </section>
   </section>
 
-  <section v-if="draftAvailable && !created" ref="draftPanel" class="section-block intake-draft" aria-label="收货草稿">
+  <section v-if="draftAvailable && !created" ref="draftPanel" class="section-block intake-draft intake-create" aria-label="收货草稿">
     <div class="field-card-head">
       <h2>新建母单</h2>
       <StatusBadge v-if="field" label="草稿" tone="gray" />
@@ -583,19 +591,20 @@ onMounted(loadCatalog);
         <input v-model="manualCourier" type="text" aria-label="运单号（可不填）" />
       </label>
       <label class="field">
-        <span>搜索客户</span>
-        <input v-model="customerSearch" type="search" aria-label="搜索客户" />
-      </label>
-      <label class="field">
         <span>客户</span>
-        <select v-model.number="customerId" aria-label="客户" @change="chooseCustomer">
-          <option :value="null">请选择客户</option>
-          <option v-for="item in visibleCustomers" :key="item.customerId" :value="item.customerId">{{ item.customerCode }} · {{ item.name }}</option>
-        </select>
+        <FilterSelect
+          :model-value="customerId == null ? '' : String(customerId)"
+          :options="customerOptions"
+          aria-label="客户"
+          placeholder="输入名称、编号或别称筛选"
+          empty-text="没有匹配的客户"
+          @update:model-value="selectCustomer"
+          @update:query="customerSearch = $event"
+        />
       </label>
       <div v-if="canManageData" class="catalog-create">
         <span>新增客户档案</span>
-        <input v-model="newCustomerName" aria-label="新增客户名称" placeholder="没有这家客户时填写名称，或直接用上方搜索词" />
+        <input v-model="newCustomerName" aria-label="新增客户名称" placeholder="没有这家客户时填写名称，或直接用上方已输入的筛选词" />
         <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addCustomer">新增客户档案</button>
       </div>
       <label class="field">
@@ -605,8 +614,8 @@ onMounted(loadCatalog);
       <div class="requirement-shortcuts" aria-label="加工要求快捷词">
         <div class="shortcut-list">
           <span v-for="item in shortcuts" :key="item.shortcutId" class="shortcut-chip">
-            <button type="button" :aria-label="`填入快捷词 ${item.phrase}`" @click="applyShortcut(item.phrase)">{{ item.phrase }}</button>
-            <button v-if="canManageData" type="button" :aria-label="`删除快捷词 ${item.phrase}`" @click="deleteShortcut(item)">移除</button>
+            <button type="button" class="shortcut-phrase" :aria-label="`填入快捷词 ${item.phrase}`" @click="applyShortcut(item.phrase)">{{ item.phrase }}</button>
+            <button v-if="canManageData" type="button" class="shortcut-remove" :aria-label="`删除快捷词 ${item.phrase}`" @click="deleteShortcut(item)">×</button>
           </span>
           <p v-if="!shortcuts.length" class="empty-hint">还没有快捷词。有档案维护权限时可以添加常用加工要求。</p>
         </div>
@@ -620,24 +629,20 @@ onMounted(loadCatalog);
         <span>完成期限</span>
         <input v-model="dueDate" type="date" aria-label="完成期限" />
       </label>
-      <label v-if="sourceType === 'COURIER'" class="field">
-        <span>快递公司</span>
-        <input v-model="expressCompany" type="text" aria-label="快递公司" />
-      </label>
-      <label class="field">
-        <span>搜索材质</span>
-        <input v-model="materialSearch" type="search" aria-label="搜索材质" />
-      </label>
       <label class="field">
         <span>材质</span>
-        <select v-model="materialCode" aria-label="材质">
-          <option value="">请选择材质</option>
-          <option v-for="item in visibleMaterials" :key="item.materialCode" :value="item.materialCode">{{ item.name }} · {{ item.materialCode }}</option>
-        </select>
+        <FilterSelect
+          v-model="materialCode"
+          :options="materialOptions"
+          aria-label="材质"
+          placeholder="输入名称、编码或别称筛选"
+          empty-text="没有匹配的材质"
+          @update:query="materialSearch = $event"
+        />
       </label>
       <div v-if="canManageData" class="catalog-create">
         <span>新增材质</span>
-        <input v-model="newMaterialName" aria-label="新增材质名称" placeholder="没有这种材质时填写名称，或直接用上方搜索词" />
+        <input v-model="newMaterialName" aria-label="新增材质名称" placeholder="没有这种材质时填写名称，或直接用上方已输入的筛选词" />
         <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addMaterial">新增材质</button>
       </div>
       <label class="field">
@@ -655,10 +660,16 @@ onMounted(loadCatalog);
       </label>
       <div v-for="(line, index) in extraLines" :key="index" class="intake-line">
         <strong>明细 {{ index + 2 }}</strong>
-        <label class="field"><span>材质</span><select v-model="line.materialCode" :aria-label="`明细${index + 2}材质`">
-          <option value="">请选择材质</option>
-          <option v-for="item in visibleMaterials" :key="item.materialCode" :value="item.materialCode">{{ item.name }} · {{ item.materialCode }}</option>
-        </select></label>
+        <label class="field">
+          <span>材质</span>
+          <FilterSelect
+            v-model="line.materialCode"
+            :options="materialOptions"
+            :aria-label="`明细${index + 2}材质`"
+            placeholder="输入名称、编码或别称筛选"
+            empty-text="没有匹配的材质"
+          />
+        </label>
         <label class="field"><span>货品名称</span><input v-model="line.goodsName" :aria-label="`明细${index + 2}货品名称`" /></label>
         <label class="field"><span>数量</span><input v-model="line.quantity" type="number" min="0" step="0.001" :aria-label="`明细${index + 2}数量`" /></label>
         <label class="field"><span>单位</span><input v-model="line.quantityUnit" :aria-label="`明细${index + 2}单位`" /></label>
@@ -666,13 +677,13 @@ onMounted(loadCatalog);
         <button type="button" class="secondary-button" @click="extraLines.splice(index, 1)">移除明细</button>
       </div>
       <button type="button" class="secondary-button" @click="extraLines.push({ materialCode: '', goodsName: '', quantity: '1', quantityUnit: '件', weight: '' })">增加材质明细</button>
-      <button v-if="!field" class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
+      <button v-if="!field" class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
         {{ submitting ? '正在生成' : '生成母单' }}
       </button>
     </div>
   </section>
 
-  <article v-if="savedMother" ref="savedPanel" class="field-card intake-saved" aria-label="已保存母单">
+  <article v-if="savedMother" ref="savedPanel" class="field-card intake-saved intake-create" aria-label="已保存母单">
     <div class="field-card-head">
       <span>收货已保存，下一步打印标签</span>
       <StatusBadge label="已保存" tone="green" />
@@ -702,7 +713,7 @@ onMounted(loadCatalog);
     </details>
   </article>
 
-  <section v-if="draftAvailable || intakeMotherCode" class="section-block">
+  <section v-if="draftAvailable || intakeMotherCode" class="section-block intake-create">
     <h2 v-if="field && !savedMother">草稿文件</h2>
     <h2 v-else-if="field && savedMother">已保存后的拆包证据</h2>
     <h2 v-else>拆包证据</h2>
@@ -723,8 +734,8 @@ onMounted(loadCatalog);
     />
   </section>
 
-  <div v-if="field && draftAvailable && !created" class="field-dock">
-    <button class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
+  <div v-if="field && draftAvailable && !created" class="field-dock intake-create">
+    <button class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
       {{ submitting ? '正在生成' : '生成母单' }}
     </button>
   </div>
@@ -736,8 +747,75 @@ onMounted(loadCatalog);
 .catalog-create span { color: var(--muted); font-size: 12px; }
 .requirement-shortcuts { display: grid; gap: 8px; }
 .shortcut-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.shortcut-chip { display: inline-flex; gap: 4px; align-items: center; }
+.shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--content);
+}
+.shortcut-phrase,
+.shortcut-remove {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.shortcut-phrase { padding: 2px 8px 2px 12px; }
+.shortcut-remove {
+  width: 28px;
+  padding: 0 8px 0 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
 .shortcut-list .empty-hint { flex: 1 1 100%; margin: 0; }
 .intake-next-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .intake-next-actions button { min-height: 44px; }
+
+@media (max-width: 900px) {
+  .intake-create button.secondary-button,
+  .intake-create button.primary-button,
+  .intake-create :deep(button.secondary-button),
+  .intake-create :deep(button.primary-button),
+  .intake-create :deep(button.table-action),
+  .intake-create :deep(.scan-fallback-actions button),
+  .intake-create :deep(.scan-guide-switch button),
+  .intake-create .intake-next-actions button {
+    width: auto;
+    max-width: 100%;
+    justify-self: start;
+    min-height: 36px;
+    padding: 4px 12px;
+    font-size: 14px;
+  }
+
+  .intake-create :deep(.scan-entry .scan-fallback-actions),
+  .intake-create :deep(.scan-entry .scan-guide-switch),
+  .intake-create :deep(.evidence-capture .button-row) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .intake-create :deep(button.scan-camera-button) {
+    width: 100%;
+    justify-self: stretch;
+    min-height: 56px;
+    padding: 12px 16px;
+    font-size: 18px;
+  }
+
+  .intake-create button.intake-submit {
+    min-height: 40px;
+    padding: 6px 16px;
+    font-size: 15px;
+  }
+
+  .intake-create.field-dock button.intake-submit {
+    width: 100%;
+    justify-self: stretch;
+  }
+}
 </style>
