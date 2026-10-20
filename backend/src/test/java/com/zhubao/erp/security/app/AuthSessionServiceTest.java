@@ -466,7 +466,7 @@ class AuthSessionServiceTest {
                 new ChangeOwnPasswordCommand("leader123", "short1")
         ))
                 .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class)
-                .hasMessageContaining("密码长度至少 12 位");
+                .hasMessageContaining("密码长度至少 8 位");
     }
 
     @Test

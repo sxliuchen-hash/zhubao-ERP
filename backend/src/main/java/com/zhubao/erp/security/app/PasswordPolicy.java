@@ -9,7 +9,7 @@ import java.util.Set;
 @Component
 public class PasswordPolicy {
 
-    private static final int MIN_LENGTH = 12;
+    private static final int MIN_LENGTH = 8;
     private static final Set<String> COMMON_WEAK_PASSWORDS = Set.of(
             "123456",
             "12345678",
@@ -33,7 +33,7 @@ public class PasswordPolicy {
             throw new BusinessException("密码属于常见弱口令");
         }
         if (rawPassword.length() < MIN_LENGTH) {
-            throw new BusinessException("密码长度至少 12 位");
+            throw new BusinessException("密码长度至少 8 位");
         }
         if (!normalizedUsername.isBlank() && normalizedPassword.equals(normalizedUsername)) {
             throw new BusinessException("密码不能与账号名相同");

@@ -21,9 +21,11 @@ class PasswordPolicyTest {
         assertThatThrownBy(() -> passwordPolicy.assertAcceptable("", "planner"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("密码不能为空");
-        assertThatThrownBy(() -> passwordPolicy.assertAcceptable("short7", "planner"))
+        assertThatCode(() -> passwordPolicy.assertAcceptable("plan2026", "planner"))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> passwordPolicy.assertAcceptable("short7a", "planner"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("至少 12 位");
+                .hasMessageContaining("至少 8 位");
         assertThatThrownBy(() -> passwordPolicy.assertAcceptable("admin123", "admin"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("常见弱口令");

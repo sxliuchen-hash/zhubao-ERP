@@ -19,6 +19,19 @@ const options = ref<AuthAccountOptions>({ roles: [] });
 const customers = ref<CustomerProfile[]>([]);
 const keyword = ref('');
 const status = ref('all');
+const coverDutyOptions = [
+  { code: 'INTAKE', label: '收货', packaged: true },
+  { code: 'REPORT', label: '报工', packaged: true },
+  { code: 'QUALITY', label: '质检', packaged: true },
+  { code: 'SPLIT', label: '拆单', packaged: true },
+  { code: 'LABEL', label: '标签打印', packaged: true },
+  { code: 'MASTER', label: '客户与材质档案', packaged: true },
+  { code: 'SHIP', label: '发货', packaged: false },
+  { code: 'RETURN', label: '退货', packaged: false },
+  { code: 'REGISTER', label: '登记导入', packaged: false },
+  { code: 'LOSS', label: '损耗审批', packaged: false },
+];
+const defaultCoverDuties = coverDutyOptions.filter((item) => item.packaged).map((item) => item.code);
 const editorMode = ref<'create' | 'edit' | 'password' | null>(null);
 const editor = ref(emptyEditor());
 const editorSection = ref<HTMLElement | null>(null);
@@ -47,7 +60,7 @@ function toggleCustomerCode(id: number, checked: boolean) {
 
 function emptyEditor() {
   return { username: '', operator: '', password: '', confirmPassword: '', role: 'OPERATOR', dataScope: 'SELF',
-    customerCodes: '', allowedProcesses: [] as string[], enabled: true, demoAccount: false };
+    customerCodes: '', allowedProcesses: [] as string[], coverDuties: [...defaultCoverDuties], enabled: true, demoAccount: false };
 }
 
 onMounted(async () => {
@@ -87,7 +100,9 @@ function openEditor(account?: AuthUserAccountSummary, passwordOnly = false) {
   editor.value = account ? {
     username: account.username, operator: account.operator, password: '', confirmPassword: '', role: account.role,
     dataScope: account.dataScope, customerCodes: account.customerScope.join('\n'),
-    allowedProcesses: [...(account.allowedProcesses ?? [])], enabled: account.enabled, demoAccount: account.demoAccount,
+    allowedProcesses: [...(account.allowedProcesses ?? [])],
+    coverDuties: account.role === 'BUSINESS_MANAGER' && account.coverDuties?.length ? [...account.coverDuties] : [...defaultCoverDuties],
+    enabled: account.enabled, demoAccount: account.demoAccount,
   } : emptyEditor();
   void nextTick(() => editorSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
 }
@@ -123,8 +138,8 @@ async function saveAccount() {
     actionError.value = '请填写密码';
     return;
   }
-  if (form.password && (form.password.length < 12 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password))) {
-    actionError.value = '密码至少 12 位，且同时包含字母和数字';
+  if (form.password && (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password))) {
+    actionError.value = '密码至少 8 位，且同时包含字母和数字';
     return;
   }
   if (form.password !== form.confirmPassword) {
@@ -136,6 +151,10 @@ async function saveAccount() {
     actionError.value = '请至少选择一个客户档案';
     return;
   }
+  if (editorMode.value !== 'password' && form.role === 'BUSINESS_MANAGER' && form.coverDuties.length === 0) {
+    actionError.value = '业务管理至少保留一项权限';
+    return;
+  }
   if (editorMode.value === 'create' && accounts.value.some(account => account.username.toLowerCase() === form.username.trim().toLowerCase())) {
     actionError.value = '账号已存在，请使用编辑操作';
     return;
@@ -144,7 +163,9 @@ async function saveAccount() {
     await upsertAuthAccount({
       username: form.username.trim(), operator: form.operator.trim(), password: form.password || undefined,
       role: form.role, dataScope: form.dataScope, customerScope: form.dataScope === 'CUSTOMER_RANGE' ? customerScope : [],
-      allowedProcesses: [...form.allowedProcesses], enabled: form.enabled, demoAccount: form.demoAccount,
+      allowedProcesses: [...form.allowedProcesses],
+      coverDuties: form.role === 'BUSINESS_MANAGER' ? [...form.coverDuties] : [],
+      enabled: form.enabled, demoAccount: form.demoAccount,
     });
     if (form.username === session.value?.username) {
       await logoutAuthSession();
@@ -235,16 +256,25 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <label>姓名<input v-model="editor.operator" aria-label="用户姓名" required /></label>
               <label>角色<select v-model="editor.role" aria-label="用户角色"><option v-for="role in options.roles" :key="role.value" :value="role.value">{{ role.label }}</option></select></label>
               <label>数据范围<select v-model="editor.dataScope" aria-label="用户数据范围"><option v-for="scope in scopes" :key="scope.value" :value="scope.value">{{ scope.label }}</option></select></label>
-              <div v-if="editor.dataScope === 'CUSTOMER_RANGE'" class="field" aria-label="授权客户档案">
-                <span>授权客户档案</span>
-                <label v-for="customer in customers" :key="customer.customerId">
-                  <input type="checkbox" :checked="selectedCustomerCodes.includes(String(customer.customerId))"
-                    :aria-label="`授权客户${customer.name}`"
-                    @change="toggleCustomerCode(customer.customerId, ($event.target as HTMLInputElement).checked)" />
-                  {{ customer.name }}（{{ customer.customerCode }} · ID {{ customer.customerId }}）
+            </div>
+            <div v-if="editorMode !== 'password' && editor.role === 'BUSINESS_MANAGER'" class="cover-duty-panel">
+              <p>默认勾选收货、报工、质检，以及拆单、标签和客户档案。其余项默认不勾，可以按人另加或取消。数据范围在上面单独选。</p>
+              <div class="user-checks" aria-label="业务管理权限">
+                <label v-for="duty in coverDutyOptions" :key="duty.code">
+                  <input v-model="editor.coverDuties" type="checkbox" :value="duty.code" :aria-label="`顶岗${duty.label}`" />
+                  {{ duty.label }}
                 </label>
-                <p v-if="unresolvedCustomerCodes.length">历史授权值待人工核对：{{ unresolvedCustomerCodes.join('、') }}。请选择对应客户档案。</p>
               </div>
+            </div>
+            <div v-if="editorMode !== 'password' && editor.dataScope === 'CUSTOMER_RANGE'" class="customer-scope" aria-label="授权客户档案">
+              <span>授权客户档案</span>
+              <label v-for="customer in customers" :key="customer.customerId">
+                <input type="checkbox" :checked="selectedCustomerCodes.includes(String(customer.customerId))"
+                  :aria-label="`授权客户${customer.name}`"
+                  @change="toggleCustomerCode(customer.customerId, ($event.target as HTMLInputElement).checked)" />
+                {{ customer.name }}（{{ customer.customerCode }} · ID {{ customer.customerId }}）
+              </label>
+              <p v-if="unresolvedCustomerCodes.length">历史授权值待人工核对：{{ unresolvedCustomerCodes.join('、') }}。请选择对应客户档案。</p>
             </div>
             <template v-if="editorMode !== 'password'">
               <p>可操作工序</p><div class="user-checks"><label v-for="process in processes" :key="process"><input v-model="editor.allowedProcesses" type="checkbox" :value="process" />{{ process }}</label></div>
@@ -252,8 +282,8 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <details class="user-permissions"><summary>查看角色包含的操作权限（{{ selectedRole?.permissions.length ?? 0 }} 项）</summary><p>操作权限随角色配置；数据范围、客户及工序限制分别设置。</p><ul><li v-for="permission in selectedRole?.permissions ?? []" :key="permission.code">{{ permission.label }}</li></ul></details>
             </template>
             <template v-if="editorMode !== 'edit'">
-              <p>密码至少 12 位，包含字母和数字。用户下次登录需自行修改密码。</p>
-              <div class="user-form-grid"><label>{{ editorMode === 'create' ? '初始密码' : '新密码' }}<input v-model="editor.password" aria-label="用户密码" type="password" autocomplete="new-password" required /></label><label>确认密码<input v-model="editor.confirmPassword" aria-label="确认用户密码" type="password" autocomplete="new-password" required /></label></div>
+              <p>密码至少 8 位，包含字母和数字。用户下次登录需自行修改密码。</p>
+              <div class="user-form-grid password-fields"><label>{{ editorMode === 'create' ? '初始密码' : '新密码' }}<input v-model="editor.password" aria-label="用户密码" type="password" autocomplete="new-password" required /></label><label>确认密码<input v-model="editor.confirmPassword" aria-label="确认用户密码" type="password" autocomplete="new-password" required /></label></div>
             </template>
             <button class="primary-button" type="submit">{{ busy ? '保存中…' : editorMode === 'password' ? '确认重置密码' : '保存用户' }}</button>
           </fieldset>
@@ -267,8 +297,19 @@ async function removeAccount(account: AuthUserAccountSummary) {
 .user-management-workspace { display: grid; gap: 18px; }
 .user-actions, .user-checks, .user-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .user-filters { margin: 16px 0; }
-.user-filters label, .user-form-grid label { display: grid; gap: 6px; min-width: 0; }
-.user-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.user-filters label, .user-form-grid > label { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.user-form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; margin-bottom: 16px; }
+.password-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 720px; }
+.user-form-grid > label input,
+.user-form-grid > label select { width: 100%; height: 36px; min-height: 36px; }
+.cover-duty-panel, .customer-scope { margin-bottom: 16px; }
+.cover-duty-panel > p, .customer-scope > p { margin: 0 0 8px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.customer-scope { display: grid; gap: 8px; }
+.customer-scope > span { color: var(--muted); font-size: 12px; }
+.user-checks label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.customer-scope label { display: flex; align-items: center; gap: 6px; }
+.user-checks input[type="checkbox"],
+.customer-scope input[type="checkbox"] { width: 16px; height: 16px; min-height: 16px; }
 input:not([type="checkbox"]), select, textarea { width: 100%; box-sizing: border-box; min-width: 0; }
 .user-table-wrap { overflow-x: auto; }
 .user-cards { display: none; }
@@ -280,10 +321,11 @@ table { min-width: 800px; }
   .user-table-wrap { display: none; }
   .user-cards { display: grid; gap: 10px; }
   table { min-width: 0; }
+  .user-form-grid { grid-template-columns: 1fr 1fr; }
 }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .user-checks, .user-permissions { margin-bottom: 16px; }
 .user-permissions ul { display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .user-editor { scroll-margin-top: 20px; }
-@media (max-width: 640px) { .section-heading { flex-wrap: wrap; gap: 12px; } .user-filters label { flex: 1; } }
+@media (max-width: 640px) { .section-heading { flex-wrap: wrap; gap: 12px; } .user-filters label { flex: 1; } .user-form-grid, .password-fields { grid-template-columns: 1fr; max-width: none; } }
 </style>

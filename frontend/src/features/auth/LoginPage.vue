@@ -80,7 +80,7 @@ async function handleChangePassword() {
           <span>请先更换临时密码</span>
         </div>
       </div>
-      <p class="login-lead">{{ session?.operator }} 的临时密码只能再用来设置新密码。新密码至少 12 位，并且同时包含字母和数字。</p>
+      <p class="login-lead">{{ session?.operator }} 的临时密码只能再用来设置新密码。新密码至少 8 位，并且同时包含字母和数字。</p>
       <label>
         <span>当前密码</span>
         <input v-model="currentPassword" type="password" autocomplete="current-password" :disabled="busy" />

@@ -155,6 +155,33 @@ h3 { font-size: 14px; }
   stroke-linejoin: round;
 }
 
+.upgrade-notice {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--action);
+  border-radius: var(--radius-control);
+  background: var(--action-soft);
+}
+
+.upgrade-notice header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.upgrade-notice ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.upgrade-notice li + li {
+  margin-top: 4px;
+}
+
 .nav,
 .ops-nav {
   display: grid;
@@ -411,11 +438,16 @@ h3 { font-size: 14px; }
 .global-search,
 .lean-search {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 6px;
   align-items: center;
-  width: min(100%, 320px);
+  width: min(100%, 440px);
   min-width: 0;
+}
+
+.lean-search span,
+.lean-search .secondary-button {
+  white-space: nowrap;
 }
 
 .global-search input,
