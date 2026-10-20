@@ -595,7 +595,7 @@ onMounted(loadCatalog);
         <FilterSelect
           :model-value="customerId == null ? '' : String(customerId)"
           :options="customerOptions"
-          aria-label="客户"
+          field-label="客户"
           placeholder="输入名称、编号或别称筛选"
           empty-text="没有匹配的客户"
           @update:model-value="selectCustomer"
@@ -634,7 +634,7 @@ onMounted(loadCatalog);
         <FilterSelect
           v-model="materialCode"
           :options="materialOptions"
-          aria-label="材质"
+          field-label="材质"
           placeholder="输入名称、编码或别称筛选"
           empty-text="没有匹配的材质"
           @update:query="materialSearch = $event"
@@ -665,7 +665,7 @@ onMounted(loadCatalog);
           <FilterSelect
             v-model="line.materialCode"
             :options="materialOptions"
-            :aria-label="`明细${index + 2}材质`"
+            :field-label="`明细${index + 2}材质`"
             placeholder="输入名称、编码或别称筛选"
             empty-text="没有匹配的材质"
           />

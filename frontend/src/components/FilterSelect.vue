@@ -11,7 +11,7 @@ export type FilterOption = {
 const props = withDefaults(defineProps<{
   modelValue: string;
   options: FilterOption[];
-  ariaLabel: string;
+  fieldLabel: string;
   placeholder?: string;
   emptyText?: string;
 }>(), {
@@ -122,7 +122,7 @@ function onKeydown(event: KeyboardEvent) {
       type="text"
       role="combobox"
       autocomplete="off"
-      :aria-label="ariaLabel"
+      :aria-label="fieldLabel"
       :aria-expanded="open ? 'true' : 'false'"
       :aria-controls="listId"
       :aria-activedescendant="open && filtered[activeIndex] ? optionId(filtered[activeIndex].value) : undefined"
@@ -133,7 +133,7 @@ function onKeydown(event: KeyboardEvent) {
       @blur="onBlur"
       @keydown="onKeydown"
     />
-    <ul v-if="open" :id="listId" class="combo-list" role="listbox" :aria-label="`${ariaLabel}选项`" @mousedown.prevent>
+    <ul v-if="open" :id="listId" class="combo-list" role="listbox" :aria-label="`${fieldLabel}选项`" @mousedown.prevent>
       <li v-for="(option, index) in filtered" :key="option.value">
         <button
           :id="optionId(option.value)"
