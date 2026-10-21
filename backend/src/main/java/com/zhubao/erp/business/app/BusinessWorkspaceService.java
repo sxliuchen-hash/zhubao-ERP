@@ -5,6 +5,7 @@ import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.BusinessWorkspaceRepository;
 import com.zhubao.erp.business.domain.BusinessReviewData.*;
 import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -24,24 +25,31 @@ public class BusinessWorkspaceService {
     private final BusinessWorkspaceDataScopeFilter demoScopeFilter = new BusinessWorkspaceDataScopeFilter();
 
     public BusinessWorkspaceService(BusinessWorkspaceRepository repository) {
-        this(repository, null, null, null, null, false);
+        this(repository, null, null, null, null, null, false);
     }
 
     public BusinessWorkspaceService(BusinessWorkspaceRepository repository, BusinessDocumentRepository documents) {
-        this(repository, documents, documents == null ? null : new ProgressBoardService(documents), null, null, false);
+        this(repository, documents, documents == null ? null : new ProgressBoardService(documents), null, null, null, false);
     }
 
     public BusinessWorkspaceService(BusinessWorkspaceRepository repository, BusinessDocumentRepository documents,
                                     ProgressBoardService progress) {
-        this(repository, documents, progress, null, null, false);
+        this(repository, documents, progress, null, null, null, false);
+    }
+
+    public BusinessWorkspaceService(BusinessWorkspaceRepository repository, BusinessDocumentRepository documents,
+                                    ProgressBoardService progress, StockLedgerService stocks, ApprovalService approvals,
+                                    boolean demoEnabled) {
+        this(repository, documents, progress, stocks, approvals, null, demoEnabled);
     }
 
     @Autowired
     public BusinessWorkspaceService(BusinessWorkspaceRepository repository, BusinessDocumentRepository documents,
                                     ProgressBoardService progress, StockLedgerService stocks, ApprovalService approvals,
+                                    AuthUserAccountRepository accounts,
                                     @Value("${zhubao.business.workspace.demo-enabled:false}") boolean demoEnabled) {
         this.demoRepository = repository;
-        this.formalQuery = new FormalBusinessWorkspaceQuery(documents, progress, stocks, approvals);
+        this.formalQuery = new FormalBusinessWorkspaceQuery(documents, progress, stocks, approvals, accounts);
         this.demoEnabled = demoEnabled;
     }
 

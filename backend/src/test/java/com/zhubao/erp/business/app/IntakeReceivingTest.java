@@ -174,7 +174,9 @@ class IntakeReceivingTest {
         MobileIntakeResult opened = world.intake().intake(intake("req-intake-02", "恒信珠宝", "另一条要求", "9"), receiver);
         assertThat(opened.alreadyExists()).isFalse();
         assertThat(opened.motherOrderCode()).isNotEqualTo(created.motherOrderCode());
-        assertThat(world.intake().lookup("SF1048329001").candidates()).hasSize(2);
+        assertThat(world.intake().lookup("SF1048329001", new com.zhubao.erp.security.domain.OperatorContext(
+                "收货员", com.zhubao.erp.security.domain.RoleCode.RECEIVER, com.zhubao.erp.security.domain.DataScope.ALL))
+                .candidates()).hasSize(2);
         assertThat(world.mothers()).isEqualTo(2);
         assertThat(world.ledgers()).isEqualTo(2);
 

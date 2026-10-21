@@ -480,7 +480,7 @@ public class ProcessStationService {
 
     private void assertCustomer(StationTicket ticket, AuthUserAccount account) {
         if (dataAccess != null) {
-            dataAccess.assertCustomer(BusinessDataAccess.contextOf(account), ticket.customerId(), ticket.customerName());
+            dataAccess.assertCanRead(BusinessDataAccess.contextOf(account), ticket.orderCode());
         }
     }
 
@@ -557,7 +557,7 @@ public class ProcessStationService {
 
     private void assertMotherCustomer(MotherOrderRecord mother, AuthUserAccount account) {
         if (dataAccess != null) {
-            dataAccess.assertCustomer(BusinessDataAccess.contextOf(account), mother.customerId(), blank(mother.customerName()));
+            dataAccess.assertCanRead(BusinessDataAccess.contextOf(account), mother.code());
         }
     }
 

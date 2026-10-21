@@ -15,11 +15,32 @@ public record ManageAuthUserAccountCommand(
         boolean demoAccount,
         String preApprovalApplicationCode,
         List<String> allowedProcesses,
-        List<String> coverDuties
+        List<String> coverDuties,
+        String teamCode,
+        String departmentCode
 ) {
     public ManageAuthUserAccountCommand {
         allowedProcesses = allowedProcesses == null ? null : List.copyOf(allowedProcesses);
         coverDuties = coverDuties == null ? null : List.copyOf(coverDuties);
+        teamCode = teamCode == null ? null : teamCode.trim();
+        departmentCode = departmentCode == null ? null : departmentCode.trim();
+    }
+
+    public ManageAuthUserAccountCommand(
+            String username,
+            String password,
+            String operator,
+            String role,
+            String dataScope,
+            List<String> customerScope,
+            boolean enabled,
+            boolean demoAccount,
+            String preApprovalApplicationCode,
+            List<String> allowedProcesses,
+            List<String> coverDuties
+    ) {
+        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount,
+                preApprovalApplicationCode, allowedProcesses, coverDuties, null, null);
     }
 
     public ManageAuthUserAccountCommand(
@@ -34,7 +55,7 @@ public record ManageAuthUserAccountCommand(
             String preApprovalApplicationCode,
             List<String> allowedProcesses
     ) {
-        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, preApprovalApplicationCode, allowedProcesses, null);
+        this(username, password, operator, role, dataScope, customerScope, enabled, demoAccount, preApprovalApplicationCode, allowedProcesses, null, null, null);
     }
 
     public ManageAuthUserAccountCommand(

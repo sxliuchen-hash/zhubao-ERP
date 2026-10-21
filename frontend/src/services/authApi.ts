@@ -21,6 +21,8 @@ export interface AuthSession {
   menuTree: NavigationMenuItem[];
   allowedProcesses?: string[];
   coverDuties?: string[];
+  teamCode?: string;
+  departmentCode?: string;
 }
 
 export interface NavigationMenuItem {
@@ -84,6 +86,8 @@ export interface AuthUserAccountSummary {
   locked: boolean;
   allowedProcesses?: string[];
   coverDuties?: string[];
+  teamCode?: string;
+  departmentCode?: string;
 }
 
 export interface AuthAccountPreApprovalReadiness {
@@ -212,6 +216,8 @@ export interface ManageAuthUserAccountRequest {
   preApprovalApplicationCode?: string;
   allowedProcesses?: string[];
   coverDuties?: string[];
+  teamCode?: string;
+  departmentCode?: string;
 }
 
 export interface AuthAccountOptions {

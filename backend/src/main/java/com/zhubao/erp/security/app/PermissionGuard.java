@@ -94,6 +94,16 @@ public class PermissionGuard {
         return Map.copyOf(roleMatrix);
     }
 
+    public Set<PermissionCode> effectivePermissions(RoleCode role, java.util.List<String> coverDuties) {
+        Set<PermissionCode> permissions = allowedPermissionsFor(role);
+        if (role != RoleCode.BUSINESS_MANAGER) {
+            return permissions;
+        }
+        return permissions.stream()
+                .filter(permission -> coverAllows(permission, coverDuties))
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(PermissionCode.class)));
+    }
+
     public Set<PermissionCode> allowedPermissionsFor(RoleCode role) {
         if (role == RoleCode.ADMIN) {
             return EnumSet.allOf(PermissionCode.class);

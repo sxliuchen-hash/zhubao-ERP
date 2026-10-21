@@ -18,6 +18,7 @@ import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.scan.app.CourierNumbers;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
@@ -53,6 +54,7 @@ public class MobileIntakeService {
     private final BusinessWorkUnit workUnit;
     private final MasterDataService masterData;
     private final StockLedgerService stockLedgerService;
+    private final AuthUserAccountRepository accounts;
     /** 本进程已发出、事务可能尚未提交的母单号，避免并发收货拿到同一个流水。 */
     private final Set<String> reservedMotherCodes = ConcurrentHashMap.newKeySet();
     private final Object motherCodeLock = new Object();
@@ -61,7 +63,7 @@ public class MobileIntakeService {
             BusinessOperationService businessOperationService,
             BusinessDocumentRepository businessDocumentRepository
     ) {
-        this(businessOperationService, businessDocumentRepository, null, null, null);
+        this(businessOperationService, businessDocumentRepository, null, null, null, null);
     }
 
     public MobileIntakeService(
@@ -69,7 +71,7 @@ public class MobileIntakeService {
             BusinessDocumentRepository businessDocumentRepository,
             BusinessWorkUnit workUnit
     ) {
-        this(businessOperationService, businessDocumentRepository, workUnit, null, null);
+        this(businessOperationService, businessDocumentRepository, workUnit, null, null, null);
     }
 
     public MobileIntakeService(
@@ -78,7 +80,17 @@ public class MobileIntakeService {
             BusinessWorkUnit workUnit,
             MasterDataService masterData
     ) {
-        this(businessOperationService, businessDocumentRepository, workUnit, masterData, null);
+        this(businessOperationService, businessDocumentRepository, workUnit, masterData, null, null);
+    }
+
+    public MobileIntakeService(
+            BusinessOperationService businessOperationService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit,
+            MasterDataService masterData,
+            StockLedgerService stockLedgerService
+    ) {
+        this(businessOperationService, businessDocumentRepository, workUnit, masterData, stockLedgerService, null);
     }
 
     @Autowired
@@ -87,13 +99,15 @@ public class MobileIntakeService {
             BusinessDocumentRepository businessDocumentRepository,
             BusinessWorkUnit workUnit,
             MasterDataService masterData,
-            StockLedgerService stockLedgerService
+            StockLedgerService stockLedgerService,
+            AuthUserAccountRepository accounts
     ) {
         this.businessOperationService = businessOperationService;
         this.businessDocumentRepository = businessDocumentRepository;
         this.workUnit = workUnit;
         this.masterData = masterData;
         this.stockLedgerService = stockLedgerService;
+        this.accounts = accounts;
     }
 
     public MobileIntakeLookup lookup(String courierNo) {
@@ -312,7 +326,9 @@ public class MobileIntakeService {
     }
 
     private boolean canRead(OperatorContext operator, MotherOrderRecord record) {
-        return CustomerScopeRules.allowed(operator, record.customerId(), record.customerName());
+        return DocumentVisibility.canSee(operator, record.customerId(), record.customerName(), "inbound",
+                List.of(record.operator(), record.receiverName(), record.unpackSigner()),
+                accounts == null ? List.of() : accounts.findAll());
     }
 
     private MobileIntakeResult resultOf(MotherOrderRecord record, boolean alreadyExists) {

@@ -226,7 +226,10 @@ public class AuthSessionService {
                 false,
                 value.token(),
                 effectiveCustomerScope(value.user()),
-                value.user().coverDuties()
+                value.user().coverDuties(),
+                value.user().username(),
+                value.user().teamCode(),
+                value.user().departmentCode()
         ));
     }
 
@@ -345,7 +348,9 @@ public class AuthSessionService {
                 false,
                 false,
                 currentAccount.allowedProcesses(),
-                currentAccount.coverDuties()
+                currentAccount.coverDuties(),
+                currentAccount.teamCode(),
+                currentAccount.departmentCode()
         ));
         AuthUserAccount persisted = userAccountRepository.findByUsername(updated.username()).orElseThrow(SessionInvalidException::new);
         if (!loginSessions.updateFingerprint(AuthTokenDigest.sha256(entry.token()), AuthAccountSnapshot.fingerprint(persisted))) {
@@ -558,7 +563,9 @@ public class AuthSessionService {
                         .filter(item -> menuCodes.contains(item.code()))
                         .toList(),
                 user.allowedProcesses(),
-                user.coverDuties()
+                user.coverDuties(),
+                user.teamCode(),
+                user.departmentCode()
         );
     }
 

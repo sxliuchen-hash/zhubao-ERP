@@ -56,7 +56,7 @@ class BusinessDataAccessTest {
         StockDimension dimension = dimension("MD-ACCESS", 101L);
         assertThat(access.canRead(context("开单员", RoleCode.OPERATOR, DataScope.SELF), dimension)).isTrue();
         assertThat(access.canRead(context("陌生人", RoleCode.OPERATOR, DataScope.DEPARTMENT), dimension)).isFalse();
-        assertThat(access.canRead(context("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT), dimension)).isTrue();
+        assertThat(access.canRead(context("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT), dimension)).isFalse();
         assertThat(access.canRead(context("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT, "102"), dimension)).isFalse();
         assertThat(access.canRead(context("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT), dimension("MD-UNKNOWN", 101L))).isFalse();
         documents.saveProcessStationHandoff(new ProcessStationHandoff("MD-ACCESS", "抛光", "加工人", "", "2026-10-10"));

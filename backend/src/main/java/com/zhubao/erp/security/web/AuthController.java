@@ -6,6 +6,7 @@ import com.zhubao.erp.security.app.AuthUserAccountManagementService;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
+import com.zhubao.erp.security.domain.AccountAccessProfile;
 import com.zhubao.erp.security.domain.AuthAccountOptions;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
@@ -103,6 +104,12 @@ public class AuthController {
     @GetMapping("/audit-integrity")
     public ApiResponse<AuthAuditIntegritySummary> auditIntegrity() {
         return ApiResponse.ok(authSessionService.auditIntegrity(20));
+    }
+
+    @GetMapping("/accounts/access-inventory")
+    public ApiResponse<List<AccountAccessProfile>> accessInventory(HttpServletRequest request) {
+        manageAccountOperator(request);
+        return ApiResponse.ok(accountManagementService.accessInventory(permissionGuard));
     }
 
     @GetMapping("/accounts")

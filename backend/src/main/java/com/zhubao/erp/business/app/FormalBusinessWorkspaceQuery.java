@@ -11,6 +11,8 @@ import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -37,13 +39,21 @@ final class FormalBusinessWorkspaceQuery {
     private final StockLedgerService stocks;
     private final ApprovalService approvals;
     private final ApprovalAccess approvalAccess = new ApprovalAccess();
+    private final AuthUserAccountRepository accounts;
 
     FormalBusinessWorkspaceQuery(BusinessDocumentRepository documents, ProgressBoardService progress,
                                  StockLedgerService stocks, ApprovalService approvals) {
+        this(documents, progress, stocks, approvals, null);
+    }
+
+    FormalBusinessWorkspaceQuery(BusinessDocumentRepository documents, ProgressBoardService progress,
+                                 StockLedgerService stocks, ApprovalService approvals,
+                                 AuthUserAccountRepository accounts) {
         this.documents = documents;
         this.progress = progress;
         this.stocks = stocks;
         this.approvals = approvals;
+        this.accounts = accounts;
     }
 
     BusinessWorkspaceSummary summary(OperatorContext operator) {
@@ -239,9 +249,8 @@ final class FormalBusinessWorkspaceQuery {
         if (stocks == null) {
             return List.of();
         }
-        // 全公司，以及未限定客户的队组/部门/本人视图，客户条件覆盖全部客户，仍一次读完全部台账。
-        if (operator.dataScope() == DataScope.ALL
-                || (operator.customerScope().isEmpty() && operator.dataScope() != DataScope.CUSTOMER_RANGE)) {
+        // 全部数据一次读取。名单为空只是没有客户过滤条件，读取后仍按单据归属收敛。
+        if (operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) {
             return stocks.ledgers();
         }
         if (operator.customerScope().isEmpty()) {
@@ -333,52 +342,48 @@ final class FormalBusinessWorkspaceQuery {
                 if (mother != null && CustomerScopeRules.identityConflicts(onlyCustomer, mother.customerId())) return false;
             }
         }
-        if (mother != null && visible(mother, operator, area)) return true;
-        if (mother == null || !customerVisible(mother.customerId(), mother.customerName(), operator)) return false;
-        return snapshot.handoffsOf(code).stream().anyMatch(handoff -> operator.operator().equals(handoff.operator()))
-                || snapshot.quality(code) != null && operator.operator().equals(snapshot.quality(code).inspector());
+        List<String> participants = new ArrayList<>();
+        if (mother != null) {
+            participants.add(mother.operator());
+            participants.add(mother.receiverName());
+            participants.add(mother.unpackSigner());
+        }
+        snapshot.handoffsOf(code).forEach(handoff -> participants.add(handoff.operator()));
+        if (snapshot.quality(code) != null) {
+            participants.add(snapshot.quality(code).inspector());
+        }
+        return mother != null && DocumentVisibility.canSee(operator, mother.customerId(), mother.customerName(),
+                area, participants, directory());
     }
 
     private boolean visible(MotherOrderRecord mother, OperatorContext operator, String area) {
-        return mother != null && customerVisible(mother.customerId(), mother.customerName(), operator)
-                && (areaVisible(area, operator) || List.of(text(mother.operator()), text(mother.receiverName()), text(mother.unpackSigner())).contains(operator.operator()));
+        if (mother == null) return false;
+        return DocumentVisibility.canSee(operator, mother.customerId(), mother.customerName(), area,
+                List.of(text(mother.operator()), text(mother.receiverName()), text(mother.unpackSigner())), directory());
     }
 
     private boolean visible(StockDimension dimension, OperatorContext operator, Snapshot snapshot) {
         if (dimension == null) return false;
         MotherOrderRecord mother = snapshot.mother(dimension.motherOrderCode());
-        return customerVisible(dimension.customerId(), mother == null ? "" : mother.customerName(), operator)
-                && (areaVisible("inventory", operator) || visibleOrder(text(dimension.workOrderCode()).isEmpty() ? dimension.motherOrderCode() : dimension.workOrderCode(), operator, "inventory", snapshot));
+        String code = text(dimension.workOrderCode()).isEmpty() ? dimension.motherOrderCode() : dimension.workOrderCode();
+        List<String> participants = new ArrayList<>();
+        if (mother != null) {
+            participants.add(mother.operator());
+            participants.add(mother.receiverName());
+            participants.add(mother.unpackSigner());
+        }
+        snapshot.handoffsOf(code).forEach(handoff -> participants.add(handoff.operator()));
+        return DocumentVisibility.canSee(operator, dimension.customerId(), mother == null ? "" : mother.customerName(),
+                "inventory", participants, directory());
     }
 
-    private boolean areaVisible(String area, OperatorContext operator) {
-        if (operator.dataScope() == DataScope.ALL || operator.dataScope() == DataScope.CUSTOMER_RANGE) return true;
-        if (operator.dataScope() == DataScope.SELF) return false;
-        // 尚无真实组织关系时，只按明确岗位职责开放队组/部门视图，其他岗位仅看本人关联记录。
-        return switch (area) {
-            case "inbound", "inventory" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.RECEIVER
-                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.WAREHOUSE_KEEPER
-                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.BUSINESS_MANAGER;
-            case "production" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.WORKSHOP_LEADER
-                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.BUSINESS_MANAGER;
-            case "quality" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.QUALITY_INSPECTOR
-                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.BUSINESS_MANAGER;
-            case "loss" -> operator.role() == com.zhubao.erp.security.domain.RoleCode.WORKSHOP_LEADER
-                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.QUALITY_INSPECTOR
-                    || operator.role() == com.zhubao.erp.security.domain.RoleCode.FINANCE_STATISTICIAN;
-            default -> false;
-        };
+    private List<AuthUserAccount> directory() {
+        return accounts == null ? List.of() : accounts.findAll();
     }
 
     private static String defects(QualityRequirementCheck check) {
         return check == null ? "" : check.lines().stream().filter(line -> QualityVerdicts.needsReason(line.verdict()))
                 .map(line -> line.clause() + "：" + line.reason()).reduce((left, right) -> left + "；" + right).orElse("");
-    }
-
-    private boolean customerVisible(Long customerId, String name, OperatorContext operator) {
-        if (operator.dataScope() == DataScope.ALL) return true;
-        if (operator.customerScope().isEmpty()) return operator.dataScope() != DataScope.CUSTOMER_RANGE;
-        return operator.customerScope().contains(text(name)) || customerId != null && operator.customerScope().contains(customerId.toString());
     }
 
     private OperationContext contextForOrder(String code, Snapshot snapshot) {

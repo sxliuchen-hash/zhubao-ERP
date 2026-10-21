@@ -20,11 +20,15 @@ public record AuthUserAccountSummary(
         String lockedUntil,
         boolean locked,
         List<String> allowedProcesses,
-        List<String> coverDuties
+        List<String> coverDuties,
+        String teamCode,
+        String departmentCode
 ) {
     public AuthUserAccountSummary {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
         allowedProcesses = allowedProcesses == null ? List.of() : List.copyOf(allowedProcesses);
         coverDuties = coverDuties == null ? List.of() : List.copyOf(coverDuties);
+        teamCode = teamCode == null ? "" : teamCode;
+        departmentCode = departmentCode == null ? "" : departmentCode;
     }
 }

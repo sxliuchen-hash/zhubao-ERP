@@ -18,13 +18,39 @@ public record AuthUserAccount(
         boolean passwordChangeRequired,
         boolean temporaryPasswordConsumed,
         List<String> allowedProcesses,
-        List<String> coverDuties
+        List<String> coverDuties,
+        String teamCode,
+        String departmentCode
 ) {
     public AuthUserAccount {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
         temporaryPasswordConsumed = passwordChangeRequired && temporaryPasswordConsumed;
         allowedProcesses = allowedProcesses == null ? List.of() : List.copyOf(allowedProcesses);
         coverDuties = CoverDuties.normalize(coverDuties);
+        teamCode = normalizeOrg(teamCode);
+        departmentCode = normalizeOrg(departmentCode);
+    }
+
+    public AuthUserAccount(
+            String username,
+            String passwordHash,
+            String operator,
+            RoleCode role,
+            DataScope dataScope,
+            boolean enabled,
+            boolean demoAccount,
+            Instant passwordChangedAt,
+            int failedLoginCount,
+            Instant lockedUntil,
+            List<String> customerScope,
+            boolean passwordChangeRequired,
+            boolean temporaryPasswordConsumed,
+            List<String> allowedProcesses,
+            List<String> coverDuties
+    ) {
+        this(username, passwordHash, operator, role, dataScope, enabled, demoAccount, passwordChangedAt,
+                failedLoginCount, lockedUntil, customerScope, passwordChangeRequired, temporaryPasswordConsumed,
+                allowedProcesses, coverDuties, "", "");
     }
 
     public AuthUserAccount(
@@ -215,7 +241,17 @@ public record AuthUserAccount(
                 passwordChangeRequired,
                 temporaryPasswordConsumed,
                 allowedProcesses,
-                coverDuties
+                coverDuties,
+                teamCode,
+                departmentCode
+        );
+    }
+
+    public AuthUserAccount withOrganization(String team, String department) {
+        return new AuthUserAccount(
+                username, passwordHash, operator, role, dataScope, enabled, demoAccount, passwordChangedAt,
+                failedLoginCount, lockedUntil, customerScope, passwordChangeRequired, temporaryPasswordConsumed,
+                allowedProcesses, coverDuties, team, department
         );
     }
 
@@ -235,7 +271,20 @@ public record AuthUserAccount(
                 passwordChangeRequired,
                 temporaryPasswordConsumed,
                 processes,
-                coverDuties
+                coverDuties,
+                teamCode,
+                departmentCode
         );
+    }
+
+    private static String normalizeOrg(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String text = value.trim();
+        if (text.length() > 40 || text.chars().anyMatch(ch -> Character.isISOControl(ch) || ch == '|' || ch == '\n')) {
+            throw new com.zhubao.erp.common.error.BusinessException("班组或部门编号无效");
+        }
+        return text;
     }
 }

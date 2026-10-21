@@ -9,8 +9,10 @@ import com.zhubao.erp.business.domain.ProgressRow;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.business.domain.QualityVerdicts;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.OperatorContext;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -38,9 +40,16 @@ public class ProgressBoardService {
     static final String NO_QUALITY = "未质检";
 
     private final BusinessDocumentRepository documents;
+    private final AuthUserAccountRepository accounts;
 
     public ProgressBoardService(BusinessDocumentRepository documents) {
+        this(documents, null);
+    }
+
+    @Autowired
+    public ProgressBoardService(BusinessDocumentRepository documents, AuthUserAccountRepository accounts) {
         this.documents = documents;
+        this.accounts = accounts;
     }
 
     public List<ProgressRow> list(
@@ -102,7 +111,7 @@ public class ProgressBoardService {
         List<ProgressRow> rows = new ArrayList<>();
         Map<String, MotherSplitState> splitByMother = splits == null ? Map.of() : splits;
         for (MotherOrderRecord mother : motherOrders) {
-            if (!withinScope(operator, mother.customerId(), mother.customerName())) {
+            if (!withinScope(operator, mother)) {
                 continue;
             }
             List<ChildWorkOrderRecord> family = children.getOrDefault(mother.code(), List.of());
@@ -210,8 +219,10 @@ public class ProgressBoardService {
         );
     }
 
-    private boolean withinScope(OperatorContext operator, Long customerId, String customerName) {
-        return CustomerScopeRules.allowed(operator, customerId, customerName);
+    private boolean withinScope(OperatorContext operator, MotherOrderRecord mother) {
+        return DocumentVisibility.canSeeAnyWorkplace(operator, mother.customerId(), mother.customerName(),
+                java.util.List.of(blank(mother.operator()), blank(mother.receiverName()), blank(mother.unpackSigner())),
+                accounts == null ? java.util.List.of() : accounts.findAll());
     }
 
     private boolean overdue(String dueDate, String status, String outcome) {

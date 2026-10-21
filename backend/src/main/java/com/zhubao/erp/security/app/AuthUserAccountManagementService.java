@@ -12,6 +12,7 @@ import com.zhubao.erp.document.domain.DocumentPackage;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.security.domain.AuthAccountActionRepository;
 import com.zhubao.erp.security.domain.AuthAccountMutation;
+import com.zhubao.erp.security.domain.AccountAccessProfile;
 import com.zhubao.erp.security.domain.AuthAccountOptions;
 import com.zhubao.erp.security.domain.CustomerAuthorization;
 import com.zhubao.erp.security.error.PermissionDeniedException;
@@ -318,6 +319,12 @@ public class AuthUserAccountManagementService {
                 );
     }
 
+    public List<AccountAccessProfile> accessInventory(PermissionGuard permissionGuard) {
+        return accountRepository.findAll().stream()
+                .map(account -> accessProfile(account, permissionGuard))
+                .toList();
+    }
+
     public List<AuthUserAccountSummary> accounts() {
         Instant now = Instant.now();
         return accountRepository.findAll().stream()
@@ -569,6 +576,9 @@ public class AuthUserAccountManagementService {
                 ? (existing == null ? List.of() : existing.allowedProcesses())
                 : WorkshopProcesses.bind(command.allowedProcesses());
         List<String> coverDuties = resolveCoverDuties(role, command.coverDuties(), existing);
+        String teamCode = command.teamCode() == null ? (existing == null ? "" : existing.teamCode()) : command.teamCode();
+        String departmentCode = command.departmentCode() == null
+                ? (existing == null ? "" : existing.departmentCode()) : command.departmentCode();
         validateTargetSnapshot(preApprovalApplication, command, role, dataScope, customerScope, allowedProcesses);
         if (existing == null && !passwordProvided) {
             throw new BusinessException("新建账号必须提供初始密码");
@@ -598,7 +608,9 @@ public class AuthUserAccountManagementService {
                 passwordChangeRequired,
                 temporaryPasswordConsumed,
                 allowedProcesses,
-                coverDuties
+                coverDuties,
+                teamCode,
+                departmentCode
         );
         String action = existing == null ? "创建账号" : passwordProvided ? "更新账号并重置密码" : "更新账号";
         String auditedAction = action
@@ -764,6 +776,30 @@ public class AuthUserAccountManagementService {
                 .orElseThrow(() -> new BusinessException("账号不存在：" + username));
     }
 
+    private AccountAccessProfile accessProfile(AuthUserAccount account, PermissionGuard permissionGuard) {
+        String source = switch (account.role()) {
+            case ADMIN -> "管理员";
+            case BUSINESS_MANAGER -> "顶岗";
+            default -> "角色模板";
+        };
+        List<AccountAccessProfile.PermissionGrant> grants = permissionGuard
+                .effectivePermissions(account.role(), account.coverDuties()).stream()
+                .map(permission -> new AccountAccessProfile.PermissionGrant(permission.name(), permission.label(), source))
+                .toList();
+        return new AccountAccessProfile(
+                account.username(),
+                account.operator(),
+                account.role().name(),
+                account.dataScope().name(),
+                effectiveCustomerScope(account),
+                account.allowedProcesses(),
+                account.coverDuties(),
+                account.teamCode(),
+                account.departmentCode(),
+                grants
+        );
+    }
+
     private AuthUserAccountSummary summary(AuthUserAccount account, Instant now) {
         boolean locked = account.lockedUntil() != null && account.lockedUntil().isAfter(now);
         return new AuthUserAccountSummary(
@@ -784,7 +820,9 @@ public class AuthUserAccountManagementService {
                 account.lockedUntil() == null ? "" : DISPLAY_TIME.format(account.lockedUntil()),
                 locked,
                 account.allowedProcesses(),
-                account.coverDuties()
+                account.coverDuties(),
+                account.teamCode(),
+                account.departmentCode()
         );
     }
 

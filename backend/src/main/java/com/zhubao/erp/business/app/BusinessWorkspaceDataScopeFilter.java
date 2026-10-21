@@ -115,10 +115,7 @@ class BusinessWorkspaceDataScopeFilter {
             return true;
         }
         return switch (context.dataScope()) {
-            case SELF -> containsAny(values, operatorKeywords(context));
-            case TEAM -> containsAny(values, operatorKeywords(context)) || containsAny(values, teamKeywords(context.role()));
-            case DEPARTMENT -> containsAny(values, operatorKeywords(context))
-                    || containsAny(values, departmentKeywords(context.role()));
+            case SELF, TEAM, DEPARTMENT -> containsAny(values, operatorKeywords(context));
             case CUSTOMER_RANGE -> !context.customerScope().isEmpty() && containsAny(values, context.customerScope());
             case ALL -> true;
         };

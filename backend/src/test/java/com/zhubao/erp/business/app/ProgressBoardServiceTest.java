@@ -98,9 +98,7 @@ class ProgressBoardServiceTest {
         assertThat(service.list(empty, "", "", "", "")).isEmpty();
 
         OperatorContext department = new OperatorContext("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT);
-        assertThat(service.list(department, "", "", "", ""))
-                .extracting(row -> row.workOrderCode())
-                .containsExactly("ZD-1");
+        assertThat(service.list(department, "", "", "", "")).isEmpty();
 
         OperatorContext scoped = new OperatorContext("业务员", RoleCode.SALES, DataScope.CUSTOMER_RANGE, false, "", List.of("1001"));
         assertThat(service.list(scoped, "", "", "", ""))

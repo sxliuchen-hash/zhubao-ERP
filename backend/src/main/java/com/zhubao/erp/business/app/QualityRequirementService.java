@@ -798,7 +798,7 @@ public class QualityRequirementService {
 
     private void assertCustomer(Ticket ticket, AuthUserAccount account) {
         if (dataAccess != null) {
-            dataAccess.assertCustomer(BusinessDataAccess.contextOf(account), ticket.customerId(), ticket.customerName());
+            dataAccess.assertCanRead(BusinessDataAccess.contextOf(account), ticket.orderCode());
         }
     }
 

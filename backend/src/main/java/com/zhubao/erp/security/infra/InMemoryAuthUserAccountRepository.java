@@ -89,7 +89,9 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
                 account.allowedProcesses(),
-                account.coverDuties()
+                account.coverDuties(),
+                account.teamCode(),
+                account.departmentCode()
         ));
     }
 
@@ -110,7 +112,9 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
                 account.allowedProcesses(),
-                account.coverDuties()
+                account.coverDuties(),
+                account.teamCode(),
+                account.departmentCode()
         ));
     }
 
@@ -131,7 +135,9 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
                 account.allowedProcesses(),
-                account.coverDuties()
+                account.coverDuties(),
+                account.teamCode(),
+                account.departmentCode()
         ));
     }
 
@@ -152,7 +158,9 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                 account.passwordChangeRequired(),
                 account.temporaryPasswordConsumed(),
                 account.allowedProcesses(),
-                account.coverDuties()
+                account.coverDuties(),
+                account.teamCode(),
+                account.departmentCode()
         ));
     }
 
@@ -179,7 +187,9 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
                     true,
                     true,
                     account.allowedProcesses(),
-                    account.coverDuties()
+                    account.coverDuties(),
+                    account.teamCode(),
+                    account.departmentCode()
             );
         });
         return consumed.get();

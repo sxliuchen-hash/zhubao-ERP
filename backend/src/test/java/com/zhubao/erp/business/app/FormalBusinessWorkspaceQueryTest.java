@@ -105,8 +105,8 @@ class FormalBusinessWorkspaceQueryTest {
             assertThat(service.inbound(production).orders()).isEmpty();
             assertThat(service.inventory(production).balances()).isEmpty();
             OperatorContext warehouse = new OperatorContext("库管", RoleCode.WAREHOUSE_KEEPER, scope);
-            assertThat(service.inbound(warehouse).orders()).hasSize(2);
-            assertThat(service.inventory(warehouse).balances()).hasSize(2);
+            assertThat(service.inbound(warehouse).orders()).isEmpty();
+            assertThat(service.inventory(warehouse).balances()).isEmpty();
             OperatorContext own = new OperatorContext("收货员", RoleCode.OPERATOR, scope);
             assertThat(service.inbound(own).orders()).extracting("code").containsExactly("MD-A");
         }

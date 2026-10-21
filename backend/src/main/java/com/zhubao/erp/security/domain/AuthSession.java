@@ -20,7 +20,9 @@ public record AuthSession(
         List<String> menuCodes,
         List<NavigationMenuItem> menuTree,
         List<String> allowedProcesses,
-        List<String> coverDuties
+        List<String> coverDuties,
+        String teamCode,
+        String departmentCode
 ) {
     public AuthSession {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
@@ -28,5 +30,7 @@ public record AuthSession(
         menuTree = List.copyOf(menuTree);
         allowedProcesses = allowedProcesses == null ? List.of() : List.copyOf(allowedProcesses);
         coverDuties = coverDuties == null ? List.of() : List.copyOf(coverDuties);
+        teamCode = teamCode == null ? "" : teamCode.trim();
+        departmentCode = departmentCode == null ? "" : departmentCode.trim();
     }
 }

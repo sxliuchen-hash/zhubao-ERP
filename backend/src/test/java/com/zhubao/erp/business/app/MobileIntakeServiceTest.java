@@ -46,8 +46,8 @@ class MobileIntakeServiceTest {
         assertThat(documents.findMotherOrderByCode(created.motherOrderCode()).orElseThrow().evidenceCode()).isBlank();
         assertThat(stock.findAllLedgers()).hasSize(1);
         assertThat(stock.findAllLedgers().get(0).remark()).doesNotContain("证据：");
-        assertThat(service.lookup("sf 1048329001").found()).isTrue();
-        assertThat(service.lookup("sf 1048329001").motherOrderCode()).isEqualTo(created.motherOrderCode());
+        assertThat(service.lookup("sf 1048329001", receiver).found()).isTrue();
+        assertThat(service.lookup("sf 1048329001", receiver).motherOrderCode()).isEqualTo(created.motherOrderCode());
     }
 
     @Test
@@ -67,21 +67,21 @@ class MobileIntakeServiceTest {
 
         assertThat(again.alreadyExists()).isFalse();
         assertThat(again.motherOrderCode()).isNotEqualTo(created.motherOrderCode());
-        assertThat(service.lookup("SF1048329001").candidates()).hasSize(2);
-        assertThat(service.lookup("SF1048329001").motherOrderCode()).isBlank();
+        assertThat(service.lookup("SF1048329001", receiver).candidates()).hasSize(2);
+        assertThat(service.lookup("SF1048329001", receiver).motherOrderCode()).isBlank();
         assertThat(documents.listMotherOrders()).hasSize(2);
         assertThat(stock.findAllLedgers()).hasSize(2);
     }
 
     @Test
-    void departmentWithoutCustomerListCanCreateMother() {
+    void departmentWithoutCustomerListCannotCreateMother() {
         OperatorContext keeper = new OperatorContext("库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT);
 
-        MobileIntakeResult created = service.intake(new MobileIntakeCommand(
+        assertThatThrownBy(() -> service.intake(new MobileIntakeCommand(
                 "SF1048329002", "恒信珠宝", null, "抛光", "2026-10-20", "戒托",
-                new BigDecimal("1"), new BigDecimal("2"), "", "", "件", "dept-intake-01"), keeper);
-
-        assertThat(created.customerName()).isEqualTo("恒信珠宝");
+                new BigDecimal("1"), new BigDecimal("2"), "", "", "件", "dept-intake-01"), keeper))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户不在当前账号范围内");
     }
 
     @Test

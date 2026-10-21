@@ -40,6 +40,12 @@ const scopes = [
   { value: 'DEPARTMENT', label: '本部门' }, { value: 'CUSTOMER_RANGE', label: '授权客户范围' },
   { value: 'ALL', label: '全部数据' },
 ];
+const organizationHint = computed(() => {
+  if (editor.value.dataScope === 'TEAM' && !editor.value.teamCode.trim()) return '未填写班组编号时，只能看到本人经手的单据';
+  if (editor.value.dataScope === 'DEPARTMENT' && !editor.value.departmentCode.trim()) return '未填写部门编号时，只能看到本人经手的单据';
+  if (editor.value.dataScope === 'CUSTOMER_RANGE' && selectedCustomerCodes.value.length === 0) return '未选择客户时，看不到任何客户单据';
+  return '';
+});
 const processes = ['雕刻', '镶嵌', '抛光'];
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 const visibleAccounts = computed(() => accounts.value.filter(account => {
@@ -60,7 +66,7 @@ function toggleCustomerCode(id: number, checked: boolean) {
 
 function emptyEditor() {
   return { username: '', operator: '', password: '', confirmPassword: '', role: 'OPERATOR', dataScope: 'SELF',
-    customerCodes: '', allowedProcesses: [] as string[], coverDuties: [...defaultCoverDuties], enabled: true, demoAccount: false };
+    customerCodes: '', teamCode: '', departmentCode: '', allowedProcesses: [] as string[], coverDuties: [...defaultCoverDuties], enabled: true, demoAccount: false };
 }
 
 onMounted(async () => {
@@ -100,6 +106,7 @@ function openEditor(account?: AuthUserAccountSummary, passwordOnly = false) {
   editor.value = account ? {
     username: account.username, operator: account.operator, password: '', confirmPassword: '', role: account.role,
     dataScope: account.dataScope, customerCodes: account.customerScope.join('\n'),
+    teamCode: account.teamCode ?? '', departmentCode: account.departmentCode ?? '',
     allowedProcesses: [...(account.allowedProcesses ?? [])],
     coverDuties: account.role === 'BUSINESS_MANAGER' && account.coverDuties?.length ? [...account.coverDuties] : [...defaultCoverDuties],
     enabled: account.enabled, demoAccount: account.demoAccount,
@@ -163,6 +170,7 @@ async function saveAccount() {
     await upsertAuthAccount({
       username: form.username.trim(), operator: form.operator.trim(), password: form.password || undefined,
       role: form.role, dataScope: form.dataScope, customerScope: form.dataScope === 'CUSTOMER_RANGE' ? customerScope : [],
+      teamCode: form.teamCode.trim(), departmentCode: form.departmentCode.trim(),
       allowedProcesses: [...form.allowedProcesses],
       coverDuties: form.role === 'BUSINESS_MANAGER' ? [...form.coverDuties] : [],
       enabled: form.enabled, demoAccount: form.demoAccount,
@@ -209,7 +217,7 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <tr v-for="account in visibleAccounts" :key="account.username" :data-user="account.username">
                 <td><b>{{ account.username }}</b><div>{{ account.operator }}</div></td>
                 <td>{{ account.roleLabel }}</td>
-                <td>{{ account.dataScopeLabel }}<div v-if="account.dataScope === 'CUSTOMER_RANGE'">{{ account.customerScope.join('、') || '未授权客户' }}</div></td>
+                <td>{{ account.dataScopeLabel }}<div v-if="account.dataScope === 'CUSTOMER_RANGE'">{{ account.customerScope.join('、') || '未授权客户' }}</div><div v-if="account.teamCode">班组 {{ account.teamCode }}</div><div v-if="account.departmentCode">部门 {{ account.departmentCode }}</div></td>
                 <td>{{ account.allowedProcesses?.join('、') || '未绑定工序' }}</td>
                 <td>{{ account.enabled ? '启用' : '停用' }}{{ account.locked ? ' · 已锁定' : '' }}{{ account.passwordChangeRequired ? ' · 待改密' : '' }}</td>
                 <td><div class="user-actions">
@@ -256,6 +264,9 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <label>姓名<input v-model="editor.operator" aria-label="用户姓名" required /></label>
               <label>角色<select v-model="editor.role" aria-label="用户角色"><option v-for="role in options.roles" :key="role.value" :value="role.value">{{ role.label }}</option></select></label>
               <label>数据范围<select v-model="editor.dataScope" aria-label="用户数据范围"><option v-for="scope in scopes" :key="scope.value" :value="scope.value">{{ scope.label }}</option></select></label>
+              <label>班组编号<input v-model="editor.teamCode" aria-label="班组编号" maxlength="40" placeholder="选择本班组时必填" /></label>
+              <label>部门编号<input v-model="editor.departmentCode" aria-label="部门编号" maxlength="40" placeholder="选择本部门时必填" /></label>
+              <p v-if="organizationHint" class="operation-feedback danger">{{ organizationHint }}</p>
             </div>
             <div v-if="editorMode !== 'password' && editor.role === 'BUSINESS_MANAGER'" class="cover-duty-panel">
               <p>默认勾选收货、报工、质检，以及拆单、标签和客户档案。其余项默认不勾，可以按人另加或取消。数据范围在上面单独选。</p>

@@ -1,19 +1,21 @@
 package com.zhubao.erp.security.domain;
 
 /**
- * 客户名单是否覆盖某个客户。未填写名单的部门、班组或本人范围视为不限制客户；
- * 授权客户范围必须命中名单。
+ * 客户名单是否覆盖某个客户。只有全部数据范围不看名单；名单为空不代表可以看全部客户。
  */
 public final class CustomerScopeRules {
     private CustomerScopeRules() {
     }
 
     public static boolean allowed(OperatorContext operator, Long customerId, String customerName) {
-        if (operator == null || operator.dataScope() == DataScope.ALL) {
+        if (operator == null) {
+            return false;
+        }
+        if (operator.dataScope() == DataScope.ALL) {
             return true;
         }
         if (operator.customerScope().isEmpty()) {
-            return operator.dataScope() != DataScope.CUSTOMER_RANGE;
+            return false;
         }
         String idText = customerId == null ? "" : customerId.toString();
         String prefixed = idText.isEmpty() ? "" : "客户#" + idText;

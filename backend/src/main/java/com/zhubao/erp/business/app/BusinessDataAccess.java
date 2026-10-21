@@ -6,11 +6,13 @@ import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -22,24 +24,32 @@ public class BusinessDataAccess {
 
     private final BusinessDocumentRepository documents;
     private final StockLedgerService stocks;
+    private final AuthUserAccountRepository accounts;
 
     public BusinessDataAccess(BusinessDocumentRepository documents, StockLedgerService stocks) {
+        this(documents, stocks, null);
+    }
+
+    @Autowired
+    public BusinessDataAccess(BusinessDocumentRepository documents, StockLedgerService stocks,
+                              AuthUserAccountRepository accounts) {
         this.documents = documents;
         this.stocks = stocks;
+        this.accounts = accounts;
     }
 
     public static OperatorContext contextOf(AuthUserAccount account) {
         if (account == null) throw new PermissionDeniedException("请先登录后再操作业务");
         return new OperatorContext(account.operator(), account.role(), account.dataScope(), false, "",
-                account.customerScope(), account.coverDuties());
+                account.customerScope(), account.coverDuties(), account.username(), account.teamCode(),
+                account.departmentCode());
     }
 
     public boolean canRead(OperatorContext context, String businessCode) {
         if (context == null || ownershipConflicts(text(businessCode))) return false;
         if (context.dataScope() == DataScope.ALL) return true;
         BusinessOwner owner = ownerOf(text(businessCode));
-        return owner != null && customerVisible(context, owner.mother().customerId(), owner.mother().customerName())
-                && (areaVisible(context, owner.area()) || related(context, owner.mother(), owner.orderCode()));
+        return owner != null && visibleOwner(context, owner);
     }
 
     public boolean canRead(OperatorContext context, StockDimension dimension) {
@@ -47,8 +57,8 @@ public class BusinessDataAccess {
         if (context.dataScope() == DataScope.ALL) return true;
         MotherOrderRecord mother = documents.findMotherOrderByCode(text(dimension.motherOrderCode())).orElse(null);
         if (mother == null || !Objects.equals(mother.customerId(), dimension.customerId())) return false;
-        return customerVisible(context, dimension.customerId(), mother.customerName())
-                && (areaVisible(context, "inventory") || related(context, mother, text(dimension.workOrderCode())));
+        return DocumentVisibility.canSee(context, dimension.customerId(), mother.customerName(), "inventory",
+                participants(mother, text(dimension.workOrderCode())), directory());
     }
 
     public void assertCanRead(OperatorContext context, String businessCode) {
@@ -81,14 +91,36 @@ public class BusinessDataAccess {
             return;
         }
         if (!Objects.equals(mother.customerId(), customerId)) throw new PermissionDeniedException("请求客户与单据真实客户不一致");
-        assertCustomer(context, mother.customerId(), mother.customerName());
+        assertCanRead(context, mother.code());
     }
 
     /** 首次拆单尚无本人关联，写入岗位另行授权后按真实母单客户检查。 */
     public void assertDocumentCustomer(OperatorContext context, String motherOrderCode) {
         MotherOrderRecord mother = documents.findMotherOrderByCode(text(motherOrderCode))
                 .orElseThrow(() -> new PermissionDeniedException("无法确认单据的真实客户归属"));
-        assertCustomer(context, mother.customerId(), mother.customerName());
+        if (!visibleOwner(context, new BusinessOwner(mother, mother.code(), "inbound"))) {
+            throw new PermissionDeniedException("客户不在当前账号的授权范围内");
+        }
+    }
+
+    private boolean visibleOwner(OperatorContext context, BusinessOwner owner) {
+        return DocumentVisibility.canSee(context, owner.mother().customerId(), owner.mother().customerName(),
+                owner.area(), participants(owner.mother(), owner.orderCode()), directory());
+    }
+
+    private List<AuthUserAccount> directory() {
+        return accounts == null ? List.of() : accounts.findAll();
+    }
+
+    private List<String> participants(MotherOrderRecord mother, String orderCode) {
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        names.add(mother.operator());
+        names.add(mother.receiverName());
+        names.add(mother.unpackSigner());
+        String code = orderCode == null || orderCode.isBlank() ? mother.code() : orderCode;
+        documents.listProcessStationHandoffs(code).forEach(row -> names.add(row.operator()));
+        documents.findQualityRequirementCheck(code).ifPresent(row -> names.add(row.inspector()));
+        return names;
     }
 
     private boolean customerVisible(OperatorContext context, Long customerId, String customerName) {
