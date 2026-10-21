@@ -82,7 +82,7 @@ data["deployedAt"] = datetime.now(timezone.utc).isoformat()
 data["frontendDeployedAt"] = data["deployedAt"]
 data["rollbackDirectory"] = rel + "/rollback"
 data["frontendRollbackDirectory"] = rel + "/rollback"
-data["note"] = "客户档案、材质目录和加工要求快捷词；运行库应已执行到 V68"
+data["note"] = "角色权限：审批按登录会话和任务场景，空客户名单和未配置班组不再放大可见范围；本次无新迁移，运行库保持 V68"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
