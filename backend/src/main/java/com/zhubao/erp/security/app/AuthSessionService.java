@@ -57,6 +57,7 @@ public class AuthSessionService {
     private final PasswordExpiryPolicy passwordExpiryPolicy;
     private final PasswordPolicy passwordPolicy;
     private final CustomerAuthorizationService customerAuthorizationService;
+    private final PermissionGuard permissionGuard;
     private MasterDataService masterDataService;
 
     public AuthSessionService(
@@ -85,7 +86,6 @@ public class AuthSessionService {
                 new InMemoryAuthLoginSessionRepository());
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
             AuthAuditRepository authAuditRepository,
@@ -96,6 +96,22 @@ public class AuthSessionService {
             CustomerAuthorizationService customerAuthorizationService,
             AuthLoginSessionRepository loginSessions
     ) {
+        this(navigationMenuService, authAuditRepository, userAccountRepository, passwordHasher,
+                passwordExpiryPolicy, passwordPolicy, customerAuthorizationService, loginSessions, new PermissionGuard());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthSessionService(
+            NavigationMenuService navigationMenuService,
+            AuthAuditRepository authAuditRepository,
+            AuthUserAccountRepository userAccountRepository,
+            PasswordHasher passwordHasher,
+            PasswordExpiryPolicy passwordExpiryPolicy,
+            PasswordPolicy passwordPolicy,
+            CustomerAuthorizationService customerAuthorizationService,
+            AuthLoginSessionRepository loginSessions,
+            PermissionGuard permissionGuard
+    ) {
         this.navigationMenuService = navigationMenuService;
         this.authAuditRepository = authAuditRepository;
         this.userAccountRepository = userAccountRepository;
@@ -104,6 +120,7 @@ public class AuthSessionService {
         this.passwordPolicy = passwordPolicy;
         this.customerAuthorizationService = customerAuthorizationService;
         this.loginSessions = loginSessions;
+        this.permissionGuard = permissionGuard == null ? new PermissionGuard() : permissionGuard;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -565,7 +582,11 @@ public class AuthSessionService {
                 user.allowedProcesses(),
                 user.coverDuties(),
                 user.teamCode(),
-                user.departmentCode()
+                user.departmentCode(),
+                permissionGuard.effectivePermissions(user.role(), user.coverDuties()).stream()
+                        .map(com.zhubao.erp.security.domain.PermissionCode::name)
+                        .sorted()
+                        .toList()
         );
     }
 

@@ -63,6 +63,8 @@ class AuthSessionServiceTest {
         assertThat(session.operator()).isEqualTo("车间组长 马杰");
         assertThat(session.role()).isEqualTo("WORKSHOP_LEADER");
         assertThat(session.menuCodes()).contains("production", "quality", "approvals", "sample");
+        assertThat(session.effectivePermissions()).contains("BUSINESS_PRODUCTION_REPORT", "BUSINESS_LOSS_APPROVAL");
+        assertThat(session.effectivePermissions()).doesNotContain("FINANCE_RECEIPT", "AUTH_ACCOUNT_MANAGE", "INVENTORY_LEDGER_TRANSFER");
         assertThat(session.menuTree())
                 .anySatisfy(item -> {
                     assertThat(item.code()).isEqualTo("sample");

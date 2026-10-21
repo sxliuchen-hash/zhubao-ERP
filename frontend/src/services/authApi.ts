@@ -23,6 +23,7 @@ export interface AuthSession {
   coverDuties?: string[];
   teamCode?: string;
   departmentCode?: string;
+  effectivePermissions?: string[];
 }
 
 export interface NavigationMenuItem {

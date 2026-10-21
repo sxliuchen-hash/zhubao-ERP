@@ -22,7 +22,8 @@ public record AuthSession(
         List<String> allowedProcesses,
         List<String> coverDuties,
         String teamCode,
-        String departmentCode
+        String departmentCode,
+        List<String> effectivePermissions
 ) {
     public AuthSession {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
@@ -32,5 +33,6 @@ public record AuthSession(
         coverDuties = coverDuties == null ? List.of() : List.copyOf(coverDuties);
         teamCode = teamCode == null ? "" : teamCode.trim();
         departmentCode = departmentCode == null ? "" : departmentCode.trim();
+        effectivePermissions = effectivePermissions == null ? List.of() : List.copyOf(effectivePermissions);
     }
 }

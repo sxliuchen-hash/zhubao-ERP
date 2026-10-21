@@ -290,7 +290,7 @@ async function removeAccount(account: AuthUserAccountSummary) {
             <template v-if="editorMode !== 'password'">
               <p>可操作工序</p><div class="user-checks"><label v-for="process in processes" :key="process"><input v-model="editor.allowedProcesses" type="checkbox" :value="process" />{{ process }}</label></div>
               <div class="user-checks"><label><input v-model="editor.enabled" type="checkbox" :disabled="editor.username === session?.username" />启用账号</label></div>
-              <details class="user-permissions"><summary>查看角色包含的操作权限（{{ selectedRole?.permissions.length ?? 0 }} 项）</summary><p>操作权限随角色配置；数据范围、客户及工序限制分别设置。</p><ul><li v-for="permission in selectedRole?.permissions ?? []" :key="permission.code">{{ permission.label }}</li></ul></details>
+              <details class="user-permissions"><summary>查看角色包含的操作权限（{{ selectedRole?.permissions.length ?? 0 }} 项）</summary><p>这里是角色模板。业务管理还要看已勾选的顶岗；桌面和手机使用同一份登录会话。菜单或按钮没显示，也不能绕过接口。</p><ul><li v-for="permission in selectedRole?.permissions ?? []" :key="permission.code">{{ permission.label }}</li></ul></details>
             </template>
             <template v-if="editorMode !== 'edit'">
               <p>密码至少 8 位，包含字母和数字。用户下次登录需自行修改密码。</p>
