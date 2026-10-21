@@ -1559,7 +1559,7 @@ PWA 一期边界：
 
 | 接口 | 权限码 | 允许角色 |
 |---|---|---|
-| `POST /api/inventory/ledger/transfers` | `INVENTORY_LEDGER_TRANSFER` | `ADMIN`、`GENERAL_MANAGER` |
+| `POST /api/inventory/ledger/transfers` | `INVENTORY_LEDGER_TRANSFER` | 仅 `ADMIN`。总经理不再因权限登记自动获得任意库存转移 |
 | `POST /api/business/operations/inbound-confirmations` | `BUSINESS_INBOUND_CONFIRM` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER` |
 | `POST /api/business/operations/process-stations` | `BUSINESS_PRODUCTION_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
 | `POST /api/business/operations/quality-checks` | `BUSINESS_QUALITY_FREEZE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |

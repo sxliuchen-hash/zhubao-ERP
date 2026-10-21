@@ -189,4 +189,22 @@ class PermissionGuardTest {
                 .hasMessageContaining("OPERATOR")
                 .hasMessageContaining("收款登记");
     }
+
+    @Test
+    void generalManagerKeepsCurrentWorkButNotAdminOnlyControls() {
+        OperatorContext manager = new OperatorContext("总经理", RoleCode.GENERAL_MANAGER, DataScope.ALL);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_INBOUND_CONFIRM, manager))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.FINANCE_RECEIPT, manager))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, manager))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.INVENTORY_LEDGER_TRANSFER, manager))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_DEVICE_MANAGE, manager))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.DOCUMENT_CONTENT_MANAGE, manager))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
 }

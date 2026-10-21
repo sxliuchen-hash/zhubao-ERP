@@ -20,41 +20,41 @@ public class PermissionGuard {
 
     public PermissionGuard() {
         allow(PermissionCode.INVENTORY_LEDGER_TRANSFER, RoleCode.ADMIN);
-        allow(PermissionCode.BUSINESS_INBOUND_CONFIRM, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER);
-        allow(PermissionCode.BUSINESS_PRODUCTION_REPORT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.BUSINESS_QUALITY_FREEZE, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.BUSINESS_REWORK_DISPATCH, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.BUSINESS_REWORK_REPORT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.BUSINESS_QUALITY_RELEASE, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, RoleCode.WAREHOUSE_KEEPER, RoleCode.SALES);
-        allow(PermissionCode.BUSINESS_CUSTOMER_RETURN, RoleCode.WAREHOUSE_KEEPER, RoleCode.SALES, RoleCode.QUALITY_INSPECTOR);
-        allow(PermissionCode.BUSINESS_AFTER_SALES_REVIEW, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.BUSINESS_LOSS_APPROVAL, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER);
-        allow(PermissionCode.REGISTER_IMPORT_REVIEW, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.REGISTER_IMPORT_POSTING, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.MACHINE_OUTPUT_SUBMIT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.GATEWAY_READING_CONSUME, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER, RoleCode.QUALITY_INSPECTOR, RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER);
+        allowManager(PermissionCode.BUSINESS_INBOUND_CONFIRM, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER);
+        allowManager(PermissionCode.BUSINESS_PRODUCTION_REPORT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.BUSINESS_QUALITY_FREEZE, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.BUSINESS_REWORK_DISPATCH, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.BUSINESS_REWORK_REPORT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.BUSINESS_QUALITY_RELEASE, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, RoleCode.WAREHOUSE_KEEPER, RoleCode.SALES);
+        allowManager(PermissionCode.BUSINESS_CUSTOMER_RETURN, RoleCode.WAREHOUSE_KEEPER, RoleCode.SALES, RoleCode.QUALITY_INSPECTOR);
+        allowManager(PermissionCode.BUSINESS_AFTER_SALES_REVIEW, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.BUSINESS_LOSS_APPROVAL, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER);
+        allowManager(PermissionCode.REGISTER_IMPORT_REVIEW, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.REGISTER_IMPORT_POSTING, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.MACHINE_OUTPUT_SUBMIT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.GATEWAY_READING_CONSUME, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER, RoleCode.QUALITY_INSPECTOR, RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER);
         allow(PermissionCode.GATEWAY_DEVICE_MANAGE, RoleCode.ADMIN);
         roleMatrix.put(PermissionCode.AUTH_ACCOUNT_MANAGE, EnumSet.of(RoleCode.ADMIN));
         roleMatrix.put(PermissionCode.ORDER_ADMIN_MAINTAIN, EnumSet.of(RoleCode.ADMIN));
         roleMatrix.put(PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE, EnumSet.of(RoleCode.ADMIN));
-        allow(PermissionCode.MASTER_DATA_MANAGE, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.APPROVAL_DECISION, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.MASTER_DATA_MANAGE, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.APPROVAL_DECISION, RoleCode.WORKSHOP_LEADER, RoleCode.GENERAL_MANAGER, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
         allow(PermissionCode.DOCUMENT_CONTENT_MANAGE, RoleCode.ADMIN);
-        allow(PermissionCode.DOCUMENT_CAPTURE, RoleCode.OPERATOR, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.VIDEO_TASK_OPERATE, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.LABEL_PRINT, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER, RoleCode.OPERATOR);
-        allow(PermissionCode.BUSINESS_MOTHER_SPLIT, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
-        allow(PermissionCode.FINANCE_PRICE_MANAGE, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_BILLING_POST, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_RECEIPT, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_PAYROLL, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_CONSUMABLE, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_ASSET, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_PAYABLE, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_CUSTOMER_READ, RoleCode.FINANCE_STATISTICIAN);
-        allow(PermissionCode.FINANCE_COMPANY_READ, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.DOCUMENT_CAPTURE, RoleCode.OPERATOR, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.VIDEO_TASK_OPERATE, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.LABEL_PRINT, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER, RoleCode.OPERATOR);
+        allowManager(PermissionCode.BUSINESS_MOTHER_SPLIT, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER, RoleCode.WORKSHOP_LEADER);
+        allowManager(PermissionCode.FINANCE_PRICE_MANAGE, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_BILLING_POST, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_RECEIPT, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_PAYROLL, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_CONSUMABLE, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_ASSET, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_PAYABLE, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_CUSTOMER_READ, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.FINANCE_COMPANY_READ, RoleCode.FINANCE_STATISTICIAN);
         // 业务管理可分给多人，只顶上收货、报工和质检，不带财务入账、发货和账号管理。
         grant(PermissionCode.BUSINESS_INBOUND_CONFIRM, RoleCode.BUSINESS_MANAGER);
         grant(PermissionCode.BUSINESS_PRODUCTION_REPORT, RoleCode.BUSINESS_MANAGER);
@@ -118,8 +118,13 @@ public class PermissionGuard {
     private void allow(PermissionCode permission, RoleCode firstRole, RoleCode... otherRoles) {
         EnumSet<RoleCode> roles = EnumSet.of(firstRole, otherRoles);
         roles.add(RoleCode.ADMIN);
-        roles.add(RoleCode.GENERAL_MANAGER);
         roleMatrix.put(permission, roles);
+    }
+
+    /** 总经理继续保留已经在用的日常权限，不再因为登记动作而自动获得新权限。 */
+    private void allowManager(PermissionCode permission, RoleCode firstRole, RoleCode... otherRoles) {
+        allow(permission, firstRole, otherRoles);
+        grant(permission, RoleCode.GENERAL_MANAGER);
     }
 
     private static boolean coverAllows(PermissionCode permission, java.util.List<String> duties) {
