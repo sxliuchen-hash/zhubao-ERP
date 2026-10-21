@@ -4,6 +4,7 @@ import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.approval.domain.ApprovalActor;
 import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalTask;
+import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.security.app.AuthSessionService;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -61,6 +62,6 @@ public class ApprovalController {
         if (account.operator() == null || account.operator().isBlank() || account.role() == null) {
             throw new PermissionDeniedException("请先登录后再查看审批");
         }
-        return new ApprovalActor(account.operator(), account.username(), account.role());
+        return new ApprovalActor(account.operator(), account.username(), account.role(), BusinessDataAccess.contextOf(account));
     }
 }

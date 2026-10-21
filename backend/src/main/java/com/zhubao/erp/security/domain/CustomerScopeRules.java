@@ -1,7 +1,7 @@
 package com.zhubao.erp.security.domain;
 
 /**
- * 客户名单是否覆盖某个客户。只有全部数据范围不看名单；名单为空不代表可以看全部客户。
+ * 客户名单是否覆盖某个客户。仅客户名单范围必须配置客户；其他范围没有名单时不附加客户限制。
  */
 public final class CustomerScopeRules {
     private CustomerScopeRules() {
@@ -15,7 +15,7 @@ public final class CustomerScopeRules {
             return true;
         }
         if (operator.customerScope().isEmpty()) {
-            return false;
+            return operator.dataScope() != DataScope.CUSTOMER_RANGE;
         }
         String idText = customerId == null ? "" : customerId.toString();
         String prefixed = idText.isEmpty() ? "" : "客户#" + idText;

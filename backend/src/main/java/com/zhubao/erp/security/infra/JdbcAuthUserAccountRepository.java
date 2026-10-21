@@ -55,6 +55,7 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
 
     @Override
     public AuthUserAccount save(AuthUserAccount account) {
+        requireOrganizationColumns(account);
         if (findByUsername(account.username()).isPresent()) {
             return update(account);
         }
@@ -450,11 +451,19 @@ public class JdbcAuthUserAccountRepository implements AuthUserAccountRepository 
         if (account == null) {
             throw new com.zhubao.erp.common.error.BusinessException("保存账号缺少账号资料");
         }
+        requireOrganizationColumns(account);
         if (exists(connection, account.username())) {
             updateOn(connection, account);
             return;
         }
         insertOn(connection, account);
+    }
+
+    private void requireOrganizationColumns(AuthUserAccount account) {
+        if (account != null && (!account.teamCode().isBlank() || !account.departmentCode().isBlank())
+                && !organizationColumns()) {
+            throw new com.zhubao.erp.common.error.BusinessException("数据库尚未升级组织字段，不能保存班组或部门编号");
+        }
     }
 
     private boolean exists(Connection connection, String username) throws SQLException {

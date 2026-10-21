@@ -74,14 +74,12 @@ class MobileIntakeServiceTest {
     }
 
     @Test
-    void departmentWithoutCustomerListCannotCreateMother() {
+    void departmentWithoutCustomerListCanCreateMother() {
         OperatorContext keeper = new OperatorContext("库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT);
 
-        assertThatThrownBy(() -> service.intake(new MobileIntakeCommand(
-                "SF1048329002", "恒信珠宝", null, "抛光", "2026-10-20", "戒托",
-                new BigDecimal("1"), new BigDecimal("2"), "", "", "件", "dept-intake-01"), keeper))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("客户不在当前账号范围内");
+        MobileIntakeResult created = service.intake(command("抛光", "2026-10-20"), keeper);
+        assertThat(created.alreadyExists()).isFalse();
+        assertThat(documents.findMotherOrderByCode(created.motherOrderCode())).isPresent();
     }
 
     @Test

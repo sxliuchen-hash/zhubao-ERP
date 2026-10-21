@@ -20,9 +20,18 @@ const progressCode = ref('');
 const insecureContext = typeof window !== 'undefined' && window.isSecureContext === false;
 
 const coverDuties = computed(() => authSession.value?.coverDuties ?? []);
+const modePermission: Record<Exclude<JobMode, 'detail'>, string> = {
+  intake: 'BUSINESS_INBOUND_CONFIRM',
+  station: 'BUSINESS_PRODUCTION_REPORT',
+  progress: 'BUSINESS_PRODUCTION_REPORT',
+  quality: 'BUSINESS_QUALITY_FREEZE',
+  shipping: 'BUSINESS_OUTBOUND_SHIPMENT',
+};
+const canUseMode = (mode: Exclude<JobMode, 'detail'>) =>
+  !authSession.value?.effectivePermissions || authSession.value.effectivePermissions.includes(modePermission[mode]);
 
 const primaryModes = computed(() => {
-  switch (authSession.value?.role) {
+  const modes = (() => { switch (authSession.value?.role) {
     case 'ADMIN': return [{ key: 'intake', label: '收货' }, { key: 'station', label: '报工' }, { key: 'quality', label: '质检' }] as const;
     case 'BUSINESS_MANAGER': return [
       ...(coverDuties.value.includes('INTAKE') ? [{ key: 'intake' as const, label: '收货' }] : []),
@@ -35,10 +44,11 @@ const primaryModes = computed(() => {
     case 'WORKSHOP_LEADER': return [{ key: 'station', label: '报工' }, { key: 'quality', label: '质检' }] as const;
     case 'QUALITY_INSPECTOR': return [{ key: 'quality', label: '质检' }] as const;
     default: return [];
-  }
+  } })();
+  return modes.filter((mode) => canUseMode(mode.key));
 });
 const extraModes = computed(() => {
-  switch (authSession.value?.role) {
+  const modes = (() => { switch (authSession.value?.role) {
     case 'ADMIN': return [{ key: 'progress', label: '进度报工' }, { key: 'shipping', label: '发货' }] as const;
     case 'OPERATOR':
     case 'WORKSHOP_LEADER': return [{ key: 'progress', label: '进度报工' }] as const;
@@ -48,7 +58,8 @@ const extraModes = computed(() => {
     ];
     case 'WAREHOUSE_KEEPER': return [{ key: 'shipping', label: '发货' }] as const;
     default: return [];
-  }
+  } })();
+  return modes.filter((mode) => canUseMode(mode.key));
 });
 
 watch([primaryModes, extraModes], () => {
@@ -80,6 +91,7 @@ function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objec
       v-if="jobMode === 'detail' && (primaryModes.length || extraModes.length)"
       :role="authSession?.role || ''"
       :cover-duties="authSession?.coverDuties ?? []"
+      :allowed-actions="[...primaryModes, ...extraModes].map((mode) => mode.key)"
       :initial-target="lastTarget"
       @open="open"
     />

@@ -8,8 +8,11 @@ import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.domain.ApprovalTaskRepository;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
+import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.security.domain.RoleCode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
@@ -24,12 +27,19 @@ public class ApprovalService {
     private static final DateTimeFormatter ACCOUNT_APPROVAL_CODE_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     private final ApprovalTaskRepository repository;
+    private final BusinessDataAccess businessDataAccess;
     private final ApprovalAccess access = new ApprovalAccess();
     private final AtomicLong accountApprovalSequence = new AtomicLong();
     private final AtomicLong accountPreApprovalSequence = new AtomicLong();
 
     public ApprovalService(ApprovalTaskRepository repository) {
+        this(repository, null);
+    }
+
+    @Autowired
+    public ApprovalService(ApprovalTaskRepository repository, BusinessDataAccess businessDataAccess) {
         this.repository = repository;
+        this.businessDataAccess = businessDataAccess;
     }
 
     public ApprovalTask createLossApprovalTask(ApproveLossCommand command, LossApprovalResult result) {
@@ -151,12 +161,12 @@ public class ApprovalService {
 
     public List<ApprovalTask> visibleTasks(ApprovalActor actor) {
         requireActor(actor);
-        return findAll().stream().filter(task -> access.canRead(actor, task)).toList();
+        return findAll().stream().filter(task -> canRead(actor, task)).toList();
     }
 
     public List<ApprovalTask> pendingTasks(ApprovalActor actor) {
         requireActor(actor);
-        return findAll().stream().filter(task -> access.canDecide(actor, task)).toList();
+        return findAll().stream().filter(task -> access.canDecide(actor, task) && withinBusinessScope(actor, task)).toList();
     }
 
     public ApprovalTask findByCode(String approvalCode) {
@@ -167,7 +177,7 @@ public class ApprovalService {
     public ApprovalTask visibleTask(String approvalCode, ApprovalActor actor) {
         requireActor(actor);
         ApprovalTask task = findByCode(approvalCode);
-        if (!access.canRead(actor, task)) {
+        if (!canRead(actor, task)) {
             throw new PermissionDeniedException("无权查看该审批任务");
         }
         return task;
@@ -177,6 +187,9 @@ public class ApprovalService {
         requireActor(actor);
         ApprovalTask current = findByCode(approvalCode);
         access.assertCanDecide(actor, current);
+        if (!withinBusinessScope(actor, current)) {
+            throw new PermissionDeniedException("单据不在当前账号的审批数据范围内");
+        }
         ApprovalStatus targetStatus = parseDecision(command.decision());
         ApprovalTask decided = new ApprovalTask(
                 current.approvalCode(),
@@ -202,6 +215,19 @@ public class ApprovalService {
         );
         return repository.decideIfWaiting(decided)
                 .orElseThrow(() -> new BusinessException("该审批已处理，不能重复决策"));
+    }
+
+    private boolean canRead(ApprovalActor actor, ApprovalTask task) {
+        return access.canRead(actor, task) && withinBusinessScope(actor, task);
+    }
+
+    private boolean withinBusinessScope(ApprovalActor actor, ApprovalTask task) {
+        if (!ApprovalAccess.LOSS.equals(task.scene()) || actor.role() == RoleCode.ADMIN
+                || (actor.operator().equals(task.applicant()) || actor.username().equalsIgnoreCase(task.applicant()))) {
+            return true;
+        }
+        return businessDataAccess == null || (actor.context() != null
+                && businessDataAccess.canRead(actor.context(), task.businessCode()));
     }
 
     private void requireActor(ApprovalActor actor) {

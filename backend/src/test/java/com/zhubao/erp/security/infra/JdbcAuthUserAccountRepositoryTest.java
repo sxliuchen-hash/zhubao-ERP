@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcAuthUserAccountRepositoryTest {
 
@@ -60,6 +61,40 @@ class JdbcAuthUserAccountRepositoryTest {
                     assertThat(account.role()).isEqualTo(RoleCode.OPERATOR);
                     assertThat(account.enabled()).isFalse();
                 });
+    }
+
+    @Test
+    void organizationSaveRequiresColumnsAndPersistsAfterMigration() throws SQLException {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1");
+        dataSource.setUser("sa");
+        dataSource.setPassword("");
+        createSchema(dataSource);
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("alter table auth_user_account drop column team_code");
+            statement.execute("alter table auth_user_account drop column department_code");
+        }
+        JdbcAuthUserAccountRepository legacy = new JdbcAuthUserAccountRepository(dataSource);
+        AuthUserAccount leader = account("leader-org", "组长", RoleCode.WORKSHOP_LEADER, DataScope.TEAM, true);
+        assertThatThrownBy(() -> legacy.save(leader.withOrganization("TEAM-A", "")))
+                .hasMessageContaining("数据库尚未升级组织字段");
+        assertThat(legacy.findByUsername("leader-org")).isEmpty();
+
+        legacy.save(leader);
+        assertThatThrownBy(() -> legacy.save(leader.withOrganization("TEAM-A", "")))
+                .hasMessageContaining("数据库尚未升级组织字段");
+        assertThat(legacy.findByUsername("leader-org")).get().extracting(AuthUserAccount::teamCode).isEqualTo("");
+
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("alter table auth_user_account add column team_code varchar(40) not null default ''");
+            statement.execute("alter table auth_user_account add column department_code varchar(40) not null default ''");
+        }
+        JdbcAuthUserAccountRepository upgraded = new JdbcAuthUserAccountRepository(dataSource);
+        upgraded.save(leader.withOrganization("TEAM-A", "DEPT-A"));
+        assertThat(upgraded.findByUsername("leader-org")).get().satisfies(saved -> {
+            assertThat(saved.teamCode()).isEqualTo("TEAM-A");
+            assertThat(saved.departmentCode()).isEqualTo("DEPT-A");
+        });
     }
 
     @Test

@@ -28,7 +28,7 @@ public class ApprovalAccess {
         if (actor.role() == RoleCode.ADMIN || samePerson(actor, task.applicant())) {
             return true;
         }
-        return allowedRoles(task).contains(actor.role());
+        return allowedRoles(task).contains(actor.role()) && assignedLossApprover(actor, task);
     }
 
     public boolean canDecide(ApprovalActor actor, ApprovalTask task) {
@@ -38,7 +38,7 @@ public class ApprovalAccess {
         if (task.status() != ApprovalStatus.WAITING_APPROVAL || samePerson(actor, task.applicant())) {
             return false;
         }
-        return allowedRoles(task).contains(actor.role());
+        return allowedRoles(task).contains(actor.role()) && assignedLossApprover(actor, task);
     }
 
     public void assertCanDecide(ApprovalActor actor, ApprovalTask task) {
@@ -53,6 +53,9 @@ public class ApprovalAccess {
         }
         if (!allowedRoles(task).contains(actor.role())) {
             throw new PermissionDeniedException("当前身份不能审批该场景");
+        }
+        if (!assignedLossApprover(actor, task)) {
+            throw new PermissionDeniedException("该损耗审批未分配给当前审批人");
         }
     }
 
@@ -96,5 +99,12 @@ public class ApprovalAccess {
             return true;
         }
         return !actor.username().isEmpty() && value.equalsIgnoreCase(actor.username());
+    }
+
+    private boolean assignedLossApprover(ApprovalActor actor, ApprovalTask task) {
+        if (!LOSS.equals(task.scene()) || actor.role() != RoleCode.WORKSHOP_LEADER) {
+            return true;
+        }
+        return samePerson(actor, task.approver());
     }
 }

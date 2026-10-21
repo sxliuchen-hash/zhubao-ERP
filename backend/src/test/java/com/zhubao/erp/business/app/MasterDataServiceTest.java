@@ -83,7 +83,8 @@ class MasterDataServiceTest {
                 .containsExactly("1001", String.valueOf(created.customerId()));
         assertThat(authorizations.authorizationsFor("recv")).isEmpty();
         assertThat(catalog.customersFor(new OperatorContext("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT)))
-                .isEmpty();
+                .extracting(CustomerProfile::customerId)
+                .contains(created.customerId());
 
         authorizations.grant("recv", "1002", "雅辰饰品", new OperatorContext("管理员", RoleCode.ADMIN, DataScope.ALL));
         CustomerProfile another = catalog.saveCustomer(new CustomerProfile(0, "", "瑞金行", "", "", "", "", true), receiver, "recv");

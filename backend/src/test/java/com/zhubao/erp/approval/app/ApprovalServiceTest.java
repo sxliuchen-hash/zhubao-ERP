@@ -6,10 +6,13 @@ import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
+import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,6 +32,35 @@ class ApprovalServiceTest {
 
     private final InMemoryApprovalTaskRepository repository = new InMemoryApprovalTaskRepository();
     private final ApprovalService service = new ApprovalService(repository);
+
+    @Test
+    void lossTaskRequiresNamedLeaderAndDocumentScope() {
+        AtomicBoolean visible = new AtomicBoolean(false);
+        BusinessDataAccess documents = new BusinessDataAccess(null, null) {
+            @Override
+            public boolean canRead(OperatorContext actor, String businessCode) {
+                return visible.get() && "ZD-UNIT-001".equals(businessCode);
+            }
+        };
+        ApprovalService scoped = new ApprovalService(new InMemoryApprovalTaskRepository(), documents);
+        scoped.createLossApprovalTask(lossCommand(), lossResult(true));
+        OperatorContext context = new OperatorContext("leader-a", RoleCode.WORKSHOP_LEADER, DataScope.TEAM);
+        ApprovalActor assigned = new ApprovalActor("leader-a", "leader", RoleCode.WORKSHOP_LEADER, context);
+        ApprovalActor other = new ApprovalActor("leader-b", "leader-b", RoleCode.WORKSHOP_LEADER, context);
+
+        assertThat(scoped.visibleTasks(assigned)).isEmpty();
+        assertThat(scoped.pendingTasks(assigned)).isEmpty();
+        assertThatThrownBy(() -> scoped.decide("LOSS-UNIT-001",
+                new ApprovalDecisionCommand("APPROVE", "", "", null), assigned))
+                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("数据范围");
+
+        visible.set(true);
+        assertThat(scoped.pendingTasks(assigned)).hasSize(1);
+        assertThat(scoped.visibleTasks(other)).isEmpty();
+        assertThatThrownBy(() -> scoped.decide("LOSS-UNIT-001",
+                new ApprovalDecisionCommand("APPROVE", "", "", null), other))
+                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("未分配");
+    }
 
     @Test
     void createsWaitingApprovalTaskForOverLimitLossTrial() {
@@ -141,7 +174,7 @@ class ApprovalServiceTest {
     @Test
     void decidesWaitingApprovalOnceAndRecordsTheSessionOperator() {
         service.createLossApprovalTask(lossCommand(), lossResult(true));
-        ApprovalActor leader = actor("workshop-leader", "leader", RoleCode.WORKSHOP_LEADER);
+        ApprovalActor leader = actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
 
         ApprovalTask decided = service.decide(
                 "LOSS-UNIT-001",
@@ -151,7 +184,7 @@ class ApprovalServiceTest {
 
         assertThat(decided.status()).isEqualTo(ApprovalStatus.APPROVED);
         assertThat(decided.locked()).isTrue();
-        assertThat(decided.decisionOperator()).isEqualTo("workshop-leader");
+        assertThat(decided.decisionOperator()).isEqualTo("leader-a");
         assertThat(decided.decisionComment()).isEqualTo("Evidence checked.");
         assertThat(decided.evidenceCode()).isEqualTo("ATT-APPROVAL-001");
         assertThat(service.pendingTasks(leader)).isEmpty();
@@ -168,7 +201,7 @@ class ApprovalServiceTest {
         service.createLossApprovalTask(lossCommand(), lossResult(true));
         ApprovalTask account = service.createAccountManagementApprovalTask(
                 "planner", "创建账号", "系统管理员", "ADMIN", "计划员", "SALES", "SELF", "", true, false);
-        ApprovalActor leader = actor("workshop-leader", "leader", RoleCode.WORKSHOP_LEADER);
+        ApprovalActor leader = actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
         ApprovalActor finance = actor("财务", "finance", RoleCode.FINANCE_STATISTICIAN);
         ApprovalActor applicant = actor("operator-a", "operator-a", RoleCode.WORKSHOP_LEADER);
         ApprovalActor manager = actor("总经理", "gm", RoleCode.GENERAL_MANAGER);
@@ -188,7 +221,7 @@ class ApprovalServiceTest {
         )).isInstanceOf(PermissionDeniedException.class).hasMessageContaining("申请人不能审批");
         assertThatThrownBy(() -> service.decide(
                 account.approvalCode(),
-                new ApprovalDecisionCommand("APPROVE", "workshop-leader", "跨场景", null),
+                new ApprovalDecisionCommand("APPROVE", "leader-a", "跨场景", null),
                 leader
         )).isInstanceOf(PermissionDeniedException.class).hasMessageContaining("不能审批该场景");
         assertThatThrownBy(() -> service.decide(
@@ -210,7 +243,7 @@ class ApprovalServiceTest {
     @Test
     void concurrentDecisionsSucceedOnlyOnce() throws Exception {
         service.createLossApprovalTask(lossCommand(), lossResult(true));
-        ApprovalActor leader = actor("workshop-leader", "leader", RoleCode.WORKSHOP_LEADER);
+        ApprovalActor leader = actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -238,7 +271,7 @@ class ApprovalServiceTest {
         pool.shutdown();
         assertThat(success).isEqualTo(1);
         assertThat(service.findByCode("LOSS-UNIT-001").status()).isEqualTo(ApprovalStatus.APPROVED);
-        assertThat(service.findByCode("LOSS-UNIT-001").decisionOperator()).isEqualTo("workshop-leader");
+        assertThat(service.findByCode("LOSS-UNIT-001").decisionOperator()).isEqualTo("leader-a");
     }
 
     private ApprovalActor actor(String operator, String username, RoleCode role) {

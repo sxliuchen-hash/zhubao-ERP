@@ -15,13 +15,23 @@ vi.mock('./MobileOrderDetail.vue', () => ({
   },
 }));
 
-function forRole(role: string, coverDuties?: string[]) {
+function forRole(role: string, coverDuties?: string[], effectivePermissions?: string[]) {
   return mount(MobileOpsWorkspace, {
-    global: { provide: { 'zhubao-auth-session': ref({ role, coverDuties } as AuthSession) } },
+    global: { provide: { 'zhubao-auth-session': ref({ role, coverDuties, effectivePermissions } as AuthSession) } },
   });
 }
 
 describe('MobileOpsWorkspace', () => {
+  it('only opens modes granted by effective permissions', async () => {
+    const wrapper = forRole('WORKSHOP_LEADER', [], ['BUSINESS_QUALITY_FREEZE']);
+    await wrapper.get('[data-open="station"]').trigger('click');
+    expect(wrapper.find('[data-job="station"]').exists()).toBe(false);
+    await wrapper.get('[data-open="progress"]').trigger('click');
+    expect(wrapper.find('[data-job="progress"]').exists()).toBe(false);
+    await wrapper.get('[data-open="quality"]').trigger('click');
+    expect(wrapper.find('[data-job="quality"]').exists()).toBe(true);
+  });
+
   it('starts the receiver at the scan detail and opens collection', async () => {
     const wrapper = forRole('RECEIVER');
     expect(wrapper.find('[data-job="detail"]').exists()).toBe(true);

@@ -72,4 +72,17 @@ describe('手机扫码订单详情', () => {
     await wrapper.get('.mobile-order-card .primary-button').trigger('click');
     expect(wrapper.emitted('open')?.[1]).toEqual(['intake', { code: 'SF123', objectType: 'EXPRESS_NO' }]);
   });
+
+  it('只展示会话有效权限允许的现场操作', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      objectType: 'WORK_ORDER', code: 'WO-1',
+      actions: [{ code: 'REPORT_PROCESS', allowed: true, blockKind: null, blockReason: null }],
+    }));
+    const wrapper = mount(MobileOrderDetail, { props: { role: 'WORKSHOP_LEADER', allowedActions: ['quality'] } });
+    await wrapper.get('[data-scan]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('逐条判定质检');
+    expect(wrapper.text()).not.toContain('正式交工');
+    expect(wrapper.text()).not.toContain('更新工序进度');
+  });
 });

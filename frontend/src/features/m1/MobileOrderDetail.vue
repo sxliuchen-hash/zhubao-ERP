@@ -12,6 +12,7 @@ type MobileAction = 'intake' | 'station' | 'progress' | 'quality' | 'shipping';
 const props = defineProps<{
   role: string;
   coverDuties?: string[];
+  allowedActions?: MobileAction[];
   initialTarget?: { code: string; objectType: NonNullable<ScanContextResponse['target']['objectType']> } | null;
 }>();
 const emit = defineEmits<{ open: [action: MobileAction, target?: { code: string; objectType: NonNullable<ScanContextResponse['target']['objectType']> }] }>();
@@ -22,11 +23,12 @@ const scan = reactive(useScanContext());
 const identity = computed(() => canonicalTarget(scan.context));
 const qualityProgressTarget = computed(() => progressTargetFromScan(scan.context));
 const hasDuty = (code: string) => props.role !== 'BUSINESS_MANAGER' || (props.coverDuties ?? []).includes(code);
-const isReceiving = computed(() => hasDuty('INTAKE') && ['ADMIN', 'BUSINESS_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER'].includes(props.role));
-const isProduction = computed(() => hasDuty('REPORT') && ['ADMIN', 'BUSINESS_MANAGER', 'OPERATOR', 'WORKSHOP_LEADER'].includes(props.role));
-const isQuality = computed(() => hasDuty('QUALITY') && ['ADMIN', 'BUSINESS_MANAGER', 'QUALITY_INSPECTOR', 'WORKSHOP_LEADER'].includes(props.role));
-const isWarehouse = computed(() => ['ADMIN', 'WAREHOUSE_KEEPER'].includes(props.role)
-  || (props.role === 'BUSINESS_MANAGER' && (props.coverDuties ?? []).includes('SHIP')));
+const canOpen = (action: MobileAction) => !props.allowedActions || props.allowedActions.includes(action);
+const isReceiving = computed(() => canOpen('intake') && hasDuty('INTAKE') && ['ADMIN', 'BUSINESS_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER'].includes(props.role));
+const isProduction = computed(() => (canOpen('station') || canOpen('progress')) && hasDuty('REPORT') && ['ADMIN', 'BUSINESS_MANAGER', 'OPERATOR', 'WORKSHOP_LEADER'].includes(props.role));
+const isQuality = computed(() => canOpen('quality') && hasDuty('QUALITY') && ['ADMIN', 'BUSINESS_MANAGER', 'QUALITY_INSPECTOR', 'WORKSHOP_LEADER'].includes(props.role));
+const isWarehouse = computed(() => canOpen('shipping') && (['ADMIN', 'WAREHOUSE_KEEPER'].includes(props.role)
+  || (props.role === 'BUSINESS_MANAGER' && (props.coverDuties ?? []).includes('SHIP'))));
 const isWorkTarget = computed(() => ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.value?.objectType ?? ''));
 const isQualityTarget = computed(() => isWorkTarget.value || identity.value?.objectType === 'REWORK');
 const formalReport = computed(() => scan.context?.actions.find((item) => item.code === 'REPORT_PROCESS'));
@@ -61,6 +63,7 @@ async function choose(target: ScanRelatedTarget) {
 }
 
 function open(action: MobileAction) {
+  if (!canOpen(action)) return;
   const target = identity.value;
   emit('open', action, target ? { code: target.code, objectType: target.objectType } : undefined);
 }
@@ -141,8 +144,8 @@ function rememberProgress(record: ScanProgressRecord) {
         <button v-if="isReceiving" class="primary-button" type="button" @click="open('intake')">
           {{ identity.objectType === 'EXPRESS_NO' ? '创建收货订单' : '查看收货与订单资料' }}
         </button>
-        <button v-if="isProduction && isWorkTarget" class="primary-button" type="button" @click="open('progress')">更新工序进度</button>
-        <button v-if="isProduction && isWorkTarget && formalReport?.allowed" class="secondary-button" type="button" @click="open('station')">正式交工</button>
+        <button v-if="isProduction && canOpen('progress') && isWorkTarget" class="primary-button" type="button" @click="open('progress')">更新工序进度</button>
+        <button v-if="isProduction && canOpen('station') && isWorkTarget && formalReport?.allowed" class="secondary-button" type="button" @click="open('station')">正式交工</button>
         <button v-if="isQuality && isQualityTarget && qualityProgressTarget" class="primary-button" type="button" @click="qualityProgressOpen = !qualityProgressOpen">记录质检过程</button>
         <button v-if="isQuality && isQualityTarget" class="secondary-button" type="button" @click="open('quality')">逐条判定质检</button>
         <button v-if="isWarehouse && identity.objectType === 'OUTBOUND_ORDER'" class="secondary-button" type="button" @click="open('shipping')">办理发货</button>
@@ -168,8 +171,8 @@ function rememberProgress(record: ScanProgressRecord) {
       <summary>直接进入本岗作业</summary>
       <div class="mobile-order-actions">
         <button v-if="isReceiving" type="button" class="secondary-button" @click="open('intake')">收货</button>
-        <button v-if="isProduction" type="button" class="secondary-button" @click="open('station')">岗位报工</button>
-        <button v-if="isProduction" type="button" class="secondary-button" @click="open('progress')">进度报工</button>
+        <button v-if="isProduction && canOpen('station')" type="button" class="secondary-button" @click="open('station')">岗位报工</button>
+        <button v-if="isProduction && canOpen('progress')" type="button" class="secondary-button" @click="open('progress')">进度报工</button>
         <button v-if="isQuality" type="button" class="secondary-button" @click="open('quality')">质检</button>
         <button v-if="isWarehouse" type="button" class="secondary-button" @click="open('shipping')">发货</button>
       </div>
