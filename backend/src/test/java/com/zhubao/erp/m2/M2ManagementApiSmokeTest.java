@@ -783,8 +783,10 @@ class M2ManagementApiSmokeTest {
                 "HO-SMOKE-LOSS-009"
         );
 
-        ResponseEntity<String> tasks = restTemplate.getForEntity("/api/approvals/tasks", String.class);
-        ResponseEntity<String> pending = restTemplate.getForEntity("/api/approvals/tasks/pending", String.class);
+        assertThat(restTemplate.getForEntity("/api/approvals/tasks", String.class).getStatusCode().value()).isEqualTo(403);
+        ResponseEntity<String> tasks = signedGet("/api/approvals/tasks", String.class);
+        ResponseEntity<String> pending = restTemplate.exchange(
+                "/api/approvals/tasks/pending", HttpMethod.GET, new HttpEntity<>(sessionHeaders("leader")), String.class);
 
         assertThat(tasks.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(tasks.getBody()).contains(
@@ -798,25 +800,27 @@ class M2ManagementApiSmokeTest {
 
         Map<String, Object> decision = new LinkedHashMap<>();
         decision.put("decision", "APPROVE");
-        decision.put("operator", "workshop-leader-smoke");
+        decision.put("operator", "伪造审批人");
         decision.put("comment", "Evidence checked by smoke test.");
         decision.put("evidenceCode", "ATT-APPROVAL-SMOKE-009");
 
         ResponseEntity<String> decided = restTemplate.postForEntity(
                 "/api/approvals/tasks/LOSS-SMOKE-20260706-009/decisions",
-                decision,
+                new HttpEntity<>(decision, sessionHeaders("leader")),
                 String.class
         );
-        ResponseEntity<String> pendingAfterDecision = restTemplate.getForEntity("/api/approvals/tasks/pending", String.class);
+        ResponseEntity<String> pendingAfterDecision = restTemplate.exchange(
+                "/api/approvals/tasks/pending", HttpMethod.GET, new HttpEntity<>(sessionHeaders("leader")), String.class);
 
         assertThat(decided.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(decided.getBody()).contains(
                 "LOSS-SMOKE-20260706-009",
                 "APPROVED",
-                "workshop-leader-smoke",
+                "车间组长 马杰",
                 "ATT-APPROVAL-SMOKE-009",
                 "\"locked\":true"
         );
+        assertThat(decided.getBody()).doesNotContain("伪造审批人");
         assertThat(pendingAfterDecision.getBody()).doesNotContain("LOSS-SMOKE-20260706-009");
     }
 
@@ -876,7 +880,7 @@ class M2ManagementApiSmokeTest {
                 new HttpEntity<>(headers),
                 String.class
         );
-        ResponseEntity<String> tasks = restTemplate.getForEntity("/api/approvals/tasks", String.class);
+        ResponseEntity<String> tasks = signedGet("/api/approvals/tasks", String.class);
 
         assertThat(created.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(created.getBody()).contains(

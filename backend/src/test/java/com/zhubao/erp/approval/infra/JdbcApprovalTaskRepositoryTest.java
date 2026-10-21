@@ -1,9 +1,12 @@
 package com.zhubao.erp.approval.infra;
 
 import com.zhubao.erp.approval.app.ApprovalService;
+import com.zhubao.erp.approval.domain.ApprovalActor;
 import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
+import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import org.h2.jdbcx.JdbcDataSource;
@@ -18,6 +21,7 @@ import java.sql.Statement;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcApprovalTaskRepositoryTest {
 
@@ -60,9 +64,11 @@ class JdbcApprovalTaskRepositoryTest {
         ApprovalService service = new ApprovalService(repository);
         service.createLossApprovalTask(lossCommand(), lossResult(true));
 
+        ApprovalActor leader = new ApprovalActor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
         ApprovalTask decided = service.decide(
                 "LOSS-JDBC-001",
-                new ApprovalDecisionCommand("APPROVE", "leader-a", "Evidence checked in JDBC test.", "ATT-JDBC-001")
+                new ApprovalDecisionCommand("APPROVE", "伪造审批人", "Evidence checked in JDBC test.", "ATT-JDBC-001"),
+                leader
         );
         JdbcApprovalTaskRepository reloaded = new JdbcApprovalTaskRepository(dataSource);
 
@@ -75,7 +81,13 @@ class JdbcApprovalTaskRepositoryTest {
                     assertThat(saved.decisionOperator()).isEqualTo("leader-a");
                     assertThat(saved.evidenceCode()).isEqualTo("ATT-JDBC-001");
                 });
-        assertThat(service.findPending()).isEmpty();
+        assertThat(service.pendingTasks(leader)).isEmpty();
+        assertThat(auditEventCount()).isEqualTo(2);
+        assertThatThrownBy(() -> service.decide(
+                "LOSS-JDBC-001",
+                new ApprovalDecisionCommand("REJECT", "leader-a", "重复", null),
+                leader
+        )).isInstanceOf(BusinessException.class).hasMessageContaining("不能重复决策");
         assertThat(auditEventCount()).isEqualTo(2);
     }
 

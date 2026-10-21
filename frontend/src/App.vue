@@ -136,9 +136,9 @@ const authorizedMenuCodes = computed(() => {
   ].filter(isTabKey));
 });
 const visibleTabs = computed(() => {
-  // 用户管理和审批暂时只给管理员。当前没有需要其他岗位处理的审批。
+  // 用户管理只给管理员。审批栏目跟随服务端下发的菜单，隐藏入口不能代替接口授权。
   const permittedTabs = tabs.filter((tab) => {
-    if (tab.key === 'users' || tab.key === 'approvals') return authSession.value?.role === 'ADMIN';
+    if (tab.key === 'users') return authSession.value?.role === 'ADMIN';
     return true;
   });
   if (!authorizedMenuCodes.value || authorizedMenuCodes.value.size === 0) {

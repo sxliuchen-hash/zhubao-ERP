@@ -1,6 +1,7 @@
 package com.zhubao.erp.approval.app;
 
 import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
+import com.zhubao.erp.approval.domain.ApprovalActor;
 import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
@@ -8,10 +9,17 @@ import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.domain.RoleCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -131,12 +139,14 @@ class ApprovalServiceTest {
     }
 
     @Test
-    void decidesWaitingApprovalOnceAndLocksAuditSnapshot() {
+    void decidesWaitingApprovalOnceAndRecordsTheSessionOperator() {
         service.createLossApprovalTask(lossCommand(), lossResult(true));
+        ApprovalActor leader = actor("workshop-leader", "leader", RoleCode.WORKSHOP_LEADER);
 
         ApprovalTask decided = service.decide(
                 "LOSS-UNIT-001",
-                new ApprovalDecisionCommand("APPROVE", "workshop-leader", "Evidence checked.", "ATT-APPROVAL-001")
+                new ApprovalDecisionCommand("APPROVE", "伪造审批人", "Evidence checked.", "ATT-APPROVAL-001"),
+                leader
         );
 
         assertThat(decided.status()).isEqualTo(ApprovalStatus.APPROVED);
@@ -144,12 +154,95 @@ class ApprovalServiceTest {
         assertThat(decided.decisionOperator()).isEqualTo("workshop-leader");
         assertThat(decided.decisionComment()).isEqualTo("Evidence checked.");
         assertThat(decided.evidenceCode()).isEqualTo("ATT-APPROVAL-001");
-        assertThat(service.findPending()).isEmpty();
+        assertThat(service.pendingTasks(leader)).isEmpty();
         assertThatThrownBy(() -> service.decide(
                 "LOSS-UNIT-001",
-                new ApprovalDecisionCommand("REJECT", "manager", "late change", null)
+                new ApprovalDecisionCommand("REJECT", "manager", "late change", null),
+                leader
         )).isInstanceOf(BusinessException.class)
-                .hasMessageContaining("already decided");
+                .hasMessageContaining("不能重复决策");
+    }
+
+    @Test
+    void hidesTasksOutsideTheViewerSceneAndRejectsSelfApproval() {
+        service.createLossApprovalTask(lossCommand(), lossResult(true));
+        ApprovalTask account = service.createAccountManagementApprovalTask(
+                "planner", "创建账号", "系统管理员", "ADMIN", "计划员", "SALES", "SELF", "", true, false);
+        ApprovalActor leader = actor("workshop-leader", "leader", RoleCode.WORKSHOP_LEADER);
+        ApprovalActor finance = actor("财务", "finance", RoleCode.FINANCE_STATISTICIAN);
+        ApprovalActor applicant = actor("operator-a", "operator-a", RoleCode.WORKSHOP_LEADER);
+        ApprovalActor manager = actor("总经理", "gm", RoleCode.GENERAL_MANAGER);
+
+        assertThat(service.visibleTasks(leader)).extracting(ApprovalTask::approvalCode).containsExactly("LOSS-UNIT-001");
+        assertThat(service.pendingTasks(leader)).extracting(ApprovalTask::scene).containsExactly("LOSS_APPROVAL");
+        assertThat(service.visibleTasks(finance)).isEmpty();
+        assertThat(service.visibleTasks(applicant)).extracting(ApprovalTask::approvalCode).containsExactly("LOSS-UNIT-001");
+        assertThat(service.pendingTasks(applicant)).isEmpty();
+        assertThatThrownBy(() -> service.visibleTask(account.approvalCode(), leader))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("无权查看");
+        assertThatThrownBy(() -> service.decide(
+                "LOSS-UNIT-001",
+                new ApprovalDecisionCommand("APPROVE", "operator-a", "自己批", null),
+                applicant
+        )).isInstanceOf(PermissionDeniedException.class).hasMessageContaining("申请人不能审批");
+        assertThatThrownBy(() -> service.decide(
+                account.approvalCode(),
+                new ApprovalDecisionCommand("APPROVE", "workshop-leader", "跨场景", null),
+                leader
+        )).isInstanceOf(PermissionDeniedException.class).hasMessageContaining("不能审批该场景");
+        assertThatThrownBy(() -> service.decide(
+                "LOSS-UNIT-001",
+                new ApprovalDecisionCommand("APPROVE", "财务", "跨场景", null),
+                finance
+        )).isInstanceOf(PermissionDeniedException.class).hasMessageContaining("不能审批该场景");
+
+        ApprovalTask acknowledged = service.decide(
+                account.approvalCode(),
+                new ApprovalDecisionCommand("APPROVE", "伪造总经理", "已阅", null),
+                manager
+        );
+        assertThat(acknowledged.decisionOperator()).isEqualTo("总经理");
+        assertThat(acknowledged.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(service.findByCode("LOSS-UNIT-001").status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
+    }
+
+    @Test
+    void concurrentDecisionsSucceedOnlyOnce() throws Exception {
+        service.createLossApprovalTask(lossCommand(), lossResult(true));
+        ApprovalActor leader = actor("workshop-leader", "leader", RoleCode.WORKSHOP_LEADER);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Boolean>> results = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            results.add(pool.submit(() -> {
+                ready.countDown();
+                start.await();
+                try {
+                    service.decide("LOSS-UNIT-001", new ApprovalDecisionCommand("APPROVE", "伪造", "并发", null), leader);
+                    return true;
+                } catch (BusinessException ex) {
+                    return false;
+                }
+            }));
+        }
+        ready.await();
+        start.countDown();
+        int success = 0;
+        for (Future<Boolean> result : results) {
+            if (result.get()) {
+                success++;
+            }
+        }
+        pool.shutdown();
+        assertThat(success).isEqualTo(1);
+        assertThat(service.findByCode("LOSS-UNIT-001").status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(service.findByCode("LOSS-UNIT-001").decisionOperator()).isEqualTo("workshop-leader");
+    }
+
+    private ApprovalActor actor(String operator, String username, RoleCode role) {
+        return new ApprovalActor(operator, username, role);
     }
 
     private ApproveLossCommand lossCommand() {

@@ -1012,7 +1012,7 @@ MySQL 持久化表：
 | `formalPayroll` | 固定为 `false`，表示该审批任务不等于正式工资发放 |
 | `createdAt` | 创建时间快照 |
 | `decidedAt` | 审批处理时间快照 |
-| `decisionOperator` | 审批操作人 |
+| `decisionOperator` | 实际审批人，取登录会话，不取请求体里的 operator |
 | `decisionComment` | 审批意见 |
 | `locked` | 审批处理后锁定，后续变更必须产生新任务或新审计事件 |
 
@@ -1034,11 +1034,15 @@ MySQL 持久化表：
 | 字段 | 说明 |
 |---|---|
 | `decision` | `APPROVE` / `APPROVED` / `REJECT` / `REJECTED` |
-| `operator` | 审批操作人快照 |
+| `operator` | 旧客户端可继续提交，服务端忽略。实际审批人取登录会话中的操作人 |
 | `comment` | 审批意见 |
 | `evidenceCode` | 审批附件或补充证据编码，可覆盖任务原证据编码 |
 
 轻量审批约束：
+- 列表、待办和详情必须携带登录会话，只返回该身份可见的任务。匿名和开发请求头身份不能读取或决策。
+- 决策按场景核对允许的身份：损耗为车间组长、总经理或管理员；账号摘要和历史前置申请按对应责任角色。财务统计不再因通用审批权限处理全部场景。申请人不能审批自己提交的任务。
+- 请求体中的 `operator` 不作为身份来源。同一待审批任务并发或重复决策只成功一次。
+- 账号管理仍由管理员直接保存并审计。历史前置申请接口保持兼容，不因本次审批收口变成强制账号审批。
 - `WAITING_APPROVAL` 任务只能处理一次，处理后 `locked=true`。
 - `AUTO_APPROVED` 用于未超标或在规则阈值内的自动通过快照。
 - 默认仓储为内存实现；设置 `zhubao.approval.repository=jdbc` 或 `ZHUBAO_APPROVAL_REPOSITORY=jdbc` 后启用 `JdbcApprovalTaskRepository`。
@@ -1566,7 +1570,8 @@ PWA 一期边界：
 | `POST /api/business/operations/customer-returns` | `BUSINESS_CUSTOMER_RETURN` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`SALES`、`QUALITY_INSPECTOR` |
 | `POST /api/business/operations/after-sales-reviews` | `BUSINESS_AFTER_SALES_REVIEW` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
 | `POST /api/business/operations/loss-approvals` | `BUSINESS_LOSS_APPROVAL` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER` |
-| `POST /api/approvals/tasks/{approvalCode}/decisions` | `APPROVAL_DECISION` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER`、`FINANCE_STATISTICIAN` |
+| `GET /api/approvals/tasks`、`GET /api/approvals/tasks/pending`、`GET /api/approvals/tasks/{approvalCode}` | 登录会话，并按任务场景过滤 | 匿名与请求头身份拒绝；可见范围见 6.14 |
+| `POST /api/approvals/tasks/{approvalCode}/decisions` | `APPROVAL_DECISION`，再按场景核对身份 | 损耗：`ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER`；账号类任务按责任角色。申请人不能自批。请求体 operator 无效 |
 | `POST /api/documents/attachments/uploads` | `DOCUMENT_ATTACHMENT_UPLOAD` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
 | `GET /api/auth/account-options`、`GET /api/auth/accounts`、`GET /api/auth/accounts/pre-approval-readiness`、`POST /api/auth/accounts/pre-approval-drafts`、`GET/POST /api/auth/accounts/pre-approval-applications`、`GET /api/auth/accounts/pre-approval-evidence`、`POST /api/auth/accounts/pre-approval-evidence/uploads`、`POST /api/auth/accounts`、`POST /api/auth/accounts/{username}/status`、`POST /api/auth/accounts/{username}/unlock`、`POST /api/auth/accounts/{username}/delete`、`POST /api/auth/accounts/{username}/session-revocations` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN` |
 | `GET/POST /api/security/customer-authorizations`、`POST /api/security/customer-authorizations/revocations` | `CUSTOMER_AUTHORIZATION_MANAGE` | 仅 `ADMIN` |

@@ -1016,7 +1016,8 @@ class AuthUserAccountManagementServiceTest {
 
     private void approve(Fixture fixture, AuthAccountPreApprovalApplication application) {
         new ApprovalService(fixture.approvalRepository()).decide(application.approvalTaskCode(),
-                new com.zhubao.erp.approval.domain.ApprovalDecisionCommand("APPROVE", "总经理", "资料已核对", ""));
+                new com.zhubao.erp.approval.domain.ApprovalDecisionCommand("APPROVE", "伪造审批人", "资料已核对", ""),
+                new com.zhubao.erp.approval.domain.ApprovalActor("总经理", "gm", RoleCode.GENERAL_MANAGER));
     }
 
     private AuthAccountPreApprovalApplication readyPreApprovalApplication(

@@ -1,6 +1,7 @@
 package com.zhubao.erp.approval.app;
 
 import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
+import com.zhubao.erp.approval.domain.ApprovalActor;
 import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
@@ -8,6 +9,7 @@ import com.zhubao.erp.approval.domain.ApprovalTaskRepository;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
@@ -22,6 +24,7 @@ public class ApprovalService {
     private static final DateTimeFormatter ACCOUNT_APPROVAL_CODE_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     private final ApprovalTaskRepository repository;
+    private final ApprovalAccess access = new ApprovalAccess();
     private final AtomicLong accountApprovalSequence = new AtomicLong();
     private final AtomicLong accountPreApprovalSequence = new AtomicLong();
 
@@ -126,6 +129,9 @@ public class ApprovalService {
         return repository.save(task);
     }
 
+    /**
+     * 未按身份过滤。工资扣减等内部计算使用；对外列表必须走 {@link #visibleTasks}。
+     */
     public List<ApprovalTask> findAll() {
         return repository.findAll()
                 .stream()
@@ -133,6 +139,9 @@ public class ApprovalService {
                 .toList();
     }
 
+    /**
+     * 未按身份过滤的待审批任务，仅供内部计算。对外待办使用 {@link #pendingTasks}。
+     */
     public List<ApprovalTask> findPending() {
         return findAll()
                 .stream()
@@ -140,17 +149,34 @@ public class ApprovalService {
                 .toList();
     }
 
+    public List<ApprovalTask> visibleTasks(ApprovalActor actor) {
+        requireActor(actor);
+        return findAll().stream().filter(task -> access.canRead(actor, task)).toList();
+    }
+
+    public List<ApprovalTask> pendingTasks(ApprovalActor actor) {
+        requireActor(actor);
+        return findAll().stream().filter(task -> access.canDecide(actor, task)).toList();
+    }
+
     public ApprovalTask findByCode(String approvalCode) {
         return repository.findByCode(approvalCode)
                 .orElseThrow(() -> new BusinessException(404, "Approval task not found: " + approvalCode));
     }
 
-    public ApprovalTask decide(String approvalCode, ApprovalDecisionCommand command) {
-        ApprovalTask current = findByCode(approvalCode);
-        if (current.status() != ApprovalStatus.WAITING_APPROVAL) {
-            throw new BusinessException("Approval task already decided: " + approvalCode);
+    public ApprovalTask visibleTask(String approvalCode, ApprovalActor actor) {
+        requireActor(actor);
+        ApprovalTask task = findByCode(approvalCode);
+        if (!access.canRead(actor, task)) {
+            throw new PermissionDeniedException("无权查看该审批任务");
         }
+        return task;
+    }
 
+    public ApprovalTask decide(String approvalCode, ApprovalDecisionCommand command, ApprovalActor actor) {
+        requireActor(actor);
+        ApprovalTask current = findByCode(approvalCode);
+        access.assertCanDecide(actor, current);
         ApprovalStatus targetStatus = parseDecision(command.decision());
         ApprovalTask decided = new ApprovalTask(
                 current.approvalCode(),
@@ -170,11 +196,18 @@ public class ApprovalService {
                 current.formalPayroll(),
                 current.createdAt(),
                 now(),
-                command.operator(),
+                actor.operator(),
                 command.comment(),
                 true
         );
-        return repository.save(decided);
+        return repository.decideIfWaiting(decided)
+                .orElseThrow(() -> new BusinessException("该审批已处理，不能重复决策"));
+    }
+
+    private void requireActor(ApprovalActor actor) {
+        if (actor == null || actor.role() == null || actor.operator().isBlank()) {
+            throw new PermissionDeniedException("请先登录后再查看审批");
+        }
     }
 
     private ApprovalStatus parseDecision(String decision) {

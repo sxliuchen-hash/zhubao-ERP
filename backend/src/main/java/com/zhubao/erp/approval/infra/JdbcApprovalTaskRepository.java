@@ -26,6 +26,30 @@ public class JdbcApprovalTaskRepository implements ApprovalTaskRepository {
     }
 
     @Override
+    public Optional<ApprovalTask> decideIfWaiting(ApprovalTask task) {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                if (updateIfWaiting(connection, task) != 1) {
+                    connection.rollback();
+                    return Optional.empty();
+                }
+                insertAuditEvent(connection, task);
+                connection.commit();
+                return Optional.of(task);
+            } catch (SQLException | RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to decide approval task", ex);
+        }
+    }
+
+    @Override
     public ApprovalTask save(ApprovalTask task) {
         try (Connection connection = dataSource.getConnection()) {
             boolean previousAutoCommit = connection.getAutoCommit();
@@ -118,6 +142,21 @@ public class JdbcApprovalTaskRepository implements ApprovalTaskRepository {
         }
     }
 
+    private int updateIfWaiting(Connection connection, ApprovalTask task) throws SQLException {
+        String sql = """
+                update approval_task
+                   set scene = ?, business_code = ?, title = ?, status = ?, applicant = ?, approver = ?,
+                       owner_role = ?, severity = ?, source_status = ?, source_summary = ?, evidence_code = ?,
+                       formal_payroll = ?, created_at = ?, decided_at = ?, decision_operator = ?,
+                       decision_comment = ?, locked = ?
+                 where approval_code = ? and status = 'WAITING_APPROVAL'
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindUpdate(statement, task);
+            return statement.executeUpdate();
+        }
+    }
+
     private void updateTask(Connection connection, ApprovalTask task) throws SQLException {
         String sql = """
                 update approval_task
@@ -128,26 +167,30 @@ public class JdbcApprovalTaskRepository implements ApprovalTaskRepository {
                  where approval_code = ?
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, task.scene());
-            statement.setString(2, task.businessCode());
-            statement.setString(3, task.title());
-            statement.setString(4, task.status().name());
-            statement.setString(5, task.applicant());
-            statement.setString(6, task.approver());
-            statement.setString(7, task.ownerRole());
-            statement.setString(8, task.severity());
-            statement.setString(9, task.sourceStatus());
-            statement.setString(10, task.sourceSummary());
-            statement.setString(11, task.evidenceCode());
-            statement.setBoolean(12, task.formalPayroll());
-            statement.setString(13, task.createdAt());
-            statement.setString(14, task.decidedAt());
-            statement.setString(15, task.decisionOperator());
-            statement.setString(16, task.decisionComment());
-            statement.setBoolean(17, task.locked());
-            statement.setString(18, task.approvalCode());
+            bindUpdate(statement, task);
             statement.executeUpdate();
         }
+    }
+
+    private void bindUpdate(PreparedStatement statement, ApprovalTask task) throws SQLException {
+        statement.setString(1, task.scene());
+        statement.setString(2, task.businessCode());
+        statement.setString(3, task.title());
+        statement.setString(4, task.status().name());
+        statement.setString(5, task.applicant());
+        statement.setString(6, task.approver());
+        statement.setString(7, task.ownerRole());
+        statement.setString(8, task.severity());
+        statement.setString(9, task.sourceStatus());
+        statement.setString(10, task.sourceSummary());
+        statement.setString(11, task.evidenceCode());
+        statement.setBoolean(12, task.formalPayroll());
+        statement.setString(13, task.createdAt());
+        statement.setString(14, task.decidedAt());
+        statement.setString(15, task.decisionOperator());
+        statement.setString(16, task.decisionComment());
+        statement.setBoolean(17, task.locked());
+        statement.setString(18, task.approvalCode());
     }
 
     private void bindTask(PreparedStatement statement, ApprovalTask task) throws SQLException {

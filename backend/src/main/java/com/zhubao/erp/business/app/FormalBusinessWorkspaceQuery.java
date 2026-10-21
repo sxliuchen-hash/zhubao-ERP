@@ -1,6 +1,8 @@
 package com.zhubao.erp.business.app;
 
+import com.zhubao.erp.approval.app.ApprovalAccess;
 import com.zhubao.erp.approval.app.ApprovalService;
+import com.zhubao.erp.approval.domain.ApprovalActor;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.business.domain.*;
 import com.zhubao.erp.business.domain.BusinessReviewData.*;
@@ -34,6 +36,7 @@ final class FormalBusinessWorkspaceQuery {
     private final ProgressBoardService progress;
     private final StockLedgerService stocks;
     private final ApprovalService approvals;
+    private final ApprovalAccess approvalAccess = new ApprovalAccess();
 
     FormalBusinessWorkspaceQuery(BusinessDocumentRepository documents, ProgressBoardService progress,
                                  StockLedgerService stocks, ApprovalService approvals) {
@@ -215,12 +218,21 @@ final class FormalBusinessWorkspaceQuery {
         }
         List<StockBalance> balances = parts.contains(Part.BALANCES) && stocks != null ? stocks.balances() : List.of();
         List<StockLedgerEntry> ledgers = parts.contains(Part.LEDGERS) ? loadLedgers(operator, mothers) : List.of();
-        List<ApprovalTask> approvalTasks = parts.contains(Part.APPROVALS) && approvals != null ? approvals.findAll() : List.of();
+        List<ApprovalTask> approvalTasks = visibleApprovals(operator, parts);
         List<ProgressRow> progressBase = List.of();
         if (parts.contains(Part.PROGRESS) && progress != null && documents != null) {
             progressBase = progress.listFrom(operator, "", "", "", "", children, handoffs, checks, mothers, splits);
         }
         return new Snapshot(mothers, children, handoffs, checks, balances, ledgers, approvalTasks, progressBase);
+    }
+
+    private List<ApprovalTask> visibleApprovals(OperatorContext operator, EnumSet<Part> parts) {
+        if (!parts.contains(Part.APPROVALS) || approvals == null || operator == null || operator.role() == null
+                || text(operator.operator()).isEmpty()) {
+            return List.of();
+        }
+        ApprovalActor actor = new ApprovalActor(operator.operator(), "", operator.role());
+        return approvals.findAll().stream().filter(task -> approvalAccess.canRead(actor, task)).toList();
     }
 
     private List<StockLedgerEntry> loadLedgers(OperatorContext operator, List<MotherOrderRecord> mothers) {

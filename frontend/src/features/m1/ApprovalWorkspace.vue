@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, inject, onMounted, ref, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   approvalStatusTone,
@@ -9,12 +9,14 @@ import {
 } from '../../data/approvalTaskData';
 import type { Tone } from '../../data/m1PrototypeData';
 import { ApiRequestError } from '../../services/apiClient';
+import type { AuthSession } from '../../services/authApi';
 import {
   fetchApprovalTasks,
   fetchPendingApprovalTasks,
   submitApprovalDecision,
 } from '../../services/approvalApi';
 
+const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const tasks = ref<ApprovalTask[]>([]);
 const pendingTasks = ref<ApprovalTask[]>([]);
 const loading = ref(false);
@@ -121,7 +123,7 @@ async function decideActiveTask(decision: ApprovalDecisionCommand['decision']) {
 
   const command: ApprovalDecisionCommand = {
     decision,
-    operator: '车间组长 马杰',
+    operator: authSession.value?.operator || authSession.value?.username || '',
     comment: decision === 'APPROVE' ? decisionComment.value : '证据不完整，驳回并要求补充称重/照片。',
     evidenceCode: activeTask.value.evidenceCode,
   };
@@ -175,7 +177,7 @@ function taskTone(task: ApprovalTask): Tone {
         <div class="module-command-title">
           <h2>轻量审批工作台</h2>
           <div class="module-date-card">
-            <strong>组长审批</strong>
+            <strong>{{ authSession?.operator || '当前登录人' }}</strong>
             <span>损耗 / 异常 / 证据</span>
           </div>
         </div>

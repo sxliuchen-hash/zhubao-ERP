@@ -1,5 +1,6 @@
 package com.zhubao.erp.approval.infra;
 
+import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.domain.ApprovalTaskRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,6 +22,16 @@ public class InMemoryApprovalTaskRepository implements ApprovalTaskRepository {
     public synchronized ApprovalTask save(ApprovalTask task) {
         tasks.put(task.approvalCode(), task);
         return task;
+    }
+
+    @Override
+    public synchronized Optional<ApprovalTask> decideIfWaiting(ApprovalTask task) {
+        ApprovalTask current = tasks.get(task.approvalCode());
+        if (current == null || current.status() != ApprovalStatus.WAITING_APPROVAL) {
+            return Optional.empty();
+        }
+        tasks.put(task.approvalCode(), task);
+        return Optional.of(task);
     }
 
     @Override
