@@ -13,4 +13,9 @@ public interface MasterDataRepository {
     List<RequirementShortcut> listShortcuts();
     RequirementShortcut saveShortcut(RequirementShortcut shortcut);
     Optional<RequirementShortcut> deleteShortcut(long shortcutId);
+    List<RequirementTemplate> listTemplates();
+    Optional<RequirementTemplate> findTemplate(String templateCode);
+    Optional<RequirementTemplate> findTemplateByRequest(String requestId);
+    RequirementTemplate insertTemplate(RequirementTemplate template);
+    RequirementTemplate updateTemplate(RequirementTemplate template, int expectedVersion);
 }

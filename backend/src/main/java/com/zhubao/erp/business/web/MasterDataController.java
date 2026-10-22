@@ -5,6 +5,7 @@ import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MaterialProfile;
 import com.zhubao.erp.business.domain.RemoveRequirementShortcutCommand;
 import com.zhubao.erp.business.domain.RequirementShortcut;
+import com.zhubao.erp.business.domain.RequirementTemplate;
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.app.AuthSessionService;
@@ -84,5 +85,38 @@ public class MasterDataController {
             throw new BusinessException("请选择要删除的快捷词");
         }
         return ApiResponse.ok(service.removeShortcut(command.shortcutId()));
+    }
+
+    @GetMapping("/requirement-templates")
+    public ApiResponse<List<RequirementTemplate>> templates(HttpServletRequest request,
+                                                            @org.springframework.web.bind.annotation.RequestParam(required = false) boolean includeDisabled) {
+        OperatorContext operator = operators.requireSession(request);
+        if (includeDisabled) {
+            permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operator);
+        }
+        return ApiResponse.ok(service.templates(includeDisabled));
+    }
+
+    @PostMapping("/requirement-templates")
+    public ApiResponse<RequirementTemplate> saveTemplate(@RequestBody RequirementTemplateCommand command, HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));
+        if (command == null) {
+            throw new BusinessException("请填写加工要求模板");
+        }
+        return ApiResponse.ok(service.saveTemplate(command.templateCode(), command.name(), command.steps(),
+                command.sortOrder(), command.version(), command.requestId()));
+    }
+
+    @PostMapping("/requirement-templates/disables")
+    public ApiResponse<RequirementTemplate> disableTemplate(@RequestBody RequirementTemplateCommand command, HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));
+        if (command == null) {
+            throw new BusinessException("请选择要停用的模板");
+        }
+        return ApiResponse.ok(service.disableTemplate(command.templateCode(), command.version()));
+    }
+
+    public record RequirementTemplateCommand(String templateCode, String name, java.util.List<String> steps,
+                                             int sortOrder, int version, String requestId) {
     }
 }

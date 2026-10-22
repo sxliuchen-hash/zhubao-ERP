@@ -67,6 +67,27 @@ class JdbcMasterDataRepositoryTest {
         assertThat(service.shortcuts()).isEmpty();
     }
 
+    @Test
+    void requirementTemplateRoundTripsAndRejectsStaleVersion() throws Exception {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:requirement_template;MODE=MySQL;DB_CLOSE_DELAY=-1");
+        String sql = Files.readString(Path.of("src/main/resources/db/mysql/V69__m3_requirement_template.sql"), StandardCharsets.UTF_8);
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            for (String part : sql.split(";")) {
+                if (!part.isBlank()) statement.execute(part);
+            }
+        }
+        MasterDataService service = new MasterDataService(new JdbcMasterDataRepository(dataSource));
+        assertThat(service.templates(false)).extracting(com.zhubao.erp.business.domain.RequirementTemplate::name)
+                .contains("常规珠型加工", "珠型雕刻加工");
+        var saved = service.saveTemplate("", "现场模板", java.util.List.of("开粗", "抛光"), 9, 0, "jdbc-tpl-1");
+        assertThat(service.saveTemplate("", "现场模板", java.util.List.of("开粗", "抛光"), 9, 0, "jdbc-tpl-1").templateCode())
+                .isEqualTo(saved.templateCode());
+        assertThatThrownBy(() -> service.saveTemplate(saved.templateCode(), "现场模板", java.util.List.of("抛光"), 9, 0, ""))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("刷新");
+    }
+
     private CustomerProfile customer(String name) {
         return new CustomerProfile(0, "", name, "", "", "", "", true);
     }

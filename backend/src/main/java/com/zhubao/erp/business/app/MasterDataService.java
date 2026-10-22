@@ -4,6 +4,8 @@ import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MasterDataRepository;
 import com.zhubao.erp.business.domain.MaterialProfile;
 import com.zhubao.erp.business.domain.RequirementShortcut;
+import com.zhubao.erp.business.domain.RequirementTemplate;
+import com.zhubao.erp.business.domain.RequirementText;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.app.CustomerAuthorizationService;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -170,6 +173,56 @@ public class MasterDataService {
 
     public RequirementShortcut removeShortcut(long shortcutId) {
         return repository.deleteShortcut(shortcutId).orElseThrow(() -> new BusinessException("快捷词不存在"));
+    }
+
+    public List<RequirementTemplate> templates(boolean includeDisabled) {
+        return repository.listTemplates().stream()
+                .filter(template -> includeDisabled || template.enabled())
+                .toList();
+    }
+
+    public RequirementTemplate saveTemplate(String templateCode, String name, List<String> steps, int sortOrder,
+                                            int version, String requestId) {
+        String title = required(name, "模板名称");
+        if (title.length() > 40) {
+            throw new BusinessException("模板名称过长");
+        }
+        RequirementText.compose(steps, "");
+        List<String> normalized = steps.stream().map(this::text).filter(step -> !step.isEmpty()).toList();
+        String code = text(templateCode);
+        if (code.isEmpty()) {
+            String request = required(requestId, "新增模板必须带请求编号");
+            if (request.length() > 80) {
+                throw new BusinessException("请求编号过长");
+            }
+            Optional<RequirementTemplate> existing = repository.findTemplateByRequest(request);
+            if (existing.isPresent()) {
+                RequirementTemplate saved = existing.get();
+                if (!saved.name().equals(title) || !saved.steps().equals(normalized)
+                        || sortOrder > 0 && saved.sortOrder() != sortOrder) {
+                    throw new BusinessException("同一请求的模板内容不一致");
+                }
+                return saved;
+            }
+            String generated = "TPL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+            int sort = sortOrder > 0 ? sortOrder : repository.listTemplates().stream().mapToInt(RequirementTemplate::sortOrder).max().orElse(0) + 1;
+            return repository.insertTemplate(new RequirementTemplate(0, generated, title, normalized, true, sort, 1, request));
+        }
+        RequirementTemplate current = repository.findTemplate(code).orElseThrow(() -> new BusinessException("加工要求模板不存在"));
+        if (repository.listTemplates().stream().anyMatch(template -> !template.templateCode().equals(code) && template.name().equalsIgnoreCase(title))) {
+            throw new BusinessException("模板名称已存在");
+        }
+        return repository.updateTemplate(new RequirementTemplate(current.templateId(), code, title, normalized, current.enabled(),
+                sortOrder > 0 ? sortOrder : current.sortOrder(), current.version(), current.requestId()), version);
+    }
+
+    public RequirementTemplate disableTemplate(String templateCode, int version) {
+        RequirementTemplate current = repository.findTemplate(text(templateCode)).orElseThrow(() -> new BusinessException("加工要求模板不存在"));
+        if (!current.enabled()) {
+            return current;
+        }
+        return repository.updateTemplate(new RequirementTemplate(current.templateId(), current.templateCode(), current.name(),
+                current.steps(), false, current.sortOrder(), current.version(), current.requestId()), version);
     }
 
     private String required(String value, String label) {

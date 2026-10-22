@@ -4,6 +4,7 @@ import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MasterDataRepository;
 import com.zhubao.erp.business.domain.MaterialProfile;
 import com.zhubao.erp.business.domain.RequirementShortcut;
+import com.zhubao.erp.business.domain.RequirementTemplate;
 import com.zhubao.erp.common.error.BusinessException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -189,6 +190,206 @@ public class JdbcMasterDataRepository implements MasterDataRepository {
             return Optional.of(existing);
         } catch (SQLException ex) {
             throw new IllegalStateException("加工要求快捷词删除失败", ex);
+        }
+    }
+
+    @Override
+    public List<RequirementTemplate> listTemplates() {
+        try (Connection connection = dataSource.getConnection()) {
+            return loadTemplates(connection, null);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工要求模板读取失败", ex);
+        }
+    }
+
+    @Override
+    public Optional<RequirementTemplate> findTemplate(String templateCode) {
+        try (Connection connection = dataSource.getConnection()) {
+            List<RequirementTemplate> rows = loadTemplates(connection, templateCode);
+            return rows.stream().findFirst();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工要求模板读取失败", ex);
+        }
+    }
+
+    @Override
+    public Optional<RequirementTemplate> findTemplateByRequest(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "select template_code from biz_requirement_template where request_key = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, requestId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return findTemplate(rs.getString("template_code"));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工要求模板读取失败", ex);
+        }
+    }
+
+    @Override
+    public RequirementTemplate insertTemplate(RequirementTemplate template) {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previous = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                long id;
+                try (PreparedStatement statement = connection.prepareStatement("""
+                        insert into biz_requirement_template
+                            (template_code, template_name, normalized_name, enabled, sort_order, version, request_key)
+                        values (?, ?, ?, ?, ?, ?, ?)
+                        """, Statement.RETURN_GENERATED_KEYS)) {
+                    statement.setString(1, template.templateCode());
+                    statement.setString(2, template.name());
+                    statement.setString(3, template.name().trim().toLowerCase(java.util.Locale.ROOT));
+                    statement.setBoolean(4, template.enabled());
+                    statement.setInt(5, template.sortOrder());
+                    statement.setInt(6, template.version());
+                    if (template.requestId() == null || template.requestId().isBlank()) {
+                        statement.setNull(7, java.sql.Types.VARCHAR);
+                    } else {
+                        statement.setString(7, template.requestId());
+                    }
+                    statement.executeUpdate();
+                    try (ResultSet keys = statement.getGeneratedKeys()) {
+                        if (!keys.next()) {
+                            throw new IllegalStateException("模板编号生成失败");
+                        }
+                        id = keys.getLong(1);
+                    }
+                }
+                insertSteps(connection, id, template.steps());
+                connection.commit();
+            } catch (SQLException | RuntimeException ex) {
+                connection.rollback();
+                if (ex instanceof BusinessException business) {
+                    throw business;
+                }
+                Optional<RequirementTemplate> winner = findTemplateByRequest(template.requestId());
+                if (winner.isPresent()) {
+                    RequirementTemplate saved = winner.get();
+                    if (!saved.name().equals(template.name()) || !saved.steps().equals(template.steps())
+                            || saved.sortOrder() != template.sortOrder()) {
+                        throw new BusinessException("同一请求的模板内容不一致");
+                    }
+                    return saved;
+                }
+                throw new BusinessException("模板名称或编号已存在");
+            } finally {
+                connection.setAutoCommit(previous);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工要求模板写入失败", ex);
+        }
+        return findTemplate(template.templateCode()).orElseThrow();
+    }
+
+    @Override
+    public RequirementTemplate updateTemplate(RequirementTemplate template, int expectedVersion) {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previous = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                long id;
+                try (PreparedStatement statement = connection.prepareStatement("""
+                        update biz_requirement_template
+                           set template_name = ?, normalized_name = ?, enabled = ?, sort_order = ?, version = version + 1
+                         where template_code = ? and version = ?
+                        """)) {
+                    statement.setString(1, template.name());
+                    statement.setString(2, template.name().trim().toLowerCase(java.util.Locale.ROOT));
+                    statement.setBoolean(3, template.enabled());
+                    statement.setInt(4, template.sortOrder());
+                    statement.setString(5, template.templateCode());
+                    statement.setInt(6, expectedVersion);
+                    if (statement.executeUpdate() != 1) {
+                        throw new BusinessException("模板已被其他人修改，请刷新后再保存");
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "select template_id from biz_requirement_template where template_code = ?")) {
+                    statement.setString(1, template.templateCode());
+                    try (ResultSet rs = statement.executeQuery()) {
+                        if (!rs.next()) {
+                            throw new BusinessException("加工要求模板不存在");
+                        }
+                        id = rs.getLong(1);
+                    }
+                }
+                try (PreparedStatement delete = connection.prepareStatement(
+                        "delete from biz_requirement_template_step where template_id = ?")) {
+                    delete.setLong(1, id);
+                    delete.executeUpdate();
+                }
+                insertSteps(connection, id, template.steps());
+                connection.commit();
+            } catch (BusinessException ex) {
+                connection.rollback();
+                throw ex;
+            } catch (SQLException ex) {
+                connection.rollback();
+                throw new BusinessException("模板名称已存在");
+            } finally {
+                connection.setAutoCommit(previous);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工要求模板写入失败", ex);
+        }
+        return findTemplate(template.templateCode()).orElseThrow();
+    }
+
+    private void insertSteps(Connection connection, long templateId, List<String> steps) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "insert into biz_requirement_template_step (template_id, step_order, phrase) values (?, ?, ?)")) {
+            int order = 1;
+            for (String step : steps) {
+                statement.setLong(1, templateId);
+                statement.setInt(2, order++);
+                statement.setString(3, step);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private List<RequirementTemplate> loadTemplates(Connection connection, String templateCode) throws SQLException {
+        String sql = """
+                select template_id, template_code, template_name, enabled, sort_order, version, request_key
+                  from biz_requirement_template
+                """ + (templateCode == null ? " order by sort_order, template_id" : " where template_code = ?");
+        List<RequirementTemplate> rows = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            if (templateCode != null) {
+                statement.setString(1, templateCode);
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    long id = rs.getLong("template_id");
+                    rows.add(new RequirementTemplate(id, rs.getString("template_code"), rs.getString("template_name"),
+                            loadSteps(connection, id), rs.getBoolean("enabled"), rs.getInt("sort_order"),
+                            rs.getInt("version"), rs.getString("request_key")));
+                }
+            }
+        }
+        return rows;
+    }
+
+    private List<String> loadSteps(Connection connection, long templateId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select phrase from biz_requirement_template_step where template_id = ? order by step_order")) {
+            statement.setLong(1, templateId);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<String> steps = new ArrayList<>();
+                while (rs.next()) {
+                    steps.add(rs.getString("phrase"));
+                }
+                return steps;
+            }
         }
     }
 }

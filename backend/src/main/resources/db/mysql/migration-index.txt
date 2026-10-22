@@ -66,3 +66,4 @@ V65__m3_business_manager_menu.sql
 V66__m3_business_manager_cover_duties.sql
 V67__m3_requirement_shortcut.sql
 V68__m3_customer_archive_menu.sql
+V69__m3_requirement_template.sql

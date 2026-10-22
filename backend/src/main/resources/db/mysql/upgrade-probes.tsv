@@ -66,3 +66,4 @@
 66	COLUMN	auth_user_account	cover_duties
 67	TABLE	biz_requirement_shortcut
 68	ROW	sys_navigation_menu	code	customers
+69	TABLE	biz_requirement_template

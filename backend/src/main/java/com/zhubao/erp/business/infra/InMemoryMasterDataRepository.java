@@ -4,6 +4,7 @@ import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MasterDataRepository;
 import com.zhubao.erp.business.domain.MaterialProfile;
 import com.zhubao.erp.business.domain.RequirementShortcut;
+import com.zhubao.erp.business.domain.RequirementTemplate;
 import com.zhubao.erp.common.error.BusinessException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -20,8 +21,10 @@ public class InMemoryMasterDataRepository implements MasterDataRepository {
     private final ConcurrentHashMap<Long, CustomerProfile> customers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, MaterialProfile> materials = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, RequirementShortcut> shortcuts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, RequirementTemplate> templates = new ConcurrentHashMap<>();
     private final AtomicLong nextCustomerId = new AtomicLong(1004);
     private final AtomicLong nextShortcutId = new AtomicLong(0);
+    private final AtomicLong nextTemplateId = new AtomicLong(2);
 
     public InMemoryMasterDataRepository() {
         saveCustomer(new CustomerProfile(1001, "C-1001", "恒信珠宝", "", "", "", "", true));
@@ -29,6 +32,10 @@ public class InMemoryMasterDataRepository implements MasterDataRepository {
         saveCustomer(new CustomerProfile(1003, "C-1003", "璟瑞工贸", "", "", "", "", true));
         saveCustomer(new CustomerProfile(1004, "C-1004", "瑞禾珠宝", "", "", "", "", true));
         saveMaterial(new MaterialProfile("AU9999", "足金", "黄金", "", true));
+        templates.put("TPL-BEAD-BASIC", new RequirementTemplate(1, "TPL-BEAD-BASIC", "常规珠型加工",
+                List.of("开粗", "车形（车成珠型）", "抛光"), true, 1, 1, ""));
+        templates.put("TPL-BEAD-CARVE", new RequirementTemplate(2, "TPL-BEAD-CARVE", "珠型雕刻加工",
+                List.of("开粗", "车形（车成珠型）", "雕刻", "抛光"), true, 2, 1, ""));
     }
 
     @Override
@@ -92,5 +99,65 @@ public class InMemoryMasterDataRepository implements MasterDataRepository {
     @Override
     public synchronized Optional<RequirementShortcut> deleteShortcut(long shortcutId) {
         return Optional.ofNullable(shortcuts.remove(shortcutId));
+    }
+
+    @Override
+    public List<RequirementTemplate> listTemplates() {
+        return templates.values().stream()
+                .sorted(Comparator.comparingInt(RequirementTemplate::sortOrder).thenComparingLong(RequirementTemplate::templateId))
+                .toList();
+    }
+
+    @Override
+    public Optional<RequirementTemplate> findTemplate(String templateCode) {
+        return Optional.ofNullable(templates.get(templateCode));
+    }
+
+    @Override
+    public Optional<RequirementTemplate> findTemplateByRequest(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return Optional.empty();
+        }
+        return templates.values().stream().filter(template -> requestId.equals(template.requestId())).findFirst();
+    }
+
+    @Override
+    public synchronized RequirementTemplate insertTemplate(RequirementTemplate template) {
+        for (RequirementTemplate existing : templates.values()) {
+            if (!template.requestId().isBlank() && template.requestId().equals(existing.requestId())) {
+                if (!existing.name().equals(template.name()) || !existing.steps().equals(template.steps())
+                        || existing.sortOrder() != template.sortOrder()) {
+                    throw new BusinessException("同一请求的模板内容不一致");
+                }
+                return existing;
+            }
+            if (existing.name().equalsIgnoreCase(template.name()) || existing.templateCode().equals(template.templateCode())) {
+                throw new BusinessException("模板名称或编号已存在");
+            }
+        }
+        long id = nextTemplateId.incrementAndGet();
+        RequirementTemplate saved = new RequirementTemplate(id, template.templateCode(), template.name(), template.steps(),
+                template.enabled(), template.sortOrder(), template.version(), template.requestId());
+        templates.put(saved.templateCode(), saved);
+        return saved;
+    }
+
+    @Override
+    public synchronized RequirementTemplate updateTemplate(RequirementTemplate template, int expectedVersion) {
+        RequirementTemplate current = templates.get(template.templateCode());
+        if (current == null) {
+            throw new BusinessException("加工要求模板不存在");
+        }
+        if (current.version() != expectedVersion) {
+            throw new BusinessException("模板已被其他人修改，请刷新后再保存");
+        }
+        if (templates.values().stream().anyMatch(existing -> !existing.templateCode().equals(template.templateCode())
+                && existing.name().equalsIgnoreCase(template.name()))) {
+            throw new BusinessException("模板名称已存在");
+        }
+        RequirementTemplate saved = new RequirementTemplate(current.templateId(), current.templateCode(), template.name(),
+                template.steps(), template.enabled(), template.sortOrder(), current.version() + 1, current.requestId());
+        templates.put(saved.templateCode(), saved);
+        return saved;
     }
 }

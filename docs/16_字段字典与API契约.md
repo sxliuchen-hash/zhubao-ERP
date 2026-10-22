@@ -2381,6 +2381,16 @@ PWA 一期边界：
 | `GET /api/hardware/poc-evidence` | `ApiResponse<List<HardwarePocEvidenceSummary>>` |
 | `GET /api/hardware/summary` | `ApiResponse<HardwareSummary>` |
 
+### MasterDataController：加工要求模板
+
+来源：`business/web/MasterDataController.java`。模板是加工要求文字主数据，不新增正式报工工序。步骤最多 12 项，每项最长 40 字，不包含分隔符或换行；合成加工要求最长 500 字。
+
+| 接口 | 现行后端契约 |
+|---|---|
+| `GET /api/business/master-data/requirement-templates` | 已登录读取启用模板。`includeDisabled=true` 需要 `MASTER_DATA_MANAGE`。 |
+| `POST /api/business/master-data/requirement-templates` | `MASTER_DATA_MANAGE`。请求包含 `templateCode`、`name`、有序 `steps`、`sortOrder`、`version`、`requestId`。新增时 code 为空且必须带请求号；相同请求与内容回放原模板，排序变化也属于内容冲突；并发新增同请求只产生一项。更新必须带当前版本，陈旧版本拒绝。 |
+| `POST /api/business/master-data/requirement-templates/disables` | `MASTER_DATA_MANAGE`。请求带 `templateCode`、`version`；重复停用返回当前已停用模板。停用不改已保存的订单要求。 |
+
 ### InventoryController
 
 来源：[InventoryController](../backend/src/main/java/com/zhubao/erp/inventory/web/InventoryController.java)。
