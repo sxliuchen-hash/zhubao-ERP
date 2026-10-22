@@ -129,13 +129,22 @@ public final class BusinessReviewData {
             String material,
             String location,
             String status,
-            int quantity,
+            String quantity,
             String weight,
             String frozen,
-            OperationContext operationContext
+            OperationContext operationContext,
+            String quantityUnit
     ) {
+        public InventoryBalance {
+            quantityUnit = quantityUnit == null ? "" : quantityUnit;
+        }
+
         public InventoryBalance(String owner, String batch, String material, String location, String status, int quantity, String weight, String frozen) {
-            this(owner, batch, material, location, status, quantity, weight, frozen, null);
+            this(owner, batch, material, location, status, Integer.toString(quantity), weight, frozen, null, "");
+        }
+
+        public InventoryBalance(String owner, String batch, String material, String location, String status, int quantity, String weight, String frozen, OperationContext operationContext) {
+            this(owner, batch, material, location, status, Integer.toString(quantity), weight, frozen, operationContext, "");
         }
     }
 

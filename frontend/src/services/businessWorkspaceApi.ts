@@ -147,7 +147,7 @@ interface QualityWorkspaceDto {
 
 interface InventoryWorkspaceDto {
   dataSource?: 'LIVE' | 'DEMO';
-  balances: Array<Omit<InventoryBalance, 'qty'> & { quantity: number }>;
+  balances: Array<Omit<InventoryBalance, 'qty'> & { quantity: number | string; quantityUnit?: string }>;
   ledgerEntries: InventoryLedgerEntryDto[];
   timeline: TraceEvent[];
   evidence: ActionItemDto[];
@@ -253,6 +253,7 @@ export function mapInventoryWorkspace(dto: InventoryWorkspaceDto): InventoryWork
       qty: item.quantity,
       weight: item.weight,
       frozen: item.frozen,
+      quantityUnit: item.quantityUnit ?? '',
     })),
     ledgerEntries: dto.ledgerEntries.map((entry) => ({
       time: entry.time,

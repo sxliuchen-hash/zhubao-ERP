@@ -76,9 +76,10 @@ export interface InventoryBalance {
   material: string;
   location: string;
   status: string;
-  qty: number;
+  qty: number | string;
   weight: string;
   frozen: string;
+  quantityUnit?: string;
 }
 
 export interface TraceEvent {

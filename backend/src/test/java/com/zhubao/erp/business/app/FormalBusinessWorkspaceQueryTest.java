@@ -171,6 +171,41 @@ class FormalBusinessWorkspaceQueryTest {
         assertThat(service.mobile().tasks()).extracting("code").containsExactly("ZD-OLD");
     }
 
+    @Test
+    void inventoryKeepsDecimalUnitAndBatchAndHidesNonProcessingStock() {
+        new BusinessOperationService(stocks, approvals, documents).confirmInbound(new ConfirmInboundCommand(
+                "MD-GRAM", 7001L, 7001L, "MAT-REAL", "2026-10-10", "", "", "", "收货员", "收货员", "金珠",
+                "", null, "", "RAW", new BigDecimal("10.500"), "克", new BigDecimal("10.500"), "收货员",
+                "", "", "车形", "2099-01-01", "真实客户"));
+        stocks.transfer(new StockTransferCommand("company_receipt", "CO-1", null,
+                new StockDimension(OwnerType.COMPANY, null, null, "", null, "MAT-CO", "RAW-COMPANY",
+                        StockStatus.RAW_WAITING, "CO-BATCH"),
+                new BigDecimal("4.250"), new BigDecimal("4.250"), "公司料"));
+        stocks.transfer(new StockTransferCommand("prep_receipt", "PREP-1", null,
+                new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, "", null, "MAT-REAL", "PREP",
+                        StockStatus.RAW_WAITING, "PREP-1"),
+                new BigDecimal("100"), new BigDecimal("100"), "寄存"));
+
+        assertThat(service.inventory().balances()).extracting(BusinessReviewData.InventoryBalance::batch)
+                .contains("MD-GRAM")
+                .doesNotContain("CO-BATCH", "PREP-1");
+        assertThat(service.inventory().balances()).filteredOn(balance -> "MD-GRAM".equals(balance.batch()))
+                .singleElement().satisfies(balance -> {
+                    assertThat(balance.owner()).isEqualTo("真实客户");
+                    assertThat(balance.quantity()).isEqualTo("10.5");
+                    assertThat(balance.quantityUnit()).isEqualTo("克");
+                    assertThat(balance.weight()).isEqualTo("10.5 g");
+                    assertThat(balance.owner()).doesNotContain("null");
+                });
+        OperatorContext receiver = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.ALL);
+        assertThat(service.inventory(receiver).ledgerEntries()).extracting(BusinessReviewData.InventoryLedgerEntry::sourceDocument)
+                .doesNotContain("CO-1");
+        assertThat(service.inventory(receiver).balances()).extracting(BusinessReviewData.InventoryBalance::owner).doesNotContain("公司自有");
+        OperatorContext keeper = new OperatorContext("库管", RoleCode.WAREHOUSE_KEEPER, DataScope.ALL);
+        assertThat(service.inventory(keeper).ledgerEntries()).extracting(BusinessReviewData.InventoryLedgerEntry::movement)
+                .contains("公司料入库");
+    }
+
     private void receipt(String code, Long customerId, String customer, String operator) {
         new BusinessOperationService(stocks, approvals, documents).confirmInbound(new ConfirmInboundCommand(code, customerId, customerId,
                 "MAT-REAL", "2026-10-10", "", "", "", operator, operator, "真实来料", "", null, "", "RAW",

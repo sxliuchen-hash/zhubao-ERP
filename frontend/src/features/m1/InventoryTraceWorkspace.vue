@@ -95,9 +95,6 @@ async function loadInventoryWorkspace() {
   try {
     const loaded = await fetchInventoryWorkspace();
     workspace.value = loaded;
-    if (loaded.balances.length === 0 && loaded.ledgerEntries.length === 0) {
-      loadError.value = '接口没有返回库存单据';
-    }
   } catch (error) {
     workspace.value = emptyInventory();
     accessDenied.value = denied(error);
@@ -223,7 +220,7 @@ function selectBalance(item: InventoryBalance) {
                 <td>{{ item.material }}</td>
                 <td>{{ item.location }}</td>
                 <td><StatusBadge :label="item.status" :tone="inventoryBalanceTone(item.status)" /></td>
-                <td>{{ item.qty }} 件 / {{ item.weight }}</td>
+                <td>{{ item.qty }}{{ item.quantityUnit ? ` ${item.quantityUnit}` : '' }} / {{ item.weight }}</td>
                 <td>{{ item.frozen }}</td>
                 <td><button class="table-action" type="button" @click.stop="selectBalance(item)">看台账</button></td>
               </tr>
@@ -247,7 +244,7 @@ function selectBalance(item: InventoryBalance) {
               <StatusBadge :label="item.status" :tone="inventoryBalanceTone(item.status)" />
             </span>
             <span>{{ item.owner }} · {{ item.material }}</span>
-            <span>{{ item.qty }} 件 / {{ item.weight }} · 冻结 {{ item.frozen }}</span>
+            <span>{{ item.qty }}{{ item.quantityUnit ? ` ${item.quantityUnit}` : '' }} / {{ item.weight }} · 冻结 {{ item.frozen }}</span>
           </button>
         </div>
       </div>
@@ -267,7 +264,7 @@ function selectBalance(item: InventoryBalance) {
             <dt>库位</dt>
             <dd>{{ activeBalance.location }}</dd>
             <dt>数量重量</dt>
-            <dd>{{ activeBalance.qty }} 件 / {{ activeBalance.weight }}</dd>
+            <dd>{{ activeBalance.qty }}{{ activeBalance.quantityUnit ? ` ${activeBalance.quantityUnit}` : '' }} / {{ activeBalance.weight }}</dd>
             <dt>冻结</dt>
             <dd>{{ activeBalance.frozen }}</dd>
             <dt>最近台账</dt>

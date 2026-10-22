@@ -170,13 +170,16 @@ final class FormalBusinessWorkspaceQuery {
     }
 
     private InventoryWorkspaceData inventory(OperatorContext operator, Snapshot snapshot) {
-        List<InventoryBalance> balances = snapshot.balances.stream().filter(balance -> positive(balance) && visible(balance.dimension(), operator, snapshot)).map(balance -> {
+        List<InventoryBalance> balances = snapshot.balances.stream()
+                .filter(balance -> positive(balance) && processingStock(balance.dimension()) && visible(balance.dimension(), operator, snapshot))
+                .map(balance -> {
             StockDimension dimension = balance.dimension();
             MotherOrderRecord mother = snapshot.mother(dimension.motherOrderCode());
-            return new InventoryBalance(mother == null ? "客户#" + dimension.customerId() : customer(mother),
-                    text(dimension.workOrderCode()).isEmpty() ? dimension.motherOrderCode() : dimension.workOrderCode(),
-                    dimension.materialCode(), dimension.warehouseCode(), status(dimension.stockStatus()), balance.quantity().intValue(),
-                    weight(balance.weight()), dimension.stockStatus() == StockStatus.FROZEN ? "已冻结" : "未冻结", context(balance));
+            String unit = mother == null || text(mother.quantityUnit()).isEmpty() ? "" : mother.quantityUnit();
+            String frozen = dimension.stockStatus() == StockStatus.FROZEN ? plain(balance.quantity()) : "0";
+            return new InventoryBalance(ownerLabel(dimension, mother), batchLabel(dimension),
+                    dimension.materialCode(), dimension.warehouseCode(), status(dimension.stockStatus()), plain(balance.quantity()),
+                    weight(balance.weight()), frozen, context(balance), unit);
         }).toList();
         List<InventoryLedgerEntry> entries = new ArrayList<>();
         List<TraceEvent> timeline = new ArrayList<>();
@@ -189,7 +192,7 @@ final class FormalBusinessWorkspaceQuery {
             if (!visible(dimension, operator, snapshot)) continue;
             BigDecimal[] after = running.getOrDefault(dimension, new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
             String actor = ledgerOperator(entry, snapshot);
-            entries.add(new InventoryLedgerEntry(entry.bizTime().toString(), entry.code(), entry.documentType(), balanceText(before), balanceText(after), entry.documentCode(), actor));
+            entries.add(new InventoryLedgerEntry(entry.bizTime().toString(), entry.code(), movementLabel(entry.documentType()), balanceText(before), balanceText(after), entry.documentCode(), actor));
             timeline.add(new TraceEvent(entry.bizTime().toString(), entry.documentType(), entry.documentCode(), actor, ""));
         }
         return new InventoryWorkspaceData(balances, List.copyOf(entries), List.copyOf(timeline), List.of(), "LIVE");
@@ -249,7 +252,7 @@ final class FormalBusinessWorkspaceQuery {
         if (stocks == null) {
             return List.of();
         }
-        // 全部数据一次读取。名单为空只是没有客户过滤条件，读取后仍按单据归属收敛。
+        // 全部数据一次读取。名单为空只是没有客户过滤条件，读取后仍按单据归属收敛，不把空名单当成全部客户。
         if (operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) {
             return stocks.ledgers();
         }
@@ -364,6 +367,9 @@ final class FormalBusinessWorkspaceQuery {
 
     private boolean visible(StockDimension dimension, OperatorContext operator, Snapshot snapshot) {
         if (dimension == null) return false;
+        if (dimension.ownerType() == com.zhubao.erp.inventory.domain.OwnerType.COMPANY && !canReadCompanyStock(operator)) {
+            return false;
+        }
         MotherOrderRecord mother = snapshot.mother(dimension.motherOrderCode());
         String code = text(dimension.workOrderCode()).isEmpty() ? dimension.motherOrderCode() : dimension.workOrderCode();
         List<String> participants = new ArrayList<>();
@@ -466,9 +472,60 @@ final class FormalBusinessWorkspaceQuery {
     private static String balanceText(BigDecimal[] balance) { return balance[0].stripTrailingZeros().toPlainString() + " / " + weight(balance[1]); }
     private static boolean positive(StockBalance balance) { return balance.quantity().signum() > 0 || balance.weight().signum() > 0; }
     private static BigDecimal number(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
+    private static String plain(BigDecimal value) { return number(value).stripTrailingZeros().toPlainString(); }
     private static String weight(BigDecimal value) { return number(value).stripTrailingZeros().toPlainString() + " g"; }
     private static String text(String value) { return value == null ? "" : value.trim(); }
     private static String customer(MotherOrderRecord mother) { return text(mother.customerName()).isEmpty() ? "客户#" + mother.customerId() : mother.customerName(); }
+
+    private static boolean processingStock(StockDimension dimension) {
+        return !text(dimension.motherOrderCode()).isBlank() || !text(dimension.workOrderCode()).isBlank();
+    }
+
+    private static String ownerLabel(StockDimension dimension, MotherOrderRecord mother) {
+        if (dimension.ownerType() == com.zhubao.erp.inventory.domain.OwnerType.COMPANY) {
+            return "公司自有";
+        }
+        if (mother != null) {
+            return customer(mother);
+        }
+        return dimension.customerId() == null ? "客户未登记" : "客户#" + dimension.customerId();
+    }
+
+    private static String batchLabel(StockDimension dimension) {
+        if (!text(dimension.batchCode()).isBlank()) {
+            return dimension.batchCode();
+        }
+        if (!text(dimension.workOrderCode()).isBlank()) {
+            return dimension.workOrderCode();
+        }
+        return dimension.motherOrderCode();
+    }
+
+    private static String movementLabel(String documentType) {
+        return switch (text(documentType)) {
+            case "inbound_confirm" -> "收货入库";
+            case "inbound_reversal" -> "收货冲正";
+            case "prep_receipt" -> "寄存收货";
+            case "prep_issue" -> "备料领用";
+            case "prep_return" -> "退回备料";
+            case "prep_customer_return" -> "退还客户";
+            case "company_receipt" -> "公司料入库";
+            case "company_issue" -> "公司料领用";
+            case "company_return" -> "公司料退回";
+            case "stock_freeze" -> "冻结";
+            case "stock_unfreeze" -> "解除冻结";
+            case "stock_correction" -> "冲正";
+            default -> text(documentType);
+        };
+    }
+
+    private static boolean canReadCompanyStock(OperatorContext operator) {
+        return operator.role() == com.zhubao.erp.security.domain.RoleCode.ADMIN
+                || operator.role() == com.zhubao.erp.security.domain.RoleCode.WAREHOUSE_KEEPER
+                || operator.role() == com.zhubao.erp.security.domain.RoleCode.FINANCE_STATISTICIAN
+                || operator.role() == com.zhubao.erp.security.domain.RoleCode.GENERAL_MANAGER;
+    }
+
     private static String status(StockStatus status) {
         return switch (status) {
             case RAW_WAITING -> "待加工";

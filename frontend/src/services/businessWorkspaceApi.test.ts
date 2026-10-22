@@ -120,6 +120,17 @@ describe('businessWorkspaceApi mappers', () => {
           weight: '15.00 g',
           frozen: '0',
         },
+        {
+          owner: '公司自有',
+          batch: 'CO-BATCH',
+          material: 'MAT-CO',
+          location: 'RAW-COMPANY',
+          status: '待加工',
+          quantity: '10.500',
+          quantityUnit: '克',
+          weight: '10.500 g',
+          frozen: '0',
+        },
       ],
       ledgerEntries: [
         {
@@ -148,6 +159,8 @@ describe('businessWorkspaceApi mappers', () => {
     expect(model.dataSource).toBe('DEMO');
     expect(model.balances[0].operationContext).toEqual(operationContext);
     expect(model.balances[0].qty).toBe(10);
+    expect(model.balances[0].quantityUnit).toBe('');
+    expect(model.balances[1]).toMatchObject({ qty: '10.500', quantityUnit: '克', batch: 'CO-BATCH' });
     expect(model.ledgerEntries[0]).toMatchObject({ bizCode: 'LEDGER-001', source: 'MD-001' });
     expect(model.evidence[0]).toMatchObject({ label: '视频证据', status: '1 个截取失败' });
   });
