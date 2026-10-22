@@ -3,8 +3,10 @@ package com.zhubao.erp.business.infra;
 import com.zhubao.erp.business.app.MasterDataService;
 import com.zhubao.erp.business.domain.CustomerProfile;
 import com.zhubao.erp.business.domain.MaterialProfile;
+import com.zhubao.erp.business.domain.MotherRequirementSource;
 import com.zhubao.erp.business.domain.RequirementShortcut;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
@@ -86,6 +89,46 @@ class JdbcMasterDataRepositoryTest {
         assertThatThrownBy(() -> service.saveTemplate(saved.templateCode(), "现场模板", java.util.List.of("抛光"), 9, 0, ""))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("刷新");
+    }
+
+    @Test
+    void motherRequirementSourceFollowsTheSessionConnection() throws Exception {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:mother_requirement_source;MODE=MySQL;DB_CLOSE_DELAY=-1");
+        String sql = Files.readString(Path.of("src/main/resources/db/mysql/V69__m3_requirement_template.sql"), StandardCharsets.UTF_8);
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            for (String part : sql.split(";")) {
+                if (!part.isBlank()) statement.execute(part);
+            }
+        }
+        JdbcMotherRequirementSourceRepository repository = new JdbcMotherRequirementSourceRepository(dataSource);
+        MotherRequirementSource source = new MotherRequirementSource("MD-SNAP-1", "TPL-BEAD-BASIC", 1, "先开粗，再抛光");
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            repository.save(source, session(connection));
+            connection.rollback();
+        }
+        assertThat(repository.find("MD-SNAP-1")).isEmpty();
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            repository.save(source, session(connection));
+            connection.commit();
+        }
+        assertThat(repository.find("MD-SNAP-1").orElseThrow().savedRequirement()).isEqualTo("先开粗，再抛光");
+        assertThat(repository.find("MD-SNAP-1").orElseThrow().templateVersion()).isEqualTo(1);
+    }
+
+    private static WorkSession session(Connection connection) {
+        return new WorkSession() {
+            @Override
+            public Optional<Connection> connection() {
+                return Optional.of(connection);
+            }
+
+            @Override
+            public void onRollback(Runnable undo) {
+            }
+        };
     }
 
     private CustomerProfile customer(String name) {

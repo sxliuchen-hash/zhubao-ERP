@@ -53,7 +53,7 @@ vi.mock('../../services/processStationApi', () => ({
   submitProcessStation: vi.fn(),
 }));
 vi.mock('../../services/masterDataApi', () => ({
-  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(),
+  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(), fetchTemplates: vi.fn(),
   saveCustomer: vi.fn(), saveMaterial: vi.fn(), saveShortcut: vi.fn(), removeShortcut: vi.fn(),
 }));
 vi.mock('../../services/evidenceApi', () => ({

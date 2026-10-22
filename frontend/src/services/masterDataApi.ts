@@ -40,3 +40,23 @@ export const saveShortcut = (phrase: string) =>
   });
 export const removeShortcut = (shortcutId: number) =>
   apiPost<{ shortcutId: number }, RequirementShortcut>('/api/business/master-data/requirement-shortcuts/removals', { shortcutId });
+
+export interface RequirementTemplate {
+  templateId: number;
+  templateCode: string;
+  name: string;
+  steps: string[];
+  enabled: boolean;
+  sortOrder: number;
+  version: number;
+  requestId?: string;
+}
+
+export const fetchTemplates = (includeDisabled = false) =>
+  apiGet<RequirementTemplate[]>(`/api/business/master-data/requirement-templates${includeDisabled ? '?includeDisabled=true' : ''}`);
+
+export const saveTemplate = (body: { templateCode?: string; name: string; steps: string[]; sortOrder: number; version: number; requestId?: string }) =>
+  apiPost<typeof body, RequirementTemplate>('/api/business/master-data/requirement-templates', body);
+
+export const disableTemplate = (templateCode: string, version: number) =>
+  apiPost<{ templateCode: string; version: number }, RequirementTemplate>('/api/business/master-data/requirement-templates/disables', { templateCode, version });

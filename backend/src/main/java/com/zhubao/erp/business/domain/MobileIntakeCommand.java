@@ -24,10 +24,14 @@ public record MobileIntakeCommand(
         String quantityUnit,
         String requestId,
         String sourceType,
-        List<MobileIntakeLine> lines
+        List<MobileIntakeLine> lines,
+        String requirementTemplateCode,
+        Integer requirementTemplateVersion
 ) {
     public MobileIntakeCommand {
         lines = lines == null ? List.of() : List.copyOf(lines);
+        requirementTemplateCode = requirementTemplateCode == null ? "" : requirementTemplateCode.trim();
+        requirementTemplateVersion = requirementTemplateVersion == null || requirementTemplateVersion < 0 ? 0 : requirementTemplateVersion;
     }
 
     public MobileIntakeCommand(String courierNo, String customerName, Long customerId,
@@ -35,7 +39,16 @@ public record MobileIntakeCommand(
             BigDecimal quantity, BigDecimal weight, String expressCompany,
             String materialCode, String quantityUnit, String requestId, String sourceType) {
         this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName,
-                quantity, weight, expressCompany, materialCode, quantityUnit, requestId, sourceType, List.of());
+                quantity, weight, expressCompany, materialCode, quantityUnit, requestId, sourceType, List.of(), "", 0);
+    }
+
+    public MobileIntakeCommand(String courierNo, String customerName, Long customerId,
+            String processingRequirement, String dueDate, String goodsName,
+            BigDecimal quantity, BigDecimal weight, String expressCompany,
+            String materialCode, String quantityUnit, String requestId, String sourceType,
+            List<MobileIntakeLine> lines) {
+        this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName,
+                quantity, weight, expressCompany, materialCode, quantityUnit, requestId, sourceType, lines, "", 0);
     }
 
     public MobileIntakeCommand(String courierNo, String customerName, Long customerId,
@@ -43,7 +56,7 @@ public record MobileIntakeCommand(
             BigDecimal quantity, BigDecimal weight, String expressCompany,
             String materialCode, String quantityUnit, String requestId) {
         this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName,
-                quantity, weight, expressCompany, materialCode, quantityUnit, requestId, "COURIER", List.of());
+                quantity, weight, expressCompany, materialCode, quantityUnit, requestId, "COURIER", List.of(), "", 0);
     }
 
     public MobileIntakeCommand(
@@ -60,6 +73,6 @@ public record MobileIntakeCommand(
             String quantityUnit
     ) {
         this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName,
-                quantity, weight, expressCompany, materialCode, quantityUnit, null, "COURIER", List.of());
+                quantity, weight, expressCompany, materialCode, quantityUnit, null, "COURIER", List.of(), "", 0);
     }
 }

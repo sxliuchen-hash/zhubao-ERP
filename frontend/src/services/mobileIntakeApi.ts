@@ -26,6 +26,8 @@ export interface MobileIntakeRequest {
   quantityUnit?: string;
   lines?: Array<{ materialCode: string; goodsName: string; quantity: number; quantityUnit: string; weight: string }>;
   requestId?: string;
+  requirementTemplateCode?: string;
+  requirementTemplateVersion?: number;
 }
 
 export interface MobileIntakeResult {

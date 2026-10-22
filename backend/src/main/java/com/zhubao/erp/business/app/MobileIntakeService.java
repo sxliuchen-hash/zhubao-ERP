@@ -8,8 +8,11 @@ import com.zhubao.erp.business.domain.MobileIntakeLine;
 import com.zhubao.erp.business.domain.MobileIntakeLookup;
 import com.zhubao.erp.business.domain.MobileIntakeResult;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.MotherRequirementSource;
+import com.zhubao.erp.business.domain.MotherRequirementSourceRepository;
 import com.zhubao.erp.business.domain.OrderCodes;
 import com.zhubao.erp.business.domain.ReceiptLine;
+import com.zhubao.erp.business.domain.RequirementText;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
@@ -54,6 +57,7 @@ public class MobileIntakeService {
     private final BusinessWorkUnit workUnit;
     private final MasterDataService masterData;
     private final StockLedgerService stockLedgerService;
+    private final MotherRequirementSourceRepository requirementSources;
     private final AuthUserAccountRepository accounts;
     /** 本进程已发出、事务可能尚未提交的母单号，避免并发收货拿到同一个流水。 */
     private final Set<String> reservedMotherCodes = ConcurrentHashMap.newKeySet();
@@ -93,6 +97,18 @@ public class MobileIntakeService {
         this(businessOperationService, businessDocumentRepository, workUnit, masterData, stockLedgerService, null);
     }
 
+    public MobileIntakeService(
+            BusinessOperationService businessOperationService,
+            BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit,
+            MasterDataService masterData,
+            StockLedgerService stockLedgerService,
+            MotherRequirementSourceRepository requirementSources
+    ) {
+        this(businessOperationService, businessDocumentRepository, workUnit, masterData, stockLedgerService,
+                requirementSources, null);
+    }
+
     @Autowired
     public MobileIntakeService(
             BusinessOperationService businessOperationService,
@@ -100,6 +116,7 @@ public class MobileIntakeService {
             BusinessWorkUnit workUnit,
             MasterDataService masterData,
             StockLedgerService stockLedgerService,
+            MotherRequirementSourceRepository requirementSources,
             AuthUserAccountRepository accounts
     ) {
         this.businessOperationService = businessOperationService;
@@ -107,7 +124,13 @@ public class MobileIntakeService {
         this.workUnit = workUnit;
         this.masterData = masterData;
         this.stockLedgerService = stockLedgerService;
+        this.requirementSources = requirementSources;
         this.accounts = accounts;
+    }
+
+    /** 在当前工作单元里占用下一个母单号，避免和收货建单撞号。 */
+    public String reserveMotherOrderCode(WorkSession session) {
+        return nextMotherOrderCode(session);
     }
 
     public MobileIntakeLookup lookup(String courierNo) {
@@ -188,6 +211,7 @@ public class MobileIntakeService {
             WorkSession session
     ) {
         long customerId = resolveCustomerId(customerName, command.customerId());
+        RequirementText.requireWithinLimit(command.processingRequirement());
         List<MobileIntakeLine> lines = normalizedLines(command);
         String motherOrderCode = nextMotherOrderCode(session);
         MobileIntakeLine first = lines.get(0);
@@ -257,6 +281,10 @@ public class MobileIntakeService {
                     .orElseThrow(() -> new BusinessException("母单已入账但未能读回：" + confirmed.motherOrderCode()))
                 : businessDocumentRepository.findMotherOrderByCode(confirmed.motherOrderCode(), session)
                     .orElseThrow(() -> new BusinessException("母单已入账但未能读回：" + confirmed.motherOrderCode()));
+        if (requirementSources != null && session != null && !command.requirementTemplateCode().isBlank()) {
+            requirementSources.save(new MotherRequirementSource(saved.code(), command.requirementTemplateCode(),
+                    command.requirementTemplateVersion(), saved.processingRequirement()), session);
+        }
         return resultOf(saved, false);
     }
 

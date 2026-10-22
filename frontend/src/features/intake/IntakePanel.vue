@@ -5,6 +5,7 @@ import { canManageMasterData } from '../../services/masterDataAccess';
 import { fetchCustomers, fetchMaterials, fetchShortcuts, removeShortcut, saveCustomer, saveMaterial, saveShortcut,
   type CustomerProfile, type MaterialProfile, type RequirementShortcut } from '../../services/masterDataApi';
 import FilterSelect from '../../components/FilterSelect.vue';
+import RequirementComposer from './RequirementComposer.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
@@ -57,8 +58,10 @@ const catalogError = ref('');
 const catalogHint = ref('');
 const catalogSaving = ref(false);
 const processingRequirement = ref('');
+const requirementTemplateCode = ref('');
+const requirementTemplateVersion = ref(0);
+const requirementComposerKey = ref(0);
 const shortcuts = ref<RequirementShortcut[]>([]);
-const newShortcut = ref('');
 const dueDate = ref('');
 const goodsName = ref('');
 const quantity = ref('1');
@@ -159,6 +162,9 @@ function startNextIntake() {
   customerId.value = null;
   materialCode.value = '';
   processingRequirement.value = '';
+  requirementTemplateCode.value = '';
+  requirementTemplateVersion.value = 0;
+  requirementComposerKey.value += 1;
   dueDate.value = '';
   goodsName.value = '';
   quantity.value = '1';
@@ -298,6 +304,8 @@ function confirmationFingerprint() {
     customerId.value,
     materialCode.value,
     processingRequirement.value.trim(),
+    requirementTemplateCode.value,
+    requirementTemplateVersion.value,
     dueDate.value,
     goodsName.value.trim(),
     quantity.value,
@@ -330,6 +338,10 @@ async function createMotherOrder() {
     formError.value = '请选择客户并填写加工要求和完成期限';
     return;
   }
+  if (processingRequirement.value.trim().length > 500) {
+    formError.value = '加工要求超过 500 字，请缩短后再保存';
+    return;
+  }
   if (!materialCode.value || !goodsName.value.trim() || !quantityUnit.value.trim() || !Number.isFinite(Number(quantity.value)) || Number(quantity.value) <= 0 || !Number.isFinite(Number(weight.value)) || Number(weight.value) <= 0) {
     formError.value = '请选择材质并填写货品名称、数量和重量';
     return;
@@ -359,6 +371,8 @@ async function createMotherOrder() {
       customerId: customerId.value,
       materialCode: materialCode.value,
       processingRequirement: processingRequirement.value.trim(),
+      requirementTemplateCode: requirementTemplateCode.value,
+      requirementTemplateVersion: requirementTemplateVersion.value,
       dueDate: dueDate.value,
       goodsName: goodsName.value.trim(),
       quantity: totalQuantity,
@@ -393,31 +407,19 @@ async function loadCatalog() {
   }
 }
 
-function applyShortcut(phrase: string) {
-  const current = processingRequirement.value.trim();
-  if (!current) {
-    processingRequirement.value = phrase;
-    return;
-  }
-  const parts = current.split(/[、,，;；]+/).map((part) => part.trim()).filter(Boolean);
-  if (parts.includes(phrase)) return;
-  processingRequirement.value = `${current}、${phrase}`;
-}
-
-async function addShortcut() {
+async function addShortcut(phrase: string) {
   if (!canManageData.value || catalogSaving.value) return;
-  const phrase = newShortcut.value.trim();
-  if (!phrase) {
+  const text = phrase.trim();
+  if (!text) {
     catalogHint.value = '';
     catalogError.value = '请填写快捷词';
     return;
   }
   catalogSaving.value = true;
   try {
-    const saved = await saveShortcut(phrase);
+    const saved = await saveShortcut(text);
     shortcuts.value = [...shortcuts.value.filter((item) => item.shortcutId !== saved.shortcutId), saved]
       .sort((left, right) => left.sortOrder - right.sortOrder || left.shortcutId - right.shortcutId);
-    newShortcut.value = '';
     catalogError.value = '';
     catalogHint.value = `已添加快捷词「${saved.phrase}」`;
   } catch (error) {
@@ -607,24 +609,16 @@ onMounted(loadCatalog);
         <input v-model="newCustomerName" aria-label="新增客户名称" placeholder="没有这家客户时填写名称，或直接用上方已输入的筛选词" />
         <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addCustomer">新增客户档案</button>
       </div>
-      <label class="field">
-        <span>加工要求</span>
-        <textarea v-model="processingRequirement" aria-label="加工要求" />
-      </label>
-      <div class="requirement-shortcuts" aria-label="加工要求快捷词">
-        <div class="shortcut-list">
-          <span v-for="item in shortcuts" :key="item.shortcutId" class="shortcut-chip">
-            <button type="button" class="shortcut-phrase" :aria-label="`填入快捷词 ${item.phrase}`" @click="applyShortcut(item.phrase)">{{ item.phrase }}</button>
-            <button v-if="canManageData" type="button" class="shortcut-remove" :aria-label="`删除快捷词 ${item.phrase}`" @click="deleteShortcut(item)">×</button>
-          </span>
-          <p v-if="!shortcuts.length" class="empty-hint">还没有快捷词。有档案维护权限时可以添加常用加工要求。</p>
-        </div>
-        <div v-if="canManageData" class="catalog-create">
-          <span>自定义快捷词</span>
-          <input v-model="newShortcut" aria-label="新快捷词" placeholder="例如：镜面抛光" />
-          <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addShortcut">添加快捷词</button>
-        </div>
-      </div>
+      <RequirementComposer
+        :key="requirementComposerKey"
+        v-model="processingRequirement"
+        v-model:template-code="requirementTemplateCode"
+        v-model:template-version="requirementTemplateVersion"
+        :shortcuts="shortcuts"
+        :can-manage="canManageData"
+        @add-shortcut="addShortcut"
+        @remove-shortcut="deleteShortcut"
+      />
       <label class="field">
         <span>完成期限</span>
         <input v-model="dueDate" type="date" aria-label="完成期限" />

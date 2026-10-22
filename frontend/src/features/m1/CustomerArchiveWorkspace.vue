@@ -12,8 +12,9 @@ import {
   type MaterialProfile,
 } from '../../services/masterDataApi';
 import { fetchProgress, type ProgressRow } from '../../services/progressApi';
+import RequirementTemplatePanel from './RequirementTemplatePanel.vue';
 
-type Section = 'customers' | 'materials';
+type Section = 'customers' | 'materials' | 'templates';
 
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const canManage = computed(() => canManageMasterData(authSession.value));
@@ -251,6 +252,7 @@ function money(value: number) {
       <div class="finance-sections" role="tablist" aria-label="档案分区">
         <button type="button" class="table-action" :class="{ active: section === 'customers' }" :aria-selected="section === 'customers'" @click="section = 'customers'">客户档案</button>
         <button type="button" class="table-action" :class="{ active: section === 'materials' }" :aria-selected="section === 'materials'" @click="section = 'materials'">材质管理</button>
+        <button type="button" class="table-action" :class="{ active: section === 'templates' }" :aria-selected="section === 'templates'" @click="section = 'templates'">加工要求模板</button>
       </div>
     </header>
 
@@ -369,7 +371,7 @@ function money(value: number) {
       </div>
     </section>
 
-    <section v-else class="archive-layout" aria-label="材质管理">
+    <section v-else-if="section === 'materials'" class="archive-layout" aria-label="材质管理">
       <div class="section-block">
         <div class="archive-toolbar">
           <label>
@@ -410,6 +412,7 @@ function money(value: number) {
       </section>
       <p v-else class="section-block empty-hint">选择一种材质，或新建常见材质。</p>
     </section>
+    <RequirementTemplatePanel v-else-if="section === 'templates'" :can-manage="canManage" />
   </div>
 </template>
 

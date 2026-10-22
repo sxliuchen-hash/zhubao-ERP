@@ -7,10 +7,11 @@ import { queryScanContext } from '../../services/scanContextApi';
 import { fetchMotherOrder, lookupMobileIntake, submitMobileIntake } from '../../services/mobileIntakeApi';
 import { bindEvidence, fetchEvidenceBoard, uploadEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
-import { fetchCustomers, fetchMaterials, fetchShortcuts, removeShortcut, saveCustomer, saveMaterial, saveShortcut } from '../../services/masterDataApi';
+import { fetchCustomers, fetchMaterials, fetchShortcuts, fetchTemplates, removeShortcut, saveCustomer, saveMaterial, saveShortcut } from '../../services/masterDataApi';
+import { composeRequirement } from './requirementText';
 
 vi.mock('../../services/masterDataApi', () => ({
-  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(),
+  fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(), fetchTemplates: vi.fn(),
   saveCustomer: vi.fn(), saveMaterial: vi.fn(), saveShortcut: vi.fn(), removeShortcut: vi.fn(),
 }));
 
@@ -87,6 +88,7 @@ describe('收货面板', () => {
       aliases: '', contact: '', phone: '', remark: '', enabled: true }]);
     vi.mocked(fetchMaterials).mockResolvedValue([{ materialCode: 'AU9999', name: '足金', aliases: '', remark: '', enabled: true }]);
     vi.mocked(fetchShortcuts).mockResolvedValue([]);
+    vi.mocked(fetchTemplates).mockResolvedValue([]);
     vi.mocked(submitMobileIntake).mockReset();
     vi.mocked(lookupMobileIntake).mockReset();
     vi.mocked(fetchMotherOrder).mockReset();
@@ -456,10 +458,11 @@ describe('收货面板', () => {
     await wrapper.get('[aria-label="填入快捷词 镜面抛光"]').trigger('click');
     expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('镜面抛光');
     await wrapper.get('[aria-label="填入快捷词 镜面抛光"]').trigger('click');
-    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('镜面抛光');
+    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('');
     await wrapper.get('[aria-label="加工要求"]').setValue('倒模');
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
     await wrapper.get('[aria-label="填入快捷词 镜面抛光"]').trigger('click');
-    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('倒模、镜面抛光');
+    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('倒模');
 
     await wrapper.get('[aria-label="新快捷词"]').setValue('改圈');
     await wrapper.findAll('button').find((button) => button.text() === '添加快捷词')!.trigger('click');
@@ -473,6 +476,70 @@ describe('收货面板', () => {
     await flushPromises();
     expect(removeShortcut).toHaveBeenCalledWith(3);
     expect(wrapper.find('[aria-label="填入快捷词 镜面抛光"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('模板预览与提交文字一致，下一单不残留来源', async () => {
+    const basic = {
+      templateId: 1, templateCode: 'TPL-BEAD-BASIC', name: '常规珠型加工',
+      steps: ['开粗', '车形（车成珠型）', '抛光'], enabled: true, sortOrder: 1, version: 1,
+    };
+    vi.mocked(fetchTemplates).mockResolvedValue([basic]);
+    vi.mocked(submitMobileIntake).mockResolvedValue({
+      alreadyExists: false, motherOrderCode: 'MD-TPL-1', courierNo: 'SF1048329001',
+      customerName: '恒信珠宝', processingRequirement: composeRequirement(basic.steps, '孔径 2 毫米'),
+      dueDate: '2026-10-20', goodsName: '戒托', quantity: 1, weight: 2.5,
+      ledgerCode: 'STK-1', qrContent: 'JG|mother|MD-TPL-1',
+    });
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      objectType: 'EXPRESS_NO', code: 'SF1048329001', motherOrderCode: null,
+      actions: [{ code: 'INTAKE', allowed: true, blockKind: 'NONE', blockReason: null }],
+    }));
+    const wrapper = mountPanel();
+    await flushPromises();
+    await wrapper.get('[aria-label="快递单号"]').setValue('SF1048329001');
+    await wrapper.get('[aria-label="识别单号"]').trigger('click');
+    await flushPromises();
+    await chooseFilterOption(wrapper, '客户', '恒信珠宝');
+    await chooseFilterOption(wrapper, '材质', '足金');
+    await wrapper.get('[aria-label="本单补充说明"]').setValue('孔径 2 毫米');
+    await wrapper.get('[aria-label="加工要求模板"]').setValue('TPL-BEAD-BASIC');
+    const preview = (wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value;
+    expect(preview).toBe(composeRequirement(basic.steps, '孔径 2 毫米'));
+    await wrapper.get('[aria-label="完成期限"]').setValue('2026-10-20');
+    await wrapper.get('[aria-label="货品名称"]').setValue('戒托');
+    await wrapper.get('[aria-label="数量"]').setValue('1');
+    await wrapper.get('[aria-label="重量"]').setValue('2.5');
+    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await flushPromises();
+    expect(submitMobileIntake).toHaveBeenCalledWith(expect.objectContaining({
+      processingRequirement: preview,
+      requirementTemplateCode: 'TPL-BEAD-BASIC',
+      requirementTemplateVersion: 1,
+    }));
+
+    await wrapper.findAll('button').find((button) => button.text() === '继续收下一件')!.trigger('click');
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
+      objectType: 'EXPRESS_NO', code: 'SF2000000001', motherOrderCode: null,
+      actions: [{ code: 'INTAKE', allowed: true, blockKind: 'NONE', blockReason: null }],
+    }));
+    await wrapper.get('[aria-label="快递单号"]').setValue('SF2000000001');
+    await wrapper.get('[aria-label="识别单号"]').trigger('click');
+    await flushPromises();
+    expect((wrapper.get('[aria-label="加工要求模板"]').element as HTMLSelectElement).value).toBe('');
+    expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('');
+    expect(wrapper.find('[aria-label="已选加工步骤"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('加工要求超过 500 字时不提交', async () => {
+    const wrapper = mountPanel();
+    await fillNewWaybill(wrapper);
+    await wrapper.get('[aria-label="加工要求"]').setValue('长'.repeat(501));
+    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await flushPromises();
+    expect(submitMobileIntake).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('加工要求超过 500 字');
     wrapper.unmount();
   });
 });
