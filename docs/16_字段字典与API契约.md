@@ -2406,7 +2406,22 @@ PWA 一期边界：
 | `POST /api/inventory/prep-stock/company-receipts` | `ApiResponse<String>`。必须带 `requestId`。权属始终为公司 |
 | `POST /api/inventory/prep-stock/returns` | `ApiResponse<String>`。必须带 `requestId`。从加工母单待加工退回原备料批次 |
 | `POST /api/inventory/prep-stock/company-issues` | `ApiResponse<String>`。必须带 `requestId`。公司料领用，权属保持公司，待加工转入在制 |
-| `POST /api/inventory/prep-stock/company-returns` | `ApiResponse<String>`。必须带 `requestId`。公司料从在制退回待加工 |
+| `POST /api/inventory/prep-stock/company-returns` | `ApiResponse<String>`。必须带 `requestId`。公司料从在制退回待加工。这组旧接口仍映射到仅管理员拥有的通用库存转移；日常库管改走下面的正式单据接口。 |
+| `GET /api/inventory/material-stock/overview?scope=company\|prep\|processing` | 当前账号可见范围内的批次数、按数量单位分组的账面数量、已知重量、冻结批次数和待核行数。无权限、无数据和加载失败分开返回。重量未知不计入已知重量。 |
+| `GET /api/inventory/material-stock/batches` | 同上筛选。公司料和寄存备料按批次汇总账面、可用、已领用和冻结；待核行不计入可用。加工库存仍按母单或子单状态列出。 |
+| `GET /api/inventory/material-stock/movements` | 只返回指定批次或加工单的流水，含业务名称、前后账面数量和操作人。 |
+| `POST /api/inventory/material-stock/company-receipts` | 公司料入库。`STOCK_COMPANY_RECEIVE`。多行同一工作单元；重量留空则整单待核，不入可用库存。 |
+| `POST /api/inventory/material-stock/company-issues` | 公司料领用。`STOCK_COMPANY_ISSUE`。只从原批次待加工转入在制，记录领用人和用途；关联加工单只作追溯，不并入客户库存。 |
+| `POST /api/inventory/material-stock/company-returns` | 公司料按原领用单退回。`STOCK_COMPANY_RETURN`。累计退回不能超过该笔可退量。 |
+| `POST /api/inventory/material-stock/prep-receipts` | 客户寄存收货。`STOCK_PREP_RECEIVE`。不建加工母单。不同数量单位分行记账。 |
+| `POST /api/inventory/material-stock/prep-confirmations` | 待核收货整单确认入账。有未称量行时拒绝，不做部分入账。 |
+| `POST /api/inventory/material-stock/prep-issues` | 备料领用到已有母单。`STOCK_PREP_ISSUE`。物料和单位必须与母单一致。 |
+| `POST /api/inventory/material-stock/prep-returns` | 从加工单待加工退回原备料批次。`STOCK_PREP_RETURN`。 |
+| `POST /api/inventory/material-stock/customer-returns` | 未加工寄存料退还客户。`STOCK_PREP_CUSTOMER_RETURN`。必须有收货来源和接收人，离厂后不再计入厂内实物。 |
+| `POST /api/inventory/material-stock/prep-orders` | 从备料批次领用并新建加工母单。同一工作单元转移库存，不再写一笔收货入库。 |
+| `POST /api/inventory/material-stock/freezes` | 冻结部分可用量。`STOCK_FREEZE`。账面仍包含冻结量，可用量只计未冻结部分。 |
+| `POST /api/inventory/material-stock/unfreezes` | 按原冻结单解除，不能超过该笔冻结量。 |
+| `POST /api/inventory/material-stock/corrections` | 冲正。仅管理员 `STOCK_CORRECT`。没有收货来源时拒绝，不补造历史入库。 |
 | `GET /api/inventory/ledgers` | `ApiResponse<List<StockLedgerEntry>>` |
 | `GET /api/inventory/balances` | `ApiResponse<List<StockBalance>>` |
 

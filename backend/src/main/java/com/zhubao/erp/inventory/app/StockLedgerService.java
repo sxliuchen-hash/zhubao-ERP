@@ -49,6 +49,27 @@ public class StockLedgerService {
      * 为收货录入错误追加冲正流水。只扣原收货去向，不写入新的库存状态。
      * 调用方须把单据数量、审计和请求结果放在同一个工作单元里。
      */
+    /** 退还客户或冲减只扣来源余额，不把数量留在另一种在厂状态。 */
+    public StockLedgerEntry depart(StockTransferCommand command, String sourceLedgerCode, WorkSession session) {
+        if (session == null) {
+            throw new BusinessException("库存离厂必须处于业务工作单元");
+        }
+        StockLedgerEntry entry = new StockLedgerEntry(
+                nextCode(),
+                Instant.now(),
+                command.documentType(),
+                command.documentCode(),
+                command.from(),
+                null,
+                scale(command.quantity()),
+                scale(command.weight()),
+                command.remark(),
+                sourceLedgerCode
+        );
+        com.zhubao.erp.inventory.domain.StockTransferRules.verifyDeparture(entry);
+        return repository.appendDeparture(entry, session);
+    }
+
     public StockLedgerEntry reverseInbound(ReceiptEntryReversal reversal, WorkSession session) {
         if (session == null) {
             throw new BusinessException("收货冲正必须处于业务工作单元");

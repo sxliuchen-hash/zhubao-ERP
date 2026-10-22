@@ -24,6 +24,11 @@ public interface StockLedgerRepository {
         throw new UnsupportedOperationException("当前仓储未实现收货冲正");
     }
 
+    /** 追加一条没有去向的离厂或冲减，只扣来源余额。 */
+    default StockLedgerEntry appendDeparture(StockLedgerEntry entry, WorkSession session) {
+        throw new UnsupportedOperationException("当前仓储未实现库存离厂");
+    }
+
     List<StockLedgerEntry> findAllLedgers();
 
     /**

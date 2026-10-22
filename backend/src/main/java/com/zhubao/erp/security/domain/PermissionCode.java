@@ -36,7 +36,16 @@ public enum PermissionCode {
     FINANCE_ASSET("固定资产"),
     FINANCE_PAYABLE("应付与付款"),
     FINANCE_CUSTOMER_READ("客户财务读取"),
-    FINANCE_COMPANY_READ("公司成本与工资读取");
+    FINANCE_COMPANY_READ("公司成本与工资读取"),
+    STOCK_COMPANY_RECEIVE("公司料入库"),
+    STOCK_COMPANY_ISSUE("公司料领用"),
+    STOCK_COMPANY_RETURN("公司料退回"),
+    STOCK_PREP_RECEIVE("客户寄存收货"),
+    STOCK_PREP_ISSUE("备料领用"),
+    STOCK_PREP_RETURN("备料退回"),
+    STOCK_PREP_CUSTOMER_RETURN("备料退还客户"),
+    STOCK_FREEZE("库存冻结"),
+    STOCK_CORRECT("库存冲正");
 
     private final String label;
 

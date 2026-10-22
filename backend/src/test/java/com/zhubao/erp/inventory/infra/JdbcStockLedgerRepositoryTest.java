@@ -105,6 +105,7 @@ class JdbcStockLedgerRepositoryTest {
         }
 
         StockRepositoryFixture.migrateSourceWorkOrder(legacy);
+        StockRepositoryFixture.migrateBatchCode(legacy);
         StockRepositoryFixture.migrateReversal(legacy);
 
         var ledgers = new JdbcStockLedgerRepository(legacy).findAllLedgers();

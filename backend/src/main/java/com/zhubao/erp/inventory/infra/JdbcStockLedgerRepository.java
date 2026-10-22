@@ -56,6 +56,22 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     }
 
     @Override
+    public StockLedgerEntry appendDeparture(StockLedgerEntry entry, WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("库存离厂必须使用工作单元连接");
+        }
+        StockTransferRules.verifyDeparture(entry);
+        Connection connection = session.connection().get();
+        try {
+            insertLedger(connection, entry);
+            debitBalance(connection, entry);
+            return entry;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("库存离厂写入失败", ex);
+        }
+    }
+
+    @Override
     public StockLedgerEntry save(StockLedgerEntry entry, WorkSession session) {
         StockTransferRules.verify(entry);
         if (session == null || session.connection().isEmpty()) {
@@ -191,7 +207,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                 select code, source_ledger_code, biz_time, document_type, document_code, owner_type, owner_customer_id,
                        customer_id, mother_order_code, work_order_code, from_work_order_code, material_code,
                        quantity, weight, from_warehouse_code, to_warehouse_code,
-                       from_stock_status, to_stock_status, remark
+                       from_stock_status, to_stock_status, from_batch_code, to_batch_code, from_mother_order_code, remark
                   from inv_stock_ledger
                 """ + whereSql + " order by biz_time, id";
         List<StockLedgerEntry> entries = new ArrayList<>();
@@ -214,16 +230,25 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                     );
                     String fromWarehouse = rs.getString("from_warehouse_code");
                     String fromStatus = rs.getString("from_stock_status");
+                    String fromBatch = rs.getString("from_batch_code");
+                    String toBatch = rs.getString("to_batch_code");
+                    String fromMother = rs.getString("from_mother_order_code");
+                    boolean explicitFromMother = !rs.wasNull();
+                    if (to != null && toBatch != null && !toBatch.isBlank()) {
+                        to = dimension(owner, ownerCustomerId, customerId, motherOrderCode, rs.getString("work_order_code"),
+                                materialCode, toWarehouse, StockStatus.valueOf(toStatus), toBatch);
+                    }
                     StockDimension anchor = to == null ? null : to;
                     StockDimension from = fromWarehouse == null || fromStatus == null ? null : dimension(
                             anchor == null ? owner : anchor.ownerType(),
                             anchor == null ? ownerCustomerId : anchor.ownerCustomerId(),
                             anchor == null ? customerId : anchor.customerId(),
-                            anchor == null ? motherOrderCode : anchor.motherOrderCode(),
+                            explicitFromMother ? (fromMother == null ? "" : fromMother) : (anchor == null ? motherOrderCode : anchor.motherOrderCode()),
                             to == null ? rs.getString("work_order_code") : rs.getString("from_work_order_code"),
                             anchor == null ? materialCode : anchor.materialCode(),
                             fromWarehouse,
-                            StockStatus.valueOf(fromStatus)
+                            StockStatus.valueOf(fromStatus),
+                            fromBatch == null ? "" : fromBatch
                     );
                     entries.add(new StockLedgerEntry(
                             rs.getString("code"),
@@ -337,8 +362,9 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                 insert into inv_stock_ledger (
                     code, source_ledger_code, biz_time, document_type, document_code, owner_type, owner_customer_id,
                     customer_id, mother_order_code, work_order_code, from_work_order_code, material_code, quantity, weight,
-                    from_warehouse_code, to_warehouse_code, from_stock_status, to_stock_status, remark
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    from_warehouse_code, to_warehouse_code, from_stock_status, to_stock_status,
+                    from_batch_code, to_batch_code, from_mother_order_code, remark
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         StockDimension anchor = entry.to() == null ? entry.from() : entry.to();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -360,7 +386,10 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             statement.setString(16, entry.to() == null ? null : entry.to().warehouseCode());
             statement.setString(17, entry.from() == null ? null : entry.from().stockStatus().name());
             statement.setString(18, entry.to() == null ? null : entry.to().stockStatus().name());
-            statement.setString(19, entry.remark());
+            statement.setString(19, entry.from() == null ? "" : entry.from().batchCode());
+            statement.setString(20, entry.to() == null ? "" : entry.to().batchCode());
+            statement.setString(21, entry.from() == null ? null : entry.from().motherOrderCode());
+            statement.setString(22, entry.remark());
             statement.executeUpdate();
         }
     }

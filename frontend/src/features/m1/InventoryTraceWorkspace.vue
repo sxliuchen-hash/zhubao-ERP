@@ -28,6 +28,7 @@ const emptyInventory = (): InventoryWorkspaceModel => ({
 });
 
 const workspace = ref<InventoryWorkspaceModel>(emptyInventory());
+const stockTab = ref<'company' | 'prep' | 'processing' | 'ledger'>('company');
 const loadError = ref('');
 const accessDenied = ref(false);
 const loading = ref(false);
@@ -164,7 +165,15 @@ function selectBalance(item: InventoryBalance) {
 <template>
   <div class="inventory-trace-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
-    <PrepStockPanel />
+    <div class="finance-sections" role="tablist" aria-label="库存分区">
+      <button type="button" class="table-action" :class="{ active: stockTab === 'company' }" :aria-selected="stockTab === 'company'" @click="stockTab = 'company'">公司自有物料</button>
+      <button type="button" class="table-action" :class="{ active: stockTab === 'prep' }" :aria-selected="stockTab === 'prep'" @click="stockTab = 'prep'">客户寄存备料</button>
+      <button type="button" class="table-action" :class="{ active: stockTab === 'processing' }" :aria-selected="stockTab === 'processing'" @click="stockTab = 'processing'">加工库存</button>
+      <button type="button" class="table-action" :class="{ active: stockTab === 'ledger' }" :aria-selected="stockTab === 'ledger'" @click="stockTab = 'ledger'">出入库记录</button>
+    </div>
+    <PrepStockPanel v-if="stockTab === 'company'" scope="company" />
+    <PrepStockPanel v-if="stockTab === 'prep'" scope="prep" />
+    <div v-show="stockTab === 'processing' || stockTab === 'ledger'">
     <ShippingPanel
       title="确认发货"
       intro="扫成品标签。选择完整库存维度，并填写本次数量、重量和物流。物流扫码只填写运单号。超时用原确认回放，不会另开一次发货。"
@@ -373,5 +382,6 @@ function selectBalance(item: InventoryBalance) {
 
     </section>
     </section>
+    </div>
   </div>
 </template>

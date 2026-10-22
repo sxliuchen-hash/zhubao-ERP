@@ -50,6 +50,34 @@ public final class StockTransferRules {
         }
     }
 
+    /** 实物离厂或冲减只扣来源余额，不转入另一种库存状态。 */
+    public static void verifyDeparture(StockLedgerEntry entry) {
+        Objects.requireNonNull(entry, "库存台账不能为空");
+        requireText(entry.code(), "库存台账号不能为空");
+        Objects.requireNonNull(entry.bizTime(), "库存业务时间不能为空");
+        if (!"prep_customer_return".equals(entry.documentType()) && !"stock_correction".equals(entry.documentType())) {
+            throw new IllegalArgumentException("离厂或冲减的业务类型不正确");
+        }
+        requireText(entry.documentCode(), "库存业务单号不能为空");
+        if (entry.to() != null || entry.from() == null) {
+            throw new IllegalArgumentException("离厂或冲减只能扣减来源余额");
+        }
+        if (entry.sourceLedgerCode() == null || entry.sourceLedgerCode().isBlank()) {
+            throw new IllegalArgumentException("离厂或冲减必须关联原收货");
+        }
+        Objects.requireNonNull(entry.quantity(), "库存数量不能为空");
+        Objects.requireNonNull(entry.weight(), "库存重量不能为空");
+        if (entry.quantity().signum() < 0 || entry.weight().signum() < 0) {
+            throw new IllegalArgumentException("库存转移数量和重量不能为负数");
+        }
+        if (entry.quantity().signum() == 0 && entry.weight().signum() == 0) {
+            throw new IllegalArgumentException("库存转移数量和重量不能同时为零");
+        }
+        verifyPrecision(entry.quantity());
+        verifyPrecision(entry.weight());
+        verifyDimension(entry.from());
+    }
+
     public static void requireSufficient(StockBalance balance, StockLedgerEntry entry) {
         if (balance.quantity().compareTo(entry.quantity()) < 0) {
             throw new BusinessException("来源库存数量不足");

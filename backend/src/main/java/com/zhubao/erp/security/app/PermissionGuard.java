@@ -75,6 +75,15 @@ public class PermissionGuard {
         grant(PermissionCode.BUSINESS_MOTHER_SPLIT, RoleCode.BUSINESS_MANAGER);
         grant(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, RoleCode.BUSINESS_MANAGER);
         grant(PermissionCode.BUSINESS_LOSS_APPROVAL, RoleCode.BUSINESS_MANAGER);
+        roleMatrix.put(PermissionCode.STOCK_COMPANY_RECEIVE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
+        roleMatrix.put(PermissionCode.STOCK_COMPANY_ISSUE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
+        roleMatrix.put(PermissionCode.STOCK_COMPANY_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_RECEIVE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_ISSUE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_CUSTOMER_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
+        roleMatrix.put(PermissionCode.STOCK_FREEZE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
+        roleMatrix.put(PermissionCode.STOCK_CORRECT, EnumSet.of(RoleCode.ADMIN));
     }
 
     public void assertAllowed(PermissionCode permission, OperatorContext operatorContext) {
@@ -141,6 +150,8 @@ public class PermissionGuard {
             case REGISTER_IMPORT_REVIEW, REGISTER_IMPORT_POSTING -> CoverDuties.REGISTER;
             case BUSINESS_LOSS_APPROVAL -> CoverDuties.LOSS;
             case GATEWAY_READING_CONSUME, DOCUMENT_ATTACHMENT_UPLOAD, DOCUMENT_CAPTURE -> null;
+            case STOCK_COMPANY_RECEIVE, STOCK_COMPANY_ISSUE, STOCK_COMPANY_RETURN, STOCK_PREP_RECEIVE,
+                    STOCK_PREP_ISSUE, STOCK_PREP_RETURN, STOCK_PREP_CUSTOMER_RETURN, STOCK_FREEZE, STOCK_CORRECT -> "";
             default -> "";
         };
         if (duty == null) {
