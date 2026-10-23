@@ -322,6 +322,7 @@ async function deliver(station: ProcessStationCard) {
     />
     <p v-if="hint" class="operation-feedback">{{ hint }}</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
+    <button v-if="initialTarget && !stationView" class="secondary-button" type="button" :disabled="stationBusy || stationScan.loading || Boolean(submittingProcess)" @click="recognizeStation({ content: initialTarget.code, ...(initialTarget.objectType ? { objectType: initialTarget.objectType } : {}) })">重新读取本单工序</button>
     <p v-if="delivered" class="operation-feedback" role="status">正式交工已保存：{{ delivered.orderCode }} · {{ delivered.processName }} · 台账 {{ delivered.ledgerCode || '未提供' }}</p>
     <OrderContextCard v-if="!embedded || stationScan.context?.requiresSelection" :context="stationScan.context" @select="chooseStationTarget" />
     <article v-if="field && stationView" class="field-card" aria-label="当前单据">

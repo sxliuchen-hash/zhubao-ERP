@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
+import type { OpenShippingAction } from '../orders/orderActions';
+import { useTraceTarget } from '../scan/useTraceTarget';
 import OperationInputs from './OperationInputs.vue';
 import { createAmountForm } from './operationAmounts';
 import { operationDraft } from './operationDraft';
@@ -28,6 +31,22 @@ const emptyInventory = (): InventoryWorkspaceModel => ({
 });
 
 const workspace = ref<InventoryWorkspaceModel>(emptyInventory());
+const openShipping = inject<OpenShippingAction | null>('zhubao-open-shipping', null);
+const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const canShip = computed(() => !session.value?.effectivePermissions || session.value.effectivePermissions.includes('BUSINESS_OUTBOUND_SHIPMENT'));
+const manualCreated = ref(!openShipping);
+const manualOpen = ref(!openShipping);
+function openManual() {
+  if (openShipping) { if (canShip.value) openShipping(); return; }
+  manualCreated.value = true;
+  manualOpen.value = !manualOpen.value;
+}
+useTraceTarget(['SHIPPING'], target => {
+  if (openShipping) { if (canShip.value) openShipping({ objectType: target.objectType, code: target.code }); }
+  else { manualCreated.value = true; manualOpen.value = true; }
+});
+const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
+watch(refresh, () => { void loadInventoryWorkspace(); });
 const stockTab = ref<'company' | 'prep' | 'processing' | 'ledger'>('company');
 const loadError = ref('');
 const accessDenied = ref(false);
@@ -54,15 +73,11 @@ const visibleBalances = computed(() => {
 
 const activeBalance = computed(
   () =>
-    workspace.value.balances.find((item) => balanceKey(item) === selectedBalanceKey.value) ??
-    workspace.value.balances.find((item) => item.status.includes('成品')) ??
-    workspace.value.balances.find((item) => item.status.includes('在制') || item.frozen !== '0') ??
-    workspace.value.balances[0],
+    workspace.value.balances.find((item) => balanceKey(item) === selectedBalanceKey.value),
 );
 const latestLedger = computed(
   () =>
-    workspace.value.ledgerEntries.find((entry) => entry.source === activeBalance.value?.batch) ??
-    workspace.value.ledgerEntries[0],
+    workspace.value.ledgerEntries.find((entry) => entry.source === activeBalance.value?.batch),
 );
 
 watch(activeBalance, (balance) => { resetAmounts(balance?.operationContext); });
@@ -103,7 +118,8 @@ async function loadInventoryWorkspace() {
   } finally {
     loading.value = false;
     if (!workspace.value.balances.some((item) => balanceKey(item) === selectedBalanceKey.value)) {
-      selectedBalanceKey.value = activeBalance.value ? balanceKey(activeBalance.value) : '';
+      selectedBalanceKey.value = '';
+      detailOpen.value = false;
     }
   }
 }
@@ -153,12 +169,23 @@ function backToList() {
 }
 
 function selectBalance(item: InventoryBalance) {
+  if (returningCustomerStock.value || reviewingAfterSalesReturn.value) return;
   selectedBalanceKey.value = balanceKey(item);
   detailOpen.value = true;
   customerReturnResult.value = null;
   customerReturnError.value = '';
   afterSalesReviewResult.value = null;
   afterSalesReviewError.value = '';
+}
+function shipSelected() {
+  const row = activeBalance.value;
+  const context = row?.operationContext;
+  if (!openShipping || !canShip.value || !row || !context || context.stockStatus !== 'FINISHED' || !context.motherOrderCode) return;
+  openShipping({ objectType: null, code: context.workOrderCode || context.motherOrderCode, balance: {
+    customerId: context.customerId, ownerCustomerId: context.ownerCustomerId ?? null, ownerType: context.ownerType,
+    motherOrderCode: context.motherOrderCode, workOrderCode: context.workOrderCode, materialCode: context.materialCode,
+    warehouseCode: context.warehouseCode, stockStatus: context.stockStatus, quantity: context.quantity, weight: context.weight,
+  } });
 }
 </script>
 
@@ -171,10 +198,12 @@ function selectBalance(item: InventoryBalance) {
       <button type="button" class="table-action" :class="{ active: stockTab === 'processing' }" :aria-selected="stockTab === 'processing'" @click="stockTab = 'processing'">加工库存</button>
       <button type="button" class="table-action" :class="{ active: stockTab === 'ledger' }" :aria-selected="stockTab === 'ledger'" @click="stockTab = 'ledger'">出入库记录</button>
     </div>
-    <PrepStockPanel v-if="stockTab === 'company'" scope="company" />
-    <PrepStockPanel v-if="stockTab === 'prep'" scope="prep" />
+    <KeepAlive><PrepStockPanel v-if="stockTab === 'company' || stockTab === 'prep'" :key="stockTab" :scope="stockTab" /></KeepAlive>
     <div v-show="stockTab === 'processing' || stockTab === 'ledger'">
+    <button v-if="canShip" class="secondary-button" type="button" @click="openManual">扫码或手输发货单据</button>
     <ShippingPanel
+      v-if="manualCreated"
+      v-show="manualOpen"
       title="确认发货"
       intro="扫成品标签。选择完整库存维度，并填写本次数量、重量和物流。物流扫码只填写运单号。超时用原确认回放，不会另开一次发货。"
     />
@@ -276,10 +305,12 @@ function selectBalance(item: InventoryBalance) {
             <dd>{{ activeBalance.qty }}{{ activeBalance.quantityUnit ? ` ${activeBalance.quantityUnit}` : '' }} / {{ activeBalance.weight }}</dd>
             <dt>冻结</dt>
             <dd>{{ activeBalance.frozen }}</dd>
-            <dt>最近台账</dt>
+            <dt>同来源台账</dt>
             <dd>{{ latestLedger?.bizCode ?? '暂无' }}</dd>
           </dl>
-          <p class="operation-feedback">成品发货使用上方确认发货，必须带请求编号。这里办理退货和售后复核。</p>
+          <button v-if="openShipping && canShip && activeBalance.operationContext?.stockStatus === 'FINISHED' && activeBalance.operationContext.ownerType === 'CUSTOMER'" class="primary-button" type="button" @click="shipSelected">从这笔库存发货</button>
+          <p v-else-if="activeBalance.operationContext?.stockStatus !== 'FINISHED'" class="operation-feedback">本笔尚非可发成品，请先核对来源单和质检放行状态。</p>
+          <p class="operation-feedback">发货从单内表单核对完整库存维度。下方保留退货和售后复核。</p>
           <OperationInputs v-model="operationValues" :fields="[['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
           <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
           <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>

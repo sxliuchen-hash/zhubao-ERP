@@ -52,11 +52,14 @@ describe('追溯回看', () => {
     const refresh = ref(0);
     const target = ref<TraceTarget | null>({ objectType: 'WORK_ORDER', code: 'WO-REAL', intent: 'LOOKUP', token: 1 });
     const openProduction = vi.fn();
+    const openShipping = vi.fn();
     const openTab = vi.fn();
-    const wrapper = mount(ChainReview, { global: { provide: { 'zhubao-trace-target': target, 'zhubao-order-refresh': refresh, 'zhubao-open-production': openProduction, 'zhubao-open-tab': openTab } } });
+    const wrapper = mount(ChainReview, { global: { provide: { 'zhubao-trace-target': target, 'zhubao-order-refresh': refresh, 'zhubao-open-production': openProduction, 'zhubao-open-shipping': openShipping, 'zhubao-open-tab': openTab } } });
     await flushPromises();
     await wrapper.get('[aria-label="去报工"]').trigger('click');
     expect(openProduction).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-REAL' }, 'station');
+    await wrapper.get('[aria-label="去发货"]').trigger('click');
+    expect(openShipping).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-REAL' });
     expect(openTab).not.toHaveBeenCalled();
     refresh.value += 1;
     await flushPromises();

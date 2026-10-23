@@ -433,8 +433,8 @@ function showClause(index: number) {
       </div>
     </div>
     <FieldSteps v-if="field && !embedded" :steps="['扫码识别', '逐条判定', '提交结果']" :current="qualityStep" />
+    <fieldset v-if="!initialTarget" class="quality-action-fields" :disabled="operationBusy || Boolean(pendingCommand)">
     <ScanInput
-      v-if="!initialTarget"
       v-model="scanText"
       field-text="贴纸二维码"
       input-aria-label="质检贴纸"
@@ -447,9 +447,11 @@ function showClause(index: number) {
       @draft="clearTarget"
       @recognize="recognize"
     />
+    </fieldset>
     <p v-if="hint" class="operation-feedback warning">{{ hint }}</p>
     <p v-if="checkBusy || qualityScan.loading" role="status">正在读取本单质检状态…</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
+    <button v-if="initialTarget && !checkView" class="secondary-button" type="button" :disabled="checkBusy || qualityScan.loading || operationBusy || Boolean(pendingCommand)" @click="recognize({ content: initialTarget.code, ...(initialTarget.objectType ? { objectType: initialTarget.objectType } : {}) })">重新读取本单质检</button>
     <button v-if="initialTarget && qualityCode" class="secondary-button" type="button" :disabled="operationBusy || checkBusy || Boolean(pendingCommand)" @click="refreshState">刷新质检状态</button>
     <p v-if="readError" class="operation-feedback danger" role="alert">{{ readError }}</p>
     <p v-if="pendingCommand" class="operation-feedback warning" role="alert">原{{ { check: '质检', rework: '开返工', report: '返工报工', recheck: '复检', release: '放行' }[pendingCommand.kind] }}请求结果待核对，已保留单号、判定和编号。<button class="secondary-button" type="button" :disabled="operationBusy" @click="execute(pendingCommand)">原请求重试</button></p>

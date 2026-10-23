@@ -1,4 +1,4 @@
-import type { ScanObjectType } from '../../services/scanContextApi';
+import type { ScanBalanceCandidate, ScanObjectType } from '../../services/scanContextApi';
 
 /** 动作目标保留类型和精确单号，不能用列表关键字代替。 */
 export interface OrderActionTarget {
@@ -10,6 +10,8 @@ export type OpenIntakeAction = (target?: OrderActionTarget | null) => void;
 export type ProductionMode = 'progress' | 'station';
 export type OpenProductionAction = (target?: OrderActionTarget | null, mode?: ProductionMode) => void;
 export type OpenQualityAction = (target?: OrderActionTarget | null) => void;
+export interface ShippingActionTarget extends OrderActionTarget { balance?: ScanBalanceCandidate }
+export type OpenShippingAction = (target?: ShippingActionTarget | null) => void;
 export interface OrderChangeTarget extends OrderActionTarget { motherOrderCode: string }
 export type OpenOrderChangeAction = (target: OrderChangeTarget) => void;
 

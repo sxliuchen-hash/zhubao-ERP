@@ -3,7 +3,7 @@ import { computed, inject, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import type { ScanObjectType } from '../../services/scanContextApi';
 import type { TraceTarget } from '../scan/traceTarget';
-import type { OpenIntakeAction, OpenProductionAction, OpenQualityAction } from '../orders/orderActions';
+import type { OpenIntakeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction } from '../orders/orderActions';
 import IntakePanel from '../intake/IntakePanel.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
 import QualityPanel from '../quality/QualityPanel.vue';
@@ -18,6 +18,7 @@ const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(n
 const openIntake = inject<OpenIntakeAction | null>('zhubao-open-intake', null);
 const openProduction = inject<OpenProductionAction | null>('zhubao-open-production', null);
 const openQuality = inject<OpenQualityAction | null>('zhubao-open-quality', null);
+const openShipping = inject<OpenShippingAction | null>('zhubao-open-shipping', null);
 const jobMode = ref<JobMode>('detail');
 const lastTarget = ref<{ code: string; objectType: ScanObjectType } | null>(null);
 const progressCode = ref('');
@@ -78,6 +79,7 @@ function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objec
   if (action === 'intake' && openIntake) { openIntake(target); return; }
   if ((action === 'station' || action === 'progress') && openProduction) { openProduction(target, action); return; }
   if (action === 'quality' && openQuality) { openQuality(target); return; }
+  if (action === 'shipping' && openShipping) { openShipping(target); return; }
   if (target) lastTarget.value = target;
   progressCode.value = target?.code ?? '';
   if (target && action !== 'progress') {

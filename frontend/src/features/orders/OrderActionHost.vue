@@ -2,10 +2,11 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue';
 import WorkspaceLoadState from '../../components/WorkspaceLoadState.vue';
 import type { MobileIntakeResult } from '../../services/mobileIntakeApi';
-import { intakeDraftKey, type OrderActionTarget, type OrderChangeTarget, type ProductionMode } from './orderActions';
+import { intakeDraftKey, type OrderActionTarget, type OrderChangeTarget, type ProductionMode, type ShippingActionTarget } from './orderActions';
+import type { ScanBalanceCandidate } from '../../services/scanContextApi';
 import { openMobileScanTarget } from '../scan/mobileScanBridge';
 
-const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean; canQuality?: boolean }>(), { canProduction: false, canChange: false, canQuality: false });
+const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean; canQuality?: boolean; canShipping?: boolean }>(), { canProduction: false, canChange: false, canQuality: false, canShipping: false });
 const emit = defineEmits<{ active: [open: boolean]; saved: [result: MobileIntakeResult]; changed: [] }>();
 function intakeComponent() {
   return defineAsyncComponent({ loader: () => import('./IntakeActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 });
@@ -16,25 +17,28 @@ function changeComponent() { return defineAsyncComponent({ loader: () => import(
 const ProductionActionPane = shallowRef(productionComponent());
 function qualityComponent() { return defineAsyncComponent({ loader: () => import('./QualityActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
 const QualityActionPane = shallowRef(qualityComponent());
+function shippingComponent() { return defineAsyncComponent({ loader: () => import('./ShippingActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
+const ShippingActionPane = shallowRef(shippingComponent());
 const OrderChangePanel = shallowRef(changeComponent());
 function locatorComponent() { return defineAsyncComponent({ loader: () => import('./OrderActionLocator.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
 const OrderActionLocator = shallowRef(locatorComponent());
-type ActionKind = 'intake' | 'production' | 'change' | 'quality';
+type ActionKind = 'intake' | 'production' | 'change' | 'quality' | 'shipping';
 const activeKind = ref<ActionKind>('intake');
 provide('zhubao-retry-workspace', () => {
   if (activeKind.value === 'intake') IntakeActionPane.value = intakeComponent();
-  else if ((activeKind.value === 'production' || activeKind.value === 'quality') && !target.value?.objectType) OrderActionLocator.value = locatorComponent();
+  else if (['production', 'quality', 'shipping'].includes(activeKind.value) && !target.value?.objectType) OrderActionLocator.value = locatorComponent();
   else if (activeKind.value === 'production') ProductionActionPane.value = productionComponent();
   else if (activeKind.value === 'quality') QualityActionPane.value = qualityComponent();
+  else if (activeKind.value === 'shipping') ShippingActionPane.value = shippingComponent();
   else OrderChangePanel.value = changeComponent();
 });
 const open = ref(false);
 const target = ref<OrderActionTarget | null>(null);
 const draftKey = ref('intake:new');
-const drafts = ref<Array<{ key: string; kind: ActionKind; target: OrderActionTarget | null; motherOrderCode?: string; mode: ProductionMode; entryRevision: number }>>([]);
-const title = computed(() => ({ intake: '收货办理', production: '工序作业', change: '单据改单', quality: '质量作业' }[activeKind.value]));
-const needsScanner = computed(() => activeKind.value === 'intake' || (['production', 'quality'].includes(activeKind.value) && !target.value?.objectType));
-function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : kind === 'quality' ? props.canQuality : props.canChange; }
+const drafts = ref<Array<{ key: string; kind: ActionKind; target: OrderActionTarget | null; motherOrderCode?: string; balance?: ScanBalanceCandidate; mode: ProductionMode; entryRevision: number }>>([]);
+const title = computed(() => ({ intake: '收货办理', production: '工序作业', change: '单据改单', quality: '质量作业', shipping: '发货办理' }[activeKind.value]));
+const needsScanner = computed(() => activeKind.value === 'intake' || (['production', 'quality', 'shipping'].includes(activeKind.value) && !target.value?.objectType));
+function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : kind === 'quality' ? props.canQuality : kind === 'shipping' ? props.canShipping : props.canChange; }
 const panel = ref<HTMLElement | null>(null);
 const closeButton = ref<HTMLButtonElement | null>(null);
 let opener: HTMLElement | null = null;
@@ -53,16 +57,21 @@ function openOrderChange(input: OrderChangeTarget) {
 function openQuality(input: OrderActionTarget | null = null) {
   if (!input || workTarget(input) || (input.objectType === 'REWORK' && input.code.trim())) openDraft('quality', input);
 }
-function openDraft(kind: ActionKind, input: OrderActionTarget | null, mode: ProductionMode = 'progress', motherOrderCode?: string) {
+function openShipping(input: ShippingActionTarget | null = null) {
+  if (!input || workTarget(input) || (input.objectType === 'OUTBOUND_ORDER' && input.code.trim())) openDraft('shipping', input, 'progress', undefined, input?.balance);
+}
+function stockIdentity(balance: ScanBalanceCandidate) { return JSON.stringify([balance.customerId, balance.ownerCustomerId, balance.ownerType, balance.motherOrderCode, balance.workOrderCode, balance.materialCode, balance.warehouseCode, balance.stockStatus]); }
+function openDraft(kind: ActionKind, input: OrderActionTarget | null, mode: ProductionMode = 'progress', motherOrderCode?: string, balance?: ScanBalanceCandidate) {
   if (!allowed(kind)) return;
   const selected = input?.code.trim() ? { objectType: input.objectType, code: input.code.trim() } : null;
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   target.value = selected;
   activeKind.value = kind;
   draftKey.value = kind === 'intake' ? intakeDraftKey(selected) : `${kind}:${selected?.objectType ?? 'AUTO'}:${selected?.code}`;
+  if (kind === 'shipping' && balance) draftKey.value += `:${stockIdentity(balance)}`;
   const existing = drafts.value.find(draft => draft.key === draftKey.value);
   if (existing) { existing.mode = mode; existing.entryRevision += 1; }
-  else drafts.value.push({ key: draftKey.value, kind, target: selected, motherOrderCode, mode, entryRevision: 1 });
+  else drafts.value.push({ key: draftKey.value, kind, target: selected, motherOrderCode, ...(balance ? { balance: { ...balance } } : {}), mode, entryRevision: 1 });
   open.value = true;
   emit('active', true);
   void nextTick(() => closeButton.value?.focus());
@@ -85,10 +94,10 @@ function keydown(event: KeyboardEvent) {
   if (event.shiftKey && (document.activeElement === first || !panel.value?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
-watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality], () => { if (!allowed(activeKind.value) && open.value) void close(); });
+watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality, () => props.canShipping], () => { if (!allowed(activeKind.value) && open.value) void close(); });
 onMounted(() => window.addEventListener('keydown', keydown));
 onBeforeUnmount(() => { window.removeEventListener('keydown', keydown); emit('active', false); });
-defineExpose({ openIntake, openProduction, openOrderChange, openQuality });
+defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShipping });
 </script>
 
 <template>
@@ -107,7 +116,8 @@ defineExpose({ openIntake, openProduction, openOrderChange, openQuality });
             <component :is="IntakeActionPane" v-if="draft.kind === 'intake'" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @saved="emit('saved', $event)" @navigate="close" />
             <component :is="ProductionActionPane" v-else-if="draft.kind === 'production' && draft.target?.objectType" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :initial-mode="draft.mode" :entry-revision="draft.entryRevision" @changed="emit('changed')" @selected="openProduction" />
             <component :is="QualityActionPane" v-else-if="draft.kind === 'quality' && draft.target?.objectType" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @changed="emit('changed')" @selected="openQuality" />
-            <component :is="OrderActionLocator" v-else-if="draft.kind === 'production' || draft.kind === 'quality'" :initial-target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :allowed-types="draft.kind === 'quality' ? ['MOTHER_ORDER', 'WORK_ORDER', 'REWORK'] : ['MOTHER_ORDER', 'WORK_ORDER']" @selected="value => draft.kind === 'quality' ? openQuality(value) : openProduction(value, draft.mode)" />
+            <component :is="ShippingActionPane" v-else-if="draft.kind === 'shipping' && draft.target?.objectType" :target="draft.target" :balance="draft.balance" :active="open && allowed(draft.kind) && draft.key === draftKey" @changed="emit('changed')" @selected="openShipping" />
+            <component :is="OrderActionLocator" v-else-if="['production', 'quality', 'shipping'].includes(draft.kind)" :initial-target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :allowed-types="draft.kind === 'quality' ? ['MOTHER_ORDER', 'WORK_ORDER', 'REWORK'] : draft.kind === 'shipping' ? ['MOTHER_ORDER', 'WORK_ORDER', 'OUTBOUND_ORDER'] : ['MOTHER_ORDER', 'WORK_ORDER']" @selected="value => draft.kind === 'quality' ? openQuality(value) : draft.kind === 'shipping' ? openShipping({ ...value, ...(draft.balance ? { balance: draft.balance } : {}) }) : openProduction(value, draft.mode)" />
             <component :is="OrderChangePanel" v-else-if="draft.target && draft.motherOrderCode" :target="{ orderCode: draft.target.code, motherOrderCode: draft.motherOrderCode }" @changed="emit('changed')" />
           </div>
         </div>

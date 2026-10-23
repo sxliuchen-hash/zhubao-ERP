@@ -22,6 +22,15 @@ function forRole(role: string, coverDuties?: string[], effectivePermissions?: st
 }
 
 describe('MobileOpsWorkspace', () => {
+  it('仓库发货接入容器时保留当前查单页，不创建第二份页内发货表单', async () => {
+    const open = vi.fn();
+    const wrapper = mount(MobileOpsWorkspace, { global: { provide: { 'zhubao-auth-session': ref({ role: 'WAREHOUSE_KEEPER', effectivePermissions: ['BUSINESS_OUTBOUND_SHIPMENT'] } as AuthSession), 'zhubao-open-shipping': open } } });
+    await wrapper.get('[data-open="shipping"]').trigger('click');
+    expect(open).toHaveBeenCalledWith(undefined);
+    expect(wrapper.find('[data-job="shipping"]').exists()).toBe(false);
+    expect(wrapper.find('[data-job="detail"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
   it('质检接入容器后保留查单页和当前目标，不再在页内重复创建表单', async () => {
     const open = vi.fn();
     const wrapper = mount(MobileOpsWorkspace, { global: { provide: { 'zhubao-auth-session': ref({ role: 'QUALITY_INSPECTOR', effectivePermissions: ['BUSINESS_QUALITY_FREEZE'] } as AuthSession), 'zhubao-open-quality': open } } });

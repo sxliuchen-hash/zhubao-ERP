@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../services/apiClient';
 import ShippingPanel from './ShippingPanel.vue';
 import { queryScanContext, saveProgressRecord } from '../../services/scanContextApi';
 import { shipFinishedStock } from '../../services/businessOperationApi';
@@ -109,6 +110,69 @@ describe('发货面板', () => {
     vi.mocked(bindEvidence).mockReset();
   });
 
+  it('复核不扣库，切换仓库撤下旧复核并清空数量和重量', async () => {
+    const wrapper = await openPanel(contextOf({ balances: [balance({ warehouseCode: 'WH-A' }), balance({ warehouseCode: 'WH-B' })] }));
+    await wrapper.findAll('[aria-label^="选择余额"]')[0].trigger('click');
+    await wrapper.get('[aria-label="出货单号"]').setValue('OUT-REVIEW');
+    await wrapper.get('[aria-label="物流单号"]').setValue('客户自提');
+    await wrapper.get('[aria-label="本次发货数量"]').setValue('10.5');
+    await wrapper.get('[aria-label="本次发货重量"]').setValue('1.25');
+    await wrapper.get('[aria-label="核对发货"]').trigger('click');
+    expect(wrapper.get('[aria-label="发货复核"]').text()).toContain('10.5');
+    expect(shipFinishedStock).not.toHaveBeenCalled();
+    await wrapper.findAll('[aria-label^="选择余额"]')[1].trigger('click');
+    expect(wrapper.find('[aria-label="发货复核"]').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="本次发货数量"]').element).toHaveProperty('value', '');
+    expect(wrapper.get('[aria-label="本次发货重量"]').element).toHaveProperty('value', '');
+    wrapper.unmount();
+  });
+
+  it('定位目标与库存维度分别核对，失效仓库不能退回第一笔，轮次不转原单', async () => {
+    const context = contextOf({ balances: [balance({ warehouseCode: 'WH-A' })] });
+    vi.mocked(queryScanContext).mockResolvedValueOnce(context);
+    const wrapper = mount(ShippingPanel, { props: { title: '发货', intro: '', embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'ZD-1' }, initialBalance: balance({ warehouseCode: 'WH-OLD' }) } });
+    await flushPromises();
+    expect(wrapper.find('[aria-label="发货贴纸"]').exists()).toBe(false);
+    expect(wrapper.findAll('[aria-label^="选择余额"][aria-pressed="true"]')).toHaveLength(0);
+    expect(wrapper.text()).toContain('原库存维度已变化或当前不可发');
+    wrapper.unmount();
+    vi.mocked(queryScanContext).mockResolvedValueOnce(context);
+    const round = mount(ShippingPanel, { props: { title: '发货', intro: '', embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'FG-1-R2' } } });
+    await flushPromises();
+    expect(round.text()).toContain('发货目标与当前单据或执行轮次不一致');
+    expect(round.find('[aria-label="核对发货"]').exists()).toBe(false);
+    expect(round.find('[aria-label="过程说明"]').exists()).toBe(false);
+    round.unmount();
+  });
+
+  it('超时锁住原完整维度和小数数量，重试不读取后来修改的物流或数量', async () => {
+    const context = contextOf({ balances: [balance({ quantity: 12.75 })] });
+    context.order.quantityUnit = '克';
+    const wrapper = await openPanel(context);
+    await wrapper.get('[aria-label="出货单号"]').setValue('OUT-DECIMAL');
+    await wrapper.get('[aria-label="物流单号"]').setValue('客户自提');
+    await wrapper.get('[aria-label="本次发货数量"]').setValue('10.5');
+    await wrapper.get('[aria-label="本次发货重量"]').setValue('10.5');
+    await wrapper.get('[aria-label="核对发货"]').trigger('click');
+    vi.mocked(shipFinishedStock).mockRejectedValueOnce(new ApiRequestError('响应超时', 408, 408));
+    await wrapper.findAll('button').find(button => button.text() === '确认发货')!.trigger('click');
+    await flushPromises();
+    const original = vi.mocked(shipFinishedStock).mock.calls[0];
+    expect(wrapper.get('fieldset').element).toHaveProperty('disabled', true);
+    await wrapper.get('[aria-label="本次发货数量"]').setValue('1');
+    await wrapper.get('[aria-label="物流单号"]').setValue('后改单号');
+    vi.mocked(shipFinishedStock).mockResolvedValueOnce({ shipmentCode: 'OUT-DECIMAL', workOrderCode: 'ZD-1', ledgerCode: 'STK-DECIMAL', fromWarehouseCode: 'FINISHED-CUSTOMER', toWarehouseCode: 'SHIPPED-CUSTOMER', fromStockStatus: 'FINISHED', toStockStatus: 'SHIPPED', quantity: 10.5, weight: 10.5, logisticsNo: '客户自提', operator: '当前库管员' });
+    vi.mocked(queryScanContext).mockRejectedValueOnce(new Error('刷新失败'));
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(shipFinishedStock).mock.calls[1]).toEqual(original);
+    expect(original[1]).toMatchObject({ quantity: '10.5', weight: '10.5', quantityUnit: '克', logisticsNo: '客户自提' });
+    expect(wrapper.find('[aria-label="核对发货"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('发货已成功，刷新失败');
+    expect(wrapper.emitted('saved')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
   it('物流扫码只填运单号，保留业务目标、表单和待上传照片', async () => {
     const wrapper = await openPanel(contextOf({ balances: [balance()] }));
     expect(wrapper.text()).toContain('恒信珠宝');
@@ -197,7 +261,7 @@ describe('发货面板', () => {
     expect(wrapper.text()).toContain('瑞丽金行');
     expect(wrapper.text()).toContain('不会默认第一笔');
     expect(wrapper.findAll('[aria-label^="选择余额"][aria-pressed="true"]')).toHaveLength(0);
-    await wrapper.findAll('button').find((button) => button.text() === '确认发货')!.trigger('click');
+    await wrapper.get('[aria-label="核对发货"]').trigger('click');
     expect(wrapper.text()).toContain('请选择完整的物料、仓库、货权和库存状态');
     expect(shipFinishedStock).not.toHaveBeenCalled();
   });
@@ -209,7 +273,7 @@ describe('发货面板', () => {
       selection: true,
       balances: [balance({ warehouseCode: 'WH-A', workOrderCode: 'ZD-2' }), chosen],
     }), 'JG|work_order|ZD-2');
-    await wrapper.get('[aria-label="选择余额 客户1001 / 货权1001 / 母单MD-1 / 工单ZD-2 / 物料AU9999 / 仓库WH-B / FINISHED / 4件 / 8克"]').trigger('click');
+    await wrapper.findAll('[aria-label^="选择余额"]').find(button => button.attributes('aria-label')?.includes('仓库WH-B'))!.trigger('click');
     await wrapper.get('[aria-label="出货单号"]').setValue('OUT-2');
     await wrapper.get('[aria-label="物流单号"]').setValue('YT20000001');
     await wrapper.get('[aria-label="本次发货数量"]').setValue('4');
@@ -232,6 +296,8 @@ describe('发货面板', () => {
       logisticsNo: 'YT20000001',
       operator: '何琳',
     });
+    await wrapper.get('[aria-label="核对发货"]').trigger('click');
+    expect(shipFinishedStock).not.toHaveBeenCalled();
     await wrapper.findAll('button').find((button) => button.text() === '确认发货')!.trigger('click');
     await flushPromises();
 
@@ -305,6 +371,7 @@ describe('发货面板', () => {
         operator: '何琳',
       };
     });
+    await wrapper.get('[aria-label="核对发货"]').trigger('click');
     await wrapper.findAll('button').find((button) => button.text() === '确认发货')!.trigger('click');
     await flushPromises();
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { ApiRequestError } from '../../services/apiClient';
+import type { OrderActionTarget } from '../orders/orderActions';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import OrderContextCard from '../scan/OrderContextCard.vue';
 import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
@@ -7,7 +9,7 @@ import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import { extractCourierNumber } from '../scan/scanCode';
 import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
-import { useScanContext } from '../scan/useScanContext';
+import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import { useTraceTarget } from '../scan/useTraceTarget';
 import type { InventoryBalance } from '../../data/m1PrototypeData';
 import { shipFinishedStock, type OutboundShipmentResult } from '../../services/businessOperationApi';
@@ -20,11 +22,15 @@ import {
   type ScanRelatedTarget,
 } from '../../services/scanContextApi';
 
-defineProps<{
+const props = withDefaults(defineProps<{
   title: string;
   intro: string;
   bindMobileScan?: boolean;
-}>();
+  initialTarget?: OrderActionTarget | null;
+  initialBalance?: ScanBalanceCandidate | null;
+  embedded?: boolean;
+}>(), { initialTarget: null, initialBalance: null, embedded: false });
+const emit = defineEmits<{ saved: [result: OutboundShipmentResult]; targetSelected: [target: OrderActionTarget] }>();
 
 const scanText = ref('');
 const logisticsScanText = ref('');
@@ -41,12 +47,18 @@ const selectedKey = ref('');
 const shipping = ref(false);
 const refreshBusy = ref(false);
 const shipmentResult = ref<OutboundShipmentResult | null>(null);
+const savedQuantityUnit = ref('');
 const recognizedContent = ref('');
 const recognizedType = ref<ScanObjectType | ''>('');
 const requestIds = ref<Record<string, string>>({});
 const shippingScan = reactive(useScanContext());
+type ShippingCommand = { row: InventoryBalance; extra: Parameters<typeof shipFinishedStock>[1]; revision: number; label: string };
+const prepared = ref<ShippingCommand | null>(null);
+const pendingShip = ref<ShippingCommand | null>(null);
+const identityAccepted = ref(false);
 
-const progressTarget = computed(() => progressTargetFromScan(shippingScan.context));
+const progressTarget = computed(() => identityAccepted.value ? progressTargetFromScan(shippingScan.context) : null);
+const quantityUnit = computed(() => shippingScan.context?.order.quantityUnit?.trim() || '');
 const candidates = computed(() => shippingScan.context?.operationContext.balanceCandidates ?? []);
 const mustChoose = computed(() => Boolean(shippingScan.context?.operationContext.balanceSelectionRequired));
 const shipAction = computed(() => shippingScan.context?.actions.find((item) => item.code === 'SHIP') ?? null);
@@ -101,7 +113,7 @@ function balanceLabel(item: ScanBalanceCandidate): string {
     `物料${item.materialCode || '未填'}`,
     `仓库${item.warehouseCode || '未填'}`,
     item.stockStatus || '未填状态',
-    `${item.quantity ?? '未填'}件`,
+    `${item.quantity ?? '未填'}${quantityUnit.value || '（单位未提供）'}`,
     `${item.weight ?? '未填'}克`,
   ].join(' / ');
 }
@@ -113,9 +125,13 @@ function rememberProgress(record: ScanProgressRecord) {
 function clearTarget() {
   const had = shippingScan.context !== null || shippingScan.loading || selectedKey.value !== '' || shipmentResult.value !== null;
   shippingScan.invalidate();
+  identityAccepted.value = false;
+  prepared.value = null;
   selectedKey.value = '';
   shipmentResult.value = null;
+  savedQuantityUnit.value = '';
   refreshError.value = '';
+  refreshBusy.value = false;
   requestIds.value = {};
   recognizedContent.value = '';
   recognizedType.value = '';
@@ -129,12 +145,20 @@ function clearTarget() {
 }
 
 watch(scanText, () => clearTarget(), { flush: 'sync' });
+watch(selectedKey, () => { if (!shipping.value && !pendingShip.value) { quantity.value = ''; weight.value = ''; } });
+watch([selectedKey, shipmentCode, quantity, weight, expressCompany, logisticsNo], () => { if (!shipping.value && !pendingShip.value) prepared.value = null; }, { flush: 'sync' });
 
 function applyBalance(response: ScanContextResponse) {
   selectedKey.value = '';
   const operation = response.operationContext;
   if (!operation.balanceSelectionRequired && operation.selectedBalance) {
     selectedKey.value = balanceKey(operation.selectedBalance);
+  }
+  if (props.initialBalance) {
+    const expected = balanceKey(props.initialBalance);
+    const match = operation.balanceCandidates.find(item => balanceKey(item) === expected) ?? (operation.selectedBalance && balanceKey(operation.selectedBalance) === expected ? operation.selectedBalance : null);
+    selectedKey.value = match ? balanceKey(match) : '';
+    if (!match) formError.value = '原库存维度已变化或当前不可发，请返回库存列表重新选择。';
   }
 }
 
@@ -144,14 +168,15 @@ function fieldText(value: string | number | null | undefined): string {
 
 function fingerprint(): string {
   const balance = chosen.value;
-  return [
+  return JSON.stringify([
     fieldText(shipmentCode.value),
     balance ? balanceKey(balance) : '',
     fieldText(quantity.value),
     fieldText(weight.value),
     fieldText(expressCompany.value),
     fieldText(logisticsNo.value),
-  ].join('|');
+    quantityUnit.value,
+  ]);
 }
 
 function ensureRequestId(key: string) {
@@ -172,6 +197,7 @@ function rowOf(balance: ScanBalanceCandidate): InventoryBalance {
     status: balance.stockStatus || '',
     qty: balance.quantity ?? 0,
     weight: String(balance.weight ?? ''),
+    quantityUnit: quantityUnit.value || undefined,
     frozen: '0',
     operationContext: {
       customerId: balance.customerId,
@@ -206,26 +232,41 @@ async function recognize(draft: ScanDraft) {
     if (shippingScan.error) formError.value = shippingScan.error;
     return;
   }
+  const target = canonicalTarget(response);
+  if (props.initialTarget && target && (target.code !== props.initialTarget.code || (props.initialTarget.objectType && target.objectType !== props.initialTarget.objectType))) {
+    shippingScan.invalidate();
+    formError.value = '发货目标与当前单据或执行轮次不一致，未打开原单办理。';
+    return;
+  }
+  identityAccepted.value = Boolean(target);
   recognizedContent.value = content;
   recognizedType.value = draft.objectType ?? '';
   applyBalance(response);
 }
 
 useTraceTarget(['SHIPPING'], (target) => {
+  if (props.initialTarget) return;
   scanText.value = target.code;
   void recognize({
     content: target.code,
     ...(target.objectType ? { objectType: target.objectType } : {}),
   });
 });
+onMounted(() => {
+  if (!props.initialTarget) return;
+  scanText.value = props.initialTarget.code;
+  void recognize({ content: props.initialTarget.code, ...(props.initialTarget.objectType ? { objectType: props.initialTarget.objectType } : {}) });
+});
 
 async function chooseTarget(related: ScanRelatedTarget) {
   if (!related.code || !related.objectType) return;
+  if (props.initialTarget) { emit('targetSelected', { objectType: related.objectType, code: related.code }); return; }
   scanText.value = related.code;
   await recognize({ content: related.code, objectType: related.objectType });
 }
 
 function fillLogistics(draft: ScanDraft) {
+  if (shipping.value || pendingShip.value) return;
   logisticsHint.value = '';
   const number = extractCourierNumber(draft.content);
   if (!number) {
@@ -247,6 +288,12 @@ async function refreshShipment() {
       ...(recognizedType.value ? { objectType: recognizedType.value } : {}),
     });
     if (shippingScan.revision !== seen || !shipmentResult.value) return;
+    const current = canonicalTarget(shippingScan.context);
+    const target = canonicalTarget(loaded);
+    if (!current || !target || current.objectType !== target.objectType || current.code !== target.code) {
+      refreshError.value = '发货已成功，刷新未返回同一规范单据。原回执与文件保留，请核对。';
+      return;
+    }
     shippingScan.context = loaded;
   } catch {
     if (shippingScan.revision !== seen || !shipmentResult.value) return;
@@ -256,68 +303,64 @@ async function refreshShipment() {
   }
 }
 
-async function confirmShip() {
+function reviewShip() {
+  if (shipping.value || pendingShip.value || shipmentResult.value || shippingScan.loading) return;
   formError.value = '';
   hint.value = '';
-  if (alreadyShipped.value) return;
-  if (shipBlocked.value) {
-    formError.value = shipBlocked.value;
-    return;
-  }
-  if (!chosen.value || chosen.value.stockStatus !== 'FINISHED') {
+  if (!identityAccepted.value || alreadyShipped.value) return;
+  if (shipBlocked.value) { formError.value = shipBlocked.value; return; }
+  const balance = chosen.value;
+  if (!balance || balance.stockStatus !== 'FINISHED' || balance.ownerType !== 'CUSTOMER'
+    || !balance.customerId || !balance.motherOrderCode || !balance.workOrderCode || !balance.materialCode || !balance.warehouseCode) {
     formError.value = '请选择完整的物料、仓库、货权和库存状态';
     return;
   }
-  if (!fieldText(shipmentCode.value) || !fieldText(logisticsNo.value)) {
-    formError.value = '请填写出货单号和物流单号';
-    return;
-  }
+  if (balance.quantity == null || balance.weight == null) { formError.value = '余额数量或重量尚不完整，请返回库存核对'; return; }
+  if (!fieldText(shipmentCode.value) || !fieldText(logisticsNo.value)) { formError.value = '请填写出货单号和物流单号'; return; }
   const quantityText = fieldText(quantity.value);
   const weightText = fieldText(weight.value);
-  if (!quantityText || !weightText) {
-    formError.value = '请确认本次数量和本次重量；留空不会自动沿用整批重量';
+  if (!quantityText || !weightText) { formError.value = '请确认本次数量和本次重量；留空不会自动沿用整批重量'; return; }
+  if (!Number.isFinite(Number(quantityText)) || Number(quantityText) <= 0 || !Number.isFinite(Number(weightText)) || Number(weightText) <= 0) {
+    formError.value = '本次数量和重量必须是大于零的有效数值';
     return;
   }
-  const seen = shippingScan.revision;
-  const balance = chosen.value;
-  const requestId = ensureRequestId(fingerprint());
-  const extra = {
-    shipmentCode: fieldText(shipmentCode.value),
-    logisticsNo: fieldText(logisticsNo.value),
-    expressCompany: fieldText(expressCompany.value),
-    quantity: quantityText,
-    weight: weightText,
-    deliveryCategory: '成品',
-    requestId,
-  };
-  const send = () => shipFinishedStock(rowOf(balance), extra);
+  prepared.value = { row: rowOf(balance), revision: shippingScan.revision, label: balanceLabel(balance), extra: {
+    shipmentCode: fieldText(shipmentCode.value), logisticsNo: fieldText(logisticsNo.value), expressCompany: fieldText(expressCompany.value),
+    quantity: quantityText, weight: weightText, ...(quantityUnit.value ? { quantityUnit: quantityUnit.value } : {}), deliveryCategory: '成品',
+    requestId: ensureRequestId(fingerprint()),
+  } };
+}
+
+async function confirmShip(retry = false) {
+  if (shipping.value || shipmentResult.value || alreadyShipped.value || shippingScan.loading) return;
+  const command = retry ? pendingShip.value : prepared.value;
+  if (!command || (pendingShip.value && !retry) || command.revision !== shippingScan.revision) return;
+  const seen = command.revision;
   shipping.value = true;
+  formError.value = '';
+  const send = () => shipFinishedStock(command.row, command.extra);
   try {
-    const result = await send();
+    let result: OutboundShipmentResult;
+    try { result = await send(); }
+    catch (error) {
+      if (!(error instanceof Error) || error.message !== '后端接口不可用') throw error;
+      result = await send();
+    }
     if (shippingScan.revision !== seen) return;
     shipmentResult.value = result;
+    savedQuantityUnit.value = command.extra?.quantityUnit || '';
+    pendingShip.value = null;
+    prepared.value = null;
+    emit('saved', result);
     await refreshShipment();
   } catch (error) {
     if (shippingScan.revision !== seen) return;
-    const message = error instanceof Error ? error.message : '确认发货失败';
-    if (message === '后端接口不可用') {
-      try {
-        const replayed = await send();
-        if (shippingScan.revision !== seen) return;
-        shipmentResult.value = replayed;
-        await refreshShipment();
-        return;
-      } catch (again) {
-        if (shippingScan.revision !== seen) return;
-        formError.value = again instanceof Error ? again.message : '确认发货失败';
-        hint.value = '结果未知。请用原确认重试，不会另开一次发货。';
-        return;
-      }
-    }
-    formError.value = message;
-  } finally {
-    if (shippingScan.revision === seen) shipping.value = false;
-  }
+    const known = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408;
+    pendingShip.value = known ? null : command;
+    if (known) prepared.value = null;
+    formError.value = error instanceof Error ? error.message : '确认发货失败';
+    if (!known) hint.value = '结果未知，已保留原单、完整库存维度、物流、数量和请求编号。';
+  } finally { if (shippingScan.revision === seen) shipping.value = false; }
 }
 </script>
 
@@ -329,6 +372,7 @@ async function confirmShip() {
         <p>{{ intro }}</p>
       </div>
     </div>
+    <fieldset v-if="!initialTarget" class="shipping-action-fields" :disabled="shipping || Boolean(pendingShip)">
     <ScanInput
       v-model="scanText"
       field-text="成品标签"
@@ -339,21 +383,18 @@ async function confirmShip() {
       photo-aria-label="拍发货标签"
       camera-aria-label="拍发货贴纸"
       :bind-mobile-scan="bindMobileScan"
-      :busy="shippingScan.loading || shipping"
+      :busy="shippingScan.loading || shipping || Boolean(pendingShip)"
       @draft="clearTarget"
       @recognize="recognize"
     />
+    </fieldset>
     <p v-if="hint" class="operation-feedback">{{ hint }}</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
-    <OrderContextCard :context="shippingScan.context" @select="chooseTarget" />
-    <ProgressNoteForm
-      v-if="progressTarget"
-      stage="SHIPPING"
-      :target-type="progressTarget.targetType"
-      :target-code="progressTarget.targetCode"
-      :mother-order-code="progressTarget.motherOrderCode"
-      @saved="rememberProgress"
-    />
+    <button v-if="initialTarget && !identityAccepted" class="secondary-button" type="button" :disabled="shippingScan.loading || shipping || Boolean(pendingShip)" @click="recognize({ content: initialTarget.code, ...(initialTarget.objectType ? { objectType: initialTarget.objectType } : {}) })">重新读取本单库存</button>
+    <p v-if="shippingScan.loading" role="status">正在读取本单可发库存…</p>
+    <p v-if="pendingShip" class="operation-feedback warning" role="alert">原请求结果待核对：{{ pendingShip.extra?.shipmentCode }} · {{ pendingShip.label }}。<button class="secondary-button" type="button" :disabled="shipping" @click="confirmShip(true)">原请求重试</button></p>
+    <OrderContextCard v-if="!embedded || shippingScan.context?.requiresSelection" :context="shippingScan.context" @select="chooseTarget" />
+    <details v-if="progressTarget"><summary>记录发货准备</summary><ProgressNoteForm stage="SHIPPING" :target-type="progressTarget.targetType" :target-code="progressTarget.targetCode" :mother-order-code="progressTarget.motherOrderCode" @saved="rememberProgress" /></details>
 
     <div v-if="alreadyShipped" class="operation-feedback success">
       <strong>这张出货单已经发货，不能再次扣库存</strong>
@@ -363,7 +404,7 @@ async function confirmShip() {
       <span>可以补传证据，不会再次发货。</span>
     </div>
 
-    <template v-if="shippingScan.context && !shippingScan.context.requiresSelection && !alreadyShipped">
+    <fieldset v-if="shippingScan.context && !shippingScan.context.requiresSelection && !alreadyShipped && !shipmentResult" class="shipping-action-fields" :disabled="shipping || Boolean(pendingShip)">
       <h3>可发货库存</h3>
       <p v-if="mustChoose">有多笔余额，请选择完整维度。不会默认第一笔，也不能只按工单匹配。</p>
       <p v-else-if="!candidates.length">没有可发货的成品余额</p>
@@ -397,7 +438,8 @@ async function confirmShip() {
         </label>
         <label class="field">
           <span>本次数量</span>
-          <input v-model="quantity" type="number" min="0" step="1" aria-label="本次发货数量" />
+          <input v-model="quantity" type="number" min="0" step="any" aria-label="本次发货数量" />
+          <small>{{ quantityUnit || '原单数量单位未提供' }}</small>
         </label>
         <label class="field">
           <span>本次重量（克）</span>
@@ -413,18 +455,28 @@ async function confirmShip() {
         submit-aria-label="填写物流单号"
         photo-aria-label="拍物流单"
         camera-aria-label="拍物流贴纸"
+        :busy="shipping || Boolean(pendingShip)"
         @recognize="fillLogistics"
       />
       <p v-if="logisticsHint" class="operation-feedback warning">{{ logisticsHint }}</p>
-      <button class="primary-button" type="button" :disabled="shipping || shippingScan.loading" @click="confirmShip">
+      <button class="secondary-button" type="button" aria-label="核对发货" :disabled="shipping || shippingScan.loading || Boolean(pendingShip)" @click="reviewShip">核对本次发货</button>
+      <article v-if="prepared" class="shipping-review section-block" aria-label="发货复核">
+        <h3>复核后提交</h3>
+        <p>{{ prepared.label }}</p>
+        <p>出货单 {{ prepared.extra?.shipmentCode }} · 本次 {{ prepared.extra?.quantity }} {{ quantityUnit || '单位未提供' }} / {{ prepared.extra?.weight }} 克</p>
+        <p>物流 {{ prepared.extra?.expressCompany || '未指定公司' }} · {{ prepared.extra?.logisticsNo }}</p>
+        <p>修改余额、数量或物流后需要重新核对。点击下方确认才会扣库存。</p>
+      <button class="primary-button" type="button" :disabled="shipping || shippingScan.loading || Boolean(pendingShip)" @click="confirmShip()">
         {{ shipping ? '正在发货' : '确认发货' }}
       </button>
-    </template>
+      </article>
+    </fieldset>
 
     <div v-if="shipmentResult" class="operation-feedback success">
       <strong>发货已写入</strong>
       <span>{{ shipmentResult.shipmentCode }} / {{ shipmentResult.ledgerCode }}</span>
       <span>{{ shipmentResult.logisticsNo }}</span>
+      <span>本次 {{ shipmentResult.quantity }} {{ savedQuantityUnit || '数量单位未提供' }} / {{ shipmentResult.weight }} 克</span>
     </div>
     <p v-if="refreshError" class="operation-feedback warning">{{ refreshError }}</p>
     <button v-if="refreshError" class="secondary-button" type="button" :disabled="refreshBusy" aria-label="重试刷新" @click="refreshShipment">
@@ -447,3 +499,9 @@ async function confirmShip() {
     </section>
   </section>
 </template>
+
+<style scoped>
+.shipping-action-fields { border: 0; min-width: 0; padding: 0; margin: 12px 0; }
+.shipping-review { overflow-wrap: anywhere; }
+.shipping-action-fields button { min-height: 44px; }
+</style>
