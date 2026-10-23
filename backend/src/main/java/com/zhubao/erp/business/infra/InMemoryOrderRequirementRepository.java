@@ -62,6 +62,11 @@ public class InMemoryOrderRequirementRepository implements OrderRequirementRepos
                 .toList();
     }
 
+    @Override
+    public List<ExecutionRound> listAll() {
+        return List.copyOf(rounds.values());
+    }
+
     private static <T> void restore(ConcurrentHashMap<String, T> store, String id, T previous) {
         if (previous == null) {
             store.remove(id);

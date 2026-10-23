@@ -135,29 +135,45 @@ public class JdbcOrderRequirementRepository implements OrderRequirementRepositor
 
     @Override
     public List<ExecutionRound> listByMother(String motherOrderCode) {
-        String sql = "select * from biz_execution_round where mother_order_code = ? order by created_at";
+        String sql = "select * from biz_execution_round where mother_order_code = ? order by created_at, round_work_order_code";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, motherOrderCode);
             try (ResultSet rs = statement.executeQuery()) {
-                List<ExecutionRound> rows = new ArrayList<>();
-                while (rs.next()) {
-                    rows.add(new ExecutionRound(
-                            rs.getString("id"),
-                            rs.getString("mother_order_code"),
-                            rs.getString("source_work_order_code"),
-                            rs.getString("round_work_order_code"),
-                            rs.getString("process_name"),
-                            rs.getString("change_id"),
-                            rs.getString("supersedes_order_code"),
-                            rs.getString("created_at")
-                    ));
-                }
-                return rows;
+                return readRounds(rs);
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("无法列出执行轮次", ex);
         }
+    }
+
+    @Override
+    public List<ExecutionRound> listAll() {
+        String sql = "select * from biz_execution_round order by created_at, round_work_order_code";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rs = statement.executeQuery()) {
+            return readRounds(rs);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法列出执行轮次", ex);
+        }
+    }
+
+    private static List<ExecutionRound> readRounds(ResultSet rs) throws SQLException {
+        List<ExecutionRound> rows = new ArrayList<>();
+        while (rs.next()) {
+            rows.add(new ExecutionRound(
+                    rs.getString("id"),
+                    rs.getString("mother_order_code"),
+                    rs.getString("source_work_order_code"),
+                    rs.getString("round_work_order_code"),
+                    rs.getString("process_name"),
+                    rs.getString("change_id"),
+                    rs.getString("supersedes_order_code"),
+                    rs.getString("created_at")
+            ));
+        }
+        return rows;
     }
 
     private Connection connection(WorkSession session) {

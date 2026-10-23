@@ -2289,6 +2289,14 @@ PWA 一期边界：
 | `GET /api/business/operations/process-progress/history` | `ApiResponse<List<ProcessProgressEvent>>` |
 | `POST /api/business/operations/process-progress` | `ApiResponse<ProcessProgressHead>`。必须带 `requestId`。动作 `PROCESS_PROGRESS`。只允许 0/30/60/90/100，回退必须写原因。100% 不交付工序、不质检、不写库存或工资 |
 
+### OrderWorkspaceController
+
+来源：[OrderWorkspaceController](../backend/src/main/java/com/zhubao/erp/business/web/OrderWorkspaceController.java)。只读，不写库存、工序、发货或证据。必须使用登录会话。没有来料、进度、生产、质检或库存菜单时拒绝，不把无权限变成空页。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/business/order-workspace?view=&query=&customerId=&process=&facet=&dueBefore=&page=&size=` | `ApiResponse<OrderWorkspacePage>`。`view` 默认 `ORDERS`，另可取 `PRODUCTION`、`QUALITY`，且必须是当前菜单允许的视图。`query` 最长 100 字，精确匹配单号或运单，货品和客户按关键字包含。`customerId` 只能是档案编号。`dueBefore` 为 `yyyy-MM-dd`，含当天，没有交期的行不进入该筛选。`page` 从 1 开始，`size` 默认 20、最大 100。非法参数返回可识别错误，不会改成全量查询。`facet` 只是展示分类：`ALL`、`UNSPLIT`、`WAITING_START`、`IN_PROCESS`、`WAITING_QUALITY`、`REWORK`、`READY_TO_SHIP`、`SHIPPED`、`UNKNOWN`。已质检不等于可发货。响应含 `items`、`page`、`size`、`totalRows`、`facetCounts`、`availableViews`、`generatedAt`。行内数量和重量是十进制文本；未知字段为 null。不返回金额、附件地址或库存写入参数 |
+
 ### DocumentManagementController
 
 来源：[DocumentManagementController](../backend/src/main/java/com/zhubao/erp/document/web/DocumentManagementController.java)。
