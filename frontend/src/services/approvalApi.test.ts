@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchApprovalTasks, fetchPendingApprovalTasks, submitApprovalDecision } from './approvalApi';
+import { fetchApprovalTask, fetchApprovalTasks, fetchPendingApprovalTasks, submitApprovalDecision } from './approvalApi';
 
 describe('approvalApi', () => {
+  it('原审批核对使用单任务只读接口并编码完整单号', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ code: 0, data: { approvalCode: 'AP/A' } }) } as Response);
+    expect(await fetchApprovalTask('AP/A')).toMatchObject({ approvalCode: 'AP/A' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/approvals/tasks/AP%2FA');
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });

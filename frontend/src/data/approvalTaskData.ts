@@ -30,6 +30,15 @@ export interface ApprovalDecisionCommand {
   evidenceCode?: string;
 }
 
+/** 审批请求留在当前账号会话里，切页面不能丢掉未知结果。 */
+export interface ApprovalDecisionSession {
+  task: ApprovalTask;
+  command: ApprovalDecisionCommand;
+  outcome: 'submitting' | 'unknown' | 'succeeded' | 'confirmed' | 'rejected';
+  result: ApprovalTask | null;
+  error: string;
+}
+
 export function approvalStatusTone(status: ApprovalStatus): Tone {
   if (status === 'APPROVED' || status === 'AUTO_APPROVED') return 'green';
   if (status === 'REJECTED') return 'red';

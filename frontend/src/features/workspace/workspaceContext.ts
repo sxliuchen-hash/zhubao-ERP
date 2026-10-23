@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue';
 import type { ScanObjectType } from '../../services/scanContextApi';
 import type { WorkspaceSection } from './workspaceNavigation';
+import type { ApprovalDecisionSession } from '../../data/approvalTaskData';
 
 /** 当前选中的规范身份。selectionRevision 只是本页查询代次，不能当作业务版本。 */
 export interface OrderSelection {
@@ -35,6 +36,8 @@ export interface WorkspaceState {
   selection: Ref<OrderSelection | null>;
   returnLocation: Ref<OrderReturnLocation | null>;
   pendingAction: Ref<PendingActionSession | null>;
+  approvalDecisions: Ref<Record<string, ApprovalDecisionSession>>;
+  approvalComments: Ref<Record<string, string>>;
   rememberSelection: (input: Omit<OrderSelection, 'selectionRevision'>) => void;
   rememberReturn: (location: OrderReturnLocation) => void;
   holdPendingAction: (action: PendingActionSession) => void;
@@ -46,6 +49,8 @@ export function createWorkspaceState(): WorkspaceState {
   const selection = ref<OrderSelection | null>(null);
   const returnLocation = ref<OrderReturnLocation | null>(null);
   const pendingAction = ref<PendingActionSession | null>(null);
+  const approvalDecisions = ref<Record<string, ApprovalDecisionSession>>({});
+  const approvalComments = ref<Record<string, string>>({});
   let revision = 0;
 
   function rememberSelection(input: Omit<OrderSelection, 'selectionRevision'>) {
@@ -66,12 +71,16 @@ export function createWorkspaceState(): WorkspaceState {
     selection.value = null;
     returnLocation.value = null;
     pendingAction.value = null;
+    approvalDecisions.value = {};
+    approvalComments.value = {};
   }
 
   return {
     selection,
     returnLocation,
     pendingAction,
+    approvalDecisions,
+    approvalComments,
     rememberSelection,
     rememberReturn,
     holdPendingAction,

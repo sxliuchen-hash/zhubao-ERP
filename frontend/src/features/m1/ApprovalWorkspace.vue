@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   approvalStatusTone,
@@ -11,11 +11,16 @@ import type { Tone } from '../../data/m1PrototypeData';
 import { ApiRequestError } from '../../services/apiClient';
 import type { AuthSession } from '../../services/authApi';
 import {
+  fetchApprovalTask,
   fetchApprovalTasks,
   fetchPendingApprovalTasks,
   submitApprovalDecision,
 } from '../../services/approvalApi';
 
+import { useWorkspaceContext } from '../workspace/useWorkspaceContext';
+import { approvalDecisionReason } from '../approvals/approvalDecisionAccess';
+
+const workspace = useWorkspaceContext();
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const requestedCode = inject<Ref<string>>('zhubao-approval-code', ref(''));
 const tasks = ref<ApprovalTask[]>([]);
@@ -23,26 +28,34 @@ const pendingTasks = ref<ApprovalTask[]>([]);
 const loading = ref(false);
 const loadingError = ref('');
 const accessDenied = ref(false);
-const decisionSubmitting = ref(false);
-const decisionResult = ref<ApprovalTask | null>(null);
-const decisionError = ref('');
-const decisionComment = ref('确认称重、缺陷照片和业务证据完整，批准本次审批。');
 const keyword = ref('');
 const detailOpen = ref(false);
 const selectedCode = ref('');
-
-const fallbackTask = computed(
-  () => pendingTasks.value[0] ?? tasks.value.find((task) => task.status === 'WAITING_APPROVAL') ?? tasks.value[0],
-);
-const activeTask = computed(
-  () => selectedCode.value ? tasks.value.find((task) => task.approvalCode === selectedCode.value) : fallbackTask.value,
-);
-watch(requestedCode, code => { selectedCode.value = code; detailOpen.value = Boolean(code); decisionResult.value = null; decisionError.value = ''; }, { immediate: true });
+const decisionSubmitting = computed(() => Object.values(workspace.approvalDecisions.value).some(item => item.outcome === 'submitting'));
+const decisionSession = computed(() => workspace.approvalDecisions.value[selectedCode.value]);
+const decisionResult = computed(() => decisionSession.value?.result ?? null);
+const decisionError = computed(() => decisionSession.value?.error ?? '');
+const decisionComment = computed({ get: () => workspace.approvalComments.value[selectedCode.value] ?? '', set: value => { if (selectedCode.value) workspace.approvalComments.value[selectedCode.value] = value; } });
+const activeTask = computed(() => tasks.value.find(task => task.approvalCode === selectedCode.value));
+const decisionBlocked = computed(() => activeTask.value ? approvalDecisionReason(activeTask.value, authSession.value) : '请先选择审批任务');
+const decisionLocked = computed(() => loading.value || accessDenied.value || Boolean(loadingError.value) || decisionSubmitting.value || ['unknown', 'succeeded', 'confirmed'].includes(decisionSession.value?.outcome ?? ''));
+const checking = ref('');
+const decisionHint = ref('');
+const unresolved = computed(() => Object.values(workspace.approvalDecisions.value).filter(item => ['submitting', 'unknown'].includes(item.outcome)));
+const completedDecisions = computed(() => Object.values(workspace.approvalDecisions.value).filter(item => item.result));
+let generation = 0;
+let disposed = false;
+onBeforeUnmount(() => { disposed = true; ++generation; });
+watch(decisionSubmitting, (busy, previous) => { if (!busy && previous) void reloadApprovals(); });
+watch(requestedCode, code => { if (decisionSubmitting.value) return; selectedCode.value = code; detailOpen.value = Boolean(code); decisionHint.value = ''; }, { immediate: true });
 const visibleTasks = computed(() => {
   const text = keyword.value.trim().toLowerCase();
   if (!text) return tasks.value;
   return tasks.value.filter((task) => `${task.approvalCode} ${task.title} ${task.scene} ${task.businessCode} ${task.applicant}`.toLowerCase().includes(text));
 });
+watch(keyword, () => {
+  if (!decisionSubmitting.value && selectedCode.value && !visibleTasks.value.some(task => task.approvalCode === selectedCode.value)) { selectedCode.value = ''; detailOpen.value = false; }
+}, { flush: 'sync' });
 const requestedMissing = computed(() => !loading.value && Boolean(selectedCode.value) && !activeTask.value);
 
 const approvalStats = computed(() => [
@@ -71,7 +84,7 @@ const approvalStats = computed(() => [
     label: '正式工资',
     value: tasks.value.filter((task) => task.formalPayroll).length,
     unit: '项',
-    detail: '一期必须为 0',
+    detail: '审批不执行工资发放',
     tone: 'blue' as Tone,
   },
 ]);
@@ -93,54 +106,61 @@ function denied(error: unknown) {
 }
 
 async function reloadApprovals() {
-  loading.value = true;
-  loadingError.value = '';
-  accessDenied.value = false;
-
+  if (decisionSubmitting.value) return;
+  const token = ++generation;
+  loading.value = true; loadingError.value = ''; accessDenied.value = false;
   try {
     const [all, pending] = await Promise.all([fetchApprovalTasks(), fetchPendingApprovalTasks()]);
-    tasks.value = all;
-    pendingTasks.value = pending;
-    if (all.length === 0 && pending.length === 0) {
-      loadingError.value = '接口没有返回审批任务';
-    }
+    if (disposed || token !== generation) return;
+    tasks.value = all.map(task => {
+      const receipt = workspace.approvalDecisions.value[task.approvalCode]?.result;
+      return receipt && receipt.status !== 'WAITING_APPROVAL' && task.status === 'WAITING_APPROVAL' ? receipt : task;
+    });
+    pendingTasks.value = pending.filter(task => !workspace.approvalDecisions.value[task.approvalCode]?.result);
   } catch (error) {
-    tasks.value = [];
-    pendingTasks.value = [];
-    accessDenied.value = denied(error);
+    if (disposed || token !== generation) return;
+    tasks.value = []; pendingTasks.value = []; accessDenied.value = denied(error);
     loadingError.value = error instanceof Error ? error.message : '审批任务加载失败';
-  } finally {
-    loading.value = false;
-    if (!selectedCode.value && !requestedCode.value) {
-      selectedCode.value = fallbackTask.value?.approvalCode ?? '';
-    }
+  } finally { if (!disposed && token === generation) loading.value = false; }
+}
+function updateTask(result: ApprovalTask) {
+  tasks.value = tasks.value.map(task => task.approvalCode === result.approvalCode ? result : task);
+  if (result.status !== 'WAITING_APPROVAL') pendingTasks.value = pendingTasks.value.filter(task => task.approvalCode !== result.approvalCode);
+}
+async function decideActiveTask(decision: ApprovalDecisionCommand['decision']) {
+  const task = activeTask.value;
+  if (!task || decisionLocked.value || decisionBlocked.value) return;
+  if (!decisionComment.value.trim()) { decisionHint.value = '请填写本次实际审批意见'; return; }
+  const code = task.approvalCode;
+  const command: ApprovalDecisionCommand = { decision, operator: authSession.value?.operator || '', comment: decisionComment.value.trim(), evidenceCode: task.evidenceCode };
+  workspace.approvalDecisions.value[code] = { task: { ...task }, command, outcome: 'submitting', result: null, error: '' };
+  const entry = workspace.approvalDecisions.value[code];
+  ++generation; loading.value = false; decisionHint.value = '';
+  try {
+    const result = await submitApprovalDecision(code, command);
+    if (workspace.approvalDecisions.value[code] !== entry) return;
+    if (result.approvalCode !== code || result.scene !== task.scene || result.businessCode !== task.businessCode || result.status !== (decision === 'APPROVE' ? 'APPROVED' : 'REJECTED')) throw new Error('审批回执与原任务或决定不一致，请保留原操作核对');
+    entry.outcome = 'succeeded'; entry.result = result;
+    if (!disposed) updateTask(result);
+  } catch (error) {
+    if (workspace.approvalDecisions.value[code] !== entry) return;
+    const known = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408;
+    entry.outcome = known ? 'rejected' : 'unknown'; entry.error = error instanceof Error ? error.message : '审批提交失败';
   }
 }
-
-async function decideActiveTask(decision: ApprovalDecisionCommand['decision']) {
-  if (!activeTask.value) return;
-
-  decisionSubmitting.value = true;
-  decisionResult.value = null;
-  decisionError.value = '';
-
-  const command: ApprovalDecisionCommand = {
-    decision,
-    operator: authSession.value?.operator || authSession.value?.username || '',
-    comment: decision === 'APPROVE' ? decisionComment.value : '证据不完整，驳回并要求补充称重/照片。',
-    evidenceCode: activeTask.value.evidenceCode,
-  };
-
+async function checkDecision(code: string) {
+  const entry = workspace.approvalDecisions.value[code];
+  if (!entry || entry.outcome !== 'unknown' || checking.value) return;
+  checking.value = code;
   try {
-    const result = await submitApprovalDecision(activeTask.value.approvalCode, command);
-    decisionResult.value = result;
-    tasks.value = tasks.value.map((task) => (task.approvalCode === result.approvalCode ? result : task));
-    pendingTasks.value = pendingTasks.value.filter((task) => task.approvalCode !== result.approvalCode);
-  } catch (error) {
-    decisionError.value = error instanceof Error ? error.message : '审批提交失败';
-  } finally {
-    decisionSubmitting.value = false;
-  }
+    const result = await fetchApprovalTask(code);
+    if (workspace.approvalDecisions.value[code] !== entry) return;
+    if (result.approvalCode !== code || result.scene !== entry.task.scene || result.businessCode !== entry.task.businessCode) throw new Error('核对响应与原审批任务不一致');
+    if (result.status === 'WAITING_APPROVAL') { entry.error = '原任务仍待审批，结果尚不能确认，请稍后再次只读核对'; return; }
+    entry.outcome = 'confirmed'; entry.result = result; entry.error = '';
+    if (!disposed) updateTask(result);
+  } catch (error) { if (workspace.approvalDecisions.value[code] === entry) entry.error = error instanceof Error ? error.message : '原审批核对失败'; }
+  finally { checking.value = ''; }
 }
 
 function statusText(status: ApprovalStatus): string {
@@ -154,10 +174,10 @@ function statusText(status: ApprovalStatus): string {
 }
 
 function selectTask(code: string) {
+  if (decisionSubmitting.value) return;
   selectedCode.value = code;
+  decisionHint.value = '';
   detailOpen.value = true;
-  decisionResult.value = null;
-  decisionError.value = '';
 }
 
 function backToList() {
@@ -173,6 +193,13 @@ function taskTone(task: ApprovalTask): Tone {
 <template>
   <div class="approval-workspace page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <p v-if="requestedMissing" class="operation-feedback danger" role="alert">指定审批不在当前可见列表中，请重新选择；没有改为另一条审批。</p>
+    <section v-if="unresolved.length" class="approval-unresolved" aria-label="原审批请求核对">
+      <article v-for="entry in unresolved" :key="entry.task.approvalCode" class="operation-feedback warning">
+        <strong>{{ entry.task.approvalCode }} · {{ entry.outcome === 'submitting' ? '原决定提交中' : '原决定结果待核对' }}</strong>
+        <p>{{ entry.command.decision === 'APPROVE' ? '通过' : '驳回' }} · {{ entry.command.comment }}</p><p>{{ entry.error }}</p>
+        <button v-if="entry.outcome === 'unknown'" class="secondary-button" type="button" :disabled="Boolean(checking)" @click="checkDecision(entry.task.approvalCode)">只读核对审批结果</button>
+      </article>
+    </section>
     <section class="module-command-surface approval-command-surface" aria-label="轻量审批工作台">
       <div class="module-command-main">
         <div class="console-title-line">
@@ -223,6 +250,7 @@ function taskTone(task: ApprovalTask): Tone {
       </aside>
     </section>
 
+    <details v-if="completedDecisions.length" class="approval-unresolved" aria-label="本次审批回执"><summary>本次审批回执</summary><article v-for="entry in completedDecisions" :key="entry.task.approvalCode"><strong>{{ entry.result?.approvalCode }} · {{ entry.result && statusText(entry.result.status) }}</strong><p>{{ entry.outcome === 'confirmed' ? '只读核对原任务当前结果' : '原决定真实回执' }} · {{ entry.result?.decisionOperator }} · {{ entry.result?.decisionComment }}</p></article></details>
     <section class="module-work-grid approval-work-grid" aria-label="审批任务主控台">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">
@@ -230,18 +258,15 @@ function taskTone(task: ApprovalTask): Tone {
             <h2>审批任务池</h2>
           </div>
           <div class="module-tools">
-            <button class="secondary-button" type="button" :disabled="loading" @click="reloadApprovals">
+            <button class="secondary-button" type="button" :disabled="loading || decisionSubmitting" @click="reloadApprovals">
               {{ loading ? '刷新中' : '刷新任务' }}
-            </button>
-            <button class="primary-button" type="button" :disabled="decisionSubmitting || !activeTask" @click="decideActiveTask('APPROVE')">
-              {{ decisionSubmitting ? '提交中' : '审批通过' }}
             </button>
           </div>
         </div>
         <div class="module-tools production-filters">
           <label>
             <span>查找</span>
-            <input v-model="keyword" placeholder="审批单、标题或业务单" aria-label="审批查找" />
+            <input v-model="keyword" placeholder="审批单、标题或业务单" aria-label="审批查找" :disabled="decisionSubmitting" />
           </label>
         </div>
 
@@ -269,7 +294,7 @@ function taskTone(task: ApprovalTask): Tone {
                 :aria-selected="activeTask?.approvalCode === task.approvalCode"
                 @click="selectTask(task.approvalCode)"
               >
-                <td><strong>{{ task.approvalCode }}</strong></td>
+                <td><button class="table-action" type="button" :disabled="decisionSubmitting" :aria-label="'查看审批 ' + task.approvalCode" @click.stop="selectTask(task.approvalCode)">{{ task.approvalCode }}</button></td>
                 <td>
                   <span class="cell-stack">
                     <b>{{ task.scene }}</b>
@@ -299,6 +324,7 @@ function taskTone(task: ApprovalTask): Tone {
             v-for="task in visibleTasks"
             :key="task.approvalCode"
             class="desk-card"
+            :disabled="decisionSubmitting"
             type="button"
             @click="selectTask(task.approvalCode)"
           >
@@ -312,7 +338,7 @@ function taskTone(task: ApprovalTask): Tone {
         </div>
       </div>
 
-      <aside v-if="activeTask" class="module-side-panel">
+      <aside v-if="activeTask && detailOpen" class="module-side-panel">
         <section class="active-object-card tone-amber">
           <div class="panel-title-row">
             <button class="secondary-button detail-back" type="button" @click="backToList">返回列表</button>
@@ -335,18 +361,19 @@ function taskTone(task: ApprovalTask): Tone {
           </dl>
           <label class="approval-comment-field">
             <span>审批意见</span>
-            <textarea v-model="decisionComment" rows="3" />
+            <textarea v-model="decisionComment" rows="3" aria-label="本次审批意见" :disabled="decisionLocked || Boolean(decisionBlocked)" placeholder="核对本任务后，填写通过或驳回原因" />
           </label>
+          <p v-if="decisionBlocked" class="operation-feedback warning">{{ decisionBlocked }}</p><p v-if="decisionHint" class="operation-feedback warning">{{ decisionHint }}</p>
           <div class="detail-actions">
-            <button class="primary-button" type="button" :disabled="decisionSubmitting || activeTask.status !== 'WAITING_APPROVAL'" @click="decideActiveTask('APPROVE')">
+            <button class="primary-button" type="button" :disabled="decisionLocked || Boolean(decisionBlocked)" @click="decideActiveTask('APPROVE')">
               {{ decisionSubmitting ? '提交中' : '审批通过' }}
             </button>
-            <button class="secondary-button" type="button" :disabled="decisionSubmitting || activeTask.status !== 'WAITING_APPROVAL'" @click="decideActiveTask('REJECT')">
+            <button class="secondary-button" type="button" :disabled="decisionLocked || Boolean(decisionBlocked)" @click="decideActiveTask('REJECT')">
               驳回补证
             </button>
           </div>
           <div v-if="decisionResult" class="operation-feedback success">
-            <strong>审批任务已锁定</strong>
+            <strong>{{ decisionSession?.outcome === 'confirmed' ? '原审批已处理，请核对实际决定人' : '审批决定已返回' }}</strong>
             <span>{{ decisionResult.approvalCode }} / {{ statusText(decisionResult.status) }}</span>
             <small>{{ decisionResult.decisionOperator }} / {{ decisionResult.decisionComment }}</small>
           </div>
@@ -358,7 +385,7 @@ function taskTone(task: ApprovalTask): Tone {
         </section>
       </aside>
 
-      <section v-if="activeTask" class="evidence-slot-panel">
+      <section v-if="activeTask && detailOpen" class="evidence-slot-panel">
         <div class="panel-title-row">
           <StatusBadge label="审批快照" tone="blue" />
         </div>
@@ -380,3 +407,12 @@ function taskTone(task: ApprovalTask): Tone {
     </section>
   </div>
 </template>
+
+
+<style scoped>
+.approval-unresolved { display: grid; gap: 10px; overflow-wrap: anywhere; }
+.approval-workspace { min-width: 0; }
+.approval-work-grid > * { min-width: 0; overflow-wrap: anywhere; }
+.approval-comment-field textarea { width: 100%; box-sizing: border-box; min-width: 0; }
+@media (max-width: 900px) { .approval-workspace button { min-height: 44px; } .approval-comment-field textarea { font-size: 16px; } }
+</style>

@@ -57,6 +57,7 @@ describe('workspaceContext', () => {
       scrollTop: 0,
     });
     workspace.holdPendingAction({ draftKey: 'a', requestId: 'req-9' });
+    workspace.approvalComments.value['AP-A'] = '上一账号意见';
     const previous = workspace.selection.value?.selectionRevision ?? 0;
 
     workspace.clear();
@@ -64,6 +65,8 @@ describe('workspaceContext', () => {
     expect(workspace.selection.value).toBeNull();
     expect(workspace.returnLocation.value).toBeNull();
     expect(workspace.pendingAction.value).toBeNull();
+    expect(workspace.approvalDecisions.value).toEqual({});
+    expect(workspace.approvalComments.value).toEqual({});
     workspace.rememberSelection({
       objectType: 'MOTHER_ORDER',
       code: 'MD-3',
