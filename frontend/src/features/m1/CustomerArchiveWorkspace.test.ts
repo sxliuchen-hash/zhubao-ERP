@@ -25,6 +25,9 @@ const hengxin = {
   remark: '老客户',
   enabled: true,
 };
+const cuiyu = { ...hengxin, customerId: 1002, customerCode: 'C-1002', name: '翠玉坊' };
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
+function statement(customerId: number, amount: number) { return { customerId, customerName: customerId === 1001 ? hengxin.name : cuiyu.name, stockQuantity: 0, stockWeight: 0, receivableAmount: amount, receivedAmount: 0, outstandingAmount: amount, prepaymentAmount: 0, lines: [], receipts: [], stockNote: '' }; }
 
 function mountArchive(role = 'RECEIVER', coverDuties: string[] = []) {
   return mount(CustomerArchiveWorkspace, {
@@ -34,7 +37,7 @@ function mountArchive(role = 'RECEIVER', coverDuties: string[] = []) {
 
 describe('客户档案', () => {
   beforeEach(() => {
-    vi.mocked(fetchCustomers).mockResolvedValue([hengxin]);
+    vi.mocked(fetchCustomers).mockReset().mockResolvedValue([hengxin]);
     vi.mocked(fetchMaterials).mockResolvedValue([{
       materialCode: 'AU9999', name: '足金', aliases: '黄金', remark: '', enabled: true,
     }]);
@@ -148,5 +151,57 @@ describe('客户档案', () => {
     expect(wrapper.text()).toContain('已保存材质「翡翠」');
     expect(wrapper.text()).toContain('MAT-JADE');
     wrapper.unmount();
+  });
+  it('切客户立即撤下旧账单及在制，迟到响应不能写入新客户详情', async () => {
+    vi.mocked(fetchCustomers).mockResolvedValue([hengxin, cuiyu]);
+    const firstStatement = deferred<ReturnType<typeof statement>>();
+    const firstProgress = deferred<Awaited<ReturnType<typeof fetchProgress>>>();
+    vi.mocked(fetchStatement).mockReturnValueOnce(firstStatement.promise).mockResolvedValueOnce(statement(1002, 222));
+    vi.mocked(fetchProgress).mockReturnValueOnce(firstProgress.promise).mockResolvedValueOnce([]);
+    const wrapper = mountArchive('FINANCE_STATISTICIAN'); await flushPromises();
+    await wrapper.get('[aria-label="选择客户 恒信珠宝"]').trigger('click');
+    await wrapper.get('[aria-label="选择客户 翠玉坊"]').trigger('click'); await flushPromises();
+    firstStatement.resolve(statement(1001, 9999));
+    firstProgress.resolve([{ customerId: 1001, customerName: hengxin.name, motherOrderCode: 'MO-A-OLD', workOrderCode: 'WO-A-OLD', currentProcess: '抛光', dueDate: '', overdue: false, qualityOutcome: '', status: '在制', openTab: 'production' }]);
+    await flushPromises();
+    expect(wrapper.get('[aria-label="客户资料"]').text()).toContain('翠玉坊');
+    expect(wrapper.get('[aria-label="客户账单"]').text()).toContain('222.00');
+    expect(wrapper.text()).not.toContain('9999.00'); expect(wrapper.text()).not.toContain('MO-A-OLD');
+    wrapper.unmount();
+  });
+  it('月份改变立刻清旧金额，旧月份查询迟到也不能写回', async () => {
+    const first = deferred<ReturnType<typeof statement>>();
+    vi.mocked(fetchStatement).mockReturnValueOnce(first.promise).mockResolvedValueOnce(statement(1001, 120));
+    vi.mocked(fetchProgress).mockResolvedValue([]);
+    const wrapper = mountArchive('FINANCE_STATISTICIAN'); await flushPromises();
+    await wrapper.get('[aria-label="选择客户 恒信珠宝"]').trigger('click');
+    await wrapper.get('[aria-label="账单月份"]').setValue('2026-09'); await flushPromises();
+    first.resolve(statement(1001, 8888)); await flushPromises();
+    expect(fetchStatement).toHaveBeenLastCalledWith('1001', '2026-09');
+    expect(wrapper.get('[aria-label="客户账单"]').text()).toContain('120.00');
+    expect(wrapper.text()).not.toContain('8888.00'); wrapper.unmount();
+  });
+  it('有效权限未含财务读取时不请求或渲染金额，客户编辑也不能靠角色扩大', async () => {
+    vi.mocked(fetchStatement).mockResolvedValue(statement(1001, 123456)); vi.mocked(fetchProgress).mockResolvedValue([]);
+    const wrapper = mount(CustomerArchiveWorkspace, { global: { provide: { 'zhubao-auth-session': ref({ role: 'ADMIN', effectivePermissions: [] }) } } });
+    await flushPromises(); await wrapper.get('[aria-label="选择客户 恒信珠宝"]').trigger('click'); await flushPromises();
+    expect(fetchStatement).not.toHaveBeenCalled(); expect(wrapper.find('[aria-label="客户账单"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('123456'); expect(wrapper.find('[aria-label="保存客户"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('编辑客户资料'); wrapper.unmount();
+  });
+  it('选择客户默认核对资料，编辑按需打开，保存期间不能切到另一客户', async () => {
+    vi.mocked(fetchCustomers).mockResolvedValue([hengxin, cuiyu]); vi.mocked(fetchStatement).mockResolvedValue(statement(1001, 0)); vi.mocked(fetchProgress).mockResolvedValue([]);
+    const saved = deferred<typeof hengxin>(); vi.mocked(saveCustomer).mockReturnValue(saved.promise);
+    const wrapper = mountArchive(); await flushPromises();
+    await wrapper.get('[aria-label="选择客户 恒信珠宝"]').trigger('click'); await flushPromises();
+    expect(wrapper.get('[aria-label="保存客户"]').isVisible()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '编辑客户资料')!.trigger('click');
+    await wrapper.get('[aria-label="客户名称"]').setValue('恒信新名'); await wrapper.get('[aria-label="保存客户"]').trigger('click');
+    const other = wrapper.get('[aria-label="选择客户 翠玉坊"]'); expect(other.attributes('disabled')).toBeDefined();
+    await other.trigger('click');
+    saved.resolve({ ...hengxin, name: '恒信新名' }); await flushPromises();
+    expect(saveCustomer).toHaveBeenCalledWith(expect.objectContaining({ customerId: 1001, name: '恒信新名' }));
+    expect(wrapper.get('[aria-label="客户资料"]').text()).toContain('恒信新名');
+    expect(wrapper.get('[aria-label="选择客户 恒信新名"]').attributes('aria-pressed')).toBe('true'); wrapper.unmount();
   });
 });
