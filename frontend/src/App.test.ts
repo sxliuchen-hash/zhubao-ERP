@@ -9,6 +9,7 @@ import { queryScanContext } from './services/scanContextApi';
 import { buildScanContext } from './features/scan/scanContextFixture';
 
 vi.mock('./services/orderWorkspaceApi', () => ({ fetchOrderWorkspace: vi.fn() }));
+vi.mock('./services/approvalApi', () => ({ fetchPendingApprovalTasks: vi.fn().mockResolvedValue([]), fetchApprovalTasks: vi.fn().mockResolvedValue([]), submitApprovalDecision: vi.fn() }));
 vi.mock('./services/scanContextApi', async () => ({
   ...await vi.importActual<typeof import('./services/scanContextApi')>('./services/scanContextApi'), queryScanContext: vi.fn(),
 }));
@@ -71,8 +72,9 @@ describe('App', () => {
       '业务工具',
       '系统管理',
     ]);
-    expect(wrapper.text()).toContain('业务单据');
-    expect(wrapper.text()).toContain('当前处理单');
+    expect(wrapper.text()).toContain('订单事项');
+    expect(wrapper.text()).toContain('今天的工作');
+    expect(wrapper.find('[aria-label="业务单据和当前处理单"]').exists()).toBe(false);
     expect(wrapper.find('.ops-scope-ribbon').exists()).toBe(false);
     expect(wrapper.find('.ops-nav').text()).toContain('首页');
     expect(wrapper.find('.ops-nav').text()).toContain('来料');
@@ -236,7 +238,7 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.find('.finance-workspace').exists()).toBe(true));
     await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
     expect(wrapper.find('.finance-workspace').exists()).toBe(false);
-    expect(wrapper.text()).toContain('业务单据');
+    expect(wrapper.text()).toContain('今天的工作');
   });
 
   it('页面文件加载失败时保留导航并提供中文重试入口', async () => {
@@ -247,7 +249,7 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('页面加载失败，请检查网络后重试。'));
     expect(wrapper.get('[role="alert"]').text()).toContain('重新加载页面');
     await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
-    expect(wrapper.text()).toContain('业务单据');
+    expect(wrapper.text()).toContain('今天的工作');
   });
 
   it('加载状态用中文反馈并可重试失败页面', async () => {
@@ -382,10 +384,11 @@ describe('App', () => {
     await flushPromises();
     const scan = vi.fn();
     bindMobileScanTarget(scan);
+    const beforeScan = vi.mocked(fetchOrderWorkspace).mock.calls.length;
     await wrapper.get('[aria-label="扫码"]').trigger('click');
     expect(scan).toHaveBeenCalledOnce();
     expect(wrapper.get('h1').text()).toBe('首页');
-    expect(fetchOrderWorkspace).not.toHaveBeenCalled();
+    expect(fetchOrderWorkspace).toHaveBeenCalledTimes(beforeScan);
     unbindMobileScanTarget(scan);
     wrapper.unmount();
   });

@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import type { ApprovalTask } from '../../data/approvalTaskData';
 import { ApiRequestError } from '../../services/apiClient';
 import { fetchApprovalTasks, fetchPendingApprovalTasks } from '../../services/approvalApi';
@@ -57,6 +58,18 @@ describe('ApprovalWorkspace', () => {
   beforeEach(() => {
     vi.mocked(fetchApprovalTasks).mockResolvedValue([lossTask, accountTask]);
     vi.mocked(fetchPendingApprovalTasks).mockResolvedValue([lossTask, accountTask]);
+  });
+
+  it('从待办打开指定审批，范围内找不到时不回退到第一条', async () => {
+    const requested = ref(accountTask.approvalCode);
+    const wrapper = mount(ApprovalWorkspace, { global: { provide: { 'zhubao-approval-code': requested } } });
+    await flushPromises();
+    expect(wrapper.get('.module-side-panel').text()).toContain(accountTask.approvalCode);
+    requested.value = 'AP-NOT-VISIBLE';
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('没有改为另一条审批');
+    expect(wrapper.find('.module-side-panel .primary-button').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('renders approval tasks returned by the api', async () => {

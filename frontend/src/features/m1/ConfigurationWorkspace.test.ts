@@ -40,18 +40,19 @@ describe('ConfigurationWorkspace', () => {
     vi.restoreAllMocks();
   });
 
-  it('展示当前登录会话、自助改密和存储内容', async () => {
+  it('个人安全默认只读本人会话，普通岗位不请求或展示存储内容', async () => {
     const wrapper = mount(ConfigurationWorkspace);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('个人与存储配置');
+    expect(wrapper.text()).toContain('个人安全');
     expect(wrapper.text()).toContain('登录会话');
     expect(wrapper.text()).toContain('自助改密');
     expect(wrapper.text()).toContain('操作员 / 操作工');
     expect(wrapper.text()).toContain('本人任务');
     expect(wrapper.text()).toContain('CUST-001');
-    expect(wrapper.text()).toContain('存储内容');
-    expect(wrapper.text()).toContain('来料照片.jpg');
+    expect(fetchStoredContent).not.toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain('存储管理');
+    expect(wrapper.text()).not.toContain('来料照片.jpg');
   });
 
   it('未登录时禁用自助改密', async () => {
@@ -97,8 +98,9 @@ describe('ConfigurationWorkspace', () => {
   });
 
   it('取消下线保留存储内容，确认后调用下线并刷新', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValue({ ...session, role: 'ADMIN', effectivePermissions: ['DOCUMENT_CONTENT_MANAGE'] });
     const confirmation = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
-    const wrapper = mount(ConfigurationWorkspace);
+    const wrapper = mount(ConfigurationWorkspace, { props: { initialSection: 'storage' } });
     await flushPromises();
     await wrapper.get('tbody .table-action').trigger('click');
     expect(retireStoredContent).not.toHaveBeenCalled();
@@ -116,8 +118,9 @@ describe('ConfigurationWorkspace', () => {
   });
 
   it('存储加载失败时展示错误，刷新后恢复', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValue({ ...session, role: 'ADMIN', effectivePermissions: ['DOCUMENT_CONTENT_MANAGE'] });
     vi.mocked(fetchStoredContent).mockRejectedValueOnce(new Error('存储服务暂不可用'));
-    const wrapper = mount(ConfigurationWorkspace);
+    const wrapper = mount(ConfigurationWorkspace, { props: { initialSection: 'storage' } });
     await flushPromises();
     expect(wrapper.text()).toContain('存储服务暂不可用');
     await wrapper.get('[aria-label="存储内容管理"] .secondary-button').trigger('click');

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
+import DeskInbox from '../workspace/DeskInbox.vue';
 import type { TraceTarget } from '../scan/traceTarget';
 import type { InboundOrder, QualityCase, Tone, WorkOrder } from '../../data/m1PrototypeData';
 import {
@@ -33,6 +34,12 @@ const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(n
 let traceToken = 0;
 const openTab = inject<(tab: DeskTab) => void>('zhubao-open-tab', () => {});
 const openOrder = inject<((target: Pick<TraceTarget, 'objectType' | 'code'>) => void) | null>('zhubao-open-order', null);
+const openOrders = inject<(() => void) | null>('zhubao-open-orders', null);
+const legacyOpen = ref(!openOrders);
+function toggleLegacy() {
+  legacyOpen.value = !legacyOpen.value;
+  if (legacyOpen.value) void loadDispatchRows();
+}
 const openLabel = inject<(code: string) => void>('zhubao-open-label', () => {});
 const visibleTabs = inject<Ref<string[]>>('zhubao-visible-tabs', ref(['inbound', 'production', 'quality', 'progress', 'label']));
 const selectedCode = ref('');
@@ -42,9 +49,12 @@ const demoData = ref(false);
 const loading = ref(false);
 const refreshedAt = ref('');
 const canOpen = (tab: DeskTab) => visibleTabs.value.includes(tab);
+const quickSession = inject<Ref<{ effectivePermissions?: string[] } | null>>('zhubao-auth-session', ref(null));
+const canStartInbound = computed(() => canOpen('inbound') && (!quickSession.value?.effectivePermissions || quickSession.value.effectivePermissions.includes('BUSINESS_INBOUND_CONFIRM')));
+const canReadOrders = computed(() => visibleTabs.value.some(tab => ['inbound', 'production', 'progress', 'quality', 'inventory'].includes(tab)));
 
 onMounted(() => {
-  void loadDispatchRows();
+  if (legacyOpen.value) void loadDispatchRows();
 });
 
 async function loadDispatchRows() {
@@ -235,31 +245,34 @@ function qualityTone(status: string): Tone {
 <template>
   <div class="command-center-v3 page-stack">
     <p v-if="demoData" class="operation-feedback warning">当前待办含评审样例，仅用于演示。</p>
-    <section class="module-master-panel" aria-label="开始业务">
+    <section class="module-master-panel dashboard-start" aria-label="开始业务">
       <div class="floor-toolbar">
         <div>
-          <h2>工作台</h2>
-          <p class="empty-hint">收货建母单 → 打印标签 → 拆单／生产 → 质检 → 发货</p>
+          <h2>今天的工作</h2>
+          <p class="empty-hint">先看待办和本岗订单，再进入单据核对与办理。</p>
         </div>
         <div class="active-action-grid">
-          <button v-if="canOpen('inbound')" class="primary-button" type="button" @click="startInbound">新建收货／母单</button>
-          <button v-if="canOpen('label')" class="secondary-button" type="button" @click="openTab('label')">标签打印</button>
-          <button v-if="canOpen('progress')" class="secondary-button" type="button" @click="openTab('progress')">查看在制进度</button>
+          <button v-if="canStartInbound" class="primary-button" type="button" @click="startInbound">新建收货／母单</button>
+          <button v-if="canOpen('label') && !openOrders" class="secondary-button" type="button" @click="openTab('label')">标签打印</button>
+          <button v-if="openOrders && canReadOrders" class="secondary-button" type="button" @click="openOrders">查看订单</button>
+          <button v-else-if="canOpen('progress')" class="secondary-button" type="button" @click="openTab('progress')">查看在制进度</button>
         </div>
       </div>
-      <p v-if="!loading && !loadError && countType('母单') === 0 && canOpen('inbound')" class="operation-feedback">
+      <p v-if="legacyOpen && !loading && !loadError && countType('母单') === 0 && canOpen('inbound')" class="operation-feedback">
         还没有母单。点击“新建收货／母单”，填写客户、运单、来料数量和重量，保存后即可打印母单标签，再核对加工要求和期限、确认拆单方式。
       </p>
     </section>
-    <section class="mission-kpi-grid lean-kpis" aria-label="权限范围内业务概览">
+    <DeskInbox v-if="openOrders" />
+    <button v-if="openOrders" class="secondary-button dashboard-history-toggle" type="button" :aria-expanded="legacyOpen" @click="toggleLegacy">{{ legacyOpen ? '收起其他单据记录' : '其他单据记录' }}</button>
+    <section v-if="legacyOpen" class="mission-kpi-grid lean-kpis" aria-label="权限范围内业务概览">
       <article v-for="item in commandStats" :key="item.label" :class="`tone-${item.tone}`">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}<small>{{ item.unit }}</small></strong>
       </article>
     </section>
-    <p class="empty-hint">当前账号可见的单据总数，不随查找变化。{{ refreshedAt ? `更新于 ${refreshedAt}` : '正在读取业务数据' }}</p>
+    <p v-if="legacyOpen" class="empty-hint">本次旧列表返回的可见记录数，不随查找变化。{{ refreshedAt ? `更新于 ${refreshedAt}` : '正在读取业务数据' }}</p>
 
-    <section class="production-desk-grid command-grid-v2 lean-desk desk-page" :class="{ 'is-detail': detailOpen }" aria-label="业务单据和当前处理单">
+    <section v-if="legacyOpen" class="production-desk-grid command-grid-v2 lean-desk desk-page" :class="{ 'is-detail': detailOpen }" aria-label="业务单据和当前处理单">
       <main class="dispatch-console-v3 dispatch-console-v2 module-master-panel">
         <div class="floor-toolbar">
           <h2>业务单据</h2>
@@ -371,3 +384,12 @@ function qualityTone(status: string): Tone {
     </section>
   </div>
 </template>
+
+<style scoped>
+.command-center-v3 { display: flex; flex-direction: column; }
+.command-center-v3 > * { order: 3; }
+.dashboard-start { order: 0; }
+.desk-task-panel { order: 1; }
+.desk-inbox { order: 2; }
+.dashboard-history-toggle { align-self: start; min-height: 44px; }
+</style>

@@ -74,12 +74,20 @@ const moreFilterRef = ref<HTMLInputElement | null>(null);
 const traceQuery = ref('');
 const traceTarget = ref<TraceTarget | null>(null);
 const labelTarget = ref<TraceTarget | null>(null);
+const approvalCode = ref('');
 const workspace = createWorkspaceState();
 let traceToken = 0;
 provide('zhubao-workspace-context', workspace);
 provide('zhubao-trace-query', traceQuery);
 provide('zhubao-trace-target', traceTarget);
 provide('zhubao-label-target', labelTarget);
+provide('zhubao-approval-code', approvalCode);
+provide('zhubao-open-orders', openOrders);
+provide('zhubao-open-approval', (code: string) => {
+  if (!visibleTabs.value.some(tab => tab.key === 'approvals')) return;
+  approvalCode.value = code;
+  activateTab('approvals');
+});
 provide('zhubao-open-label', (code: string) => {
   if (!code.trim() || !visibleTabs.value.some((tab) => tab.key === 'label')) return;
   labelTarget.value = { objectType: 'MOTHER_ORDER', code: code.trim(), intent: 'LOOKUP', token: ++traceToken };
@@ -190,6 +198,7 @@ async function handleLogout() {
   cancelMobileScan();
   workspace.clear();
   orderWorkspaceOpen.value = false;
+  approvalCode.value = '';
   await logoutAuthSession();
   authSession.value = null;
   labelTarget.value = null;
@@ -201,6 +210,7 @@ function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) 
   cancelMobileScan();
   workspace.clear();
   moreOpen.value = false;
+  approvalCode.value = '';
   orderWorkspaceOpen.value = false;
   authRevision.value += 1;
   labelTarget.value = null;

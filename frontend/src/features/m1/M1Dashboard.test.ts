@@ -89,6 +89,27 @@ describe('M1Dashboard', () => {
     wrapper.unmount();
   });
 
+  it('新首页默认收起旧单据列表，仍可按需恢复旧入口', async () => {
+    const wrapper = mount(M1Dashboard, { global: { provide: { 'zhubao-open-orders': vi.fn() }, stubs: { DeskInbox: { template: '<section>本岗订单预览</section>' } } } });
+    await flushPromises();
+    expect(fetchInboundWorkspace).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('本岗订单预览');
+    expect(wrapper.find('.floor-dispatch-table').exists()).toBe(false);
+    await wrapper.get('.dashboard-history-toggle').trigger('click');
+    await flushPromises();
+    expect(fetchInboundWorkspace).toHaveBeenCalledOnce();
+    expect(wrapper.find('.floor-dispatch-table').exists()).toBe(true);
+    expect(wrapper.text()).toContain('本次旧列表返回的可见记录数');
+    wrapper.unmount();
+  });
+
+  it('有来料读取菜单但没有有效收货权限时不出现快捷建单', async () => {
+    const wrapper = mount(M1Dashboard, { global: { provide: { 'zhubao-visible-tabs': ref(['inbound']), 'zhubao-auth-session': ref({ effectivePermissions: [] }) } } });
+    await flushPromises();
+    expect(wrapper.findAll('button').some(button => button.text() === '新建收货／母单')).toBe(false);
+    wrapper.unmount();
+  });
+
   it('shows an empty list and the failure reason when workspace apis are unavailable', async () => {
     vi.mocked(fetchInboundWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));
     vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));

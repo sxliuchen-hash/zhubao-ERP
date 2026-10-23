@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import { changeOwnPassword, fetchAuthSession, type AuthSession } from '../../services/authApi';
 import {
@@ -7,6 +7,9 @@ import {
   retireStoredContent,
   type StoredContentInventory,
 } from '../../services/documentManagementApi';
+
+const props = withDefaults(defineProps<{ initialSection?: 'account' | 'storage'; accountOnly?: boolean }>(), { initialSection: 'account', accountOnly: false });
+const activeSection = ref(props.initialSection);
 
 const authSession = ref<AuthSession | null>(null);
 const passwordCurrent = ref('');
@@ -18,11 +21,27 @@ const storedContent = ref<StoredContentInventory | null>(null);
 const contentError = ref('');
 const contentMessage = ref('');
 const contentBusyCode = ref('');
+const canManageStorage = computed(() => !props.accountOnly && authSession.value?.role === 'ADMIN'
+  && (!authSession.value.effectivePermissions || authSession.value.effectivePermissions.includes('DOCUMENT_CONTENT_MANAGE')));
+let contentGeneration = 0;
+let disposed = false;
 
 onMounted(async () => {
   await restoreAuthSession();
-  await loadStoredContent();
+  if (activeSection.value === 'storage') {
+    if (canManageStorage.value) await loadStoredContent();
+    else activeSection.value = 'account';
+  }
 });
+watch(activeSection, section => { if (section === 'storage' && canManageStorage.value) void loadStoredContent(); });
+watch(canManageStorage, allowed => {
+  if (allowed) return;
+  contentGeneration += 1;
+  storedContent.value = null;
+  contentError.value = '';
+  activeSection.value = 'account';
+});
+onBeforeUnmount(() => { disposed = true; contentGeneration += 1; });
 
 async function restoreAuthSession() {
   try {
@@ -33,16 +52,21 @@ async function restoreAuthSession() {
 }
 
 async function loadStoredContent() {
+  if (!canManageStorage.value) return;
+  const token = ++contentGeneration;
   contentError.value = '';
   try {
-    storedContent.value = await fetchStoredContent();
+    const result = await fetchStoredContent();
+    if (!disposed && token === contentGeneration) storedContent.value = result;
   } catch (error) {
+    if (disposed || token !== contentGeneration) return;
     storedContent.value = null;
     contentError.value = error instanceof Error ? error.message : '存储内容加载失败';
   }
 }
 
 async function retireContent(code: string, fileName: string) {
+  if (!canManageStorage.value) return;
   contentMessage.value = '';
   if (!globalThis.confirm?.(`下线 ${fileName} 后，本地文件会删除，台账保留为已下线。继续吗？`)) {
     return;
@@ -89,15 +113,12 @@ async function handleChangePassword() {
 
 <template>
   <div class="page-stack">
-    <section class="operations-hero">
-      <div class="hero-copy">
-        <span class="eyebrow">SETTINGS</span>
-        <h2>个人与存储配置</h2>
-        <p>查看当前登录会话、更新自己的密码并管理存储内容。</p>
-      </div>
-    </section>
+    <nav v-if="!accountOnly" class="configuration-sections" aria-label="配置事项">
+      <button type="button" class="secondary-button" :aria-pressed="activeSection === 'account'" @click="activeSection = 'account'">个人安全</button>
+      <button v-if="canManageStorage" type="button" class="secondary-button" :aria-pressed="activeSection === 'storage'" @click="activeSection = 'storage'">存储管理</button>
+    </nav>
 
-    <section class="security-context-panel" aria-label="个人登录与密码">
+    <section v-show="activeSection === 'account'" class="security-context-panel" aria-label="个人登录与密码">
       <div class="security-context-main">
         <div class="section-heading compact-heading">
           <div>
@@ -180,7 +201,7 @@ async function handleChangePassword() {
 
     </section>
 
-    <section class="security-context-panel" aria-label="存储内容管理">
+    <section v-if="activeSection === 'storage' && canManageStorage" class="security-context-panel" aria-label="存储内容管理">
       <div class="security-context-main">
         <div class="section-heading compact-heading">
           <div>
@@ -264,4 +285,7 @@ async function handleChangePassword() {
 .auth-password-strip { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 form label { display: grid; gap: 6px; min-width: 0; }
 form input { box-sizing: border-box; width: 100%; min-width: 0; }
+.configuration-sections { display: flex; gap: 10px; flex-wrap: wrap; }
+.configuration-sections button[aria-pressed="true"] { background: var(--action-soft); color: var(--action); }
+@media (max-width: 900px) { .configuration-sections button, .auth-password-strip button { min-height: 44px; } .auth-password-strip input { font-size: 16px; min-height: 44px; } }
 </style>

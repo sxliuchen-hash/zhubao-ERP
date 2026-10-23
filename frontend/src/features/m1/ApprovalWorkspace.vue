@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, type Ref } from 'vue';
+import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import {
   approvalStatusTone,
@@ -17,6 +17,7 @@ import {
 } from '../../services/approvalApi';
 
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const requestedCode = inject<Ref<string>>('zhubao-approval-code', ref(''));
 const tasks = ref<ApprovalTask[]>([]);
 const pendingTasks = ref<ApprovalTask[]>([]);
 const loading = ref(false);
@@ -34,13 +35,15 @@ const fallbackTask = computed(
   () => pendingTasks.value[0] ?? tasks.value.find((task) => task.status === 'WAITING_APPROVAL') ?? tasks.value[0],
 );
 const activeTask = computed(
-  () => tasks.value.find((task) => task.approvalCode === selectedCode.value) ?? fallbackTask.value,
+  () => selectedCode.value ? tasks.value.find((task) => task.approvalCode === selectedCode.value) : fallbackTask.value,
 );
+watch(requestedCode, code => { selectedCode.value = code; detailOpen.value = Boolean(code); decisionResult.value = null; decisionError.value = ''; }, { immediate: true });
 const visibleTasks = computed(() => {
   const text = keyword.value.trim().toLowerCase();
   if (!text) return tasks.value;
   return tasks.value.filter((task) => `${task.approvalCode} ${task.title} ${task.scene} ${task.businessCode} ${task.applicant}`.toLowerCase().includes(text));
 });
+const requestedMissing = computed(() => !loading.value && Boolean(selectedCode.value) && !activeTask.value);
 
 const approvalStats = computed(() => [
   {
@@ -108,7 +111,7 @@ async function reloadApprovals() {
     loadingError.value = error instanceof Error ? error.message : '审批任务加载失败';
   } finally {
     loading.value = false;
-    if (!tasks.value.some((task) => task.approvalCode === selectedCode.value)) {
+    if (!selectedCode.value && !requestedCode.value) {
       selectedCode.value = fallbackTask.value?.approvalCode ?? '';
     }
   }
@@ -169,6 +172,7 @@ function taskTone(task: ApprovalTask): Tone {
 
 <template>
   <div class="approval-workspace page-stack desk-page" :class="{ 'is-detail': detailOpen }">
+    <p v-if="requestedMissing" class="operation-feedback danger" role="alert">指定审批不在当前可见列表中，请重新选择；没有改为另一条审批。</p>
     <section class="module-command-surface approval-command-surface" aria-label="轻量审批工作台">
       <div class="module-command-main">
         <div class="console-title-line">
