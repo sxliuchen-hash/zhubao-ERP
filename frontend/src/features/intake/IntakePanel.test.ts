@@ -289,6 +289,7 @@ describe('收货面板', () => {
     expect(wrapper.text()).toContain('尚未建单');
     expect(wrapper.text()).not.toContain('已保存');
 
+    await wrapper.get('.field-dock button').trigger('click');
     await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('已保存');
@@ -540,6 +541,59 @@ describe('收货面板', () => {
     await flushPromises();
     expect(submitMobileIntake).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('加工要求超过 500 字');
+    wrapper.unmount();
+  });
+
+  it('两段往返保留要求与已选文件，下一步不提交任何业务', async () => {
+    const wrapper = mountPanel(true);
+    await fillNewWaybill(wrapper);
+    expect(wrapper.get('.intake-goods').classes()).not.toContain('intake-stage-hidden');
+    expect(wrapper.get('.intake-requirement').classes()).toContain('intake-stage-hidden');
+    await wrapper.get('.field-dock button').trigger('click');
+    expect(wrapper.get('.intake-stage-nav button:last-child').attributes('aria-current')).toBe('step');
+    await pickEvidence(wrapper, '留在本草稿.jpg', 'image/jpeg');
+    const evidence = wrapper.get('[aria-label="选择证据文件"]').element;
+    await wrapper.get('.intake-stage-back').trigger('click');
+    expect(wrapper.get('.intake-goods').classes()).not.toContain('intake-stage-hidden');
+    expect(wrapper.get('[aria-label="选择证据文件"]').element).toBe(evidence);
+    await wrapper.get('.field-dock button').trigger('click');
+    expect(wrapper.text()).toContain('留在本草稿.jpg');
+    expect(wrapper.get('[aria-label="加工要求"]').element).toHaveProperty('value', '抛光');
+    expect(submitMobileIntake).not.toHaveBeenCalled();
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('超时后往返两段仍用原请求重试，不因为换步骤生成第二笔身份', async () => {
+    vi.mocked(submitMobileIntake).mockRejectedValue(new Error('网络超时，请原请求重试'));
+    const wrapper = mountPanel(true);
+    await fillNewWaybill(wrapper);
+    await wrapper.get('.field-dock button').trigger('click');
+    await wrapper.get('.field-dock button').trigger('click');
+    await flushPromises();
+    const first = vi.mocked(submitMobileIntake).mock.calls[0][0];
+    await wrapper.get('.intake-stage-back').trigger('click');
+    await wrapper.get('.field-dock button').trigger('click');
+    await wrapper.get('.field-dock button').trigger('click');
+    await flushPromises();
+    expect(vi.mocked(submitMobileIntake).mock.calls[1][0]).toEqual(first);
+    expect(wrapper.text()).toContain('网络超时');
+    wrapper.unmount();
+  });
+
+  it('未选择客户不能进入第二段，成功数量保留本次提交单位', async () => {
+    const wrapper = mountPanel(true);
+    await wrapper.findAll('button').find(button => button.text() === '无运单直接建单')!.trigger('click');
+    await wrapper.get('.field-dock button').trigger('click');
+    expect(wrapper.text()).toContain('请先选择客户');
+    expect(wrapper.get('.intake-stage-nav button:first-child').attributes('aria-current')).toBe('step');
+    await fillNewWaybill(wrapper);
+    await wrapper.get('[aria-label="单位"]').setValue('颗');
+    vi.mocked(submitMobileIntake).mockResolvedValue({ alreadyExists: false, motherOrderCode: 'MD-UNIT', courierNo: 'SF1048329001', customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20', goodsName: '戒托', quantity: 1, weight: 2.5, ledgerCode: 'LED-UNIT', qrContent: '' });
+    await wrapper.get('.field-dock button').trigger('click');
+    await wrapper.get('.field-dock button').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="已保存母单"]').text()).toContain('1 颗 / 2.5 克');
     wrapper.unmount();
   });
 });

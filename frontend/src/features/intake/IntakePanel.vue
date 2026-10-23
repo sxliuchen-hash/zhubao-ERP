@@ -10,7 +10,6 @@ import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
 import { fetchEvidenceBoard, type EvidenceBoard } from '../../services/evidenceApi';
-import FieldSteps from '../field/FieldSteps.vue';
 import { keptInputFailure } from '../field/keptInput';
 import OrderContextCard from '../scan/OrderContextCard.vue';
 import ScanInput from '../scan/ScanInput.vue';
@@ -89,6 +88,8 @@ const sourceType = ref<'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER'>('COUR
 const manualDraft = ref(false);
 const manualCourier = ref('');
 const submitting = ref(false);
+const formStage = ref<1 | 2>(1);
+const savedQuantityUnit = ref('');
 const entryPanel = ref<HTMLElement | null>(null);
 const draftPanel = ref<HTMLElement | null>(null);
 const savedPanel = ref<HTMLElement | null>(null);
@@ -122,12 +123,6 @@ const intakeMotherCode = computed(() => {
 
 const savedMother = computed(() => Boolean(created.value) || Boolean(intakeMotherCode.value && !newExpressCode.value));
 
-const intakeStep = computed(() => {
-  if (savedMother.value) return 2;
-  if (draftAvailable.value) return 1;
-  return 0;
-});
-
 const shownCustomer = computed(() => created.value?.customerName || intakeScan.context?.order.customerName || '');
 const shownRequirement = computed(() => created.value?.processingRequirement || intakeScan.context?.order.requirement || '');
 const shownDue = computed(() => created.value?.dueDate || intakeScan.context?.order.dueDate || '');
@@ -154,6 +149,8 @@ function openMotherDetails() {
 }
 
 function startNextIntake() {
+  formStage.value = 1;
+  savedQuantityUnit.value = '';
   if (traceTarget.value?.intent === 'INTAKE') traceTarget.value = null;
   scanText.value = '';
   clearIntakeTarget();
@@ -187,6 +184,8 @@ function clearIntakeTarget() {
   const had = intakeScan.context !== null || intakeScan.loading || created.value !== null;
   intakeScan.invalidate();
   created.value = null;
+  formStage.value = 1;
+  savedQuantityUnit.value = '';
   requestId.value = '';
   requestFingerprint.value = '';
   formError.value = '';
@@ -325,6 +324,23 @@ function ensureRequestId() {
   return requestId.value;
 }
 
+function nextFormStage() {
+  formError.value = '';
+  if (!customerId.value || !customerName.value.trim()) {
+    formError.value = '请先选择客户';
+    return;
+  }
+  const lines = [{ materialCode: materialCode.value, goodsName: goodsName.value, quantity: quantity.value, quantityUnit: quantityUnit.value, weight: weight.value }, ...extraLines.value];
+  if (lines.some(line => !line.materialCode || !line.goodsName.trim() || !line.quantityUnit.trim()
+    || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0
+    || !Number.isFinite(Number(line.weight)) || Number(line.weight) <= 0)) {
+    formError.value = '请核对每条来料的材质、货品、数量、单位和重量';
+    return;
+  }
+  formStage.value = 2;
+  showPanel(draftPanel);
+}
+
 async function createMotherOrder() {
   if (submitting.value) return;
   formError.value = '';
@@ -382,6 +398,7 @@ async function createMotherOrder() {
       requestId: currentRequestId,
     });
     if (intakeScan.revision !== seen) return;
+    savedQuantityUnit.value = lines[0]?.quantityUnit ?? '';
     created.value = result;
     emit('saved', result);
     showPanel(savedPanel);
@@ -536,7 +553,6 @@ onMounted(loadCatalog);
       </select>
     </label>
     <button v-if="sourceType === 'COURIER' && !draftAvailable" class="secondary-button" type="button" @click="manualDraft = true">无运单直接建单</button>
-    <FieldSteps v-if="field" :steps="['扫码识别', '填写要求', '保存证据']" :current="intakeStep" />
     <ScanInput
       v-model="scanText"
       field-text="快递单号或二维码内容"
@@ -587,8 +603,14 @@ onMounted(loadCatalog);
     <p v-if="field">草稿尚未建单，填好资料后点击“生成母单”。</p>
     <p>照片或视频可稍后补传，不影响建单。</p>
     <div class="intake-form">
+      <nav class="intake-stage-nav" aria-label="收货填写步骤">
+        <button type="button" class="secondary-button" :aria-current="formStage === 1 ? 'step' : undefined" :disabled="submitting" @click="formStage = 1">1 客户来料</button>
+        <button type="button" class="secondary-button" :aria-current="formStage === 2 ? 'step' : undefined" :disabled="submitting" @click="nextFormStage">2 要求证据</button>
+      </nav>
       <p v-if="catalogHint" class="operation-feedback">{{ catalogHint }}</p>
       <p v-if="catalogError" class="operation-feedback danger">{{ catalogError }}</p>
+      <fieldset class="intake-stage intake-goods" :class="{ 'intake-stage-hidden': formStage !== 1 }" :disabled="submitting">
+      <legend>客户与来料明细</legend>
       <label v-if="sourceType === 'COURIER' && !newExpressCode" class="field">
         <span>运单号（可不填）</span>
         <input v-model="manualCourier" type="text" aria-label="运单号（可不填）" />
@@ -610,20 +632,6 @@ onMounted(loadCatalog);
         <input v-model="newCustomerName" aria-label="新增客户名称" placeholder="没有这家客户时填写名称，或直接用上方已输入的筛选词" />
         <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addCustomer">新增客户档案</button>
       </div>
-      <RequirementComposer
-        :key="requirementComposerKey"
-        v-model="processingRequirement"
-        v-model:template-code="requirementTemplateCode"
-        v-model:template-version="requirementTemplateVersion"
-        :shortcuts="shortcuts"
-        :can-manage="canManageData"
-        @add-shortcut="addShortcut"
-        @remove-shortcut="deleteShortcut"
-      />
-      <label class="field">
-        <span>完成期限</span>
-        <input v-model="dueDate" type="date" aria-label="完成期限" />
-      </label>
       <label class="field">
         <span>材质</span>
         <FilterSelect
@@ -672,9 +680,30 @@ onMounted(loadCatalog);
         <button type="button" class="secondary-button" @click="extraLines.splice(index, 1)">移除明细</button>
       </div>
       <button type="button" class="secondary-button" @click="extraLines.push({ materialCode: '', goodsName: '', quantity: '1', quantityUnit: '件', weight: '' })">增加材质明细</button>
+      <button type="button" class="primary-button intake-stage-next" @click="nextFormStage">下一步：要求与证据</button>
+      </fieldset>
+      <fieldset class="intake-stage intake-requirement" :class="{ 'intake-stage-hidden': formStage !== 2 }" :disabled="submitting">
+      <legend>加工要求与交期</legend>
+      <RequirementComposer
+        :key="requirementComposerKey"
+        v-model="processingRequirement"
+        v-model:template-code="requirementTemplateCode"
+        v-model:template-version="requirementTemplateVersion"
+        :shortcuts="shortcuts"
+        :can-manage="canManageData"
+        @add-shortcut="addShortcut"
+        @remove-shortcut="deleteShortcut"
+      />
+      <label class="field">
+        <span>完成期限</span>
+        <input v-model="dueDate" type="date" aria-label="完成期限" />
+      </label>
+      <p>核对最终要求后生成母单；上传失败可单独重试，不重复建单。</p>
+      <button class="secondary-button intake-stage-back" type="button" @click="formStage = 1">返回客户来料</button>
       <button v-if="!field" class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
         {{ submitting ? '正在生成' : '生成母单' }}
       </button>
+      </fieldset>
     </div>
   </section>
 
@@ -693,7 +722,7 @@ onMounted(loadCatalog);
       <dd>{{ shownText(shownDue) }}</dd>
       <template v-if="created">
         <dt>数量／重量</dt>
-        <dd>{{ created.quantity }} 件 / {{ created.weight }} 克</dd>
+        <dd>{{ created.quantity }} {{ savedQuantityUnit || '（单位未提供）' }} / {{ created.weight }} 克</dd>
       </template>
     </dl>
     <div class="intake-next-actions">
@@ -708,7 +737,7 @@ onMounted(loadCatalog);
     </details>
   </article>
 
-  <section v-if="draftAvailable || intakeMotherCode" class="section-block intake-create">
+  <section v-if="draftAvailable || intakeMotherCode" class="section-block intake-create" :class="{ 'intake-stage-hidden': !savedMother && formStage !== 2 }">
     <h2 v-if="field && !savedMother">草稿文件</h2>
     <h2 v-else-if="field && savedMother">已保存后的拆包证据</h2>
     <h2 v-else>拆包证据</h2>
@@ -730,7 +759,8 @@ onMounted(loadCatalog);
   </section>
 
   <div v-if="field && draftAvailable && !created" class="field-dock intake-create">
-    <button class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
+    <button v-if="formStage === 1" class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="nextFormStage">下一步：要求与证据</button>
+    <button v-else class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
       {{ submitting ? '正在生成' : '生成母单' }}
     </button>
   </div>
@@ -767,8 +797,24 @@ onMounted(loadCatalog);
 .shortcut-list .empty-hint { flex: 1 1 100%; margin: 0; }
 .intake-next-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .intake-next-actions button { min-height: 44px; }
+.intake-stage-nav { display: none; }
+.intake-stage { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.intake-stage legend { padding: 0 6px; font-weight: 700; color: var(--action); }
+.intake-stage-next, .intake-stage-back { display: none; }
+@media (min-width: 901px) {
+  .intake-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .intake-form > .operation-feedback { grid-column: 1 / -1; }
+  .intake-goods { grid-column: 1; }
+  .intake-requirement { grid-column: 2; }
+}
 
 @media (max-width: 900px) {
+  .intake-stage-hidden { display: none; }
+  .intake-stage-nav { display: flex; gap: 10px; flex-wrap: wrap; }
+  .intake-stage-nav button[aria-current="step"] { background: var(--action-soft); color: var(--action); }
+  .intake-stage-next, .intake-stage-back { display: inline-flex; }
+  .intake-stage { padding: 12px; }
+  .intake-stage :deep(input), .intake-stage :deep(select), .intake-stage :deep(textarea) { font-size: 16px; min-height: 44px; }
   .intake-create button.secondary-button,
   .intake-create button.primary-button,
   .intake-create :deep(button.secondary-button),
@@ -780,7 +826,7 @@ onMounted(loadCatalog);
     width: auto;
     max-width: 100%;
     justify-self: start;
-    min-height: 36px;
+    min-height: 44px;
     padding: 4px 12px;
     font-size: 14px;
   }
@@ -803,7 +849,7 @@ onMounted(loadCatalog);
   }
 
   .intake-create button.intake-submit {
-    min-height: 40px;
+    min-height: 44px;
     padding: 6px 16px;
     font-size: 15px;
   }
