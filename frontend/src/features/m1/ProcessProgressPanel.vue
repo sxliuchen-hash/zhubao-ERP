@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
-import type { OrderActionTarget } from '../orders/orderActions';
+import type { OpenOrderChangeAction, OrderActionTarget } from '../orders/orderActions';
 import OrderChangePanel from '../orders/OrderChangePanel.vue';
 import { ApiRequestError } from '../../services/apiClient';
 import {
@@ -15,8 +15,9 @@ const props = withDefaults(defineProps<{
   initialTarget?: OrderActionTarget | null;
   bindMobileScan?: boolean;
   embedded?: boolean;
+  formallyDeliveredProcess?: string;
 }>(), { bindMobileScan: false, embedded: false, initialTarget: null });
-const emit = defineEmits<{ saved: [result: ProcessProgressHead] }>();
+const emit = defineEmits<{ saved: [result: ProcessProgressHead]; targetSelected: [target: OrderActionTarget] }>();
 const percents = [0, 30, 60, 90, 100];
 const query = ref('');
 const processFilter = ref('');
@@ -39,6 +40,8 @@ const changeOpen = ref(false);
 const changeCreated = ref(false);
 const unknownRequest = ref<Parameters<typeof submitProcessProgress>[0] | null>(null);
 const expectedCode = ref(props.initialTarget?.code ?? '');
+const openOrderChange = inject<OpenOrderChangeAction | null>('zhubao-open-order-change', null);
+const isDelivered = computed(() => Boolean(target.value?.formallyDelivered || (props.formallyDeliveredProcess && props.formallyDeliveredProcess === target.value?.currentProcess)));
 const requestIds = new Map<string, string>();
 let generation = 0;
 let listGeneration = 0;
@@ -102,13 +105,13 @@ async function locate(draft?: ScanDraft) {
 }
 function chooseChild(childCode: string) {
   if (!target.value?.children.some(child => child.code === childCode)) return;
-  if (props.initialTarget) expectedCode.value = childCode;
+  if (props.initialTarget) { emit('targetSelected', { objectType: 'WORK_ORDER', code: childCode }); return; }
   code.value = childCode;
   void locate({ content: childCode });
 }
 
 async function submit() {
-  if (submitting.value || locating.value || receipt.value || !target.value || target.value.selectChild || target.value.formallyDelivered) return;
+  if (submitting.value || locating.value || receipt.value || !target.value || target.value.selectChild || isDelivered.value) return;
   error.value = '';
   const current = target.value;
   if (typeof current.version !== 'number') { error.value = '没有读到当前进度版本，请重新定位'; return; }
@@ -144,7 +147,14 @@ async function submit() {
   }
 }
 function editAgain() { receipt.value = null; message.value = ''; }
-function showChange() { changeCreated.value = true; changeOpen.value = !changeOpen.value; }
+function showChange() {
+  if (openOrderChange && target.value && !target.value.selectChild) {
+    openOrderChange({ objectType: props.initialTarget?.objectType ?? null, code: target.value.orderCode, motherOrderCode: target.value.motherOrderCode });
+    return;
+  }
+  changeCreated.value = true;
+  changeOpen.value = !changeOpen.value;
+}
 async function loadHistory() {
   const current = target.value;
   if (!current || current.selectChild) return;
@@ -172,6 +182,7 @@ async function loadHistory() {
     </div>
     <ScanInput v-if="!initialTarget" v-model="code" field-text="进度单号" input-aria-label="进度单号" submit-label="定位" :busy="locating || submitting || Boolean(unknownRequest)" :bind-mobile-scan="bindMobileScan" @draft="invalidate" @recognize="locate" />
     <p v-if="locating" role="status">正在定位工序…</p>
+    <button v-if="initialTarget" class="secondary-button" type="button" :disabled="locating || submitting || Boolean(unknownRequest)" @click="locate({ content: initialTarget.code })">刷新本单工序</button>
     <p v-if="error" class="operation-feedback danger" role="alert">{{ error }}</p>
     <p v-if="readError" class="operation-feedback danger" role="alert">只读刷新失败：{{ readError }}。已有成功回执保留。</p>
     <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
@@ -181,7 +192,7 @@ async function loadHistory() {
     </div>
     <form v-else-if="target" aria-label="保存工序进度" @submit.prevent="submit">
       <p>{{ target.orderCode }} · {{ target.customerName }} · {{ target.currentProcess }} · {{ target.processingRequirement || '未记录要求' }}</p>
-      <p v-if="target.formallyDelivered">这道工序已经正式交付，不能再用进度代替。</p>
+      <p v-if="isDelivered">这道工序已经正式交付，不能再用进度代替。可刷新本单工序核对后续工序。</p>
       <fieldset v-else :disabled="submitting || Boolean(receipt) || Boolean(unknownRequest)">
         <label>进度<select v-model.number="percent" aria-label="工序进度"><option v-for="item in percents" :key="item" :value="item">{{ item }}%</option></select></label>
         <label>说明<input v-model="note" aria-label="进度说明" /></label>

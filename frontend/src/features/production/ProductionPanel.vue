@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import type { OrderActionTarget } from '../orders/orderActions';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import FieldSteps from '../field/FieldSteps.vue';
@@ -24,9 +25,14 @@ const props = withDefaults(defineProps<{
   title: string;
   intro: string;
   field?: boolean;
+  initialTarget?: OrderActionTarget | null;
+  embedded?: boolean;
 }>(), {
   field: false,
+  initialTarget: null,
+  embedded: false,
 });
+const emit = defineEmits<{ saved: [result: ProcessStationReport]; targetSelected: [target: OrderActionTarget] }>();
 
 const scanText = ref('');
 const hint = ref('');
@@ -53,7 +59,6 @@ const evidenceOperationType = computed(() => {
 });
 const activeStation = computed(() => (
   stationView.value?.stations.find((item) => item.processName === activeProcess.value)
-  ?? stationView.value?.stations[0]
 ));
 const activeLines = computed(() => requirementLines(activeStation.value?.requirement ?? ''));
 const checkedCount = computed(() => activeLines.value.filter((_, index) => (
@@ -65,6 +70,7 @@ const reviewDone = computed(() => Boolean(
 const stationStep = computed(() => {
   if (!stationView.value) return 0;
   const station = activeStation.value;
+  if (!station) return 1;
   if (station && !station.submitted && !reviewConfirmed.value[station.processName]) return 1;
   return 2;
 });
@@ -76,7 +82,7 @@ const canConfirmReview = computed(() => {
 watch(stationView, (view) => {
   const stations = view?.stations ?? [];
   if (!stations.some((item) => item.processName === activeProcess.value)) {
-    activeProcess.value = stations.find((item) => !item.submitted)?.processName ?? stations[0]?.processName ?? '';
+    activeProcess.value = props.field && stations.length > 1 ? '' : stations[0]?.processName ?? '';
   }
 });
 
@@ -153,6 +159,11 @@ async function loadStation(response: ScanContextResponse, seen: number) {
     hint.value = '没有定位到可报工的单据';
     return;
   }
+  if (props.initialTarget && (target.code !== props.initialTarget.code
+    || (props.initialTarget.objectType && target.objectType !== props.initialTarget.objectType))) {
+    hint.value = '报工目标与当前单据或执行轮次不一致，请返回列表核对。';
+    return;
+  }
   if (target.objectType === 'EXPRESS_NO') {
     hint.value = '这是快递单号，请切到收货';
     return;
@@ -165,6 +176,10 @@ async function loadStation(response: ScanContextResponse, seen: number) {
   try {
     const loaded = await lookupProcessStation(target.code);
     if (stationScan.revision !== seen) return;
+    if (loaded.orderCode !== target.code) {
+      hint.value = '岗位单据与规范目标不一致，未打开正式交工。';
+      return;
+    }
     stationCode.value = target.code;
     stationView.value = loaded;
     if (loaded.message) hint.value = loaded.message;
@@ -200,15 +215,22 @@ async function recognizeStation(draft: ScanDraft) {
 }
 
 useTraceTarget(['PRODUCTION'], (target) => {
+  if (props.initialTarget) return;
   scanText.value = target.code;
   void recognizeStation({
     content: target.code,
     ...(target.objectType ? { objectType: target.objectType } : {}),
   });
 });
+onMounted(() => {
+  if (!props.initialTarget) return;
+  scanText.value = props.initialTarget.code;
+  void recognizeStation({ content: props.initialTarget.code, ...(props.initialTarget.objectType ? { objectType: props.initialTarget.objectType } : {}) });
+});
 
 async function chooseStationTarget(related: ScanRelatedTarget) {
   if (!related.code || !related.objectType) return;
+  if (props.initialTarget) { emit('targetSelected', { objectType: related.objectType, code: related.code }); return; }
   formError.value = '';
   hint.value = '';
   const response = await stationScan.lookup({
@@ -226,17 +248,16 @@ async function chooseStationTarget(related: ScanRelatedTarget) {
 async function applyResult(result: ProcessStationReport, code: string, processName: string, seen: number) {
   if (stationScan.revision !== seen || stationCode.value !== code) return;
   delivered.value = result;
+  if (stationView.value) stationView.value = { ...stationView.value, stations: stationView.value.stations.map(station => station.processName === result.processName ? { ...station, submitted: true } : station) };
+  emit('saved', result);
   try {
-    stationView.value = await lookupProcessStation(code);
+    const loaded = await lookupProcessStation(code);
+    if (stationScan.revision !== seen || stationCode.value !== code) return;
+    if (loaded.orderCode !== code) { hint.value = '交付已保存，刷新返回的单据不一致，请重新打开本单核对。'; return; }
+    stationView.value = loaded;
   } catch {
     if (stationScan.revision !== seen) return;
     hint.value = '交付已保存，页面刷新失败。请重新打开本单，不会再次交付。';
-    return;
-  }
-  if (stationScan.revision !== seen) {
-    stationView.value = null;
-    stationCode.value = '';
-    delivered.value = null;
     return;
   }
   hint.value = `${processName}已交`;
@@ -247,7 +268,8 @@ async function deliver(station: ProcessStationCard) {
   const seen = stationScan.revision;
   formError.value = '';
   if (props.field && !reviewConfirmed.value[station.processName]) return;
-  if (!code || station.submitted || stationScan.loading || submittingProcess.value) return;
+  if (!code || station.submitted || stationScan.loading || submittingProcess.value
+    || (delivered.value?.orderCode === code && delivered.value.processName === station.processName)) return;
   const currentRequestId = ensureRequestId(code, station.processName);
   submittingProcess.value = station.processName;
   try {
@@ -283,8 +305,9 @@ async function deliver(station: ProcessStationCard) {
         <p>{{ intro }}</p>
       </div>
     </div>
-    <FieldSteps v-if="field" :steps="['扫码识别', '核对要求', '报工确认']" :current="stationStep" />
+    <FieldSteps v-if="field && !embedded" :steps="['扫码识别', '核对要求', '报工确认']" :current="stationStep" />
     <ScanInput
+      v-if="!initialTarget"
       v-model="scanText"
       field-text="贴纸二维码"
       input-aria-label="贴纸二维码"
@@ -299,7 +322,8 @@ async function deliver(station: ProcessStationCard) {
     />
     <p v-if="hint" class="operation-feedback">{{ hint }}</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
-    <OrderContextCard :context="stationScan.context" @select="chooseStationTarget" />
+    <p v-if="delivered" class="operation-feedback" role="status">正式交工已保存：{{ delivered.orderCode }} · {{ delivered.processName }} · 台账 {{ delivered.ledgerCode || '未提供' }}</p>
+    <OrderContextCard v-if="!embedded || stationScan.context?.requiresSelection" :context="stationScan.context" @select="chooseStationTarget" />
     <article v-if="field && stationView" class="field-card" aria-label="当前单据">
       <div class="field-card-head">
         <span>{{ stationScan.identity?.objectType === 'MOTHER_ORDER' ? '当前母单' : '当前子单' }}</span>
@@ -329,6 +353,7 @@ async function deliver(station: ProcessStationCard) {
       <p>只显示当前账号能做的工序。</p>
     </article>
     <div v-if="field && (stationView?.stations.length ?? 0) > 1" class="field-process-list">
+      <p v-if="!activeStation">请选择本次办理的工序。</p>
       <button
         v-for="station in stationView?.stations ?? []"
         :key="station.processName"

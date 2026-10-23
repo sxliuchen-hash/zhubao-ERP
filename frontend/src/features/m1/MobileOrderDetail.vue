@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import ScanInput from '../scan/ScanInput.vue';
 import OrderDetail from '../orders/OrderDetail.vue';
 import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
@@ -21,6 +21,7 @@ const code = ref('');
 const locatedInput = ref('');
 const qualityProgressOpen = ref(false);
 const scan = reactive(useScanContext());
+const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
 const identity = computed(() => canonicalTarget(scan.context));
 const qualityProgressTarget = computed(() => progressTargetFromScan(scan.context));
 const hasDuty = (code: string) => props.role !== 'BUSINESS_MANAGER' || (props.coverDuties ?? []).includes(code);
@@ -46,6 +47,10 @@ watch(code, (value) => {
   if (value.trim() !== locatedInput.value && scan.context) scan.invalidate();
 });
 watch(identity, () => { qualityProgressOpen.value = false; });
+watch(refresh, () => {
+  const current = identity.value;
+  if (current && !qualityProgressOpen.value) void scan.lookup({ content: current.code, objectType: current.objectType, intent: 'LOOKUP' });
+});
 
 async function recognize(draft: ScanDraft) {
   locatedInput.value = draft.content.trim();

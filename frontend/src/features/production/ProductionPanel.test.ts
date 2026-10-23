@@ -74,11 +74,37 @@ async function openStation(field = false) {
 
 describe('生产面板', () => {
   beforeEach(() => {
+    vi.mocked(queryScanContext).mockReset();
     vi.mocked(submitProcessStation).mockReset();
     vi.mocked(lookupProcessStation).mockReset();
     vi.mocked(uploadEvidenceFile).mockReset();
     vi.mocked(bindEvidence).mockReset();
     vi.mocked(saveProgressRecord).mockReset();
+  });
+
+  it('固定轮次不能被解析成原单，不加载原单岗位或开放提交', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100' }));
+    const wrapper = mount(ProductionPanel, { props: { title: '正式交工', intro: '', embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'FG-100-R2' } } });
+    await flushPromises();
+    expect(queryScanContext).toHaveBeenCalledWith({ content: 'FG-100-R2', objectType: 'WORK_ORDER', intent: 'PRODUCTION' });
+    expect(lookupProcessStation).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('报工目标与当前单据或执行轮次不一致');
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('现场有多个岗位工序时须人工选择，不默认核对或交付第一道', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100' }));
+    const view = stationView();
+    vi.mocked(lookupProcessStation).mockResolvedValue({ ...view, stations: [...view.stations, { ...view.stations[0], processName: '镶嵌', requirement: '爪位对称' }] });
+    const wrapper = mount(ProductionPanel, { props: { title: '正式交工', intro: '', field: true, embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'ZD-100' } } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('请选择本次办理的工序');
+    expect(wrapper.find('[aria-label="完成核对"]').exists()).toBe(false);
+    await wrapper.get('[aria-label="选择工序 镶嵌"]').trigger('click');
+    expect(wrapper.get('[aria-label="本岗位加工要求"]').text()).toContain('爪位对称');
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it('进度目标按规范单号打开，别的意图不报工', async () => {

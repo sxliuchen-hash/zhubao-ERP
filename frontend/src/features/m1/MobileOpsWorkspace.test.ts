@@ -22,6 +22,18 @@ function forRole(role: string, coverDuties?: string[], effectivePermissions?: st
 }
 
 describe('MobileOpsWorkspace', () => {
+  it('生产与进度入口接入容器时不再卸载查单页，分别传递办理方式', async () => {
+    const open = vi.fn();
+    const wrapper = mount(MobileOpsWorkspace, { global: { provide: { 'zhubao-auth-session': ref({ role: 'OPERATOR', effectivePermissions: ['BUSINESS_PRODUCTION_REPORT'] } as AuthSession), 'zhubao-open-production': open } } });
+    await wrapper.get('[data-open="station"]').trigger('click');
+    expect(open).toHaveBeenLastCalledWith(undefined, 'station');
+    expect(wrapper.find('[data-job="station"]').exists()).toBe(false);
+    await wrapper.get('[data-open="progress"]').trigger('click');
+    expect(open).toHaveBeenLastCalledWith(undefined, 'progress');
+    expect(wrapper.find('[data-job="progress"]').exists()).toBe(false);
+    expect(wrapper.find('[data-job="detail"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
   it('only opens modes granted by effective permissions', async () => {
     const wrapper = forRole('WORKSHOP_LEADER', [], ['BUSINESS_QUALITY_FREEZE']);
     await wrapper.get('[data-open="station"]').trigger('click');

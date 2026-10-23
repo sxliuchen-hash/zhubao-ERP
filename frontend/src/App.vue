@@ -4,7 +4,7 @@ import AppShell from './components/AppShell.vue';
 import NavIcon from './components/NavIcon.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import OrderActionHost from './features/orders/OrderActionHost.vue';
-import type { OrderActionTarget } from './features/orders/orderActions';
+import type { OrderActionTarget, OrderChangeTarget, ProductionMode } from './features/orders/orderActions';
 import type { MobileIntakeResult } from './services/mobileIntakeApi';
 import LoginPage from './features/auth/LoginPage.vue';
 import ChainReview from './features/scan/ChainReview.vue';
@@ -93,6 +93,8 @@ provide('zhubao-scan-suspended', orderActionOpen);
 provide('zhubao-order-refresh', orderRefresh);
 provide('zhubao-intake-receipt', intakeReceipt);
 provide('zhubao-open-intake', (target?: OrderActionTarget | null) => { if (canIntake.value) orderActionHost.value?.openIntake(target ?? null); });
+provide('zhubao-open-production', (target?: OrderActionTarget | null, mode?: ProductionMode) => { if (canProduction.value) orderActionHost.value?.openProduction(target ?? null, mode); });
+provide('zhubao-open-order-change', (target: OrderChangeTarget) => { if (canChange.value) orderActionHost.value?.openOrderChange(target); });
 provide('zhubao-open-orders', openOrders);
 provide('zhubao-open-approval', (code: string) => {
   if (!visibleTabs.value.some(tab => tab.key === 'approvals')) return;
@@ -145,10 +147,15 @@ const showDeskTab = computed(() => visibleTabs.value.some((tab) => tab.key === '
 const showInventoryTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'inventory'));
 const orderDockTabs = computed(() => mobileOrderTabs(visibleTabs.value));
 const canReadOrders = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['inbound', 'production', 'progress', 'quality', 'inventory'].includes(tab.key)));
-const canIntake = computed(() => visibleTabs.value.some(tab => tab.key === 'inbound' || tab.key === 'mobile')
+const canIntake = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && (tab.key === 'inbound' || tab.key === 'mobile'))
   && (authSession.value?.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_INBOUND_CONFIRM')
     : ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER'].includes(authSession.value?.role ?? '')
       || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('INTAKE') === true)));
+const canProduction = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['production', 'progress', 'mobile'].includes(tab.key))
+  && (authSession.value?.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_PRODUCTION_REPORT')
+    : ['ADMIN', 'GENERAL_MANAGER', 'OPERATOR', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? '')
+      || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('REPORT') === true)));
+const canChange = computed(() => authorizedMenuCodes.value?.has('progress') === true);
 const moreTabs = computed(() => mobileMoreTabs(visibleTabs.value));
 const filteredMoreGroups = computed(() => groupTabsBySection(filterWorkspaceTabs(moreTabs.value, moreQuery.value)));
 const deskActive = computed(() => activeTab.value === 'dashboard' && !moreOpen.value && !orderWorkspaceOpen.value);
@@ -443,5 +450,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
-  <OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" @active="orderActionOpen = $event" @saved="intakeSaved" />
+  <OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
 </template>

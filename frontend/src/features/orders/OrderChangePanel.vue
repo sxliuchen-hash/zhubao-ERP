@@ -6,6 +6,7 @@ import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 
 const props = defineProps<{ target: { orderCode: string; motherOrderCode: string } }>();
+const emit = defineEmits<{ changed: [] }>();
 const target = computed(() => props.target);
 const code = computed(() => props.target.orderCode);
 const message = ref('');
@@ -102,6 +103,7 @@ async function draftChange() {
     if (disposed) return;
     readGeneration += 1;
     changeId.value = created.id;
+    emit('changed');
     message.value = `已保存改单 ${created.id}，送财务确认后才会生效`;
     await loadChanges();
   } catch (caught) {
@@ -120,6 +122,7 @@ async function runChange(path: string, body: unknown, success: string) {
     if (disposed) return;
     readGeneration += 1;
     selectedChange.value = saved;
+    emit('changed');
     changeId.value = selectedChange.value.id;
     message.value = success;
     await loadChanges();
@@ -230,7 +233,7 @@ async function loadTimeline() {
         <button class="secondary-button" type="button" :disabled="changeSubmitting" @click="confirmDelta">确认差额</button>
         <button class="secondary-button" type="button" :disabled="changeSubmitting" @click="rejectChange">拒绝改单</button>
         </template>
-        <button class="primary-button" type="button" :disabled="changeSubmitting || !['FINANCE_CONFIRMED', 'APPLIED'].includes(selectedChange.status)" @click="applyChange">生效改单</button>
+        <button class="primary-button" type="button" :disabled="changeSubmitting || selectedChange.status !== 'FINANCE_CONFIRMED'" @click="applyChange">生效改单</button>
         <h4>改单证据</h4>
         <EvidenceCapture
           target-type="MOTHER_ORDER"

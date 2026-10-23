@@ -7,6 +7,10 @@ export interface OrderActionTarget {
 }
 
 export type OpenIntakeAction = (target?: OrderActionTarget | null) => void;
+export type ProductionMode = 'progress' | 'station';
+export type OpenProductionAction = (target?: OrderActionTarget | null, mode?: ProductionMode) => void;
+export interface OrderChangeTarget extends OrderActionTarget { motherOrderCode: string }
+export type OpenOrderChangeAction = (target: OrderChangeTarget) => void;
 
 export function intakeDraftKey(target: OrderActionTarget | null): string {
   return target ? `intake:${target.objectType ?? 'AUTO'}:${target.code}` : 'intake:new';

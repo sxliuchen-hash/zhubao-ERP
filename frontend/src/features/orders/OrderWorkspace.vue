@@ -14,7 +14,7 @@ import type { TabKey } from '../workspace/workspaceNavigation';
 import { workspaceTabs } from '../workspace/workspaceNavigation';
 import OrderList from './OrderList.vue';
 import OrderDetail from './OrderDetail.vue';
-import type { OpenIntakeAction } from './orderActions';
+import type { OpenIntakeAction, OpenOrderChangeAction, OpenProductionAction, ProductionMode } from './orderActions';
 import { orderFacetLabel } from './orderWorkspaceLabels';
 
 const workspace = useWorkspaceContext();
@@ -37,6 +37,11 @@ const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null)
 const tabs = inject<Ref<TabKey[]>>('zhubao-visible-tabs', ref([]));
 const openTab = inject<(tab: TabKey) => void>('zhubao-open-tab', () => {});
 const openIntake = inject<OpenIntakeAction | null>('zhubao-open-intake', null);
+const openProduction = inject<OpenProductionAction | null>('zhubao-open-production', null);
+const openOrderChange = inject<OpenOrderChangeAction | null>('zhubao-open-order-change', null);
+const canWork = computed(() => Boolean(identity.value && ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.value.objectType)
+  && tabs.value.some(tab => ['production', 'progress', 'mobile'].includes(tab))
+  && (!session.value?.effectivePermissions || session.value.effectivePermissions.includes('BUSINESS_PRODUCTION_REPORT'))));
 const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
 const canCreate = computed(() => openIntake && tabs.value.includes('inbound') && session.value?.effectivePermissions?.includes('BUSINESS_INBOUND_CONFIRM'));
 const trace = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
@@ -137,6 +142,15 @@ function go(tab: TabKey, intent: TraceTarget['intent'], permission: string, acti
   trace.value = { objectType: identity.value.objectType, code: identity.value.code, intent, token: (trace.value?.token ?? 0) + 1 };
   openTab(tab);
 }
+function work(mode: ProductionMode) {
+  if (!identity.value || !canWork.value) return;
+  if (openProduction) openProduction({ objectType: identity.value.objectType, code: identity.value.code }, mode);
+  else go('production', 'PRODUCTION', 'BUSINESS_PRODUCTION_REPORT', 'REPORT_PROCESS');
+}
+function changeOrder() {
+  if (!identity.value?.motherOrderCode || !tabs.value.includes('progress')) return;
+  openOrderChange?.({ objectType: identity.value.objectType, code: identity.value.code, motherOrderCode: identity.value.motherOrderCode });
+}
 
 void load().then(async () => {
   if (!disposed && saved) { await nextTick(); window.scrollTo(0, saved.scrollTop); }
@@ -192,7 +206,9 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
         </OrderDetail>
         <div class="order-legacy-actions" aria-label="原业务办理入口">
           <button v-if="identity.objectType === 'MOTHER_ORDER' && canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')" class="secondary-button" type="button" @click="go('inbound', 'INTAKE', 'BUSINESS_INBOUND_CONFIRM')">收货与拆单资料</button>
-          <button v-if="canUse('production', 'BUSINESS_PRODUCTION_REPORT', 'REPORT_PROCESS')" class="secondary-button" type="button" @click="go('production', 'PRODUCTION', 'BUSINESS_PRODUCTION_REPORT', 'REPORT_PROCESS')">打开岗位交工</button>
+          <button v-if="openProduction && canWork" class="secondary-button" type="button" @click="work('progress')">更新工序进度</button>
+          <button v-if="canWork && scan.context.actions.some(action => action.code === 'REPORT_PROCESS' && action.allowed)" class="secondary-button" type="button" @click="work('station')">打开岗位交工</button>
+          <button v-if="openOrderChange && identity.motherOrderCode && tabs.includes('progress') && ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.objectType)" class="secondary-button" type="button" @click="changeOrder">改单办理</button>
           <button v-if="canUse('quality', 'BUSINESS_QUALITY_FREEZE', 'SUBMIT_QUALITY')" class="secondary-button" type="button" @click="go('quality', 'QUALITY', 'BUSINESS_QUALITY_FREEZE', 'SUBMIT_QUALITY')">打开逐条质检</button>
         </div>
       </template>

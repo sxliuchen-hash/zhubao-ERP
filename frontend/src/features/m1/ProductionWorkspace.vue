@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, inject, onMounted, ref } from 'vue';
+import type { OpenProductionAction } from '../orders/orderActions';
+import { useTraceTarget } from '../scan/useTraceTarget';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
@@ -24,6 +26,18 @@ const emptyProduction = (): ProductionWorkspaceModel => ({
 });
 
 const workspace = ref<ProductionWorkspaceModel>(emptyProduction());
+const openProduction = inject<OpenProductionAction | null>('zhubao-open-production', null);
+const manualOpen = ref(!openProduction);
+const manualCreated = ref(!openProduction);
+function openManual() {
+  if (openProduction) { openProduction(null, 'station'); return; }
+  manualCreated.value = true;
+  manualOpen.value = !manualOpen.value;
+}
+useTraceTarget(['PRODUCTION'], target => {
+  if (openProduction) openProduction({ objectType: target.objectType, code: target.code }, 'station');
+  else { manualCreated.value = true; manualOpen.value = true; }
+});
 const loadError = ref('');
 const accessDenied = ref(false);
 const loading = ref(false);
@@ -193,7 +207,10 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
 <template>
   <div class="production-desk page-stack" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
+    <button class="secondary-button" type="button" @click="openManual">扫码或手输工序单据</button>
     <ProductionPanel
+      v-if="manualCreated"
+      v-show="manualOpen"
       title="工序交付"
       intro="扫子单或不拆母单贴纸。过程说明和正式交付分开。超时用原确认回放，不会另开一次交付。"
     />
@@ -327,11 +344,12 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
             <dt>工资口径</dt>
             <dd>计件试算，单价按报工快照</dd>
           </dl>
-          <div class="mini-progress" aria-label="工单进度">
+          <div class="mini-progress" aria-label="数量完成参考">
             <span><b :style="{ width: `${activeWorkOrder.progress}%` }" /></span>
             <em>{{ activeWorkOrder.progress }}%</em>
           </div>
-          <p class="operation-feedback">工序交付使用上方现场面板，按单据数量和重量提交，并带回放编号。</p>
+          <p class="operation-feedback">以上为数量完成参考，不是本工序五档进度。工序作业按单据数量和重量提交，进度与交工分别办理。</p>
+          <button v-if="openProduction" class="primary-button" type="button" @click="openProduction({ objectType: null, code: activeWorkOrder.code }, 'progress')">办理本单工序</button>
         </section>
 
         <section class="handoff-focus-panel">

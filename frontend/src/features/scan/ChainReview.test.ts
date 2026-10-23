@@ -47,6 +47,25 @@ describe('追溯回看', () => {
     vi.mocked(queryScanContext).mockReset();
   });
 
+  it('正式动作使用精确目标容器，成功通知只刷新本单的只读详情', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(chainContext({ code: 'WO-REAL' }));
+    const refresh = ref(0);
+    const target = ref<TraceTarget | null>({ objectType: 'WORK_ORDER', code: 'WO-REAL', intent: 'LOOKUP', token: 1 });
+    const openProduction = vi.fn();
+    const openTab = vi.fn();
+    const wrapper = mount(ChainReview, { global: { provide: { 'zhubao-trace-target': target, 'zhubao-order-refresh': refresh, 'zhubao-open-production': openProduction, 'zhubao-open-tab': openTab } } });
+    await flushPromises();
+    await wrapper.get('[aria-label="去报工"]').trigger('click');
+    expect(openProduction).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-REAL' }, 'station');
+    expect(openTab).not.toHaveBeenCalled();
+    refresh.value += 1;
+    await flushPromises();
+    expect(queryScanContext).toHaveBeenLastCalledWith({ content: 'WO-REAL', objectType: 'WORK_ORDER', intent: 'LOOKUP' });
+    expect(openProduction).toHaveBeenCalledOnce();
+    expect(target.value?.intent).toBe('LOOKUP');
+    wrapper.unmount();
+  });
+
   it('按打开的单号回看链路，空事实不编造，跳转使用规范身份', async () => {
     const target = ref<TraceTarget | null>({ objectType: null, code: 'ZD-1', intent: 'LOOKUP', token: 1 });
     const opened: string[] = [];
