@@ -1,9 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import ProcessProgressPanel from './ProcessProgressPanel.vue';
-import { apiGet, apiPost } from '../../services/apiClient';
+import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
 import {
   fetchProcessProgress,
+  fetchProcessProgressHistory,
   openProcessProgress,
   submitProcessProgress,
   type ProcessProgressTarget,
@@ -11,7 +13,7 @@ import {
 
 const scanCamera = vi.hoisted(() => vi.fn());
 
-vi.mock('../../services/apiClient', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }));
+vi.mock('../../services/apiClient', async () => ({ ...await vi.importActual<typeof import('../../services/apiClient')>('../../services/apiClient'), apiGet: vi.fn(), apiPost: vi.fn() }));
 vi.mock('../../services/evidenceApi', () => ({
   fetchEvidenceBoard: vi.fn().mockResolvedValue({ links: [], historical: [] }),
   uploadEvidenceFile: vi.fn(),
@@ -58,6 +60,8 @@ function located(code: string, version = 4, percent = 60): ProcessProgressTarget
 describe('ProcessProgressPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(apiGet).mockResolvedValue([]);
+    vi.mocked(fetchProcessProgressHistory).mockResolvedValue([]);
     vi.mocked(fetchProcessProgress).mockResolvedValue([{
       orderCode: 'ZD-1',
       motherOrderCode: 'MD-SPLIT',
@@ -142,6 +146,7 @@ describe('ProcessProgressPanel', () => {
     await wrapper.get('[aria-label="进度单号"]').setValue('MD-CHANGE-1');
     await wrapper.get('button[aria-label="定位"]').trigger('click');
     await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '打开改单办理')!.trigger('click');
     await wrapper.get('[aria-label="改单新要求"]').setValue('改为外圈刻字');
     await wrapper.get('[aria-label="改单新期限"]').setValue('2026-11-01');
     const save = () => wrapper.findAll('button').find((button) => button.text() === '保存改单申请')!;
@@ -185,11 +190,12 @@ describe('ProcessProgressPanel', () => {
     vi.mocked(openProcessProgress).mockResolvedValue(located('MD-CHANGE-1', 2, 30));
     vi.mocked(apiGet).mockResolvedValue([row]);
     vi.mocked(apiPost).mockImplementation(async (path) => ({ ...row, status: String(path).includes('applications') ? 'APPLIED' : 'FINANCE_CONFIRMED' }));
-    const wrapper = mount(ProcessProgressPanel);
+    const wrapper = mount(ProcessProgressPanel, { global: { provide: { 'zhubao-auth-session': ref({ effectivePermissions: ['FINANCE_BILLING_POST'] }) } } });
     await flushPromises();
     await wrapper.get('[aria-label="进度单号"]').setValue('MD-CHANGE-1');
     await wrapper.get('button[aria-label="定位"]').trigger('click');
     await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '打开改单办理')!.trigger('click');
     await wrapper.findAll('button').find((button) => button.text() === '刷新改单')!.trigger('click');
     await flushPromises();
     await wrapper.findAll('button').find((button) => button.text().includes('CHG-1'))!.trigger('click');
@@ -212,10 +218,98 @@ describe('ProcessProgressPanel', () => {
       expect.objectContaining({ note: '价格不对' }),
     );
 
+    vi.mocked(apiGet).mockResolvedValue([{ ...row, id: 'CHG-2', status: 'FINANCE_CONFIRMED' }]);
+    await wrapper.findAll('button').find(button => button.text() === '刷新改单')!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text().includes('CHG-2'))!.trigger('click');
     await wrapper.findAll('button').find((button) => button.text() === '生效改单')!.trigger('click');
     await flushPromises();
     const applyCall = vi.mocked(apiPost).mock.calls.find((call) => String(call[0]).includes('/applications'));
     expect(applyCall?.[1]).toEqual(expect.objectContaining({ expectedVersion: 0 }));
+    wrapper.unmount();
+  });
+
+  it('A 单迟到响应不能覆盖 B 单，改号后旧提交目标立即失效', async () => {
+    let finish!: (value: ProcessProgressTarget) => void;
+    vi.mocked(openProcessProgress).mockImplementation(code => code === 'A' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(located('B')));
+    const wrapper = mount(ProcessProgressPanel);
+    await wrapper.get('[aria-label="进度单号"]').setValue('A');
+    await wrapper.get('[aria-label="定位"]').trigger('click');
+    await wrapper.get('[aria-label="进度单号"]').setValue('B');
+    await wrapper.get('[aria-label="定位"]').trigger('click');
+    await flushPromises();
+    finish(located('A'));
+    await flushPromises();
+    expect(wrapper.get('[aria-label="保存工序进度"]').text()).toContain('B ·');
+    expect(wrapper.get('[aria-label="保存工序进度"]').text()).not.toContain('A ·');
+    await wrapper.get('[aria-label="进度单号"]').setValue('C');
+    expect(wrapper.find('[aria-label="保存工序进度"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('提交中只发一次，100% 保存后保留回执，刷新失败不允许再交一遍', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof submitProcessProgress>>) => void;
+    vi.mocked(submitProcessProgress).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const wrapper = mount(ProcessProgressPanel, { props: { initialCode: 'ZD-1' } });
+    await flushPromises();
+    await wrapper.get('[aria-label="工序进度"]').setValue('100');
+    await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
+    await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
+    expect(submitProcessProgress).toHaveBeenCalledOnce();
+    vi.mocked(fetchProcessProgress).mockRejectedValueOnce(new Error('列表断网'));
+    finish({ orderCode: 'ZD-1', processName: '雕刻', percent: 100, version: 5, note: '', operator: '雕刻工', updatedAt: '' });
+    await flushPromises();
+    expect(wrapper.text()).toContain('已记下 100%');
+    expect(wrapper.text()).toContain('仍需正式交工');
+    expect(wrapper.text()).toContain('列表断网');
+    expect(wrapper.text()).toContain('进度版本 5');
+    await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
+    expect(submitProcessProgress).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
+  it('结果未知时保留原内容、版本和请求，明确版本冲突不自动重交', async () => {
+    vi.mocked(submitProcessProgress).mockRejectedValueOnce(new Error('网络超时')).mockRejectedValueOnce(new ApiRequestError('版本已变，请重新定位', 409, 40901));
+    const wrapper = mount(ProcessProgressPanel, { props: { initialCode: 'ZD-1' } });
+    await flushPromises();
+    await wrapper.get('[aria-label="进度说明"]').setValue('原说明');
+    await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
+    await flushPromises();
+    expect(wrapper.text()).toContain('原请求结果待核对');
+    const first = vi.mocked(submitProcessProgress).mock.calls[0][0];
+    await wrapper.get('[aria-label="进度说明"]').setValue('程序改写的值');
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(submitProcessProgress).mock.calls[1][0]).toEqual(first);
+    expect(wrapper.text()).toContain('版本已变');
+    expect(wrapper.text()).not.toContain('原请求结果待核对');
+    expect(submitProcessProgress).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+
+  it('嵌入时只查询精确目标，不加载列表或重复扫码，不把轮次解析成原单', async () => {
+    vi.mocked(openProcessProgress).mockResolvedValue(located('ZD-OLD'));
+    const wrapper = mount(ProcessProgressPanel, { props: { embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'FG-1' } } });
+    await flushPromises();
+    expect(openProcessProgress).toHaveBeenCalledWith('FG-1');
+    expect(fetchProcessProgress).not.toHaveBeenCalled();
+    expect(wrapper.find('[aria-label="进度单号"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('进度目标与当前单据或轮次不一致');
+    expect(wrapper.find('[aria-label="保存工序进度"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('进度回退需要原因，普通岗位的独立改单中不展示财务确认字段', async () => {
+    const wrapper = mount(ProcessProgressPanel, { props: { initialCode: 'ZD-1' } });
+    await flushPromises();
+    await wrapper.get('[aria-label="工序进度"]').setValue('30');
+    await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
+    expect(submitProcessProgress).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('进度回退必须填写原因');
+    expect(wrapper.find('[aria-label="改单新要求"]').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '打开改单办理')!.trigger('click');
+    expect(wrapper.find('[aria-label="改单新要求"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="改单客户单价"]').exists()).toBe(false);
     wrapper.unmount();
   });
 });
