@@ -99,6 +99,7 @@ provide('zhubao-open-quality', (target?: OrderActionTarget | null) => { if (canQ
 provide('zhubao-open-shipping', (target?: ShippingActionTarget | null) => { if (canShipping.value) orderActionHost.value?.openShipping(target ?? null); });
 provide('zhubao-open-aftercare', (row: InventoryBalance) => { if (canAftercare.value) orderActionHost.value?.openAftercare(row); });
 provide('zhubao-open-order-change', (target: OrderChangeTarget) => { if (canChange.value) orderActionHost.value?.openOrderChange(target); });
+provide('zhubao-open-label-target', (target?: OrderActionTarget | null) => { if (canLabel.value) orderActionHost.value?.openLabel(target ?? null); });
 provide('zhubao-open-orders', openOrders);
 provide('zhubao-open-approval', (code: string) => {
   if (!visibleTabs.value.some(tab => tab.key === 'approvals')) return;
@@ -106,9 +107,7 @@ provide('zhubao-open-approval', (code: string) => {
   activateTab('approvals');
 });
 provide('zhubao-open-label', (code: string) => {
-  if (!code.trim() || !visibleTabs.value.some((tab) => tab.key === 'label')) return;
-  labelTarget.value = { objectType: 'MOTHER_ORDER', code: code.trim(), intent: 'LOOKUP', token: ++traceToken };
-  activateTab('label');
+  if (code.trim() && canLabel.value) orderActionHost.value?.openLabel({ objectType: 'MOTHER_ORDER', code: code.trim() });
 });
 provide('zhubao-open-tab', (tab: TabKey) => {
   activateTab(tab);
@@ -160,6 +159,8 @@ const canProduction = computed(() => visibleTabs.value.some(tab => authorizedMen
     : ['ADMIN', 'GENERAL_MANAGER', 'OPERATOR', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? '')
       || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('REPORT') === true)));
 const canChange = computed(() => authorizedMenuCodes.value?.has('progress') === true);
+const canLabel = computed(() => authorizedMenuCodes.value?.has('label') === true
+  && (!authSession.value?.effectivePermissions || authSession.value.effectivePermissions.includes('LABEL_PRINT')));
 const canAftercare = computed(() => authorizedMenuCodes.value?.has('inventory') === true
   && (authSession.value?.effectivePermissions ? ['BUSINESS_CUSTOMER_RETURN', 'BUSINESS_AFTER_SALES_REVIEW'].some(permission => authSession.value?.effectivePermissions?.includes(permission))
     : ['ADMIN', 'GENERAL_MANAGER', 'WAREHOUSE_KEEPER', 'SALES', 'QUALITY_INSPECTOR', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? '')
@@ -466,5 +467,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
-<OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
+<OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" :can-label="canLabel" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
 </template>

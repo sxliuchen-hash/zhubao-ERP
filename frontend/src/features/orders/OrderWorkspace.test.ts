@@ -48,6 +48,17 @@ beforeEach(() => {
 });
 
 describe('统一订单列表与详情', () => {
+  it('标签入口同时核对菜单与有效权限，子单保持精确类型', async () => {
+    const auth = ref({ effectivePermissions: [] as string[] });
+    const open = vi.fn();
+    const wrapper = mountWorkspace({ 'zhubao-auth-session': auth, 'zhubao-visible-tabs': ref(['label']), 'zhubao-open-label-target': open });
+    await flushPromises(); await select(wrapper, 'WO-1');
+    expect(wrapper.findAll('button').some(button => button.text() === '预览本单标签')).toBe(false);
+    auth.value.effectivePermissions.push('LABEL_PRINT'); await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '预览本单标签')!.trigger('click');
+    expect(open).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1' });
+    wrapper.unmount();
+  });
   it('发货核对入口按真实库存菜单及有效权限开放，并传递精确目标', async () => {
     const auth = ref({ effectivePermissions: [] as string[] });
     const open = vi.fn();

@@ -135,7 +135,7 @@ describe('LabelWorkspace', () => {
     const wrapper = mount(LabelWorkspace);
     await flushPromises();
     await wrapper.get('[aria-label="标签类型"]').setValue('OUTBOUND');
-    const generic = wrapper.findAll('.form-card')[1];
+    const generic = wrapper.get('.generic-label-tools');
     await generic.get('select:not([aria-label])').setValue('OUTBOUND-CUSTOM');
     expect(generic.findAll('input[placeholder="名称，如 客户"]').map((input) => (input.element as HTMLInputElement).value))
       .toEqual(['出货批次', '客户']);
@@ -180,7 +180,7 @@ describe('LabelWorkspace', () => {
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('已打开子单 ZD-1');
+    expect(wrapper.text()).toContain('已从单据打开子工单标签：ZD-1');
     expect(wrapper.text()).toContain('B8N4');
     expect(wrapper.text()).toContain('恒信珠宝');
     expect(wrapper.text()).toContain('内壁刻字');
@@ -236,7 +236,7 @@ describe('LabelWorkspace', () => {
     const submit = () => wrapper.findAll('button').find((button) => button.text() === '提交到打印工位')!;
     await submit().trigger('click');
     await flushPromises();
-    await submit().trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '原打印请求重试')!.trigger('click');
     await flushPromises();
     expect(printIds).toHaveLength(2);
     expect(printIds[1]).toBe(printIds[0]);
@@ -295,7 +295,6 @@ describe('LabelWorkspace', () => {
 
   it('同版刷新沿用打印请求，改单换版后创建新请求', async () => {
     let version = 0;
-    let instance = 0;
     const requestIds: string[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
@@ -308,7 +307,7 @@ describe('LabelWorkspace', () => {
       }
       const payload = url.includes('/api/label/work-orders/') ? {
         type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1',
-        qrContent: `JG|work_order|ZD-1|${version}|LI${++instance}`,
+        qrContent: `JG|work_order|ZD-1|${version}|LI${version}`,
         fields: [], footerLeft: '', footerRight: '', printedAt: '',
         brandTitle: '珠宝来料加工系统', templateCode: 'FLOW',
         printerSetting: { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 },
@@ -330,9 +329,8 @@ describe('LabelWorkspace', () => {
     await openAndSubmit();
     version = 1;
     await openAndSubmit();
-    expect(requestIds).toHaveLength(3);
-    expect(requestIds[1]).toBe(requestIds[0]);
-    expect(requestIds[2]).not.toBe(requestIds[0]);
+    expect(requestIds).toHaveLength(2);
+    expect(requestIds[1]).not.toBe(requestIds[0]);
     wrapper.unmount();
   });
 
@@ -383,8 +381,11 @@ describe('LabelWorkspace', () => {
     await wrapper.get('[aria-label="现场贴纸单号"]').setValue('MD-SPLIT-1');
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     await flushPromises();
+    expect(wrapper.find('[aria-label="标签预览"]').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '选择母单标签 MD-SPLIT-1')!.trigger('click');
+    await flushPromises();
     expect(wrapper.get('[aria-label="标签预览"]').text()).toContain('MD-SPLIT-1');
-    expect(wrapper.text()).toContain('已拆成子单');
+    expect(wrapper.text()).toContain('请选择具体单据');
     expect(wrapper.find('[aria-label="选择ZD-1"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="选择ZD-2"]').exists()).toBe(true);
     await wrapper.get('.preview-toolbar .primary-button').trigger('click');

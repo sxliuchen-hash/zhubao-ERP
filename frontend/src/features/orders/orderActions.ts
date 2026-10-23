@@ -11,6 +11,7 @@ export type OpenIntakeAction = (target?: OrderActionTarget | null) => void;
 export type ProductionMode = 'progress' | 'station';
 export type OpenProductionAction = (target?: OrderActionTarget | null, mode?: ProductionMode) => void;
 export type OpenQualityAction = (target?: OrderActionTarget | null) => void;
+export type OpenLabelAction = (target?: OrderActionTarget | null) => void;
 export interface ShippingActionTarget extends OrderActionTarget { balance?: ScanBalanceCandidate }
 export type OpenShippingAction = (target?: ShippingActionTarget | null) => void;
 export type OpenAftercareAction = (row: InventoryBalance) => void;

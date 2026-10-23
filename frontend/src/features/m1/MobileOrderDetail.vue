@@ -2,6 +2,9 @@
 import { computed, inject, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import ScanInput from '../scan/ScanInput.vue';
 import OrderDetail from '../orders/OrderDetail.vue';
+import type { OpenLabelAction } from '../orders/orderActions';
+import type { AuthSession } from '../../services/authApi';
+import type { TabKey } from '../workspace/workspaceNavigation';
 import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
@@ -23,6 +26,11 @@ const qualityProgressOpen = ref(false);
 const scan = reactive(useScanContext());
 const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
 const identity = computed(() => canonicalTarget(scan.context));
+const openLabel = inject<OpenLabelAction | null>('zhubao-open-label-target', null);
+const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const tabs = inject<Ref<TabKey[]>>('zhubao-visible-tabs', ref([]));
+const canLabel = computed(() => openLabel && tabs.value.includes('label') && isWorkTarget.value
+  && (!session.value?.effectivePermissions || session.value.effectivePermissions.includes('LABEL_PRINT')));
 const qualityProgressTarget = computed(() => progressTargetFromScan(scan.context));
 const hasDuty = (code: string) => props.role !== 'BUSINESS_MANAGER' || (props.coverDuties ?? []).includes(code);
 const canOpen = (action: MobileAction) => !props.allowedActions || props.allowedActions.includes(action);
@@ -123,6 +131,7 @@ function rememberProgress(record: ScanProgressRecord) {
       </div>
       <OrderDetail :context="scan.context" :show-customer="isReceiving" :show-weight="isReceiving" :show-station="isProduction" />
       <div class="mobile-order-actions" aria-label="本岗操作">
+        <button v-if="canLabel" class="secondary-button" type="button" @click="openLabel?.(identity)">预览本单标签</button>
         <button v-if="isReceiving" class="primary-button" type="button" @click="open('intake')">
           {{ identity.objectType === 'EXPRESS_NO' ? '创建收货订单' : '查看收货与订单资料' }}
         </button>

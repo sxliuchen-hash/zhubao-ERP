@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
 import {
   fetchLabelTemplates,
   fetchMotherLabel,
-  fetchWorkOrderLabel,
   generateLabel,
   labelTypeOptions,
   motherFieldSourceOptions,
-  reprintLabel,
   saveLabelTemplate,
   type LabelField,
   type LabelLayout,
@@ -16,15 +14,10 @@ import {
   type LabelTemplateField,
   type LabelType,
 } from '../../services/labelApi';
-import OrderContextCard from '../scan/OrderContextCard.vue';
-import ScanInput from '../scan/ScanInput.vue';
-import type { ScanDraft } from '../scan/scanDraft';
-import type { TraceTarget } from '../scan/traceTarget';
-import { canonicalTarget, useScanContext } from '../scan/useScanContext';
-import type { ScanRelatedTarget } from '../../services/scanContextApi';
+import OrderLabelPanel from '../labels/OrderLabelPanel.vue';
+import type { PrintQueueView } from '../../services/printRoutingTypes';
 import { customerInitials } from './customerInitials';
-import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
-import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
+import { buildLabelMarkup, labelFaceCss, labelPreviewScale } from './labelPrint';
 import { apiGet, apiPost } from '../../services/apiClient';
 import type { AuthSession } from '../../services/authApi';
 
@@ -38,12 +31,6 @@ const templatesError = ref('');
 const feedback = ref('');
 const errorMessage = ref('');
 const submitting = ref(false);
-const stickerQuery = ref('');
-const stickerHint = ref('');
-const labelScan = reactive(useScanContext());
-const reprintReason = ref('');
-const loadedSticker = ref<{ type: LabelType; code: string } | null>(null);
-
 // 模板列表（连后端后加载）
 const templates = ref<LabelTemplate[]>([]);
 const templateKeyword = ref('');
@@ -73,18 +60,6 @@ const form = ref<{
 // 按母单号便捷生成
 const motherOrderCode = ref('');
 const motherTemplateCode = ref('');
-
-const labelMarkup = computed(() => preview.value ? buildLabelMarkup(preview.value) : '');
-const sheetStyle = computed(() => ({
-  width: `calc(${preview.value?.printerSetting.widthMm ?? 40}mm * var(--label-scale, ${labelPreviewScale}))`,
-  height: `calc(${preview.value?.printerSetting.heightMm ?? 30}mm * var(--label-scale, ${labelPreviewScale}))`,
-}));
-const labelScaleStyle = computed(() => ({
-  transform: `scale(var(--label-scale, ${labelPreviewScale}))`,
-  transformOrigin: 'top left',
-  width: `${(preview.value?.printerSetting.widthMm ?? 40)}mm`,
-  height: `${(preview.value?.printerSetting.heightMm ?? 30)}mm`,
-}));
 
 // 当前类型可选模板
 const templatesForType = computed(() =>
@@ -130,7 +105,6 @@ async function loadTemplates() {
 
 async function submitGenerate() {
   preview.value = null;
-  loadedSticker.value = null;
   feedback.value = '';
   errorMessage.value = '';
   if (!form.value.primaryCode.trim()) {
@@ -158,130 +132,8 @@ async function submitGenerate() {
   }
 }
 
-function clearStickerTarget() {
-  const had = labelScan.context !== null || preview.value !== null || loadedSticker.value !== null;
-  labelScan.invalidate();
-  preview.value = null;
-  loadedSticker.value = null;
-  submitting.value = false;
-  if (had) stickerHint.value = '单号已变化，请重新查询';
-}
-
-watch(stickerQuery, () => clearStickerTarget(), { flush: 'sync' });
-
-const incomingLabel = inject<Ref<TraceTarget | null>>('zhubao-label-target', ref(null));
-watch(incomingLabel, (target) => {
-  if (!target?.code) return;
-  stickerQuery.value = target.code;
-  void openFieldSticker({ content: target.code, ...(target.objectType ? { objectType: target.objectType } : {}) });
-}, { immediate: true });
-
-async function openFieldSticker(draft: ScanDraft) {
-  feedback.value = '';
-  errorMessage.value = '';
-  stickerHint.value = '';
-  const raw = draft.content.trim();
-  if (!raw) {
-    labelScan.invalidate();
-    preview.value = null;
-    loadedSticker.value = null;
-    errorMessage.value = '请填写母单号、子单号或贴纸二维码';
-    return;
-  }
-  const response = await labelScan.lookup({
-    content: raw,
-    objectType: draft.objectType,
-    intent: 'LOOKUP',
-  });
-  if (!response) {
-    preview.value = null;
-    loadedSticker.value = null;
-    if (labelScan.error) errorMessage.value = labelScan.error;
-    return;
-  }
-  const seen = labelScan.revision;
-  const knownMother = response.target.objectType === 'MOTHER_ORDER' && response.target.code
-    ? { objectType: 'MOTHER_ORDER' as const, code: response.target.code }
-    : null;
-  if (response.requiresSelection && !knownMother) {
-    preview.value = null;
-    loadedSticker.value = null;
-    stickerHint.value = '请选择母单或子单';
-    return;
-  }
-  const target = canonicalTarget(response) ?? knownMother;
-  if (!target) {
-    errorMessage.value = '没有定位到单据';
-    return;
-  }
-  if (target.objectType !== 'MOTHER_ORDER' && target.objectType !== 'WORK_ORDER') {
-    errorMessage.value = '这不是母单或子单贴纸';
-    return;
-  }
-  const kind = target.objectType === 'WORK_ORDER' ? 'WORK_ORDER' : 'MOTHER';
-  submitting.value = true;
-  try {
-    const payload = kind === 'WORK_ORDER'
-      ? await fetchWorkOrderLabel(target.code)
-      : await fetchMotherLabel(target.code);
-    if (labelScan.revision !== seen) return;
-    showSticker(payload, kind);
-    if (response.requiresSelection && kind === 'MOTHER') {
-      stickerHint.value = `已打开母单 ${payload.primaryCode}。这张母单已拆成子单，母单标签仍可打印；下方可改选子单贴纸。`;
-    }
-  } catch (error) {
-    if (labelScan.revision !== seen) return;
-    errorMessage.value = error instanceof Error ? error.message : '贴纸生成失败';
-  } finally {
-    if (labelScan.revision === seen) submitting.value = false;
-  }
-}
-
-async function chooseStickerTarget(related: ScanRelatedTarget) {
-  if (!related.code || !related.objectType) return;
-  await openFieldSticker({ content: related.code, objectType: related.objectType });
-}
-
-function showSticker(payload: LabelPayload, kind: 'MOTHER' | 'WORK_ORDER') {
-  preview.value = payload;
-  loadedSticker.value = { type: payload.type, code: payload.primaryCode };
-  const hasCode = payload.fields.some((field) => field.name === '验证码' && field.value.trim() !== '');
-  stickerHint.value = hasCode
-    ? (kind === 'WORK_ORDER' ? `已打开子单 ${payload.primaryCode}` : `已打开母单 ${payload.primaryCode}`)
-    : '收货母单标签可直接打印；用于生产流转前，请在来料页选择不拆或拆成子单，生成验证码。';
-  feedback.value = `已从单据生成贴纸：${payload.primaryCode}`;
-}
-
-async function reprintSticker() {
-  feedback.value = '';
-  errorMessage.value = '';
-  if (!loadedSticker.value) {
-    errorMessage.value = '请先按单号打开现场贴纸';
-    return;
-  }
-  if (!reprintReason.value.trim()) {
-    errorMessage.value = '补打必须填写原因';
-    return;
-  }
-  submitting.value = true;
-  try {
-    const payload = await reprintLabel({
-      type: loadedSticker.value.type,
-      primaryCode: loadedSticker.value.code,
-      reason: reprintReason.value.trim(),
-    });
-    preview.value = payload;
-    feedback.value = `已记录补打：${payload.primaryCode}`;
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '补打失败';
-  } finally {
-    submitting.value = false;
-  }
-}
-
 async function loadMotherLabel() {
   preview.value = null;
-  loadedSticker.value = null;
   feedback.value = '';
   errorMessage.value = '';
   if (!motherOrderCode.value.trim()) {
@@ -300,16 +152,6 @@ async function loadMotherLabel() {
   }
 }
 
-function printLabel() {
-  if (preview.value) openLabelPrint(preview.value);
-}
-
-interface PrintQueueView { stationId: string; queueId: string; name: string; labelType: string;
-  widthMm: number; heightMm: number; enabled: boolean; defaultQueue: boolean }
-interface PrintTargetJobView { id: string; targetStationId: string; targetQueueId: string; status: string;
-  failureReason: string; paperCheckResult: string; copies: number; predecessorId: string; retryReason: string }
-interface PrintBatchView { id: string; jobs: PrintTargetJobView[] }
-const printQueues = ref<PrintQueueView[]>([]);
 const allPrintQueues = ref<PrintQueueView[]>([]);
 const printStations = ref<Array<{ stationId: string; name: string; enabled: boolean; remark: string }>>([]);
 const stationForm = ref({ stationId: '', name: '', enabled: true, remark: '' });
@@ -317,26 +159,8 @@ const queueForm = ref({ stationId: '', queueId: '', name: '', labelType: 'ALL', 
   enabled: true, defaultQueue: false });
 const newStationToken = ref('');
 const routeFeedback = ref('');
-const selectedTargets = ref<string[]>([]);
-const copiesPerTarget = ref(1);
-const printBatch = ref<PrintBatchView | null>(null);
-const paperChecks = ref<Record<string, string>>({});
-const rerouteTargets = ref<Record<string, string>>({});
-const rerouteReasons = ref<Record<string, string>>({});
-const rerouteAttempts = ref<Record<string, RequestAttempt>>({});
-const reroutedBatches = ref<PrintBatchView[]>([]);
-const printAttempt = ref<RequestAttempt | null>(null);
-const printSubmitting = ref(false);
-const eligibleQueues = computed(() => printQueues.value.filter(queue => preview.value
-  && (queue.labelType === 'ALL' || queue.labelType === preview.value.type)
-  && queue.widthMm === preview.value.printerSetting.widthMm
-  && queue.heightMm === preview.value.printerSetting.heightMm));
-const chosenTargets = computed(() => eligibleQueues.value.filter(queue => selectedTargets.value.includes(`${queue.stationId}|${queue.queueId}`)));
-const estimatedSheets = computed(() => chosenTargets.value.length * Number(copiesPerTarget.value || 0));
-
 async function loadPrintQueues() {
   try {
-    printQueues.value = await apiGet<PrintQueueView[]>('/api/label/print-queues');
     if (canManageRoutes.value) {
       printStations.value = await apiGet<typeof printStations.value>('/api/label/print-stations');
       allPrintQueues.value = await apiGet<PrintQueueView[]>('/api/label/print-queues/all');
@@ -366,96 +190,6 @@ async function rotateStationToken(id: string) {
     newStationToken.value = result.token;
     routeFeedback.value = `工位 ${id} 凭据已轮换，请更新厂内程序配置`;
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : '凭据轮换失败'; }
-}
-
-function printStatusLabel(status: string) {
-  if (status === 'SPOOLED') return '已送入系统队列';
-  if (status === 'PENDING') return '待工位上线或领取';
-  if (status === 'LEASED') return '已领取';
-  if (status === 'FAILED') return '发送前失败';
-  if (status === 'UNCERTAIN') return '不确定是否出纸';
-  if (status === 'CANCELED') return '已取消';
-  return status;
-}
-
-function printFingerprint() {
-  const current = preview.value;
-  // 同版同模板内容重试复用请求；业务版本或模板内容变化后另建打印任务。
-  const version = current?.qrContent.split('|')[3] ?? '';
-  return JSON.stringify([
-    current?.primaryCode ?? '', current?.templateCode || 'FLOW', version,
-    current?.printerSetting, current?.layout, current?.fields,
-    current?.brandTitle, current?.footerLeft, current?.footerRight,
-    Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(),
-  ]);
-}
-
-async function submitPrintJob() {
-  if (!preview.value || printSubmitting.value) return;
-  if (!chosenTargets.value.length || !Number.isInteger(Number(copiesPerTarget.value))
-      || Number(copiesPerTarget.value) < 1 || Number(copiesPerTarget.value) > 20) {
-    errorMessage.value = '请选择打印目标并填写每目标 1 到 20 份';
-    return;
-  }
-  errorMessage.value = '';
-  printAttempt.value = nextRequestAttempt(printAttempt.value, printFingerprint(), `print-${preview.value.primaryCode}`);
-  printSubmitting.value = true;
-  try {
-    const batch = await apiPost<{ requestId: string; businessCode: string; templateCode: string;
-      copiesPerTarget: number; targets: Array<{ stationId: string; queueId: string }> }, PrintBatchView>(
-      '/api/label/print-batches',
-      {
-        requestId: printAttempt.value.requestId,
-        businessCode: preview.value.primaryCode,
-        templateCode: preview.value.templateCode || 'FLOW',
-        copiesPerTarget: Number(copiesPerTarget.value),
-        targets: chosenTargets.value.map(queue => ({ stationId: queue.stationId, queueId: queue.queueId })),
-      },
-    );
-    printBatch.value = batch;
-    feedback.value = `已提交打印批次 ${batch.id}，共 ${batch.jobs.length} 个目标、预计 ${estimatedSheets.value} 张。送入系统队列不等于已经出纸。`;
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '打印任务提交失败';
-  } finally {
-    printSubmitting.value = false;
-  }
-}
-
-async function refreshPrintJob() {
-  if (!printBatch.value) return;
-  printBatch.value = await apiGet<PrintBatchView>(`/api/label/print-batches/${printBatch.value.id}`);
-  reroutedBatches.value = await Promise.all(reroutedBatches.value.map(batch =>
-    apiGet<PrintBatchView>(`/api/label/print-batches/${batch.id}`)));
-}
-
-async function verifyTargetPaper(jobId: string) {
-  const result = paperChecks.value[jobId]?.trim();
-  if (!result) { errorMessage.value = '请填写该目标的出纸核实结果'; return; }
-  try {
-    await apiPost(`/api/label/print-target-jobs/${jobId}/paper-checks`, { result });
-    await refreshPrintJob();
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '出纸核实失败';
-  }
-}
-async function rerouteTarget(job: PrintTargetJobView) {
-  const selected = rerouteTargets.value[job.id] || '';
-  const queue = eligibleQueues.value.find(item => `${item.stationId}|${item.queueId}` === selected);
-  const reason = rerouteReasons.value[job.id]?.trim();
-  if (!queue || !reason) { errorMessage.value = '改派须选择新目标并填写原因'; return; }
-  const fingerprint = JSON.stringify([job.id, selected, reason]);
-  const attempt = nextRequestAttempt(rerouteAttempts.value[job.id] || null, fingerprint, `reroute-${job.id}`);
-  rerouteAttempts.value[job.id] = attempt;
-  try {
-    const replacement = await apiPost<{ requestId: string; target: { stationId: string; queueId: string }; reason: string }, PrintBatchView>(
-      `/api/label/print-target-jobs/${encodeURIComponent(job.id)}/reroute`,
-      { requestId: attempt.requestId, target: { stationId: queue.stationId, queueId: queue.queueId }, reason },
-    );
-    await refreshPrintJob();
-    reroutedBatches.value = [...reroutedBatches.value.filter(batch => batch.id !== replacement.id), replacement];
-    feedback.value = `原目标已取消，改派批次 ${replacement.id} 已创建。请核对新目标状态。`;
-    errorMessage.value = '';
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : '改派失败'; }
 }
 
 // ---- 模板管理 ----
@@ -698,33 +432,11 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
       </p>
     </section>
 
-    <div class="label-layout">
+    <OrderLabelPanel :external-payload="preview" />
+    <details class="advanced-label-tools">
+      <summary>高级标签工具</summary>
       <section class="label-forms">
-        <div class="form-card">
-          <h3>现场贴纸</h3>
-          <p class="hint">按母单号或子单号打开，字段从单据带出。也可以粘贴贴纸上的二维码内容。</p>
-          <ScanInput
-            v-model="stickerQuery"
-            field-text="单号或二维码"
-            input-aria-label="现场贴纸单号"
-            placeholder="母单号、子单号或 JG|mother|单号"
-            submit-label="打开贴纸"
-            submit-aria-label="打开现场贴纸"
-            photo-aria-label="拍贴纸"
-            :busy="submitting || labelScan.loading"
-            @draft="clearStickerTarget"
-            @recognize="openFieldSticker"
-          />
-          <p v-if="stickerHint" class="hint">{{ stickerHint }}</p>
-          <OrderContextCard :context="labelScan.context" @select="chooseStickerTarget" />
-          <label class="field">
-            <span>补打原因</span>
-            <input v-model="reprintReason" type="text" aria-label="补打原因" placeholder="如 贴纸丢失" />
-          </label>
-          <button type="button" class="table-action" :disabled="submitting" @click="reprintSticker">补打并记录</button>
-        </div>
-
-        <div class="form-card">
+        <div class="form-card generic-label-tools">
           <h3>通用标签生成</h3>
           <p class="hint">选择模板后会带出字段名称与顺序，填写对应值即可生成。</p>
           <label class="field">
@@ -800,77 +512,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
         <p v-if="errorMessage" class="feedback error">{{ errorMessage }}</p>
       </section>
 
-      <section v-if="preview" class="label-preview" aria-label="标签预览">
-        <div class="preview-toolbar">
-          <span>标签预览</span>
-          <div class="toolbar-actions">
-            <span class="printer-hint">
-              {{ preview.printerSetting.widthMm }}×{{ preview.printerSetting.heightMm }}mm · 黑白 ·
-              {{ preview.printerSetting.copies }} 份
-              <template v-if="preview.printerSetting.printerName">· {{ preview.printerSetting.printerName }}</template>
-            </span>
-            <button type="button" class="primary-button" @click="printLabel">浏览器预览打印</button>
-            <button type="button" class="primary-button" :disabled="printSubmitting || !chosenTargets.length" @click="submitPrintJob">提交到打印工位</button>
-          </div>
-        </div>
-
-        <div class="label-print-area">
-          <component :is="'style'">{{ labelFaceCss }}</component>
-          <div class="label-mat">
-            <div class="label-sheet" :style="sheetStyle">
-              <div class="label-scale" :style="labelScaleStyle" v-html="labelMarkup"></div>
-            </div>
-          </div>
-          <p class="qr-content-line">二维码内容：{{ preview.qrContent }}。浏览器预览打印不等于厂内出纸。</p>
-          <div class="print-targets" aria-label="打印目标">
-            <strong>选择工位和打印队列</strong>
-            <p v-if="!eligibleQueues.length">暂无匹配当前标签类型和纸张尺寸的队列；请由管理员配置工位及队列。</p>
-            <label v-for="queue in eligibleQueues" :key="`${queue.stationId}|${queue.queueId}`">
-              <input v-model="selectedTargets" type="checkbox" :value="`${queue.stationId}|${queue.queueId}`" />
-              {{ queue.stationId }} · {{ queue.name }}（{{ queue.queueId }}）
-            </label>
-            <label>每目标份数 <input v-model.number="copiesPerTarget" type="number" min="1" max="20" aria-label="每目标份数" /></label>
-            <p>目标 {{ chosenTargets.length }} 个 × 每目标 {{ copiesPerTarget }} 份 = 预计 {{ estimatedSheets }} 张；每个目标都会独立打印。</p>
-          </div>
-          <div v-if="printBatch" class="print-targets">
-            <button type="button" class="secondary-button" @click="refreshPrintJob">刷新目标状态</button>
-            <div v-for="batch in [printBatch, ...reroutedBatches]" :key="batch.id">
-              <p>批次 {{ batch.id }} · SPOOLED 仅表示送入系统队列</p>
-              <div v-for="job in batch.jobs" :key="job.id">
-                <strong>{{ job.targetStationId }} / {{ job.targetQueueId }}</strong> · {{ job.id }} · {{ printStatusLabel(job.status) }}
-                <span v-if="job.failureReason"> · {{ job.failureReason }}</span>
-                <span v-if="job.paperCheckResult"> · 出纸核实：{{ job.paperCheckResult }}</span>
-                <span v-if="job.predecessorId"> · 来源任务 {{ job.predecessorId }} · {{ job.retryReason }}</span>
-                <label v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)">核纸结果
-                  <select v-model="paperChecks[job.id]" :aria-label="`${job.id}核纸结果`">
-                    <option value="">请选择</option>
-                    <option value="确认未出纸">确认未出纸</option>
-                    <option value="已出纸">已出纸</option>
-                    <option value="仍不确定">仍不确定</option>
-                  </select>
-                </label>
-                <button v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)" type="button"
-                  class="secondary-button" @click="verifyTargetPaper(job.id)">记录核纸</button>
-                <div v-if="job.status === 'PENDING' || (['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status) && job.paperCheckResult === '确认未出纸')">
-                  <label>改派目标
-                    <select v-model="rerouteTargets[job.id]" :aria-label="`${job.id}改派目标`">
-                      <option value="">请选择新工位和队列</option>
-                      <option v-for="queue in eligibleQueues.filter(item => item.stationId !== job.targetStationId || item.queueId !== job.targetQueueId)"
-                        :key="`${queue.stationId}|${queue.queueId}`" :value="`${queue.stationId}|${queue.queueId}`">
-                        {{ queue.stationId }} / {{ queue.queueId }} · {{ queue.name }}
-                      </option>
-                    </select>
-                  </label>
-                  <label>改派原因 <input v-model="rerouteReasons[job.id]" :aria-label="`${job.id}改派原因`" /></label>
-                  <button type="button" class="secondary-button" @click="rerouteTarget(job)">取消原目标并创建关联任务</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section v-else class="label-preview"><p class="hint">请先按单号打开贴纸或生成标签，成功后再预览和打印。</p></section>
-    </div>
+    </details>
 
     <section v-if="canManageRoutes" class="template-manager" aria-label="工位与队列维护">
       <h3>工位与打印队列</h3>

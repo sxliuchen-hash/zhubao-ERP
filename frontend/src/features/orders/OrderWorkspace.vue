@@ -14,7 +14,7 @@ import type { TabKey } from '../workspace/workspaceNavigation';
 import { workspaceTabs } from '../workspace/workspaceNavigation';
 import OrderList from './OrderList.vue';
 import OrderDetail from './OrderDetail.vue';
-import type { OpenIntakeAction, OpenOrderChangeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, ProductionMode } from './orderActions';
+import type { OpenIntakeAction, OpenLabelAction, OpenOrderChangeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, ProductionMode } from './orderActions';
 import { orderFacetLabel } from './orderWorkspaceLabels';
 
 const workspace = useWorkspaceContext();
@@ -41,6 +41,9 @@ const openProduction = inject<OpenProductionAction | null>('zhubao-open-producti
 const openOrderChange = inject<OpenOrderChangeAction | null>('zhubao-open-order-change', null);
 const openQuality = inject<OpenQualityAction | null>('zhubao-open-quality', null);
 const openShipping = inject<OpenShippingAction | null>('zhubao-open-shipping', null);
+const openLabel = inject<OpenLabelAction | null>('zhubao-open-label-target', null);
+const canLabel = computed(() => Boolean(identity.value && ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.value.objectType)
+  && tabs.value.includes('label') && (!session.value?.effectivePermissions || session.value.effectivePermissions.includes('LABEL_PRINT'))));
 const canShip = computed(() => Boolean(identity.value && ['MOTHER_ORDER', 'WORK_ORDER', 'OUTBOUND_ORDER'].includes(identity.value.objectType)
   && tabs.value.some(tab => ['inventory', 'mobile'].includes(tab)) && (!session.value?.effectivePermissions || session.value.effectivePermissions.includes('BUSINESS_OUTBOUND_SHIPMENT'))));
 const canInspect = computed(() => Boolean(identity.value && ['MOTHER_ORDER', 'WORK_ORDER', 'REWORK'].includes(identity.value.objectType)
@@ -166,6 +169,7 @@ function inspect() {
 function ship() {
   if (identity.value && canShip.value) openShipping?.({ objectType: identity.value.objectType, code: identity.value.code });
 }
+function label() { if (identity.value && canLabel.value) openLabel?.({ objectType: identity.value.objectType, code: identity.value.code }); }
 
 void load().then(async () => {
   if (!disposed && saved) { await nextTick(); window.scrollTo(0, saved.scrollTop); }
@@ -226,6 +230,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
           <button v-if="openOrderChange && identity.motherOrderCode && tabs.includes('progress') && ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.objectType)" class="secondary-button" type="button" @click="changeOrder">改单办理</button>
           <button v-if="canInspect" class="secondary-button" type="button" @click="inspect">质检、返工与放行</button>
           <button v-if="openShipping && canShip" class="secondary-button" type="button" @click="ship">核对库存与发货</button>
+          <button v-if="openLabel && canLabel" class="secondary-button" type="button" @click="label">预览本单标签</button>
         </div>
       </template>
     </aside>

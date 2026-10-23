@@ -9,6 +9,10 @@ vi.mock('../intake/IntakePanel.vue', () => ({ default: defineComponent({
   setup() { return { draft: ref('') }; },
   template: '<div><input v-model="draft" aria-label="动作草稿" /></div>',
 }) }));
+vi.mock('../labels/OrderLabelPanel.vue', () => ({ default: defineComponent({
+  name: 'OrderLabelPanel', props: ['initialTarget', 'active'], setup() { return { reason: ref('') }; },
+  template: '<div><input v-model="reason" aria-label="原标签原因" /><span>{{ initialTarget?.code }}</span></div>',
+}) }));
 
 async function opened(wrapper: ReturnType<typeof mount<typeof OrderActionHost>>) {
   await flushPromises();
@@ -23,6 +27,24 @@ function host(allowed = true) {
 function dom() { return new DOMWrapper(document.body); }
 afterEach(() => { mountedHosts.forEach(wrapper => wrapper.unmount()); mountedHosts.length = 0; });
 describe('单内动作容器', () => {
+  it('标签草稿按精确类型单号保留，收起和打开其他单据不销毁原请求，权限撤销收起', async () => {
+    const wrapper = host();
+    wrapper.vm.openLabel({ objectType: 'WORK_ORDER', code: 'WO-A' }); await flushPromises();
+    expect(document.querySelector('[aria-label="原标签原因"]')).toBeNull();
+    await wrapper.setProps({ canLabel: true });
+    wrapper.vm.openLabel({ objectType: 'WORK_ORDER', code: 'WO-A' }); await flushPromises();
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="原标签原因"]')).not.toBeNull());
+    const first = wrapper.getComponent({ name: 'OrderLabelPanel' }).vm.$;
+    await dom().get('[data-action-active="true"] input').setValue('A 原因');
+    await dom().get('.order-action-dialog header button').trigger('click');
+    wrapper.vm.openLabel({ objectType: 'MOTHER_ORDER', code: 'MO-B' }); await flushPromises();
+    wrapper.vm.openLabel({ objectType: 'WORK_ORDER', code: 'WO-A' }); await flushPromises();
+    expect(wrapper.getComponent({ name: 'OrderLabelPanel' }).vm.$).toBe(first);
+    expect(dom().get('[data-action-active="true"] input').element).toHaveProperty('value', 'A 原因');
+    await wrapper.setProps({ canLabel: false });
+    expect(wrapper.emitted('active')?.at(-1)).toEqual([false]);
+    expect(first.isUnmounted).toBe(false);
+  });
   it('原生传送层收起不销毁草稿', async () => {
     const wrapper = host();
     wrapper.vm.openIntake();
