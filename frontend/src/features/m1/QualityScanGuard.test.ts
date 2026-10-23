@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import QualityWorkspace from './QualityWorkspace.vue';
 import { fetchQualityWorkspace } from '../../services/businessWorkspaceApi';
 import { lookupQualityCheck, openQualityRework, submitQualityCheck } from '../../services/qualityCheckApi';
@@ -41,6 +42,20 @@ beforeEach(() => {
 });
 
 describe('质检扫码不串单', () => {
+  it('接入动作容器后先看岗位列表，手输和旧追溯入口保留精确目标', async () => {
+    const open = vi.fn();
+    const target = ref<import('../scan/traceTarget').TraceTarget | null>(null);
+    const wrapper = mount(QualityWorkspace, { global: { provide: { 'zhubao-open-quality': open, 'zhubao-trace-target': target } } });
+    await flushPromises();
+    expect(wrapper.find('[aria-label="质检贴纸"]').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '扫码或手输质检单据')!.trigger('click');
+    expect(open).toHaveBeenLastCalledWith();
+    target.value = { objectType: 'WORK_ORDER', code: 'WO-REAL', intent: 'QUALITY', token: 1 };
+    await flushPromises();
+    expect(open).toHaveBeenLastCalledWith({ objectType: 'WORK_ORDER', code: 'WO-REAL' });
+    expect(wrapper.find('[aria-label="质检贴纸"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
   it('识别 A 后改成 B 会清空结果，晚到的旧响应不能占用按钮或覆盖新单', async () => {
     let resolveA: (value: QualityCheckView) => void = () => {};
     let resolveB: (value: QualityCheckView) => void = () => {};

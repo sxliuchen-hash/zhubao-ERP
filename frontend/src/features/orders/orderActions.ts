@@ -9,6 +9,7 @@ export interface OrderActionTarget {
 export type OpenIntakeAction = (target?: OrderActionTarget | null) => void;
 export type ProductionMode = 'progress' | 'station';
 export type OpenProductionAction = (target?: OrderActionTarget | null, mode?: ProductionMode) => void;
+export type OpenQualityAction = (target?: OrderActionTarget | null) => void;
 export interface OrderChangeTarget extends OrderActionTarget { motherOrderCode: string }
 export type OpenOrderChangeAction = (target: OrderChangeTarget) => void;
 

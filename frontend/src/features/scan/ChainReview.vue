@@ -3,7 +3,7 @@ import { computed, inject, reactive, ref, watch } from 'vue';
 import type { Ref } from 'vue';
 import OrderContextCard from './OrderContextCard.vue';
 import OrderDetail from '../orders/OrderDetail.vue';
-import type { OpenProductionAction } from '../orders/orderActions';
+import type { OpenProductionAction, OpenQualityAction } from '../orders/orderActions';
 import { canonicalTarget, useScanContext } from './useScanContext';
 import { useTraceTarget } from './useTraceTarget';
 import type { TraceTarget } from './traceTarget';
@@ -13,6 +13,7 @@ const scan = reactive(useScanContext());
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 const openTab = inject<(tab: string) => void>('zhubao-open-tab', () => {});
 const openProduction = inject<OpenProductionAction | null>('zhubao-open-production', null);
+const openQuality = inject<OpenQualityAction | null>('zhubao-open-quality', null);
 const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
 
 useTraceTarget(['LOOKUP'], (target) => {
@@ -69,6 +70,7 @@ function jump(intent: ScanIntent, tab: string) {
   const target = identity.value;
   if (!target || scan.context?.requiresSelection || !traceTarget.value) return;
   if (intent === 'PRODUCTION' && openProduction) { openProduction({ objectType: target.objectType, code: target.code }, 'station'); return; }
+  if (intent === 'QUALITY' && openQuality) { openQuality({ objectType: target.objectType, code: target.code }); return; }
   traceTarget.value = {
     objectType: target.objectType,
     code: target.code,

@@ -5,7 +5,7 @@ import type { MobileIntakeResult } from '../../services/mobileIntakeApi';
 import { intakeDraftKey, type OrderActionTarget, type OrderChangeTarget, type ProductionMode } from './orderActions';
 import { openMobileScanTarget } from '../scan/mobileScanBridge';
 
-const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean }>(), { canProduction: false, canChange: false });
+const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean; canQuality?: boolean }>(), { canProduction: false, canChange: false, canQuality: false });
 const emit = defineEmits<{ active: [open: boolean]; saved: [result: MobileIntakeResult]; changed: [] }>();
 function intakeComponent() {
   return defineAsyncComponent({ loader: () => import('./IntakeActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 });
@@ -14,23 +14,27 @@ const IntakeActionPane = shallowRef(intakeComponent());
 function productionComponent() { return defineAsyncComponent({ loader: () => import('./ProductionActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
 function changeComponent() { return defineAsyncComponent({ loader: () => import('./OrderChangePanel.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
 const ProductionActionPane = shallowRef(productionComponent());
+function qualityComponent() { return defineAsyncComponent({ loader: () => import('./QualityActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
+const QualityActionPane = shallowRef(qualityComponent());
 const OrderChangePanel = shallowRef(changeComponent());
 function locatorComponent() { return defineAsyncComponent({ loader: () => import('./OrderActionLocator.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
 const OrderActionLocator = shallowRef(locatorComponent());
-type ActionKind = 'intake' | 'production' | 'change';
+type ActionKind = 'intake' | 'production' | 'change' | 'quality';
 const activeKind = ref<ActionKind>('intake');
 provide('zhubao-retry-workspace', () => {
   if (activeKind.value === 'intake') IntakeActionPane.value = intakeComponent();
-  else if (activeKind.value === 'production' && !target.value?.objectType) OrderActionLocator.value = locatorComponent();
+  else if ((activeKind.value === 'production' || activeKind.value === 'quality') && !target.value?.objectType) OrderActionLocator.value = locatorComponent();
   else if (activeKind.value === 'production') ProductionActionPane.value = productionComponent();
+  else if (activeKind.value === 'quality') QualityActionPane.value = qualityComponent();
   else OrderChangePanel.value = changeComponent();
 });
 const open = ref(false);
 const target = ref<OrderActionTarget | null>(null);
 const draftKey = ref('intake:new');
 const drafts = ref<Array<{ key: string; kind: ActionKind; target: OrderActionTarget | null; motherOrderCode?: string; mode: ProductionMode; entryRevision: number }>>([]);
-const title = computed(() => activeKind.value === 'production' ? '工序作业' : activeKind.value === 'change' ? '单据改单' : '收货办理');
-function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : props.canChange; }
+const title = computed(() => ({ intake: '收货办理', production: '工序作业', change: '单据改单', quality: '质量作业' }[activeKind.value]));
+const needsScanner = computed(() => activeKind.value === 'intake' || (['production', 'quality'].includes(activeKind.value) && !target.value?.objectType));
+function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : kind === 'quality' ? props.canQuality : props.canChange; }
 const panel = ref<HTMLElement | null>(null);
 const closeButton = ref<HTMLButtonElement | null>(null);
 let opener: HTMLElement | null = null;
@@ -45,6 +49,9 @@ function openProduction(input: OrderActionTarget | null = null, mode: Production
 }
 function openOrderChange(input: OrderChangeTarget) {
   if (workTarget(input) && input.motherOrderCode.trim()) openDraft('change', input, 'progress', input.motherOrderCode.trim());
+}
+function openQuality(input: OrderActionTarget | null = null) {
+  if (!input || workTarget(input) || (input.objectType === 'REWORK' && input.code.trim())) openDraft('quality', input);
 }
 function openDraft(kind: ActionKind, input: OrderActionTarget | null, mode: ProductionMode = 'progress', motherOrderCode?: string) {
   if (!allowed(kind)) return;
@@ -78,22 +85,29 @@ function keydown(event: KeyboardEvent) {
   if (event.shiftKey && (document.activeElement === first || !panel.value?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
-watch([() => props.canIntake, () => props.canProduction, () => props.canChange], () => { if (!allowed(activeKind.value) && open.value) void close(); });
+watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality], () => { if (!allowed(activeKind.value) && open.value) void close(); });
 onMounted(() => window.addEventListener('keydown', keydown));
 onBeforeUnmount(() => { window.removeEventListener('keydown', keydown); emit('active', false); });
-defineExpose({ openIntake, openProduction, openOrderChange });
+defineExpose({ openIntake, openProduction, openOrderChange, openQuality });
 </script>
 
 <template>
   <Teleport to="body">
     <div v-show="open" class="order-action-overlay">
       <section ref="panel" class="order-action-dialog" role="dialog" aria-modal="true" :aria-label="title">
-        <header><div><h2>{{ title }}</h2><p>{{ target ? `定位单据 ${target.code}` : activeKind === 'intake' ? '新建收货草稿' : '扫码选择作业单据' }} · 收起后保留本次填写和请求</p></div><div class="order-action-top-actions"><button ref="closeButton" class="secondary-button" type="button" @click="close">收起表单</button><button v-if="activeKind === 'intake' || (activeKind === 'production' && !target?.objectType)" class="secondary-button order-action-scan" aria-label="当前表单扫码" type="button" @click="openMobileScanTarget">扫码</button></div></header>
+        <header>
+          <div><h2>{{ title }}</h2><p>{{ target ? `定位单据 ${target.code}` : activeKind === 'intake' ? '新建收货草稿' : '扫码选择作业单据' }} · 收起后保留本次填写和请求</p></div>
+          <div class="order-action-top-actions">
+            <button ref="closeButton" class="secondary-button" type="button" @click="close">收起表单</button>
+            <button v-if="needsScanner" class="secondary-button order-action-scan" aria-label="当前表单扫码" type="button" @click="openMobileScanTarget">扫码</button>
+          </div>
+        </header>
         <div class="order-action-content">
           <div v-for="draft in drafts" :key="draft.key" v-show="open && allowed(draft.kind) && draft.key === draftKey" :data-action-active="open && allowed(draft.kind) && draft.key === draftKey" :inert="!(open && allowed(draft.kind) && draft.key === draftKey) || undefined">
             <component :is="IntakeActionPane" v-if="draft.kind === 'intake'" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @saved="emit('saved', $event)" @navigate="close" />
             <component :is="ProductionActionPane" v-else-if="draft.kind === 'production' && draft.target?.objectType" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :initial-mode="draft.mode" :entry-revision="draft.entryRevision" @changed="emit('changed')" @selected="openProduction" />
-            <component :is="OrderActionLocator" v-else-if="draft.kind === 'production'" :initial-target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :allowed-types="['MOTHER_ORDER', 'WORK_ORDER']" @selected="value => openProduction(value, draft.mode)" />
+            <component :is="QualityActionPane" v-else-if="draft.kind === 'quality' && draft.target?.objectType" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @changed="emit('changed')" @selected="openQuality" />
+            <component :is="OrderActionLocator" v-else-if="draft.kind === 'production' || draft.kind === 'quality'" :initial-target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :allowed-types="draft.kind === 'quality' ? ['MOTHER_ORDER', 'WORK_ORDER', 'REWORK'] : ['MOTHER_ORDER', 'WORK_ORDER']" @selected="value => draft.kind === 'quality' ? openQuality(value) : openProduction(value, draft.mode)" />
             <component :is="OrderChangePanel" v-else-if="draft.target && draft.motherOrderCode" :target="{ orderCode: draft.target.code, motherOrderCode: draft.motherOrderCode }" @changed="emit('changed')" />
           </div>
         </div>

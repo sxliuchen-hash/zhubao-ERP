@@ -48,6 +48,19 @@ beforeEach(() => {
 });
 
 describe('统一订单列表与详情', () => {
+  it('初检已提交仍可按放行有效权限进入单内质检核对，未授权时不出现入口', async () => {
+    const auth = ref({ effectivePermissions: [] as string[] });
+    const open = vi.fn();
+    const wrapper = mountWorkspace({ 'zhubao-auth-session': auth, 'zhubao-visible-tabs': ref(['quality']), 'zhubao-open-quality': open });
+    await flushPromises();
+    await select(wrapper, 'WO-1');
+    expect(wrapper.findAll('button').some(button => button.text() === '质检、返工与放行')).toBe(false);
+    auth.value.effectivePermissions.push('BUSINESS_QUALITY_RELEASE');
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '质检、返工与放行')!.trigger('click');
+    expect(open).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1' });
+    wrapper.unmount();
+  });
   it('工序动作按有效权限开放，传递规范目标、办理方式与改单母单', async () => {
     const auth = ref({ effectivePermissions: [] as string[] });
     const openProduction = vi.fn();

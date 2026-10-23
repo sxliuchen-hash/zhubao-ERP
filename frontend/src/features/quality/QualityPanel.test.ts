@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import { ApiRequestError } from '../../services/apiClient';
 import QualityPanel from './QualityPanel.vue';
 import { queryScanContext, saveProgressRecord } from '../../services/scanContextApi';
@@ -71,13 +72,13 @@ function fileOf(name: string) {
   return file;
 }
 
-async function openPanel() {
+async function openPanel(view = openView()) {
   vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
     objectType: 'WORK_ORDER',
     code: 'ZD-100',
     customerName: '恒信珠宝',
   }));
-  vi.mocked(lookupQualityCheck).mockResolvedValue(openView());
+  vi.mocked(lookupQualityCheck).mockResolvedValue(view);
   const wrapper = mount(QualityPanel, {
     props: { title: '对照加工要求', intro: '扫贴纸后质检' },
   });
@@ -89,6 +90,7 @@ async function openPanel() {
 
 describe('质检面板', () => {
   beforeEach(() => {
+    vi.mocked(queryScanContext).mockReset();
     vi.mocked(submitQualityCheck).mockReset();
     vi.mocked(lookupQualityCheck).mockReset();
     vi.mocked(openQualityRework).mockReset();
@@ -100,12 +102,76 @@ describe('质检面板', () => {
     vi.mocked(saveProgressRecord).mockReset();
   });
 
+  it('固定轮次与规范身份不一致时同时拒绝质检和过程说明', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100' }));
+    const wrapper = mount(QualityPanel, { props: { title: '质检', intro: '', initialTarget: { objectType: 'WORK_ORDER', code: 'FG-100-R2' }, embedded: true } });
+    await flushPromises();
+    expect(queryScanContext).toHaveBeenCalledWith({ content: 'FG-100-R2', objectType: 'WORK_ORDER', intent: 'QUALITY' });
+    expect(lookupQualityCheck).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('质检目标与当前单据或执行轮次不一致');
+    expect(wrapper.find('[aria-label="质检贴纸"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="过程说明"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('结果未知时锁定原判定并用原请求重试，成功刷新失败保留回执且不能重复质检', async () => {
+    const wrapper = await openPanel();
+    vi.mocked(submitQualityCheck).mockRejectedValueOnce(new ApiRequestError('响应超时', 408, 408));
+    await wrapper.get('[aria-label="不合格 1"]').trigger('click');
+    await wrapper.get('[aria-label="原因 1"]').setValue('原缺陷照片对应的划伤');
+    await wrapper.get('[aria-label="提交质检"]').trigger('click');
+    await flushPromises();
+    const original = vi.mocked(submitQualityCheck).mock.calls[0][0];
+    expect(wrapper.get('fieldset').element).toHaveProperty('disabled', true);
+    expect(wrapper.text()).toContain('原质检请求结果待核对');
+    await wrapper.get('[aria-label="原因 1"]').setValue('后改输入');
+    vi.mocked(submitQualityCheck).mockResolvedValueOnce({ ...openView(true), ledgerCode: 'STK-1' });
+    vi.mocked(lookupQualityCheck).mockRejectedValueOnce(new Error('只读刷新失败'));
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
+    await flushPromises();
+    expect(submitQualityCheck).toHaveBeenLastCalledWith(original);
+    expect(original.lines[0].reason).toBe('原缺陷照片对应的划伤');
+    expect(wrapper.text()).toContain('初检已提交');
+    expect(wrapper.text()).toContain('业务已保存，页面刷新失败');
+    expect(wrapper.find('[aria-label="提交质检"]').exists()).toBe(false);
+    expect(wrapper.emitted('changed')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('复检成功后立即关闭本轮提交，刷新失败也不会自动放行或再次复检', async () => {
+    const wrapper = await openPanel({ ...openView(true), reworkOrderCode: 'FG-ZD-100', reworkReported: true, canRecheck: true, recheckBlock: '' });
+    vi.mocked(submitQualityRecheck).mockResolvedValueOnce({ ...openView(true), outcome: '合格', frozen: false, ledgerCode: '', roundCode: 'QR-ZD-100-2', roundNo: 2, roundType: 'RECHECK', lines: [{ lineNo: 1, clause: '内壁刻字', verdict: '合格', reason: '' }] });
+    vi.mocked(lookupQualityCheck).mockRejectedValueOnce(new Error('刷新失败'));
+    await wrapper.get('[aria-label="复检合格 1"]').trigger('click');
+    await wrapper.get('[aria-label="提交复检"]').trigger('click');
+    await flushPromises();
+    expect(submitQualityRecheck).toHaveBeenCalledOnce();
+    expect(wrapper.text()).toContain('复检已提交 · 合格');
+    expect(wrapper.find('[aria-label="提交复检"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="放行"]').exists()).toBe(false);
+    expect(releaseQualityRound).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('现有状态允许操作仍要核对各项有效权限，历史保留真实轮次和判定', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100' }));
+    vi.mocked(lookupQualityCheck).mockResolvedValue({ ...openView(true), reworkOrderCode: 'FG-ZD-100', canRecheck: true, canRelease: true, rounds: [{ roundCode: 'QR-HISTORY-1', roundNo: 1, roundType: 'INITIAL', reworkOrderCode: 'FG-ZD-100', reworkReportLedger: 'STK-REWORK', outcome: '不合格', frozen: true, ledgerCode: 'STK-FROZEN', inspector: '原质检员', createdAt: '2026-10-01', lines: [{ lineNo: 1, clause: '真实初检条款', verdict: '不合格', reason: '原划伤' }] }] });
+    const wrapper = mount(QualityPanel, { props: { title: '质检', intro: '', initialTarget: { objectType: 'WORK_ORDER', code: 'ZD-100' } }, global: { provide: { 'zhubao-auth-session': ref({ effectivePermissions: [] }) } } });
+    await flushPromises();
+    expect(wrapper.find('[aria-label="提交返工报工"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="提交复检"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="放行"]').exists()).toBe(false);
+    expect(wrapper.get('.quality-round-history').text()).toContain('QR-HISTORY-1');
+    expect(wrapper.get('.quality-round-history').text()).toContain('真实初检条款 · 不合格 原划伤');
+    wrapper.unmount();
+  });
+
   it('同一次确认复用请求编号，换判定后换新编号', async () => {
     const wrapper = await openPanel();
     const ids: string[] = [];
     vi.mocked(submitQualityCheck).mockImplementation(async (body) => {
       ids.push(body.requestId ?? '');
-      throw new Error('上一轮还不能提交');
+      throw new ApiRequestError('上一轮还不能提交', 409, 409);
     });
     await wrapper.get('[aria-label="不合格 1"]').trigger('click');
     await wrapper.get('[aria-label="原因 1"]').setValue('划伤');

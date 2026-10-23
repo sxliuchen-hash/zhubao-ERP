@@ -187,6 +187,9 @@ function resolveSnap(item: DraftFile): { snap: Snap; switched: boolean; waiting:
   }
   const switched = item.snap.targetType !== props.targetType || item.snap.targetCode !== props.targetCode.trim();
   if (switched) return { snap: item.snap, switched: true, waiting: false };
+  if (item.snap.operationCode) {
+    return { snap: item.snap, switched: item.snap.operationCode !== props.operationCode.trim() || item.snap.operationType !== props.operationType.trim(), waiting: false };
+  }
   return {
     snap: {
       ...item.snap,
@@ -208,7 +211,8 @@ async function submit(item: DraftFile) {
     return;
   }
   if (decision.switched) {
-    item.message = `这份文件属于原单 ${decision.snap.targetCode}，不会转到新单`;
+    const sameTarget = decision.snap.targetType === props.targetType && decision.snap.targetCode === props.targetCode.trim();
+    item.message = sameTarget ? `这份文件属于原操作 ${decision.snap.operationCode}，不会转到新的检验轮次或交工` : `这份文件属于原单 ${decision.snap.targetCode}，不会转到新单`;
   }
   item.snap = decision.snap;
   if (!decision.snap.operationType || !decision.snap.operationCode) {
@@ -410,7 +414,15 @@ async function recover(item: HistoricalEvidence) {
 }
 
 watch(() => [props.targetType, props.targetCode, props.stage, props.operationType, props.operationCode], () => {
-  loadBoard();
+  const snap = currentSnap();
+  if (snap.targetCode) {
+    for (const item of items.value) {
+      // 草稿取得第一个正式编号时即固定归属，后续轮次不能接管尚未上传的原文件。
+      if (!item.snap.targetCode) item.snap = { ...snap };
+      else if (!item.snap.operationCode && snap.operationCode && item.snap.targetType === snap.targetType && item.snap.targetCode === snap.targetCode && item.snap.stage === snap.stage && item.snap.scene === snap.scene) item.snap = { ...snap };
+    }
+  }
+  void loadBoard();
 }, { immediate: true });
 
 onBeforeUnmount(() => {

@@ -94,6 +94,7 @@ provide('zhubao-order-refresh', orderRefresh);
 provide('zhubao-intake-receipt', intakeReceipt);
 provide('zhubao-open-intake', (target?: OrderActionTarget | null) => { if (canIntake.value) orderActionHost.value?.openIntake(target ?? null); });
 provide('zhubao-open-production', (target?: OrderActionTarget | null, mode?: ProductionMode) => { if (canProduction.value) orderActionHost.value?.openProduction(target ?? null, mode); });
+provide('zhubao-open-quality', (target?: OrderActionTarget | null) => { if (canQuality.value) orderActionHost.value?.openQuality(target ?? null); });
 provide('zhubao-open-order-change', (target: OrderChangeTarget) => { if (canChange.value) orderActionHost.value?.openOrderChange(target); });
 provide('zhubao-open-orders', openOrders);
 provide('zhubao-open-approval', (code: string) => {
@@ -156,6 +157,10 @@ const canProduction = computed(() => visibleTabs.value.some(tab => authorizedMen
     : ['ADMIN', 'GENERAL_MANAGER', 'OPERATOR', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? '')
       || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('REPORT') === true)));
 const canChange = computed(() => authorizedMenuCodes.value?.has('progress') === true);
+const canQuality = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['quality', 'mobile'].includes(tab.key))
+  && (authSession.value?.effectivePermissions ? ['BUSINESS_QUALITY_FREEZE', 'BUSINESS_REWORK_DISPATCH', 'BUSINESS_REWORK_REPORT', 'BUSINESS_QUALITY_RELEASE'].some(permission => authSession.value?.effectivePermissions?.includes(permission))
+    : ['ADMIN', 'GENERAL_MANAGER', 'WORKSHOP_LEADER', 'QUALITY_INSPECTOR'].includes(authSession.value?.role ?? '')
+      || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('QUALITY') === true)));
 const moreTabs = computed(() => mobileMoreTabs(visibleTabs.value));
 const filteredMoreGroups = computed(() => groupTabsBySection(filterWorkspaceTabs(moreTabs.value, moreQuery.value)));
 const deskActive = computed(() => activeTab.value === 'dashboard' && !moreOpen.value && !orderWorkspaceOpen.value);
@@ -450,5 +455,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
-  <OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
+  <OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
 </template>

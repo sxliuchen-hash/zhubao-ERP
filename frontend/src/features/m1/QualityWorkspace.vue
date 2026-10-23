@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
+import type { OpenQualityAction } from '../orders/orderActions';
+import { useTraceTarget } from '../scan/useTraceTarget';
 import OperationInputs from './OperationInputs.vue';
 import QualityPanel from '../quality/QualityPanel.vue';
 import { createAmountForm } from './operationAmounts';
@@ -24,6 +26,18 @@ const emptyQuality = (): QualityWorkspaceModel => ({
 });
 
 const workspace = ref<QualityWorkspaceModel>(emptyQuality());
+const openQuality = inject<OpenQualityAction | null>('zhubao-open-quality', null);
+const manualOpen = ref(!openQuality);
+const manualCreated = ref(!openQuality);
+function openManual() {
+  if (openQuality) { openQuality(); return; }
+  manualCreated.value = true;
+  manualOpen.value = !manualOpen.value;
+}
+useTraceTarget(['QUALITY'], target => {
+  if (openQuality) openQuality({ objectType: target.objectType, code: target.code });
+  else { manualCreated.value = true; manualOpen.value = true; }
+});
 const loadError = ref('');
 const accessDenied = ref(false);
 const loading = ref(false);
@@ -134,7 +148,10 @@ function selectQualityCase(code: string) {
 <template>
   <div class="quality-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
+    <button class="secondary-button" type="button" @click="openManual">扫码或手输质检单据</button>
     <QualityPanel
+      v-if="manualCreated"
+      v-show="manualOpen"
       title="对照加工要求"
       intro="扫子单贴纸。不拆的母单扫母单贴纸。质检员是当前登录账号。超时用原确认回放，不会另开一次质检。"
     />
@@ -239,7 +256,8 @@ function selectQualityCase(code: string) {
             <dt>损耗审批</dt>
             <dd>{{ activeApproval?.code ?? '无' }}</dd>
           </dl>
-          <p class="operation-feedback">冻结、返工、复检和放行走上方质检面板。这里只提交损耗工资试算。</p>
+          <button v-if="openQuality" class="primary-button" type="button" @click="openQuality({ objectType: null, code: activeCase.workOrder })">办理本单质检</button>
+          <p class="operation-feedback">冻结、返工、复检和放行从本单质检办理。下方保留损耗申请与工资试算。</p>
           <OperationInputs v-model="operationValues" :fields="[['approvalCode', '损耗申请单号'], ['operator', '损耗报工人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量（克）', 'number'], ['outputWeight', '产出重量（克）', 'number'], ['reasonableTransferWeight', '合理转移重量（克）', 'number'], ['standardLossRatePercent', '标准损耗率（%）', 'number'], ['acceptedQuantity', '验收数量', 'number'], ['pieceRate', '计件单价', 'number'], ['lossDeductionUnitPrice', '损耗扣减单价', 'number']]" />
           <div class="detail-actions">
             <button class="secondary-button" type="button" :disabled="approvingLoss" @click="approveActiveLoss">

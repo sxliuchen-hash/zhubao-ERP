@@ -80,6 +80,32 @@ describe('现场证据采集', () => {
     vi.mocked(bindEvidence).mockResolvedValue({ linkCode: 'LNK-1', attachmentCode: 'ATT-1', scene: 'UNPACK' });
   });
 
+  it('待上传文件取得初检编号后固定在初检，切到复检不重新归属', async () => {
+    const wrapper = mount(EvidenceCapture, { props: { targetType: 'WORK_ORDER', targetCode: 'WO-1', stage: 'QUALITY', scene: 'CHECK', operationType: 'quality_round', operationCode: '' } });
+    await pick(wrapper, 'initial.jpg', 'image/jpeg');
+    await wrapper.setProps({ operationCode: 'QR-INITIAL' });
+    await wrapper.setProps({ operationCode: 'QR-RECHECK' });
+    await wrapper.get('li button').trigger('click');
+    await flushPromises();
+    expect(bindEvidence).toHaveBeenCalledWith(expect.objectContaining({ targetCode: 'WO-1', operationCode: 'QR-INITIAL' }));
+    expect(wrapper.text()).toContain('属于原操作 QR-INITIAL');
+    wrapper.unmount();
+  });
+
+  it('同单换交工后关联重试仍使用原操作，不重新上传或改挂到下一道', async () => {
+    const wrapper = mount(EvidenceCapture, { props: { targetType: 'WORK_ORDER', targetCode: 'WO-1', stage: 'PRODUCTION', scene: 'PROCESS', operationType: 'process_station_report', operationCode: 'STK-FIRST', processName: '雕刻' } });
+    await pick(wrapper, 'first.jpg', 'image/jpeg');
+    vi.mocked(bindEvidence).mockRejectedValueOnce(new Error('关联超时'));
+    await wrapper.get('li button').trigger('click');
+    await flushPromises();
+    await wrapper.setProps({ operationType: 'production_report', operationCode: 'STK-SECOND', processName: '抛光' });
+    await wrapper.get('li button').trigger('click');
+    await flushPromises();
+    expect(uploadEvidenceFile).toHaveBeenCalledOnce();
+    expect(bindEvidence).toHaveBeenLastCalledWith(expect.objectContaining({ operationType: 'process_station_report', operationCode: 'STK-FIRST', processName: '雕刻' }));
+    wrapper.unmount();
+  });
+
   it('无单号时文件留在表单，建单后才上传，失败重试不重做业务', async () => {
     const wrapper = mount(EvidenceCapture, {
       props: { targetType: 'MOTHER_ORDER', targetCode: '', stage: 'INTAKE', scene: 'UNPACK', operationType: 'inbound_confirm', operationCode: '' },

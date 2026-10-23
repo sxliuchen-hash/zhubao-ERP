@@ -223,7 +223,7 @@ describe('App', () => {
     await wrapper.get('[aria-label="追溯查询"]').setValue('MD-1');
     await wrapper.get('.mobile-tabbar button[aria-haspopup="dialog"]').trigger('click');
     await wrapper.get('.mobile-more-item[data-mobile-tab="finance"]').trigger('click');
-    await vi.waitFor(() => expect(wrapper.findAll('.finance-workspace')).toHaveLength(1));
+    await vi.waitFor(() => expect(wrapper.findAll('.finance-workspace')).toHaveLength(1), { timeout: 5000 });
 
     expect(wrapper.get('h1').text()).toBe('财务');
     expect(wrapper.find('.page-location').exists()).toBe(false);

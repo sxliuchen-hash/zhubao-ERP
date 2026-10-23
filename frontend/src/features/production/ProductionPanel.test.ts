@@ -89,6 +89,7 @@ describe('生产面板', () => {
     expect(queryScanContext).toHaveBeenCalledWith({ content: 'FG-100-R2', objectType: 'WORK_ORDER', intent: 'PRODUCTION' });
     expect(lookupProcessStation).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('报工目标与当前单据或执行轮次不一致');
+    expect(wrapper.find('[aria-label="过程说明"]').exists()).toBe(false);
     expect(submitProcessStation).not.toHaveBeenCalled();
     wrapper.unmount();
   });

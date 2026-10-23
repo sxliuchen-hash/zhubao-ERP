@@ -48,7 +48,7 @@ const reviewConfirmed = ref<Record<string, boolean>>({});
 const activeProcess = ref('');
 const stationScan = reactive(useScanContext());
 
-const progressTarget = computed(() => progressTargetFromScan(stationScan.context));
+const progressTarget = computed(() => stationCode.value ? progressTargetFromScan(stationScan.context) : null);
 const processOptions = computed(() => (stationView.value?.stations ?? []).map((item) => item.processName));
 const evidenceTargetType = computed(() => (
   stationScan.identity?.objectType === 'MOTHER_ORDER' ? 'MOTHER_ORDER' : 'WORK_ORDER'

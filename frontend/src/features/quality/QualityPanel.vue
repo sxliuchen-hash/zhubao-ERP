@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, inject, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
+import { ApiRequestError } from '../../services/apiClient';
+import type { OrderActionTarget } from '../orders/orderActions';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import FieldSteps from '../field/FieldSteps.vue';
 import { keptInputFailure } from '../field/keptInput';
@@ -28,20 +31,34 @@ const props = withDefaults(defineProps<{
   title: string;
   intro: string;
   field?: boolean;
+  initialTarget?: OrderActionTarget | null;
+  embedded?: boolean;
 }>(), {
   field: false,
+  initialTarget: null,
+  embedded: false,
 });
+const emit = defineEmits<{ changed: []; targetSelected: [target: OrderActionTarget] }>();
+const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+type QualityOperation = 'check' | 'rework' | 'report' | 'recheck' | 'release';
+const operationPermissions: Record<QualityOperation, string> = { check: 'BUSINESS_QUALITY_FREEZE', rework: 'BUSINESS_REWORK_DISPATCH', report: 'BUSINESS_REWORK_REPORT', recheck: 'BUSINESS_QUALITY_FREEZE', release: 'BUSINESS_QUALITY_RELEASE' };
+function allowed(kind: QualityOperation) { return !session.value?.effectivePermissions || session.value.effectivePermissions.includes(operationPermissions[kind]); }
+type QualityCommand = { kind: QualityOperation; code: string; requestId: string; send: () => Promise<void>; success: string };
+const pendingCommand = ref<QualityCommand | null>(null);
+const activeOperation = ref<QualityOperation | ''>('');
+const operationBusy = computed(() => Boolean(activeOperation.value));
+const readError = ref('');
 
 const scanText = ref('');
 const hint = ref('');
 const formError = ref('');
 const qualityCode = ref('');
 const checkBusy = ref(false);
-const checkSubmitting = ref(false);
-const reworkOpening = ref(false);
-const reportingRework = ref(false);
-const recheckSubmitting = ref(false);
-const releasing = ref(false);
+const checkSubmitting = computed(() => activeOperation.value === 'check');
+const reworkOpening = computed(() => activeOperation.value === 'rework');
+const reportingRework = computed(() => activeOperation.value === 'report');
+const recheckSubmitting = computed(() => activeOperation.value === 'recheck');
+const releasing = computed(() => activeOperation.value === 'release');
 const checkView = ref<QualityCheckView | null>(null);
 const checkResult = ref<QualityCheckResult | null>(null);
 const requirementRework = ref<QualityReworkResult | null>(null);
@@ -53,19 +70,19 @@ const requestIds = ref<Record<string, string>>({});
 const focusLine = ref(0);
 const qualityScan = reactive(useScanContext());
 
-const progressTarget = computed(() => progressTargetFromScan(qualityScan.context));
+const progressTarget = computed(() => qualityCode.value ? progressTargetFromScan(qualityScan.context) : null);
 const shownInspector = computed(() => checkResult.value?.inspector || checkView.value?.inspector || '');
 const requirementSubmitted = computed(() => Boolean(checkView.value?.qualityCaseCode));
 const canOpenRequirementRework = computed(() => (
-  checkView.value?.outcome === '不合格' && !checkView.value.reworkOrderCode && !requirementRework.value
+  allowed('rework') && checkView.value?.outcome === '不合格' && !checkView.value.reworkOrderCode && !requirementRework.value
 ));
 const canReportRework = computed(() => (
-  Boolean(checkView.value?.reworkOrderCode)
+  allowed('report') && Boolean(checkView.value?.reworkOrderCode)
   && !checkView.value?.reworkReported
   && !reworkReportLedger.value
 ));
-const canRecheck = computed(() => Boolean(checkView.value?.canRecheck) && !recheckSubmitting.value);
-const canRelease = computed(() => Boolean(checkView.value?.canRelease) && !releasing.value && !releaseLedger.value);
+const canRecheck = computed(() => allowed('recheck') && Boolean(checkView.value?.canRecheck));
+const canRelease = computed(() => allowed('release') && Boolean(checkView.value?.canRelease) && !releaseLedger.value);
 const roundCode = computed(() => checkResult.value?.roundCode || checkView.value?.roundCode || '');
 const evidenceTargetType = computed(() => (
   qualityScan.identity?.objectType === 'MOTHER_ORDER' ? 'MOTHER_ORDER' : 'WORK_ORDER'
@@ -86,10 +103,11 @@ const recheckHint = computed(() => {
 
 const canSubmitRequirement = computed(() => (
   Boolean(qualityCode.value)
+  && allowed('check')
   && Boolean(checkView.value?.ready)
   && !requirementSubmitted.value
   && requirementHint.value === ''
-  && !checkSubmitting.value
+  && !operationBusy.value && !pendingCommand.value
   && !qualityScan.loading
 ));
 
@@ -97,6 +115,7 @@ const canSubmitRecheck = computed(() => (
   Boolean(qualityCode.value)
   && canRecheck.value
   && recheckHint.value === ''
+  && !operationBusy.value && !pendingCommand.value
   && !qualityScan.loading
 ));
 
@@ -163,6 +182,7 @@ function clearTarget() {
   checkBusy.value = false;
   focusLine.value = 0;
   formError.value = '';
+  readError.value = '';
   if (had) hint.value = '贴纸已变化，请重新识别';
 }
 
@@ -179,9 +199,7 @@ function ensureRequestId(kind: string, fingerprint: string) {
 }
 
 function lineFingerprint(drafts: Record<number, { verdict: string; reason: string }>) {
-  return Object.keys(drafts)
-    .map((key) => `${key}:${drafts[Number(key)]?.verdict ?? ''}:${drafts[Number(key)]?.reason.trim() ?? ''}`)
-    .join('|');
+  return JSON.stringify(Object.keys(drafts).map(key => [Number(key), drafts[Number(key)]?.verdict ?? '', drafts[Number(key)]?.reason.trim() ?? '']));
 }
 
 function linesFrom(drafts: Record<number, { verdict: string; reason: string }>) {
@@ -199,6 +217,10 @@ async function loadCheck(response: ScanContextResponse, seen: number) {
     return;
   }
   const target = canonicalTarget(response);
+  if (props.initialTarget && target && (target.code !== props.initialTarget.code || (props.initialTarget.objectType && target.objectType !== props.initialTarget.objectType))) {
+    hint.value = '质检目标与当前单据或执行轮次不一致，未打开原单办理。';
+    return;
+  }
   if (!target || (target.objectType !== 'WORK_ORDER' && target.objectType !== 'MOTHER_ORDER')) {
     hint.value = '请扫描子单贴纸，或不拆母单的贴纸';
     return;
@@ -207,6 +229,7 @@ async function loadCheck(response: ScanContextResponse, seen: number) {
   try {
     const loaded = await lookupQualityCheck(target.code);
     if (qualityScan.revision !== seen) return;
+    if (loaded.orderCode !== target.code) { hint.value = '质检返回的单据与规范目标不一致，请返回列表核对。'; return; }
     qualityCode.value = target.code;
     resetDrafts(loaded);
     checkView.value = loaded;
@@ -245,15 +268,22 @@ async function recognize(draft: ScanDraft) {
 }
 
 useTraceTarget(['QUALITY'], (target) => {
+  if (props.initialTarget) return;
   scanText.value = target.code;
   void recognize({
     content: target.code,
     ...(target.objectType ? { objectType: target.objectType } : {}),
   });
 });
+onMounted(() => {
+  if (!props.initialTarget) return;
+  scanText.value = props.initialTarget.code;
+  void recognize({ content: props.initialTarget.code, ...(props.initialTarget.objectType ? { objectType: props.initialTarget.objectType } : {}) });
+});
 
 async function chooseTarget(related: ScanRelatedTarget) {
   if (!related.code || !related.objectType) return;
+  if (props.initialTarget) { emit('targetSelected', { objectType: related.objectType, code: related.code }); return; }
   await recognize({ content: related.code, objectType: related.objectType });
 }
 
@@ -261,195 +291,132 @@ function stillHere(code: string, seen: number) {
   return qualityScan.revision === seen && qualityCode.value === code;
 }
 
-async function refreshView(code: string, seen: number) {
+async function refreshView(code: string, seen: number, keepDrafts = false) {
+  readError.value = '';
   try {
     const loaded = await lookupQualityCheck(code);
     if (!stillHere(code, seen)) return;
-    if (loaded.qualityCaseCode) {
+    if (loaded.orderCode !== code) { readError.value = '刷新返回的单据不一致，请核对；原回执保留。'; return; }
+    if (loaded.qualityCaseCode || !checkView.value?.qualityCaseCode) {
+      const sameLines = JSON.stringify(loaded.lines.map(line => [line.lineNo, line.clause])) === JSON.stringify(checkView.value?.lines.map(line => [line.lineNo, line.clause]));
+      const preserve = keepDrafts && sameLines && loaded.roundCode === checkView.value?.roundCode && loaded.qualityCaseCode === checkView.value?.qualityCaseCode;
       checkView.value = loaded;
-      resetDrafts(loaded);
+      if (!preserve) resetDrafts(loaded);
     }
   } catch {
     if (!stillHere(code, seen)) return;
-    hint.value = '业务已保存，页面刷新失败。请重新打开本单，不会再次提交。';
+    readError.value = checkView.value?.qualityCaseCode || checkResult.value || requirementRework.value || reworkReportLedger.value || releaseLedger.value
+      ? '业务已保存，页面刷新失败。原回执保留，不会再次提交。' : '质检状态刷新失败，已填判定保留。';
   }
 }
+async function refreshState() {
+  if (operationBusy.value || pendingCommand.value || !qualityCode.value || checkBusy.value) return;
+  checkBusy.value = true;
+  try { await refreshView(qualityCode.value, qualityScan.revision, true); }
+  finally { checkBusy.value = false; }
+}
 
-async function retrySame(message: string, again: () => Promise<void>) {
-  if (message !== '后端接口不可用') return false;
+async function execute(command: QualityCommand) {
+  if (operationBusy.value || checkBusy.value || (pendingCommand.value && pendingCommand.value.requestId !== command.requestId)) return;
+  if (!allowed(command.kind) || command.code !== qualityCode.value) { formError.value = '当前权限或单据已变化，请保留原请求并核对。'; return; }
+  const seen = qualityScan.revision;
+  activeOperation.value = command.kind;
+  formError.value = '';
   try {
-    await again();
-    return true;
+    try { await command.send(); }
+    catch (error) {
+      // 网络中断时只用已捕获的原请求回放一次，判定内容不会重新读取表单。
+      if (!(error instanceof Error) || error.message !== '后端接口不可用') throw error;
+      await command.send();
+    }
+    if (!stillHere(command.code, seen)) return;
+    pendingCommand.value = null;
+    hint.value = command.success;
+    emit('changed');
+    await refreshView(command.code, seen);
   } catch (error) {
-    formError.value = keptInputFailure(error, '提交失败');
-    hint.value = '请用原确认重试，不会另开一次质检';
-    return true;
-  }
+    if (!stillHere(command.code, seen)) return;
+    const known = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408;
+    pendingCommand.value = known ? null : command;
+    formError.value = keptInputFailure(error, '质检操作失败');
+  } finally { activeOperation.value = ''; }
+}
+
+function applyCheck(result: QualityCheckResult, view: QualityCheckView) {
+  if (result.orderCode !== view.orderCode) throw new Error('质检回执单据不一致，请保留原请求核对');
+  checkResult.value = result;
+  checkView.value = { ...view, inspector: result.inspector, qualityCaseCode: result.qualityCaseCode,
+    outcome: result.outcome, frozen: result.frozen, reworkOrderCode: result.reworkOrderCode,
+    lines: result.lines, roundCode: result.roundCode, roundNo: result.roundNo, roundType: result.roundType,
+    ready: false, blockReason: '', canRecheck: false, canRelease: false };
+  resetDrafts(checkView.value);
 }
 
 async function submitRequirement() {
-  if (!canSubmitRequirement.value || !checkView.value || !qualityCode.value) return;
+  if (!canSubmitRequirement.value || !checkView.value) return;
   const code = qualityCode.value;
   const seen = qualityScan.revision;
   const view = checkView.value;
-  const requestId = ensureRequestId('check', `${code}|${lineFingerprint(clauseDrafts.value)}`);
-  checkSubmitting.value = true;
-  formError.value = '';
-  const send = () => submitQualityCheck({ code, lines: linesFrom(clauseDrafts.value), requestId });
-  try {
-    const result = await send();
-    if (!stillHere(code, seen)) return;
-    checkResult.value = result;
-    checkView.value = {
-      ...view,
-      inspector: result.inspector,
-      qualityCaseCode: result.qualityCaseCode,
-      outcome: result.outcome,
-      frozen: result.frozen,
-      reworkOrderCode: result.reworkOrderCode,
-      lines: result.lines,
-      roundCode: result.roundCode,
-      roundNo: result.roundNo,
-      roundType: result.roundType,
-      ready: false,
-      blockReason: '',
-    };
-    hint.value = `${roundLabel(result.roundType)}已提交`;
-    await refreshView(code, seen);
-  } catch (error) {
-    if (!stillHere(code, seen)) return;
-    const message = error instanceof Error ? error.message : '提交质检失败';
-    const recovered = await retrySame(message, async () => {
-      const result = await send();
-      if (!stillHere(code, seen)) return;
-      checkResult.value = result;
-      hint.value = `${roundLabel(result.roundType)}已提交`;
-      await refreshView(code, seen);
-    });
-    if (!recovered) formError.value = keptInputFailure(error, '提交质检失败');
-  } finally {
-    checkSubmitting.value = false;
-  }
+  const requestId = ensureRequestId('check', JSON.stringify([code, roundCode.value, lineFingerprint(clauseDrafts.value)]));
+  const body = { code, lines: linesFrom(clauseDrafts.value), requestId };
+  await execute({ kind: 'check', code, requestId, success: '初检已提交', send: async () => {
+    const result = await submitQualityCheck(body);
+    if (stillHere(code, seen)) applyCheck(result, view);
+  } });
 }
 
 async function openRequirementRework() {
-  if (!checkView.value || !qualityCode.value || !canOpenRequirementRework.value) return;
+  if (!canOpenRequirementRework.value || !checkView.value || pendingCommand.value) return;
   const code = qualityCode.value;
   const seen = qualityScan.revision;
   const view = checkView.value;
-  const requestId = ensureRequestId('rework', code);
-  reworkOpening.value = true;
-  formError.value = '';
-  const send = () => openQualityRework(code, requestId);
-  try {
-    const opened = await send();
+  const requestId = ensureRequestId('rework', JSON.stringify([code, roundCode.value, view.qualityCaseCode]));
+  await execute({ kind: 'rework', code, requestId, success: '已开返工', send: async () => {
+    const opened = await openQualityRework(code, requestId);
     if (!stillHere(code, seen)) return;
     requirementRework.value = opened;
     checkView.value = { ...view, reworkOrderCode: opened.reworkOrderCode };
-    hint.value = '已开返工';
-    await refreshView(code, seen);
-  } catch (error) {
-    if (!stillHere(code, seen)) return;
-    const message = error instanceof Error ? error.message : '开返工失败';
-    const recovered = await retrySame(message, async () => {
-      const opened = await send();
-      if (!stillHere(code, seen)) return;
-      requirementRework.value = opened;
-      hint.value = '已开返工';
-    });
-    if (!recovered) formError.value = keptInputFailure(error, '开返工失败');
-  } finally {
-    reworkOpening.value = false;
-  }
+  } });
 }
 
 async function reportRework() {
-  if (!canReportRework.value || !qualityCode.value) return;
+  if (!canReportRework.value || !checkView.value || pendingCommand.value) return;
   const code = qualityCode.value;
   const seen = qualityScan.revision;
   const view = checkView.value;
-  const requestId = ensureRequestId('report', code);
-  reportingRework.value = true;
-  formError.value = '';
-  const send = () => reportQualityRework(code, requestId);
-  try {
-    const reported = await send();
+  const requestId = ensureRequestId('report', JSON.stringify([code, view.reworkOrderCode, roundCode.value]));
+  await execute({ kind: 'report', code, requestId, success: '返工已报工', send: async () => {
+    const reported = await reportQualityRework(code, requestId);
     if (!stillHere(code, seen)) return;
     reworkReportLedger.value = reported.ledgerCode;
-    if (view) checkView.value = { ...view, reworkReported: true };
-    hint.value = '返工已报工';
-    await refreshView(code, seen);
-  } catch (error) {
-    if (!stillHere(code, seen)) return;
-    const message = error instanceof Error ? error.message : '返工报工失败';
-    const recovered = await retrySame(message, async () => {
-      const reported = await send();
-      if (!stillHere(code, seen)) return;
-      reworkReportLedger.value = reported.ledgerCode;
-      hint.value = '返工已报工';
-    });
-    if (!recovered) formError.value = keptInputFailure(error, '返工报工失败');
-  } finally {
-    reportingRework.value = false;
-  }
+    checkView.value = { ...view, reworkReported: true };
+  } });
 }
 
 async function submitRecheck() {
-  if (!canSubmitRecheck.value || !qualityCode.value) return;
+  if (!canSubmitRecheck.value || !checkView.value) return;
   const code = qualityCode.value;
   const seen = qualityScan.revision;
-  const requestId = ensureRequestId('recheck', `${code}|${lineFingerprint(recheckDrafts.value)}`);
-  recheckSubmitting.value = true;
-  formError.value = '';
-  const send = () => submitQualityRecheck({ code, lines: linesFrom(recheckDrafts.value), requestId });
-  try {
-    const result = await send();
-    if (!stillHere(code, seen)) return;
-    checkResult.value = result;
-    hint.value = '复检已提交';
-    await refreshView(code, seen);
-  } catch (error) {
-    if (!stillHere(code, seen)) return;
-    const message = error instanceof Error ? error.message : '提交复检失败';
-    const recovered = await retrySame(message, async () => {
-      const result = await send();
-      if (!stillHere(code, seen)) return;
-      checkResult.value = result;
-      hint.value = '复检已提交';
-    });
-    if (!recovered) formError.value = keptInputFailure(error, '提交复检失败');
-  } finally {
-    recheckSubmitting.value = false;
-  }
+  const view = checkView.value;
+  const requestId = ensureRequestId('recheck', JSON.stringify([code, roundCode.value, lineFingerprint(recheckDrafts.value)]));
+  const body = { code, lines: linesFrom(recheckDrafts.value), requestId };
+  await execute({ kind: 'recheck', code, requestId, success: '复检已提交', send: async () => {
+    const result = await submitQualityRecheck(body);
+    if (stillHere(code, seen)) applyCheck(result, view);
+  } });
 }
 
 async function releaseRound() {
-  if (!canRelease.value || !qualityCode.value) return;
+  if (!canRelease.value || pendingCommand.value) return;
   const code = qualityCode.value;
   const seen = qualityScan.revision;
-  const requestId = ensureRequestId('release', `${code}|${roundCode.value}`);
-  releasing.value = true;
-  formError.value = '';
-  const send = () => releaseQualityRound(code, requestId);
-  try {
-    const released = await send();
+  const requestId = ensureRequestId('release', JSON.stringify([code, roundCode.value]));
+  await execute({ kind: 'release', code, requestId, success: '已放行', send: async () => {
+    const released = await releaseQualityRound(code, requestId);
     if (!stillHere(code, seen)) return;
     releaseLedger.value = released.ledgerCode;
-    hint.value = '已放行';
-    await refreshView(code, seen);
-  } catch (error) {
-    if (!stillHere(code, seen)) return;
-    const message = error instanceof Error ? error.message : '放行失败';
-    const recovered = await retrySame(message, async () => {
-      const released = await send();
-      if (!stillHere(code, seen)) return;
-      releaseLedger.value = released.ledgerCode;
-      hint.value = '已放行';
-    });
-    if (!recovered) formError.value = keptInputFailure(error, '放行失败');
-  } finally {
-    releasing.value = false;
-  }
+    if (checkView.value) checkView.value = { ...checkView.value, canRelease: false };
+  } });
 }
 
 function showClause(index: number) {
@@ -465,8 +432,9 @@ function showClause(index: number) {
         <p>{{ intro }}</p>
       </div>
     </div>
-    <FieldSteps v-if="field" :steps="['扫码识别', '逐条判定', '提交结果']" :current="qualityStep" />
+    <FieldSteps v-if="field && !embedded" :steps="['扫码识别', '逐条判定', '提交结果']" :current="qualityStep" />
     <ScanInput
+      v-if="!initialTarget"
       v-model="scanText"
       field-text="贴纸二维码"
       input-aria-label="质检贴纸"
@@ -475,23 +443,23 @@ function showClause(index: number) {
       submit-aria-label="识别质检贴纸"
       photo-aria-label="拍贴纸"
       :bind-mobile-scan="field"
-      :busy="checkBusy || qualityScan.loading"
+      :busy="checkBusy || qualityScan.loading || operationBusy || Boolean(pendingCommand)"
       @draft="clearTarget"
       @recognize="recognize"
     />
     <p v-if="hint" class="operation-feedback warning">{{ hint }}</p>
+    <p v-if="checkBusy || qualityScan.loading" role="status">正在读取本单质检状态…</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
-    <OrderContextCard :context="qualityScan.context" @select="chooseTarget" />
-    <ProgressNoteForm
-      v-if="progressTarget"
-      stage="QUALITY"
-      :target-type="progressTarget.targetType"
-      :target-code="progressTarget.targetCode"
-      :mother-order-code="progressTarget.motherOrderCode"
-      @saved="rememberProgress"
-    />
+    <button v-if="initialTarget && qualityCode" class="secondary-button" type="button" :disabled="operationBusy || checkBusy || Boolean(pendingCommand)" @click="refreshState">刷新质检状态</button>
+    <p v-if="readError" class="operation-feedback danger" role="alert">{{ readError }}</p>
+    <p v-if="pendingCommand" class="operation-feedback warning" role="alert">原{{ { check: '质检', rework: '开返工', report: '返工报工', recheck: '复检', release: '放行' }[pendingCommand.kind] }}请求结果待核对，已保留单号、判定和编号。<button class="secondary-button" type="button" :disabled="operationBusy" @click="execute(pendingCommand)">原请求重试</button></p>
+    <OrderContextCard v-if="!embedded || qualityScan.context?.requiresSelection || qualityScan.identity?.objectType === 'REWORK'" :context="qualityScan.context" @select="chooseTarget" />
+    <details v-if="progressTarget" class="quality-process-note">
+      <summary>记录质检过程</summary>
+      <ProgressNoteForm stage="QUALITY" :target-type="progressTarget.targetType" :target-code="progressTarget.targetCode" :mother-order-code="progressTarget.motherOrderCode" @saved="rememberProgress" />
+    </details>
 
-    <template v-if="checkView">
+    <fieldset v-if="checkView" class="quality-action-fields" :disabled="operationBusy || checkBusy || Boolean(pendingCommand)">
       <dl class="detail-grid compact-detail-grid">
         <dt>单号</dt>
         <dd>{{ checkView.orderCode }}</dd>
@@ -641,7 +609,7 @@ function showClause(index: number) {
       <div v-if="checkResult?.roundType === 'RECHECK'" class="operation-feedback success">
         <strong>复检已提交 · {{ checkResult.outcome }}</strong>
         <span>轮次 {{ checkResult.roundCode }}</span>
-        <span>{{ checkResult.frozen ? '半成品已再次冻结' : '本轮可以用于放行' }}</span>
+        <span>{{ checkResult.frozen ? '半成品已再次冻结' : '本轮未冻结，是否可放行仍按当前服务端条件核对' }}</span>
       </div>
       <div v-if="canRelease" class="button-row">
         <button class="primary-button" type="button" aria-label="放行" :disabled="releasing" @click="releaseRound">
@@ -650,7 +618,16 @@ function showClause(index: number) {
       </div>
       <p v-else-if="requirementSubmitted && checkView.releaseBlock" class="operation-feedback warning">{{ checkView.releaseBlock }}</p>
       <p v-if="releaseLedger" class="operation-feedback success">已放行 {{ releaseLedger }}。原不合格记录仍保留。</p>
-    </template>
+      <details v-if="checkView.rounds?.length" class="quality-round-history">
+        <summary>检验轮次与历史（{{ checkView.rounds.length }}）</summary>
+        <article v-for="round in checkView.rounds" :key="round.roundCode" class="quality-clause">
+          <h3>{{ roundLabel(round.roundType) }} {{ round.roundNo }} · {{ round.roundCode }}</h3>
+          <p>{{ round.createdAt }} · {{ round.inspector }} · {{ round.outcome }}<template v-if="round.frozen"> · 已冻结</template></p>
+          <p v-if="round.reworkOrderCode">返工 {{ round.reworkOrderCode }} · 报工台账 {{ round.reworkReportLedger || '未报工' }}</p>
+          <p v-for="line in round.lines" :key="line.lineNo">{{ line.lineNo }}. {{ line.clause }} · {{ line.verdict }} {{ line.reason }}</p>
+        </article>
+      </details>
+    </fieldset>
 
     <section v-if="qualityCode" class="section-block">
       <h2>质检证据</h2>
@@ -667,3 +644,9 @@ function showClause(index: number) {
     </section>
   </section>
 </template>
+
+<style scoped>
+.quality-action-fields { border: 0; min-width: 0; padding: 0; margin: 0; }
+.quality-action-fields[disabled] .quality-verdict-row { opacity: .65; }
+.quality-round-history { margin-block: 12px; }
+</style>
