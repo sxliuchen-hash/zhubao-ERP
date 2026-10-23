@@ -138,9 +138,10 @@ describe('ProcessProgressPanel', () => {
     wrapper.unmount();
   });
 
-  it('改单申请失败后重试复用请求编号，要求变化才换新编号', async () => {
+  it('改单申请未知后按原请求重试，成功后显式另开申请才换新编号', async () => {
     vi.mocked(openProcessProgress).mockResolvedValue(located('MD-CHANGE-1', 2, 30));
-    vi.mocked(apiPost).mockRejectedValueOnce(new Error('响应丢失')).mockResolvedValue({ id: 'CHG-1' });
+    const saved = { id: 'CHG-1', motherOrderCode: 'MD-SPLIT', workOrderCode: 'MD-CHANGE-1', status: 'DRAFT', versionNo: 1, expectedVersion: 0 };
+    vi.mocked(apiPost).mockRejectedValueOnce(new Error('响应丢失')).mockResolvedValue(saved);
     const wrapper = mount(ProcessProgressPanel);
     await flushPromises();
     await wrapper.get('[aria-label="进度单号"]').setValue('MD-CHANGE-1');
@@ -152,14 +153,16 @@ describe('ProcessProgressPanel', () => {
     const save = () => wrapper.findAll('button').find((button) => button.text() === '保存改单申请')!;
     await save().trigger('click');
     await flushPromises();
-    await save().trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '原改单请求重试')!.trigger('click');
     await flushPromises();
     const first = (vi.mocked(apiPost).mock.calls[0][1] as { requestId: string }).requestId;
     const second = (vi.mocked(apiPost).mock.calls[1][1] as { requestId: string }).requestId;
     expect(second).toBe(first);
 
+    await wrapper.findAll('button').find(button => button.text() === '另开一份改单申请')!.trigger('click');
+    await flushPromises();
     await wrapper.get('[aria-label="改单新要求"]').setValue('改为另一要求');
-    vi.mocked(apiPost).mockResolvedValueOnce({ id: 'CHG-2' });
+    vi.mocked(apiPost).mockResolvedValueOnce({ ...saved, id: 'CHG-2' });
     await save().trigger('click');
     await flushPromises();
     const third = (vi.mocked(apiPost).mock.calls[2][1] as { requestId: string }).requestId;
@@ -185,11 +188,12 @@ describe('ProcessProgressPanel', () => {
       workerFee: null,
       customerDelta: null,
       financeNote: '',
-      motherOrderCode: 'MD-CHANGE-1',
+      motherOrderCode: 'MD-SPLIT',
+      workOrderCode: 'MD-CHANGE-1',
     };
     vi.mocked(openProcessProgress).mockResolvedValue(located('MD-CHANGE-1', 2, 30));
     vi.mocked(apiGet).mockResolvedValue([row]);
-    vi.mocked(apiPost).mockImplementation(async (path) => ({ ...row, status: String(path).includes('applications') ? 'APPLIED' : 'FINANCE_CONFIRMED' }));
+    vi.mocked(apiPost).mockImplementation(async (path) => ({ ...row, id: String(path).split('/')[4], status: String(path).includes('applications') ? 'APPLIED' : String(path).includes('rejections') ? 'REJECTED' : 'FINANCE_CONFIRMED' }));
     const wrapper = mount(ProcessProgressPanel, { global: { provide: { 'zhubao-auth-session': ref({ effectivePermissions: ['FINANCE_BILLING_POST'] }) } } });
     await flushPromises();
     await wrapper.get('[aria-label="进度单号"]').setValue('MD-CHANGE-1');
@@ -210,11 +214,15 @@ describe('ProcessProgressPanel', () => {
       expect.objectContaining({ amountUnchanged: true }),
     );
 
+    vi.mocked(apiGet).mockResolvedValue([{ ...row, id: 'CHG-REJECT' }]);
+    await wrapper.findAll('button').find(button => button.text() === '刷新改单')!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text().startsWith('CHG-REJECT ·'))!.trigger('click');
     await wrapper.get('[aria-label="改单财务说明"]').setValue('价格不对');
     await wrapper.findAll('button').find((button) => button.text() === '拒绝改单')!.trigger('click');
     await flushPromises();
     expect(apiPost).toHaveBeenCalledWith(
-      '/api/business/order-changes/CHG-1/finance-rejections',
+      '/api/business/order-changes/CHG-REJECT/finance-rejections',
       expect.objectContaining({ note: '价格不对' }),
     );
 
