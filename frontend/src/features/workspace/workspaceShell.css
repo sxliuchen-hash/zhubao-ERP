@@ -1,0 +1,54 @@
+/* 跨端外壳色只改语义令牌和导航，不把原型的全局选择器搬进来。 */
+
+:root {
+  --nav: #1c3330;
+  --action: #25645a;
+  --action-dark: #1a4a43;
+  --action-soft: #eaf3ef;
+  --workspace: #f5f5f2;
+  --ink: #222b2b;
+  --ink-muted: #5f6b68;
+  --border: #e4ebe7;
+  --brand-gold: #a88043;
+  --danger: #b65d45;
+}
+
+.sidebar .nav-button.active {
+  background: rgba(37, 100, 90, 0.45);
+}
+
+@media (max-width: 900px) {
+  .mobile-tabbar {
+    background: var(--content);
+    border-top: 1px solid var(--line);
+    color: var(--ink);
+  }
+
+  .mobile-tab {
+    color: var(--ink-muted);
+    background: transparent;
+  }
+
+  .mobile-tab.active {
+    background: transparent;
+    color: var(--action);
+    font-weight: 700;
+  }
+
+  .mobile-more-heading,
+  .mobile-sheet-close {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-more-heading {
+    margin: 4px 2px 0;
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .mobile-sheet-close {
+    justify-self: end;
+    min-height: 44px;
+  }
+}

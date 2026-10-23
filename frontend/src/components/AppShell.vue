@@ -78,7 +78,7 @@ function toggleCollapsed() {
           <img class="brand-mark" src="/favicon.svg" alt="珠宝 ERP 图标" />
           <div>
             <strong>{{ title }}</strong>
-            <span v-if="location">{{ location }}</span>
+            <span v-if="location && location !== title">{{ location }}</span>
           </div>
         </div>
         <div class="context-stack">
@@ -100,7 +100,7 @@ function toggleCollapsed() {
       <UpgradeNotice />
 
       <header class="workspace-header ops-page-header review-page-header lean-header">
-        <p v-if="location" class="page-location">{{ location }}</p>
+        <p v-if="location && location !== title" class="page-location">{{ location }}</p>
         <h1>{{ title }}</h1>
       </header>
 

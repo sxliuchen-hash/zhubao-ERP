@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
+import { armMobileScan, bindMobileScanTarget, unbindMobileScanTarget } from './features/scan/mobileScanBridge';
 import { authSessionChangedEvent, fetchAuthSession, type AuthSession } from './services/authApi';
 
 vi.mock('./services/authApi', () => ({
@@ -50,11 +51,15 @@ describe('App', () => {
     expect(wrapper.text()).toContain('来料加工');
     expect(wrapper.findAll('.nav-group-label').map((label) => label.text())).toEqual([
       '工作台',
-      '来料与订单',
-      '生产与质量',
-      '库存与交付',
-      '财务经营',
-      '协同与系统',
+      '订单',
+      '生产作业',
+      '质量作业',
+      '库存',
+      '客户',
+      '财务',
+      '审批',
+      '业务工具',
+      '系统管理',
     ]);
     expect(wrapper.text()).toContain('业务单据');
     expect(wrapper.text()).toContain('当前处理单');
@@ -74,10 +79,12 @@ describe('App', () => {
     expect(wrapper.find('.ops-nav').text()).toContain('运维');
     expect(wrapper.find('.ops-nav').text()).toContain('手机作业');
     expect(wrapper.get('.page-location').text()).toBe('工作台');
-    expect(wrapper.get('.mobile-tabbar').text()).toContain('工作台');
-    expect(wrapper.get('.mobile-tabbar').text()).toContain('现场作业');
-    expect(wrapper.get('.mobile-tabbar').text()).toContain('审批');
-    expect(wrapper.get('.mobile-tabbar').text()).toContain('全部功能');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('待办');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('订单');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('库存');
+    expect(wrapper.get('.mobile-tabbar').text()).toContain('更多');
+    expect(wrapper.get('.mobile-tabbar').text()).not.toContain('现场作业');
+    expect(wrapper.get('.mobile-tabbar').text()).not.toContain('审批');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('消息');
     expect(wrapper.get('[aria-label="扫码"]').classes()).toContain('mobile-scan-key');
     expect(wrapper.get('[aria-label="版本升级通知"]').text()).toContain('单据维护会列出未回收母单');
@@ -97,7 +104,8 @@ describe('App', () => {
     await wrapper.get('[aria-label="扫码"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.get('.mobile-tab[data-mobile-tab="mobile"]').classes()).toContain('active');
+    expect(wrapper.get('h1').text()).toBe('手机作业');
+    expect(wrapper.get('.mobile-tab[data-mobile-section="more"]').classes()).toContain('active');
     wrapper.unmount();
     if (mediaDevices) Object.defineProperty(navigator, 'mediaDevices', mediaDevices);
   });
@@ -110,8 +118,9 @@ describe('App', () => {
       const wrapper = mount(App);
       await flushPromises();
 
-      expect(wrapper.get('.mobile-tab[data-mobile-tab="mobile"]').classes()).toContain('active');
-      expect(wrapper.get('.mobile-brand strong').text()).toBe('手机作业');
+      expect(wrapper.get('.mobile-tab[data-mobile-tab="dashboard"]').classes()).toContain('active');
+      expect(wrapper.get('.mobile-brand strong').text()).toBe('首页');
+      expect(wrapper.get('.mobile-tabbar').text()).toContain('订单');
       wrapper.unmount();
     } finally {
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
@@ -183,10 +192,12 @@ describe('App', () => {
     await flushPromises();
 
     expect(wrapper.find('.ops-nav').text()).not.toContain('财务');
-    expect(wrapper.findAll('.nav-group-label').map((label) => label.text())).not.toContain('财务经营');
+    expect(wrapper.findAll('.nav-group-label').map((label) => label.text())).not.toContain('财务');
     await wrapper.get('.mobile-tabbar button[aria-haspopup="dialog"]').trigger('click');
-    expect(wrapper.get('.mobile-more-sheet').text()).not.toContain('财务');
-    expect(wrapper.get('.mobile-more-sheet').text()).toContain('来料');
+    expect(wrapper.get('[aria-label="更多"]').text()).not.toContain('财务');
+    expect(wrapper.get('[aria-label="更多"]').text()).not.toContain('来料');
+    await wrapper.get('.mobile-tab[data-mobile-section="orders"]').trigger('click');
+    expect(wrapper.get('[aria-label="订单"]').text()).toContain('来料');
   });
 
   it('opens an authorized module from the mobile more sheet without a second page state', async () => {
@@ -200,7 +211,7 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.findAll('.finance-workspace')).toHaveLength(1));
 
     expect(wrapper.get('h1').text()).toBe('财务');
-    expect(wrapper.get('.page-location').text()).toBe('财务经营');
+    expect(wrapper.find('.page-location').exists()).toBe(false);
     expect(wrapper.find('.mobile-more-sheet').exists()).toBe(false);
     expect(wrapper.get('[aria-label="追溯查询"]').element).toHaveProperty('value', 'MD-1');
     expect(wrapper.findAll('.finance-workspace')).toHaveLength(1);
@@ -269,6 +280,7 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
     expect(wrapper.find('[data-tab="approvals"]').exists()).toBe(true);
+    await wrapper.get('[aria-haspopup="dialog"]').trigger('click');
     expect(wrapper.find('[data-mobile-tab="approvals"]').exists()).toBe(true);
 
     window.dispatchEvent(new CustomEvent(authSessionChangedEvent, {
@@ -276,6 +288,7 @@ describe('App', () => {
     }));
     await flushPromises();
     expect(wrapper.find('[data-tab="approvals"]').exists()).toBe(true);
+    await wrapper.get('[aria-haspopup="dialog"]').trigger('click');
     expect(wrapper.find('[data-mobile-tab="approvals"]').exists()).toBe(true);
 
     window.dispatchEvent(new CustomEvent(authSessionChangedEvent, {
@@ -286,6 +299,35 @@ describe('App', () => {
     await wrapper.get('[aria-haspopup="dialog"]').trigger('click');
     expect(wrapper.get('.mobile-more-sheet').text()).toContain('标签');
     expect(wrapper.get('.mobile-more-sheet').text()).not.toContain('审批');
+    wrapper.unmount();
+  });
+
+  it('没有手机作业菜单时，底栏扫码不进入现场页', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'inbound']));
+    const wrapper = mount(App);
+    await flushPromises();
+
+    await wrapper.get('[aria-label="扫码"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('h1').text()).toBe('首页');
+    expect(wrapper.find('.mobile-tab[data-mobile-section="inventory"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('退出或会话失效后取消挂起扫码', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'mobile']));
+    const wrapper = mount(App);
+    await flushPromises();
+    armMobileScan();
+
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, { detail: { session: null } }));
+    await flushPromises();
+
+    const open = vi.fn();
+    bindMobileScanTarget(open);
+    expect(open).not.toHaveBeenCalled();
+    unbindMobileScanTarget(open);
     wrapper.unmount();
   });
 

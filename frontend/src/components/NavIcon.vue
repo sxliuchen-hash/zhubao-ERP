@@ -12,6 +12,10 @@ defineProps<{
       <path d="M4.5 18v-1.2a4.5 4.5 0 0 1 9 0V18" />
       <path d="M15 7.5h5M15 11h5M15 14.5h3.5" />
     </template>
+    <template v-else-if="name === 'orders'">
+      <path d="M7 3.5h10a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />
+      <path d="M9 8h6M9 12h6M9 16h4" />
+    </template>
     <template v-else-if="name === 'inbound'">
       <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5z" />
       <path d="M3 8.5V16l9 4.5L21 16V8.5" />

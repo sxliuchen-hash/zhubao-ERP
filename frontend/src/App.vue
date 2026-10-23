@@ -7,6 +7,18 @@ import LoginPage from './features/auth/LoginPage.vue';
 import ChainReview from './features/scan/ChainReview.vue';
 import { armMobileScan, cancelMobileScan, openMobileScanTarget } from './features/scan/mobileScanBridge';
 import type { TraceTarget } from './features/scan/traceTarget';
+import { createWorkspaceState } from './features/workspace/workspaceContext';
+import {
+  filterWorkspaceTabs,
+  groupTabsBySection,
+  isTabKey,
+  mobileMoreTabs,
+  mobileOrderTabs,
+  sectionLabel,
+  sectionOfTab,
+  workspaceTabs,
+  type TabKey,
+} from './features/workspace/workspaceNavigation';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
 import { getAuthToken } from './services/apiClient';
 import {
@@ -17,60 +29,6 @@ import {
   type AuthSessionChangedDetail,
   type NavigationMenuItem,
 } from './services/authApi';
-
-type TabKey =
-  | 'dashboard'
-  | 'inbound'
-  | 'customers'
-  | 'production'
-  | 'progress'
-  | 'quality'
-  | 'inventory'
-  | 'finance'
-  | 'approvals'
-  | 'configuration'
-  | 'users'
-  | 'documents'
-  | 'sample'
-  | 'label'
-  | 'hardware'
-  | 'operations'
-  | 'mobile';
-
-type NavGroupId = 'desk' | 'inbound' | 'production' | 'inventory' | 'finance' | 'system';
-
-/** 只改变展示分组，不新增菜单编码，也不因此放宽权限。 */
-const navGroups: Array<{ id: NavGroupId; label: string }> = [
-  { id: 'desk', label: '工作台' },
-  { id: 'inbound', label: '来料与订单' },
-  { id: 'production', label: '生产与质量' },
-  { id: 'inventory', label: '库存与交付' },
-  { id: 'finance', label: '财务经营' },
-  { id: 'system', label: '协同与系统' },
-];
-
-const tabs: Array<{ key: TabKey; label: string; meta: string; code: string; group: NavGroupId }> = [
-  { key: 'dashboard', label: '首页', meta: '今日待办', code: 'OP', group: 'desk' },
-  { key: 'inbound', label: '来料', meta: '收货入库', code: 'IN', group: 'inbound' },
-  { key: 'customers', label: '客户档案', meta: '账单与进度', code: 'CU', group: 'inbound' },
-  { key: 'label', label: '标签', meta: '打印补打', code: 'LB', group: 'inbound' },
-  { key: 'production', label: '生产', meta: '派工报工', code: 'MO', group: 'production' },
-  { key: 'progress', label: '进度', meta: '在制筛选', code: 'PG', group: 'production' },
-  { key: 'quality', label: '质检', meta: '返工放行', code: 'QC', group: 'production' },
-  { key: 'inventory', label: '库存', meta: '出库退货', code: 'ST', group: 'inventory' },
-  { key: 'finance', label: '财务', meta: '客户账成本', code: 'FN', group: 'finance' },
-  { key: 'approvals', label: '审批', meta: '待我处理', code: 'AP', group: 'system' },
-  { key: 'sample', label: '登记导入', meta: 'Excel 入账', code: 'SA', group: 'system' },
-  { key: 'documents', label: '附件', meta: '照片视频', code: 'EV', group: 'system' },
-  { key: 'hardware', label: '设备', meta: '读数接入', code: 'HW', group: 'system' },
-  { key: 'users', label: '用户管理', meta: '账号与权限', code: 'US', group: 'system' },
-  { key: 'configuration', label: '配置', meta: '个人与存储', code: 'CF', group: 'system' },
-  { key: 'operations', label: '运维', meta: '硬件存储', code: 'OC', group: 'system' },
-  { key: 'mobile', label: '手机作业', meta: '收货报工', code: 'PW', group: 'system' },
-];
-
-const mobilePrimaryKeys: TabKey[] = ['dashboard', 'mobile', 'approvals'];
-const fieldRoles = new Set(['ADMIN', 'BUSINESS_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER', 'OPERATOR', 'WORKSHOP_LEADER', 'QUALITY_INSPECTOR']);
 
 const activeTab = ref<TabKey>('dashboard');
 const workspaceLoaders = {
@@ -93,12 +51,14 @@ const workspaceLoaders = {
 };
 const workspaceLoadAttempt = ref(0);
 provide('zhubao-retry-workspace', () => { workspaceLoadAttempt.value += 1; });
+const systemShellKeys = new Set<TabKey>(['approvals', 'sample', 'documents', 'hardware', 'users', 'configuration', 'operations', 'mobile']);
 const activeWorkspace = computed(() => {
   // 重建异步组件以重新请求失败的页面，已加载模块由浏览器缓存复用。
   void workspaceLoadAttempt.value;
-  if (activeTab.value === 'dashboard') return null;
+  const key = activeTab.value;
+  if (key === 'dashboard') return null;
   return defineAsyncComponent({
-    loader: workspaceLoaders[activeTab.value],
+    loader: workspaceLoaders[key],
     loadingComponent: WorkspaceLoadState,
     errorComponent: WorkspaceLoadState,
     delay: 150,
@@ -106,11 +66,16 @@ const activeWorkspace = computed(() => {
   });
 });
 const moreOpen = ref(false);
+const ordersOpen = ref(false);
 const moreQuery = ref('');
+const moreFilterRef = ref<HTMLInputElement | null>(null);
+const ordersCloseRef = ref<HTMLButtonElement | null>(null);
 const traceQuery = ref('');
 const traceTarget = ref<TraceTarget | null>(null);
 const labelTarget = ref<TraceTarget | null>(null);
+const workspace = createWorkspaceState();
 let traceToken = 0;
+provide('zhubao-workspace-context', workspace);
 provide('zhubao-trace-query', traceQuery);
 provide('zhubao-trace-target', traceTarget);
 provide('zhubao-label-target', labelTarget);
@@ -126,7 +91,6 @@ const authSession = ref<AuthSession | null>(null);
 provide('zhubao-auth-session', authSession);
 const authReady = ref(false);
 const authRestoreError = ref('');
-const tabKeySet = new Set<TabKey>(tabs.map((tab) => tab.key));
 const authorizedMenuCodes = computed(() => {
   if (!authSession.value) {
     return null;
@@ -138,7 +102,7 @@ const authorizedMenuCodes = computed(() => {
 });
 const visibleTabs = computed(() => {
   // 用户管理只给管理员。审批栏目跟随服务端下发的菜单，隐藏入口不能代替接口授权。
-  const permittedTabs = tabs.filter((tab) => {
+  const permittedTabs = workspaceTabs.filter((tab) => {
     if (tab.key === 'users') return authSession.value?.role === 'ADMIN';
     return true;
   });
@@ -146,36 +110,34 @@ const visibleTabs = computed(() => {
     return permittedTabs;
   }
   const filteredTabs = permittedTabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
-  return filteredTabs.length ? filteredTabs : tabs.filter((tab) => tab.key === 'dashboard');
+  return filteredTabs.length ? filteredTabs : workspaceTabs.filter((tab) => tab.key === 'dashboard');
 });
 provide('zhubao-visible-tabs', computed(() => visibleTabs.value.map((tab) => tab.key)));
-const navigationGroups = computed(() => navGroups
-  .map((group) => ({
-    label: group.label,
-    tabs: visibleTabs.value.filter((tab) => tab.group === group.id),
-  }))
-  .filter((group) => group.tabs.length > 0));
+const navigationGroups = computed(() => groupTabsBySection(visibleTabs.value));
 const activeTabMeta = computed(() => visibleTabs.value.find((tab) => tab.key === activeTab.value) ?? visibleTabs.value[0]);
 const activeTitle = computed(() => activeTabMeta.value?.label ?? '首页');
-const activeLocation = computed(() => navGroups.find((group) => group.id === activeTabMeta.value?.group)?.label ?? '');
-const mobilePrimaryTabs = computed(() => mobilePrimaryKeys
-  .map((key) => visibleTabs.value.find((tab) => tab.key === key))
-  .filter((tab): tab is (typeof tabs)[number] => Boolean(tab))
-  .map((tab) => ({
-    key: tab.key,
-    label: tab.key === 'dashboard' ? '工作台' : tab.key === 'mobile' ? '现场作业' : '审批',
-  })));
-const moreTabs = computed(() => visibleTabs.value.filter((tab) => !mobilePrimaryKeys.includes(tab.key)));
-const filteredMoreTabs = computed(() => {
-  const query = moreQuery.value.trim();
-  if (!query) return moreTabs.value;
-  return moreTabs.value.filter((tab) => tab.label.includes(query) || tab.meta.includes(query));
-});
+const activeLocation = computed(() => sectionLabel(sectionOfTab(activeTabMeta.value?.key ?? 'dashboard')));
+const showDeskTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'dashboard'));
+const showInventoryTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'inventory'));
+const orderDockTabs = computed(() => mobileOrderTabs(visibleTabs.value));
+const moreTabs = computed(() => mobileMoreTabs(visibleTabs.value));
+const filteredMoreGroups = computed(() => groupTabsBySection(filterWorkspaceTabs(moreTabs.value, moreQuery.value)));
+const deskActive = computed(() => activeTab.value === 'dashboard' && !moreOpen.value && !ordersOpen.value);
+const ordersActive = computed(() => ordersOpen.value || (!moreOpen.value && orderDockTabs.value.some((tab) => tab.key === activeTab.value)));
+const inventoryActive = computed(() => activeTab.value === 'inventory' && !moreOpen.value && !ordersOpen.value);
+const moreActive = computed(() => moreOpen.value || moreTabs.value.some((tab) => tab.key === activeTab.value));
 
 watch(activeTab, () => {
   moreOpen.value = false;
+  ordersOpen.value = false;
   moreQuery.value = '';
   void nextTick(() => window.scrollTo(0, 0));
+});
+
+watch(moreOpen, (open) => {
+  if (!open) return;
+  ordersOpen.value = false;
+  void nextTick(() => moreFilterRef.value?.focus());
 });
 
 watch(visibleTabs, (nextTabs) => {
@@ -186,11 +148,15 @@ watch(visibleTabs, (nextTabs) => {
 
 onMounted(() => {
   globalThis.addEventListener?.(authSessionChangedEvent, handleAuthSessionChanged as EventListener);
+  globalThis.addEventListener?.('keydown', handleGlobalKeydown);
   void restoreAuthSessionForNavigation();
 });
 
 onBeforeUnmount(() => {
   globalThis.removeEventListener?.(authSessionChangedEvent, handleAuthSessionChanged as EventListener);
+  globalThis.removeEventListener?.('keydown', handleGlobalKeydown);
+  cancelMobileScan();
+  workspace.clear();
 });
 
 async function restoreAuthSessionForNavigation() {
@@ -198,7 +164,6 @@ async function restoreAuthSessionForNavigation() {
   authRestoreError.value = '';
   try {
     authSession.value = await fetchAuthSession();
-    openMobileWorkspaceForSession(authSession.value);
   } catch {
     authSession.value = null;
     // 会话失效时接口层已经清掉令牌，这里回到登录页。令牌还在只说明服务器暂时没响应。
@@ -210,26 +175,33 @@ async function restoreAuthSessionForNavigation() {
 
 async function handleLogout() {
   cancelMobileScan();
+  workspace.clear();
   await logoutAuthSession();
   authSession.value = null;
   labelTarget.value = null;
   traceTarget.value = null;
+  traceQuery.value = '';
 }
 
 function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) {
-  const wasSignedOut = !authSession.value;
+  cancelMobileScan();
+  workspace.clear();
+  moreOpen.value = false;
+  ordersOpen.value = false;
   authSession.value = event.detail.session;
   if (event.detail.session) {
     authRestoreError.value = '';
-    if (wasSignedOut) openMobileWorkspaceForSession(event.detail.session);
+    return;
   }
+  labelTarget.value = null;
+  traceTarget.value = null;
+  traceQuery.value = '';
 }
 
-function openMobileWorkspaceForSession(session: AuthSession | null) {
-  if (session && window.innerWidth <= 900 && fieldRoles.has(session.role)
-    && visibleTabs.value.some((tab) => tab.key === 'mobile') && activeTab.value === 'dashboard') {
-    activeTab.value = 'mobile';
-  }
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || (!moreOpen.value && !ordersOpen.value)) return;
+  moreOpen.value = false;
+  ordersOpen.value = false;
 }
 
 function openTraceDocument() {
@@ -247,11 +219,25 @@ function activateTab(tab: TabKey) {
 
 function openMobileTab(tab: TabKey) {
   moreOpen.value = false;
+  ordersOpen.value = false;
   activateTab(tab);
+}
+
+function openMobileOrders() {
+  moreOpen.value = false;
+  if (orderDockTabs.value.length === 1) {
+    openMobileTab(orderDockTabs.value[0].key);
+    return;
+  }
+  ordersOpen.value = !ordersOpen.value;
+  if (ordersOpen.value) {
+    void nextTick(() => ordersCloseRef.value?.focus());
+  }
 }
 
 function startDockScan() {
   moreOpen.value = false;
+  ordersOpen.value = false;
   if (openMobileScanTarget()) return;
   if (!visibleTabs.value.some((tab) => tab.key === 'mobile')) return;
   const switching = activeTab.value !== 'mobile';
@@ -267,10 +253,6 @@ function startDockScan() {
 function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
   return items.flatMap((item) => [item.code, ...flattenMenuCodes(item.children)]);
 }
-
-function isTabKey(value: string): value is TabKey {
-  return tabKeySet.has(value as TabKey);
-}
 </script>
 
 <template>
@@ -283,7 +265,7 @@ function isTabKey(value: string): value is TabKey {
     </section>
   </div>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
-  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': activeTabMeta?.group === 'system' }" @open-trace="openTraceDocument">
+  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
     <template #session>
       <div class="top-session">
         <span>{{ authSession?.operator }}</span>
@@ -294,16 +276,28 @@ function isTabKey(value: string): value is TabKey {
     <template #mobile-nav>
       <div class="mobile-tab-cluster">
         <button
-          v-for="item in mobilePrimaryTabs"
-          :key="item.key"
+          v-if="showDeskTab"
           class="mobile-tab"
-          :class="{ active: activeTab === item.key }"
-          :data-mobile-tab="item.key"
+          :class="{ active: deskActive }"
+          data-mobile-section="desk"
+          data-mobile-tab="dashboard"
           type="button"
-          @click="openMobileTab(item.key)"
+          @click="openMobileTab('dashboard')"
         >
-          <NavIcon :name="item.key" />
-          <span>{{ item.label }}</span>
+          <NavIcon name="dashboard" />
+          <span>待办</span>
+        </button>
+        <button
+          v-if="orderDockTabs.length"
+          class="mobile-tab"
+          :class="{ active: ordersActive }"
+          data-mobile-section="orders"
+          type="button"
+          :aria-expanded="ordersOpen ? 'true' : 'false'"
+          @click="openMobileOrders"
+        >
+          <NavIcon name="orders" />
+          <span>订单</span>
         </button>
       </div>
       <button class="mobile-scan-key" type="button" aria-label="扫码" @click="startDockScan">
@@ -312,25 +306,36 @@ function isTabKey(value: string): value is TabKey {
       </button>
       <div class="mobile-tab-cluster">
         <button
+          v-if="showInventoryTab"
+          class="mobile-tab"
+          :class="{ active: inventoryActive }"
+          data-mobile-section="inventory"
+          data-mobile-tab="inventory"
+          type="button"
+          @click="openMobileTab('inventory')"
+        >
+          <NavIcon name="inventory" />
+          <span>库存</span>
+        </button>
+        <button
           v-if="moreTabs.length"
           class="mobile-tab"
-          :class="{ active: moreOpen || moreTabs.some((tab) => tab.key === activeTab) }"
+          :class="{ active: moreActive }"
+          data-mobile-section="more"
           type="button"
           aria-haspopup="dialog"
           :aria-expanded="moreOpen ? 'true' : 'false'"
           @click="moreOpen = !moreOpen"
         >
           <NavIcon name="more" />
-          <span>全部功能</span>
+          <span>更多</span>
         </button>
       </div>
-      <div v-if="moreOpen" class="mobile-more-sheet" role="dialog" aria-label="全部功能">
-        <label class="mobile-more-filter">
-          <span class="visually-hidden">筛选功能</span>
-          <input v-model="moreQuery" aria-label="筛选功能" placeholder="筛选功能" />
-        </label>
+      <div v-if="ordersOpen" class="mobile-more-sheet" role="dialog" aria-label="订单">
+        <button ref="ordersCloseRef" class="secondary-button mobile-sheet-close" type="button" @click="ordersOpen = false">关闭</button>
+        <p class="mobile-more-heading">打开原有页面</p>
         <button
-          v-for="tab in filteredMoreTabs"
+          v-for="tab in orderDockTabs"
           :key="tab.key"
           class="mobile-more-item"
           :data-mobile-tab="tab.key"
@@ -340,10 +345,31 @@ function isTabKey(value: string): value is TabKey {
           {{ tab.label }}
         </button>
       </div>
+      <div v-if="moreOpen" class="mobile-more-sheet" role="dialog" aria-label="更多">
+        <button class="secondary-button mobile-sheet-close" type="button" @click="moreOpen = false">关闭</button>
+        <label class="mobile-more-filter">
+          <span class="visually-hidden">筛选功能</span>
+          <input ref="moreFilterRef" v-model="moreQuery" aria-label="筛选功能" placeholder="筛选功能" />
+        </label>
+        <template v-for="group in filteredMoreGroups" :key="group.id">
+          <p class="mobile-more-heading">{{ group.label }}</p>
+          <button
+            v-for="tab in group.tabs"
+            :key="tab.key"
+            class="mobile-more-item"
+            :data-mobile-tab="tab.key"
+            type="button"
+            @click="openMobileTab(tab.key)"
+          >
+            {{ tab.label }}
+          </button>
+        </template>
+        <p v-if="!filteredMoreGroups.length" class="mobile-more-heading">没有匹配的功能</p>
+      </div>
     </template>
 
     <template #nav>
-      <template v-for="group in navigationGroups" :key="group.label">
+      <template v-for="group in navigationGroups" :key="group.id">
         <p v-if="group.tabs.length" class="nav-group-label">{{ group.label }}</p>
         <button
           v-for="tab in group.tabs"
