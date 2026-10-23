@@ -84,6 +84,7 @@ function rememberProgress(record: ScanProgressRecord) {
       field-text="订单贴纸或运单"
       input-aria-label="订单贴纸或运单"
       submit-label="查看订单"
+      bind-mobile-scan
       :busy="scan.loading"
       @draft="scan.invalidate"
       @recognize="recognize"

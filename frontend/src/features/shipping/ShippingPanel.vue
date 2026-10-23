@@ -23,6 +23,7 @@ import {
 defineProps<{
   title: string;
   intro: string;
+  bindMobileScan?: boolean;
 }>();
 
 const scanText = ref('');
@@ -337,6 +338,7 @@ async function confirmShip() {
       submit-aria-label="识别发货对象"
       photo-aria-label="拍发货标签"
       camera-aria-label="拍发货贴纸"
+      :bind-mobile-scan="bindMobileScan"
       :busy="shippingScan.loading || shipping"
       @draft="clearTarget"
       @recognize="recognize"

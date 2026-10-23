@@ -14,7 +14,9 @@ import {
   type ProcessProgressTarget,
 } from '../../services/processProgressApi';
 
-const props = defineProps<{ initialCode?: string }>();
+const props = withDefaults(defineProps<{ initialCode?: string; bindMobileScan?: boolean }>(), {
+  bindMobileScan: false,
+});
 const percents = [0, 30, 60, 90, 100];
 const query = ref('');
 const processFilter = ref('');
@@ -278,7 +280,7 @@ async function loadTimeline() {
     <label>查找<input v-model="query" aria-label="进度查找" placeholder="单号、客户、工序或进度" @change="page = 1; reload()" /></label>
     <label>工序<input v-model="processFilter" aria-label="工序筛选" placeholder="雕刻、镶嵌或抛光" @change="page = 1; reload()" /></label>
     <label>期限到<input v-model="dueBefore" aria-label="期限筛选" placeholder="2026-12-31" @change="page = 1; reload()" /></label>
-    <ScanInput v-model="code" field-text="进度单号" input-aria-label="进度单号" submit-label="定位" @recognize="locate" />
+    <ScanInput v-model="code" field-text="进度单号" input-aria-label="进度单号" submit-label="定位" :bind-mobile-scan="bindMobileScan" @recognize="locate" />
     <button class="secondary-button" type="button" @click="page -= 1; reload()" :disabled="page <= 1">上一页</button>
     <button class="secondary-button" type="button" @click="page += 1; reload()">下一页</button>
     <p v-if="error" class="operation-feedback danger">{{ error }}</p>

@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { armMobileScan, cancelMobileScan } from './mobileScanBridge';
 import { queryScanContext } from '../../services/scanContextApi';
 import { hasLiveCamera, openCameraStream, readBarcodeFromFile, readLiveBarcode } from './cameraBarcode';
 import OrderContextCard from './OrderContextCard.vue';
@@ -88,6 +89,19 @@ describe('扫码输入组件', () => {
 
     await wrapper.get('[aria-label="停止扫码"]').trigger('click');
     wrapper.unmount();
+  });
+
+  it('底栏点过扫码后，当前页的扫码框挂上就打开相机', async () => {
+    vi.mocked(hasLiveCamera).mockReturnValue(true);
+    const stop = vi.fn();
+    vi.mocked(openCameraStream).mockResolvedValue({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+    vi.mocked(readLiveBarcode).mockImplementation(() => new Promise(() => {}));
+    armMobileScan();
+    const wrapper = mount(ScanInput, { props: { ...inputProps, bindMobileScan: true } });
+    await flushPromises();
+    expect(wrapper.get('[aria-label="扫码取景"]').isVisible()).toBe(true);
+    wrapper.unmount();
+    cancelMobileScan();
   });
 
   it('拍照与相册入口分开，选图识别时不显示空取景框', async () => {

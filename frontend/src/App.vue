@@ -5,6 +5,7 @@ import NavIcon from './components/NavIcon.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import LoginPage from './features/auth/LoginPage.vue';
 import ChainReview from './features/scan/ChainReview.vue';
+import { armMobileScan, cancelMobileScan, openMobileScanTarget } from './features/scan/mobileScanBridge';
 import type { TraceTarget } from './features/scan/traceTarget';
 import M1Dashboard from './features/m1/M1Dashboard.vue';
 import { getAuthToken } from './services/apiClient';
@@ -208,6 +209,7 @@ async function restoreAuthSessionForNavigation() {
 }
 
 async function handleLogout() {
+  cancelMobileScan();
   await logoutAuthSession();
   authSession.value = null;
   labelTarget.value = null;
@@ -248,6 +250,20 @@ function openMobileTab(tab: TabKey) {
   activateTab(tab);
 }
 
+function startDockScan() {
+  moreOpen.value = false;
+  if (openMobileScanTarget()) return;
+  if (!visibleTabs.value.some((tab) => tab.key === 'mobile')) return;
+  const switching = activeTab.value !== 'mobile';
+  armMobileScan();
+  if (switching) activateTab('mobile');
+  else {
+    void nextTick(() => {
+      if (!openMobileScanTarget()) cancelMobileScan();
+    });
+  }
+}
+
 function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
   return items.flatMap((item) => [item.code, ...flattenMenuCodes(item.children)]);
 }
@@ -276,30 +292,38 @@ function isTabKey(value: string): value is TabKey {
     </template>
 
     <template #mobile-nav>
-      <button
-        v-for="item in mobilePrimaryTabs"
-        :key="item.key"
-        class="mobile-tab"
-        :class="{ active: activeTab === item.key }"
-        :data-mobile-tab="item.key"
-        type="button"
-        @click="openMobileTab(item.key)"
-      >
-        <NavIcon :name="item.key" />
-        <span>{{ item.label }}</span>
+      <div class="mobile-tab-cluster">
+        <button
+          v-for="item in mobilePrimaryTabs"
+          :key="item.key"
+          class="mobile-tab"
+          :class="{ active: activeTab === item.key }"
+          :data-mobile-tab="item.key"
+          type="button"
+          @click="openMobileTab(item.key)"
+        >
+          <NavIcon :name="item.key" />
+          <span>{{ item.label }}</span>
+        </button>
+      </div>
+      <button class="mobile-scan-key" type="button" aria-label="扫码" @click="startDockScan">
+        <span class="mobile-scan-finder" aria-hidden="true"></span>
+        <span>扫码</span>
       </button>
-      <button
-        v-if="moreTabs.length"
-        class="mobile-tab"
-        :class="{ active: moreOpen || moreTabs.some((tab) => tab.key === activeTab) }"
-        type="button"
-        aria-haspopup="dialog"
-        :aria-expanded="moreOpen ? 'true' : 'false'"
-        @click="moreOpen = !moreOpen"
-      >
-        <NavIcon name="more" />
-        <span>全部功能</span>
-      </button>
+      <div class="mobile-tab-cluster">
+        <button
+          v-if="moreTabs.length"
+          class="mobile-tab"
+          :class="{ active: moreOpen || moreTabs.some((tab) => tab.key === activeTab) }"
+          type="button"
+          aria-haspopup="dialog"
+          :aria-expanded="moreOpen ? 'true' : 'false'"
+          @click="moreOpen = !moreOpen"
+        >
+          <NavIcon name="more" />
+          <span>全部功能</span>
+        </button>
+      </div>
       <div v-if="moreOpen" class="mobile-more-sheet" role="dialog" aria-label="全部功能">
         <label class="mobile-more-filter">
           <span class="visually-hidden">筛选功能</span>

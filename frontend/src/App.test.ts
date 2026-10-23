@@ -79,11 +79,27 @@ describe('App', () => {
     expect(wrapper.get('.mobile-tabbar').text()).toContain('审批');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('全部功能');
     expect(wrapper.get('.mobile-tabbar').text()).not.toContain('消息');
-    expect(wrapper.get('.mobile-tabbar').text()).not.toContain('扫码');
+    expect(wrapper.get('[aria-label="扫码"]').classes()).toContain('mobile-scan-key');
     expect(wrapper.get('[aria-label="版本升级通知"]').text()).toContain('单据维护会列出未回收母单');
     await wrapper.get('[aria-label="版本升级通知"] button').trigger('click');
     expect(wrapper.find('[aria-label="版本升级通知"]').exists()).toBe(false);
     expect(localStorage.getItem('zhubao-upgrade-notice-20261020')).toBe('1');
+  });
+
+  it('opens field work from the center scan key when the current page has no scanner', async () => {
+    const mediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'mobile', 'label']));
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.get('.mobile-tab[data-mobile-tab="dashboard"]').classes()).toContain('active');
+    await wrapper.get('[aria-label="扫码"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('.mobile-tab[data-mobile-tab="mobile"]').classes()).toContain('active');
+    wrapper.unmount();
+    if (mediaDevices) Object.defineProperty(navigator, 'mediaDevices', mediaDevices);
   });
 
   it('opens the permitted field workspace first on a phone', async () => {

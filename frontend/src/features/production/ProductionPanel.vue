@@ -292,6 +292,7 @@ async function deliver(station: ProcessStationCard) {
       submit-label="识别贴纸"
       submit-aria-label="识别贴纸"
       photo-aria-label="拍贴纸"
+      :bind-mobile-scan="field"
       :busy="stationScan.loading || stationBusy"
       @draft="clearStationTarget"
       @recognize="recognizeStation"

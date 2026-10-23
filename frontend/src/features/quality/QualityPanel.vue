@@ -474,6 +474,7 @@ function showClause(index: number) {
       submit-label="识别贴纸"
       submit-aria-label="识别质检贴纸"
       photo-aria-label="拍贴纸"
+      :bind-mobile-scan="field"
       :busy="checkBusy || qualityScan.loading"
       @draft="clearTarget"
       @recognize="recognize"

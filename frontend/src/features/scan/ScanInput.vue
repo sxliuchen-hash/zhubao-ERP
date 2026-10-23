@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { hasLiveCamera } from './cameraBarcode';
+import { bindMobileScanTarget, unbindMobileScanTarget } from './mobileScanBridge';
 import type { ScanDraft } from './scanDraft';
 import { useScanner } from './useScanner';
 import { scanObjectTypeOptions, type ScanObjectType } from '../../services/scanContextApi';
@@ -15,12 +16,14 @@ const props = withDefaults(defineProps<{
   cameraAriaLabel?: string;
   photoAriaLabel?: string;
   busy?: boolean;
+  bindMobileScan?: boolean;
 }>(), {
   placeholder: '',
   submitAriaLabel: '',
   cameraAriaLabel: '打开摄像头',
   photoAriaLabel: '拍照识别',
   busy: false,
+  bindMobileScan: false,
 });
 
 const emit = defineEmits<{
@@ -94,9 +97,23 @@ async function onCamera() {
     photoRef.value?.click();
     return;
   }
-  const raw = await scanner.scanCamera();
+  const reading = scanner.scanCamera();
+  await nextTick();
+  const panel = videoEl.value?.closest('.scan-camera-panel');
+  if (panel && typeof panel.scrollIntoView === 'function') {
+    panel.scrollIntoView({ block: 'center' });
+  }
+  const raw = await reading;
   if (raw) publish(raw);
 }
+
+onMounted(() => {
+  if (props.bindMobileScan) bindMobileScanTarget(onCamera);
+});
+
+onBeforeUnmount(() => {
+  unbindMobileScanTarget(onCamera);
+});
 
 async function onPhoto(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -109,7 +126,7 @@ async function onPhoto(event: Event) {
 </script>
 
 <template>
-  <form class="scan-entry intake-form" @submit.prevent="submitManual">
+  <form class="scan-entry intake-form" :class="{ 'is-scanning': cameraActive }" @submit.prevent="submitManual">
     <div class="scan-start">
       <button
         class="primary-button scan-camera-button"
@@ -331,5 +348,12 @@ async function onPhoto(event: Event) {
   cursor: pointer;
   color: var(--muted, #64748b);
   font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .scan-start,
+  .scan-entry:not(.is-scanning) > .scan-fallback-actions {
+    display: none;
+  }
 }
 </style>

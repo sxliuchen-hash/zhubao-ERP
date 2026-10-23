@@ -545,6 +545,7 @@ onMounted(loadCatalog);
       submit-label="识别单号"
       submit-aria-label="识别单号"
       photo-aria-label="拍面单"
+      :bind-mobile-scan="field"
       :busy="intakeScan.loading || submitting"
       @draft="clearIntakeTarget"
       @recognize="recognizeIntake"

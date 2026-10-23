@@ -99,6 +99,7 @@ function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objec
 
     <ShippingPanel
       v-if="jobMode === 'shipping' && extraModes.some((mode) => mode.key === 'shipping')"
+      bind-mobile-scan
       title="确认发货"
       intro="扫成品标签，核对库存、数量、重量和物流后提交。"
     />
@@ -110,7 +111,7 @@ function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objec
       intro="扫码核对加工要求，逐条判定后提交。"
     />
 
-    <ProcessProgressPanel v-if="jobMode === 'progress' && extraModes.some((mode) => mode.key === 'progress')" :initial-code="progressCode" />
+    <ProcessProgressPanel v-if="jobMode === 'progress' && extraModes.some((mode) => mode.key === 'progress')" bind-mobile-scan :initial-code="progressCode" />
 
     <ProductionPanel
       v-if="jobMode === 'station' && primaryModes.some((mode) => mode.key === 'station')"
