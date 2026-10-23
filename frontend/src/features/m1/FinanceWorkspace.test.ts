@@ -102,6 +102,26 @@ function dashboardOf(patch: {
 }
 
 describe('FinanceWorkspace', () => {
+  it('财务入口将客户和月份交给共享账单容器，不在原页面直接收款', async () => {
+    const open = vi.fn();
+    const wrapper = mount(FinanceWorkspace, { global: { provide: { 'zhubao-open-bill': open } } });
+    await selectSection(wrapper, '收款'); await wrapper.get('[aria-label="客户编号"]').setValue('1002'); await wrapper.get('[aria-label="财务月份"]').setValue('2026-09');
+    await wrapper.findAll('button').find(button => button.text() === '核对客户账单与收款')!.trigger('click');
+    expect(open).toHaveBeenCalledWith({ customerId: 1002, yearMonth: '2026-09' }, 'receipt');
+    expect(wrapper.find('[aria-label="收款金额"]').exists()).toBe(false); expect(recordReceipt).not.toHaveBeenCalled(); wrapper.unmount();
+  });
+  it('财务账单切客户立即撤下旧结果，迟到的另一客户结果不回写', async () => {
+    let resolveFirst!: (value: Awaited<ReturnType<typeof fetchStatement>>) => void;
+    const first = new Promise<Awaited<ReturnType<typeof fetchStatement>>>(done => { resolveFirst = done; });
+    const base = { customerId: 1002, customerName: '客户乙', stockQuantity: 0, stockWeight: 0, receivableAmount: 20, receivedAmount: 0, outstandingAmount: 20, prepaymentAmount: 0, lines: [], receipts: [], stockNote: '' };
+    vi.mocked(fetchStatement).mockReturnValueOnce(first).mockResolvedValueOnce(base);
+    const wrapper = mount(FinanceWorkspace); await selectSection(wrapper, '客户账单'); await wrapper.get('[aria-label="客户编号"]').setValue('1001');
+    await wrapper.findAll('button').find(button => button.text() === '查询账单')!.trigger('click');
+    await wrapper.get('[aria-label="客户编号"]').setValue('1002');
+    await wrapper.findAll('button').find(button => button.text() === '查询账单')!.trigger('click'); await flushPromises();
+    resolveFirst({ ...base, customerId: 1001, customerName: '客户甲旧账单', outstandingAmount: 9999 }); await flushPromises();
+    expect(wrapper.text()).toContain('客户乙'); expect(wrapper.text()).not.toContain('客户甲旧账单'); expect(wrapper.text()).not.toContain('9,999'); wrapper.unmount();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchConsumables).mockResolvedValue([]);
@@ -262,6 +282,7 @@ describe('FinanceWorkspace', () => {
       allocations: [],
     });
     vi.mocked(fetchStatement)
+      .mockResolvedValueOnce({ customerId: 1008, customerName: '恒信珠宝', stockQuantity: 0, stockWeight: 0, receivableAmount: 0, receivedAmount: 0, outstandingAmount: 0, prepaymentAmount: 0, lines: [], receipts: [], stockNote: '' })
       .mockRejectedValueOnce(new Error('查询账单失败'))
       .mockResolvedValueOnce({
         customerId: 1008,
@@ -281,17 +302,17 @@ describe('FinanceWorkspace', () => {
     await wrapper.get('[aria-label="客户编号"]').setValue('1008');
     await wrapper.get('[aria-label="收款金额"]').setValue('80');
     await wrapper.get('[aria-label="收款日期"]').setValue('2026-10-10');
-    const register = wrapper.findAll('button').find((button) => button.text() === '登记收款');
+    const register = wrapper.findAll('button').find((button) => button.text() === '确认登记收款');
     await register?.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('收款单号 FIN-RC-9');
     expect(wrapper.text()).toContain('请只重试查询，不要再次登记');
-    expect(register?.attributes('disabled')).toBeDefined();
+    expect(register?.element.closest('fieldset')?.disabled).toBe(true);
     expect(recordReceipt).toHaveBeenCalledTimes(1);
     await wrapper.findAll('button').find((button) => button.text() === '重新查询账单')?.trigger('click');
     await flushPromises();
     expect(recordReceipt).toHaveBeenCalledTimes(1);
-    expect(fetchStatement).toHaveBeenCalledTimes(2);
+    expect(fetchStatement).toHaveBeenCalledTimes(3);
     expect(wrapper.text()).not.toContain('请只重试查询，不要再次登记');
     expect(wrapper.text()).toContain('收款单号 FIN-RC-9');
   });

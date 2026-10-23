@@ -14,7 +14,6 @@ import {
   issueConsumable,
   payPayable,
   purchaseConsumable,
-  recordReceipt,
   runDepreciation,
   saveConsumableItem,
   saveFixedAsset,
@@ -31,6 +30,8 @@ import {
   type PayableView,
   type PayrollLine,
 } from '../../services/financeApi';
+import CustomerBillPanel from '../finance/CustomerBillPanel.vue';
+import { validBillContext, type OpenBillAction } from '../finance/billContext';
 import { formatAmount } from '../../utils/formatAmount';
 
 type Section = 'overview' | 'statement' | 'receipt' | 'payroll' | 'consumable' | 'asset' | 'payable' | 'operating';
@@ -64,6 +65,9 @@ const sourceLabels: Record<string, string> = {
 };
 
 const openTab = inject<((tab: 'inventory') => void) | undefined>('zhubao-open-tab', undefined);
+const openBill = inject<OpenBillAction | null>('zhubao-open-bill', null);
+const billContext = computed(() => ({ customerId: Number(customerId.value), yearMonth: yearMonth.value.trim() }));
+function showBill(mode: 'statement' | 'receipt') { if (validBillContext(billContext.value)) openBill?.(billContext.value, mode); else error.value = '请先填写正整数客户编号和有效月份'; }
 const section = ref<Section>('overview');
 const amountsHidden = ref(false);
 const sectionLabel = computed(() => sections.find((item) => item.key === section.value)?.label ?? '财务');
@@ -76,33 +80,12 @@ const customerName = ref('');
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
 const yearMonth = ref(today.slice(0, 7));
 const statement = ref<CustomerStatement | null>(null);
+const statementReading = ref(false);
 const billing = ref<BillingRunResult | null>(null);
 const mode = ref('WEIGHT');
 const unitPrice = ref('10');
 const processName = ref('雕刻');
 const chargeUnit = ref('GRAM');
-
-const receiptAmount = ref('');
-const receiptDate = ref(today);
-const receiptLine = ref('');
-const receiptAllocated = ref('');
-const receiptKey = ref('');
-const savedReceiptCode = ref('');
-const receiptRefreshError = ref('');
-
-watch([customerId, customerName, receiptAmount, receiptDate, receiptLine, receiptAllocated], () => {
-  receiptKey.value = '';
-  savedReceiptCode.value = '';
-  receiptRefreshError.value = '';
-});
-
-function receiptIdempotencyKey() {
-  if (!receiptKey.value) {
-    const random = globalThis.crypto?.randomUUID?.();
-    receiptKey.value = random ?? `rc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-  return receiptKey.value;
-}
 
 const payrollLines = ref<PayrollLine[]>([]);
 const consumables = ref<ConsumableStock[]>([]);
@@ -120,6 +103,9 @@ const detailError = ref('');
 const selectedMonth = ref('');
 let overviewSeq = 0;
 let detailSeq = 0;
+let statementSeq = 0;
+let disposed = false;
+watch([customerId, yearMonth], () => { ++statementSeq; statement.value = null; billing.value = null; statementReading.value = false; }, { flush: 'sync' });
 const payableCode = ref('');
 const payAmount = ref('');
 const payDate = ref(today);
@@ -171,20 +157,21 @@ async function run(action: () => Promise<void>) {
 }
 
 function requireCustomer() {
-  if (!customerId.value.trim()) {
-    throw new Error('请先填写客户编号');
-  }
+  if (!/^\d+$/.test(customerId.value.trim()) || !Number.isSafeInteger(Number(customerId.value)) || Number(customerId.value) <= 0) throw new Error('请先填写正整数客户编号');
   return Number(customerId.value);
 }
 
 async function loadStatement() {
-  await run(async () => {
+  const token = ++statementSeq; const month = yearMonth.value.trim(); const id = customerId.value.trim();
+  statementReading.value = true; error.value = ''; statement.value = null;
+  try {
     requireCustomer();
-    statement.value = await fetchStatement(customerId.value.trim(), yearMonth.value.trim());
-    if (statement.value.lines.length === 0) {
-      message.value = '暂无账单行';
-    }
-  });
+    const loaded = await fetchStatement(id, month);
+    if (disposed || token !== statementSeq) return;
+    if (loaded.customerId !== Number(id)) throw new Error('账单与当前客户不一致');
+    statement.value = loaded; message.value = loaded.lines.length ? '' : '暂无账单行';
+  } catch (reason) { if (!disposed && token === statementSeq) fail(reason); }
+  finally { if (!disposed && token === statementSeq) statementReading.value = false; }
 }
 
 async function saveAgreement() {
@@ -206,65 +193,17 @@ async function saveAgreement() {
 }
 
 async function createBilling() {
+  const id = customerId.value.trim(); const month = yearMonth.value.trim(); const token = ++statementSeq;
   await run(async () => {
-    billing.value = await generateBilling(yearMonth.value.trim(), customerId.value.trim());
+    const generated = await generateBilling(month, id);
+    if (disposed || token !== statementSeq) return;
+    billing.value = generated;
     message.value = `新入账 ${billing.value.createdCount} 笔`;
-    if (customerId.value.trim()) {
-      statement.value = await fetchStatement(customerId.value.trim(), yearMonth.value.trim());
+    if (id) {
+      const loaded = await fetchStatement(id, month);
+      if (!disposed && token === statementSeq && loaded.customerId === Number(id)) statement.value = loaded;
     }
   });
-}
-
-async function saveReceipt() {
-  busy.value = true;
-  error.value = '';
-  message.value = '';
-  receiptRefreshError.value = '';
-  try {
-    const id = requireCustomer();
-    const allocations = receiptLine.value.trim()
-      ? [{ receivableCode: receiptLine.value.trim(), amount: Number(receiptAllocated.value || receiptAmount.value) }]
-      : [];
-    const idempotencyKey = receiptIdempotencyKey();
-    const receipt = await recordReceipt({
-      customerId: id,
-      customerName: customerName.value.trim() || statement.value?.customerName || `客户${id}`,
-      receivedOn: receiptDate.value,
-      amount: Number(receiptAmount.value),
-      allocations,
-      idempotencyKey,
-    });
-    savedReceiptCode.value = receipt.code;
-    message.value = `收款已登记，单号 ${receipt.code}`;
-    await refreshReceiptStatement(id);
-  } catch (reason) {
-    fail(reason);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function refreshReceiptStatement(customer: number) {
-  try {
-    statement.value = await fetchStatement(String(customer), '');
-    receiptRefreshError.value = '';
-    receiptKey.value = '';
-  } catch (reason) {
-    const detail = reason instanceof Error ? reason.message : '查询失败';
-    receiptRefreshError.value = `收款已登记，账单刷新失败：${detail}。请只重试查询，不要再次登记。`;
-  }
-}
-
-async function retryReceiptQuery() {
-  busy.value = true;
-  error.value = '';
-  try {
-    await refreshReceiptStatement(requireCustomer());
-  } catch (reason) {
-    fail(reason);
-  } finally {
-    busy.value = false;
-  }
 }
 
 async function buildPayroll(confirm: boolean) {
@@ -825,6 +764,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
+  ++statementSeq;
   overviewSeq += 1;
   detailSeq += 1;
 });
@@ -1156,9 +1097,10 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'statement'" class="section-block">
+      <button v-if="openBill" class="secondary-button" type="button" @click="showBill('statement')">打开本客户账单与收款</button>
       <h2>客户账单</h2>
       <div class="finance-actions">
-        <button class="primary-button" type="button" :disabled="busy" @click="loadStatement">查询账单</button>
+        <button class="primary-button" type="button" :disabled="busy || statementReading" @click="loadStatement">查询账单</button>
         <button class="table-action" type="button" :disabled="busy" @click="createBilling">生成本月账单</button>
         <button class="table-action" type="button" :disabled="busy" @click="saveAgreement">保存协议</button>
         <button class="table-action" type="button" @click="openTab?.('inventory')">看库存</button>
@@ -1194,7 +1136,7 @@ function kindLabel(kind: string) {
       <p v-if="statement" class="empty-hint">
         {{ statement.customerName }} 应收 {{ formatAmount(statement.receivableAmount) }} ，已收 {{ formatAmount(statement.receivedAmount) }} ，未收
         {{ formatAmount(statement.outstandingAmount) }} ，预收 {{ formatAmount(statement.prepaymentAmount) }} 。在库
-        {{ statement.stockQuantity }} 件 / {{ statement.stockWeight }} 克。{{ statement.stockNote }}
+        数量汇总 {{ statement.stockQuantity }} / 重量汇总 {{ statement.stockWeight }}。{{ statement.stockNote }}
       </p>
       <p v-if="statement && statement.lines.length === 0" class="empty-hint">暂无账单行</p>
       <div v-if="statement && statement.lines.length" class="erp-table-wrap finance-register-table" tabindex="0" aria-label="账单明细，可横向滚动">
@@ -1238,27 +1180,10 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'receipt'" class="section-block">
-      <h2>登记收款</h2>
-      <label>
-        收款日期
-        <input v-model="receiptDate" type="date" aria-label="收款日期" />
-      </label>
-      <label>
-        金额
-        <input v-model="receiptAmount" aria-label="收款金额" />
-      </label>
-      <label>
-        核销账单号
-        <input v-model="receiptLine" aria-label="核销账单号" placeholder="不填则全部记为预收" />
-      </label>
-      <label>
-        核销金额
-        <input v-model="receiptAllocated" aria-label="核销金额" />
-      </label>
-      <p v-if="savedReceiptCode">收款单号 {{ savedReceiptCode }}</p>
-      <p v-if="receiptRefreshError" class="operation-feedback danger">{{ receiptRefreshError }}</p>
-      <button v-if="receiptRefreshError" class="table-action" type="button" :disabled="busy" @click="retryReceiptQuery">重新查询账单</button>
-      <button class="primary-button" type="button" :disabled="busy || !!receiptRefreshError" @click="saveReceipt">登记收款</button>
+      <h2>客户账单与收款</h2><p>按客户编号与月份进入原客户面板，收起后仍保留请求与回执。收款金额和分摊分别填写，可保留合法预收。</p>
+      <button v-if="openBill" class="primary-button" type="button" @click="showBill('receipt')">核对客户账单与收款</button>
+      <CustomerBillPanel v-else-if="validBillContext(billContext)" :key="customerId + ':' + yearMonth" :context="billContext" initial-mode="receipt" />
+      <p v-else>请先填写正整数客户编号和有效月份。</p>
     </section>
 
     <section v-else-if="section === 'payroll'" class="section-block">

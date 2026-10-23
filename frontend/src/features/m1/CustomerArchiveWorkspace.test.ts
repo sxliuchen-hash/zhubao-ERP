@@ -204,4 +204,14 @@ describe('客户档案', () => {
     expect(wrapper.get('[aria-label="客户资料"]').text()).toContain('恒信新名');
     expect(wrapper.get('[aria-label="选择客户 恒信新名"]').attributes('aria-pressed')).toBe('true'); wrapper.unmount();
   });
+  it('客户账单交给共享容器时只传稳定编号、月份和原应收行，不传客户名称或总额', async () => {
+    const bill = { ...statement(1001, 10), lines: [{ code: 'AR-1', customerId: 1001, customerName: hengxin.name, yearMonth: '2026-10', sourceType: 'PROCESS', motherOrderCode: 'MO-1', workOrderCode: 'WO-1', processName: '抛光', quantity: 1, unit: '件', unitPrice: 10, amount: 10, reversesCode: '', remark: '' }] };
+    vi.mocked(fetchStatement).mockResolvedValue(bill); vi.mocked(fetchProgress).mockResolvedValue([]);
+    const open = vi.fn();
+    const wrapper = mount(CustomerArchiveWorkspace, { global: { provide: { 'zhubao-open-bill': open, 'zhubao-visible-tabs': ref(['finance']), 'zhubao-auth-session': ref({ effectivePermissions: ['FINANCE_CUSTOMER_READ', 'FINANCE_RECEIPT'] }) } } });
+    await flushPromises(); await wrapper.get('[aria-label="选择客户 恒信珠宝"]').trigger('click'); await flushPromises();
+    await wrapper.get('[aria-label="账单月份"]').setValue('2026-10'); await flushPromises();
+    await wrapper.get('[aria-label="办理应收行 AR-1"]').trigger('click');
+    expect(open).toHaveBeenCalledWith({ customerId: 1001, yearMonth: '2026-10', receivableCode: 'AR-1' }, 'receipt'); wrapper.unmount();
+  });
 });

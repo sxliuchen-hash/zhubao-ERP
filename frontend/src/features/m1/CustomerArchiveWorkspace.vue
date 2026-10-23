@@ -14,11 +14,16 @@ import {
 import { fetchProgress, type ProgressRow } from '../../services/progressApi';
 import RequirementTemplatePanel from './RequirementTemplatePanel.vue';
 import { progressTraceTarget, type TraceTarget } from '../scan/traceTarget';
+import type { OpenBillAction } from '../finance/billContext';
+import type { TabKey } from '../workspace/workspaceNavigation';
 
 type Section = 'customers' | 'materials' | 'templates';
 
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const openOrder = inject<((target: Pick<TraceTarget, 'objectType' | 'code'>) => void) | null>('zhubao-open-order', null);
+const openBill = inject<OpenBillAction | null>('zhubao-open-bill', null);
+const tabs = inject<Ref<TabKey[]>>('zhubao-visible-tabs', ref([]));
+const canOpenBill = computed(() => openBill && tabs.value.includes('finance') && canReadStatement.value);
 const canManage = computed(() => authSession.value?.effectivePermissions ? authSession.value.effectivePermissions.includes('MASTER_DATA_MANAGE') : canManageMasterData(authSession.value));
 const canReadStatement = computed(() => !authSession.value?.effectivePermissions || authSession.value.effectivePermissions.includes('FINANCE_CUSTOMER_READ'));
 const section = ref<Section>('customers');
@@ -360,6 +365,7 @@ function money(value: number) {
             </button>
           </div>
           <p class="archive-note">这里按所选月份查看应收和收款。登记收款仍在财务页办理。</p>
+          <button v-if="canOpenBill" class="secondary-button" type="button" @click="openBill?.({ customerId: selectedCustomerId, yearMonth })">核对账单与办理收款</button>
           <p v-if="statementError" class="operation-feedback danger">{{ statementError }}</p>
           <template v-else-if="statement">
             <dl class="detail-grid">
@@ -374,7 +380,7 @@ function money(value: number) {
             <div v-else class="module-table-wrap">
               <table class="module-table">
                 <thead>
-                  <tr><th>月份</th><th>单号</th><th>工序</th><th>数量</th><th>金额</th></tr>
+                  <tr><th>月份</th><th>单号</th><th>工序</th><th>数量</th><th>金额</th><th v-if="canOpenBill && (!authSession?.effectivePermissions || authSession.effectivePermissions.includes('FINANCE_RECEIPT'))">办理</th></tr>
                 </thead>
                 <tbody>
                   <tr v-for="line in statement.lines" :key="line.code">
@@ -383,6 +389,7 @@ function money(value: number) {
                     <td>{{ line.processName }}</td>
                     <td>{{ line.quantity }} {{ line.unit }}</td>
                     <td>{{ money(line.amount) }}</td>
+                    <td v-if="canOpenBill && (!authSession?.effectivePermissions || authSession.effectivePermissions.includes('FINANCE_RECEIPT'))"><button class="table-action" type="button" :aria-label="`办理应收行 ${line.code}`" @click="openBill?.({ customerId: selectedCustomerId, yearMonth, receivableCode: line.code }, 'receipt')">办理本行收款</button></td>
                   </tr>
                 </tbody>
               </table>

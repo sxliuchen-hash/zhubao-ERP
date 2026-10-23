@@ -13,6 +13,10 @@ vi.mock('../labels/OrderLabelPanel.vue', () => ({ default: defineComponent({
   name: 'OrderLabelPanel', props: ['initialTarget', 'active'], setup() { return { reason: ref('') }; },
   template: '<div><input v-model="reason" aria-label="原标签原因" /><span>{{ initialTarget?.code }}</span></div>',
 }) }));
+vi.mock('../finance/CustomerBillPanel.vue', () => ({ default: defineComponent({
+  name: 'CustomerBillPanel', props: ['context', 'initialMode'], setup() { return { amount: ref('') }; },
+  template: '<div><input v-model="amount" aria-label="原收款草稿" /><span>{{ context.customerId }} · {{ initialMode }}</span></div>',
+}) }));
 
 async function opened(wrapper: ReturnType<typeof mount<typeof OrderActionHost>>) {
   await flushPromises();
@@ -27,6 +31,23 @@ function host(allowed = true) {
 function dom() { return new DOMWrapper(document.body); }
 afterEach(() => { mountedHosts.forEach(wrapper => wrapper.unmount()); mountedHosts.length = 0; });
 describe('单内动作容器', () => {
+  it('账单按客户和月份缓存，跨客户返回恢复原收款实例，非数字客户及撤权不能办理', async () => {
+    const wrapper = host(); await wrapper.setProps({ canBill: true });
+    wrapper.vm.openBill({ customerId: 0, yearMonth: '2026-10' }); await flushPromises();
+    expect(document.querySelector('[aria-label="原收款草稿"]')).toBeNull();
+    wrapper.vm.openBill({ customerId: 1001, yearMonth: '2026-10' }, 'receipt'); await flushPromises();
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="原收款草稿"]')).not.toBeNull());
+    await dom().get('[data-action-active="true"] input').setValue('100.25');
+    const first = wrapper.getComponent({ name: 'CustomerBillPanel' }).vm.$;
+    await dom().get('.order-action-dialog header button').trigger('click');
+    wrapper.vm.openBill({ customerId: 1002, yearMonth: '2026-10' }); await flushPromises();
+    expect(dom().get('[data-action-active="true"] input').element).toHaveProperty('value', '');
+    wrapper.vm.openBill({ customerId: 1001, yearMonth: '2026-10', receivableCode: 'AR-2' }, 'statement'); await flushPromises();
+    expect(wrapper.getComponent({ name: 'CustomerBillPanel' }).vm.$).toBe(first);
+    expect(dom().get('[data-action-active="true"] input').element).toHaveProperty('value', '100.25');
+    await wrapper.setProps({ canBill: false });
+    expect(wrapper.emitted('active')?.at(-1)).toEqual([false]); expect(first.isUnmounted).toBe(false);
+  });
   it('标签草稿按精确类型单号保留，收起和打开其他单据不销毁原请求，权限撤销收起', async () => {
     const wrapper = host();
     wrapper.vm.openLabel({ objectType: 'WORK_ORDER', code: 'WO-A' }); await flushPromises();
