@@ -1,41 +1,29 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
-import type { OpenShippingAction } from '../orders/orderActions';
+import type { OpenAftercareAction, OpenShippingAction } from '../orders/orderActions';
 import { useTraceTarget } from '../scan/useTraceTarget';
-import OperationInputs from './OperationInputs.vue';
-import { createAmountForm } from './operationAmounts';
-import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import PrepStockPanel from './PrepStockPanel.vue';
 import ShippingPanel from '../shipping/ShippingPanel.vue';
+import StockLedgerPanel from '../inventory/StockLedgerPanel.vue';
+import InventoryAftercarePanel from '../inventory/InventoryAftercarePanel.vue';
 import type { InventoryBalance, Tone } from '../../data/m1PrototypeData';
 import { ApiRequestError } from '../../services/apiClient';
-import {
-  fetchInventoryWorkspace,
-  type InventoryWorkspaceModel,
-} from '../../services/businessWorkspaceApi';
-import {
-  reviewAfterSalesReturn,
-  returnCustomerShipment,
-  type AfterSalesReviewResult,
-  type CustomerReturnResult,
-} from '../../services/businessOperationApi';
+import { fetchInventoryWorkspace, type InventoryWorkspaceModel } from '../../services/businessWorkspaceApi';
 
-const emptyInventory = (): InventoryWorkspaceModel => ({
-  balances: [],
-  ledgerEntries: [],
-  timeline: [],
-  evidence: [],
-});
-
+const emptyInventory = (): InventoryWorkspaceModel => ({ balances: [], ledgerEntries: [], timeline: [], evidence: [] });
 const workspace = ref<InventoryWorkspaceModel>(emptyInventory());
 const openShipping = inject<OpenShippingAction | null>('zhubao-open-shipping', null);
+const openAftercare = inject<OpenAftercareAction | null>('zhubao-open-aftercare', null);
 const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const canShip = computed(() => !session.value?.effectivePermissions || session.value.effectivePermissions.includes('BUSINESS_OUTBOUND_SHIPMENT'));
 const manualCreated = ref(!openShipping);
 const manualOpen = ref(!openShipping);
+const stockTab = ref<'company' | 'prep' | 'processing' | 'ledger'>('company');
+const ledgerCreated = ref(false);
+watch(stockTab, tab => { if (tab === 'ledger') ledgerCreated.value = true; });
 function openManual() {
   if (openShipping) { if (canShip.value) openShipping(); return; }
   manualCreated.value = true;
@@ -43,149 +31,86 @@ function openManual() {
 }
 useTraceTarget(['SHIPPING'], target => {
   if (openShipping) { if (canShip.value) openShipping({ objectType: target.objectType, code: target.code }); }
-  else { manualCreated.value = true; manualOpen.value = true; }
+  else { stockTab.value = 'processing'; manualCreated.value = true; manualOpen.value = true; }
 });
 const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
 watch(refresh, () => { void loadInventoryWorkspace(); });
-const stockTab = ref<'company' | 'prep' | 'processing' | 'ledger'>('company');
 const loadError = ref('');
 const accessDenied = ref(false);
 const loading = ref(false);
 const statusKeyword = ref('');
 const advancedOpen = ref(false);
 const detailOpen = ref(false);
-const { operationValues, resetAmounts, assertAmounts, amountHint, amountDefaultNote } = createAmountForm();
-const returningCustomerStock = ref(false);
-const customerReturnResult = ref<CustomerReturnResult | null>(null);
-const customerReturnError = ref('');
-const reviewingAfterSalesReturn = ref(false);
-const afterSalesReviewResult = ref<AfterSalesReviewResult | null>(null);
-const afterSalesReviewError = ref('');
 const selectedBalanceKey = ref('');
 const { keyword, filtered: filteredBalances } = useDeskFilter(
   () => workspace.value.balances,
-  (item) => `${item.owner} ${item.batch} ${item.material} ${item.location} ${item.status}`,
+  item => `${item.owner} ${item.batch} ${item.material} ${item.location} ${item.status}`,
 );
 const visibleBalances = computed(() => {
   const status = statusKeyword.value.trim();
-  return filteredBalances.value.filter((item) => !status || item.status.includes(status));
+  return filteredBalances.value.filter(item => !status || item.status.includes(status));
 });
-
-const activeBalance = computed(
-  () =>
-    workspace.value.balances.find((item) => balanceKey(item) === selectedBalanceKey.value),
-);
-const latestLedger = computed(
-  () =>
-    workspace.value.ledgerEntries.find((entry) => entry.source === activeBalance.value?.batch),
-);
-
-watch(activeBalance, (balance) => { resetAmounts(balance?.operationContext); });
-
+const activeBalance = computed(() => workspace.value.balances.find(item => balanceKey(item) === selectedBalanceKey.value));
+const latestLedger = computed(() => workspace.value.ledgerEntries.find(entry => entry.source === activeBalance.value?.batch));
+watch([keyword, statusKeyword], () => { selectedBalanceKey.value = ''; detailOpen.value = false; });
 function balanceKey(item: InventoryBalance) {
   const context = item.operationContext;
-  return JSON.stringify([item.owner, item.batch, item.material, item.location, item.status,
-    context?.customerId, context?.ownerCustomerId, context?.motherOrderCode, context?.workOrderCode,
-    context?.materialCode, context?.warehouseCode, context?.ownerType, context?.stockStatus]);
+  return JSON.stringify(context ? [context.customerId, context.ownerCustomerId, context.motherOrderCode, context.workOrderCode, context.materialCode, context.warehouseCode, context.ownerType, context.stockStatus]
+    : [item.owner, item.batch, item.material, item.location, item.status]);
 }
-
 function inventoryBalanceTone(status: string): Tone {
   if (status.includes('返工')) return 'violet';
   if (status.includes('在制')) return 'amber';
   if (status.includes('成品')) return 'green';
   return 'blue';
 }
-
-onMounted(() => {
-  void loadInventoryWorkspace();
-});
-
-function denied(error: unknown) {
-  return error instanceof ApiRequestError && (error.status === 403 || error.code === 40301);
-}
-
+let generation = 0;
+let disposed = false;
+onMounted(() => { void loadInventoryWorkspace(); });
+onBeforeUnmount(() => { disposed = true; generation += 1; });
 async function loadInventoryWorkspace() {
-  loadError.value = '';
-  accessDenied.value = false;
-  loading.value = true;
+  const token = ++generation;
+  loadError.value = ''; accessDenied.value = false; loading.value = true;
   try {
     const loaded = await fetchInventoryWorkspace();
+    if (disposed || token !== generation) return;
     workspace.value = loaded;
-  } catch (error) {
-    workspace.value = emptyInventory();
-    accessDenied.value = denied(error);
-    loadError.value = error instanceof Error ? error.message : '库存单据加载失败';
-  } finally {
-    loading.value = false;
-    if (!workspace.value.balances.some((item) => balanceKey(item) === selectedBalanceKey.value)) {
-      selectedBalanceKey.value = '';
-      detailOpen.value = false;
-    }
-  }
+    if (!loaded.balances.some(item => balanceKey(item) === selectedBalanceKey.value)) { selectedBalanceKey.value = ''; detailOpen.value = false; }
+  } catch (caught) {
+    if (disposed || token !== generation) return;
+    accessDenied.value = caught instanceof ApiRequestError && (caught.status === 403 || caught.code === 40301);
+    if (accessDenied.value) { workspace.value = emptyInventory(); selectedBalanceKey.value = ''; detailOpen.value = false; }
+    loadError.value = caught instanceof Error ? caught.message : '库存读取失败';
+  } finally { if (!disposed && token === generation) loading.value = false; }
 }
-
-async function returnActiveCustomerShipment() {
-  if (!activeBalance.value) return;
-
-  returningCustomerStock.value = true;
-  customerReturnResult.value = null;
-  customerReturnError.value = '';
-  afterSalesReviewResult.value = null;
-  afterSalesReviewError.value = '';
-
-  try {
-    assertAmounts();
-    customerReturnResult.value = await returnCustomerShipment(activeBalance.value, operationDraft(operationValues.value));
-    await loadInventoryWorkspace();
-  } catch (error) {
-    customerReturnError.value = error instanceof Error ? error.message : '客户退货入库失败';
-  } finally {
-    returningCustomerStock.value = false;
-  }
-}
-
-async function reviewActiveAfterSalesReturn() {
-  if (!activeBalance.value) return;
-
-  reviewingAfterSalesReturn.value = true;
-  afterSalesReviewResult.value = null;
-  afterSalesReviewError.value = '';
-
-  try {
-    assertAmounts();
-    afterSalesReviewResult.value = await reviewAfterSalesReturn(activeBalance.value, operationDraft(operationValues.value));
-    await loadInventoryWorkspace();
-  } catch (error) {
-    afterSalesReviewError.value = error instanceof Error ? error.message : '售后复核分流失败';
-  } finally {
-    reviewingAfterSalesReturn.value = false;
-  }
-}
-
 defineExpose({ reloadInventory: loadInventoryWorkspace });
-
-function backToList() {
-  detailOpen.value = false;
-}
-
-function selectBalance(item: InventoryBalance) {
-  if (returningCustomerStock.value || reviewingAfterSalesReturn.value) return;
-  selectedBalanceKey.value = balanceKey(item);
-  detailOpen.value = true;
-  customerReturnResult.value = null;
-  customerReturnError.value = '';
-  afterSalesReviewResult.value = null;
-  afterSalesReviewError.value = '';
-}
+function backToList() { detailOpen.value = false; }
+function selectBalance(item: InventoryBalance) { selectedBalanceKey.value = balanceKey(item); detailOpen.value = true; }
 function shipSelected() {
+  const context = activeBalance.value?.operationContext;
+  if (!openShipping || !canShip.value || !context || loading.value || loadError.value || context.stockStatus !== 'FINISHED' || context.ownerType !== 'CUSTOMER') return;
+  openShipping({ objectType: null, code: context.workOrderCode || context.motherOrderCode, balance: { ...context } });
+}
+const localAftercare = ref<Array<{ key: string; row: InventoryBalance }>>([]);
+const localAftercareKey = ref('');
+let localAttempt = 0;
+const canOpenAftercare = computed(() => {
+  const context = activeBalance.value?.operationContext;
+  if (context?.ownerType !== 'CUSTOMER') return false;
+  const permission = context.stockStatus === 'SHIPPED' ? 'BUSINESS_CUSTOMER_RETURN' : context.stockStatus === 'FINISHED' ? 'BUSINESS_AFTER_SALES_REVIEW' : '';
+  return Boolean(permission && (!session.value?.effectivePermissions || session.value.effectivePermissions.includes(permission)));
+});
+function localAftercareDraft(row: InventoryBalance, newAttempt = false) {
+  const baseKey = balanceKey(row);
+  const key = newAttempt ? `${baseKey}:attempt-${++localAttempt}` : localAftercare.value.filter(draft => draft.key === baseKey || draft.key.startsWith(`${baseKey}:attempt-`)).at(-1)?.key ?? baseKey;
+  if (!localAftercare.value.some(draft => draft.key === key)) localAftercare.value.push({ key, row: JSON.parse(JSON.stringify(row)) as InventoryBalance });
+  localAftercareKey.value = key;
+}
+function aftercareSelected() {
   const row = activeBalance.value;
-  const context = row?.operationContext;
-  if (!openShipping || !canShip.value || !row || !context || context.stockStatus !== 'FINISHED' || !context.motherOrderCode) return;
-  openShipping({ objectType: null, code: context.workOrderCode || context.motherOrderCode, balance: {
-    customerId: context.customerId, ownerCustomerId: context.ownerCustomerId ?? null, ownerType: context.ownerType,
-    motherOrderCode: context.motherOrderCode, workOrderCode: context.workOrderCode, materialCode: context.materialCode,
-    warehouseCode: context.warehouseCode, stockStatus: context.stockStatus, quantity: context.quantity, weight: context.weight,
-  } });
+  if (!row || !canOpenAftercare.value || loading.value || loadError.value) return;
+  if (openAftercare) { openAftercare(row); return; }
+  localAftercareDraft(row);
 }
 </script>
 
@@ -199,7 +124,7 @@ function shipSelected() {
       <button type="button" class="table-action" :class="{ active: stockTab === 'ledger' }" :aria-selected="stockTab === 'ledger'" @click="stockTab = 'ledger'">出入库记录</button>
     </div>
     <KeepAlive><PrepStockPanel v-if="stockTab === 'company' || stockTab === 'prep'" :key="stockTab" :scope="stockTab" /></KeepAlive>
-    <div v-show="stockTab === 'processing' || stockTab === 'ledger'">
+    <div v-show="stockTab === 'processing'">
     <button v-if="canShip" class="secondary-button" type="button" @click="openManual">扫码或手输发货单据</button>
     <ShippingPanel
       v-if="manualCreated"
@@ -310,39 +235,11 @@ function shipSelected() {
           </dl>
           <button v-if="openShipping && canShip && activeBalance.operationContext?.stockStatus === 'FINISHED' && activeBalance.operationContext.ownerType === 'CUSTOMER'" class="primary-button" type="button" @click="shipSelected">从这笔库存发货</button>
           <p v-else-if="activeBalance.operationContext?.stockStatus !== 'FINISHED'" class="operation-feedback">本笔尚非可发成品，请先核对来源单和质检放行状态。</p>
-          <p class="operation-feedback">发货从单内表单核对完整库存维度。下方保留退货和售后复核。</p>
-          <OperationInputs v-model="operationValues" :fields="[['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['reviewCode', '售后复核单号'], ['disposition', '处理结论'], ['finding', '复核说明'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />
-          <p v-if="amountDefaultNote" class="operation-feedback">{{ amountDefaultNote }}</p>
-          <p v-if="amountHint" class="operation-feedback warning">{{ amountHint }}</p>
-          <div class="detail-actions">
-            <button class="secondary-button" type="button" :disabled="returningCustomerStock" @click="returnActiveCustomerShipment">
-              {{ returningCustomerStock ? '正在退货' : '退货入库' }}
-            </button>
-            <button class="secondary-button" type="button" :disabled="reviewingAfterSalesReturn" @click="reviewActiveAfterSalesReturn">
-              {{ reviewingAfterSalesReturn ? '正在复核' : '售后复核' }}
-            </button>
-          </div>
-          <div v-if="customerReturnResult" class="operation-feedback success">
-            <strong>客户退货已写入台账</strong>
-            <span>{{ customerReturnResult.ledgerCode }} / {{ customerReturnResult.returnCode }}</span>
-            <small>{{ customerReturnResult.fromStockStatus }} -> {{ customerReturnResult.toStockStatus }} / {{ customerReturnResult.returnLogisticsNo }}</small>
-          </div>
-          <div v-else-if="customerReturnError" class="operation-feedback danger">
-            <strong>客户退货入库失败</strong>
-            <span>{{ customerReturnError }}</span>
-          </div>
-          <div v-if="afterSalesReviewResult" class="operation-feedback success">
-            <strong>售后复核已写入台账</strong>
-            <span>{{ afterSalesReviewResult.ledgerCode }} / {{ afterSalesReviewResult.reviewCode }}</span>
-            <small>{{ afterSalesReviewResult.fromStockStatus }} -> {{ afterSalesReviewResult.toStockStatus }} / {{ afterSalesReviewResult.disposition }}</small>
-          </div>
-          <div v-else-if="afterSalesReviewError" class="operation-feedback danger">
-            <strong>售后复核分流失败</strong>
-            <span>{{ afterSalesReviewError }}</span>
-            <small>请确认退货库存已进入 RETURN-CHECK，并已补齐复核照片或视频证据。</small>
-          </div>
+          <button v-if="canOpenAftercare" class="secondary-button" type="button" :disabled="loading || Boolean(loadError)" @click="aftercareSelected">退货与售后复核</button>
+          <p class="operation-feedback">先核对来源和完整库存维度，再按需打开单内动作；不可发库存保留来源及阻断状态。</p>
         </section>
       </aside>
+    </section>
 
     <section class="module-detail-grid inventory-detail-grid" aria-label="库存台账和追溯链">
       <section class="evidence-slot-panel">
@@ -362,42 +259,7 @@ function shipSelected() {
       </section>
       <section class="module-rule-panel">
         <div class="panel-title-row">
-          <StatusBadge label="只追加" tone="green" />
-        </div>
-        <h2 class="compact-panel-title">库存台账明细</h2>
-        <div class="ledger-table compact-ledger-table ledger-desktop">
-          <div class="ledger-row ledger-head">
-            <span>时间</span>
-            <span>台账号</span>
-            <span>动作</span>
-            <span>变化后</span>
-            <span>来源</span>
-          </div>
-          <div v-for="entry in workspace.ledgerEntries" :key="entry.bizCode" class="ledger-row">
-            <time>{{ entry.time }}</time>
-            <strong>{{ entry.bizCode }}</strong>
-            <span>{{ entry.movement }}</span>
-            <span>{{ entry.after }}</span>
-            <span>{{ entry.source }}</span>
-          </div>
-          <p v-if="workspace.ledgerEntries.length === 0" class="empty-hint">暂无台账</p>
-        </div>
-        <div class="desk-cards">
-          <p v-if="workspace.ledgerEntries.length === 0" class="empty-hint">暂无台账</p>
-          <article v-for="entry in workspace.ledgerEntries" :key="entry.bizCode" class="desk-card production-handoff-card">
-            <span class="desk-card-top">
-              <strong class="code">{{ entry.bizCode }}</strong>
-              <span>{{ entry.movement }}</span>
-            </span>
-            <span>{{ entry.time }} · 变化后 {{ entry.after }}</span>
-            <span>来源 {{ entry.source }}</span>
-          </article>
-        </div>
-      </section>
-
-      <section class="module-rule-panel">
-        <div class="panel-title-row">
-          <StatusBadge label="全链路" tone="blue" />
+          <StatusBadge label="流转摘要" tone="blue" />
         </div>
         <div class="timeline compact-timeline">
           <article v-for="event in workspace.timeline" :key="`${event.time}-${event.bizCode}`">
@@ -412,7 +274,11 @@ function shipSelected() {
       </section>
 
     </section>
-    </section>
     </div>
+    <StockLedgerPanel v-if="ledgerCreated" v-show="stockTab === 'ledger'" />
+    <section v-for="draft in localAftercare" :key="draft.key" v-show="localAftercareKey === draft.key" :inert="localAftercareKey !== draft.key || undefined">
+      <button class="secondary-button" type="button" @click="localAftercareKey = ''">收起退售后</button>
+      <InventoryAftercarePanel :row="draft.row" :active="localAftercareKey === draft.key" @saved="loadInventoryWorkspace" @new-request="row => localAftercareDraft(row, true)" />
+    </section>
   </div>
 </template>

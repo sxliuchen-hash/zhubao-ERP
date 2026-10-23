@@ -1,0 +1,91 @@
+import { flushPromises, mount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
+import InventoryAftercarePanel from './InventoryAftercarePanel.vue';
+import { returnCustomerShipment, reviewAfterSalesReturn } from '../../services/businessOperationApi';
+import { fetchStockLedgers } from '../../services/stockLedgerApi';
+import { ApiRequestError } from '../../services/apiClient';
+import type { InventoryBalance } from '../../data/m1PrototypeData';
+import { fetchInventoryWorkspace } from '../../services/businessWorkspaceApi';
+
+vi.mock('../../services/businessOperationApi', () => ({ returnCustomerShipment: vi.fn(), reviewAfterSalesReturn: vi.fn() }));
+vi.mock('../../services/stockLedgerApi', () => ({ fetchStockLedgers: vi.fn().mockResolvedValue([]) }));
+vi.mock('../../services/businessWorkspaceApi', () => ({ fetchInventoryWorkspace: vi.fn() }));
+const row: InventoryBalance = { owner: '客户甲', batch: 'WO-1', material: '原物料', location: '已发库', status: '已发货', qty: 12.75, quantityUnit: '克', weight: '12.75 克', frozen: '0', operationContext: { customerId: 1, ownerCustomerId: 2, motherOrderCode: 'MO-1', workOrderCode: 'WO-1', materialCode: 'MAT-1', warehouseCode: 'SHIPPED-CUSTOMER', ownerType: 'CUSTOMER', stockStatus: 'SHIPPED', quantity: 12.75, weight: 12.75 } };
+async function fillReturn(wrapper: ReturnType<typeof mount>) {
+  for (const [label, value] of [['原出库单号', 'OUT-1'], ['退货单号', 'RET-1'], ['退货运单号', 'YT-1'], ['退货原因', '客户退回']]) await wrapper.get(`[aria-label="${label}"]`).setValue(value);
+}
+beforeEach(() => { vi.mocked(returnCustomerShipment).mockReset(); vi.mocked(reviewAfterSalesReturn).mockReset(); vi.mocked(fetchStockLedgers).mockClear(); vi.mocked(fetchInventoryWorkspace).mockReset(); });
+describe('单内退售后', () => {
+  it('权限及原库存状态分别约束退货与复核，未授权操作不能提交', async () => {
+    const session = ref({ effectivePermissions: [] as string[] });
+    const wrapper = mount(InventoryAftercarePanel, { props: { row }, global: { provide: { 'zhubao-auth-session': session } } });
+    expect(wrapper.text()).toContain('当前库存状态或有效权限不支持办理');
+    session.value.effectivePermissions.push('BUSINESS_CUSTOMER_RETURN');
+    await flushPromises();
+    expect(wrapper.get('fieldset:first-of-type').isVisible()).toBe(true);
+    expect(wrapper.get('fieldset:nth-of-type(2)').isVisible()).toBe(false);
+    expect(reviewAfterSalesReturn).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+  it('数量改变必须确认重量，提交锁及真实回执不会随库存刷新或切回重复写入', async () => {
+    let finish!: (result: Awaited<ReturnType<typeof returnCustomerShipment>>) => void;
+    vi.mocked(returnCustomerShipment).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const wrapper = mount(InventoryAftercarePanel, { props: { row } });
+    await fillReturn(wrapper);
+    await wrapper.get('[aria-label="本次数量"]').setValue('10.5');
+    const submit = () => wrapper.findAll('button').find(button => button.text() === '提交退货入库')!;
+    await submit().trigger('click');
+    expect(returnCustomerShipment).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('重新确认本次重量');
+    await wrapper.get('[aria-label="本次重量（克）"]').setValue('10.500');
+    await submit().trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '提交中…')!.trigger('click');
+    expect(returnCustomerShipment).toHaveBeenCalledOnce();
+    expect(returnCustomerShipment).toHaveBeenCalledWith(row, expect.objectContaining({ quantity: 10.5, weight: '10.500', returnCode: 'RET-1' }));
+    finish({ returnCode: 'RET-1', originalShipmentCode: 'OUT-1', workOrderCode: 'WO-1', ledgerCode: 'STK-RET', fromWarehouseCode: 'SHIPPED-CUSTOMER', toWarehouseCode: 'RETURN-CHECK', fromStockStatus: 'SHIPPED', toStockStatus: 'FINISHED', quantity: 10.5, weight: 10.5, returnLogisticsNo: 'YT-1', reason: '客户退回', operator: '当前账号' });
+    await flushPromises();
+    expect(wrapper.text()).toContain('客户退货已写入台账：RET-1 / STK-RET');
+    await submit().trigger('click');
+    expect(returnCustomerShipment).toHaveBeenCalledOnce();
+    expect(wrapper.emitted('saved')).toHaveLength(1);
+    vi.mocked(fetchInventoryWorkspace).mockResolvedValueOnce({ balances: [{ ...row, operationContext: { ...row.operationContext!, warehouseCode: 'OTHER-WH' } }, { ...row, qty: 2.25, operationContext: { ...row.operationContext!, quantity: 2.25, weight: 2.25 } }], ledgerEntries: [], timeline: [], evidence: [] });
+    await wrapper.findAll('button').find(button => button.text() === '重新读取余额，办理另一笔')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('newRequest')?.[0][0]).toMatchObject({ qty: 2.25, operationContext: { warehouseCode: 'SHIPPED-CUSTOMER', quantity: 2.25 } });
+    expect(wrapper.text()).toContain('RET-1 / STK-RET');
+    wrapper.unmount();
+  });
+  it('非幂等接口结果未知时保留原单并停止重交，只读核对不发第二次写请求', async () => {
+    vi.mocked(returnCustomerShipment).mockRejectedValueOnce(new ApiRequestError('响应超时', 408, 408));
+    const wrapper = mount(InventoryAftercarePanel, { props: { row } });
+    await fillReturn(wrapper);
+    await wrapper.findAll('button').find(button => button.text() === '提交退货入库')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('原退货 RET-1 结果待核对');
+    expect(wrapper.get('fieldset:first-of-type').element).toHaveProperty('disabled', true);
+    await wrapper.get('[aria-label="退货单号"]').setValue('RET-NEW');
+    await wrapper.findAll('button').find(button => button.text() === '提交退货入库')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '核对原单台账')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="台账业务单号"]').element).toHaveProperty('value', 'RET-1');
+    expect(fetchStockLedgers).toHaveBeenCalledOnce();
+    expect(returnCustomerShipment).toHaveBeenCalledOnce();
+    expect(wrapper.emitted('saved')).toBeUndefined();
+    wrapper.unmount();
+  });
+  it('售后结论必须明确选择，调用原复核契约并保留原完整库存维度', async () => {
+    const returned = { ...row, operationContext: { ...row.operationContext!, warehouseCode: 'RETURN-CHECK', stockStatus: 'FINISHED' } };
+    vi.mocked(reviewAfterSalesReturn).mockResolvedValue({ reviewCode: 'REV-1', returnCode: 'RET-1', originalShipmentCode: 'OUT-1', workOrderCode: 'WO-1', ledgerCode: 'STK-REV', fromWarehouseCode: 'RETURN-CHECK', toWarehouseCode: 'FROZEN-QC', fromStockStatus: 'FINISHED', toStockStatus: 'FROZEN', quantity: 12.75, weight: 12.75, disposition: 'FREEZE', inspector: '当前账号', finding: '需继续核对' });
+    const wrapper = mount(InventoryAftercarePanel, { props: { row: returned } });
+    for (const [label, value] of [['复核原出库单号', 'OUT-1'], ['复核退货单号', 'RET-1'], ['售后复核单号', 'REV-1'], ['复核说明', '需继续核对']]) await wrapper.get(`[aria-label="${label}"]`).setValue(value);
+    await wrapper.findAll('button').find(button => button.text() === '提交售后复核')!.trigger('click');
+    expect(reviewAfterSalesReturn).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="处理结论"]').setValue('FREEZE');
+    await wrapper.findAll('button').find(button => button.text() === '提交售后复核')!.trigger('click');
+    await flushPromises();
+    expect(reviewAfterSalesReturn).toHaveBeenCalledWith(returned, expect.objectContaining({ disposition: 'FREEZE', quantity: 12.75, weight: '12.75', returnCode: 'RET-1', reviewCode: 'REV-1' }));
+    expect(wrapper.text()).toContain('售后复核已写入台账：REV-1 / STK-REV');
+    wrapper.unmount();
+  });
+});

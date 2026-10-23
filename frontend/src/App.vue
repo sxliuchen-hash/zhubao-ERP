@@ -4,6 +4,7 @@ import AppShell from './components/AppShell.vue';
 import NavIcon from './components/NavIcon.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import OrderActionHost from './features/orders/OrderActionHost.vue';
+import type { InventoryBalance } from './data/m1PrototypeData';
 import type { OrderActionTarget, OrderChangeTarget, ProductionMode, ShippingActionTarget } from './features/orders/orderActions';
 import type { MobileIntakeResult } from './services/mobileIntakeApi';
 import LoginPage from './features/auth/LoginPage.vue';
@@ -96,6 +97,7 @@ provide('zhubao-open-intake', (target?: OrderActionTarget | null) => { if (canIn
 provide('zhubao-open-production', (target?: OrderActionTarget | null, mode?: ProductionMode) => { if (canProduction.value) orderActionHost.value?.openProduction(target ?? null, mode); });
 provide('zhubao-open-quality', (target?: OrderActionTarget | null) => { if (canQuality.value) orderActionHost.value?.openQuality(target ?? null); });
 provide('zhubao-open-shipping', (target?: ShippingActionTarget | null) => { if (canShipping.value) orderActionHost.value?.openShipping(target ?? null); });
+provide('zhubao-open-aftercare', (row: InventoryBalance) => { if (canAftercare.value) orderActionHost.value?.openAftercare(row); });
 provide('zhubao-open-order-change', (target: OrderChangeTarget) => { if (canChange.value) orderActionHost.value?.openOrderChange(target); });
 provide('zhubao-open-orders', openOrders);
 provide('zhubao-open-approval', (code: string) => {
@@ -158,6 +160,10 @@ const canProduction = computed(() => visibleTabs.value.some(tab => authorizedMen
     : ['ADMIN', 'GENERAL_MANAGER', 'OPERATOR', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? '')
       || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('REPORT') === true)));
 const canChange = computed(() => authorizedMenuCodes.value?.has('progress') === true);
+const canAftercare = computed(() => authorizedMenuCodes.value?.has('inventory') === true
+  && (authSession.value?.effectivePermissions ? ['BUSINESS_CUSTOMER_RETURN', 'BUSINESS_AFTER_SALES_REVIEW'].some(permission => authSession.value?.effectivePermissions?.includes(permission))
+    : ['ADMIN', 'GENERAL_MANAGER', 'WAREHOUSE_KEEPER', 'SALES', 'QUALITY_INSPECTOR', 'WORKSHOP_LEADER'].includes(authSession.value?.role ?? '')
+      || (authSession.value?.role === 'BUSINESS_MANAGER' && (authSession.value.coverDuties?.includes('RETURN') === true || authSession.value.coverDuties?.includes('QUALITY') === true))));
 const canShipping = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['inventory', 'mobile'].includes(tab.key))
   && (authSession.value?.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_OUTBOUND_SHIPMENT')
     : ['ADMIN', 'GENERAL_MANAGER', 'WAREHOUSE_KEEPER', 'SALES'].includes(authSession.value?.role ?? '')
@@ -460,5 +466,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
-  <OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
+<OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
 </template>

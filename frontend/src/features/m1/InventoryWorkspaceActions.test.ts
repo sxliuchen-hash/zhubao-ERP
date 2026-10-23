@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, ref } from 'vue';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
 import { fetchInventoryWorkspace } from '../../services/businessWorkspaceApi';
+import { fetchStockLedgers } from '../../services/stockLedgerApi';
+vi.mock('../../services/stockLedgerApi', () => ({ fetchStockLedgers: vi.fn().mockResolvedValue([]) }));
 
 vi.mock('../../services/businessWorkspaceApi', () => ({ fetchInventoryWorkspace: vi.fn() }));
 vi.mock('../../services/businessOperationApi', () => ({ returnCustomerShipment: vi.fn(), reviewAfterSalesReturn: vi.fn() }));
@@ -10,9 +12,28 @@ vi.mock('../shipping/ShippingPanel.vue', () => ({ default: { template: '<div dat
 vi.mock('./PrepStockPanel.vue', () => ({ default: defineComponent({ name: 'PrepStockPanel', props: ['scope'], setup() { return { draft: ref('') }; }, template: '<input v-model="draft" :aria-label="scope" />' }) }));
 const context = { customerId: 1, ownerCustomerId: 2, motherOrderCode: 'MO-1', workOrderCode: 'WO-1', materialCode: 'MAT-1', warehouseCode: 'WH-B', ownerType: 'CUSTOMER', stockStatus: 'FINISHED', quantity: 10.5, weight: 20.5 };
 const row = { owner: '客户甲', batch: 'WO-1', material: '物料', location: '库位乙', status: '成品', qty: 10.5, weight: '20.5 克', frozen: '0', operationContext: context };
-beforeEach(() => { vi.mocked(fetchInventoryWorkspace).mockReset().mockResolvedValue({ balances: [row], ledgerEntries: [], timeline: [], evidence: [] }); });
+beforeEach(() => { vi.mocked(fetchInventoryWorkspace).mockReset().mockResolvedValue({ balances: [row], ledgerEntries: [], timeline: [], evidence: [] }); vi.mocked(fetchStockLedgers).mockClear(); });
 
 describe('库存动作入口', () => {
+  it('独立流水按需读取真实接口，筛选撤下旧余额，退售后进入完整目标容器', async () => {
+    const open = vi.fn();
+    const session = ref({ effectivePermissions: ['BUSINESS_AFTER_SALES_REVIEW'] });
+    const wrapper = mount(InventoryTraceWorkspace, { global: { provide: { 'zhubao-auth-session': session, 'zhubao-open-aftercare': open, 'zhubao-open-shipping': vi.fn() } } });
+    await flushPromises();
+    expect(fetchStockLedgers).not.toHaveBeenCalled();
+    await wrapper.findAll('button').find(button => button.text() === '加工库存')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '看台账')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '退货与售后复核')!.trigger('click');
+    expect(open).toHaveBeenCalledWith(row);
+    await wrapper.get('[aria-label="库存追溯关键字"]').setValue('别的物料');
+    expect(wrapper.find('.module-side-panel').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '出入库记录')!.trigger('click');
+    await flushPromises();
+    expect(fetchStockLedgers).toHaveBeenCalledOnce();
+    expect(wrapper.get('[aria-label="全部出入库检索"]').isVisible()).toBe(true);
+    expect(wrapper.get('[aria-label="库存追溯主控台"]').isVisible()).toBe(false);
+    wrapper.unmount();
+  });
   it('列表入口核对有效权限，发货保留所选余额完整维度，成功通知只读刷新不重开', async () => {
     const open = vi.fn();
     const session = ref({ effectivePermissions: [] as string[] });
