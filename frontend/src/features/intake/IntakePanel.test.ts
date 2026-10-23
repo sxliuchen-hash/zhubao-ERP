@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ref } from 'vue';
+import { defineComponent, ref } from 'vue';
 import { ApiRequestError } from '../../services/apiClient';
 import IntakePanel from './IntakePanel.vue';
 import { queryScanContext } from '../../services/scanContextApi';
@@ -9,6 +9,10 @@ import { bindEvidence, fetchEvidenceBoard, uploadEvidenceFile } from '../../serv
 import { buildScanContext } from '../scan/scanContextFixture';
 import { fetchCustomers, fetchMaterials, fetchShortcuts, fetchTemplates, removeShortcut, saveCustomer, saveMaterial, saveShortcut } from '../../services/masterDataApi';
 import { composeRequirement } from './requirementText';
+import RequirementComposer from './RequirementComposer.vue';
+import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+
+vi.mock('../m1/PrepStockPanel.vue', () => ({ default: defineComponent({ name: 'PrepStockPanel', props: ['scope', 'initialSource'], setup() { return { draft: ref('') }; }, template: '<input v-model="draft" aria-label="寄存原草稿" />' }) }));
 
 vi.mock('../../services/masterDataApi', () => ({
   fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(), fetchTemplates: vi.fn(),
@@ -561,6 +565,52 @@ describe('收货面板', () => {
     expect(wrapper.get('[aria-label="加工要求"]').element).toHaveProperty('value', '抛光');
     expect(submitMobileIntake).not.toHaveBeenCalled();
     expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('加工与寄存用途往返保留原要求、文件及各自实例，切换不建母单', async () => {
+    const wrapper = mountPanel(true);
+    await fillNewWaybill(wrapper);
+    await wrapper.get('.field-dock button').trigger('click');
+    await pickEvidence(wrapper, '加工原照片.jpg', 'image/jpeg');
+    const composer = wrapper.getComponent(RequirementComposer).vm.$;
+    const evidence = wrapper.getComponent(EvidenceCapture).vm.$;
+    await wrapper.get('[aria-label="收货用途"]').setValue('prep');
+    await wrapper.get('[aria-label="寄存原草稿"]').setValue('寄存原请求与明细');
+    const prep = wrapper.getComponent({ name: 'PrepStockPanel' }).vm.$;
+    expect(composer.isUnmounted).toBe(false);
+    expect(evidence.isUnmounted).toBe(false);
+    await wrapper.get('[aria-label="收货用途"]').setValue('processing');
+    expect(wrapper.get('[aria-label="加工要求"]').element).toHaveProperty('value', '抛光');
+    expect(wrapper.text()).toContain('加工原照片.jpg');
+    expect(wrapper.getComponent(RequirementComposer).vm.$).toBe(composer);
+    expect(prep.isUnmounted).toBe(false);
+    await wrapper.get('[aria-label="收货用途"]').setValue('prep');
+    expect(wrapper.get('[aria-label="寄存原草稿"]').element).toHaveProperty('value', '寄存原请求与明细');
+    expect(submitMobileIntake).not.toHaveBeenCalled();
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('加工请求完成后父级草稿区收起，不销毁另一个用途尚未完成的寄存实例', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof submitMobileIntake>>) => void;
+    vi.mocked(submitMobileIntake).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const wrapper = mountPanel(true);
+    await fillNewWaybill(wrapper);
+    await wrapper.get('.field-dock button').trigger('click');
+    await wrapper.get('.field-dock button').trigger('click');
+    await wrapper.get('[aria-label="收货用途"]').setValue('prep');
+    await wrapper.get('[aria-label="寄存原草稿"]').setValue('尚待确认的原寄存');
+    const prep = wrapper.getComponent({ name: 'PrepStockPanel' }).vm.$;
+    finish({ alreadyExists: false, motherOrderCode: 'MD-DONE', courierNo: 'SF1048329001', customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20', goodsName: '戒托', quantity: 1, weight: 2.5, ledgerCode: 'LED-DONE', qrContent: '' });
+    await flushPromises();
+    expect(wrapper.get('[aria-label="已保存母单"]').text()).toContain('MD-DONE');
+    expect(prep.isUnmounted).toBe(false);
+    expect(wrapper.get('[aria-label="寄存原草稿"]').element).toHaveProperty('value', '尚待确认的原寄存');
+    await wrapper.findAll('button').find(button => button.text() === '收起寄存草稿')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '返回寄存草稿')!.trigger('click');
+    expect(wrapper.getComponent({ name: 'PrepStockPanel' }).vm.$).toBe(prep);
+    expect(submitMobileIntake).toHaveBeenCalledOnce();
     wrapper.unmount();
   });
 

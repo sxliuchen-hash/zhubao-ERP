@@ -6,6 +6,7 @@ import { fetchCustomers, fetchMaterials, fetchShortcuts, removeShortcut, saveCus
   type CustomerProfile, type MaterialProfile, type RequirementShortcut } from '../../services/masterDataApi';
 import FilterSelect from '../../components/FilterSelect.vue';
 import RequirementComposer from './RequirementComposer.vue';
+import PrepStockPanel from '../m1/PrepStockPanel.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
@@ -57,6 +58,11 @@ const catalogError = ref('');
 const catalogHint = ref('');
 const catalogSaving = ref(false);
 const processingRequirement = ref('');
+const intakePurpose = ref('processing');
+const prepCreated = ref(false);
+const prepOpen = ref(false);
+watch(intakePurpose, purpose => { if (purpose === 'prep') prepCreated.value = true; prepOpen.value = purpose === 'prep'; }, { flush: 'sync' });
+function togglePrepDraft() { intakePurpose.value = prepOpen.value ? 'processing' : 'prep'; }
 const requirementTemplateCode = ref('');
 const requirementTemplateVersion = ref(0);
 const requirementComposerKey = ref(0);
@@ -342,6 +348,7 @@ function nextFormStage() {
 }
 
 async function createMotherOrder() {
+  if (intakePurpose.value !== 'processing') return;
   if (submitting.value) return;
   formError.value = '';
   const courier = sourceType.value === 'COURIER' ? (newExpressCode.value || manualCourier.value.trim()) : '';
@@ -596,13 +603,15 @@ onMounted(loadCatalog);
 
   <section v-if="draftAvailable && !created" ref="draftPanel" class="section-block intake-draft intake-create" aria-label="收货草稿">
     <div class="field-card-head">
-      <h2>新建母单</h2>
+      <h2>{{ intakePurpose === 'prep' ? '寄存备料' : '新建母单' }}</h2>
       <StatusBadge v-if="field" label="草稿" tone="gray" />
     </div>
     <p v-if="newExpressCode">运单号 {{ newExpressCode }}</p>
-    <p v-if="field">草稿尚未建单，填好资料后点击“生成母单”。</p>
+    <p v-if="intakePurpose === 'prep'">先寄存不建立加工母单，不产生加工费；下方单独登记备料。</p>
+    <p v-else-if="field">草稿尚未建单，填好资料后点击“生成母单”。</p>
     <p>照片或视频可稍后补传，不影响建单。</p>
-    <div class="intake-form">
+    <label class="field"><span>收货用途</span><select v-model="intakePurpose" aria-label="收货用途"><option value="processing">现在加工，建立母单</option><option value="prep">先寄存备料</option></select></label>
+    <div v-show="intakePurpose === 'processing'" class="intake-form" :inert="intakePurpose !== 'processing' || undefined">
       <nav class="intake-stage-nav" aria-label="收货填写步骤">
         <button type="button" class="secondary-button" :aria-current="formStage === 1 ? 'step' : undefined" :disabled="submitting" @click="formStage = 1">1 客户来料</button>
         <button type="button" class="secondary-button" :aria-current="formStage === 2 ? 'step' : undefined" :disabled="submitting" @click="nextFormStage">2 要求证据</button>
@@ -707,6 +716,11 @@ onMounted(loadCatalog);
     </div>
   </section>
 
+  <section v-if="prepCreated" class="section-block intake-prep-draft" aria-label="寄存备料草稿">
+    <button class="secondary-button" type="button" :aria-expanded="prepOpen" @click="togglePrepDraft">{{ prepOpen ? '收起寄存草稿' : '返回寄存草稿' }}</button>
+    <PrepStockPanel v-show="prepOpen" scope="prep" :initial-source="newExpressCode ? `运单 ${newExpressCode}` : ''" :inert="!prepOpen || undefined" />
+  </section>
+
   <article v-if="savedMother" ref="savedPanel" class="field-card intake-saved intake-create" aria-label="已保存母单">
     <div class="field-card-head">
       <span>收货已保存，下一步打印标签</span>
@@ -737,7 +751,7 @@ onMounted(loadCatalog);
     </details>
   </article>
 
-  <section v-if="draftAvailable || intakeMotherCode" class="section-block intake-create" :class="{ 'intake-stage-hidden': !savedMother && formStage !== 2 }">
+  <section v-if="draftAvailable || intakeMotherCode" v-show="intakePurpose === 'processing'" :inert="intakePurpose !== 'processing' || undefined" class="section-block intake-create" :class="{ 'intake-stage-hidden': !savedMother && formStage !== 2 }">
     <h2 v-if="field && !savedMother">草稿文件</h2>
     <h2 v-else-if="field && savedMother">已保存后的拆包证据</h2>
     <h2 v-else>拆包证据</h2>
@@ -758,7 +772,7 @@ onMounted(loadCatalog);
     />
   </section>
 
-  <div v-if="field && draftAvailable && !created" class="field-dock intake-create">
+  <div v-if="intakePurpose === 'processing' && field && draftAvailable && !created" class="field-dock intake-create">
     <button v-if="formStage === 1" class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="nextFormStage">下一步：要求与证据</button>
     <button v-else class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
       {{ submitting ? '正在生成' : '生成母单' }}
