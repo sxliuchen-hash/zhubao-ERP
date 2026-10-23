@@ -21,6 +21,18 @@ describe('ProgressWorkspace', () => {
     vi.mocked(fetchProgress).mockReset();
   });
 
+  it('提供统一详情入口时传递精确身份，不再同时打开旧业务页', async () => {
+    vi.mocked(fetchProgress).mockResolvedValueOnce([{ customerId: 1001, customerName: '客户', motherOrderCode: 'MD-KEEP', workOrderCode: 'MD-KEEP', currentProcess: '抛光', dueDate: '', overdue: false, qualityOutcome: '', status: '在制', openTab: 'production' }]);
+    const openOrder = vi.fn();
+    const openTab = vi.fn();
+    const wrapper = mount(ProgressWorkspace, { global: { provide: { 'zhubao-open-order': openOrder, 'zhubao-open-tab': openTab } } });
+    await flushPromises();
+    await wrapper.get('button.table-action').trigger('click');
+    expect(openOrder).toHaveBeenCalledWith(expect.objectContaining({ objectType: 'MOTHER_ORDER', code: 'MD-KEEP' }));
+    expect(openTab).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('没有单据时显示空表，不回退样例行', async () => {
     vi.mocked(fetchProgress).mockResolvedValueOnce([]);
     const wrapper = mount(ProgressWorkspace);

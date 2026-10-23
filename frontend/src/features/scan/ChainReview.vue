@@ -2,6 +2,7 @@
 import { computed, inject, reactive, ref } from 'vue';
 import type { Ref } from 'vue';
 import OrderContextCard from './OrderContextCard.vue';
+import OrderDetail from '../orders/OrderDetail.vue';
 import { canonicalTarget, useScanContext } from './useScanContext';
 import { useTraceTarget } from './useTraceTarget';
 import type { TraceTarget } from './traceTarget';
@@ -76,7 +77,11 @@ function jump(intent: ScanIntent, tab: string) {
     <p>这里按服务端返回的单据回看收货、工序、质检和发货。没有记录的环节留空，不补样例。</p>
     <p v-if="scan.loading">正在查询</p>
     <p v-if="scan.error" class="operation-feedback danger">{{ scan.error }}</p>
-    <OrderContextCard :context="scan.context" @select="choose" />
+    <OrderContextCard v-if="scan.context?.requiresSelection" :context="scan.context" @select="choose" />
+    <template v-if="identity && scan.context">
+      <h3>{{ identity.code }}</h3>
+      <OrderDetail :key="`${identity.objectType}:${identity.code}`" :context="scan.context" />
+    </template>
     <p v-if="scan.context?.requiresSelection">请先选择具体单据，再进入收货、报工、质检或发货。</p>
     <div v-if="canJump" class="button-row">
       <button

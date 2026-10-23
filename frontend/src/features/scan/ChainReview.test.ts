@@ -68,8 +68,9 @@ describe('追溯回看', () => {
     await flushPromises();
 
     expect(queryScanContext).toHaveBeenCalledWith({ content: 'ZD-1', intent: 'LOOKUP' });
-    expect(wrapper.text()).toContain('工序 雕刻');
-    expect(wrapper.text()).toContain('发货 OUT-1');
+    await wrapper.get('.order-detail-tabs button:nth-child(2)').trigger('click');
+    expect(wrapper.text()).toContain('雕刻 · STK-1');
+    expect(wrapper.text()).toContain('OUT-1 · ZD-1');
     expect(wrapper.text()).not.toContain('暂无工序交付');
     await wrapper.get('[aria-label="去报工"]').trigger('click');
     expect(target.value).toMatchObject({ objectType: 'WORK_ORDER', code: 'ZD-1', intent: 'PRODUCTION' });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import ScanInput from '../scan/ScanInput.vue';
+import OrderDetail from '../orders/OrderDetail.vue';
 import ProgressNoteForm from '../scan/ProgressNoteForm.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import { appendProgressRecord, progressTargetFromScan } from '../scan/progressTarget';
@@ -45,10 +46,6 @@ watch(code, (value) => {
   if (value.trim() !== locatedInput.value && scan.context) scan.invalidate();
 });
 watch(identity, () => { qualityProgressOpen.value = false; });
-
-function quantity(value: number | null, unit: string | null): string {
-  return value === null ? '未填写' : `${value}${unit ? ` ${unit}` : ''}`;
-}
 
 async function recognize(draft: ScanDraft) {
   locatedInput.value = draft.content.trim();
@@ -119,28 +116,7 @@ function rememberProgress(record: ScanProgressRecord) {
           质检{{ scan.context.progress.quality.outcome || '待确认' }}
         </span>
       </div>
-      <dl v-if="identity.objectType !== 'EXPRESS_NO'" class="mobile-order-facts">
-        <div><dt>货品</dt><dd>{{ scan.context.order.goodsName || '未填写' }}</dd></div>
-        <div><dt>数量</dt><dd>{{ quantity(scan.context.order.quantity, scan.context.order.quantityUnit) }}</dd></div>
-        <div><dt>交期</dt><dd>{{ scan.context.order.dueDate || '未填写' }}</dd></div>
-        <div v-if="isReceiving"><dt>客户</dt><dd>{{ scan.context.order.customerName || '未填写' }}</dd></div>
-        <div v-if="isReceiving"><dt>重量</dt><dd>{{ quantity(scan.context.order.weight, scan.context.order.weightUnit) }}</dd></div>
-      </dl>
-      <p v-if="identity.objectType === 'EXPRESS_NO'" class="mobile-order-requirement">这张运单尚未定位到订单，可进入收货建单。</p>
-      <section v-else class="mobile-order-requirements" aria-label="订单要求">
-        <h4>当前要求</h4>
-        <p v-if="scan.context.requirements.workOrderRequirement">子单：{{ scan.context.requirements.workOrderRequirement }}</p>
-        <p v-if="scan.context.requirements.motherRequirement">母单：{{ scan.context.requirements.motherRequirement }}</p>
-        <p v-if="!scan.context.requirements.workOrderRequirement && !scan.context.requirements.motherRequirement">暂无加工要求</p>
-        <ul v-if="isProduction && scan.context.requirements.stationRequirements.length">
-          <li v-for="item in scan.context.requirements.stationRequirements" :key="`${item.process}-${item.text}`">
-            {{ item.process || '当前工序' }}：{{ item.text || '未填写' }}
-          </li>
-        </ul>
-      </section>
-      <p v-if="scan.context.progress.handoffs.length" class="mobile-order-latest">
-        最近交工：{{ scan.context.progress.handoffs.at(-1)?.process || '工序' }}
-      </p>
+      <OrderDetail :context="scan.context" :show-customer="isReceiving" :show-weight="isReceiving" :show-station="isProduction" />
       <div class="mobile-order-actions" aria-label="本岗操作">
         <button v-if="isReceiving" class="primary-button" type="button" @click="open('intake')">
           {{ identity.objectType === 'EXPRESS_NO' ? '创建收货订单' : '查看收货与订单资料' }}
@@ -188,17 +164,10 @@ function rememberProgress(record: ScanProgressRecord) {
 .mobile-order-title { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
 .mobile-order-kicker { margin: 0 0 3px; color: var(--muted); font-size: .85rem; }
 .mobile-order-status { padding: 5px 9px; border-radius: 999px; background: var(--surface-soft, var(--content)); white-space: nowrap; }
-.mobile-order-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0; }
-.mobile-order-facts div { min-width: 0; }
-.mobile-order-facts dt { color: var(--muted); font-size: .82rem; }
-.mobile-order-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
-.mobile-order-requirements { border-top: 1px solid var(--line); padding-top: 12px; }
-.mobile-order-requirements h4, .mobile-order-requirements p { margin: 0 0 7px; }
-.mobile-order-requirements ul { margin: 0; padding-left: 20px; }
 .mobile-order-actions, .mobile-order-choices { display: grid; gap: 8px; }
 .mobile-order-choices button { text-align: left; }
 .mobile-order-choices small { display: block; margin-top: 4px; }
-.mobile-order-latest, .mobile-order-hint, .mobile-order-requirement { margin: 0; color: var(--muted); }
+.mobile-order-hint { margin: 0; color: var(--muted); }
 .mobile-order-more, .mobile-order-shortcuts { border-top: 1px solid var(--line); padding-top: 10px; }
 .mobile-order-shortcuts .mobile-order-actions { margin-top: 10px; }
 </style>

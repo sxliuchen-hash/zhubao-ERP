@@ -13,10 +13,12 @@ import {
 } from '../../services/masterDataApi';
 import { fetchProgress, type ProgressRow } from '../../services/progressApi';
 import RequirementTemplatePanel from './RequirementTemplatePanel.vue';
+import { progressTraceTarget, type TraceTarget } from '../scan/traceTarget';
 
 type Section = 'customers' | 'materials' | 'templates';
 
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const openOrder = inject<((target: Pick<TraceTarget, 'objectType' | 'code'>) => void) | null>('zhubao-open-order', null);
 const canManage = computed(() => canManageMasterData(authSession.value));
 const section = ref<Section>('customers');
 const loading = ref(false);
@@ -358,7 +360,7 @@ function money(value: number) {
               </thead>
               <tbody>
                 <tr v-for="row in progressRows" :key="`${row.motherOrderCode}|${row.workOrderCode}`">
-                  <td class="code">{{ row.motherOrderCode }}</td>
+                  <td class="code"><button v-if="openOrder" class="table-action" type="button" @click="openOrder(progressTraceTarget(row, 0))">{{ row.motherOrderCode }}</button><template v-else>{{ row.motherOrderCode }}</template></td>
                   <td class="code">{{ childCode(row) }}</td>
                   <td>{{ row.currentProcess }}</td>
                   <td>{{ row.dueDate || '—' }}</td>

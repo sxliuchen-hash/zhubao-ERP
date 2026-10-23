@@ -44,6 +44,19 @@ describe('客户档案', () => {
     vi.mocked(saveMaterial).mockReset();
   });
 
+  it('客户订单按具体子单进入统一详情，客户名称不作为目标', async () => {
+    vi.mocked(fetchStatement).mockRejectedValue(new Error('无权查看财务'));
+    vi.mocked(fetchProgress).mockResolvedValue([{ customerId: 1001, customerName: '恒信珠宝', motherOrderCode: 'MD-1', workOrderCode: 'ZD-1', currentProcess: '抛光', dueDate: '', overdue: false, qualityOutcome: '', status: '在制', openTab: 'production' }]);
+    const openOrder = vi.fn();
+    const wrapper = mount(CustomerArchiveWorkspace, { global: { provide: { 'zhubao-open-order': openOrder } } });
+    await flushPromises();
+    await wrapper.get('[aria-label="选择客户 恒信珠宝"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[aria-label="客户订单进度"] button.table-action').trigger('click');
+    expect(openOrder).toHaveBeenCalledWith(expect.objectContaining({ objectType: 'WORK_ORDER', code: 'ZD-1' }));
+    wrapper.unmount();
+  });
+
   it('新建客户后选入列表', async () => {
     vi.mocked(saveCustomer).mockResolvedValue({
       customerId: 2088, customerCode: 'C-2088', name: '翠玉坊', aliases: '', contact: '', phone: '', remark: '', enabled: true,

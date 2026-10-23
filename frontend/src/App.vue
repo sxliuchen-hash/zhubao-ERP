@@ -31,6 +31,9 @@ import {
 } from './services/authApi';
 
 const activeTab = ref<TabKey>('dashboard');
+const orderWorkspaceOpen = ref(false);
+const authRevision = ref(0);
+const orderWorkspaceLoader = () => import('./features/orders/OrderWorkspace.vue');
 const workspaceLoaders = {
   inbound: () => import('./features/m1/InboundWorkspace.vue'),
   customers: () => import('./features/m1/CustomerArchiveWorkspace.vue'),
@@ -56,9 +59,9 @@ const activeWorkspace = computed(() => {
   // 重建异步组件以重新请求失败的页面，已加载模块由浏览器缓存复用。
   void workspaceLoadAttempt.value;
   const key = activeTab.value;
-  if (key === 'dashboard') return null;
+  if (key === 'dashboard' && !orderWorkspaceOpen.value) return null;
   return defineAsyncComponent({
-    loader: workspaceLoaders[key],
+    loader: orderWorkspaceOpen.value ? orderWorkspaceLoader : workspaceLoaders[key as Exclude<TabKey, 'dashboard'>],
     loadingComponent: WorkspaceLoadState,
     errorComponent: WorkspaceLoadState,
     delay: 150,
@@ -66,10 +69,8 @@ const activeWorkspace = computed(() => {
   });
 });
 const moreOpen = ref(false);
-const ordersOpen = ref(false);
 const moreQuery = ref('');
 const moreFilterRef = ref<HTMLInputElement | null>(null);
-const ordersCloseRef = ref<HTMLButtonElement | null>(null);
 const traceQuery = ref('');
 const traceTarget = ref<TraceTarget | null>(null);
 const labelTarget = ref<TraceTarget | null>(null);
@@ -86,6 +87,10 @@ provide('zhubao-open-label', (code: string) => {
 });
 provide('zhubao-open-tab', (tab: TabKey) => {
   activateTab(tab);
+});
+provide('zhubao-open-order', (target: Omit<TraceTarget, 'intent' | 'token'>) => {
+  traceTarget.value = { ...target, intent: 'LOOKUP', token: nextTraceToken() };
+  openOrders();
 });
 const authSession = ref<AuthSession | null>(null);
 provide('zhubao-auth-session', authSession);
@@ -115,28 +120,36 @@ const visibleTabs = computed(() => {
 provide('zhubao-visible-tabs', computed(() => visibleTabs.value.map((tab) => tab.key)));
 const navigationGroups = computed(() => groupTabsBySection(visibleTabs.value));
 const activeTabMeta = computed(() => visibleTabs.value.find((tab) => tab.key === activeTab.value) ?? visibleTabs.value[0]);
-const activeTitle = computed(() => activeTabMeta.value?.label ?? '首页');
-const activeLocation = computed(() => sectionLabel(sectionOfTab(activeTabMeta.value?.key ?? 'dashboard')));
+const activeTitle = computed(() => orderWorkspaceOpen.value ? '订单中心' : activeTabMeta.value?.label ?? '首页');
+const activeLocation = computed(() => orderWorkspaceOpen.value ? '订单' : sectionLabel(sectionOfTab(activeTabMeta.value?.key ?? 'dashboard')));
 const showDeskTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'dashboard'));
 const showInventoryTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'inventory'));
 const orderDockTabs = computed(() => mobileOrderTabs(visibleTabs.value));
+const canReadOrders = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['inbound', 'production', 'progress', 'quality', 'inventory'].includes(tab.key)));
 const moreTabs = computed(() => mobileMoreTabs(visibleTabs.value));
 const filteredMoreGroups = computed(() => groupTabsBySection(filterWorkspaceTabs(moreTabs.value, moreQuery.value)));
-const deskActive = computed(() => activeTab.value === 'dashboard' && !moreOpen.value && !ordersOpen.value);
-const ordersActive = computed(() => ordersOpen.value || (!moreOpen.value && orderDockTabs.value.some((tab) => tab.key === activeTab.value)));
-const inventoryActive = computed(() => activeTab.value === 'inventory' && !moreOpen.value && !ordersOpen.value);
-const moreActive = computed(() => moreOpen.value || moreTabs.value.some((tab) => tab.key === activeTab.value));
+const deskActive = computed(() => activeTab.value === 'dashboard' && !moreOpen.value && !orderWorkspaceOpen.value);
+const ordersActive = computed(() => orderWorkspaceOpen.value || (!moreOpen.value && orderDockTabs.value.some((tab) => tab.key === activeTab.value)));
+const inventoryActive = computed(() => activeTab.value === 'inventory' && !moreOpen.value && !orderWorkspaceOpen.value);
+const moreActive = computed(() => moreOpen.value || (!orderWorkspaceOpen.value && moreTabs.value.some((tab) => tab.key === activeTab.value)));
+
+watch(canReadOrders, allowed => {
+  if (!allowed && orderWorkspaceOpen.value) {
+    orderWorkspaceOpen.value = false;
+    cancelMobileScan();
+    workspace.clear();
+    traceTarget.value = null;
+  }
+});
 
 watch(activeTab, () => {
   moreOpen.value = false;
-  ordersOpen.value = false;
   moreQuery.value = '';
   void nextTick(() => window.scrollTo(0, 0));
 });
 
 watch(moreOpen, (open) => {
   if (!open) return;
-  ordersOpen.value = false;
   void nextTick(() => moreFilterRef.value?.focus());
 });
 
@@ -176,6 +189,7 @@ async function restoreAuthSessionForNavigation() {
 async function handleLogout() {
   cancelMobileScan();
   workspace.clear();
+  orderWorkspaceOpen.value = false;
   await logoutAuthSession();
   authSession.value = null;
   labelTarget.value = null;
@@ -187,7 +201,11 @@ function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) 
   cancelMobileScan();
   workspace.clear();
   moreOpen.value = false;
-  ordersOpen.value = false;
+  orderWorkspaceOpen.value = false;
+  authRevision.value += 1;
+  labelTarget.value = null;
+  traceTarget.value = null;
+  traceQuery.value = '';
   authSession.value = event.detail.session;
   if (event.detail.session) {
     authRestoreError.value = '';
@@ -199,46 +217,56 @@ function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) 
 }
 
 function handleGlobalKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || (!moreOpen.value && !ordersOpen.value)) return;
+  if (event.key !== 'Escape' || !moreOpen.value) return;
   moreOpen.value = false;
-  ordersOpen.value = false;
 }
 
 function openTraceDocument() {
   const code = traceQuery.value.trim();
   if (!code) return;
-  traceToken += 1;
-  traceTarget.value = { objectType: null, code, intent: 'LOOKUP', token: traceToken };
+  traceTarget.value = { objectType: null, code, intent: 'LOOKUP', token: nextTraceToken() };
+}
+
+function nextTraceToken() {
+  traceToken = Math.max(traceToken, traceTarget.value?.token ?? 0) + 1;
+  return traceToken;
 }
 
 function activateTab(tab: TabKey) {
   if (visibleTabs.value.some((item) => item.key === tab)) {
+    orderWorkspaceOpen.value = false;
+    if (traceTarget.value?.intent === 'LOOKUP') traceTarget.value = null;
     activeTab.value = tab;
   }
 }
 
 function openMobileTab(tab: TabKey) {
   moreOpen.value = false;
-  ordersOpen.value = false;
   activateTab(tab);
 }
 
 function openMobileOrders() {
+  openOrders();
+}
+
+function openOrders() {
+  if (!canReadOrders.value) return;
   moreOpen.value = false;
-  if (orderDockTabs.value.length === 1) {
-    openMobileTab(orderDockTabs.value[0].key);
-    return;
-  }
-  ordersOpen.value = !ordersOpen.value;
-  if (ordersOpen.value) {
-    void nextTick(() => ordersCloseRef.value?.focus());
-  }
+  orderWorkspaceOpen.value = true;
 }
 
 function startDockScan() {
   moreOpen.value = false;
-  ordersOpen.value = false;
   if (openMobileScanTarget()) return;
+  if (canReadOrders.value) {
+    armMobileScan();
+    if (orderWorkspaceOpen.value) {
+      traceTarget.value = null;
+      workspaceLoadAttempt.value += 1;
+    }
+    openOrders();
+    return;
+  }
   if (!visibleTabs.value.some((tab) => tab.key === 'mobile')) return;
   const switching = activeTab.value !== 'mobile';
   armMobileScan();
@@ -265,7 +293,7 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     </section>
   </div>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
-  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
+  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': !orderWorkspaceOpen && activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
     <template #session>
       <div class="top-session">
         <span>{{ authSession?.operator }}</span>
@@ -288,12 +316,11 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
           <span>待办</span>
         </button>
         <button
-          v-if="orderDockTabs.length"
+          v-if="canReadOrders"
           class="mobile-tab"
           :class="{ active: ordersActive }"
           data-mobile-section="orders"
           type="button"
-          :aria-expanded="ordersOpen ? 'true' : 'false'"
           @click="openMobileOrders"
         >
           <NavIcon name="orders" />
@@ -331,20 +358,6 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
           <span>更多</span>
         </button>
       </div>
-      <div v-if="ordersOpen" class="mobile-more-sheet" role="dialog" aria-label="订单">
-        <button ref="ordersCloseRef" class="secondary-button mobile-sheet-close" type="button" @click="ordersOpen = false">关闭</button>
-        <p class="mobile-more-heading">打开原有页面</p>
-        <button
-          v-for="tab in orderDockTabs"
-          :key="tab.key"
-          class="mobile-more-item"
-          :data-mobile-tab="tab.key"
-          type="button"
-          @click="openMobileTab(tab.key)"
-        >
-          {{ tab.label }}
-        </button>
-      </div>
       <div v-if="moreOpen" class="mobile-more-sheet" role="dialog" aria-label="更多">
         <button class="secondary-button mobile-sheet-close" type="button" @click="moreOpen = false">关闭</button>
         <label class="mobile-more-filter">
@@ -369,6 +382,9 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     </template>
 
     <template #nav>
+      <button v-if="canReadOrders" class="nav-button" data-workspace-section="orders" :class="{ active: orderWorkspaceOpen }" type="button" @click="openOrders">
+        <span class="nav-icon-wrap"><NavIcon name="orders" /></span><span class="nav-label"><strong>订单中心</strong></span>
+      </button>
       <template v-for="group in navigationGroups" :key="group.id">
         <p v-if="group.tabs.length" class="nav-group-label">{{ group.label }}</p>
         <button
@@ -376,7 +392,7 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
           :key="tab.key"
           class="nav-button"
           :data-tab="tab.key"
-          :class="{ active: activeTab === tab.key }"
+          :class="{ active: !orderWorkspaceOpen && activeTab === tab.key }"
           :title="`${tab.label} · ${tab.meta}`"
           type="button"
           @click="activateTab(tab.key)"
@@ -389,8 +405,8 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
       </template>
     </template>
 
-    <ChainReview v-if="traceTarget?.intent === 'LOOKUP'" />
-    <M1Dashboard v-if="activeTab === 'dashboard'" />
-    <component :is="activeWorkspace" v-else />
+    <ChainReview v-if="traceTarget?.intent === 'LOOKUP' && !orderWorkspaceOpen" />
+    <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
+    <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
 </template>

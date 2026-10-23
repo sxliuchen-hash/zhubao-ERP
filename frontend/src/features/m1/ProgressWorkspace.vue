@@ -10,6 +10,7 @@ import type { Tone } from '../../data/m1PrototypeData';
 type DeskTab = 'inbound' | 'production' | 'quality';
 
 const openTab = inject<(tab: DeskTab) => void>('zhubao-open-tab', () => {});
+const openOrder = inject<((target: Pick<TraceTarget, 'objectType' | 'code'>) => void) | null>('zhubao-open-order', null);
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 let traceToken = 0;
 const rows = ref<ProgressRow[]>([]);
@@ -68,6 +69,10 @@ async function loadRows() {
 
 function openRow(row: ProgressRow) {
   traceToken += 1;
+  if (openOrder) {
+    openOrder(progressTraceTarget(row, traceToken));
+    return;
+  }
   traceTarget.value = progressTraceTarget(row, traceToken);
   openTab(row.openTab);
 }

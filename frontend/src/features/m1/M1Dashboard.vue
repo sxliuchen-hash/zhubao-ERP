@@ -32,6 +32,7 @@ const traceQuery = inject<Ref<string>>('zhubao-trace-query', ref(''));
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 let traceToken = 0;
 const openTab = inject<(tab: DeskTab) => void>('zhubao-open-tab', () => {});
+const openOrder = inject<((target: Pick<TraceTarget, 'objectType' | 'code'>) => void) | null>('zhubao-open-order', null);
 const openLabel = inject<(code: string) => void>('zhubao-open-label', () => {});
 const visibleTabs = inject<Ref<string[]>>('zhubao-visible-tabs', ref(['inbound', 'production', 'quality', 'progress', 'label']));
 const selectedCode = ref('');
@@ -189,6 +190,11 @@ function backToDesk() {
 
 function openSelected() {
   if (selectedRow.value) {
+    if (openOrder) {
+      const row = selectedRow.value;
+      openOrder({ objectType: row.type === '母单' ? 'MOTHER_ORDER' : null, code: row.type === '质检' ? row.reference : row.code });
+      return;
+    }
     if (selectedRow.value.type === '母单') {
       traceToken += 1;
       traceTarget.value = { objectType: 'MOTHER_ORDER', code: selectedRow.value.code, intent: 'INTAKE', token: traceToken };
@@ -356,7 +362,7 @@ function qualityTone(status: string): Tone {
           </dl>
           <p v-if="selectedRow.type === '母单'" class="empty-hint">母单已建立后可直接打印标签；继续处理可核对加工要求、完成期限和拆单方式。</p>
           <div class="active-action-grid">
-            <button class="primary-button" type="button" @click="openSelected">{{ selectedRow.action }}</button>
+            <button class="primary-button" type="button" @click="openSelected">{{ openOrder ? '查看订单详情' : selectedRow.action }}</button>
             <button v-if="selectedRow.type === '母单' && canOpen('label')" class="secondary-button" type="button" @click="printSelected">打印此母单标签</button>
           </div>
         </template>

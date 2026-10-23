@@ -76,6 +76,19 @@ describe('M1Dashboard', () => {
     expect(wrapper.find('.active-record-panel').text()).toContain('1.00 g');
   });
 
+  it('工作区提供统一详情入口时仅打开所选母单，保留旧业务与轻任务入口', async () => {
+    const openOrder = vi.fn();
+    const openTab = vi.fn();
+    const wrapper = mount(M1Dashboard, { global: { provide: { 'zhubao-open-order': openOrder, 'zhubao-open-tab': openTab } } });
+    await flushPromises();
+    await wrapper.findAll('table.floor-dispatch-table tbody tr')[1].trigger('click');
+    await wrapper.get('.active-record-panel .primary-button').trigger('click');
+    expect(openOrder).toHaveBeenCalledWith({ objectType: 'MOTHER_ORDER', code: 'MD-API-002' });
+    expect(openTab).not.toHaveBeenCalled();
+    expect(wrapper.findAll('button').some(button => button.text() === '新建收货／母单')).toBe(true);
+    wrapper.unmount();
+  });
+
   it('shows an empty list and the failure reason when workspace apis are unavailable', async () => {
     vi.mocked(fetchInboundWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));
     vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));

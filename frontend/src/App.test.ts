@@ -4,6 +4,14 @@ import App from './App.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import { armMobileScan, bindMobileScanTarget, unbindMobileScanTarget } from './features/scan/mobileScanBridge';
 import { authSessionChangedEvent, fetchAuthSession, type AuthSession } from './services/authApi';
+import { fetchOrderWorkspace } from './services/orderWorkspaceApi';
+import { queryScanContext } from './services/scanContextApi';
+import { buildScanContext } from './features/scan/scanContextFixture';
+
+vi.mock('./services/orderWorkspaceApi', () => ({ fetchOrderWorkspace: vi.fn() }));
+vi.mock('./services/scanContextApi', async () => ({
+  ...await vi.importActual<typeof import('./services/scanContextApi')>('./services/scanContextApi'), queryScanContext: vi.fn(),
+}));
 
 vi.mock('./services/authApi', () => ({
   authSessionChangedEvent: 'zhubao-auth-session-changed',
@@ -20,6 +28,8 @@ describe('App', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     localStorage.clear();
     vi.mocked(fetchAuthSession).mockResolvedValue(null);
+    vi.mocked(fetchOrderWorkspace).mockReset().mockResolvedValue({ items: [], page: 1, size: 20, totalRows: 0, facetCounts: {}, availableViews: ['ORDERS'], generatedAt: '' });
+    vi.mocked(queryScanContext).mockReset().mockImplementation(async input => buildScanContext({ objectType: input.objectType ?? 'MOTHER_ORDER', code: input.content }));
   });
 
   it('shows the login page before a session exists', async () => {
@@ -133,7 +143,7 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    expect(wrapper.findAll('.nav-button').map((button) => button.attributes('data-tab'))).toEqual([
+    expect(wrapper.findAll('.nav-button[data-tab]').map((button) => button.attributes('data-tab'))).toEqual([
       'dashboard',
       'production',
       'mobile',
@@ -147,7 +157,7 @@ describe('App', () => {
     }));
     await flushPromises();
 
-    expect(wrapper.findAll('.nav-button').map((button) => button.attributes('data-tab'))).toEqual([
+    expect(wrapper.findAll('.nav-button[data-tab]').map((button) => button.attributes('data-tab'))).toEqual([
       'dashboard',
       'quality',
     ]);
@@ -167,7 +177,7 @@ describe('App', () => {
     await flushPromises();
     const operatorMenus = allMenuCodes;
 
-    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(operatorMenus.length);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(operatorMenus.length + 1);
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('true');
     expect(wrapper.get('.app-shell').classes()).not.toContain('is-collapsed');
 
@@ -177,7 +187,7 @@ describe('App', () => {
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('false');
     expect(wrapper.get('.sidebar-toggle').attributes('aria-label')).toBe('展开侧边栏');
     expect(localStorage.getItem('zhubao-sidebar-collapsed')).toBe('1');
-    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(operatorMenus.length);
+    expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(operatorMenus.length + 1);
 
     await wrapper.get('.sidebar-toggle').trigger('click');
 
@@ -197,7 +207,8 @@ describe('App', () => {
     expect(wrapper.get('[aria-label="更多"]').text()).not.toContain('财务');
     expect(wrapper.get('[aria-label="更多"]').text()).not.toContain('来料');
     await wrapper.get('.mobile-tab[data-mobile-section="orders"]').trigger('click');
-    expect(wrapper.get('[aria-label="订单"]').text()).toContain('来料');
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(true), { timeout: 5000 });
+    expect(wrapper.get('[aria-label="订单查询列表"]').text()).toContain('来料');
   });
 
   it('opens an authorized module from the mobile more sheet without a second page state', async () => {
@@ -302,7 +313,7 @@ describe('App', () => {
     wrapper.unmount();
   });
 
-  it('没有手机作业菜单时，底栏扫码不进入现场页', async () => {
+  it('没有手机作业菜单但有订单读取菜单时，底栏扫码进入只读订单中心', async () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'inbound']));
     const wrapper = mount(App);
     await flushPromises();
@@ -310,7 +321,8 @@ describe('App', () => {
     await wrapper.get('[aria-label="扫码"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.get('h1').text()).toBe('首页');
+    expect(wrapper.get('h1').text()).toBe('订单中心');
+    expect(wrapper.find('.field-job').exists()).toBe(false);
     expect(wrapper.find('.mobile-tab[data-mobile-section="inventory"]').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -341,6 +353,83 @@ describe('App', () => {
     }));
     await flushPromises();
     expect(wrapper.find('[data-tab="users"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('顶栏查单只打开订单详情，不同时打开追溯回看；权限变化清掉旧单', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'production']));
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.get('[data-mobile-section="orders"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.order-workspace').exists()).toBe(true), { timeout: 5000 });
+    await wrapper.get('[aria-label="追溯查询"]').setValue('MO-ONLY');
+    await wrapper.get('[aria-label="打开追溯单据"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="订单详情"] h2').text()).toContain('MO-ONLY'));
+    expect(queryScanContext).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[aria-label="追溯回看"]').exists()).toBe(false);
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, { detail: { session: sessionWithMenus(['dashboard']) } }));
+    await flushPromises();
+    expect(wrapper.find('[aria-label="订单详情"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="追溯回看"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('MO-ONLY');
+    expect(wrapper.find('[data-workspace-section="orders"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('底栏优先使用当前表单扫码，有订单菜单也不跳走', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'production']));
+    const wrapper = mount(App);
+    await flushPromises();
+    const scan = vi.fn();
+    bindMobileScanTarget(scan);
+    await wrapper.get('[aria-label="扫码"]').trigger('click');
+    expect(scan).toHaveBeenCalledOnce();
+    expect(wrapper.get('h1').text()).toBe('首页');
+    expect(fetchOrderWorkspace).not.toHaveBeenCalled();
+    unbindMobileScanTarget(scan);
+    wrapper.unmount();
+  });
+
+  it('只有财务菜单时不因新展示分区获得订单入口', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'finance']));
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.find('[data-workspace-section="orders"]').exists()).toBe(false);
+    expect(wrapper.find('[data-mobile-section="orders"]').exists()).toBe(false);
+    expect(fetchOrderWorkspace).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('从全局单据详情重新扫码时清掉原 LOOKUP，挂起扫码不重新打开旧单', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'production']));
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.get('[data-mobile-section="orders"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.order-workspace').exists()).toBe(true), { timeout: 5000 });
+    await wrapper.get('[aria-label="追溯查询"]').setValue('MO-SCAN');
+    await wrapper.get('[aria-label="打开追溯单据"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="订单详情"]').exists()).toBe(true), { timeout: 5000 });
+    await wrapper.get('[aria-label="扫码"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="订单扫码单号"]').exists()).toBe(true), { timeout: 5000 });
+    expect(queryScanContext).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[aria-label="订单详情"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('其他页面的顶栏查单保留原组件和草稿，只在当前页复用只读详情', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'production']));
+    const wrapper = mount(App, { global: { stubs: { M1Dashboard: { template: '<input aria-label="原页面草稿" />' } } } });
+    await flushPromises();
+    const original = wrapper.get('[aria-label="原页面草稿"]').element;
+    await wrapper.get('[aria-label="原页面草稿"]').setValue('尚未提交');
+    await wrapper.get('[aria-label="追溯查询"]').setValue('MO-IN-PLACE');
+    await wrapper.get('[aria-label="打开追溯单据"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="原页面草稿"]').element).toBe(original);
+    expect(original).toHaveProperty('value', '尚未提交');
+    expect(wrapper.findAll('.order-detail-content')).toHaveLength(1);
+    expect(wrapper.find('.order-workspace').exists()).toBe(false);
+    expect(fetchOrderWorkspace).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });

@@ -15,6 +15,7 @@ export interface OrderSelection {
 /** 从详情返回列表时恢复的筛选位置。不写入 localStorage。 */
 export interface OrderReturnLocation {
   section: WorkspaceSection;
+  view?: 'ORDERS' | 'PRODUCTION' | 'QUALITY';
   query: string;
   customerId: string;
   process: string;
