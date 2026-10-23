@@ -3,6 +3,7 @@ import { computed, inject, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import type { ScanObjectType } from '../../services/scanContextApi';
 import type { TraceTarget } from '../scan/traceTarget';
+import type { OpenIntakeAction } from '../orders/orderActions';
 import IntakePanel from '../intake/IntakePanel.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
 import QualityPanel from '../quality/QualityPanel.vue';
@@ -14,6 +15,7 @@ type JobMode = 'detail' | 'intake' | 'station' | 'progress' | 'quality' | 'shipp
 
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
+const openIntake = inject<OpenIntakeAction | null>('zhubao-open-intake', null);
 const jobMode = ref<JobMode>('detail');
 const lastTarget = ref<{ code: string; objectType: ScanObjectType } | null>(null);
 const progressCode = ref('');
@@ -71,6 +73,7 @@ watch([primaryModes, extraModes], () => {
 
 function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objectType: ScanObjectType }) {
   if (![...primaryModes.value, ...extraModes.value].some((mode) => mode.key === action)) return;
+  if (action === 'intake' && openIntake) { openIntake(target); return; }
   if (target) lastTarget.value = target;
   progressCode.value = target?.code ?? '';
   if (target && action !== 'progress') {

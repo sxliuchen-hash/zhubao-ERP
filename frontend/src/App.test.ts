@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
+import OrderActionHost from './features/orders/OrderActionHost.vue';
 import { armMobileScan, bindMobileScanTarget, unbindMobileScanTarget } from './features/scan/mobileScanBridge';
 import { authSessionChangedEvent, fetchAuthSession, type AuthSession } from './services/authApi';
 import { fetchOrderWorkspace } from './services/orderWorkspaceApi';
@@ -10,6 +11,7 @@ import { buildScanContext } from './features/scan/scanContextFixture';
 
 vi.mock('./services/orderWorkspaceApi', () => ({ fetchOrderWorkspace: vi.fn() }));
 vi.mock('./services/approvalApi', () => ({ fetchPendingApprovalTasks: vi.fn().mockResolvedValue([]), fetchApprovalTasks: vi.fn().mockResolvedValue([]), submitApprovalDecision: vi.fn() }));
+vi.mock('./services/masterDataApi', async () => ({ ...await vi.importActual<typeof import('./services/masterDataApi')>('./services/masterDataApi'), fetchCustomers: vi.fn().mockResolvedValue([]), fetchMaterials: vi.fn().mockResolvedValue([]), fetchShortcuts: vi.fn().mockResolvedValue([]), fetchTemplates: vi.fn().mockResolvedValue([]) }));
 vi.mock('./services/scanContextApi', async () => ({
   ...await vi.importActual<typeof import('./services/scanContextApi')>('./services/scanContextApi'), queryScanContext: vi.fn(),
 }));
@@ -433,6 +435,24 @@ describe('App', () => {
     expect(wrapper.findAll('.order-detail-content')).toHaveLength(1);
     expect(wrapper.find('.order-workspace').exists()).toBe(false);
     expect(fetchOrderWorkspace).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('有效收货权限打开原页之上的动作容器，收起恢复底页交互，权限变化清掉本账号动作', async () => {
+    const receiver = { ...sessionWithMenus(['dashboard', 'inbound']), role: 'RECEIVER', effectivePermissions: ['BUSINESS_INBOUND_CONFIRM'] };
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(receiver);
+    const wrapper = mount(App);
+    await flushPromises();
+    expect(wrapper.getComponent(OrderActionHost).props('canIntake')).toBe(true);
+    await wrapper.findAll('button').find(button => button.text() === '新建收货／母单')!.trigger('click');
+    expect(wrapper.get('.app-shell').attributes('inert')).toBeDefined();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(wrapper.get('.app-shell').attributes('inert')).toBeUndefined();
+    window.dispatchEvent(new CustomEvent(authSessionChangedEvent, { detail: { session: { ...receiver, effectivePermissions: [] } } }));
+    await flushPromises();
+    expect(wrapper.getComponent(OrderActionHost).props('canIntake')).toBe(false);
+    expect(wrapper.findAll('button').some(button => button.text() === '新建收货／母单')).toBe(false);
     wrapper.unmount();
   });
 });

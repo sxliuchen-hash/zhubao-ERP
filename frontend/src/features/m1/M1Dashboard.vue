@@ -35,6 +35,7 @@ let traceToken = 0;
 const openTab = inject<(tab: DeskTab) => void>('zhubao-open-tab', () => {});
 const openOrder = inject<((target: Pick<TraceTarget, 'objectType' | 'code'>) => void) | null>('zhubao-open-order', null);
 const openOrders = inject<(() => void) | null>('zhubao-open-orders', null);
+const openIntake = inject<(() => void) | null>('zhubao-open-intake', null);
 const legacyOpen = ref(!openOrders);
 function toggleLegacy() {
   legacyOpen.value = !legacyOpen.value;
@@ -214,6 +215,7 @@ function openSelected() {
 }
 
 function startInbound() {
+  if (openIntake) { openIntake(); return; }
   traceQuery.value = '';
   traceTarget.value = null;
   openTab('inbound');

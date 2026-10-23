@@ -3,6 +3,9 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, p
 import AppShell from './components/AppShell.vue';
 import NavIcon from './components/NavIcon.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
+import OrderActionHost from './features/orders/OrderActionHost.vue';
+import type { OrderActionTarget } from './features/orders/orderActions';
+import type { MobileIntakeResult } from './services/mobileIntakeApi';
 import LoginPage from './features/auth/LoginPage.vue';
 import ChainReview from './features/scan/ChainReview.vue';
 import { armMobileScan, cancelMobileScan, openMobileScanTarget } from './features/scan/mobileScanBridge';
@@ -75,6 +78,10 @@ const traceQuery = ref('');
 const traceTarget = ref<TraceTarget | null>(null);
 const labelTarget = ref<TraceTarget | null>(null);
 const approvalCode = ref('');
+const orderActionHost = ref<InstanceType<typeof OrderActionHost> | null>(null);
+const orderActionOpen = ref(false);
+const orderRefresh = ref(0);
+const intakeReceipt = ref<MobileIntakeResult | null>(null);
 const workspace = createWorkspaceState();
 let traceToken = 0;
 provide('zhubao-workspace-context', workspace);
@@ -82,6 +89,10 @@ provide('zhubao-trace-query', traceQuery);
 provide('zhubao-trace-target', traceTarget);
 provide('zhubao-label-target', labelTarget);
 provide('zhubao-approval-code', approvalCode);
+provide('zhubao-scan-suspended', orderActionOpen);
+provide('zhubao-order-refresh', orderRefresh);
+provide('zhubao-intake-receipt', intakeReceipt);
+provide('zhubao-open-intake', (target?: OrderActionTarget | null) => { if (canIntake.value) orderActionHost.value?.openIntake(target ?? null); });
 provide('zhubao-open-orders', openOrders);
 provide('zhubao-open-approval', (code: string) => {
   if (!visibleTabs.value.some(tab => tab.key === 'approvals')) return;
@@ -134,6 +145,10 @@ const showDeskTab = computed(() => visibleTabs.value.some((tab) => tab.key === '
 const showInventoryTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'inventory'));
 const orderDockTabs = computed(() => mobileOrderTabs(visibleTabs.value));
 const canReadOrders = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['inbound', 'production', 'progress', 'quality', 'inventory'].includes(tab.key)));
+const canIntake = computed(() => visibleTabs.value.some(tab => tab.key === 'inbound' || tab.key === 'mobile')
+  && (authSession.value?.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_INBOUND_CONFIRM')
+    : ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER'].includes(authSession.value?.role ?? '')
+      || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('INTAKE') === true)));
 const moreTabs = computed(() => mobileMoreTabs(visibleTabs.value));
 const filteredMoreGroups = computed(() => groupTabsBySection(filterWorkspaceTabs(moreTabs.value, moreQuery.value)));
 const deskActive = computed(() => activeTab.value === 'dashboard' && !moreOpen.value && !orderWorkspaceOpen.value);
@@ -198,6 +213,8 @@ async function handleLogout() {
   cancelMobileScan();
   workspace.clear();
   orderWorkspaceOpen.value = false;
+  orderActionOpen.value = false;
+  intakeReceipt.value = null;
   approvalCode.value = '';
   await logoutAuthSession();
   authSession.value = null;
@@ -210,6 +227,8 @@ function handleAuthSessionChanged(event: CustomEvent<AuthSessionChangedDetail>) 
   cancelMobileScan();
   workspace.clear();
   moreOpen.value = false;
+  orderActionOpen.value = false;
+  intakeReceipt.value = null;
   approvalCode.value = '';
   orderWorkspaceOpen.value = false;
   authRevision.value += 1;
@@ -240,6 +259,11 @@ function openTraceDocument() {
 function nextTraceToken() {
   traceToken = Math.max(traceToken, traceTarget.value?.token ?? 0) + 1;
   return traceToken;
+}
+
+function intakeSaved(result: MobileIntakeResult) {
+  intakeReceipt.value = result;
+  orderRefresh.value += 1;
 }
 
 function activateTab(tab: TabKey) {
@@ -303,7 +327,7 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     </section>
   </div>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
-  <AppShell v-else v-model:trace-query="traceQuery" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': !orderWorkspaceOpen && activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
+  <AppShell v-else v-model:trace-query="traceQuery" :inert="orderActionOpen || undefined" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': !orderWorkspaceOpen && activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
     <template #session>
       <div class="top-session">
         <span>{{ authSession?.operator }}</span>
@@ -419,4 +443,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
+  <OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" @active="orderActionOpen = $event" @saved="intakeSaved" />
 </template>

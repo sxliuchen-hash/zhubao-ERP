@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { armMobileScan, cancelMobileScan } from './mobileScanBridge';
+import { defineComponent, ref } from 'vue';
+import { armMobileScan, cancelMobileScan, openMobileScanTarget } from './mobileScanBridge';
 import { queryScanContext } from '../../services/scanContextApi';
 import { hasLiveCamera, openCameraStream, readBarcodeFromFile, readLiveBarcode } from './cameraBarcode';
 import OrderContextCard from './OrderContextCard.vue';
@@ -30,6 +31,31 @@ beforeEach(() => {
 
 describe('扫码输入组件', () => {
   const inputProps = { modelValue: '', fieldText: '单号', inputAriaLabel: '单号输入', submitLabel: '识别' };
+
+  it('底页暂停扫码时解绑并停止取景，恢复后重新绑定', async () => {
+    const suspended = ref(false);
+    const wrapper = mount(ScanInput, { props: { ...inputProps, bindMobileScan: true }, global: { provide: { 'zhubao-scan-suspended': suspended } } });
+    expect(openMobileScanTarget()).toBe(true);
+    suspended.value = true;
+    await flushPromises();
+    expect(openMobileScanTarget()).toBe(false);
+    suspended.value = false;
+    await flushPromises();
+    expect(openMobileScanTarget()).toBe(true);
+    wrapper.unmount();
+    expect(openMobileScanTarget()).toBe(false);
+  });
+
+  it('缓存表单收起后解绑，恢复时只绑定当前可见扫码框', async () => {
+    const Harness = defineComponent({ components: { ScanInput }, setup() { return { visible: ref(true), inputProps }; }, template: '<div><button @click="visible = !visible">切换</button><KeepAlive><ScanInput v-if="visible" v-bind="inputProps" bind-mobile-scan /></KeepAlive></div>' });
+    const wrapper = mount(Harness);
+    expect(openMobileScanTarget()).toBe(true);
+    await wrapper.get('button').trigger('click');
+    expect(openMobileScanTarget()).toBe(false);
+    await wrapper.get('button').trigger('click');
+    expect(openMobileScanTarget()).toBe(true);
+    wrapper.unmount();
+  });
 
   it('摄像头是首个操作，默认自动判断且扫码后无需再点识别', async () => {
     vi.mocked(hasLiveCamera).mockReturnValue(true);

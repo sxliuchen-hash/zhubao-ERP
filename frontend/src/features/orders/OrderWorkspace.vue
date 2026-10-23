@@ -14,6 +14,7 @@ import type { TabKey } from '../workspace/workspaceNavigation';
 import { workspaceTabs } from '../workspace/workspaceNavigation';
 import OrderList from './OrderList.vue';
 import OrderDetail from './OrderDetail.vue';
+import type { OpenIntakeAction } from './orderActions';
 import { orderFacetLabel } from './orderWorkspaceLabels';
 
 const workspace = useWorkspaceContext();
@@ -35,6 +36,9 @@ const identity = computed(() => canonicalTarget(scan.context));
 const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const tabs = inject<Ref<TabKey[]>>('zhubao-visible-tabs', ref([]));
 const openTab = inject<(tab: TabKey) => void>('zhubao-open-tab', () => {});
+const openIntake = inject<OpenIntakeAction | null>('zhubao-open-intake', null);
+const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
+const canCreate = computed(() => openIntake && tabs.value.includes('inbound') && session.value?.effectivePermissions?.includes('BUSINESS_INBOUND_CONFIRM'));
 const trace = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 const legacyTabs = computed(() => workspaceTabs.filter(tab => ['inbound', 'production', 'progress', 'quality'].includes(tab.key) && tabs.value.includes(tab.key)));
 const serverViews = ref<OrderWorkspacePage['availableViews']>(['ORDERS', 'PRODUCTION', 'QUALITY']);
@@ -65,6 +69,7 @@ function invalidateList() {
 }
 watch([filters, view], () => { invalidateList(); page.value = 1; remember(); }, { flush: 'sync' });
 watch(scanCode, () => { clearDetail(); }, { flush: 'sync' });
+watch(refresh, () => { void load(); });
 
 async function load(requestedPage = page.value) {
   clearDetail();
@@ -143,6 +148,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 <template>
   <div class="order-workspace page-stack" :class="{ 'has-detail': detailOpen }">
     <section class="order-list-panel" aria-label="订单查询列表">
+      <button v-if="canCreate" type="button" class="primary-button" @click="openIntake?.()">新建收货</button>
       <details class="order-legacy-pages"><summary>原业务页面</summary><div class="order-legacy-actions"><button v-for="tab in legacyTabs" :key="tab.key" type="button" class="secondary-button" @click="openTab(tab.key)">{{ tab.label }}</button></div></details>
       <form class="order-filters" @submit.prevent="load(1)">
         <label class="order-search"><span>搜索订单</span><input v-model="filters.query" maxlength="100" aria-label="订单搜索" placeholder="单号、运单、货品或客户" /></label>

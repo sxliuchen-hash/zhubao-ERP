@@ -48,6 +48,24 @@ beforeEach(() => {
 });
 
 describe('统一订单列表与详情', () => {
+  it('收货按钮同时要求有效权限，保存后的只读刷新失败不会重新打开写表单', async () => {
+    const auth = ref({ effectivePermissions: [] as string[] });
+    const refresh = ref(0);
+    const openIntake = vi.fn();
+    const wrapper = mountWorkspace({ 'zhubao-auth-session': auth, 'zhubao-visible-tabs': ref(['inbound']), 'zhubao-order-refresh': refresh, 'zhubao-open-intake': openIntake });
+    await flushPromises();
+    expect(wrapper.findAll('button').some(button => button.text() === '新建收货')).toBe(false);
+    auth.value.effectivePermissions.push('BUSINESS_INBOUND_CONFIRM');
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '新建收货')!.trigger('click');
+    expect(openIntake).toHaveBeenCalledOnce();
+    vi.mocked(fetchOrderWorkspace).mockRejectedValueOnce(new Error('列表刷新失败'));
+    refresh.value += 1;
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('列表刷新失败');
+    expect(openIntake).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
   it('读取 Q1 原始小数、总数和分类，不自动选择第一行，不把未知进度当 0', async () => {
     vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([row(), row('WO-2', { processPercent: 100 })], { totalRows: 42, facetCounts: { ALL: 42, IN_PROCESS: 35 } }));
     const wrapper = mountWorkspace();

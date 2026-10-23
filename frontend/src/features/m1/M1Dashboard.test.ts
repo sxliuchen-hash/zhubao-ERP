@@ -110,6 +110,17 @@ describe('M1Dashboard', () => {
     wrapper.unmount();
   });
 
+  it('新建收货优先打开动作容器，不切走工作台', async () => {
+    const openIntake = vi.fn();
+    const openTab = vi.fn();
+    const wrapper = mount(M1Dashboard, { global: { provide: { 'zhubao-open-intake': openIntake, 'zhubao-open-tab': openTab } } });
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '新建收货／母单')!.trigger('click');
+    expect(openIntake).toHaveBeenCalledOnce();
+    expect(openTab).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('shows an empty list and the failure reason when workspace apis are unavailable', async () => {
     vi.mocked(fetchInboundWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));
     vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new Error('待办接口不可用'));

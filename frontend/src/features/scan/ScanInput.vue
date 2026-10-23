@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, inject, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type Ref } from 'vue';
 import { hasLiveCamera } from './cameraBarcode';
 import { bindMobileScanTarget, unbindMobileScanTarget } from './mobileScanBridge';
 import type { ScanDraft } from './scanDraft';
@@ -44,6 +44,15 @@ const objectType = ref<ScanObjectType | ''>('');
 const guideType = ref<'qr' | 'barcode'>('qr');
 const submitAria = computed(() => props.submitAriaLabel || props.submitLabel);
 let acceptSubmit = true;
+const suspended = inject<Ref<boolean>>('zhubao-scan-suspended', ref(false));
+let mounted = false;
+let active = true;
+function updateBinding() {
+  if (mounted && active && !suspended.value && props.bindMobileScan) bindMobileScanTarget(onCamera);
+  else unbindMobileScanTarget(onCamera);
+  if (!active || suspended.value) scanner.stop();
+}
+watch([() => props.bindMobileScan, suspended], updateBinding, { flush: 'post' });
 
 function draftOf(content: string): ScanDraft {
   const draft: ScanDraft = { content: content.trim() };
@@ -108,10 +117,14 @@ async function onCamera() {
 }
 
 onMounted(() => {
-  if (props.bindMobileScan) bindMobileScanTarget(onCamera);
+  mounted = true;
+  updateBinding();
 });
+onActivated(() => { active = true; updateBinding(); });
+onDeactivated(() => { active = false; updateBinding(); });
 
 onBeforeUnmount(() => {
+  mounted = false;
   unbindMobileScanTarget(onCamera);
 });
 

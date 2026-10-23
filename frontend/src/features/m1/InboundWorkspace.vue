@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onMounted, ref, type Ref } from 'vue';
+import { computed, inject, nextTick, onMounted, ref, watch, type Ref } from 'vue';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
 import type { InboundOrder, Tone } from '../../data/m1PrototypeData';
+import type { AuthSession } from '../../services/authApi';
 import {
   fetchInboundWorkspace,
   type InboundWorkspaceModel,
@@ -48,6 +49,11 @@ const detailPanel = ref<HTMLElement | null>(null);
 let scrollRequested = false;
 let extrasRevision = 0;
 const openLabel = inject<((code: string) => void) | null>('zhubao-open-label', null);
+const openIntake = inject<(() => void) | null>('zhubao-open-intake', null);
+const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const canCreate = computed(() => openIntake && session.value?.effectivePermissions?.includes('BUSINESS_INBOUND_CONFIRM'));
+const intakeReceipt = inject<Ref<MobileIntakeResult | null>>('zhubao-intake-receipt', ref(null));
+watch(intakeReceipt, receipt => { if (receipt) void handleIntakeSaved(receipt); });
 const visibleTabs = inject<Ref<string[] | null>>('zhubao-visible-tabs', ref(null));
 const canPrintLabel = computed(() => Boolean(openLabel) && (!visibleTabs.value || visibleTabs.value.includes('label')));
 const loading = ref(false);
@@ -250,7 +256,9 @@ function backToList() {
 <template>
   <div class="inbound-desk page-stack" :class="{ 'is-detail': detailOpen }">
     <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
+    <button v-if="canCreate" class="primary-button" type="button" @click="openIntake?.()">新建收货</button>
     <IntakePanel
+      v-if="!openIntake"
       title="新建来料"
       intro="扫运单查看关联母单，也可用同一运单新建另一张母单。提交超时请用原请求号核对或重试。"
       @saved="handleIntakeSaved"
