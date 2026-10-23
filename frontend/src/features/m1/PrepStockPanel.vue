@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, type Ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import { fetchCustomers, fetchMaterials, type CustomerProfile, type MaterialProfile } from '../../services/masterDataApi';
 import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
@@ -64,6 +64,7 @@ const loading = ref(false);
 const loaded = ref(false);
 const message = ref('');
 const formError = ref('');
+const detailError = ref('');
 const submitting = ref(false);
 const action = ref('');
 const selectedKey = ref('');
@@ -87,6 +88,11 @@ const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null)
 let loadRevision = 0;
 let detailRevision = 0;
 const attempts = ref<Record<string, RequestAttempt>>({});
+type StockCommand = { path: string; prefix: string; body: Record<string, unknown>; success: string; action: string; label: string };
+const pendingCommand = ref<StockCommand | null>(null);
+const locked = computed(() => submitting.value || Boolean(pendingCommand.value));
+let disposed = false;
+onBeforeUnmount(() => { disposed = true; ++loadRevision; ++detailRevision; });
 
 const materialCode = ref('');
 const quantityUnit = ref('克');
@@ -132,7 +138,7 @@ async function loadCatalog() {
 }
 
 function cardKey(item: BatchCard) {
-  return [item.documentCode, item.batchCode, item.lineNo, item.materialCode, item.warehouseCode, item.pending ? 'pending' : item.status].join('|');
+  return JSON.stringify([props.scope, item.customerId ?? null, item.documentCode, item.batchCode, item.lineNo, item.materialCode, item.warehouseCode, item.quantityUnit, item.pending ? 'pending' : item.status]);
 }
 
 function emptyOverview(): Overview {
@@ -178,6 +184,7 @@ async function loadMovements(card: BatchCard) {
   const revision = ++detailRevision;
   movements.value = [];
   selectedDocument.value = null;
+  detailError.value = '';
   const query = new URLSearchParams({ scope: props.scope });
   if (card.batchCode) query.set('batchCode', card.batchCode);
   if (card.documentCode) query.set('documentCode', card.documentCode);
@@ -193,12 +200,13 @@ async function loadMovements(card: BatchCard) {
   } catch (error) {
     if (revision !== detailRevision) return;
     movements.value = [];
-    formError.value = error instanceof Error ? error.message : '流水加载失败';
+    detailError.value = error instanceof Error ? error.message : '流水加载失败';
   }
 }
 
 function selectCard(card: BatchCard) {
-  if (submitting.value) return;
+  if (locked.value) return;
+  if (selectedKey.value !== cardKey(card)) { quantity.value = ''; weight.value = ''; targetOrder.value = ''; confirmLines.value = []; }
   selectedKey.value = cardKey(card);
   action.value = '';
   formError.value = '';
@@ -227,19 +235,31 @@ function amountBody() {
 }
 
 async function submit(path: string, prefix: string, fingerprint: string, body: Record<string, unknown>, success: string) {
-  if (submitting.value) return;
+  if (locked.value || !canDo(action.value)) return;
+  const snapshot = JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
+  snapshot.requestId = requestIdFor(prefix, JSON.stringify(snapshot));
+  await sendCommand({ path, prefix, body: snapshot, success, action: action.value, label: selected.value ? `${selected.value.ownerLabel} / ${selected.value.batchCode || selected.value.documentCode} / ${selected.value.materialCode} / ${selected.value.warehouseCode}` : `${title.value} / ${snapshot.customerName || '公司自有'} / ${snapshot.warehouseCode || '未填仓库'}` });
+}
+
+async function sendCommand(command: StockCommand) {
+  if (submitting.value || !canDo(command.action)) return;
   formError.value = '';
   message.value = '';
   submitting.value = true;
   try {
-    const code = await apiPost<Record<string, unknown>, string>(path, { ...body, requestId: requestIdFor(prefix, JSON.stringify(body)) });
+    const code = await apiPost<Record<string, unknown>, string>(command.path, command.body);
+    if (disposed) return;
+    pendingCommand.value = null;
     const remaining = { ...attempts.value };
-    delete remaining[prefix];
+    delete remaining[command.prefix];
     attempts.value = remaining;
-    message.value = `${success} ${code}`;
+    message.value = `${command.success} ${code}`;
     action.value = '';
     await load();
   } catch (error) {
+    if (disposed) return;
+    const known = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408;
+    pendingCommand.value = known ? null : command;
     formError.value = error instanceof Error ? error.message : '库存操作失败';
   } finally {
     submitting.value = false;
@@ -379,7 +399,7 @@ function correct() {
   <section class="stock-desk" :aria-label="title">
     <header class="stock-head">
       <h2>{{ title }}</h2>
-      <button class="secondary-button" type="button" @click="load">刷新</button>
+      <button class="secondary-button" type="button" :disabled="submitting" @click="load">刷新</button>
     </header>
     <p v-if="props.scope === 'company'" class="archive-note">领用只表示转入在制，仍在厂内，不会并入客户加工库存，也不会自动核销。</p>
     <p v-else class="archive-note">先寄存不建加工单、不产生加工费。重量留空表示待称量，整单称清后才入账。</p>
@@ -397,7 +417,7 @@ function correct() {
       <span>冻结 {{ overview.frozenCount }}</span>
       <span>待核 {{ overview.pendingCount }}</span>
     </div>
-    <div class="stock-filters">
+    <fieldset class="stock-filters stock-plain-fields" :disabled="locked">
       <label><span>物料</span><input v-model="materialFilter" aria-label="筛选物料" /></label>
       <label><span>批次</span><input v-model="batchFilter" aria-label="筛选批次" /></label>
       <label v-if="props.scope === 'prep'"><span>客户</span><input v-model="customerFilter" :list="`${props.scope}-customers`" aria-label="筛选客户" /></label>
@@ -406,11 +426,11 @@ function correct() {
       <label><span>变动开始日期</span><input v-model="fromDate" type="date" aria-label="变动开始日期" /></label>
       <label><span>变动结束日期</span><input v-model="toDate" type="date" aria-label="变动结束日期" /></label>
       <button class="secondary-button" type="button" @click="load">应用筛选</button>
-    </div>
+    </fieldset>
     <p v-if="loaded && !loading && !loadError && !batches.length" class="empty-hint">没有符合条件的库存</p>
     <div class="stock-cards">
       <article v-for="card in batches" :key="cardKey(card)" class="stock-card" :class="{ 'is-selected': selected && cardKey(selected) === cardKey(card) }">
-        <button type="button" class="stock-card-button" @click="selectCard(card)">
+        <button type="button" class="stock-card-button" :disabled="locked" @click="selectCard(card)">
           <strong>{{ card.pending ? '待核' : (card.batchCode || '未编号') }}</strong>
           <span>{{ card.ownerLabel }} · {{ card.materialCode }} · {{ card.quantityUnit }}</span>
           <span v-if="card.pending">申报 {{ card.bookQuantity }} {{ card.quantityUnit }} · {{ card.weightText }}</span>
@@ -419,7 +439,7 @@ function correct() {
         </button>
       </article>
     </div>
-    <div class="stock-actions">
+    <fieldset class="stock-actions stock-plain-fields" :disabled="locked">
       <button v-if="canDo('receive')" class="primary-button" type="button" :disabled="submitting" @click="action = 'receive'">{{ props.scope === 'company' ? '入库' : '寄存收货' }}</button>
       <button v-if="canDo('issue')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'issue'">领用</button>
       <button v-if="canDo('return')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode" @click="action = 'return'">{{ props.scope === 'company' ? '原单退回' : '退回备料' }}</button>
@@ -429,8 +449,9 @@ function correct() {
       <button v-if="canDo('unfreeze')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'unfreeze'">解除冻结</button>
       <button v-if="session?.role === 'ADMIN' && canDo('correct')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'correct'">差错冲正</button>
       <button v-if="selected?.pending && canDo('confirm')" class="secondary-button" type="button" :disabled="submitting || !confirmLines.length" @click="action = 'confirm'">确认入账</button>
-    </div>
+    </fieldset>
     <form v-if="action" class="stock-form" @submit.prevent>
+      <fieldset class="stock-form stock-plain-fields" :disabled="locked">
       <p v-if="selected && action !== 'receive'" class="archive-note">{{ selected.ownerLabel }} · {{ selected.materialCode }} · {{ selected.warehouseCode }} · {{ selected.batchCode || selected.documentCode }} · 可用 {{ selected.availableQuantity }} {{ selected.quantityUnit }}</p>
       <template v-if="action === 'receive'">
         <label v-if="props.scope === 'prep'">客户编号<input v-model="customerId" :list="`${props.scope}-customers`" aria-label="寄存客户" /></label>
@@ -510,11 +531,14 @@ function correct() {
         </fieldset>
         <button class="primary-button" type="button" :disabled="submitting" @click="confirmPending">确认入账</button>
       </template>
+      </fieldset>
     </form>
+    <p v-if="pendingCommand" class="operation-feedback warning" role="alert">原库存请求结果待核对：{{ pendingCommand.label }}。内容与编号已保留（{{ pendingCommand.body.requestId }}）。<button class="secondary-button" type="button" :disabled="submitting || !canDo(pendingCommand.action)" @click="sendCommand(pendingCommand)">原请求重试</button></p>
     <p v-if="message" class="operation-feedback">{{ message }}</p>
     <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
     <section v-if="selected" aria-label="批次流水">
       <h3>这批的出入库</h3>
+      <p v-if="detailError" class="operation-feedback warning">流水读取失败：{{ detailError }}。已有业务回执保留。</p>
       <p v-if="selectedDocument">来源 {{ selectedDocument.documentCode }} · {{ selectedDocument.sourceNote || '无来源说明' }} · 交接人 {{ selectedDocument.handoverPerson || '未填' }}</p>
       <p v-if="selectedDocument && (selectedDocument.purpose || selectedDocument.recipient)">用途 {{ selectedDocument.purpose || '未填' }} · 领用人 {{ selectedDocument.recipient || '未填' }}<template v-if="selectedDocument.targetOrderCode"> · 关联 {{ selectedDocument.targetOrderCode }}</template></p>
       <p v-if="!movements.length" class="empty-hint">这批还没有可显示的流水</p>
@@ -530,9 +554,11 @@ function correct() {
 
 <style scoped>
 .stock-desk { display: grid; gap: 12px; min-width: 0; }
+.stock-desk > .operation-feedback { overflow-wrap: anywhere; }
 .stock-head, .stock-overview, .stock-actions, .stock-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .stock-filters label, .stock-form label { display: grid; gap: 4px; min-width: 0; }
 .stock-form { display: grid; gap: 8px; }
+.stock-plain-fields { min-width: 0; border: 0; padding: 0; margin: 0; }
 .stock-line { min-width: 0; display: grid; gap: 8px; border: 1px solid var(--line, #ddd); border-radius: 8px; }
 .stock-card, .stock-card-button { overflow-wrap: anywhere; }
 .stock-form input, .stock-form textarea, .stock-filters input { width: 100%; max-width: 100%; box-sizing: border-box; }

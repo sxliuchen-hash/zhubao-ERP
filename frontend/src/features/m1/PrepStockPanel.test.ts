@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import PrepStockPanel from './PrepStockPanel.vue';
 import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
 
@@ -45,11 +46,13 @@ describe('PrepStockPanel', () => {
     const receive = () => wrapper.findAll('button').find((button) => button.text() === '确认入库')!;
     await receive().trigger('click');
     await flushPromises();
-    await receive().trigger('click');
+    await wrapper.get('[aria-label="公司数量"]').setValue('999');
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
     await flushPromises();
     const first = (vi.mocked(apiPost).mock.calls[0][1] as { requestId: string }).requestId;
     const second = (vi.mocked(apiPost).mock.calls[1][1] as { requestId: string }).requestId;
     expect(second).toBe(first);
+    expect(vi.mocked(apiPost).mock.calls[1][1]).toEqual(vi.mocked(apiPost).mock.calls[0][1]);
     expect(vi.mocked(apiPost).mock.calls[0][0]).toBe('/api/inventory/material-stock/company-receipts');
     expect(String((vi.mocked(apiPost).mock.calls[0][1] as { lines: Array<{ quantity: string }> }).lines[0].quantity)).toBe('10.500');
 
@@ -60,6 +63,55 @@ describe('PrepStockPanel', () => {
     await flushPromises();
     const third = (vi.mocked(apiPost).mock.calls[2][1] as { requestId: string }).requestId;
     expect(third).not.toBe(first);
+    wrapper.unmount();
+  });
+
+  it('未知结果保留全部明细快照，失败只读刷新不允许换号重交已保存业务', async () => {
+    vi.mocked(apiPost).mockRejectedValueOnce(new ApiRequestError('请求结果未知', 408, 408)).mockResolvedValueOnce('GS-SAVED');
+    const wrapper = mount(PrepStockPanel, { props: { scope: 'company' } });
+    await flushPromises();
+    await openReceipt(wrapper);
+    await wrapper.findAll('button').find(button => button.text() === '新增物料明细')!.trigger('click');
+    await wrapper.get('[aria-label="明细 2 物料"]').setValue('STONE');
+    await wrapper.get('[aria-label="明细 2 数量"]').setValue('2.75');
+    await wrapper.get('[aria-label="明细 2 重量"]').setValue('1.25');
+    await wrapper.findAll('button').find(button => button.text() === '确认入库')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.stock-actions').element).toHaveProperty('disabled', true);
+    await wrapper.get('[aria-label="明细 2 数量"]').setValue('99');
+    vi.mocked(apiGet).mockRejectedValue(new Error('只读刷新失败'));
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(apiPost).mock.calls[1][1]).toEqual(vi.mocked(apiPost).mock.calls[0][1]);
+    expect(wrapper.text()).toContain('已入库 GS-SAVED');
+    expect(wrapper.text()).toContain('只读刷新失败');
+    expect(wrapper.find('.stock-form').exists()).toBe(false);
+    expect(apiPost).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+
+  it('明确业务拒绝后才可修改内容开启不同请求，权限收回不能重试原写入', async () => {
+    vi.mocked(apiPost).mockRejectedValueOnce(new ApiRequestError('请核对本次明细', 400, 40001)).mockRejectedValueOnce(new ApiRequestError('响应超时', 408, 408));
+    const session = ref({ role: 'ADMIN', effectivePermissions: ['STOCK_COMPANY_RECEIVE'] });
+    const wrapper = mount(PrepStockPanel, { props: { scope: 'company' }, global: { provide: { 'zhubao-auth-session': session } } });
+    await flushPromises();
+    await openReceipt(wrapper);
+    const receive = () => wrapper.findAll('button').find(button => button.text() === '确认入库')!;
+    await receive().trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('原库存请求结果待核对');
+    await wrapper.get('[aria-label="公司数量"]').setValue('4.25');
+    await receive().trigger('click');
+    await flushPromises();
+    const first = vi.mocked(apiPost).mock.calls[0][1] as { requestId: string };
+    const second = vi.mocked(apiPost).mock.calls[1][1] as { requestId: string };
+    expect(second.requestId).not.toBe(first.requestId);
+    session.value.effectivePermissions = [];
+    await flushPromises();
+    expect(wrapper.findAll('button').find(button => button.text() === '原请求重试')!.element).toHaveProperty('disabled', true);
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
+    await flushPromises();
+    expect(apiPost).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 
