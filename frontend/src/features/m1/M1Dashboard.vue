@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, type Ref } from 'vue';
+import { computed, inject, onMounted, ref, watch, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import NavIcon from '../../components/NavIcon.vue';
 import DeskInbox from '../workspace/DeskInbox.vue';
@@ -72,6 +72,9 @@ const canAssign = computed(() => authSession.value?.effectivePermissions?.includ
 const canSeeAllOpen = computed(() => authSession.value?.role === 'ADMIN');
 const deskView = ref<DeskTaskView>('assigned');
 const deskTasks = ref<DeskTask[]>([]);
+const taskPreviewCount = ref(5);
+const previewTasks = computed(() => deskTasks.value.slice(0, taskPreviewCount.value));
+watch(deskView, () => { taskPreviewCount.value = 5; });
 const deskError = ref('');
 const deskLoading = ref(false);
 const creating = ref(false);
@@ -536,7 +539,7 @@ async function voidTask(task: DeskTask) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="task in deskTasks" :key="task.taskCode">
+            <tr v-for="task in previewTasks" :key="task.taskCode">
               <td>{{ kindLabel[task.kind] ?? task.kind }}</td>
               <td>
                 <span class="cell-stack">
@@ -552,6 +555,7 @@ async function voidTask(task: DeskTask) {
               <td>{{ task.assigneeName || task.assigneeUsername }}</td>
               <td>{{ statusLabel[task.status] ?? task.status }}</td>
               <td>
+                <details v-if="showComplete(task) || showCancel(task)" class="info-disclosure"><summary>办理待办</summary>
                 <div v-if="showComplete(task)" class="desk-task-action">
                   <input v-model="resultNotes[task.taskCode]" aria-label="结果说明" placeholder="结果说明，可选" />
                   <button class="table-action" type="button" :disabled="actingCode === task.taskCode" @click="finishTask(task)">完成</button>
@@ -560,13 +564,14 @@ async function voidTask(task: DeskTask) {
                   <input v-model="cancelReasons[task.taskCode]" aria-label="作废原因" placeholder="作废原因" />
                   <button class="table-action" type="button" :disabled="actingCode === task.taskCode" @click="voidTask(task)">作废</button>
                 </div>
+                </details>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
       <div v-if="deskTasks.length" class="desk-cards">
-        <article v-for="task in deskTasks" :key="`card-${task.taskCode}`" class="desk-card desk-task-card">
+        <article v-for="task in previewTasks" :key="`card-${task.taskCode}`" class="desk-card desk-task-card">
           <span class="desk-task-icon"><NavIcon name="sample" /></span>
           <div class="desk-task-copy">
             <span class="desk-card-top">
@@ -593,6 +598,8 @@ async function voidTask(task: DeskTask) {
         </article>
       </div>
     </section>
+
+    <div v-if="deskTasks.length > 5" class="info-toolbar" aria-label="待办显示范围"><span class="info-context">已显示 {{ previewTasks.length }} / {{ deskTasks.length }} 项待办</span><button v-if="previewTasks.length < deskTasks.length" type="button" class="secondary-button" @click="taskPreviewCount += 5">显示更多待办</button><button v-else type="button" class="secondary-button" @click="taskPreviewCount = 5">收起待办列表</button></div>
 
     <section v-if="legacyOpen" class="production-desk-grid command-grid-v2 lean-desk desk-page" :class="{ 'is-detail': detailOpen }" aria-label="业务单据和当前处理单">
       <main class="dispatch-console-v3 dispatch-console-v2 module-master-panel">

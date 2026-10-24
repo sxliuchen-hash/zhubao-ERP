@@ -197,11 +197,13 @@ function submitShortcut() {
       </span>
       <p v-if="!phrases.length" class="empty-hint">还没有快捷词。有档案维护权限时可以添加常用加工要求。</p>
     </div>
-    <div v-if="canManage" class="catalog-create">
+    <details v-if="canManage" class="info-disclosure"><summary>维护快捷词</summary>
+    <div class="catalog-create">
       <span>自定义快捷词</span>
       <input v-model="newShortcut" aria-label="新快捷词" placeholder="例如：镜面抛光" />
       <button type="button" class="secondary-button" @click="submitShortcut">添加快捷词</button>
     </div>
+    </details>
     <label>
       <span>自定义步骤</span>
       <input v-model="customStep" aria-label="自定义加工步骤" placeholder="例如：车形（车成珠型）" @keydown.enter.prevent="addStep(customStep); customStep = ''" />
@@ -219,15 +221,19 @@ function submitShortcut() {
       <span>本单补充说明</span>
       <textarea :value="supplement" aria-label="本单补充说明" @input="onSupplement(($event.target as HTMLTextAreaElement).value)" />
     </label>
+    <p class="requirement-final-text"><strong>将写入母单的加工要求</strong><span>{{ finalText || '尚未填写加工要求' }}</span></p>
+    <details class="info-disclosure"><summary>直接编辑最终要求</summary>
     <label>
-      <span>将写入母单的加工要求</span>
+      <span>最终要求全文</span>
       <textarea :value="finalText" aria-label="加工要求" @input="onFinalInput" />
     </label>
+    </details>
   </div>
 </template>
 
 <style scoped>
 .requirement-composer { display: grid; gap: 8px; min-width: 0; }
+.requirement-final-text { display: grid; gap: 6px; margin: 0; padding: 12px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; white-space: pre-wrap; }
 .requirement-composer select,
 .requirement-composer input,
 .requirement-composer textarea { width: 100%; max-width: 100%; box-sizing: border-box; }

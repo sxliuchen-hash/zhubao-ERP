@@ -6,6 +6,7 @@ import './features/workspace/workspaceShell.css';
 import './business-workspaces.css';
 import './system-workspaces.css';
 import './register-import.css';
+import './information-layout.css';
 
 createApp(App).mount('#app');
 registerServiceWorker();

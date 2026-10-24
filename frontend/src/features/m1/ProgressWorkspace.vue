@@ -100,7 +100,7 @@ function statusTone(row: ProgressRow): Tone {
 
 <template>
   <div class="progress-board page-stack desk-page" :class="{ 'is-detail': detailOpen }">
-    <ProcessProgressPanel />
+    <details class="info-disclosure section-block"><summary>办理工序进度</summary><ProcessProgressPanel /></details>
     <section class="module-work-grid" aria-label="在制进度">
       <div class="module-master-panel">
         <div class="module-toolbar refined-module-toolbar">

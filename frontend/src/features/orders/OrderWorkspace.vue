@@ -32,6 +32,7 @@ const selectedRow = ref<OrderWorkspaceRow | null>(null);
 const detailError = ref('');
 const scanCode = ref('');
 const scanOpen = ref(false);
+const advancedFilterCount = computed(() => [filters.process, filters.dueBefore, filters.customerId].filter(value => value.trim()).length);
 const scan = reactive(useScanContext());
 const identity = computed(() => canonicalTarget(scan.context));
 const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
@@ -236,12 +237,17 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
       </div>
       <form class="order-filters" @submit.prevent="load(1)">
         <label class="order-search"><span>搜索</span><input v-model="filters.query" maxlength="100" aria-label="订单搜索" placeholder="单号、运单、货品或客户" /></label>
+        <button class="primary-button" type="submit" :disabled="loading">查询</button>
+        <button v-if="canCreate" type="button" class="secondary-button" @click="openIntake?.()">新建收货</button>
+        <details class="info-disclosure order-advanced-filters">
+          <summary>更多筛选<small v-if="advancedFilterCount">已填 {{ advancedFilterCount }} 项</small></summary>
+          <div class="info-fields">
         <label v-if="allowedViews.length > 1"><span>视图</span><select v-model="view" aria-label="订单视图"><option v-for="item in allowedViews" :key="item" :value="item">{{ item === 'PRODUCTION' ? '生产作业' : item === 'QUALITY' ? '质量作业' : '全部订单' }}</option></select></label>
         <label><span>工序</span><input v-model="filters.process" aria-label="订单工序" placeholder="工序名称" /></label>
         <label><span>交期到</span><input v-model="filters.dueBefore" aria-label="订单截止交期" type="date" /></label>
-        <details class="order-customer-filter"><summary>客户</summary><label><span>客户档案 ID</span><input v-model="filters.customerId" aria-label="订单客户ID" inputmode="numeric" placeholder="稳定客户 ID" /></label></details>
-        <button class="primary-button" type="submit" :disabled="loading">查询</button>
-        <button v-if="canCreate" type="button" class="secondary-button" @click="openIntake?.()">新建收货</button>
+        <label><span>客户档案 ID</span><input v-model="filters.customerId" aria-label="订单客户ID" inputmode="numeric" placeholder="稳定客户 ID" /></label>
+          </div>
+        </details>
       </form>
       <details v-if="!detailOpen" class="order-scan-tools" :open="scanOpen" @toggle="scanOpen = ($event.target as HTMLDetailsElement).open"><summary>扫码或手动定位单据</summary><ScanInput v-model="scanCode" field-text="扫码定位单据" input-aria-label="订单扫码单号" submit-label="查看单据" bind-mobile-scan :busy="scan.loading" @activate-camera="scanOpen = true" @draft="clearDetail" @recognize="draft => locate(draft)" /></details>
       <p v-if="loading" role="status">正在加载订单…</p>
@@ -301,6 +307,8 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 .order-filters .order-search { flex: 1 1 220px; max-width: 320px; }
 .order-filters input, .order-filters select { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .order-filters details { flex: 0 0 auto; }
+.order-filters .order-advanced-filters { flex: 1 0 100%; }
+.order-advanced-filters .info-fields label { max-width: none; }
 .order-filters summary { cursor: pointer; min-height: 36px; align-content: center; }
 .order-customer-filter { position: relative; }
 .order-customer-filter[open] { flex: 0 1 180px; }
@@ -315,8 +323,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 @media (min-width: 901px) and (max-width: 1199px) { .has-detail .order-list-panel { display: none; } }
 @media (max-width: 900px) {
   .has-detail .order-list-panel { display: none; }
-  .order-filters label,
-  .order-filters .order-search { flex-basis: calc(50% - 10px); max-width: none; }
+  .order-filters .order-search { flex-basis: 100%; max-width: none; }
   .order-detail-panel { display: flex; flex-direction: column; }
   .order-detail-panel > button { order: -2; align-self: start; border: 0; background: transparent; padding-left: 0; }
   .order-detail-actions { order: -1; position: sticky; top: 0; z-index: 4; margin: 0 -12px; padding: 8px 12px; background: var(--content); border-bottom: 1px solid var(--line); }

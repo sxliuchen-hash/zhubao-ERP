@@ -500,6 +500,8 @@ function showClause(index: number) {
               {{ verdict }}
             </button>
           </div>
+          <details class="info-disclosure" :open="['不合格', '让步'].includes(clauseDrafts[line.lineNo].verdict)">
+            <summary>{{ ['不合格', '让步'].includes(clauseDrafts[line.lineNo].verdict) ? '判定原因（必填）' : '补充判定说明（可选）' }}</summary>
           <label class="field">
             <span>{{ clauseDrafts[line.lineNo].verdict === '合格' ? '原因（合格可以不写）' : '原因' }}</span>
             <textarea
@@ -508,6 +510,7 @@ function showClause(index: number) {
               :placeholder="clauseDrafts[line.lineNo].verdict === '不合格' || clauseDrafts[line.lineNo].verdict === '让步' ? '必须写原因' : '可以不写'"
             />
           </label>
+          </details>
         </template>
       </article>
       </template>

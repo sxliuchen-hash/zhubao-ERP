@@ -34,6 +34,7 @@ const coverDutyOptions = [
 const defaultCoverDuties = coverDutyOptions.filter((item) => item.packaged).map((item) => item.code);
 const editorMode = ref<'create' | 'edit' | 'password' | null>(null);
 const editor = ref(emptyEditor());
+const authorizationQuery = ref('');
 const editorSection = ref<HTMLElement | null>(null);
 const scopes = [
   { value: 'SELF', label: '本人任务' }, { value: 'TEAM', label: '本班组/工位' },
@@ -99,6 +100,7 @@ async function reload() {
 }
 
 function openEditor(account?: AuthUserAccountSummary, passwordOnly = false) {
+  authorizationQuery.value = '';
   if (busy.value || !isAdmin.value) return;
   actionError.value = '';
   message.value = '';
@@ -279,7 +281,9 @@ async function removeAccount(account: AuthUserAccountSummary) {
             </div>
             <div v-if="editorMode !== 'password' && editor.dataScope === 'CUSTOMER_RANGE'" class="customer-scope" aria-label="授权客户档案">
               <span>授权客户档案</span>
-              <label v-for="customer in customers" :key="customer.customerId">
+              <p class="info-context">已选择 {{ selectedCustomerCodes.length }} 家客户，搜索不会清除已选范围。</p>
+              <label>查找授权客户<input v-model="authorizationQuery" aria-label="查找授权客户" placeholder="名称或客户编号" /></label>
+              <label v-for="customer in customers.filter(item => `${item.name} ${item.customerCode} ${item.customerId}`.toLowerCase().includes(authorizationQuery.trim().toLowerCase()))" :key="customer.customerId">
                 <input type="checkbox" :checked="selectedCustomerCodes.includes(String(customer.customerId))"
                   :aria-label="`授权客户${customer.name}`"
                   @change="toggleCustomerCode(customer.customerId, ($event.target as HTMLInputElement).checked)" />

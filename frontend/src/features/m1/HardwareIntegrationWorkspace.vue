@@ -434,6 +434,7 @@ function taskTone(task: IntegrationTask): Tone {
           </article>
         </div>
 
+        <details class="info-disclosure"><summary>查看设备接入技术信息</summary>
         <div class="ops-scope-ribbon" aria-label="硬件 POC 仓储边界">
           <span>POC 仓储可切换</span>
           <span>zhubao.hardware.poc.repository</span>
@@ -441,6 +442,7 @@ function taskTone(task: IntegrationTask): Tone {
           <span>MySQL 默认 jdbc</span>
           <span>/api/hardware/poc-records 接口不变</span>
         </div>
+        </details>
       </div>
 
       <aside class="module-priority-panel">
@@ -471,8 +473,7 @@ function taskTone(task: IntegrationTask): Tone {
               <span>设备/业务码</span>
               <input v-model="deviceKeyword" placeholder="设备编码或名称" aria-label="设备或业务编码" />
             </label>
-            <button class="primary-button" type="button" disabled title="当前版本未提供新建">新建 POC</button>
-            <button class="secondary-button" type="button" disabled title="当前版本未提供导出">导出清单</button>
+
           </div>
         </div>
 
@@ -596,6 +597,8 @@ function taskTone(task: IntegrationTask): Tone {
     </section>
     </section>
 
+    <p v-if="gatewayError" class="operation-feedback warning" role="alert">网关读数读取失败：{{ gatewayError }}</p>
+    <details class="info-disclosure"><summary>网关设备、读数与接入设置</summary>
     <section class="section-block" aria-label="设备网关读数接入">
       <div class="section-heading">
         <div>
@@ -887,5 +890,6 @@ function taskTone(task: IntegrationTask): Tone {
         </div>
       </div>
     </section>
+    </details>
   </div>
 </template>

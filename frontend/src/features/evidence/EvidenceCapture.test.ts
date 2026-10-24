@@ -215,7 +215,7 @@ describe('现场证据采集', () => {
     expect(bindEvidence).not.toHaveBeenCalled();
   });
 
-  it('切单不把已选文件转挂到新单，取消选择不清草稿', async () => {
+  it('切单不把已选文件转挂到新单，收起采集及取消文件选择不清草稿', async () => {
     const wrapper = mount(EvidenceCapture, {
       props: {
         targetType: 'MOTHER_ORDER', targetCode: 'MD-A', stage: 'INTAKE', scene: 'UNPACK',
@@ -223,7 +223,9 @@ describe('现场证据采集', () => {
       },
     });
     await pick(wrapper, 'a.jpg', 'image/jpeg');
-    await wrapper.get('[aria-label="取消选择"]').trigger('click');
+    const capture = wrapper.get('.evidence-add');
+    (capture.element as HTMLDetailsElement).open = false;
+    await capture.trigger('toggle');
     expect(wrapper.text()).toContain('a.jpg');
     await wrapper.get('[aria-label="选择证据文件"]').trigger('cancel');
     expect(wrapper.text()).toContain('a.jpg');

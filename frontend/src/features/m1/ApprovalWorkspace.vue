@@ -200,6 +200,7 @@ function taskTone(task: ApprovalTask): Tone {
         <button v-if="entry.outcome === 'unknown'" class="secondary-button" type="button" :disabled="Boolean(checking)" @click="checkDecision(entry.task.approvalCode)">只读核对审批结果</button>
       </article>
     </section>
+    <details class="info-disclosure approval-overview"><summary>审批概览<small>统计与阻断队列</small></summary>
     <section class="module-command-surface approval-command-surface" aria-label="轻量审批工作台">
       <div class="module-command-main">
         <div class="console-title-line">
@@ -250,6 +251,7 @@ function taskTone(task: ApprovalTask): Tone {
       </aside>
     </section>
 
+    </details>
     <details v-if="completedDecisions.length" class="approval-unresolved" aria-label="本次审批回执"><summary>本次审批回执</summary><article v-for="entry in completedDecisions" :key="entry.task.approvalCode"><strong>{{ entry.result?.approvalCode }} · {{ entry.result && statusText(entry.result.status) }}</strong><p>{{ entry.outcome === 'confirmed' ? '只读核对原任务当前结果' : '原决定真实回执' }} · {{ entry.result?.decisionOperator }} · {{ entry.result?.decisionComment }}</p></article></details>
     <section class="module-work-grid approval-work-grid" aria-label="审批任务主控台">
       <div class="module-master-panel">
@@ -414,5 +416,6 @@ function taskTone(task: ApprovalTask): Tone {
 .approval-workspace { min-width: 0; }
 .approval-work-grid > * { min-width: 0; overflow-wrap: anywhere; }
 .approval-comment-field textarea { width: 100%; box-sizing: border-box; min-width: 0; }
-@media (max-width: 900px) { .approval-command-surface { display: none; } .approval-workspace button { min-height: 44px; } .approval-comment-field textarea { font-size: 16px; } }
+.approval-overview .approval-command-surface { display: grid; }
+@media (max-width: 900px) { .approval-workspace button { min-height: 44px; } .approval-comment-field textarea { font-size: 16px; } }
 </style>

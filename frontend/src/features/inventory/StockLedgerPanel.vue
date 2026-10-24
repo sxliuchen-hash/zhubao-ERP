@@ -8,6 +8,7 @@ const filters = reactive({ query: '', document: props.initialDocumentCode, wareh
 const loading = ref(false);
 const error = ref('');
 const page = ref(1);
+const advancedFilterCount = computed(() => [filters.document, filters.warehouse, filters.from, filters.to].filter(value => value.trim()).length);
 const size = 20;
 let generation = 0;
 let disposed = false;
@@ -50,11 +51,13 @@ onBeforeUnmount(() => { disposed = true; generation += 1; });
     <p>逐条核对来源和去向；公司料与客户料、不同单位均不合计。流水未提供数量单位时保留未知。</p>
     <div class="ledger-filters">
       <label>查找<input v-model="filters.query" aria-label="台账查找" placeholder="台账号、单号、物料、客户或备注" /></label>
+      <label>货权<select v-model="filters.owner" aria-label="台账货权"><option value="">全部可见</option><option value="COMPANY">公司料</option><option value="CUSTOMER">客户料</option></select></label>
+      <details class="info-disclosure ledger-advanced"><summary>更多筛选<small v-if="advancedFilterCount">已填 {{ advancedFilterCount }} 项</small></summary><div class="info-fields">
       <label>精确业务单号<input v-model="filters.document" aria-label="台账业务单号" /></label>
       <label>精确仓库<input v-model="filters.warehouse" aria-label="台账仓库" /></label>
-      <label>货权<select v-model="filters.owner" aria-label="台账货权"><option value="">全部可见</option><option value="COMPANY">公司料</option><option value="CUSTOMER">客户料</option></select></label>
       <label>开始日期<input v-model="filters.from" type="date" aria-label="台账开始日期" /></label>
       <label>结束日期<input v-model="filters.to" type="date" aria-label="台账结束日期" /></label>
+      </div></details>
     </div>
     <p v-if="loading" role="status">正在读取当前账号可见台账…</p>
     <p v-if="error" class="operation-feedback danger" role="alert">{{ error }}</p>
@@ -62,8 +65,11 @@ onBeforeUnmount(() => { disposed = true; generation += 1; });
     <article v-for="row in visible" :key="row.code" class="ledger-entry">
       <header><strong>{{ label(row.documentType) }} · {{ row.documentCode }}</strong><span>{{ row.code }} · {{ row.bizTime }}</span></header>
       <p>数量 {{ row.quantity }}（单位未提供） / 重量 {{ row.weight }} 克</p>
+      <p>{{ row.from?.warehouseCode || '外部' }} → {{ row.to?.warehouseCode || '外部' }} · {{ row.to?.materialCode || row.from?.materialCode || '物料未提供' }}</p>
+      <details class="info-disclosure"><summary>来源与去向明细</summary>
       <div class="ledger-dimensions"><p>来源：{{ dimensionText(row.from) }}</p><p>去向：{{ dimensionText(row.to) }}</p></div>
       <p v-if="row.sourceLedgerCode">关联原流水 {{ row.sourceLedgerCode }}</p><p v-if="row.remark">{{ row.remark }}</p>
+      </details>
     </article>
     <p v-if="!loading && !error && !filtered.length">没有符合条件的可见流水</p>
     <nav v-if="filtered.length" class="ledger-pages" aria-label="台账分页"><button class="secondary-button" type="button" :disabled="page <= 1" @click="page -= 1">上一页</button><span>第 {{ page }} / {{ Math.ceil(filtered.length / size) }} 页</span><button class="secondary-button" type="button" :disabled="page * size >= filtered.length" @click="page += 1">下一页</button></nav>
@@ -75,6 +81,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; });
 header, .ledger-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
 h2, p { margin: 0; }
 .ledger-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ledger-advanced { grid-column: 1 / -1; }
 label { display: grid; gap: 4px; }
 input, select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 40px; }
 .ledger-entry { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; overflow-wrap: anywhere; }

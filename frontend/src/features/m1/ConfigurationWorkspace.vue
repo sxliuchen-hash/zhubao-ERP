@@ -129,8 +129,9 @@ async function handleChangePassword() {
           <StatusBadge :label="authSession ? authSession.roleLabel : '未登录'" :tone="authSession ? 'green' : 'amber'" />
         </div>
 
-        <p class="empty-hint">当前会话：{{ authSession ? `${authSession.operator} / ${authSession.roleLabel}` : '未登录' }}。切换账号请使用顶部退出入口。</p>
+        <p class="empty-hint">{{ authSession?.operator || '未登录' }} · {{ authSession?.dataScopeLabel || '尚无数据范围' }}</p>
 
+        <details class="info-disclosure"><summary>修改登录密码</summary>
         <form class="auth-password-strip" aria-label="自助改密续期" @submit.prevent="handleChangePassword">
           <div>
             <span>自助改密</span>
@@ -171,7 +172,9 @@ async function handleChangePassword() {
           </div>
           <small v-if="passwordMessage" class="auth-session-message">{{ passwordMessage }}</small>
         </form>
+        </details>
 
+        <details class="info-disclosure"><summary>查看完整账号与授权范围</summary>
         <div class="security-identity-grid">
           <article>
             <span>操作人</span>
@@ -197,6 +200,7 @@ async function handleChangePassword() {
             </strong>
           </article>
         </div>
+        </details>
       </div>
 
     </section>

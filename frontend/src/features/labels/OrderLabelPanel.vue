@@ -114,7 +114,9 @@ function officialPrint() {
         <p v-if="reprintUnknown" class="operation-feedback warning">补打记录结果待核对，原单及原因保留，尚未提交新的打印任务。</p>
         <button v-if="explicitMother" class="secondary-button" type="button" :disabled="locked" @click="choose({ objectType: 'MOTHER_ORDER', code: explicitMother, motherOrderCode: explicitMother, requirement: null, quantity: null, quantityUnit: null })">选择母单标签 {{ explicitMother }}</button>
         <OrderContextCard v-if="scan.context?.requiresSelection" :context="scan.context" @select="choose" />
+        <details v-if="loadedSticker" class="info-disclosure"><summary>补打这张标签</summary>
         <fieldset class="label-plain-fields" :disabled="locked || !canPrint"><label class="field">补打原因<input v-model="reprintReason" aria-label="补打原因" placeholder="如 贴纸丢失" /></label><button class="secondary-button" type="button" :disabled="!loadedSticker || locked || !canPrint" @click="reprint">补打并记录</button></fieldset>
+        </details>
       </section>
       <section v-if="preview" class="label-preview form-card" aria-label="标签预览">
         <header class="preview-toolbar"><strong>标签预览</strong><span>{{ preview.printerSetting.widthMm }}×{{ preview.printerSetting.heightMm }}mm · 黑白</span><button class="primary-button" type="button" :disabled="locked || !canPrint" @click="printBrowser">浏览器预览打印</button></header>

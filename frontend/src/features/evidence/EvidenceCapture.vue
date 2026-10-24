@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   bindEvidence,
   fetchHistoricalEvidencePage,
@@ -83,6 +83,7 @@ const uploadedFrom = ref('');
 const uploadedTo = ref('');
 const mediaCategory = ref<'' | 'image' | 'video' | 'pdf'>('');
 const ownerKeyword = ref('');
+const filterCount = computed(() => [uploadedFrom.value, uploadedTo.value, mediaCategory.value, ownerKeyword.value.trim()].filter(Boolean).length);
 const recoveringCode = ref('');
 const recoveryErrors = ref<Record<string, string>>({});
 const fileRef = ref<HTMLInputElement | null>(null);
@@ -439,14 +440,15 @@ onBeforeUnmount(() => {
       <div>
         <h3>{{ plainUnpack() ? '拆包照片' : '现场证据' }}</h3>
         <p v-if="plainUnpack()">拍下或选好后上传。照片会印上当时的时间，点开即可查看。</p>
-        <p v-else>扫码成功不等于已经留证。拍照、录视频或选文件后需要上传并关联。</p>
+        <p v-else>当前操作的照片与视频；选好文件后上传并关联。</p>
       </div>
     </div>
-    <p v-if="!plainUnpack()" class="evidence-hint">视频请尽量控制在 30 秒内。系统只检查文件大小，不检查时长。</p>
+    <details class="info-disclosure evidence-add">
+      <summary>添加照片或视频</summary>
+    <p v-if="!plainUnpack()" class="evidence-hint">视频建议控制在 30 秒内。</p>
     <div class="button-row">
       <button class="secondary-button" type="button" aria-label="拍照留证" @click="openCamera">拍照留证</button>
       <button class="secondary-button" type="button" aria-label="录视频留证" @click="openVideo">录视频留证</button>
-      <button class="secondary-button" type="button" aria-label="取消选择" @click="cancelSelection">取消选择</button>
     </div>
     <input
       ref="cameraRef"
@@ -479,6 +481,7 @@ onBeforeUnmount(() => {
         @cancel="cancelSelection"
       />
     </label>
+    </details>
     <p v-if="formMessage" class="operation-feedback danger">{{ formMessage }}</p>
     <ul v-if="items.length" class="evidence-file-list">
       <li v-for="item in items" :key="item.id" :data-state="item.state">
@@ -497,7 +500,9 @@ onBeforeUnmount(() => {
         </button>
       </li>
     </ul>
-    <div v-if="!plainUnpack()" class="evidence-filters">
+    <details v-if="!plainUnpack()" class="info-disclosure evidence-search">
+      <summary>查找历史证据<small>{{ filterCount ? `已填 ${filterCount} 项筛选` : '范围、日期与上传人' }}</small></summary>
+    <div class="evidence-filters">
       <label class="field"><span>证据范围</span>
         <select v-model="searchScope" aria-label="证据范围">
           <option value="operation">当前操作</option>
@@ -522,6 +527,7 @@ onBeforeUnmount(() => {
       <label class="field"><span>上传人</span><input v-model="ownerKeyword" type="search" aria-label="上传人" /></label>
       <button class="secondary-button" type="button" @click="loadBoard">筛选证据</button>
     </div>
+    </details>
     <p v-if="boardError" class="operation-feedback danger">{{ boardError }}</p>
     <ul v-if="activeState !== 'unlinked' && board.links.length" class="evidence-file-list" :class="{ 'evidence-photo-board': plainUnpack() }">
       <li v-for="link in board.links" :key="linkKey(link)">

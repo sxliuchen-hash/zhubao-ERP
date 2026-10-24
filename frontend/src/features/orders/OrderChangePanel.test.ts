@@ -143,7 +143,8 @@ describe('独立改单面板', () => {
     vi.mocked(apiPost).mockResolvedValue({ ...row, status: 'FINANCE_CONFIRMED' });
     await click(wrapper, '确认金额不变');
     expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('财务已确认');
-    await click(wrapper, '确认金额不变'); await click(wrapper, '拒绝改单');
+    expect(wrapper.find('[aria-label="财务确认改单"]').exists()).toBe(false);
+    expect(wrapper.findAll('button').some(button => ['确认金额不变', '拒绝改单'].includes(button.text()))).toBe(false);
     expect(apiPost).toHaveBeenCalledTimes(1);
   });
   it('财务填写按改单分别保留，切单不能把另一份草稿带入当前请求', async () => {

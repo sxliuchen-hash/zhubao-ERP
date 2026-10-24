@@ -30,6 +30,7 @@ const changeRequirement = ref('');
 const changeDue = ref('');
 const changeRoute = ref('');
 const changeRework = ref('');
+const composeOpen = ref(false);
 const draftBase = ref<number | null>(null);
 const draftSaved = ref<OrderChangeRow | null>(null);
 const changeAttempt = ref<RequestAttempt | null>(null);
@@ -77,6 +78,7 @@ function preserveReceipt(row: OrderChangeRow) {
 }
 function select(row: OrderChangeRow) {
   if (locked.value || !validRow(row)) return;
+  composeOpen.value = false;
   assignSelection(row);
 }
 function latestBase(rows: OrderChangeRow[]) {
@@ -135,6 +137,7 @@ async function draftChange() {
 }
 async function newDraft() {
   if (locked.value || reading.value) return;
+  composeOpen.value = true;
   draftSaved.value = null; draftBase.value = null; changeAttempt.value = null;
   changeRequirement.value = ''; changeDue.value = ''; changeRoute.value = ''; changeRework.value = '';
   await loadChanges();
@@ -210,7 +213,7 @@ async function loadTimeline() {
       <button v-if="pending.idempotent" class="secondary-button" type="button" :disabled="submitting" @click="retryOriginal">原改单请求重试</button>
       <button v-else class="secondary-button" type="button" :disabled="checking" @click="checkUnknown">只读核对原改单</button>
     </section>
-    <details class="change-compose" open>
+    <details class="change-compose info-disclosure" :open="composeOpen" @toggle="composeOpen = ($event.target as HTMLDetailsElement).open">
       <summary>新改单申请</summary>
       <p>基准业务版本 {{ draftBase === null ? '尚未读取' : draftBase }}。填写期间固定，刷新列表不会自动换版。</p>
       <fieldset :disabled="locked || reading || Boolean(draftSaved) || draftBase === null">
@@ -237,7 +240,7 @@ async function loadTimeline() {
         <button class="secondary-button" type="button" :disabled="locked || selectedChange.status !== 'DRAFT'" @click="stage('submit')">送财务确认</button>
         <template v-if="canFinance">
           <details v-if="['FINANCE_CONFIRMED', 'APPLIED'].includes(selectedChange.status)"><summary>财务确认内容</summary><p>{{ selectedChange.amountUnchanged ? '金额不变' : '差额确认' }} · 客户单价 {{ selectedChange.customerUnitPrice }} · 工费 {{ selectedChange.workerFee }}</p><p>客户差额 {{ selectedChange.customerDelta }} · 工费差额 {{ selectedChange.workerDelta }} · {{ selectedChange.financeNote }}</p></details>
-          <fieldset :disabled="locked || selectedChange.status !== 'PENDING_FINANCE'" aria-label="财务确认改单">
+          <fieldset v-if="selectedChange.status === 'PENDING_FINANCE'" :disabled="locked" aria-label="财务确认改单">
             <label>财务说明<input v-model="financeNote" aria-label="改单财务说明" /></label>
             <label>客户单价<input v-model="customerPrice" aria-label="改单客户单价" inputmode="decimal" /></label>
             <label>工人工费<input v-model="workerFee" aria-label="改单工人工费" inputmode="decimal" /></label>

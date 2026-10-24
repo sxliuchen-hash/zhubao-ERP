@@ -106,7 +106,12 @@ function errorTone(error: ErrorSummary): Tone {
 
 <template>
   <div class="operations-center-page page-stack">
-    <OrderMaintenancePanel v-if="isAdmin" />
+<section class="section-block ops-status-summary" aria-label="系统状态摘要">
+      <div class="info-toolbar"><strong>系统运行状态</strong><StatusBadge :label="snapshot.summary.overallStatus" :tone="!hasSnapshot || snapshot.summary.degradedServices > 0 ? 'amber' : 'green'" /><button class="secondary-button" type="button" :disabled="loading" @click="loadOperationsCenter">{{ loading ? '刷新中' : '刷新状态' }}</button></div>
+      <p v-if="hasSnapshot">告警 {{ snapshot.summary.openAlerts }} 项 · 报错 {{ snapshot.summary.openErrors }} 项 · 备份 {{ snapshot.summary.backupStatus }}</p>
+      <p v-if="hasSnapshot" class="info-context">最近采集 {{ snapshot.generatedAt }}</p>
+    </section>
+    <details class="info-disclosure"><summary>运行指标与重点服务</summary>
     <section class="operations-command-surface" aria-label="运维中心总览">
       <div class="operations-command-main">
         <div class="console-title-line">
@@ -117,9 +122,7 @@ function errorTone(error: ErrorSummary): Tone {
             <h2>运维中心</h2>
             <p>查看硬件是否在线、磁盘和附件目录占用、服务状态、日志、报错和数据库备份。</p>
           </div>
-          <button class="secondary-button" type="button" :disabled="loading" @click="loadOperationsCenter">
-            {{ loading ? '刷新中' : '刷新状态' }}
-          </button>
+
         </div>
 
         <div v-if="hasSnapshot" class="operations-hero-grid" aria-label="运维关键指标">
@@ -149,7 +152,9 @@ function errorTone(error: ErrorSummary): Tone {
       </aside>
     </section>
 
-    <section v-if="hasSnapshot" class="operations-grid" aria-label="硬件在线和存储占用">
+    </details>
+    <details v-if="hasSnapshot" class="info-disclosure"><summary>设备在线与存储明细</summary>
+    <section class="operations-grid" aria-label="硬件在线和存储占用">
       <div class="operations-panel">
         <div class="section-heading">
           <div>
@@ -206,13 +211,15 @@ function errorTone(error: ErrorSummary): Tone {
       </aside>
     </section>
 
+    </details>
     <p v-if="loadingError" class="operation-feedback danger">
       <strong>状态读取失败</strong>
       <span>{{ loadingError }}</span>
       <small>{{ hasSnapshot ? `保留最后一次真实采集结果：${snapshot.generatedAt}` : '尚未取得真实运行状态' }}</small>
     </p>
 
-    <section v-if="hasSnapshot" class="operations-grid alerts" aria-label="告警汇总和运行状态">
+    <details v-if="hasSnapshot" class="info-disclosure" :open="snapshot.summary.openAlerts > 0"><summary>告警与服务器指标<small>{{ snapshot.summary.openAlerts }} 项告警</small></summary>
+    <section class="operations-grid alerts" aria-label="告警汇总和运行状态">
       <div class="operations-panel alert-panel">
         <div class="section-heading">
           <div>
@@ -282,7 +289,9 @@ function errorTone(error: ErrorSummary): Tone {
       </div>
     </section>
 
-    <section v-if="hasSnapshot" class="operations-grid lower" aria-label="报错、日志和备份">
+    </details>
+    <details v-if="hasSnapshot" class="info-disclosure"><summary>报错记录与运行日志<small>{{ snapshot.summary.openErrors }} 项报错</small></summary>
+    <section class="operations-grid lower" aria-label="报错、日志和备份">
       <div class="operations-panel error-panel">
         <div class="section-heading">
           <div>
@@ -352,7 +361,9 @@ function errorTone(error: ErrorSummary): Tone {
       </aside>
     </section>
 
-    <section v-if="hasSnapshot" class="operations-grid backup" aria-label="备份与上线检查">
+    </details>
+    <details v-if="hasSnapshot" class="info-disclosure"><summary>备份详情与恢复记录<small>{{ snapshot.summary.backupStatus }}</small></summary>
+    <section class="operations-grid backup" aria-label="备份与上线检查">
       <div class="operations-panel backup-panel">
         <div class="section-heading">
           <div>
@@ -456,5 +467,13 @@ function errorTone(error: ErrorSummary): Tone {
       </aside>
     </section>
 
+    </details>
+    <details v-if="isAdmin" class="info-disclosure"><summary>单据维护与回收站</summary><OrderMaintenancePanel /></details>
   </div>
 </template>
+
+<style scoped>
+.ops-status-summary { display: grid; gap: 10px; }
+.ops-status-summary p { margin: 0; }
+.operations-command-surface { display: grid; }
+</style>

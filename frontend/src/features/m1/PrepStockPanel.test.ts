@@ -77,7 +77,8 @@ describe('PrepStockPanel', () => {
     await wrapper.get('[aria-label="明细 2 重量"]').setValue('1.25');
     await wrapper.findAll('button').find(button => button.text() === '确认入库')!.trigger('click');
     await flushPromises();
-    expect(wrapper.get('.stock-actions').element).toHaveProperty('disabled', true);
+    expect(wrapper.get('.stock-head .primary-button').element).toHaveProperty('disabled', true);
+    expect(wrapper.get('.stock-form fieldset').element).toHaveProperty('disabled', true);
     await wrapper.get('[aria-label="明细 2 数量"]').setValue('99');
     vi.mocked(apiGet).mockRejectedValue(new Error('只读刷新失败'));
     await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
@@ -144,9 +145,11 @@ describe('PrepStockPanel', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('领用只表示转入在制');
     expect(wrapper.get('[aria-label="库存总览"]').text()).toContain('10.5 克');
-    expect(wrapper.text()).toContain('已领用 3.125');
+    expect(wrapper.get('.stock-card-button').text()).toContain('可用 7.375 克');
+    expect(wrapper.find('[aria-label="当前批次摘要"]').exists()).toBe(false);
     await wrapper.get('button.stock-card-button').trigger('click');
     await flushPromises();
+    expect(wrapper.get('[aria-label="当前批次摘要"]').text()).toContain('3.125 克');
     expect(wrapper.get('[aria-label="批次流水"]').text()).toContain('公司料领用 LY-1');
     expect(wrapper.text()).toContain('前 10.5 · 后 6.25');
     expect(wrapper.text()).toContain('用途 补货');

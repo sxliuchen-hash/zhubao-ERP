@@ -797,7 +797,7 @@ function kindLabel(kind: string) {
       </button>
       <div class="finance-sections" aria-label="财务功能">
         <button
-          v-for="item in sections"
+          v-for="item in sections.slice(0, 3)"
           :key="item.key"
           type="button"
           class="table-action"
@@ -806,6 +806,10 @@ function kindLabel(kind: string) {
         >
           {{ item.label }}
         </button>
+        <details class="info-disclosure finance-other-sections">
+          <summary>{{ sections.slice(3).some(item => item.key === section) ? sectionLabel : '更多财务功能' }}</summary>
+          <div class="info-toolbar"><button v-for="item in sections.slice(3)" :key="item.key" type="button" class="table-action" :class="{ active: section === item.key }" @click="section = item.key">{{ item.label }}</button></div>
+        </details>
       </div>
     </header>
 
@@ -817,10 +821,6 @@ function kindLabel(kind: string) {
       <label>
         客户编号
         <input v-model="customerId" aria-label="客户编号" />
-      </label>
-      <label>
-        客户名称
-        <input v-model="customerName" aria-label="客户名称" />
       </label>
     </section>
 
@@ -963,6 +963,8 @@ function kindLabel(kind: string) {
           </button>
         </div>
 
+        <details class="info-disclosure finance-analysis">
+          <summary>趋势、成本与账务核对</summary>
         <div class="finance-chart-grid">
           <article class="finance-panel" aria-label="收入与结余趋势">
             <h2>收入与结余趋势</h2>
@@ -1093,6 +1095,7 @@ function kindLabel(kind: string) {
             <p class="finance-note">客户来料数量和克重不计入这里的金额。</p>
           </article>
         </div>
+        </details>
       </template>
     </section>
 
@@ -1102,9 +1105,12 @@ function kindLabel(kind: string) {
       <div class="finance-actions">
         <button class="primary-button" type="button" :disabled="busy || statementReading" @click="loadStatement">查询账单</button>
         <button class="table-action" type="button" :disabled="busy" @click="createBilling">生成本月账单</button>
-        <button class="table-action" type="button" :disabled="busy" @click="saveAgreement">保存协议</button>
         <button class="table-action" type="button" @click="openTab?.('inventory')">看库存</button>
       </div>
+      <details class="info-disclosure finance-agreement">
+        <summary>维护计价协议</summary>
+        <div class="info-fields">
+      <label>客户名称<input v-model="customerName" aria-label="客户名称" /></label>
       <label>
         计价方式
         <select v-model="mode" aria-label="计价方式">
@@ -1133,6 +1139,9 @@ function kindLabel(kind: string) {
         单价
         <input v-model="unitPrice" aria-label="单价" />
       </label>
+        <button class="secondary-button" type="button" :disabled="busy" @click="saveAgreement">保存协议</button>
+        </div>
+      </details>
       <p v-if="statement" class="empty-hint">
         {{ statement.customerName }} 应收 {{ formatAmount(statement.receivableAmount) }} ，已收 {{ formatAmount(statement.receivedAmount) }} ，未收
         {{ formatAmount(statement.outstandingAmount) }} ，预收 {{ formatAmount(statement.prepaymentAmount) }} 。在库

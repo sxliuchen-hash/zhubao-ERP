@@ -481,6 +481,7 @@ function money(value: number) {
 .archive-heading > *, .archive-layout > *, .customer-fact { min-width: 0; }
 .archive-page { overflow-wrap: anywhere; }
 .archive-detail { display: grid; gap: 12px; min-width: 0; }
+.customer-fact:not(.is-current) { display: none; }
 .archive-toolbar,
 .archive-form { display: grid; gap: 10px; }
 .archive-form { grid-template-columns: 1fr 1fr; align-items: end; }
@@ -510,7 +511,7 @@ function money(value: number) {
 .archive-check { display: flex; gap: 8px; align-items: center; }
 .archive-note { color: var(--muted); margin: 0; }
 .archive-form textarea { min-height: 72px; }
-@media (max-width: 800px) {
+@media (max-width: 900px) {
   .archive-page > header p { display: none; }
   .archive-layout { grid-template-columns: minmax(0, 1fr); }
   .customer-back { display: inline-flex; }

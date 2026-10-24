@@ -32,21 +32,27 @@ function amount(value: number | null, unit: string | null) {
         <div><dt>交期</dt><dd>{{ context.order.dueDate || '未填写' }}</dd></div>
         <div v-if="showCustomer && context.order.customerName"><dt>客户</dt><dd>{{ context.order.customerName }}</dd></div>
         <div v-if="showWeight"><dt>重量</dt><dd>{{ amount(context.order.weight, context.order.weightUnit) }}</dd></div>
-        <div><dt>母单</dt><dd>{{ identity.motherOrderCode || '未提供' }}</dd></div>
-        <div v-if="identity.workOrderCode"><dt>子单／执行目标</dt><dd>{{ identity.workOrderCode }}</dd></div>
       </dl>
+      <slot name="summary" />
+      <details v-if="identity.objectType !== 'EXPRESS_NO'" class="info-disclosure">
+        <summary>关联单号</summary>
+        <dl class="info-facts"><div><dt>母单</dt><dd>{{ identity.motherOrderCode || '未提供' }}</dd></div><div v-if="identity.workOrderCode"><dt>子单／执行目标</dt><dd>{{ identity.workOrderCode }}</dd></div></dl>
+      </details>
       <p v-if="identity.objectType === 'EXPRESS_NO'">这张运单尚未定位到订单，可进入收货建单。</p>
       <section v-else class="mobile-order-requirements" aria-label="订单要求">
         <h4>当前要求</h4>
-        <p>母单要求：{{ context.requirements.motherRequirement || '未填写' }}</p>
-        <p>子单／本轮次要求：{{ context.requirements.workOrderRequirement || '未填写' }}</p>
-        <ul v-if="showStation && context.requirements.stationRequirements.length">
+        <p v-if="identity.objectType !== 'MOTHER_ORDER'">子单／本轮次要求：{{ context.requirements.workOrderRequirement || '未填写' }}</p>
+        <p v-if="identity.objectType === 'MOTHER_ORDER' || !context.requirements.workOrderRequirement">母单要求：{{ context.requirements.motherRequirement || '未填写' }}</p>
+        <details v-else class="info-disclosure"><summary>查看母单原要求</summary><p>{{ context.requirements.motherRequirement || '未填写' }}</p></details>
+        <details v-if="showStation && context.requirements.stationRequirements.length" class="info-disclosure">
+          <summary>岗位要求<small>{{ context.requirements.stationRequirements.length }} 项</small></summary>
+        <ul>
           <li v-for="(item, index) in context.requirements.stationRequirements" :key="index">
             岗位 {{ item.process || '当前工序' }}：{{ item.text || '未填写' }}
           </li>
         </ul>
+        </details>
       </section>
-      <slot name="summary" />
     </div>
     <section v-else-if="tab === 'flow'" class="order-flow" aria-label="本单流转事实">
       <p>查询目标：{{ identity.code }}。下列记录保留原单号；尚无跨母子单聚合时间线。</p>

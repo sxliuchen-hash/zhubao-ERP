@@ -597,6 +597,7 @@ const registerTemplateRows = computed(() =>
           </div>
           <StatusBadge :label="`${registerImportSummary.templates} 类模板`" tone="green" />
         </div>
+        <details class="info-disclosure"><summary>模板与解析概况</summary>
         <div class="register-kpi-strip" aria-label="登记表导入指标">
           <article>
             <span>映射字段</span>
@@ -614,6 +615,7 @@ const registerTemplateRows = computed(() =>
             <small>预检 → 批次确认 → 显式入账</small>
           </article>
         </div>
+        </details>
         <form class="register-preview-console" aria-label="登记表上传预检" @submit.prevent="submitRegisterPreview">
           <div class="register-preview-title">
             <span class="eyebrow">UPLOAD PREVIEW</span>
@@ -822,7 +824,7 @@ const registerTemplateRows = computed(() =>
           </article>
         </div>
         </details>
-        <details class="register-template-reference" open>
+        <details class="register-template-reference">
           <summary>导入校验规则 <span>{{ activeRegisterTemplate.validationRules.length }} 条规则</span></summary>
         <div class="register-rule-list" aria-label="导入校验规则">
           <article

@@ -514,7 +514,9 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
 
     </details>
 
-    <section v-if="canManageRoutes" class="template-manager" aria-label="工位与队列维护">
+    <details v-if="canManageRoutes" class="info-disclosure label-route-settings">
+      <summary>工位与打印队列设置</summary>
+    <section class="template-manager" aria-label="工位与队列维护">
       <h3>工位与打印队列</h3>
       <p v-if="routeFeedback">{{ routeFeedback }}</p>
       <p v-if="newStationToken">新工位凭据（仅此时显示）：<code>{{ newStationToken }}</code></p>
@@ -551,6 +553,9 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
       </p>
     </section>
 
+    </details>
+    <details class="info-disclosure label-template-settings">
+      <summary>标签模板设置</summary>
     <!-- 模板与打印机设置管理 -->
     <section class="template-manager">
       <div class="manager-head">
@@ -741,6 +746,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
       </div>
       <p v-else-if="templateFeedback" class="feedback ok">{{ templateFeedback }}</p>
     </section>
+    </details>
   </div>
 </template>
 

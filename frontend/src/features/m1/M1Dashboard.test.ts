@@ -85,6 +85,20 @@ function deskTask(overrides: Partial<DeskTask> = {}): DeskTask {
 }
 
 describe('M1Dashboard', () => {
+  it('大量待办先显示摘要，展开和收起不丢办理草稿，也不提交业务', async () => {
+    vi.mocked(fetchDeskTasks).mockResolvedValue(Array.from({ length: 7 }, (_, index) => deskTask({ taskCode: `DT-${index}`, title: `待办 ${index}` })));
+    const wrapper = mount(M1Dashboard);
+    await flushPromises();
+    expect(wrapper.findAll('.desk-task-card')).toHaveLength(5);
+    await wrapper.get('[aria-label="卡片结果说明"]').setValue('保留办理说明');
+    await wrapper.findAll('button').find(button => button.text() === '显示更多待办')!.trigger('click');
+    expect(wrapper.findAll('.desk-task-card')).toHaveLength(7);
+    await wrapper.findAll('button').find(button => button.text() === '收起待办列表')!.trigger('click');
+    expect(wrapper.findAll('.desk-task-card')).toHaveLength(5);
+    expect(wrapper.get('[aria-label="卡片结果说明"]').element).toHaveProperty('value', '保留办理说明');
+    expect(completeDeskTask).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchDeskTasks).mockResolvedValue([]);

@@ -360,7 +360,7 @@ async function uploadEvidence() {
         <h1>附件</h1>
         <p>查看单据照片、称重记录和视频，缺的证据从这里补上。</p>
       </div>
-      <div class="hero-kpis">
+      <details class="info-disclosure document-statistics"><summary>查看附件统计</summary><div class="hero-kpis">
         <article>
           <span>文档包</span>
           <strong>{{ summary.packages }}</strong>
@@ -377,85 +377,13 @@ async function uploadEvidence() {
           <span>缺口</span>
           <strong>{{ summary.missingEvidence }}</strong>
         </article>
-      </div>
+      </div></details>
     </section>
 
     <p v-if="loadingError" class="operation-feedback danger" role="alert">{{ loadingError }}</p>
     <p v-else-if="packageLoading && packages.length === 0" class="empty-hint" role="status">正在加载文档包…</p>
     <p v-else-if="!packageLoadError && packages.length === 0 && hasPackageSearch" class="empty-hint">没有匹配的文档包。</p>
     <p v-else-if="!packageLoadError && packages.length === 0" class="empty-hint">暂无文档包，请从业务单据建立证据关联。</p>
-
-    <section class="document-control-board" aria-label="文档证据运营板">
-      <article v-if="activePackage" class="document-active-case" :class="`tone-${activePackage.tone}`">
-        <div class="panel-title-row">
-          <div>
-            <span class="eyebrow">Active Package</span>
-            <h2>{{ activePackage.title }}</h2>
-          </div>
-          <StatusBadge :label="activePackage.status" :tone="activePackage.tone" />
-        </div>
-        <dl class="document-case-grid">
-          <dt>文档包</dt>
-          <dd>{{ activePackage.code }}</dd>
-          <dt>业务对象</dt>
-          <dd>{{ activePackage.businessCode }}</dd>
-          <dt>负责人</dt>
-          <dd>{{ activePackage.owner }}</dd>
-          <dt>证据</dt>
-          <dd>{{ activePackage.linkedEvidence }}/{{ activePackage.requiredEvidence }}</dd>
-          <dt>保留策略</dt>
-          <dd>{{ activePackage.retentionPolicy }}</dd>
-          <dt>更新时间</dt>
-          <dd>{{ activePackage.lastUpdated }}</dd>
-        </dl>
-      </article>
-
-      <div class="document-gap-stack">
-        <div class="panel-title-row">
-          <div>
-            <span class="eyebrow">Evidence Gaps</span>
-            <h2>待补证据</h2>
-            <small>仅统计当前已加载的文档包</small>
-          </div>
-          <StatusBadge :label="`${missingPackages.length} 项`" tone="amber" />
-        </div>
-        <article v-for="item in missingPackages" :key="item.code" :class="`tone-${item.tone}`">
-          <strong>{{ item.code }}</strong>
-          <span>{{ item.title }}</span>
-          <small>{{ item.owner }} / {{ item.gap }}</small>
-        </article>
-      </div>
-
-    </section>
-
-    <section class="document-upload-console" aria-label="附件上传与预览">
-      <div class="section-heading">
-        <div>
-          <span class="eyebrow">Upload & Preview</span>
-          <h2>上传附件</h2>
-          <p>选择文件后上传；在下方附件清单中直接预览或下载。</p>
-        </div>
-        <div class="button-row">
-          <label>文档包<select v-model="selectedPackageCode" :disabled="uploading" aria-label="上传文档包"><option value="">当前待补文档包</option><option v-for="item in packageOptions" :key="item.code" :value="item.code">{{ item.code }} / {{ item.title }}</option></select></label>
-          <label>附件文件<input type="file" aria-label="附件文件" :disabled="uploading" @change="selectFile" /></label>
-          <button class="primary-button" type="button" :disabled="uploading || !activePackage || !selectedFile" @click="uploadEvidence">
-            {{ uploading ? '正在上传' : '上传所选文件' }}
-          </button>
-        </div>
-      </div>
-      <div class="document-upload-result-grid">
-        <article v-if="uploadResult" class="operation-feedback success">
-          <strong>附件上传成功</strong>
-          <span>{{ uploadResult.code }} / {{ uploadResult.fileName }}</span>
-          <small>{{ uploadResult.checksum }}</small>
-        </article>
-        <article v-else-if="uploadError" class="operation-feedback danger">
-          <strong>附件上传失败</strong>
-          <span>{{ uploadError }}</span>
-          <small>请检查文件和网络后重试。</small>
-        </article>
-      </div>
-    </section>
 
     <section class="document-layout">
       <div class="document-master">
@@ -528,11 +456,12 @@ async function uploadEvidence() {
       <aside v-if="activePackage" class="document-detail module-side-panel">
         <div class="detail-title">
           <button class="secondary-button detail-back" type="button" @click="backToPackages">返回列表</button>
-          <span>当前缺口</span>
-          <strong>{{ activePackage.code }}</strong>
+          <span>当前文档包</span>
+          <strong>{{ activePackage.title }}</strong>
           <StatusBadge :label="activePackage.status" :tone="activePackage.tone" />
         </div>
         <dl class="detail-grid">
+          <dt>文档包</dt><dd>{{ activePackage.code }}</dd>
           <dt>标题</dt>
           <dd>{{ activePackage.title }}</dd>
           <dt>业务对象</dt>
@@ -544,20 +473,43 @@ async function uploadEvidence() {
           <dt>更新时间</dt>
           <dd>{{ activePackage.lastUpdated }}</dd>
         </dl>
-        <div class="document-linked-list">
-          <strong>关联附件（当前包）</strong>
-          <p v-if="attachmentLoadError" class="operation-feedback danger" role="alert">附件数据读取失败：{{ attachmentLoadError }}</p>
-          <p v-else-if="attachmentLoading" class="operation-feedback" role="status">正在加载当前文档包附件…</p>
-          <p v-else-if="attachments.length === 0" class="empty-hint">当前文档包暂无附件。</p>
-          <article v-for="attachment in activeAttachments" :key="attachment.code" :class="`tone-${attachment.tone}`">
-            <span>{{ attachment.fileName }}</span>
-            <StatusBadge :label="attachment.status" :tone="attachment.tone" />
-            <EvidencePreviewLink v-if="attachment.status !== '已下线'" :attachment-code="attachment.code" :media-type-hint="attachment.mediaType" />
-          </article>
-        </div>
+        <p class="info-context">当前包已加载 {{ activeAttachments.length }} 个附件，在下方文件清单预览或下载。</p>
       </aside>
     </section>
 
+<details class="info-disclosure document-upload-toggle"><summary>上传到当前文档包<small>{{ activePackage?.title || "请先选择文档包" }}</small></summary>
+    <section class="document-upload-console" aria-label="附件上传与预览">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Upload & Preview</span>
+          <h2>上传附件</h2>
+          <p>选择文件后上传；在下方附件清单中直接预览或下载。</p>
+        </div>
+        <div class="button-row">
+          <label>文档包<select v-model="selectedPackageCode" :disabled="uploading" aria-label="上传文档包"><option value="">当前待补文档包</option><option v-for="item in packageOptions" :key="item.code" :value="item.code">{{ item.code }} / {{ item.title }}</option></select></label>
+          <label>附件文件<input type="file" aria-label="附件文件" :disabled="uploading" @change="selectFile" /></label>
+          <button class="primary-button" type="button" :disabled="uploading || !activePackage || !selectedFile" @click="uploadEvidence">
+            {{ uploading ? '正在上传' : '上传所选文件' }}
+          </button>
+        </div>
+      </div>
+      <div class="document-upload-result-grid">
+        <article v-if="uploadResult" class="operation-feedback success">
+          <strong>附件上传成功</strong>
+          <span>{{ uploadResult.code }} / {{ uploadResult.fileName }}</span>
+          <small>{{ uploadResult.checksum }}</small>
+        </article>
+        <article v-else-if="uploadError" class="operation-feedback danger">
+          <strong>附件上传失败</strong>
+          <span>{{ uploadError }}</span>
+          <small>请检查文件和网络后重试。</small>
+        </article>
+      </div>
+    </section>
+
+</details>
+<p v-if="uploadResult" class="operation-feedback success" role="status">附件上传成功：{{ uploadResult.code }} · {{ uploadResult.fileName }}</p>
+<p v-if="uploadError" class="operation-feedback danger" role="alert">{{ uploadError }}</p>
     <section class="section-block">
       <div class="section-heading">
         <div>
@@ -577,9 +529,7 @@ async function uploadEvidence() {
               <th>附件</th>
               <th>业务绑定</th>
               <th>介质</th>
-              <th>存储位置</th>
-              <th>校验</th>
-              <th>兜底</th>
+              <th>文件属性</th>
               <th>状态</th>
             </tr>
           </thead>
@@ -587,16 +537,14 @@ async function uploadEvidence() {
             <tr v-for="item in attachments" :key="item.code">
               <td>
                 <span class="cell-stack">
-                  <b>{{ item.code }}</b>
-                  <small>{{ item.fileName }}</small>
+                  <b>{{ item.fileName }}</b>
+                  <small>{{ item.code }}</small>
                   <EvidencePreviewLink v-if="item.status !== '已下线'" :attachment-code="item.code" :media-type-hint="item.mediaType" />
                 </span>
               </td>
               <td>{{ item.businessType }} / {{ item.businessCode }}</td>
               <td>{{ item.mediaType }}</td>
-              <td>{{ item.storageLocation }}</td>
-              <td>{{ item.checksum }}</td>
-              <td>{{ item.fallbackAction }}</td>
+              <td><details class="info-disclosure"><summary>查看属性</summary><p>存储：{{ item.storageLocation }}</p><p>校验：{{ item.checksum }}</p><p>兜底：{{ item.fallbackAction }}</p></details></td>
               <td><StatusBadge :label="item.status" :tone="item.tone" /></td>
             </tr>
           </tbody>
@@ -622,7 +570,53 @@ async function uploadEvidence() {
       </div>
     </section>
 
-    <section v-if="canViewAudit" class="split-layout">
+<details class="info-disclosure document-management-details"><summary>证据缺口与文档包属性<small>统计仅限已加载范围</small></summary>
+    <section class="document-control-board" aria-label="文档证据运营板">
+      <article v-if="activePackage" class="document-active-case" :class="`tone-${activePackage.tone}`">
+        <div class="panel-title-row">
+          <div>
+            <span class="eyebrow">Active Package</span>
+            <h2>{{ activePackage.title }}</h2>
+          </div>
+          <StatusBadge :label="activePackage.status" :tone="activePackage.tone" />
+        </div>
+        <dl class="document-case-grid">
+          <dt>文档包</dt>
+          <dd>{{ activePackage.code }}</dd>
+          <dt>业务对象</dt>
+          <dd>{{ activePackage.businessCode }}</dd>
+          <dt>负责人</dt>
+          <dd>{{ activePackage.owner }}</dd>
+          <dt>证据</dt>
+          <dd>{{ activePackage.linkedEvidence }}/{{ activePackage.requiredEvidence }}</dd>
+          <dt>保留策略</dt>
+          <dd>{{ activePackage.retentionPolicy }}</dd>
+          <dt>更新时间</dt>
+          <dd>{{ activePackage.lastUpdated }}</dd>
+        </dl>
+      </article>
+
+      <div class="document-gap-stack">
+        <div class="panel-title-row">
+          <div>
+            <span class="eyebrow">Evidence Gaps</span>
+            <h2>待补证据</h2>
+            <small>仅统计当前已加载的文档包</small>
+          </div>
+          <StatusBadge :label="`${missingPackages.length} 项`" tone="amber" />
+        </div>
+        <article v-for="item in missingPackages" :key="item.code" :class="`tone-${item.tone}`">
+          <strong>{{ item.code }}</strong>
+          <span>{{ item.title }}</span>
+          <small>{{ item.owner }} / {{ item.gap }}</small>
+        </article>
+      </div>
+
+    </section>
+
+</details>
+    <details v-if="canViewAudit" class="info-disclosure document-audit-toggle"><summary>查看归档审计</summary>
+    <section class="split-layout">
       <div class="section-block">
         <div class="section-heading">
           <div>
@@ -644,11 +638,16 @@ async function uploadEvidence() {
         </div>
       </div>
     </section>
+    </details>
   </div>
 </template>
 
 <style scoped>
 .document-hero h1 { margin: 0; font-size: 24px; }
+.document-management-details .document-control-board { display: grid; }
+.document-statistics { width: 100%; }
+.document-audit-toggle, .document-management-details { border-top: 1px solid var(--line); padding-top: 8px; }
+.attachment-table td { overflow-wrap: anywhere; }
 .document-upload-console label { min-width: 0; max-width: 100%; }
 .document-upload-console select,
 .document-upload-console input { box-sizing: border-box; min-width: 0; width: 100%; max-width: 100%; }

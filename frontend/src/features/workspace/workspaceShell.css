@@ -295,8 +295,7 @@
   .operations-command-surface,
   .hardware-command-surface,
   .document-control-board,
-  .label-intro .label-note,
-  .finance-overview {
+  .label-intro .label-note {
     display: none;
   }
 }

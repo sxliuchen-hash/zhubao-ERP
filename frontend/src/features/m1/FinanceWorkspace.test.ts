@@ -102,6 +102,28 @@ function dashboardOf(patch: {
 }
 
 describe('FinanceWorkspace', () => {
+  it('收起经营分析仍保留核心金额，读取失败也在默认内容中明确显示', async () => {
+    const wrapper = mount(FinanceWorkspace);
+    await flushPromises();
+    const revenue = wrapper.get('[data-metric="revenue"]');
+    expect(revenue.element.closest('details')).toBeNull();
+    const analysis = wrapper.get('.finance-analysis');
+    (analysis.element as HTMLDetailsElement).open = true;
+    await analysis.trigger('toggle');
+    (analysis.element as HTMLDetailsElement).open = false;
+    await analysis.trigger('toggle');
+    expect(wrapper.get('[data-metric="revenue"]').text()).toContain('128,600.5');
+    expect(fetchFinanceDashboard).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+
+    vi.mocked(fetchFinanceDashboard).mockRejectedValueOnce(new Error('经营数据读取失败'));
+    const failed = mount(FinanceWorkspace);
+    await flushPromises();
+    const alert = failed.get('[role="alert"]');
+    expect(alert.text()).toContain('经营数据读取失败');
+    expect(alert.element.closest('details')).toBeNull();
+    failed.unmount();
+  });
   it('财务入口将客户和月份交给共享账单容器，不在原页面直接收款', async () => {
     const open = vi.fn();
     const wrapper = mount(FinanceWorkspace, { global: { provide: { 'zhubao-open-bill': open } } });

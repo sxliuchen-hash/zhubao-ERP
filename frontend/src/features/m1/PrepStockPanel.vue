@@ -75,6 +75,7 @@ const warehouseFilter = ref('');
 const statusFilter = ref('');
 const fromDate = ref('');
 const toDate = ref('');
+const advancedFilterCount = computed(() => [batchFilter.value, customerFilter.value, warehouseFilter.value, fromDate.value, toDate.value].filter(value => value.trim()).length);
 const extraLines = ref<ReceiptLine[]>([]);
 const confirmLines = ref<ReceiptLine[]>([]);
 const sourceLineNo = ref(1);
@@ -400,6 +401,7 @@ function correct() {
     <header class="stock-head">
       <h2>{{ title }}</h2>
       <button class="secondary-button" type="button" :disabled="submitting" @click="load">刷新</button>
+      <button v-if="canDo('receive')" class="primary-button" type="button" :disabled="locked" @click="action = 'receive'">{{ props.scope === 'company' ? '入库' : '寄存收货' }}</button>
     </header>
     <p v-if="props.scope === 'company'" class="archive-note">领用只表示转入在制，仍在厂内，不会并入客户加工库存，也不会自动核销。</p>
     <p v-else class="archive-note">先寄存不建加工单、不产生加工费。重量留空表示待称量，整单称清后才入账。</p>
@@ -419,13 +421,18 @@ function correct() {
     </div>
     <fieldset class="stock-filters stock-plain-fields" :disabled="locked">
       <label><span>物料</span><input v-model="materialFilter" aria-label="筛选物料" /></label>
+      <label><span>状态</span><select v-model="statusFilter" aria-label="筛选库存状态"><option value="">全部</option><option>待核</option><option>可用</option><option>在制</option><option>冻结</option></select></label>
+      <button class="secondary-button" type="button" @click="load">应用筛选</button>
+      <details class="info-disclosure stock-advanced-filters">
+        <summary>更多筛选<small v-if="advancedFilterCount">已填 {{ advancedFilterCount }} 项</small></summary>
+        <div class="stock-filters">
       <label><span>批次</span><input v-model="batchFilter" aria-label="筛选批次" /></label>
       <label v-if="props.scope === 'prep'"><span>客户</span><input v-model="customerFilter" :list="`${props.scope}-customers`" aria-label="筛选客户" /></label>
       <label><span>仓库</span><input v-model="warehouseFilter" aria-label="筛选仓库" /></label>
-      <label><span>状态</span><select v-model="statusFilter" aria-label="筛选库存状态"><option value="">全部</option><option>待核</option><option>可用</option><option>在制</option><option>冻结</option></select></label>
       <label><span>变动开始日期</span><input v-model="fromDate" type="date" aria-label="变动开始日期" /></label>
       <label><span>变动结束日期</span><input v-model="toDate" type="date" aria-label="变动结束日期" /></label>
-      <button class="secondary-button" type="button" @click="load">应用筛选</button>
+        </div>
+      </details>
     </fieldset>
     <p v-if="loaded && !loading && !loadError && !batches.length" class="empty-hint">没有符合条件的库存</p>
     <div class="stock-cards">
@@ -434,20 +441,34 @@ function correct() {
           <strong>{{ card.pending ? '待核' : (card.batchCode || '未编号') }}</strong>
           <span>{{ card.ownerLabel }} · {{ card.materialCode }} · {{ card.quantityUnit }}</span>
           <span v-if="card.pending">申报 {{ card.bookQuantity }} {{ card.quantityUnit }} · {{ card.weightText }}</span>
-          <span v-else>账面 {{ card.bookQuantity }} {{ card.quantityUnit }} / {{ card.bookWeight }} 克 · 可用 {{ card.availableQuantity }} · 已领用 {{ card.issuedQuantity }} · 冻结 {{ card.frozenQuantity }}</span>
+          <span v-else>可用 {{ card.availableQuantity }} {{ card.quantityUnit }} · {{ card.availableWeight }} 克</span>
+          <span v-if="!card.pending && Number(card.frozenQuantity) > 0">冻结 {{ card.frozenQuantity }} {{ card.quantityUnit }}</span>
           <span>{{ card.status }} · {{ card.warehouseCode }}<template v-if="card.sourceMissing"> · 来源单据缺失</template></span>
         </button>
       </article>
     </div>
-    <fieldset class="stock-actions stock-plain-fields" :disabled="locked">
-      <button v-if="canDo('receive')" class="primary-button" type="button" :disabled="submitting" @click="action = 'receive'">{{ props.scope === 'company' ? '入库' : '寄存收货' }}</button>
+    <section v-if="selected" class="stock-selected-summary" aria-label="当前批次摘要">
+      <h3>{{ selected.batchCode || selected.documentCode }} · {{ selected.materialCode }}</h3>
+      <dl class="info-facts">
+        <div><dt>账面</dt><dd>{{ selected.bookQuantity }} {{ selected.quantityUnit }} / {{ selected.bookWeight }} 克</dd></div>
+        <div><dt>可用</dt><dd>{{ selected.availableQuantity }} {{ selected.quantityUnit }}</dd></div>
+        <div><dt>已领用</dt><dd>{{ selected.issuedQuantity }} {{ selected.quantityUnit }}</dd></div>
+        <div><dt>冻结</dt><dd>{{ selected.frozenQuantity }} {{ selected.quantityUnit }}</dd></div>
+      </dl>
+    </section>
+    <fieldset v-if="selected" class="stock-actions stock-plain-fields" :disabled="locked">
       <button v-if="canDo('issue')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'issue'">领用</button>
       <button v-if="canDo('return')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode" @click="action = 'return'">{{ props.scope === 'company' ? '原单退回' : '退回备料' }}</button>
       <button v-if="props.scope === 'prep' && canDo('customer-return')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'customer-return'">退还客户</button>
       <button v-if="props.scope === 'prep' && canDo('order')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'order'">从备料建加工单</button>
+      <details v-if="canDo('freeze') || (session?.role === 'ADMIN' && canDo('correct'))" class="info-disclosure">
+        <summary>更多批次操作</summary>
+        <div class="stock-actions">
       <button v-if="canDo('freeze')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'freeze'">冻结</button>
       <button v-if="canDo('unfreeze')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'unfreeze'">解除冻结</button>
       <button v-if="session?.role === 'ADMIN' && canDo('correct')" class="secondary-button" type="button" :disabled="submitting || !selected?.batchCode || selected.sourceMissing" @click="action = 'correct'">差错冲正</button>
+        </div>
+      </details>
       <button v-if="selected?.pending && canDo('confirm')" class="secondary-button" type="button" :disabled="submitting || !confirmLines.length" @click="action = 'confirm'">确认入账</button>
     </fieldset>
     <form v-if="action" class="stock-form" @submit.prevent>
@@ -558,6 +579,9 @@ function correct() {
 .stock-head, .stock-overview { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .stock-actions, .stock-filters, .stock-form, .stock-line { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: end; }
 .stock-filters label, .stock-form label { display: grid; gap: 4px; min-width: 0; }
+.stock-advanced-filters { grid-column: 1 / -1; }
+.stock-selected-summary { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.stock-selected-summary h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
 .stock-plain-fields { min-width: 0; border: 0; padding: 0; margin: 0; }
 .stock-form > .stock-plain-fields,
 .stock-plain-fields > p,
