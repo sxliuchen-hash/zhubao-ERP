@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import RequirementShortcutPanel from './RequirementShortcutPanel.vue';
 import { disableTemplate, fetchTemplates, saveTemplate, type RequirementTemplate } from '../../services/masterDataApi';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 
@@ -129,4 +130,5 @@ async function disable(item: RequirementTemplate) {
       <button v-if="editing" class="secondary-button" type="button" @click="reset">取消编辑</button>
     </form>
   </section>
+  <RequirementShortcutPanel :can-manage="canManage" />
 </template>

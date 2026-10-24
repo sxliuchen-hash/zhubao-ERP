@@ -2,7 +2,7 @@
 import { computed, inject, nextTick, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import { canManageMasterData } from '../../services/masterDataAccess';
-import { fetchCustomers, fetchMaterials, fetchShortcuts, removeShortcut, saveCustomer, saveMaterial, saveShortcut,
+import { fetchCustomers, fetchMaterials, fetchShortcuts, saveCustomer, saveMaterial,
   type CustomerProfile, type MaterialProfile, type RequirementShortcut } from '../../services/masterDataApi';
 import FilterSelect from '../../components/FilterSelect.vue';
 import RequirementComposer from './RequirementComposer.vue';
@@ -57,6 +57,19 @@ const newMaterialName = ref('');
 const catalogError = ref('');
 const catalogHint = ref('');
 const catalogSaving = ref(false);
+const catalogDialog = ref<'customer' | 'material' | ''>('');
+const catalogMaterialTarget = ref<(typeof extraLines.value)[number] | null>(null);
+const catalogDraftKey = ref('');
+function openCatalog(kind: 'customer' | 'material', query: string, line: (typeof extraLines.value)[number] | null = null) {
+  if (!canManageData.value || submitting.value) return;
+  catalogMaterialTarget.value = line;
+  catalogDraftKey.value = evidenceDraftKey.value;
+  newCustomerName.value = kind === 'customer' ? query : '';
+  newMaterialName.value = kind === 'material' ? query : '';
+  catalogError.value = '';
+  catalogDialog.value = kind;
+}
+function closeCatalog() { if (!catalogSaving.value) catalogDialog.value = ''; }
 const processingRequirement = ref('');
 const intakePurpose = ref('processing');
 const prepCreated = ref(false);
@@ -363,6 +376,7 @@ function nextFormStage() {
     formError.value = '请核对每条来料的材质、货品、数量、单位和重量';
     return;
   }
+  if (new Set(lines.map(line => line.quantityUnit.trim())).size > 1) { formError.value = '同一加工母单的数量单位必须一致，请分开建单'; return; }
   formStage.value = 2;
   showPanel(draftPanel);
 }
@@ -431,7 +445,7 @@ async function createMotherOrder() {
     showPanel(savedPanel);
   } catch (error) {
     if (intakeScan.revision !== seen) return;
-    if (intakeScan.revision === seen) formError.value = keptInputFailure(error, '生成母单失败');
+    if (intakeScan.revision === seen) formError.value = keptInputFailure(error, '确认建单并入库失败');
   } finally {
     submitting.value = false;
   }
@@ -451,45 +465,6 @@ async function loadCatalog() {
   }
 }
 
-async function addShortcut(phrase: string) {
-  if (!canManageData.value || catalogSaving.value) return;
-  const text = phrase.trim();
-  if (!text) {
-    catalogHint.value = '';
-    catalogError.value = '请填写快捷词';
-    return;
-  }
-  catalogSaving.value = true;
-  try {
-    const saved = await saveShortcut(text);
-    shortcuts.value = [...shortcuts.value.filter((item) => item.shortcutId !== saved.shortcutId), saved]
-      .sort((left, right) => left.sortOrder - right.sortOrder || left.shortcutId - right.shortcutId);
-    catalogError.value = '';
-    catalogHint.value = `已添加快捷词「${saved.phrase}」`;
-  } catch (error) {
-    catalogHint.value = '';
-    catalogError.value = error instanceof Error ? error.message : '添加快捷词失败';
-  } finally {
-    catalogSaving.value = false;
-  }
-}
-
-async function deleteShortcut(item: RequirementShortcut) {
-  if (!canManageData.value || catalogSaving.value) return;
-  catalogSaving.value = true;
-  try {
-    await removeShortcut(item.shortcutId);
-    shortcuts.value = shortcuts.value.filter((row) => row.shortcutId !== item.shortcutId);
-    catalogError.value = '';
-    catalogHint.value = `已删除快捷词「${item.phrase}」`;
-  } catch (error) {
-    catalogHint.value = '';
-    catalogError.value = error instanceof Error ? error.message : '删除快捷词失败';
-  } finally {
-    catalogSaving.value = false;
-  }
-}
-
 function selectCustomer(value: string) {
   const id = Number(value);
   customerId.value = value && Number.isInteger(id) ? id : null;
@@ -501,7 +476,7 @@ function pendingCatalogName(dedicated: string, search: string) {
 }
 
 async function addCustomer() {
-  if (catalogSaving.value) return;
+  if (!canManageData.value || catalogSaving.value) return;
   const name = pendingCatalogName(newCustomerName.value, customerSearch.value);
   if (!name) {
     catalogHint.value = '';
@@ -513,8 +488,10 @@ async function addCustomer() {
     const saved = await saveCustomer({ customerId: 0, customerCode: '', name,
       aliases: '', contact: '', phone: '', remark: '', enabled: true });
     customers.value = [...customers.value.filter((item) => item.customerId !== saved.customerId), saved];
+    if (catalogDraftKey.value !== evidenceDraftKey.value) return;
     customerId.value = saved.customerId;
     customerName.value = saved.name;
+    catalogDialog.value = '';
     newCustomerName.value = '';
     customerSearch.value = '';
     catalogError.value = '';
@@ -528,7 +505,7 @@ async function addCustomer() {
 }
 
 async function addMaterial() {
-  if (catalogSaving.value) return;
+  if (!canManageData.value || catalogSaving.value) return;
   const name = pendingCatalogName(newMaterialName.value, materialSearch.value);
   if (!name) {
     catalogHint.value = '';
@@ -539,16 +516,13 @@ async function addMaterial() {
   try {
     const saved = await saveMaterial({ materialCode: '', name, aliases: '', remark: '', enabled: true });
     materials.value = [...materials.value.filter((item) => item.materialCode !== saved.materialCode), saved];
-    if (!materialCode.value) {
-      materialCode.value = saved.materialCode;
-      catalogHint.value = `已新增材质「${saved.name}」，并选入本单`;
-    } else {
-      const emptyLine = extraLines.value.find((line) => !line.materialCode);
-      if (emptyLine) emptyLine.materialCode = saved.materialCode;
-      catalogHint.value = emptyLine
-        ? `已新增材质「${saved.name}」，并选入空白明细`
-        : `已新增材质「${saved.name}」，请在材质下拉中选择`;
-    }
+    if (catalogDraftKey.value !== evidenceDraftKey.value) return;
+    const target = catalogMaterialTarget.value;
+    if (target && !extraLines.value.includes(target)) { catalogError.value = '原明细已移除，请重新选择材质'; return; }
+    if (target) target.materialCode = saved.materialCode;
+    else materialCode.value = saved.materialCode;
+    catalogHint.value = `已新增材质「${saved.name}」，并选入发起新增的明细`;
+    catalogDialog.value = '';
     newMaterialName.value = '';
     materialSearch.value = '';
     catalogError.value = '';
@@ -564,6 +538,16 @@ onMounted(loadCatalog);
 </script>
 
 <template>
+  <div v-if="catalogDialog" class="intake-dialog-backdrop" @keydown.esc="closeCatalog">
+    <section role="dialog" aria-modal="true" :aria-label="catalogDialog === 'customer' ? '新增客户档案' : '新增材质'" class="intake-catalog-dialog">
+      <h2>{{ catalogDialog === 'customer' ? '新增客户档案' : '新增材质' }}</h2>
+      <label v-if="catalogDialog === 'customer'" class="field"><span>客户名称</span><input v-model="newCustomerName" aria-label="新增客户名称" :disabled="catalogSaving" /></label>
+      <label v-else class="field"><span>材质名称</span><input v-model="newMaterialName" aria-label="新增材质名称" :disabled="catalogSaving" /></label>
+      <p v-if="catalogError" role="alert">{{ catalogError }}</p>
+      <button type="button" class="primary-button" :disabled="catalogSaving" @click="catalogDialog === 'customer' ? addCustomer() : addMaterial()">保存并选回</button>
+      <button type="button" class="secondary-button" :disabled="catalogSaving" @click="closeCatalog">取消</button>
+    </section>
+  </div>
   <section ref="entryPanel" class="section-block intake-create">
     <div class="section-heading">
       <div>
@@ -628,7 +612,7 @@ onMounted(loadCatalog);
     </div>
     <p v-if="newExpressCode">运单号 {{ newExpressCode }}</p>
     <p v-if="intakePurpose === 'prep'">先寄存不建立加工母单，不产生加工费；下方单独登记备料。</p>
-    <p v-else-if="field">草稿尚未建单，填好资料后点击“生成母单”。</p>
+    <p v-else-if="field">草稿尚未建单，填好资料后点击“确认建单并入库”。</p>
     <p>照片或视频可稍后补传，不影响建单。</p>
     <label class="field"><span>收货用途</span><select v-model="intakePurpose" aria-label="收货用途"><option value="processing">现在加工，建立母单</option><option value="prep">先寄存备料</option></select></label>
     <div v-show="intakePurpose === 'processing'" class="intake-form" :inert="intakePurpose !== 'processing' || undefined">
@@ -647,36 +631,32 @@ onMounted(loadCatalog);
       <label class="field">
         <span>客户</span>
         <FilterSelect
+          preserve-selection-on-query
           :model-value="customerId == null ? '' : String(customerId)"
           :options="customerOptions"
           field-label="客户"
           placeholder="输入名称、编号或别称筛选"
           empty-text="没有匹配的客户"
+          :create-label="canManageData ? '新增客户档案' : ''"
+          @create="openCatalog('customer', $event)"
           @update:model-value="selectCustomer"
           @update:query="customerSearch = $event"
         />
       </label>
-      <div v-if="canManageData" class="catalog-create">
-        <span>新增客户档案</span>
-        <input v-model="newCustomerName" aria-label="新增客户名称" placeholder="没有这家客户时填写名称，或直接用上方已输入的筛选词" />
-        <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addCustomer">新增客户档案</button>
-      </div>
       <label class="field">
         <span>材质</span>
         <FilterSelect
+          preserve-selection-on-query
           v-model="materialCode"
           :options="materialOptions"
           field-label="材质"
           placeholder="输入名称、编码或别称筛选"
           empty-text="没有匹配的材质"
+          :create-label="canManageData ? '新增材质' : ''"
+          @create="openCatalog('material', $event)"
           @update:query="materialSearch = $event"
         />
       </label>
-      <div v-if="canManageData" class="catalog-create">
-        <span>新增材质</span>
-        <input v-model="newMaterialName" aria-label="新增材质名称" placeholder="没有这种材质时填写名称，或直接用上方已输入的筛选词" />
-        <button type="button" class="secondary-button" :disabled="catalogSaving" @click="addMaterial">新增材质</button>
-      </div>
       <label class="field">
         <span>货品名称</span>
         <input v-model="goodsName" type="text" aria-label="货品名称" />
@@ -695,11 +675,14 @@ onMounted(loadCatalog);
         <label class="field">
           <span>材质</span>
           <FilterSelect
+          preserve-selection-on-query
             v-model="line.materialCode"
             :options="materialOptions"
             :field-label="`明细${index + 2}材质`"
             placeholder="输入名称、编码或别称筛选"
             empty-text="没有匹配的材质"
+            :create-label="canManageData ? '新增材质' : ''"
+            @create="openCatalog('material', $event, line)"
           />
         </label>
         <label class="field"><span>货品名称</span><input v-model="line.goodsName" :aria-label="`明细${index + 2}货品名称`" /></label>
@@ -719,18 +702,17 @@ onMounted(loadCatalog);
         v-model:template-code="requirementTemplateCode"
         v-model:template-version="requirementTemplateVersion"
         :shortcuts="shortcuts"
-        :can-manage="canManageData"
-        @add-shortcut="addShortcut"
-        @remove-shortcut="deleteShortcut"
+
       />
       <label class="field">
         <span>完成期限</span>
         <input v-model="dueDate" type="date" aria-label="完成期限" />
       </label>
-      <p>核对最终要求后生成母单；上传失败可单独重试，不重复建单。</p>
+      <div aria-label="建单核对摘要"><strong>{{ customerName || '未选客户' }}</strong><p v-for="(line, index) in [{ materialCode, goodsName, quantity, quantityUnit, weight }, ...extraLines]" :key="index">明细 {{ index + 1 }}：{{ materials.find(m => m.materialCode === line.materialCode)?.name || '未选材质' }} · {{ line.goodsName || '未填货品' }} · {{ line.quantity }} {{ line.quantityUnit }} ／ {{ line.weight || '未称量' }} 克</p></div>
+      <p>核对最终要求后确认建单并入库；上传失败可单独重试，不重复建单。</p>
       <button class="secondary-button intake-stage-back" type="button" @click="formStage = 1">返回客户来料</button>
       <button v-if="!field" class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
-        {{ submitting ? '正在生成' : '生成母单' }}
+        {{ submitting ? '正在建单并入库' : '确认建单并入库' }}
       </button>
       </fieldset>
     </div>
@@ -798,12 +780,14 @@ onMounted(loadCatalog);
   <div v-if="intakePurpose === 'processing' && field && draftAvailable && !created" class="field-dock intake-create">
     <button v-if="formStage === 1" class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="nextFormStage">下一步：要求与证据</button>
     <button v-else class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
-      {{ submitting ? '正在生成' : '生成母单' }}
+      {{ submitting ? '正在建单并入库' : '确认建单并入库' }}
     </button>
   </div>
 </template>
 
 <style scoped>
+.intake-dialog-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: #0006; }
+.intake-catalog-dialog { width: min(460px, 100%); max-height: 90vh; overflow: auto; padding: 24px; background: var(--content); border-radius: 12px; }
 .intake-draft, .intake-saved { min-width: 0; scroll-margin-top: 20px; overflow-wrap: anywhere; }
 .catalog-create { display: grid; gap: 8px; }
 .catalog-create span { color: var(--muted); font-size: 12px; }

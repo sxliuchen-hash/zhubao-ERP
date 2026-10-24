@@ -195,7 +195,7 @@ function submitShortcut() {
         <button type="button" class="shortcut-phrase" role="checkbox" :aria-checked="steps.includes(item.phrase)" :aria-label="`填入快捷词 ${item.phrase}`" @click="steps.includes(item.phrase) ? removeStep(steps.indexOf(item.phrase)) : addStep(item.phrase)">{{ steps.includes(item.phrase) ? '☑' : '☐' }} {{ item.phrase }}</button>
         <button v-if="canManage" type="button" class="shortcut-remove" :aria-label="`删除快捷词 ${item.phrase}`" @click="emit('remove-shortcut', item)">×</button>
       </span>
-      <p v-if="!phrases.length" class="empty-hint">还没有快捷词。有档案维护权限时可以添加常用加工要求。</p>
+      <p v-if="!phrases.length" class="empty-hint">还没有快捷词，可在基础资料管理中维护常用加工要求。</p>
     </div>
     <details v-if="canManage" class="info-disclosure"><summary>维护快捷词</summary>
     <div class="catalog-create">
@@ -204,11 +204,13 @@ function submitShortcut() {
       <button type="button" class="secondary-button" @click="submitShortcut">添加快捷词</button>
     </div>
     </details>
+    <details class="info-disclosure"><summary>自定义本单步骤</summary>
     <label>
       <span>自定义步骤</span>
       <input v-model="customStep" aria-label="自定义加工步骤" placeholder="例如：车形（车成珠型）" @keydown.enter.prevent="addStep(customStep); customStep = ''" />
     </label>
     <button type="button" class="secondary-button" @click="addStep(customStep); customStep = ''">加入步骤</button>
+    </details>
     <ol v-if="steps.length" class="composer-steps" aria-label="已选加工步骤">
       <li v-for="(step, index) in steps" :key="`${step}-${index}`">
         <span>{{ index + 1 }}. {{ step }}</span>

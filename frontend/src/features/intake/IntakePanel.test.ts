@@ -151,7 +151,7 @@ describe('收货面板', () => {
     expect(submitMobileIntake).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('尚无正式单号，文件留在当前表单');
 
-    const create = () => wrapper.findAll('button').find((button) => button.text() === '生成母单');
+    const create = () => wrapper.findAll('button').find((button) => button.text() === '确认建单并入库');
     await create()!.trigger('click');
     await flushPromises();
     await create()!.trigger('click');
@@ -197,7 +197,7 @@ describe('收货面板', () => {
     });
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
-    const create = wrapper.findAll('button').find((button) => button.text() === '生成母单');
+    const create = wrapper.findAll('button').find((button) => button.text() === '确认建单并入库');
     await create!.trigger('click');
     await flushPromises();
 
@@ -229,7 +229,7 @@ describe('收货面板', () => {
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
     await pickEvidence(wrapper, 'unpack.jpg', 'image/jpeg');
-    const create = wrapper.findAll('button').find((button) => button.text() === '生成母单');
+    const create = wrapper.findAll('button').find((button) => button.text() === '确认建单并入库');
     await create!.trigger('click');
     await flushPromises();
 
@@ -248,7 +248,7 @@ describe('收货面板', () => {
     vi.mocked(lookupMobileIntake).mockRejectedValue(new Error('网络中断'));
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
-    const create = () => wrapper.findAll('button').find((button) => button.text() === '生成母单');
+    const create = () => wrapper.findAll('button').find((button) => button.text() === '确认建单并入库');
     await create()!.trigger('click');
     await flushPromises();
 
@@ -291,7 +291,7 @@ describe('收货面板', () => {
     expect(wrapper.text()).not.toContain('已保存');
 
     await wrapper.get('.field-dock button').trigger('click');
-    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '确认建单并入库')!.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('已保存');
     expect(wrapper.text()).toContain('恒信珠宝');
@@ -312,7 +312,7 @@ describe('收货面板', () => {
     });
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
-    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '确认建单并入库')!.trigger('click');
     await flushPromises();
     expect(wrapper.get('[aria-label="已保存母单"]').text()).toContain('MD-DESKTOP-1');
     expect(wrapper.get('[aria-label="打开标签"]').text()).toContain('预览并打印');
@@ -327,7 +327,7 @@ describe('收货面板', () => {
     vi.mocked(lookupMobileIntake).mockImplementation(() => new Promise(resolve => { finishLookup = resolve; }));
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
-    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '确认建单并入库')!.trigger('click');
     await flushPromises();
     await wrapper.get('[aria-label="快递单号"]').setValue('SF-NEW');
     finishLookup({ found: true, motherOrderCode: 'MD-OLD', courierNo: 'SF1048329001', customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20', goodsName: '戒托' });
@@ -348,24 +348,35 @@ describe('收货面板', () => {
     });
     await flushPromises();
     await wrapper.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
-    expect(wrapper.text()).toContain('新增客户档案');
-    expect(wrapper.text()).toContain('新增材质');
-
-    await wrapper.findAll('button').find((button) => button.text() === '新增客户档案')!.trigger('click');
-    expect(wrapper.text()).toContain('请填写要新增的客户名称');
-
+    expect(wrapper.find('[aria-label="新增客户名称"]').exists()).toBe(false);
     await wrapper.get('[aria-label="客户"]').setValue('翠玉坊');
-    await wrapper.findAll('button').find((button) => button.text() === '新增客户档案')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '新增客户档案')!.trigger('click');
+    await wrapper.get('[role="dialog"] button').trigger('click');
     await flushPromises();
     expect(saveCustomer).toHaveBeenCalledWith(expect.objectContaining({ name: '翠玉坊', customerId: 0 }));
     expect((wrapper.get('[aria-label="客户"]').element as HTMLInputElement).value).toContain('翠玉坊');
-    expect(wrapper.text()).toContain('已新增客户档案「翠玉坊」');
-
-    await wrapper.get('[aria-label="材质"]').setValue('翡翠');
-    await wrapper.findAll('button').find((button) => button.text() === '新增材质')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '增加材质明细')!.trigger('click');
+    await wrapper.get('[aria-label="明细2材质"]').setValue('翡翠');
+    await wrapper.findAll('button').find(button => button.text() === '新增材质')!.trigger('click');
+    await wrapper.get('[role="dialog"] button').trigger('click');
     await flushPromises();
     expect(saveMaterial).toHaveBeenCalledWith(expect.objectContaining({ name: '翡翠' }));
-    expect((wrapper.get('[aria-label="材质"]').element as HTMLInputElement).value).toContain('翡翠');
+    expect((wrapper.get('[aria-label="明细2材质"]').element as HTMLInputElement).value).toContain('翡翠');
+    expect((wrapper.get('[aria-label="材质"]').element as HTMLInputElement).value).toBe('');
+    wrapper.unmount();
+  });
+
+  it('取消快捷新增保留原选择、来料和照片', async () => {
+    const wrapper = mount(IntakePanel, { props: { title: '收料', intro: '' }, global: { provide: { 'zhubao-auth-session': ref({ role: 'RECEIVER' }) } } });
+    await fillNewWaybill(wrapper);
+    await pickEvidence(wrapper, 'keep.webm', 'video/webm');
+    await wrapper.get('[aria-label="材质"]').setValue('新材质');
+    await wrapper.findAll('button').find(button => button.text() === '新增材质')!.trigger('click');
+    await wrapper.findAll('[role="dialog"] button').find(button => button.text() === '取消')!.trigger('click');
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(wrapper.getComponent(EvidenceCapture).text()).toContain('keep.webm');
+    expect((wrapper.get('[aria-label="重量"]').element as HTMLInputElement).value).toBe('2.5');
+    expect(wrapper.findAllComponents({ name: 'FilterSelect' })[1].props('modelValue')).toBe('AU9999');
     wrapper.unmount();
   });
 
@@ -399,8 +410,9 @@ describe('收货面板', () => {
     });
     await flushPromises();
     await allowed.get('[aria-label="收货来源"]').setValue('CUSTOMER_DELIVERY');
+    await allowed.get('[aria-label="客户"]').trigger('focus');
     expect(allowed.text()).toContain('新增客户档案');
-    expect(allowed.find('[aria-label="新快捷词"]').exists()).toBe(true);
+    expect(allowed.find('[aria-label="新快捷词"]').exists()).toBe(false);
     allowed.unmount();
   });
 
@@ -466,18 +478,8 @@ describe('收货面板', () => {
     await wrapper.get('[aria-label="填入快捷词 镜面抛光"]').trigger('click');
     expect((wrapper.get('[aria-label="加工要求"]').element as HTMLTextAreaElement).value).toBe('倒模');
 
-    await wrapper.get('[aria-label="新快捷词"]').setValue('改圈');
-    await wrapper.findAll('button').find((button) => button.text() === '添加快捷词')!.trigger('click');
-    await flushPromises();
-    expect(saveShortcut).toHaveBeenCalledWith('改圈');
-    expect(wrapper.text()).toContain('已添加快捷词「改圈」');
-
-    expect(wrapper.get('[aria-label="删除快捷词 镜面抛光"]').text()).toBe('×');
-    expect(wrapper.text()).not.toContain('移除');
-    await wrapper.get('[aria-label="删除快捷词 镜面抛光"]').trigger('click');
-    await flushPromises();
-    expect(removeShortcut).toHaveBeenCalledWith(3);
-    expect(wrapper.find('[aria-label="填入快捷词 镜面抛光"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="新快捷词"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="删除快捷词 镜面抛光"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -512,7 +514,7 @@ describe('收货面板', () => {
     await wrapper.get('[aria-label="货品名称"]').setValue('戒托');
     await wrapper.get('[aria-label="数量"]').setValue('1');
     await wrapper.get('[aria-label="重量"]').setValue('2.5');
-    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '确认建单并入库')!.trigger('click');
     await flushPromises();
     expect(submitMobileIntake).toHaveBeenCalledWith(expect.objectContaining({
       processingRequirement: preview,
@@ -538,7 +540,7 @@ describe('收货面板', () => {
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
     await wrapper.get('[aria-label="加工要求"]').setValue('长'.repeat(501));
-    await wrapper.findAll('button').find((button) => button.text() === '生成母单')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '确认建单并入库')!.trigger('click');
     await flushPromises();
     expect(submitMobileIntake).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('加工要求超过 500 字');

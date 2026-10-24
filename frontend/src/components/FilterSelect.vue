@@ -14,14 +14,19 @@ const props = withDefaults(defineProps<{
   fieldLabel: string;
   placeholder?: string;
   emptyText?: string;
+  createLabel?: string;
+  preserveSelectionOnQuery?: boolean;
 }>(), {
   placeholder: '输入关键字筛选',
   emptyText: '没有匹配项',
+  createLabel: '',
+  preserveSelectionOnQuery: false,
 });
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'update:query': [value: string];
+  create: [query: string];
 }>();
 
 const listId = useId();
@@ -73,7 +78,7 @@ function onInput(event: Event) {
   open.value = true;
   activeIndex.value = 0;
   emit('update:query', value);
-  if (props.modelValue && value.trim() !== selected.value?.label) {
+  if (!props.preserveSelectionOnQuery && props.modelValue && value.trim() !== selected.value?.label) {
     emit('update:modelValue', '');
   }
 }
@@ -149,6 +154,7 @@ function onKeydown(event: KeyboardEvent) {
         </button>
       </li>
       <li v-if="!filtered.length" class="combo-empty">{{ emptyText }}</li>
+      <li v-if="createLabel"><button class="combo-option" type="button" @click="emit('create', query); open = false">{{ createLabel }}</button></li>
     </ul>
   </div>
 </template>
