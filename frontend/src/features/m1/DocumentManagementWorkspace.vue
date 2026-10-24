@@ -357,7 +357,7 @@ async function uploadEvidence() {
   <div class="page-stack document-page desk-page" :class="{ 'is-detail': detailOpen }">
     <section class="operations-hero document-hero">
       <div class="hero-copy">
-        <h2>附件</h2>
+        <h1>附件</h1>
         <p>查看单据照片、称重记录和视频，缺的证据从这里补上。</p>
       </div>
       <div class="hero-kpis">
@@ -648,6 +648,7 @@ async function uploadEvidence() {
 </template>
 
 <style scoped>
+.document-hero h1 { margin: 0; font-size: 24px; }
 .document-upload-console label { min-width: 0; max-width: 100%; }
 .document-upload-console select,
 .document-upload-console input { box-sizing: border-box; min-width: 0; width: 100%; max-width: 100%; }

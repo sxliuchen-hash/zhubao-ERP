@@ -5,6 +5,7 @@ import UpgradeNotice from './UpgradeNotice.vue';
 defineProps<{
   title: string;
   location?: string;
+  headingInContent?: boolean;
 }>();
 
 const traceQuery = defineModel<string>('traceQuery', { default: '' });
@@ -99,7 +100,7 @@ function toggleCollapsed() {
 
       <UpgradeNotice />
 
-      <header class="workspace-header ops-page-header review-page-header lean-header">
+      <header v-if="!headingInContent" class="workspace-header ops-page-header review-page-header lean-header">
         <p v-if="location && location !== title" class="page-location">{{ location }}</p>
         <h1>{{ title }}</h1>
       </header>

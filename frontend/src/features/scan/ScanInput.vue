@@ -261,6 +261,13 @@ async function onPhoto(event: Event) {
   width: 100%;
 }
 
+.scan-entry input[type="file"] {
+  width: 1px;
+  max-width: 1px;
+  height: 1px;
+  min-height: 0;
+}
+
 .scan-camera-button {
   width: 100%;
   min-height: 56px;

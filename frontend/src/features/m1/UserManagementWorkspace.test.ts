@@ -66,6 +66,7 @@ describe('用户管理', () => {
     await flushPromises();
     expect(upsertAuthAccount).toHaveBeenCalledWith({
       username: 'new-user', operator: '李四', password: 'TemporaryPass2026', role: 'OPERATOR', dataScope: 'SELF',
+      teamCode: '', departmentCode: '',
       customerScope: [], allowedProcesses: [], coverDuties: [], enabled: true, demoAccount: false,
     });
     expect(wrapper.text()).toContain('已保存用户 new-user');

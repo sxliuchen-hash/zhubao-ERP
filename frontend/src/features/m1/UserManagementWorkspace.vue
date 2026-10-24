@@ -195,7 +195,7 @@ async function removeAccount(account: AuthUserAccountSummary) {
     <template v-else>
       <section class="section-block">
         <div class="section-heading">
-          <div><h2>用户管理</h2><p>管理账号、角色与数据权限，保存后直接生效。</p></div>
+          <div><h1>用户管理</h1><p>管理账号、角色与数据权限，保存后直接生效。</p></div>
           <div class="user-actions">
             <button type="button" class="secondary-button" :disabled="busy || loading" @click="reload">刷新</button>
             <button type="button" class="primary-button" :disabled="busy || loading || !!loadError" @click="openEditor()">新增用户</button>
@@ -306,6 +306,7 @@ async function removeAccount(account: AuthUserAccountSummary) {
 
 <style scoped>
 .user-management-workspace { display: grid; gap: 18px; }
+.user-management-workspace h1 { margin: 0; font-size: 24px; }
 .user-actions, .user-checks, .user-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .user-filters { margin: 16px 0; }
 .user-filters label, .user-form-grid > label { display: grid; gap: 6px; min-width: 0; align-content: start; }

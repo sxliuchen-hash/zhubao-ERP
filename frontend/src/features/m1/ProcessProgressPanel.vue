@@ -216,7 +216,7 @@ async function loadHistory() {
 .process-progress-panel { display: grid; gap: 12px; }
 .process-progress-panel fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .process-progress-panel label { display: grid; gap: 6px; }
-.process-progress-panel input, .process-progress-panel select { box-sizing: border-box; width: 100%; min-width: 0; }
+.process-progress-panel input:not([type="file"]), .process-progress-panel select { box-sizing: border-box; width: 100%; min-width: 0; }
 .progress-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
-@media (max-width: 900px) { .process-progress-panel input, .process-progress-panel select { font-size: 16px; min-height: 44px; } .process-progress-panel button { min-height: 44px; } }
+@media (max-width: 900px) { .process-progress-panel input:not([type="file"]), .process-progress-panel select { font-size: 16px; min-height: 44px; } .process-progress-panel button { min-height: 44px; } }
 </style>

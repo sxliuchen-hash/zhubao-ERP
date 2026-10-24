@@ -61,6 +61,7 @@ const workspaceLoaders = {
 const workspaceLoadAttempt = ref(0);
 provide('zhubao-retry-workspace', () => { workspaceLoadAttempt.value += 1; });
 const systemShellKeys = new Set<TabKey>(['approvals', 'sample', 'documents', 'hardware', 'users', 'configuration', 'operations', 'mobile']);
+const contentHeadingKeys = new Set<TabKey>(['customers', 'finance', 'documents', 'users']);
 const activeWorkspace = computed(() => {
   // 重建异步组件以重新请求失败的页面，已加载模块由浏览器缓存复用。
   void workspaceLoadAttempt.value;
@@ -367,7 +368,7 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     </section>
   </div>
   <LoginPage v-else-if="!authSession || authSession.passwordChangeRequired" :session="authSession" />
-  <AppShell v-else v-model:trace-query="traceQuery" :inert="orderActionOpen || undefined" :title="activeTitle" :location="activeLocation" :class="{ 'system-workspace-shell': !orderWorkspaceOpen && activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
+  <AppShell v-else v-model:trace-query="traceQuery" :inert="orderActionOpen || undefined" :title="activeTitle" :location="activeLocation" :heading-in-content="!orderWorkspaceOpen && contentHeadingKeys.has(activeTab)" :class="{ 'system-workspace-shell': !orderWorkspaceOpen && activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
     <template #session>
       <div class="top-session">
         <span>{{ authSession?.operator }}</span>
