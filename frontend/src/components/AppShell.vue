@@ -80,7 +80,7 @@ function toggleCollapsed() {
           <span class="brand-mark" aria-hidden="true">Z</span>
           <div>
             <strong>{{ title }}</strong>
-            <span v-if="location && location !== title">{{ location }}</span>
+            <span>{{ title === '工作台' ? '来料加工 · 我的工作' : '来料加工' }}</span>
           </div>
         </div>
         <p class="crumb"><span>来料加工</span><b>{{ title }}</b></p>
@@ -88,8 +88,13 @@ function toggleCollapsed() {
         <div class="context-stack">
           <span>{{ businessDate }}</span>
         </div>
+        <button class="trace-toggle" type="button" aria-label="查单" :aria-expanded="traceOpen ? 'true' : 'false'" aria-controls="trace-search" @click="traceOpen = !traceOpen">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4 4" />
+          </svg>
+        </button>
         <slot name="session" />
-        <button class="trace-toggle" type="button" :aria-expanded="traceOpen ? 'true' : 'false'" aria-controls="trace-search" @click="traceOpen = !traceOpen">查单</button>
         <label id="trace-search" class="global-search lean-search" :class="{ 'is-open': traceOpen }">
           <span class="trace-label">查单</span>
           <input

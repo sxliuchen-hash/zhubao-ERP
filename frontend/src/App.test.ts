@@ -86,7 +86,8 @@ describe('App', () => {
     expect(wrapper.find('.ops-nav').text()).toContain('配置');
     expect(wrapper.find('.ops-nav').text()).toContain('运维');
     expect(wrapper.find('.ops-nav').text()).toContain('手机作业');
-    expect(wrapper.get('.page-location').text()).toBe('工作台');
+    expect(wrapper.get('h1').text()).toBe('工作台');
+    expect(wrapper.find('.page-location').exists()).toBe(false);
     expect(wrapper.get('.mobile-tabbar').text()).toContain('待办');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('订单');
     expect(wrapper.get('.mobile-tabbar').text()).toContain('库存');
@@ -152,7 +153,7 @@ describe('App', () => {
       await flushPromises();
 
       expect(wrapper.get('.mobile-tab[data-mobile-tab="dashboard"]').classes()).toContain('active');
-      expect(wrapper.get('.mobile-brand strong').text()).toBe('首页');
+      expect(wrapper.get('.mobile-brand strong').text()).toBe('工作台');
       expect(wrapper.get('.mobile-tabbar').text()).toContain('订单');
       wrapper.unmount();
     } finally {
@@ -409,7 +410,7 @@ describe('App', () => {
     const beforeScan = vi.mocked(fetchOrderWorkspace).mock.calls.length;
     await wrapper.get('[aria-label="扫码"]').trigger('click');
     expect(scan).toHaveBeenCalledOnce();
-    expect(wrapper.get('h1').text()).toBe('首页');
+    expect(wrapper.get('h1').text()).toBe('工作台');
     expect(fetchOrderWorkspace).toHaveBeenCalledTimes(beforeScan);
     unbindMobileScanTarget(scan);
     wrapper.unmount();

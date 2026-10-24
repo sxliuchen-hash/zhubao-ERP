@@ -339,5 +339,12 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .user-checks, .user-permissions { margin-bottom: 16px; }
 .user-permissions ul { display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .user-editor { scroll-margin-top: 20px; }
-@media (max-width: 640px) { .section-heading { flex-wrap: wrap; gap: 12px; } .user-filters label { flex: 1; } .user-form-grid, .password-fields { grid-template-columns: 1fr; max-width: none; } }
+@media (max-width: 640px) {
+  .section-heading { flex-wrap: wrap; gap: 12px; }
+  .section-heading p { display: none; }
+  .user-filters label { flex: 1 1 calc(50% - 8px); max-width: calc(50% - 4px); min-width: 0; }
+  .user-form-grid, .password-fields { grid-template-columns: 1fr 1fr; max-width: none; }
+  .user-form-grid > label:has(textarea) { grid-column: 1 / -1; }
+  .user-permissions ul { grid-template-columns: 1fr 1fr; }
+}
 </style>

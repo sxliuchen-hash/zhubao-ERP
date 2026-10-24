@@ -87,6 +87,14 @@
   .ops-workspace :is(.inbound-work-grid, .production-work-grid, .quality-work-grid, .inventory-work-grid, .command-grid-v2) > * { grid-area: auto; }
 }
 @container business-workspace (max-width: 560px) {
-  .finance-workspace > .section-block > label { max-width: none; flex-basis: 100%; }
+  .finance-workspace > .section-block > label,
+  :is(.finance-workspace, .progress-board) :is(.finance-actions, .finance-filters) label {
+    flex: 1 1 calc(50% - 8px);
+    max-width: calc(50% - 8px);
+  }
+  .finance-workspace .account-admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-workspace .account-admin-grid > :has(textarea) { grid-column: 1 / -1; }
+  .finance-page-head .finance-crumb,
+  .finance-page-head .finance-note { display: none; }
   .timeline article { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }

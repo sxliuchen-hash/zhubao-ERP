@@ -492,7 +492,7 @@ function money(value: number) {
 .archive-form input,
 .archive-form textarea,
 .archive-toolbar input { width: 100%; }
-.archive-toolbar { align-items: end; }
+.archive-toolbar { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
 .archive-list { display: grid; gap: 6px; max-height: 480px; overflow: auto; }
 .archive-row {
   display: flex;
@@ -511,6 +511,7 @@ function money(value: number) {
 .archive-note { color: var(--muted); margin: 0; }
 .archive-form textarea { min-height: 72px; }
 @media (max-width: 800px) {
+  .archive-page > header p { display: none; }
   .archive-layout { grid-template-columns: minmax(0, 1fr); }
   .customer-back { display: inline-flex; }
   .has-customer-detail .customer-list-panel, .customer-fact:not(.is-current) { display: none; }

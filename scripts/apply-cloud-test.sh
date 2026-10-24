@@ -82,7 +82,7 @@ data["deployedAt"] = datetime.now(timezone.utc).isoformat()
 data["frontendDeployedAt"] = data["deployedAt"]
 data["rollbackDirectory"] = rel + "/rollback"
 data["frontendRollbackDirectory"] = rel + "/rollback"
-data["note"] = "2026-10-24 进度、出货、流水、改单、客户、分单、待办和硬件表单短字段改为两列；无新迁移，MySQL 未重建"
+data["note"] = "2026-10-24 来料、生产、质量、财务、用户、标签、收款和单据维护的短字段改为两列；无新迁移，MySQL 未重建"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 

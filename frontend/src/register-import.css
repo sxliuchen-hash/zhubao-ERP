@@ -187,7 +187,10 @@
   .sample-control-workbench .register-kpi-strip { grid-template-columns: minmax(0, 1fr); }
   .sample-control-workbench .register-kpi-strip article { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   .sample-control-workbench .register-kpi-strip small { grid-column: 1 / -1; }
-  .register-preview-controls, .register-correction-panel { grid-template-columns: minmax(0, 1fr); }
-  .register-preview-controls label:has(input[type="file"]) { grid-column: auto; }
+  .register-preview-controls, .register-correction-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .register-preview-controls label:has(input[type="file"]),
+  .register-preview-controls button,
+  .register-correction-panel > button,
+  .register-correction-panel label:has(textarea) { grid-column: 1 / -1; }
   .register-preview-controls button { width: 100%; }
 }

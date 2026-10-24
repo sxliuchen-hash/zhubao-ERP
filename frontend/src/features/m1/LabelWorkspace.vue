@@ -933,8 +933,11 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
     max-width: 100%;
   }
 
-  .label-layout,
-  .field-row { grid-template-columns: minmax(0, 1fr); }
+  .label-layout { grid-template-columns: minmax(0, 1fr); }
+  .field-row, .editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .field-row > .field-actions,
+  .field-row > .link-button,
+  .editor-grid > label:has(textarea) { grid-column: 1 / -1; }
 
   .field input[type='text'],
   .field input[type='number'],

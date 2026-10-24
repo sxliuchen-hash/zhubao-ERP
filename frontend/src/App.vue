@@ -121,6 +121,11 @@ provide('zhubao-open-order', (target: Omit<TraceTarget, 'intent' | 'token'>) => 
   openOrders();
 });
 const authSession = ref<AuthSession | null>(null);
+const sessionMark = computed(() => {
+  const name = authSession.value?.operator?.trim() ?? '';
+  const last = name.split(/\s+/).filter(Boolean).at(-1) ?? '';
+  return last.slice(0, 1) || '我';
+});
 provide('zhubao-auth-session', authSession);
 const authReady = ref(false);
 const authRestoreError = ref('');
@@ -150,7 +155,15 @@ const dailyNavigation = computed(() => navigationGroups.value.filter(group => !s
 const supportNavigation = computed(() => navigationGroups.value.filter(group => supportSectionIds.has(group.id)));
 const activeTabMeta = computed(() => visibleTabs.value.find((tab) => tab.key === activeTab.value) ?? visibleTabs.value[0]);
 const activeOrderView = computed(() => workspace.orderView.value ?? 'ORDERS');
-const activeTitle = computed(() => orderWorkspaceOpen.value ? activeOrderView.value === 'PRODUCTION' ? '生产作业' : activeOrderView.value === 'QUALITY' ? '质量作业' : '订单中心' : activeTabMeta.value?.label ?? '首页');
+const activeTitle = computed(() => {
+  if (orderWorkspaceOpen.value) {
+    if (activeOrderView.value === 'PRODUCTION') return '生产作业';
+    if (activeOrderView.value === 'QUALITY') return '质量作业';
+    return '订单中心';
+  }
+  if (!activeTabMeta.value || activeTabMeta.value.key === 'dashboard') return '工作台';
+  return activeTabMeta.value.label;
+});
 const activeLocation = computed(() => orderWorkspaceOpen.value ? activeOrderView.value === 'PRODUCTION' ? '生产作业' : activeOrderView.value === 'QUALITY' ? '质量作业' : '订单' : sectionLabel(sectionOfTab(activeTabMeta.value?.key ?? 'dashboard')));
 const showDeskTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'dashboard'));
 const showInventoryTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'inventory'));
@@ -374,8 +387,15 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
   <AppShell v-else v-model:trace-query="traceQuery" :inert="orderActionOpen || undefined" :title="activeTitle" :location="activeLocation" :heading-in-content="!orderWorkspaceOpen && contentHeadingKeys.has(activeTab)" :class="{ 'system-workspace-shell': !orderWorkspaceOpen && activeTabMeta ? systemShellKeys.has(activeTabMeta.key) : false }" @open-trace="openTraceDocument">
     <template #session>
       <div class="top-session">
-        <span>{{ authSession?.operator }}</span>
-        <button class="secondary-button" type="button" @click="handleLogout">退出</button>
+        <span class="session-name">{{ authSession?.operator }}</span>
+        <button class="secondary-button session-logout" type="button" @click="handleLogout">退出</button>
+        <details class="session-menu">
+          <summary class="session-avatar" :aria-label="`${authSession?.operator || '当前账号'}，账号与退出`">{{ sessionMark }}</summary>
+          <div class="session-panel">
+            <span class="session-name">{{ authSession?.operator }}</span>
+            <button class="secondary-button session-logout" type="button" @click="handleLogout">退出</button>
+          </div>
+        </details>
       </div>
     </template>
 
@@ -406,7 +426,11 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
         </button>
       </div>
       <button class="mobile-scan-key" type="button" aria-label="扫码" @click="startDockScan">
-        <span class="mobile-scan-finder" aria-hidden="true"></span>
+        <span class="mobile-scan-finder" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M8 4H4v4M16 4h4v4M4 16v4h4M20 16v4h-4M7 12h10" />
+          </svg>
+        </span>
         <span>扫码</span>
       </button>
       <div class="mobile-tab-cluster">

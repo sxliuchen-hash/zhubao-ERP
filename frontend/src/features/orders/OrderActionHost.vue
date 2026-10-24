@@ -153,7 +153,9 @@ defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShi
           <div><h2>{{ title }}</h2><p>{{ activeKind === 'bill' ? `客户编号 ${target?.code}` : target ? `定位单据 ${target.code}` : activeKind === 'intake' ? '新建收货草稿' : '扫码选择作业单据' }} · 收起后保留本次填写和请求</p></div>
           <div class="order-action-top-actions">
             <button ref="closeButton" class="secondary-button" type="button" @click="close">收起表单</button>
-            <button v-if="needsScanner" class="secondary-button order-action-scan" aria-label="当前表单扫码" type="button" @click="openMobileScanTarget">扫码</button>
+            <button v-if="needsScanner" class="secondary-button order-action-scan" aria-label="当前表单扫码" type="button" @click="openMobileScanTarget">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M4 16v4h4M20 16v4h-4M7 12h10" /></svg>
+            </button>
           </div>
         </header>
         <div class="order-action-content">
@@ -184,6 +186,7 @@ defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShi
 .order-action-dialog > header > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .order-action-top-actions button { min-height: 44px; }
 .order-action-scan { display: none; }
+.order-action-scan svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .order-action-content { overflow-y: auto; overscroll-behavior: contain; padding: 20px; min-width: 0; }
-@media (max-width: 900px) { .order-action-scan { display: inline-flex; } .order-action-overlay { padding: 0; } .order-action-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; } .order-action-dialog > header { padding: calc(12px + env(safe-area-inset-top)) 12px 12px; } .order-action-dialog > header p, .order-action-content :deep(.section-heading), .order-action-content :deep(.compact-detail-grid), .order-action-content :deep(.quality-inspector-note) { display: none; } .order-action-content { padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); } }
+@media (max-width: 900px) { .order-action-scan { display: grid; width: 44px; place-items: center; padding: 0; } .order-action-overlay { padding: 0; } .order-action-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; } .order-action-dialog > header { padding: calc(12px + env(safe-area-inset-top)) 12px 12px; } .order-action-dialog > header p, .order-action-content :deep(.section-heading), .order-action-content :deep(.compact-detail-grid), .order-action-content :deep(.quality-inspector-note) { display: none; } .order-action-content { padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); } }
 </style>
