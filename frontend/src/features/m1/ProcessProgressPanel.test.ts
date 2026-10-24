@@ -124,7 +124,7 @@ describe('ProcessProgressPanel', () => {
     await wrapper.findAll('button').find((button) => button.text() === 'ZD-1')!.trigger('click');
     await flushPromises();
     expect(openProcessProgress).toHaveBeenCalledWith('ZD-1');
-    expect((wrapper.get('[aria-label="工序进度"]').element as HTMLSelectElement).value).toBe('60');
+    expect(wrapper.get('[aria-label="进度 60%"]').element).toHaveProperty('checked', true);
 
     const progressForm = wrapper.findAll('form').find((form) => form.text().includes('提交进度'));
     await progressForm!.trigger('submit');
@@ -260,7 +260,7 @@ describe('ProcessProgressPanel', () => {
     vi.mocked(submitProcessProgress).mockReturnValue(new Promise(resolve => { finish = resolve; }));
     const wrapper = mount(ProcessProgressPanel, { props: { initialCode: 'ZD-1' } });
     await flushPromises();
-    await wrapper.get('[aria-label="工序进度"]').setValue('100');
+    await wrapper.get('[aria-label="进度 100%"]').setValue(true);
     await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
     await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
     expect(submitProcessProgress).toHaveBeenCalledOnce();
@@ -310,7 +310,7 @@ describe('ProcessProgressPanel', () => {
   it('进度回退需要原因，普通岗位的独立改单中不展示财务确认字段', async () => {
     const wrapper = mount(ProcessProgressPanel, { props: { initialCode: 'ZD-1' } });
     await flushPromises();
-    await wrapper.get('[aria-label="工序进度"]').setValue('30');
+    await wrapper.get('[aria-label="进度 30%"]').setValue(true);
     await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
     expect(submitProcessProgress).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('进度回退必须填写原因');

@@ -18,6 +18,18 @@ vi.mock('../scan/ProgressNoteForm.vue', () => ({ default: { template: '<div data
 beforeEach(() => vi.mocked(queryScanContext).mockReset());
 
 describe('手机扫码订单详情', () => {
+  it('连接共享办理容器时只有一个报工入口，不能自行执行交工', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'WO-1', actions: [{ code: 'REPORT_PROCESS', allowed: true, blockKind: null, blockReason: null }] }));
+    const wrapper = mount(MobileOrderDetail, { props: { role: 'OPERATOR', unifiedProduction: true } });
+    await wrapper.get('[data-scan]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.mobile-order-actions .primary-button').text()).toBe('报工');
+    expect(wrapper.find('.mobile-order-actions').text()).not.toContain('更新工序进度');
+    expect(wrapper.find('.mobile-order-actions').text()).not.toContain('正式交工');
+    await wrapper.get('.mobile-order-actions .primary-button').trigger('click');
+    expect(wrapper.emitted('open')?.[0]).toEqual(['progress', { code: 'WO-1', objectType: 'WORK_ORDER' }]);
+    wrapper.unmount();
+  });
   it('操作工优先看到要求和进度操作，换号后旧单立即消失', async () => {
     const context = buildScanContext({
       objectType: 'WORK_ORDER', code: 'WO-1', customerName: '内部客户', goodsName: '戒指',

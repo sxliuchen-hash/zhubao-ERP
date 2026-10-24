@@ -349,6 +349,9 @@ public class OrderWorkspaceQueryService {
         }
         ProcessProgressHead head = heads.get(code + "|" + current);
         Integer percent = head != null && PERCENTS.contains(head.percent()) ? head.percent() : null;
+        if (WAITING_START.equals(status) && percent != null && percent > 0) {
+            status = IN_PROCESS;
+        }
         Integer version = head == null ? null : head.version();
         boolean delivered = done.contains(current);
         String operator = head != null && !blank(head.operator()).isEmpty()

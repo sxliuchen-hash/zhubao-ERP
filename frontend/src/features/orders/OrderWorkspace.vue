@@ -193,11 +193,8 @@ const detailActions = computed(() => {
   if (current.objectType === 'MOTHER_ORDER' && canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')) {
     items.push({ key: 'intake', label: '收货与拆单资料', run: () => go('inbound', 'INTAKE', 'BUSINESS_INBOUND_CONFIRM'), rank: 45 });
   }
-  if (openProduction && canWork.value) {
-    items.push({ key: 'progress', label: '更新工序进度', run: () => work('progress'), rank: 5 });
-  }
-  if (canWork.value && scan.context?.actions.some(action => action.code === 'REPORT_PROCESS' && action.allowed)) {
-    items.push({ key: 'station', label: '打开岗位交工', run: () => work('station'), rank: 6 });
+  if (canWork.value && selectedRow.value?.processFormallyDelivered !== true && (openProduction || scan.context?.actions.some(action => action.code === 'REPORT_PROCESS' && action.allowed))) {
+    items.push({ key: 'production', label: '报工', run: () => work(selectedRow.value?.processPercent === 100 ? 'station' : 'progress'), rank: 5 });
   }
   if (openOrderChange && current.motherOrderCode && tabs.value.includes('progress') && ['MOTHER_ORDER', 'WORK_ORDER'].includes(current.objectType)) {
     items.push({ key: 'change', label: '改单办理', run: changeOrder, rank: 50 });
@@ -214,10 +211,7 @@ const detailActions = computed(() => {
   return items.sort((left, right) => left.rank - right.rank);
 });
 const foregroundActions = computed(() => {
-  const ordered = detailActions.value;
-  const primary = ordered[0];
-  const station = primary?.key === 'progress' ? ordered.find(item => item.key === 'station') : undefined;
-  return [primary, station].filter((item): item is DetailAction => Boolean(item));
+  return detailActions.value.slice(0, 1);
 });
 const moreActions = computed(() => detailActions.value.filter(item => !foregroundActions.value.includes(item)));
 

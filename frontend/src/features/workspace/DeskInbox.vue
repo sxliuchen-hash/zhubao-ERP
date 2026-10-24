@@ -5,7 +5,7 @@ import { fetchPendingApprovalTasks } from '../../services/approvalApi';
 import type { OrderWorkspacePage, OrderWorkspaceRow } from '../../services/orderWorkspaceTypes';
 import type { ApprovalTask } from '../../data/approvalTaskData';
 import type { TraceTarget } from '../scan/traceTarget';
-import { orderFacetLabel, orderQuantityText } from '../orders/orderWorkspaceLabels';
+import { orderFacetLabel, orderProductionStatus, orderQuantityText } from '../orders/orderWorkspaceLabels';
 
 const tabs = inject<Ref<string[]>>('zhubao-visible-tabs', ref([]));
 const openOrders = inject<() => void>('zhubao-open-orders', () => {});
@@ -78,7 +78,7 @@ onBeforeUnmount(() => { disposed = true; orderGeneration += 1; approvalGeneratio
         <p v-if="!orders.items.length">当前分类暂无订单</p>
         <button v-for="row in orders.items" :key="row.rowKey" type="button" class="inbox-row" @click="select(row)">
           <span><strong>{{ row.goodsName || '货品未填写' }}</strong><small>{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次 {{ row.executionRoundCode }}</template></small><small>{{ row.currentProcess || '工序未提供' }} · {{ orderQuantityText(row.quantity, row.quantityUnit) }}</small></span>
-          <span><b>{{ row.businessStatus || orderFacetLabel(row.facet) }}</b><small>交期 {{ row.dueDate || '未填写' }}</small><small class="inbox-row-hint">查看要求与下一步</small></span>
+          <span><b>{{ orderProductionStatus(row) }}</b><small>交期 {{ row.dueDate || '未填写' }}</small><small class="inbox-row-hint">查看要求与下一步</small></span>
         </button>
       </template>
     </section>

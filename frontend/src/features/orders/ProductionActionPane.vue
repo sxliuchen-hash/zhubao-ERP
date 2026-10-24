@@ -11,32 +11,38 @@ const mode = ref<ProductionMode>(props.initialMode);
 const progressCreated = ref(false);
 const stationCreated = ref(false);
 const deliveredProcess = ref('');
+const progressLocked = ref(false);
+const stationLocked = ref(false);
+const locked = computed(() => progressLocked.value || stationLocked.value);
 provide('zhubao-scan-suspended', computed(() => !props.active));
-watch(() => props.entryRevision, () => { mode.value = props.initialMode; }, { immediate: true });
+watch(() => props.entryRevision, () => { if (!locked.value) mode.value = props.initialMode; }, { immediate: true });
 watch(mode, value => { if (value === 'progress') progressCreated.value = true; else stationCreated.value = true; }, { immediate: true });
 function delivered(result: ProcessStationReport) { deliveredProcess.value = result.processName; emit('changed'); }
+function switchMode(next: ProductionMode) { if (!locked.value) mode.value = next; }
 </script>
 
 <template>
   <div class="production-action-pane field-job page-stack" :inert="!active || undefined">
-    <p class="action-lead">当前目标 {{ target.code }}。工序进度与正式交工各自保存，不共用请求编号。</p>
+    <p class="action-lead">当前单据 {{ target.code }}</p>
     <nav class="production-modes" aria-label="工序办理方式">
-      <button class="secondary-button" type="button" :aria-pressed="mode === 'progress'" @click="mode = 'progress'">更新进度</button>
-      <button class="secondary-button" type="button" :aria-pressed="mode === 'station'" @click="mode = 'station'">正式交工</button>
+      <button class="secondary-button" type="button" :disabled="locked" :aria-pressed="mode === 'progress'" @click="switchMode('progress')">加工中，记进度<small>记录本工序做到哪里</small></button>
+      <button class="secondary-button" type="button" :disabled="locked" :aria-pressed="mode === 'station'" @click="switchMode('station')">已做完，去交工<small>核对整单后确认完成</small></button>
     </nav>
+    <p v-if="locked" class="info-context" role="status">当前请求正在提交或等待结果核对，请先处理原请求。</p>
     <div v-show="mode === 'progress'" :inert="mode !== 'progress' || undefined">
-      <ProcessProgressPanel v-if="progressCreated" embedded :initial-target="target" :formally-delivered-process="deliveredProcess" @saved="emit('changed')" @target-selected="emit('selected', $event, mode)" />
+      <ProcessProgressPanel v-if="progressCreated" embedded :initial-target="target" :formally-delivered-process="deliveredProcess" @saved="emit('changed')" @locked="progressLocked = $event" @handoff="switchMode('station')" @target-selected="emit('selected', $event, mode)" />
     </div>
     <div v-show="mode === 'station'" :inert="mode !== 'station' || undefined">
-      <ProductionPanel v-if="stationCreated" field embedded :initial-target="target" title="正式交工" intro="逐条核对本岗位要求，再按原单据数量和重量办理交付。" @saved="delivered" @target-selected="emit('selected', $event, mode)" />
+      <ProductionPanel v-if="stationCreated" field embedded :initial-target="target" title="完成本工序并交工" intro="核对要求、数量和重量后确认交工。" @saved="delivered" @locked="stationLocked = $event" @target-selected="emit('selected', $event, mode)" />
     </div>
   </div>
 </template>
 
 <style scoped>
 .action-lead { margin: 0; color: var(--muted); }
-.production-modes { display: flex; gap: 10px; flex-wrap: wrap; }
-.production-modes button { min-height: 44px; }
+.production-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.production-modes button { display: grid; gap: 5px; min-height: 64px; white-space: normal; text-align: left; }
+.production-modes small { font-size: 12px; font-weight: 400; color: var(--muted); }
 .production-modes button[aria-pressed="true"] { color: var(--action); background: var(--action-soft); }
 .production-action-pane { padding-bottom: 0; }
 .production-action-pane :deep(.field-dock) { position: sticky; left: auto; right: auto; bottom: 0; width: auto; margin: 0; transform: none; }

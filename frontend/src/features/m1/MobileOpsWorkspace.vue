@@ -101,6 +101,7 @@ function open(action: Exclude<JobMode, 'detail'>, target?: { code: string; objec
       :role="authSession?.role || ''"
       :cover-duties="authSession?.coverDuties ?? []"
       :allowed-actions="[...primaryModes, ...extraModes].map((mode) => mode.key)"
+      :unified-production="Boolean(openProduction)"
       :initial-target="lastTarget"
       @open="open"
     />

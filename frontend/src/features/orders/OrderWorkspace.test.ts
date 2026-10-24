@@ -112,17 +112,32 @@ describe('统一订单列表与详情', () => {
     const wrapper = mountWorkspace({ 'zhubao-auth-session': auth, 'zhubao-visible-tabs': ref(['progress']), 'zhubao-open-production': openProduction, 'zhubao-open-order-change': openChange });
     await flushPromises();
     await select(wrapper, 'WO-1');
-    expect(wrapper.findAll('button').some(button => button.text() === '更新工序进度')).toBe(false);
+    expect(wrapper.findAll('button').some(button => button.text() === '报工')).toBe(false);
     expect(wrapper.findAll('button').some(button => button.text() === '打开岗位交工')).toBe(false);
     auth.value.effectivePermissions.push('BUSINESS_PRODUCTION_REPORT');
     await flushPromises();
-    await wrapper.findAll('button').find(button => button.text() === '更新工序进度')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '报工')!.trigger('click');
     expect(openProduction).toHaveBeenLastCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1' }, 'progress');
-    await wrapper.findAll('button').find(button => button.text() === '打开岗位交工')!.trigger('click');
-    expect(openProduction).toHaveBeenLastCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1' }, 'station');
+    expect(wrapper.findAll('button').some(button => button.text() === '打开岗位交工')).toBe(false);
     await wrapper.findAll('button').find(button => button.text() === '改单办理')!.trigger('click');
     expect(openChange).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1', motherOrderCode: 'MO-1' });
     wrapper.unmount();
+  });
+  it('同一报工入口在百分比 100 时进入交工核对，已正式交工不再开放', async () => {
+    vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([row('WO-1', { processPercent: 100 })]));
+    const openProduction = vi.fn();
+    const wrapper = mountWorkspace({ 'zhubao-auth-session': ref({ effectivePermissions: ['BUSINESS_PRODUCTION_REPORT'] }), 'zhubao-visible-tabs': ref(['production']), 'zhubao-open-production': openProduction });
+    await flushPromises();
+    await select(wrapper, 'WO-1');
+    await wrapper.findAll('button').find(button => button.text() === '报工')!.trigger('click');
+    expect(openProduction).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1' }, 'station');
+    wrapper.unmount();
+    vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([row('WO-1', { processPercent: 100, processFormallyDelivered: true, businessStatus: '待质检', facet: 'WAITING_QUALITY' })]));
+    const done = mountWorkspace({ 'zhubao-auth-session': ref({ effectivePermissions: ['BUSINESS_PRODUCTION_REPORT'] }), 'zhubao-visible-tabs': ref(['production']), 'zhubao-open-production': openProduction });
+    await flushPromises();
+    await select(done, 'WO-1');
+    expect(done.findAll('button').some(button => button.text() === '报工')).toBe(false);
+    done.unmount();
   });
   it('收货按钮同时要求有效权限，保存后的只读刷新失败不会重新打开写表单', async () => {
     const auth = ref({ effectivePermissions: [] as string[] });

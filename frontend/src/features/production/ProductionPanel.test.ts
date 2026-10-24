@@ -73,6 +73,27 @@ async function openStation(field = false) {
 }
 
 describe('生产面板', () => {
+  it('数量缺失或上道未交时提前阻断，逐条勾选不产生交工', async () => {
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100', quantity: null, weight: null }));
+    vi.mocked(lookupProcessStation).mockResolvedValue(stationView());
+    const wrapper = mount(ProductionPanel, { props: { title: '交工', intro: '', field: true, embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'ZD-100' } } });
+    await flushPromises();
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    expect(wrapper.get('[aria-label="确认雕刻交工"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[aria-label="确认雕刻交工"]').trigger('click');
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('数量或重量尚未读取完整');
+    wrapper.unmount();
+
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100', quantity: 18, weight: 12.5 }));
+    vi.mocked(lookupProcessStation).mockResolvedValue({ ...stationView(), stations: [{ ...stationView().stations[0], processName: '镶嵌', previousProcessName: '雕刻', previousSubmitted: false }] });
+    const blocked = mount(ProductionPanel, { props: { title: '交工', intro: '', field: true, embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'ZD-100' } } });
+    await flushPromises();
+    expect(blocked.text()).toContain('上一道「雕刻」还未交工');
+    expect(blocked.get('[aria-label="确认镶嵌交工"]').attributes('disabled')).toBeDefined();
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    blocked.unmount();
+  });
   beforeEach(() => {
     vi.mocked(queryScanContext).mockReset();
     vi.mocked(submitProcessStation).mockReset();
@@ -94,13 +115,13 @@ describe('生产面板', () => {
     wrapper.unmount();
   });
 
-  it('现场有多个岗位工序时须人工选择，不默认核对或交付第一道', async () => {
+  it('现场定位到当前可办理工序，切换查看不会自动核对或交工', async () => {
     vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100' }));
     const view = stationView();
     vi.mocked(lookupProcessStation).mockResolvedValue({ ...view, stations: [...view.stations, { ...view.stations[0], processName: '镶嵌', requirement: '爪位对称' }] });
     const wrapper = mount(ProductionPanel, { props: { title: '正式交工', intro: '', field: true, embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'ZD-100' } } });
     await flushPromises();
-    expect(wrapper.text()).toContain('请选择本次办理的工序');
+    expect(wrapper.get('[aria-label="选择工序 雕刻"]').attributes('aria-pressed')).toBe('true');
     expect(wrapper.find('[aria-label="完成核对"]').exists()).toBe(false);
     await wrapper.get('[aria-label="选择工序 镶嵌"]').trigger('click');
     expect(wrapper.get('[aria-label="本岗位加工要求"]').text()).toContain('爪位对称');
@@ -141,7 +162,7 @@ describe('生产面板', () => {
     const ids: string[] = [];
     vi.mocked(submitProcessStation).mockImplementation(async (_code, process, requestId) => {
       ids.push(`${process}:${requestId}`);
-      if (process === '雕刻') throw new Error('上一道还没交');
+      if (process === '雕刻') throw new ApiRequestError('上一道还没交', 400, 40001);
       return {
         orderCode: 'ZD-100',
         processName: process,
@@ -164,7 +185,7 @@ describe('生产面板', () => {
           requirement: '镶石',
           dueDate: '2026-10-20',
           previousProcessName: '雕刻',
-          previousSubmitted: false,
+          previousSubmitted: true,
           submitted: false,
         },
       ],
@@ -203,6 +224,10 @@ describe('生产面板', () => {
     await wrapper.findAll('button').find((button) => button.text() === '提交雕刻')!.trigger('click');
     await flushPromises();
 
+    expect(ids).toHaveLength(1);
+    expect(wrapper.text()).toContain('交工结果待核对');
+    await wrapper.findAll('button').find(button => button.text() === '原交工请求重试')!.trigger('click');
+    await flushPromises();
     expect(ids).toHaveLength(2);
     expect(ids[0]).toBe(ids[1]);
     expect(wrapper.text()).toContain('雕刻已交');
@@ -267,16 +292,14 @@ describe('生产面板', () => {
     }));
   });
 
-  it('手机先核对再报工，勾选和登录过期都不另开交付', async () => {
+  it('手机核对要求与整单数量后一次确认交工，登录过期重试沿用原编号', async () => {
     const wrapper = await openStation(true);
     expect(wrapper.text()).toContain('当前子单');
     expect(wrapper.text()).toContain('来料戒托');
-    expect(wrapper.text()).toContain('勾选不是报工');
+    expect(wrapper.text()).toContain('点击下方“确认交工”才会提交');
     expect(wrapper.findAll('button').some((button) => button.text() === '提交雕刻')).toBe(false);
 
     await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
-    expect(submitProcessStation).not.toHaveBeenCalled();
-    await wrapper.get('[aria-label="完成核对"]').trigger('click');
     expect(submitProcessStation).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('18 件');
     expect(wrapper.text()).toContain('12.5 克');
@@ -286,7 +309,7 @@ describe('生产面板', () => {
       ids.push(requestId ?? '');
       throw new ApiRequestError('未登录', 401, 401);
     });
-    const submit = () => wrapper.findAll('button').find((button) => button.text() === '提交雕刻');
+    const submit = () => wrapper.findAll('button').find((button) => button.text() === '确认雕刻交工');
     await submit()!.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('登录已过期。已填内容还在');

@@ -17,6 +17,7 @@ const props = defineProps<{
   role: string;
   coverDuties?: string[];
   allowedActions?: MobileAction[];
+  unifiedProduction?: boolean;
   initialTarget?: { code: string; objectType: NonNullable<ScanContextResponse['target']['objectType']> } | null;
 }>();
 const emit = defineEmits<{ open: [action: MobileAction, target?: { code: string; objectType: NonNullable<ScanContextResponse['target']['objectType']> }] }>();
@@ -135,8 +136,11 @@ function rememberProgress(record: ScanProgressRecord) {
         <button v-if="isReceiving" class="primary-button" type="button" @click="open('intake')">
           {{ identity.objectType === 'EXPRESS_NO' ? '创建收货订单' : '查看收货与订单资料' }}
         </button>
+        <button v-if="unifiedProduction && isProduction && isWorkTarget && (canOpen('progress') || canOpen('station'))" class="primary-button" type="button" @click="open(canOpen('progress') ? 'progress' : 'station')">报工</button>
+        <template v-else>
         <button v-if="isProduction && canOpen('progress') && isWorkTarget" class="primary-button" type="button" @click="open('progress')">更新工序进度</button>
         <button v-if="isProduction && canOpen('station') && isWorkTarget && formalReport?.allowed" class="secondary-button" type="button" @click="open('station')">正式交工</button>
+        </template>
         <button v-if="isQuality && isQualityTarget && qualityProgressTarget" class="primary-button" type="button" @click="qualityProgressOpen = !qualityProgressOpen">记录质检过程</button>
         <button v-if="isQuality && isQualityTarget" class="secondary-button" type="button" @click="open('quality')">逐条判定质检</button>
         <button v-if="isWarehouse && identity.objectType === 'OUTBOUND_ORDER'" class="secondary-button" type="button" @click="open('shipping')">办理发货</button>

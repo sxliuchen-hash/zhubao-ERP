@@ -14,7 +14,7 @@ vi.mock('../scan/ProgressNoteForm.vue', () => ({ default: { template: '<div />' 
 vi.mock('../evidence/EvidenceCapture.vue', () => ({ default: defineComponent({ name: 'EvidenceCapture', setup() { return { draft: ref('') }; }, template: '<input v-model="draft" aria-label="交工草稿文件" />' }) }));
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'WO-1', motherOrderCode: 'MO-1' }));
+  vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'WO-1', motherOrderCode: 'MO-1', quantity: 18, weight: 12.5 }));
   vi.mocked(openProcessProgress).mockResolvedValue({ selectChild: false, orderCode: 'WO-1', motherOrderCode: 'MO-1', customerName: '', processingRequirement: '真实加工要求', dueDate: '', currentProcess: '雕刻', formallyDelivered: false, percent: 60, version: 4, children: [] });
   vi.mocked(submitProcessProgress).mockImplementation(async body => ({ orderCode: body.code, processName: '雕刻', percent: body.percent, version: 5, operator: '本岗人员', updatedAt: '', note: body.note }));
   vi.mocked(lookupProcessStation).mockResolvedValue({ orderCode: 'WO-1', customerName: '', dueDate: '', processingRequirement: '真实加工要求', stations: [{ processName: '雕刻', requirement: '打磨边缘\n检查表面', dueDate: '', previousProcessName: '', previousSubmitted: true, submitted: false }], message: '' });
@@ -22,6 +22,52 @@ beforeEach(() => {
 });
 
 describe('同单工序动作', () => {
+  it('进度 100% 后继续交工只打开核对，确认要求后才交工', async () => {
+    const wrapper = mount(ProductionActionPane, { props: { target: { objectType: 'WORK_ORDER', code: 'WO-1' }, active: true, entryRevision: 1 } });
+    await flushPromises();
+    await wrapper.get('[aria-label="进度 100%"]').setValue(true);
+    await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '前往交工核对')!.trigger('click');
+    await flushPromises();
+    expect(submitProcessProgress).toHaveBeenCalledOnce();
+    expect(submitProcessStation).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('18 件');
+    const confirm = wrapper.get('[aria-label="确认雕刻交工"]');
+    expect(confirm.attributes('disabled')).toBeDefined();
+    for (const check of wrapper.findAll('[aria-label="本岗位加工要求"] input')) await check.setValue(true);
+    await confirm.trigger('click');
+    await flushPromises();
+    expect(submitProcessStation).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+  it('未知进度和未知交工结果分别锁住切换，原请求回放成功后才解锁', async () => {
+    vi.mocked(submitProcessProgress).mockRejectedValueOnce(new Error('网络超时')).mockResolvedValueOnce({ orderCode: 'WO-1', processName: '雕刻', percent: 60, version: 5, operator: '本岗人员', updatedAt: '', note: '' });
+    const wrapper = mount(ProductionActionPane, { props: { target: { objectType: 'WORK_ORDER', code: 'WO-1' }, active: true, entryRevision: 1 } });
+    await flushPromises();
+    await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
+    await flushPromises();
+    await wrapper.get('.production-modes button:last-child').trigger('click');
+    expect(lookupProcessStation).not.toHaveBeenCalled();
+    expect(wrapper.get('.production-modes button:last-child').attributes('disabled')).toBeDefined();
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(submitProcessProgress).mock.calls[1][0]).toEqual(vi.mocked(submitProcessProgress).mock.calls[0][0]);
+    await wrapper.get('.production-modes button:last-child').trigger('click');
+    await flushPromises();
+    for (const check of wrapper.findAll('[aria-label="本岗位加工要求"] input')) await check.setValue(true);
+    vi.mocked(submitProcessStation).mockRejectedValueOnce(new Error('交工响应丢失'));
+    await wrapper.get('[aria-label="确认雕刻交工"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.production-modes button:first-child').attributes('disabled')).toBeDefined();
+    await wrapper.get('.production-modes button:first-child').trigger('click');
+    expect(wrapper.text()).toContain('交工结果待核对');
+    await wrapper.findAll('button').find(button => button.text() === '原交工请求重试')!.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(submitProcessStation).mock.calls[1]).toEqual(vi.mocked(submitProcessStation).mock.calls[0]);
+    expect(wrapper.get('.production-modes button:first-child').attributes('disabled')).toBeUndefined();
+    wrapper.unmount();
+  });
   it('母单拆分后的人工选择交给独立子单草稿，不把母单容器改写为子单', async () => {
     vi.mocked(openProcessProgress).mockResolvedValueOnce({ selectChild: true, orderCode: 'MO-1', motherOrderCode: 'MO-1', customerName: '', processingRequirement: '', dueDate: '', currentProcess: '', formallyDelivered: false, percent: 0, version: 0, children: [{ code: 'WO-A', customerName: '', processes: '雕刻' }, { code: 'WO-B', customerName: '', processes: '雕刻' }] });
     const wrapper = mount(ProductionActionPane, { props: { target: { objectType: 'MOTHER_ORDER', code: 'MO-1' }, active: true, entryRevision: 1 } });
@@ -39,7 +85,7 @@ describe('同单工序动作', () => {
     expect(openProcessProgress).toHaveBeenCalledWith('WO-1');
     expect(lookupProcessStation).not.toHaveBeenCalled();
     expect(wrapper.find('[aria-label="进度单号"]').exists()).toBe(false);
-    await wrapper.get('[aria-label="工序进度"]').setValue('100');
+    await wrapper.get('[aria-label="进度 100%"]').setValue(true);
     await wrapper.get('[aria-label="进度说明"]').setValue('已按要求完成');
     await wrapper.get('.production-modes button:last-child').trigger('click');
     await flushPromises();
@@ -48,7 +94,7 @@ describe('同单工序动作', () => {
     await wrapper.get('[aria-label="交工草稿文件"]').setValue('原单照片.jpg');
     const evidence = wrapper.getComponent({ name: 'EvidenceCapture' }).vm.$;
     await wrapper.get('.production-modes button:first-child').trigger('click');
-    expect(wrapper.get('[aria-label="工序进度"]').element).toHaveProperty('value', '100');
+    expect(wrapper.get('[aria-label="进度 100%"]').element).toHaveProperty('checked', true);
     expect(wrapper.get('[aria-label="进度说明"]').element).toHaveProperty('value', '已按要求完成');
     await wrapper.get('[aria-label="保存工序进度"]').trigger('submit');
     await flushPromises();
@@ -60,10 +106,9 @@ describe('同单工序动作', () => {
     const checks = wrapper.findAll('[aria-label="本岗位加工要求"] input');
     expect(checks).toHaveLength(2);
     for (const check of checks) await check.setValue(true);
-    await wrapper.get('[aria-label="完成核对"]').trigger('click');
     expect(submitProcessStation).not.toHaveBeenCalled();
     vi.mocked(lookupProcessStation).mockRejectedValueOnce(new Error('刷新失败'));
-    await wrapper.findAll('button').find(button => button.text() === '提交雕刻')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '确认雕刻交工')!.trigger('click');
     await flushPromises();
     expect(submitProcessStation).toHaveBeenCalledOnce();
     expect(wrapper.text()).toContain('正式交工已保存：WO-1 · 雕刻 · 台账 LED-1');

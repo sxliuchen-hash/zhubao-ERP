@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import type { OrderActionTarget } from '../orders/orderActions';
+import { ApiRequestError } from '../../services/apiClient';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import FieldSteps from '../field/FieldSteps.vue';
@@ -32,7 +33,7 @@ const props = withDefaults(defineProps<{
   initialTarget: null,
   embedded: false,
 });
-const emit = defineEmits<{ saved: [result: ProcessStationReport]; targetSelected: [target: OrderActionTarget] }>();
+const emit = defineEmits<{ saved: [result: ProcessStationReport]; targetSelected: [target: OrderActionTarget]; locked: [value: boolean] }>();
 
 const scanText = ref('');
 const hint = ref('');
@@ -41,6 +42,9 @@ const stationView = ref<ProcessStationView | null>(null);
 const stationCode = ref('');
 const stationBusy = ref(false);
 const submittingProcess = ref('');
+const pendingDelivery = ref<{ code: string; processName: string; requestId: string } | null>(null);
+const locked = computed(() => Boolean(submittingProcess.value) || Boolean(pendingDelivery.value));
+watch(locked, value => emit('locked', value), { immediate: true });
 const delivered = ref<ProcessStationReport | null>(null);
 const requestIds = ref<Record<string, string>>({});
 const checkedRequirement = ref<Record<string, boolean>>({});
@@ -64,25 +68,17 @@ const activeLines = computed(() => requirementLines(activeStation.value?.require
 const checkedCount = computed(() => activeLines.value.filter((_, index) => (
   checkedRequirement.value[checkKey(activeStation.value?.processName ?? '', index)]
 )).length);
-const reviewDone = computed(() => Boolean(
-  activeStation.value && reviewConfirmed.value[activeStation.value.processName],
-));
-const stationStep = computed(() => {
-  if (!stationView.value) return 0;
-  const station = activeStation.value;
-  if (!station) return 1;
-  if (station && !station.submitted && !reviewConfirmed.value[station.processName]) return 1;
-  return 2;
-});
+const quantityReady = computed(() => stationScan.context?.order.quantity != null && stationScan.context?.order.weight != null);
+function previousReady(station: ProcessStationCard) { return !station.previousProcessName || station.previousSubmitted; }
 const canConfirmReview = computed(() => {
-  if (!activeStation.value || activeStation.value.submitted) return false;
+  if (!activeStation.value || activeStation.value.submitted || !previousReady(activeStation.value) || locked.value || stationBusy.value || stationScan.loading || !quantityReady.value) return false;
   return activeLines.value.length === 0 || checkedCount.value === activeLines.value.length;
 });
 
 watch(stationView, (view) => {
   const stations = view?.stations ?? [];
   if (!stations.some((item) => item.processName === activeProcess.value)) {
-    activeProcess.value = props.field && stations.length > 1 ? '' : stations[0]?.processName ?? '';
+    activeProcess.value = stations.find(item => !item.submitted && previousReady(item))?.processName ?? stations.find(item => !item.submitted)?.processName ?? stations[0]?.processName ?? '';
   }
 });
 
@@ -94,17 +90,12 @@ function toggleCheck(processName: string, index: number, checked: boolean) {
   checkedRequirement.value = { ...checkedRequirement.value, [checkKey(processName, index)]: checked };
 }
 
-function confirmReview() {
+async function confirmAndDeliver() {
   const station = activeStation.value;
   if (!station || !canConfirmReview.value) return;
-  // 核对只留在本页，不调用交付。
+  // 点击明确的交工按钮后才提交；逐条勾选本身不写业务。
   reviewConfirmed.value = { ...reviewConfirmed.value, [station.processName]: true };
-}
-
-function reopenReview() {
-  const name = activeStation.value?.processName;
-  if (!name) return;
-  reviewConfirmed.value = { ...reviewConfirmed.value, [name]: false };
+  await deliver(station);
 }
 
 function amountText(value: number | null | undefined, unit: string | null | undefined) {
@@ -122,6 +113,7 @@ function previousText(station: ProcessStationCard) {
 }
 
 function clearStationTarget() {
+  if (locked.value) return;
   const had = stationScan.context !== null || stationScan.loading || stationView.value !== null || stationCode.value !== '';
   stationScan.invalidate();
   stationView.value = null;
@@ -194,6 +186,7 @@ async function loadStation(response: ScanContextResponse, seen: number) {
 }
 
 async function recognizeStation(draft: ScanDraft) {
+  if (locked.value) return;
   formError.value = '';
   hint.value = '';
   const content = draft.content.trim();
@@ -229,6 +222,7 @@ onMounted(() => {
 });
 
 async function chooseStationTarget(related: ScanRelatedTarget) {
+  if (locked.value) return;
   if (!related.code || !related.objectType) return;
   if (props.initialTarget) { emit('targetSelected', { objectType: related.objectType, code: related.code }); return; }
   formError.value = '';
@@ -247,6 +241,7 @@ async function chooseStationTarget(related: ScanRelatedTarget) {
 
 async function applyResult(result: ProcessStationReport, code: string, processName: string, seen: number) {
   if (stationScan.revision !== seen || stationCode.value !== code) return;
+  pendingDelivery.value = null;
   delivered.value = result;
   if (stationView.value) stationView.value = { ...stationView.value, stations: stationView.value.stations.map(station => station.processName === result.processName ? { ...station, submitted: true } : station) };
   emit('saved', result);
@@ -268,44 +263,40 @@ async function deliver(station: ProcessStationCard) {
   const seen = stationScan.revision;
   formError.value = '';
   if (props.field && !reviewConfirmed.value[station.processName]) return;
+  if (!previousReady(station)) { formError.value = `请先完成上一道「${station.previousProcessName}」交工`; return; }
+  if (pendingDelivery.value && (pendingDelivery.value.code !== code || pendingDelivery.value.processName !== station.processName)) return;
   if (!code || station.submitted || stationScan.loading || submittingProcess.value
     || (delivered.value?.orderCode === code && delivered.value.processName === station.processName)) return;
-  const currentRequestId = ensureRequestId(code, station.processName);
+  const currentRequestId = pendingDelivery.value?.requestId ?? ensureRequestId(code, station.processName);
   submittingProcess.value = station.processName;
   try {
     const result = await submitProcessStation(code, station.processName, currentRequestId);
     await applyResult(result, code, station.processName, seen);
   } catch (error) {
     if (stationScan.revision !== seen) return;
-    const message = error instanceof Error ? error.message : '报工失败';
-    if (message === '后端接口不可用') {
-      try {
-        const replayed = await submitProcessStation(code, station.processName, currentRequestId);
-        await applyResult(replayed, code, station.processName, seen);
-        return;
-      } catch (again) {
-        if (stationScan.revision !== seen) return;
-        formError.value = keptInputFailure(again, '报工失败');
-        hint.value = '请用原确认重试，不会另开一次交付';
-        return;
-      }
-    }
-    formError.value = keptInputFailure(error, '报工失败');
+    const knownFailure = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408;
+    pendingDelivery.value = knownFailure ? null : { code, processName: station.processName, requestId: currentRequestId };
+    formError.value = keptInputFailure(error, '交工失败');
   } finally {
     if (submittingProcess.value === station.processName) submittingProcess.value = '';
   }
 }
+function retryDelivery() {
+  const station = stationView.value?.stations.find(item => item.processName === pendingDelivery.value?.processName);
+  if (station) void deliver(station);
+  else formError.value = '原交工工序尚未读取完整，请保留本单并核对原结果';
+}
 </script>
 
 <template>
-  <section class="section-block">
+  <section class="section-block" :class="{ 'production-field': field }">
     <div class="section-heading">
       <div>
         <h2>{{ title }}</h2>
         <p>{{ intro }}</p>
       </div>
     </div>
-    <FieldSteps v-if="field && !embedded" :steps="['扫码识别', '核对要求', '报工确认']" :current="stationStep" />
+    <FieldSteps v-if="field && !embedded" :steps="['扫码识别', '核对并交工']" :current="stationView ? 1 : 0" />
     <ScanInput
       v-if="!initialTarget"
       v-model="scanText"
@@ -316,26 +307,30 @@ async function deliver(station: ProcessStationCard) {
       submit-aria-label="识别贴纸"
       photo-aria-label="拍贴纸"
       :bind-mobile-scan="field"
-      :busy="stationScan.loading || stationBusy"
+      :busy="stationScan.loading || stationBusy || locked"
       @draft="clearStationTarget"
       @recognize="recognizeStation"
     />
     <p v-if="hint" class="operation-feedback">{{ hint }}</p>
-    <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
+    <p v-if="formError" class="operation-feedback danger" role="alert">{{ formError }}</p>
+    <p v-if="pendingDelivery" class="operation-feedback warning" role="alert">交工结果待核对：{{ pendingDelivery.code }} · {{ pendingDelivery.processName }}。原确认编号已保留。<button type="button" class="secondary-button" :disabled="Boolean(submittingProcess)" @click="retryDelivery">原交工请求重试</button></p>
     <button v-if="initialTarget && !stationView" class="secondary-button" type="button" :disabled="stationBusy || stationScan.loading || Boolean(submittingProcess)" @click="recognizeStation({ content: initialTarget.code, ...(initialTarget.objectType ? { objectType: initialTarget.objectType } : {}) })">重新读取本单工序</button>
     <p v-if="delivered" class="operation-feedback" role="status">正式交工已保存：{{ delivered.orderCode }} · {{ delivered.processName }} · 台账 {{ delivered.ledgerCode || '未提供' }}</p>
+    <p v-if="delivered" class="operation-feedback" role="status">{{ delivered.movedToSemiFinished ? '本单工序已完成，已转半成品，下一步由质检处理。' : '本工序已交工，下一岗位可继续；库存仍在制。' }}</p>
     <OrderContextCard v-if="!embedded || stationScan.context?.requiresSelection" :context="stationScan.context" @select="chooseStationTarget" />
     <article v-if="field && stationView" class="field-card" aria-label="当前单据">
       <div class="field-card-head">
         <span>{{ stationScan.identity?.objectType === 'MOTHER_ORDER' ? '当前母单' : '当前子单' }}</span>
-        <StatusBadge :label="activeStation?.submitted ? '已报工' : '待报工'" :tone="activeStation?.submitted ? 'green' : 'amber'" />
+        <StatusBadge :label="activeStation?.submitted ? '已交工' : activeStation && !previousReady(activeStation) ? '待上一道交工' : '待交工'" :tone="activeStation?.submitted ? 'green' : 'amber'" />
       </div>
-      <strong>{{ stationView.orderCode }}</strong>
+      <strong>{{ activeStation?.processName || '暂无可办理工序' }}</strong><span class="info-context">{{ stationView.orderCode }}</span>
       <p v-if="stationScan.context?.target.motherOrderCode && stationScan.identity?.objectType !== 'MOTHER_ORDER'">
         母单 {{ stationScan.context.target.motherOrderCode }}
         <template v-if="stationView.customerName"> · {{ stationView.customerName }}</template>
       </p>
-      <dl class="detail-grid field-identity">
+      <details class="field-note">
+      <summary>查看物料、期限与工序信息</summary>
+      <dl class="detail-grid">
         <dt>客户</dt>
         <dd>{{ stationView.customerName || '未记录' }}</dd>
         <dt>物料</dt>
@@ -351,6 +346,7 @@ async function deliver(station: ProcessStationCard) {
           <dd>{{ previousText(activeStation) }}</dd>
         </template>
       </dl>
+      </details>
       <p v-if="!embedded" class="field-coach">只显示当前账号能做的工序。</p>
     </article>
     <div v-if="field && (stationView?.stations.length ?? 0) > 1" class="field-process-list">
@@ -362,13 +358,15 @@ async function deliver(station: ProcessStationCard) {
         :class="station.processName === activeProcess ? 'primary-button' : 'secondary-button'"
         :aria-pressed="station.processName === activeProcess"
         :aria-label="`选择工序 ${station.processName}`"
+        :disabled="locked || (!station.submitted && !previousReady(station))"
         @click="activeProcess = station.processName"
       >
-        {{ station.processName }}
+        {{ station.processName }}<small>{{ station.submitted ? '已交工' : previousReady(station) ? '可办理' : '待上一道交工' }}</small>
       </button>
     </div>
+    <p v-if="field && activeStation && !activeStation.submitted && !previousReady(activeStation)" class="operation-feedback warning" role="alert">上一道「{{ activeStation.previousProcessName }}」还未交工，当前不能提交「{{ activeStation.processName }}」。</p>
     <article
-      v-if="field && activeStation && !activeStation.submitted && !reviewDone"
+      v-if="field && activeStation && !activeStation.submitted && previousReady(activeStation)"
       class="field-card"
       aria-label="本岗位加工要求"
     >
@@ -376,11 +374,12 @@ async function deliver(station: ProcessStationCard) {
         <h2>本岗位加工要求</h2>
         <span>逐条核对</span>
       </div>
-      <p v-if="!embedded" class="field-coach">勾选不是报工。正式报工在下一步确认。</p>
-      <p v-if="!activeLines.length">本岗位没有单独列出的加工要求。看过当前单后即可进入报工确认。</p>
+      <p class="info-context">逐条核对后，点击下方“确认交工”才会提交。</p>
+      <p v-if="!activeLines.length">本岗位没有单独列出的要求，请核对本次整单数量与重量。</p>
       <label v-for="(line, index) in activeLines" :key="checkKey(activeStation.processName, index)" class="field-check">
         <input
           type="checkbox"
+          :disabled="locked"
           :checked="Boolean(checkedRequirement[checkKey(activeStation.processName, index)])"
           :aria-label="`核对 ${index + 1} ${line}`"
           @change="toggleCheck(activeStation.processName, index, ($event.target as HTMLInputElement).checked)"
@@ -389,22 +388,20 @@ async function deliver(station: ProcessStationCard) {
       </label>
     </article>
     <article
-      v-if="field && activeStation && reviewDone && !activeStation.submitted"
+      v-if="field && activeStation && !activeStation.submitted"
       class="field-card"
       aria-label="报工确认"
     >
-      <h2>报工确认</h2>
+      <h2>本次整单交工</h2>
       <p>{{ activeStation.processName }} · {{ stationView?.orderCode }}</p>
-      <p v-if="!embedded" class="field-coach">核对已完成。下面的提交才会报工。本次按单据已有数量和重量交付，这里不另填一套。</p>
+      <p class="info-context">按这张单已有数量和重量一次交完本工序。无需先保存 100% 进度。</p>
       <dl class="detail-grid">
         <dt>单据数量</dt>
         <dd>{{ amountText(stationScan.context?.order.quantity, stationScan.context?.order.quantityUnit) }}</dd>
         <dt>单据重量</dt>
         <dd>{{ amountText(stationScan.context?.order.weight, stationScan.context?.order.weightUnit) }}</dd>
       </dl>
-      <button class="secondary-button" type="button" @click="reopenReview">
-        返回核对
-      </button>
+      <p v-if="!quantityReady" class="operation-feedback danger" role="alert">数量或重量尚未读取完整，请重新打开本单核对。</p>
     </article>
     <details v-if="field && progressTarget" class="field-note">
       <summary>过程说明</summary>
@@ -445,7 +442,7 @@ async function deliver(station: ProcessStationCard) {
         v-if="!station.submitted"
         class="primary-button"
         type="button"
-        :disabled="submittingProcess !== '' || !stationCode"
+        :disabled="locked || !stationCode || !previousReady(station)"
         @click="deliver(station)"
       >
         {{ submittingProcess === station.processName ? '正在提交' : `提交${station.processName}` }}
@@ -453,8 +450,8 @@ async function deliver(station: ProcessStationCard) {
       <p v-else class="operation-feedback">{{ station.processName }}已交</p>
     </article>
     </template>
-    <section v-if="stationCode" class="section-block">
-      <h2>工序证据</h2>
+    <details v-if="stationCode" class="section-block" :open="!field">
+      <summary>照片与视频（可选）</summary>
       <p v-if="delivered">业务已保存。证据上传或关联失败时只重试文件，不会再次交付。</p>
       <p v-else>可以先选择文件。正式交付成功后才关联到本次台账，不会把待上传文件当成已经报工。</p>
       <EvidenceCapture
@@ -466,27 +463,23 @@ async function deliver(station: ProcessStationCard) {
         :operation-code="delivered?.ledgerCode || ''"
         :process-name="delivered?.processName || ''"
       />
-    </section>
+    </details>
     <div v-if="field && activeStation && !activeStation.submitted" class="field-dock">
-      <button
-        v-if="!reviewDone"
-        class="primary-button"
-        type="button"
-        aria-label="完成核对"
-        :disabled="!canConfirmReview"
-        @click="confirmReview"
-      >
-        {{ activeLines.length ? `完成核对 · ${checkedCount}/${activeLines.length}` : '进入报工确认' }}
-      </button>
-      <button
-        v-else
-        class="primary-button"
-        type="button"
-        :disabled="submittingProcess !== '' || !stationCode"
-        @click="deliver(activeStation)"
-      >
-        {{ submittingProcess === activeStation.processName ? '正在提交' : `提交${activeStation.processName}` }}
-      </button>
+      <span v-if="previousReady(activeStation) && activeLines.length && checkedCount < activeLines.length" class="info-context">已核对 {{ checkedCount }} / {{ activeLines.length }} 项要求</span>
+      <button class="primary-button" type="button" :aria-label="`确认${activeStation.processName}交工`" :disabled="!canConfirmReview" @click="confirmAndDeliver">{{ submittingProcess === activeStation.processName ? '正在提交…' : `确认${activeStation.processName}交工` }}</button>
     </div>
   </section>
 </template>
+
+<style scoped>
+.field-process-list button { display: grid; gap: 4px; }
+.field-process-list small { font-size: 11px; font-weight: 400; }
+.field-dock { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.field-dock .primary-button { flex: 1; min-height: 48px; }
+@media (min-width: 901px) {
+  .production-field { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .production-field > * { grid-column: 1 / -1; }
+  .production-field > .field-card[aria-label="本岗位加工要求"],
+  .production-field > .field-card[aria-label="报工确认"] { grid-column: auto; }
+}
+</style>

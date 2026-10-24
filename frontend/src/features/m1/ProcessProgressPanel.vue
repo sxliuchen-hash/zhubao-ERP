@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import type { OpenOrderChangeAction, OrderActionTarget } from '../orders/orderActions';
@@ -17,8 +17,10 @@ const props = withDefaults(defineProps<{
   embedded?: boolean;
   formallyDeliveredProcess?: string;
 }>(), { bindMobileScan: false, embedded: false, initialTarget: null });
-const emit = defineEmits<{ saved: [result: ProcessProgressHead]; targetSelected: [target: OrderActionTarget] }>();
+const emit = defineEmits<{ saved: [result: ProcessProgressHead]; targetSelected: [target: OrderActionTarget]; handoff: []; locked: [value: boolean] }>();
 const percents = [0, 30, 60, 90, 100];
+const progressGroup = useId();
+const percentLabels: Record<number, string> = { 0: '未开始', 30: '刚开始', 60: '进行中', 90: '快做完', 100: '待交工' };
 const query = ref('');
 const processFilter = ref('');
 const dueBefore = ref('');
@@ -42,6 +44,7 @@ const unknownRequest = ref<Parameters<typeof submitProcessProgress>[0] | null>(n
 const expectedCode = ref(props.initialTarget?.code ?? '');
 const openOrderChange = inject<OpenOrderChangeAction | null>('zhubao-open-order-change', null);
 const isDelivered = computed(() => Boolean(target.value?.formallyDelivered || (props.formallyDeliveredProcess && props.formallyDeliveredProcess === target.value?.currentProcess)));
+watch(() => submitting.value || Boolean(unknownRequest.value), value => emit('locked', value), { immediate: true });
 const requestIds = new Map<string, string>();
 let generation = 0;
 let listGeneration = 0;
@@ -191,18 +194,23 @@ async function loadHistory() {
       <button v-for="child in target.children" :key="child.code" class="secondary-button" type="button" @click="chooseChild(child.code)">{{ child.code }}</button>
     </div>
     <form v-else-if="target" aria-label="保存工序进度" @submit.prevent="submit">
-      <p>{{ target.orderCode }} · {{ target.customerName }} · {{ target.currentProcess }} · {{ target.processingRequirement || '未记录要求' }}</p>
+      <header class="process-progress-heading"><strong>{{ target.currentProcess }}<small>当前工序</small></strong><span>{{ target.orderCode }}<template v-if="target.customerName"> · {{ target.customerName }}</template></span></header>
+      <p class="info-context">下面的百分比只表示「{{ target.currentProcess }}」，下一道工序单独记录。</p>
+      <details class="info-disclosure"><summary>查看加工要求</summary><p>{{ target.processingRequirement || '未记录要求' }}</p></details>
       <p v-if="isDelivered">这道工序已经正式交付，不能再用进度代替。可刷新本单工序核对后续工序。</p>
       <fieldset v-else :disabled="submitting || Boolean(receipt) || Boolean(unknownRequest)">
-        <label>进度<select v-model.number="percent" aria-label="工序进度"><option v-for="item in percents" :key="item" :value="item">{{ item }}%</option></select></label>
-        <label>说明<input v-model="note" aria-label="进度说明" /></label>
-        <label>回退原因<input v-model="reason" aria-label="进度回退原因" placeholder="只有往回调时必填" /></label>
+        <div class="progress-choices" role="group" aria-label="工序进度"><label v-for="item in percents" :key="item" :class="{ selected: percent === item }"><input v-model.number="percent" type="radio" :name="progressGroup" :value="item" :aria-label="`进度 ${item}%`" /><strong>{{ item }}%</strong><small>{{ percentLabels[item] }}</small></label></div>
+        <details class="info-disclosure progress-note"><summary>补充说明（可选）</summary><label>说明<input v-model="note" aria-label="进度说明" /></label></details>
+        <label v-if="percent < target.percent">回退原因<input v-model="reason" aria-label="进度回退原因" placeholder="请说明为什么往回调" /></label>
+        <p v-if="percent === 100" class="progress-handoff-note">做完后还需核对整单数量与重量，再确认交工。</p>
         <button class="primary-button" type="submit" :disabled="submitting || Boolean(receipt) || Boolean(unknownRequest)">{{ submitting ? '提交中…' : '提交进度' }}</button>
       </fieldset>
       <p v-if="unknownRequest">原请求结果待核对：{{ unknownRequest.code }} · {{ unknownRequest.percent }}% · 版本 {{ unknownRequest.expectedVersion }}。保留原内容与编号。<button class="secondary-button" type="button" :disabled="submitting" @click="submit">原请求重试</button></p>
       <p v-if="receipt">回执：{{ receipt.orderCode }} · {{ receipt.processName }} · 进度版本 {{ receipt.version }} <button type="button" class="secondary-button" @click="editAgain">记录下一次进度</button></p>
-      <button class="secondary-button" type="button" @click="loadHistory">查看进度历史</button>
+      <button v-if="embedded && receipt?.percent === 100 && !isDelivered && !unknownRequest" class="primary-button" type="button" @click="emit('handoff')">前往交工核对</button>
+      <details class="info-disclosure"><summary @click="loadHistory">查看进度历史</summary>
       <p v-for="(item, index) in history" :key="index">{{ item.createdAt }} {{ item.operator }} {{ item.newPercent }}% {{ item.reason }}</p>
+      </details>
     </form>
     <template v-if="target && !target.selectChild && !embedded">
       <button class="secondary-button" type="button" :aria-expanded="changeOpen" @click="showChange">{{ changeOpen ? '收起改单办理' : '打开改单办理' }}</button>
@@ -218,6 +226,19 @@ async function loadHistory() {
 .process-progress-panel label { display: grid; gap: 6px; }
 .process-progress-panel input:not([type="file"]), .process-progress-panel select { box-sizing: border-box; width: 100%; min-width: 0; }
 .progress-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.process-progress-heading { display: grid; gap: 6px; }
+.process-progress-heading strong { font-size: 22px; }
+.process-progress-heading small { margin-left: 10px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.process-progress-heading > span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.progress-choices { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; grid-column: 1 / -1; }
+.process-progress-panel .progress-choices { width: 100%; }
+.progress-choices label { position: relative; text-align: center; border: 1px solid var(--border); border-radius: 10px; padding: 12px 4px; cursor: pointer; min-width: 0; }
+.progress-choices label.selected { background: var(--action-soft); border-color: var(--action); color: var(--action); }
+.progress-choices input[type="radio"] { position: absolute; opacity: 0; width: 1px; min-height: 0; height: 1px; }
+.progress-choices label:focus-within { outline: 2px solid var(--action); outline-offset: 2px; }
+.progress-choices small { font-size: 11px; }
+.progress-note, .progress-handoff-note { grid-column: 1 / -1; }
+.progress-handoff-note { margin: 0; font-size: 13px; color: var(--muted); }
 @media (max-width: 900px) {
   .process-progress-panel fieldset, .progress-filters { display: grid; grid-template-columns: 1fr 1fr; align-items: end; }
   .process-progress-panel fieldset > p,

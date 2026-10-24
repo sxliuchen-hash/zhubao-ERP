@@ -10,6 +10,7 @@ import com.zhubao.erp.business.domain.OrderWorkspaceQuery;
 import com.zhubao.erp.business.domain.OrderWorkspaceRow;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
 import com.zhubao.erp.business.domain.ProcessProgressHead;
+import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityCheckLine;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
@@ -146,6 +147,29 @@ class OrderWorkspaceQueryServiceTest {
         OrderWorkspaceRow ready = service.queryWithBalances(office, orders, query(), List.of(finished)).items().get(0);
         assertThat(ready.facet()).isEqualTo("READY_TO_SHIP");
         assertThat(ready.businessStatus()).isEqualTo("已质检");
+    }
+
+    @Test
+    void firstProcessProgressChangesProductionStatusButNeverCompletesHandoff() {
+        documents.saveMotherOrder(mother("MD-PG", 1001L, "恒信珠宝", "2026-10-23", "1", "件"));
+        documents.saveMotherSplitState(new MotherSplitState("MD-PG", MotherSplitState.SPLIT, "V1", "收货", "2026-10-09T08:00:00"));
+        documents.saveChildWorkOrder(child("ZD-PG", "MD-PG", 1001L, "恒信珠宝"));
+        int version = 0;
+        for (int percent : List.of(0, 30, 60, 90, 100)) {
+            progress.save(new ProcessProgressHead("ZD-PG", "雕刻", percent, ++version, "", "雕刻员", "2026-10-24T09:00:00"), SESSION);
+            OrderWorkspaceRow row = service.query(office, orders, query()).items().get(0);
+            assertThat(row.businessStatus()).isEqualTo(percent == 0 ? "待开工" : "在制");
+            assertThat(row.facet()).isEqualTo(percent == 0 ? "WAITING_START" : "IN_PROCESS");
+            assertThat(row.currentProcess()).isEqualTo("雕刻");
+            assertThat(row.processFormallyDelivered()).isFalse();
+            assertThat(documents.listAllProcessStationHandoffs()).isEmpty();
+        }
+        documents.saveProcessStationHandoff(new ProcessStationHandoff("ZD-PG", "雕刻", "雕刻员", "LED-PG", "2026-10-24T10:00:00"));
+        OrderWorkspaceRow next = service.query(office, orders, query()).items().get(0);
+        assertThat(next.currentProcess()).isEqualTo("镶嵌");
+        assertThat(next.processPercent()).isNull();
+        assertThat(next.businessStatus()).isEqualTo("在制");
+        assertThat(next.processFormallyDelivered()).isFalse();
     }
 
     @Test
