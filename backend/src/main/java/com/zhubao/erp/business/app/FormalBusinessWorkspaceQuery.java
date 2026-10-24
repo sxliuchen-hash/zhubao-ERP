@@ -94,10 +94,10 @@ final class FormalBusinessWorkspaceQuery {
             return new InboundOrder(mother.code(), customer(mother), goods.isEmpty() ? mother.materialCode() : goods,
                     text(mother.inboundDate()), text(mother.expressCompany()), text(mother.courierNo()),
                     text(mother.senderName()), text(mother.receiverName()), text(mother.unpackSigner()), goods,
-                    number(mother.quantity()).intValue(), weight(mother.weight()), "已入库",
+                    number(mother.quantity()), weight(mother.weight()), "已入库",
                     text(mother.evidenceCode()).isEmpty() ? "未关联" : "已关联", mother.customerOwned() ? "客户所有" : "公司所有",
                     "加工要求：" + text(mother.processingRequirement()) + "；期限：" + text(mother.dueDate()),
-                    context(mother.code(), "", Set.of(StockStatus.RAW_WAITING), snapshot));
+                    context(mother.code(), "", Set.of(StockStatus.RAW_WAITING), snapshot), text(mother.quantityUnit()));
         }).toList();
         return new InboundWorkspaceData(List.of(), orders, List.of(), "LIVE");
     }

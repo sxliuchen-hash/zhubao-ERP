@@ -89,7 +89,7 @@ describe('客户档案', () => {
     vi.mocked(fetchStatement).mockResolvedValueOnce({
       customerId: 1001,
       customerName: '恒信珠宝',
-      stockQuantity: 2,
+      stockQuantity: 130.5,
       stockWeight: 8,
       receivableAmount: 120,
       receivedAmount: 20,
@@ -115,6 +115,9 @@ describe('客户档案', () => {
     expect(fetchProgress).toHaveBeenCalledWith({ customer: '1001' });
     expect(wrapper.get('[aria-label="客户账单"]').text()).toContain('100.00');
     expect(wrapper.get('[aria-label="客户账单"]').text()).toContain('抛光');
+    expect(wrapper.get('[aria-label="客户账单"]').text()).not.toContain('130.5');
+    expect(wrapper.get('[aria-label="客户账单"]').text()).toContain('按物料与单位分别核对');
+    expect(wrapper.get('[aria-label="客户账单"]').text()).toContain('1 件');
     expect(wrapper.get('[aria-label="客户订单进度"]').text()).toContain('MD-1');
     expect(wrapper.get('[aria-label="客户订单进度"]').text()).toContain('逾期');
     expect(wrapper.text()).not.toContain('保存客户');

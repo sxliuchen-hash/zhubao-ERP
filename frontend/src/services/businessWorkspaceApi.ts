@@ -46,6 +46,7 @@ interface InboundOrderDto {
   unpackSigner?: string;
   goodsName?: string;
   quantity: number;
+  quantityUnit?: string;
   weight: string;
   status: string;
   videoStatus: string;
@@ -180,6 +181,7 @@ export function mapInboundWorkspace(dto: InboundWorkspaceDto): InboundWorkspaceM
       unpackSigner: order.unpackSigner ?? '',
       goodsName: order.goodsName ?? order.material,
       qty: order.quantity,
+      quantityUnit: order.quantityUnit ?? '',
       weight: order.weight,
       status: order.status,
       video: order.videoStatus,

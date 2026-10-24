@@ -30,6 +30,7 @@ export interface InboundOrder {
   unpackSigner: string;
   goodsName: string;
   qty: number;
+  quantityUnit?: string;
   weight: string;
   status: string;
   video: string;

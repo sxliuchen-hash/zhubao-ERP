@@ -41,6 +41,8 @@ class FormalBusinessWorkspaceQueryTest {
     void projectsRealReceiptAndCurrentInventoryWithoutMergingDemoOrders() {
         receipt("MD-LIVE", 7001L, "真实客户", "收货员");
         assertThat(service.inbound().orders()).singleElement().satisfies(order -> {
+            assertThat(order.quantity()).isEqualByComparingTo("2");
+            assertThat(order.quantityUnit()).isEqualTo("件");
             assertThat(order.code()).isEqualTo("MD-LIVE");
             assertThat(order.customer()).isEqualTo("真实客户");
             assertThat(order.operationContext().customerId()).isEqualTo(7001L);
@@ -185,6 +187,11 @@ class FormalBusinessWorkspaceQueryTest {
                 new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, "", null, "MAT-REAL", "PREP",
                         StockStatus.RAW_WAITING, "PREP-1"),
                 new BigDecimal("100"), new BigDecimal("100"), "寄存"));
+
+        assertThat(service.inbound().orders()).singleElement().satisfies(order -> {
+            assertThat(order.quantity()).isEqualByComparingTo("10.5");
+            assertThat(order.quantityUnit()).isEqualTo("克");
+        });
 
         assertThat(service.inventory().balances()).extracting(BusinessReviewData.InventoryBalance::batch)
                 .contains("MD-GRAM")

@@ -50,6 +50,7 @@ const first: InboundOrder = {
   unpackSigner: '何琳',
   goodsName: '戒托',
   qty: 1200000,
+  quantityUnit: '件',
   weight: '486.25 g',
   status: '待拆包',
   video: '已关联',
@@ -92,6 +93,21 @@ describe('来料列表与详情', () => {
       qrContent: '',
       children: [],
     });
+  });
+
+  it('来料表格、手机卡片与详情保留小数及原单位，旧记录不猜成件', async () => {
+    vi.mocked(fetchInboundWorkspace).mockResolvedValue({ checkpoints: [], risks: [], orders: [
+      { ...first, qty: 10.5, quantityUnit: '克' },
+      { ...second, qty: 120, quantityUnit: undefined },
+    ] });
+    const wrapper = mount(InboundWorkspace);
+    await flushPromises();
+    await wrapper.get('.inbound-card').trigger('click');
+    expect(wrapper.get('table').text()).toContain('10.5 克');
+    expect(wrapper.findAll('.inbound-card')[0].text()).toContain('10.5 克');
+    expect(wrapper.get('[aria-label="母单详情"]').text()).toContain('10.5 克');
+    expect(wrapper.text()).not.toContain('10 件');
+    expect(wrapper.text()).not.toContain('120 件');
   });
 
   it('按客户筛选，选中后返回仍保留筛选和选中', async () => {

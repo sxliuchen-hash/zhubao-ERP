@@ -316,7 +316,7 @@ function backToList() {
                 <td class="code"><strong>{{ order.code }}</strong></td>
                 <td>{{ order.customer }}</td>
                 <td>{{ requirementText(order) }}</td>
-                <td class="amount">{{ order.qty }} 件 / {{ order.weight }}</td>
+                <td class="amount">{{ order.qty }} {{ order.quantityUnit }} / {{ order.weight }}</td>
                 <td><StatusBadge :label="order.status" :tone="statusTone(order.status)" /></td>
                 <td><button class="table-action" type="button" @click.stop="selectInboundOrder(order.code)">处理</button></td>
               </tr>
@@ -340,7 +340,7 @@ function backToList() {
               <StatusBadge :label="order.status" :tone="statusTone(order.status)" />
             </span>
             <span>{{ order.customer }}</span>
-            <span>{{ requirementText(order) }} · {{ order.qty }} 件 / {{ order.weight }}</span>
+            <span>{{ requirementText(order) }} · {{ order.qty }} {{ order.quantityUnit }} / {{ order.weight }}</span>
           </button>
         </div>
       </div>
@@ -374,7 +374,7 @@ function backToList() {
             <dt>权属</dt>
             <dd>{{ activeOrder.owner }}</dd>
             <dt>数量重量</dt>
-            <dd>{{ activeOrder.qty }} 件 / {{ activeOrder.weight }}</dd>
+            <dd>{{ activeOrder.qty }} {{ activeOrder.quantityUnit }} / {{ activeOrder.weight }}</dd>
             <dt>备注</dt>
             <dd>{{ activeOrder.remark }}</dd>
             <dt>风险</dt>

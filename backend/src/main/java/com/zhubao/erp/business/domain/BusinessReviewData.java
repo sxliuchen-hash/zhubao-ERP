@@ -42,16 +42,20 @@ public final class BusinessReviewData {
             String receiverName,
             String unpackSigner,
             String goodsName,
-            int quantity,
+            BigDecimal quantity,
             String weight,
             String status,
             String videoStatus,
             String ownerType,
             String remark,
-            OperationContext operationContext
+            OperationContext operationContext,
+            String quantityUnit
     ) {
         public InboundOrder(String code, String customer, String material, String inboundDate, String expressCompany, String courierNo, String senderName, String receiverName, String unpackSigner, String goodsName, int quantity, String weight, String status, String videoStatus, String ownerType, String remark) {
             this(code, customer, material, inboundDate, expressCompany, courierNo, senderName, receiverName, unpackSigner, goodsName, quantity, weight, status, videoStatus, ownerType, remark, null);
+        }
+        public InboundOrder(String code, String customer, String material, String inboundDate, String expressCompany, String courierNo, String senderName, String receiverName, String unpackSigner, String goodsName, int quantity, String weight, String status, String videoStatus, String ownerType, String remark, OperationContext operationContext) {
+            this(code, customer, material, inboundDate, expressCompany, courierNo, senderName, receiverName, unpackSigner, goodsName, BigDecimal.valueOf(quantity), weight, status, videoStatus, ownerType, remark, operationContext, "");
         }
     }
 

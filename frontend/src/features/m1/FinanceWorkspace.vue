@@ -1136,7 +1136,7 @@ function kindLabel(kind: string) {
       <p v-if="statement" class="empty-hint">
         {{ statement.customerName }} 应收 {{ formatAmount(statement.receivableAmount) }} ，已收 {{ formatAmount(statement.receivedAmount) }} ，未收
         {{ formatAmount(statement.outstandingAmount) }} ，预收 {{ formatAmount(statement.prepaymentAmount) }} 。在库
-        数量汇总 {{ statement.stockQuantity }} / 重量汇总 {{ statement.stockWeight }}。{{ statement.stockNote }}
+        数量请到库存页按物料与单位分别核对；重量汇总 {{ statement.stockWeight }}。{{ statement.stockNote }}
       </p>
       <p v-if="statement && statement.lines.length === 0" class="empty-hint">暂无账单行</p>
       <div v-if="statement && statement.lines.length" class="erp-table-wrap finance-register-table" tabindex="0" aria-label="账单明细，可横向滚动">

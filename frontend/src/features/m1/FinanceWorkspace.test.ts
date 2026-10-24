@@ -113,14 +113,15 @@ describe('FinanceWorkspace', () => {
   it('财务账单切客户立即撤下旧结果，迟到的另一客户结果不回写', async () => {
     let resolveFirst!: (value: Awaited<ReturnType<typeof fetchStatement>>) => void;
     const first = new Promise<Awaited<ReturnType<typeof fetchStatement>>>(done => { resolveFirst = done; });
-    const base = { customerId: 1002, customerName: '客户乙', stockQuantity: 0, stockWeight: 0, receivableAmount: 20, receivedAmount: 0, outstandingAmount: 20, prepaymentAmount: 0, lines: [], receipts: [], stockNote: '' };
+    const base = { customerId: 1002, customerName: '客户乙', stockQuantity: 130.5, stockWeight: 0, receivableAmount: 20, receivedAmount: 0, outstandingAmount: 20, prepaymentAmount: 0, lines: [], receipts: [], stockNote: '' };
     vi.mocked(fetchStatement).mockReturnValueOnce(first).mockResolvedValueOnce(base);
     const wrapper = mount(FinanceWorkspace); await selectSection(wrapper, '客户账单'); await wrapper.get('[aria-label="客户编号"]').setValue('1001');
     await wrapper.findAll('button').find(button => button.text() === '查询账单')!.trigger('click');
     await wrapper.get('[aria-label="客户编号"]').setValue('1002');
     await wrapper.findAll('button').find(button => button.text() === '查询账单')!.trigger('click'); await flushPromises();
     resolveFirst({ ...base, customerId: 1001, customerName: '客户甲旧账单', outstandingAmount: 9999 }); await flushPromises();
-    expect(wrapper.text()).toContain('客户乙'); expect(wrapper.text()).not.toContain('客户甲旧账单'); expect(wrapper.text()).not.toContain('9,999'); wrapper.unmount();
+    expect(wrapper.text()).toContain('客户乙'); expect(wrapper.text()).not.toContain('客户甲旧账单'); expect(wrapper.text()).not.toContain('9,999');
+    expect(wrapper.text()).not.toContain('130.5'); expect(wrapper.text()).toContain('按物料与单位分别核对'); wrapper.unmount();
   });
   beforeEach(() => {
     vi.clearAllMocks();

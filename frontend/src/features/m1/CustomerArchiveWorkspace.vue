@@ -373,7 +373,7 @@ function money(value: number) {
               <dt>已收</dt><dd>{{ money(statement.receivedAmount) }}</dd>
               <dt>未收</dt><dd>{{ money(statement.outstandingAmount) }}</dd>
               <dt>预收</dt><dd>{{ money(statement.prepaymentAmount) }}</dd>
-              <dt>在库数量汇总</dt><dd>{{ statement.stockQuantity }}</dd><dt>在库重量汇总</dt><dd>{{ statement.stockWeight }}</dd>
+              <dt>在库数量</dt><dd>请到库存页按物料与单位分别核对</dd><dt>在库重量汇总</dt><dd>{{ statement.stockWeight }}</dd>
             </dl>
             <p v-if="statement.stockNote" class="archive-note">{{ statement.stockNote }}</p>
             <p v-if="!statement.lines.length" class="empty-hint">这个月没有账单明细</p>

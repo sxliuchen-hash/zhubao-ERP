@@ -29,7 +29,8 @@ describe('businessWorkspaceApi mappers', () => {
           receiverName: '何琳',
           unpackSigner: '何琳',
           goodsName: '戒托来料',
-          quantity: 12,
+          quantity: 10.5,
+          quantityUnit: '克',
           weight: '18.20 g',
           status: '待拆包',
           videoStatus: '待开始',
@@ -44,7 +45,8 @@ describe('businessWorkspaceApi mappers', () => {
     expect(model.orders[0].operationContext).toEqual(operationContext);
     expect(model.checkpoints[0].status).toBe('1 个截取任务失败');
     expect(model.orders[0]).toMatchObject({
-      qty: 12,
+      qty: 10.5,
+      quantityUnit: '克',
       video: '待开始',
       owner: '客户所有',
       expressCompany: '顺丰',
