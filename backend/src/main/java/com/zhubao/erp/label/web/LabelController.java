@@ -40,6 +40,14 @@ public class LabelController {
     private final LabelTemplateService labelTemplateService;
     private final OperatorContextResolver operatorContextResolver;
     private final BusinessDataAccess dataAccess;
+    private com.zhubao.erp.inventory.app.MaterialStockService materialStocks;
+    private com.zhubao.erp.security.app.AuthSessionService sessions;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setStockAccess(com.zhubao.erp.inventory.app.MaterialStockService materialStocks, com.zhubao.erp.security.app.AuthSessionService sessions) { this.materialStocks = materialStocks; this.sessions = sessions; }
+    private void assertBatch(String code, HttpServletRequest request) {
+        var account = sessions.currentAccount(request.getHeader(com.zhubao.erp.security.app.AuthSessionService.AUTHORIZATION_HEADER)).orElseThrow(() -> new com.zhubao.erp.common.error.BusinessException("请先登录"));
+        materialStocks.batchLabelSource(code, account);
+    }
 
     public LabelController(
             LabelService labelService,
@@ -58,9 +66,37 @@ public class LabelController {
     public ApiResponse<LabelPayload> generate(@Valid @RequestBody GenerateLabelCommand command, HttpServletRequest request) {
         OperatorContext operator = operatorContextResolver.requireSession(request);
         if (command != null && command.primaryCode() != null) {
-            dataAccess.assertCanReadIfStored(operator, command.primaryCode());
+            if (com.zhubao.erp.label.domain.LabelType.fromString(command.type()) == com.zhubao.erp.label.domain.LabelType.STOCK_BATCH) assertBatch(command.primaryCode(), request);
+            else dataAccess.assertCanReadIfStored(operator, command.primaryCode());
         }
         return ApiResponse.ok(labelService.generate(command));
+    }
+
+    @GetMapping("/stock-batches/{code}")
+    public ApiResponse<LabelPayload> stockBatchLabel(@PathVariable String code, HttpServletRequest request) {
+        operatorContextResolver.requireSession(request);
+        assertBatch(code, request);
+        return ApiResponse.ok(labelService.generateStockBatchLabel(code));
+    }
+
+    private com.zhubao.erp.label.app.LabelStorageEditionService storageEditions;
+    private com.zhubao.erp.security.app.PermissionGuard permissions;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setStorageEditions(com.zhubao.erp.label.app.LabelStorageEditionService storageEditions, com.zhubao.erp.security.app.PermissionGuard permissions) { this.storageEditions = storageEditions; this.permissions = permissions; }
+    public record AdoptStorage(String requestId, int expectedEdition, String reason, String templateCode) { }
+    @GetMapping("/{code}/storage-editions")
+    public ApiResponse<List<com.zhubao.erp.label.domain.LabelStorageEdition>> storageHistory(@PathVariable String code, HttpServletRequest request) {
+        var operator = operatorContextResolver.requireSession(request);
+        if (labelService.isStockBatch(code)) assertBatch(code, request); else dataAccess.assertCanRead(operator, code);
+        return ApiResponse.ok(storageEditions.history(code));
+    }
+    @PostMapping("/{code}/storage-editions")
+    public ApiResponse<Integer> adoptStorage(@PathVariable String code, @RequestBody AdoptStorage command, HttpServletRequest request) {
+        var operator = operatorContextResolver.requireSession(request);
+        permissions.assertAllowed(com.zhubao.erp.security.domain.PermissionCode.LABEL_PRINT, operator);
+        permissions.assertAllowed(com.zhubao.erp.security.domain.PermissionCode.MASTER_DATA_MANAGE, operator);
+        if (labelService.isStockBatch(code)) assertBatch(code, request); else dataAccess.assertCanRead(operator, code);
+        return ApiResponse.ok(storageEditions.adopt(code, command.requestId(), command.expectedEdition(), command.reason(), operator.operator(), command.templateCode()));
     }
 
     /** 按母单号便捷生成母单标签，可指定模板编码。 */
@@ -99,7 +135,8 @@ public class LabelController {
                 command.type(),
                 command.primaryCode(),
                 command.reason(),
-                operator.operator()
+                operator.operator(),
+                command.expectedSnapshotHash()
         )));
     }
 

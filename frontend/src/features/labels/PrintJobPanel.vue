@@ -42,7 +42,7 @@ function queuesFor(payload: LabelPayload) {
 function fingerprint() {
   const label = props.payload;
   return JSON.stringify([label.type, label.primaryCode, label.templateCode || 'FLOW', label.qrContent, label.printerSetting, label.layout,
-    label.fields, label.brandTitle, label.footerLeft, label.footerRight, Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(), intent.value]);
+    label.fields, label.storageSources, label.storageEdition, label.brandTitle, label.footerLeft, label.footerRight, Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(), intent.value]);
 }
 const submitted = computed(() => receipts.value.some(receipt => receipt.fingerprint === fingerprint()));
 async function loadQueues() {

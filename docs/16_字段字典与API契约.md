@@ -502,6 +502,14 @@ MySQL 持久化表：
 
 收货明细、寄存收货明细、子单来源分配增加 `storageRequirements: { conditions, instruction }`，冻结本次来源；备料领用沿用原批次快照。历史 `null` 表示未记录，不回填为当前材质档案。数量更正与待核确认保留原快照。`GET /api/business/master-data/materials/{code}/storage-changes` 需 `MASTER_DATA_MANAGE`，返回变更前后快照及时间；修改档案与变更记录在同一事务保存，不覆盖历史来源。档案页可按当前库存权限查询该材质在库／在制记录以供人工核对。
 
+### 4.1.2 标签保存圆章与换贴（V75）
+
+标签独立返回 `storageSources`，每项含来源编码、来源说明、材质编码、历史是否记录、汉字标识数组及完整说明；`storageEdition` 为保存要求标签版本 S0、S1……，与业务改单版本分别保留。打印任务冻结这些字段，紧凑模式和自定义模板均保留固定保存区域。每字由程序独立画圆居中；多来源逐项展示，空间不足拒绝打印并提示改尺寸／按来源打印，不能印为无归属的条件并集。
+
+`POST /api/label/{code}/storage-editions` 需单据可读及 `MASTER_DATA_MANAGE`，请求为 `requestId / expectedEdition / reason / templateCode`，经人工核对采用当前档案保存条件，冻结新标签版本及操作者、时间、原因；原业务来源和旧任务不改写。请求结果未知时原请求重放，版本冲突先重新预览。`GET` 同路径按单据读取历史。母／子单及真实寄存批次均支持显式换贴，原批次业务快照继续保留。网页补打可传 `expectedSnapshotHash`，内容变化时拒绝静默换版，原任务同版补打继续复用冻结快照。
+
+`GET /api/label/stock-batches/{code}` 按库存读取权限与客户范围核对真实已入账寄存批次；返回类型 `STOCK_BATCH`、真实批次主编码及 `STOCK|batch|真实批次号` 二维码，不能冒充母单。批次模板可单独配置尺寸，网页可直接打印，服务端任务仍冻结完整载荷。此码用于批次身份，不宣称通用订单扫码已支持寄存领用。
+
 ### 4.2 `ConfirmInboundCommand`
 
 `POST /api/business/operations/inbound-confirmations` 使用该命令模型。该接口执行真实业务动作并保存正式单据与库存台账。

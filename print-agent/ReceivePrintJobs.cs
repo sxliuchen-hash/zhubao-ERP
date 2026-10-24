@@ -535,6 +535,23 @@ namespace Zhubao.PrintReceiver
             spec.Lines = lines.ToArray();
             spec.FooterLeft = Text(snapshot, "footerLeft");
             spec.FooterRight = Text(snapshot, "footerRight");
+            var storageSources = new List<StorageSourceSpec>();
+            object rawStorage;
+            if (snapshot.TryGetValue("storageSources", out rawStorage) && rawStorage is ArrayList)
+            {
+                foreach (object rawSource in (ArrayList)rawStorage)
+                {
+                    var source = rawSource as Dictionary<string, object>;
+                    if (source == null) throw new InvalidOperationException("保存标识来源无效");
+                    var marks = new List<string>();
+                    object rawMarks;
+                    if (source.TryGetValue("marks", out rawMarks) && rawMarks is ArrayList)
+                        foreach (object mark in (ArrayList)rawMarks) marks.Add(Convert.ToString(mark));
+                    storageSources.Add(new StorageSourceSpec { SourceLabel = Text(source, "sourceLabel"), Marks = marks.ToArray(), Instruction = Text(source, "instruction") });
+                }
+            }
+            if (rawStorage != null && !(rawStorage is ArrayList)) throw new InvalidOperationException("保存标识载荷无效，不能省略打印");
+            spec.StorageSources = storageSources.ToArray();
             var built = new BuiltLabel();
             built.Spec = spec;
             built.Copies = useCopies;

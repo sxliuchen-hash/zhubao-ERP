@@ -20,6 +20,22 @@ const payload: LabelPayload = {
 };
 
 describe('黑白标签打印', () => {
+  it('紧凑模式为冷真圆章保留固定位置并显示来源', () => {
+    const html = buildLabelMarkup({ ...payload, printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30 }, storageSources: [{ sourceCode: 'MD-1:1', sourceLabel: '明细1', materialCode: 'XY', recorded: true, marks: ['冷', '真'], instruction: '' }] });
+    expect(html).toContain('bw-has-storage');
+    expect(html).toContain('--storage-height:5mm');
+    expect(html.match(/<circle /g)).toHaveLength(2);
+    expect(html).toContain('明细1');
+    expect(html).not.toContain('ⓒ');
+  });
+  it('多来源或说明放不下时拒绝打印，不静默截断', () => {
+    const source = { sourceCode: 'MD-1:1', sourceLabel: '明细1', materialCode: 'XY', recorded: true, marks: ['冷', '真'], instruction: '' };
+    expect(() => buildLabelMarkup({ ...payload, printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30 }, storageSources: [source, { ...source, sourceCode: 'MD-1:2', sourceLabel: '明细2' }] })).toThrow('空间不足');
+    const large = buildLabelMarkup({ ...payload, storageSources: [source, { ...source, sourceCode: 'MD-1:2', sourceLabel: '明细2' }] });
+    expect(large).toContain('明细2');
+    expect(large.match(/<circle /g)).toHaveLength(4);
+  });
+
   it('按标签纸毫米尺寸出黑白页，不使用彩色色块', () => {
     const html = buildLabelPrintDocument(payload);
 

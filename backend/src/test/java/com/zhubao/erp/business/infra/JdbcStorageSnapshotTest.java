@@ -19,6 +19,22 @@ import static org.assertj.core.api.Assertions.*;
 
 /** 使用真实 JDBC 连接执行迁移与回滚；H2 的 MySQL 兼容模式不等同于目标 MySQL 验收。 */
 class JdbcStorageSnapshotTest {
+    @Test void 标签换贴版本使用JDBC保存回滚及重读() throws Exception {
+        var ds = new JdbcDataSource(); ds.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");
+        try (var c = ds.getConnection(); var statement = c.createStatement()) {
+            for (String migration : List.of("V44__m3_command_request.sql", "V75__m3_label_storage_edition.sql"))
+                for (String part : MigrationCatalog.statements(Files.readString(Path.of("src/main/resources/db/mysql", migration)))) statement.execute(part);
+        }
+        var repo = new com.zhubao.erp.label.infra.JdbcLabelStorageEditionRepository(ds);
+        var unit = new JdbcBusinessWorkUnit(ds, new JdbcCommandRequestRepository(ds));
+        var edition = new com.zhubao.erp.label.domain.LabelStorageEdition("MD-1", 1, List.of(com.zhubao.erp.label.domain.StorageLabelSource.of("MD-1:1", "明细1", "XY", new StorageRequirements(List.of("COLD", "VACUUM"), ""))), "edition-001", "核对换贴", "收货员", "2026-10-25T10:00:00");
+        var call = new CommandCall("edition-001", "收货员", "LABEL_STORAGE_EDITION", "MOTHER_ORDER", "MD-1", "换贴");
+        assertThatThrownBy(() -> unit.execute(call, session -> { repo.save(edition, session); throw new IllegalStateException("回滚探针"); })).hasMessageContaining("回滚探针");
+        assertThat(repo.latest("MD-1", null)).isEmpty();
+        unit.execute(call, session -> { repo.save(edition, session); return "1"; });
+        assertThat(new com.zhubao.erp.label.infra.JdbcLabelStorageEditionRepository(ds).latest("MD-1", null)).contains(edition);
+    }
+
     @Test void 来源快照持久化重读和同事务失败回滚() throws Exception {
         var ds = new JdbcDataSource();
         ds.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");

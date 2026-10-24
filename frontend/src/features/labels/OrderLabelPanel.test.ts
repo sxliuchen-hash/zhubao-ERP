@@ -1,11 +1,12 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchMotherLabel, fetchWorkOrderLabel, reprintLabel, type LabelPayload } from '../../services/labelApi';
+import { adoptStorageEdition, fetchMotherLabel, fetchWorkOrderLabel, reprintLabel, type LabelPayload } from '../../services/labelApi';
+import { ref } from 'vue';
 import { queryScanContext } from '../../services/scanContextApi';
 import { buildScanContext } from '../scan/scanContextFixture';
 import OrderLabelPanel from './OrderLabelPanel.vue';
 
-vi.mock('../../services/labelApi', async () => ({ ...await vi.importActual<typeof import('../../services/labelApi')>('../../services/labelApi'), fetchMotherLabel: vi.fn(), fetchWorkOrderLabel: vi.fn(), reprintLabel: vi.fn() }));
+vi.mock('../../services/labelApi', async () => ({ ...await vi.importActual<typeof import('../../services/labelApi')>('../../services/labelApi'), adoptStorageEdition: vi.fn(), fetchMotherLabel: vi.fn(), fetchWorkOrderLabel: vi.fn(), reprintLabel: vi.fn() }));
 vi.mock('../../services/scanContextApi', async () => ({ ...await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi'), queryScanContext: vi.fn() }));
 vi.mock('./PrintJobPanel.vue', () => ({ default: { props: ['payload'], template: '<div data-print-jobs />' } }));
 const payload: LabelPayload = { type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'WO-1', qrContent: 'JG|work_order|WO-1|1|LI1', fields: [], footerLeft: '', footerRight: '', printedAt: '', brandTitle: '珠宝', templateCode: 'FLOW', printerSetting: { widthMm: 40, heightMm: 30, dpi: 203, printerName: '', copies: 1 } };
@@ -18,6 +19,18 @@ beforeEach(() => {
 });
 afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()));
 describe('精确单据标签', () => {
+  it('保存要求换贴超时后保留原请求和快照再核对', async () => {
+    vi.mocked(adoptStorageEdition).mockRejectedValueOnce(new Error('网络超时')).mockResolvedValueOnce(1);
+    const wrapper = mount(OrderLabelPanel, { props: { externalPayload: payload }, global: { provide: { 'zhubao-auth-session': ref({ role: 'RECEIVER' }) } } }); wrappers.push(wrapper);
+    await wrapper.setProps({ externalPayload: { ...payload } }); await flushPromises();
+    await wrapper.get('[aria-label="保存要求换贴原因"]').setValue('核对后更新保存要求');
+    const submit = () => wrapper.findAll('button').find(button => button.text().includes('确认采用当前') || button.text().includes('用原请求核对'))!;
+    await submit().trigger('click'); await flushPromises();
+    const first = vi.mocked(adoptStorageEdition).mock.calls[0];
+    await submit().trigger('click'); await flushPromises();
+    expect(vi.mocked(adoptStorageEdition).mock.calls[1]).toEqual(first);
+  });
+
   it('执行轮次解析为原子单时拦截，不能打印原单代替轮次', async () => {
     const wrapper = panel('ROUND-2'); await flushPromises();
     expect(wrapper.text()).toContain('执行轮次不一致');

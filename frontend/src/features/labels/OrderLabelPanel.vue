@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, provide, reactive, ref, watch, type Ref } from 'vue';
-import { fetchMotherLabel, fetchWorkOrderLabel, reprintLabel, type LabelPayload, type LabelType } from '../../services/labelApi';
+import { fetchStockBatchLabel, fetchStorageEditions, type LabelStorageEdition, adoptStorageEdition, fetchMotherLabel, fetchWorkOrderLabel, reprintLabel, type LabelPayload, type LabelType } from '../../services/labelApi';
+import { canManageMasterData } from '../../services/masterDataAccess';
 import type { AuthSession } from '../../services/authApi';
 import { ApiRequestError } from '../../services/apiClient';
 import type { OrderActionTarget } from '../orders/orderActions';
@@ -19,6 +20,33 @@ const openLabel = inject<((target: OrderActionTarget) => void) | null>('zhubao-o
 const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const canPrint = computed(() => !session.value?.effectivePermissions || session.value.effectivePermissions.includes('LABEL_PRINT'));
 provide('zhubao-scan-suspended', computed(() => !props.active));
+const canAdoptStorage = computed(() => canPrint.value && canManageMasterData(session.value));
+const storageReason = ref('');
+const storageHistory = ref<LabelStorageEdition[]>([]);
+async function loadStorageHistory() {
+  const code = preview.value?.primaryCode; if (!code) return;
+  try { const rows = await fetchStorageEditions(code); if (preview.value?.primaryCode === code) storageHistory.value = rows; }
+  catch (caught) { error.value = caught instanceof Error ? caught.message : '换贴记录读取失败'; }
+}
+const storageAttempt = ref<{ code: string; requestId: string; expectedEdition: number; reason: string; templateCode: string } | null>(null);
+async function adoptStorage() {
+  if (!canAdoptStorage.value || loading.value || !preview.value || !['MOTHER', 'WORK_ORDER', 'STOCK_BATCH'].includes(preview.value.type)) return;
+  if (!storageReason.value.trim()) { error.value = '请填写采用新保存要求换贴的原因'; return; }
+  const label = preview.value;
+  const attempt = storageAttempt.value ?? { code: label.primaryCode, requestId: `storage-${crypto.randomUUID()}`, expectedEdition: label.storageEdition ?? 0, reason: storageReason.value.trim(), templateCode: label.templateCode };
+  storageAttempt.value = attempt;
+  loading.value = true;
+  try {
+    await adoptStorageEdition(attempt.code, attempt);
+    storageAttempt.value = null;
+    preview.value = label.type === 'STOCK_BATCH' ? await fetchStockBatchLabel(attempt.code) : label.type === 'MOTHER' ? await fetchMotherLabel(attempt.code, label.templateCode || undefined) : await fetchWorkOrderLabel(attempt.code, label.templateCode || undefined);
+    hint.value = '已保存新的保存要求标签版本，请核对后换贴；旧打印任务保留原快照';
+    error.value = '';
+  } catch (caught) {
+    if (caught instanceof ApiRequestError && caught.status >= 400 && caught.status < 500) storageAttempt.value = null;
+    error.value = caught instanceof Error ? caught.message : '换贴版本结果待核对，请用原请求重试';
+  } finally { loading.value = false; }
+}
 const code = ref('');
 const scan = reactive(useScanContext());
 const preview = ref<LabelPayload | null>(null);
@@ -30,7 +58,7 @@ const error = ref('');
 const reprintReason = ref('');
 const reprintUnknown = ref(false);
 const printLocked = ref(false);
-const locked = computed(() => loading.value || printLocked.value || reprintUnknown.value);
+const locked = computed(() => loading.value || printLocked.value || reprintUnknown.value || Boolean(storageAttempt.value));
 const loadedSticker = ref<{ type: LabelType; code: string } | null>(null);
 let disposed = false;
 onBeforeUnmount(() => { disposed = true; });
@@ -41,7 +69,7 @@ watch(() => props.externalPayload, value => {
   if (props.initialTarget || locked.value) return;
   if (!value) { if (external.value) preview.value = null; return; }
   external.value = true; preview.value = value; loadedSticker.value = null;
-});
+}, { immediate: true });
 const incoming = inject<Ref<TraceTarget | null>>('zhubao-label-target', ref(null));
 watch(incoming, target => { if (!props.initialTarget && target?.code && !locked.value) { code.value = target.code; void locate({ content: target.code, ...(target.objectType ? { objectType: target.objectType } : {}) }); } }, { immediate: true });
 onMounted(() => { if (props.initialTarget) { code.value = props.initialTarget.code; void locate({ content: props.initialTarget.code, ...(props.initialTarget.objectType ? { objectType: props.initialTarget.objectType } : {}) }); } });
@@ -82,7 +110,7 @@ async function reprint() {
   if (!reprintReason.value.trim()) { error.value = '补打必须填写原因'; return; }
   loading.value = true; error.value = '';
   try {
-    const result = await reprintLabel({ type: loadedSticker.value.type, primaryCode: loadedSticker.value.code, reason: reprintReason.value.trim() });
+    const result = await reprintLabel({ type: loadedSticker.value.type, primaryCode: loadedSticker.value.code, reason: reprintReason.value.trim(), ...(preview.value?.snapshotHash ? { expectedSnapshotHash: preview.value.snapshotHash } : {}) });
     if (disposed) return;
     if (result.primaryCode !== loadedSticker.value.code || result.type !== loadedSticker.value.type) throw new Error('补打回执与本单不一致，请保留原原因核对');
     preview.value = result; hint.value = `已记录补打：${result.primaryCode}。尚未创建新的打印批次。`;
@@ -114,6 +142,8 @@ function officialPrint() {
         <p v-if="reprintUnknown" class="operation-feedback warning">补打记录结果待核对，原单及原因保留，尚未提交新的打印任务。</p>
         <button v-if="explicitMother" class="secondary-button" type="button" :disabled="locked" @click="choose({ objectType: 'MOTHER_ORDER', code: explicitMother, motherOrderCode: explicitMother, requirement: null, quantity: null, quantityUnit: null })">选择母单标签 {{ explicitMother }}</button>
         <OrderContextCard v-if="scan.context?.requiresSelection" :context="scan.context" @select="choose" />
+        <details v-if="preview && canAdoptStorage && ['MOTHER', 'WORK_ORDER', 'STOCK_BATCH'].includes(preview.type)" class="info-disclosure"><summary>采用更新后的保存要求换贴（当前 S{{ preview.storageEdition || 0 }}）</summary><p>核对当前材质档案后建立新标签版本；原收货及旧打印任务保留。</p><label>换贴原因<input v-model="storageReason" aria-label="保存要求换贴原因" :disabled="loading || Boolean(storageAttempt)" maxlength="200" /></label><button type="button" :disabled="loading" @click="adoptStorage">{{ storageAttempt ? '用原请求核对换贴版本' : '确认采用当前材质保存要求' }}</button></details>
+        <details v-if="preview && ['MOTHER', 'WORK_ORDER', 'STOCK_BATCH'].includes(preview.type)"><summary @click="loadStorageHistory">保存要求换贴历史</summary><p v-for="edition in storageHistory" :key="edition.edition">S{{ edition.edition }} · {{ edition.createdAt }} · {{ edition.operator }} · {{ edition.reason }}<span v-for="source in edition.sources" :key="source.sourceCode"> ／ {{ source.sourceLabel }}：{{ source.marks.join('、') || '未配置条件' }} {{ source.instruction }}</span></p></details>
         <details v-if="loadedSticker" class="info-disclosure"><summary>补打这张标签</summary>
         <fieldset class="label-plain-fields" :disabled="locked || !canPrint"><label class="field">补打原因<input v-model="reprintReason" aria-label="补打原因" placeholder="如 贴纸丢失" /></label><button class="secondary-button" type="button" :disabled="!loadedSticker || locked || !canPrint" @click="reprint">补打并记录</button></fieldset>
         </details>
@@ -126,7 +156,7 @@ function officialPrint() {
       </section>
       <section v-else class="label-preview form-card"><p>请先按单号打开贴纸或生成标签，成功后再预览和打印。</p></section>
     </div>
-    <PrintJobPanel v-if="lastPayload" v-show="preview && !external" :payload="lastPayload" :disabled="!canPrint || reprintUnknown" @locked="printLocked = $event" />
+    <PrintJobPanel v-if="lastPayload" v-show="preview && (!external || preview.type === 'STOCK_BATCH')" :payload="lastPayload" :disabled="!canPrint || reprintUnknown" @locked="printLocked = $event" />
   </section>
 </template>
 

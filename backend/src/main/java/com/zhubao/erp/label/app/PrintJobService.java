@@ -44,6 +44,9 @@ public class PrintJobService {
     private BusinessDocumentRepository documents;
     private BusinessDataAccess dataAccess;
     private LabelService labelService;
+    private com.zhubao.erp.inventory.app.MaterialStockService materialStocks;
+    @Autowired(required = false)
+    public void setMaterialStocks(com.zhubao.erp.inventory.app.MaterialStockService materialStocks) { this.materialStocks = materialStocks; }
     private final ObjectMapper snapshotMapper = new ObjectMapper();
 
     public PrintJobService(PrintJobRepository jobs, String stationToken) {
@@ -173,7 +176,7 @@ public class PrintJobService {
             throw new BusinessException("同一请求的内容不一致");
         }
         if (stored.id().startsWith("PJ-") && labelGuard != null && stored.createdAt().equals(now)) {
-            labelGuard.recordEvent(businessCode.trim(), businessCode.trim(), version == 0 ? "PRINT" : "REISSUE_VERSION",
+            labelGuard.recordEvent(motherCode(businessCode.trim()), businessCode.trim(), version == 0 ? "PRINT" : "REISSUE_VERSION",
                     "V" + version, "", stored.id(), "", operator);
         }
         return stored;
@@ -195,7 +198,11 @@ public class PrintJobService {
                 String[] parts = qr.split("\\|", -1);
                 code = parts.length > 2 ? parts[2] : "";
             }
-            return new LabelEdition(code, parser.labelVersion(qr), parser.labelInstance(qr));
+            String version = parser.labelVersion(qr);
+            int storage = root.path("storageEdition").asInt(0);
+            if ("STOCK_BATCH".equals(root.path("type").asText())) return new LabelEdition(code, "S" + storage, code + "-S" + storage);
+            if (storage > 0) version += "/S" + storage;
+            return new LabelEdition(code, version, parser.labelInstance(qr));
         } catch (JsonProcessingException ex) {
             throw new BusinessException("标签快照无效");
         }
@@ -232,7 +239,7 @@ public class PrintJobService {
             throw new BusinessException("同一请求的内容不一致");
         }
         if (labelGuard != null && stored.createdAt().equals(now)) {
-            labelGuard.recordEvent(original.businessCode(), original.businessCode(), "REPRINT_SAME", "", "", stored.id(), reason.trim(), operator);
+            labelGuard.recordEvent(motherCode(original.businessCode()), original.businessCode(), "REPRINT_SAME", "", "", stored.id(), reason.trim(), operator);
         }
         return stored;
     }
@@ -243,7 +250,7 @@ public class PrintJobService {
             throw new BusinessException("出纸核实必须填写结果");
         }
         if (labelGuard != null) {
-            labelGuard.recordEvent(job.businessCode(), job.businessCode(), "PAPER_CHECKED", "", "", job.id(), note.trim(), operator);
+            labelGuard.recordEvent(motherCode(job.businessCode()), job.businessCode(), "PAPER_CHECKED", "", "", job.id(), note.trim(), operator);
         }
         return job;
     }
@@ -254,7 +261,7 @@ public class PrintJobService {
             throw new BusinessException("实物换贴必须填写结果");
         }
         if (labelGuard != null) {
-            labelGuard.recordEvent(job.businessCode(), job.businessCode(), "RELABELED", "", "", job.id(), note.trim(), operator);
+            labelGuard.recordEvent(motherCode(job.businessCode()), job.businessCode(), "RELABELED", "", "", job.id(), note.trim(), operator);
         }
         return job;
     }
@@ -309,6 +316,8 @@ public class PrintJobService {
             payload = labelService.generateMotherLabel(businessCode, selectedTemplate);
         } else if (documents.findChildWorkOrderByCode(businessCode).isPresent()) {
             payload = labelService.generateWorkOrderLabel(businessCode, selectedTemplate);
+        } else if (materialStocks != null) {
+            payload = labelService.generateStockBatchLabel(businessCode, selectedTemplate);
         } else {
             return snapshot(businessCode, templateCode, copies, version);
         }
@@ -325,9 +334,13 @@ public class PrintJobService {
         snapshot.put("instance", qrParts.length > 4 ? qrParts[4] : "");
         snapshot.put("qr", payload.qrContent());
         snapshot.put("brandTitle", payload.brandTitle());
+        snapshot.put("type", payload.type().name());
         snapshot.put("typeLabel", payload.typeLabel());
         snapshot.put("primaryCode", payload.primaryCode());
         snapshot.put("fields", payload.fields());
+        snapshot.put("storageSources", payload.storageSources());
+        snapshot.put("storageEdition", payload.storageEdition());
+        snapshot.put("storageHeightMm", payload.storageHeightMm());
         snapshot.put("footerLeft", payload.footerLeft());
         snapshot.put("footerRight", payload.footerRight());
         snapshot.put("layout", payload.layout());
@@ -359,6 +372,12 @@ public class PrintJobService {
                 + "\",\"lines\":[\"单号:" + escape(businessCode) + "\",\"模板:" + escape(templateCode) + "\"]}";
     }
 
+    private String motherCode(String code) {
+        if (documents == null) return "";
+        if (documents.findMotherOrderByCode(code).isPresent()) return code;
+        return documents.findChildWorkOrderByCode(code).map(child -> child.motherOrderCode()).orElse("");
+    }
+
     private void assertPrintable(String businessCode, AuthUserAccount account) {
         if (!readable(businessCode, account)) {
             throw new PermissionDeniedException("打印对象不在当前账号的业务数据范围内");
@@ -369,6 +388,10 @@ public class PrintJobService {
         if (documents != null) {
             boolean known = documents.findMotherOrderByCode(businessCode).isPresent()
                     || documents.findChildWorkOrderByCode(businessCode).isPresent();
+            if (!known && materialStocks != null && account != null) {
+                materialStocks.batchLabelSource(businessCode, account);
+                return true;
+            }
             if (!known) {
                 throw new BusinessException("打印对象不存在：" + businessCode);
             }

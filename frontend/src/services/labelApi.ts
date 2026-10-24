@@ -1,7 +1,7 @@
 import { apiGet, apiPost } from './apiClient';
 
 // 标签类型：母单 / 子工单 / 出货 / 返工
-export type LabelType = 'MOTHER' | 'WORK_ORDER' | 'OUTBOUND' | 'REWORK';
+export type LabelType = 'MOTHER' | 'WORK_ORDER' | 'OUTBOUND' | 'REWORK' | 'STOCK_BATCH';
 
 // 标签上的一个信息字段（键值对）
 export interface LabelField {
@@ -30,7 +30,12 @@ export interface LabelLayout {
 }
 
 // 可打印标签载荷，前端据此渲染标签并生成二维码
+export interface StorageLabelSource { sourceCode: string; sourceLabel: string; materialCode: string; recorded: boolean; marks: string[]; instruction: string }
 export interface LabelPayload {
+  storageSources?: StorageLabelSource[];
+  storageEdition?: number;
+  snapshotHash?: string;
+  storageHeightMm?: number;
   type: LabelType;
   typeLabel: string;
   primaryCode: string;
@@ -120,6 +125,7 @@ export async function fetchWorkOrderLabel(code: string, templateCode?: string): 
 }
 
 export interface ReprintLabelRequest {
+  expectedSnapshotHash?: string;
   type: LabelType;
   primaryCode: string;
   reason: string;
@@ -141,6 +147,7 @@ export async function saveLabelTemplate(request: SaveLabelTemplateRequest): Prom
 
 // 标签类型下拉选项
 export const labelTypeOptions: Array<{ value: LabelType; label: string }> = [
+  { value: 'STOCK_BATCH', label: '寄存批次' },
   { value: 'MOTHER', label: '母单' },
   { value: 'WORK_ORDER', label: '子工单' },
   { value: 'OUTBOUND', label: '出货' },
@@ -165,3 +172,11 @@ export const motherFieldSourceOptions: Array<{ value: string; label: string }> =
   { value: 'receiver', label: '收货人' },
   { value: 'express', label: '快递' },
 ];
+
+export const fetchStockBatchLabel = (code: string) => apiGet<LabelPayload>(`/api/label/stock-batches/${encodeURIComponent(code)}`);
+
+export const adoptStorageEdition = (code: string, body: { requestId: string; expectedEdition: number; reason: string; templateCode: string }) =>
+  apiPost<typeof body, number>(`/api/label/${encodeURIComponent(code)}/storage-editions`, body);
+
+export interface LabelStorageEdition { businessCode: string; edition: number; sources: StorageLabelSource[]; reason: string; operator: string; createdAt: string }
+export const fetchStorageEditions = (code: string) => apiGet<LabelStorageEdition[]>(`/api/label/${encodeURIComponent(code)}/storage-editions`);

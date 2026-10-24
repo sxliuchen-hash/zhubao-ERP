@@ -64,6 +64,25 @@ class MaterialStockServiceTest {
     }
 
     @Test
+    void 寄存标签只读取真实批次并遵守客户范围() {
+        service.receivePrep(prepReceipt(1001L, "甲", List.of(new StockDesk.LineInput("AU9999", "克", BigDecimal.TEN, BigDecimal.TEN, "")), true, "batch-label-001"), keeper);
+        var batch = onlyBatch("prep");
+        assertThat(service.batchLabelSource(batch.batchCode(), keeper).documentCode()).isEqualTo(batch.documentCode());
+        assertThatThrownBy(() -> service.batchLabelSource("MD-FAKE", keeper)).hasMessageContaining("真实寄存批次");
+        var outsider = account("其他客户库管", RoleCode.WAREHOUSE_KEEPER, DataScope.CUSTOMER_RANGE, List.of("1002"));
+        assertThatThrownBy(() -> service.batchLabelSource(batch.batchCode(), outsider)).isInstanceOf(PermissionDeniedException.class);
+        var labels = new com.zhubao.erp.label.app.LabelService(); labels.setStockDocuments(stockDocuments);
+        assertThat(labels.generateStockBatchLabel(batch.batchCode()).primaryCode()).isEqualTo(batch.batchCode());
+        assertThat(labels.generateStockBatchLabel(batch.batchCode()).qrContent()).isEqualTo("STOCK|batch|" + batch.batchCode());
+        catalog.saveMaterial(new com.zhubao.erp.business.domain.MaterialProfile("AU9999", "足金", "", "", true, List.of("DARK"), ""));
+        var editions = new com.zhubao.erp.label.infra.InMemoryLabelStorageEditionRepository(); labels.setStorageEditions(editions);
+        var editionService = new com.zhubao.erp.label.app.LabelStorageEditionService(editions, orders, catalog, labels, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), stockDocuments);
+        editionService.adopt(batch.batchCode(), "batch-adopt-001", 0, "核对保存要求", keeper.operator(), "");
+        assertThat(labels.generateStockBatchLabel(batch.batchCode()).qrContent()).isEqualTo("STOCK|batch|" + batch.batchCode() + "|S1");
+        assertThat(labels.generateStockBatchLabel(batch.batchCode()).storageSources().get(0).marks()).containsExactly("光");
+    }
+
+    @Test
     void companyIssueAndOriginalReturnKeepDecimalsAndTrace() {
         String receipt = service.receiveCompany(companyReceipt("10.500", true, "company-recv-1"), keeper);
         StockDesk.BatchCard batch = onlyBatch("company");

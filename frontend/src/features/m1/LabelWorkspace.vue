@@ -333,8 +333,8 @@ function workOrderDraftFields(): LabelField[] {
 const templateDraft = computed<LabelPayload>(() => ({
   type: templateForm.value.labelType,
   typeLabel: labelTypeOptions.find((item) => item.value === templateForm.value.labelType)?.label ?? '标签',
-  primaryCode: templateForm.value.labelType === 'WORK_ORDER' ? 'ZD-20261014-0001' : 'MD-20261014-0001',
-  qrContent: templateForm.value.labelType === 'WORK_ORDER' ? 'JG|work_order|ZD-20261014-0001|0|PREVIEW' : 'JG|mother|MD-20261014-0001|0|PREVIEW',
+  primaryCode: templateForm.value.labelType === 'STOCK_BATCH' ? 'PC-PREVIEW' : templateForm.value.labelType === 'WORK_ORDER' ? 'ZD-20261014-0001' : 'MD-20261014-0001',
+  qrContent: templateForm.value.labelType === 'STOCK_BATCH' ? 'STOCK|batch|PC-PREVIEW' : templateForm.value.labelType === 'WORK_ORDER' ? 'JG|work_order|ZD-20261014-0001|0|PREVIEW' : 'JG|mother|MD-20261014-0001|0|PREVIEW',
   fields: workOrderDraftFields(),
   footerLeft: draftFieldExamples[templateForm.value.footerLeftSource] || '',
   footerRight: draftFieldExamples[templateForm.value.footerRightSource] || '',
@@ -539,7 +539,7 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
         <label>队列 ID <input v-model="queueForm.queueId" aria-label="队列 ID" /></label>
         <label>显示名称 <input v-model="queueForm.name" aria-label="队列名称" /></label>
         <label>标签类型 <select v-model="queueForm.labelType" aria-label="队列标签类型">
-          <option value="ALL">母单与子单</option><option value="MOTHER">母单</option><option value="WORK_ORDER">子单</option>
+          <option value="ALL">全部业务标签</option><option value="STOCK_BATCH">寄存批次</option><option value="MOTHER">母单</option><option value="WORK_ORDER">子单</option>
         </select></label>
         <label>宽（mm）<input v-model.number="queueForm.widthMm" type="number" aria-label="队列纸宽" /></label>
         <label>高（mm）<input v-model.number="queueForm.heightMm" type="number" aria-label="队列纸高" /></label>

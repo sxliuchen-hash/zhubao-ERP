@@ -24,6 +24,32 @@ import static org.mockito.Mockito.when;
 class LabelReadAuthorizationTest {
 
     @Test
+    void 采用新保存要求需要标签及档案维护权限() {
+        var labels = mock(LabelService.class); var resolver = mock(OperatorContextResolver.class);
+        var operator = new OperatorContext("业务员", RoleCode.SALES, DataScope.ALL);
+        when(resolver.requireSession(org.mockito.ArgumentMatchers.any())).thenReturn(operator);
+        var controller = new LabelController(labels, mock(LabelTemplateService.class), resolver, mock(BusinessDataAccess.class));
+        var editions = mock(com.zhubao.erp.label.app.LabelStorageEditionService.class);
+        var guard = mock(com.zhubao.erp.security.app.PermissionGuard.class);
+        controller.setStorageEditions(editions, guard);
+        doThrow(new PermissionDeniedException("无档案维护权限")).when(guard).assertAllowed(com.zhubao.erp.security.domain.PermissionCode.MASTER_DATA_MANAGE, operator);
+        assertThatThrownBy(() -> controller.adoptStorage("MD-1", new LabelController.AdoptStorage("adopt-001", 0, "换贴", ""), mock(HttpServletRequest.class))).isInstanceOf(PermissionDeniedException.class);
+        verify(editions, never()).adopt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void 寄存通用标签小写类型也必须核对批次权限() {
+        var labels = mock(LabelService.class);
+        var resolver = mock(OperatorContextResolver.class);
+        when(resolver.requireSession(org.mockito.ArgumentMatchers.any())).thenReturn(new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.ALL));
+        var controller = new LabelController(labels, mock(LabelTemplateService.class), resolver, mock(BusinessDataAccess.class));
+        controller.setStockAccess(mock(com.zhubao.erp.inventory.app.MaterialStockService.class), mock(com.zhubao.erp.security.app.AuthSessionService.class));
+        assertThatThrownBy(() -> controller.generate(new GenerateLabelCommand("stock_batch", "PC-REAL", java.util.List.of(), "", "", ""), mock(HttpServletRequest.class)))
+                .hasMessageContaining("请先登录");
+        verify(labels, never()).generate(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void storedLabelQueriesUseTheDocumentReadBoundary() {
         LabelService labels = mock(LabelService.class);
         OperatorContextResolver resolver = mock(OperatorContextResolver.class);

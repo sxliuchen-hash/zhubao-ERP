@@ -68,7 +68,7 @@ public class PrintBatchService {
         if (queue == null || !validId(queue.stationId()) || !validId(queue.queueId())
                 || queue.name() == null || queue.name().isBlank() || queue.widthMm() < 10
                 || queue.heightMm() < 10 || queue.widthMm() > 200 || queue.heightMm() > 200
-                || !List.of("MOTHER", "WORK_ORDER", "ALL").contains(queue.labelType()))
+                || !List.of("MOTHER", "WORK_ORDER", "STOCK_BATCH", "ALL").contains(queue.labelType()))
             throw new BusinessException("打印队列配置无效");
         repository.station(queue.stationId()).orElseThrow(() -> new BusinessException("工位不存在"));
         return repository.saveQueue(new PrintQueue(queue.stationId(), queue.queueId(), queue.name().trim(),
@@ -239,7 +239,7 @@ public class PrintBatchService {
         try {
             JsonNode root = mapper.readTree(snapshot);
             int width = root.path("widthMm").asInt(); int height = root.path("heightMm").asInt();
-            String type = businessCode.startsWith("MD") ? "MOTHER" : "WORK_ORDER";
+            String type = root.path("type").asText(businessCode.startsWith("MD") ? "MOTHER" : "WORK_ORDER");
             List<PrintQueue> active = availableQueues();
             for (PrintTarget target : targets) {
                 boolean valid = active.stream().anyMatch(queue -> queue.stationId().equals(target.stationId())

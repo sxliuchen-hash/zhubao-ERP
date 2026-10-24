@@ -13,6 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LabelRendererTest {
 
     @Test
+    void 圆章占用独立区域且空间不足明确拒绝() throws Exception {
+        String common = "{\"copies\":1,\"widthMm\":40,\"heightMm\":30,\"dpi\":300,\"fields\":[],\"qr\":\"JG|mother|MD-1|0|LI1\",\"storageSources\":[{\"sourceLabel\":\"明细1\",\"marks\":[\"冷\",\"真\"],\"instruction\":\"";
+        byte[] rendered = LabelRenderer.render(common + "\"}]}");
+        java.nio.file.Files.write(java.nio.file.Path.of("target/storage-label-java.png"), rendered);
+        var image = ImageIO.read(new ByteArrayInputStream(rendered));
+        assertTrue(hasBlackPixelIn(image, 100, 300, 300, 340));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> LabelRenderer.render(common + "测".repeat(200) + "\"}]}"));
+    }
+
+    @Test
     void rendersMillimeterLabelWithQrPayload() throws Exception {
         String snapshot = "{\"kind\":\"LABEL\",\"businessCode\":\"MD-1\",\"templateCode\":\"FLOW\",\"copies\":2,"
                 + "\"widthMm\":60,\"heightMm\":40,\"version\":\"V1\",\"instance\":\"LI1\","

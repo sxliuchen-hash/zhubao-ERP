@@ -8,6 +8,13 @@ using System.Text;
 
 namespace Zhubao.PrintReceiver
 {
+    public sealed class StorageSourceSpec
+    {
+        public string SourceLabel;
+        public string[] Marks;
+        public string Instruction;
+    }
+
     public sealed class LabelSpec
     {
         public string TypeLabel;
@@ -19,6 +26,7 @@ namespace Zhubao.PrintReceiver
         public string[] Lines;
         public string FooterLeft;
         public string FooterRight;
+        public StorageSourceSpec[] StorageSources;
     }
 
     public static class LabelPrinter
@@ -38,14 +46,18 @@ namespace Zhubao.PrintReceiver
                 canvas.Clear(Color.White);
                 canvas.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 int pad = Math.Max(2, (int)Math.Round(0.8 * dpi / 25.4));
+                int storageHeight = StorageHeight(spec, dpi);
+                int contentBottom = height - pad - storageHeight;
+                if (storageHeight > 0 && (spec.WidthMm < 35 || storageHeight + (int)Math.Round(24 * dpi / 25.4) > height))
+                    throw new ArgumentException("保存标识与来源说明空间不足，请调整标签尺寸或按来源明细打印");
                 float y = pad;
                 using (var title = LabelFont((float)(7.2 * dpi / 72.0), true))
                 {
                     string head = ((spec.TypeLabel ?? "") + " " + (spec.Code ?? "")).Trim();
-                    y = DrawLine(canvas, head, title, pad, y, width - 2 * pad, height - pad);
+                    y = DrawLine(canvas, head, title, pad, y, width - 2 * pad, contentBottom);
                 }
                 int qrTop = (int)Math.Ceiling(y) + 2;
-                int qrBox = Math.Min(height - qrTop - pad, (int)(width * 0.42));
+                int qrBox = Math.Min(contentBottom - qrTop, (int)(width * 0.42));
                 qrBox = Math.Max(21, qrBox);
                 if (!string.IsNullOrWhiteSpace(spec.Qr))
                     DrawQr(canvas, spec.Qr, pad, qrTop, qrBox);
@@ -58,8 +70,8 @@ namespace Zhubao.PrintReceiver
                     {
                         foreach (string line in spec.Lines)
                         {
-                            if (string.IsNullOrWhiteSpace(line) || textY >= height - pad) continue;
-                            textY = DrawWrapped(canvas, line, body, textX, textY, textWidth, height - pad, 2);
+                            if (string.IsNullOrWhiteSpace(line) || textY >= contentBottom) continue;
+                            textY = DrawWrapped(canvas, line, body, textX, textY, textWidth, contentBottom, 2);
                         }
                     }
                 }
@@ -68,14 +80,62 @@ namespace Zhubao.PrintReceiver
                 {
                     using (var footerFont = LabelFont((float)(5.5 * dpi / 72.0), false))
                     {
-                        float footerY = height - pad - footerFont.Height;
+                        float footerY = contentBottom - footerFont.Height;
                         if (footerY > textY)
                             DrawLine(canvas, footer, footerFont, pad, footerY, width - 2 * pad, height);
                     }
                 }
+                DrawStorage(canvas, spec, dpi, pad, height - pad - storageHeight, width - 2 * pad);
                 canvas.DrawRectangle(Pens.Black, 0, 0, width - 1, height - 1);
             }
             return image;
+        }
+
+        private static int StorageHeight(LabelSpec spec, int dpi)
+        {
+            double mm = 0;
+            int chars = Math.Max(1, (int)((spec.WidthMm - 3) / 2.2));
+            foreach (var source in spec.StorageSources ?? new StorageSourceSpec[0])
+            {
+                if ((source.Marks == null || source.Marks.Length == 0) && string.IsNullOrWhiteSpace(source.Instruction)) continue;
+                mm += 5 + (string.IsNullOrWhiteSpace(source.Instruction) ? 0 : Math.Ceiling((double)source.Instruction.Length / chars) * 3);
+            }
+            return (int)Math.Round(mm * dpi / 25.4);
+        }
+
+        private static void DrawStorage(Graphics canvas, LabelSpec spec, int dpi, int left, int top, int width)
+        {
+            float y = top;
+            float row = (float)(5 * dpi / 25.4);
+            float diameter = (float)(4 * dpi / 25.4);
+            using (var font = LabelFont((float)(6 * dpi / 72.0), false))
+            using (var markFont = LabelFont((float)(8 * dpi / 72.0), true))
+            using (var pen = new Pen(Color.Black, (float)(0.25 * dpi / 25.4)))
+            using (var center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            {
+                foreach (var source in spec.StorageSources ?? new StorageSourceSpec[0])
+                {
+                    if ((source.Marks == null || source.Marks.Length == 0) && string.IsNullOrWhiteSpace(source.Instruction)) continue;
+                    canvas.DrawString(source.SourceLabel ?? "", font, Brushes.Black, left, y + (row - font.Height) / 2);
+                    float x = left + (float)(10 * dpi / 25.4);
+                    foreach (var mark in source.Marks ?? new string[0])
+                    {
+                        if (mark.Length != 1 || "冷冻真光潮".IndexOf(mark, StringComparison.Ordinal) < 0) throw new ArgumentException("保存标识无效");
+                        canvas.DrawEllipse(pen, x, y + (row - diameter) / 2, diameter, diameter);
+                        canvas.DrawString(mark, markFont, Brushes.Black, new RectangleF(x, y + (row - diameter) / 2, diameter, diameter), center);
+                        x += diameter + (float)(0.5 * dpi / 25.4);
+                    }
+                    y += row;
+                    if (!string.IsNullOrWhiteSpace(source.Instruction))
+                    {
+                        int chars = Math.Max(1, (int)((spec.WidthMm - 3) / 2.2));
+                        int count = (int)Math.Ceiling((double)source.Instruction.Length / chars);
+                        float noteHeight = (float)(count * 3 * dpi / 25.4);
+                        DrawWrapped(canvas, System.Text.RegularExpressions.Regex.Replace(source.Instruction, @"\s+", " "), font, left, y, width, y + noteHeight, count);
+                        y += noteHeight;
+                    }
+                }
+            }
         }
 
         public static void Print(string printerName, Bitmap image, int copies, int widthMm, int heightMm)
@@ -171,7 +231,8 @@ namespace Zhubao.PrintReceiver
                 Dpi = 300,
                 Lines = new[] { "客户：何琴", "加工要求：抛光", "期限：2026-10-25" },
                 FooterLeft = "",
-                FooterRight = ""
+                FooterRight = "",
+                StorageSources = new[] { new StorageSourceSpec { SourceLabel = "明细1", Marks = new[] { "冷", "真" }, Instruction = "" } }
             };
             using (Bitmap bitmap = Render(spec))
             {
@@ -180,7 +241,11 @@ namespace Zhubao.PrintReceiver
                 if (!string.IsNullOrEmpty(samplePath))
                     bitmap.Save(samplePath, System.Drawing.Imaging.ImageFormat.Png);
             }
-            return "二维码 " + size + " 模块，画面 472×354";
+            spec.StorageSources = new[] { new StorageSourceSpec { SourceLabel = "明细1", Marks = new[] { "冷", "真" }, Instruction = new string('测', 200) } };
+            bool rejected = false;
+            try { using (Bitmap unexpected = Render(spec)) { } } catch (ArgumentException) { rejected = true; }
+            if (!rejected) throw new InvalidOperationException("保存说明空间不足时应拒绝打印");
+            return "二维码 " + size + " 模块，画面 472×354，冷真圆章与空间校验通过";
         }
 
         private static void DrawQr(Graphics canvas, string content, int left, int top, int box)

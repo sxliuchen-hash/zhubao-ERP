@@ -15,7 +15,10 @@ public enum LabelType {
     OUTBOUND("出货", "outbound"),
 
     /** 返工标签（跟随返工品）。 */
-    REWORK("返工", "rework");
+    REWORK("返工", "rework"),
+
+    /** 客户寄存实物批次，主编码来自原收货批次。 */
+    STOCK_BATCH("寄存批次", "stock_batch");
 
     private final String label;
     private final String scanType;

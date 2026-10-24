@@ -47,6 +47,14 @@ public final class LabelRenderer {
         boolean compact = "COMPACT".equals(mode)
                 || (!"STANDARD".equals(mode) && widthMm <= 40 && heightMm <= 30);
         int pad = pixels(compact ? 0.8 : 1.1, dpi);
+        if (data.get("storageSources") != null && !(data.get("storageSources") instanceof List<?>)) throw new IllegalArgumentException("保存标识载荷无效，不能省略打印");
+        List<?> storage = data.get("storageSources") instanceof List<?> sources ? sources : List.of();
+        int chars = Math.max(1, (int)((widthMm - 3) / 2.2));
+        double bandMm = storage.stream().map(LabelRenderer::object).filter(source -> !string(source, "instruction").isBlank() || (source.get("marks") instanceof List<?> marks && !marks.isEmpty()))
+                .mapToDouble(source -> 5 + (string(source, "instruction").isBlank() ? 0 : Math.ceil((double)string(source, "instruction").length() / chars) * 3)).sum();
+        if (bandMm > 0 && (widthMm < 35 || bandMm + decimal(layout, "qrWidthMm", 17, 5, 100) + 7 > heightMm))
+            throw new IllegalArgumentException("保存标识与来源说明空间不足，请调整标签尺寸或按来源明细打印");
+        int contentBottom = height - pad - pixels(bandMm, dpi);
         int gap = pixels(compact ? 0.8 : 1.2, dpi);
         int qrWidth = pixels(decimal(layout, "qrWidthMm", compact ? 17 : 18, 5, 100), dpi);
         qrWidth = Math.min(qrWidth, (int) (width * (compact ? 0.5 : 0.42)));
@@ -95,10 +103,10 @@ public final class LabelRenderer {
             pen.setFont(font(index == 0 ? emphasisPt : fieldPt, dpi, true));
             FontMetrics metrics = pen.getFontMetrics();
             y += metrics.getAscent();
-            if (y >= height - pad) break;
+            if (y >= contentBottom) break;
             if (compact) {
                 y = drawAround(pen, name + "：" + value, y, rightX, rightWidth, pad, fullWidth,
-                        qrBottom, height - pad, 4);
+                        qrBottom, contentBottom, 4);
             } else {
                 drawFit(pen, name + "：" + value, rightX, y, rightWidth);
             }
@@ -108,12 +116,41 @@ public final class LabelRenderer {
         String right = string(data, "footerRight");
         if (!left.isBlank() || !right.isBlank()) {
             pen.setFont(font(footerPt, dpi, false));
-            int footerY = height - pad - pen.getFontMetrics().getDescent();
+            int footerY = contentBottom - pen.getFontMetrics().getDescent();
             if (footerY > y + gap) {
                 int lineY = footerY - pen.getFontMetrics().getAscent() - gap / 2;
                 pen.drawLine(pad, lineY, width - pad, lineY);
                 drawFit(pen, left, pad, footerY, Math.max(1, width / 2 - pad - gap));
                 drawFit(pen, right, width / 2, footerY, Math.max(1, width / 2 - pad));
+            }
+        }
+        int storageY = contentBottom;
+        for (Object raw : storage) {
+            Map<String, Object> source = object(raw);
+            List<?> marks = source.get("marks") instanceof List<?> list ? list : List.of();
+            String instruction = string(source, "instruction");
+            if (marks.isEmpty() && instruction.isBlank()) continue;
+            pen.setFont(font(6, dpi, false));
+            pen.drawString(string(source, "sourceLabel"), pad, storageY + pixels(3.4, dpi));
+            int x = pad + pixels(10, dpi);
+            int diameter = pixels(4, dpi);
+            pen.setFont(font(8, dpi, true));
+            pen.setStroke(new java.awt.BasicStroke(Math.max(1, pixels(0.25, dpi))));
+            for (Object rawMark : marks) {
+                String mark = String.valueOf(rawMark);
+                if (!List.of("冷", "冻", "真", "光", "潮").contains(mark)) throw new IllegalArgumentException("保存标识无效");
+                pen.drawOval(x, storageY, diameter, diameter);
+                FontMetrics metrics = pen.getFontMetrics();
+                pen.drawString(mark, x + (diameter - metrics.stringWidth(mark)) / 2, storageY + (diameter - metrics.getHeight()) / 2 + metrics.getAscent());
+                x += pixels(4.5, dpi);
+            }
+            storageY += pixels(5, dpi);
+            pen.setFont(font(6, dpi, false));
+            String note = instruction.replaceAll("\\s+", " ");
+            while (!note.isEmpty()) {
+                int count = Math.min(chars, note.length());
+                pen.drawString(note.substring(0, count), pad, storageY + pixels(2.4, dpi));
+                note = note.substring(count); storageY += pixels(3, dpi);
             }
         }
         pen.dispose();

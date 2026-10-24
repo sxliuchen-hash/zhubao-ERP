@@ -9,6 +9,10 @@ public record ReprintLabelCommand(
         @NotBlank(message = "缺少标签类型") String type,
         @NotBlank(message = "缺少单号") String primaryCode,
         @NotBlank(message = "补打必须填写原因") String reason,
-        String operator
+        String operator,
+        String expectedSnapshotHash
 ) {
+    public ReprintLabelCommand(String type, String primaryCode, String reason, String operator) {
+        this(type, primaryCode, reason, operator, null);
+    }
 }

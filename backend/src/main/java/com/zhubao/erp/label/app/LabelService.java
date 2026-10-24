@@ -14,6 +14,7 @@ import com.zhubao.erp.label.domain.LabelTemplate;
 import com.zhubao.erp.label.domain.LabelTemplateField;
 import com.zhubao.erp.label.domain.LabelTemplateRepository;
 import com.zhubao.erp.label.domain.LabelType;
+import com.zhubao.erp.label.domain.StorageLabelSource;
 import com.zhubao.erp.business.domain.OrderChangeRepository;
 import com.zhubao.erp.label.domain.ReprintLabelCommand;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +49,16 @@ public class LabelService {
     private final BusinessDocumentRepository businessDocumentRepository;
     private final LabelTemplateRepository labelTemplateRepository;
     private OrderChangeRepository orderChanges;
+    private com.zhubao.erp.label.domain.LabelStorageEditionRepository storageEditions;
+    @Autowired(required = false)
+    public void setStorageEditions(com.zhubao.erp.label.domain.LabelStorageEditionRepository storageEditions) { this.storageEditions = storageEditions; }
+    private LabelPayload applyStorageEdition(LabelPayload payload) {
+        if (storageEditions == null) return payload;
+        return storageEditions.latest(payload.primaryCode(), null).map(edition -> payload.withStorage(edition.sources(), edition.edition())).orElse(payload);
+    }
+    private com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments;
+    @Autowired(required = false)
+    public void setStockDocuments(com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments) { this.stockDocuments = stockDocuments; }
 
     public LabelService() {
         this(null, null);
@@ -84,6 +95,8 @@ public class LabelService {
             throw new BusinessException("缺少标签主编码");
         }
         String code = command.primaryCode().trim();
+        if (type == LabelType.STOCK_BATCH) return generateStockBatchLabel(code, command.templateCode());
+        if (type == LabelType.MOTHER && businessDocumentRepository != null) return generateMotherLabel(code, command.templateCode());
         if (type == LabelType.WORK_ORDER && businessDocumentRepository != null) {
             return generateWorkOrderLabel(code, command.templateCode());
         }
@@ -161,6 +174,10 @@ public class LabelService {
         LabelPayload payload = type == LabelType.MOTHER
                 ? generateMotherLabel(command.primaryCode())
                 : generateWorkOrderLabel(command.primaryCode());
+        if (command.expectedSnapshotHash() != null && !command.expectedSnapshotHash().isBlank()
+                && !command.expectedSnapshotHash().equals(payload.snapshotHash())) {
+            throw new BusinessException("标签内容已更新，请从原打印任务同版补打，或重新预览核对后换贴");
+        }
         String verificationCode = type == LabelType.MOTHER
                 ? motherFacts(requireMother(command.primaryCode())).verificationCode()
                 : businessDocumentRepository.findChildWorkOrderByCode(command.primaryCode().trim())
@@ -202,7 +219,7 @@ public class LabelService {
             footerLeft = facts.express();
             footerRight = receiverFooter(facts.receiver());
         }
-        return new LabelPayload(
+        LabelPayload payload = new LabelPayload(
                 type,
                 type.label(),
                 code,
@@ -214,8 +231,51 @@ public class LabelService {
                 brand,
                 template != null ? template.templateCode() : "",
                 printerSetting,
-                template != null ? template.layout() : null
+                template != null ? template.layout() : null,
+                storageSources(type, code)
         );
+        payload = applyStorageEdition(payload);
+        validateStorageArea(payload);
+        return payload;
+    }
+
+    public boolean isStockBatch(String code) {
+        return stockDocuments != null && stockDocuments.list().stream().filter(document -> "PREP_RECEIPT".equals(document.kind()) && "POSTED".equals(document.status()))
+                .anyMatch(document -> document.lines().stream().anyMatch(line -> code.equals(line.batchCode()) && line.counted()));
+    }
+    public LabelPayload generateStockBatchLabel(String batchCode) { return generateStockBatchLabel(batchCode, null); }
+    public LabelPayload generateStockBatchLabel(String batchCode, String templateCode) {
+        if (stockDocuments == null) throw new BusinessException("库存单据仓储不可用");
+        var source = stockDocuments.list().stream().filter(document -> "PREP_RECEIPT".equals(document.kind()) && "POSTED".equals(document.status()))
+                .flatMap(document -> document.lines().stream()).filter(line -> batchCode.equals(line.batchCode()) && line.counted()).findFirst()
+                .orElseThrow(() -> new BusinessException("未找到真实寄存批次：" + batchCode));
+        var template = resolveTemplate(templateCode, LabelType.STOCK_BATCH);
+        LabelPayload payload = new LabelPayload(LabelType.STOCK_BATCH, "寄存批次", source.batchCode(), "STOCK|batch|" + source.batchCode(),
+                List.of(new LabelField("材质", source.materialCode()), new LabelField("原收数量", source.quantity().toPlainString() + source.quantityUnit()),
+                        new LabelField("原收重量", source.weight().toPlainString() + "克")), "", "", TIME_FORMATTER.format(LocalDateTime.now()), DEFAULT_BRAND, template == null ? "" : template.templateCode(), template == null ? LabelPrinterSetting.defaultSetting() : template.printerSetting(), template == null ? null : template.layout(),
+                List.of(StorageLabelSource.of(source.batchCode(), "本批次", source.materialCode(), source.storageRequirements())));
+        payload = applyStorageEdition(payload);
+        validateStorageArea(payload);
+        return payload;
+    }
+
+    private List<StorageLabelSource> storageSources(LabelType type, String code) {
+        if (businessDocumentRepository == null) return List.of();
+        if (type == LabelType.MOTHER) return businessDocumentRepository.listReceiptLines(code).stream()
+                .map(line -> StorageLabelSource.of(code + ":" + line.lineNo(), "明细" + line.lineNo(), line.materialCode(), line.storageRequirements())).toList();
+        var child = businessDocumentRepository.findChildWorkOrderByCode(code).orElseThrow();
+        var allocations = businessDocumentRepository.listChildAllocations(child.motherOrderCode(), null).stream().filter(line -> code.equals(line.childOrderCode())).toList();
+        if (!allocations.isEmpty()) return allocations.stream().map(line -> StorageLabelSource.of(line.motherOrderCode() + ":" + line.sourceLineNo(), "来源" + line.sourceLineNo(), line.materialCode(), line.storageRequirements())).toList();
+        return List.of(StorageLabelSource.of(code, "来源", child.materialCode(), null));
+    }
+
+    public static void validateStorageArea(LabelPayload payload) {
+        double band = payload.storageHeightMm();
+        if (band == 0) return;
+        double qr = payload.layout().qrWidthMm() == null ? 17 : payload.layout().qrWidthMm();
+        if (payload.printerSetting().widthMm() < 35 || band + qr + 7 > payload.printerSetting().heightMm()) {
+            throw new BusinessException("保存标识与来源说明空间不足，请调整标签尺寸或按来源明细打印，不能省略保存要求");
+        }
     }
 
     private MotherOrderRecord requireMother(String motherOrderCode) {

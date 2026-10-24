@@ -229,6 +229,17 @@ public class MaterialStockService {
         return document;
     }
 
+    public StockDocument batchLabelSource(String batchCode, AuthUserAccount account) {
+        requireAccount(account);
+        assertRead("prep", account);
+        StockDocument document = stockDocuments.list().stream()
+                .filter(item -> StockDocumentKinds.PREP_RECEIPT.equals(item.kind()) && StockDocumentKinds.POSTED.equals(item.status()))
+                .filter(item -> item.lines().stream().anyMatch(line -> batchCode.equals(line.batchCode()) && line.counted()))
+                .findFirst().orElseThrow(() -> new BusinessException("未找到真实寄存批次"));
+        assertDocumentVisible(document, account);
+        return document;
+    }
+
     public String receivePrep(StockDesk.ReceiptInput input, AuthUserAccount account) {
         assertPermission(PermissionCode.STOCK_PREP_RECEIVE, account);
         return receive(input, account, false);

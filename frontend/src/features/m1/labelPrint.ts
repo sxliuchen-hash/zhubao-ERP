@@ -7,6 +7,11 @@ export const labelPreviewScale = 1.65;
 
 /** 黑白标签版式。只用黑字、白底和细黑线，不铺色块。 */
 export const labelFaceCss = `
+.bw-has-storage { position: relative; padding-bottom: calc(var(--storage-height) + 1mm) !important; }
+.bw-storage { position: absolute; bottom: .6mm; left: .8mm; right: .8mm; height: var(--storage-height); color: black; background: white; border-top: .2mm solid black; font-size: 6pt; line-height: 1; }
+.bw-storage-source { height: 5mm; display: flex; gap: .5mm; align-items: center; white-space: nowrap; }
+.bw-storage-mark { width: 4mm; height: 4mm; flex: 0 0 4mm; overflow: visible; }
+.bw-storage-note { font-size: 6pt; line-height: 3mm; overflow-wrap: anywhere; }
 .bw-label {
   box-sizing: border-box;
   background: #fff;
@@ -144,6 +149,14 @@ export const labelFaceCss = `
 export function buildLabelMarkup(payload: LabelPayload): string {
   const width = positiveMm(payload.printerSetting.widthMm, 40);
   const height = positiveMm(payload.printerSetting.heightMm, 30);
+  const sources = (payload.storageSources ?? []).filter(source => source.marks.length || source.instruction.trim());
+  const chars = Math.max(1, Math.floor((width - 3) / 2.2));
+  const bandHeight = sources.reduce((sum, source) => sum + 5 + (source.instruction.trim() ? Math.ceil(source.instruction.length / chars) * 3 : 0), 0);
+  if (bandHeight && (width < 35 || bandHeight + (payload.layout?.qrWidthMm ?? 17) + 7 > height)) throw new Error('保存标识与来源说明空间不足，请调整标签尺寸或按来源明细打印');
+  const storage = sources.length ? `<div class="bw-storage">${sources.map(source => `<div class="bw-storage-source"><span>${escapeHtml(source.sourceLabel)}</span>${source.marks.map(mark => {
+    if (!['冷', '冻', '真', '光', '潮'].includes(mark)) throw new Error('保存标识无效');
+    return `<svg class="bw-storage-mark" viewBox="0 0 24 24" aria-label="${mark}"><circle cx="12" cy="12" r="10.5" fill="white" stroke="black" stroke-width="1.5"/><text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="bold">${mark}</text></svg>`;
+  }).join('')}</div>${source.instruction ? `<div class="bw-storage-note">${escapeHtml(source.instruction)}</div>` : ''}`).join('')}</div>` : '';
   const mode = payload.layout?.mode;
   const compact = mode === 'COMPACT' || (mode !== 'STANDARD' && width <= 40 && height <= 30);
   const availableFields = payload.fields.filter((field) => field.name.trim() !== '' && field.value.trim() !== '');
@@ -171,25 +184,27 @@ export function buildLabelMarkup(payload: LabelPayload): string {
       : `<div class="bw-top"><span class="bw-brand">${escapeHtml(payload.brandTitle)}</span>${type}</div><div class="bw-code">${escapeHtml(payload.primaryCode)}</div>`;
   const qr = `<div class="bw-qr">${renderQrSvg(payload.qrContent)}</div>`;
   const fieldList = fields ? `<dl class="bw-fields">${fields}</dl>` : '';
-  const articleStyle = `width:${width}mm;height:${height}mm;${layoutStyle(payload, compact)}`;
+  const articleStyle = `width:${width}mm;height:${height}mm;--storage-height:${bandHeight}mm;${layoutStyle(payload, compact)}`;
   if (compact) {
     return [
-      `<article class="bw-label bw-label--compact" style="${articleStyle}">`,
+      `<article class="bw-label bw-label--compact${storage ? ' bw-has-storage' : ''}" style="${articleStyle}">`,
       heading,
       qr,
       fieldList,
       footer,
+      storage,
       '</article>',
     ].join('');
   }
   return [
-    `<article class="bw-label" style="${articleStyle}">`,
+    `<article class="bw-label${storage ? ' bw-has-storage' : ''}" style="${articleStyle}">`,
     qr,
     '<div class="bw-main">',
     heading,
     fieldList,
     '</div>',
     footer,
+    storage,
     '</article>',
   ].join('');
 }

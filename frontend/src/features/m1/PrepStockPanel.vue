@@ -5,6 +5,14 @@ import { storageText, type StorageRequirements, fetchCustomers, fetchMaterials, 
 import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import RequirementComposer from '../intake/RequirementComposer.vue';
+import { fetchStockBatchLabel, type LabelPayload } from '../../services/labelApi';
+import OrderLabelPanel from '../labels/OrderLabelPanel.vue';
+const batchLabelPreview = ref<LabelPayload | null>(null);
+async function printBatch() {
+  if (!selected.value?.batchCode) return;
+  try { const label = await fetchStockBatchLabel(selected.value.batchCode); batchLabelPreview.value = label; }
+  catch (error) { formError.value = error instanceof Error ? error.message : '寄存标签读取失败'; }
+}
 
 const props = withDefaults(defineProps<{ scope?: 'company' | 'prep'; initialSource?: string }>(), { scope: 'company', initialSource: '' });
 
@@ -397,6 +405,7 @@ function correct() {
 </script>
 
 <template>
+  <OrderLabelPanel v-if="batchLabelPreview" :external-payload="batchLabelPreview" />
   <section class="stock-desk" :aria-label="title">
     <header class="stock-head">
       <h2>{{ title }}</h2>
@@ -560,6 +569,7 @@ function correct() {
     <section v-if="selected" aria-label="批次流水">
       <h3>这批的出入库</h3>
       <p v-if="detailError" class="operation-feedback warning">流水读取失败：{{ detailError }}。已有业务回执保留。</p>
+      <button v-if="scope === 'prep' && selected?.batchCode && !selected?.pending && (!session?.effectivePermissions || session.effectivePermissions.includes('LABEL_PRINT'))" type="button" class="secondary-button" @click="printBatch">打印寄存批次标签</button>
       <p v-for="line in selectedDocument?.lines || []" :key="`storage-${line.lineNo}`">来源明细 {{ line.lineNo }} · {{ line.materialCode }}：{{ storageText(line.storageRequirements) }}</p>
       <p v-if="selectedDocument">来源 {{ selectedDocument.documentCode }} · {{ selectedDocument.sourceNote || '无来源说明' }} · 交接人 {{ selectedDocument.handoverPerson || '未填' }}</p>
       <p v-if="selectedDocument && (selectedDocument.purpose || selectedDocument.recipient)">用途 {{ selectedDocument.purpose || '未填' }} · 领用人 {{ selectedDocument.recipient || '未填' }}<template v-if="selectedDocument.targetOrderCode"> · 关联 {{ selectedDocument.targetOrderCode }}</template></p>
