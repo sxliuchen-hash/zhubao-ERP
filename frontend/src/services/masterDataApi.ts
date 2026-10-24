@@ -11,8 +11,19 @@ export interface CustomerProfile {
   enabled: boolean;
 }
 
+export const STORAGE_CONDITIONS = [
+  { code: 'COLD', mark: '冷', label: '冷藏' }, { code: 'FROZEN', mark: '冻', label: '冷冻' },
+  { code: 'VACUUM', mark: '真', label: '真空' }, { code: 'DARK', mark: '光', label: '避光' }, { code: 'DRY', mark: '潮', label: '防潮' },
+] as const;
+export interface StorageRequirements { conditions: string[]; instruction: string }
+export function storageText(value: StorageRequirements | null | undefined): string {
+  if (!value) return '历史未记录';
+  return [value.conditions.map(code => STORAGE_CONDITIONS.find(item => item.code === code)?.label || code).join('＋') || '未配置保存条件', value.instruction].filter(Boolean).join('；');
+}
 export interface MaterialProfile {
   materialCode: string;
+  storageConditions?: string[] | null;
+  storageInstruction?: string | null;
   name: string;
   aliases: string;
   remark: string;
@@ -60,3 +71,6 @@ export const saveTemplate = (body: { templateCode?: string; name: string; steps:
 
 export const disableTemplate = (templateCode: string, version: number) =>
   apiPost<{ templateCode: string; version: number }, RequirementTemplate>('/api/business/master-data/requirement-templates/disables', { templateCode, version });
+
+export interface MaterialStorageChange { materialCode: string; previous: StorageRequirements | null; current: StorageRequirements | null; changedAt: string }
+export const fetchStorageChanges = (code: string) => apiGet<MaterialStorageChange[]>(`/api/business/master-data/materials/${encodeURIComponent(code)}/storage-changes`);

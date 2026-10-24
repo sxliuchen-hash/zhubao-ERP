@@ -814,7 +814,7 @@ public class OrderMaintenanceService {
         if (lines.size() == 1) {
             ReceiptLine line = lines.get(0);
             documents.replaceReceiptLine(current.code(), new ReceiptLine(line.lineNo(), line.materialCode(),
-                    line.materialName(), line.goodsName(), quantity, line.quantityUnit(), weight, corrected.code()), session);
+                    line.materialName(), line.goodsName(), quantity, line.quantityUnit(), weight, corrected.code(), line.storageRequirements()), session);
         }
         return corrected.code();
     }

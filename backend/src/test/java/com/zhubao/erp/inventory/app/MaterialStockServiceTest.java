@@ -131,6 +131,11 @@ class MaterialStockServiceTest {
 
     @Test
     void openingMotherFromPrepMovesStockOnceAndKeepsSavedRequirement() {
+        var unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        var operations = new BusinessOperationService(ledger, null, orders, unit);
+        var intakes = new MobileIntakeService(operations, orders, unit);
+        service = new MaterialStockService(ledger, stockDocuments, orders, unit, operations, intakes, sources, new PermissionGuard(), null, null, null, catalog);
+        catalog.saveMaterial(new com.zhubao.erp.business.domain.MaterialProfile("AU9999", "足金", "", "", true, List.of("COLD", "VACUUM"), "测试保存条件"));
         service.receivePrep(prepReceipt(1001L, "甲", List.of(
                 new StockDesk.LineInput("AU9999", "克", new BigDecimal("100"), new BigDecimal("100"), "")
         ), true, "prep-open-recv"), keeper);
@@ -138,10 +143,12 @@ class MaterialStockServiceTest {
         RequirementTemplate basic = catalog.templates(false).stream()
                 .filter(template -> "常规珠型加工".equals(template.name())).findFirst().orElseThrow();
         String requirement = RequirementText.compose(basic.steps(), "孔径 2 毫米");
+        catalog.saveMaterial(new com.zhubao.erp.business.domain.MaterialProfile("AU9999", "足金", "", "", true, List.of("DARK"), "新说明"));
         String mother = service.openOrder(new StockDesk.OpenOrderInput(1001L, "甲", "WH", batch.batchCode(), "AU9999", "克",
                 new BigDecimal("30"), new BigDecimal("30"), "珠子", requirement, "2026-11-01",
                 basic.templateCode(), basic.version(), "prep-open-1"), keeper);
 
+        assertThat(orders.listReceiptLines(mother).get(0).storageRequirements().conditions()).containsExactly("COLD", "VACUUM");
         assertThat(onlyBatch("prep").availableQuantity()).isEqualTo("70");
         assertThat(quantity(OwnerType.CUSTOMER, "", mother, StockStatus.RAW_WAITING)).isEqualByComparingTo("30");
         assertThat(quantity(OwnerType.CUSTOMER, batch.batchCode(), "", StockStatus.RAW_WAITING).add(new BigDecimal("30")))

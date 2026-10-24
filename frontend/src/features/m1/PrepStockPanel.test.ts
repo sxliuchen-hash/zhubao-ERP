@@ -4,7 +4,8 @@ import { ref } from 'vue';
 import PrepStockPanel from './PrepStockPanel.vue';
 import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
 
-vi.mock('../../services/masterDataApi', () => ({
+vi.mock('../../services/masterDataApi', async () => ({
+  ...await vi.importActual<typeof import('../../services/masterDataApi')>('../../services/masterDataApi'),
   fetchCustomers: vi.fn().mockResolvedValue([]),
   fetchMaterials: vi.fn().mockResolvedValue([]),
 }));

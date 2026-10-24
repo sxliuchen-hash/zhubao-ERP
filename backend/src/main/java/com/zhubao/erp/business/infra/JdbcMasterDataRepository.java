@@ -116,18 +116,50 @@ public class JdbcMasterDataRepository implements MasterDataRepository {
     @Override
     public MaterialProfile saveMaterial(MaterialProfile profile) {
         String sql = findMaterial(profile.materialCode()).isPresent()
-                ? "update biz_material_catalog set display_name=?, normalized_name=?, aliases=?, remark=?, enabled=? where material_code=?"
-                : "insert into biz_material_catalog (display_name, normalized_name, aliases, remark, enabled, material_code) values (?, ?, ?, ?, ?, ?)";
-        try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, profile.name());
-            statement.setString(2, profile.name().trim().toLowerCase(java.util.Locale.ROOT));
-            statement.setString(3, profile.aliases());
-            statement.setString(4, profile.remark());
-            statement.setBoolean(5, profile.enabled());
-            statement.setString(6, profile.materialCode());
-            statement.executeUpdate();
-            return profile;
-        } catch (SQLException ex) { throw new BusinessException("材质编码或名称已存在，请选择现有材质"); }
+                ? "update biz_material_catalog set display_name=?, normalized_name=?, aliases=?, remark=?, enabled=?, storage_conditions=?, storage_instruction=? where material_code=?"
+                : "insert into biz_material_catalog (display_name, normalized_name, aliases, remark, enabled, storage_conditions, storage_instruction, material_code) values (?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                MaterialProfile previous;
+                try (PreparedStatement lock = connection.prepareStatement("select * from biz_material_catalog where material_code=? for update")) {
+                    lock.setString(1, profile.materialCode());
+                    try (ResultSet rs = lock.executeQuery()) { previous = rs.next() ? material(rs) : null; }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    statement.setString(1, profile.name());
+                    statement.setString(2, profile.name().trim().toLowerCase(java.util.Locale.ROOT));
+                    statement.setString(3, profile.aliases()); statement.setString(4, profile.remark()); statement.setBoolean(5, profile.enabled());
+                    statement.setString(6, profile.storageConditions() == null ? null : String.join("|", profile.storageConditions()));
+                    statement.setString(7, profile.storageInstruction()); statement.setString(8, profile.materialCode());
+                    statement.executeUpdate();
+                }
+                var before = com.zhubao.erp.business.domain.StorageRequirements.of(previous);
+                var after = com.zhubao.erp.business.domain.StorageRequirements.of(profile);
+                if (!java.util.Objects.equals(before, after)) {
+                    try (PreparedStatement audit = connection.prepareStatement("insert into biz_material_storage_change (material_code, previous_conditions, previous_instruction, current_conditions, current_instruction, changed_at) values (?,?,?,?,?,?)")) {
+                        audit.setString(1, profile.materialCode()); audit.setString(2, before == null ? null : before.encoded());
+                        audit.setString(3, before == null ? null : before.instruction()); audit.setString(4, after == null ? null : after.encoded());
+                        audit.setString(5, after == null ? null : after.instruction()); audit.setString(6, java.time.LocalDateTime.now().toString()); audit.executeUpdate();
+                    }
+                }
+                connection.commit(); return profile;
+            } catch (SQLException | RuntimeException ex) { connection.rollback(); throw ex; }
+        } catch (SQLException ex) { throw new BusinessException("材质编码或名称已存在，或数据库尚未升级，请核对"); }
+    }
+
+    @Override
+    public List<com.zhubao.erp.business.domain.MaterialStorageChange> storageChanges(String code) {
+        try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement("select * from biz_material_storage_change where material_code=? order by change_id")) {
+            statement.setString(1, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                var changes = new ArrayList<com.zhubao.erp.business.domain.MaterialStorageChange>();
+                while (rs.next()) changes.add(new com.zhubao.erp.business.domain.MaterialStorageChange(code,
+                        com.zhubao.erp.business.domain.StorageRequirements.read(rs.getString("previous_conditions"), rs.getString("previous_instruction")),
+                        com.zhubao.erp.business.domain.StorageRequirements.read(rs.getString("current_conditions"), rs.getString("current_instruction")), rs.getString("changed_at")));
+                return changes;
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("保存要求变更记录读取失败", ex); }
     }
 
     private CustomerProfile customer(ResultSet rs) throws SQLException {
@@ -138,7 +170,8 @@ public class JdbcMasterDataRepository implements MasterDataRepository {
 
     private MaterialProfile material(ResultSet rs) throws SQLException {
         return new MaterialProfile(rs.getString("material_code"), rs.getString("display_name"),
-                rs.getString("aliases"), rs.getString("remark"), rs.getBoolean("enabled"));
+                rs.getString("aliases"), rs.getString("remark"), rs.getBoolean("enabled"),
+                rs.getString("storage_conditions") == null ? null : (rs.getString("storage_conditions").isEmpty() ? List.of() : java.util.Arrays.asList(rs.getString("storage_conditions").split("\\|"))), rs.getString("storage_instruction"));
     }
 
     @Override

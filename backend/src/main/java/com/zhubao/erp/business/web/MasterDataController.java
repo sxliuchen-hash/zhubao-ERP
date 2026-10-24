@@ -59,6 +59,12 @@ public class MasterDataController {
         return ApiResponse.ok(service.materials());
     }
 
+    @GetMapping("/materials/{code}/storage-changes")
+    public ApiResponse<List<com.zhubao.erp.business.domain.MaterialStorageChange>> storageChanges(@org.springframework.web.bind.annotation.PathVariable String code, HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));
+        return ApiResponse.ok(service.storageChanges(code));
+    }
+
     @PostMapping("/materials")
     public ApiResponse<MaterialProfile> saveMaterial(@RequestBody MaterialProfile input, HttpServletRequest request) {
         permissions.assertAllowed(PermissionCode.MASTER_DATA_MANAGE, operators.requireSession(request));

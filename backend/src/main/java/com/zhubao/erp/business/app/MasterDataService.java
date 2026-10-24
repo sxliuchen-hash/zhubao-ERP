@@ -48,6 +48,8 @@ public class MasterDataService {
                 .toList();
     }
 
+    public List<com.zhubao.erp.business.domain.MaterialStorageChange> storageChanges(String code) { return repository.storageChanges(code); }
+
     public List<MaterialProfile> materials() { return repository.listMaterials(); }
 
     public CustomerProfile customerForIntake(Long id) {
@@ -149,7 +151,13 @@ public class MasterDataService {
         String code = input.materialCode() == null || input.materialCode().isBlank()
                 ? "MAT-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase(Locale.ROOT)
                 : input.materialCode().trim();
-        return repository.saveMaterial(new MaterialProfile(code, name, text(input.aliases()), text(input.remark()), input.enabled()));
+        MaterialProfile previous = repository.findMaterial(code).orElse(null);
+        var conditions = input.storageConditions() != null ? input.storageConditions()
+                : previous == null || previous.storageConditions() == null ? List.<String>of() : previous.storageConditions();
+        String instruction = input.storageInstruction() != null ? input.storageInstruction()
+                : previous == null ? "" : previous.storageInstruction();
+        var storage = new com.zhubao.erp.business.domain.StorageRequirements(conditions, instruction);
+        return repository.saveMaterial(new MaterialProfile(code, name, text(input.aliases()), text(input.remark()), input.enabled(), storage.conditions(), storage.instruction()));
     }
 
     public List<RequirementShortcut> shortcuts() {

@@ -269,7 +269,7 @@ public class MaterialStockService {
                         null, to, actual.quantity(), actual.weight(), "确认入账第 " + original.lineNo() + " 行"), session);
                 posted.add(new StockDocumentLine(original.lineNo(), original.materialCode(), original.quantityUnit(),
                         actual.quantity(), actual.weight(), batch, original.externalRef(), null, true,
-                        original.declaredQuantity(), original.declaredWeight(), entry.code()));
+                        original.declaredQuantity(), original.declaredWeight(), entry.code(), original.storageRequirements()));
             }
             stockDocuments.save(copy(document, StockDocumentKinds.POSTED, posted), session);
             return document.documentCode();
@@ -385,10 +385,12 @@ public class MaterialStockService {
             StockLedgerEntry entry = stocks.transfer(new StockTransferCommand("prep_issue", issueCode, from, to, input.quantity(), input.weight(), "备料领用建加工单"), session);
             operations.saveProcessingMotherFromPrep(new ConfirmInboundCommand(
                     motherCode, input.customerId(), input.customerId(), input.materialCode(), LocalDate.now().toString(),
-                    "", "", "", account.operator(), account.operator(), input.goodsName().trim(), "PREP_ISSUE", null, "",
+                    "", "", "", account.operator(), account.operator(), input.goodsName().trim(), "INTAKE_LINES:PREP_ISSUE", null, "",
                     input.warehouseCode(), input.quantity(), input.quantityUnit().trim(), input.weight(), account.operator(),
                     "", "备料领用建单，不重复收货", input.processingRequirement().trim(), due.toString(), customerName
             ), entry, session);
+            orders.saveReceiptLine(motherCode, new ReceiptLine(1, input.materialCode(), input.materialCode(), input.goodsName().trim(),
+                    input.quantity(), input.quantityUnit().trim(), input.weight(), entry.code(), source.storageRequirements()), session);
             saveMovement(issueCode, StockDocumentKinds.PREP_ISSUE, OwnerType.CUSTOMER.name(), input.customerId(), customerName,
                     input.warehouseCode(), "", "", "建加工单", motherCode, source == null ? "" : sourceDocumentOf(source),
                     account, input.requestId(), StockDocumentKinds.OUT,
@@ -477,7 +479,7 @@ public class MaterialStockService {
                 }
                 lines.add(new StockDocumentLine(number, line.materialCode().trim(), line.quantityUnit().trim(),
                         line.quantity(), line.weight(), batch, text(line.externalRef()), null, postNow,
-                        line.quantity(), line.weight(), ledger));
+                        line.quantity(), line.weight(), ledger, com.zhubao.erp.business.domain.StorageRequirements.of(masterData == null ? null : masterData.materialForIntake(line.materialCode()))));
                 number++;
             }
             StockDocument document = new StockDocument(code, company ? StockDocumentKinds.COMPANY_RECEIPT : StockDocumentKinds.PREP_RECEIPT,
@@ -533,7 +535,7 @@ public class MaterialStockService {
             nextLine = 2;
         }
         orders.saveReceiptLine(mother.code(), new ReceiptLine(nextLine, input.materialCode(), input.materialCode(), mother.goodsName(),
-                input.quantity(), input.quantityUnit(), input.weight(), entry.code()), session);
+                input.quantity(), input.quantityUnit(), input.weight(), entry.code(), receipt.storageRequirements()), session);
         saveMovement(code, StockDocumentKinds.PREP_ISSUE, OwnerType.CUSTOMER.name(), input.customerId(), mother.customerName(),
                 input.warehouseCode(), "", text(input.recipient()), text(input.purpose()), mother.code(),
                 receipt == null ? "" : sourceDocumentOf(receipt), account, input.requestId(), StockDocumentKinds.OUT,
@@ -561,7 +563,7 @@ public class MaterialStockService {
                 BigDecimal remainingWeight = line.weight().add(weightDelta);
                 if (remainingQuantity.signum() < 0 || remainingWeight.signum() < 0) throw new BusinessException("退回超过加工明细剩余量");
                 orders.replaceReceiptLine(mother.code(), new ReceiptLine(line.lineNo(), line.materialCode(), line.materialName(), line.goodsName(),
-                        remainingQuantity, line.quantityUnit(), remainingWeight, line.ledgerCode()), session);
+                        remainingQuantity, line.quantityUnit(), remainingWeight, line.ledgerCode(), line.storageRequirements()), session);
             }
         }
         orders.updateMotherOrderSummary(mother.code(), quantity, weight, session);

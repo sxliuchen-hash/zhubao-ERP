@@ -61,6 +61,7 @@ public class BusinessOperationService {
     private final MotherOrderSaveProbe motherOrderSaveProbe;
     private final OutboundSaveProbe outboundSaveProbe;
     private LabelVersionGuard labelGuard;
+    private MasterDataService masterData;
 
     public BusinessOperationService(StockLedgerService stockLedgerService) {
         this(stockLedgerService, null, null);
@@ -78,7 +79,6 @@ public class BusinessOperationService {
         this(stockLedgerService, approvalService, businessDocumentRepository, null, MotherOrderSaveProbe.NONE, OutboundSaveProbe.NONE);
     }
 
-    @Autowired
     public BusinessOperationService(
             StockLedgerService stockLedgerService,
             ApprovalService approvalService,
@@ -86,6 +86,13 @@ public class BusinessOperationService {
             BusinessWorkUnit workUnit
     ) {
         this(stockLedgerService, approvalService, businessDocumentRepository, workUnit, MotherOrderSaveProbe.NONE, OutboundSaveProbe.NONE);
+    }
+
+    @Autowired
+    public BusinessOperationService(StockLedgerService stockLedgerService, ApprovalService approvalService,
+            BusinessDocumentRepository businessDocumentRepository, BusinessWorkUnit workUnit, MasterDataService masterData) {
+        this(stockLedgerService, approvalService, businessDocumentRepository, workUnit);
+        this.masterData = masterData;
     }
 
     public BusinessOperationService(
@@ -191,6 +198,12 @@ public class BusinessOperationService {
                 command.evidenceCode()
         );
         saveMotherOrder(command, rawCustomerStock, entry, session);
+        if (session != null && masterData != null && !blankToEmpty(command.sourceRegisterType()).startsWith("INTAKE_LINES:")) {
+            var material = masterData.materialForIntake(command.materialCode());
+            businessDocumentRepository.saveReceiptLine(command.motherOrderCode(), new com.zhubao.erp.business.domain.ReceiptLine(1,
+                    command.materialCode(), material.name(), command.goodsName(), command.quantity(), command.quantityUnit(), command.weight(), entry.code(),
+                    com.zhubao.erp.business.domain.StorageRequirements.of(material)), session);
+        }
         return result;
     }
 

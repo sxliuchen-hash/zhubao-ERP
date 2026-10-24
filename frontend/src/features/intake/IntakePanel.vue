@@ -2,7 +2,7 @@
 import { computed, inject, nextTick, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import { canManageMasterData } from '../../services/masterDataAccess';
-import { fetchCustomers, fetchMaterials, fetchShortcuts, saveCustomer, saveMaterial,
+import { fetchCustomers, fetchMaterials, fetchShortcuts, STORAGE_CONDITIONS, saveCustomer, saveMaterial,
   type CustomerProfile, type MaterialProfile, type RequirementShortcut } from '../../services/masterDataApi';
 import FilterSelect from '../../components/FilterSelect.vue';
 import RequirementComposer from './RequirementComposer.vue';
@@ -99,7 +99,7 @@ const materialOptions = computed(() => {
     .filter((item) => item.enabled || selected.has(item.materialCode))
     .map((item) => ({
       value: item.materialCode,
-      label: `${item.name} · ${item.materialCode}`,
+      label: `${item.name} · ${item.materialCode}${item.storageConditions?.length ? ' · ' + item.storageConditions.map(code => STORAGE_CONDITIONS.find(c => c.code === code)?.label || code).join('＋') : ' · 未配置保存条件'}`,
       searchText: `${item.materialCode} ${item.name} ${item.aliases}`,
     }));
 });
@@ -657,6 +657,7 @@ onMounted(loadCatalog);
           @update:query="materialSearch = $event"
         />
       </label>
+      <details v-if="materials.find(m => m.materialCode === materialCode)?.storageInstruction"><summary>查看保存说明</summary>{{ materials.find(m => m.materialCode === materialCode)?.storageInstruction }}</details>
       <label class="field">
         <span>货品名称</span>
         <input v-model="goodsName" type="text" aria-label="货品名称" />
@@ -685,6 +686,7 @@ onMounted(loadCatalog);
             @create="openCatalog('material', $event, line)"
           />
         </label>
+        <details v-if="materials.find(m => m.materialCode === line.materialCode)?.storageInstruction"><summary>查看本明细保存说明</summary>{{ materials.find(m => m.materialCode === line.materialCode)?.storageInstruction }}</details>
         <label class="field"><span>货品名称</span><input v-model="line.goodsName" :aria-label="`明细${index + 2}货品名称`" /></label>
         <label class="field"><span>数量</span><input v-model="line.quantity" type="number" min="0" step="0.001" :aria-label="`明细${index + 2}数量`" /></label>
         <label class="field"><span>单位</span><input v-model="line.quantityUnit" :aria-label="`明细${index + 2}单位`" /></label>

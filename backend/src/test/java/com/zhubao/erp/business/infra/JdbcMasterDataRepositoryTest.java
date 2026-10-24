@@ -34,6 +34,12 @@ class JdbcMasterDataRepositoryTest {
                 if (!part.isBlank()) statement.execute(part);
             }
         }
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            String storageSql = Files.readString(Path.of("src/main/resources/db/mysql/V74__m3_material_storage_requirements.sql"));
+            for (String part : com.zhubao.erp.ops.infra.MigrationCatalog.statements(storageSql)) {
+                if (part.contains("ALTER TABLE biz_material_catalog") || part.contains("CREATE TABLE biz_material_storage_change") || part.contains("CREATE INDEX idx_material_storage_change")) statement.execute(part);
+            }
+        }
         MasterDataService service = new MasterDataService(new JdbcMasterDataRepository(dataSource));
         assertThat(service.customers()).hasSize(4);
         assertThat(service.materials()).hasSize(1);

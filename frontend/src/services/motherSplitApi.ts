@@ -38,7 +38,7 @@ export interface MotherOrderSplitView {
   qrContent: string;
   children: ChildWorkOrderView[];
   sourceLines?: Array<{ lineNo: number; materialCode: string; materialName: string; goodsName: string;
-    quantity: number; quantityUnit: string; weight: number; remainingQuantity: number; remainingWeight: number }>;
+    quantity: number; quantityUnit: string; weight: number; remainingQuantity: number; remainingWeight: number; storageRequirements?: import('./masterDataApi').StorageRequirements | null }>;
 }
 
 export function fetchMotherSplit(code: string): Promise<MotherOrderSplitView> {

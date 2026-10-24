@@ -496,6 +496,12 @@ MySQL 持久化表：
 - 拆包视频失败必须有人工上传兜底。
 - 入库数量必须有单位口径；前端可以展示 `320 件`，后端字段必须拆成 `quantity` + `quantityUnit`。
 
+### 4.1.1 材质保存条件与来源快照（V74）
+
+`/api/business/master-data/materials` 增加 `storageConditions`（按 COLD 冷藏、FROZEN 冷冻、VACUUM 真空、DARK 避光、DRY 防潮排序的数组）及 `storageInstruction`（完整说明，最多 500 字）。拒绝重复值、未知值及冷藏与冷冻同时选择。旧更新请求未传任一字段时保留该字段；显式空数组／空字符串清除对应值。新增未传时为空，未配置不等于常温，不自动补温度、期限或推断材质要求。
+
+收货明细、寄存收货明细、子单来源分配增加 `storageRequirements: { conditions, instruction }`，冻结本次来源；备料领用沿用原批次快照。历史 `null` 表示未记录，不回填为当前材质档案。数量更正与待核确认保留原快照。`GET /api/business/master-data/materials/{code}/storage-changes` 需 `MASTER_DATA_MANAGE`，返回变更前后快照及时间；修改档案与变更记录在同一事务保存，不覆盖历史来源。档案页可按当前库存权限查询该材质在库／在制记录以供人工核对。
+
 ### 4.2 `ConfirmInboundCommand`
 
 `POST /api/business/operations/inbound-confirmations` 使用该命令模型。该接口执行真实业务动作并保存正式单据与库存台账。

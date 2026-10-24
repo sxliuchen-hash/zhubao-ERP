@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { storageText } from '../../services/masterDataApi';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
 import { fetchMotherLabel, fetchWorkOrderLabel, type LabelPayload } from '../../services/labelApi';
 import {
@@ -212,6 +213,7 @@ function scaleStyle(payload: LabelPayload) {
         <li v-for="source in view.sourceLines" :key="source.lineNo">
           来源 {{ source.lineNo }} · {{ source.materialName }}（{{ source.materialCode }}）· {{ source.goodsName }}：
           剩余 {{ source.remainingQuantity }} {{ source.quantityUnit }} / {{ source.remainingWeight }} 克
+          <p>保存：{{ storageText(source.storageRequirements) }}</p>
         </li>
       </ul>
       <button v-if="canKeep" class="primary-button" type="button" :disabled="submitting" @click="keepWhole">

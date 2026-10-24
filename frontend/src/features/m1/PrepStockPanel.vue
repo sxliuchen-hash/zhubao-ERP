@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
-import { fetchCustomers, fetchMaterials, type CustomerProfile, type MaterialProfile } from '../../services/masterDataApi';
+import { storageText, type StorageRequirements, fetchCustomers, fetchMaterials, type CustomerProfile, type MaterialProfile } from '../../services/masterDataApi';
 import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import RequirementComposer from '../intake/RequirementComposer.vue';
@@ -40,7 +40,7 @@ interface BatchCard {
   updatedAt: string;
   lineNo?: number;
 }
-interface ReceiptLine { materialCode: string; quantityUnit: string; quantity: string; weight: string; externalRef: string }
+interface ReceiptLine { storageRequirements?: StorageRequirements | null; materialCode: string; quantityUnit: string; quantity: string; weight: string; externalRef: string }
 interface StockDocument { documentCode: string; kind: string; sourceNote: string; handoverPerson: string; recipient: string; purpose: string; targetOrderCode: string; lines: Array<ReceiptLine & { lineNo: number }> }
 interface MovementRow {
   time: string;
@@ -560,6 +560,7 @@ function correct() {
     <section v-if="selected" aria-label="批次流水">
       <h3>这批的出入库</h3>
       <p v-if="detailError" class="operation-feedback warning">流水读取失败：{{ detailError }}。已有业务回执保留。</p>
+      <p v-for="line in selectedDocument?.lines || []" :key="`storage-${line.lineNo}`">来源明细 {{ line.lineNo }} · {{ line.materialCode }}：{{ storageText(line.storageRequirements) }}</p>
       <p v-if="selectedDocument">来源 {{ selectedDocument.documentCode }} · {{ selectedDocument.sourceNote || '无来源说明' }} · 交接人 {{ selectedDocument.handoverPerson || '未填' }}</p>
       <p v-if="selectedDocument && (selectedDocument.purpose || selectedDocument.recipient)">用途 {{ selectedDocument.purpose || '未填' }} · 领用人 {{ selectedDocument.recipient || '未填' }}<template v-if="selectedDocument.targetOrderCode"> · 关联 {{ selectedDocument.targetOrderCode }}</template></p>
       <p v-if="!movements.length" class="empty-hint">这批还没有可显示的流水</p>

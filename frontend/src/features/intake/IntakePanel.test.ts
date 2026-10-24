@@ -14,7 +14,8 @@ import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 
 vi.mock('../m1/PrepStockPanel.vue', () => ({ default: defineComponent({ name: 'PrepStockPanel', props: ['scope', 'initialSource'], setup() { return { draft: ref('') }; }, template: '<input v-model="draft" aria-label="寄存原草稿" />' }) }));
 
-vi.mock('../../services/masterDataApi', () => ({
+vi.mock('../../services/masterDataApi', async () => ({
+  ...await vi.importActual<typeof import('../../services/masterDataApi')>('../../services/masterDataApi'),
   fetchCustomers: vi.fn(), fetchMaterials: vi.fn(), fetchShortcuts: vi.fn(), fetchTemplates: vi.fn(),
   saveCustomer: vi.fn(), saveMaterial: vi.fn(), saveShortcut: vi.fn(), removeShortcut: vi.fn(),
 }));

@@ -309,10 +309,15 @@ public class MotherOrderSplitService {
                             allocation.quantity(), allocation.weight(), operator, session);
                     if (entry == null) { entry = moved; firstSource = source; }
                     savedAllocations.add(new ChildLineAllocation(line.code(), mother.code(), source.lineNo(),
-                            source.materialCode(), allocation.quantity(), allocation.weight(), moved.code()));
+                            source.materialCode(), allocation.quantity(), allocation.weight(), moved.code(), source.storageRequirements()));
                 }
             } else {
                 entry = moveToWip(mother, line, operator, session);
+                if (session != null) {
+                    ReceiptLine source = documents.listReceiptLines(mother.code()).get(0);
+                    savedAllocations.add(new ChildLineAllocation(line.code(), mother.code(), source.lineNo(),
+                            source.materialCode(), line.quantity(), line.weight(), entry.code(), source.storageRequirements()));
+                }
             }
             saveChild(new ChildWorkOrderRecord(
                     line.code(),
@@ -406,7 +411,7 @@ public class MotherOrderSplitService {
                         .map(ChildLineAllocation::weight).reduce(ZERO, BigDecimal::add);
                 sourceLines.add(new ReceiptLineBalance(line.lineNo(), line.materialCode(), line.materialName(),
                         line.goodsName(), line.quantity(), line.quantityUnit(), line.weight(),
-                        line.quantity().subtract(usedQuantity), line.weight().subtract(usedWeight)));
+                        line.quantity().subtract(usedQuantity), line.weight().subtract(usedWeight), line.storageRequirements()));
             }
         }
         MotherSplitState state = findSplit(mother.code(), session).orElse(null);

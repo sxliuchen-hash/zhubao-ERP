@@ -71,3 +71,4 @@
 71	COLUMN	auth_user_account	team_code
 72	TABLE	biz_desk_task
 73	TABLE	biz_process_batch_handoff
+74	TABLE	biz_material_storage_change

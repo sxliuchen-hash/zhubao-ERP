@@ -18,6 +18,10 @@ import java.util.concurrent.atomic.AtomicLong;
 @Repository
 @ConditionalOnProperty(name = "zhubao.master-data.repository", havingValue = "memory", matchIfMissing = true)
 public class InMemoryMasterDataRepository implements MasterDataRepository {
+    private final java.util.List<com.zhubao.erp.business.domain.MaterialStorageChange> storageChanges = new java.util.ArrayList<>();
+    @Override public synchronized java.util.List<com.zhubao.erp.business.domain.MaterialStorageChange> storageChanges(String code) {
+        return storageChanges.stream().filter(item -> item.materialCode().equals(code)).toList();
+    }
     private final ConcurrentHashMap<Long, CustomerProfile> customers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, MaterialProfile> materials = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, RequirementShortcut> shortcuts = new ConcurrentHashMap<>();
@@ -76,6 +80,11 @@ public class InMemoryMasterDataRepository implements MasterDataRepository {
                     && existing.name().trim().equalsIgnoreCase(profile.name().trim())) {
                 throw new BusinessException("材质名称已存在，请选择现有材质");
             }
+        }
+        MaterialProfile previous = materials.get(profile.materialCode());
+        if (!java.util.Objects.equals(com.zhubao.erp.business.domain.StorageRequirements.of(previous), com.zhubao.erp.business.domain.StorageRequirements.of(profile))) {
+            storageChanges.add(new com.zhubao.erp.business.domain.MaterialStorageChange(profile.materialCode(),
+                    com.zhubao.erp.business.domain.StorageRequirements.of(previous), com.zhubao.erp.business.domain.StorageRequirements.of(profile), java.time.LocalDateTime.now().toString()));
         }
         materials.put(profile.materialCode(), profile);
         return profile;

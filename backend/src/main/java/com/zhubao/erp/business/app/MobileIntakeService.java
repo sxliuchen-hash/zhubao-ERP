@@ -270,7 +270,7 @@ public class MobileIntakeService {
                         : masterData.materialForIntake(line.materialCode()).name();
                 businessDocumentRepository.saveReceiptLine(motherOrderCode, new ReceiptLine(index + 1,
                         line.materialCode(), materialName, line.goodsName(), line.quantity(), line.quantityUnit(),
-                        line.weight(), ledgerCode), session);
+                        line.weight(), ledgerCode, com.zhubao.erp.business.domain.StorageRequirements.of(masterData == null ? null : masterData.materialForIntake(line.materialCode()))), session);
                 totalQuantity = totalQuantity.add(line.quantity());
                 totalWeight = totalWeight.add(line.weight());
             }

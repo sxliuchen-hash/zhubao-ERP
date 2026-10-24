@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
+import { apiGet } from '../../services/apiClient';
 import type { AuthSession } from '../../services/authApi';
 import { fetchStatement, type CustomerStatement } from '../../services/financeApi';
 import { canManageMasterData } from '../../services/masterDataAccess';
 import {
+  STORAGE_CONDITIONS, storageText, fetchStorageChanges, type MaterialStorageChange,
   fetchCustomers,
   fetchMaterials,
   saveCustomer,
@@ -43,6 +45,16 @@ const customerFact = ref<'progress' | 'statement'>('progress');
 const editingMaterial = ref(false);
 const selectedCustomerId = ref<number | null>(null);
 const selectedMaterialCode = ref('');
+const storageChanges = ref<MaterialStorageChange[]>([]);
+const storageUsage = ref<Array<{ batchCode: string; motherOrderCode: string; materialCode: string; ownerLabel: string; status: string }>>([]);
+async function loadStorageUsage() {
+  const code = selectedMaterialCode.value;
+  try {
+    const groups = await Promise.all(['prep', 'company', 'processing'].map(scope => apiGet<typeof storageUsage.value>(`/api/inventory/material-stock/batches?scope=${scope}&materialCode=${encodeURIComponent(code)}`)));
+    if (code === selectedMaterialCode.value) storageUsage.value = groups.flat();
+  } catch (error) { saveError.value = error instanceof Error ? error.message : '关联在库在制读取失败'; }
+}
+async function loadStorageChanges() { try { storageChanges.value = await fetchStorageChanges(selectedMaterialCode.value); } catch (error) { saveError.value = error instanceof Error ? error.message : '变更记录读取失败'; } }
 const customerForm = ref(emptyCustomerForm());
 const materialForm = ref(emptyMaterialForm());
 
@@ -91,7 +103,7 @@ function emptyCustomerForm() {
 }
 
 function emptyMaterialForm() {
-  return { name: '', aliases: '', remark: '', enabled: true };
+  return { name: '', aliases: '', remark: '', enabled: true, storageConditions: [] as string[], storageInstruction: '' };
 }
 
 async function loadCatalog() {
@@ -236,9 +248,12 @@ function chooseMaterial(item: MaterialProfile, afterSave = false) {
   if (saving.value && !afterSave) return;
   editingMaterial.value = true;
   selectedMaterialCode.value = item.materialCode;
+  storageChanges.value = [];
   materialForm.value = {
     name: item.name,
     aliases: item.aliases,
+    storageConditions: [...(item.storageConditions ?? [])],
+    storageInstruction: item.storageInstruction ?? '',
     remark: item.remark,
     enabled: item.enabled,
   };
@@ -263,6 +278,8 @@ async function submitMaterial() {
       aliases: materialForm.value.aliases.trim(),
       remark: materialForm.value.remark.trim(),
       enabled: materialForm.value.enabled,
+      storageConditions: materialForm.value.storageConditions,
+      storageInstruction: materialForm.value.storageInstruction,
     });
     if (disposed) return;
     materials.value = [...materials.value.filter((item) => item.materialCode !== saved.materialCode), saved]
@@ -455,6 +472,11 @@ function money(value: number) {
           <label><span>材质名称</span><input v-model="materialForm.name" aria-label="材质名称" :readonly="!canManage || saving" /></label>
           <label><span>别称</span><input v-model="materialForm.aliases" aria-label="材质别称" :readonly="!canManage || saving" placeholder="多个用顿号或竖线分开" /></label>
           <label><span>备注</span><textarea v-model="materialForm.remark" aria-label="材质备注" :readonly="!canManage || saving" /></label>
+          <fieldset><legend>固定保存条件</legend><label v-for="condition in STORAGE_CONDITIONS" :key="condition.code"><input v-model="materialForm.storageConditions" type="checkbox" :value="condition.code" :aria-label="condition.label" :disabled="!canManage || saving" />{{ condition.mark }}＝{{ condition.label }}</label></fieldset>
+          <label><span>完整保存说明</span><textarea v-model="materialForm.storageInstruction" aria-label="保存说明" maxlength="500" :readonly="!canManage || saving" /></label>
+          <p>未配置不代表常温；星月可按已确认规则选择冷藏＋真空，不推断温度或期限。修改档案不改变历史来源快照。</p>
+          <details v-if="selectedMaterialCode"><summary @click="loadStorageUsage">核对该材质在库／在制记录（按当前库存权限）</summary><p v-for="(row, index) in storageUsage" :key="index">{{ row.batchCode || row.motherOrderCode }} · {{ row.ownerLabel }} · {{ row.status }}</p><p v-if="!storageUsage.length">暂无可见记录</p></details>
+          <details v-if="selectedMaterialCode && canManage"><summary @click="loadStorageChanges">保存要求修改记录</summary><p v-for="(change, index) in storageChanges" :key="index">{{ change.changedAt }}：{{ storageText(change.previous) }} → {{ storageText(change.current) }}</p></details>
           <label class="archive-check"><input v-model="materialForm.enabled" type="checkbox" aria-label="启用材质" :disabled="!canManage || saving" /><span>启用，可在来料单中选择</span></label>
           <button v-if="canManage" class="primary-button" type="button" aria-label="保存材质" :disabled="saving" @click="submitMaterial">
             {{ saving ? '正在保存' : '保存材质' }}

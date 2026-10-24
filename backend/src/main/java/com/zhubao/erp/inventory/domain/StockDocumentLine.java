@@ -15,8 +15,15 @@ public record StockDocumentLine(
         boolean counted,
         BigDecimal declaredQuantity,
         BigDecimal declaredWeight,
-        String ledgerCode
+        String ledgerCode,
+        com.zhubao.erp.business.domain.StorageRequirements storageRequirements
 ) {
+    public StockDocumentLine(int lineNo, String materialCode, String quantityUnit, BigDecimal quantity, BigDecimal weight,
+                             String batchCode, String externalRef, Integer sourceLineNo, boolean counted,
+                             BigDecimal declaredQuantity, BigDecimal declaredWeight, String ledgerCode) {
+        this(lineNo, materialCode, quantityUnit, quantity, weight, batchCode, externalRef, sourceLineNo, counted,
+                declaredQuantity, declaredWeight, ledgerCode, null);
+    }
     public StockDocumentLine {
         batchCode = batchCode == null ? "" : batchCode;
         externalRef = externalRef == null ? "" : externalRef;

@@ -121,8 +121,8 @@ public class JdbcStockDocumentRepository implements StockDocumentRepository {
         String lineSql = """
                 insert into inv_stock_document_line (
                     document_code, line_no, material_code, quantity_unit, quantity, weight, batch_code, external_ref,
-                    source_line_no, counted, declared_quantity, declared_weight, ledger_code
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_line_no, counted, declared_quantity, declared_weight, ledger_code, storage_conditions, storage_instruction
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(lineSql)) {
             for (StockDocumentLine line : document.lines()) {
@@ -143,6 +143,8 @@ public class JdbcStockDocumentRepository implements StockDocumentRepository {
                 statement.setBigDecimal(11, line.declaredQuantity());
                 setDecimal(statement, 12, line.declaredWeight());
                 statement.setString(13, line.ledgerCode());
+                statement.setString(14, line.storageRequirements() == null ? null : line.storageRequirements().encoded());
+                statement.setString(15, line.storageRequirements() == null ? null : line.storageRequirements().instruction());
                 statement.addBatch();
             }
             statement.executeBatch();
@@ -197,7 +199,7 @@ public class JdbcStockDocumentRepository implements StockDocumentRepository {
         }
         StringBuilder sql = new StringBuilder("""
                 select document_code, line_no, material_code, quantity_unit, quantity, weight, batch_code, external_ref,
-                       source_line_no, counted, declared_quantity, declared_weight, ledger_code
+                       source_line_no, counted, declared_quantity, declared_weight, ledger_code, storage_conditions, storage_instruction
                   from inv_stock_document_line
                  where document_code in (
                 """);
@@ -232,7 +234,8 @@ public class JdbcStockDocumentRepository implements StockDocumentRepository {
                             rs.getBoolean("counted"),
                             rs.getBigDecimal("declared_quantity"),
                             decimal(rs, "declared_weight"),
-                            rs.getString("ledger_code")
+                            rs.getString("ledger_code"),
+                            com.zhubao.erp.business.domain.StorageRequirements.read(rs.getString("storage_conditions"), rs.getString("storage_instruction"))
                     );
                     grouped.computeIfAbsent(rs.getString("document_code"), key -> new ArrayList<>()).add(line);
                 }

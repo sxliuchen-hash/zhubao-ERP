@@ -6,7 +6,8 @@ import { fetchStatement } from '../../services/financeApi';
 import { fetchCustomers, fetchMaterials, saveCustomer, saveMaterial } from '../../services/masterDataApi';
 import { fetchProgress } from '../../services/progressApi';
 
-vi.mock('../../services/masterDataApi', () => ({
+vi.mock('../../services/masterDataApi', async () => ({
+  ...await vi.importActual<typeof import('../../services/masterDataApi')>('../../services/masterDataApi'),
   fetchCustomers: vi.fn(),
   fetchMaterials: vi.fn(),
   saveCustomer: vi.fn(),
@@ -134,6 +135,23 @@ describe('客户档案', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('无权查看该客户的财务');
     expect(wrapper.text()).toContain('这家客户暂无在制单据');
+    wrapper.unmount();
+  });
+
+  it('保存星月的冷藏真空与完整说明', async () => {
+    vi.mocked(saveMaterial).mockImplementation(async body => body);
+    const wrapper = mountArchive();
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === '材质管理')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '新建材质')!.trigger('click');
+    await wrapper.get('[aria-label="材质名称"]').setValue('星月');
+    await wrapper.get('[aria-label="冷藏"]').setValue(true);
+    await wrapper.get('[aria-label="真空"]').setValue(true);
+    await wrapper.get('[aria-label="保存说明"]').setValue('按本单核对密封状态');
+    await wrapper.get('[aria-label="保存材质"]').trigger('click');
+    await flushPromises();
+    expect(saveMaterial).toHaveBeenCalledWith(expect.objectContaining({ storageConditions: ['COLD', 'VACUUM'], storageInstruction: '按本单核对密封状态' }));
+    expect(wrapper.text()).toContain('未配置不代表常温');
     wrapper.unmount();
   });
 

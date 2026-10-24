@@ -209,7 +209,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     public List<ReceiptLine> listStoredReceiptLines(String motherOrderCode, WorkSession session) {
         try (PreparedStatement statement = requireConnection(session).prepareStatement("""
                 select line_no, material_code, material_name_snapshot, goods_name_snapshot,
-                       quantity, quantity_unit, weight, ledger_code
+                       quantity, quantity_unit, weight, ledger_code, storage_conditions, storage_instruction
                   from biz_receipt_line where mother_order_code = ? order by line_no
                 """)) {
             statement.setString(1, motherOrderCode);
@@ -217,7 +217,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
                 List<ReceiptLine> rows = new ArrayList<>();
                 while (rs.next()) {
                     rows.add(new ReceiptLine(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                            rs.getBigDecimal(5), rs.getString(6), rs.getBigDecimal(7), rs.getString(8)));
+                            rs.getBigDecimal(5), rs.getString(6), rs.getBigDecimal(7), rs.getString(8), com.zhubao.erp.business.domain.StorageRequirements.read(rs.getString(9), rs.getString(10))));
                 }
                 return rows;
             }
@@ -275,14 +275,14 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      select line_no, material_code, material_name_snapshot, goods_name_snapshot,
-                            quantity, quantity_unit, weight, ledger_code
+                            quantity, quantity_unit, weight, ledger_code, storage_conditions, storage_instruction
                        from biz_receipt_line where mother_order_code = ? order by line_no
                      """)) {
             statement.setString(1, motherOrderCode);
             try (ResultSet rs = statement.executeQuery()) {
                 List<ReceiptLine> rows = new ArrayList<>();
                 while (rs.next()) rows.add(new ReceiptLine(rs.getInt(1), rs.getString(2), rs.getString(3),
-                        rs.getString(4), rs.getBigDecimal(5), rs.getString(6), rs.getBigDecimal(7), rs.getString(8)));
+                        rs.getString(4), rs.getBigDecimal(5), rs.getString(6), rs.getBigDecimal(7), rs.getString(8), com.zhubao.erp.business.domain.StorageRequirements.read(rs.getString(9), rs.getString(10))));
                 if (!rows.isEmpty()) return rows;
             }
         } catch (SQLException ex) { throw new IllegalStateException("收货明细读取失败", ex); }
@@ -295,8 +295,8 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     public void saveReceiptLine(String motherOrderCode, ReceiptLine line, WorkSession session) {
         try (PreparedStatement statement = requireConnection(session).prepareStatement("""
                 insert into biz_receipt_line (mother_order_code, line_no, material_code, material_name_snapshot,
-                goods_name_snapshot, quantity, quantity_unit, weight, ledger_code)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                goods_name_snapshot, quantity, quantity_unit, weight, ledger_code, storage_conditions, storage_instruction)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             statement.setString(1, motherOrderCode);
             statement.setInt(2, line.lineNo());
@@ -307,6 +307,8 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setString(7, line.quantityUnit());
             statement.setBigDecimal(8, line.weight());
             statement.setString(9, line.ledgerCode());
+            statement.setString(10, line.storageRequirements() == null ? null : line.storageRequirements().encoded());
+            statement.setString(11, line.storageRequirements() == null ? null : line.storageRequirements().instruction());
             statement.executeUpdate();
         } catch (SQLException ex) { throw new IllegalStateException("收货明细保存失败", ex); }
     }
@@ -325,7 +327,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public List<ChildLineAllocation> listChildAllocations(String motherOrderCode, WorkSession session) {
-        String sql = "select child_order_code, mother_order_code, source_line_no, material_code, quantity, weight, ledger_code "
+        String sql = "select child_order_code, mother_order_code, source_line_no, material_code, quantity, weight, ledger_code, storage_conditions, storage_instruction "
                 + "from biz_child_line_allocation where mother_order_code = ? order by child_order_code, source_line_no";
         try {
             if (session == null) {
@@ -343,7 +345,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             try (ResultSet rs = statement.executeQuery()) {
                 List<ChildLineAllocation> rows = new ArrayList<>();
                 while (rs.next()) rows.add(new ChildLineAllocation(rs.getString(1), rs.getString(2), rs.getInt(3),
-                        rs.getString(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getString(7)));
+                        rs.getString(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getString(7), com.zhubao.erp.business.domain.StorageRequirements.read(rs.getString(8), rs.getString(9))));
                 return rows;
             }
         }
@@ -353,7 +355,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     public void saveChildAllocation(ChildLineAllocation allocation, WorkSession session) {
         try (PreparedStatement statement = requireConnection(session).prepareStatement("""
                 insert into biz_child_line_allocation (child_order_code, mother_order_code, source_line_no,
-                material_code, quantity, weight, ledger_code) values (?, ?, ?, ?, ?, ?, ?)
+                material_code, quantity, weight, ledger_code, storage_conditions, storage_instruction) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             statement.setString(1, allocation.childOrderCode());
             statement.setString(2, allocation.motherOrderCode());
@@ -362,6 +364,8 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setBigDecimal(5, allocation.quantity());
             statement.setBigDecimal(6, allocation.weight());
             statement.setString(7, allocation.ledgerCode());
+            statement.setString(8, allocation.storageRequirements() == null ? null : allocation.storageRequirements().encoded());
+            statement.setString(9, allocation.storageRequirements() == null ? null : allocation.storageRequirements().instruction());
             statement.executeUpdate();
         } catch (SQLException ex) { throw new IllegalStateException("子单来源分配保存失败", ex); }
     }
