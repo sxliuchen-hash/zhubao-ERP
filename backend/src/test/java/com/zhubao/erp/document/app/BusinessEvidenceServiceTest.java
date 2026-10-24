@@ -807,6 +807,20 @@ class BusinessEvidenceServiceTest {
         assertThat(fixture.stocks.ledgers()).hasSize(ledgersBefore);
     }
 
+    @Test void batchEvidenceBindsOnlyToTheSavedBatchAndItsExactProcess() {
+        Fixture fixture = memoryFixture(); prepareFacts(fixture);
+        var unit = new com.zhubao.erp.work.app.MemoryBusinessWorkUnit(new com.zhubao.erp.work.infra.InMemoryCommandRequestRepository());
+        unit.execute(new com.zhubao.erp.work.domain.CommandCall("batch-evidence", "操作工", "PROCESS_BATCH_HANDOFF", "WORK_ORDER", CHILD, "quantity=1"), session -> {
+            fixture.business.saveProcessBatch(new com.zhubao.erp.business.domain.ProcessBatchHandoff("PB-EVIDENCE", CHILD, "雕刻", java.math.BigDecimal.ONE, null, "操作工", "2026-10-24T10:00:00"), session);
+            return "已交";
+        });
+        var file = upload(fixture, EvidenceCodes.WORK_ORDER, CHILD, "PROCESS", "batch".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var command = bind(file.code(), EvidenceCodes.WORK_ORDER, CHILD, EvidenceCodes.PRODUCTION, "PROCESS", "process_batch_report", "PB-EVIDENCE", "雕刻", "");
+        assertThat(fixture.evidence.bind(command, fixture.admin)).isNotNull();
+        assertThatThrownBy(() -> fixture.evidence.bind(bind(file.code(), EvidenceCodes.WORK_ORDER, CHILD, EvidenceCodes.PRODUCTION, "PROCESS", "process_batch_report", "PB-EVIDENCE", "镶嵌", ""), fixture.admin)).hasMessageContaining("工序");
+        assertThatThrownBy(() -> fixture.evidence.bind(bind(file.code(), EvidenceCodes.WORK_ORDER, CHILD, EvidenceCodes.PRODUCTION, "PROCESS", "process_batch_report", "PB-MISSING", "雕刻", ""), fixture.admin)).hasMessageContaining("不存在");
+    }
+
     private void prepareFacts(Fixture fixture) {
         fixture.business.saveMotherOrder(mother(MOTHER, INBOUND_LEDGER));
         fixture.business.saveChildWorkOrder(child());

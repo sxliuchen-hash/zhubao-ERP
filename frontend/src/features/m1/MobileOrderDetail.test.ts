@@ -27,7 +27,7 @@ describe('手机扫码订单详情', () => {
     expect(wrapper.find('.mobile-order-actions').text()).not.toContain('更新工序进度');
     expect(wrapper.find('.mobile-order-actions').text()).not.toContain('正式交工');
     await wrapper.get('.mobile-order-actions .primary-button').trigger('click');
-    expect(wrapper.emitted('open')?.[0]).toEqual(['progress', { code: 'WO-1', objectType: 'WORK_ORDER' }]);
+    expect(wrapper.emitted('open')?.[0]).toEqual(['station', { code: 'WO-1', objectType: 'WORK_ORDER' }]);
     wrapper.unmount();
   });
   it('操作工优先看到要求和进度操作，换号后旧单立即消失', async () => {

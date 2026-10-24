@@ -533,6 +533,14 @@ public class BusinessEvidenceService {
             assertIntake(operationCode, targetType, targetCode);
             return;
         }
+        if (EvidenceCodes.PRODUCTION.equals(stage) && "process_batch_report".equals(operationType)) {
+            var batch = businessDocuments.listProcessBatches(targetCode, null).stream().filter(row -> operationCode.equals(row.batchCode())).findFirst()
+                    .orElseThrow(() -> new BusinessException("交工批次不存在"));
+            String expectedType = businessDocuments.findMotherOrderByCode(targetCode).isPresent() ? EvidenceCodes.MOTHER_ORDER : EvidenceCodes.WORK_ORDER;
+            if (!expectedType.equals(targetType)) throw new BusinessException("证据单据类型与交工批次不一致");
+            if (processName.isEmpty() || !processName.equals(batch.processName())) throw new BusinessException("证据工序与交工批次不一致");
+            return;
+        }
         if (EvidenceCodes.PRODUCTION.equals(stage)
                 && (EvidenceCodes.PROCESS_STATION_REPORT.equals(operationType)
                 || EvidenceCodes.PRODUCTION_REPORT.equals(operationType))) {

@@ -194,7 +194,7 @@ const detailActions = computed(() => {
     items.push({ key: 'intake', label: '收货与拆单资料', run: () => go('inbound', 'INTAKE', 'BUSINESS_INBOUND_CONFIRM'), rank: 45 });
   }
   if (canWork.value && selectedRow.value?.processFormallyDelivered !== true && (openProduction || scan.context?.actions.some(action => action.code === 'REPORT_PROCESS' && action.allowed))) {
-    items.push({ key: 'production', label: '报工', run: () => work(selectedRow.value?.processPercent === 100 ? 'station' : 'progress'), rank: 5 });
+    items.push({ key: 'production', label: '报工', run: () => work('station'), rank: 5 });
   }
   if (openOrderChange && current.motherOrderCode && tabs.value.includes('progress') && ['MOTHER_ORDER', 'WORK_ORDER'].includes(current.objectType)) {
     items.push({ key: 'change', label: '改单办理', run: changeOrder, rank: 50 });

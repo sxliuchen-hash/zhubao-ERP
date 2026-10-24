@@ -66,6 +66,15 @@ class OrderWorkspaceQueryServiceTest {
         service = new OrderWorkspaceQueryService(documents, null, progress, requirements, null);
     }
 
+    @Test void partialUpstreamIsVisibleToDownstreamAccountWithoutCompletingEitherProcess() {
+        documents.saveMotherOrder(mother("MD-BQ", 1001L, "恒信珠宝", "2026-10-23", "10", "件"));
+        documents.saveMotherSplitState(new MotherSplitState("MD-BQ", MotherSplitState.SPLIT, "V1", "收货", "2026-10-09T08:00:00"));
+        documents.saveChildWorkOrder(child("ZD-BQ", "MD-BQ", 1001L, "恒信珠宝"));
+        documents.saveProcessBatch(new com.zhubao.erp.business.domain.ProcessBatchHandoff("PB-Q", "ZD-BQ", "雕刻", BigDecimal.ONE, null, "雕刻工", "2026-10-24T09:00:00"), SESSION);
+        var page = service.query(office, new OrderWorkspaceAccess(List.of("production"), List.of("镶嵌")), new OrderWorkspaceQuery("PRODUCTION", "", null, "", "ALL", null, 1, 20));
+        assertThat(page.items()).anySatisfy(row -> { assertThat(row.code()).isEqualTo("ZD-BQ"); assertThat(row.currentProcess()).isEqualTo("镶嵌"); assertThat(row.facet()).isEqualTo("IN_PROCESS"); assertThat(row.processFormallyDelivered()).isFalse(); });
+    }
+
     @Test
     void anonymousAndMenusWithoutOrderSourceAreRejected() {
         assertThatThrownBy(() -> service.query(null, orders, query()))

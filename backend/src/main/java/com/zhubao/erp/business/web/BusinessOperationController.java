@@ -212,6 +212,9 @@ public class BusinessOperationController {
             HttpServletRequest request
     ) {
         AuthUserAccount account = requireStationAccount(request);
+        if (command.quantity() != null || command.finalWeight() != null) {
+            return ApiResponse.ok(requireProcessStationService().reportBatch(command, account));
+        }
         if (command.requestId() != null && !command.requestId().isBlank()) {
             return ApiResponse.ok(requireProcessStationService().report(
                     command.code(),

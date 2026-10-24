@@ -35,7 +35,7 @@ class DatabaseUpgradeServiceTest {
     @Test
     void realCatalogKeepsContiguousVersionsThroughV70() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(72);
+        assertThat(scripts).hasSize(73);
         assertThat(scripts.get(0).version()).isEqualTo(1);
         assertThat(scripts.get(38).version()).isEqualTo(39);
         assertThat(scripts.get(39).version()).isEqualTo(40);

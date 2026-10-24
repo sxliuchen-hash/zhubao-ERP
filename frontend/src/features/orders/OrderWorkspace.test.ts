@@ -117,7 +117,7 @@ describe('统一订单列表与详情', () => {
     auth.value.effectivePermissions.push('BUSINESS_PRODUCTION_REPORT');
     await flushPromises();
     await wrapper.findAll('button').find(button => button.text() === '报工')!.trigger('click');
-    expect(openProduction).toHaveBeenLastCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1' }, 'progress');
+    expect(openProduction).toHaveBeenLastCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1' }, 'station');
     expect(wrapper.findAll('button').some(button => button.text() === '打开岗位交工')).toBe(false);
     await wrapper.findAll('button').find(button => button.text() === '改单办理')!.trigger('click');
     expect(openChange).toHaveBeenCalledWith({ objectType: 'WORK_ORDER', code: 'WO-1', motherOrderCode: 'MO-1' });

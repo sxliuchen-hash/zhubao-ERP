@@ -136,7 +136,7 @@ function rememberProgress(record: ScanProgressRecord) {
         <button v-if="isReceiving" class="primary-button" type="button" @click="open('intake')">
           {{ identity.objectType === 'EXPRESS_NO' ? '创建收货订单' : '查看收货与订单资料' }}
         </button>
-        <button v-if="unifiedProduction && isProduction && isWorkTarget && (canOpen('progress') || canOpen('station'))" class="primary-button" type="button" @click="open(canOpen('progress') ? 'progress' : 'station')">报工</button>
+        <button v-if="unifiedProduction && isProduction && isWorkTarget && (canOpen('progress') || canOpen('station'))" class="primary-button" type="button" @click="open(canOpen('station') ? 'station' : 'progress')">报工</button>
         <template v-else>
         <button v-if="isProduction && canOpen('progress') && isWorkTarget" class="primary-button" type="button" @click="open('progress')">更新工序进度</button>
         <button v-if="isProduction && canOpen('station') && isWorkTarget && formalReport?.allowed" class="secondary-button" type="button" @click="open('station')">正式交工</button>

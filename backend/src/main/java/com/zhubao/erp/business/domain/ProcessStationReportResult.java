@@ -8,6 +8,16 @@ public record ProcessStationReportResult(
         String processName,
         String ledgerCode,
         boolean movedToSemiFinished,
-        String stockStatus
+        String stockStatus,
+        String batchCode,
+        java.math.BigDecimal batchQuantity,
+        java.math.BigDecimal deliveredQuantity,
+        java.math.BigDecimal remainingQuantity,
+        Boolean processCompleted,
+        java.math.BigDecimal finalWeight
 ) {
+    public ProcessStationReportResult(String orderCode, String processName, String ledgerCode,
+                                     boolean movedToSemiFinished, String stockStatus) {
+        this(orderCode, processName, ledgerCode, movedToSemiFinished, stockStatus, null, null, null, null, true, null);
+    }
 }

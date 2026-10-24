@@ -799,7 +799,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     @Override
     public Optional<ProcessStationHandoff> findProcessStationHandoff(String orderCode, String processName, WorkSession session) {
         try {
-            return findProcessStationHandoff(requireConnection(session), orderCode, processName);
+            return findProcessStationHandoff(requireConnection(session), orderCode, processName, true);
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to load process station handoff: " + orderCode, ex);
         }
@@ -1318,11 +1318,11 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     private Optional<ProcessStationHandoff> findProcessStationHandoff(Connection connection, String orderCode, String processName)
             throws SQLException {
-        String sql = """
-                select order_code, process_name, operator, ledger_code, created_at
-                  from biz_process_station_handoff
-                 where order_code = ? and process_name = ?
-                """;
+        return findProcessStationHandoff(connection, orderCode, processName, false);
+    }
+
+    private Optional<ProcessStationHandoff> findProcessStationHandoff(Connection connection, String orderCode, String processName, boolean lock) throws SQLException {
+        String sql = "select order_code, process_name, operator, ledger_code, created_at from biz_process_station_handoff where order_code = ? and process_name = ?" + (lock ? " for update" : "");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, orderCode);
             statement.setString(2, processName);
@@ -2129,4 +2129,61 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     private interface SqlBinder {
         void bind(PreparedStatement statement) throws SQLException;
     }
+
+    private volatile Boolean processBatchesSupported;
+
+    @Override public boolean supportsProcessBatches() {
+        if (processBatchesSupported != null) return processBatchesSupported;
+        try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement("select batch_code from biz_process_batch_handoff where 1 = 0")) {
+            statement.executeQuery().close(); processBatchesSupported = true; return true;
+        } catch (SQLException ex) {
+            if ("42S02".equals(ex.getSQLState()) || "42102".equals(ex.getSQLState())) { processBatchesSupported = false; return false; }
+            throw new IllegalStateException("无法核查分批交工结构", ex);
+        }
+    }
+
+    @Override public void lockProcessBatchOrder(String orderCode, WorkSession session) {
+        Connection connection = requireConnection(session);
+        try (PreparedStatement insert = connection.prepareStatement("insert into biz_process_batch_lock (order_code) values (?) on duplicate key update order_code = values(order_code)")) {
+            insert.setString(1, orderCode); insert.executeUpdate();
+            try (PreparedStatement lock = connection.prepareStatement("select order_code from biz_process_batch_lock where order_code = ? for update")) {
+                lock.setString(1, orderCode); lock.executeQuery().close();
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("无法锁定分批交工工单", ex); }
+    }
+
+    @Override public List<com.zhubao.erp.business.domain.ProcessBatchHandoff> listProcessBatches(String orderCode, WorkSession session) {
+        if (!supportsProcessBatches()) return List.of();
+        if (session != null) return readProcessBatches(requireConnection(session), orderCode, true);
+        try (Connection connection = dataSource.getConnection()) { return readProcessBatches(connection, orderCode, false); }
+        catch (SQLException ex) { throw new IllegalStateException("无法读取分批交工", ex); }
+    }
+
+    @Override public List<com.zhubao.erp.business.domain.ProcessBatchHandoff> listAllProcessBatches() {
+        if (!supportsProcessBatches()) return List.of();
+        try (Connection connection = dataSource.getConnection()) { return readProcessBatches(connection, null, false); }
+        catch (SQLException ex) { throw new IllegalStateException("无法读取分批交工", ex); }
+    }
+
+    private List<com.zhubao.erp.business.domain.ProcessBatchHandoff> readProcessBatches(Connection connection, String orderCode, boolean lock) {
+        String sql = "select batch_code, order_code, process_name, quantity, final_weight, operator, created_at from biz_process_batch_handoff"
+                + (orderCode == null ? "" : " where order_code = ?") + " order by created_at, batch_code" + (lock ? " for update" : "");
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            if (orderCode != null) statement.setString(1, orderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<com.zhubao.erp.business.domain.ProcessBatchHandoff> rows = new ArrayList<>();
+                while (rs.next()) rows.add(new com.zhubao.erp.business.domain.ProcessBatchHandoff(rs.getString(1), rs.getString(2), rs.getString(3), rs.getBigDecimal(4), rs.getBigDecimal(5), rs.getString(6), rs.getString(7)));
+                return List.copyOf(rows);
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("无法读取分批交工明细", ex); }
+    }
+
+    @Override public void saveProcessBatch(com.zhubao.erp.business.domain.ProcessBatchHandoff batch, WorkSession session) {
+        try (PreparedStatement statement = requireConnection(session).prepareStatement("insert into biz_process_batch_handoff (batch_code, order_code, process_name, quantity, final_weight, operator, created_at) values (?, ?, ?, ?, ?, ?, ?)")) {
+            statement.setString(1, batch.batchCode()); statement.setString(2, batch.orderCode()); statement.setString(3, batch.processName());
+            statement.setBigDecimal(4, batch.quantity()); statement.setBigDecimal(5, batch.finalWeight()); statement.setString(6, batch.operator()); statement.setString(7, batch.createdAt());
+            statement.executeUpdate();
+        } catch (SQLException ex) { throw new IllegalStateException("无法保存分批交工", ex); }
+    }
+
 }

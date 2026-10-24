@@ -43,6 +43,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+import com.zhubao.erp.business.domain.ProcessBatchHandoff;
+import com.zhubao.erp.business.domain.ProcessStationReportCommand;
 
 /**
  * 三个工序岗位扫码。只展示账号绑定的工序，并按单上的顺序交付。
@@ -226,6 +229,10 @@ public class ProcessStationService {
             String labelExceptionReason
     ) {
         requireAccount(account);
+        documents.supportsProcessBatches();
+        if ((requestId == null || requestId.isBlank()) && workUnit != null && documents.supportsProcessBatches()) {
+            return report(rawCode, requestedProcess, account, "legacy-" + UUID.randomUUID(), labelExceptionReason);
+        }
         if (requestId == null || requestId.isBlank()) {
             synchronized (this) {
         StationTicket ticket = resolve(rawCode);
@@ -281,6 +288,10 @@ public class ProcessStationService {
             String requestId
     ) {
         requireAccount(account);
+        documents.supportsProcessBatches();
+        if ((requestId == null || requestId.isBlank()) && workUnit != null && documents.supportsProcessBatches()) {
+            return reportProduction(submittedCommand, account, "legacy-" + UUID.randomUUID());
+        }
         if (requestId == null || requestId.isBlank()) {
             synchronized (this) {
                 return postStation(submittedCommand, account, null);
@@ -302,9 +313,19 @@ public class ProcessStationService {
     }
 
     private ProductionReportResult postStation(ReportProductionCommand submittedCommand, AuthUserAccount account, WorkSession session) {
+        return postStation(submittedCommand, account, session, false);
+    }
+
+    private ProductionReportResult postStation(ReportProductionCommand submittedCommand, AuthUserAccount account, WorkSession session, boolean fromBatch) {
         requireAccount(account);
         ReportProductionCommand command = BusinessCommandActors.withActor(submittedCommand, account.operator().trim());
         StationTicket ticket = resolve(command.workOrderCode());
+        if (documents.supportsProcessBatches()) {
+            if (session != null) { documents.lockMotherOrder(ticket.motherOrderCode(), session); documents.lockProcessBatchOrder(ticket.orderCode(), session); if (!ticket.equals(resolve(command.workOrderCode()))) throw new BusinessException("单据内容已变化，请刷新后重新交工"); }
+            if (!fromBatch && !documents.listProcessBatches(ticket.orderCode(), session).isEmpty()) {
+                throw new BusinessException("这张单已经开始分批交工，请按本次可交数量继续办理");
+            }
+        }
         assertCustomer(ticket, account);
         assertFormalCommand(ticket, command);
         String process = normalizeRequested(command.process());
@@ -388,6 +409,58 @@ public class ProcessStationService {
         } else {
             stockLedgerService.transfer(transfer, session);
         }
+    }
+
+    /** 分批数量独立累计；末道数量交齐并登记总重量后才写原工序完成事实。 */
+    public ProcessStationReportResult reportBatch(ProcessStationReportCommand command, AuthUserAccount account) {
+        requireAccount(account);
+        if (workUnit == null || !documents.supportsProcessBatches()) throw new BusinessException("分批交工尚未装配，请先完成数据库升级");
+        if (command.requestId() == null || command.requestId().isBlank()) throw new BusinessException("分批交工必须带原请求编号");
+        StationTicket ticket = resolve(command.code());
+        assertCustomer(ticket, account);
+        assertLabel(command.code(), ticket, command.labelExceptionReason(), account);
+        String process = normalizeRequested(command.process());
+        if (!ticket.processes().contains(process) || !boundProcesses(account).contains(process)) throw new BusinessException("当前账号不能做这道工序");
+        BigDecimal quantity = command.quantity();
+        if (quantity == null || quantity.signum() < 0 || quantity.scale() > 3 || quantity.precision() - quantity.scale() > 15) throw new BusinessException("本次数量须为非负数，最多三位小数");
+        BigDecimal weight = command.finalWeight();
+        if (weight != null && (weight.signum() <= 0 || weight.scale() > 3 || weight.precision() - weight.scale() > 15)) throw new BusinessException("末道总重量须为正数，最多三位小数");
+        boolean last = process.equals(ticket.routeTail());
+        if (weight != null && !last) throw new BusinessException("总重量在末道交齐时统一登记");
+        String payload = ProcessHandoffResultText.payload(ticket.customerId(), ticket.ownerCustomerId(), ticket.motherOrderCode(), process, quantity, weight);
+        String text = workUnit.execute(new CommandCall(command.requestId(), account.operator().trim(), "PROCESS_BATCH_HANDOFF",
+                ticket.keptMother() ? "MOTHER_ORDER" : "WORK_ORDER", ticket.orderCode(), payload), session -> {
+            documents.lockMotherOrder(ticket.motherOrderCode(), session);
+            documents.lockProcessBatchOrder(ticket.orderCode(), session);
+            if (!ticket.equals(resolve(command.code()))) throw new BusinessException("单据要求或工序已变化，请刷新本单后重新交工");
+            List<ProcessBatchHandoff> batches = documents.listProcessBatches(ticket.orderCode(), session);
+            if (submitted(ticket.orderCode(), process, session)) throw new BusinessException("这道工序已经全部交齐");
+            BigDecimal delivered = batchQuantity(batches, process);
+            String previous = previousProcess(ticket.processes(), process);
+            BigDecimal received = previous.isBlank() || submitted(ticket.orderCode(), previous, session)
+                    ? ticket.quantity() : batchQuantity(batches, previous);
+            BigDecimal available = received.min(ticket.quantity()).subtract(delivered).max(BigDecimal.ZERO);
+            if (quantity.compareTo(available) > 0) throw new BusinessException("本次数量超过上道已交或本工序剩余可交数量：" + available.toPlainString());
+            BigDecimal cumulative = delivered.add(quantity);
+            boolean all = cumulative.compareTo(ticket.quantity()) == 0;
+            if (quantity.signum() == 0 && (!all || !last || weight == null)) throw new BusinessException("请填写本次交工数量；末道全部交齐后才可只补登记重量");
+            if (weight != null && !all) throw new BusinessException("末道数量尚未交齐，不能登记整单总重量");
+            ensureWipForKeptMother(ticket, account.operator().trim(), session);
+            ProcessBatchHandoff batch = new ProcessBatchHandoff("PB-" + UUID.randomUUID(), ticket.orderCode(), process,
+                    quantity, weight, account.operator().trim(), RECORD_TIME.format(LocalDateTime.now()));
+            documents.saveProcessBatch(batch, session);
+            boolean completed = all && (!last || weight != null);
+            ProcessStationReportResult formal = completed ? stationResult(postStation(defaultCommand(ticket, process, account.operator()), account, session, true)) : null;
+            return ProcessHandoffResultText.write(new ProcessStationReportResult(ticket.orderCode(), process,
+                    formal == null ? "" : formal.ledgerCode(), formal != null && formal.movedToSemiFinished(),
+                    formal == null ? "WIP" : formal.stockStatus(), batch.batchCode(), quantity, cumulative,
+                    ticket.quantity().subtract(cumulative), completed, weight));
+        });
+        return ProcessHandoffResultText.read(text);
+    }
+
+    private BigDecimal batchQuantity(List<ProcessBatchHandoff> rows, String process) {
+        return rows.stream().filter(row -> row.processName().equals(process)).map(ProcessBatchHandoff::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private ReportProductionCommand defaultCommand(StationTicket ticket, String process, String operator) {
@@ -487,13 +560,18 @@ public class ProcessStationService {
     private ProcessStationCard card(StationTicket ticket, String process) {
         String previous = previousProcess(ticket.processes(), process);
         boolean previousSubmitted = previous.isBlank() || submitted(ticket.orderCode(), previous);
+        List<ProcessBatchHandoff> batches = documents.listProcessBatches(ticket.orderCode(), null);
+        BigDecimal delivered = submitted(ticket.orderCode(), process) ? ticket.quantity() : batchQuantity(batches, process);
+        BigDecimal received = previousSubmitted ? ticket.quantity() : batchQuantity(batches, previous);
         return new ProcessStationCard(
                 process,
                 ticket.processingRequirement(),
                 ticket.dueDate(),
                 previous,
                 previousSubmitted,
-                submitted(ticket.orderCode(), process)
+                submitted(ticket.orderCode(), process),
+                ticket.quantity(), delivered, received.min(ticket.quantity()).subtract(delivered).max(BigDecimal.ZERO),
+                process.equals(ticket.routeTail()), batches.stream().filter(row -> row.processName().equals(process)).toList()
         );
     }
 

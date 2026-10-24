@@ -838,4 +838,26 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
         java.util.Collections.reverse(matched);
         return matched;
     }
+
+    private final java.util.concurrent.ConcurrentMap<String, com.zhubao.erp.business.domain.ProcessBatchHandoff> processBatches = new java.util.concurrent.ConcurrentHashMap<>();
+
+    @Override public boolean supportsProcessBatches() { return true; }
+
+    @Override public void lockProcessBatchOrder(String orderCode, WorkSession session) { requireSession(session); }
+
+    @Override public List<com.zhubao.erp.business.domain.ProcessBatchHandoff> listProcessBatches(String orderCode, WorkSession session) {
+        if (session != null) requireSession(session);
+        return listAllProcessBatches().stream().filter(row -> row.orderCode().equals(orderCode)).toList();
+    }
+
+    @Override public List<com.zhubao.erp.business.domain.ProcessBatchHandoff> listAllProcessBatches() {
+        return processBatches.values().stream().sorted(java.util.Comparator.comparing(com.zhubao.erp.business.domain.ProcessBatchHandoff::createdAt)).toList();
+    }
+
+    @Override public void saveProcessBatch(com.zhubao.erp.business.domain.ProcessBatchHandoff batch, WorkSession session) {
+        requireSession(session);
+        if (processBatches.putIfAbsent(batch.batchCode(), batch) != null) throw new com.zhubao.erp.common.error.BusinessException("交工批次已存在");
+        session.onRollback(() -> processBatches.remove(batch.batchCode(), batch));
+    }
+
 }

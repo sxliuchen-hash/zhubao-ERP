@@ -560,7 +560,7 @@ public class ScanContextService {
                 return deny(REPORT_PROCESS, BLOCK_PERMISSION, reason);
             }
             for (ProcessStationCard card : view.stations()) {
-                if (!card.submitted() && (blank(card.previousProcessName()).isBlank() || card.previousSubmitted())) {
+                if (!card.submitted() && (blank(card.previousProcessName()).isBlank() || card.previousSubmitted() || (card.availableQuantity() != null && card.availableQuantity().signum() > 0))) {
                     return action(REPORT_PROCESS, true, BLOCK_NONE, null);
                 }
             }

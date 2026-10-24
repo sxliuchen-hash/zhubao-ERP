@@ -42,7 +42,7 @@ const stationView = ref<ProcessStationView | null>(null);
 const stationCode = ref('');
 const stationBusy = ref(false);
 const submittingProcess = ref('');
-const pendingDelivery = ref<{ code: string; processName: string; requestId: string } | null>(null);
+const pendingDelivery = ref<{ code: string; processName: string; requestId: string; batch?: { quantity: string; finalWeight?: string } } | null>(null);
 const locked = computed(() => Boolean(submittingProcess.value) || Boolean(pendingDelivery.value));
 watch(locked, value => emit('locked', value), { immediate: true });
 const delivered = ref<ProcessStationReport | null>(null);
@@ -50,6 +50,20 @@ const requestIds = ref<Record<string, string>>({});
 const checkedRequirement = ref<Record<string, boolean>>({});
 const reviewConfirmed = ref<Record<string, boolean>>({});
 const activeProcess = ref('');
+const batchQuantity = ref('');
+const finalWeight = ref('');
+const evidenceDrafts = ref<Array<{ key: number; result: ProcessStationReport | null }>>([{ key: 0, result: null }]);
+const evidenceDraftKey = ref(0);
+const currentEvidenceDraftKey = ref(0);
+function evidenceType(result: ProcessStationReport | null) { return result?.batchCode ? 'process_batch_report' : result?.movedToSemiFinished ? 'production_report' : result ? 'process_station_report' : ''; }
+function nextBatch() {
+  if (locked.value) return;
+  hint.value = ''; formError.value = '';
+  delivered.value = null; checkedRequirement.value = {}; reviewConfirmed.value = {}; requestIds.value = {};
+  batchQuantity.value = activeStation.value?.availableQuantity === 0 ? '0' : ''; finalWeight.value = '';
+  const key = evidenceDrafts.value.length; evidenceDrafts.value.push({ key, result: null }); evidenceDraftKey.value = key; currentEvidenceDraftKey.value = key;
+}
+watch(activeProcess, (current, previous) => { if (!locked.value) { if (previous && current !== previous) nextBatch(); batchQuantity.value = ''; finalWeight.value = ''; } });
 const stationScan = reactive(useScanContext());
 
 const progressTarget = computed(() => stationCode.value ? progressTargetFromScan(stationScan.context) : null);
@@ -69,9 +83,20 @@ const checkedCount = computed(() => activeLines.value.filter((_, index) => (
   checkedRequirement.value[checkKey(activeStation.value?.processName ?? '', index)]
 )).length);
 const quantityReady = computed(() => stationScan.context?.order.quantity != null && stationScan.context?.order.weight != null);
-function previousReady(station: ProcessStationCard) { return !station.previousProcessName || station.previousSubmitted; }
+const batchMode = computed(() => activeStation.value?.totalQuantity != null);
+function previousReady(station: ProcessStationCard) {
+  return station.availableQuantity != null ? station.availableQuantity > 0 || station.deliveredQuantity === station.totalQuantity : !station.previousProcessName || station.previousSubmitted;
+}
+function batchInputReady() {
+  if (!activeStation.value || !batchMode.value) return true;
+  const q = batchQuantity.value.trim(); const w = finalWeight.value.trim();
+  if (!/^\d+(?:\.\d{1,3})?$/.test(q) || Number(q) > (activeStation.value.availableQuantity ?? 0)) return false;
+  const all = Number(q) + (activeStation.value.deliveredQuantity ?? 0) === activeStation.value.totalQuantity;
+  if (w && (!activeStation.value.finalProcess || !all || !/^\d+(?:\.\d{1,3})?$/.test(w) || Number(w) <= 0)) return false;
+  return Number(q) > 0 || (all && Boolean(activeStation.value.finalProcess) && Number(w) > 0);
+}
 const canConfirmReview = computed(() => {
-  if (!activeStation.value || activeStation.value.submitted || !previousReady(activeStation.value) || locked.value || stationBusy.value || stationScan.loading || !quantityReady.value) return false;
+  if (!activeStation.value || activeStation.value.submitted || !previousReady(activeStation.value) || locked.value || stationBusy.value || stationScan.loading || (!batchMode.value && !quantityReady.value) || Boolean(delivered.value) || !batchInputReady()) return false;
   return activeLines.value.length === 0 || checkedCount.value === activeLines.value.length;
 });
 
@@ -125,13 +150,14 @@ function clearStationTarget() {
   reviewConfirmed.value = {};
   activeProcess.value = '';
   formError.value = '';
+  batchQuantity.value = ''; finalWeight.value = ''; evidenceDrafts.value = [{ key: 0, result: null }]; evidenceDraftKey.value = 0; currentEvidenceDraftKey.value = 0;
   if (had) hint.value = '贴纸已变化，请重新识别';
 }
 
 watch(scanText, () => clearStationTarget(), { flush: 'sync' });
 
 function ensureRequestId(code: string, processName: string) {
-  const fingerprint = `${code}|${processName.trim()}`;
+  const fingerprint = `${code}|${processName.trim()}|${batchMode.value ? batchQuantity.value.trim() : ""}|${finalWeight.value.trim()}`;
   const current = requestIds.value[fingerprint];
   if (current) return current;
   const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -243,7 +269,8 @@ async function applyResult(result: ProcessStationReport, code: string, processNa
   if (stationScan.revision !== seen || stationCode.value !== code) return;
   pendingDelivery.value = null;
   delivered.value = result;
-  if (stationView.value) stationView.value = { ...stationView.value, stations: stationView.value.stations.map(station => station.processName === result.processName ? { ...station, submitted: true } : station) };
+  const draft = evidenceDrafts.value.find(item => item.key === currentEvidenceDraftKey.value); if (draft) draft.result = result;
+  if (stationView.value) stationView.value = { ...stationView.value, stations: stationView.value.stations.map(station => station.processName === result.processName ? { ...station, submitted: result.processCompleted !== false, deliveredQuantity: result.deliveredQuantity ?? station.deliveredQuantity, availableQuantity: Math.max(0, (station.availableQuantity ?? 0) - (result.batchQuantity ?? 0)) } : station) };
   emit('saved', result);
   try {
     const loaded = await lookupProcessStation(code);
@@ -255,7 +282,7 @@ async function applyResult(result: ProcessStationReport, code: string, processNa
     hint.value = '交付已保存，页面刷新失败。请重新打开本单，不会再次交付。';
     return;
   }
-  hint.value = `${processName}已交`;
+  hint.value = result.processCompleted === false ? "本批数量已保存，可继续登记后续批次" : `${processName}已全部交齐`;
 }
 
 async function deliver(station: ProcessStationCard) {
@@ -270,12 +297,13 @@ async function deliver(station: ProcessStationCard) {
   const currentRequestId = pendingDelivery.value?.requestId ?? ensureRequestId(code, station.processName);
   submittingProcess.value = station.processName;
   try {
-    const result = await submitProcessStation(code, station.processName, currentRequestId);
+    const batch = pendingDelivery.value?.batch ?? (batchMode.value ? { quantity: batchQuantity.value.trim(), ...(finalWeight.value.trim() ? { finalWeight: finalWeight.value.trim() } : {}) } : undefined);
+    const result = batch ? await submitProcessStation(code, station.processName, currentRequestId, batch) : await submitProcessStation(code, station.processName, currentRequestId);
     await applyResult(result, code, station.processName, seen);
   } catch (error) {
     if (stationScan.revision !== seen) return;
     const knownFailure = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408;
-    pendingDelivery.value = knownFailure ? null : { code, processName: station.processName, requestId: currentRequestId };
+    pendingDelivery.value = knownFailure ? null : { code, processName: station.processName, requestId: currentRequestId, batch: batchMode.value ? { quantity: batchQuantity.value.trim(), ...(finalWeight.value.trim() ? { finalWeight: finalWeight.value.trim() } : {}) } : undefined };
     formError.value = keptInputFailure(error, '交工失败');
   } finally {
     if (submittingProcess.value === station.processName) submittingProcess.value = '';
@@ -314,9 +342,11 @@ function retryDelivery() {
     <p v-if="hint" class="operation-feedback">{{ hint }}</p>
     <p v-if="formError" class="operation-feedback danger" role="alert">{{ formError }}</p>
     <p v-if="pendingDelivery" class="operation-feedback warning" role="alert">交工结果待核对：{{ pendingDelivery.code }} · {{ pendingDelivery.processName }}。原确认编号已保留。<button type="button" class="secondary-button" :disabled="Boolean(submittingProcess)" @click="retryDelivery">原交工请求重试</button></p>
-    <button v-if="initialTarget && !stationView" class="secondary-button" type="button" :disabled="stationBusy || stationScan.loading || Boolean(submittingProcess)" @click="recognizeStation({ content: initialTarget.code, ...(initialTarget.objectType ? { objectType: initialTarget.objectType } : {}) })">重新读取本单工序</button>
-    <p v-if="delivered" class="operation-feedback" role="status">正式交工已保存：{{ delivered.orderCode }} · {{ delivered.processName }} · 台账 {{ delivered.ledgerCode || '未提供' }}</p>
-    <p v-if="delivered" class="operation-feedback" role="status">{{ delivered.movedToSemiFinished ? '本单工序已完成，已转半成品，下一步由质检处理。' : '本工序已交工，下一岗位可继续；库存仍在制。' }}</p>
+    <button v-if="initialTarget && !stationView" class="secondary-button" type="button" :disabled="stationBusy || stationScan.loading || locked" @click="recognizeStation({ content: initialTarget.code, ...(initialTarget.objectType ? { objectType: initialTarget.objectType } : {}) })">重新读取本单工序</button>
+    <p v-if="delivered" class="operation-feedback" role="status">交工已保存：{{ delivered.orderCode }} · {{ delivered.processName }}<template v-if="delivered.batchCode"> · 本批 {{ delivered.batchQuantity }}，累计 {{ delivered.deliveredQuantity }}，剩余 {{ delivered.remainingQuantity }}</template><template v-if="delivered.ledgerCode"> · 台账 {{ delivered.ledgerCode }}</template></p>
+    <p v-if="delivered" class="operation-feedback" role="status">{{ delivered.processCompleted === false ? (delivered.remainingQuantity === 0 ? '数量已交齐，待末道总重量登记后进入质检。' : '本批已交出的数量可以继续下一道，当前工序尚未全部交齐。') : delivered.movedToSemiFinished ? '本单工序已完成，已转半成品，下一步由质检处理。' : '本工序已交工，下一岗位可继续；库存仍在制。' }}</p>
+    <div v-if="delivered?.processCompleted === false" class="button-row"><button type="button" class="primary-button" @click="nextBatch">{{ delivered.remainingQuantity === 0 ? '登记末道总重量' : '登记下一批' }}</button></div>
+    <button v-if="initialTarget && stationView" class="secondary-button" type="button" :disabled="locked || stationBusy" @click="recognizeStation({ content: initialTarget.code, ...(initialTarget.objectType ? { objectType: initialTarget.objectType } : {}) })">刷新可交数量</button>
     <OrderContextCard v-if="!embedded || stationScan.context?.requiresSelection" :context="stationScan.context" @select="chooseStationTarget" />
     <article v-if="field && stationView" class="field-card" aria-label="当前单据">
       <div class="field-card-head">
@@ -366,7 +396,7 @@ function retryDelivery() {
     </div>
     <p v-if="field && activeStation && !activeStation.submitted && !previousReady(activeStation)" class="operation-feedback warning" role="alert">上一道「{{ activeStation.previousProcessName }}」还未交工，当前不能提交「{{ activeStation.processName }}」。</p>
     <article
-      v-if="field && activeStation && !activeStation.submitted && previousReady(activeStation)"
+      v-if="field && activeStation && !activeStation.submitted && !delivered && previousReady(activeStation)"
       class="field-card"
       aria-label="本岗位加工要求"
     >
@@ -388,21 +418,28 @@ function retryDelivery() {
       </label>
     </article>
     <article
-      v-if="field && activeStation && !activeStation.submitted"
+      v-if="field && activeStation && !activeStation.submitted && !delivered"
       class="field-card"
       aria-label="报工确认"
     >
-      <h2>本次整单交工</h2>
+      <h2>{{ batchMode ? "本次分批交工" : "本次整单交工" }}</h2>
       <p>{{ activeStation.processName }} · {{ stationView?.orderCode }}</p>
-      <p class="info-context">按这张单已有数量和重量一次交完本工序。无需先保存 100% 进度。</p>
-      <dl class="detail-grid">
+      <template v-if="batchMode">
+        <dl class="detail-grid"><dt>整单数量</dt><dd>{{ activeStation.totalQuantity }} {{ stationScan.context?.order.quantityUnit }}</dd><dt>本工序已交</dt><dd>{{ activeStation.deliveredQuantity }}</dd><dt>本次可交</dt><dd>{{ activeStation.availableQuantity }}</dd></dl>
+        <label class="batch-field">本次交工数量<input v-model="batchQuantity" aria-label="本次交工数量" inputmode="decimal" :disabled="locked" placeholder="填写本批实际交出的数量" /></label>
+        <label v-if="activeStation.finalProcess" class="batch-field">末道整单实称重量（交齐时填，可稍后补记）<input v-model="finalWeight" aria-label="末道总重量" inputmode="decimal" :disabled="locked" /></label>
+        <p class="info-context">每批只记数量，不按比例估算重量。末道数量交齐并登记总重量后进入质检；账面差额沿用损耗处理。</p>
+      </template>
+      <p v-else class="info-context">按这张单已有数量和重量一次交完本工序。无需先保存 100% 进度。</p>
+      <dl v-if="!batchMode" class="detail-grid">
         <dt>单据数量</dt>
         <dd>{{ amountText(stationScan.context?.order.quantity, stationScan.context?.order.quantityUnit) }}</dd>
         <dt>单据重量</dt>
         <dd>{{ amountText(stationScan.context?.order.weight, stationScan.context?.order.weightUnit) }}</dd>
       </dl>
-      <p v-if="!quantityReady" class="operation-feedback danger" role="alert">数量或重量尚未读取完整，请重新打开本单核对。</p>
+      <p v-if="!batchMode && !quantityReady" class="operation-feedback danger" role="alert">数量或重量尚未读取完整，请重新打开本单核对。</p>
     </article>
+    <details v-if="activeStation?.batches?.length" class="section-block"><summary>查看本工序交工批次（{{ activeStation.batches.length }}）</summary><p v-for="batch in activeStation.batches" :key="batch.batchCode">{{ batch.createdAt }} · {{ batch.operator }} · 本批 {{ batch.quantity }}<template v-if="batch.finalWeight != null"> · 末道总重量 {{ batch.finalWeight }}</template></p></details>
     <details v-if="field && progressTarget" class="field-note">
       <summary>过程说明</summary>
       <ProgressNoteForm
@@ -453,25 +490,29 @@ function retryDelivery() {
     <details v-if="stationCode" class="section-block" :open="!field">
       <summary>照片与视频（可选）</summary>
       <p v-if="delivered">业务已保存。证据上传或关联失败时只重试文件，不会再次交付。</p>
-      <p v-else>可以先选择文件。正式交付成功后才关联到本次台账，不会把待上传文件当成已经报工。</p>
-      <EvidenceCapture
+      <p v-else>可以先选择文件。本次交工成功后才关联到对应批次或台账，待上传文件不代表已经报工。</p>
+      <nav v-if="evidenceDrafts.length > 1" aria-label="批次证据草稿"><button v-for="draft in evidenceDrafts" :key="draft.key" class="secondary-button" type="button" :aria-pressed="evidenceDraftKey === draft.key" @click="evidenceDraftKey = draft.key">{{ draft.result ? '已存批次 ' + (draft.key + 1) : '当前批次' }}</button></nav>
+      <EvidenceCapture v-for="draft in evidenceDrafts" :key="draft.key" v-show="evidenceDraftKey === draft.key"
         :target-type="evidenceTargetType"
         :target-code="stationCode"
         stage="PRODUCTION"
         scene="PROCESS"
-        :operation-type="evidenceOperationType"
-        :operation-code="delivered?.ledgerCode || ''"
-        :process-name="delivered?.processName || ''"
+        :operation-type="evidenceType(draft.result)"
+        :operation-code="draft.result?.batchCode || draft.result?.ledgerCode || ''"
+        :process-name="draft.result?.processName || ''"
       />
     </details>
-    <div v-if="field && activeStation && !activeStation.submitted" class="field-dock">
+    <div v-if="field && activeStation && !activeStation.submitted && !delivered" class="field-dock">
       <span v-if="previousReady(activeStation) && activeLines.length && checkedCount < activeLines.length" class="info-context">已核对 {{ checkedCount }} / {{ activeLines.length }} 项要求</span>
-      <button class="primary-button" type="button" :aria-label="`确认${activeStation.processName}交工`" :disabled="!canConfirmReview" @click="confirmAndDeliver">{{ submittingProcess === activeStation.processName ? '正在提交…' : `确认${activeStation.processName}交工` }}</button>
+      <button class="primary-button" type="button" :aria-label="`确认${activeStation.processName}交工`" :disabled="!canConfirmReview" @click="confirmAndDeliver">{{ submittingProcess === activeStation.processName ? '正在提交…' : batchMode && batchQuantity === '0' ? '登记总重量并完成交工' : `确认${activeStation.processName}${batchMode ? '本批' : ''}交工` }}</button>
     </div>
   </section>
 </template>
 
 <style scoped>
+.batch-field { display: grid; gap: 6px; margin-top: 12px; }
+.batch-field input { min-height: 44px; width: 100%; box-sizing: border-box; }
+.production-field > button { width: auto; justify-self: end; }
 .field-process-list button { display: grid; gap: 4px; }
 .field-process-list small { font-size: 11px; font-weight: 400; }
 .field-dock { display: flex; gap: 10px; align-items: center; justify-content: space-between; }

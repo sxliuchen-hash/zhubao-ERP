@@ -101,7 +101,10 @@ public class OrderWorkspaceQueryService {
             throw new PermissionDeniedException("当前账号不能查看这个订单视图");
         }
         Loaded loaded = visibleRows(operator, balances);
+        Map<String, List<com.zhubao.erp.business.domain.ProcessBatchHandoff>> batchRows = new LinkedHashMap<>();
+        for (var batch : documents.listAllProcessBatches()) batchRows.computeIfAbsent(batch.orderCode(), key -> new ArrayList<>()).add(batch);
         List<OrderWorkspaceRow> rows = loaded.rows().stream()
+                .map(row -> batchRow(row, query, granted.allowedProcesses(), batchRows.getOrDefault(row.code(), List.of())))
                 .filter(row -> matchesView(query.view(), row, granted.allowedProcesses()))
                 .filter(row -> matchesQuery(query.query(), row, loaded))
                 .filter(row -> query.customerId() == null || query.customerId().equals(row.customerId()))
@@ -443,6 +446,36 @@ public class OrderWorkspaceQueryService {
             case QUALITY_DONE -> new Facet("UNKNOWN", "已质检，尚未确认放行和可发库存");
             default -> new Facet("UNKNOWN", "来源不足，不能判断下一步");
         };
+    }
+
+    /** 工序尚未全量完成时，下道岗位也能看到上道已经交出的可办数量。 */
+    private OrderWorkspaceRow batchRow(OrderWorkspaceRow row, OrderWorkspaceQuery query, List<String> allowed,
+            List<com.zhubao.erp.business.domain.ProcessBatchHandoff> batches) {
+        if (batches.isEmpty() || (!WAITING_START.equals(row.businessStatus()) && !IN_PROCESS.equals(row.businessStatus()))) return row;
+        String process = row.currentProcess();
+        if (OrderWorkspaceQuery.PRODUCTION.equals(query.view())) {
+            var child = documents.findChildWorkOrderByCode(row.code()).orElse(null);
+            List<String> steps = child == null ? WorkshopProcesses.DEFAULT_ORDER : WorkshopProcesses.split(child.processes());
+            if (row.executionRoundCode() != null) steps = List.of(row.currentProcess());
+            else steps = OrderRequirementLookup.route(OrderRequirementLookup.current(requirements, row.motherOrderCode(), child == null ? "" : child.code()).orElse(null), steps);
+            var completed = documents.listProcessStationHandoffs(row.code()).stream().map(ProcessStationHandoff::processName).collect(java.util.stream.Collectors.toSet());
+            List<String> bound = WorkshopProcesses.bind(allowed);
+            BigDecimal total = new BigDecimal(row.quantity());
+            for (int index = 0; index < steps.size(); index++) {
+                String step = steps.get(index);
+                if ((!bound.isEmpty() && !bound.contains(step)) || completed.contains(step)) continue;
+                BigDecimal delivered = batches.stream().filter(batch -> batch.processName().equals(step)).map(com.zhubao.erp.business.domain.ProcessBatchHandoff::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+                String previous = index == 0 ? "" : steps.get(index - 1);
+                BigDecimal received = previous.isEmpty() || completed.contains(previous) ? total : batches.stream().filter(batch -> batch.processName().equals(previous)).map(com.zhubao.erp.business.domain.ProcessBatchHandoff::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+                if (received.compareTo(delivered) > 0 || (index == steps.size() - 1 && delivered.compareTo(total) == 0)) { process = step; break; }
+            }
+        }
+        boolean same = java.util.Objects.equals(process, row.currentProcess());
+        return new OrderWorkspaceRow(row.objectType() + "|" + row.code() + "|" + process + "|" + blank(row.executionRoundCode()),
+                row.objectType(), row.code(), row.motherOrderCode(), row.workOrderCode(), row.executionRoundCode(), process,
+                row.customerId(), row.customerName(), row.goodsName(), row.materialCode(), row.materialName(), row.quantity(), row.quantityUnit(),
+                row.weight(), row.weightUnit(), row.dueDate(), IN_PROCESS, "IN_PROCESS", row.facetNote(), same ? row.processPercent() : null,
+                same ? row.processProgressVersion() : null, false, same ? row.operatorName() : null, same ? row.updatedAt() : null);
     }
 
     private boolean matchesView(String view, OrderWorkspaceRow row, List<String> allowedProcesses) {

@@ -259,6 +259,64 @@ class ProcessStationServiceTest {
                 .hasMessageContaining("请扫描子单贴纸");
     }
 
+
+    private ProcessStationService batchService(com.zhubao.erp.work.domain.CommandResultProbe probe) {
+        return new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser(), null,
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), probe));
+    }
+    private com.zhubao.erp.business.domain.ProcessStationReportCommand batch(String code, String process, String id, String quantity, String weight) {
+        return new com.zhubao.erp.business.domain.ProcessStationReportCommand(code, process, "req-" + id, null, new BigDecimal(quantity), weight == null ? null : new BigDecimal(weight));
+    }
+    @Test void partialHandoffFlowsDownstreamAndWeightWaitsUntilFinalQuantity() {
+        String code = splitOneChild("MD-BATCH");
+        var service = batchService(com.zhubao.erp.work.domain.CommandResultProbe.NONE);
+        var carving = account("雕刻工 林海", "雕刻"); var inlay = account("镶嵌工 赵敏", "镶嵌"); var polish = account("抛光工 陈刚", "抛光");
+        var first = service.reportBatch(batch(code, "雕刻", "batch-1", "2", null), carving);
+        assertThat(first.processCompleted()).isFalse(); assertThat(first.deliveredQuantity()).isEqualByComparingTo("2");
+        assertThat(service.reportBatch(batch(code, "雕刻", "batch-1", "2.0", null), carving)).isEqualTo(first);
+        assertThat(documents.listProcessBatches(code, null)).hasSize(1);
+        assertThat(documents.listProcessStationHandoffs(code)).isEmpty();
+        assertThat(service.lookup(code, inlay).stations().get(0).availableQuantity()).isEqualByComparingTo("2");
+        assertThatThrownBy(() -> service.reportBatch(batch(code, "镶嵌", "batch-over", "3", null), inlay)).hasMessageContaining("超过");
+        service.reportBatch(batch(code, "镶嵌", "batch-2", "2", null), inlay);
+        service.reportBatch(batch(code, "抛光", "batch-3", "2", null), polish);
+        assertThat(quantity(code, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("0");
+        assertThatThrownBy(() -> service.reportBatch(batch(code, "抛光", "batch-weight-early", "0", "7.8"), polish)).hasMessageContaining("全部交齐");
+        assertThatThrownBy(() -> service.report(code, "雕刻", carving, "legacy-bypass")).hasMessageContaining("分批");
+        service.reportBatch(batch(code, "雕刻", "batch-4", "2", null), carving);
+        service.reportBatch(batch(code, "镶嵌", "batch-5", "2", null), inlay);
+        var lastQuantity = service.reportBatch(batch(code, "抛光", "batch-6", "2", null), polish);
+        assertThat(lastQuantity.processCompleted()).isFalse(); assertThat(lastQuantity.remainingQuantity()).isEqualByComparingTo("0");
+        assertThat(documents.findProcessStationHandoff(code, "抛光")).isEmpty();
+        var weighed = service.reportBatch(batch(code, "抛光", "batch-weigh", "0", "7.8"), polish);
+        assertThat(weighed.processCompleted()).isTrue(); assertThat(weighed.finalWeight()).isEqualByComparingTo("7.8");
+        assertThat(quantity(code, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("4");
+        assertThat(documents.listProcessStationHandoffs(code)).hasSize(3);
+        assertThat(service.reportBatch(batch(code, "抛光", "batch-weigh", "0", "7.8"), polish)).isEqualTo(weighed);
+        assertThatThrownBy(() -> service.reportBatch(batch(code, "抛光", "batch-weigh", "0", "7.9"), polish)).hasMessageContaining("内容不一致");
+    }
+    @Test void batchRejectsUnboundAndInvalidNumbersAndRollsBackFailedResult() {
+        String code = splitOneChild("MD-BATCH-FAIL"); var service = batchService(com.zhubao.erp.work.domain.CommandResultProbe.NONE);
+        assertThatThrownBy(() -> service.reportBatch(batch(code, "镶嵌", "batch-role", "1", null), account("雕刻工 林海", "雕刻"))).hasMessageContaining("不能做");
+        assertThatThrownBy(() -> service.reportBatch(batch(code, "雕刻", "batch-negative", "-1", null), account("雕刻工 林海", "雕刻"))).hasMessageContaining("非负数");
+        assertThatThrownBy(() -> service.reportBatch(batch(code, "雕刻", "batch-precision", "0.0001", null), account("雕刻工 林海", "雕刻"))).hasMessageContaining("三位");
+        int ledgers = stockLedgerService.ledgers().size();
+        var failing = batchService(() -> { throw new IllegalStateException("模拟回执失败"); });
+        assertThatThrownBy(() -> failing.reportBatch(batch(code, "雕刻", "batch-fail", "4", null), account("雕刻工 林海", "雕刻"))).hasMessageContaining("模拟回执失败");
+        assertThat(documents.listProcessBatches(code, null)).isEmpty(); assertThat(documents.listProcessStationHandoffs(code)).isEmpty();
+        assertThat(stockLedgerService.ledgers()).hasSize(ledgers);
+    }
+    @Test void concurrentBatchRequestsCannotOverDeliver() throws Exception {
+        String code = splitOneChild("MD-BATCH-RACE"); var service = batchService(com.zhubao.erp.work.domain.CommandResultProbe.NONE);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<Boolean> one = () -> { try { service.reportBatch(batch(code, "雕刻", java.util.UUID.randomUUID().toString(), "3", null), account("雕刻工 林海", "雕刻")); return true; } catch (BusinessException ex) { return false; } };
+            var a = pool.submit(one); var b = pool.submit(one);
+            assertThat(java.util.List.of(a.get(), b.get())).containsExactlyInAnyOrder(true, false);
+            assertThat(documents.listProcessBatches(code, null)).hasSize(1);
+        } finally { pool.shutdownNow(); }
+    }
+
     private String splitOneChild(String motherCode) {
         inbound(motherCode, "10", "20");
         var view = splitService.split(new SplitMotherOrderCommand(motherCode, "何琳", List.of(

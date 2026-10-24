@@ -122,6 +122,22 @@ public interface BusinessDocumentRepository {
 
     List<ProcessStationHandoff> listAllProcessStationHandoffs();
 
+    /** 旧库可继续整单交工；分批写入必须先完成新增迁移。 */
+    default boolean supportsProcessBatches() { return false; }
+
+    /** 在工作单元内锁定整张工单，防止不同批次和不同工序并发超交。 */
+    default void lockProcessBatchOrder(String orderCode, WorkSession session) {
+        throw new IllegalStateException("分批交工尚未装配");
+    }
+
+    default List<ProcessBatchHandoff> listProcessBatches(String orderCode, WorkSession session) { return List.of(); }
+
+    default List<ProcessBatchHandoff> listAllProcessBatches() { return List.of(); }
+
+    default void saveProcessBatch(ProcessBatchHandoff batch, WorkSession session) {
+        throw new IllegalStateException("分批交工尚未装配");
+    }
+
     void saveQualityRequirementCheck(QualityRequirementCheck check);
 
     /** 在当前工作单元里保存质检对照，不单独提交。 */

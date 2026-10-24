@@ -111,7 +111,7 @@ describe('同单工序动作', () => {
     await wrapper.findAll('button').find(button => button.text() === '确认雕刻交工')!.trigger('click');
     await flushPromises();
     expect(submitProcessStation).toHaveBeenCalledOnce();
-    expect(wrapper.text()).toContain('正式交工已保存：WO-1 · 雕刻 · 台账 LED-1');
+    expect(wrapper.text()).toContain('交工已保存：WO-1 · 雕刻 · 台账 LED-1');
     expect(wrapper.text()).toContain('交付已保存，页面刷新失败');
     expect(wrapper.findAll('button').some(button => button.text() === '提交雕刻')).toBe(false);
     expect(vi.mocked(submitProcessStation).mock.calls[0][2]).not.toBe(vi.mocked(submitProcessProgress).mock.calls[0][0].requestId);

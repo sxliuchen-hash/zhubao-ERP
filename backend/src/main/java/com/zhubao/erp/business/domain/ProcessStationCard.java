@@ -9,6 +9,16 @@ public record ProcessStationCard(
         String dueDate,
         String previousProcessName,
         boolean previousSubmitted,
-        boolean submitted
+        boolean submitted,
+        java.math.BigDecimal totalQuantity,
+        java.math.BigDecimal deliveredQuantity,
+        java.math.BigDecimal availableQuantity,
+        boolean finalProcess,
+        java.util.List<ProcessBatchHandoff> batches
 ) {
+    public ProcessStationCard(String processName, String requirement, String dueDate, String previousProcessName,
+                              boolean previousSubmitted, boolean submitted) {
+        this(processName, requirement, dueDate, previousProcessName, previousSubmitted, submitted,
+                null, null, null, false, java.util.List.of());
+    }
 }

@@ -70,3 +70,4 @@ V69__m3_requirement_template.sql
 V70__m3_stock_document.sql
 V71__m3_account_organization.sql
 V72__m3_desk_task.sql
+V73__m3_process_batch_handoff.sql

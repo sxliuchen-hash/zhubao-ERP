@@ -70,3 +70,4 @@
 70	TABLE	inv_stock_document
 71	COLUMN	auth_user_account	team_code
 72	TABLE	biz_desk_task
+73	TABLE	biz_process_batch_handoff

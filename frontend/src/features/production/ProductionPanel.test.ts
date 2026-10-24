@@ -73,6 +73,51 @@ async function openStation(field = false) {
 }
 
 describe('生产面板', () => {
+  async function openBatch(delivered = 2, available = 3, finalProcess = false) {
+    const view = { ...stationView(), stations: [{ ...stationView().stations[0]!, previousProcessName: '前道', previousSubmitted: false, totalQuantity: 10, deliveredQuantity: delivered, availableQuantity: available, finalProcess, batches: [] }] };
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100', quantity: 10, weight: 12.5 }));
+    vi.mocked(lookupProcessStation).mockResolvedValue(view);
+    const wrapper = mount(ProductionPanel, { props: { title: '分批交工', intro: '', field: true, embedded: true, initialTarget: { objectType: 'WORK_ORDER', code: 'ZD-100' } } });
+    await flushPromises(); return wrapper;
+  }
+  it('前道部分交工即可登记，超可交数量被拦截，下一批使用新编号并保留证据草稿', async () => {
+    const wrapper = await openBatch();
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    await wrapper.get('[aria-label="本次交工数量"]').setValue('4');
+    expect(wrapper.get('[aria-label="确认雕刻交工"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[aria-label="本次交工数量"]').setValue('3');
+    const firstEvidence = wrapper.getComponent({ name: 'EvidenceCapture' }).vm.$;
+    vi.mocked(submitProcessStation).mockResolvedValue({ orderCode: 'ZD-100', processName: '雕刻', ledgerCode: '', batchCode: 'PB-1', batchQuantity: 3, deliveredQuantity: 5, remainingQuantity: 5, processCompleted: false, movedToSemiFinished: false, stockStatus: 'WIP' });
+    await wrapper.get('[aria-label="确认雕刻交工"]').trigger('click'); await flushPromises();
+    expect(submitProcessStation).toHaveBeenLastCalledWith('ZD-100', '雕刻', expect.any(String), { quantity: '3' });
+    expect(wrapper.text()).toContain('本批 3，累计 5，剩余 5');
+    expect(wrapper.text()).not.toContain('本单工序已完成');
+    await wrapper.findAll('button').find(button => button.text() === '登记下一批')!.trigger('click');
+    expect(wrapper.findAllComponents({ name: 'EvidenceCapture' })).toHaveLength(2);
+    expect(wrapper.findAllComponents({ name: 'EvidenceCapture' })[0]!.vm.$).toBe(firstEvidence);
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    await wrapper.get('[aria-label="本次交工数量"]').setValue('3');
+    await wrapper.get('[aria-label="确认雕刻交工"]').trigger('click'); await flushPromises();
+    expect(vi.mocked(submitProcessStation).mock.calls.at(-1)![2]).not.toBe(vi.mocked(submitProcessStation).mock.calls.at(-2)![2]);
+    wrapper.unmount();
+  });
+  it('末道数量交齐后可以只补记重量，提交期间保留原数量重量请求', async () => {
+    const wrapper = await openBatch(10, 0, true);
+    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
+    await wrapper.get('[aria-label="本次交工数量"]').setValue('0');
+    expect(wrapper.get('[aria-label="确认雕刻交工"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[aria-label="末道总重量"]').setValue('12.3');
+    vi.mocked(submitProcessStation).mockRejectedValueOnce(new Error('响应丢失'));
+    await wrapper.get('[aria-label="确认雕刻交工"]').trigger('click'); await flushPromises();
+    const original = vi.mocked(submitProcessStation).mock.calls.at(-1);
+    expect(original?.[3]).toEqual({ quantity: '0', finalWeight: '12.3' });
+    expect(wrapper.get('[aria-label="末道总重量"]').attributes('disabled')).toBeDefined();
+    vi.mocked(submitProcessStation).mockResolvedValueOnce({ orderCode: 'ZD-100', processName: '雕刻', ledgerCode: 'STK-LAST', batchCode: 'PB-W', batchQuantity: 0, deliveredQuantity: 10, remainingQuantity: 0, processCompleted: true, movedToSemiFinished: true, stockStatus: 'SEMI_FINISHED' });
+    await wrapper.findAll('button').find(button => button.text() === '原交工请求重试')!.trigger('click'); await flushPromises();
+    expect(vi.mocked(submitProcessStation).mock.calls.at(-1)).toEqual(original);
+    expect(wrapper.text()).toContain('下一步由质检处理'); wrapper.unmount();
+  });
+
   it('数量缺失或上道未交时提前阻断，逐条勾选不产生交工', async () => {
     vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'WORK_ORDER', code: 'ZD-100', quantity: null, weight: null }));
     vi.mocked(lookupProcessStation).mockResolvedValue(stationView());

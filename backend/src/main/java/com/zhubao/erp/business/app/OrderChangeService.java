@@ -267,6 +267,15 @@ public class OrderChangeService {
             if (changes.latestAppliedVersion(target) != expected) {
                 throw new BusinessException("改单版本已变化，请重新确认后再生效");
             }
+            if (documents.supportsProcessBatches()) {
+                // 母单锁与交工一致，避免在途批次的路线在生效过程中发生改变。
+                for (var batch : documents.listAllProcessBatches()) {
+                    boolean family = batch.orderCode().equals(latest.motherOrderCode())
+                            || documents.findChildWorkOrderByCode(batch.orderCode()).map(child -> child.motherOrderCode().equals(latest.motherOrderCode())).orElse(false);
+                    if (family && documents.findProcessStationHandoff(batch.orderCode(), batch.processName(), session).isEmpty())
+                        throw new BusinessException("这张母单存在尚未交齐的批次，请完成在途交工后再生效改单");
+                }
+            }
             if (posting != null) {
                 posting.post(latest, account.operator().trim(), session);
             }

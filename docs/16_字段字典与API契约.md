@@ -602,13 +602,25 @@ MySQL 持久化表：
 |---|---|
 | `code` | 子单号，或不拆母单号。已拆母单不能把母单号当目标 |
 | `process` | 要交付的工序。操作人取当前登录账号 |
-| `requestId` | 可选。同一次确认保持不变，8 到 64 位，只含字母、数字、点、下划线、冒号和减号。不传时仍走旧的各自提交，不回放 |
+| `requestId` | 分批必填，整单可选。同一次确认保持不变，8 到 64 位，只含字母、数字、点、下划线、冒号和减号 |
 
 带 `requestId` 时，动作记为 `PROCESS_HANDOFF`。目标类型是 `WORK_ORDER` 或 `MOTHER_ORDER`，目标编号是解析后的真实单号。规范化内容包含客户、货权客户、母单号、工序、整单数量和重量。同账号、同请求、同规范化内容回放原 `ProcessStationReportResult`，不第二次交付，也不第二次改库存。换工序、换单据、换客户或换账号都会拒绝，必须换新 `requestId`。不拆母单首次转在制、本工序库存流水、交付事实和成功结果在同一条数据库连接里提交。交接保存失败或结果保存失败时整单回滚，不能留下「库存已转但没有交付事实」。已有「这道工序已经交过」只拒绝另一次交付，不能代替结果回放。前序未交、岗位不符、已拆母单未选真实子单仍按原规则拒绝。
 
 证据只能在交付成功并拿到台账号之后绑定。中间工序的操作类型是 `process_station_report`，末道是 `production_report`，操作编号是返回的 `ledgerCode`。上传或绑定失败只补文件或引用，不重新交付。过程说明仍走 `POST /api/scan/progress-records`，不产生库存、工资或工序完成。
 
-不带 `requestId` 的岗位交付仍由库存仓储和交接单各自打开连接并提交。这不是回放，也不能当成已经同事务。通用 `production-reports` HTTP 已退出。工序交付没有新迁移：交付唯一键沿用 `V34__m3_process_station.sql`，请求表沿用 `V44__m3_command_request.sql`。
+新运行环境中，未带 `requestId` 的整单交工在已装配工作单元与分批仓储时使用内部新编号原子提交，但客户端没有稳定编号，因此不能依赖重试回放。旧未装配调用仍按原路径处理。通用 `production-reports` HTTP 已退出。整道工序完成唯一键仍沿用 V34，请求表沿用 V44；分批事实及工单锁新增于 `V73__m3_process_batch_handoff.sql`。
+
+#### 分批数量与末道统一重量（V73）
+
+同一路径增加可选 `quantity`、`finalWeight`，二者都不传时兼容整单交工；一旦原单出现分批事实，旧整单命令不能绕过累计校验。
+
+- `quantity`：本批实际交出的数量，最多三位小数。第一道不超过整单剩余；下道不超过 `min(整单数量, 上道累计已交) - 本道累计已交`。上道未全量完成也允许流入已交出的数量。零数量只用于末道交齐后补记总重量。
+- `finalWeight`：末道整单实称总重量，正数、最多三位小数；只能在末道累计数量达到整单数量时填写，也可先保存最后一批数量，再以 `quantity=0` 补记。实称作为记录保存；账面库存不按比例摊重、不直接冲减差额，差额沿用现有损耗流程。
+- 分批动作是 `PROCESS_BATCH_HANDOFF`，请求编号必填。回放内容固定本次数量与本次总重量，未知结果只重试原命令；不同批次必须新建编号。母单与工单锁串行校验累计数量；批次、必要库存转移、全量完成事实和成功回执进入同一事务。
+- 响应增加 `batchCode/batchQuantity/deliveredQuantity/remainingQuantity/processCompleted/finalWeight`。部分完成时 `ledgerCode` 为空，不能当作已写库存台账；工序全部交齐后才写原工序完成事实，末道还须登记总重量才转半成品并开放质检。既有完成事实与按工序计费保留一次完成语义。
+- 岗位查询每道可见工序增加 `totalQuantity/deliveredQuantity/availableQuantity/finalProcess/batches`，历史保留操作人、时间、本次数量及末道重量登记。订单生产视图为下道岗位呈现已到达的可办工序，数量事实不冒充手工五档百分比。
+- 批次证据类型为 `process_batch_report`、操作编号为 `batchCode`，校验精确单据与工序；每批独立保留证据草稿，换批不改挂旧文件。原整单证据继续使用原台账编号与类型。
+- 尚未交齐的在途批次会阻止同母单改单生效，避免工序路线在累计过程中改变。历史迁移和旧交工记录均不改写；V73 回滚应用不得删除批次事实或自动降级数据库。
 
 ### 5.2.2 质检轮次与复检
 
@@ -2233,7 +2245,7 @@ PWA 一期边界：
 | `POST /api/business/operations/mother-orders/{code}/splits` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_SPLIT`，库存转移、子单和母单拆分状态同一次提交。同一请求只生效一次；内容变化必须换新编号。缺编号直接拒绝 |
 | `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
 | `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
-| `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。可选 `requestId`。有值时动作是 `PROCESS_HANDOFF`，同账号同请求同内容回放原结果。不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。无 `requestId` 时不回放、不保证同事务 |
+| `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。整单动作 `PROCESS_HANDOFF`；传本次数量时为 `PROCESS_BATCH_HANDOFF` 并要求 `requestId`，详见 5.2.1。相同编号原内容回放，批次累计与正式交付同事务 |
 | `GET /api/business/operations/quality-checks` | `ApiResponse<QualityCheckView>` |
 | `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>`。可选 `requestId`。有值时动作是 `QUALITY_CHECK`，初检轮次、适用冻结和成功结果同一次提交 |
 | `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>`。可选 `requestId`。有值时动作是 `QUALITY_REWORK` |

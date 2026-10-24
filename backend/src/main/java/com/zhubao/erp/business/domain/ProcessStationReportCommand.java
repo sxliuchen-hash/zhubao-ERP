@@ -10,8 +10,13 @@ public record ProcessStationReportCommand(
         @NotBlank String code,
         @NotBlank String process,
         String requestId,
-        String labelExceptionReason
+        String labelExceptionReason,
+        java.math.BigDecimal quantity,
+        java.math.BigDecimal finalWeight
 ) {
+    public ProcessStationReportCommand(String code, String process, String requestId, String labelExceptionReason) {
+        this(code, process, requestId, labelExceptionReason, null, null);
+    }
     public ProcessStationReportCommand(String code, String process) {
         this(code, process, null, null);
     }
