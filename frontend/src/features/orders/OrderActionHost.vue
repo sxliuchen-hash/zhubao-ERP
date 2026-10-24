@@ -45,6 +45,17 @@ provide('zhubao-retry-workspace', () => {
   else OrderChangePanel.value = changeComponent();
 });
 const open = ref(false);
+let previousBodyOverflow: string | null = null;
+function restoreBodyScroll() {
+  if (previousBodyOverflow === null) return;
+  document.body.style.overflow = previousBodyOverflow;
+  previousBodyOverflow = null;
+}
+watch(open, value => {
+  if (!value) { restoreBodyScroll(); return; }
+  if (previousBodyOverflow === null) previousBodyOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+}, { flush: 'sync' });
 const target = ref<OrderActionTarget | null>(null);
 const draftKey = ref('intake:new');
 let aftercareAttempt = 0;
@@ -130,7 +141,7 @@ function keydown(event: KeyboardEvent) {
 }
 watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality, () => props.canShipping, () => props.canAftercare, () => props.canLabel, () => props.canBill], () => { if (!allowed(activeKind.value) && open.value) void close(); });
 onMounted(() => window.addEventListener('keydown', keydown));
-onBeforeUnmount(() => { window.removeEventListener('keydown', keydown); emit('active', false); });
+onBeforeUnmount(() => { window.removeEventListener('keydown', keydown); restoreBodyScroll(); emit('active', false); });
 defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShipping, openAftercare, openLabel, openBill });
 </script>
 

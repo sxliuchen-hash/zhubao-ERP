@@ -48,6 +48,13 @@ beforeEach(() => {
 });
 
 describe('统一订单列表与详情', () => {
+  it('列表默认收起重复扫码区，当前扫码请求可展开，原目标绑定仍保留', async () => {
+    const wrapper = mountWorkspace(); await flushPromises();
+    expect(wrapper.get('.order-scan-tools').attributes('open')).toBeUndefined();
+    wrapper.getComponent(ScanInput).vm.$emit('activate-camera'); await flushPromises();
+    expect(wrapper.get('.order-scan-tools').attributes('open')).toBeDefined();
+    wrapper.unmount();
+  });
   it('标签入口同时核对菜单与有效权限，子单保持精确类型', async () => {
     const auth = ref({ effectivePermissions: [] as string[] });
     const open = vi.fn();

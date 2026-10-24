@@ -689,7 +689,7 @@ onMounted(loadCatalog);
         <button type="button" class="secondary-button" @click="extraLines.splice(index, 1)">移除明细</button>
       </div>
       <button type="button" class="secondary-button" @click="extraLines.push({ materialCode: '', goodsName: '', quantity: '1', quantityUnit: '件', weight: '' })">增加材质明细</button>
-      <button type="button" class="primary-button intake-stage-next" @click="nextFormStage">下一步：要求与证据</button>
+      <button v-if="!field" type="button" class="primary-button intake-stage-next" @click="nextFormStage">下一步：要求与证据</button>
       </fieldset>
       <fieldset class="intake-stage intake-requirement" :class="{ 'intake-stage-hidden': formStage !== 2 }" :disabled="submitting">
       <legend>加工要求与交期</legend>

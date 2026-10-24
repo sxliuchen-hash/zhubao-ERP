@@ -30,6 +30,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string];
   draft: [];
   recognize: [draft: ScanDraft];
+  'activate-camera': [];
 }>();
 
 const scanner = useScanner();
@@ -101,6 +102,7 @@ function publish(raw: string) {
 
 async function onCamera() {
   if (props.busy || scanning.value) return;
+  emit('activate-camera');
   if (!hasLiveCamera()) {
     scannerHint.value = '当前浏览器无法实时扫码，请拍照识别，也可以选图或手输单号';
     photoRef.value?.click();

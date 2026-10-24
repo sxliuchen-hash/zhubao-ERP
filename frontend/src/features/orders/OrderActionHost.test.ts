@@ -31,6 +31,16 @@ function host(allowed = true) {
 function dom() { return new DOMWrapper(document.body); }
 afterEach(() => { mountedHosts.forEach(wrapper => wrapper.unmount()); mountedHosts.length = 0; });
 describe('单内动作容器', () => {
+  it('弹层打开锁住背景滚动，关闭及卸载恢复先前样式', async () => {
+    document.body.style.overflow = 'auto';
+    const wrapper = host(); wrapper.vm.openIntake(); await opened(wrapper);
+    expect(document.body.style.overflow).toBe('hidden');
+    await dom().get('.order-action-dialog header button').trigger('click');
+    expect(document.body.style.overflow).toBe('auto');
+    wrapper.vm.openIntake(); await opened(wrapper); wrapper.unmount();
+    expect(document.body.style.overflow).toBe('auto');
+    document.body.style.overflow = '';
+  });
   it('账单按客户和月份缓存，跨客户返回恢复原收款实例，非数字客户及撤权不能办理', async () => {
     const wrapper = host(); await wrapper.setProps({ canBill: true });
     wrapper.vm.openBill({ customerId: 0, yearMonth: '2026-10' }); await flushPromises();

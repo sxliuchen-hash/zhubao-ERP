@@ -31,6 +31,7 @@ const detailOpen = ref(false);
 const selectedRow = ref<OrderWorkspaceRow | null>(null);
 const detailError = ref('');
 const scanCode = ref('');
+const scanOpen = ref(false);
 const scan = reactive(useScanContext());
 const identity = computed(() => canonicalTarget(scan.context));
 const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
@@ -192,7 +193,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
         <label><span>展示分类</span><select v-model="filters.facet" aria-label="订单分类"><option v-for="facet in facets" :key="facet" :value="facet">{{ orderFacetLabel(facet) }}</option></select></label>
         <button class="primary-button" type="submit" :disabled="loading">查询</button>
       </form>
-      <ScanInput v-if="!detailOpen" v-model="scanCode" field-text="扫码定位单据" input-aria-label="订单扫码单号" submit-label="查看单据" bind-mobile-scan :busy="scan.loading" @draft="clearDetail" @recognize="draft => locate(draft)" />
+      <details v-if="!detailOpen" class="order-scan-tools" :open="scanOpen" @toggle="scanOpen = ($event.target as HTMLDetailsElement).open"><summary>扫码或手动定位单据</summary><ScanInput v-model="scanCode" field-text="扫码定位单据" input-aria-label="订单扫码单号" submit-label="查看单据" bind-mobile-scan :busy="scan.loading" @activate-camera="scanOpen = true" @draft="clearDetail" @recognize="draft => locate(draft)" /></details>
       <p v-if="loading" role="status">正在加载订单…</p>
       <p v-if="error" role="alert" class="operation-feedback danger">{{ accessDenied ? '无权限：' : '' }}{{ error }}</p>
       <template v-if="result">
@@ -249,6 +250,8 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 .order-filters details { flex: 1 1 140px; }
 .order-filters summary { cursor: pointer; min-height: 44px; align-content: center; }
 .order-count { color: var(--muted); }
+.order-scan-tools { margin: 8px 0 16px; }
+.order-scan-tools > summary { cursor: pointer; min-height: 44px; align-content: center; }
 .order-facet-counts, .order-pagination, .order-legacy-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .order-facet-counts { margin-bottom: 12px; font-size: 12px; color: var(--muted); }
 .order-pagination { justify-content: end; margin-top: 16px; }

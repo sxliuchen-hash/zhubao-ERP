@@ -552,6 +552,7 @@ describe('收货面板', () => {
     const wrapper = mountPanel(true);
     await fillNewWaybill(wrapper);
     expect(wrapper.get('.intake-goods').classes()).not.toContain('intake-stage-hidden');
+    expect(wrapper.findAll('button').filter(button => button.text() === '下一步：要求与证据')).toHaveLength(1);
     expect(wrapper.get('.intake-requirement').classes()).toContain('intake-stage-hidden');
     await wrapper.get('.field-dock button').trigger('click');
     expect(wrapper.get('.intake-stage-nav button:last-child').attributes('aria-current')).toBe('step');
