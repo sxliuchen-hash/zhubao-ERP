@@ -200,14 +200,28 @@ public class MotherOrderSplitService {
             throw new BusinessException("拆成多张至少需要两张子单");
         }
         List<ChildWorkOrderRecord> existing = listChildren(mother.code(), session);
-        boolean detailed = mother.sourceRegisterType() != null
-                && mother.sourceRegisterType().startsWith("INTAKE_LINES:");
+        boolean detailed = (mother.sourceRegisterType() != null && mother.sourceRegisterType().startsWith("INTAKE_LINES:"))
+                || lines.stream().anyMatch(line -> line != null && !line.allocations().isEmpty());
+        if (session != null && documents.listStoredReceiptLines(mother.code(), session).isEmpty()) {
+            // 老单在首次正式拆分时落下原来源，保证分配外键和历史未记录语义。
+            for (ReceiptLine source : documents.listReceiptLines(mother.code())) documents.saveReceiptLine(mother.code(), source, session);
+        }
         Map<Integer, ReceiptLine> sourceByNo = new HashMap<>();
         Map<Integer, BigDecimal> allocatedQuantity = new HashMap<>();
         Map<Integer, BigDecimal> allocatedWeight = new HashMap<>();
         if (detailed) {
             for (ReceiptLine source : documents.listReceiptLines(mother.code())) sourceByNo.put(source.lineNo(), source);
-            for (ChildLineAllocation prior : documents.listChildAllocations(mother.code(), session)) {
+            List<ChildLineAllocation> priorAllocations = documents.listChildAllocations(mother.code(), session);
+            if (sourceByNo.size() == 1) {
+                int sourceNo = sourceByNo.keySet().iterator().next();
+                for (ChildWorkOrderRecord prior : existing) {
+                    if (priorAllocations.stream().noneMatch(allocation -> allocation.childOrderCode().equals(prior.code()))) {
+                        allocatedQuantity.merge(sourceNo, prior.quantity(), BigDecimal::add);
+                        allocatedWeight.merge(sourceNo, prior.weight(), BigDecimal::add);
+                    }
+                }
+            }
+            for (ChildLineAllocation prior : priorAllocations) {
                 allocatedQuantity.merge(prior.sourceLineNo(), prior.quantity(), BigDecimal::add);
                 allocatedWeight.merge(prior.sourceLineNo(), prior.weight(), BigDecimal::add);
             }
@@ -402,13 +416,21 @@ public class MotherOrderSplitService {
     private MotherOrderSplitView toView(MotherOrderRecord mother, WorkSession session) {
         List<ChildWorkOrderRecord> children = listChildren(mother.code(), session);
         List<ReceiptLineBalance> sourceLines = new ArrayList<>();
-        if (mother.sourceRegisterType() != null && mother.sourceRegisterType().startsWith("INTAKE_LINES:")) {
+        {
             List<ChildLineAllocation> allocations = documents.listChildAllocations(mother.code(), session);
-            for (ReceiptLine line : documents.listReceiptLines(mother.code())) {
+            List<ReceiptLine> receiptSources = documents.listReceiptLines(mother.code());
+            for (ReceiptLine line : receiptSources) {
                 BigDecimal usedQuantity = allocations.stream().filter(item -> item.sourceLineNo() == line.lineNo())
                         .map(ChildLineAllocation::quantity).reduce(ZERO, BigDecimal::add);
                 BigDecimal usedWeight = allocations.stream().filter(item -> item.sourceLineNo() == line.lineNo())
                         .map(ChildLineAllocation::weight).reduce(ZERO, BigDecimal::add);
+                if (receiptSources.size() == 1) {
+                    for (ChildWorkOrderRecord child : children) {
+                        if (allocations.stream().noneMatch(allocation -> allocation.childOrderCode().equals(child.code()))) {
+                            usedQuantity = usedQuantity.add(child.quantity()); usedWeight = usedWeight.add(child.weight());
+                        }
+                    }
+                }
                 sourceLines.add(new ReceiptLineBalance(line.lineNo(), line.materialCode(), line.materialName(),
                         line.goodsName(), line.quantity(), line.quantityUnit(), line.weight(),
                         line.quantity().subtract(usedQuantity), line.weight().subtract(usedWeight), line.storageRequirements()));

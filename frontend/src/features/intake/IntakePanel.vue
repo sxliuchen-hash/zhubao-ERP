@@ -7,6 +7,7 @@ import { fetchCustomers, fetchMaterials, fetchShortcuts, STORAGE_CONDITIONS, sav
 import FilterSelect from '../../components/FilterSelect.vue';
 import RequirementComposer from './RequirementComposer.vue';
 import PrepStockPanel from '../m1/PrepStockPanel.vue';
+import MotherSplitPanel from '../m1/MotherSplitPanel.vue';
 import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
@@ -40,6 +41,10 @@ const visibleTabs = inject<Ref<string[] | null>>('zhubao-visible-tabs', ref(null
 const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const canManageData = computed(() => canManageMasterData(authSession.value));
 const canOpenLabel = computed(() => !visibleTabs.value || visibleTabs.value.includes('label'));
+const arrangementLocked = ref(false);
+const productionDecision = ref('');
+const canArrange = computed(() => !authSession.value || (authSession.value.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_MOTHER_SPLIT')
+  : authSession.value.role === 'BUSINESS_MANAGER' ? authSession.value.coverDuties?.includes('SPLIT') : ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER', 'WORKSHOP_LEADER'].includes(authSession.value.role)));
 const canOpenInbound = computed(() => !visibleTabs.value || visibleTabs.value.includes('inbound'));
 
 const scanText = ref('');
@@ -184,6 +189,8 @@ function openMotherDetails() {
 }
 
 function startNextIntake() {
+  if (arrangementLocked.value) return;
+  productionDecision.value = '';
   evidenceDraftKey.value = crypto.randomUUID();
   formStage.value = 1;
   savedQuantityUnit.value = '';
@@ -298,6 +305,7 @@ async function loadRelatedEvidence() {
 }
 
 async function recognizeIntake(draft: ScanDraft) {
+  if (arrangementLocked.value) { formError.value = '请先核对当前生产安排的原请求结果'; return; }
   formError.value = '';
   scanHint.value = '';
   const content = draft.content.trim();
@@ -557,7 +565,7 @@ onMounted(loadCatalog);
     </div>
     <label class="field">
       <span>收货来源</span>
-      <select v-model="sourceType" aria-label="收货来源" @change="clearIntakeTarget">
+      <select v-model="sourceType" aria-label="收货来源" :disabled="arrangementLocked" @change="clearIntakeTarget">
         <option value="COURIER">快递寄来</option>
         <option value="CUSTOMER_DELIVERY">客户送达</option>
         <option value="INTERNAL_OTHER">厂内接收／其他</option>
@@ -573,7 +581,7 @@ onMounted(loadCatalog);
       submit-aria-label="识别单号"
       photo-aria-label="拍面单"
       :bind-mobile-scan="field"
-      :busy="intakeScan.loading || submitting"
+      :busy="intakeScan.loading || submitting || arrangementLocked"
       @draft="clearIntakeTarget"
       @recognize="recognizeIntake"
     />
@@ -727,7 +735,7 @@ onMounted(loadCatalog);
 
   <article v-if="savedMother" ref="savedPanel" class="field-card intake-saved intake-create" aria-label="已保存母单">
     <div class="field-card-head">
-      <span>收货已保存，下一步打印标签</span>
+      <span>已入库 · {{ productionDecision === 'KEEP' ? '整单生产' : productionDecision === 'SPLIT' ? '已拆子单' : '待安排生产' }}</span>
       <StatusBadge label="已保存" tone="green" />
     </div>
     <strong>{{ intakeMotherCode }}</strong>
@@ -746,7 +754,7 @@ onMounted(loadCatalog);
     <div class="intake-next-actions">
       <button v-if="canOpenLabel" class="primary-button" type="button" aria-label="打开标签" @click="openLabelPage">预览并打印母单标签</button>
       <button v-if="canOpenInbound" class="secondary-button" type="button" @click="openMotherDetails">拆单与流转贴纸</button>
-      <button class="secondary-button" type="button" @click="startNextIntake">继续收下一件</button>
+      <button class="secondary-button" type="button" :disabled="arrangementLocked" @click="startNextIntake">继续收下一件</button>
     </div>
     <p>单号会自动带入标签页。<template v-if="created?.ledgerCode">收货已入库，无需再次确认入库；</template>生产前可在来料详情选择不拆或拆单。</p>
     <details v-if="intakeScan.context && !newExpressCode">
@@ -754,6 +762,8 @@ onMounted(loadCatalog);
       <OrderContextCard :context="intakeScan.context" @select="chooseIntakeTarget" />
     </details>
   </article>
+
+  <MotherSplitPanel v-if="savedMother && canArrange" :mother-order-code="intakeMotherCode" intake-mode @arranged="productionDecision = $event.decision" @locked="arrangementLocked = $event" />
 
   <section v-show="(draftAvailable || intakeMotherCode) && intakePurpose === 'processing'" :inert="intakePurpose !== 'processing' || undefined" class="section-block intake-create" :class="{ 'intake-stage-hidden': !savedMother && formStage !== 2 }">
     <h2 v-if="field && !savedMother">草稿文件</h2>

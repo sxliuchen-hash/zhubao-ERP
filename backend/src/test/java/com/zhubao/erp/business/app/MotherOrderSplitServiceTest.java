@@ -70,6 +70,36 @@ class MotherOrderSplitServiceTest {
     }
 
     @Test
+    void 旧单按来源部分分配并分别核对数量重量余量() {
+        inbound("MD-SOURCE-OLD", "10", "20");
+        assertThat(splitService.view("MD-SOURCE-OLD").sourceLines()).singleElement().satisfies(source -> assertThat(source.storageRequirements()).isNull());
+        var first = new SplitMotherOrderLine(new BigDecimal("1.125"), new BigDecimal("2.001"), List.of("抛光"), List.of(new com.zhubao.erp.business.domain.SplitSourceAllocation(1, new BigDecimal("1.125"), new BigDecimal("2.001"))));
+        var second = new SplitMotherOrderLine(new BigDecimal("2.375"), new BigDecimal("3.999"), List.of("抛光"), List.of(new com.zhubao.erp.business.domain.SplitSourceAllocation(1, new BigDecimal("2.375"), new BigDecimal("3.999"))));
+        var result = splitService.split(command("MD-SOURCE-OLD", first, second), "source-old-001");
+        assertThat(result.sourceLines().get(0).remainingQuantity()).isEqualByComparingTo("6.5");
+        assertThat(result.sourceLines().get(0).remainingWeight()).isEqualByComparingTo("14");
+        assertThat(documents.listChildAllocations("MD-SOURCE-OLD", null)).hasSize(2);
+    }
+
+    @Test
+    void 多材质不能整单或跨材质子单且失败不占用来源() {
+        var catalog = new MasterDataService(new com.zhubao.erp.business.infra.InMemoryMasterDataRepository());
+        catalog.saveMaterial(new com.zhubao.erp.business.domain.MaterialProfile("PT950", "铂金", "", "", true));
+        var unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        var currentOperations = new BusinessOperationService(stockLedgerService, null, documents, unit);
+        var intake = new MobileIntakeService(currentOperations, documents, unit, catalog, stockLedgerService);
+        var two = new BigDecimal("2");
+        String code = intake.intake(new com.zhubao.erp.business.domain.MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-11-01", "戒托", new BigDecimal("4"), new BigDecimal("4"), "", "AU9999", "件", "source-multi-001", "CUSTOMER_DELIVERY", List.of(
+                new com.zhubao.erp.business.domain.MobileIntakeLine("AU9999", "金", two, "件", two), new com.zhubao.erp.business.domain.MobileIntakeLine("PT950", "铂金", two, "件", two))), new com.zhubao.erp.security.domain.OperatorContext("收货员", com.zhubao.erp.security.domain.RoleCode.RECEIVER, com.zhubao.erp.security.domain.DataScope.ALL)).motherOrderCode();
+        var splits = new MotherOrderSplitService(documents, stockLedgerService, unit);
+        assertThatThrownBy(() -> splits.keep(code, "收货员", "multi-keep-001")).hasMessageContaining("多材质");
+        var mixed = new SplitMotherOrderLine(two, two, List.of("抛光"), List.of(new com.zhubao.erp.business.domain.SplitSourceAllocation(1, BigDecimal.ONE, BigDecimal.ONE), new com.zhubao.erp.business.domain.SplitSourceAllocation(2, BigDecimal.ONE, BigDecimal.ONE)));
+        assertThatThrownBy(() -> splits.split(command(code, mixed, mixed), "multi-split-001")).hasMessageContaining("不能跨材质");
+        assertThat(splits.view(code).children()).isEmpty();
+        assertThat(splits.view(code).sourceLines()).allSatisfy(source -> assertThat(source.remainingQuantity()).isEqualByComparingTo("2"));
+    }
+
+    @Test
     void keepPrintsOneMotherStickerWithoutMovingStock() {
         inbound("MD-KEEP-001", "10", "20");
 

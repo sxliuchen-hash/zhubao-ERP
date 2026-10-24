@@ -12,6 +12,8 @@ import { composeRequirement } from './requirementText';
 import RequirementComposer from './RequirementComposer.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 
+vi.mock('../m1/MotherSplitPanel.vue', () => ({ default: defineComponent({ name: 'MotherSplitPanel', props: { motherOrderCode: String, intakeMode: Boolean }, template: '<div data-production-arrangement />' }) }));
+
 vi.mock('../m1/PrepStockPanel.vue', () => ({ default: defineComponent({ name: 'PrepStockPanel', props: ['scope', 'initialSource'], setup() { return { draft: ref('') }; }, template: '<input v-model="draft" aria-label="寄存原草稿" />' }) }));
 
 vi.mock('../../services/masterDataApi', async () => ({
@@ -240,6 +242,8 @@ describe('收货面板', () => {
 
     expect(submitMobileIntake).toHaveBeenCalledTimes(1);
     expect(uploadEvidenceFile).toHaveBeenCalledTimes(2);
+    expect(wrapper.getComponent({ name: 'MotherSplitPanel' }).props('intakeMode')).toBe(true);
+    expect(wrapper.getComponent({ name: 'MotherSplitPanel' }).props('motherOrderCode')).toBe('MD-20261012-001');
     expect(wrapper.text()).toContain('业务已保存');
     expect(wrapper.text()).toContain('不会再次建单或入库');
   });

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
+import { ApiRequestError } from '../../services/apiClient';
 import { storageText } from '../../services/masterDataApi';
 import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
 import { fetchMotherLabel, fetchWorkOrderLabel, type LabelPayload } from '../../services/labelApi';
@@ -14,9 +16,20 @@ import {
 
 const processOptions = ['雕刻', '镶嵌', '抛光'];
 
-const props = defineProps<{
-  motherOrderCode: string;
-}>();
+const props = withDefaults(defineProps<{ motherOrderCode: string; intakeMode?: boolean }>(), { intakeMode: false });
+const emit = defineEmits<{ arranged: [view: MotherOrderSplitView]; locked: [locked: boolean] }>();
+const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const canArrange = computed(() => !session.value || (session.value.effectivePermissions ? session.value.effectivePermissions.includes('BUSINESS_MOTHER_SPLIT')
+  : session.value.role === 'BUSINESS_MANAGER' ? session.value.coverDuties?.includes('SPLIT') : ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER', 'WORKSHOP_LEADER'].includes(session.value.role)));
+const canPrint = computed(() => !session.value?.effectivePermissions || session.value.effectivePermissions.includes('LABEL_PRINT'));
+const choice = ref('');
+const stickerError = ref('');
+const success = ref('');
+type Arrangement = { key: string; kind: 'keep' | 'split'; code: string; requestId: string; lines?: import('../../services/motherSplitApi').SplitLineRequest[] };
+const pending = ref<Arrangement | null>(null);
+const locked = computed(() => submitting.value || Boolean(pending.value));
+let generation = 0;
+onBeforeUnmount(() => { generation += 1; });
 
 const view = ref<MotherOrderSplitView | null>(null);
 const stickers = ref<LabelPayload[]>([]);
@@ -25,11 +38,14 @@ const lines = ref<Array<{ quantity: string; weight: string; processes: string[];
 const loadError = ref('');
 const formError = ref('');
 const submitting = ref(false);
+watch(locked, value => emit('locked', value));
 const requestIds = ref<Record<string, string>>({});
 
-const canKeep = computed(() => view.value != null && view.value.decision !== 'KEEP' && view.value.decision !== 'SPLIT' && view.value.children.length === 0);
+const multiMaterial = computed(() => new Set(view.value?.sourceLines?.map(source => source.materialCode) ?? []).size > 1);
+const hasSources = computed(() => Boolean(view.value?.sourceLines?.length));
+const canKeep = computed(() => canArrange.value && !multiMaterial.value && view.value != null && view.value.decision !== 'KEEP' && view.value.decision !== 'SPLIT' && view.value.children.length === 0);
 const canSplit = computed(() => {
-  if (!view.value || view.value.decision === 'KEEP') return false;
+  if (!canArrange.value || !view.value || view.value.decision === 'KEEP') return false;
   return Number(view.value.remainingQuantity) > 0 && Number(view.value.remainingWeight) > 0;
 });
 
@@ -43,33 +59,68 @@ function blankLine() {
 }
 
 async function load() {
-  loadError.value = '';
-  formError.value = '';
-  view.value = null;
-  stickers.value = [];
-  if (!props.motherOrderCode) return;
+  const seen = ++generation;
+  const code = props.motherOrderCode;
+  loadError.value = ''; formError.value = ''; stickerError.value = ''; success.value = '';
+  view.value = null; stickers.value = []; lines.value = [blankLine(), blankLine()]; choice.value = '';
+  if (!code) return;
   try {
-    view.value = await fetchMotherSplit(props.motherOrderCode);
-    await loadStickers(view.value);
-  } catch (error) {
-    loadError.value = error instanceof Error ? error.message : '母单拆分信息加载失败';
-  }
+    const current = await fetchMotherSplit(code);
+    if (seen !== generation || code !== props.motherOrderCode) return;
+    view.value = current; emit('arranged', current);
+    await loadStickers(current);
+  } catch (error) { if (seen === generation) loadError.value = error instanceof Error ? error.message : '母单拆分信息加载失败'; }
 }
 
 async function loadStickers(current: MotherOrderSplitView) {
-  if (current.decision === 'KEEP') {
-    stickers.value = [await fetchMotherLabel(current.motherOrderCode)];
-    return;
-  }
-  if (current.children.length === 0) {
-    stickers.value = [];
-    return;
-  }
-  const [mother, ...childStickers] = await Promise.all([
-    fetchMotherLabel(current.motherOrderCode),
-    ...current.children.map((child) => fetchWorkOrderLabel(child.code)),
-  ]);
-  stickers.value = [mother, ...childStickers];
+  const seen = generation;
+  stickerError.value = '';
+  if (!canPrint.value || (current.decision !== 'KEEP' && !current.children.length)) { stickers.value = []; return; }
+  try {
+    const settled = await Promise.allSettled([
+      fetchMotherLabel(current.motherOrderCode), ...current.children.map(child => fetchWorkOrderLabel(child.code)),
+    ]);
+    if (seen !== generation || current.motherOrderCode !== props.motherOrderCode) return;
+    stickers.value = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+    const failures = settled.filter(result => result.status === 'rejected');
+    if (failures.length) stickerError.value = `生产安排已保存，${failures.length} 张标签待处理：` + failures.map(result => result.status === 'rejected' ? String(result.reason instanceof Error ? result.reason.message : result.reason) : '').join('；');
+  } catch (error) { if (seen === generation) stickerError.value = error instanceof Error ? error.message : '标签读取失败，可单独重试'; }
+}
+
+function scaled(value: string | number): bigint {
+  const text = String(value).trim();
+  if (!/^\d+(\.\d{1,3})?$/.test(text)) throw new Error('数量和重量最多三位小数，请填写实称数据');
+  const [whole, fraction = ''] = text.split('.');
+  const result = BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'));
+  if (result > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('数值过大，请分开核对录入');
+  return result;
+}
+function decimal(value: bigint): string { return `${value / 1000n}.${String(value % 1000n).padStart(3, '0')}`.replace(/\.?0+$/, '') || '0'; }
+function allocationTotal(line: typeof lines.value[number], key: 'quantity' | 'weight'): string {
+  try { return decimal(line.allocations.reduce((sum, row) => sum + (row[key].trim() ? scaled(row[key]) : 0n), 0n)); }
+  catch { return ''; }
+}
+function fillRemaining(lineIndex: number, allocationIndex: number) {
+  if (locked.value) return;
+  const row = lines.value[lineIndex].allocations[allocationIndex];
+  const source = view.value?.sourceLines?.find(source => source.lineNo === row.sourceLineNo);
+  if (!source) { formError.value = '请先选择来源明细'; return; }
+  try {
+    const others = lines.value.flatMap(line => line.allocations).filter(item => item !== row && item.sourceLineNo === row.sourceLineNo);
+    const quantity = scaled(source.remainingQuantity) - others.reduce((sum, item) => sum + (item.quantity.trim() ? scaled(item.quantity) : 0n), 0n);
+    const weight = scaled(source.remainingWeight) - others.reduce((sum, item) => sum + (item.weight.trim() ? scaled(item.weight) : 0n), 0n);
+    if (quantity <= 0n || weight <= 0n) throw new Error('该来源剩余数量或实称重量不足，请核对其他草稿分配');
+    row.quantity = decimal(quantity); row.weight = decimal(weight); formError.value = '';
+  } catch (error) { formError.value = error instanceof Error ? error.message : '剩余量读取失败'; }
+}
+function generateSourceDrafts() {
+  if (locked.value || !view.value?.sourceLines?.length) return;
+  if (lines.value.some(line => line.quantity || line.weight || line.allocations.some(row => row.quantity || row.weight)) && !globalThis.confirm('重新生成会覆盖当前拆分草稿，继续吗？')) return;
+  lines.value = view.value.sourceLines.filter(source => source.remainingQuantity > 0 && source.remainingWeight > 0).map(source => ({
+    ...blankLine(), allocations: [{ sourceLineNo: source.lineNo, quantity: String(source.remainingQuantity), weight: String(source.remainingWeight) }],
+  }));
+  while (lines.value.length < 2) lines.value.push(blankLine());
+  formError.value = ''; choice.value = 'split';
 }
 
 function toggleProcess(index: number, name: string) {
@@ -105,76 +156,62 @@ function clearRequestId(key: string) {
   requestIds.value = next;
 }
 
-async function keepWhole() {
-  formError.value = '';
-  submitting.value = true;
-  const key = `keep|${props.motherOrderCode}`;
-  const requestId = ensureRequestId(key, 'keep');
+async function executeArrangement(attempt: Arrangement) {
+  if (submitting.value || !canArrange.value) return;
+  const seen = generation;
+  submitting.value = true; pending.value = attempt; formError.value = '';
   try {
-    view.value = await keepMotherOrder(props.motherOrderCode, requestId);
-    clearRequestId(key);
-    await loadStickers(view.value);
+    const current = attempt.kind === 'keep' ? await keepMotherOrder(attempt.code, attempt.requestId) : await splitMotherOrder(attempt.code, attempt.lines!, attempt.requestId);
+    if (seen !== generation || attempt.code !== props.motherOrderCode) return;
+    pending.value = null; clearRequestId(attempt.key); view.value = current; emit('arranged', current);
+    success.value = attempt.kind === 'keep' ? '整单生产安排已保存' : '子单已生成，剩余来源可稍后继续分配';
+    if (attempt.kind === 'split') lines.value = [blankLine(), blankLine()];
+    void loadStickers(current);
   } catch (error) {
-    formError.value = error instanceof Error ? error.message : '选择不拆失败';
-  } finally {
-    submitting.value = false;
-  }
+    if (seen !== generation) return;
+    if (error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408) pending.value = null;
+    formError.value = error instanceof Error ? error.message : '生产安排结果待核对，请使用原请求重试';
+  } finally { submitting.value = false; }
 }
-
+async function keepWhole() {
+  if (locked.value || !canKeep.value) return;
+  await executeArrangement({ key: `keep|${props.motherOrderCode}`, kind: 'keep', code: props.motherOrderCode, requestId: ensureRequestId(`keep|${props.motherOrderCode}`, 'keep') });
+}
 async function splitMany() {
+  if (locked.value || !canSplit.value || !view.value) return;
   formError.value = '';
-  if (!view.value) return;
-  const hasSources = (view.value.sourceLines?.length ?? 0) > 0;
-  const parsed = lines.value.map((line) => ({
-    quantity: Number(line.quantity),
-    weight: Number(line.weight),
-    processes: [...line.processes],
-    ...(hasSources ? { allocations: line.allocations.map((allocation) => ({ sourceLineNo: Number(allocation.sourceLineNo),
-      quantity: Number(allocation.quantity), weight: Number(allocation.weight) })) } : {}),
-  }));
-  if (parsed.length < 2) {
-    formError.value = '拆成多张至少需要两张子单';
-    return;
-  }
-  if (parsed.some((line) => !Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.weight) || line.weight <= 0)) {
-    formError.value = '每张子单的数量和重量必须大于 0';
-    return;
-  }
-  if (parsed.some((line) => line.processes.length === 0)) {
-    formError.value = '每张子单至少选择一道工序';
-    return;
-  }
-  if (hasSources && parsed.some((line) => !line.allocations || line.allocations.length === 0
-    || line.allocations.some((item) => !item.sourceLineNo || item.quantity <= 0 || item.weight <= 0)
-    || round3(line.allocations.reduce((sum, item) => sum + item.quantity, 0)) !== round3(line.quantity)
-    || round3(line.allocations.reduce((sum, item) => sum + item.weight, 0)) !== round3(line.weight))) {
-    formError.value = '请逐行分配来源材质，且分配合计须等于子单数量和重量';
-    return;
-  }
-  const quantity = round3(parsed.reduce((sum, line) => sum + line.quantity, 0));
-  const weight = round3(parsed.reduce((sum, line) => sum + line.weight, 0));
-  if (quantity > round3(Number(view.value.remainingQuantity))) {
-    formError.value = '拆出的数量合计不得超过母单剩余';
-    return;
-  }
-  if (weight > round3(Number(view.value.remainingWeight))) {
-    formError.value = '拆出的重量合计不得超过母单剩余';
-    return;
-  }
-  submitting.value = true;
-  const fingerprint = parsed.map((line) => `${line.quantity}:${line.weight}:${line.processes.join(',')}:${JSON.stringify(line.allocations)}`).join('|');
-  const key = `split|${props.motherOrderCode}|${fingerprint}`;
-  const requestId = ensureRequestId(key, 'split');
   try {
-    view.value = await splitMotherOrder(props.motherOrderCode, parsed, requestId);
-    clearRequestId(key);
-    lines.value = [blankLine(), blankLine()];
-    await loadStickers(view.value);
-  } catch (error) {
-    formError.value = error instanceof Error ? error.message : '拆分子单失败';
-  } finally {
-    submitting.value = false;
-  }
+    const parsed = lines.value.map(line => ({
+      quantity: Number(hasSources.value ? allocationTotal(line, 'quantity') : line.quantity),
+      weight: Number(hasSources.value ? allocationTotal(line, 'weight') : line.weight), processes: [...line.processes],
+      ...(hasSources.value ? { allocations: line.allocations.map(row => ({ sourceLineNo: Number(row.sourceLineNo), quantity: Number(decimal(scaled(row.quantity))), weight: Number(decimal(scaled(row.weight))) })) } : {}),
+    }));
+    if (parsed.length < 2) throw new Error('拆成多张至少需要两张子单');
+    if (parsed.some(line => !Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.weight) || line.weight <= 0)) throw new Error('每张子单的数量和重量必须大于 0');
+    if (parsed.some(line => !line.processes.length)) throw new Error('每张子单至少选择一道正式工序');
+    if (hasSources.value) {
+      const used = new Map<number, { quantity: bigint; weight: bigint }>();
+      for (const line of parsed) {
+        if (!line.allocations?.length) throw new Error('每张子单必须分配来源明细');
+        const materials = new Set<string>(); const selected = new Set<number>();
+        for (const row of line.allocations) {
+          const source = view.value.sourceLines!.find(source => source.lineNo === row.sourceLineNo);
+          if (!source || selected.has(row.sourceLineNo) || row.quantity <= 0 || row.weight <= 0) throw new Error('来源明细无效、重复或分配量不大于零');
+          selected.add(row.sourceLineNo); materials.add(source.materialCode);
+          const sum = used.get(row.sourceLineNo) ?? { quantity: 0n, weight: 0n };
+          sum.quantity += scaled(row.quantity); sum.weight += scaled(row.weight); used.set(row.sourceLineNo, sum);
+          if (sum.quantity > scaled(source.remainingQuantity) || sum.weight > scaled(source.remainingWeight)) throw new Error(`来源 ${source.lineNo} 的数量或重量超过剩余`);
+        }
+        if (materials.size > 1) throw new Error('一张子单不能跨材质，请分别拆单');
+      }
+    }
+    const quantity = parsed.reduce((sum, line) => sum + scaled(line.quantity), 0n);
+    const weight = parsed.reduce((sum, line) => sum + scaled(line.weight), 0n);
+    if (quantity > scaled(view.value.remainingQuantity)) throw new Error('拆出的数量合计不得超过母单剩余');
+    if (weight > scaled(view.value.remainingWeight)) throw new Error('拆出的重量合计不得超过母单剩余');
+    const key = `split|${props.motherOrderCode}|${JSON.stringify(parsed)}`;
+    await executeArrangement({ key, kind: 'split', code: props.motherOrderCode, requestId: ensureRequestId(key, 'split'), lines: parsed });
+  } catch (error) { formError.value = error instanceof Error ? error.message : '请核对子单来源分配'; }
 }
 
 function round3(value: number) {
@@ -216,31 +253,39 @@ function scaleStyle(payload: LabelPayload) {
           <p>保存：{{ storageText(source.storageRequirements) }}</p>
         </li>
       </ul>
-      <button v-if="canKeep" class="primary-button" type="button" :disabled="submitting" @click="keepWhole">
+      <p v-if="success" class="operation-feedback">{{ success }}</p>
+      <p v-if="!view.decision">已入库 · 待安排生产；打印收货标签不确认不拆。</p>
+      <p v-if="multiMaterial">多材质母单必须按来源拆成子单，不能整单生产。</p>
+      <div v-if="intakeMode && canArrange && view.decision !== 'KEEP'" class="button-row"><button v-if="canKeep" type="button" class="primary-button" :disabled="locked" @click="keepWhole">整单生产</button><button v-if="canSplit" type="button" class="secondary-button" :disabled="locked" @click="choice = 'split'">拆成子单</button><button type="button" class="secondary-button" :disabled="locked" @click="choice = 'later'">稍后安排</button></div>
+      <p v-if="choice === 'later'">已保留待安排状态，可从本单详情继续。</p>
+      <button v-if="canKeep && !intakeMode" class="primary-button" type="button" :disabled="submitting" @click="keepWhole">
         不拆，预览流转贴纸
       </button>
       <p v-if="canKeep" class="split-summary">确认不拆后将按整张母单生产，不能再拆成子单；预览后点击“打印这张”出纸。</p>
 
-      <div v-if="canSplit" class="split-form">
-        <h4>拆成多张</h4>
+      <fieldset v-if="canSplit && (!intakeMode || choice === 'split')" class="split-form" :disabled="locked">
+        <h4>按来源分配拆成多张</h4>
+        <p>数量和重量分别按真实来源合计；以下工序是正式路线，加工要求文字不会自动转成工序。</p>
+        <button v-if="hasSources" type="button" class="secondary-button" @click="generateSourceDrafts">按明细生成草稿</button>
         <article v-for="(line, index) in lines" :key="index" class="split-line">
           <strong>第 {{ index + 1 }} 张</strong>
           <label class="field">
             <span>数量（{{ view.quantityUnit }}）</span>
-            <input v-model="line.quantity" inputmode="decimal" :aria-label="`第${index + 1}张数量`" />
+            <input :value="hasSources ? allocationTotal(line, 'quantity') : line.quantity" :readonly="hasSources" @input="line.quantity = ($event.target as HTMLInputElement).value" inputmode="decimal" :aria-label="`第${index + 1}张数量`" />
           </label>
           <label class="field">
             <span>重量（克）</span>
-            <input v-model="line.weight" inputmode="decimal" :aria-label="`第${index + 1}张重量`" />
+            <input :value="hasSources ? allocationTotal(line, 'weight') : line.weight" :readonly="hasSources" @input="line.weight = ($event.target as HTMLInputElement).value" inputmode="decimal" :aria-label="`第${index + 1}张重量`" />
           </label>
           <div v-if="view.sourceLines?.length" class="source-allocations">
             <div v-for="(allocation, allocationIndex) in line.allocations" :key="allocationIndex" class="split-line">
-              <label class="field"><span>来源明细</span><select v-model.number="allocation.sourceLineNo" :aria-label="`第${index + 1}张来源${allocationIndex + 1}`">
+              <label class="field"><span>来源明细</span><select v-model.number="allocation.sourceLineNo" :aria-label="`第${index + 1}张来源${allocationIndex + 1}`" @change="allocation.quantity = ''; allocation.weight = ''">
                 <option :value="null">请选择来源</option>
                 <option v-for="source in view.sourceLines" :key="source.lineNo" :value="source.lineNo">第 {{ source.lineNo }} 行 · {{ source.materialName }} · 剩余 {{ source.remainingQuantity }} {{ source.quantityUnit }}</option>
               </select></label>
               <label class="field"><span>分配数量</span><input v-model="allocation.quantity" inputmode="decimal" :aria-label="`第${index + 1}张分配数量${allocationIndex + 1}`" /></label>
               <label class="field"><span>分配重量（克）</span><input v-model="allocation.weight" inputmode="decimal" :aria-label="`第${index + 1}张分配重量${allocationIndex + 1}`" /></label>
+              <button type="button" class="table-action" @click="fillRemaining(index, allocationIndex)">填入剩余量</button>
               <button type="button" class="table-action" @click="line.allocations.splice(allocationIndex, 1)">移除来源</button>
             </div>
             <button type="button" class="table-action" @click="line.allocations.push({ sourceLineNo: null, quantity: '', weight: '' })">增加来源明细</button>
@@ -262,10 +307,12 @@ function scaleStyle(payload: LabelPayload) {
           <button class="table-action" type="button" @click="addLine">再加一张</button>
           <button class="primary-button" type="button" aria-label="生成子单并预览贴纸" :disabled="submitting" @click="splitMany">生成子单并预览贴纸</button>
         </div>
-      </div>
+      </fieldset>
 
       <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
 
+      <p v-if="pending" class="operation-feedback warning">安排结果待核对，原提交快照保留。<button type="button" :disabled="submitting" @click="executeArrangement(pending)">用原请求核对生产安排</button></p>
+      <p v-if="stickerError" class="operation-feedback warning">{{ stickerError }} <button type="button" :disabled="submitting" @click="loadStickers(view)">只重试标签</button></p>
       <ul v-if="view.children.length" class="child-list">
         <li v-for="child in view.children" :key="child.code">
           {{ child.code }} · 验证码 {{ child.verificationCode }} · {{ child.processes.join('、') }} · {{ child.quantity }} {{ view.quantityUnit }} / {{ child.weight }} 克
@@ -279,7 +326,7 @@ function scaleStyle(payload: LabelPayload) {
             <div class="label-scale" :style="scaleStyle(sticker)" v-html="buildLabelMarkup(sticker)"></div>
           </div>
           <p>二维码 {{ sticker.qrContent }}</p>
-          <button class="table-action" type="button" @click="openLabelPrint(sticker)">打印这张</button>
+          <button v-if="canPrint" class="table-action" type="button" @click="openLabelPrint(sticker)">打印这张</button>
         </article>
       </div>
     </template>
