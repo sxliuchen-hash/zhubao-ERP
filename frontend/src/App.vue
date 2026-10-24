@@ -15,6 +15,7 @@ import type { TraceTarget } from './features/scan/traceTarget';
 import { createWorkspaceState } from './features/workspace/workspaceContext';
 import {
   filterWorkspaceTabs,
+  desktopNavigationGroups,
   groupTabsBySection,
   isTabKey,
   mobileMoreTabs,
@@ -137,17 +138,16 @@ const visibleTabs = computed(() => {
     if (tab.key === 'users') return authSession.value?.role === 'ADMIN';
     return true;
   });
-  if (!authorizedMenuCodes.value || authorizedMenuCodes.value.size === 0) {
-    return permittedTabs;
-  }
+  if (!authorizedMenuCodes.value || authorizedMenuCodes.value.size === 0) return workspaceTabs.filter(tab => tab.key === 'dashboard');
   const filteredTabs = permittedTabs.filter((tab) => authorizedMenuCodes.value?.has(tab.key));
   return filteredTabs.length ? filteredTabs : workspaceTabs.filter((tab) => tab.key === 'dashboard');
 });
 provide('zhubao-visible-tabs', computed(() => visibleTabs.value.map((tab) => tab.key)));
-const navigationGroups = computed(() => groupTabsBySection(visibleTabs.value));
+const navigationGroups = computed(() => desktopNavigationGroups(visibleTabs.value));
 const activeTabMeta = computed(() => visibleTabs.value.find((tab) => tab.key === activeTab.value) ?? visibleTabs.value[0]);
-const activeTitle = computed(() => orderWorkspaceOpen.value ? '订单中心' : activeTabMeta.value?.label ?? '首页');
-const activeLocation = computed(() => orderWorkspaceOpen.value ? '订单' : sectionLabel(sectionOfTab(activeTabMeta.value?.key ?? 'dashboard')));
+const activeOrderView = computed(() => workspace.orderView.value ?? 'ORDERS');
+const activeTitle = computed(() => orderWorkspaceOpen.value ? activeOrderView.value === 'PRODUCTION' ? '生产作业' : activeOrderView.value === 'QUALITY' ? '质量作业' : '订单中心' : activeTabMeta.value?.label ?? '首页');
+const activeLocation = computed(() => orderWorkspaceOpen.value ? activeOrderView.value === 'PRODUCTION' ? '生产作业' : activeOrderView.value === 'QUALITY' ? '质量作业' : '订单' : sectionLabel(sectionOfTab(activeTabMeta.value?.key ?? 'dashboard')));
 const showDeskTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'dashboard'));
 const showInventoryTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'inventory'));
 const orderDockTabs = computed(() => mobileOrderTabs(visibleTabs.value));
@@ -304,15 +304,27 @@ function activateTab(tab: TabKey) {
 
 function openMobileTab(tab: TabKey) {
   moreOpen.value = false;
-  activateTab(tab);
+  navigateTab(tab);
+}
+function navigateTab(tab: TabKey) {
+  if (!visibleTabs.value.some(item => item.key === tab)) return;
+  if (tab === 'production' || tab === 'progress') openOrders('PRODUCTION');
+  else if (tab === 'quality') openOrders('QUALITY');
+  else if (tab === 'inbound') openOrders('ORDERS');
+  else activateTab(tab);
+}
+function navigationActive(tab: TabKey) {
+  if (!orderWorkspaceOpen.value) return activeTab.value === tab;
+  return activeOrderView.value === 'PRODUCTION' ? tab === 'production' || tab === 'progress' : activeOrderView.value === 'QUALITY' && tab === 'quality';
 }
 
 function openMobileOrders() {
   openOrders();
 }
 
-function openOrders() {
+function openOrders(view: 'ORDERS' | 'PRODUCTION' | 'QUALITY' = 'ORDERS') {
   if (!canReadOrders.value) return;
+  workspace.orderView.value = view;
   moreOpen.value = false;
   orderWorkspaceOpen.value = true;
 }
@@ -444,20 +456,20 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     </template>
 
     <template #nav>
-      <button v-if="canReadOrders" class="nav-button" data-workspace-section="orders" :class="{ active: orderWorkspaceOpen }" type="button" @click="openOrders">
+      <button v-if="canReadOrders" class="nav-button" data-workspace-section="orders" :class="{ active: orderWorkspaceOpen && activeOrderView === 'ORDERS' }" type="button" @click="openOrders()">
         <span class="nav-icon-wrap"><NavIcon name="orders" /></span><span class="nav-label"><strong>订单中心</strong></span>
       </button>
       <template v-for="group in navigationGroups" :key="group.id">
-        <p v-if="group.tabs.length" class="nav-group-label">{{ group.label }}</p>
+        <p v-if="group.tabs.length > 1" class="nav-group-label">{{ group.label }}</p>
         <button
           v-for="tab in group.tabs"
           :key="tab.key"
           class="nav-button"
           :data-tab="tab.key"
-          :class="{ active: !orderWorkspaceOpen && activeTab === tab.key }"
+          :class="{ active: navigationActive(tab.key) }"
           :title="`${tab.label} · ${tab.meta}`"
           type="button"
-          @click="activateTab(tab.key)"
+          @click="navigateTab(tab.key)"
         >
           <span class="nav-icon-wrap">
             <NavIcon :name="tab.key" />

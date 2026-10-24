@@ -121,3 +121,15 @@ export function mobileMoreTabs<T extends { key: TabKey }>(visible: T[]): T[] {
   const dock = new Set<TabKey>(['dashboard', 'inventory', ...mobileOrderTabKeys]);
   return visible.filter((tab) => !dock.has(tab.key));
 }
+
+/** 桌面把来料和进度收进订单中心；岗位入口仍携带真实获准菜单编码。 */
+export function desktopNavigationGroups(visible: WorkspaceTab[]) {
+  const productionCode = visible.some(tab => tab.key === 'production') ? 'production' : 'progress';
+  const entries = visible.flatMap(tab => {
+    if (tab.key === 'inbound' || (tab.key === 'progress' && productionCode !== 'progress')) return [];
+    if (tab.key === productionCode) return [{ ...tab, label: '生产作业', section: 'production' as const }];
+    if (tab.key === 'quality') return [{ ...tab, label: '质量作业', section: 'quality' as const }];
+    return [tab];
+  });
+  return workspaceSections.map(section => ({ ...section, tabs: entries.filter(tab => tab.section === section.id) })).filter(group => group.tabs.length);
+}

@@ -33,6 +33,7 @@ export interface PendingActionSession {
 }
 
 export interface WorkspaceState {
+  orderView: Ref<'ORDERS' | 'PRODUCTION' | 'QUALITY' | null>;
   selection: Ref<OrderSelection | null>;
   returnLocation: Ref<OrderReturnLocation | null>;
   pendingAction: Ref<PendingActionSession | null>;
@@ -46,6 +47,7 @@ export interface WorkspaceState {
 
 /** 每个应用实例一份。退出、换账号或权限变化时调用 clear。 */
 export function createWorkspaceState(): WorkspaceState {
+  const orderView = ref<'ORDERS' | 'PRODUCTION' | 'QUALITY' | null>(null);
   const selection = ref<OrderSelection | null>(null);
   const returnLocation = ref<OrderReturnLocation | null>(null);
   const pendingAction = ref<PendingActionSession | null>(null);
@@ -68,6 +70,7 @@ export function createWorkspaceState(): WorkspaceState {
 
   function clear() {
     revision += 1;
+    orderView.value = null;
     selection.value = null;
     returnLocation.value = null;
     pendingAction.value = null;
@@ -76,6 +79,7 @@ export function createWorkspaceState(): WorkspaceState {
   }
 
   return {
+    orderView,
     selection,
     returnLocation,
     pendingAction,

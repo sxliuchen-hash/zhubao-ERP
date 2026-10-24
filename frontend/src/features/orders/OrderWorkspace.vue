@@ -21,7 +21,7 @@ const workspace = useWorkspaceContext();
 const saved = workspace.returnLocation.value;
 const filters = reactive({ query: saved?.query ?? '', customerId: saved?.customerId ?? '', process: saved?.process ?? '',
   facet: saved?.facet ?? 'ALL', dueBefore: saved?.dueBefore ?? '' });
-const view = ref<NonNullable<OrderWorkspaceQuery['view']>>(saved?.view ?? 'ORDERS');
+const view = ref<NonNullable<OrderWorkspaceQuery['view']>>(workspace.orderView.value ?? saved?.view ?? 'ORDERS');
 const page = ref(saved?.page ?? 1);
 const result = ref<OrderWorkspacePage | null>(null);
 const loading = ref(false);
@@ -57,6 +57,7 @@ const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
 const canCreate = computed(() => openIntake && tabs.value.includes('inbound') && session.value?.effectivePermissions?.includes('BUSINESS_INBOUND_CONFIRM'));
 const trace = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
 const legacyTabs = computed(() => workspaceTabs.filter(tab => ['inbound', 'production', 'progress', 'quality'].includes(tab.key) && tabs.value.includes(tab.key)));
+const legacyLabel: Partial<Record<TabKey, string>> = { inbound: '来料记录、母单与拆单', production: '生产记录与设备产量', progress: '原进度查询与历史', quality: '质检记录、损耗与工资试算' };
 const serverViews = ref<OrderWorkspacePage['availableViews']>(['ORDERS', 'PRODUCTION', 'QUALITY']);
 const allowedViews = computed(() => serverViews.value.filter(item =>
   item === 'ORDERS' || (item === 'PRODUCTION' ? tabs.value.some(key => key === 'production' || key === 'progress') : tabs.value.includes('quality'))));
@@ -85,6 +86,8 @@ function invalidateList() {
 }
 watch([filters, view], () => { invalidateList(); page.value = 1; remember(); }, { flush: 'sync' });
 watch(scanCode, () => { clearDetail(); }, { flush: 'sync' });
+watch(view, value => { workspace.orderView.value = value; }, { immediate: true });
+watch(workspace.orderView, requested => { if (requested && requested !== view.value) { view.value = requested; void load(1); } });
 watch(refresh, () => { void load(); });
 
 async function load(requestedPage = page.value) {
@@ -183,7 +186,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
   <div class="order-workspace page-stack" :class="{ 'has-detail': detailOpen }">
     <section class="order-list-panel" aria-label="订单查询列表">
       <button v-if="canCreate" type="button" class="primary-button" @click="openIntake?.()">新建收货</button>
-      <details class="order-legacy-pages"><summary>原业务页面</summary><div class="order-legacy-actions"><button v-for="tab in legacyTabs" :key="tab.key" type="button" class="secondary-button" @click="openTab(tab.key)">{{ tab.label }}</button></div></details>
+      <details class="order-legacy-pages"><summary>其他业务记录与工具</summary><div class="order-legacy-actions"><button v-for="tab in legacyTabs" :key="tab.key" type="button" class="secondary-button" @click="openTab(tab.key)">{{ legacyLabel[tab.key] || tab.label }}</button></div></details>
       <form class="order-filters" @submit.prevent="load(1)">
         <label class="order-search"><span>搜索订单</span><input v-model="filters.query" maxlength="100" aria-label="订单搜索" placeholder="单号、运单、货品或客户" /></label>
         <label><span>视图</span><select v-model="view" aria-label="订单视图"><option v-for="item in allowedViews" :key="item" :value="item">{{ item === 'PRODUCTION' ? '生产作业' : item === 'QUALITY' ? '质量作业' : '全部订单' }}</option></select></label>

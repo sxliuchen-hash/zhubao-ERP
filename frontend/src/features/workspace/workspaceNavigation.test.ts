@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   filterWorkspaceTabs,
+  desktopNavigationGroups,
   groupTabsBySection,
   isTabKey,
   mobileMoreTabs,
@@ -10,6 +11,16 @@ import {
 } from './workspaceNavigation';
 
 describe('workspaceNavigation', () => {
+  it('桌面来料与进度归订单入口，生产和质量仍用真实获准编码，不扩大菜单', () => {
+    const all = desktopNavigationGroups(workspaceTabs).flatMap(group => group.tabs);
+    expect(all.some(tab => tab.key === 'inbound' || tab.key === 'progress')).toBe(false);
+    expect(all.find(tab => tab.key === 'production')?.label).toBe('生产作业');
+    expect(all.find(tab => tab.key === 'quality')?.label).toBe('质量作业');
+    const progressOnly = desktopNavigationGroups(workspaceTabs.filter(tab => ['dashboard', 'progress'].includes(tab.key)));
+    expect(progressOnly.flatMap(group => group.tabs).map(tab => tab.key)).toEqual(['dashboard', 'progress']);
+    expect(progressOnly.find(group => group.id === 'production')?.tabs[0].key).toBe('progress');
+    expect(desktopNavigationGroups(workspaceTabs.filter(tab => tab.key === 'inventory')).flatMap(group => group.tabs).map(tab => tab.key)).toEqual(['inventory']);
+  });
   it('把现有 17 个页面各归入一个展示分区，不新增菜单编码', () => {
     expect(workspaceTabs).toHaveLength(17);
     expect(new Set(workspaceTabs.map((tab) => tab.key)).size).toBe(17);

@@ -31,7 +31,7 @@ describe('App', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     localStorage.clear();
     vi.mocked(fetchAuthSession).mockResolvedValue(null);
-    vi.mocked(fetchOrderWorkspace).mockReset().mockResolvedValue({ items: [], page: 1, size: 20, totalRows: 0, facetCounts: {}, availableViews: ['ORDERS'], generatedAt: '' });
+    vi.mocked(fetchOrderWorkspace).mockReset().mockResolvedValue({ items: [], page: 1, size: 20, totalRows: 0, facetCounts: {}, availableViews: ['ORDERS', 'PRODUCTION', 'QUALITY'], generatedAt: '' });
     vi.mocked(queryScanContext).mockReset().mockImplementation(async input => buildScanContext({ objectType: input.objectType ?? 'MOTHER_ORDER', code: input.content }));
   });
 
@@ -63,14 +63,6 @@ describe('App', () => {
 
     expect(wrapper.text()).toContain('来料加工');
     expect(wrapper.findAll('.nav-group-label').map((label) => label.text())).toEqual([
-      '工作台',
-      '订单',
-      '生产作业',
-      '质量作业',
-      '库存',
-      '客户',
-      '财务',
-      '审批',
       '业务工具',
       '系统管理',
     ]);
@@ -79,10 +71,12 @@ describe('App', () => {
     expect(wrapper.find('[aria-label="业务单据和当前处理单"]').exists()).toBe(false);
     expect(wrapper.find('.ops-scope-ribbon').exists()).toBe(false);
     expect(wrapper.find('.ops-nav').text()).toContain('首页');
-    expect(wrapper.find('.ops-nav').text()).toContain('来料');
+    expect(wrapper.find('.ops-nav').text()).toContain('订单中心');
+    expect(wrapper.find('[data-tab="inbound"]').exists()).toBe(false);
+    expect(wrapper.find('[data-tab="progress"]').exists()).toBe(false);
     expect(wrapper.find('.ops-nav').text()).toContain('客户档案');
     expect(wrapper.find('.ops-nav').text()).toContain('生产');
-    expect(wrapper.find('.ops-nav').text()).toContain('质检');
+    expect(wrapper.find('.ops-nav').text()).toContain('质量作业');
     expect(wrapper.find('.ops-nav').text()).toContain('库存');
     expect(wrapper.find('.ops-nav').text()).toContain('审批');
     expect(wrapper.find('.ops-nav').text()).toContain('标签');
@@ -105,6 +99,31 @@ describe('App', () => {
     await wrapper.get('[aria-label="版本升级通知"] button').trigger('click');
     expect(wrapper.find('[aria-label="版本升级通知"]').exists()).toBe(false);
     expect(localStorage.getItem('zhubao-upgrade-notice-20261020')).toBe('1');
+  });
+  it('岗位导航读取同一 Q1，并保留原业务工具入口而不循环回到岗位列表', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
+    const wrapper = mount(App); await flushPromises();
+    await wrapper.get('[data-tab="production"]').trigger('click'); await flushPromises();
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(true), { timeout: 5000 });
+    expect(wrapper.get('h1').text()).toBe('生产作业');
+    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'PRODUCTION', size: 20 }));
+    expect(wrapper.get('[data-tab="production"]').classes()).toContain('active');
+    await wrapper.get('[data-tab="quality"]').trigger('click'); await flushPromises();
+    expect(wrapper.get('h1').text()).toBe('质量作业');
+    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'QUALITY', size: 20 }));
+    await wrapper.findAll('.order-legacy-actions button').find(button => button.text() === '质检记录、损耗与工资试算')!.trigger('click'); await flushPromises();
+    expect(wrapper.get('h1').text()).toBe('质检');
+    expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(false); wrapper.unmount();
+  });
+  it('只有进度菜单仍可进入生产岗位查询，空菜单不会展开为全量管理菜单', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'progress']));
+    const progress = mount(App); await flushPromises(); await progress.get('[data-tab="progress"]').trigger('click'); await flushPromises();
+    await vi.waitFor(() => expect(progress.find('[aria-label="订单查询列表"]').exists()).toBe(true), { timeout: 5000 });
+    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'PRODUCTION', size: 20 })); progress.unmount();
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce({ ...sessionWithMenus([]), role: 'ADMIN', effectivePermissions: [] });
+    const empty = mount(App); await flushPromises();
+    expect(empty.find('[data-workspace-section="orders"]').exists()).toBe(false);
+    expect(empty.find('[data-tab="finance"]').exists()).toBe(false); expect(empty.find('[data-tab="users"]').exists()).toBe(false); empty.unmount();
   });
 
   it('opens field work from the center scan key when the current page has no scanner', async () => {
@@ -179,7 +198,7 @@ describe('App', () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
     const wrapper = mount(App);
     await flushPromises();
-    const operatorMenus = allMenuCodes;
+    const operatorMenus = allMenuCodes.filter(key => !['inbound', 'progress'].includes(key));
 
     expect(wrapper.findAll('.ops-nav .nav-button .nav-icon')).toHaveLength(operatorMenus.length + 1);
     expect(wrapper.get('.sidebar-toggle').attributes('aria-expanded')).toBe('true');

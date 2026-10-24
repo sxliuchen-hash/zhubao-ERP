@@ -48,6 +48,18 @@ beforeEach(() => {
 });
 
 describe('统一订单列表与详情', () => {
+  it('外部岗位导航使用同一 Q1 列表，切视图撤下旧目标，旧响应不能回写', async () => {
+    const workspace = createWorkspaceState(); workspace.orderView.value = 'PRODUCTION';
+    const slow = deferred<OrderWorkspacePage>();
+    vi.mocked(fetchOrderWorkspace).mockReturnValueOnce(slow.promise).mockResolvedValueOnce(page([row('WO-QC')]));
+    const wrapper = mountWorkspace({ 'zhubao-workspace-context': workspace, 'zhubao-visible-tabs': ref(['production', 'quality']) });
+    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'PRODUCTION' }));
+    workspace.orderView.value = 'QUALITY'; await flushPromises();
+    expect(fetchOrderWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'QUALITY', page: 1 }));
+    slow.resolve(page([row('WO-OLD')])); await flushPromises();
+    expect(wrapper.text()).toContain('WO-QC'); expect(wrapper.text()).not.toContain('WO-OLD');
+    expect(wrapper.find('[aria-label="订单详情"]').exists()).toBe(false); wrapper.unmount();
+  });
   it('列表默认收起重复扫码区，当前扫码请求可展开，原目标绑定仍保留', async () => {
     const wrapper = mountWorkspace(); await flushPromises();
     expect(wrapper.get('.order-scan-tools').attributes('open')).toBeUndefined();
