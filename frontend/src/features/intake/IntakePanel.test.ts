@@ -233,9 +233,6 @@ describe('收货面板', () => {
     await create!.trigger('click');
     await flushPromises();
 
-    const upload = wrapper.findAll('button').find((button) => button.text() === '上传并关联');
-    await upload!.trigger('click');
-    await flushPromises();
     const retry = wrapper.findAll('button').find((button) => button.text() === '重试');
     await retry!.trigger('click');
     await flushPromises();

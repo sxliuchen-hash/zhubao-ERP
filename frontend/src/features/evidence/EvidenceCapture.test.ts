@@ -80,6 +80,41 @@ describe('现场证据采集', () => {
     vi.mocked(bindEvidence).mockResolvedValue({ linkCode: 'LNK-1', attachmentCode: 'ATT-1', scene: 'UNPACK' });
   });
 
+  it('收料草稿隐藏上传入口，取得真实编号后自动上传；关联失败只补关联', async () => {
+    const wrapper = mount(EvidenceCapture, { props: { targetType: 'MOTHER_ORDER', targetCode: '', stage: 'INTAKE', scene: 'UNPACK', operationType: 'inbound_confirm', operationCode: '', draftKey: 'draft-a', autoUpload: true } });
+    await pick(wrapper, 'a.jpg', 'image/jpeg');
+    expect(wrapper.text()).toContain('建单后自动上传');
+    expect(wrapper.find('li button').exists()).toBe(false);
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    vi.mocked(bindEvidence).mockRejectedValueOnce(new Error('关联失败'));
+    await wrapper.setProps({ targetCode: 'MD-1', operationCode: 'STK-REAL' });
+    await flushPromises();
+    expect(uploadEvidenceFile).toHaveBeenCalledOnce();
+    await wrapper.get('li button').trigger('click');
+    await flushPromises();
+    expect(uploadEvidenceFile).toHaveBeenCalledOnce();
+    expect(bindEvidence).toHaveBeenLastCalledWith(expect.objectContaining({ targetCode: 'MD-1', operationCode: 'STK-REAL' }));
+    wrapper.unmount();
+  });
+
+  it('照片处理跨草稿完成时仍归原单，同一文件不会并行提交', async () => {
+    let finish!: (file: File) => void;
+    vi.mocked(stampPhotoTimestamp).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const wrapper = mount(EvidenceCapture, { props: { targetType: 'MOTHER_ORDER', targetCode: '', stage: 'INTAKE', scene: 'UNPACK', operationType: 'inbound_confirm', operationCode: '', draftKey: 'draft-a', autoUpload: true } });
+    await pick(wrapper, 'a.jpg', 'image/jpeg');
+    await wrapper.setProps({ targetCode: 'MD-A', operationCode: 'STK-A' });
+    await wrapper.setProps({ draftKey: 'draft-b', targetCode: 'MD-B', operationCode: 'STK-B' });
+    finish(fileOf('a.jpg', 'image/jpeg'));
+    await flushPromises();
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    const button = wrapper.get('li button');
+    await Promise.all([button.trigger('click'), button.trigger('click')]);
+    await flushPromises();
+    expect(uploadEvidenceFile).toHaveBeenCalledOnce();
+    expect(bindEvidence).toHaveBeenCalledWith(expect.objectContaining({ targetCode: 'MD-A', operationCode: 'STK-A' }));
+    wrapper.unmount();
+  });
+
   it('待上传文件取得初检编号后固定在初检，切到复检不重新归属', async () => {
     const wrapper = mount(EvidenceCapture, { props: { targetType: 'WORK_ORDER', targetCode: 'WO-1', stage: 'QUALITY', scene: 'CHECK', operationType: 'quality_round', operationCode: '' } });
     await pick(wrapper, 'initial.jpg', 'image/jpeg');

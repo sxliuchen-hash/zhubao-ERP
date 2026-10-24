@@ -20,7 +20,7 @@ import { useTraceTarget } from '../scan/useTraceTarget';
 import type { TraceTarget } from '../scan/traceTarget';
 import type { ScanContextResponse, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
-  submitMobileIntake,
+  submitMobileIntake, fetchMotherOrder,
   type MobileIntakeResult,
 } from '../../services/mobileIntakeApi';
 
@@ -100,6 +100,9 @@ const entryPanel = ref<HTMLElement | null>(null);
 const draftPanel = ref<HTMLElement | null>(null);
 const savedPanel = ref<HTMLElement | null>(null);
 const created = ref<MobileIntakeResult | null>(null);
+const evidenceDraftKey = ref(crypto.randomUUID());
+const existingLedgerCode = ref('');
+const evidenceIdentityError = ref('');
 const requestId = ref('');
 const requestFingerprint = ref('');
 const intakeScan = reactive(useScanContext());
@@ -125,6 +128,19 @@ const intakeMotherCode = computed(() => {
   if (target.objectType === 'MOTHER_ORDER') return target.code ?? '';
   if (target.objectType === 'EXPRESS_NO') return target.motherOrderCode ?? '';
   return '';
+});
+
+watch(intakeMotherCode, async code => {
+  existingLedgerCode.value = '';
+  evidenceIdentityError.value = '';
+  if (!code || created.value) return;
+  const draft = evidenceDraftKey.value;
+  try {
+    const mother = await fetchMotherOrder(code);
+    if (draft === evidenceDraftKey.value && code === intakeMotherCode.value) existingLedgerCode.value = mother.ledgerCode;
+  } catch (error) {
+    if (draft === evidenceDraftKey.value) evidenceIdentityError.value = error instanceof Error ? error.message : '无法读取真实收货编号';
+  }
 });
 
 const savedMother = computed(() => Boolean(created.value) || Boolean(intakeMotherCode.value && !newExpressCode.value));
@@ -155,6 +171,7 @@ function openMotherDetails() {
 }
 
 function startNextIntake() {
+  evidenceDraftKey.value = crypto.randomUUID();
   formStage.value = 1;
   savedQuantityUnit.value = '';
   if (traceTarget.value?.intent === 'INTAKE') traceTarget.value = null;
@@ -188,6 +205,9 @@ function shownText(value: string) {
 
 function clearIntakeTarget() {
   const had = intakeScan.context !== null || intakeScan.loading || created.value !== null;
+  if (had) evidenceDraftKey.value = crypto.randomUUID();
+  existingLedgerCode.value = '';
+  evidenceIdentityError.value = '';
   intakeScan.invalidate();
   created.value = null;
   formStage.value = 1;
@@ -751,7 +771,7 @@ onMounted(loadCatalog);
     </details>
   </article>
 
-  <section v-if="draftAvailable || intakeMotherCode" v-show="intakePurpose === 'processing'" :inert="intakePurpose !== 'processing' || undefined" class="section-block intake-create" :class="{ 'intake-stage-hidden': !savedMother && formStage !== 2 }">
+  <section v-show="(draftAvailable || intakeMotherCode) && intakePurpose === 'processing'" :inert="intakePurpose !== 'processing' || undefined" class="section-block intake-create" :class="{ 'intake-stage-hidden': !savedMother && formStage !== 2 }">
     <h2 v-if="field && !savedMother">草稿文件</h2>
     <h2 v-else-if="field && savedMother">已保存后的拆包证据</h2>
     <h2 v-else>拆包证据</h2>
@@ -760,7 +780,8 @@ onMounted(loadCatalog);
       <template v-if="created.qrContent"> / {{ created.qrContent }}</template>
     </p>
     <p v-if="created">业务已保存。照片或视频失败可以单独重试，不会再次建单或入库。</p>
-    <p v-else-if="intakeMotherCode">请先完成入库确认，取得操作编号后再上传并关联。</p>
+    <p v-else-if="intakeMotherCode">读取原收货操作编号后自动关联补拍文件。</p>
+    <p v-if="evidenceIdentityError" class="operation-feedback danger">{{ evidenceIdentityError }}</p>
     <p v-else>文件先留在当前表单。建单成功后上传并关联。</p>
     <EvidenceCapture
       target-type="MOTHER_ORDER"
@@ -768,7 +789,9 @@ onMounted(loadCatalog);
       stage="INTAKE"
       scene="UNPACK"
       operation-type="inbound_confirm"
-      :operation-code="created?.ledgerCode || ''"
+      :draft-key="evidenceDraftKey"
+      :auto-upload="true"
+      :operation-code="created?.ledgerCode || existingLedgerCode"
     />
   </section>
 

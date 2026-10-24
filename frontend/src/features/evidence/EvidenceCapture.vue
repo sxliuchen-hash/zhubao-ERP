@@ -18,11 +18,15 @@ const props = withDefaults(defineProps<{
   targetCode: string;
   stage: string;
   scene: string;
+  draftKey?: string;
+  autoUpload?: boolean;
   operationType?: string;
   operationCode?: string;
   processName?: string;
   clauseNo?: string;
 }>(), {
+  draftKey: '',
+  autoUpload: false,
   operationType: '',
   operationCode: '',
   processName: '',
@@ -44,6 +48,7 @@ interface Snap {
 }
 
 interface DraftFile {
+  draftKey: string;
   id: number;
   file: File;
   name: string;
@@ -66,6 +71,9 @@ const stateText: Record<FileState, string> = {
 
 const items = ref<DraftFile[]>([]);
 const formMessage = ref('');
+const draftSnaps = new Map<string, Snap>();
+const pendingPhotos = ref(0);
+const autoReady = computed(() => props.autoUpload && Boolean(props.targetCode.trim() && props.operationCode.trim() && props.operationType.trim()));
 const board = ref<EvidenceBoard>({ links: [], historical: [] });
 const boardError = ref('');
 const linksCursor = ref<number | null>(null);
@@ -119,7 +127,7 @@ function problemOf(file: File): string {
   return '格式不支持。请重新选择 JPEG、PNG、MP4 或 WebM，不能只改扩展名。';
 }
 
-function remember(file: File) {
+function remember(file: File, draftKey = props.draftKey, snap = currentSnap()) {
   const problem = problemOf(file);
   if (problem) {
     formMessage.value = problem;
@@ -128,6 +136,7 @@ function remember(file: File) {
   formMessage.value = '';
   const previewUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '';
   items.value.push({
+    draftKey,
     id: nextId,
     file,
     name: file.name,
@@ -135,9 +144,10 @@ function remember(file: File) {
     state: 'LOCAL_PENDING',
     message: props.targetCode.trim() ? '' : '尚无正式单号，文件留在当前表单',
     attachmentCode: '',
-    snap: currentSnap(),
+    snap: draftSnaps.get(draftKey) ?? snap,
   });
   nextId += 1;
+  autoSubmit();
 }
 
 function onPicked(event: Event) {
@@ -158,7 +168,14 @@ function onPicked(event: Event) {
 }
 
 async function acceptStampedPhoto(file: File) {
-  const stamped = await stampPhotoTimestamp(file);
+  // 开始处理时固定归属，异步完成不能采用后来切换的草稿。
+  const draftKey = props.draftKey;
+  const snap = currentSnap();
+  pendingPhotos.value += 1;
+  let stamped: File;
+  try { stamped = await stampPhotoTimestamp(file); }
+  catch { if (draftKey === props.draftKey) formMessage.value = '照片处理失败，请重新选择原文件'; return; }
+  finally { pendingPhotos.value -= 1; }
   if (stamped !== file) {
     const problem = problemOf(stamped);
     if (problem) {
@@ -166,7 +183,7 @@ async function acceptStampedPhoto(file: File) {
       return;
     }
   }
-  remember(stamped);
+  remember(stamped, draftKey, snap);
 }
 
 function cancelSelection() {
@@ -182,6 +199,7 @@ function openVideo() {
 }
 
 function resolveSnap(item: DraftFile): { snap: Snap; switched: boolean; waiting: boolean } {
+  if (props.autoUpload && item.draftKey !== props.draftKey) return { snap: item.snap, switched: true, waiting: !item.snap.targetCode };
   if (!item.snap.targetCode) {
     if (!props.targetCode.trim()) return { snap: item.snap, switched: false, waiting: true };
     return { snap: currentSnap(), switched: false, waiting: false };
@@ -205,6 +223,7 @@ function resolveSnap(item: DraftFile): { snap: Snap; switched: boolean; waiting:
 }
 
 async function submit(item: DraftFile) {
+  if (item.state === 'UPLOADING' || item.state === 'LINKED') return;
   const decision = resolveSnap(item);
   if (decision.waiting) {
     item.state = 'LOCAL_PENDING';
@@ -414,15 +433,25 @@ async function recover(item: HistoricalEvidence) {
   }
 }
 
-watch(() => [props.targetType, props.targetCode, props.stage, props.operationType, props.operationCode], () => {
+function autoSubmit() {
+  if (!autoReady.value) return;
+  for (const item of items.value) {
+    if (item.draftKey === props.draftKey && item.state === 'LOCAL_PENDING') void submit(item);
+  }
+}
+
+watch(() => [props.draftKey, props.targetType, props.targetCode, props.stage, props.operationType, props.operationCode], () => {
   const snap = currentSnap();
   if (snap.targetCode) {
+    draftSnaps.set(props.draftKey, { ...snap });
     for (const item of items.value) {
+      if (props.autoUpload && item.draftKey !== props.draftKey) continue;
       // 草稿取得第一个正式编号时即固定归属，后续轮次不能接管尚未上传的原文件。
       if (!item.snap.targetCode) item.snap = { ...snap };
       else if (!item.snap.operationCode && snap.operationCode && item.snap.targetType === snap.targetType && item.snap.targetCode === snap.targetCode && item.snap.stage === snap.stage && item.snap.scene === snap.scene) item.snap = { ...snap };
     }
   }
+  autoSubmit();
   void loadBoard();
 }, { immediate: true });
 
@@ -439,7 +468,8 @@ onBeforeUnmount(() => {
     <div class="section-heading">
       <div>
         <h3>{{ plainUnpack() ? '拆包照片' : '现场证据' }}</h3>
-        <p v-if="plainUnpack()">拍下或选好后上传。照片会印上当时的时间，点开即可查看。</p>
+        <p v-if="autoUpload && !autoReady">建单后自动上传，文件保留在本次独立草稿。</p>
+        <p v-else-if="plainUnpack()">拍下或选好后上传。照片会印上当时的时间，点开即可查看。</p>
         <p v-else>当前操作的照片与视频；选好文件后上传并关联。</p>
       </div>
     </div>
@@ -483,6 +513,7 @@ onBeforeUnmount(() => {
     </label>
     </details>
     <p v-if="formMessage" class="operation-feedback danger">{{ formMessage }}</p>
+    <p v-if="pendingPhotos">照片正在处理，请等待处理完成。</p>
     <ul v-if="items.length" class="evidence-file-list">
       <li v-for="item in items" :key="item.id" :data-state="item.state">
         <strong>{{ item.name }}</strong>
@@ -491,6 +522,7 @@ onBeforeUnmount(() => {
         <video v-else-if="item.previewUrl && previewKind(item) === 'video'" class="evidence-preview" :src="item.previewUrl" controls />
         <p v-if="item.message">{{ item.message }}</p>
         <button
+          v-if="!autoUpload || Boolean(item.snap.targetCode && item.snap.operationCode) || (item.draftKey === draftKey && autoReady)"
           class="primary-button"
           type="button"
           :disabled="item.state === 'UPLOADING' || item.state === 'LINKED'"
