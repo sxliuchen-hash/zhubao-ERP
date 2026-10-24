@@ -111,6 +111,7 @@ public class ProgressBoardService {
         List<ProgressRow> rows = new ArrayList<>();
         Map<String, MotherSplitState> splitByMother = splits == null ? Map.of() : splits;
         for (MotherOrderRecord mother : motherOrders) {
+            if (mother.quantity() == null || mother.quantity().signum() <= 0) continue;
             if (!withinScope(operator, mother)) {
                 continue;
             }

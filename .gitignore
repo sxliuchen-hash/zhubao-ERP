@@ -19,4 +19,7 @@ frontend/coverage/
 frontend/.vite/
 
 backend/target/
+print-agent/print-agent.properties
+print-agent/received/
+print-agent/*.zip
 deploy/runtime-backups/

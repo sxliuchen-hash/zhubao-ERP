@@ -472,7 +472,7 @@ function showClause(index: number) {
         <dt>质检员</dt>
         <dd>{{ shownInspector || '请先登录' }}</dd>
       </dl>
-      <p v-if="field">质检员取当前登录账号，页面不能另填姓名。</p>
+      <p v-if="field" class="quality-inspector-note">质检员取当前登录账号，页面不能另填姓名。</p>
 
       <template v-for="(line, index) in checkView.lines" :key="line.lineNo">
       <article v-if="showClause(index)" class="quality-clause">

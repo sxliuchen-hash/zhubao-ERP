@@ -502,6 +502,7 @@ async function confirmShip(retry = false) {
 
 <style scoped>
 .shipping-action-fields { border: 0; min-width: 0; padding: 0; margin: 12px 0; }
+.shipping-action-fields .intake-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
 .shipping-review { overflow-wrap: anywhere; }
 .shipping-action-fields button { min-height: 44px; }
 </style>

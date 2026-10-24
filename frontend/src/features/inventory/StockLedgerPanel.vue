@@ -74,7 +74,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; });
 .stock-ledger-panel { min-width: 0; }
 header, .ledger-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
 h2, p { margin: 0; }
-.ledger-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.ledger-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 label { display: grid; gap: 4px; }
 input, select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 40px; }
 .ledger-entry { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; overflow-wrap: anywhere; }

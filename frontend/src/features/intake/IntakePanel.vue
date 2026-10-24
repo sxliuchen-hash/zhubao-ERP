@@ -823,6 +823,16 @@ onMounted(loadCatalog);
 }
 
 @media (max-width: 900px) {
+  .intake-goods, .intake-line { grid-template-columns: 1fr 1fr; }
+  .intake-line { display: grid; gap: 8px; }
+  .intake-goods > :not(.field),
+  .intake-line > :not(.field),
+  .intake-goods > .field,
+  .intake-line > .field { grid-column: 1 / -1; }
+  .intake-goods > .field:has(input[type="number"]),
+  .intake-goods > .field:has(input[aria-label="单位"]),
+  .intake-line > .field:has(input[type="number"]),
+  .intake-line > .field:has(input[aria-label$="单位"]) { grid-column: auto; }
   .intake-stage-hidden { display: none; }
   .intake-stage-nav { display: flex; gap: 10px; flex-wrap: wrap; }
   .intake-stage-nav button[aria-current="step"] { background: var(--action-soft); color: var(--action); }

@@ -84,6 +84,9 @@ public class PermissionGuard {
         roleMatrix.put(PermissionCode.STOCK_PREP_CUSTOMER_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
         roleMatrix.put(PermissionCode.STOCK_FREEZE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
         roleMatrix.put(PermissionCode.STOCK_CORRECT, EnumSet.of(RoleCode.ADMIN));
+        // 待办指派不自动交给总经理。业务管理只要已有任一顶岗即可指派。
+        allow(PermissionCode.DESK_TASK_ASSIGN, RoleCode.WORKSHOP_LEADER, RoleCode.SALES);
+        grant(PermissionCode.DESK_TASK_ASSIGN, RoleCode.BUSINESS_MANAGER);
     }
 
     public void assertAllowed(PermissionCode permission, OperatorContext operatorContext) {
@@ -149,7 +152,7 @@ public class PermissionGuard {
             case BUSINESS_CUSTOMER_RETURN -> CoverDuties.RETURN;
             case REGISTER_IMPORT_REVIEW, REGISTER_IMPORT_POSTING -> CoverDuties.REGISTER;
             case BUSINESS_LOSS_APPROVAL -> CoverDuties.LOSS;
-            case GATEWAY_READING_CONSUME, DOCUMENT_ATTACHMENT_UPLOAD, DOCUMENT_CAPTURE -> null;
+            case DESK_TASK_ASSIGN, GATEWAY_READING_CONSUME, DOCUMENT_ATTACHMENT_UPLOAD, DOCUMENT_CAPTURE -> null;
             case STOCK_COMPANY_RECEIVE, STOCK_COMPANY_ISSUE, STOCK_COMPANY_RETURN, STOCK_PREP_RECEIVE,
                     STOCK_PREP_ISSUE, STOCK_PREP_RETURN, STOCK_PREP_CUSTOMER_RETURN, STOCK_FREEZE, STOCK_CORRECT -> "";
             default -> "";

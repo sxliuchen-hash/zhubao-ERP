@@ -19,7 +19,7 @@ function delivered(result: ProcessStationReport) { deliveredProcess.value = resu
 
 <template>
   <div class="production-action-pane field-job page-stack" :inert="!active || undefined">
-    <p>当前目标 {{ target.code }}。工序进度与正式交工各自保存，不共用请求编号。</p>
+    <p class="action-lead">当前目标 {{ target.code }}。工序进度与正式交工各自保存，不共用请求编号。</p>
     <nav class="production-modes" aria-label="工序办理方式">
       <button class="secondary-button" type="button" :aria-pressed="mode === 'progress'" @click="mode = 'progress'">更新进度</button>
       <button class="secondary-button" type="button" :aria-pressed="mode === 'station'" @click="mode = 'station'">正式交工</button>
@@ -34,9 +34,11 @@ function delivered(result: ProcessStationReport) { deliveredProcess.value = resu
 </template>
 
 <style scoped>
+.action-lead { margin: 0; color: var(--muted); }
 .production-modes { display: flex; gap: 10px; flex-wrap: wrap; }
 .production-modes button { min-height: 44px; }
 .production-modes button[aria-pressed="true"] { color: var(--action); background: var(--action-soft); }
 .production-action-pane { padding-bottom: 0; }
 .production-action-pane :deep(.field-dock) { position: sticky; left: auto; right: auto; bottom: 0; width: auto; margin: 0; transform: none; }
+@media (max-width: 900px) { .action-lead { display: none; } }
 </style>

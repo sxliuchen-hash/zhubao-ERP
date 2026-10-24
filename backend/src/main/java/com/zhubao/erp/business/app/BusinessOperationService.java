@@ -194,6 +194,22 @@ public class BusinessOperationService {
         return result;
     }
 
+    /**
+     * 备料转入加工母单时只登记母单。库存已由领用流水转入待加工，这里不再写收货入库。
+     */
+    public void saveProcessingMotherFromPrep(ConfirmInboundCommand command, StockLedgerEntry movement, WorkSession session) {
+        assertRequiredText(command.processingRequirement(), "加工要求不能为空");
+        assertDueDate(command.dueDate());
+        assertMotherOrderAvailable(command.motherOrderCode(), session);
+        if (movement == null || movement.to() == null || !"prep_issue".equals(movement.documentType())) {
+            throw new BusinessException("备料建单必须先完成领用，不能再次收货入库");
+        }
+        if (!command.motherOrderCode().equals(movement.to().motherOrderCode())) {
+            throw new BusinessException("领用去向与加工母单不一致");
+        }
+        saveMotherOrder(command, movement.to(), movement, session);
+    }
+
     /** 供来料建单在已打开的工作单元里入库，不再套一层请求回放。 */
     InboundConfirmationResult postInboundInSession(ConfirmInboundCommand command, WorkSession session) {
         if (session == null) {

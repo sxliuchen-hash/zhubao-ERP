@@ -8,12 +8,30 @@ import {
   fetchProductionWorkspace,
   fetchQualityWorkspace,
 } from '../../services/businessWorkspaceApi';
+import { fetchCustomers } from '../../services/masterDataApi';
+import {
+  completeDeskTask,
+  createDeskTask,
+  fetchDeskAssignees,
+  fetchDeskTasks,
+  type DeskTask,
+} from '../../services/deskTaskApi';
 import M1Dashboard from './M1Dashboard.vue';
 
 vi.mock('../../services/businessWorkspaceApi', () => ({
   fetchInboundWorkspace: vi.fn(),
   fetchProductionWorkspace: vi.fn(),
   fetchQualityWorkspace: vi.fn(),
+}));
+vi.mock('../../services/deskTaskApi', () => ({
+  fetchDeskTasks: vi.fn(),
+  fetchDeskAssignees: vi.fn(),
+  createDeskTask: vi.fn(),
+  completeDeskTask: vi.fn(),
+  cancelDeskTask: vi.fn(),
+}));
+vi.mock('../../services/masterDataApi', () => ({
+  fetchCustomers: vi.fn(),
 }));
 
 function order(code: string, status: string): InboundOrder {
@@ -37,9 +55,41 @@ function order(code: string, status: string): InboundOrder {
   };
 }
 
+function deskTask(overrides: Partial<DeskTask> = {}): DeskTask {
+  return {
+    taskCode: 'DT-20261022-0001',
+    kind: 'MODELING',
+    title: '戒托建模',
+    note: '按来图',
+    customerId: 1001,
+    customerName: '恒信珠宝',
+    motherOrderCode: '',
+    assigneeUsername: 'designer',
+    assigneeName: '建模员',
+    dueDate: '2020-01-01',
+    status: 'OPEN',
+    creatorUsername: 'sales',
+    createdAt: '2026-10-22T00:00:00Z',
+    requestId: 'create-1',
+    version: 1,
+    completedAt: '',
+    completedBy: '',
+    resultNote: '',
+    completeRequestId: '',
+    cancelledAt: '',
+    cancelledBy: '',
+    cancelReason: '',
+    cancelRequestId: '',
+    ...overrides,
+  };
+}
+
 describe('M1Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchDeskTasks).mockResolvedValue([]);
+    vi.mocked(fetchDeskAssignees).mockResolvedValue([]);
+    vi.mocked(fetchCustomers).mockResolvedValue([]);
     vi.mocked(fetchInboundWorkspace).mockResolvedValue({
       checkpoints: [],
       orders: [order('MD-API-001', '待拆包'), order('MD-API-002', '已入库')],
@@ -85,7 +135,7 @@ describe('M1Dashboard', () => {
     await wrapper.get('.active-record-panel .primary-button').trigger('click');
     expect(openOrder).toHaveBeenCalledWith({ objectType: 'MOTHER_ORDER', code: 'MD-API-002' });
     expect(openTab).not.toHaveBeenCalled();
-    expect(wrapper.findAll('button').some(button => button.text() === '新建收货／母单')).toBe(true);
+    expect(wrapper.findAll('button').some(button => button.attributes('aria-label') === '新建收货／母单')).toBe(true);
     wrapper.unmount();
   });
 
@@ -106,7 +156,7 @@ describe('M1Dashboard', () => {
   it('有来料读取菜单但没有有效收货权限时不出现快捷建单', async () => {
     const wrapper = mount(M1Dashboard, { global: { provide: { 'zhubao-visible-tabs': ref(['inbound']), 'zhubao-auth-session': ref({ effectivePermissions: [] }) } } });
     await flushPromises();
-    expect(wrapper.findAll('button').some(button => button.text() === '新建收货／母单')).toBe(false);
+    expect(wrapper.findAll('button').some(button => button.attributes('aria-label') === '新建收货／母单')).toBe(false);
     wrapper.unmount();
   });
 
@@ -115,7 +165,7 @@ describe('M1Dashboard', () => {
     const openTab = vi.fn();
     const wrapper = mount(M1Dashboard, { global: { provide: { 'zhubao-open-intake': openIntake, 'zhubao-open-tab': openTab } } });
     await flushPromises();
-    await wrapper.findAll('button').find(button => button.text() === '新建收货／母单')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.attributes('aria-label') === '新建收货／母单')!.trigger('click');
     expect(openIntake).toHaveBeenCalledOnce();
     expect(openTab).not.toHaveBeenCalled();
     wrapper.unmount();
@@ -148,7 +198,7 @@ describe('M1Dashboard', () => {
 
     expect(wrapper.text()).toContain('还没有母单');
     expect(wrapper.find('.operation-feedback.danger').exists()).toBe(false);
-    await wrapper.findAll('button').find(button => button.text() === '新建收货／母单')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.attributes('aria-label') === '新建收货／母单')!.trigger('click');
     expect(openTab).toHaveBeenCalledWith('inbound');
     expect(traceQuery.value).toBe('');
     expect(traceTarget.value).toBeNull();
@@ -196,8 +246,78 @@ describe('M1Dashboard', () => {
     expect(fetchInboundWorkspace).not.toHaveBeenCalled();
     expect(fetchQualityWorkspace).not.toHaveBeenCalled();
     expect(fetchProductionWorkspace).toHaveBeenCalledOnce();
+    expect(fetchDeskTasks).toHaveBeenCalledOnce();
     expect(wrapper.text()).not.toContain('新建收货／母单');
     expect(wrapper.text()).not.toContain('标签打印');
     expect(wrapper.text()).not.toContain('母单记录');
+  });
+
+  it('shows assigned light tasks and completes one without hiding business documents', async () => {
+    vi.mocked(fetchDeskTasks).mockResolvedValue([deskTask()]);
+    const wrapper = mount(M1Dashboard, { global: { provide: {
+      'zhubao-auth-session': ref({ username: 'designer', role: 'OPERATOR', effectivePermissions: [] }),
+    } } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('我的待办');
+    expect(wrapper.text()).toContain('戒托建模');
+    expect(wrapper.text()).toContain('逾期');
+    expect(wrapper.text()).toContain('MD-API-001');
+    expect(wrapper.text()).not.toContain('新建待办');
+
+    vi.mocked(completeDeskTask).mockResolvedValue(deskTask({ status: 'DONE' }));
+    vi.mocked(fetchDeskTasks).mockResolvedValueOnce([]);
+    await wrapper.get('input[aria-label="结果说明"]').setValue('模型已交');
+    await wrapper.get('table.desk-task-table .table-action').trigger('click');
+    await flushPromises();
+
+    expect(completeDeskTask).toHaveBeenCalledWith('DT-20261022-0001', expect.objectContaining({
+      expectedVersion: 1,
+      resultNote: '模型已交',
+    }));
+    expect(wrapper.text()).toContain('暂无派给我的待办');
+    expect(wrapper.text()).toContain('业务单据');
+  });
+
+  it('keeps business documents when the light-task list fails', async () => {
+    vi.mocked(fetchDeskTasks).mockRejectedValueOnce(new Error('轻任务待办暂时读不到'));
+    const wrapper = mount(M1Dashboard);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('轻任务待办暂时读不到');
+    expect(wrapper.text()).toContain('MD-API-001');
+    expect(wrapper.text()).toContain('业务单据');
+  });
+
+  it('opens a create form for people who can assign tasks', async () => {
+    vi.mocked(fetchDeskAssignees).mockResolvedValue([{ username: 'designer', operator: '建模员' }]);
+    vi.mocked(fetchCustomers).mockResolvedValue([{
+      customerId: 1001, customerCode: 'C-1001', name: '恒信珠宝', aliases: '', contact: '', phone: '', remark: '', enabled: true,
+    }]);
+    vi.mocked(createDeskTask).mockResolvedValue(deskTask());
+    const wrapper = mount(M1Dashboard, { global: { provide: {
+      'zhubao-auth-session': ref({ username: 'sales', role: 'SALES', effectivePermissions: ['DESK_TASK_ASSIGN'] }),
+    } } });
+    await flushPromises();
+
+    const create = wrapper.findAll('button').find((button) => button.text() === '新建待办');
+    expect(create).toBeTruthy();
+    await create!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('select[aria-label="待办类型"]').exists()).toBe(true);
+    await wrapper.get('input[aria-label="待办标题"]').setValue('吊坠设计');
+    await wrapper.get('input[aria-label="待办期限"]').setValue('2026-11-01');
+    await wrapper.get('select[aria-label="待办责任人"]').setValue('designer');
+    await wrapper.get('form.desk-task-form').trigger('submit');
+    await flushPromises();
+
+    expect(createDeskTask).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'MODELING',
+      title: '吊坠设计',
+      dueDate: '2026-11-01',
+      assigneeUsername: 'designer',
+      customerId: null,
+    }));
+    expect(fetchDeskTasks).toHaveBeenLastCalledWith('issued');
   });
 });

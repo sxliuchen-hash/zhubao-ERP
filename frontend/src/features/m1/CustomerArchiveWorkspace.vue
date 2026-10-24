@@ -483,6 +483,10 @@ function money(value: number) {
 .archive-detail { display: grid; gap: 12px; min-width: 0; }
 .archive-toolbar,
 .archive-form { display: grid; gap: 10px; }
+.archive-form { grid-template-columns: 1fr 1fr; align-items: end; }
+.archive-form > label:has(textarea),
+.archive-form > .archive-check,
+.archive-form > button { grid-column: 1 / -1; }
 .archive-form label,
 .archive-toolbar label { display: grid; gap: 4px; }
 .archive-form input,

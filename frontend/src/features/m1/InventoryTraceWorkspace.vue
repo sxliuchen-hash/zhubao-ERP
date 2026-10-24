@@ -236,12 +236,12 @@ function aftercareSelected() {
           <button v-if="openShipping && canShip && activeBalance.operationContext?.stockStatus === 'FINISHED' && activeBalance.operationContext.ownerType === 'CUSTOMER'" class="primary-button" type="button" @click="shipSelected">从这笔库存发货</button>
           <p v-else-if="activeBalance.operationContext?.stockStatus !== 'FINISHED'" class="operation-feedback">本笔尚非可发成品，请先核对来源单和质检放行状态。</p>
           <button v-if="canOpenAftercare" class="secondary-button" type="button" :disabled="loading || Boolean(loadError)" @click="aftercareSelected">退货与售后复核</button>
-          <p class="operation-feedback">先核对来源和完整库存维度，再按需打开单内动作；不可发库存保留来源及阻断状态。</p>
+          <p class="operation-feedback inventory-coach">先核对来源和完整库存维度，再按需打开单内动作；不可发库存保留来源及阻断状态。</p>
         </section>
       </aside>
     </section>
 
-    <section class="module-detail-grid inventory-detail-grid" aria-label="库存台账和追溯链">
+    <section v-if="detailOpen" class="module-detail-grid inventory-detail-grid" aria-label="库存台账和追溯链">
       <section class="evidence-slot-panel">
         <div class="panel-title-row">
           <StatusBadge label="附件/视频/台账" tone="blue" />

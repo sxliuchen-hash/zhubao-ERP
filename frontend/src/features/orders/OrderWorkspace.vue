@@ -174,6 +174,51 @@ function ship() {
   if (identity.value && canShip.value) openShipping?.({ objectType: identity.value.objectType, code: identity.value.code });
 }
 function label() { if (identity.value && canLabel.value) openLabel?.({ objectType: identity.value.objectType, code: identity.value.code }); }
+function chooseFacet(facet: string) {
+  filters.facet = facet;
+  void load(1);
+}
+function facetCount(facet: string) {
+  const count = result.value?.facetCounts?.[facet];
+  return count == null ? '' : String(count);
+}
+
+interface DetailAction { key: string; label: string; run: () => void; rank: number }
+const detailActions = computed(() => {
+  const items: DetailAction[] = [];
+  const facet = selectedRow.value?.facet ?? '';
+  const current = identity.value;
+  if (!current) return items;
+  if (current.objectType === 'MOTHER_ORDER' && canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')) {
+    items.push({ key: 'intake', label: '收货与拆单资料', run: () => go('inbound', 'INTAKE', 'BUSINESS_INBOUND_CONFIRM'), rank: 45 });
+  }
+  if (openProduction && canWork.value) {
+    items.push({ key: 'progress', label: '更新工序进度', run: () => work('progress'), rank: 5 });
+  }
+  if (canWork.value && scan.context?.actions.some(action => action.code === 'REPORT_PROCESS' && action.allowed)) {
+    items.push({ key: 'station', label: '打开岗位交工', run: () => work('station'), rank: 6 });
+  }
+  if (openOrderChange && current.motherOrderCode && tabs.value.includes('progress') && ['MOTHER_ORDER', 'WORK_ORDER'].includes(current.objectType)) {
+    items.push({ key: 'change', label: '改单办理', run: changeOrder, rank: 50 });
+  }
+  if (canInspect.value) {
+    items.push({ key: 'inspect', label: '质检、返工与放行', run: inspect, rank: facet === 'WAITING_QUALITY' || facet === 'REWORK' || view.value === 'QUALITY' ? 1 : 25 });
+  }
+  if (openShipping && canShip.value) {
+    items.push({ key: 'ship', label: '核对库存与发货', run: ship, rank: facet === 'READY_TO_SHIP' ? 0 : 30 });
+  }
+  if (openLabel && canLabel.value) {
+    items.push({ key: 'label', label: '预览本单标签', run: label, rank: 40 });
+  }
+  return items.sort((left, right) => left.rank - right.rank);
+});
+const foregroundActions = computed(() => {
+  const ordered = detailActions.value;
+  const primary = ordered[0];
+  const station = primary?.key === 'progress' ? ordered.find(item => item.key === 'station') : undefined;
+  return [primary, station].filter((item): item is DetailAction => Boolean(item));
+});
+const moreActions = computed(() => detailActions.value.filter(item => !foregroundActions.value.includes(item)));
 
 void load().then(async () => {
   if (!disposed && saved) { await nextTick(); window.scrollTo(0, saved.scrollTop); }
@@ -185,23 +230,24 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 <template>
   <div class="order-workspace page-stack" :class="{ 'has-detail': detailOpen }">
     <section class="order-list-panel" aria-label="订单查询列表">
-      <button v-if="canCreate" type="button" class="primary-button" @click="openIntake?.()">新建收货</button>
       <details class="order-legacy-pages"><summary>其他业务记录与工具</summary><div class="order-legacy-actions"><button v-for="tab in legacyTabs" :key="tab.key" type="button" class="secondary-button" @click="openTab(tab.key)">{{ legacyLabel[tab.key] || tab.label }}</button></div></details>
+      <div class="order-facet-tabs" role="tablist" aria-label="订单分类">
+        <button v-for="facet in facets" :key="facet" type="button" class="order-facet-tab" :aria-selected="filters.facet === facet" @click="chooseFacet(facet)">{{ orderFacetLabel(facet) }}<small v-if="facetCount(facet)">{{ facetCount(facet) }}</small></button>
+      </div>
       <form class="order-filters" @submit.prevent="load(1)">
-        <label class="order-search"><span>搜索订单</span><input v-model="filters.query" maxlength="100" aria-label="订单搜索" placeholder="单号、运单、货品或客户" /></label>
-        <label><span>视图</span><select v-model="view" aria-label="订单视图"><option v-for="item in allowedViews" :key="item" :value="item">{{ item === 'PRODUCTION' ? '生产作业' : item === 'QUALITY' ? '质量作业' : '全部订单' }}</option></select></label>
-        <label><span>工序</span><input v-model="filters.process" aria-label="订单工序" placeholder="正式工序名称" /></label>
-        <label><span>截止交期（含当天）</span><input v-model="filters.dueBefore" aria-label="订单截止交期" type="date" /></label>
-        <details><summary>客户筛选</summary><label><span>客户档案 ID</span><input v-model="filters.customerId" aria-label="订单客户ID" inputmode="numeric" placeholder="稳定客户 ID" /></label></details>
-        <label><span>展示分类</span><select v-model="filters.facet" aria-label="订单分类"><option v-for="facet in facets" :key="facet" :value="facet">{{ orderFacetLabel(facet) }}</option></select></label>
+        <label class="order-search"><span>搜索</span><input v-model="filters.query" maxlength="100" aria-label="订单搜索" placeholder="单号、运单、货品或客户" /></label>
+        <label v-if="allowedViews.length > 1"><span>视图</span><select v-model="view" aria-label="订单视图"><option v-for="item in allowedViews" :key="item" :value="item">{{ item === 'PRODUCTION' ? '生产作业' : item === 'QUALITY' ? '质量作业' : '全部订单' }}</option></select></label>
+        <label><span>工序</span><input v-model="filters.process" aria-label="订单工序" placeholder="工序名称" /></label>
+        <label><span>交期到</span><input v-model="filters.dueBefore" aria-label="订单截止交期" type="date" /></label>
+        <details class="order-customer-filter"><summary>客户</summary><label><span>客户档案 ID</span><input v-model="filters.customerId" aria-label="订单客户ID" inputmode="numeric" placeholder="稳定客户 ID" /></label></details>
         <button class="primary-button" type="submit" :disabled="loading">查询</button>
+        <button v-if="canCreate" type="button" class="secondary-button" @click="openIntake?.()">新建收货</button>
       </form>
       <details v-if="!detailOpen" class="order-scan-tools" :open="scanOpen" @toggle="scanOpen = ($event.target as HTMLDetailsElement).open"><summary>扫码或手动定位单据</summary><ScanInput v-model="scanCode" field-text="扫码定位单据" input-aria-label="订单扫码单号" submit-label="查看单据" bind-mobile-scan :busy="scan.loading" @activate-camera="scanOpen = true" @draft="clearDetail" @recognize="draft => locate(draft)" /></details>
       <p v-if="loading" role="status">正在加载订单…</p>
       <p v-if="error" role="alert" class="operation-feedback danger">{{ accessDenied ? '无权限：' : '' }}{{ error }}</p>
       <template v-if="result">
         <p class="order-count">共 {{ result.totalRows }} 项目标 · 本页 {{ result.items.length }} 项</p>
-        <div class="order-facet-counts" aria-label="同条件分类统计"><span v-for="(count, facet) in result.facetCounts" :key="facet">{{ orderFacetLabel(String(facet)) }} {{ count }}</span></div>
         <OrderList :rows="result.items" :selected-key="selectedRow?.rowKey ?? ''" @select="selectRow" />
         <p v-if="!result.items.length">当前条件下暂无订单</p>
         <nav class="order-pagination" aria-label="订单分页">
@@ -227,14 +273,14 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
             <p v-if="selectedRow">{{ selectedRow.currentProcess || '未提供工序' }} · {{ selectedRow.processPercent === null ? '未记录进度' : `工序进度 ${selectedRow.processPercent}%` }} · {{ selectedRow.processFormallyDelivered === null ? '交工状态未提供' : selectedRow.processFormallyDelivered ? '已正式交工' : '未正式交工' }}</p>
           </template>
         </OrderDetail>
-        <div class="order-legacy-actions" aria-label="原业务办理入口">
-          <button v-if="identity.objectType === 'MOTHER_ORDER' && canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')" class="secondary-button" type="button" @click="go('inbound', 'INTAKE', 'BUSINESS_INBOUND_CONFIRM')">收货与拆单资料</button>
-          <button v-if="openProduction && canWork" class="secondary-button" type="button" @click="work('progress')">更新工序进度</button>
-          <button v-if="canWork && scan.context.actions.some(action => action.code === 'REPORT_PROCESS' && action.allowed)" class="secondary-button" type="button" @click="work('station')">打开岗位交工</button>
-          <button v-if="openOrderChange && identity.motherOrderCode && tabs.includes('progress') && ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.objectType)" class="secondary-button" type="button" @click="changeOrder">改单办理</button>
-          <button v-if="canInspect" class="secondary-button" type="button" @click="inspect">质检、返工与放行</button>
-          <button v-if="openShipping && canShip" class="secondary-button" type="button" @click="ship">核对库存与发货</button>
-          <button v-if="openLabel && canLabel" class="secondary-button" type="button" @click="label">预览本单标签</button>
+        <div class="order-detail-actions" aria-label="原业务办理入口">
+          <button v-for="(action, index) in foregroundActions" :key="action.key" :class="index === 0 ? 'primary-button' : 'secondary-button'" type="button" @click="action.run">{{ action.label }}</button>
+          <details v-if="moreActions.length" class="order-more-actions">
+            <summary>更多操作</summary>
+            <div>
+              <button v-for="action in moreActions" :key="action.key" class="secondary-button" type="button" @click="action.run">{{ action.label }}</button>
+            </div>
+          </details>
         </div>
       </template>
     </aside>
@@ -246,22 +292,35 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 .order-list-panel, .order-detail-panel { min-width: 0; background: var(--content); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .order-detail-panel { display: grid; gap: 14px; overflow-wrap: anywhere; }
 .order-detail-panel h2 { margin: 0; font-size: 18px; }
-.order-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
-.order-filters label { display: grid; gap: 6px; min-width: 0; flex: 1 1 140px; }
-.order-filters .order-search { flex-basis: 240px; }
-.order-filters input, .order-filters select { box-sizing: border-box; width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
-.order-filters details { flex: 1 1 140px; }
-.order-filters summary { cursor: pointer; min-height: 44px; align-content: center; }
+.order-facet-tabs { display: flex; gap: 18px; overflow: auto; border-bottom: 1px solid var(--line); margin: 0 0 12px; }
+.order-facet-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.order-facet-tab small { font-size: 11px; }
+.order-facet-tab[aria-selected="true"] { color: var(--action); border-bottom-color: var(--action); font-weight: 700; }
+.order-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 12px; }
+.order-filters label { display: grid; gap: 4px; min-width: 0; flex: 0 1 180px; max-width: 220px; }
+.order-filters .order-search { flex: 1 1 220px; max-width: 320px; }
+.order-filters input, .order-filters select { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.order-filters details { flex: 0 0 auto; }
+.order-filters summary { cursor: pointer; min-height: 36px; align-content: center; }
+.order-customer-filter { position: relative; }
+.order-customer-filter[open] { flex: 0 1 180px; }
 .order-count { color: var(--muted); }
 .order-scan-tools { margin: 8px 0 16px; }
-.order-scan-tools > summary { cursor: pointer; min-height: 44px; align-content: center; }
-.order-facet-counts, .order-pagination, .order-legacy-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-.order-facet-counts { margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+.order-scan-tools > summary { cursor: pointer; min-height: 36px; align-content: center; }
+.order-more-actions { flex: 1 1 100%; }
+.order-more-actions > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.order-pagination, .order-legacy-actions, .order-detail-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .order-pagination { justify-content: end; margin-top: 16px; }
 @media (min-width: 1200px) { .has-detail { grid-template-columns: minmax(0, 1fr) minmax(340px, 38%); gap: 16px; } }
 @media (min-width: 901px) and (max-width: 1199px) { .has-detail .order-list-panel { display: none; } }
 @media (max-width: 900px) {
   .has-detail .order-list-panel { display: none; }
+  .order-filters label,
+  .order-filters .order-search { flex-basis: calc(50% - 10px); max-width: none; }
+  .order-detail-panel { display: flex; flex-direction: column; }
+  .order-detail-panel > button { order: -2; align-self: start; border: 0; background: transparent; padding-left: 0; }
+  .order-detail-actions { order: -1; position: sticky; top: 0; z-index: 4; margin: 0 -12px; padding: 8px 12px; background: var(--content); border-bottom: 1px solid var(--line); }
+  .order-detail-actions > button { flex: 1 1 120px; }
   .order-list-panel, .order-detail-panel { padding: 12px; }
   .order-filters input, .order-filters select { font-size: 16px; min-height: 44px; }
   .order-filters button, .order-pagination button { min-height: 44px; }

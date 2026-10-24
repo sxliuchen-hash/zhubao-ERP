@@ -287,5 +287,11 @@ form label { display: grid; gap: 6px; min-width: 0; }
 form input { box-sizing: border-box; width: 100%; min-width: 0; }
 .configuration-sections { display: flex; gap: 10px; flex-wrap: wrap; }
 .configuration-sections button[aria-pressed="true"] { background: var(--action-soft); color: var(--action); }
-@media (max-width: 900px) { .configuration-sections button, .auth-password-strip button { min-height: 44px; } .auth-password-strip input { font-size: 16px; min-height: 44px; } }
+@media (max-width: 900px) {
+  .auth-password-strip { grid-template-columns: 1fr 1fr; }
+  .auth-password-strip > div,
+  .auth-password-strip > button { grid-column: 1 / -1; }
+  .configuration-sections button, .auth-password-strip button { min-height: 44px; }
+  .auth-password-strip input { font-size: 16px; min-height: 44px; }
+}
 </style>

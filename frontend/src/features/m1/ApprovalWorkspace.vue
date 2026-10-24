@@ -414,5 +414,5 @@ function taskTone(task: ApprovalTask): Tone {
 .approval-workspace { min-width: 0; }
 .approval-work-grid > * { min-width: 0; overflow-wrap: anywhere; }
 .approval-comment-field textarea { width: 100%; box-sizing: border-box; min-width: 0; }
-@media (max-width: 900px) { .approval-workspace button { min-height: 44px; } .approval-comment-field textarea { font-size: 16px; } }
+@media (max-width: 900px) { .approval-command-surface { display: none; } .approval-workspace button { min-height: 44px; } .approval-comment-field textarea { font-size: 16px; } }
 </style>

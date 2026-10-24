@@ -68,3 +68,5 @@ V67__m3_requirement_shortcut.sql
 V68__m3_customer_archive_menu.sql
 V69__m3_requirement_template.sql
 V70__m3_stock_document.sql
+V71__m3_account_organization.sql
+V72__m3_desk_task.sql

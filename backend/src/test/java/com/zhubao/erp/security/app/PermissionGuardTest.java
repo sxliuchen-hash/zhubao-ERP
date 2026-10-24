@@ -206,5 +206,37 @@ class PermissionGuardTest {
                 .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.DOCUMENT_CONTENT_MANAGE, manager))
                 .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.DESK_TASK_ASSIGN, manager))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("待办指派");
+    }
+
+    @Test
+    void 待办指派给车间组长和业务员且业务管理必须已有顶岗() {
+        OperatorContext operator = new OperatorContext("操作工 王强", RoleCode.OPERATOR, DataScope.SELF);
+        OperatorContext sales = new OperatorContext("业务员 林岚", RoleCode.SALES, DataScope.CUSTOMER_RANGE);
+        OperatorContext leader = new OperatorContext("车间组长 马杰", RoleCode.WORKSHOP_LEADER, DataScope.TEAM);
+        OperatorContext covered = new OperatorContext("业务管理", RoleCode.BUSINESS_MANAGER, DataScope.ALL, false, "",
+                java.util.List.of(), java.util.List.of("INTAKE"));
+        OperatorContext uncovered = new OperatorContext("无顶岗", RoleCode.BUSINESS_MANAGER, DataScope.ALL, false, "",
+                java.util.List.of(), java.util.List.of());
+
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.DESK_TASK_ASSIGN, operator))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("OPERATOR");
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.DESK_TASK_ASSIGN, sales))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.DESK_TASK_ASSIGN, leader))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.DESK_TASK_ASSIGN, covered))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.DESK_TASK_ASSIGN, uncovered))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThat(permissionGuard.effectivePermissions(RoleCode.SALES, java.util.List.of()))
+                .contains(PermissionCode.DESK_TASK_ASSIGN);
+        assertThat(permissionGuard.effectivePermissions(RoleCode.BUSINESS_MANAGER, java.util.List.of()))
+                .doesNotContain(PermissionCode.DESK_TASK_ASSIGN);
+        assertThat(permissionGuard.effectivePermissions(RoleCode.GENERAL_MANAGER, java.util.List.of()))
+                .doesNotContain(PermissionCode.DESK_TASK_ASSIGN);
     }
 }

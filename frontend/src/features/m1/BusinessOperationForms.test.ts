@@ -37,24 +37,36 @@ describe('业务操作真实输入', () => {
     expect(approveLoss).toHaveBeenCalledWith(expect.objectContaining({ code: 'LOSS-REAL', workOrder: 'ZD-REAL', process: '抛光' }), { approvalCode: 'LOSS-REAL', inputWeight: '10' });
   });
 
-  it('退货使用输入的单号和本次数量重量，页面不再提供旧确认出库', async () => {
-    const balances = [
-      { owner: '客户甲', batch: 'MD-1', material: '物料甲', location: '库位甲', status: '成品', qty: 12, weight: '25 g', frozen: '0' },
-      { owner: '客户甲', batch: 'MD-1', material: '物料甲', location: '库位乙', status: '成品', qty: 4, weight: '8 g', frozen: '0' },
-    ];
-    vi.mocked(fetchInventoryWorkspace).mockResolvedValue({ balances, ledgerEntries: [], timeline: [], evidence: [], dataSource: 'LIVE' });
+  it('退货从加工库存选中已出库单后按原维度提交，页面不再提供旧确认出库', async () => {
+    const balance = {
+      owner: '客户甲', batch: 'ZD-1', material: '物料甲', location: '成品仓', status: '已出库', qty: 12, quantityUnit: '件', weight: '25 g', frozen: '0',
+      operationContext: {
+        customerId: 1, ownerCustomerId: 1, motherOrderCode: 'MD-1', workOrderCode: 'ZD-1', materialCode: 'M1',
+        warehouseCode: 'W1', ownerType: 'CUSTOMER', stockStatus: 'SHIPPED', quantity: 12, weight: 25,
+      },
+    };
+    vi.mocked(fetchInventoryWorkspace).mockResolvedValue({ balances: [balance], ledgerEntries: [], timeline: [], evidence: [], dataSource: 'LIVE' });
+    vi.mocked(returnCustomerShipment).mockResolvedValue({
+      returnCode: 'RET-USER', originalShipmentCode: 'OUT-USER', workOrderCode: 'ZD-1', ledgerCode: 'LEDGER-RET-1',
+      fromWarehouseCode: 'W1', toWarehouseCode: 'W1', fromStockStatus: 'SHIPPED', toStockStatus: 'RETURNED',
+      quantity: 2, weight: 4.25, returnLogisticsNo: 'YT-USER', reason: '客户退回', operator: '测试员',
+    });
     const wrapper = mount(InventoryTraceWorkspace);
     await flushPromises();
     expect(wrapper.text()).not.toContain('确认出库');
+    await wrapper.findAll('button').find(button => button.text() === '加工库存')!.trigger('click');
+    await wrapper.get('table.inventory-dispatch-table tbody tr').trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '退货与售后复核')!.trigger('click');
+    await flushPromises();
     await wrapper.get('[aria-label="退货单号"]').setValue('RET-USER');
     await wrapper.get('[aria-label="原出库单号"]').setValue('OUT-USER');
     await wrapper.get('[aria-label="退货运单号"]').setValue('YT-USER');
     await wrapper.get('[aria-label="退货原因"]').setValue('客户退回');
     await wrapper.get('[aria-label="本次数量"]').setValue('2');
     await wrapper.get('[aria-label="本次重量（克）"]').setValue('4.25');
-    await wrapper.findAll('button').find(button => button.text() === '退货入库')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === '提交退货入库')!.trigger('click');
     await flushPromises();
-    expect(returnCustomerShipment).toHaveBeenCalledWith(balances[0], expect.objectContaining({
+    expect(returnCustomerShipment).toHaveBeenCalledWith(expect.objectContaining({ batch: 'ZD-1' }), expect.objectContaining({
       returnCode: 'RET-USER', originalShipmentCode: 'OUT-USER', returnLogisticsNo: 'YT-USER', reason: '客户退回', quantity: 2, weight: '4.25',
     }));
   });

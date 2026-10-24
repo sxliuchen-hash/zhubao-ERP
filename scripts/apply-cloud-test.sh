@@ -82,7 +82,7 @@ data["deployedAt"] = datetime.now(timezone.utc).isoformat()
 data["frontendDeployedAt"] = data["deployedAt"]
 data["rollbackDirectory"] = rel + "/rollback"
 data["frontendRollbackDirectory"] = rel + "/rollback"
-data["note"] = "角色权限：审批按登录会话和任务场景，空客户名单和未配置班组不再放大可见范围；本次无新迁移，运行库保持 V68"
+data["note"] = "2026-10-24 进度、出货、流水、改单、客户、分单、待办和硬件表单短字段改为两列；无新迁移，MySQL 未重建"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 

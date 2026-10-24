@@ -302,11 +302,19 @@ function scaleStyle(payload: LabelPayload) {
   line-height: 1.5;
 }
 .split-line {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px;
   margin-bottom: 8px;
 }
+.split-line > strong,
+.split-line > button,
+.split-line > .source-allocations,
+.split-line > .process-checks,
+.split-line > .field:has(select) { grid-column: 1 / -1; }
 .process-checks {
   display: flex;
   flex-wrap: wrap;

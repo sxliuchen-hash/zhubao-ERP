@@ -78,6 +78,7 @@ public class ProcessProgressService {
             rows.add(rowOf(child.code(), child.motherOrderCode(), child.customerName(), child.processes(), child.dueDate()));
         }
         for (MotherOrderRecord mother : documents.listMotherOrders()) {
+            if (mother.quantity() == null || mother.quantity().signum() <= 0) continue;
             if (!documents.listChildWorkOrders(mother.code()).isEmpty()) {
                 continue;
             }

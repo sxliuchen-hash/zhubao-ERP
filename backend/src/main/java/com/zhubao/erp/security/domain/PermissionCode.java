@@ -45,7 +45,8 @@ public enum PermissionCode {
     STOCK_PREP_RETURN("备料退回"),
     STOCK_PREP_CUSTOMER_RETURN("备料退还客户"),
     STOCK_FREEZE("库存冻结"),
-    STOCK_CORRECT("库存冲正");
+    STOCK_CORRECT("库存冲正"),
+    DESK_TASK_ASSIGN("待办指派");
 
     private final String label;
 

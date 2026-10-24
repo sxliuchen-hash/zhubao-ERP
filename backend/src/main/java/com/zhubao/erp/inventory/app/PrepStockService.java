@@ -101,6 +101,9 @@ public class PrepStockService {
         if (mother.customerId() == null || !mother.customerId().equals(customerId)) {
             throw new PermissionDeniedException("不能把备料领用到其他客户的加工单");
         }
+        if (materialCode == null || !materialCode.trim().equals(mother.materialCode())) {
+            throw new BusinessException("备料物料与加工母单材质不一致，不能记到原单");
+        }
         assertCustomer(account, customerId);
         StockDimension from = prepDimension(customerId, materialCode, warehouseCode, batchCode);
         StockDimension to = new StockDimension(

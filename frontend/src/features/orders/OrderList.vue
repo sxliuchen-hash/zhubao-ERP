@@ -25,12 +25,12 @@ const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
     <button v-for="row in rows" :key="row.rowKey" class="order-card" type="button" :aria-label="`查看${row.code}`" @click="emit('select', row)">
       <span class="order-card-title"><strong>{{ row.goodsName || '货品未填写' }}</strong><span>{{ orderFacetLabel(row.facet) }}</span></span>
       <span>{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次</template></span>
-      <span>母单 {{ row.motherOrderCode }}<template v-if="row.executionRoundCode && row.workOrderCode"> · 原子单 {{ row.workOrderCode }}</template></span>
+      <span class="order-card-quiet">母单 {{ row.motherOrderCode }}<template v-if="row.executionRoundCode && row.workOrderCode"> · 原子单 {{ row.workOrderCode }}</template></span>
       <span v-if="row.customerName">{{ row.customerName }}</span>
       <span>{{ orderQuantityText(row.quantity, row.quantityUnit) }} · {{ row.dueDate || '交期未填写' }}</span>
       <span>{{ row.currentProcess || '未提供工序' }} · {{ row.processPercent === null ? '未记录工序进度' : `${row.processPercent}%` }} · {{ row.businessStatus }}</span>
-      <span v-if="row.processFormallyDelivered !== null">{{ row.processFormallyDelivered ? '本工序已正式交工' : '本工序未正式交工' }}</span>
-      <span v-if="row.facetNote">{{ row.facetNote }}</span>
+      <span v-if="row.processFormallyDelivered !== null" class="order-card-quiet">{{ row.processFormallyDelivered ? '本工序已正式交工' : '本工序未正式交工' }}</span>
+      <span v-if="row.facetNote" class="order-card-quiet">{{ row.facetNote }}</span>
     </button>
   </div>
 </template>
@@ -46,7 +46,8 @@ const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
 @media (max-width: 900px) {
   .order-table-wrap { display: none; }
   .order-cards { display: grid; gap: 10px; }
-  .order-card { display: grid; gap: 8px; width: 100%; min-width: 0; text-align: left; padding: 16px; background: var(--content); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); overflow-wrap: anywhere; }
+  .order-card { display: grid; gap: 4px; width: 100%; min-width: 0; text-align: left; padding: 12px; background: var(--content); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); overflow-wrap: anywhere; }
+  .order-card-quiet { display: none; }
   .order-card-title { display: flex; gap: 12px; justify-content: space-between; color: var(--action); }
 }
 </style>

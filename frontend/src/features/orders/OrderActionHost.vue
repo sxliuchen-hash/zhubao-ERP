@@ -185,5 +185,5 @@ defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShi
 .order-action-top-actions button { min-height: 44px; }
 .order-action-scan { display: none; }
 .order-action-content { overflow-y: auto; overscroll-behavior: contain; padding: 20px; min-width: 0; }
-@media (max-width: 900px) { .order-action-scan { display: inline-flex; } .order-action-overlay { padding: 0; } .order-action-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; } .order-action-dialog > header { padding: calc(12px + env(safe-area-inset-top)) 12px 12px; } .order-action-content { padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); } }
+@media (max-width: 900px) { .order-action-scan { display: inline-flex; } .order-action-overlay { padding: 0; } .order-action-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; } .order-action-dialog > header { padding: calc(12px + env(safe-area-inset-top)) 12px 12px; } .order-action-dialog > header p, .order-action-content :deep(.section-heading), .order-action-content :deep(.compact-detail-grid), .order-action-content :deep(.quality-inspector-note) { display: none; } .order-action-content { padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); } }
 </style>

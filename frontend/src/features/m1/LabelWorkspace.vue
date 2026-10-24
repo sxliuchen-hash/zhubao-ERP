@@ -154,8 +154,8 @@ async function loadMotherLabel() {
 
 const allPrintQueues = ref<PrintQueueView[]>([]);
 const printStations = ref<Array<{ stationId: string; name: string; enabled: boolean; remark: string }>>([]);
-const stationForm = ref({ stationId: '', name: '', enabled: true, remark: '' });
-const queueForm = ref({ stationId: '', queueId: '', name: '', labelType: 'ALL', widthMm: 40, heightMm: 30,
+const stationForm = ref({ stationId: 'liuchen', name: 'liuchen', enabled: true, remark: '' });
+const queueForm = ref({ stationId: 'liuchen', queueId: 'liuchen', name: 'liuchen', labelType: 'ALL', widthMm: 40, heightMm: 30,
   enabled: true, defaultQueue: false });
 const newStationToken = ref('');
 const routeFeedback = ref('');

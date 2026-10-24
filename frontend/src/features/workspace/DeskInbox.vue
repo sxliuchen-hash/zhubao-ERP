@@ -69,7 +69,7 @@ onBeforeUnmount(() => { disposed = true; orderGeneration += 1; approvalGeneratio
 <template>
   <div class="desk-inbox">
     <section v-if="canReadOrders" class="inbox-panel" aria-label="本岗订单预览">
-      <header><div><h2>订单事项</h2><p>按交期优先预览；选定单据后核对要求并办理本岗事项。</p></div><button class="secondary-button" type="button" @click="openOrders">全部订单</button></header>
+      <header><div><h2>订单事项</h2><p class="inbox-intro">按交期优先预览；选定单据后核对要求并办理本岗事项。</p></div><button class="secondary-button inbox-text-action" type="button" @click="openOrders">全部订单</button></header>
       <div class="inbox-tools"><label>分类 <select v-model="facet" aria-label="工作台订单分类"><option v-for="item in facets" :key="item" :value="item">{{ orderFacetLabel(item) }}</option></select></label><button class="secondary-button" type="button" :disabled="orderBusy" @click="loadOrders">刷新订单</button></div>
       <p v-if="orderBusy" role="status">正在读取订单…</p>
       <p v-if="orderError" role="alert">{{ orderError }}，可单独重试订单。</p>
@@ -78,12 +78,12 @@ onBeforeUnmount(() => { disposed = true; orderGeneration += 1; approvalGeneratio
         <p v-if="!orders.items.length">当前分类暂无订单</p>
         <button v-for="row in orders.items" :key="row.rowKey" type="button" class="inbox-row" @click="select(row)">
           <span><strong>{{ row.goodsName || '货品未填写' }}</strong><small>{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次 {{ row.executionRoundCode }}</template></small><small>{{ row.currentProcess || '工序未提供' }} · {{ orderQuantityText(row.quantity, row.quantityUnit) }}</small></span>
-          <span><b>{{ row.businessStatus || orderFacetLabel(row.facet) }}</b><small>交期 {{ row.dueDate || '未填写' }}</small><small>查看要求与下一步</small></span>
+          <span><b>{{ row.businessStatus || orderFacetLabel(row.facet) }}</b><small>交期 {{ row.dueDate || '未填写' }}</small><small class="inbox-row-hint">查看要求与下一步</small></span>
         </button>
       </template>
     </section>
     <section v-if="canReadApprovals" class="inbox-panel" aria-label="待我核对的审批">
-      <header><div><h2>审批待办</h2><p>先查看原单、证据和申请原因，再办理审批决定。</p></div><button class="secondary-button" type="button" :disabled="approvalBusy" @click="loadApprovals">刷新审批</button></header>
+      <header><div><h2>审批待办</h2><p class="inbox-intro">先查看原单、证据和申请原因，再办理审批决定。</p></div><button class="secondary-button inbox-text-action" type="button" :disabled="approvalBusy" @click="loadApprovals">刷新审批</button></header>
       <p v-if="approvalBusy" role="status">正在读取审批…</p>
       <p v-else-if="approvalError" role="alert">{{ approvalError }}，其他事项仍可办理。</p>
       <template v-else>
@@ -92,7 +92,7 @@ onBeforeUnmount(() => { disposed = true; orderGeneration += 1; approvalGeneratio
         <button v-for="task in approvals.slice(0, 5)" :key="task.approvalCode" type="button" class="inbox-row" @click="openApproval(task.approvalCode)">
           <span><strong>{{ task.title }}</strong><small>{{ task.approvalCode }} · {{ task.businessCode }}</small><small>{{ task.applicant }} · {{ task.createdAt }}</small></span><span>核对并审批</span>
         </button>
-        <button class="secondary-button" type="button" @click="openApproval('')">全部审批</button>
+        <button class="secondary-button inbox-text-action" type="button" @click="openApproval('')">全部审批</button>
       </template>
     </section>
   </div>
@@ -110,5 +110,25 @@ onBeforeUnmount(() => { disposed = true; orderGeneration += 1; approvalGeneratio
 .inbox-row > span { display: grid; gap: 6px; min-width: 0; }
 .inbox-row > span:last-child { text-align: right; }
 .inbox-count { font-size: 12px; }
-@media (max-width: 900px) { .inbox-panel { padding: 14px; } .inbox-panel button, .inbox-tools select { min-height: 44px; } .inbox-tools select { font-size: 16px; } }
+@media (max-width: 900px) {
+  .desk-inbox { gap: 20px; }
+  .inbox-panel { padding: 0; border: 0; border-radius: 0; background: transparent; }
+  .inbox-panel header { align-items: center; flex-wrap: nowrap; gap: 8px; }
+  .inbox-panel h2 { font-size: 15px; }
+  .inbox-intro, .inbox-row-hint { display: none; }
+  .inbox-panel button, .inbox-tools select { min-height: 44px; }
+  .inbox-text-action { flex-shrink: 0; padding: 0 2px 0 12px; border: 0; background: transparent; font-size: 13px; }
+  .inbox-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 8px 0; }
+  .inbox-tools label { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); font-size: 12px; }
+  .inbox-tools select { flex: 1; min-width: 0; width: 100%; font-size: 16px; background: var(--content); padding: 8px; }
+  .inbox-tools button { padding: 8px 10px; font-size: 13px; }
+  .inbox-count { display: none; }
+  .inbox-row { gap: 10px; padding: 14px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--content); font-size: 13px; }
+  .inbox-row > span { gap: 5px; }
+  .inbox-row > span:first-child { flex: 1; }
+  .inbox-row > span:last-child { flex: 0 0 100px; font-size: 12px; }
+  .inbox-row small { font-size: 12px; }
+  .inbox-row b { color: var(--action); font-weight: 500; }
+  .inbox-panel > p:not(.inbox-count) { margin-top: 8px; font-size: 13px; }
+}
 </style>

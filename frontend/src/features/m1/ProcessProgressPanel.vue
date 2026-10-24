@@ -171,8 +171,8 @@ async function loadHistory() {
 
 <template>
   <section class="section-block process-progress-panel" aria-label="工序进度报工">
-    <h2>工序进度</h2>
-    <p>只记录当前工序的 0%、30%、60%、90%、100%。100% 不会自动交付、质检或写库存。</p>
+    <h2 v-if="!embedded">工序进度</h2>
+    <p v-if="!embedded">只记录当前工序的 0%、30%、60%、90%、100%。100% 不会自动交付、质检或写库存。</p>
     <div v-if="!embedded" class="progress-filters">
       <label>查找<input v-model="query" aria-label="进度查找" placeholder="单号、客户、工序或进度" @change="page = 1; reload()" /></label>
       <label>工序<input v-model="processFilter" aria-label="工序筛选" placeholder="雕刻、镶嵌或抛光" @change="page = 1; reload()" /></label>
@@ -218,5 +218,13 @@ async function loadHistory() {
 .process-progress-panel label { display: grid; gap: 6px; }
 .process-progress-panel input:not([type="file"]), .process-progress-panel select { box-sizing: border-box; width: 100%; min-width: 0; }
 .progress-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
-@media (max-width: 900px) { .process-progress-panel input:not([type="file"]), .process-progress-panel select { font-size: 16px; min-height: 44px; } .process-progress-panel button { min-height: 44px; } }
+@media (max-width: 900px) {
+  .process-progress-panel fieldset, .progress-filters { display: grid; grid-template-columns: 1fr 1fr; align-items: end; }
+  .process-progress-panel fieldset > p,
+  .process-progress-panel fieldset > button,
+  .process-progress-panel label:has(input[aria-label="进度说明"]),
+  .process-progress-panel label:has(input[aria-label="进度回退原因"]) { grid-column: 1 / -1; }
+  .process-progress-panel input:not([type="file"]), .process-progress-panel select { font-size: 16px; min-height: 44px; }
+  .process-progress-panel button { min-height: 44px; }
+}
 </style>

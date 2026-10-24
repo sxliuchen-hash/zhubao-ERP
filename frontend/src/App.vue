@@ -145,6 +145,9 @@ const visibleTabs = computed(() => {
 });
 provide('zhubao-visible-tabs', computed(() => visibleTabs.value.map((tab) => tab.key)));
 const navigationGroups = computed(() => desktopNavigationGroups(visibleTabs.value));
+const supportSectionIds = new Set(['tools', 'system']);
+const dailyNavigation = computed(() => navigationGroups.value.filter(group => !supportSectionIds.has(group.id)));
+const supportNavigation = computed(() => navigationGroups.value.filter(group => supportSectionIds.has(group.id)));
 const activeTabMeta = computed(() => visibleTabs.value.find((tab) => tab.key === activeTab.value) ?? visibleTabs.value[0]);
 const activeOrderView = computed(() => workspace.orderView.value ?? 'ORDERS');
 const activeTitle = computed(() => orderWorkspaceOpen.value ? activeOrderView.value === 'PRODUCTION' ? '生产作业' : activeOrderView.value === 'QUALITY' ? '质量作业' : '订单中心' : activeTabMeta.value?.label ?? '首页');
@@ -457,11 +460,8 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     </template>
 
     <template #nav>
-      <button v-if="canReadOrders" class="nav-button" data-workspace-section="orders" :class="{ active: orderWorkspaceOpen && activeOrderView === 'ORDERS' }" type="button" @click="openOrders()">
-        <span class="nav-icon-wrap"><NavIcon name="orders" /></span><span class="nav-label"><strong>订单中心</strong></span>
-      </button>
-      <template v-for="group in navigationGroups" :key="group.id">
-        <p v-if="group.tabs.length > 1" class="nav-group-label">{{ group.label }}</p>
+      <p v-if="dailyNavigation.length || canReadOrders" class="nav-group-label">日常协同</p>
+      <template v-for="group in dailyNavigation" :key="group.id">
         <button
           v-for="tab in group.tabs"
           :key="tab.key"
@@ -472,9 +472,29 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
           type="button"
           @click="navigateTab(tab.key)"
         >
-          <span class="nav-icon-wrap">
-            <NavIcon :name="tab.key" />
-          </span>
+          <span class="nav-icon-wrap"><NavIcon :name="tab.key" /></span>
+          <span class="nav-label"><strong>{{ tab.label }}</strong></span>
+        </button>
+        <button v-if="group.id === 'desk' && canReadOrders" class="nav-button" data-workspace-section="orders" :class="{ active: orderWorkspaceOpen && activeOrderView === 'ORDERS' }" type="button" @click="openOrders()">
+          <span class="nav-icon-wrap"><NavIcon name="orders" /></span><span class="nav-label"><strong>订单中心</strong></span>
+        </button>
+      </template>
+      <button v-if="canReadOrders && !dailyNavigation.some(group => group.id === 'desk')" class="nav-button" data-workspace-section="orders" :class="{ active: orderWorkspaceOpen && activeOrderView === 'ORDERS' }" type="button" @click="openOrders()">
+        <span class="nav-icon-wrap"><NavIcon name="orders" /></span><span class="nav-label"><strong>订单中心</strong></span>
+      </button>
+      <p v-if="supportNavigation.length" class="nav-group-label">支持与管理</p>
+      <template v-for="group in supportNavigation" :key="group.id">
+        <button
+          v-for="tab in group.tabs"
+          :key="tab.key"
+          class="nav-button"
+          :data-tab="tab.key"
+          :class="{ active: navigationActive(tab.key) }"
+          :title="`${tab.label} · ${tab.meta}`"
+          type="button"
+          @click="navigateTab(tab.key)"
+        >
+          <span class="nav-icon-wrap"><NavIcon :name="tab.key" /></span>
           <span class="nav-label"><strong>{{ tab.label }}</strong></span>
         </button>
       </template>

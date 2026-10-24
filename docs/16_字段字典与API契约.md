@@ -1572,6 +1572,7 @@ PWA 一期边界：
 | `POST /api/business/operations/customer-returns` | `BUSINESS_CUSTOMER_RETURN` | `ADMIN`、`GENERAL_MANAGER`、`WAREHOUSE_KEEPER`、`SALES`、`QUALITY_INSPECTOR` |
 | `POST /api/business/operations/after-sales-reviews` | `BUSINESS_AFTER_SALES_REVIEW` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
 | `POST /api/business/operations/loss-approvals` | `BUSINESS_LOSS_APPROVAL` | `ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER` |
+| `POST /api/business/desk-tasks` | `DESK_TASK_ASSIGN` | `ADMIN`、`WORKSHOP_LEADER`、`SALES`；`BUSINESS_MANAGER` 须已有任一顶岗。总经理不自动获得。完成和作废不走该权限 |
 | `GET /api/approvals/tasks`、`GET /api/approvals/tasks/pending`、`GET /api/approvals/tasks/{approvalCode}` | 登录会话，并按任务场景过滤 | 匿名与请求头身份拒绝；可见范围见 6.14 |
 | `POST /api/approvals/tasks/{approvalCode}/decisions` | `APPROVAL_DECISION`，再按场景核对身份 | 损耗：`ADMIN`、`GENERAL_MANAGER`、`WORKSHOP_LEADER`；账号类任务按责任角色。申请人不能自批。请求体 operator 无效 |
 | `POST /api/documents/attachments/uploads` | `DOCUMENT_ATTACHMENT_UPLOAD` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
@@ -2400,6 +2401,18 @@ PWA 一期边界：
 | `GET /api/business/master-data/requirement-templates` | 已登录读取启用模板。`includeDisabled=true` 需要 `MASTER_DATA_MANAGE`。 |
 | `POST /api/business/master-data/requirement-templates` | `MASTER_DATA_MANAGE`。请求包含 `templateCode`、`name`、有序 `steps`、`sortOrder`、`version`、`requestId`。新增时 code 为空且必须带请求号；相同请求与内容回放原模板，排序变化也属于内容冲突；并发新增同请求只产生一项。更新必须带当前版本，陈旧版本拒绝。 |
 | `POST /api/business/master-data/requirement-templates/disables` | `MASTER_DATA_MANAGE`。请求带 `templateCode`、`version`；重复停用返回当前已停用模板。停用不改已保存的订单要求。 |
+
+### DeskTaskController：工作台轻任务
+
+来源：`business/web/DeskTaskController.java`。建模、设计和其他事项只在首页「我的待办」里指派和勾掉，不进入雕刻、镶嵌、抛光，也不写库存、质检或发货。类型取 `MODELING`（建模）、`DESIGN`（设计）、`OTHER`（其他）。状态取 `OPEN`（待办）、`DONE`（已完成）、`CANCELLED`（已作废）。客户名称和责任人姓名是保存当时的快照。
+
+| 接口 | 现行后端契约 |
+|---|---|
+| `GET /api/business/desk-tasks` | 已登录。查询参数 `view` 取 `assigned`、`issued` 或 `open`。`assigned` 或缺省：派给当前账号且未完成。`issued`：当前账号发出的，含已完成和已作废。`open`：仅管理员看全部未完成。未填客户的待办不会因此对全公司可见。 |
+| `GET /api/business/desk-tasks/assignees` | `DESK_TASK_ASSIGN`。只返回启用账号的用户名和姓名。 |
+| `POST /api/business/desk-tasks` | `DESK_TASK_ASSIGN`。请求含 `kind`、`title`、`note`、`customerId`、`motherOrderCode`、`assigneeUsername`、`dueDate`、`requestId`。标题和期限必填，期限为 `yyyy-MM-dd`。客户和母单可空；客户须启用且在授权范围内，母单须可见，两者都填时客户必须与母单一致。同一请求和内容回放原待办，内容变化拒绝。 |
+| `POST /api/business/desk-tasks/{taskCode}/completions` | 已登录。责任人或管理员。请求含 `requestId`、`expectedVersion`、`resultNote`。版本不符拒绝。同一完成请求回放；已完成后换请求拒绝。不写工序和库存。 |
+| `POST /api/business/desk-tasks/{taskCode}/cancellations` | 已登录。创建人或管理员。请求含 `requestId`、`expectedVersion`、`reason`。原因必填。已完成不能作废。记录保留。 |
 
 ### InventoryController
 

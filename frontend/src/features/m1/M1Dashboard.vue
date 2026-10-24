@@ -1,14 +1,28 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
+import NavIcon from '../../components/NavIcon.vue';
 import DeskInbox from '../workspace/DeskInbox.vue';
 import type { TraceTarget } from '../scan/traceTarget';
 import type { InboundOrder, QualityCase, Tone, WorkOrder } from '../../data/m1PrototypeData';
+import type { AuthSession } from '../../services/authApi';
 import {
   fetchInboundWorkspace,
   fetchProductionWorkspace,
   fetchQualityWorkspace,
 } from '../../services/businessWorkspaceApi';
+import {
+  cancelDeskTask,
+  completeDeskTask,
+  createDeskTask,
+  fetchDeskAssignees,
+  fetchDeskTasks,
+  type DeskAssignee,
+  type DeskTask,
+  type DeskTaskKind,
+  type DeskTaskView,
+} from '../../services/deskTaskApi';
+import { fetchCustomers, type CustomerProfile } from '../../services/masterDataApi';
 
 type DeskTab = 'inbound' | 'production' | 'quality' | 'progress' | 'label';
 
@@ -53,9 +67,38 @@ const canOpen = (tab: DeskTab) => visibleTabs.value.includes(tab);
 const quickSession = inject<Ref<{ effectivePermissions?: string[] } | null>>('zhubao-auth-session', ref(null));
 const canStartInbound = computed(() => canOpen('inbound') && (!quickSession.value?.effectivePermissions || quickSession.value.effectivePermissions.includes('BUSINESS_INBOUND_CONFIRM')));
 const canReadOrders = computed(() => visibleTabs.value.some(tab => ['inbound', 'production', 'progress', 'quality', 'inventory'].includes(tab)));
+const authSession = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const canAssign = computed(() => authSession.value?.effectivePermissions?.includes('DESK_TASK_ASSIGN') === true);
+const canSeeAllOpen = computed(() => authSession.value?.role === 'ADMIN');
+const deskView = ref<DeskTaskView>('assigned');
+const deskTasks = ref<DeskTask[]>([]);
+const deskError = ref('');
+const deskLoading = ref(false);
+const creating = ref(false);
+const savingTask = ref(false);
+const actingCode = ref('');
+const assignees = ref<DeskAssignee[]>([]);
+const taskCustomers = ref<CustomerProfile[]>([]);
+const formError = ref('');
+const resultNotes = ref<Record<string, string>>({});
+const cancelReasons = ref<Record<string, string>>({});
+const createRequestId = ref(newRequestId());
+const taskForm = ref({
+  kind: 'MODELING' as DeskTaskKind,
+  title: '',
+  note: '',
+  customerId: '',
+  motherOrderCode: '',
+  assigneeUsername: '',
+  dueDate: '',
+});
+const kindLabel: Record<string, string> = { MODELING: '建模', DESIGN: '设计', OTHER: '其他' };
+const statusLabel: Record<string, string> = { OPEN: '待办', DONE: '已完成', CANCELLED: '已作废' };
+const actionRequests = new Map<string, { id: string; text: string }>();
 
 onMounted(() => {
   if (legacyOpen.value) void loadDispatchRows();
+  void loadDeskTasks();
 });
 
 async function loadDispatchRows() {
@@ -242,24 +285,169 @@ function qualityTone(status: string): Tone {
   if (status.includes('完成')) return 'green';
   return 'blue';
 }
+
+function newRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `desk-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function todayIso() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function isOverdue(task: DeskTask) {
+  return task.status === 'OPEN' && task.dueDate < todayIso();
+}
+
+function taskSubject(task: DeskTask) {
+  return [task.customerName, task.motherOrderCode].filter(Boolean).join(' · ') || '未关联客户';
+}
+
+function showComplete(task: DeskTask) {
+  return task.status === 'OPEN' && (deskView.value === 'assigned' || deskView.value === 'open');
+}
+
+function showCancel(task: DeskTask) {
+  return task.status === 'OPEN' && (deskView.value === 'issued' || deskView.value === 'open');
+}
+
+const emptyDeskText = computed(() => {
+  if (deskView.value === 'issued') return '还没有发出的待办';
+  if (deskView.value === 'open') return '没有未完成待办';
+  return '暂无派给我的待办';
+});
+
+async function loadDeskTasks() {
+  deskError.value = '';
+  deskLoading.value = true;
+  try {
+    deskTasks.value = await fetchDeskTasks(deskView.value);
+  } catch (error) {
+    deskTasks.value = [];
+    deskError.value = error instanceof Error ? error.message : '轻任务待办暂时读不到';
+  } finally {
+    deskLoading.value = false;
+  }
+}
+
+async function switchDeskView(view: DeskTaskView) {
+  deskView.value = view;
+  await loadDeskTasks();
+}
+
+async function openCreate() {
+  creating.value = !creating.value;
+  formError.value = '';
+  if (!creating.value) return;
+  try {
+    const [people, customerRows] = await Promise.all([fetchDeskAssignees(), fetchCustomers()]);
+    assignees.value = people;
+    taskCustomers.value = customerRows.filter((item) => item.enabled);
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : '待办选项暂时读不到';
+  }
+}
+
+async function submitTask() {
+  formError.value = '';
+  savingTask.value = true;
+  try {
+    await createDeskTask({
+      kind: taskForm.value.kind,
+      title: taskForm.value.title.trim(),
+      note: taskForm.value.note.trim(),
+      customerId: taskForm.value.customerId ? Number(taskForm.value.customerId) : null,
+      motherOrderCode: taskForm.value.motherOrderCode.trim(),
+      assigneeUsername: taskForm.value.assigneeUsername,
+      dueDate: taskForm.value.dueDate,
+      requestId: createRequestId.value,
+    });
+    createRequestId.value = newRequestId();
+    taskForm.value = {
+      kind: 'MODELING', title: '', note: '', customerId: '', motherOrderCode: '', assigneeUsername: '', dueDate: '',
+    };
+    creating.value = false;
+    deskView.value = 'issued';
+    await loadDeskTasks();
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : '待办没有保存';
+  } finally {
+    savingTask.value = false;
+  }
+}
+
+function actionRequest(key: string, text: string) {
+  const current = actionRequests.get(key);
+  if (current && current.text === text) return current.id;
+  const id = newRequestId();
+  actionRequests.set(key, { id, text });
+  return id;
+}
+
+async function finishTask(task: DeskTask) {
+  deskError.value = '';
+  actingCode.value = task.taskCode;
+  const note = (resultNotes.value[task.taskCode] ?? '').trim();
+  try {
+    await completeDeskTask(task.taskCode, {
+      requestId: actionRequest(`complete:${task.taskCode}`, note),
+      expectedVersion: task.version,
+      resultNote: note,
+    });
+    actionRequests.delete(`complete:${task.taskCode}`);
+    await loadDeskTasks();
+  } catch (error) {
+    deskError.value = error instanceof Error ? error.message : '待办没有完成';
+  } finally {
+    actingCode.value = '';
+  }
+}
+
+async function voidTask(task: DeskTask) {
+  const reason = (cancelReasons.value[task.taskCode] ?? '').trim();
+  if (!reason) {
+    deskError.value = '请填写作废原因';
+    return;
+  }
+  deskError.value = '';
+  actingCode.value = task.taskCode;
+  try {
+    await cancelDeskTask(task.taskCode, {
+      requestId: actionRequest(`cancel:${task.taskCode}`, reason),
+      expectedVersion: task.version,
+      reason,
+    });
+    actionRequests.delete(`cancel:${task.taskCode}`);
+    await loadDeskTasks();
+  } catch (error) {
+    deskError.value = error instanceof Error ? error.message : '待办没有作废';
+  } finally {
+    actingCode.value = '';
+  }
+}
 </script>
 
 <template>
   <div class="command-center-v3 page-stack">
     <p v-if="demoData" class="operation-feedback warning">当前待办含评审样例，仅用于演示。</p>
     <section class="module-master-panel dashboard-start" aria-label="开始业务">
-      <div class="floor-toolbar">
+      <div class="floor-toolbar dashboard-start-toolbar">
         <div>
-          <h2>今天的工作</h2>
-          <p class="empty-hint">先看待办和本岗订单，再进入单据核对与办理。</p>
-        </div>
-        <div class="active-action-grid">
-          <button v-if="canStartInbound" class="primary-button" type="button" @click="startInbound">新建收货／母单</button>
-          <button v-if="canOpen('label') && !openOrders" class="secondary-button" type="button" @click="openTab('label')">标签打印</button>
-          <button v-if="openOrders && canReadOrders" class="secondary-button" type="button" @click="openOrders">查看订单</button>
-          <button v-else-if="canOpen('progress')" class="secondary-button" type="button" @click="openTab('progress')">查看在制进度</button>
+          <h2>{{ authSession?.operator || '今天' }}，今天好</h2>
+          <p class="empty-hint dashboard-intro">先看待办和本岗订单，再进入单据核对与办理。</p>
         </div>
       </div>
+      <nav class="dashboard-shortcuts" aria-label="工作台快捷入口">
+        <button v-if="canStartInbound" type="button" aria-label="新建收货／母单" @click="startInbound"><i><NavIcon name="inbound" /></i><span>新建收货</span></button>
+        <button v-if="canOpen('production')" type="button" @click="openTab('production')"><i><NavIcon name="production" /></i><span>生产作业</span></button>
+        <button v-if="canOpen('quality')" type="button" @click="openTab('quality')"><i><NavIcon name="quality" /></i><span>质量作业</span></button>
+        <button v-if="canOpen('label') && !openOrders" type="button" @click="openTab('label')"><i><NavIcon name="label" /></i><span>标签打印</span></button>
+        <button v-if="openOrders && canReadOrders" type="button" @click="openOrders"><i><NavIcon name="orders" /></i><span>查看订单</span></button>
+        <button v-else-if="canOpen('progress')" type="button" @click="openTab('progress')"><i><NavIcon name="progress" /></i><span>在制进度</span></button>
+      </nav>
       <p v-if="legacyOpen && !loading && !loadError && countType('母单') === 0 && canOpen('inbound')" class="operation-feedback">
         还没有母单。点击“新建收货／母单”，填写客户、运单、来料数量和重量，保存后即可打印母单标签，再核对加工要求和期限、确认拆单方式。
       </p>
@@ -273,6 +461,138 @@ function qualityTone(status: string): Tone {
       </article>
     </section>
     <p v-if="legacyOpen" class="empty-hint">本次旧列表返回的可见记录数，不随查找变化。{{ refreshedAt ? `更新于 ${refreshedAt}` : '正在读取业务数据' }}</p>
+
+    <section class="module-master-panel desk-task-panel" aria-label="我的待办">
+      <div class="floor-toolbar desk-task-heading">
+        <div>
+          <h2>我的待办</h2>
+          <p class="empty-hint desk-task-intro">建模、设计等不经过工序的事项。</p>
+        </div>
+        <button v-if="canAssign" class="desk-text-action" type="button" :aria-expanded="creating" aria-controls="desk-task-create" @click="openCreate">{{ creating ? '收起新建' : '新建待办' }}</button>
+      </div>
+      <div class="desk-view-tabs" role="group" aria-label="待办分类">
+        <button :aria-pressed="deskView === 'assigned'" type="button" @click="switchDeskView('assigned')">派给我的</button>
+        <button v-if="canAssign" :aria-pressed="deskView === 'issued'" type="button" @click="switchDeskView('issued')">我发出的</button>
+        <button v-if="canSeeAllOpen" :aria-pressed="deskView === 'open'" type="button" @click="switchDeskView('open')">全部未完成</button>
+      </div>
+      <form v-if="creating" id="desk-task-create" class="desk-task-form" @submit.prevent="submitTask">
+        <label>
+          <span>类型</span>
+          <select v-model="taskForm.kind" aria-label="待办类型">
+            <option value="MODELING">建模</option>
+            <option value="DESIGN">设计</option>
+            <option value="OTHER">其他</option>
+          </select>
+        </label>
+        <label>
+          <span>标题</span>
+          <input v-model="taskForm.title" aria-label="待办标题" maxlength="80" />
+        </label>
+        <label>
+          <span>期限</span>
+          <input v-model="taskForm.dueDate" aria-label="待办期限" type="date" />
+        </label>
+        <label>
+          <span>责任人</span>
+          <select v-model="taskForm.assigneeUsername" aria-label="待办责任人">
+            <option value="">请选择</option>
+            <option v-for="person in assignees" :key="person.username" :value="person.username">{{ person.operator }}</option>
+          </select>
+        </label>
+        <label>
+          <span>客户</span>
+          <select v-model="taskForm.customerId" aria-label="待办客户">
+            <option value="">不关联客户</option>
+            <option v-for="customer in taskCustomers" :key="customer.customerId" :value="String(customer.customerId)">{{ customer.name }}</option>
+          </select>
+        </label>
+        <label>
+          <span>母单号</span>
+          <input v-model="taskForm.motherOrderCode" aria-label="待办母单号" placeholder="可选" />
+        </label>
+        <label class="span-2">
+          <span>说明</span>
+          <input v-model="taskForm.note" aria-label="待办说明" maxlength="500" />
+        </label>
+        <div class="active-action-grid">
+          <button class="primary-button" type="submit" :disabled="savingTask">{{ savingTask ? '保存中…' : '保存待办' }}</button>
+        </div>
+      </form>
+      <p v-if="formError" class="operation-feedback danger">{{ formError }}</p>
+      <p v-if="deskError" class="operation-feedback danger">{{ deskError }}</p>
+      <p v-else-if="deskLoading" class="empty-hint">正在读取待办…</p>
+      <p v-else-if="deskTasks.length === 0" class="empty-hint">{{ emptyDeskText }}</p>
+      <div v-if="deskTasks.length" class="erp-table-wrap desk-table-wrap">
+        <table class="erp-table desk-task-table">
+          <thead>
+            <tr>
+              <th>类型</th>
+              <th>标题</th>
+              <th>客户／母单</th>
+              <th>期限</th>
+              <th>责任人</th>
+              <th>状态</th>
+              <th>动作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="task in deskTasks" :key="task.taskCode">
+              <td>{{ kindLabel[task.kind] ?? task.kind }}</td>
+              <td>
+                <span class="cell-stack">
+                  <b>{{ task.title }}</b>
+                  <small v-if="task.note">{{ task.note }}</small>
+                </span>
+              </td>
+              <td>{{ taskSubject(task) }}</td>
+              <td>
+                <span>{{ task.dueDate }}</span>
+                <StatusBadge v-if="isOverdue(task)" label="逾期" tone="red" />
+              </td>
+              <td>{{ task.assigneeName || task.assigneeUsername }}</td>
+              <td>{{ statusLabel[task.status] ?? task.status }}</td>
+              <td>
+                <div v-if="showComplete(task)" class="desk-task-action">
+                  <input v-model="resultNotes[task.taskCode]" aria-label="结果说明" placeholder="结果说明，可选" />
+                  <button class="table-action" type="button" :disabled="actingCode === task.taskCode" @click="finishTask(task)">完成</button>
+                </div>
+                <div v-if="showCancel(task)" class="desk-task-action">
+                  <input v-model="cancelReasons[task.taskCode]" aria-label="作废原因" placeholder="作废原因" />
+                  <button class="table-action" type="button" :disabled="actingCode === task.taskCode" @click="voidTask(task)">作废</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="deskTasks.length" class="desk-cards">
+        <article v-for="task in deskTasks" :key="`card-${task.taskCode}`" class="desk-card desk-task-card">
+          <span class="desk-task-icon"><NavIcon name="sample" /></span>
+          <div class="desk-task-copy">
+            <span class="desk-card-top">
+              <strong class="code">{{ task.title }}</strong>
+              <StatusBadge v-if="isOverdue(task)" label="逾期" tone="red" />
+              <span v-else>{{ statusLabel[task.status] ?? task.status }}</span>
+            </span>
+            <p class="desk-task-meta">{{ kindLabel[task.kind] ?? task.kind }} · {{ taskSubject(task) }}</p>
+            <p class="desk-task-meta">{{ task.dueDate }} · {{ task.assigneeName || task.assigneeUsername }}</p>
+            <details class="desk-task-handling">
+              <summary>{{ showComplete(task) || showCancel(task) ? '办理待办' : '查看记录' }}</summary>
+              <p class="desk-task-meta">{{ task.taskCode }}</p>
+              <p v-if="task.note" class="desk-task-meta">{{ task.note }}</p>
+              <div v-if="showComplete(task)" class="desk-task-action">
+                <input v-model="resultNotes[task.taskCode]" aria-label="卡片结果说明" placeholder="结果说明，可选" />
+                <button class="table-action" type="button" :disabled="actingCode === task.taskCode" @click="finishTask(task)">完成</button>
+              </div>
+              <div v-if="showCancel(task)" class="desk-task-action">
+                <input v-model="cancelReasons[task.taskCode]" aria-label="卡片作废原因" placeholder="作废原因" />
+                <button class="table-action" type="button" :disabled="actingCode === task.taskCode" @click="voidTask(task)">作废</button>
+              </div>
+            </details>
+          </div>
+        </article>
+      </div>
+    </section>
 
     <section v-if="legacyOpen" class="production-desk-grid command-grid-v2 lean-desk desk-page" :class="{ 'is-detail': detailOpen }" aria-label="业务单据和当前处理单">
       <main class="dispatch-console-v3 dispatch-console-v2 module-master-panel">
@@ -394,4 +714,54 @@ function qualityTone(status: string): Tone {
 .desk-task-panel { order: 1; }
 .desk-inbox { order: 2; }
 .dashboard-history-toggle { align-self: start; min-height: 44px; }
+.dashboard-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-width: 560px; }
+.dashboard-shortcuts button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 78px; padding: 5px 0; border: 0; background: transparent; cursor: pointer; font-size: 13px; }
+.dashboard-shortcuts i { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 12px; background: var(--content); color: var(--action); }
+.dashboard-shortcuts button:hover i { background: var(--action-soft); border-color: var(--action); }
+.desk-task-heading { margin: 0; }
+.desk-text-action { min-height: 44px; padding: 0 2px 0 12px; border: 0; background: transparent; color: var(--action); white-space: nowrap; cursor: pointer; }
+.desk-view-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; width: fit-content; max-width: 100%; }
+.desk-view-tabs button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 7px; background: var(--workspace); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.desk-view-tabs button[aria-pressed="true"] { background: var(--action-soft); color: var(--action); font-weight: 600; }
+.desk-task-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--action-soft); color: var(--action); }
+.desk-task-copy { display: grid; gap: 5px; min-width: 0; }
+.desk-task-meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.desk-task-handling summary { display: flex; align-items: center; min-height: 44px; color: var(--action); cursor: pointer; }
+.desk-task-handling summary::after { content: '⌄'; margin-left: 6px; }
+.desk-task-handling summary::-webkit-details-marker { display: none; }
+.desk-task-handling[open] summary::after { content: '⌃'; }
+.desk-task-handling .desk-task-action { grid-template-columns: minmax(0, 1fr) auto; margin-top: 8px; align-items: center; }
+@media (min-width: 901px) {
+  .command-center-v3 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr); align-items: start; }
+  .command-center-v3 > * { grid-column: 1 / -1; }
+  .desk-inbox { grid-column: 1; grid-row: 2; }
+  .desk-task-panel { grid-column: 2; grid-row: 2; }
+  .dashboard-shortcuts { display: flex; flex-wrap: wrap; max-width: none; gap: 8px; }
+  .dashboard-shortcuts button { flex-direction: row; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); color: var(--action); background: var(--content); }
+  .dashboard-shortcuts i { width: 20px; height: 20px; border: 0; border-radius: 0; background: transparent; }
+  .dashboard-shortcuts button[aria-label="新建收货／母单"] { background: var(--action); border-color: var(--action); color: #fff; }
+  .dashboard-shortcuts button[aria-label="新建收货／母单"] i { color: inherit; }
+}
+@media (max-width: 900px) {
+  .command-center-v3 { gap: 16px; padding: 4px 8px; }
+  .command-center-v3 .dashboard-start,
+  .command-center-v3 .desk-task-panel { padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+  .dashboard-start-toolbar { margin-bottom: 12px; }
+  .dashboard-start h2 { font-size: 21px; font-weight: 600; }
+  .dashboard-intro,
+  .desk-task-intro { display: none; }
+  .dashboard-shortcuts { max-width: none; }
+  .desk-inbox { order: 1; }
+  .desk-task-panel { order: 2; gap: 10px; }
+  .desk-task-heading h2 { font-size: 15px; }
+  .desk-view-tabs { width: 100%; }
+  .desk-view-tabs button { padding: 8px 4px; font-size: 13px; }
+  .desk-task-panel > .empty-hint { padding: 16px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--content); text-align: center; font-size: 13px; }
+  .desk-task-panel .desk-task-card { grid-template-columns: 32px minmax(0, 1fr); gap: 11px; padding: 14px; border-radius: 12px; }
+  .desk-card-top { flex-wrap: nowrap; align-items: start; }
+  .desk-card-top strong { font-size: 14px; }
+  .desk-card-top > :last-child { flex-shrink: 0; font-size: 12px; }
+  .desk-task-form { grid-template-columns: 1fr 1fr; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--content); }
+  .dashboard-history-toggle { align-self: center; border: 0; background: transparent; font-size: 12px; color: var(--muted); }
+}
 </style>

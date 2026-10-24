@@ -67,7 +67,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/label/generate", PermissionCode.LABEL_PRINT),
             Map.entry("/api/label/templates", PermissionCode.LABEL_PRINT),
             Map.entry("/api/label/reprints", PermissionCode.LABEL_PRINT),
-            Map.entry("/api/label/print-jobs", PermissionCode.LABEL_PRINT)
+            Map.entry("/api/label/print-jobs", PermissionCode.LABEL_PRINT),
+            Map.entry("/api/business/desk-tasks", PermissionCode.DESK_TASK_ASSIGN)
     );
     private final Pattern motherSplitPath = Pattern.compile("^/api/business/operations/mother-orders/[^/]+/(keep|splits)$");
     private final Pattern documentRetirePath = Pattern.compile("^/api/documents/attachments/[^/]+/retirements$");

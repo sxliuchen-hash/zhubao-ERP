@@ -222,7 +222,7 @@ describe('现场入口防串单', () => {
     await wrapper.get('[aria-label="货品名称"]').setValue('戒托');
     await wrapper.get('[aria-label="数量"]').setValue('1');
     await wrapper.get('[aria-label="重量"]').setValue('2.5');
-    await wrapper.get('button').element;
+    await wrapper.findAll('button').find((button) => button.text() === '下一步：要求与证据')!.trigger('click');
     const create = wrapper.findAll('button').find((button) => button.text() === '生成母单');
     await create!.trigger('click');
     await flushPromises();
@@ -303,7 +303,7 @@ describe('现场入口防串单', () => {
     await wrapper.get('[aria-label="现场贴纸单号"]').setValue('JG|work_order|ZD-1');
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     await flushPromises();
-    expect(wrapper.text()).toContain('已打开子单 ZD-1');
+    expect(wrapper.text()).toContain('已从单据打开子工单标签：ZD-1');
     const called = () => fetchSpy.mock.calls.map((call) => String(call[0]));
     expect(called().some((url) => url.endsWith('/api/label/work-orders/ZD-1'))).toBe(true);
     expect(called().some((url) => url.includes('/api/label/mother-orders/'))).toBe(false);
@@ -313,7 +313,7 @@ describe('现场入口防串单', () => {
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('未找到对应单据');
-    expect(wrapper.text()).not.toContain('已打开子单 ZD-1');
+    expect(wrapper.text()).not.toContain('已从单据打开子工单标签：ZD-1');
     expect(called().some((url) => url.includes('/api/label/mother-orders/'))).toBe(false);
     fetchSpy.mockRestore();
   });

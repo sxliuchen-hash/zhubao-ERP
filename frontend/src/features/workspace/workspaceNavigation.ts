@@ -129,7 +129,13 @@ export function desktopNavigationGroups(visible: WorkspaceTab[]) {
     if (tab.key === 'inbound' || (tab.key === 'progress' && productionCode !== 'progress')) return [];
     if (tab.key === productionCode) return [{ ...tab, label: '生产作业', section: 'production' as const }];
     if (tab.key === 'quality') return [{ ...tab, label: '质量作业', section: 'quality' as const }];
-    return [tab];
+    const desktopLabel: Partial<Record<TabKey, string>> = {
+      dashboard: '工作台',
+      inventory: '库存与交付',
+      finance: '财务经营',
+      approvals: '审批中心',
+    };
+    return [{ ...tab, label: desktopLabel[tab.key] ?? tab.label }];
   });
   return workspaceSections.map(section => ({ ...section, tabs: entries.filter(tab => tab.section === section.id) })).filter(group => group.tabs.length);
 }

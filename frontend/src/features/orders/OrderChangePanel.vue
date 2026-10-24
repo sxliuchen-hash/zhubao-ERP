@@ -264,6 +264,11 @@ async function loadTimeline() {
 <style scoped>
 .order-change-panel { min-width: 0; overflow-wrap: anywhere; }
 .order-change-panel fieldset, .change-compose, .change-history, .change-detail { display: grid; gap: 10px; min-width: 0; border: 1px solid var(--line); padding: 12px; border-radius: 10px; }
+.order-change-panel fieldset { grid-template-columns: 1fr 1fr; align-items: end; }
+.order-change-panel fieldset > button,
+.order-change-panel fieldset > .change-actions,
+.order-change-panel fieldset > p,
+.order-change-panel label:has(textarea) { grid-column: 1 / -1; }
 .order-change-panel fieldset { margin: 8px 0; }
 .order-change-panel label { display: grid; gap: 6px; min-width: 0; }
 .order-change-panel input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; }

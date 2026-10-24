@@ -63,14 +63,14 @@ describe('App', () => {
 
     expect(wrapper.text()).toContain('来料加工');
     expect(wrapper.findAll('.nav-group-label').map((label) => label.text())).toEqual([
-      '业务工具',
-      '系统管理',
+      '日常协同',
+      '支持与管理',
     ]);
     expect(wrapper.text()).toContain('订单事项');
-    expect(wrapper.text()).toContain('今天的工作');
+    expect(wrapper.text()).toContain('今天好');
     expect(wrapper.find('[aria-label="业务单据和当前处理单"]').exists()).toBe(false);
     expect(wrapper.find('.ops-scope-ribbon').exists()).toBe(false);
-    expect(wrapper.find('.ops-nav').text()).toContain('首页');
+    expect(wrapper.find('.ops-nav').text()).toContain('工作台');
     expect(wrapper.find('.ops-nav').text()).toContain('订单中心');
     expect(wrapper.find('[data-tab="inbound"]').exists()).toBe(false);
     expect(wrapper.find('[data-tab="progress"]').exists()).toBe(false);
@@ -260,7 +260,7 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.find('.finance-workspace').exists()).toBe(true));
     await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
     expect(wrapper.find('.finance-workspace').exists()).toBe(false);
-    expect(wrapper.text()).toContain('今天的工作');
+    expect(wrapper.text()).toContain('今天好');
   });
 
   it('页面文件加载失败时保留导航并提供中文重试入口', async () => {
@@ -271,7 +271,7 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('页面加载失败，请检查网络后重试。'));
     expect(wrapper.get('[role="alert"]').text()).toContain('重新加载页面');
     await wrapper.get('.nav-button[data-tab="dashboard"]').trigger('click');
-    expect(wrapper.text()).toContain('今天的工作');
+    expect(wrapper.text()).toContain('今天好');
   });
 
   it('加载状态用中文反馈并可重试失败页面', async () => {
@@ -464,7 +464,7 @@ describe('App', () => {
     const wrapper = mount(App);
     await flushPromises();
     expect(wrapper.getComponent(OrderActionHost).props('canIntake')).toBe(true);
-    await wrapper.findAll('button').find(button => button.text() === '新建收货／母单')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.attributes('aria-label') === '新建收货／母单')!.trigger('click');
     expect(wrapper.get('.app-shell').attributes('inert')).toBeDefined();
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await flushPromises();
@@ -472,7 +472,7 @@ describe('App', () => {
     window.dispatchEvent(new CustomEvent(authSessionChangedEvent, { detail: { session: { ...receiver, effectivePermissions: [] } } }));
     await flushPromises();
     expect(wrapper.getComponent(OrderActionHost).props('canIntake')).toBe(false);
-    expect(wrapper.findAll('button').some(button => button.text() === '新建收货／母单')).toBe(false);
+    expect(wrapper.findAll('button').some(button => button.attributes('aria-label') === '新建收货／母单')).toBe(false);
     wrapper.unmount();
   });
 });

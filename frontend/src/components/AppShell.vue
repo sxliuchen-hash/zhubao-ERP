@@ -13,6 +13,7 @@ const emit = defineEmits<{ openTrace: [] }>();
 
 const collapsedStorageKey = 'zhubao-sidebar-collapsed';
 const collapsed = ref(readCollapsed());
+const traceOpen = ref(false);
 const businessDate = formatToday();
 
 function formatToday() {
@@ -44,10 +45,10 @@ function toggleCollapsed() {
   <div class="app-shell ops-shell review-shell" :class="{ 'is-collapsed': collapsed }">
     <aside id="app-sidebar" class="sidebar ops-sidebar review-sidebar">
       <div class="brand ops-brand">
-        <img class="brand-mark" src="/favicon.svg" alt="珠宝 ERP 图标" />
+        <span class="brand-mark" aria-hidden="true">Z</span>
         <div class="brand-copy">
           <strong>来料加工</strong>
-          <span>收货 · 生产 · 质检 · 库存</span>
+          <span>生产与经营工作台</span>
         </div>
       </div>
 
@@ -76,26 +77,30 @@ function toggleCollapsed() {
     <main class="workspace ops-workspace review-workspace">
       <div class="top-strip ops-topbar review-topbar">
         <div class="mobile-brand">
-          <img class="brand-mark" src="/favicon.svg" alt="珠宝 ERP 图标" />
+          <span class="brand-mark" aria-hidden="true">Z</span>
           <div>
             <strong>{{ title }}</strong>
             <span v-if="location && location !== title">{{ location }}</span>
           </div>
         </div>
+        <p class="crumb"><span>来料加工</span><b>{{ title }}</b></p>
+        <div class="top-cluster">
         <div class="context-stack">
           <span>{{ businessDate }}</span>
         </div>
         <slot name="session" />
-        <label class="global-search lean-search">
-          <span>追溯</span>
+        <button class="trace-toggle" type="button" :aria-expanded="traceOpen ? 'true' : 'false'" aria-controls="trace-search" @click="traceOpen = !traceOpen">查单</button>
+        <label id="trace-search" class="global-search lean-search" :class="{ 'is-open': traceOpen }">
+          <span class="trace-label">查单</span>
           <input
             v-model="traceQuery"
-            placeholder="母单、工单或快递单号"
+            placeholder="搜索母单、子单、运单或客户"
             aria-label="追溯查询"
             @keydown.enter.prevent="emit('openTrace')"
           />
           <button class="secondary-button" type="button" aria-label="打开追溯单据" @click="emit('openTrace')">打开单据</button>
         </label>
+        </div>
       </div>
 
       <UpgradeNotice />

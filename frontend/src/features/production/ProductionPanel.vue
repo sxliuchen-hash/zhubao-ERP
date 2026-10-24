@@ -335,7 +335,7 @@ async function deliver(station: ProcessStationCard) {
         母单 {{ stationScan.context.target.motherOrderCode }}
         <template v-if="stationView.customerName"> · {{ stationView.customerName }}</template>
       </p>
-      <dl class="detail-grid">
+      <dl class="detail-grid field-identity">
         <dt>客户</dt>
         <dd>{{ stationView.customerName || '未记录' }}</dd>
         <dt>物料</dt>
@@ -351,7 +351,7 @@ async function deliver(station: ProcessStationCard) {
           <dd>{{ previousText(activeStation) }}</dd>
         </template>
       </dl>
-      <p>只显示当前账号能做的工序。</p>
+      <p v-if="!embedded" class="field-coach">只显示当前账号能做的工序。</p>
     </article>
     <div v-if="field && (stationView?.stations.length ?? 0) > 1" class="field-process-list">
       <p v-if="!activeStation">请选择本次办理的工序。</p>
@@ -376,7 +376,7 @@ async function deliver(station: ProcessStationCard) {
         <h2>本岗位加工要求</h2>
         <span>逐条核对</span>
       </div>
-      <p>勾选不是报工。正式报工在下一步确认。</p>
+      <p v-if="!embedded" class="field-coach">勾选不是报工。正式报工在下一步确认。</p>
       <p v-if="!activeLines.length">本岗位没有单独列出的加工要求。看过当前单后即可进入报工确认。</p>
       <label v-for="(line, index) in activeLines" :key="checkKey(activeStation.processName, index)" class="field-check">
         <input
@@ -395,7 +395,7 @@ async function deliver(station: ProcessStationCard) {
     >
       <h2>报工确认</h2>
       <p>{{ activeStation.processName }} · {{ stationView?.orderCode }}</p>
-      <p>核对已完成。下面的提交才会报工。本次按单据已有数量和重量交付，这里不另填一套。</p>
+      <p v-if="!embedded" class="field-coach">核对已完成。下面的提交才会报工。本次按单据已有数量和重量交付，这里不另填一套。</p>
       <dl class="detail-grid">
         <dt>单据数量</dt>
         <dd>{{ amountText(stationScan.context?.order.quantity, stationScan.context?.order.quantityUnit) }}</dd>
@@ -406,8 +406,19 @@ async function deliver(station: ProcessStationCard) {
         返回核对
       </button>
     </article>
+    <details v-if="field && progressTarget" class="field-note">
+      <summary>过程说明</summary>
+      <ProgressNoteForm
+        stage="PRODUCTION"
+        :target-type="progressTarget.targetType"
+        :target-code="progressTarget.targetCode"
+        :mother-order-code="progressTarget.motherOrderCode"
+        :process-options="processOptions"
+        @saved="rememberProgress"
+      />
+    </details>
     <ProgressNoteForm
-      v-if="progressTarget"
+      v-else-if="progressTarget"
       stage="PRODUCTION"
       :target-type="progressTarget.targetType"
       :target-code="progressTarget.targetCode"

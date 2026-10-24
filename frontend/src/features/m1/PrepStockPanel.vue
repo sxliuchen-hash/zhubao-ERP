@@ -555,13 +555,23 @@ function correct() {
 <style scoped>
 .stock-desk { display: grid; gap: 12px; min-width: 0; }
 .stock-desk > .operation-feedback { overflow-wrap: anywhere; }
-.stock-head, .stock-overview, .stock-actions, .stock-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.stock-head, .stock-overview { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stock-actions, .stock-filters, .stock-form, .stock-line { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: end; }
 .stock-filters label, .stock-form label { display: grid; gap: 4px; min-width: 0; }
-.stock-form { display: grid; gap: 8px; }
 .stock-plain-fields { min-width: 0; border: 0; padding: 0; margin: 0; }
-.stock-line { min-width: 0; display: grid; gap: 8px; border: 1px solid var(--line, #ddd); border-radius: 8px; }
+.stock-form > .stock-plain-fields,
+.stock-plain-fields > p,
+.stock-plain-fields > .archive-check,
+.stock-plain-fields > .archive-note,
+.stock-plain-fields > button,
+.stock-plain-fields > .stock-line,
+.stock-plain-fields > .requirement-composer,
+.stock-filters > button,
+.stock-line > button,
+.stock-plain-fields label:has(textarea) { grid-column: 1 / -1; }
+.stock-line { border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 8px; }
 .stock-card, .stock-card-button { overflow-wrap: anywhere; }
-.stock-form input, .stock-form textarea, .stock-filters input { width: 100%; max-width: 100%; box-sizing: border-box; }
+.stock-form input, .stock-form textarea, .stock-form select, .stock-filters input, .stock-filters select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
 .stock-cards { display: grid; gap: 8px; }
 .stock-card { border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 8px; min-width: 0; }
 .stock-card.is-selected { border-color: var(--accent, #8a6a3b); }
@@ -569,6 +579,6 @@ function correct() {
 .stock-desk button { min-height: 36px; }
 @media (max-width: 900px) {
   .stock-desk { overflow-x: hidden; }
-  .stock-actions button, .stock-form button { width: 100%; }
+  .stock-overview { display: grid; grid-template-columns: 1fr 1fr; }
 }
 </style>

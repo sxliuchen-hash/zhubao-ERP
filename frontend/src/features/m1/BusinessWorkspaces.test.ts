@@ -190,8 +190,13 @@ const balances: InventoryBalance[] = [
     location: '成品仓',
     status: '成品',
     qty: 8,
+    quantityUnit: '件',
     weight: '12.40 g',
     frozen: '0',
+    operationContext: {
+      customerId: 1, ownerCustomerId: 1, motherOrderCode: 'MD-20260706-002', workOrderCode: 'ZD-20260706-001',
+      materialCode: 'AU750', warehouseCode: 'FINISHED', ownerType: 'CUSTOMER', stockStatus: 'FINISHED', quantity: 8, weight: 12.4,
+    },
   },
   {
     owner: '雅辰饰品',
@@ -200,8 +205,13 @@ const balances: InventoryBalance[] = [
     location: '在制仓',
     status: '在制',
     qty: 20,
+    quantityUnit: '件',
     weight: '30.00 g',
     frozen: '0',
+    operationContext: {
+      customerId: 2, ownerCustomerId: 2, motherOrderCode: 'MD-20260706-002', workOrderCode: 'ZD-20260706-001',
+      materialCode: 'S925', warehouseCode: 'WIP', ownerType: 'CUSTOMER', stockStatus: 'IN_PRODUCTION', quantity: 20, weight: 30,
+    },
   },
 ];
 
@@ -400,18 +410,20 @@ describe('M1 business workspaces', () => {
   it('renders inventory ledger details and trace evidence', async () => {
     const wrapper = mount(InventoryTraceWorkspace);
     await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === '加工库存')!.trigger('click');
 
     expect(wrapper.text()).toContain('客户库存池');
     expect(wrapper.find('table.inventory-dispatch-table').exists()).toBe(true);
-    expect(wrapper.findAll('table.inventory-dispatch-table tbody tr.is-selected')).toHaveLength(1);
+    expect(wrapper.findAll('table.inventory-dispatch-table tbody tr.is-selected')).toHaveLength(0);
+
+    await wrapper.findAll('table.inventory-dispatch-table tbody tr')[0].trigger('click');
+
     expect(wrapper.find('.active-object-card > strong').text()).toBe('MD-20260706-002');
     expect(wrapper.text()).toContain('确认发货');
     expect(wrapper.text()).not.toContain('确认出库');
     expect(wrapper.text()).not.toContain('不是回放路径');
-    expect(wrapper.text()).toContain('退货入库');
-    expect(wrapper.text()).toContain('售后复核');
+    expect(wrapper.text()).toContain('退货与售后复核');
     expect(wrapper.text()).toContain('客户所有权');
-    expect(wrapper.text()).toContain('库存台账明细');
     expect(wrapper.text()).toContain('追溯证据');
     expect(wrapper.text()).toContain('LEDGER-20260706-001');
 
@@ -424,16 +436,19 @@ describe('M1 business workspaces', () => {
   it('keeps the inventory status filter after returning and shows permission denial', async () => {
     const wrapper = mount(InventoryTraceWorkspace);
     await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === '加工库存')!.trigger('click');
     await wrapper.findAll('button').find((button) => button.text() === '更多筛选')!.trigger('click');
     await wrapper.get('[aria-label="库存状态筛选"]').setValue('在制');
     expect(wrapper.get('table.inventory-dispatch-table').text()).toContain('ZD-20260706-001');
     expect(wrapper.get('table.inventory-dispatch-table').text()).not.toContain('MD-20260706-002');
+    await wrapper.get('table.inventory-dispatch-table tbody tr').trigger('click');
     await wrapper.get('.detail-back').trigger('click');
     expect((wrapper.get('[aria-label="库存状态筛选"]').element as HTMLInputElement).value).toBe('在制');
 
     vi.mocked(fetchInventoryWorkspace).mockRejectedValueOnce(new ApiRequestError('无权查看库存', 403, 40301));
     const denied = mount(InventoryTraceWorkspace);
     await flushPromises();
+    await denied.findAll('button').find((button) => button.text() === '加工库存')!.trigger('click');
     expect(denied.text()).toContain('无权限');
     expect(denied.text()).toContain('无权查看库存');
     expect(denied.find('.active-object-card').exists()).toBe(false);

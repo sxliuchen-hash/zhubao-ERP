@@ -68,3 +68,5 @@
 68	ROW	sys_navigation_menu	code	customers
 69	TABLE	biz_requirement_template
 70	TABLE	inv_stock_document
+71	COLUMN	auth_user_account	team_code
+72	TABLE	biz_desk_task

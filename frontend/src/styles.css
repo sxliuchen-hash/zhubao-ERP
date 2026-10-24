@@ -1371,6 +1371,8 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 }
 
 @media (max-width: 900px) {
+  .field-identity { display: none; }
+  .inventory-coach { display: none; }
   .field-dock {
     position: fixed;
     right: 8px;
@@ -1779,6 +1781,9 @@ td.finance-amount,
   .finance-desktop-only {
     display: none !important;
   }
+
+  .account-admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .account-admin-grid > :has(textarea) { grid-column: 1 / -1; }
 }
 
 @media (min-width: 901px) {
@@ -1826,6 +1831,20 @@ td.finance-amount,
 }
 
 .production-handoff-card { cursor: default; }
+
+.desk-task-panel { display: grid; gap: 12px; }
+.desk-task-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 12px;
+  align-items: end;
+}
+.desk-task-form label,
+.desk-task-action { display: grid; gap: 4px; }
+.desk-task-form label span { font-size: 13px; color: var(--muted); }
+.desk-task-form .span-2 { grid-column: 1 / -1; }
+.desk-task-action input { min-width: 0; }
+.desk-task-panel .desk-card { cursor: default; }
 
 .inbound-card-top {
   display: flex;

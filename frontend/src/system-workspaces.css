@@ -270,10 +270,11 @@
 
 .system-workspace-shell .hardware-desk :is(.gateway-form, .posting-form) {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
   align-items: end;
 }
+.system-workspace-shell .hardware-desk .gateway-form > button { grid-column: 1 / -1; }
 
 .system-workspace-shell .hardware-desk .gateway-form label {
   display: grid;
