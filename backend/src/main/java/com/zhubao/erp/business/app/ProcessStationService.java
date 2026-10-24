@@ -170,6 +170,14 @@ public class ProcessStationService {
         StationTicket ticket = resolve(rawCode);
         assertCustomer(ticket, account);
         String current = unfinishedProcess(ticket);
+        if (current != null && !boundProcesses(account).contains(current)) {
+            // 上道部分交工后，下道岗位可以记录自己已收到部分的加工进度。
+            current = visibleProcesses(ticket, account).stream().filter(process -> {
+                ProcessStationCard station = card(ticket, process);
+                return !station.submitted() && (station.availableQuantity().signum() > 0
+                        || station.deliveredQuantity().compareTo(station.totalQuantity()) == 0);
+            }).findFirst().orElse(current);
+        }
         boolean delivered = current == null;
         String process = delivered ? ticket.processes().get(ticket.processes().size() - 1) : current;
         if (!boundProcesses(account).contains(process)) {

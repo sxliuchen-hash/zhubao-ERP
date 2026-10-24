@@ -277,6 +277,8 @@ class ProcessStationServiceTest {
         assertThat(documents.listProcessBatches(code, null)).hasSize(1);
         assertThat(documents.listProcessStationHandoffs(code)).isEmpty();
         assertThat(service.lookup(code, inlay).stations().get(0).availableQuantity()).isEqualByComparingTo("2");
+        assertThat(service.openProgress(code, inlay).currentProcess()).isEqualTo("镶嵌");
+        assertThatThrownBy(() -> service.openProgress(code, polish)).hasMessageContaining("不能做");
         assertThatThrownBy(() -> service.reportBatch(batch(code, "镶嵌", "batch-over", "3", null), inlay)).hasMessageContaining("超过");
         service.reportBatch(batch(code, "镶嵌", "batch-2", "2", null), inlay);
         service.reportBatch(batch(code, "抛光", "batch-3", "2", null), polish);
