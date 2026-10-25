@@ -131,7 +131,7 @@ public class BusinessOperationController {
     ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         if (dataAccess != null) dataAccess.assertCustomer(context, command.customerId(), "");
-        return ApiResponse.ok(mobileIntakeService.intake(command, context));
+        return ApiResponse.ok(command.pendingCode().isBlank() ? mobileIntakeService.intake(command, context) : mobileIntakeService.intake(command, context, requireBusinessAccount(request).username()));
     }
 
     @GetMapping("/mother-orders/{code}")

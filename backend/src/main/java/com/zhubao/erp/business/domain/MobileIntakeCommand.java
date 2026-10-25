@@ -26,12 +26,29 @@ public record MobileIntakeCommand(
         String sourceType,
         List<MobileIntakeLine> lines,
         String requirementTemplateCode,
-        Integer requirementTemplateVersion
+        Integer requirementTemplateVersion,
+        String pendingCode,
+        Integer pendingVersion
 ) {
     public MobileIntakeCommand {
+        pendingCode = pendingCode == null ? "" : pendingCode.trim();
         lines = lines == null ? List.of() : List.copyOf(lines);
         requirementTemplateCode = requirementTemplateCode == null ? "" : requirementTemplateCode.trim();
         requirementTemplateVersion = requirementTemplateVersion == null || requirementTemplateVersion < 0 ? 0 : requirementTemplateVersion;
+    }
+
+    public MobileIntakeCommand(String courierNo, String customerName, Long customerId, String processingRequirement,
+            String dueDate, String goodsName, BigDecimal quantity, BigDecimal weight, String expressCompany, String materialCode,
+            String quantityUnit, String requestId, String sourceType, List<MobileIntakeLine> lines, String requirementTemplateCode, Integer requirementTemplateVersion, String pendingCode) {
+        this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName, quantity, weight, expressCompany, materialCode,
+                quantityUnit, requestId, sourceType, lines, requirementTemplateCode, requirementTemplateVersion, pendingCode, null);
+    }
+
+    public MobileIntakeCommand(String courierNo, String customerName, Long customerId, String processingRequirement,
+            String dueDate, String goodsName, BigDecimal quantity, BigDecimal weight, String expressCompany, String materialCode,
+            String quantityUnit, String requestId, String sourceType, List<MobileIntakeLine> lines, String requirementTemplateCode, Integer requirementTemplateVersion) {
+        this(courierNo, customerName, customerId, processingRequirement, dueDate, goodsName, quantity, weight, expressCompany, materialCode,
+                quantityUnit, requestId, sourceType, lines, requirementTemplateCode, requirementTemplateVersion, "");
     }
 
     public MobileIntakeCommand(String courierNo, String customerName, Long customerId,

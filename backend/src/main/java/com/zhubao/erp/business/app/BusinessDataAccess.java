@@ -25,17 +25,23 @@ public class BusinessDataAccess {
     private final BusinessDocumentRepository documents;
     private final StockLedgerService stocks;
     private final AuthUserAccountRepository accounts;
+    private com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments;
 
     public BusinessDataAccess(BusinessDocumentRepository documents, StockLedgerService stocks) {
         this(documents, stocks, null);
     }
 
-    @Autowired
     public BusinessDataAccess(BusinessDocumentRepository documents, StockLedgerService stocks,
                               AuthUserAccountRepository accounts) {
         this.documents = documents;
         this.stocks = stocks;
         this.accounts = accounts;
+    }
+
+    @Autowired
+    public BusinessDataAccess(BusinessDocumentRepository documents, StockLedgerService stocks, AuthUserAccountRepository accounts,
+                              com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments) {
+        this(documents, stocks, accounts); this.stockDocuments = stockDocuments;
     }
 
     public static OperatorContext contextOf(AuthUserAccount account) {
@@ -47,6 +53,12 @@ public class BusinessDataAccess {
 
     public boolean canRead(OperatorContext context, String businessCode) {
         if (context == null || ownershipConflicts(text(businessCode))) return false;
+        var receipt = stockDocuments == null ? null : stockDocuments.find(text(businessCode)).orElse(null);
+        if (receipt != null) {
+            if (!"PREP_RECEIPT".equals(receipt.kind()) || ownerOf(text(businessCode)) != null) return false;
+            return DocumentVisibility.canSee(context, receipt.customerId(), receipt.customerName(), "inventory",
+                    List.of(receipt.operatorName(), receipt.handoverPerson()), directory());
+        }
         if (context.dataScope() == DataScope.ALL) return true;
         BusinessOwner owner = ownerOf(text(businessCode));
         return owner != null && visibleOwner(context, owner);

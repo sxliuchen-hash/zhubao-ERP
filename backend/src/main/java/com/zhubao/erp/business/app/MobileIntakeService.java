@@ -59,6 +59,7 @@ public class MobileIntakeService {
     private final StockLedgerService stockLedgerService;
     private final MotherRequirementSourceRepository requirementSources;
     private final AuthUserAccountRepository accounts;
+    private com.zhubao.erp.business.domain.ProcessingIntakePendingRepository pendingRepository;
     /** 本进程已发出、事务可能尚未提交的母单号，避免并发收货拿到同一个流水。 */
     private final Set<String> reservedMotherCodes = ConcurrentHashMap.newKeySet();
     private final Object motherCodeLock = new Object();
@@ -109,7 +110,6 @@ public class MobileIntakeService {
                 requirementSources, null);
     }
 
-    @Autowired
     public MobileIntakeService(
             BusinessOperationService businessOperationService,
             BusinessDocumentRepository businessDocumentRepository,
@@ -126,6 +126,15 @@ public class MobileIntakeService {
         this.stockLedgerService = stockLedgerService;
         this.requirementSources = requirementSources;
         this.accounts = accounts;
+    }
+
+    @Autowired
+    public MobileIntakeService(BusinessOperationService businessOperationService, BusinessDocumentRepository businessDocumentRepository,
+            BusinessWorkUnit workUnit, MasterDataService masterData, StockLedgerService stockLedgerService,
+            MotherRequirementSourceRepository requirementSources, AuthUserAccountRepository accounts,
+            com.zhubao.erp.business.domain.ProcessingIntakePendingRepository pendingRepository) {
+        this(businessOperationService, businessDocumentRepository, workUnit, masterData, stockLedgerService, requirementSources, accounts);
+        this.pendingRepository = pendingRepository;
     }
 
     /** 在当前工作单元里占用下一个母单号，避免和收货建单撞号。 */
@@ -154,7 +163,8 @@ public class MobileIntakeService {
                         record.createdAt(), record.goodsName(), record.processingRequirement(), record.dueDate())).toList());
     }
 
-    public MobileIntakeResult intake(MobileIntakeCommand command, OperatorContext operator) {
+    public MobileIntakeResult intake(MobileIntakeCommand command, OperatorContext operator) { return intake(command, operator, operator == null ? "" : operator.operator()); }
+    public MobileIntakeResult intake(MobileIntakeCommand command, OperatorContext operator, String account) {
         if (operator == null || operator.operator() == null || operator.operator().isBlank()) {
             throw new BusinessException("请先登录后再收货");
         }
@@ -173,19 +183,26 @@ public class MobileIntakeService {
         if (command.requestId() == null || command.requestId().isBlank()) {
             throw new BusinessException("建单必须提供请求编号，请升级客户端后重试");
         }
-        return intakeOnce(command, operator.operator().trim(), courierNo, customerName);
+        return intakeOnce(command, operator.operator().trim(), courierNo, customerName, account);
     }
 
     private MobileIntakeResult intakeOnce(
             MobileIntakeCommand command,
             String operator,
             String courierNo,
-            String customerName
+            String customerName,
+            String account
     ) {
         if (workUnit == null) {
             throw new BusinessException("来料回放尚未装配");
         }
         long customerId = resolveCustomerId(customerName, command.customerId());
+        // 回放也须核对真实账号，不能因同名操作人绕过待核资料归属。
+        if (!command.pendingCode().isBlank()) {
+            if (pendingRepository == null) throw new BusinessException("加工待核转换仓储尚未装配");
+            var existingPending = pendingRepository.find(command.pendingCode(), null).orElseThrow(() -> new BusinessException("加工待核记录不存在"));
+            if (!existingPending.account().equals(account)) throw new com.zhubao.erp.security.error.PermissionDeniedException("加工待核记录不属于当前账号");
+        }
         String text = workUnit.execute(new CommandCall(
                     command.requestId(),
                     operator,
@@ -193,7 +210,19 @@ public class MobileIntakeService {
                     "REQUEST",
                     command.requestId(),
                     ReceivingResultText.intakePayload(command, customerId, customerName)
-        ), session -> ReceivingResultText.intake(create(command, operator, courierNo, customerName, session)));
+        ), session -> {
+            com.zhubao.erp.business.domain.ProcessingIntakePending pending = null;
+            if (!command.pendingCode().isBlank()) {
+                if (pendingRepository == null) throw new BusinessException("加工待核转换仓储尚未装配");
+                pending = pendingRepository.find(command.pendingCode(), session).orElseThrow(() -> new BusinessException("加工待核记录不存在"));
+                if (!pending.account().equals(account)) throw new com.zhubao.erp.security.error.PermissionDeniedException("加工待核记录不属于当前账号");
+                if (command.pendingVersion() != null && command.pendingVersion() != pending.version()) throw new BusinessException("加工待核资料已更新，请重新读取后建单");
+                if (!"PENDING".equals(pending.status())) throw new BusinessException("此待核记录已转正式母单：" + pending.motherOrderCode());
+            }
+            MobileIntakeResult created = create(command, operator, courierNo, customerName, session);
+            if (pending != null) pendingRepository.save(new com.zhubao.erp.business.domain.ProcessingIntakePending(pending.code(), pending.version() + 1, pending.account(), "CONSUMED", created.motherOrderCode(), pending.draftJson(), pending.createdAt(), java.time.LocalDateTime.now().toString()), session);
+            return ReceivingResultText.intake(created);
+        });
         return ReceivingResultText.intake(text);
     }
 

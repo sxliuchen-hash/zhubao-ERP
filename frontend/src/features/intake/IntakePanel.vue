@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import { canManageMasterData } from '../../services/masterDataAccess';
 import { fetchCustomers, fetchMaterials, fetchShortcuts, STORAGE_CONDITIONS, saveCustomer, saveMaterial,
@@ -12,6 +12,10 @@ import StatusBadge from '../../components/StatusBadge.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
 import EvidencePreviewLink from '../evidence/EvidencePreviewLink.vue';
 import { fetchEvidenceBoard, type EvidenceBoard } from '../../services/evidenceApi';
+import { ApiRequestError } from '../../services/apiClient';
+import { readIntakeDraft, writeIntakeDraft, deleteIntakeDraft } from './intakeDraftStore';
+import { fetchProcessingPendings, saveProcessingPending, type ProcessingIntakeDraft, type ProcessingIntakePending, type SaveProcessingPending } from '../../services/processingPendingApi';
+import type { EvidenceDraftFile } from '../evidence/evidenceDraft';
 import { keptInputFailure } from '../field/keptInput';
 import OrderContextCard from '../scan/OrderContextCard.vue';
 import ScanInput from '../scan/ScanInput.vue';
@@ -22,15 +26,17 @@ import type { TraceTarget } from '../scan/traceTarget';
 import type { ScanContextResponse, ScanRelatedTarget } from '../../services/scanContextApi';
 import {
   submitMobileIntake, fetchMotherOrder,
-  type MobileIntakeResult,
+  type MobileIntakeRequest, type MobileIntakeResult,
 } from '../../services/mobileIntakeApi';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   title: string;
   intro: string;
   field?: boolean;
+  draftScope?: string;
 }>(), {
   field: false,
+  draftScope: 'new-receipt',
 });
 
 const openTab = inject<((tab: string) => void) | null>('zhubao-open-tab', null);
@@ -79,7 +85,7 @@ const processingRequirement = ref('');
 const intakePurpose = ref('processing');
 const prepCreated = ref(false);
 const prepOpen = ref(false);
-watch(intakePurpose, purpose => { if (purpose === 'prep') prepCreated.value = true; prepOpen.value = purpose === 'prep'; }, { flush: 'sync' });
+watch(intakePurpose, purpose => { if (purpose === 'prep') { preparePrepSeed(); prepCreated.value = true; } prepOpen.value = purpose === 'prep'; }, { flush: 'sync' });
 function togglePrepDraft() { intakePurpose.value = prepOpen.value ? 'processing' : 'prep'; }
 const requirementTemplateCode = ref('');
 const requirementTemplateVersion = ref(0);
@@ -118,11 +124,31 @@ const entryPanel = ref<HTMLElement | null>(null);
 const draftPanel = ref<HTMLElement | null>(null);
 const savedPanel = ref<HTMLElement | null>(null);
 const created = ref<MobileIntakeResult | null>(null);
-const evidenceDraftKey = ref(crypto.randomUUID());
+const evidenceDraftKey = ref<string>(crypto.randomUUID());
 const existingLedgerCode = ref('');
 const evidenceIdentityError = ref('');
 const requestId = ref('');
 const requestFingerprint = ref('');
+const pendingIntake = ref<MobileIntakeRequest | null>(null);
+const pendingSave = ref<SaveProcessingPending | null>(null);
+const pendingRecord = ref<ProcessingIntakePending | null>(null);
+const pendingRows = ref<ProcessingIntakePending[]>([]);
+const evidenceFiles = ref<EvidenceDraftFile[]>([]);
+const restoredEvidence = ref<EvidenceDraftFile[] | undefined>(undefined);
+const accountKey = computed(() => authSession.value?.username ?? '');
+const localScope = computed(() => `processing:${props.draftScope}`);
+const restoring = ref(false);
+const draftError = ref('');
+const draftSavedAt = ref('');
+const draftDirty = ref(false);
+let draftRevision = 0;
+const businessLocked = computed(() => submitting.value || Boolean(pendingIntake.value) || Boolean(pendingSave.value) || restoring.value);
+const reuseRequirements = ref(false);
+const reuseDueDate = ref(false);
+const prepReceiptCode = ref('');
+const prepSeed = ref<{ customerId: number | null; customerName: string; sourceNote: string; lines: Array<{ materialCode: string; quantityUnit: string; quantity: string; weight: string; externalRef: string }>; sourceDraftKey: string } | null>(null);
+let restoreGeneration = 0;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const intakeScan = reactive(useScanContext());
 const relatedWaybill = ref('');
 const relatedMotherCodes = ref<string[]>([]);
@@ -188,35 +214,28 @@ function openMotherDetails() {
   openTab?.('inbound');
 }
 
-function startNextIntake() {
-  if (arrangementLocked.value) return;
-  productionDecision.value = '';
-  evidenceDraftKey.value = crypto.randomUUID();
-  formStage.value = 1;
-  savedQuantityUnit.value = '';
+function startNextIntake(mode: 'same-waybill' | 'same-customer' | 'new' = 'new') {
+  if (arrangementLocked.value || businessLocked.value) return;
+  const previous = { customerId: customerId.value, customerName: created.value?.customerName || customerName.value,
+    courier: created.value?.courierNo || newExpressCode.value || manualCourier.value, sourceType: sourceType.value,
+    requirement: processingRequirement.value, dueDate: dueDate.value, template: requirementTemplateCode.value, templateVersion: requirementTemplateVersion.value };
+  productionDecision.value = ''; pendingRecord.value = null; prepReceiptCode.value = ''; prepOpen.value = false;
+  formStage.value = 1; savedQuantityUnit.value = '';
   if (traceTarget.value?.intent === 'INTAKE') traceTarget.value = null;
-  scanText.value = '';
-  clearIntakeTarget();
-  scanHint.value = '';
-  customerName.value = '';
-  customerId.value = null;
-  materialCode.value = '';
-  processingRequirement.value = '';
-  requirementTemplateCode.value = '';
-  requirementTemplateVersion.value = 0;
+  scanText.value = ''; clearIntakeTarget(); evidenceDraftKey.value = crypto.randomUUID();
+  customerName.value = mode === 'new' ? '' : previous.customerName;
+  customerId.value = mode === 'new' ? null : previous.customerId;
+  materialCode.value = ''; goodsName.value = ''; quantity.value = '1'; quantityUnit.value = '件'; weight.value = ''; extraLines.value = [];
+  processingRequirement.value = mode !== 'new' && reuseRequirements.value ? previous.requirement : '';
+  requirementTemplateCode.value = mode !== 'new' && reuseRequirements.value ? previous.template : '';
+  requirementTemplateVersion.value = mode !== 'new' && reuseRequirements.value ? previous.templateVersion : 0;
   requirementComposerKey.value += 1;
-  dueDate.value = '';
-  goodsName.value = '';
-  quantity.value = '1';
-  quantityUnit.value = '件';
-  weight.value = '';
-  extraLines.value = [];
-  customerSearch.value = '';
-  materialSearch.value = '';
-  sourceType.value = 'COURIER';
-  manualDraft.value = false;
-  manualCourier.value = '';
-  showPanel(entryPanel);
+  dueDate.value = mode !== 'new' && reuseDueDate.value ? previous.dueDate : '';
+  sourceType.value = mode === 'same-waybill' ? 'COURIER' : mode === 'same-customer' ? previous.sourceType : 'COURIER';
+  manualCourier.value = mode === 'same-waybill' ? previous.courier : '';
+  manualDraft.value = true; customerSearch.value = ''; materialSearch.value = '';
+  intakePurpose.value = 'processing'; scanHint.value = '新一笔使用新请求；材质、数量、重量和照片重新录入';
+  showPanel(draftPanel);
 }
 
 function shownText(value: string) {
@@ -224,6 +243,7 @@ function shownText(value: string) {
 }
 
 function clearIntakeTarget() {
+  if (restoring.value || pendingIntake.value || pendingSave.value) return;
   const had = intakeScan.context !== null || intakeScan.loading || created.value !== null;
   if (had) evidenceDraftKey.value = crypto.randomUUID();
   existingLedgerCode.value = '';
@@ -305,7 +325,7 @@ async function loadRelatedEvidence() {
 }
 
 async function recognizeIntake(draft: ScanDraft) {
-  if (arrangementLocked.value) { formError.value = '请先核对当前生产安排的原请求结果'; return; }
+  if (arrangementLocked.value || businessLocked.value) { formError.value = '请先核对当前生产安排的原请求结果'; return; }
   formError.value = '';
   scanHint.value = '';
   const content = draft.content.trim();
@@ -348,6 +368,7 @@ function confirmationFingerprint() {
     newExpressCode.value || manualCourier.value.trim(),
     customerName.value.trim(),
     customerId.value,
+    pendingRecord.value?.code ?? '', pendingRecord.value?.version ?? 0,
     materialCode.value,
     processingRequirement.value.trim(),
     requirementTemplateCode.value,
@@ -372,6 +393,8 @@ function ensureRequestId() {
 }
 
 function nextFormStage() {
+  if (pendingIntake.value) { formStage.value = 2; return; }
+  if (businessLocked.value) return;
   formError.value = '';
   if (!customerId.value || !customerName.value.trim()) {
     formError.value = '请先选择客户';
@@ -391,10 +414,11 @@ function nextFormStage() {
 
 async function createMotherOrder() {
   if (intakePurpose.value !== 'processing') return;
-  if (submitting.value) return;
+  if (submitting.value || restoring.value || created.value) return;
+  if (pendingIntake.value) { await sendIntake(pendingIntake.value); return; }
+  if (prepReceiptCode.value) { formError.value = '此来料已保存寄存收货，请从原寄存批次领用建单，不能重复收货'; return; }
   formError.value = '';
   const courier = sourceType.value === 'COURIER' ? (newExpressCode.value || manualCourier.value.trim()) : '';
-  const seen = intakeScan.revision;
   if (intakeScan.loading) {
     formError.value = '请等待扫码识别完成';
     return;
@@ -427,9 +451,7 @@ async function createMotherOrder() {
   const totalQuantity = lines.reduce((sum, line) => sum + Math.round(line.quantity * 1000), 0) / 1000;
   const totalWeight = lines.reduce((sum, line) => sum + Math.round(Number(line.weight) * 1000), 0) / 1000;
   const currentRequestId = ensureRequestId();
-  submitting.value = true;
-  try {
-    const result = await submitMobileIntake({
+  const body: MobileIntakeRequest = {
       courierNo: courier,
       sourceType: sourceType.value,
       customerName: customerName.value.trim(),
@@ -445,18 +467,31 @@ async function createMotherOrder() {
       expressCompany: '',
       lines,
       requestId: currentRequestId,
-    });
-    if (intakeScan.revision !== seen) return;
-    savedQuantityUnit.value = lines[0]?.quantityUnit ?? '';
-    created.value = result;
-    emit('saved', result);
-    showPanel(savedPanel);
+      ...(pendingRecord.value ? { pendingCode: pendingRecord.value.code, pendingVersion: pendingRecord.value.version } : {}),
+  };
+  await sendIntake(body);
+}
+async function sendIntake(body: MobileIntakeRequest) {
+  if (submitting.value) return;
+  const owner = accountKey.value; const seen = intakeScan.revision; const epoch = restoreGeneration;
+  submitting.value = true; pendingIntake.value = JSON.parse(JSON.stringify(body));
+  let sent = false;
+  try {
+    await persistDraft();
+    if (owner !== accountKey.value) throw new Error('账号已变化，请回到原账号用原请求核对');
+    sent = true;
+    const result = await submitMobileIntake(body);
+    if (owner !== accountKey.value || epoch !== restoreGeneration || intakeScan.revision !== seen) return;
+    pendingIntake.value = null; savedQuantityUnit.value = body.lines?.[0]?.quantityUnit ?? body.quantityUnit ?? '';
+    created.value = result; emit('saved', result); showPanel(savedPanel);
+    try { await persistDraft(); } catch { draftError.value = '业务已成功，本机状态更新失败；刷新后用原请求核对，不另建单'; }
   } catch (error) {
-    if (intakeScan.revision !== seen) return;
-    if (intakeScan.revision === seen) formError.value = keptInputFailure(error, '确认建单并入库失败');
-  } finally {
-    submitting.value = false;
-  }
+    if (owner !== accountKey.value || epoch !== restoreGeneration || intakeScan.revision !== seen) return;
+    const known = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && ![401, 408, 409].includes(error.status);
+    if (!sent || known) pendingIntake.value = null;
+    formError.value = keptInputFailure(error, '确认建单并入库失败');
+    void persistDraft().catch(() => {});
+  } finally { if (epoch === restoreGeneration) submitting.value = false; }
 }
 
 async function loadCatalog() {
@@ -542,6 +577,102 @@ async function addMaterial() {
   }
 }
 
+function processingDraft(): ProcessingIntakeDraft {
+  return { customerId: customerId.value, customerName: customerName.value, sourceType: sourceType.value,
+    courierNo: newExpressCode.value || manualCourier.value, processingRequirement: processingRequirement.value, dueDate: dueDate.value,
+    lines: [{ materialCode: materialCode.value, goodsName: goodsName.value, quantity: String(quantity.value), quantityUnit: quantityUnit.value, weight: String(weight.value) }, ...extraLines.value.map(line => ({ ...line, quantity: String(line.quantity), weight: String(line.weight) }))],
+    requirementTemplateCode: requirementTemplateCode.value, requirementTemplateVersion: requirementTemplateVersion.value, localDraftKey: evidenceDraftKey.value };
+}
+function snapshot() {
+  return { version: 1, form: processingDraft(), scanText: scanText.value, context: intakeScan.context ? JSON.parse(JSON.stringify(intakeScan.context)) : null,
+    savedQuantityUnit: savedQuantityUnit.value, manualDraft: manualDraft.value, formStage: formStage.value, purpose: intakePurpose.value, prepCreated: prepCreated.value, prepSeed: prepSeed.value ? JSON.parse(JSON.stringify(prepSeed.value)) : null,
+    created: created.value ? JSON.parse(JSON.stringify(created.value)) as MobileIntakeResult : null, pendingIntake: pendingIntake.value ? JSON.parse(JSON.stringify(pendingIntake.value)) : null,
+    pendingSave: pendingSave.value ? JSON.parse(JSON.stringify(pendingSave.value)) : null, pendingRecord: pendingRecord.value ? { ...pendingRecord.value } : null,
+    requestId: requestId.value, requestFingerprint: requestFingerprint.value, prepReceiptCode: prepReceiptCode.value,
+    files: evidenceFiles.value.map(file => ({ ...file, snap: { ...file.snap } })), savedAt: new Date().toISOString() };
+}
+async function persistDraft(owner = accountKey.value) {
+  if (!owner || restoring.value) return;
+  const value = snapshot(); const revision = draftRevision;
+  try { await writeIntakeDraft(owner, localScope.value, value); if (owner === accountKey.value) { draftSavedAt.value = value.savedAt; draftError.value = ''; if (revision === draftRevision) draftDirty.value = false; } }
+  catch (error) { if (owner === accountKey.value) draftError.value = error instanceof Error ? error.message : '本机草稿保存失败'; throw error; }
+}
+function applyDraft(draft: ProcessingIntakeDraft) {
+  customerId.value = draft.customerId; customerName.value = draft.customerName; sourceType.value = ['COURIER', 'CUSTOMER_DELIVERY', 'INTERNAL_OTHER'].includes(draft.sourceType) ? draft.sourceType as typeof sourceType.value : 'COURIER';
+  manualCourier.value = draft.courierNo; processingRequirement.value = draft.processingRequirement; dueDate.value = draft.dueDate;
+  const [first, ...rest] = draft.lines;
+  materialCode.value = first?.materialCode ?? ''; goodsName.value = first?.goodsName ?? ''; quantity.value = String(first?.quantity ?? '1'); quantityUnit.value = first?.quantityUnit ?? '件'; weight.value = String(first?.weight ?? '');
+  extraLines.value = rest.map(line => ({ ...line, quantity: String(line.quantity), weight: String(line.weight) })); requirementTemplateCode.value = draft.requirementTemplateCode; requirementTemplateVersion.value = draft.requirementTemplateVersion;
+  evidenceDraftKey.value = draft.localDraftKey || crypto.randomUUID(); requirementComposerKey.value += 1; manualDraft.value = true;
+}
+async function loadPendingRows() {
+  if (!accountKey.value) return;
+  const owner = accountKey.value;
+  try { const rows = await fetchProcessingPendings(); if (owner === accountKey.value) pendingRows.value = rows; }
+  catch (error) { if (owner === accountKey.value) formError.value = error instanceof Error ? error.message : '加工待核列表读取失败'; }
+}
+async function savePending() {
+  if (submitting.value || pendingIntake.value || restoring.value || prepReceiptCode.value || created.value) return;
+  const owner = accountKey.value; const epoch = restoreGeneration;
+  const body = pendingSave.value ?? { code: pendingRecord.value?.code ?? '', expectedVersion: pendingRecord.value?.version ?? 0, requestId: `pending-${crypto.randomUUID()}`, draft: processingDraft() };
+  pendingSave.value = body; submitting.value = true;
+  try { await persistDraft(); const saved = await saveProcessingPending(body); if (owner !== accountKey.value || epoch !== restoreGeneration) return; pendingRecord.value = saved; pendingSave.value = null; scanHint.value = `加工待核已保存 ${saved.code}，未建立母单、未入库`; await persistDraft(); await loadPendingRows(); }
+  catch (error) { if (owner !== accountKey.value || epoch !== restoreGeneration) return; if (error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && ![401, 408, 409].includes(error.status)) pendingSave.value = null; formError.value = error instanceof Error ? error.message : '待核结果未知，请用原请求核对'; }
+  finally { if (epoch === restoreGeneration) submitting.value = false; }
+}
+function openPending(row: ProcessingIntakePending) {
+  if (businessLocked.value || arrangementLocked.value) return;
+  if (!globalThis.confirm('打开待核资料会替换当前加工表单，当前本机文件仍按原草稿保留。继续吗？')) return;
+  restoring.value = true;
+  try { clearIntakeTarget(); created.value = null; intakeScan.invalidate(); applyDraft(JSON.parse(row.draftJson)); pendingRecord.value = row; intakePurpose.value = 'processing'; formStage.value = 1; scanHint.value = `已打开 ${row.code}，补齐资料后确认建单并入库`; }
+  catch { formError.value = '待核资料无法识别，请保留编号核对'; }
+  finally { restoring.value = false; }
+}
+async function clearLocalDraft() {
+  if (businessLocked.value || arrangementLocked.value || !accountKey.value) return;
+  if (!globalThis.confirm('清除本机草稿及文件后，未上传的文件无法恢复；服务端已保存业务和证据保留。继续吗？')) return;
+  if (saveTimer) clearTimeout(saveTimer);
+  await deleteIntakeDraft(accountKey.value, localScope.value); evidenceFiles.value = []; restoredEvidence.value = []; draftSavedAt.value = ''; startNextIntake('new');
+}
+function onPrepReceived(result: { documentCode: string; posted: boolean }) { if (prepSeed.value?.sourceDraftKey === evidenceDraftKey.value) prepReceiptCode.value = result.documentCode; }
+function preparePrepSeed() {
+  if (restoring.value || prepCreated.value) return;
+  prepSeed.value = { customerId: customerId.value, customerName: customerName.value, sourceNote: newExpressCode.value || manualCourier.value ? `运单 ${newExpressCode.value || manualCourier.value}` : sourceType.value === 'CUSTOMER_DELIVERY' ? '客户送达' : '厂内接收／其他',
+    lines: processingDraft().lines.map(line => ({ materialCode: line.materialCode, quantityUnit: line.quantityUnit, quantity: line.quantity, weight: line.weight, externalRef: line.goodsName })), sourceDraftKey: evidenceDraftKey.value };
+}
+watch(accountKey, async (owner, previous) => {
+  if (!owner && !previous) return;
+  if (previous && !restoring.value) void persistDraft(previous).catch(() => {});
+  const generation = ++restoreGeneration; restoring.value = true; submitting.value = false;
+  pendingIntake.value = null; pendingSave.value = null; pendingRecord.value = null; created.value = null; intakeScan.invalidate();
+  evidenceFiles.value = []; restoredEvidence.value = []; prepReceiptCode.value = ''; pendingRows.value = []; prepCreated.value = false; prepOpen.value = false; prepSeed.value = null;
+  applyDraft({ customerId: null, customerName: '', sourceType: 'COURIER', courierNo: '', processingRequirement: '', dueDate: '', lines: [], requirementTemplateCode: '', requirementTemplateVersion: 0, localDraftKey: crypto.randomUUID() }); manualDraft.value = false;
+  if (!owner) { restoring.value = false; return; }
+  try {
+    const saved = await readIntakeDraft<ReturnType<typeof snapshot>>(owner, localScope.value);
+    if (generation !== restoreGeneration) return;
+    if (saved?.version === 1) {
+      applyDraft(saved.form); scanText.value = saved.scanText; intakeScan.context = saved.context;
+      created.value = saved.created; savedQuantityUnit.value = saved.savedQuantityUnit ?? ''; pendingIntake.value = saved.pendingIntake; pendingSave.value = saved.pendingSave; pendingRecord.value = saved.pendingRecord;
+      requestId.value = saved.requestId; requestFingerprint.value = saved.requestFingerprint; formStage.value = saved.formStage; manualDraft.value = saved.manualDraft;
+      prepSeed.value = saved.prepSeed; prepCreated.value = saved.prepCreated; intakePurpose.value = saved.purpose; prepOpen.value = saved.purpose === 'prep'; prepReceiptCode.value = saved.prepReceiptCode;
+      evidenceFiles.value = saved.files; restoredEvidence.value = saved.files; draftSavedAt.value = saved.savedAt; scanHint.value = '已恢复本账号草稿及实际文件；结果未知时先用原请求核对';
+    }
+    await nextTick();
+  } catch (error) { if (generation === restoreGeneration) draftError.value = error instanceof Error ? error.message : '本机草稿恢复失败'; }
+  finally { if (generation === restoreGeneration) { restoring.value = false; void loadPendingRows();
+      if (traceTarget.value?.intent === 'INTAKE' && !intakeScan.context && !created.value) void recognizeIntake({ content: traceTarget.value.code, objectType: traceTarget.value.objectType ?? undefined }); } }
+}, { immediate: true, flush: 'sync' });
+watch(() => [processingDraft(), evidenceFiles.value, pendingIntake.value, pendingSave.value, pendingRecord.value, created.value, formStage.value, intakePurpose.value, prepReceiptCode.value], () => {
+  if (!accountKey.value || restoring.value) return;
+  draftDirty.value = true; ++draftRevision;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { void persistDraft().catch(() => {}); }, 120);
+}, { deep: true });
+function beforeLeave(event: BeforeUnloadEvent) { if (draftDirty.value || draftError.value || pendingIntake.value || pendingSave.value) { event.preventDefault(); event.returnValue = ''; } }
+onMounted(() => { window.addEventListener('beforeunload', beforeLeave); });
+onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeLeave); if (saveTimer) clearTimeout(saveTimer); void persistDraft().catch(() => {}); });
+
 onMounted(loadCatalog);
 </script>
 
@@ -556,6 +687,8 @@ onMounted(loadCatalog);
       <button type="button" class="secondary-button" :disabled="catalogSaving" @click="closeCatalog">取消</button>
     </section>
   </div>
+  <section class="section-block" aria-label="本机收料草稿"><p v-if="restoring">正在恢复本账号的表单及实际文件…</p><p v-else-if="draftDirty">正在保存本机草稿及实际文件，请等保存完成后刷新或离开。</p><p v-else-if="draftSavedAt">本机草稿和实际文件已保存；切换账号独立保存，退出登录不删除本机草稿。</p><p v-if="draftError" class="operation-feedback danger">{{ draftError }}</p><p v-if="pendingIntake || pendingSave" class="operation-feedback warning">上次提交结果待核对，保留原请求和快照；先核对结果，再开始下一笔。</p><button v-if="accountKey" type="button" class="secondary-button" :disabled="businessLocked || arrangementLocked" @click="clearLocalDraft">清除本机草稿及文件</button></section>
+  <details v-if="accountKey" class="section-block"><summary @click="loadPendingRows">继续加工待核资料（未入库）</summary><button v-for="row in pendingRows" :key="row.code" type="button" class="secondary-button" :disabled="businessLocked" @click="openPending(row)">{{ row.code }} · {{ row.updatedAt }}</button></details>
   <section ref="entryPanel" class="section-block intake-create">
     <div class="section-heading">
       <div>
@@ -565,13 +698,13 @@ onMounted(loadCatalog);
     </div>
     <label class="field">
       <span>收货来源</span>
-      <select v-model="sourceType" aria-label="收货来源" :disabled="arrangementLocked" @change="clearIntakeTarget">
+      <select v-model="sourceType" aria-label="收货来源" :disabled="arrangementLocked || businessLocked" @change="clearIntakeTarget">
         <option value="COURIER">快递寄来</option>
         <option value="CUSTOMER_DELIVERY">客户送达</option>
         <option value="INTERNAL_OTHER">厂内接收／其他</option>
       </select>
     </label>
-    <button v-if="sourceType === 'COURIER' && !draftAvailable" class="secondary-button" type="button" @click="manualDraft = true">无运单直接建单</button>
+    <button v-if="sourceType === 'COURIER' && !draftAvailable" class="secondary-button" type="button" :disabled="businessLocked || arrangementLocked" @click="manualDraft = true">无运单直接建单</button>
     <ScanInput
       v-model="scanText"
       field-text="快递单号或二维码内容"
@@ -581,7 +714,7 @@ onMounted(loadCatalog);
       submit-aria-label="识别单号"
       photo-aria-label="拍面单"
       :bind-mobile-scan="field"
-      :busy="intakeScan.loading || submitting || arrangementLocked"
+      :busy="intakeScan.loading || businessLocked || arrangementLocked"
       @draft="clearIntakeTarget"
       @recognize="recognizeIntake"
     />
@@ -622,15 +755,19 @@ onMounted(loadCatalog);
     <p v-if="intakePurpose === 'prep'">先寄存不建立加工母单，不产生加工费；下方单独登记备料。</p>
     <p v-else-if="field">草稿尚未建单，填好资料后点击“确认建单并入库”。</p>
     <p>照片或视频可稍后补传，不影响建单。</p>
-    <label class="field"><span>收货用途</span><select v-model="intakePurpose" aria-label="收货用途"><option value="processing">现在加工，建立母单</option><option value="prep">先寄存备料</option></select></label>
+    <label class="field"><span>收货用途</span><select v-model="intakePurpose" aria-label="收货用途" :disabled="businessLocked || arrangementLocked"><option value="processing">现在加工，建立母单</option><option value="prep">先寄存备料</option></select></label>
+    <p v-if="prepReceiptCode" class="operation-feedback warning">此来料已寄存收货 {{ prepReceiptCode }}，请回寄存草稿按原批次领用建加工单，不能重复收货。</p>
+    <button v-if="intakePurpose === 'processing'" type="button" class="secondary-button" :disabled="submitting || restoring || Boolean(pendingIntake) || Boolean(prepReceiptCode)" @click="savePending">{{ pendingSave ? '用原请求核对加工待核' : '资料不全，保存加工待核（不入库）' }}</button>
+    <button v-if="pendingIntake && !field" type="button" class="primary-button" :disabled="submitting || restoring" @click="createMotherOrder">用原请求核对建单结果</button>
+    <p v-if="pendingRecord">加工待核 {{ pendingRecord.code }} · 版本 {{ pendingRecord.version }} · 未建立母单、未入库</p>
     <div v-show="intakePurpose === 'processing'" class="intake-form" :inert="intakePurpose !== 'processing' || undefined">
       <nav class="intake-stage-nav" aria-label="收货填写步骤">
-        <button type="button" class="secondary-button" :aria-current="formStage === 1 ? 'step' : undefined" :disabled="submitting" @click="formStage = 1">1 客户来料</button>
-        <button type="button" class="secondary-button" :aria-current="formStage === 2 ? 'step' : undefined" :disabled="submitting" @click="nextFormStage">2 要求证据</button>
+        <button type="button" class="secondary-button" :aria-current="formStage === 1 ? 'step' : undefined" :disabled="businessLocked" @click="formStage = 1">1 客户来料</button>
+        <button type="button" class="secondary-button" :aria-current="formStage === 2 ? 'step' : undefined" :disabled="businessLocked" @click="nextFormStage">2 要求证据</button>
       </nav>
       <p v-if="catalogHint" class="operation-feedback">{{ catalogHint }}</p>
       <p v-if="catalogError" class="operation-feedback danger">{{ catalogError }}</p>
-      <fieldset class="intake-stage intake-goods" :class="{ 'intake-stage-hidden': formStage !== 1 }" :disabled="submitting">
+      <fieldset class="intake-stage intake-goods" :class="{ 'intake-stage-hidden': formStage !== 1 }" :disabled="businessLocked">
       <legend>客户与来料明细</legend>
       <label v-if="sourceType === 'COURIER' && !newExpressCode" class="field">
         <span>运单号（可不填）</span>
@@ -704,7 +841,7 @@ onMounted(loadCatalog);
       <button type="button" class="secondary-button" @click="extraLines.push({ materialCode: '', goodsName: '', quantity: '1', quantityUnit: '件', weight: '' })">增加材质明细</button>
       <button v-if="!field" type="button" class="primary-button intake-stage-next" @click="nextFormStage">下一步：要求与证据</button>
       </fieldset>
-      <fieldset class="intake-stage intake-requirement" :class="{ 'intake-stage-hidden': formStage !== 2 }" :disabled="submitting">
+      <fieldset class="intake-stage intake-requirement" :class="{ 'intake-stage-hidden': formStage !== 2 }" :disabled="businessLocked">
       <legend>加工要求与交期</legend>
       <RequirementComposer
         :key="requirementComposerKey"
@@ -721,8 +858,8 @@ onMounted(loadCatalog);
       <div aria-label="建单核对摘要"><strong>{{ customerName || '未选客户' }}</strong><p v-for="(line, index) in [{ materialCode, goodsName, quantity, quantityUnit, weight }, ...extraLines]" :key="index">明细 {{ index + 1 }}：{{ materials.find(m => m.materialCode === line.materialCode)?.name || '未选材质' }} · {{ line.goodsName || '未填货品' }} · {{ line.quantity }} {{ line.quantityUnit }} ／ {{ line.weight || '未称量' }} 克</p></div>
       <p>核对最终要求后确认建单并入库；上传失败可单独重试，不重复建单。</p>
       <button class="secondary-button intake-stage-back" type="button" @click="formStage = 1">返回客户来料</button>
-      <button v-if="!field" class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
-        {{ submitting ? '正在建单并入库' : '确认建单并入库' }}
+      <button v-if="!field && !pendingIntake" class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
+        {{ submitting ? '正在建单并入库' : pendingIntake ? '用原请求核对建单结果' : '确认建单并入库' }}
       </button>
       </fieldset>
     </div>
@@ -730,7 +867,7 @@ onMounted(loadCatalog);
 
   <section v-if="prepCreated" class="section-block intake-prep-draft" aria-label="寄存备料草稿">
     <button class="secondary-button" type="button" :aria-expanded="prepOpen" @click="togglePrepDraft">{{ prepOpen ? '收起寄存草稿' : '返回寄存草稿' }}</button>
-    <PrepStockPanel v-show="prepOpen" scope="prep" :initial-source="newExpressCode ? `运单 ${newExpressCode}` : ''" :inert="!prepOpen || undefined" />
+    <PrepStockPanel v-show="prepOpen" scope="prep" :key="accountKey" :draft-scope="props.draftScope" :source-processed-mother="prepSeed?.sourceDraftKey === evidenceDraftKey ? created?.motherOrderCode : undefined" :initial-draft="prepSeed" :initial-source="newExpressCode ? `运单 ${newExpressCode}` : ''" @received="onPrepReceived" :inert="!prepOpen || undefined" />
   </section>
 
   <article v-if="savedMother" ref="savedPanel" class="field-card intake-saved intake-create" aria-label="已保存母单">
@@ -754,7 +891,11 @@ onMounted(loadCatalog);
     <div class="intake-next-actions">
       <button v-if="canOpenLabel" class="primary-button" type="button" aria-label="打开标签" @click="openLabelPage">预览并打印母单标签</button>
       <button v-if="canOpenInbound" class="secondary-button" type="button" @click="openMotherDetails">拆单与流转贴纸</button>
-      <button class="secondary-button" type="button" :disabled="arrangementLocked" @click="startNextIntake">继续收下一件</button>
+      <label><input v-model="reuseRequirements" type="checkbox" />下一笔显式复用加工要求</label><label><input v-model="reuseDueDate" type="checkbox" />下一笔显式复用交期</label>
+      <p>同运单继续保留客户及运单；同客户再收只保留客户和来源类型。材质、数量、重量和照片重新录入；要求、交期按上方勾选复用。</p>
+      <button v-if="created?.courierNo" class="secondary-button" type="button" :disabled="arrangementLocked || businessLocked" @click="startNextIntake('same-waybill')">同运单继续</button>
+      <button class="secondary-button" type="button" :disabled="arrangementLocked || businessLocked" @click="startNextIntake('same-customer')">同客户再收</button>
+      <button class="secondary-button" type="button" :disabled="arrangementLocked || businessLocked" @click="startNextIntake('new')">全新收料</button>
     </div>
     <p>单号会自动带入标签页。<template v-if="created?.ledgerCode">收货已入库，无需再次确认入库；</template>生产前可在来料详情选择不拆或拆单。</p>
     <details v-if="intakeScan.context && !newExpressCode">
@@ -778,6 +919,10 @@ onMounted(loadCatalog);
     <p v-if="evidenceIdentityError" class="operation-feedback danger">{{ evidenceIdentityError }}</p>
     <p v-else>文件先留在当前表单。建单成功后上传并关联。</p>
     <EvidenceCapture
+      :key="accountKey"
+      :restored-files="restoredEvidence"
+      :persist-draft="persistDraft"
+      @draft-changed="evidenceFiles = $event"
       target-type="MOTHER_ORDER"
       :target-code="intakeMotherCode"
       stage="INTAKE"
@@ -792,7 +937,7 @@ onMounted(loadCatalog);
   <div v-if="intakePurpose === 'processing' && field && draftAvailable && !created" class="field-dock intake-create">
     <button v-if="formStage === 1" class="primary-button" type="button" :disabled="submitting || intakeScan.loading" @click="nextFormStage">下一步：要求与证据</button>
     <button v-else class="primary-button intake-submit" type="button" :disabled="submitting || intakeScan.loading" @click="createMotherOrder">
-      {{ submitting ? '正在建单并入库' : '确认建单并入库' }}
+      {{ submitting ? '正在建单并入库' : pendingIntake ? '用原请求核对建单结果' : '确认建单并入库' }}
     </button>
   </div>
 </template>

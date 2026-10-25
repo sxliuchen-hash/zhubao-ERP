@@ -73,3 +73,4 @@
 73	TABLE	biz_process_batch_handoff
 74	TABLE	biz_material_storage_change
 75	TABLE	label_storage_edition
+76	TABLE	biz_processing_intake_pending

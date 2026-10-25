@@ -24,7 +24,7 @@ if (parentOpenLabel) provide('zhubao-open-label', (code: string) => { emit('navi
 
 <template>
   <div class="intake-action-pane field-job page-stack" :inert="!active || undefined">
-    <IntakePanel field title="收货资料" intro="核对客户与来料，再填写要求与证据。" @saved="emit('saved', $event)" />
+    <IntakePanel :draft-scope="target ? `${target.objectType}:${target.code}` : 'new-receipt'" field title="收货资料" intro="核对客户与来料，再填写要求与证据。" @saved="emit('saved', $event)" />
   </div>
 </template>
 

@@ -63,6 +63,22 @@ async function pick(wrapper: ReturnType<typeof mount>, name: string, type: strin
 }
 
 describe('现场证据采集', () => {
+  it('刷新恢复已上传附件仅补关联，原文件字节及正式操作归属不变', async () => {
+    const file = fileOf('原照片.jpg', 'image/jpeg', 8);
+    const snapshot = { targetType: 'MOTHER_ORDER', targetCode: 'MD-1', stage: 'INTAKE', scene: 'UNPACK', operationType: 'inbound_confirm', operationCode: 'OP-1', processName: '', clauseNo: '' };
+    vi.mocked(bindEvidence).mockResolvedValue({ linkCode: 'LINK-1', attachmentCode: 'ATT-1', scene: 'UNPACK' });
+    const wrapper = mount(EvidenceCapture, { props: { ...snapshot, draftKey: 'new-draft', autoUpload: true,
+      restoredFiles: [{ id: 5, draftKey: 'old-draft', file, name: file.name, lastModified: file.lastModified, capturedAt: 1, processing: false, state: 'UPLOADING', message: '', attachmentCode: 'ATT-1', snap: snapshot }] } });
+    await flushPromises();
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    await wrapper.findAll('button').find(button => button.text() === '重试')!.trigger('click');
+    await flushPromises();
+    expect(uploadEvidenceFile).not.toHaveBeenCalled();
+    expect(bindEvidence).toHaveBeenCalledWith(expect.objectContaining({ attachmentCode: 'ATT-1', targetCode: 'MD-1', operationCode: 'OP-1' }));
+    expect((wrapper.vm as unknown as { exportDraft: () => Array<{ file: File }> }).exportDraft()[0].file.size).toBe(8);
+    wrapper.unmount();
+  });
+
   beforeEach(() => {
     vi.mocked(fetchHistoricalEvidencePage).mockReset();
     vi.mocked(fetchLinkedEvidencePage).mockReset();
@@ -84,7 +100,7 @@ describe('现场证据采集', () => {
     const wrapper = mount(EvidenceCapture, { props: { targetType: 'MOTHER_ORDER', targetCode: '', stage: 'INTAKE', scene: 'UNPACK', operationType: 'inbound_confirm', operationCode: '', draftKey: 'draft-a', autoUpload: true } });
     await pick(wrapper, 'a.jpg', 'image/jpeg');
     expect(wrapper.text()).toContain('建单后自动上传');
-    expect(wrapper.find('li button').exists()).toBe(false);
+    expect(wrapper.find('li .primary-button').exists()).toBe(false);
     expect(uploadEvidenceFile).not.toHaveBeenCalled();
     vi.mocked(bindEvidence).mockRejectedValueOnce(new Error('关联失败'));
     await wrapper.setProps({ targetCode: 'MD-1', operationCode: 'STK-REAL' });

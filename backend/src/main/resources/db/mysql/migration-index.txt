@@ -73,3 +73,4 @@ V72__m3_desk_task.sql
 V73__m3_process_batch_handoff.sql
 V74__m3_material_storage_requirements.sql
 V75__m3_label_storage_edition.sql
+V76__m3_processing_intake_pending.sql

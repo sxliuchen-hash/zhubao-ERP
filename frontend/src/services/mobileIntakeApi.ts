@@ -12,6 +12,8 @@ export interface MobileIntakeLookup {
 }
 
 export interface MobileIntakeRequest {
+  pendingCode?: string;
+  pendingVersion?: number;
   courierNo: string;
   sourceType: 'COURIER' | 'CUSTOMER_DELIVERY' | 'INTERNAL_OTHER';
   customerName: string;

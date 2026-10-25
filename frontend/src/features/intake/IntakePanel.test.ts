@@ -1,6 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
+import { readIntakeDraft, writeIntakeDraft, deleteIntakeDraft } from './intakeDraftStore';
+import { fetchProcessingPendings, saveProcessingPending } from '../../services/processingPendingApi';
 import { ApiRequestError } from '../../services/apiClient';
 import IntakePanel from './IntakePanel.vue';
 import { queryScanContext } from '../../services/scanContextApi';
@@ -11,6 +14,9 @@ import { fetchCustomers, fetchMaterials, fetchShortcuts, fetchTemplates, removeS
 import { composeRequirement } from './requirementText';
 import RequirementComposer from './RequirementComposer.vue';
 import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+
+vi.mock('./intakeDraftStore', () => ({ readIntakeDraft: vi.fn(), writeIntakeDraft: vi.fn(), deleteIntakeDraft: vi.fn() }));
+vi.mock('../../services/processingPendingApi', () => ({ fetchProcessingPendings: vi.fn(), saveProcessingPending: vi.fn() }));
 
 vi.mock('../m1/MotherSplitPanel.vue', () => ({ default: defineComponent({ name: 'MotherSplitPanel', props: { motherOrderCode: String, intakeMode: Boolean }, template: '<div data-production-arrangement />' }) }));
 
@@ -90,7 +96,63 @@ async function fillNewWaybill(wrapper: ReturnType<typeof mountPanel>) {
 }
 
 describe('收货面板', () => {
+  it('刷新恢复实际文件和超时原快照，账号切换不泄漏其他账号草稿', async () => {
+    const auth = ref({ username: 'receiver-a', role: 'ADMIN' } as AuthSession);
+    const start = () => mount(IntakePanel, { props: { title: '收料', intro: '' }, global: { provide: { 'zhubao-auth-session': auth } } });
+    vi.mocked(submitMobileIntake).mockRejectedValue(new Error('连接中断'));
+    let wrapper = start(); await flushPromises(); await fillNewWaybill(wrapper);
+    await pickEvidence(wrapper, '刷新原件.jpg', 'image/jpeg');
+    await wrapper.findAll('button').find(b => b.text() === '确认建单并入库')!.trigger('click'); await flushPromises();
+    const original = vi.mocked(submitMobileIntake).mock.calls[0][0]; wrapper.unmount(); await flushPromises();
+    wrapper = start(); await flushPromises();
+    expect(wrapper.text()).toContain('刷新原件.jpg');
+    const restored = wrapper.getComponent(EvidenceCapture).vm as unknown as { exportDraft: () => Array<{ file: File }> };
+    expect(restored.exportDraft()[0].file.size).toBe(5);
+    await wrapper.findAll('button').find(b => b.text() === '用原请求核对建单结果')!.trigger('click'); await flushPromises();
+    expect(vi.mocked(submitMobileIntake).mock.calls[1][0]).toEqual(original);
+    auth.value = { username: 'receiver-b', role: 'ADMIN' } as AuthSession; await flushPromises();
+    expect(wrapper.text()).not.toContain('刷新原件.jpg');
+    wrapper.unmount(); await flushPromises();
+    expect(vi.mocked(writeIntakeDraft).mock.calls.filter(call => call[0] === 'receiver-b').every(call => !(call[2] as { files: unknown[] }).files.length)).toBe(true);
+    wrapper = start(); await flushPromises();
+    expect(wrapper.text()).not.toContain('刷新原件.jpg');
+    expect(wrapper.findAll('button').some(b => b.text() === '用原请求核对建单结果')).toBe(false);
+    auth.value = { username: 'receiver-a', role: 'ADMIN' } as AuthSession; await flushPromises();
+    expect(wrapper.text()).toContain('刷新原件.jpg'); wrapper.unmount();
+  });
+
+  it('空重量可保存加工待核但不能正式入库，同运单下一笔重新填数量和照片', async () => {
+    const wrapper = mountPanel(); await fillNewWaybill(wrapper);
+    await wrapper.get('[aria-label="重量"]').setValue('');
+    vi.mocked(saveProcessingPending).mockResolvedValue({ code: 'PD-1', version: 1, account: 'receiver', status: 'PENDING', motherOrderCode: '', draftJson: '{}', createdAt: '', updatedAt: '' });
+    await wrapper.findAll('button').find(b => b.text().includes('资料不全，保存加工待核'))!.trigger('click'); await flushPromises();
+    expect(saveProcessingPending).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ lines: [expect.objectContaining({ weight: '' })] }) }));
+    expect(submitMobileIntake).not.toHaveBeenCalled();
+    await wrapper.findAll('button').find(b => b.text() === '确认建单并入库')!.trigger('click'); await flushPromises(); expect(submitMobileIntake).not.toHaveBeenCalled();
+    await wrapper.get('[aria-label="重量"]').setValue('2.5');
+    vi.mocked(submitMobileIntake).mockResolvedValue({ alreadyExists: false, motherOrderCode: 'MD-NEXT', courierNo: 'SF1048329001', customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20', goodsName: '戒托', quantity: 1, weight: 2.5, ledgerCode: 'LED-NEXT', qrContent: '' });
+    await wrapper.findAll('button').find(b => b.text() === '确认建单并入库')!.trigger('click'); await flushPromises();
+    expect(submitMobileIntake).toHaveBeenCalledWith(expect.objectContaining({ pendingCode: 'PD-1', pendingVersion: 1 }));
+    const first = vi.mocked(submitMobileIntake).mock.calls[0][0];
+    await wrapper.findAll('button').find(b => b.text() === '同运单继续')!.trigger('click'); await flushPromises();
+    expect(wrapper.get('[aria-label="客户"]').element).toHaveProperty('value', 'C-1001 · 恒信珠宝');
+    expect(wrapper.get('[aria-label="运单号（可不填）"]').element).toHaveProperty('value', 'SF1048329001');
+    expect(wrapper.get('[aria-label="重量"]').element).toHaveProperty('value', '');
+    expect(wrapper.get('[aria-label="加工要求"]').element).toHaveProperty('value', '');
+    await chooseFilterOption(wrapper, '材质', '足金'); await wrapper.get('[aria-label="货品名称"]').setValue('下一笔');
+    await wrapper.get('[aria-label="重量"]').setValue('3'); await wrapper.get('[aria-label="加工要求"]').setValue('抛光'); await wrapper.get('[aria-label="完成期限"]').setValue('2026-11-01');
+    await wrapper.findAll('button').find(b => b.text() === '确认建单并入库')!.trigger('click'); await flushPromises();
+    expect(vi.mocked(submitMobileIntake).mock.calls[1][0].requestId).not.toBe(first.requestId);
+    expect(vi.mocked(submitMobileIntake).mock.calls[1][0].pendingCode).toBeUndefined(); wrapper.unmount();
+  });
+
   beforeEach(() => {
+    const local = new Map<string, unknown>();
+    vi.mocked(writeIntakeDraft).mockImplementation(async (a, scope, value) => { local.set(a + scope, value); });
+    vi.mocked(readIntakeDraft).mockImplementation(async (a, scope) => local.get(a + scope) as never ?? null);
+    vi.mocked(deleteIntakeDraft).mockImplementation(async (a, scope) => { local.delete(a + scope); });
+    vi.mocked(fetchProcessingPendings).mockResolvedValue([]);
+    vi.mocked(saveProcessingPending).mockReset();
     vi.mocked(fetchCustomers).mockResolvedValue([{ customerId: 1001, customerCode: 'C-1001', name: '恒信珠宝',
       aliases: '', contact: '', phone: '', remark: '', enabled: true }]);
     vi.mocked(fetchMaterials).mockResolvedValue([{ materialCode: 'AU9999', name: '足金', aliases: '', remark: '', enabled: true }]);
@@ -154,7 +216,7 @@ describe('收货面板', () => {
     expect(submitMobileIntake).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('尚无正式单号，文件留在当前表单');
 
-    const create = () => wrapper.findAll('button').find((button) => button.text() === '确认建单并入库');
+    const create = () => wrapper.findAll('button').find((button) => ['确认建单并入库', '用原请求核对建单结果'].includes(button.text()));
     await create()!.trigger('click');
     await flushPromises();
     await create()!.trigger('click');
@@ -171,7 +233,8 @@ describe('收货面板', () => {
     await create()!.trigger('click');
     await flushPromises();
     const third = vi.mocked(submitMobileIntake).mock.calls[2][0].requestId;
-    expect(third).not.toBe(first);
+    expect(third).toBe(first);
+    expect(vi.mocked(submitMobileIntake).mock.calls[2][0]).toEqual(vi.mocked(submitMobileIntake).mock.calls[0][0]);
   });
 
   it('超时后保留原请求号，不按运单猜测母单', async () => {
@@ -253,7 +316,7 @@ describe('收货面板', () => {
     vi.mocked(lookupMobileIntake).mockRejectedValue(new Error('网络中断'));
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
-    const create = () => wrapper.findAll('button').find((button) => button.text() === '确认建单并入库');
+    const create = () => wrapper.findAll('button').find((button) => ['确认建单并入库', '用原请求核对建单结果'].includes(button.text()));
     await create()!.trigger('click');
     await flushPromises();
 
@@ -321,7 +384,7 @@ describe('收货面板', () => {
     await flushPromises();
     expect(wrapper.get('[aria-label="已保存母单"]').text()).toContain('MD-DESKTOP-1');
     expect(wrapper.get('[aria-label="打开标签"]').text()).toContain('预览并打印');
-    await wrapper.findAll('button').find((button) => button.text() === '继续收下一件')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '全新收料')!.trigger('click');
     expect(wrapper.find('[aria-label="已保存母单"]').exists()).toBe(false);
     expect(wrapper.get('[aria-label="快递单号"]').element).toHaveProperty('value', '');
   });
@@ -340,7 +403,7 @@ describe('收货面板', () => {
     expect(fetchMotherOrder).not.toHaveBeenCalled();
     expect(wrapper.emitted('saved')).toBeUndefined();
     expect(wrapper.find('[aria-label="已保存母单"]').exists()).toBe(false);
-    expect(wrapper.get('[aria-label="识别单号"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('[aria-label="识别单号"]').attributes('disabled')).toBeDefined();
   });
 
   it('收货员新建母单时可用搜索词新增客户和材质并选中', async () => {
@@ -527,7 +590,7 @@ describe('收货面板', () => {
       requirementTemplateVersion: 1,
     }));
 
-    await wrapper.findAll('button').find((button) => button.text() === '继续收下一件')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '全新收料')!.trigger('click');
     vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
       objectType: 'EXPRESS_NO', code: 'SF2000000001', motherOrderCode: null,
       actions: [{ code: 'INTAKE', allowed: true, blockKind: 'NONE', blockReason: null }],
@@ -602,16 +665,19 @@ describe('收货面板', () => {
     vi.mocked(submitMobileIntake).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
     const wrapper = mountPanel(true);
     await fillNewWaybill(wrapper);
-    await wrapper.get('.field-dock button').trigger('click');
-    await wrapper.get('.field-dock button').trigger('click');
     await wrapper.get('[aria-label="收货用途"]').setValue('prep');
     await wrapper.get('[aria-label="寄存原草稿"]').setValue('尚待确认的原寄存');
     const prep = wrapper.getComponent({ name: 'PrepStockPanel' }).vm.$;
+    await wrapper.get('[aria-label="收货用途"]').setValue('processing');
+    await wrapper.get('.field-dock button').trigger('click');
+    await wrapper.get('.field-dock button').trigger('click');
+    await flushPromises();
     finish({ alreadyExists: false, motherOrderCode: 'MD-DONE', courierNo: 'SF1048329001', customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20', goodsName: '戒托', quantity: 1, weight: 2.5, ledgerCode: 'LED-DONE', qrContent: '' });
     await flushPromises();
     expect(wrapper.get('[aria-label="已保存母单"]').text()).toContain('MD-DONE');
     expect(prep.isUnmounted).toBe(false);
     expect(wrapper.get('[aria-label="寄存原草稿"]').element).toHaveProperty('value', '尚待确认的原寄存');
+    await wrapper.findAll('button').find(button => button.text() === '返回寄存草稿')!.trigger('click');
     await wrapper.findAll('button').find(button => button.text() === '收起寄存草稿')!.trigger('click');
     await wrapper.findAll('button').find(button => button.text() === '返回寄存草稿')!.trigger('click');
     expect(wrapper.getComponent({ name: 'PrepStockPanel' }).vm.$).toBe(prep);

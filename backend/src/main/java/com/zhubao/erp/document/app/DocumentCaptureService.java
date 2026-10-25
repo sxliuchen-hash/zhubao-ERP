@@ -41,6 +41,8 @@ public class DocumentCaptureService {
     private final DocumentManagementService documentManagementService;
     private final BusinessDocumentRepository businessDocumentRepository;
     private final DocumentCaptureProperties properties;
+    private com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments;
+    private com.zhubao.erp.business.app.BusinessDataAccess dataAccess;
 
     public DocumentCaptureService(
             DocumentManagementRepository repository,
@@ -54,6 +56,15 @@ public class DocumentCaptureService {
         this.documentManagementService = documentManagementService;
         this.businessDocumentRepository = businessDocumentRepository;
         this.properties = properties;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DocumentCaptureService(DocumentManagementRepository repository, AttachmentObjectStorage storage,
+            DocumentManagementService documentManagementService, BusinessDocumentRepository businessDocumentRepository,
+            DocumentCaptureProperties properties, com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments,
+            com.zhubao.erp.business.app.BusinessDataAccess dataAccess) {
+        this(repository, storage, documentManagementService, businessDocumentRepository, properties);
+        this.stockDocuments = stockDocuments; this.dataAccess = dataAccess;
     }
 
     public EvidenceAttachmentUploadResult capture(
@@ -116,9 +127,15 @@ public class DocumentCaptureService {
         } else if (EvidenceCodes.WORK_ORDER.equals(canonicalType)) {
             assertChildCustomer(operator, code);
         }
+        boolean stockReceipt = EvidenceCodes.STOCK_DOCUMENT.equals(canonicalType);
+        if (stockReceipt) {
+            var receipt = stockDocuments == null ? null : stockDocuments.find(code).orElse(null);
+            if (receipt == null || !"PREP_RECEIPT".equals(receipt.kind()) || dataAccess == null) throw new BusinessException("寄存收货单不存在");
+            dataAccess.assertCanRead(operator, code);
+        }
         String canonicalMediaType = AttachmentMediaPolicy.canonicalType(mediaType, false);
         boolean video = AttachmentMediaPolicy.isVideo(canonicalMediaType);
-        String origin = AttachmentOrigins.uniqueMatch(businessDocumentRepository, canonicalType, code);
+        String origin = stockReceipt && AttachmentOrigins.hits(businessDocumentRepository, code).isEmpty() ? EvidenceCodes.STOCK_DOCUMENT : AttachmentOrigins.uniqueMatch(businessDocumentRepository, canonicalType, code);
         if (requireVerified && origin.isEmpty()) {
             throw new BusinessException("无法确认这份文件属于哪张单据");
         }

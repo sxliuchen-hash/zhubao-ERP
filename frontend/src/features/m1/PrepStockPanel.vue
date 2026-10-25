@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import { storageText, type StorageRequirements, fetchCustomers, fetchMaterials, type CustomerProfile, type MaterialProfile } from '../../services/masterDataApi';
 import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 import RequirementComposer from '../intake/RequirementComposer.vue';
+import EvidenceCapture from '../evidence/EvidenceCapture.vue';
+import type { EvidenceDraftFile } from '../evidence/evidenceDraft';
+import { readIntakeDraft, writeIntakeDraft } from '../intake/intakeDraftStore';
 import { fetchStockBatchLabel, type LabelPayload } from '../../services/labelApi';
 import OrderLabelPanel from '../labels/OrderLabelPanel.vue';
 const batchLabelPreview = ref<LabelPayload | null>(null);
@@ -14,7 +17,22 @@ async function printBatch() {
   catch (error) { formError.value = error instanceof Error ? error.message : '寄存标签读取失败'; }
 }
 
-const props = withDefaults(defineProps<{ scope?: 'company' | 'prep'; initialSource?: string }>(), { scope: 'company', initialSource: '' });
+interface PrepSeed { customerId: number | null; customerName: string; sourceNote: string; sourceDraftKey: string; lines: Array<{ materialCode: string; quantityUnit: string; quantity: string; weight: string; externalRef: string }> }
+const props = withDefaults(defineProps<{ scope?: 'company' | 'prep'; initialSource?: string; initialDraft?: PrepSeed | null; draftScope?: string; sourceProcessedMother?: string }>(), { scope: 'company', initialSource: '', initialDraft: null, draftScope: 'stock-desk', sourceProcessedMother: '' });
+const emit = defineEmits<{ received: [result: { documentCode: string; posted: boolean }] }>();
+const receiptEvidenceCode = ref('');
+const receiptPosted = ref(false);
+const sourceProcessedMother = ref(props.sourceProcessedMother);
+watch(() => props.sourceProcessedMother, code => { if (code) sourceProcessedMother.value = code; });
+const evidenceDraftKey = ref<string>(crypto.randomUUID());
+const evidenceFiles = ref<EvidenceDraftFile[]>([]);
+const restoredFiles = ref<EvidenceDraftFile[] | undefined>(undefined);
+const draftRestoring = ref(false);
+const draftError = ref('');
+const draftDirty = ref(false);
+let draftRevision = 0;
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+let draftGeneration = 0;
 
 interface UnitTotal { unit: string; quantity: string }
 interface Overview {
@@ -94,12 +112,13 @@ const customers = ref<CustomerProfile[]>([]);
 const materials = ref<MaterialProfile[]>([]);
 const catalogError = ref('');
 const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+const draftOwner = ref(session.value?.username ?? '');
 let loadRevision = 0;
 let detailRevision = 0;
 const attempts = ref<Record<string, RequestAttempt>>({});
 type StockCommand = { path: string; prefix: string; body: Record<string, unknown>; success: string; action: string; label: string };
 const pendingCommand = ref<StockCommand | null>(null);
-const locked = computed(() => submitting.value || Boolean(pendingCommand.value));
+const locked = computed(() => submitting.value || Boolean(pendingCommand.value) || draftRestoring.value);
 let disposed = false;
 onBeforeUnmount(() => { disposed = true; ++loadRevision; ++detailRevision; });
 
@@ -137,7 +156,69 @@ function canDo(name: string) {
 const selected = computed(() => batches.value.find((item) => cardKey(item) === selectedKey.value) ?? null);
 const title = computed(() => props.scope === 'company' ? '公司自有物料' : '客户寄存备料');
 
-onMounted(() => { void load(); void loadCatalog(); });
+function applySeed() {
+  if (!props.initialDraft) return;
+  customerId.value = props.initialDraft.customerId == null ? '' : String(props.initialDraft.customerId);
+  customerName.value = props.initialDraft.customerName; sourceNote.value = props.initialDraft.sourceNote;
+  const [first, ...rest] = props.initialDraft.lines;
+  materialCode.value = first?.materialCode ?? ''; quantityUnit.value = first?.quantityUnit ?? '件'; quantity.value = String(first?.quantity ?? ''); weight.value = String(first?.weight ?? ''); externalRef.value = first?.externalRef ?? '';
+  extraLines.value = rest.map(line => ({ ...line, quantity: String(line.quantity), weight: String(line.weight) })); action.value = 'receive';
+}
+function stockSnapshot() {
+  return { version: 1, seed: props.initialDraft ? JSON.parse(JSON.stringify(props.initialDraft)) : null,
+    form: { materialCode: materialCode.value, quantityUnit: quantityUnit.value, quantity: quantity.value, weight: weight.value, warehouseCode: warehouseCode.value,
+      customerId: customerId.value, customerName: customerName.value, sourceNote: sourceNote.value, handoverPerson: handoverPerson.value, externalRef: externalRef.value,
+      recipient: recipient.value, purpose: purpose.value, targetOrder: targetOrder.value, goodsName: goodsName.value, dueDate: dueDate.value, requirement: requirement.value,
+      templateCode: templateCode.value, templateVersion: templateVersion.value, postNow: postNow.value, extraLines: extraLines.value.map(line => ({ ...line })), confirmLines: confirmLines.value.map(line => ({ ...line })), action: action.value, selectedKey: selectedKey.value },
+    requestAttempts: JSON.parse(JSON.stringify(attempts.value)), pendingCommand: pendingCommand.value ? JSON.parse(JSON.stringify(pendingCommand.value)) as StockCommand : null,
+    evidenceDraftKey: evidenceDraftKey.value, receiptEvidenceCode: receiptEvidenceCode.value, receiptPosted: receiptPosted.value, sourceProcessedMother: sourceProcessedMother.value, files: evidenceFiles.value.map(file => ({ ...file, snap: { ...file.snap } })) };
+}
+async function persistStockDraft(owner = draftOwner.value) {
+  if (!owner || draftRestoring.value || props.scope !== 'prep') return;
+  const revision = draftRevision;
+  try { await writeIntakeDraft(owner, `prep:${props.draftScope}`, stockSnapshot()); if (owner === (session.value?.username ?? '')) { draftError.value = ''; if (revision === draftRevision) draftDirty.value = false; } }
+  catch (error) { if (owner === (session.value?.username ?? '')) draftError.value = error instanceof Error ? error.message : '寄存本机草稿保存失败'; throw error; }
+}
+function startReceipt() {
+  if (locked.value) return;
+  if (receiptEvidenceCode.value || sourceProcessedMother.value) { sourceProcessedMother.value = ''; receiptEvidenceCode.value = ''; evidenceDraftKey.value = crypto.randomUUID(); quantity.value = ''; weight.value = ''; extraLines.value = []; }
+  action.value = 'receive'; formError.value = '';
+}
+watch(() => session.value?.username ?? '', async (owner, previous) => {
+  if (!owner && !previous) { applySeed(); return; }
+  if (previous && !draftRestoring.value) void persistStockDraft(previous).catch(() => {});
+  draftOwner.value = owner;
+  const generation = ++draftGeneration; draftRestoring.value = true; submitting.value = false; ++loadRevision; ++detailRevision;
+  sourceProcessedMother.value = props.sourceProcessedMother;
+  pendingCommand.value = null; evidenceFiles.value = []; restoredFiles.value = []; receiptEvidenceCode.value = ''; evidenceDraftKey.value = crypto.randomUUID();
+  sourceNote.value = props.initialSource; handoverPerson.value = ''; externalRef.value = ''; recipient.value = ''; purpose.value = ''; targetOrder.value = ''; goodsName.value = ''; dueDate.value = ''; requirement.value = ''; templateCode.value = ''; templateVersion.value = 0; attempts.value = {}; receiptPosted.value = false;
+  materialCode.value = ''; quantity.value = ''; weight.value = ''; customerId.value = ''; customerName.value = ''; extraLines.value = []; confirmLines.value = []; action.value = ''; applySeed();
+  try {
+    const saved = owner && props.scope === 'prep' ? await readIntakeDraft<ReturnType<typeof stockSnapshot>>(owner, `prep:${props.draftScope}`) : null;
+    if (generation !== draftGeneration) return;
+    if (saved?.version === 1) {
+      const form = saved.form;
+      materialCode.value = form.materialCode; quantityUnit.value = form.quantityUnit; quantity.value = form.quantity; weight.value = form.weight; warehouseCode.value = form.warehouseCode;
+      customerId.value = form.customerId; customerName.value = form.customerName; sourceNote.value = form.sourceNote; handoverPerson.value = form.handoverPerson; externalRef.value = form.externalRef;
+      recipient.value = form.recipient; purpose.value = form.purpose; targetOrder.value = form.targetOrder; goodsName.value = form.goodsName; dueDate.value = form.dueDate; requirement.value = form.requirement;
+      templateCode.value = form.templateCode; templateVersion.value = form.templateVersion; postNow.value = form.postNow; extraLines.value = form.extraLines; confirmLines.value = form.confirmLines; action.value = form.action; selectedKey.value = form.selectedKey;
+      attempts.value = saved.requestAttempts; pendingCommand.value = saved.pendingCommand; evidenceDraftKey.value = saved.evidenceDraftKey; receiptEvidenceCode.value = saved.receiptEvidenceCode; receiptPosted.value = saved.receiptPosted ?? false; sourceProcessedMother.value = props.sourceProcessedMother || saved.sourceProcessedMother || '';
+      evidenceFiles.value = saved.files; restoredFiles.value = saved.files;
+      if (receiptEvidenceCode.value) emit('received', { documentCode: receiptEvidenceCode.value, posted: receiptPosted.value });
+    }
+  } catch (error) { draftError.value = error instanceof Error ? error.message : '寄存草稿恢复失败'; }
+  finally { if (generation === draftGeneration) { draftRestoring.value = false; void load(); } }
+}, { immediate: true, flush: 'sync' });
+watch(() => [stockSnapshot().form, evidenceFiles.value, pendingCommand.value, receiptEvidenceCode.value, sourceProcessedMother.value], () => {
+  if (draftRestoring.value || !session.value?.username || props.scope !== 'prep') return;
+  draftDirty.value = true; ++draftRevision;
+  if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(() => { void persistStockDraft().catch(() => {}); }, 120);
+}, { deep: true });
+onBeforeUnmount(() => { if (draftTimer) clearTimeout(draftTimer); void persistStockDraft().catch(() => {}); });
+
+function beforeLeave(event: BeforeUnloadEvent) { if (draftDirty.value || draftError.value || pendingCommand.value) { event.preventDefault(); event.returnValue = ''; } }
+onMounted(() => { window.addEventListener('beforeunload', beforeLeave); void load(); void loadCatalog(); });
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeLeave));
 
 async function loadCatalog() {
   try {
@@ -255,28 +336,41 @@ async function sendCommand(command: StockCommand) {
   formError.value = '';
   message.value = '';
   submitting.value = true;
+  const owner = session.value?.username ?? ''; const epoch = draftGeneration;
+  pendingCommand.value = command;
+  let sent = false;
   try {
+    await persistStockDraft();
+    if (owner !== (session.value?.username ?? '') || epoch !== draftGeneration) throw new Error('账号变化，请回原账号核对原请求');
+    sent = true;
     const code = await apiPost<Record<string, unknown>, string>(command.path, command.body);
-    if (disposed) return;
+    if (disposed || owner !== (session.value?.username ?? '') || epoch !== draftGeneration) return;
     pendingCommand.value = null;
     const remaining = { ...attempts.value };
     delete remaining[command.prefix];
     attempts.value = remaining;
     message.value = `${command.success} ${code}`;
+    if (command.prefix === 'prep-recv') {
+      receiptEvidenceCode.value = code; receiptPosted.value = command.body.postNow === true;
+      emit('received', { documentCode: code, posted: command.body.postNow === true });
+    }
     action.value = '';
+    try { await persistStockDraft(); } catch { draftError.value = '库存操作已成功，本机状态更新失败；保留原请求核对，不重新收货'; }
     await load();
   } catch (error) {
-    if (disposed) return;
-    const known = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && error.status !== 408;
-    pendingCommand.value = known ? null : command;
+    if (disposed || owner !== (session.value?.username ?? '') || epoch !== draftGeneration) return;
+    const known = error instanceof ApiRequestError && error.status >= 400 && error.status < 500 && ![401, 408, 409].includes(error.status);
+    pendingCommand.value = !sent || known ? null : command;
     formError.value = error instanceof Error ? error.message : '库存操作失败';
   } finally {
-    submitting.value = false;
+    if (epoch === draftGeneration) submitting.value = false;
   }
 }
 
 function receive() {
+  if (sourceProcessedMother.value) { formError.value = `原资料已建加工母单 ${sourceProcessedMother.value}，不能再次登记寄存收货；新来料请明确开始下一笔寄存`; return; }
   const line = amountBody();
+  if (receiptEvidenceCode.value) { formError.value = '本次收货已保存，请按原批次领用或明确开始下一笔寄存'; return; }
   const fingerprint = [props.scope, customerId.value, warehouseCode.value, line.materialCode, line.quantityUnit, line.quantity, line.weight, postNow.value].join('|');
   const path = props.scope === 'company' ? '/api/inventory/material-stock/company-receipts' : '/api/inventory/material-stock/prep-receipts';
   void submit(path, `${props.scope}-recv`, fingerprint, {
@@ -406,11 +500,12 @@ function correct() {
 
 <template>
   <OrderLabelPanel v-if="batchLabelPreview" :external-payload="batchLabelPreview" />
+  <p v-if="sourceProcessedMother" class="operation-feedback warning">原资料已建立加工母单 {{ sourceProcessedMother }}，不能重复寄存收货。新来料请点“开始下一笔寄存”，重新填写数量、重量并拍摄新照片。</p><p v-if="draftDirty">寄存草稿和实际文件正在保存，请等保存完成后离开。</p><p v-if="draftError" class="operation-feedback danger">{{ draftError }}</p>
   <section class="stock-desk" :aria-label="title">
     <header class="stock-head">
       <h2>{{ title }}</h2>
       <button class="secondary-button" type="button" :disabled="submitting" @click="load">刷新</button>
-      <button v-if="canDo('receive')" class="primary-button" type="button" :disabled="locked" @click="action = 'receive'">{{ props.scope === 'company' ? '入库' : '寄存收货' }}</button>
+      <button v-if="canDo('receive')" class="primary-button" type="button" :disabled="locked" @click="startReceipt">{{ props.scope === 'company' ? '入库' : receiptEvidenceCode || sourceProcessedMother ? '开始下一笔寄存' : '寄存收货' }}</button>
     </header>
     <p v-if="props.scope === 'company'" class="archive-note">领用只表示转入在制，仍在厂内，不会并入客户加工库存，也不会自动核销。</p>
     <p v-else class="archive-note">先寄存不建加工单、不产生加工费。重量留空表示待称量，整单称清后才入账。</p>
@@ -505,7 +600,7 @@ function correct() {
         <label>来源说明<input v-model="sourceNote" aria-label="来源说明" /></label>
         <label>交接人<input v-model="handoverPerson" aria-label="交接人" /></label>
         <label class="archive-check"><input v-model="postNow" type="checkbox" aria-label="立即入账" /> 重量已明确，立即入账</label>
-        <button class="primary-button" type="button" :disabled="submitting" @click="receive">{{ readyToPost ? '确认入库' : '保存待核' }}</button>
+        <button class="primary-button" type="button" :disabled="submitting || Boolean(sourceProcessedMother)" @click="receive">{{ readyToPost ? '确认入库' : '保存待核' }}</button>
       </template>
       <template v-else-if="action === 'issue'">
         <p v-if="props.scope === 'company'">这次领用只减少库内可用量，并记入已领用未退回。</p>
@@ -582,6 +677,7 @@ function correct() {
       </article>
     </section>
   </section>
+  <section v-if="scope === 'prep'" class="section-block" aria-label="寄存独立照片"><p>寄存照片保留在本用途草稿，保存真实寄存收货单后自动上传；加工照片保留在原加工草稿。</p><EvidenceCapture :key="session?.username || ''" target-type="STOCK_DOCUMENT" :target-code="receiptEvidenceCode" stage="INTAKE" scene="UNPACK" operation-type="prep_receipt" :operation-code="receiptEvidenceCode" :draft-key="evidenceDraftKey" auto-upload :restored-files="restoredFiles" :persist-draft="persistStockDraft" @draft-changed="evidenceFiles = $event" /></section>
 </template>
 
 <style scoped>

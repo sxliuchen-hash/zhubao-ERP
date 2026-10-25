@@ -68,6 +68,7 @@ public class BusinessEvidenceService {
     private final OperationProgressRepository progressRecords;
     private final AtomicInteger sequence = new AtomicInteger();
     private OrderChangeRepository orderChanges;
+    private com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments;
 
     public BusinessEvidenceService(
             DocumentManagementRepository documents,
@@ -81,7 +82,6 @@ public class BusinessEvidenceService {
         this(documents, links, businessDocuments, stocks, documentManagementService, dataAccess, permissionGuard, null);
     }
 
-    @Autowired
     public BusinessEvidenceService(
             DocumentManagementRepository documents,
             BusinessEvidenceLinkRepository links,
@@ -100,6 +100,15 @@ public class BusinessEvidenceService {
         this.dataAccess = dataAccess;
         this.permissionGuard = permissionGuard;
         this.progressRecords = progressRecords;
+    }
+
+    @Autowired
+    public BusinessEvidenceService(DocumentManagementRepository documents, BusinessEvidenceLinkRepository links,
+            BusinessDocumentRepository businessDocuments, StockLedgerService stocks, DocumentManagementService documentManagementService,
+            BusinessDataAccess dataAccess, PermissionGuard permissionGuard, OperationProgressRepository progressRecords,
+            com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments) {
+        this(documents, links, businessDocuments, stocks, documentManagementService, dataAccess, permissionGuard, progressRecords);
+        this.stockDocuments = stockDocuments;
     }
 
     @Autowired(required = false)
@@ -529,6 +538,12 @@ public class BusinessEvidenceService {
             String targetType,
             String targetCode
     ) {
+        if (EvidenceCodes.INTAKE.equals(stage) && "prep_receipt".equals(operationType)) {
+            var receipt = stockDocuments == null ? null : stockDocuments.find(targetCode).orElse(null);
+            if (!EvidenceCodes.STOCK_DOCUMENT.equals(targetType) || !operationCode.equals(targetCode) || receipt == null || !"PREP_RECEIPT".equals(receipt.kind()))
+                throw new BusinessException("寄存证据必须关联真实收货单及其原操作编号");
+            return;
+        }
         if (EvidenceCodes.INTAKE.equals(stage) && EvidenceCodes.INBOUND_CONFIRM.equals(operationType)) {
             assertIntake(operationCode, targetType, targetCode);
             return;
@@ -772,6 +787,7 @@ public class BusinessEvidenceService {
             return PermissionCode.BUSINESS_PRODUCTION_REPORT;
         }
         if (EvidenceCodes.INTAKE.equals(stage)) {
+            if ("prep_receipt".equals(operationType)) return PermissionCode.STOCK_PREP_RECEIVE;
             return PermissionCode.BUSINESS_INBOUND_CONFIRM;
         }
         if (EvidenceCodes.PRODUCTION.equals(stage)) {

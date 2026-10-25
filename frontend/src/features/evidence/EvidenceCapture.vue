@@ -11,6 +11,7 @@ import {
   type EvidenceLink,
 } from '../../services/evidenceApi';
 import EvidencePreviewLink from './EvidencePreviewLink.vue';
+import type { EvidenceDraftFile } from './evidenceDraft';
 import { stampPhotoTimestamp } from './photoStamp';
 
 const props = withDefaults(defineProps<{
@@ -20,6 +21,8 @@ const props = withDefaults(defineProps<{
   scene: string;
   draftKey?: string;
   autoUpload?: boolean;
+  restoredFiles?: EvidenceDraftFile[];
+  persistDraft?: () => Promise<void>;
   operationType?: string;
   operationCode?: string;
   processName?: string;
@@ -32,7 +35,7 @@ const props = withDefaults(defineProps<{
   processName: '',
   clauseNo: '',
 });
-const emit = defineEmits<{ uploaded: [targetCode: string] }>();
+const emit = defineEmits<{ uploaded: [targetCode: string]; draftChanged: [files: EvidenceDraftFile[]] }>();
 
 type FileState = 'LOCAL_PENDING' | 'UPLOADING' | 'FAILED' | 'UPLOADED_PENDING_LINK' | 'LINKED';
 
@@ -48,6 +51,8 @@ interface Snap {
 }
 
 interface DraftFile {
+  capturedAt: number;
+  processing: boolean;
   draftKey: string;
   id: number;
   file: File;
@@ -98,6 +103,7 @@ const fileRef = ref<HTMLInputElement | null>(null);
 const cameraRef = ref<HTMLInputElement | null>(null);
 const videoRef = ref<HTMLInputElement | null>(null);
 let nextId = 1;
+let disposed = false;
 let boardGeneration = 0;
 let activeQuery: EvidencePageQuery | null = null;
 let linksPageRequest = 0;
@@ -127,7 +133,7 @@ function problemOf(file: File): string {
   return '格式不支持。请重新选择 JPEG、PNG、MP4 或 WebM，不能只改扩展名。';
 }
 
-function remember(file: File, draftKey = props.draftKey, snap = currentSnap()) {
+function remember(file: File, draftKey = props.draftKey, snap = currentSnap(), processing = false) {
   const problem = problemOf(file);
   if (problem) {
     formMessage.value = problem;
@@ -136,6 +142,8 @@ function remember(file: File, draftKey = props.draftKey, snap = currentSnap()) {
   formMessage.value = '';
   const previewUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '';
   items.value.push({
+    capturedAt: Date.now(),
+    processing,
     draftKey,
     id: nextId,
     file,
@@ -147,7 +155,9 @@ function remember(file: File, draftKey = props.draftKey, snap = currentSnap()) {
     snap: draftSnaps.get(draftKey) ?? snap,
   });
   nextId += 1;
+  emitDraft();
   autoSubmit();
+  return items.value[items.value.length - 1];
 }
 
 function onPicked(event: Event) {
@@ -168,23 +178,54 @@ function onPicked(event: Event) {
 }
 
 async function acceptStampedPhoto(file: File) {
-  // 开始处理时固定归属，异步完成不能采用后来切换的草稿。
-  const draftKey = props.draftKey;
-  const snap = currentSnap();
-  pendingPhotos.value += 1;
-  let stamped: File;
-  try { stamped = await stampPhotoTimestamp(file); }
-  catch { if (draftKey === props.draftKey) formMessage.value = '照片处理失败，请重新选择原文件'; return; }
-  finally { pendingPhotos.value -= 1; }
-  if (stamped !== file) {
-    const problem = problemOf(stamped);
-    if (problem) {
-      formMessage.value = problem;
-      return;
-    }
-  }
-  remember(stamped, draftKey, snap);
+  // 先保留原始字节，再异步印时间；刷新或切单不会只留下文件名。
+  const item = remember(file, props.draftKey, currentSnap(), true);
+  if (item) await processPhoto(item);
 }
+async function processPhoto(item: DraftFile) {
+  pendingPhotos.value += 1;
+  try {
+    const stamped = await stampPhotoTimestamp(item.file, new Date(item.capturedAt));
+    if (disposed || !items.value.includes(item)) return;
+    const problem = problemOf(stamped); if (problem) throw new Error(problem);
+    if (item.previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(item.previewUrl);
+    item.file = stamped; item.name = stamped.name;
+    item.previewUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(stamped) : '';
+    item.processing = false; emitDraft(); autoSubmit();
+  } catch (error) {
+    if (!disposed) { item.processing = false; item.message = error instanceof Error ? error.message : '照片处理失败，原文件已保留'; emitDraft(); }
+  } finally { pendingPhotos.value -= 1; }
+}
+function exportDraft(): EvidenceDraftFile[] {
+  return items.value.map(item => ({ id: item.id, draftKey: item.draftKey, file: item.file, name: item.name, lastModified: item.file.lastModified,
+    capturedAt: item.capturedAt, processing: item.processing, state: item.state, message: item.message, attachmentCode: item.attachmentCode, snap: { ...item.snap } }));
+}
+function emitDraft() { emit('draftChanged', exportDraft()); }
+async function persistFiles() { emitDraft(); await props.persistDraft?.(); }
+function removeLocal(item: DraftFile) {
+  if (item.state === 'UPLOADING' || item.processing) return;
+  if (item.state !== 'LINKED' && !globalThis.confirm('此文件尚未完成关联，删除本机副本后不能恢复，继续吗？')) return;
+  if (item.previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(item.previewUrl);
+  items.value = items.value.filter(current => current !== item); emitDraft();
+}
+watch(() => props.restoredFiles, files => {
+  if (!files) return;
+  for (const item of items.value) if (item.previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(item.previewUrl);
+  items.value = files.map(stored => ({ ...stored, snap: { ...stored.snap },
+    file: new File([stored.file], stored.name, { type: stored.file.type, lastModified: stored.lastModified }),
+    previewUrl: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(stored.file) : '',
+    state: stored.state === 'UPLOADING' ? (stored.attachmentCode ? 'UPLOADED_PENDING_LINK' : 'FAILED') : stored.state,
+    message: stored.state === 'UPLOADING' ? '刷新前文件处理结果待核对，请单独重试文件或关联' : stored.message,
+  }));
+  nextId = Math.max(0, ...items.value.map(item => item.id)) + 1;
+  for (const item of items.value) {
+    if (item.snap.targetCode) draftSnaps.set(item.draftKey, { ...item.snap });
+    if (item.processing) void processPhoto(item);
+  }
+  emitDraft(); autoSubmit();
+}, { immediate: true });
+watch(items, emitDraft, { deep: true });
+defineExpose({ exportDraft });
 
 function cancelSelection() {
   formMessage.value = '';
@@ -223,7 +264,7 @@ function resolveSnap(item: DraftFile): { snap: Snap; switched: boolean; waiting:
 }
 
 async function submit(item: DraftFile) {
-  if (item.state === 'UPLOADING' || item.state === 'LINKED') return;
+  if (item.processing || item.state === 'UPLOADING' || item.state === 'LINKED') return;
   const decision = resolveSnap(item);
   if (decision.waiting) {
     item.state = 'LOCAL_PENDING';
@@ -251,7 +292,9 @@ async function submit(item: DraftFile) {
         scene: decision.snap.scene,
         file: item.file,
       });
+      if (disposed) return;
       item.attachmentCode = uploaded.code;
+      await persistFiles();
       emit('uploaded', decision.snap.targetCode);
     }
     await bindEvidence({
@@ -265,8 +308,10 @@ async function submit(item: DraftFile) {
       processName: decision.snap.processName,
       clauseNo: decision.snap.clauseNo,
     });
+    if (disposed) return;
     item.state = 'LINKED';
     item.message = decision.switched ? item.message : '已关联到当前操作';
+    await persistFiles();
     await loadBoard();
   } catch (error) {
     const text = error instanceof Error ? error.message : '上传或关联失败';
@@ -436,7 +481,7 @@ async function recover(item: HistoricalEvidence) {
 function autoSubmit() {
   if (!autoReady.value) return;
   for (const item of items.value) {
-    if (item.draftKey === props.draftKey && item.state === 'LOCAL_PENDING') void submit(item);
+    if (item.draftKey === props.draftKey && !item.processing && item.state === 'LOCAL_PENDING') void submit(item);
   }
 }
 
@@ -456,6 +501,7 @@ watch(() => [props.draftKey, props.targetType, props.targetCode, props.stage, pr
 }, { immediate: true });
 
 onBeforeUnmount(() => {
+  disposed = true;
   boardGeneration += 1;
   for (const item of items.value) {
     if (item.previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(item.previewUrl);
@@ -513,10 +559,12 @@ onBeforeUnmount(() => {
     </label>
     </details>
     <p v-if="formMessage" class="operation-feedback danger">{{ formMessage }}</p>
+    <p v-if="autoUpload && items.length">本机保留 {{ items.length }} 份实际文件，约 {{ (items.reduce((sum, item) => sum + item.file.size, 0) / 1024 / 1024).toFixed(1) }} MB。清除本机副本不删除服务端已关联证据。</p>
     <p v-if="pendingPhotos">照片正在处理，请等待处理完成。</p>
     <ul v-if="items.length" class="evidence-file-list">
       <li v-for="item in items" :key="item.id" :data-state="item.state">
         <strong>{{ item.name }}</strong>
+        <small>{{ item.snap.targetCode ? `归属 ${item.snap.targetCode}` : item.draftKey === draftKey ? '本次独立草稿' : '原草稿文件，等待原草稿建单' }}{{ item.draftKey !== draftKey ? '，不会转入当前收料' : '' }}</small>
         <span>{{ stateText[item.state] }}</span>
         <img v-if="item.previewUrl && previewKind(item) === 'image'" class="evidence-preview" :src="item.previewUrl" alt="证据预览" />
         <video v-else-if="item.previewUrl && previewKind(item) === 'video'" class="evidence-preview" :src="item.previewUrl" controls />
@@ -525,11 +573,12 @@ onBeforeUnmount(() => {
           v-if="!autoUpload || Boolean(item.snap.targetCode && item.snap.operationCode) || (item.draftKey === draftKey && autoReady)"
           class="primary-button"
           type="button"
-          :disabled="item.state === 'UPLOADING' || item.state === 'LINKED'"
+          :disabled="item.processing || item.state === 'UPLOADING' || item.state === 'LINKED'"
           @click="submit(item)"
         >
           {{ item.state === 'FAILED' || item.state === 'UPLOADED_PENDING_LINK' ? '重试' : '上传并关联' }}
         </button>
+        <button v-if="autoUpload" class="secondary-button" type="button" :disabled="item.processing || item.state === 'UPLOADING'" @click="removeLocal(item)">{{ item.state === 'LINKED' ? '清除已关联文件的本机副本' : '移除本地文件' }}</button>
       </li>
     </ul>
     <details v-if="!plainUnpack()" class="info-disclosure evidence-search">

@@ -25,6 +25,20 @@ vi.mock('../../services/apiClient', () => ({
 }));
 
 describe('PrepStockPanel', () => {
+  it('加工资料已正式建单后原寄存草稿不能重复收货，新笔明确清空实称数据', async () => {
+    const wrapper = mount(PrepStockPanel, { props: { scope: 'prep', initialDraft: { customerId: 1001, customerName: '甲', sourceNote: '运单原件', sourceDraftKey: 'processing-1', lines: [{ materialCode: 'XY', quantityUnit: '颗', quantity: 2 as unknown as string, weight: 4 as unknown as string, externalRef: '珠子' }] } } });
+    await flushPromises();
+    expect(wrapper.get('[aria-label="寄存数量"]').element).toHaveProperty('value', '2');
+    await wrapper.setProps({ sourceProcessedMother: 'MD-REAL' });
+    expect(wrapper.text()).toContain('不能重复寄存收货');
+    expect(wrapper.findAll('button').find(button => button.text() === '确认入库')!.element).toHaveProperty('disabled', true);
+    expect(apiPost).not.toHaveBeenCalled();
+    await wrapper.get('.stock-head .primary-button').trigger('click');
+    expect(wrapper.get('[aria-label="寄存数量"]').element).toHaveProperty('value', '');
+    expect(wrapper.get('[aria-label="寄存重量"]').element).toHaveProperty('value', '');
+    wrapper.unmount();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(apiGet).mockResolvedValue([]);

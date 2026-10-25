@@ -37,7 +37,7 @@ final class ReceivingResultText {
                 "lines=" + command.lines().stream().map(line -> text(line.materialCode()) + "|"
                         + text(line.goodsName()) + "|" + number(line.quantity()) + "|"
                         + text(blankTo(line.quantityUnit(), "件")) + "|" + number(line.weight())).toList()
-        );
+        ) + (command.pendingCode().isBlank() ? "" : ";pendingCode=" + command.pendingCode() + ";pendingVersion=" + command.pendingVersion());
     }
 
     static String inboundPayload(ConfirmInboundCommand command) {

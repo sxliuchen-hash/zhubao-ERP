@@ -8,6 +8,7 @@ import java.util.Set;
  */
 public final class EvidenceCodes {
 
+    public static final String STOCK_DOCUMENT = "STOCK_DOCUMENT";
     public static final String MOTHER_ORDER = "MOTHER_ORDER";
     public static final String WORK_ORDER = "WORK_ORDER";
     public static final String OUTBOUND_ORDER = "OUTBOUND_ORDER";
@@ -35,7 +36,7 @@ public final class EvidenceCodes {
     public static final String HISTORICAL_LABEL = "历史单据证据";
 
     public static final Set<String> STAGES = Set.of(INTAKE, PRODUCTION, QUALITY, SHIPPING, "REWORK");
-    public static final Set<String> OBJECT_TYPES = Set.of(MOTHER_ORDER, WORK_ORDER, OUTBOUND_ORDER, REWORK);
+    public static final Set<String> OBJECT_TYPES = Set.of(MOTHER_ORDER, WORK_ORDER, OUTBOUND_ORDER, REWORK, STOCK_DOCUMENT);
 
     private static final Map<String, String> SCENE_LABELS = Map.of(
             "UNPACK", "拆包",
@@ -49,6 +50,7 @@ public final class EvidenceCodes {
     );
 
     private static final Map<String, String> CAPTURE_ALIASES = Map.of(
+            "stock_document", STOCK_DOCUMENT,
             "mother", MOTHER_ORDER,
             "work_order", WORK_ORDER,
             "outbound", OUTBOUND_ORDER,
