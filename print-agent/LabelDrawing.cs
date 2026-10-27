@@ -156,16 +156,20 @@ namespace Zhubao.PrintReceiver
                 document.PrinterSettings.DefaultPageSettings.PaperSize = paper;
                 document.DefaultPageSettings.PaperSize = paper;
                 document.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+                document.DefaultPageSettings.Landscape = false;
+                document.PrinterSettings.DefaultPageSettings.Landscape = false;
                 document.PrintPage += (sender, args) =>
                 {
+                    args.PageSettings.Landscape = false;
                     args.PageSettings.PaperSize = paper;
                     args.PageSettings.Margins = new Margins(0, 0, 0, 0);
-                    args.Graphics.TranslateTransform(-args.PageSettings.HardMarginX, -args.PageSettings.HardMarginY);
-                    float dpiX = args.Graphics.DpiX <= 1 ? 203 : args.Graphics.DpiX;
-                    float dpiY = args.Graphics.DpiY <= 1 ? 203 : args.Graphics.DpiY;
-                    int destWidth = Math.Max(1, (int)Math.Round(widthMm / 25.4 * dpiX));
-                    int destHeight = Math.Max(1, (int)Math.Round(heightMm / 25.4 * dpiY));
-                    args.Graphics.DrawImage(image, new Rectangle(0, 0, destWidth, destHeight));
+                    // 页面坐标默认是 1/100 英寸。按打印机 DPI 当像素去画，300 DPI 会把 40×30 放大成约 120×90。
+                    args.Graphics.PageUnit = GraphicsUnit.Millimeter;
+                    float marginX = args.PageSettings.HardMarginX / 100f * 25.4f;
+                    float marginY = args.PageSettings.HardMarginY / 100f * 25.4f;
+                    args.Graphics.TranslateTransform(-marginX, -marginY);
+                    RectangleF destination = MillimeterDestination(widthMm, heightMm);
+                    args.Graphics.DrawImage(image, destination);
                     args.HasMorePages = false;
                 };
                 // 部分标签机驱动把最大份数报成 1。超过上限时逐张送入，避免份数被悄悄丢掉。
@@ -208,6 +212,13 @@ namespace Zhubao.PrintReceiver
         static int Hundredths(int millimeters)
         {
             return Math.Max(1, (int)Math.Round(millimeters / 25.4 * 100));
+        }
+
+        /** 打印目标就是标签的毫米尺寸，不乘打印机 DPI。 */
+        public static RectangleF MillimeterDestination(int widthMm, int heightMm)
+        {
+            if (widthMm < 10 || heightMm < 10) throw new ArgumentException("标签尺寸无效");
+            return new RectangleF(0, 0, widthMm, heightMm);
         }
 
         public static string ResolveInstalledPrinter(string name)
@@ -265,6 +276,9 @@ namespace Zhubao.PrintReceiver
             {
                 if (bitmap.Width != 472 || bitmap.Height != 354)
                     throw new InvalidOperationException("画面尺寸异常 " + bitmap.Width + "x" + bitmap.Height);
+                RectangleF page = MillimeterDestination(40, 30);
+                if (page.Width != 40 || page.Height != 30)
+                    throw new InvalidOperationException("打印页面不是 40×30 毫米");
                 if (!string.IsNullOrEmpty(samplePath))
                     bitmap.Save(samplePath, System.Drawing.Imaging.ImageFormat.Png);
             }
