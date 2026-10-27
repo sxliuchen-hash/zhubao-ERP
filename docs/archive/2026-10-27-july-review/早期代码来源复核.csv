@@ -1,0 +1,16 @@
+﻿当前文件,当前路径首次加入提交,首次加入作者时间,首次提交摘要,当前行数,归因7月的行数,归因10月的行数,未提交行数,处理建议
+backend/src/main/java/com/zhubao/erp/hardware/app/HardwareIntegrationService.java,4ed7ca19b798bd94c52b30bd371376332fb519f8,2026-07-06T18:34:32+08:00,feat: expose management APIs and refine M1 cockpit,209,209,0,0,重点核对固定设备与健康任务的早期假设，保留现场证据和真实读数
+backend/src/main/java/com/zhubao/erp/operations/app/OperationsCenterService.java,38e4c63fb847bbb26b3a5f5ed72a9d964808d1c2,2026-07-07T08:19:00+08:00,feat: add operations center baseline,1920,1537,383,0,区分早期展示假设与近期真实探测、备份恢复证据，不整体删除
+frontend/src/features/m1/SampleLibraryWorkspace.vue,c37b2cd1d96b9d749aff735eca7c0485e4206a55,2026-07-06T18:09:12+08:00,feat: add sample and hardware cockpit,1171,1020,151,0,核对早期评审外壳和本地规则，保留近期批次修正、显式入账及恢复保护
+frontend/src/data/registerImportTemplates.ts,c78a707a04d576bd9622cebfe09919509d971da9,2026-07-07T18:23:46+08:00,feat: add register import template baseline,468,468,0,0,核对早期模板与本地计划，迁到后端唯一规则来源后裁剪
+backend/src/main/java/com/zhubao/erp/register/app/RegisterImportPostingExecutionService.java,f2b8630944056be9f56a89a00dcf70ba67458b8f,2026-07-08T20:11:29+08:00,feat: advance m3 business delivery baseline,445,388,57,0,核对早期入账假设与当前岗位、请求回放及逐行恢复消费者
+backend/src/main/java/com/zhubao/erp/finance/app/FinanceBillingService.java,31053da3761c4da775a620edb0a2912aa86506f1,2026-10-10T09:38:37+08:00,feat: 补齐现场作业、财务核算和登录运维入口,670,0,670,0,优先裁剪旧计价内部闭包，保护近期结单接续、收款回放与余额锁
+backend/src/main/java/com/zhubao/erp/finance/app/FinancePayrollService.java,31053da3761c4da775a620edb0a2912aa86506f1,2026-10-10T09:38:37+08:00,feat: 补齐现场作业、财务核算和登录运维入口,282,0,282,0,优先裁剪交工工价和摘要扣薪旧算法，保留新工资及历史成本读取
+backend/src/main/java/com/zhubao/erp/business/app/BusinessOperationService.java,c36e83da9321fba9a9ce66bbc654cfd6fa81592d,2026-07-06T22:25:41+08:00,feat: add inbound confirmation operation,1169,824,345,0,核对早期通用命令假设；保护近期来源行、事务、发货退回锁及损耗事实
+backend/src/main/java/com/zhubao/erp/security/app/AuthUserAccountManagementService.java,54b29c2f6199786cdcc74ed9f0e403b79e40cd86,2026-07-08T21:44:50+08:00,feat: add auth account management boundary,1390,1051,339,0,早期前置审批与展示占位待核，近期组织、顶岗、账号审计和会话撤销保留
+backend/src/main/java/com/zhubao/erp/inventory/app/StockLedgerService.java,170ebeaf08a5a51945e2dbc7f7428c85b0dada79,2026-07-06T16:57:26+08:00,chore: establish m0 foundation,148,57,91,0,早期形成但仍是现行台账内核，默认保留，不能按年代删除
+frontend/src/App.vue,170ebeaf08a5a51945e2dbc7f7428c85b0dada79,2026-07-06T16:57:26+08:00,chore: establish m0 foundation,532,73,459,0,保护近期导航、有效权限、共享动作与账号切换；只按旧外壳实际调用逐项核查
+frontend/src/features/production/ProductionPanel.vue,d7184e471d48cb1e8ee0de2c844fa4f9e182317c,2026-10-12T15:41:54+08:00,feat(station): commit process handoff in one request,526,0,526,0,近期明确的岗位与分批交工面板，作为业务保留基准
+frontend/src/features/orders/OrderWorkspace.vue,2e7be7d1cfc816e6ce2ef5d57a5a195c1a8eeecf,2026-10-23T23:45:11+08:00,feat(ui): connect order lists and shared details,352,0,352,0,近期订单统一入口，作为业务保留基准
+backend/src/main/java/com/zhubao/erp/business/app/MotherOrderSplitService.java,31053da3761c4da775a620edb0a2912aa86506f1,2026-10-10T09:38:37+08:00,feat: 补齐现场作业、财务核算和登录运维入口,790,0,790,0,近期母子单来源分配及撤销规则保留，不恢复早期原型简化规则
+backend/src/main/java/com/zhubao/erp/business/app/QualityRequirementService.java,31053da3761c4da775a620edb0a2912aa86506f1,2026-10-10T09:38:37+08:00,feat: 补齐现场作业、财务核算和登录运维入口,1185,0,1185,0,近期逐条质检、轮次、返工和放行规则保留
