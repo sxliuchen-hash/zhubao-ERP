@@ -556,6 +556,49 @@ public class JdbcOrderSettlementRepository implements OrderSettlementRepository 
         }
     }
 
+    @Override
+    public void saveLegacyLink(
+            String code,
+            String settlementCode,
+            String ledgerKind,
+            String ledgerCode,
+            BigDecimal coveredAmount,
+            WorkSession session
+    ) {
+        String sql = """
+                insert into fin_settlement_legacy_link
+                    (code, settlement_code, ledger_kind, ledger_code, covered_amount)
+                values (?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = require(session).prepareStatement(sql)) {
+            statement.setString(1, code);
+            statement.setString(2, settlementCode);
+            statement.setString(3, ledgerKind);
+            statement.setString(4, ledgerCode);
+            statement.setBigDecimal(5, coveredAmount);
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            if (duplicate(ex)) {
+                throw new BusinessException("同一旧账不能重复接续");
+            }
+            throw new IllegalStateException("无法接续历史账", ex);
+        }
+    }
+
+    @Override
+    public boolean legacyLinked(String ledgerKind, String ledgerCode, WorkSession session) {
+        String sql = "select code from fin_settlement_legacy_link where ledger_kind = ? and ledger_code = ?";
+        try (PreparedStatement statement = require(session).prepareStatement(sql)) {
+            statement.setString(1, ledgerKind);
+            statement.setString(2, ledgerCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取历史账接续", ex);
+        }
+    }
+
     private Connection require(WorkSession session) {
         if (session == null || session.connection().isEmpty()) {
             throw new IllegalStateException("结单写入必须处于同一业务工作单元");

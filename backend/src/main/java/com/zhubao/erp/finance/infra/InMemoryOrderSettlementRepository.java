@@ -15,7 +15,9 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 内存结单仓储。本地默认使用；若会话带着 JDBC 连接则拒绝写入，避免和数据库账各记一半。
@@ -25,6 +27,7 @@ import java.util.Optional;
 public class InMemoryOrderSettlementRepository implements OrderSettlementRepository {
 
     private final Map<String, OrderSettlement> headers = new LinkedHashMap<>();
+    private final Map<String, String> legacyLinks = new ConcurrentHashMap<>();
     private final Map<String, List<OrderSettlementItem>> items = new LinkedHashMap<>();
     private final Map<String, List<OrderSettlementSource>> sources = new LinkedHashMap<>();
     private final Map<String, List<OrderSettlementPosting>> postings = new LinkedHashMap<>();
@@ -199,6 +202,32 @@ public class InMemoryOrderSettlementRepository implements OrderSettlementReposit
                 postings.put(settlementCode, previous);
             }
         });
+    }
+
+    @Override
+    public synchronized void saveLegacyLink(
+            String code,
+            String settlementCode,
+            String ledgerKind,
+            String ledgerCode,
+            BigDecimal coveredAmount,
+            WorkSession session
+    ) {
+        assertMemory(session);
+        if (session == null) {
+            throw new IllegalStateException("旧账接续必须处于业务工作单元");
+        }
+        String key = ledgerKind + "|" + ledgerCode;
+        if (legacyLinks.putIfAbsent(key, settlementCode) != null) {
+            throw new BusinessException("同一旧账不能重复接续");
+        }
+        session.onRollback(() -> legacyLinks.remove(key, settlementCode));
+    }
+
+    @Override
+    public synchronized boolean legacyLinked(String ledgerKind, String ledgerCode, WorkSession session) {
+        assertMemory(session);
+        return legacyLinks.containsKey(ledgerKind + "|" + ledgerCode);
     }
 
     @Override

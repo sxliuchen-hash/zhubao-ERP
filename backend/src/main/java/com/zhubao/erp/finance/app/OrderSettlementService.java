@@ -103,35 +103,132 @@ public class OrderSettlementService {
         String month = YearMonth.now().toString();
         String now = FinanceTexts.now();
         List<OrderSettlementPosting> postings = new ArrayList<>();
-        Map<String, PayableAccumulator> payables = new LinkedHashMap<>();
-        for (Priced priced : prepared.priced()) {
-            if (priced.item().kind() == SettlementItemKind.CUSTOMER) {
-                if (priced.net().signum() > 0) {
-                    String code = FinanceTexts.code("FIN-AR", sequence);
-                    finance.saveReceivable(new ReceivableLine(
-                            code, prepared.assessment().customerId(), prepared.assessment().customerName(), month,
-                            "ORDER_SETTLEMENT", sourceKey(draft.code(), priced.item().lineNo()),
-                            prepared.assessment().motherOrderCode(), prepared.assessment().targetCode(), priced.process(),
-                            priced.quantity(), priced.unit(), priced.unitPrice(), priced.net(), "", priced.item().remark(),
-                            actorId(actor), now
-                    ), session);
-                    postings.add(new OrderSettlementPosting(priced.item().lineNo(), OrderSettlementPosting.RECEIVABLE, code, priced.net()));
+        List<ReceivableLine> oldReceivables = historicalReceivables(prepared.assessment(), session);
+        List<PayrollLine> oldPayroll = historicalPayroll(prepared.assessment(), session);
+        postCustomer(prepared, draft, oldReceivables, month, now, actor, postings, session);
+        postEmployees(prepared, draft, oldPayroll, month, now, actor, postings, session);
+        settlements.savePostings(draft.code(), postings, session);
+        OrderSettlement confirmed = settlements.markConfirmed(draft.code(), draft.rowVersion(), actorId(actor), month, now, session);
+        return confirmed.code() + "|customer=" + confirmed.customerNet().toPlainString() + "|employee=" + confirmed.employeeNet().toPlainString();
+    }
+
+    /** 按原净入账额接续。没有历史账时仍按确认行入账；有历史账时只记差额。 */
+    private void postCustomer(
+            Prepared prepared,
+            OrderSettlement draft,
+            List<ReceivableLine> historical,
+            String month,
+            String now,
+            OperatorContext actor,
+            List<OrderSettlementPosting> postings,
+            WorkSession session
+    ) {
+        if (historical.isEmpty()) {
+            for (Priced priced : prepared.priced()) {
+                if (priced.item().kind() != SettlementItemKind.CUSTOMER || priced.net().signum() <= 0) {
+                    continue;
                 }
-                continue;
+                String code = FinanceTexts.code("FIN-AR", sequence);
+                finance.saveReceivable(customerLine(prepared, draft, priced, code, priced.net(), "", actor, month, now), session);
+                postings.add(new OrderSettlementPosting(priced.item().lineNo(), OrderSettlementPosting.RECEIVABLE, code, priced.net()));
             }
-            if (priced.net().signum() <= 0) {
-                continue;
-            }
-            String payrollCode = FinanceTexts.code("FIN-WG", sequence);
-            finance.savePayrollLine(new PayrollLine(
-                    payrollCode, month, priced.payeeName(), prepared.assessment().targetCode(), priced.process(),
-                    prepared.assessment().motherOrderCode(), prepared.assessment().customerId(), priced.quantity(),
-                    priced.unit(), priced.unitPrice(), priced.gross(), priced.deduction(), priced.net(), true,
-                    sourceKey(draft.code(), priced.item().lineNo()), PayrollLine.POST_DELIVERY, priced.item().payeeAccount()
+            return;
+        }
+        BigDecimal historicalNet = historical.stream().map(ReceivableLine::amount).reduce(ZERO, BigDecimal::add);
+        BigDecimal delta = prepared.customerNet().subtract(historicalNet);
+        if (delta.signum() > 0) {
+            String code = FinanceTexts.code("FIN-AR", sequence);
+            Priced sample = prepared.priced().stream().filter(row -> row.item().kind() == SettlementItemKind.CUSTOMER).findFirst().orElse(null);
+            finance.saveReceivable(new ReceivableLine(
+                    code, prepared.assessment().customerId(), prepared.assessment().customerName(), month,
+                    "ORDER_SETTLEMENT", "SETTLEMENT|" + draft.code() + "|DELTA",
+                    prepared.assessment().motherOrderCode(), prepared.assessment().targetCode(),
+                    sample == null ? "结单差额" : sample.process(),
+                    BigDecimal.ONE.setScale(3, RoundingMode.HALF_UP), ChargeUnit.JOB, delta.setScale(4, RoundingMode.HALF_UP),
+                    delta, "", "结单接续差额", actorId(actor), now
             ), session);
-            postings.add(new OrderSettlementPosting(priced.item().lineNo(), OrderSettlementPosting.PAYROLL, payrollCode, priced.net()));
-            payables.computeIfAbsent(priced.item().payeeAccount(), key -> new PayableAccumulator(priced.payeeName()))
-                    .add(priced.net());
+            postings.add(new OrderSettlementPosting(1, OrderSettlementPosting.RECEIVABLE, code, delta));
+        } else if (delta.signum() < 0) {
+            BigDecimal allocated = allocatedTo(historical);
+            if (historicalNet.subtract(allocated).compareTo(delta.abs()) < 0) {
+                throw new BusinessException("已收部分超过结单金额，不能自动减账");
+            }
+            ReceivableLine root = historical.stream()
+                    .filter(line -> line.reversesCode().isBlank() && line.amount().signum() > 0)
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException("历史待核：找不到可冲减的原应收"));
+            String code = FinanceTexts.code("FIN-RED", sequence);
+            finance.saveReceivable(new ReceivableLine(
+                    code, root.customerId(), root.customerName(), month, "ORDER_SETTLEMENT",
+                    "SETTLEMENT|" + draft.code() + "|RED", root.motherOrderCode(), root.workOrderCode(),
+                    root.processName(), root.quantity(), root.unit(), root.unitPrice(), delta, root.code(),
+                    "结单接续减额", actorId(actor), now
+            ), session);
+            postings.add(new OrderSettlementPosting(1, OrderSettlementPosting.RECEIVABLE, code, delta));
+        }
+        for (ReceivableLine line : historical) {
+            settlements.saveLegacyLink(FinanceTexts.code("LEG", sequence), draft.code(), "RECEIVABLE", line.code(), line.amount(), session);
+        }
+    }
+
+    private void postEmployees(
+            Prepared prepared,
+            OrderSettlement draft,
+            List<PayrollLine> historical,
+            String month,
+            String now,
+            OperatorContext actor,
+            List<OrderSettlementPosting> postings,
+            WorkSession session
+    ) {
+        Map<String, PayableAccumulator> payables = new LinkedHashMap<>();
+        if (historical.isEmpty()) {
+            for (Priced priced : prepared.priced()) {
+                if (priced.item().kind() != SettlementItemKind.EMPLOYEE || priced.net().signum() <= 0) {
+                    continue;
+                }
+                postPayroll(prepared, draft, priced, priced.net(), month, now, postings, session);
+                payables.computeIfAbsent(priced.item().payeeAccount(), key -> new PayableAccumulator(priced.payeeName())).add(priced.net());
+            }
+        } else {
+            Map<String, BigDecimal> remaining = new LinkedHashMap<>();
+            for (PayrollLine line : historical) {
+                String name = payrollName(line);
+                if (name.isBlank() || prepared.priced().stream().noneMatch(row -> row.item().kind() == SettlementItemKind.EMPLOYEE
+                        && row.net().signum() > 0 && name.equals(row.payeeName()))) {
+                    throw new BusinessException("历史待核：员工旧工资无法对应本次计酬人");
+                }
+                remaining.merge(name, line.netAmount(), BigDecimal::add);
+            }
+            for (Priced priced : prepared.priced()) {
+                if (priced.item().kind() != SettlementItemKind.EMPLOYEE || priced.net().signum() <= 0) {
+                    continue;
+                }
+                BigDecimal old = remaining.getOrDefault(priced.payeeName(), ZERO);
+                BigDecimal delta = priced.net().subtract(old);
+                remaining.put(priced.payeeName(), ZERO);
+                if (delta.signum() < 0) {
+                    throw new BusinessException("历史待核：员工旧工资高于本次确认，不能自动冲减");
+                }
+                if (delta.signum() == 0) {
+                    continue;
+                }
+                postPayroll(prepared, draft, priced, delta, month, now, postings, session);
+                payables.computeIfAbsent(priced.item().payeeAccount(), key -> new PayableAccumulator(priced.payeeName())).add(delta);
+            }
+            for (PayrollLine line : historical) {
+                settlements.saveLegacyLink(FinanceTexts.code("LEG", sequence), draft.code(), "PAYROLL", line.code(), line.netAmount(), session);
+            }
+            for (Payable payable : finance.listPayables()) {
+                boolean tiedToOrder = historical.stream().anyMatch(line -> line.code().equals(payable.sourceCode()));
+                if (!tiedToOrder) {
+                    continue;
+                }
+                if (settlements.legacyLinked("PAYABLE", payable.code(), session)) {
+                    throw new BusinessException("历史待核：同一旧账已被其他结单接续");
+                }
+                settlements.saveLegacyLink(FinanceTexts.code("LEG", sequence), draft.code(), "PAYABLE", payable.code(), payable.amount(), session);
+            }
         }
         int payableLine = 9000;
         for (Map.Entry<String, PayableAccumulator> entry : payables.entrySet()) {
@@ -144,9 +241,148 @@ public class OrderSettlementService {
             ), session);
             postings.add(new OrderSettlementPosting(payableLine++, OrderSettlementPosting.PAYABLE, payableCode, entry.getValue().amount));
         }
-        settlements.savePostings(draft.code(), postings, session);
-        OrderSettlement confirmed = settlements.markConfirmed(draft.code(), draft.rowVersion(), actorId(actor), month, now, session);
-        return confirmed.code() + "|customer=" + confirmed.customerNet().toPlainString() + "|employee=" + confirmed.employeeNet().toPlainString();
+    }
+
+    private void postPayroll(
+            Prepared prepared,
+            OrderSettlement draft,
+            Priced priced,
+            BigDecimal net,
+            String month,
+            String now,
+            List<OrderSettlementPosting> postings,
+            WorkSession session
+    ) {
+        String payrollCode = FinanceTexts.code("FIN-WG", sequence);
+        finance.savePayrollLine(new PayrollLine(
+                payrollCode, month, priced.payeeName(), prepared.assessment().targetCode(), priced.process(),
+                prepared.assessment().motherOrderCode(), prepared.assessment().customerId(), priced.quantity(),
+                priced.unit(), priced.unitPrice(), net, ZERO, net, true,
+                sourceKey(draft.code(), priced.item().lineNo()), PayrollLine.POST_DELIVERY, priced.item().payeeAccount()
+        ), session);
+        postings.add(new OrderSettlementPosting(priced.item().lineNo(), OrderSettlementPosting.PAYROLL, payrollCode, net));
+    }
+
+    private ReceivableLine customerLine(
+            Prepared prepared,
+            OrderSettlement draft,
+            Priced priced,
+            String code,
+            BigDecimal amount,
+            String reversesCode,
+            OperatorContext actor,
+            String month,
+            String now
+    ) {
+        return new ReceivableLine(
+                code, prepared.assessment().customerId(), prepared.assessment().customerName(), month,
+                "ORDER_SETTLEMENT", sourceKey(draft.code(), priced.item().lineNo()),
+                prepared.assessment().motherOrderCode(), prepared.assessment().targetCode(), priced.process(),
+                priced.quantity(), priced.unit(), priced.unitPrice(), amount, reversesCode, priced.item().remark(),
+                actorId(actor), now
+        );
+    }
+
+    private List<ReceivableLine> historicalReceivables(OrderDeliveryAssessment assessment, WorkSession session) {
+        Scope scope = scope(assessment);
+        List<ReceivableLine> matched = new ArrayList<>();
+        for (ReceivableLine line : finance.listReceivables()) {
+            if (!scope.mother().equals(line.motherOrderCode())) {
+                continue;
+            }
+            if (line.sourceKey() != null && line.sourceKey().startsWith("SETTLEMENT|")) {
+                continue;
+            }
+            String work = line.workOrderCode() == null ? "" : line.workOrderCode();
+            if (!inScope(scope, work)) {
+                continue;
+            }
+            if (settlements.legacyLinked("RECEIVABLE", line.code(), session)) {
+                throw new BusinessException("历史待核：同一旧账已被其他结单接续");
+            }
+            matched.add(line);
+        }
+        return matched;
+    }
+
+    private List<PayrollLine> historicalPayroll(OrderDeliveryAssessment assessment, WorkSession session) {
+        Scope scope = scope(assessment);
+        List<PayrollLine> matched = new ArrayList<>();
+        for (PayrollLine line : finance.listPayrollLines()) {
+            if (line.sourceKey() != null && line.sourceKey().startsWith("SETTLEMENT|")) {
+                continue;
+            }
+            String order = line.orderCode() == null ? "" : line.orderCode();
+            boolean sameMother = scope.mother().equals(line.motherOrderCode());
+            if (!sameMother && !scope.target().equals(order)) {
+                continue;
+            }
+            if (!inScope(scope, order)) {
+                continue;
+            }
+            if (settlements.legacyLinked("PAYROLL", line.code(), session)) {
+                throw new BusinessException("历史待核：同一旧账已被其他结单接续");
+            }
+            matched.add(line);
+        }
+        return matched;
+    }
+
+    private boolean inScope(Scope scope, String work) {
+        String order = work == null ? "" : work;
+        boolean motherLevel = order.isBlank() || order.equals(scope.mother());
+        boolean sameTarget = order.equals(scope.target());
+        if (scope.child()) {
+            if (motherLevel || (!sameTarget && !scope.children().contains(order))) {
+                throw new BusinessException("历史待核：母单旧账与当前子单的覆盖关系不明确");
+            }
+            return sameTarget;
+        }
+        if (!motherLevel && !sameTarget) {
+            throw new BusinessException("历史待核：旧账来源无法对应到当前结单");
+        }
+        return true;
+    }
+
+    private Scope scope(OrderDeliveryAssessment assessment) {
+        Set<String> children = new LinkedHashSet<>();
+        for (var child : documents.listChildWorkOrders(assessment.motherOrderCode())) {
+            children.add(child.code());
+        }
+        return new Scope(
+                OrderDeliveryAssessment.CHILD.equals(assessment.targetType()),
+                assessment.motherOrderCode(),
+                assessment.targetCode(),
+                children
+        );
+    }
+
+    private String payrollName(PayrollLine line) {
+        if (line.payeeAccount() != null && !line.payeeAccount().isBlank() && accounts != null) {
+            AuthUserAccount account = accounts.findByUsername(line.payeeAccount()).orElse(null);
+            if (account != null && account.operator() != null && !account.operator().isBlank()) {
+                return account.operator();
+            }
+        }
+        return line.operatorName() == null ? "" : line.operatorName().trim();
+    }
+
+    private BigDecimal allocatedTo(List<ReceivableLine> lines) {
+        Set<String> codes = new LinkedHashSet<>();
+        for (ReceivableLine line : lines) {
+            if (line.reversesCode().isBlank()) {
+                codes.add(line.code());
+            }
+        }
+        BigDecimal received = ZERO;
+        for (var receipt : finance.listReceipts()) {
+            for (var allocation : receipt.allocations()) {
+                if (codes.contains(allocation.receivableCode())) {
+                    received = received.add(allocation.amount());
+                }
+            }
+        }
+        return received;
     }
 
     private OrderSettlement store(Prepared prepared, WorkSession session) {
@@ -512,5 +748,8 @@ public class OrderSettlementService {
         private void add(BigDecimal net) {
             amount = amount.add(net);
         }
+    }
+
+    private record Scope(boolean child, String mother, String target, Set<String> children) {
     }
 }
