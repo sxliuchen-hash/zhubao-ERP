@@ -25,7 +25,9 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -156,6 +158,7 @@ public class InMemoryFinanceRepository implements FinanceRepository {
                     return existing;
                 }
             }
+            assertOpenBalances(receipt);
             receipts.put(receipt.code(), receipt);
             if (!key.isEmpty()) {
                 receiptCodeByIdempotency.put(key, receipt.code());
@@ -170,6 +173,41 @@ public class InMemoryFinanceRepository implements FinanceRepository {
                 throw ex;
             }
             return receipt;
+        }
+    }
+
+    private void assertOpenBalances(CustomerReceipt receipt) {
+        Map<String, BigDecimal> requested = new LinkedHashMap<>();
+        for (ReceiptAllocation allocation : receipt.allocations()) {
+            if (allocation.amount() == null || allocation.amount().signum() < 0) {
+                throw new BusinessException("核销金额不能为负");
+            }
+            requested.merge(allocation.receivableCode(), allocation.amount(), BigDecimal::add);
+        }
+        for (Map.Entry<String, BigDecimal> entry : requested.entrySet()) {
+            ReceivableLine line = receivablesByCode.get(entry.getKey());
+            if (line == null) {
+                throw new BusinessException("找不到要核销的账单行");
+            }
+            if (!line.reversesCode().isBlank()) {
+                throw new BusinessException("红字不能直接核销");
+            }
+            BigDecimal open = line.amount();
+            for (ReceivableLine other : receivablesByCode.values()) {
+                if (line.code().equals(other.reversesCode())) {
+                    open = open.add(other.amount());
+                }
+            }
+            for (CustomerReceipt existing : receipts.values()) {
+                for (ReceiptAllocation allocation : existing.allocations()) {
+                    if (line.code().equals(allocation.receivableCode())) {
+                        open = open.subtract(allocation.amount());
+                    }
+                }
+            }
+            if (entry.getValue().compareTo(open) > 0) {
+                throw new BusinessException("核销金额不能超过尚未核销的余额");
+            }
         }
     }
 

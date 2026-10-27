@@ -34,7 +34,9 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -319,6 +321,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
                         return existing;
                     }
                 }
+                assertOpenBalances(connection, receipt);
                 insertReceipt(connection, receipt, key);
                 receiptProbe.beforeAllocationInsert();
                 insertAllocations(connection, receipt);
@@ -346,6 +349,57 @@ public class JdbcFinanceRepository implements FinanceRepository {
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("收款事务失败", ex);
+        }
+    }
+
+    private void assertOpenBalances(Connection connection, CustomerReceipt receipt) throws SQLException {
+        Map<String, BigDecimal> requested = new LinkedHashMap<>();
+        for (ReceiptAllocation allocation : receipt.allocations()) {
+            if (allocation.amount() == null || allocation.amount().signum() < 0) {
+                throw new BusinessException("核销金额不能为负");
+            }
+            requested.merge(allocation.receivableCode(), allocation.amount(), BigDecimal::add);
+        }
+        for (Map.Entry<String, BigDecimal> entry : requested.entrySet()) {
+            BigDecimal original;
+            String reverses;
+            String sql = "select amount, reverses_code from fin_receivable_line where code = ? for update";
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, entry.getKey());
+                try (ResultSet rs = statement.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new BusinessException("找不到要核销的账单行");
+                    }
+                    original = rs.getBigDecimal("amount");
+                    reverses = rs.getString("reverses_code");
+                }
+            }
+            if (reverses != null && !reverses.isBlank()) {
+                throw new BusinessException("红字不能直接核销");
+            }
+            BigDecimal reds = BigDecimal.ZERO;
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "select coalesce(sum(amount), 0) from fin_receivable_line where reverses_code = ? for update")) {
+                statement.setString(1, entry.getKey());
+                try (ResultSet rs = statement.executeQuery()) {
+                    if (rs.next()) {
+                        reds = rs.getBigDecimal(1);
+                    }
+                }
+            }
+            BigDecimal used = BigDecimal.ZERO;
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "select coalesce(sum(amount), 0) from fin_receipt_allocation where receivable_code = ?")) {
+                statement.setString(1, entry.getKey());
+                try (ResultSet rs = statement.executeQuery()) {
+                    if (rs.next()) {
+                        used = rs.getBigDecimal(1);
+                    }
+                }
+            }
+            if (entry.getValue().compareTo(original.add(reds).subtract(used)) > 0) {
+                throw new BusinessException("核销金额不能超过尚未核销的余额");
+            }
         }
     }
 
