@@ -161,13 +161,14 @@ public class OrderChangeService {
     public OrderChange submitFinance(String id, AuthUserAccount account) {
         OrderChange current = requireVisible(id, account);
         if (current.status() != OrderChangeStatus.DRAFT) {
-            throw new BusinessException("只有草稿可以送财务确认");
+            throw new BusinessException("只有草稿可以送审");
         }
-        return visible(saveStatus(current, OrderChangeStatus.PENDING_FINANCE, current.amountUnchanged(), current.customerUnitPrice(), current.workerFee(), current.financeNote(), current.confirmedBy()), account);
+        return visible(saveStatus(current, OrderChangeStatus.DEFERRED_TO_SETTLEMENT, false, BigDecimal.ZERO, BigDecimal.ZERO,
+                "费用交货后确定", account.operator().trim()), account);
     }
 
     public OrderChange confirmFinance(String id, boolean amountUnchanged, BigDecimal customerUnitPrice, BigDecimal workerFee, String note, AuthUserAccount account) {
-        return confirmFinance(id, amountUnchanged, customerUnitPrice, workerFee, BigDecimal.ZERO, BigDecimal.ZERO, "", "", "", note, account);
+        throw new BusinessException("改单不再确认单价或工费，费用在交货后结单");
     }
 
     public OrderChange confirmFinance(
@@ -183,41 +184,7 @@ public class OrderChangeService {
             String note,
             AuthUserAccount account
     ) {
-        requireFinance(account);
-        OrderChange current = requireVisible(id, account);
-        if (current.status() != OrderChangeStatus.PENDING_FINANCE) {
-            throw new BusinessException("改单不在待财务确认状态");
-        }
-        if (!amountUnchanged && (customerUnitPrice == null || workerFee == null)) {
-            throw new BusinessException("财务必须确认客户单价和工人工费，或明确选择金额不变");
-        }
-        BigDecimal customer = customerDelta == null ? BigDecimal.ZERO : customerDelta;
-        BigDecimal worker = workerDelta == null ? BigDecimal.ZERO : workerDelta;
-        if (amountUnchanged && (customer.signum() != 0 || worker.signum() != 0)) {
-            throw new BusinessException("金额不变时不能再填写差额");
-        }
-        if (customer.signum() < 0 && (receivableCode == null || receivableCode.isBlank())) {
-            throw new BusinessException("减额必须指定要冲销的应收行");
-        }
-        String process = processName == null ? "" : processName.trim();
-        if (customer.signum() > 0 && process.isBlank()) {
-            throw new BusinessException("增额必须指定工序");
-        }
-        if (worker.signum() != 0 && (workerName == null || workerName.isBlank() || process.isBlank())) {
-            throw new BusinessException("工费差额必须指定工人和工序");
-        }
-        assertProcess(process, account);
-        return visible(changes.save(rebuild(
-                current, OrderChangeStatus.FINANCE_CONFIRMED, amountUnchanged,
-                amountUnchanged ? BigDecimal.ZERO : customerUnitPrice,
-                amountUnchanged ? BigDecimal.ZERO : workerFee,
-                note == null ? "" : note.trim(),
-                account.operator().trim(),
-                customer, worker,
-                receivableCode == null ? "" : receivableCode.trim(),
-                process,
-                workerName == null ? "" : workerName.trim()
-        )), account);
+        throw new BusinessException("改单不再确认单价或工费，费用在交货后结单");
     }
 
     public OrderChange rejectFinance(String id, String note, AuthUserAccount account) {
@@ -239,8 +206,8 @@ public class OrderChangeService {
             throw new BusinessException("改单回放尚未装配");
         }
         OrderChange current = requireVisible(id, account);
-        if (current.status() != OrderChangeStatus.FINANCE_CONFIRMED && current.status() != OrderChangeStatus.APPLIED) {
-            throw new BusinessException("财务确认后才能生效");
+        if (!canApply(current.status())) {
+            throw new BusinessException("业务审核后才能生效");
         }
         if (expectedVersion != null && expectedVersion != current.expectedVersion()) {
             throw new BusinessException("不能改写财务确认时固定的基准版本");
@@ -261,8 +228,9 @@ public class OrderChangeService {
             if (latest.status() == OrderChangeStatus.APPLIED) {
                 return "applied";
             }
-            if (latest.status() != OrderChangeStatus.FINANCE_CONFIRMED) {
-                throw new BusinessException("财务确认后才能生效");
+            if (latest.status() != OrderChangeStatus.DEFERRED_TO_SETTLEMENT
+                    && latest.status() != OrderChangeStatus.FINANCE_CONFIRMED) {
+                throw new BusinessException("业务审核后才能生效");
             }
             if (changes.latestAppliedVersion(target) != expected) {
                 throw new BusinessException("改单版本已变化，请重新确认后再生效");
@@ -275,9 +243,6 @@ public class OrderChangeService {
                     if (family && documents.findProcessStationHandoff(batch.orderCode(), batch.processName(), session).isEmpty())
                         throw new BusinessException("这张母单存在尚未交齐的批次，请完成在途交工后再生效改单");
                 }
-            }
-            if (posting != null) {
-                posting.post(latest, account.operator().trim(), session);
             }
             String now = TIME.format(LocalDateTime.now());
             String storedWork = storedWorkOrder(latest);
@@ -555,6 +520,12 @@ public class OrderChangeService {
         if (account == null || account.operator() == null || account.operator().isBlank()) {
             throw new BusinessException("请先登录后再改单");
         }
+    }
+
+    private boolean canApply(OrderChangeStatus status) {
+        return status == OrderChangeStatus.DEFERRED_TO_SETTLEMENT
+                || status == OrderChangeStatus.FINANCE_CONFIRMED
+                || status == OrderChangeStatus.APPLIED;
     }
 
     private void requireFinance(AuthUserAccount account) {

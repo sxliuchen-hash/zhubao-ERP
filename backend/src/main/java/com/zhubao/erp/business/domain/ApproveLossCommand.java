@@ -21,8 +21,8 @@ public record ApproveLossCommand(
         @NotNull @DecimalMin(value = "0.000") BigDecimal reasonableTransferWeight,
         @NotNull @DecimalMin(value = "0.000") BigDecimal standardLossRatePercent,
         @NotNull @DecimalMin(value = "0.000") BigDecimal acceptedQuantity,
-        @NotNull @DecimalMin(value = "0.000") BigDecimal pieceRate,
-        @NotNull @DecimalMin(value = "0.000") BigDecimal lossDeductionUnitPrice,
+        BigDecimal pieceRate,
+        BigDecimal lossDeductionUnitPrice,
         String evidenceCode,
         String remark
 ) {

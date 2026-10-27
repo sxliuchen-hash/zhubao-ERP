@@ -75,7 +75,7 @@ class ApprovalServiceTest {
         assertThat(task.sourceSummary()).contains(
                 "lossWeight=4.600",
                 "excessLossWeight=2.177",
-                "trialWage=31.74",
+                "wageTrial=deferred",
                 "formalPayroll=false"
         );
         assertThat(service.findPending()).containsExactly(task);

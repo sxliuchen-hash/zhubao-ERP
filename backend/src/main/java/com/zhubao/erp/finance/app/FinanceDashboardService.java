@@ -266,13 +266,15 @@ public class FinanceDashboardService {
         List<FinanceDetailRow> rows = new ArrayList<>();
         boolean company = "COMPANY".equals(scope.kind());
         PayrollRun run = finance.findPayrollRun(yearMonth).orElse(null);
-        if (run != null && run.confirmed()) {
-            for (PayrollLine line : finance.listPayrollLines()) {
-                if (!yearMonth.equals(line.yearMonth()) || !line.confirmed() || !customerInScope(scope, line.customerId())) {
-                    continue;
-                }
-                rows.add(detail("PAYROLL", line.code(), line.customerId(), customerName(line.customerId()), line.yearMonth(), line.netAmount(), line.processName()));
+        boolean legacyConfirmed = run != null && run.confirmed();
+        for (PayrollLine line : finance.listPayrollLines()) {
+            if (!yearMonth.equals(line.yearMonth()) || !line.confirmed() || !customerInScope(scope, line.customerId())) {
+                continue;
             }
+            if (!PayrollLine.POST_DELIVERY.equals(line.sourceMode()) && !legacyConfirmed) {
+                continue;
+            }
+            rows.add(detail("PAYROLL", line.code(), line.customerId(), customerName(line.customerId()), line.yearMonth(), line.netAmount(), line.processName()));
         }
         for (ConsumableMovement movement : finance.listConsumableMovements()) {
             if (!FinanceCostService.ISSUE.equals(movement.direction()) || !yearMonth.equals(movement.yearMonth())) {

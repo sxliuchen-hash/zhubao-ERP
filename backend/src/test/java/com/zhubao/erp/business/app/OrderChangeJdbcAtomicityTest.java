@@ -74,15 +74,12 @@ class OrderChangeJdbcAtomicityTest {
                 new JdbcOrderRequirementRepository(dataSource)
         );
         AuthUserAccount receiver = account("收货员", RoleCode.RECEIVER);
-        AuthUserAccount financeUser = account("财务员", RoleCode.FINANCE_STATISTICIAN);
         var draft = service.draft("MD-JDBC", "", "改为外圈刻字", "2026-11-01", "jdbc-change-001", receiver);
         service.submitFinance(draft.id(), receiver);
-        service.confirmFinance(draft.id(), false, new BigDecimal("70"), new BigDecimal("8"),
-                new BigDecimal("-30.00"), new BigDecimal("-8.00"), "FIN-1", "雕刻", "雕刻工", "回滚", financeUser);
         assertThatThrownBy(() -> service.apply(draft.id(), "jdbc-change-apply", receiver))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("结果写入失败");
-        assertThat(changes.findById(draft.id()).orElseThrow().status()).isEqualTo(OrderChangeStatus.FINANCE_CONFIRMED);
+        assertThat(changes.findById(draft.id()).orElseThrow().status()).isEqualTo(OrderChangeStatus.DEFERRED_TO_SETTLEMENT);
         assertThat(finance.findReceivableByCode("FIN-1").orElseThrow().amount()).isEqualByComparingTo("100.00");
         assertThat(finance.findReceivableBySourceKey("CHANGE-RED|" + draft.id())).isEmpty();
         assertThat(finance.listPayrollLines()).isEmpty();

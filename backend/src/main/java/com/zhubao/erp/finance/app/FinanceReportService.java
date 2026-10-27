@@ -52,16 +52,31 @@ public class FinanceReportService {
             }
         }
         BigDecimal wage = FinanceTexts.ZERO;
+        boolean legacyMonthOpen = true;
         PayrollRun run = finance.findPayrollRun(month.toString()).orElse(null);
-        if (run == null || !run.confirmed()) {
-            gaps.add("工资未确认，成本按 0");
-        } else {
-            for (PayrollLine line : finance.listPayrollLines()) {
-                if (month.toString().equals(line.yearMonth()) && line.confirmed()
-                        && matchesCustomer(customerId, line.customerId())) {
+        if (run != null && run.confirmed()) {
+            legacyMonthOpen = false;
+        }
+        boolean legacyWaiting = false;
+        for (PayrollLine line : finance.listPayrollLines()) {
+            if (!month.toString().equals(line.yearMonth()) || !matchesCustomer(customerId, line.customerId())) {
+                continue;
+            }
+            boolean postDelivery = PayrollLine.POST_DELIVERY.equals(line.sourceMode());
+            if (postDelivery) {
+                if (line.confirmed()) {
                     wage = wage.add(line.netAmount());
                 }
+                continue;
             }
+            if (!line.confirmed() || legacyMonthOpen) {
+                legacyWaiting = true;
+                continue;
+            }
+            wage = wage.add(line.netAmount());
+        }
+        if (legacyWaiting) {
+            gaps.add("历史月度工资未确认，这部分成本按 0");
         }
         BigDecimal consumable = FinanceTexts.ZERO;
         for (ConsumableMovement movement : finance.listConsumableMovements()) {
@@ -102,7 +117,7 @@ public class FinanceReportService {
             }
         }
         if (!billingService.unpriced(month.toString(), customerId).isEmpty()) {
-            gaps.add("仍有未计价单据，收入未包含这些单");
+            gaps.add("已交货但尚未结单，收入未包含这些单");
         }
         BigDecimal result = revenue.subtract(wage).subtract(consumable).subtract(depreciation).subtract(outsource);
         return new OperatingStatement(

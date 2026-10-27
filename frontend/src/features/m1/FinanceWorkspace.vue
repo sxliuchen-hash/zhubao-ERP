@@ -2,15 +2,12 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ApiRequestError } from '../../services/apiClient';
 import {
-  confirmPayroll,
   fetchConsumables,
   fetchFinanceDashboard,
   fetchFinanceDetails,
   fetchOperatingStatement,
   fetchPayables,
   fetchStatement,
-  generateBilling,
-  generatePayroll,
   issueConsumable,
   payPayable,
   purchaseConsumable,
@@ -18,8 +15,6 @@ import {
   saveConsumableItem,
   saveFixedAsset,
   saveOutsource,
-  savePriceAgreement,
-  saveWorkerRate,
   type BillingRunResult,
   type ConsumableStock,
   type CustomerStatement,
@@ -172,69 +167,6 @@ async function loadStatement() {
     statement.value = loaded; message.value = loaded.lines.length ? '' : '暂无账单行';
   } catch (reason) { if (!disposed && token === statementSeq) fail(reason); }
   finally { if (!disposed && token === statementSeq) statementReading.value = false; }
-}
-
-async function saveAgreement() {
-  await run(async () => {
-    const id = requireCustomer();
-    const line = mode.value === 'PROCESS'
-      ? { processName: processName.value, unit: chargeUnit.value, unitPrice: Number(unitPrice.value) }
-      : { processName: '', unit: mode.value === 'WEIGHT' ? 'GRAM' : 'PIECE', unitPrice: Number(unitPrice.value) };
-    await savePriceAgreement({
-      customerId: id,
-      customerName: customerName.value.trim() || `客户${id}`,
-      mode: mode.value,
-      effectiveFrom: yearMonth.value.trim(),
-      effectiveTo: '',
-      lines: [line],
-    });
-    message.value = '协议已保存，之后的入账使用这条单价';
-  });
-}
-
-async function createBilling() {
-  const id = customerId.value.trim(); const month = yearMonth.value.trim(); const token = ++statementSeq;
-  await run(async () => {
-    const generated = await generateBilling(month, id);
-    if (disposed || token !== statementSeq) return;
-    billing.value = generated;
-    message.value = `新入账 ${billing.value.createdCount} 笔`;
-    if (id) {
-      const loaded = await fetchStatement(id, month);
-      if (!disposed && token === statementSeq && loaded.customerId === Number(id)) statement.value = loaded;
-    }
-  });
-}
-
-async function buildPayroll(confirm: boolean) {
-  await run(async () => {
-    if (confirm) {
-      await confirmPayroll(yearMonth.value.trim());
-      message.value = '本月工资已锁定';
-    }
-    const result = confirm
-      ? { lines: payrollLines.value, missingRates: [] }
-      : await generatePayroll(yearMonth.value.trim());
-    if (!confirm) {
-      payrollLines.value = result.lines;
-      message.value = result.missingRates.length
-        ? `有 ${result.missingRates.length} 道工序还没有工人单价`
-        : `已试算 ${result.lines.length} 行，尚未锁定`;
-    }
-  });
-}
-
-async function saveRate() {
-  await run(async () => {
-    await saveWorkerRate({
-      processName: processName.value,
-      unit: chargeUnit.value,
-      unitPrice: Number(unitPrice.value),
-      effectiveFrom: yearMonth.value.trim(),
-      effectiveTo: '',
-    });
-    message.value = '工人单价已保存';
-  });
 }
 
 async function loadConsumables() {
@@ -1104,7 +1036,7 @@ function kindLabel(kind: string) {
       <h2>客户账单</h2>
       <div class="finance-actions">
         <button class="primary-button" type="button" :disabled="busy || statementReading" @click="loadStatement">查询账单</button>
-        <button class="table-action" type="button" :disabled="busy" @click="createBilling">生成本月账单</button>
+        <p class="finance-note">已停止按收货或交工生成本月账单。加工费在交货后结单。</p>
         <button class="table-action" type="button" @click="openTab?.('inventory')">看库存</button>
       </div>
       <details class="info-disclosure finance-agreement">
@@ -1139,7 +1071,7 @@ function kindLabel(kind: string) {
         单价
         <input v-model="unitPrice" aria-label="单价" />
       </label>
-        <button class="secondary-button" type="button" :disabled="busy" @click="saveAgreement">保存协议</button>
+        <p class="finance-note">客户协议已停止新增和改价，历史协议只可查询。</p>
         </div>
       </details>
       <p v-if="statement" class="empty-hint">
@@ -1218,9 +1150,7 @@ function kindLabel(kind: string) {
         <input v-model="unitPrice" aria-label="工人单价" />
       </label>
       <div class="finance-actions">
-        <button class="table-action" type="button" :disabled="busy" @click="saveRate">保存工人单价</button>
-        <button class="primary-button" type="button" :disabled="busy" @click="buildPayroll(false)">试算工资</button>
-        <button class="table-action" type="button" :disabled="busy" @click="buildPayroll(true)">确认并锁定</button>
+        <p class="finance-note">员工工价和整月工资试算已停止。工费在交货后按单确认，这里只查看已确认结果。</p>
       </div>
       <p v-if="payrollLines.length === 0" class="empty-hint">暂无工资行</p>
       <div v-else class="erp-table-wrap finance-register-table" tabindex="0" aria-label="工资明细，可横向滚动">

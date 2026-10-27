@@ -206,25 +206,8 @@ describe('ProcessProgressPanel', () => {
     expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('内壁刻字');
     expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('外圈刻字');
     expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('基准版本 0');
-
-    await wrapper.findAll('button').find((button) => button.text() === '确认金额不变')!.trigger('click');
-    await flushPromises();
-    expect(apiPost).toHaveBeenCalledWith(
-      '/api/business/order-changes/CHG-1/finance-confirmations',
-      expect.objectContaining({ amountUnchanged: true }),
-    );
-
-    vi.mocked(apiGet).mockResolvedValue([{ ...row, id: 'CHG-REJECT' }]);
-    await wrapper.findAll('button').find(button => button.text() === '刷新改单')!.trigger('click');
-    await flushPromises();
-    await wrapper.findAll('button').find(button => button.text().startsWith('CHG-REJECT ·'))!.trigger('click');
-    await wrapper.get('[aria-label="改单财务说明"]').setValue('价格不对');
-    await wrapper.findAll('button').find((button) => button.text() === '拒绝改单')!.trigger('click');
-    await flushPromises();
-    expect(apiPost).toHaveBeenCalledWith(
-      '/api/business/order-changes/CHG-REJECT/finance-rejections',
-      expect.objectContaining({ note: '价格不对' }),
-    );
+    expect(wrapper.findAll('button').some((button) => button.text() === '确认金额不变' || button.text() === '拒绝改单')).toBe(false);
+    expect(wrapper.text()).toContain('旧的金额确认已停止');
 
     vi.mocked(apiGet).mockResolvedValue([{ ...row, id: 'CHG-2', status: 'FINANCE_CONFIRMED' }]);
     await wrapper.findAll('button').find(button => button.text() === '刷新改单')!.trigger('click');

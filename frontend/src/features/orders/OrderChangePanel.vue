@@ -61,7 +61,7 @@ function workCode() { return props.target.orderCode === props.target.motherOrder
 function validRow(row: OrderChangeRow | null | undefined, id?: string) {
   return Boolean(row?.id && row.motherOrderCode === props.target.motherOrderCode && (!id || row.id === id));
 }
-function statusLabel(status: string) { return ({ DRAFT: '草稿', PENDING_FINANCE: '待财务确认', FINANCE_CONFIRMED: '财务已确认', REJECTED: '已拒绝', APPLIED: '已生效' } as Record<string, string>)[status] || status; }
+function statusLabel(status: string) { return ({ DRAFT: '草稿', PENDING_FINANCE: '待财务确认（已停用）', FINANCE_CONFIRMED: '财务已确认', DEFERRED_TO_SETTLEMENT: '费用交货后确定', REJECTED: '已拒绝', APPLIED: '已生效' } as Record<string, string>)[status] || status; }
 function rememberEvidence(row: OrderChangeRow) { if (!evidenceTargets.value.some(item => item.id === row.id)) evidenceTargets.value.push(row); }
 function assignSelection(row: OrderChangeRow) {
   if (selectedChange.value?.id !== row.id) {
@@ -73,7 +73,7 @@ function assignSelection(row: OrderChangeRow) {
 }
 function preserveReceipt(row: OrderChangeRow) {
   const receipt = confirmedRows.get(row.id);
-  const rank: Record<string, number> = { DRAFT: 0, PENDING_FINANCE: 1, FINANCE_CONFIRMED: 2, REJECTED: 3, APPLIED: 3 };
+  const rank: Record<string, number> = { DRAFT: 0, PENDING_FINANCE: 1, DEFERRED_TO_SETTLEMENT: 2, FINANCE_CONFIRMED: 2, REJECTED: 3, APPLIED: 3 };
   return receipt && (rank[receipt.status] ?? -1) > (rank[row.status] ?? -1) ? receipt : row;
 }
 function select(row: OrderChangeRow) {
@@ -148,7 +148,7 @@ async function stage(kind: 'submit' | 'confirm' | 'reject', body: Record<string,
   if (!current || locked.value || (kind === 'submit' ? current.status !== 'DRAFT' : current.status !== 'PENDING_FINANCE')) return;
   if (kind !== 'submit' && !canFinance.value) return;
   const suffix = { submit: 'finance-submissions', confirm: 'finance-confirmations', reject: 'finance-rejections' }[kind];
-  const success = { submit: '已送财务确认', confirm: '财务确认完成', reject: '财务已拒绝' }[kind];
+  const success = { submit: '已送审，费用交货后确定', confirm: '财务确认完成', reject: '财务已拒绝' }[kind];
   await execute({ kind, id: current.id, before: current.status, path: '/api/business/order-changes/' + encodeURIComponent(current.id) + '/' + suffix, body, success, idempotent: false });
 }
 async function confirmUnchanged() { await stage('confirm', { amountUnchanged: true, note: financeNote.value.trim() || '金额不变' }); }
@@ -166,7 +166,7 @@ async function confirmDelta() {
 }
 async function applyChange() {
   const current = selectedChange.value;
-  if (!current || locked.value || current.status !== 'FINANCE_CONFIRMED') return;
+  if (!current || locked.value || !['DEFERRED_TO_SETTLEMENT', 'FINANCE_CONFIRMED'].includes(current.status)) return;
   applyAttempt.value = nextRequestAttempt(applyAttempt.value, JSON.stringify([current.id, current.expectedVersion]), 'change-apply');
   await execute({ kind: 'apply', id: current.id, before: current.status, path: '/api/business/order-changes/' + encodeURIComponent(current.id) + '/applications',
     body: { requestId: applyAttempt.value.requestId, expectedVersion: current.expectedVersion }, success: '改单已生效', idempotent: true });
@@ -181,7 +181,7 @@ async function checkUnknown() {
     if (disposed || pending.value !== command) return;
     if (!validRow(row, command.id)) throw new Error('核对响应与原改单不一致');
     assignSelection(row);
-    const progressed = command.kind === 'submit' ? ['PENDING_FINANCE', 'FINANCE_CONFIRMED', 'REJECTED', 'APPLIED'] : ['FINANCE_CONFIRMED', 'REJECTED', 'APPLIED'];
+    const progressed = command.kind === 'submit' ? ['PENDING_FINANCE', 'DEFERRED_TO_SETTLEMENT', 'FINANCE_CONFIRMED', 'REJECTED', 'APPLIED'] : ['FINANCE_CONFIRMED', 'DEFERRED_TO_SETTLEMENT', 'REJECTED', 'APPLIED'];
     if (progressed.includes(row.status)) {
       pending.value = null;
       confirmedRows.set(row.id, row);
@@ -237,22 +237,13 @@ async function loadTimeline() {
         <p>目标 {{ selectedChange.workOrderCode || selectedChange.motherOrderCode }} · 基准版本 {{ selectedChange.expectedVersion }} · 申请版本 {{ selectedChange.versionNo }}</p>
         <dl class="change-diff"><dt>要求</dt><dd>{{ selectedChange.oldRequirement || '空' }} → {{ selectedChange.newRequirement || '空' }}</dd><dt>期限</dt><dd>{{ selectedChange.oldDueDate || '空' }} → {{ selectedChange.newDueDate || '空' }}</dd><dt>路线</dt><dd>{{ selectedChange.oldRoute || '空' }} → {{ selectedChange.newRoute || '空' }}</dd></dl>
         <p v-if="selectedChange.reworkProcess">重做工序：{{ selectedChange.reworkProcess }}；不覆盖原交付。</p>
-        <button class="secondary-button" type="button" :disabled="locked || selectedChange.status !== 'DRAFT'" @click="stage('submit')">送财务确认</button>
+        <button class="secondary-button" type="button" :disabled="locked || selectedChange.status !== 'DRAFT'" @click="stage('submit')">送审，费用交货后确定</button>
+        <p v-if="selectedChange.status === 'DEFERRED_TO_SETTLEMENT'">费用交货后确定。业务变更可以生效，不在这里填写客户单价或员工工费。</p>
+        <p v-if="selectedChange.status === 'PENDING_FINANCE'">旧的金额确认已停止。请重新处理为费用交货后确定，不能再填写差额。</p>
         <template v-if="canFinance">
-          <details v-if="['FINANCE_CONFIRMED', 'APPLIED'].includes(selectedChange.status)"><summary>财务确认内容</summary><p>{{ selectedChange.amountUnchanged ? '金额不变' : '差额确认' }} · 客户单价 {{ selectedChange.customerUnitPrice }} · 工费 {{ selectedChange.workerFee }}</p><p>客户差额 {{ selectedChange.customerDelta }} · 工费差额 {{ selectedChange.workerDelta }} · {{ selectedChange.financeNote }}</p></details>
-          <fieldset v-if="selectedChange.status === 'PENDING_FINANCE'" :disabled="locked" aria-label="财务确认改单">
-            <label>财务说明<input v-model="financeNote" aria-label="改单财务说明" /></label>
-            <label>客户单价<input v-model="customerPrice" aria-label="改单客户单价" inputmode="decimal" /></label>
-            <label>工人工费<input v-model="workerFee" aria-label="改单工人工费" inputmode="decimal" /></label>
-            <label>客户差额<input v-model="customerDelta" aria-label="改单客户差额" inputmode="decimal" /></label>
-            <label>工费差额<input v-model="workerDelta" aria-label="改单工费差额" inputmode="decimal" /></label>
-            <label>原应收行（减额必填）<input v-model="receivableCode" aria-label="改单原应收行" /></label>
-            <label>工序（增额或工费差额必填）<input v-model="processName" aria-label="改单差额工序" /></label>
-            <label>工人（工费差额必填）<input v-model="workerName" aria-label="改单差额工人" /></label>
-            <div class="change-actions"><button class="secondary-button" type="button" @click="confirmUnchanged">确认金额不变</button><button class="secondary-button" type="button" @click="confirmDelta">确认差额</button><button class="secondary-button" type="button" @click="stage('reject', { amountUnchanged: false, note: financeNote.trim() })">拒绝改单</button></div>
-          </fieldset>
+          <details v-if="['FINANCE_CONFIRMED', 'APPLIED'].includes(selectedChange.status)"><summary>历史财务确认</summary><p>{{ selectedChange.amountUnchanged ? '当时记录为金额不变' : '当时记录了差额' }} · 客户单价 {{ selectedChange.customerUnitPrice }} · 工费 {{ selectedChange.workerFee }}</p><p>客户差额 {{ selectedChange.customerDelta }} · 工费差额 {{ selectedChange.workerDelta }} · {{ selectedChange.financeNote }}</p></details>
         </template>
-        <button class="primary-button" type="button" :disabled="locked || selectedChange.status !== 'FINANCE_CONFIRMED'" @click="applyChange">生效改单</button>
+        <button class="primary-button" type="button" :disabled="locked || !['DEFERRED_TO_SETTLEMENT', 'FINANCE_CONFIRMED'].includes(selectedChange.status)" @click="applyChange">生效改单</button>
       </section>
     </div>
     <section v-for="row in evidenceTargets" :key="row.id" v-show="selectedChange?.id === row.id" :inert="selectedChange?.id !== row.id || undefined">
@@ -267,11 +258,11 @@ async function loadTimeline() {
 <style scoped>
 .order-change-panel { min-width: 0; overflow-wrap: anywhere; }
 .order-change-panel fieldset, .change-compose, .change-history, .change-detail { display: grid; gap: 10px; min-width: 0; border: 1px solid var(--line); padding: 12px; border-radius: 10px; }
-.order-change-panel fieldset { grid-template-columns: 1fr 1fr; align-items: end; }
-.order-change-panel fieldset > button,
+.order-change-panel fieldset { grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); align-items: end; justify-content: start; }
 .order-change-panel fieldset > .change-actions,
 .order-change-panel fieldset > p,
 .order-change-panel label:has(textarea) { grid-column: 1 / -1; }
+.order-change-panel fieldset > button { width: auto; justify-self: start; }
 .order-change-panel fieldset { margin: 8px 0; }
 .order-change-panel label { display: grid; gap: 6px; min-width: 0; }
 .order-change-panel input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; }
@@ -280,5 +271,5 @@ async function loadTimeline() {
 .change-diff { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; }
 .change-diff dd { margin: 0; white-space: pre-wrap; }
 .change-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-@media (max-width: 900px) { .change-record-grid { grid-template-columns: minmax(0, 1fr); } .order-change-panel input { font-size: 16px; min-height: 44px; } .order-change-panel button { min-height: 44px; } }
+@media (max-width: 900px) { .order-change-panel fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); } .change-record-grid { grid-template-columns: minmax(0, 1fr); } .order-change-panel input { font-size: 16px; min-height: 44px; } .order-change-panel button { min-height: 44px; } }
 </style>

@@ -26,7 +26,10 @@ import com.zhubao.erp.finance.domain.FinanceCommands.SaveFixedAssetCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.SavePriceAgreementCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.SaveWorkerRateCommand;
 import com.zhubao.erp.finance.domain.OperatingStatement;
+import com.zhubao.erp.finance.domain.PayrollLine;
+import com.zhubao.erp.finance.domain.PayrollRun;
 import com.zhubao.erp.finance.domain.PricingMode;
+import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.infra.InMemoryFinanceRepository;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
@@ -67,66 +70,30 @@ class FinanceOperationServiceTest {
     }
 
     @Test
-    void billsInboundWeightOnceAndKeepsThePriceSnapshot() {
+    void agreementAndBillingGenerationAreRejected() {
         documents.saveMotherOrder(mother("MD-1", 1001L, "恒信珠宝", "2026-10-08", "2", "10.500"));
-        billing.saveAgreement(agreement(1001L, "WEIGHT", "2026-10", "", new PriceLineCommand("", "GRAM", new BigDecimal("12.5"))), "财务");
-
-        var first = billing.generate(new BillingRunCommand("2026-10", 1001L));
-        var second = billing.generate(new BillingRunCommand("2026-10", 1001L));
-
-        assertThat(first.createdCount()).isEqualTo(1);
-        assertThat(first.createdLines().get(0).amount()).isEqualByComparingTo("131.25");
-        assertThat(first.createdLines().get(0).motherOrderCode()).isEqualTo("MD-1");
-        assertThat(first.createdLines().get(0).unitPrice()).isEqualByComparingTo("12.5000");
-        assertThat(second.createdCount()).isZero();
-
-        billing.saveAgreement(agreement(1001L, "WEIGHT", "2026-11", "", new PriceLineCommand("", "GRAM", new BigDecimal("20"))), "财务");
-        assertThat(billing.statement(1001L, "2026-10").lines().get(0).unitPrice()).isEqualByComparingTo("12.5000");
-    }
-
-    @Test
-    void billsPieceAndProcessSeparatelyAndSkipsRework() {
-        documents.saveMotherOrder(mother("MD-P", 1002L, "雅辰", "2026-10-02", "3", "1"));
-        billing.saveAgreement(agreement(1002L, "PIECE", "2026-10", "", new PriceLineCommand("", "PIECE", new BigDecimal("8"))), "财务");
-        assertThat(billing.generate(new BillingRunCommand("2026-10", null)).createdLines())
-                .singleElement()
-                .satisfies(line -> assertThat(line.amount()).isEqualByComparingTo("24.00"));
-
-        documents.saveMotherOrder(mother("MD-S", 1003L, "锦瑞", "2026-10-03", "1", "2"));
-        documents.saveChildWorkOrder(child("ZD-1", "MD-S", 1003L, "1", "2.000"));
-        documents.saveProcessStationHandoff(new ProcessStationHandoff("ZD-1", "雕刻", "王强", "STK-1", "2026-10-09T09:00:00"));
-        documents.saveProcessStationHandoff(new ProcessStationHandoff("FG-ZD-1", "抛光", "王强", "STK-2", "2026-10-09T11:00:00"));
-        billing.saveAgreement(new SavePriceAgreementCommand(
-                1003L,
-                "锦瑞",
-                "PROCESS",
-                "2026-10",
-                "",
-                List.of(new PriceLineCommand("雕刻", "JOB", new BigDecimal("30")))
-        ), "财务");
-
-        var result = billing.generate(new BillingRunCommand("2026-10", 1003L));
-        assertThat(result.createdLines()).singleElement().satisfies(line -> {
-            assertThat(line.sourceType()).isEqualTo("PROCESS");
-            assertThat(line.workOrderCode()).isEqualTo("ZD-1");
-            assertThat(line.processName()).isEqualTo("雕刻");
-            assertThat(line.amount()).isEqualByComparingTo("30.00");
-        });
-        assertThat(result.unpriced()).isEmpty();
-    }
-
-    @Test
-    void leavesUnpricedOrdersUntilAnAgreementExists() {
-        documents.saveMotherOrder(mother("MD-U", 1004L, "未定价", "2026-10-04", "1", "1"));
-
-        assertThat(billing.unpriced("2026-10", 1004L))
-                .singleElement()
-                .satisfies(item -> assertThat(item.reason()).contains("没有生效的客户协议"));
+        assertThatThrownBy(() -> billing.saveAgreement(agreement(1001L, "WEIGHT", "2026-10", "", new PriceLineCommand("", "GRAM", new BigDecimal("12.5"))), "财务"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("协议已停止维护");
+        assertThatThrownBy(() -> billing.generate(new BillingRunCommand("2026-10", 1001L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已停止按收货或交工生成加工费");
         assertThat(finance.listReceivables()).isEmpty();
+        assertThat(billing.unpriced("2026-10", 1001L)).isEmpty();
+    }
 
-        billing.saveAgreement(agreement(1004L, "PIECE", "2026-10", "", new PriceLineCommand("", "PIECE", new BigDecimal("6"))), "财务");
-        assertThat(billing.generate(new BillingRunCommand("2026-10", 1004L)).createdCount()).isEqualTo(1);
-        assertThat(billing.unpriced("2026-10", 1004L)).isEmpty();
+    @Test
+    void payrollRebuildIsRejected() {
+        assertThatThrownBy(() -> payroll.saveRate(new SaveWorkerRateCommand("镶嵌", "PIECE", new BigDecimal("10"), "2026-10", ""), "财务"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("工价已停止维护");
+        assertThatThrownBy(() -> payroll.generate(new PayrollRunCommand("2026-10")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已停止按交工");
+        assertThatThrownBy(() -> payroll.confirm(new PayrollRunCommand("2026-10"), "财务"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已停止整月确认");
+        assertThat(finance.listPayrollLines()).isEmpty();
     }
 
     @Test
@@ -141,8 +108,11 @@ class FinanceOperationServiceTest {
                 new BigDecimal("1.5"),
                 "结存"
         ));
-        billing.saveAgreement(agreement(1005L, "PIECE", "2026-10", "", new PriceLineCommand("", "PIECE", new BigDecimal("10"))), "财务");
-        var line = billing.generate(new BillingRunCommand("2026-10", 1005L)).createdLines().get(0);
+        ReceivableLine line = new ReceivableLine(
+                "FIN-R", 1005L, "收款客户", "2026-10", "MANUAL", "MANUAL|FIN-R", "MD-R", "MD-R", "",
+                new BigDecimal("2"), ChargeUnit.PIECE, new BigDecimal("10.0000"), new BigDecimal("20.00"),
+                "", "", "财务", "2026-10-05T00:00:00");
+        finance.saveReceivable(line);
         billing.receive(new RecordReceiptCommand(
                 1005L,
                 "收款客户",
@@ -165,61 +135,30 @@ class FinanceOperationServiceTest {
     }
 
     @Test
-    void confirmsPayrollOnceAndCapsLossDeduction() {
-        documents.saveMotherOrder(mother("MD-W", 1006L, "工资客户", "2026-10-01", "2", "1"));
-        documents.saveChildWorkOrder(child("ZD-W", "MD-W", 1006L, "2", "1"));
-        documents.saveProcessStationHandoff(new ProcessStationHandoff("ZD-W", "镶嵌", "赵敏", "STK-W", "2026-10-11T08:00:00"));
-        approvals.save(new ApprovalTask(
-                "AP-W",
-                "LOSS_APPROVAL",
-                "ZD-W",
-                "Loss approval for ZD-W / 镶嵌",
-                ApprovalStatus.APPROVED,
-                "赵敏",
-                "组长",
-                "WORKSHOP_LEADER",
-                "red",
-                "APPROVED",
-                "lossDeduction=50.00; trialWage=0",
-                "",
-                false,
-                "2026-10-11T09:00:00",
-                "2026-10-11T09:10:00",
-                "组长",
-                "同意",
-                true
-        ));
-        payroll.saveRate(new SaveWorkerRateCommand("镶嵌", "PIECE", new BigDecimal("10"), "2026-10", ""), "财务");
-
-        var generated = payroll.generate(new PayrollRunCommand("2026-10"));
-        assertThat(generated.lines()).singleElement().satisfies(line -> {
-            assertThat(line.grossAmount()).isEqualByComparingTo("20.00");
-            assertThat(line.lossDeduction()).isEqualByComparingTo("20.00");
-            assertThat(line.netAmount()).isEqualByComparingTo("0.00");
-            assertThat(line.confirmed()).isFalse();
-        });
-
-        payroll.confirm(new PayrollRunCommand("2026-10"), "财务");
-        assertThat(payroll.lines("2026-10")).allMatch(line -> line.confirmed());
-        assertThat(report.payables("2026-10")).singleElement().satisfies(payable -> {
-            assertThat(payable.kind()).isEqualTo("PAYROLL");
-            assertThat(payable.payee()).isEqualTo("赵敏");
-            assertThat(payable.unpaidAmount()).isEqualByComparingTo("0.00");
-        });
+    void monthlyPayrollRebuildCannotDeductFromApprovalText() {
+        assertThatThrownBy(() -> payroll.saveRate(new SaveWorkerRateCommand("镶嵌", "PIECE", new BigDecimal("10"), "2026-10", ""), "财务"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("工价已停止维护");
         assertThatThrownBy(() -> payroll.generate(new PayrollRunCommand("2026-10")))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("已锁定");
+                .hasMessageContaining("已停止按交工");
+        assertThat(finance.listPayables()).isEmpty();
     }
 
     @Test
     void tracksConsumablesAssetsAndMonthlyOperatingResult() {
         documents.saveMotherOrder(mother("MD-C", 1007L, "经营客户", "2026-10-06", "1", "1"));
-        billing.saveAgreement(agreement(1007L, "PIECE", "2026-10", "", new PriceLineCommand("", "PIECE", new BigDecimal("100"))), "财务");
-        billing.generate(new BillingRunCommand("2026-10", 1007L));
+        finance.saveReceivable(new ReceivableLine(
+                "FIN-C", 1007L, "经营客户", "2026-10", "MANUAL", "MANUAL|FIN-C", "MD-C", "MD-C", "",
+                BigDecimal.ONE, ChargeUnit.JOB, new BigDecimal("100.0000"), new BigDecimal("100.00"),
+                "", "", "财务", "2026-10-06T00:00:00"));
         documents.saveChildWorkOrder(child("ZD-C", "MD-C", 1007L, "1", "1"));
         documents.saveProcessStationHandoff(new ProcessStationHandoff("ZD-C", "抛光", "陈刚", "STK-C", "2026-10-12T08:00:00"));
-        payroll.saveRate(new SaveWorkerRateCommand("抛光", "JOB", new BigDecimal("40"), "2026-10", ""), "财务");
-        payroll.confirm(new PayrollRunCommand("2026-10"), "财务");
+        finance.savePayrollLine(new PayrollLine(
+                "WG-C", "2026-10", "陈刚", "ZD-C", "抛光", "MD-C", 1007L, BigDecimal.ONE, ChargeUnit.JOB,
+                new BigDecimal("40.0000"), new BigDecimal("40.00"), BigDecimal.ZERO, new BigDecimal("40.00"),
+                true, "MANUAL|WG-C"));
+        finance.savePayrollRun(new PayrollRun("2026-10", true, "财务", "2026-10-12T00:00:00"));
 
         cost.saveItem(new SaveConsumableItemCommand("GLUE", "胶", "支"));
         var purchase = cost.purchase(new PurchaseConsumableCommand("GLUE", new BigDecimal("10"), new BigDecimal("30"), "胶行", "2026-10"), "财务");
@@ -270,7 +209,8 @@ class FinanceOperationServiceTest {
         cost.saveAsset(new SaveFixedAssetCommand("空压机", "设备", new BigDecimal("500"), new BigDecimal("100"), "2026-09", 12), "财务");
         OperatingStatement statement = report.operating("2026-10", null);
         assertThat(statement.revenue()).isEqualByComparingTo("0.00");
-        assertThat(statement.gaps()).contains("工资未确认，成本按 0", "折旧未生成，成本按 0");
+        assertThat(statement.gaps()).contains("折旧未生成，成本按 0");
+        assertThat(statement.gaps()).noneMatch(gap -> gap.contains("工资未确认"));
         assertThat(PricingMode.WEIGHT.name()).isEqualTo("WEIGHT");
         assertThat(ChargeUnit.GRAM.name()).isEqualTo("GRAM");
     }

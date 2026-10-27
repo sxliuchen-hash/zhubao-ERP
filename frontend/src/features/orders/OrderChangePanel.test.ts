@@ -74,14 +74,14 @@ describe('独立改单面板', () => {
   it('无幂等键的送审超时后禁止重发，只读核对仍为草稿时继续保留未知状态', async () => {
     vi.mocked(apiGet).mockResolvedValueOnce([{ ...row, status: 'DRAFT' }]);
     vi.mocked(apiPost).mockRejectedValue(new Error('超时'));
-    const wrapper = panel(); await choose(wrapper); await click(wrapper, '送财务确认');
-    await click(wrapper, '送财务确认'); expect(apiPost).toHaveBeenCalledTimes(1);
+    const wrapper = panel(); await choose(wrapper); await click(wrapper, '送审，费用交货后确定');
+    await click(wrapper, '送审，费用交货后确定'); expect(apiPost).toHaveBeenCalledTimes(1);
     expect(wrapper.findAll('button').some(button => button.text() === '原改单请求重试')).toBe(false);
     vi.mocked(apiGet).mockResolvedValueOnce({ ...row, status: 'DRAFT' });
     await click(wrapper, '只读核对原改单'); expect(wrapper.text()).toContain('结果尚不能确认');
     vi.mocked(apiGet).mockResolvedValueOnce(row);
     await click(wrapper, '只读核对原改单');
-    expect(wrapper.text()).toContain('当前为待财务确认，未再次提交原操作');
+    expect(wrapper.text()).toContain('当前为待财务确认（已停用），未再次提交原操作');
     expect(wrapper.find('[aria-label="原改单请求待核对"]').exists()).toBe(false);
     expect(apiPost).toHaveBeenCalledTimes(1);
   });
@@ -114,20 +114,12 @@ describe('独立改单面板', () => {
     expect(vi.mocked(apiPost).mock.calls[1][1]).toEqual(original);
     expect(original).toMatchObject({ expectedVersion: 2 });
   });
-  it('财务差额按原接口明确应收、工序与工人，不把空单价当零', async () => {
+  it('旧的金额确认入口已移除，不能再提交差额', async () => {
     const wrapper = panel(true); await choose(wrapper);
-    await click(wrapper, '确认差额'); expect(apiPost).not.toHaveBeenCalled();
-    await wrapper.get('[aria-label="改单客户单价"]').setValue('12.50');
-    await wrapper.get('[aria-label="改单工人工费"]').setValue('2.25');
-    await wrapper.get('[aria-label="改单客户差额"]').setValue('-10.50');
-    await wrapper.get('[aria-label="改单工费差额"]').setValue('1.25');
-    await click(wrapper, '确认差额'); expect(wrapper.text()).toContain('减额必须指定原应收行');
-    await wrapper.get('[aria-label="改单原应收行"]').setValue('AR-1');
-    await wrapper.get('[aria-label="改单差额工序"]').setValue('抛光');
-    await wrapper.get('[aria-label="改单差额工人"]').setValue('工人甲');
-    vi.mocked(apiPost).mockResolvedValue({ ...row, status: 'FINANCE_CONFIRMED' });
-    await click(wrapper, '确认差额');
-    expect(apiPost).toHaveBeenCalledWith('/api/business/order-changes/CHANGE-1/finance-confirmations', expect.objectContaining({ customerUnitPrice: '12.50', workerFee: '2.25', customerDelta: '-10.50', workerDelta: '1.25', receivableCode: 'AR-1', processName: '抛光', workerName: '工人甲' }));
+    expect(wrapper.find('[aria-label="改单客户单价"]').exists()).toBe(false);
+    expect(wrapper.findAll('button').some(button => button.text() === '确认差额' || button.text() === '确认金额不变')).toBe(false);
+    expect(wrapper.text()).toContain('旧的金额确认已停止');
+    expect(apiPost).not.toHaveBeenCalled();
   });
   it('改单证据组件按改单号保留，切换记录不会重用或销毁另一单本地文件容器', async () => {
     vi.mocked(apiGet).mockResolvedValue([row, { ...row, id: 'CHANGE-2' }]);
@@ -138,23 +130,16 @@ describe('独立改单面板', () => {
     expect(wrapper.getComponent({ name: 'EvidenceCapture' }).vm.$).toBe(evidence);
     expect(evidence.isUnmounted).toBe(false);
   });
-  it('成功回执防止陈旧列表倒退状态，已确认金额不能再次确认或拒绝', async () => {
+  it('待财务确认的旧单不再显示金额确认按钮', async () => {
     const wrapper = panel(true); await choose(wrapper);
-    vi.mocked(apiPost).mockResolvedValue({ ...row, status: 'FINANCE_CONFIRMED' });
-    await click(wrapper, '确认金额不变');
-    expect(wrapper.get('[aria-label="改单详情"]').text()).toContain('财务已确认');
+    expect(wrapper.text()).toContain('待财务确认（已停用）');
     expect(wrapper.find('[aria-label="财务确认改单"]').exists()).toBe(false);
     expect(wrapper.findAll('button').some(button => ['确认金额不变', '拒绝改单'].includes(button.text()))).toBe(false);
-    expect(apiPost).toHaveBeenCalledTimes(1);
+    expect(apiPost).not.toHaveBeenCalled();
   });
-  it('财务填写按改单分别保留，切单不能把另一份草稿带入当前请求', async () => {
+  it('历史金额字段不再出现在改单表单', async () => {
     vi.mocked(apiGet).mockResolvedValue([row, { ...row, id: 'CHANGE-2' }]);
     const wrapper = panel(true); await choose(wrapper);
-    await wrapper.get('[aria-label="改单客户单价"]').setValue('10.25');
-    await choose(wrapper, 'CHANGE-2');
-    expect(wrapper.get('[aria-label="改单客户单价"]').element).toHaveProperty('value', '');
-    await wrapper.get('[aria-label="改单客户单价"]').setValue('20.50');
-    await choose(wrapper);
-    expect(wrapper.get('[aria-label="改单客户单价"]').element).toHaveProperty('value', '10.25');
+    expect(wrapper.find('[aria-label="改单客户单价"]').exists()).toBe(false);
   });
 });

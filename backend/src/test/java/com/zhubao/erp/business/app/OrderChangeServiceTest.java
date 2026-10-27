@@ -86,13 +86,11 @@ class OrderChangeServiceTest {
         var second = service.draft("MD-CHANGE-001", "", "第二次", "2026-11-02", "change-base-b001", receiver);
         service.submitFinance(first.id(), receiver);
         service.submitFinance(second.id(), receiver);
-        service.confirmFinance(first.id(), true, null, null, "金额不变", finance);
-        service.confirmFinance(second.id(), true, null, null, "金额不变", finance);
         service.apply(first.id(), "change-base-apply-a", receiver);
         assertThatThrownBy(() -> service.apply(second.id(), "change-base-apply-b", 1, receiver))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能改写财务确认时固定的基准版本");
-        assertThat(service.present(second.id(), receiver).status()).isEqualTo(OrderChangeStatus.FINANCE_CONFIRMED);
+        assertThat(service.present(second.id(), receiver).status()).isEqualTo(OrderChangeStatus.DEFERRED_TO_SETTLEMENT);
     }
 
     @Test
@@ -104,7 +102,6 @@ class OrderChangeServiceTest {
         OrderChangeService effect = effectService(requirements, null);
         var first = effect.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-route-1001", "雕刻、镶嵌", 0, "", receiver);
         effect.submitFinance(first.id(), receiver);
-        effect.confirmFinance(first.id(), true, null, null, "金额不变", finance);
         effect.apply(first.id(), "change-route-apply", receiver);
         var second = effect.draft("MD-CHANGE-001", "", "", "2026-12-01", "change-route-2001", null, null, "", receiver);
         assertThat(second.oldRequirement()).isEqualTo("改为外圈刻字");
@@ -172,7 +169,6 @@ class OrderChangeServiceTest {
 
         var draft = changes.draft("MD-ROUND-001", "", "外圈重刻", "2026-12-01", "round-draft-0001", null, null, "雕刻", receiver);
         changes.submitFinance(draft.id(), receiver);
-        changes.confirmFinance(draft.id(), true, null, null, "金额不变", finance);
         changes.apply(draft.id(), "round-apply-0001", receiver);
         String roundCode = requirements.listByMother("MD-ROUND-001").get(0).roundWorkOrderCode();
 
@@ -200,14 +196,14 @@ class OrderChangeServiceTest {
         var draft = service.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-draft-001", receiver);
         assertThatThrownBy(() -> service.apply(draft.id(), "change-apply-001", receiver))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("财务确认后才能生效");
+                .hasMessageContaining("业务审核后才能生效");
         service.submitFinance(draft.id(), receiver);
         assertThatThrownBy(() -> service.confirmFinance(draft.id(), true, null, null, "金额不变", receiver))
-                .isInstanceOf(PermissionDeniedException.class);
-        service.confirmFinance(draft.id(), true, null, null, "金额不变", finance);
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不再确认单价");
         var applied = service.apply(draft.id(), "change-apply-001", receiver);
         assertThat(applied.status()).isEqualTo(OrderChangeStatus.APPLIED);
-        assertThat(applied.amountUnchanged()).isTrue();
+        assertThat(applied.amountUnchanged()).isFalse();
         assertThat(documents.listProcessStationHandoffs("MD-CHANGE-001")).hasSize(1);
         assertThat(service.apply(draft.id(), "change-apply-001", receiver).status()).isEqualTo(OrderChangeStatus.APPLIED);
         assertThat(service.timeline("MD-CHANGE-001", receiver)).anyMatch(line -> line.contains("改为外圈刻字"));
@@ -225,7 +221,6 @@ class OrderChangeServiceTest {
         OrderChangeService effect = effectService(requirements, null);
         var draft = effect.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-effect-001", null, 0, "雕刻", receiver);
         effect.submitFinance(draft.id(), receiver);
-        effect.confirmFinance(draft.id(), true, null, null, "金额不变", finance);
         var applied = effect.apply(draft.id(), "change-effect-apply", receiver);
         assertThat(applied.status()).isEqualTo(OrderChangeStatus.APPLIED);
         assertThat(documents.findMotherOrderByCode("MD-CHANGE-001").orElseThrow().processingRequirement()).isEqualTo("内壁刻字");
@@ -248,10 +243,8 @@ class OrderChangeServiceTest {
         var first = effect.draft("MD-CHANGE-001", "", "第一次", "2026-11-01", "change-stale-a", receiver);
         var second = effect.draft("MD-CHANGE-001", "", "第二次", "2026-12-01", "change-stale-b", null, 0, "", receiver);
         effect.submitFinance(first.id(), receiver);
-        effect.confirmFinance(first.id(), true, null, null, "金额不变", finance);
         effect.apply(first.id(), "change-stale-apply-a", receiver);
         effect.submitFinance(second.id(), receiver);
-        effect.confirmFinance(second.id(), true, null, null, "金额不变", finance);
         assertThatThrownBy(() -> effect.apply(second.id(), "change-stale-apply-b", 0, receiver))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("版本已变化");
@@ -283,13 +276,15 @@ class OrderChangeServiceTest {
                 .isInstanceOf(PermissionDeniedException.class);
         var draft = scoped.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-money-view", limited);
         scoped.submitFinance(draft.id(), limited);
-        scoped.confirmFinance(draft.id(), false, new BigDecimal("70"), new BigDecimal("8"),
-                new BigDecimal("-30"), BigDecimal.ZERO, "FIN-X", "雕刻", "", "减额", finance);
+        assertThatThrownBy(() -> scoped.confirmFinance(draft.id(), false, new BigDecimal("70"), new BigDecimal("8"),
+                new BigDecimal("-30"), BigDecimal.ZERO, "FIN-X", "雕刻", "", "减额", finance))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不再确认单价");
         assertThat(scoped.present(draft.id(), limited).customerUnitPrice()).isEqualByComparingTo("0");
         assertThat(scoped.present(draft.id(), limited).receivableCode()).isEmpty();
-        assertThat(scoped.present(draft.id(), finance).customerUnitPrice()).isEqualByComparingTo("70");
+        assertThat(scoped.present(draft.id(), finance).customerUnitPrice()).isEqualByComparingTo("0");
         assertThat(scoped.timeline("MD-CHANGE-001", limited)).noneMatch(line -> line.contains("客户单价") || line.contains("FIN-X"));
-        assertThat(scoped.timeline("MD-CHANGE-001", finance)).anyMatch(line -> line.contains("客户单价:70"));
+        assertThat(scoped.timeline("MD-CHANGE-001", finance)).noneMatch(line -> line.contains("客户单价:70"));
         AuthUserAccount carver = new AuthUserAccount(
                 "雕刻工", "hash", "雕刻工", RoleCode.OPERATOR, DataScope.ALL, true, true,
                 Instant.now(), 0, null, List.of(), false, false, List.of("雕刻")

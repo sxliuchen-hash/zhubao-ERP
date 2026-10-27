@@ -66,56 +66,15 @@ public class FinancePayrollService {
     }
 
     public WorkerRate saveRate(SaveWorkerRateCommand command, String operator) {
-        FinanceTexts.requireProcess(command.processName());
-        ChargeUnit unit = FinanceTexts.chargeUnit(command.unit());
-        YearMonth from = FinanceTexts.month(command.effectiveFrom());
-        YearMonth to = FinanceTexts.blank(command.effectiveTo()).isEmpty()
-                ? null
-                : FinanceTexts.month(command.effectiveTo());
-        if (to != null && to.isBefore(from)) {
-            throw new BusinessException("工价结束月份不能早于开始月份");
-        }
-        closeOverlappingRates(command.processName().trim(), from, to);
-        WorkerRate rate = new WorkerRate(
-                FinanceTexts.code("FIN-WR", sequence),
-                command.processName().trim(),
-                unit,
-                FinanceTexts.price(command.unitPrice()),
-                from.toString(),
-                to == null ? "" : to.toString(),
-                operator,
-                FinanceTexts.now()
-        );
-        finance.saveWorkerRate(rate);
-        return rate;
+        throw new BusinessException("员工工价已停止维护，历史工价只可查询。工费请在交货后按单填写");
     }
 
     public PayrollGenerateResult generate(PayrollRunCommand command) {
-        YearMonth month = FinanceTexts.month(command.yearMonth());
-        ensureOpen(month);
-        Built built = build(month);
-        List<PayrollLine> merged = withAdjustments(month, built.lines());
-        finance.replacePayroll(month.toString(), merged);
-        return new PayrollGenerateResult(month.toString(), merged, built.missing());
+        throw new BusinessException("已停止按交工和工价重算工资，请在交货后结单");
     }
 
     public PayrollRun confirm(PayrollRunCommand command, String operator) {
-        YearMonth month = FinanceTexts.month(command.yearMonth());
-        ensureOpen(month);
-        Built built = build(month);
-        List<PayrollLine> merged = withAdjustments(month, built.lines());
-        if (!built.missing().isEmpty()) {
-            throw new BusinessException("仍有工序没有工人单价，不能确认工资");
-        }
-        if (merged.isEmpty()) {
-            throw new BusinessException("本月没有可确认的报工");
-        }
-        List<PayrollLine> locked = merged.stream().map(PayrollLine::confirm).toList();
-        finance.replacePayroll(month.toString(), locked);
-        PayrollRun run = new PayrollRun(month.toString(), true, operator, FinanceTexts.now());
-        finance.savePayrollRun(run);
-        createPayables(month, locked, operator);
-        return run;
+        throw new BusinessException("已停止整月确认工资，员工应付随交货后结单生成");
     }
 
     private List<PayrollLine> withAdjustments(YearMonth month, List<PayrollLine> generated) {

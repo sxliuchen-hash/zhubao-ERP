@@ -784,14 +784,6 @@ public class BusinessOperationService {
                 .multiply(ONE_HUNDRED)
                 .divide(command.inputWeight(), 4, RoundingMode.HALF_UP)
                 .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal pieceWage = command.acceptedQuantity()
-                .multiply(command.pieceRate())
-                .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal theoreticalDeduction = excessLossWeight
-                .multiply(command.lossDeductionUnitPrice())
-                .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal lossDeduction = theoreticalDeduction.min(pieceWage).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal trialWage = pieceWage.subtract(lossDeduction).max(ZERO).setScale(2, RoundingMode.HALF_UP);
         boolean overLimit = excessLossWeight.compareTo(ZERO) > 0;
 
         LossApprovalResult result = new LossApprovalResult(
@@ -809,11 +801,11 @@ public class BusinessOperationService {
                 actualLossRatePercent,
                 overLimit,
                 overLimit ? "WAITING_APPROVAL" : "AUTO_APPROVED",
-                command.acceptedQuantity().setScale(0, RoundingMode.HALF_UP),
-                command.pieceRate().setScale(2, RoundingMode.HALF_UP),
-                pieceWage,
-                lossDeduction,
-                trialWage,
+                command.acceptedQuantity() == null ? null : command.acceptedQuantity().setScale(3, RoundingMode.HALF_UP),
+                null,
+                null,
+                null,
+                null,
                 false,
                 command.operator(),
                 command.approver(),

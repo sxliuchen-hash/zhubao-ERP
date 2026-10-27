@@ -5,6 +5,7 @@ public enum OrderChangeStatus {
     DRAFT,
     PENDING_FINANCE,
     FINANCE_CONFIRMED,
+    DEFERRED_TO_SETTLEMENT,
     APPLIED,
     REJECTED,
     CANCELED

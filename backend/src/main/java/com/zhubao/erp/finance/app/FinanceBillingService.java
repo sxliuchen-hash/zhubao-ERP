@@ -65,37 +65,15 @@ public class FinanceBillingService {
     }
 
     public PriceAgreement saveAgreement(SavePriceAgreementCommand command, String operator) {
-        PricingMode mode = FinanceTexts.pricingMode(command.mode());
-        YearMonth from = FinanceTexts.month(command.effectiveFrom());
-        YearMonth to = FinanceTexts.blank(command.effectiveTo()).isEmpty()
-                ? null
-                : FinanceTexts.month(command.effectiveTo());
-        if (to != null && to.isBefore(from)) {
-            throw new BusinessException("协议结束月份不能早于开始月份");
-        }
-        List<PriceLine> lines = normalizeLines(mode, command.lines());
-        closeOverlappingAgreements(command.customerId(), from, to);
-        PriceAgreement agreement = new PriceAgreement(
-                FinanceTexts.code("FIN-AGR", sequence),
-                command.customerId(),
-                command.customerName().trim(),
-                mode,
-                from.toString(),
-                to == null ? "" : to.toString(),
-                lines,
-                operator,
-                FinanceTexts.now()
-        );
-        finance.saveAgreement(agreement);
-        return agreement;
+        throw new BusinessException("客户协议已停止维护，历史协议只可查询。加工费请在交货后结单");
     }
 
     public BillingRunResult generate(BillingRunCommand command) {
-        return run(command, true);
+        throw new BusinessException("已停止按收货或交工生成加工费，请在交货后结单");
     }
 
     public List<UnpricedItem> unpriced(String yearMonth, Long customerId) {
-        return run(new BillingRunCommand(yearMonth, customerId), false).unpriced();
+        return List.of();
     }
 
     private BillingRunResult run(BillingRunCommand command, boolean write) {
@@ -120,7 +98,7 @@ public class FinanceBillingService {
         return new BillingRunResult(month.toString(), created.size(), created, unpriced);
     }
 
-    /** 改单减额。必须核对原应收的客户、母单、工单和来源，重复生效只返回原来的红字。 */
+    /** 改单减额已停止。客户减额改由交货后结单调整处理。 */
     public ReceivableLine reverseForChange(
             String receivableCode,
             BigDecimal amount,
@@ -131,34 +109,7 @@ public class FinanceBillingService {
             String motherOrderCode,
             String workOrderCode
     ) {
-        String sourceKey = "CHANGE-RED|" + changeId;
-        Optional<ReceivableLine> existing = finance.findReceivableBySourceKey(sourceKey);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-        ReceivableLine original = finance.findReceivableByCode(receivableCode)
-                .orElseThrow(() -> new BusinessException("找不到要冲销的账单行"));
-        String order = workOrderCode == null || workOrderCode.isBlank() ? motherOrderCode : workOrderCode;
-        if (original.customerId() != customerId) {
-            throw new BusinessException("减额应收不属于该客户");
-        }
-        if (!motherOrderCode.equals(original.motherOrderCode())) {
-            throw new BusinessException("减额应收不属于该母单");
-        }
-        if (!order.equals(original.workOrderCode()) && !motherOrderCode.equals(original.workOrderCode())) {
-            throw new BusinessException("减额应收不属于该工单");
-        }
-        if (original.sourceKey() == null || original.sourceKey().isBlank()
-                || (!original.sourceKey().contains(order) && !original.sourceKey().contains(motherOrderCode))) {
-            throw new BusinessException("减额应收来源与改单不符");
-        }
-        ReceivableLine linked = buildRed(new ReverseReceivableCommand(receivableCode, amount, "改单 " + changeId), operator, sourceKey);
-        if (session == null) {
-            finance.saveReceivable(linked);
-        } else {
-            finance.saveReceivable(linked, session);
-        }
-        return linked;
+        throw new BusinessException("改单不再冲减加工费，费用在交货后结单");
     }
 
     public ReceivableLine reverse(ReverseReceivableCommand command, String operator) {

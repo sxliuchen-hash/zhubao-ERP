@@ -65,7 +65,8 @@ class FinanceDashboardServiceTest {
         assertThat(company.trend().get(0).yearMonth()).isEqualTo("2026-05");
         assertThat(company.operating().revenue()).isEqualByComparingTo("140.00");
         assertThat(company.operating().depreciationCost()).isEqualByComparingTo("0.00");
-        assertThat(company.operating().gaps()).contains("工资未确认，成本按 0", "折旧未生成，成本按 0");
+        assertThat(company.operating().gaps()).contains("折旧未生成，成本按 0");
+        assertThat(company.operating().gaps()).noneMatch(gap -> gap.contains("工资未确认"));
         assertThat(company.scope().kind()).isEqualTo("COMPANY");
         assertThat(company.capabilities()).anySatisfy(item -> {
             assertThat(item.part()).isEqualTo("currentBalances");

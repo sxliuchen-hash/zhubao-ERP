@@ -116,6 +116,7 @@ public class OrderOperationLogService {
             case DRAFT -> "草稿";
             case PENDING_FINANCE -> "待财务确认";
             case FINANCE_CONFIRMED -> "财务已确认";
+            case DEFERRED_TO_SETTLEMENT -> "费用交货后确定";
             case APPLIED -> "已生效";
             case REJECTED -> "已驳回";
             case CANCELED -> "已取消";

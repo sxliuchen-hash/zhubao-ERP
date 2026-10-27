@@ -750,9 +750,9 @@ class BusinessOperationServiceTest {
         assertThat(result.actualLossRatePercent()).isEqualByComparingTo("3.80");
         assertThat(result.overLimit()).isTrue();
         assertThat(result.approvalStatus()).isEqualTo("WAITING_APPROVAL");
-        assertThat(result.pieceWage()).isEqualByComparingTo("44.80");
-        assertThat(result.lossDeduction()).isEqualByComparingTo("13.06");
-        assertThat(result.trialWage()).isEqualByComparingTo("31.74");
+        assertThat(result.pieceWage()).isNull();
+        assertThat(result.lossDeduction()).isNull();
+        assertThat(result.trialWage()).isNull();
         assertThat(result.formalPayroll()).isFalse();
         assertThat(repository.findAllLedgers()).isEmpty();
     }
@@ -794,7 +794,7 @@ class BusinessOperationServiceTest {
             assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
             assertThat(task.businessCode()).isEqualTo("ZD-20260706-099");
             assertThat(task.formalPayroll()).isFalse();
-            assertThat(task.sourceSummary()).contains("excessLossWeight=2.177", "trialWage=31.74");
+            assertThat(task.sourceSummary()).contains("excessLossWeight=2.177", "wageTrial=deferred");
         });
     }
 
