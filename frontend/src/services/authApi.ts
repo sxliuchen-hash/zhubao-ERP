@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPostForm, clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
+import { apiGet, apiPost, clearAuthToken, getAuthToken, setAuthToken } from './apiClient';
 
 export const authSessionChangedEvent = 'zhubao-auth-session-changed';
 
@@ -45,29 +45,6 @@ export interface ChangeOwnPasswordRequest {
   newPassword: string;
 }
 
-export interface AuthAuditEvent {
-  eventId: string;
-  eventType: string;
-  username: string;
-  operator: string;
-  role: string;
-  result: string;
-  reason: string;
-  occurredAt: string;
-  sessionTokenSuffix: string;
-  previousEventHash: string;
-  eventHash: string;
-}
-
-export interface AuthAuditIntegritySummary {
-  checkedEvents: number;
-  verified: boolean;
-  latestEventId: string;
-  latestEventHash: string;
-  brokenEventId: string;
-  message: string;
-}
-
 export interface AuthUserAccountSummary {
   username: string;
   operator: string;
@@ -89,120 +66,6 @@ export interface AuthUserAccountSummary {
   coverDuties?: string[];
   teamCode?: string;
   departmentCode?: string;
-}
-
-export interface AuthAccountPreApprovalReadiness {
-  readinessCode: string;
-  actionType: string;
-  scenario: string;
-  enforcementStatus: string;
-  requiredBeforeAction: string[];
-  missingCapabilities: string[];
-  approverRoles: string[];
-  auditEvidence: string;
-  rolloutGate: string;
-  nextAction: string;
-  riskLevel: string;
-  tone: string;
-}
-
-export interface AuthAccountPreApprovalDraftRequest {
-  actionType: string;
-  targetUsername: string;
-  targetOperator?: string;
-  targetRole?: string;
-  targetDataScope?: string;
-  targetCustomerScope?: string[];
-  targetAllowedProcesses?: string[];
-  statusAction?: 'ENABLE' | 'DISABLE' | 'UNLOCK';
-  targetEnabled?: boolean;
-  demoAccount?: boolean;
-  reason: string;
-  providedEvidence?: string[];
-}
-
-export interface AuthAccountPreApprovalDraft {
-  draftCode: string;
-  readinessCode: string;
-  actionType: string;
-  targetUsername: string;
-  applicant: string;
-  applicantRole: string;
-  requiredEvidence: string[];
-  providedEvidence: string[];
-  missingEvidence: string[];
-  missingCapabilities: string[];
-  approverRoles: string[];
-  blockingStatus: string;
-  readyForBlockingApproval: boolean;
-  sourceSummary: string;
-  nextAction: string;
-  riskLevel: string;
-  tone: string;
-}
-
-export interface AuthAccountPreApprovalApplicationRequest {
-  actionType: string;
-  targetUsername: string;
-  targetOperator?: string;
-  targetRole?: string;
-  targetDataScope?: string;
-  targetCustomerScope?: string[];
-  targetAllowedProcesses?: string[];
-  statusAction?: 'ENABLE' | 'DISABLE' | 'UNLOCK';
-  targetEnabled?: boolean;
-  demoAccount?: boolean;
-  reason: string;
-  providedEvidence?: string[];
-}
-
-export interface AuthAccountPreApprovalApplication {
-  applicationCode: string;
-  draftCode: string;
-  readinessCode: string;
-  actionType: string;
-  targetUsername: string;
-  applicant: string;
-  applicantRole: string;
-  targetOperator: string;
-  targetRole: string;
-  targetDataScope: string;
-  targetCustomerScope: string[];
-  targetAllowedProcesses?: string[];
-  statusAction?: 'ENABLE' | 'DISABLE' | 'UNLOCK' | '';
-  targetEnabled: boolean | null;
-  demoAccount: boolean | null;
-  reason: string;
-  requiredEvidence: string[];
-  providedEvidence: string[];
-  missingEvidence: string[];
-  missingCapabilities: string[];
-  approverRoles: string[];
-  blockingStatus: string;
-  applicationStatus: string;
-  readyForBlockingApproval: boolean;
-  sourceSummary: string;
-  nextAction: string;
-  riskLevel: string;
-  tone: string;
-  approvalTaskCode: string;
-  submittedAt: string;
-}
-
-export interface AuthAccountPreApprovalEvidenceSummary {
-  applicationCode: string;
-  readinessCode: string;
-  actionType: string;
-  targetUsername: string;
-  requiredEvidence: string;
-  documentCode: string;
-  attachmentCount: number;
-  missingEvidence: number;
-  attachmentCodes: string[];
-  latestUploadedAt: string;
-  status: string;
-  nextAction: string;
-  tone: string;
 }
 
 export interface ManageAuthUserAccountRequest {
@@ -282,56 +145,8 @@ export async function changeOwnPassword(request: ChangeOwnPasswordRequest): Prom
   return session;
 }
 
-export async function fetchAuthAuditEvents(): Promise<AuthAuditEvent[]> {
-  return apiGet<AuthAuditEvent[]>('/api/auth/audit-events');
-}
-
-export async function fetchAuthAuditIntegrity(): Promise<AuthAuditIntegritySummary> {
-  return apiGet<AuthAuditIntegritySummary>('/api/auth/audit-integrity');
-}
-
 export async function fetchAuthAccounts(): Promise<AuthUserAccountSummary[]> {
   return apiGet<AuthUserAccountSummary[]>('/api/auth/accounts');
-}
-
-export async function fetchAuthAccountPreApprovalReadiness(): Promise<AuthAccountPreApprovalReadiness[]> {
-  return apiGet<AuthAccountPreApprovalReadiness[]>('/api/auth/accounts/pre-approval-readiness');
-}
-
-export async function draftAuthAccountPreApproval(
-  request: AuthAccountPreApprovalDraftRequest,
-): Promise<AuthAccountPreApprovalDraft> {
-  return apiPost<AuthAccountPreApprovalDraftRequest, AuthAccountPreApprovalDraft>(
-    '/api/auth/accounts/pre-approval-drafts',
-    request,
-  );
-}
-
-export async function fetchAuthAccountPreApprovalApplications(): Promise<AuthAccountPreApprovalApplication[]> {
-  return apiGet<AuthAccountPreApprovalApplication[]>('/api/auth/accounts/pre-approval-applications');
-}
-
-export async function fetchAuthAccountPreApprovalEvidence(): Promise<AuthAccountPreApprovalEvidenceSummary[]> {
-  return apiGet<AuthAccountPreApprovalEvidenceSummary[]>('/api/auth/accounts/pre-approval-evidence');
-}
-
-export async function uploadAuthAccountPreApprovalEvidence(
-  applicationCode: string,
-  file: File,
-): Promise<AuthAccountPreApprovalEvidenceSummary> {
-  const body = new FormData();
-  body.append('applicationCode', applicationCode);
-  body.append('file', file);
-  return apiPostForm<AuthAccountPreApprovalEvidenceSummary>('/api/auth/accounts/pre-approval-evidence/uploads', body);
-}
-
-export async function submitAuthAccountPreApprovalApplication(
-  request: AuthAccountPreApprovalApplicationRequest,
-): Promise<AuthAccountPreApprovalApplication> {
-  return apiPost<AuthAccountPreApprovalApplicationRequest, AuthAccountPreApprovalApplication>(
-    '/api/auth/accounts/pre-approval-applications',
-    request,
-  );
 }
 
 export async function upsertAuthAccount(request: ManageAuthUserAccountRequest): Promise<AuthUserAccountSummary> {

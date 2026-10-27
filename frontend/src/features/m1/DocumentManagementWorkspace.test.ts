@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import DocumentManagementWorkspace from './DocumentManagementWorkspace.vue';
-import { documentAuditEvents, documentPackages, documentSummary, evidenceAttachments } from '../../data/documentManagementData';
+import { documentAuditEvents, documentPackages, documentSummary, evidenceAttachments } from '../../test/fixtures/documentManagement';
 import { fetchAttachmentPreviewUrl, fetchDocumentAuditEvents, fetchDocumentPackagesPage, fetchDocumentSummary, fetchEvidenceAttachmentsPage, uploadEvidenceAttachment } from '../../services/documentManagementApi';
 import type { AuthSession } from '../../services/authApi';
 

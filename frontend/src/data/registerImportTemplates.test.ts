@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  registerFieldCoverage,
   registerImportSummary,
   registerImportTemplates,
-  registerProcessCoverage,
 } from './registerImportTemplates';
 
 describe('registerImportTemplates', () => {
@@ -75,26 +73,4 @@ describe('registerImportTemplates', () => {
       .toBe('RegisterImportPreview');
   });
 
-  it('keeps register process and field coverage audit explicit', () => {
-    expect(registerProcessCoverage).toHaveLength(4);
-    expect(registerProcessCoverage.some((row) => row.coveredProcess.includes('雕刻'))).toBe(true);
-    expect(registerProcessCoverage.some((row) => row.coveredProcess.includes('粗抛'))).toBe(true);
-    expect(registerProcessCoverage.some((row) => row.sourceFile === '出货登记表.xlsx' && row.coveredProcess.includes('出货'))).toBe(true);
-
-    expect(registerFieldCoverage).toHaveLength(48);
-    expect(registerFieldCoverage.some((row) =>
-      row.sourceFile === '雕刻登记表.xlsx'
-      && row.sourceColumn === '操机签字'
-      && row.targetField === 'operatorSignatureName',
-    )).toBe(true);
-    expect(registerFieldCoverage.some((row) =>
-      row.sourceFile === '抛光登记表.xlsx'
-      && row.sourceColumn === '交单审核'
-      && row.status === 'partial',
-    )).toBe(true);
-    expect(registerFieldCoverage.some((row) =>
-      row.sourceColumn === '原表行号'
-      && row.targetField === 'sourceRegisterLineNo',
-    )).toBe(true);
-  });
 });

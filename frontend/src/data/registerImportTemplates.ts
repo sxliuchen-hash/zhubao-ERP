@@ -153,27 +153,6 @@ export interface RegisterImportPostingExecutionResult {
   items: RegisterImportPostingExecutionItem[];
 }
 
-export interface RegisterProcessCoverage {
-  sourceFile: string;
-  sourceContent: string;
-  coveredProcess: string;
-  systemModule: string;
-  status: 'covered' | 'partial' | 'pending';
-  gap: string;
-  tone: Tone;
-}
-
-export interface RegisterFieldCoverage {
-  sourceFile: string;
-  sourceColumn: string;
-  targetField: string;
-  targetObject: string;
-  processNode: string;
-  status: 'covered' | 'partial' | 'pending';
-  gap: string;
-  tone: Tone;
-}
-
 export const registerImportTemplates: RegisterImportTemplate[] = [
   {
     code: 'REG-INBOUND',
@@ -304,108 +283,6 @@ export const registerImportSummary: RegisterImportSummary = {
   parserStatus: 'Excel preview parser ready; structured batch confirm ready; explicit business posting command ready',
 };
 
-export const registerImportReviewBatches: RegisterImportBatch[] = [
-  {
-    importBatchNo: 'IMP-REG-INBOUND-20260707193000',
-    templateCode: 'REG-INBOUND',
-    templateName: '签收入库登记表',
-    sourceFileName: '入库登记表.xlsx',
-    targetCommand: 'ConfirmInboundCommand',
-    totalRows: 2,
-    readyRows: 2,
-    warningRows: 0,
-    blockedRows: 0,
-    executable: true,
-    status: 'CONFIRMED',
-    confirmedBy: '样例库复核员',
-    confirmedAt: '2026-07-07T19:30:00',
-    confirmRemark: '结构化批次确认，等待客户/物料匹配后入账',
-    nextAction: '待映射为母单/签收入库业务命令',
-    rows: [
-      {
-        importBatchNo: 'IMP-REG-INBOUND-20260707193000',
-        sourceLineNo: 4,
-        sourceRegisterSequence: '1',
-        status: 'READY',
-        normalizedFields: {
-          sourceSheetName: '签收入库登记表',
-          sourceRegisterType: '签收入库登记表',
-          sourceRegisterLineNo: '4',
-          inboundDate: '2026-07-07',
-          courierNo: 'SF-IN-20260707-001',
-          goodsName: '客户来料配件',
-          quantity: '320',
-          quantityUnit: '件',
-        },
-        messages: [],
-      },
-      {
-        importBatchNo: 'IMP-REG-INBOUND-20260707193000',
-        sourceLineNo: 5,
-        sourceRegisterSequence: '2',
-        status: 'READY',
-        normalizedFields: {
-          sourceSheetName: '签收入库登记表',
-          sourceRegisterType: '签收入库登记表',
-          sourceRegisterLineNo: '5',
-          inboundDate: '2026-07-07',
-          courierNo: 'YT-IN-20260707-002',
-          goodsName: '复检返修件',
-          quantity: '48',
-          quantityUnit: '件',
-        },
-        messages: [],
-      },
-    ],
-  },
-  {
-    importBatchNo: 'IMP-REG-OUTBOUND-20260707195000',
-    templateCode: 'REG-OUTBOUND',
-    templateName: '交货情况登记表',
-    sourceFileName: '出货登记表.xlsx',
-    targetCommand: 'ShipFinishedStockCommand',
-    totalRows: 1,
-    readyRows: 0,
-    warningRows: 1,
-    blockedRows: 0,
-    executable: true,
-    status: 'CONFIRMED',
-    confirmedBy: '样例库复核员',
-    confirmedAt: '2026-07-07T19:50:00',
-    confirmRemark: '快递原文已保留，入账前需复核出库单客户和成品库存',
-    nextAction: '待映射为出库单和成品出库命令',
-    rows: [
-      {
-        importBatchNo: 'IMP-REG-OUTBOUND-20260707195000',
-        sourceLineNo: 6,
-        sourceRegisterSequence: '1',
-        status: 'WARNING',
-        normalizedFields: {
-          sourceSheetName: '交货情况登记表',
-          sourceRegisterType: '交货情况登记表',
-          sourceRegisterLineNo: '6',
-          deliveryDate: '2026-07-07',
-          customerNameSnapshot: 'CUST-REVIEW-01',
-          deliveryCategory: '成品',
-          quantity: '120',
-          quantityUnit: '件',
-          paperExpressText: '顺丰 SF-OUT-20260707-022',
-          logisticsNo: 'SF-OUT-20260707-022',
-        },
-        messages: [
-          {
-            ruleCode: 'OUT-STOCK-MATCH',
-            level: 'WARN',
-            field: 'customerNameSnapshot',
-            message: '客户名称来自登记表快照，入账前需匹配客户主数据',
-            fallback: '导入复核页选择客户档案后再生成出库单',
-          },
-        ],
-      },
-    ],
-  },
-];
-
 export function buildRegisterImportPostingPlan(batch: RegisterImportBatch): RegisterImportPostingPlan {
   const drafts = batch.rows.map((row) => buildRegisterImportPostingDraft(batch, row));
   const blockedDrafts = drafts.filter((draft) => draft.status === 'BLOCKED').length;
@@ -434,58 +311,6 @@ export function buildRegisterImportPostingPlan(batch: RegisterImportBatch): Regi
     drafts,
   };
 }
-
-export const registerProcessCoverage: RegisterProcessCoverage[] = [
-  {
-    sourceFile: '入库登记表.xlsx',
-    sourceContent: '签收入库、快递、寄收货人、拆箱签字、货品和数量',
-    coveredProcess: '收货签收 / 拆包称重前置',
-    systemModule: '来料母单 / ConfirmInboundCommand',
-    status: 'covered',
-    gap: '称重重量不在原表内，仍需系统拆包称重补录。',
-    tone: 'green',
-  },
-  {
-    sourceFile: '出货登记表.xlsx',
-    sourceContent: '客户、交货类目、交货数量、快递、经办人',
-    coveredProcess: '打包出货 / 已发货库存',
-    systemModule: '库存追溯 / ShipFinishedStockCommand',
-    status: 'covered',
-    gap: '确认导入已落结构化批次，出库单结构化持久化仍待推进。',
-    tone: 'green',
-  },
-  {
-    sourceFile: '抛光登记表.xlsx',
-    sourceContent: '姓名、日期、工作项目、开始/完成时间、完成情况、交单审核',
-    coveredProcess: '粗抛 / 精抛 / 返工抛光 / 交单审核',
-    systemModule: '生产工单 / ReportProductionCommand',
-    status: 'partial',
-    gap: '字段已进命令和预检，日报查询和交单审核动作仍需结构化。',
-    tone: 'amber',
-  },
-  {
-    sourceFile: '雕刻登记表.xlsx',
-    sourceContent: '日期、客户、品类、1-8 号机器、雕刻数量、操机签字',
-    coveredProcess: '雕刻设备产量 / 交单审核',
-    systemModule: '生产工单 / ReportProductionCommand / biz_machine_output_record',
-    status: 'partial',
-    gap: '雕刻已纳入工序模板，M3.79 已接 biz_machine_output_record；机器档案匹配和签名附件仍待深化。',
-    tone: 'amber',
-  },
-];
-
-export const registerFieldCoverage: RegisterFieldCoverage[] = registerImportTemplates.flatMap((template) =>
-  template.fields.map((item) => ({
-    sourceFile: template.sourceFile,
-    sourceColumn: item.sourceColumn,
-    targetField: item.targetField,
-    targetObject: item.targetObject,
-    processNode: template.businessFlow,
-    status: fieldCoverageStatus(template.code, item.targetField),
-    gap: fieldCoverageGap(template.code, item.targetField),
-    tone: fieldCoverageTone(fieldCoverageStatus(template.code, item.targetField)),
-  })),
-);
 
 export function registerRuleTone(level: RegisterValidationRule['level']): Tone {
   return level === 'BLOCK' ? 'red' : 'amber';
@@ -516,52 +341,6 @@ function rule(
   fallback: string,
 ): RegisterValidationRule {
   return { code, level, description, fallback };
-}
-
-function fieldCoverageStatus(templateCode: string, targetField: string): RegisterFieldCoverage['status'] {
-  if (templateCode === 'REG-POLISHING' && ['handoffAuditStatus', 'startedAt', 'finishedAt'].includes(targetField)) {
-    return 'partial';
-  }
-  if (
-    templateCode === 'REG-ENGRAVING'
-    && ['machineLineNo', 'machineNo', 'operatorSignatureName', 'quantity + quantityUnit'].includes(targetField)
-  ) {
-    return 'partial';
-  }
-  if (
-    ['sourceRegisterType', 'sourceRegisterLineNo', 'sourceSheetName', 'sourceRegisterSequence'].includes(targetField)
-  ) {
-    return 'covered';
-  }
-  return 'covered';
-}
-
-function fieldCoverageGap(templateCode: string, targetField: string): string {
-  if (templateCode === 'REG-INBOUND' && ['inboundDate', 'expressCompany', 'courierNo', 'senderName', 'receiverName', 'unpackSigner', 'goodsName'].includes(targetField)) {
-    return '命令和预检已覆盖，真实母单/签收入库结构化表仍待推进。';
-  }
-  if (templateCode === 'REG-OUTBOUND') {
-    return targetField.includes('paperExpressText')
-      ? '快递原文已保留并拆分，后续需落出库单结构化表。'
-      : '命令和预检已覆盖，出库单结构化持久化仍待推进。';
-  }
-  if (templateCode === 'REG-POLISHING') {
-    return ['handoffAuditStatus', 'startedAt', 'finishedAt'].includes(targetField)
-      ? '字段已覆盖，交单审核动作和日报查询仍需结构化。'
-      : '字段已覆盖，后续需接真实员工和工序模板配置。';
-  }
-  if (templateCode === 'REG-ENGRAVING') {
-    return ['machineLineNo', 'machineNo', 'operatorSignatureName', 'quantity + quantityUnit'].includes(targetField)
-      ? '字段已覆盖，M3.79 已接独立设备产量表；签名附件和机器档案匹配仍待推进。'
-      : '字段已覆盖，客户/品类仍需匹配真实主数据。';
-  }
-  return '已覆盖。';
-}
-
-function fieldCoverageTone(status: RegisterFieldCoverage['status']): Tone {
-  if (status === 'covered') return 'green';
-  if (status === 'partial') return 'amber';
-  return 'red';
 }
 
 function buildRegisterImportPostingDraft(

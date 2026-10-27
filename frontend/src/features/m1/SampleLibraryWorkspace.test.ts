@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerImportReviewBatches, buildRegisterImportPostingPlan } from '../../data/registerImportTemplates';
+import { buildRegisterImportPostingPlan } from '../../data/registerImportTemplates';
+import { registerImportReviewBatches } from '../../test/fixtures/registerImport';
 import { fetchAuthSession, type AuthSession } from '../../services/authApi';
 import SampleLibraryWorkspace from './SampleLibraryWorkspace.vue';
 import {
