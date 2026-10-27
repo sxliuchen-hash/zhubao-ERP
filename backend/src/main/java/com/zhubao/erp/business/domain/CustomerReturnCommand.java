@@ -22,6 +22,29 @@ public record CustomerReturnCommand(
         @NotBlank String reason,
         String operator,
         String evidenceCode,
-        String remark
+        String remark,
+        String requestId
 ) {
+    public CustomerReturnCommand(
+            String returnCode,
+            String originalShipmentCode,
+            String motherOrderCode,
+            String workOrderCode,
+            Long customerId,
+            Long ownerCustomerId,
+            String materialCode,
+            String fromWarehouseCode,
+            String toWarehouseCode,
+            BigDecimal quantity,
+            BigDecimal weight,
+            String returnLogisticsNo,
+            String reason,
+            String operator,
+            String evidenceCode,
+            String remark
+    ) {
+        this(returnCode, originalShipmentCode, motherOrderCode, workOrderCode, customerId, ownerCustomerId,
+                materialCode, fromWarehouseCode, toWarehouseCode, quantity, weight, returnLogisticsNo, reason,
+                operator, evidenceCode, remark, "");
+    }
 }

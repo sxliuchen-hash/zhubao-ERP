@@ -197,7 +197,8 @@ public final class BusinessCommandActors {
                 command.reason(),
                 actor,
                 command.evidenceCode(),
-                command.remark()
+                command.remark(),
+                command.requestId()
         );
     }
 

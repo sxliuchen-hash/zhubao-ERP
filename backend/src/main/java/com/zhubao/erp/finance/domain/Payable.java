@@ -16,26 +16,39 @@ public record Payable(
         BigDecimal amount,
         BigDecimal paidAmount,
         String operator,
-        String createdAt
+        String createdAt,
+        String payeeAccount,
+        String adjustsCode,
+        String postingKey
 ) {
     public Payable {
         motherOrderCode = motherOrderCode == null ? "" : motherOrderCode;
         sourceCode = sourceCode == null ? "" : sourceCode;
+        payeeAccount = payeeAccount == null ? "" : payeeAccount;
+        adjustsCode = adjustsCode == null ? "" : adjustsCode;
+    }
+
+    public Payable(
+            String code,
+            String kind,
+            String yearMonth,
+            String payee,
+            String sourceCode,
+            Long customerId,
+            String motherOrderCode,
+            BigDecimal amount,
+            BigDecimal paidAmount,
+            String operator,
+            String createdAt
+    ) {
+        this(code, kind, yearMonth, payee, sourceCode, customerId, motherOrderCode, amount, paidAmount, operator,
+                createdAt, "", "", null);
     }
 
     public Payable pay(BigDecimal paidAmount) {
         return new Payable(
-                code,
-                kind,
-                yearMonth,
-                payee,
-                sourceCode,
-                customerId,
-                motherOrderCode,
-                amount,
-                paidAmount,
-                operator,
-                createdAt
+                code, kind, yearMonth, payee, sourceCode, customerId, motherOrderCode, amount, paidAmount, operator,
+                createdAt, payeeAccount, adjustsCode, postingKey
         );
     }
 }

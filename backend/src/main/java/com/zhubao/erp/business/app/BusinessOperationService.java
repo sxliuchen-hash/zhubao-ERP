@@ -1,5 +1,7 @@
 package com.zhubao.erp.business.app;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.business.domain.AfterSalesReviewCommand;
 import com.zhubao.erp.business.domain.AfterSalesReviewDisposition;
@@ -50,6 +52,7 @@ import java.time.format.DateTimeParseException;
 @Service
 public class BusinessOperationService {
 
+    private static final ObjectMapper RETURN_JSON = new ObjectMapper();
     private static final DateTimeFormatter RECORD_TIME = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     private static final BigDecimal ZERO = BigDecimal.ZERO;
@@ -546,6 +549,9 @@ public class BusinessOperationService {
     }
 
     private OutboundShipmentResult postShipment(ShipFinishedStockCommand command, WorkSession session) {
+        if (session != null && businessDocumentRepository != null) {
+            businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
+        }
         assertOutboundOrderAvailable(command.shipmentCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFinished = new StockDimension(
@@ -601,6 +607,32 @@ public class BusinessOperationService {
     }
 
     public CustomerReturnResult returnCustomerShipment(CustomerReturnCommand command) {
+        if (workUnit == null || businessDocumentRepository == null) {
+            return postReturn(command, null);
+        }
+        String requestId = command.requestId() == null ? "" : command.requestId().trim();
+        if (requestId.isEmpty()) {
+            requestId = "customer-return-" + command.returnCode().trim();
+        }
+        if (!requestId.matches("[A-Za-z0-9._:-]{8,64}")) {
+            throw new BusinessException("退货请求编号无效");
+        }
+        String actor = command.operator() == null || command.operator().isBlank() ? "return-operator" : command.operator().trim();
+        String text = workUnit.execute(new CommandCall(
+                requestId,
+                actor,
+                "CUSTOMER_RETURN",
+                "MOTHER_ORDER",
+                command.motherOrderCode(),
+                returnPayload(command)
+        ), session -> returnResult(postReturn(command, session)));
+        return readReturn(text);
+    }
+
+    private CustomerReturnResult postReturn(CustomerReturnCommand command, WorkSession session) {
+        if (session != null && businessDocumentRepository != null) {
+            businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
+        }
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromShipped = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -623,7 +655,7 @@ public class BusinessOperationService {
                 StockStatus.FINISHED
         );
 
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockLedgerEntry entry = postTransfer(new StockTransferCommand(
                 "customer_return",
                 command.returnCode(),
                 fromShipped,
@@ -631,7 +663,7 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        ), session);
 
         return new CustomerReturnResult(
                 command.returnCode(),
@@ -649,6 +681,40 @@ public class BusinessOperationService {
                 command.operator(),
                 command.evidenceCode()
         );
+    }
+
+    private static String returnPayload(CustomerReturnCommand command) {
+        Long owner = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
+        return String.join(";",
+                "original=" + command.originalShipmentCode(),
+                "mother=" + command.motherOrderCode(),
+                "work=" + command.workOrderCode(),
+                "customer=" + command.customerId(),
+                "owner=" + owner,
+                "material=" + command.materialCode(),
+                "from=" + command.fromWarehouseCode(),
+                "to=" + command.toWarehouseCode(),
+                "quantity=" + command.quantity().toPlainString(),
+                "weight=" + command.weight().toPlainString(),
+                "logistics=" + command.returnLogisticsNo(),
+                "reason=" + command.reason()
+        );
+    }
+
+    private static String returnResult(CustomerReturnResult result) {
+        try {
+            return "return:" + RETURN_JSON.writeValueAsString(result);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("无法保存退货结果", ex);
+        }
+    }
+
+    private static CustomerReturnResult readReturn(String text) {
+        try {
+            return RETURN_JSON.readValue(text.substring("return:".length()), CustomerReturnResult.class);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("无法读取退货结果", ex);
+        }
     }
 
     public AfterSalesReviewResult reviewAfterSalesReturn(AfterSalesReviewCommand command) {

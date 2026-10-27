@@ -651,7 +651,16 @@ public class JdbcFinanceRepository implements FinanceRepository {
     }
 
     private void insertPayrollLine(Connection connection, PayrollLine line) throws SQLException {
-        String insert = """
+        boolean extended = hasColumn(connection, "fin_payroll_line", "source_mode");
+        String insert = extended
+                ? """
+                insert into fin_payroll_line (
+                    code, `year_month`, operator_name, order_code, process_name, mother_order_code, customer_id,
+                    quantity, charge_unit, unit_price, gross_amount, loss_deduction, net_amount, confirmed, source_key,
+                    source_mode, payee_account
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                : """
                 insert into fin_payroll_line (
                     code, `year_month`, operator_name, order_code, process_name, mother_order_code, customer_id,
                     quantity, charge_unit, unit_price, gross_amount, loss_deduction, net_amount, confirmed, source_key
@@ -673,6 +682,10 @@ public class JdbcFinanceRepository implements FinanceRepository {
             statement.setBigDecimal(13, line.netAmount());
             statement.setBoolean(14, line.confirmed());
             statement.setString(15, line.sourceKey());
+            if (extended) {
+                statement.setString(16, line.sourceMode());
+                statement.setString(17, line.payeeAccount());
+            }
             statement.executeUpdate();
         }
     }
@@ -685,23 +698,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
              ResultSet rs = statement.executeQuery()) {
             List<PayrollLine> lines = new ArrayList<>();
             while (rs.next()) {
-                lines.add(new PayrollLine(
-                        rs.getString("code"),
-                        rs.getString("year_month"),
-                        rs.getString("operator_name"),
-                        rs.getString("order_code"),
-                        rs.getString("process_name"),
-                        rs.getString("mother_order_code"),
-                        rs.getLong("customer_id"),
-                        rs.getBigDecimal("quantity"),
-                        ChargeUnit.valueOf(rs.getString("charge_unit")),
-                        rs.getBigDecimal("unit_price"),
-                        rs.getBigDecimal("gross_amount"),
-                        rs.getBigDecimal("loss_deduction"),
-                        rs.getBigDecimal("net_amount"),
-                        rs.getBoolean("confirmed"),
-                        rs.getString("source_key")
-                ));
+                lines.add(mapPayroll(rs));
             }
             return lines;
         } catch (SQLException ex) {
@@ -968,13 +965,29 @@ public class JdbcFinanceRepository implements FinanceRepository {
     }
 
     private void writePayable(Connection connection, Payable payable) throws SQLException {
-        String update = """
+        boolean extended = hasColumn(connection, "fin_payable", "posting_key");
+        String update = extended
+                ? """
+                update fin_payable
+                   set kind = ?, `year_month` = ?, payee = ?, source_code = ?, customer_id = ?, mother_order_code = ?,
+                       amount = ?, paid_amount = ?, operator_name = ?, created_at = ?, payee_account = ?,
+                       adjusts_code = ?, posting_key = ?
+                 where code = ?
+                """
+                : """
                 update fin_payable
                    set kind = ?, `year_month` = ?, payee = ?, source_code = ?, customer_id = ?, mother_order_code = ?,
                        amount = ?, paid_amount = ?, operator_name = ?, created_at = ?
                  where code = ?
                 """;
-        String insert = """
+        String insert = extended
+                ? """
+                insert into fin_payable (
+                    code, kind, `year_month`, payee, source_code, customer_id, mother_order_code, amount, paid_amount,
+                    operator_name, created_at, payee_account, adjusts_code, posting_key
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                : """
                 insert into fin_payable (
                     code, kind, `year_month`, payee, source_code, customer_id, mother_order_code, amount, paid_amount,
                     operator_name, created_at
@@ -982,12 +995,12 @@ public class JdbcFinanceRepository implements FinanceRepository {
                 """;
         int updated;
         try (PreparedStatement statement = connection.prepareStatement(update)) {
-            bindPayable(statement, payable, false);
+            bindPayable(statement, payable, false, extended);
             updated = statement.executeUpdate();
         }
         if (updated == 0) {
             try (PreparedStatement statement = connection.prepareStatement(insert)) {
-                bindPayable(statement, payable, true);
+                bindPayable(statement, payable, true, extended);
                 statement.executeUpdate();
             }
         }
@@ -1243,7 +1256,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
         statement.setString(8, rate.code());
     }
 
-    private void bindPayable(PreparedStatement statement, Payable payable, boolean insert) throws SQLException {
+    private void bindPayable(PreparedStatement statement, Payable payable, boolean insert, boolean extended) throws SQLException {
         if (insert) {
             statement.setString(1, payable.code());
             statement.setString(2, payable.kind());
@@ -1256,6 +1269,11 @@ public class JdbcFinanceRepository implements FinanceRepository {
             statement.setBigDecimal(9, payable.paidAmount());
             statement.setString(10, payable.operator());
             statement.setString(11, payable.createdAt());
+            if (extended) {
+                statement.setString(12, payable.payeeAccount());
+                statement.setString(13, payable.adjustsCode());
+                setNullableString(statement, 14, payable.postingKey());
+            }
             return;
         }
         statement.setString(1, payable.kind());
@@ -1268,7 +1286,35 @@ public class JdbcFinanceRepository implements FinanceRepository {
         statement.setBigDecimal(8, payable.paidAmount());
         statement.setString(9, payable.operator());
         statement.setString(10, payable.createdAt());
-        statement.setString(11, payable.code());
+        int next = 11;
+        if (extended) {
+            statement.setString(next++, payable.payeeAccount());
+            statement.setString(next++, payable.adjustsCode());
+            setNullableString(statement, next++, payable.postingKey());
+        }
+        statement.setString(next, payable.code());
+    }
+
+    private PayrollLine mapPayroll(ResultSet rs) throws SQLException {
+        return new PayrollLine(
+                rs.getString("code"),
+                rs.getString("year_month"),
+                rs.getString("operator_name"),
+                rs.getString("order_code"),
+                rs.getString("process_name"),
+                rs.getString("mother_order_code"),
+                rs.getLong("customer_id"),
+                rs.getBigDecimal("quantity"),
+                ChargeUnit.valueOf(rs.getString("charge_unit")),
+                rs.getBigDecimal("unit_price"),
+                rs.getBigDecimal("gross_amount"),
+                rs.getBigDecimal("loss_deduction"),
+                rs.getBigDecimal("net_amount"),
+                rs.getBoolean("confirmed"),
+                rs.getString("source_key"),
+                column(rs, "source_mode").orElse(PayrollLine.LEGACY),
+                column(rs, "payee_account").orElse("")
+        );
     }
 
     private List<PriceLine> loadPriceLines(String agreementCode) {
@@ -1367,8 +1413,33 @@ public class JdbcFinanceRepository implements FinanceRepository {
                 rs.getBigDecimal("amount"),
                 rs.getBigDecimal("paid_amount"),
                 rs.getString("operator_name"),
-                rs.getString("created_at")
+                rs.getString("created_at"),
+                column(rs, "payee_account").orElse(""),
+                column(rs, "adjusts_code").orElse(""),
+                column(rs, "posting_key").orElse(null)
         );
+    }
+
+    private boolean hasColumn(Connection connection, String table, String column) throws SQLException {
+        java.sql.DatabaseMetaData meta = connection.getMetaData();
+        return hasColumn(meta, connection, table, column)
+                || hasColumn(meta, connection, table.toUpperCase(java.util.Locale.ROOT), column.toUpperCase(java.util.Locale.ROOT));
+    }
+
+    private boolean hasColumn(java.sql.DatabaseMetaData meta, Connection connection, String table, String column) throws SQLException {
+        try (ResultSet rs = meta.getColumns(connection.getCatalog(), connection.getSchema(), table, column)) {
+            return rs.next();
+        }
+    }
+
+    private java.util.Optional<String> column(ResultSet rs, String name) throws SQLException {
+        java.sql.ResultSetMetaData meta = rs.getMetaData();
+        for (int index = 1; index <= meta.getColumnCount(); index++) {
+            if (name.equalsIgnoreCase(meta.getColumnLabel(index))) {
+                return java.util.Optional.ofNullable(rs.getString(index));
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     private void setNullableString(PreparedStatement statement, int index, String value) throws SQLException {
