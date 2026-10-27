@@ -151,12 +151,15 @@ namespace Zhubao.PrintReceiver
                     throw new InvalidOperationException("本机没有名为 " + printerName + " 的打印队列");
                 document.DocumentName = "珠宝标签";
                 document.PrintController = new StandardPrintController();
-                int paperWidth = Math.Max(1, (int)Math.Round(widthMm / 25.4 * 100));
-                int paperHeight = Math.Max(1, (int)Math.Round(heightMm / 25.4 * 100));
-                document.DefaultPageSettings.PaperSize = new PaperSize("ZhubaoLabel", paperWidth, paperHeight);
+                document.OriginAtMargins = false;
+                PaperSize paper = LabelPaper(document.PrinterSettings, widthMm, heightMm);
+                document.PrinterSettings.DefaultPageSettings.PaperSize = paper;
+                document.DefaultPageSettings.PaperSize = paper;
                 document.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
                 document.PrintPage += (sender, args) =>
                 {
+                    args.PageSettings.PaperSize = paper;
+                    args.PageSettings.Margins = new Margins(0, 0, 0, 0);
                     args.Graphics.TranslateTransform(-args.PageSettings.HardMarginX, -args.PageSettings.HardMarginY);
                     float dpiX = args.Graphics.DpiX <= 1 ? 203 : args.Graphics.DpiX;
                     float dpiY = args.Graphics.DpiY <= 1 ? 203 : args.Graphics.DpiY;
@@ -181,6 +184,30 @@ namespace Zhubao.PrintReceiver
                     for (int index = 0; index < copies; index++) document.Print();
                 }
             }
+        }
+
+        static PaperSize LabelPaper(PrinterSettings settings, int widthMm, int heightMm)
+        {
+            int wantWidth = Hundredths(widthMm);
+            int wantHeight = Hundredths(heightMm);
+            PaperSize nearest = null;
+            int nearestGap = int.MaxValue;
+            foreach (PaperSize candidate in settings.PaperSizes)
+            {
+                int gap = Math.Abs(candidate.Width - wantWidth) + Math.Abs(candidate.Height - wantHeight);
+                if (gap < nearestGap)
+                {
+                    nearestGap = gap;
+                    nearest = candidate;
+                }
+            }
+            if (nearest != null && nearestGap <= 8) return nearest;
+            return new PaperSize(widthMm + "x" + heightMm + "mm", wantWidth, wantHeight);
+        }
+
+        static int Hundredths(int millimeters)
+        {
+            return Math.Max(1, (int)Math.Round(millimeters / 25.4 * 100));
         }
 
         public static string ResolveInstalledPrinter(string name)

@@ -80,6 +80,11 @@ public class PrintRoutingController {
         permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
         return ApiResponse.ok(service.batch(id, account(request)));
     }
+    @PostMapping("/print-target-jobs/{id}/cancellations")
+    public ApiResponse<PrintTargetJob> cancel(@PathVariable String id, HttpServletRequest request) {
+        permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
+        return ApiResponse.ok(service.cancel(id, account(request)));
+    }
     @PostMapping("/print-target-jobs/{id}/paper-checks")
     public ApiResponse<PrintTargetJob> paper(@PathVariable String id, @RequestBody PaperCheck body,
                                              HttpServletRequest request) {

@@ -74,3 +74,4 @@
 74	TABLE	biz_material_storage_change
 75	TABLE	label_storage_edition
 76	TABLE	biz_processing_intake_pending
+77	ROW	sys_label_default_revision	revision_code	V77

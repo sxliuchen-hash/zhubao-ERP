@@ -318,6 +318,26 @@ class PrintBatchServiceTest {
         assertThat(versionedLabels.readEdition(moved.contentSnapshot()).distinguishes(freshEdition)).isTrue();
     }
 
+    @Test
+    void 失败任务取消后可以再提交() {
+        String token = service.saveStation(new PrintStation("A", "收货", true, "", "")).token();
+        service.saveQueue(new PrintQueue("A", "Q1", "原队列", "ALL", 40, 30, true, true));
+        PrintBatch failed = service.create("guard-cancel-0001", "MD-CANCEL", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account);
+        String cancelId = failed.jobs().get(0).id();
+        service.claim("A", token);
+        service.report(cancelId, "A", token, "FAILED", "保存要求无法打印");
+        assertThatThrownBy(() -> service.create("guard-cancel-0002", "MD-CANCEL", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account)).isInstanceOf(BusinessException.class);
+        assertThat(service.cancel(cancelId, account).status()).isEqualTo(PrintJobStatus.CANCELED);
+        assertThat(service.cancel(cancelId, account).status()).isEqualTo(PrintJobStatus.CANCELED);
+        assertThat(service.create("guard-cancel-0002", "MD-CANCEL", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account).id()).isNotEqualTo(failed.id());
+        assertThatThrownBy(() -> service.cancel(service.create("guard-cancel-0003", "MD-OPEN", "FLOW", 1,
+                List.of(new PrintTarget("A", "Q1")), account).jobs().get(0).id(), account))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("只有失败");
+    }
+
     private static String qrOf(PrintBatch batch) {
         int start = batch.contentSnapshot().indexOf("\"qr\":\"") + 6;
         int end = batch.contentSnapshot().indexOf('"', start);

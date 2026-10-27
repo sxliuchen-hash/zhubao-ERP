@@ -102,7 +102,7 @@ public class LabelService {
         }
         LabelTemplate template = resolveTemplate(command.templateCode(), type);
         String brand = template != null && !template.brandTitle().isBlank() ? template.brandTitle() : DEFAULT_BRAND;
-        LabelPrinterSetting printerSetting = template != null ? template.printerSetting() : LabelPrinterSetting.defaultSetting();
+        LabelPrinterSetting printerSetting = paper(template != null ? template.printerSetting() : LabelPrinterSetting.defaultSetting());
         return new LabelPayload(
                 type,
                 type.label(),
@@ -209,7 +209,7 @@ public class LabelService {
     ) {
         LabelTemplate template = resolveTemplate(templateCode, type);
         String brand = template != null && !template.brandTitle().isBlank() ? template.brandTitle() : DEFAULT_BRAND;
-        LabelPrinterSetting printerSetting = template != null ? template.printerSetting() : LabelPrinterSetting.defaultSetting();
+        LabelPrinterSetting printerSetting = paper(template != null ? template.printerSetting() : LabelPrinterSetting.defaultSetting());
         String footerLeft = "";
         String footerRight = "";
         if (template != null) {
@@ -252,7 +252,7 @@ public class LabelService {
         var template = resolveTemplate(templateCode, LabelType.STOCK_BATCH);
         LabelPayload payload = new LabelPayload(LabelType.STOCK_BATCH, "寄存批次", source.batchCode(), "STOCK|batch|" + source.batchCode(),
                 List.of(new LabelField("材质", source.materialCode()), new LabelField("原收数量", source.quantity().toPlainString() + source.quantityUnit()),
-                        new LabelField("原收重量", source.weight().toPlainString() + "克")), "", "", TIME_FORMATTER.format(LocalDateTime.now()), DEFAULT_BRAND, template == null ? "" : template.templateCode(), template == null ? LabelPrinterSetting.defaultSetting() : template.printerSetting(), template == null ? null : template.layout(),
+                        new LabelField("原收重量", source.weight().toPlainString() + "克")), "", "", TIME_FORMATTER.format(LocalDateTime.now()), DEFAULT_BRAND, template == null ? "" : template.templateCode(), paper(template == null ? LabelPrinterSetting.defaultSetting() : template.printerSetting()), template == null ? null : template.layout(),
                 List.of(StorageLabelSource.of(source.batchCode(), "本批次", source.materialCode(), source.storageRequirements())));
         payload = applyStorageEdition(payload);
         validateStorageArea(payload);
@@ -267,6 +267,14 @@ public class LabelService {
         var allocations = businessDocumentRepository.listChildAllocations(child.motherOrderCode(), null).stream().filter(line -> code.equals(line.childOrderCode())).toList();
         if (!allocations.isEmpty()) return allocations.stream().map(line -> StorageLabelSource.of(line.motherOrderCode() + ":" + line.sourceLineNo(), "来源" + line.sourceLineNo(), line.materialCode(), line.storageRequirements())).toList();
         return List.of(StorageLabelSource.of(code, "来源", child.materialCode(), null));
+    }
+
+    /** 旧内置模板是 60×40。厂内标签纸是 40×30，预览和提交都按这张纸。 */
+    private static LabelPrinterSetting paper(LabelPrinterSetting setting) {
+        if (setting != null && setting.widthMm() == 60 && setting.heightMm() == 40) {
+            return new LabelPrinterSetting(40, 30, 300, setting.printerName(), setting.copies());
+        }
+        return setting == null ? LabelPrinterSetting.defaultSetting() : setting;
     }
 
     public static void validateStorageArea(LabelPayload payload) {

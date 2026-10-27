@@ -917,7 +917,8 @@ onMounted(() => { void loadTemplates(); void loadPrintQueues(); });
 }
 .editor-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 220px));
+  justify-content: start;
   gap: 12px;
 }
 .editor-actions {

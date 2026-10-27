@@ -157,6 +157,18 @@ public class PrintBatchService {
                 job.failureReason(), result.trim(), TIME.format(LocalDateTime.now())), job.status())
                 .orElseThrow(() -> new BusinessException("任务状态已变化，请刷新后核实"));
     }
+    /** 发送失败还没进打印机，可以直接取消，取消后才能再提交。 */
+    public PrintTargetJob cancel(String id, AuthUserAccount account) {
+        PrintTargetJob job = repository.job(id).orElseThrow(() -> new BusinessException("目标任务不存在"));
+        batch(job.batchId(), account);
+        if (job.status() == PrintJobStatus.CANCELED) return job;
+        if (job.status() != PrintJobStatus.FAILED) throw new BusinessException("只有失败的任务可以取消");
+        String now = TIME.format(LocalDateTime.now());
+        return repository.saveJobIfStatus(job.withStatus(PrintJobStatus.CANCELED, job.claimedStationId(),
+                job.leaseUntil(), job.failureReason(), job.paperCheckResult(), now), PrintJobStatus.FAILED)
+                .orElseGet(() -> repository.job(id).filter(current -> current.status() == PrintJobStatus.CANCELED)
+                        .orElseThrow(() -> new BusinessException("任务状态已变化，请刷新")));
+    }
     public PrintBatch reroute(String originalId, String requestId, PrintTarget target, String reason,
                               AuthUserAccount account) {
         requireRequest(requestId);

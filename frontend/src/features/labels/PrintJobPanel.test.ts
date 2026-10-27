@@ -69,6 +69,16 @@ describe('原单打印请求与快照', () => {
     expect(wrapper.text()).toContain('V1 · LI1');
     expect(wrapper.get('[aria-label="J1改派目标"]').findAll('option').map(option => option.attributes('value'))).toContain('B|Q2');
   });
+  it('失败只显示原因和取消，取消后不再挡住下一张', async () => {
+    vi.mocked(apiPost).mockResolvedValueOnce({ ...batch, jobs: [{ ...job, status: 'FAILED', failureReason: '保存标识载荷无效，不能省略打印' }] });
+    const wrapper = panel();
+    await submit(wrapper);
+    expect(wrapper.text()).toContain('失败：保存要求无法打印');
+    expect(wrapper.text()).not.toContain('核纸结果');
+    await click(wrapper, '取消');
+    expect(apiPost).toHaveBeenCalledWith('/api/label/print-target-jobs/J1/cancellations', {});
+    expect(wrapper.text()).toContain('已取消');
+  });
   it('权限撤销后禁用核纸与改派，不能通过保留草稿发起写入', async () => {
     const wrapper = panel(); await submit(wrapper);
     await wrapper.setProps({ disabled: true });

@@ -83,7 +83,26 @@ async function submitPrintJob(retry = false) {
   } finally { submitting.value = false; }
 }
 function nextPrint() { if (!locked.value && !props.disabled) { intent.value += 1; feedback.value = '已开启另一批打印草稿，请重新核对目标和份数后提交。'; } }
-function statusLabel(status: string) { return ({ SPOOLED: '已送入系统队列', PENDING: '待工位上线或领取', LEASED: '已领取', FAILED: '发送前失败', UNCERTAIN: '不确定是否出纸', CANCELED: '已取消' } as Record<string, string>)[status] || status; }
+function statusLabel(status: string) { return ({ SPOOLED: '已送入系统队列', PENDING: '待工位上线或领取', LEASED: '已领取', FAILED: '失败', UNCERTAIN: '不确定是否出纸', CANCELED: '已取消' } as Record<string, string>)[status] || status; }
+function plainFailure(reason: string) {
+  if (!reason) return '打印没有送出';
+  if (reason.includes('保存标识')) return '保存要求无法打印';
+  if (reason.includes('空间不足')) return '40×30 纸放不下保存说明';
+  if (reason.includes('没有名为') || reason.includes('未映射')) return '找不到打印机';
+  return reason;
+}
+async function cancelFailed(job: PrintTargetJobView) {
+  if (locked.value || props.disabled || job.status !== 'FAILED') return;
+  ++readGeneration;
+  busyJob.value = job.id;
+  error.value = '';
+  try {
+    await apiPost(`/api/label/print-target-jobs/${encodeURIComponent(job.id)}/cancellations`, {});
+    if (!disposed) { job.status = 'CANCELED'; feedback.value = '已取消'; await refreshPrintJob(); }
+  } catch (caught) {
+    if (!disposed) error.value = caught instanceof Error ? caught.message : '取消失败';
+  } finally { busyJob.value = ''; }
+}
 function snapshot(receipt: Receipt): Record<string, unknown> | null {
   try { const parsed: unknown = JSON.parse(receipt.batch.contentSnapshot || ''); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null; }
   catch { return null; }
@@ -178,14 +197,20 @@ async function rerouteTarget(job: PrintTargetJobView, receipt: Receipt, retry = 
       <details v-if="snapshot(receipt)" class="frozen-snapshot"><summary>查看任务原始快照</summary><p>二维码：{{ snapshot(receipt)?.qr }}</p><p>纸张：{{ snapshot(receipt)?.widthMm }}×{{ snapshot(receipt)?.heightMm }}mm · {{ snapshot(receipt)?.dpi }} DPI</p><pre>{{ JSON.stringify(snapshot(receipt)?.fields, null, 2) }}</pre></details>
       <p v-if="snapshot(receipt)?.qr && snapshot(receipt)?.qr !== receipt.preview.qrContent" class="operation-feedback warning">任务快照与当时预览的版本或实例不同，请以冻结快照核对。</p>
       <div v-for="job in receipt.batch.jobs" :key="job.id" class="print-target-job">
+        <template v-if="job.status === 'FAILED'">
+          <p>失败：{{ plainFailure(job.failureReason) }}</p>
+          <button class="secondary-button" type="button" :disabled="locked || disabled" @click="cancelFailed(job)">取消</button>
+        </template>
+        <template v-else>
         <strong>{{ job.targetStationId }} / {{ job.targetQueueId }}</strong> · {{ job.id }} · {{ statusLabel(job.status) }}
         <p v-if="job.failureReason">{{ job.failureReason }}</p><p v-if="job.paperCheckResult">出纸核实：{{ job.paperCheckResult }}</p><p v-if="job.predecessorId">来源任务 {{ job.predecessorId }} · {{ job.retryReason }}</p>
         <p v-if="unknownPaperChecks[job.id]" class="operation-feedback warning">{{ job.id }} 核纸记录结果待核对：{{ unknownPaperChecks[job.id] }}。请刷新目标状态核对原记录，尚未开放重复记录或改派。</p>
-        <fieldset v-if="['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status)" :disabled="locked || disabled"><label>核纸结果<select v-model="paperChecks[job.id]" :aria-label="`${job.id}核纸结果`"><option value="">请选择</option><option>确认未出纸</option><option>已出纸</option><option>仍不确定</option></select></label><button class="secondary-button" type="button" @click="verifyTargetPaper(job)">记录核纸</button></fieldset>
-        <fieldset v-if="job.status === 'PENDING' || (['SPOOLED', 'FAILED', 'UNCERTAIN'].includes(job.status) && job.paperCheckResult === '确认未出纸')" :disabled="locked || disabled">
+        <fieldset v-if="['SPOOLED', 'UNCERTAIN'].includes(job.status)" :disabled="locked || disabled"><label>核纸结果<select v-model="paperChecks[job.id]" :aria-label="`${job.id}核纸结果`"><option value="">请选择</option><option>确认未出纸</option><option>已出纸</option><option>仍不确定</option></select></label><button class="secondary-button" type="button" @click="verifyTargetPaper(job)">记录核纸</button></fieldset>
+        <fieldset v-if="job.status === 'PENDING' || (['SPOOLED', 'UNCERTAIN'].includes(job.status) && job.paperCheckResult === '确认未出纸')" :disabled="locked || disabled">
           <label>改派目标<select v-model="rerouteTargets[job.id]" :aria-label="`${job.id}改派目标`"><option value="">请选择新工位和队列</option><option v-for="queue in queuesForReceipt(receipt).filter(item => item.stationId !== job.targetStationId || item.queueId !== job.targetQueueId)" :key="`${queue.stationId}|${queue.queueId}`" :value="`${queue.stationId}|${queue.queueId}`">{{ queue.stationId }} / {{ queue.queueId }} · {{ queue.name }}</option></select></label><label>改派原因<input v-model="rerouteReasons[job.id]" :aria-label="`${job.id}改派原因`" /></label><button class="secondary-button" type="button" @click="rerouteTarget(job, receipt)">取消原目标并创建关联任务</button>
         </fieldset>
         <p v-if="unknownReroutes[job.id]">原改派结果待核对，保留原目标与编号。<button class="secondary-button" type="button" :disabled="Boolean(busyJob) || disabled" @click="rerouteTarget(job, receipt, true)">原改派请求重试</button></p>
+        </template>
       </div>
     </article>
   </section>

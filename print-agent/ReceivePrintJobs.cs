@@ -101,6 +101,7 @@ namespace Zhubao.PrintReceiver
             {
                 TestConfig();
                 TestHttp();
+                TestSnapshot();
                 string samplePath = string.IsNullOrEmpty(renderSample)
                     ? Path.Combine(Path.GetTempPath(), "zhubao-label-sample.png")
                     : renderSample;
@@ -199,13 +200,13 @@ namespace Zhubao.PrintReceiver
                 }
                 catch (Exception ex)
                 {
-                    string reason = string.IsNullOrWhiteSpace(ex.Message) ? "发送前失败" : ex.Message;
+                    string reason = ShortReason(ex.Message);
                     try { Report(agent, claim.Id, "FAILED", reason); }
-                    catch (Exception reportError)
+                    catch (Exception)
                     {
-                        Console.WriteLine("回报失败：" + reportError.Message + "。任务会在租约到期后变为不确定，请到标签页核纸。");
+                        Console.WriteLine("失败：" + reason + "。结果没能回报服务器。");
                     }
-                    Console.WriteLine("发送前失败 " + claim.Id + "：" + reason);
+                    Console.WriteLine("失败：" + reason);
                     if (once) return 1;
                 }
             }
@@ -300,6 +301,9 @@ namespace Zhubao.PrintReceiver
         {
             if (context.Request.Headers["X-Print-Station"] != "STATION-1" || context.Request.Headers["X-Print-Token"] != "PS-example")
                 throw new InvalidOperationException("工位凭据头不正确");
+            // 保活连接被服务器关掉后，.NET 不会重发 POST，窗口会报连接被关闭。
+            if (context.Request.KeepAlive || context.Request.ProtocolVersion != HttpVersion.Version10)
+                throw new InvalidOperationException("领取必须使用会在响应后关闭的 HTTP/1.0 连接");
         }
 
         static int FreePort()
@@ -438,6 +442,9 @@ namespace Zhubao.PrintReceiver
             request.Timeout = 20000;
             request.ReadWriteTimeout = 20000;
             request.AllowAutoRedirect = false;
+            // 测试服按块返回并声明保持连接，空闲后却会关掉。POST 被中断时不会自动重发。
+            request.ProtocolVersion = HttpVersion.Version10;
+            request.KeepAlive = false;
             request.Headers["X-Print-Station"] = agent.StationId;
             request.Headers["X-Print-Token"] = agent.Token;
             if (body == null) body = new byte[0];
@@ -497,9 +504,10 @@ namespace Zhubao.PrintReceiver
             if (snapshot == null) throw new InvalidOperationException("标签快照无效");
             var lines = new List<string>();
             object fields;
-            if (snapshot.TryGetValue("fields", out fields) && fields is ArrayList)
+            IList fieldItems = snapshot.TryGetValue("fields", out fields) ? Items(fields) : null;
+            if (fieldItems != null)
             {
-                foreach (object item in (ArrayList)fields)
+                foreach (object item in fieldItems)
                 {
                     var field = item as Dictionary<string, object>;
                     if (field == null) continue;
@@ -509,12 +517,16 @@ namespace Zhubao.PrintReceiver
                 }
             }
             object rawLines;
-            if (lines.Count == 0 && snapshot.TryGetValue("lines", out rawLines) && rawLines is ArrayList)
+            if (lines.Count == 0 && snapshot.TryGetValue("lines", out rawLines))
             {
-                foreach (object line in (ArrayList)rawLines)
+                IList lineItems = Items(rawLines);
+                if (lineItems != null)
                 {
-                    string text = Convert.ToString(line);
-                    if (!string.IsNullOrWhiteSpace(text)) lines.Add(text);
+                    foreach (object line in lineItems)
+                    {
+                        string text = Convert.ToString(line);
+                        if (!string.IsNullOrWhiteSpace(text)) lines.Add(text);
+                    }
                 }
             }
             string code = Text(snapshot, "primaryCode");
@@ -524,6 +536,8 @@ namespace Zhubao.PrintReceiver
             int dpi = Number(snapshot, "dpi", 300);
             if (width < 10) width = 40;
             if (height < 10) height = 30;
+            // 旧模板快照是 60×40。厂内纸张是 40×30，按实际纸绘制，不再把 60×40 送进打印机。
+            if (width == 60 && height == 40) { width = 40; height = 30; }
             int useCopies = copies >= 1 ? copies : Number(snapshot, "copies", 0);
             var spec = new LabelSpec();
             spec.TypeLabel = Text(snapshot, "typeLabel");
@@ -536,26 +550,72 @@ namespace Zhubao.PrintReceiver
             spec.FooterLeft = Text(snapshot, "footerLeft");
             spec.FooterRight = Text(snapshot, "footerRight");
             var storageSources = new List<StorageSourceSpec>();
-            object rawStorage;
-            if (snapshot.TryGetValue("storageSources", out rawStorage) && rawStorage is ArrayList)
+            object rawStorage = null;
+            snapshot.TryGetValue("storageSources", out rawStorage);
+            // JavaScriptSerializer 把 JSON 数组还原成 object[]，不是 ArrayList。只认 ArrayList 会把有保存要求的标签直接判失败。
+            IList storageItems = Items(rawStorage);
+            if (rawStorage != null && storageItems == null)
+                throw new InvalidOperationException("保存标识载荷无效，不能省略打印");
+            if (storageItems != null)
             {
-                foreach (object rawSource in (ArrayList)rawStorage)
+                foreach (object rawSource in storageItems)
                 {
                     var source = rawSource as Dictionary<string, object>;
                     if (source == null) throw new InvalidOperationException("保存标识来源无效");
                     var marks = new List<string>();
                     object rawMarks;
-                    if (source.TryGetValue("marks", out rawMarks) && rawMarks is ArrayList)
-                        foreach (object mark in (ArrayList)rawMarks) marks.Add(Convert.ToString(mark));
+                    IList markItems = source.TryGetValue("marks", out rawMarks) ? Items(rawMarks) : null;
+                    if (rawMarks != null && markItems == null) throw new InvalidOperationException("保存标识来源无效");
+                    if (markItems != null)
+                        foreach (object mark in markItems) marks.Add(Convert.ToString(mark));
                     storageSources.Add(new StorageSourceSpec { SourceLabel = Text(source, "sourceLabel"), Marks = marks.ToArray(), Instruction = Text(source, "instruction") });
                 }
             }
-            if (rawStorage != null && !(rawStorage is ArrayList)) throw new InvalidOperationException("保存标识载荷无效，不能省略打印");
             spec.StorageSources = storageSources.ToArray();
             var built = new BuiltLabel();
             built.Spec = spec;
             built.Copies = useCopies;
             return built;
+        }
+
+        static void TestSnapshot()
+        {
+            string json = "{\"primaryCode\":\"MD-1\",\"copies\":1,\"widthMm\":40,\"heightMm\":30,\"dpi\":300,"
+                + "\"fields\":[{\"name\":\"客户\",\"value\":\"甲\"}],\"lines\":[\"客户:甲\"],"
+                + "\"storageSources\":[{\"sourceLabel\":\"明细1\",\"marks\":[\"冷\",\"真\"],\"instruction\":\"避光\"}]}";
+            BuiltLabel built = ToLabel(json, 1);
+            if (built.Spec.Lines.Length == 0 || built.Spec.Lines[0].IndexOf("甲") < 0)
+                throw new InvalidOperationException("标签字段未被读取");
+            if (built.Spec.StorageSources == null || built.Spec.StorageSources.Length != 1
+                || built.Spec.StorageSources[0].Marks.Length != 2 || built.Spec.StorageSources[0].Instruction != "避光")
+                throw new InvalidOperationException("保存标识未被读取");
+            BuiltLabel legacy = ToLabel("{\"widthMm\":60,\"heightMm\":40,\"dpi\":203,\"primaryCode\":\"MD-1\",\"copies\":1}", 1);
+            if (legacy.Spec.WidthMm != 40 || legacy.Spec.HeightMm != 30)
+                throw new InvalidOperationException("旧尺寸没有改成 40×30");
+            try
+            {
+                ToLabel("{\"storageSources\":{\"sourceLabel\":\"明细1\"}}", 1);
+                throw new InvalidOperationException("对象形式的保存标识未被拒绝");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("保存标识载荷无效") < 0) throw;
+            }
+        }
+
+        static string ShortReason(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return "打印没有送出";
+            if (message.IndexOf("保存标识") >= 0) return "保存要求无法打印";
+            if (message.IndexOf("空间不足") >= 0) return "40×30 纸放不下保存说明";
+            if (message.IndexOf("没有名为") >= 0 || message.IndexOf("未映射") >= 0) return "找不到打印机";
+            return message.Length > 40 ? message.Substring(0, 40) : message;
+        }
+
+        static IList Items(object value)
+        {
+            if (value == null || value is string || value is IDictionary) return null;
+            return value as IList;
         }
 
         static Dictionary<string, object> ParseObject(string json)
