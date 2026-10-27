@@ -29,6 +29,7 @@ public record OrderWorkspaceRow(
         Integer processProgressVersion,
         Boolean processFormallyDelivered,
         String operatorName,
-        String updatedAt
+        String updatedAt,
+        String createdBy
 ) {
 }

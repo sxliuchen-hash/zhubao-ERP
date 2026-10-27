@@ -26,6 +26,7 @@ export interface OrderWorkspaceRow {
   processProgressVersion: number | null;
   processFormallyDelivered: boolean | null;
   operatorName: string | null;
+  createdBy?: string | null;
   updatedAt: string | null;
 }
 

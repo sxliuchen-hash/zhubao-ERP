@@ -89,7 +89,8 @@ public class ProcessProgressController {
                 account.username(), account.passwordHash(), account.operator(), account.role(), account.dataScope(),
                 account.enabled(), account.demoAccount(), account.passwordChangedAt(), account.failedLoginCount(),
                 account.lockedUntil(), context.customerScope(), account.passwordChangeRequired(),
-                account.temporaryPasswordConsumed(), account.allowedProcesses()
+                account.temporaryPasswordConsumed(), account.allowedProcesses(), context.coverDuties(),
+                context.teamCode(), context.departmentCode()
         );
     }
 

@@ -67,6 +67,9 @@ class JdbcOrderRecycleTest {
     }
 
     private void createTables(JdbcDataSource source) throws SQLException {
+        execute(source, "create table biz_order_adjustment (id bigint auto_increment primary key, target_type varchar(20), "
+                + "target_code varchar(90), before_text varchar(1000), after_text varchar(1000), reason varchar(200), "
+                + "operator_name varchar(80), created_at varchar(40))");
         execute(source, "create table biz_mother_order (code varchar(90) primary key, recycled_at varchar(40), "
                 + "recycled_by varchar(80), recycle_batch varchar(90), recycle_reason varchar(200))");
         execute(source, "create table biz_work_order (code varchar(90) primary key, mother_order_code varchar(90), "

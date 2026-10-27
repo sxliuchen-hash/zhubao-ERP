@@ -2298,6 +2298,8 @@ PWA 一期边界：
 | `GET /api/business/order-maintenance/mothers` | 未回收母单列表。可选 `from`、`to`（年-月-日，含当天，按建单日期，缺建单时间时用入库日）、`customer`、`operator`。按日期从新到旧，最多 200 张；响应含 `items`、`total`、`truncated` |
 | `GET /api/business/order-maintenance?code=` | 按母单号、子单号或打印任务编号返回相关单据，包括已在回收站的 |
 | `GET /api/business/order-maintenance/recycle-bin` | 回收站中的母单、子单和打印任务 |
+| `GET /api/business/order-maintenance/operation-logs?code=` | 仅管理员；以母单、子单或执行轮次号定位母单，返回关联操作事实，字段为 `targetCode`、`action`、`operator`、`createdAt`、`detail`；包括创建、拆单、进度、分批／正式交工、质检、返工、发货、改单当前状态、标签、过程说明和管理员维护。按时间正序，历史缺失信息不补造 |
+| `POST /api/business/order-maintenance/mother-orders/{code}/basic-info` | 仅管理员更正母单基础信息；请求为 `customerId`（稳定客户档案 ID；null 沿用）、`goodsName`（必填，最多 120 字）、`remark`（最多 300 字）、`reason`（必填，最多 200 字）、`requestId`、`expectedRevision`，返回当前 `MaintainedOrder` |
 | `POST /api/business/order-maintenance/mother-orders/{code}` | 改正母单；已有库存流水编号时，客户、材质、货品、数量、重量只能经后续差额／冲正流程调整，当前接口仅允许说明、期限等非入账字段。原因必填 |
 | `POST /api/business/order-maintenance/work-orders/{code}` | 改正子单；已有库存流水编号时同样保护入账字段，工序也不可原地覆盖。原因必填 |
 | `POST /api/business/order-maintenance/print-jobs/{id}` | 仅未领取旧任务可改份数；`stationId` 是领取记录，不可改为目标工位 |
@@ -2309,7 +2311,9 @@ PWA 一期边界：
 
 母单、子单的查找响应还返回 `postedFactsLocked`；有库存流水编号，或缺编号但对应母单范围内存在该单号的实际库存流水时为 `true`，页面据此将入账事实字段设为只读。服务端仍独立校验，直接调用接口也不能绕过。本字段只是已发现库存事实的保护，不是历史账务完整性的证明。
 
-打印任务查找响应的 `revision` 由完整任务快照计算；上述两个打印改单请求也必须提交 `requestId` 与 `expectedRevision`。同账号、同编号、同内容重试只回放一次，旧页面或改内容复用编号被拒绝。任务字段、调整记录及请求结果同事务提交；旧客户端缺少新字段会收到重新查找或请求编号提示。回收与恢复尚未接入该命令边界。
+基础信息接口与旧整单更正接口分开：查找响应新增 `customerId` 和 `remark`，货品／备注可独立更正，保留原建单人、要求、交期、数量和重量。换客户必须选择启用档案；没有拆单、分批／正式交工、质检、改单和财务记录且库存仅有收货／收货冲正时，按有效收货流水逐条冲正并重新入账，同步客户、相应货主、收货明细关联和当前母单流水号。多材质和零重量收货可处理。单据、库存、审计、请求结果同事务；旧版本、内容冲突、缺失流水或余额不足整笔拒绝。纸面信息更新需重新生成标签，已有打印快照保留。回收和恢复母／子单同事务追加维护日志；回收本身不冲销库存或账单。
+
+打印任务查找响应的 `revision` 由完整任务快照计算；上述两个打印改单请求也必须提交 `requestId` 与 `expectedRevision`。同账号、同编号、同内容重试只回放一次，旧页面或改内容复用编号被拒绝。任务字段、调整记录及请求结果同事务提交；旧客户端缺少新字段会收到重新查找或请求编号提示。
 
 ### BusinessWorkspaceController
 
@@ -2339,6 +2343,8 @@ PWA 一期边界：
 ### OrderWorkspaceController
 
 来源：[OrderWorkspaceController](../backend/src/main/java/com/zhubao/erp/business/web/OrderWorkspaceController.java)。只读，不写库存、工序、发货或证据。必须使用登录会话。没有来料、进度、生产、质检或库存菜单时拒绝，不把无权限变成空页。
+
+订单行新增 `createdBy`，取原母单的建单人快照，子单和执行轮次也保留该来源；当前工序操作人仍使用 `operatorName`，两者不能互相替代。历史未记录时返回 null，页面显示“历史未记录”。
 
 | 方法与完整路径 | 返回类型 |
 |---|---|

@@ -334,6 +334,7 @@ public class OrderMaintenanceService {
                             operator.operator(), "ADMIN_RECYCLE_MOTHER", type, code,
                             OrderMaintenanceRevision.of(payload(reason))), session -> {
                         recycleMother(code, operator.operator(), at, batch, reason, session);
+                        documents.saveOrderAdjustment(adjustment(type, code, "正常", "删除至回收站", reason, operator), session);
                         return code;
                     });
                 }
@@ -354,6 +355,7 @@ public class OrderMaintenanceService {
                         lockPrints(List.of(code), session);
                         documents.recycleChild(code, operator.operator(), at, batch, reason, session);
                         hidePrints(code, operator.operator(), at, batch, reason, session);
+                        documents.saveOrderAdjustment(adjustment(type, code, "正常", "删除至回收站", reason, operator), session);
                         return code;
                     });
                 }
@@ -402,6 +404,7 @@ public class OrderMaintenanceService {
                             operator.operator(), "ADMIN_RESTORE_MOTHER", type, code,
                             OrderMaintenanceRevision.of(payload(type, code))), session -> {
                         restoreMother(code, session);
+                        documents.saveOrderAdjustment(adjustment(type, code, "回收站", "恢复", "管理员恢复母单", operator), session);
                         return code;
                     });
                 }
@@ -426,6 +429,7 @@ public class OrderMaintenanceService {
                         documents.clearChildRecycle(code, session);
                         printJobs.restoreBatch(mark.batch(), session);
                         routing.restoreBatch(mark.batch(), session);
+                        documents.saveOrderAdjustment(adjustment(type, code, "回收站", "恢复", "管理员恢复子单", operator), session);
                         return code;
                     });
                 }
@@ -688,7 +692,7 @@ public class OrderMaintenanceService {
                 record.goodsName(), record.processingRequirement(), record.dueDate(), plain(record.quantity()),
                 plain(record.weight()), "", null, "", "", mark != null, mark == null ? "" : mark.reason(),
                 lines("MOTHER", record.code()), OrderMaintenanceRevision.of(record),
-                isPosted(record.ledgerCode(), record.code(), record.code()));
+                isPosted(record.ledgerCode(), record.code(), record.code()), record.customerId(), record.remark());
     }
 
     private MaintainedOrder toChild(ChildWorkOrderRecord record) {
@@ -698,14 +702,14 @@ public class OrderMaintenanceService {
                 record.materialCode(), record.goodsName(), record.processingRequirement(), record.dueDate(),
                 plain(record.quantity()), plain(record.weight()), record.processes(), null, "", "",
                 mark != null || motherRecycled, mark == null ? "" : mark.reason(), lines("WORK_ORDER", record.code()),
-                OrderMaintenanceRevision.of(record), isPosted(record.ledgerCode(), record.motherOrderCode(), record.code()));
+                OrderMaintenanceRevision.of(record), isPosted(record.ledgerCode(), record.motherOrderCode(), record.code()), record.customerId(), "");
     }
 
     private MaintainedOrder toPrintJob(PrintJob job) {
         PrintRecycle mark = printJobs.recycleMark(job.id()).orElse(null);
         return new MaintainedOrder("PRINT_JOB", job.id(), job.businessCode(), "", "", "", "", "", "", "", "",
                 job.copies(), job.stationId(), "", mark != null, mark == null ? "" : mark.reason(),
-                lines("PRINT_JOB", job.id()), OrderMaintenanceRevision.of(job), false);
+                lines("PRINT_JOB", job.id()), OrderMaintenanceRevision.of(job), false, null, "");
     }
 
     private MaintainedOrder toTarget(PrintTargetJob job) {
@@ -713,7 +717,7 @@ public class OrderMaintenanceService {
         String business = routing.batch(job.batchId()).map(batch -> batch.businessCode()).orElse("");
         return new MaintainedOrder("PRINT_TARGET", job.id(), business, "", "", "", "", "", "", "", "",
                 job.copies(), job.targetStationId(), job.targetQueueId(), mark != null,
-                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()), OrderMaintenanceRevision.of(job), false);
+                mark == null ? "" : mark.reason(), lines("PRINT_TARGET", job.id()), OrderMaintenanceRevision.of(job), false, null, "");
     }
 
     private List<String> lines(String type, String code) {

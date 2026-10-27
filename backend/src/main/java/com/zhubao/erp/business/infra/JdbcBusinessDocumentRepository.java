@@ -1830,6 +1830,21 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public void correctMotherBasicInfo(MotherOrderRecord record, OrderAdjustment adjustment, WorkSession session) {
+        Connection connection = requireConnection(session);
+        try {
+            updateOne(connection, "update biz_mother_order set owner_customer_id = ?, ledger_code = ? where code = ?", statement -> {
+                setLong(statement, 1, record.ownerCustomerId());
+                statement.setString(2, record.ledgerCode());
+                statement.setString(3, record.code());
+            }, "母单不存在");
+            correctMotherOrder(record, adjustment, session);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("母单基础信息更正失败", ex);
+        }
+    }
+
+    @Override
     public void correctChildWorkOrder(ChildWorkOrderRecord record, OrderAdjustment adjustment) {
         correctOrder(connection -> updateChildWorkOrder(connection, record), adjustment);
     }

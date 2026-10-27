@@ -424,7 +424,8 @@ public class OrderWorkspaceQueryService {
                 version,
                 delivered,
                 emptyToNull(operator),
-                emptyToNull(updatedAt)
+                emptyToNull(updatedAt),
+                emptyToNull(mother.operator())
         );
     }
 
@@ -475,7 +476,7 @@ public class OrderWorkspaceQueryService {
                 row.objectType(), row.code(), row.motherOrderCode(), row.workOrderCode(), row.executionRoundCode(), process,
                 row.customerId(), row.customerName(), row.goodsName(), row.materialCode(), row.materialName(), row.quantity(), row.quantityUnit(),
                 row.weight(), row.weightUnit(), row.dueDate(), IN_PROCESS, "IN_PROCESS", row.facetNote(), same ? row.processPercent() : null,
-                same ? row.processProgressVersion() : null, false, same ? row.operatorName() : null, same ? row.updatedAt() : null);
+                same ? row.processProgressVersion() : null, false, same ? row.operatorName() : null, same ? row.updatedAt() : null, row.createdBy());
     }
 
     private boolean matchesView(String view, OrderWorkspaceRow row, List<String> allowedProcesses) {
@@ -570,7 +571,7 @@ public class OrderWorkspaceQueryService {
                 row.executionRoundCode(), row.currentProcess(), row.customerId(), row.customerName(), row.goodsName(),
                 row.materialCode(), row.materialName(), row.quantity(), row.quantityUnit(), row.weight(), row.weightUnit(),
                 row.dueDate(), row.businessStatus(), facet, note, row.processPercent(), row.processProgressVersion(),
-                row.processFormallyDelivered(), row.operatorName(), row.updatedAt()
+                row.processFormallyDelivered(), row.operatorName(), row.updatedAt(), row.createdBy()
         );
     }
 

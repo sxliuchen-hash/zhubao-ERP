@@ -20,6 +20,8 @@ export interface MaintainedOrder {
   adjustments: string[];
   revision: string;
   postedFactsLocked?: boolean;
+  customerId?: number | null;
+  remark?: string;
 }
 
 export interface MaintainedMotherSummary {
@@ -72,7 +74,7 @@ export function correctMaintainedOrder(order: MaintainedOrder, reason: string, r
       weight: order.weight,
       requirement: order.requirement,
       dueDate: order.dueDate,
-      remark: '',
+      remark: order.remark ?? '',
       reason,
       requestId,
       expectedRevision: order.revision,
@@ -111,3 +113,18 @@ export function recycleMaintainedOrder(targetType: string, code: string, reason:
 export function restoreMaintainedOrder(targetType: string, code: string, requestId: string): Promise<void> {
   return apiPost('/api/business/order-maintenance/restore', { targetType, code, requestId });
 }
+
+export interface OrderOperationLog {
+  targetCode: string;
+  action: string;
+  operator: string;
+  createdAt: string;
+  detail: string;
+}
+
+export const fetchOrderOperationLogs = (code: string) =>
+  apiGet<OrderOperationLog[]>(`/api/business/order-maintenance/operation-logs?code=${encodeURIComponent(code)}`);
+
+export const correctMotherBasicInfo = (code: string, body: {
+  customerId: number | null; goodsName: string; remark: string; reason: string; requestId: string; expectedRevision: string;
+}) => apiPost<typeof body, MaintainedOrder>(`/api/business/order-maintenance/mother-orders/${encodeURIComponent(code)}/basic-info`, body);

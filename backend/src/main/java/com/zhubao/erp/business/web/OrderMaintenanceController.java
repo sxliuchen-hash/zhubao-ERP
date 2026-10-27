@@ -4,6 +4,8 @@ import com.zhubao.erp.business.app.MaintainedMotherBrowse;
 import com.zhubao.erp.business.app.MaintainedOrder;
 import com.zhubao.erp.business.app.OrderMaintenanceCommands;
 import com.zhubao.erp.business.app.OrderMaintenanceService;
+import com.zhubao.erp.business.app.MotherOrderAdminService;
+import com.zhubao.erp.business.app.OrderOperationLogService;
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,10 +24,30 @@ import java.util.List;
 public class OrderMaintenanceController {
     private final OrderMaintenanceService service;
     private final OperatorContextResolver operators;
+    private final MotherOrderAdminService motherAdmin;
+    private final OrderOperationLogService operationLogs;
 
-    public OrderMaintenanceController(OrderMaintenanceService service, OperatorContextResolver operators) {
+    public OrderMaintenanceController(OrderMaintenanceService service, OperatorContextResolver operators,
+                                      MotherOrderAdminService motherAdmin, OrderOperationLogService operationLogs) {
         this.service = service;
         this.operators = operators;
+        this.motherAdmin = motherAdmin;
+        this.operationLogs = operationLogs;
+    }
+
+    @PostMapping("/mother-orders/{code}/basic-info")
+    public ApiResponse<MaintainedOrder> correctBasicInfo(@PathVariable String code,
+                                                        @RequestBody MotherOrderAdminService.BasicInfo command,
+                                                        HttpServletRequest request) {
+        var operator = operators.requireSession(request);
+        motherAdmin.correct(code, command, operator);
+        return ApiResponse.ok(service.search(code, operator).stream()
+                .filter(row -> "MOTHER".equals(row.targetType())).findFirst().orElseThrow());
+    }
+
+    @GetMapping("/operation-logs")
+    public ApiResponse<List<OrderOperationLogService.Entry>> operationLogs(@RequestParam String code, HttpServletRequest request) {
+        return ApiResponse.ok(operationLogs.list(code, operators.requireSession(request)));
     }
 
     @GetMapping

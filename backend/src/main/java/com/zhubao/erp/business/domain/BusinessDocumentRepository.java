@@ -7,6 +7,11 @@ import java.util.Optional;
 
 public interface BusinessDocumentRepository {
 
+    /** 基础信息更正同时保存客户归属、当前收货流水及审计。 */
+    default void correctMotherBasicInfo(MotherOrderRecord record, OrderAdjustment adjustment, WorkSession session) {
+        correctMotherOrder(record, adjustment, session);
+    }
+
     boolean motherOrderExists(String code);
 
     /** 在当前工作单元里判断母单号，能看见本事务尚未提交的写入。 */

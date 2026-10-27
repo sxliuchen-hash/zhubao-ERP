@@ -19,6 +19,35 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JdbcOrderCorrectionTest {
 
     @Test
+    void 基础信息更正持久化客户归属和新流水并与审计共同回滚() throws SQLException {
+        JdbcDataSource source = source();
+        createTables(source);
+        execute(source, "alter table biz_mother_order add column owner_customer_id bigint");
+        execute(source, "alter table biz_mother_order add column ledger_code varchar(90)");
+        execute(source, "insert into biz_mother_order (code, customer_id, owner_customer_id, customer_name, ledger_code) "
+                + "values ('MD-1', 1, 1, '原客户', 'OLD')");
+        JdbcBusinessDocumentRepository repository = new JdbcBusinessDocumentRepository(source);
+        try (Connection connection = source.getConnection()) {
+            connection.setAutoCommit(false);
+            var session = new com.zhubao.erp.work.domain.WorkSession() {
+                public java.util.Optional<Connection> connection() { return java.util.Optional.of(connection); }
+                public void onRollback(Runnable undo) { }
+            };
+            assertThatThrownBy(() -> repository.correctMotherBasicInfo(mother(), adjustment("MOTHER", "MD-1", "FAIL"), session))
+                    .isInstanceOf(IllegalStateException.class);
+            connection.rollback();
+            assertThat(value(source, "select customer_id from biz_mother_order where code = 'MD-1'")).isEqualTo("1");
+            assertThat(value(source, "select owner_customer_id from biz_mother_order where code = 'MD-1'")).isEqualTo("1");
+            assertThat(value(source, "select ledger_code from biz_mother_order where code = 'MD-1'")).isEqualTo("OLD");
+            repository.correctMotherBasicInfo(mother(), adjustment("MOTHER", "MD-1", "核对客户"), session);
+            connection.commit();
+        }
+        assertThat(value(source, "select customer_id from biz_mother_order where code = 'MD-1'")).isEqualTo("2");
+        assertThat(value(source, "select owner_customer_id from biz_mother_order where code = 'MD-1'")).isNull();
+        assertThat(value(source, "select ledger_code from biz_mother_order where code = 'MD-1'")).isEqualTo("L1");
+    }
+
+    @Test
     void 母单调整记录写入失败时字段覆盖回滚() throws SQLException {
         JdbcDataSource source = source();
         createTables(source);

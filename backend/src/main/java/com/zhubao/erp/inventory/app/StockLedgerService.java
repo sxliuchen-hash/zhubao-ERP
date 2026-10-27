@@ -84,8 +84,8 @@ public class StockLedgerService {
             throw new BusinessException("收货冲正必须指定原收货库存");
         }
         if (reversal.quantity() == null || reversal.weight() == null
-                || reversal.quantity().signum() <= 0 || reversal.weight().signum() <= 0) {
-            throw new BusinessException("收货冲正的数量和重量必须为正数");
+                || reversal.quantity().signum() <= 0 || reversal.weight().signum() < 0) {
+            throw new BusinessException("收货冲正的数量必须为正数，重量不能为负数");
         }
         StockLedgerEntry entry = new StockLedgerEntry(
                 nextCode(),

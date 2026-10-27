@@ -19,6 +19,8 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,6 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,6 +58,102 @@ class BusinessOperationRuleHttpTest {
     @Autowired private ProcessStationService stations;
     @Autowired private QualityRequirementService quality;
     @Autowired private AuthUserAccountRepository accounts;
+    private final java.util.Map<String, AuthUserAccount> originalAccounts = new java.util.HashMap<>();
+
+    @BeforeEach
+    void prepareProcessRuleAccounts() {
+        // 这些场景验证工序顺序，明确赋予测试数据范围，避免被默认本人范围提前拦截。
+        for (String username : List.of("operator", "carve", "inlay", "polish", "qc")) {
+            AuthUserAccount account = accounts.findByUsername(username).orElseThrow();
+            originalAccounts.put(username, account);
+            accounts.save(new AuthUserAccount(account.username(), account.passwordHash(), account.operator(), account.role(),
+                    DataScope.ALL, account.enabled(), account.demoAccount(), account.passwordChangedAt(), account.failedLoginCount(),
+                    account.lockedUntil(), account.customerScope(), account.passwordChangeRequired(), account.temporaryPasswordConsumed(),
+                    account.allowedProcesses(), account.coverDuties(), account.teamCode(), account.departmentCode()));
+        }
+    }
+
+    @AfterEach
+    void restoreProcessRuleAccounts() {
+        originalAccounts.values().forEach(accounts::save);
+    }
+
+    @Test
+    void 管理员可更正母单客户删除恢复并查看操作日志且其他角色被拒绝() throws Exception {
+        String code = keptMother();
+        String admin = "Bearer " + sessions.login(new AuthLoginCommand("admin", "admin123")).token();
+        String worker = "Bearer " + sessions.login(new AuthLoginCommand("carve", "carve123")).token();
+        String root = "/api/business/order-maintenance";
+        String response = mvc.perform(get(root).param("code", code).header("Authorization", admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String revision = mapper.readTree(response).path("data").get(0).path("revision").asText();
+        var body = new com.zhubao.erp.business.app.MotherOrderAdminService.BasicInfo(1002L, "更正货品", "更正备注",
+                "误选客户", "req-basic-http-" + code, revision);
+        mvc.perform(post(root + "/mother-orders/" + code + "/basic-info").header("Authorization", worker)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(body)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(root + "/mother-orders/" + code + "/basic-info").header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(body)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.customerId").value(1002));
+        assertThat(documents.findMotherOrderByCode(code).orElseThrow().ownerCustomerId()).isEqualTo(1002L);
+        assertThat(stocks.balances().stream().filter(row -> code.equals(row.dimension().motherOrderCode())
+                && row.dimension().customerId().equals(1001L)).map(StockBalance::quantity).reduce(BigDecimal.ZERO, BigDecimal::add)).isZero();
+        mvc.perform(post(root + "/recycle").header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(new com.zhubao.erp.business.app.OrderMaintenanceCommands.RecycleCommand(
+                                "MOTHER", code, "重复录单", "req-delete-http-" + code))))
+                .andExpect(status().isOk());
+        assertThat(documents.findMotherOrderByCode(code)).isEmpty();
+        mvc.perform(post(root + "/restore").header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(new com.zhubao.erp.business.app.OrderMaintenanceCommands.RestoreCommand(
+                                "MOTHER", code, "req-restore-http-" + code))))
+                .andExpect(status().isOk());
+        mvc.perform(get(root + "/operation-logs").param("code", code).header("Authorization", worker)).andExpect(status().isForbidden());
+        mvc.perform(get(root + "/operation-logs").param("code", code)).andExpect(status().isForbidden());
+        mvc.perform(get(root + "/operation-logs").param("code", code).header("Authorization", admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[?(@.action == '管理员维护')]").isArray())
+                .andExpect(jsonPath("$.data.length()").value(5));
+    }
+
+    @Test
+    void 业务管理保留顶岗与多工种授权并能登记进度和交工() throws Exception {
+        AuthUserAccount seed = accounts.findByUsername("carve").orElseThrow();
+        String username = "manager-report-" + SEQUENCE.incrementAndGet();
+        accounts.save(new AuthUserAccount(username, seed.passwordHash(), "顶岗师傅", RoleCode.BUSINESS_MANAGER,
+                DataScope.ALL, true, true, seed.passwordChangedAt(), 0, null, List.of(), false, false,
+                List.of("雕刻", "镶嵌"), List.of("REPORT"), "一组", "生产部"));
+        String token = sessions.login(new AuthLoginCommand(username, "carve123")).token();
+        String code = keptMother();
+        mvc.perform(post(ROOT + "/process-progress").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(
+                                new ProcessProgressController.ProcessProgressRequest(code, 30, 0, "开始加工", "", "req-progress-" + code))))
+                .andExpect(status().isOk());
+        mvc.perform(post(ROOT + "/process-stations").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(new ProcessStationReportCommand(code, "雕刻", "req-manager-carve-" + code))))
+                .andExpect(status().isOk());
+        mvc.perform(post(ROOT + "/process-stations").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(new ProcessStationReportCommand(code, "镶嵌", "req-manager-inlay-" + code))))
+                .andExpect(status().isOk());
+        assertThat(documents.listProcessStationHandoffs(code)).hasSize(2)
+                .allMatch(row -> row.operator().equals("顶岗师傅"));
+        mvc.perform(post(ROOT + "/process-stations").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(new ProcessStationReportCommand(code, "抛光", "req-manager-polish-" + code))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 业务管理只有工种没有报工顶岗权限仍不能提交() throws Exception {
+        AuthUserAccount seed = accounts.findByUsername("carve").orElseThrow();
+        String username = "manager-intake-" + SEQUENCE.incrementAndGet();
+        accounts.save(new AuthUserAccount(username, seed.passwordHash(), "收货顶岗", RoleCode.BUSINESS_MANAGER,
+                DataScope.ALL, true, true, seed.passwordChangedAt(), 0, null, List.of(), false, false,
+                List.of("雕刻"), List.of("INTAKE")));
+        String token = sessions.login(new AuthLoginCommand(username, "carve123")).token();
+        String code = keptMother();
+        mvc.perform(post(ROOT + "/process-stations").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(new ProcessStationReportCommand(code, "雕刻", "req-no-report-" + code))))
+                .andExpect(status().isForbidden());
+        assertThat(documents.listProcessStationHandoffs(code)).isEmpty();
+    }
 
     @Test
     void anonymousHeadersCannotCreateInboundAndSessionIdentityReplacesMissingOrForgedActor() throws Exception {

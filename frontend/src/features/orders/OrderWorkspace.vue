@@ -14,6 +14,7 @@ import type { TabKey } from '../workspace/workspaceNavigation';
 import { workspaceTabs } from '../workspace/workspaceNavigation';
 import OrderList from './OrderList.vue';
 import OrderDetail from './OrderDetail.vue';
+import MotherAdminPanel from './MotherAdminPanel.vue';
 import type { OpenIntakeAction, OpenLabelAction, OpenOrderChangeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, ProductionMode } from './orderActions';
 import { orderFacetLabel } from './orderWorkspaceLabels';
 
@@ -30,6 +31,7 @@ const accessDenied = ref(false);
 const detailOpen = ref(false);
 const selectedRow = ref<OrderWorkspaceRow | null>(null);
 const detailError = ref('');
+const adminPanelOpen = ref(false);
 const scanCode = ref('');
 const scanOpen = ref(false);
 const advancedFilterCount = computed(() => [filters.process, filters.dueBefore, filters.customerId].filter(value => value.trim()).length);
@@ -71,6 +73,7 @@ function remember() {
   workspace.rememberReturn({ section: 'orders', ...filters, view: view.value, page: page.value, scrollTop });
 }
 function clearDetail() {
+  adminPanelOpen.value = false;
   scan.invalidate();
   detailError.value = '';
   detailOpen.value = false;
@@ -190,6 +193,9 @@ const detailActions = computed(() => {
   const facet = selectedRow.value?.facet ?? '';
   const current = identity.value;
   if (!current) return items;
+  if (session.value?.role === 'ADMIN' && current.motherOrderCode && ['MOTHER_ORDER', 'WORK_ORDER'].includes(current.objectType)) {
+    items.push({ key: 'admin', label: '母单编辑与删除', run: () => { adminPanelOpen.value = true; }, rank: 55 });
+  }
   if (current.objectType === 'MOTHER_ORDER' && canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')) {
     items.push({ key: 'intake', label: '收货与拆单资料', run: () => go('inbound', 'INTAKE', 'BUSINESS_INBOUND_CONFIRM'), rank: 45 });
   }
@@ -267,6 +273,8 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
       </template>
       <template v-if="identity && scan.context">
         <h2>{{ scanObjectTypeLabel(identity.objectType) }} {{ identity.code }}</h2>
+        <MotherAdminPanel v-if="adminPanelOpen && session?.role === 'ADMIN' && identity.motherOrderCode"
+          :key="identity.motherOrderCode" :mother-code="identity.motherOrderCode" @close="adminPanelOpen = false" @saved="load()" @deleted="load()" />
         <p v-if="selectedRow?.executionRoundCode">执行轮次 {{ selectedRow.executionRoundCode }} · 原子单 {{ selectedRow.workOrderCode || '未提供' }}</p>
         <OrderDetail :key="`${identity.objectType}:${identity.code}`" :context="scan.context">
           <template #summary>

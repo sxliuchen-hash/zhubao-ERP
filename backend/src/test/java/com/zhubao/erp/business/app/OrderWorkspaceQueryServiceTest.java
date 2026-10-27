@@ -68,6 +68,8 @@ class OrderWorkspaceQueryServiceTest {
 
     @Test void partialUpstreamIsVisibleToDownstreamAccountWithoutCompletingEitherProcess() {
         documents.saveMotherOrder(mother("MD-BQ", 1001L, "恒信珠宝", "2026-10-23", "10", "件"));
+        assertThat(service.query(office, orders, OrderWorkspaceQuery.parse(null, "MD-BQ", null, null, null, null, null, null)).items())
+                .allMatch(row -> row.createdBy().equals(documents.findMotherOrderByCode("MD-BQ").orElseThrow().operator()));
         documents.saveMotherSplitState(new MotherSplitState("MD-BQ", MotherSplitState.SPLIT, "V1", "收货", "2026-10-09T08:00:00"));
         documents.saveChildWorkOrder(child("ZD-BQ", "MD-BQ", 1001L, "恒信珠宝"));
         documents.saveProcessBatch(new com.zhubao.erp.business.domain.ProcessBatchHandoff("PB-Q", "ZD-BQ", "雕刻", BigDecimal.ONE, null, "雕刻工", "2026-10-24T09:00:00"), SESSION);

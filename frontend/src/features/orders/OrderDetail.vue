@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, inject, ref, watch, type Ref } from 'vue';
+import type { AuthSession } from '../../services/authApi';
+import OrderOperationLogs from './OrderOperationLogs.vue';
 import type { ScanContextResponse } from '../../services/scanContextApi';
 import { canonicalTarget } from '../scan/useScanContext';
 import { progressStageLabel } from '../scan/progressTarget';
@@ -12,6 +14,7 @@ const props = withDefaults(defineProps<{
   showStation?: boolean;
 }>(), { showCustomer: true, showWeight: true, showStation: true });
 const tab = ref<'overview' | 'flow' | 'evidence'>('overview');
+const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
 const identity = computed(() => canonicalTarget(props.context));
 watch(() => props.context, () => { tab.value = 'overview'; });
 function amount(value: number | null, unit: string | null) {
@@ -55,6 +58,7 @@ function amount(value: number | null, unit: string | null) {
       </section>
     </div>
     <section v-else-if="tab === 'flow'" class="order-flow" aria-label="本单流转事实">
+      <OrderOperationLogs v-if="session?.role === 'ADMIN'" :code="identity.code" />
       <p>查询目标：{{ identity.code }}。下列记录保留原单号；尚无跨母子单聚合时间线。</p>
       <h4>正式交工</h4>
       <p v-if="!context.progress.handoffs.length">暂无正式交工记录</p>

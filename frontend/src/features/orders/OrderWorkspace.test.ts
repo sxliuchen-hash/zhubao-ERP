@@ -48,6 +48,19 @@ beforeEach(() => {
 });
 
 describe('统一订单列表与详情', () => {
+  it('桌面与手机列表显示原建单人，只有管理员能打开母单维护', async () => {
+    vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([row('WO-1', { createdBy: '收货建单人', operatorName: '当前师傅' })]));
+    const auth = ref({ role: 'BUSINESS_MANAGER' });
+    const wrapper = mountWorkspace({ 'zhubao-auth-session': auth });
+    await flushPromises();
+    expect(wrapper.get('.order-table').text()).toContain('收货建单人');
+    expect(wrapper.get('.order-cards').text()).toContain('建单人：收货建单人');
+    await select(wrapper, 'WO-1');
+    expect(wrapper.text()).not.toContain('母单编辑与删除');
+    auth.value = { role: 'ADMIN' }; await flushPromises();
+    expect(wrapper.text()).toContain('母单编辑与删除');
+    wrapper.unmount();
+  });
   it('外部岗位导航使用同一 Q1 列表，切视图撤下旧目标，旧响应不能回写', async () => {
     const workspace = createWorkspaceState(); workspace.orderView.value = 'PRODUCTION';
     const slow = deferred<OrderWorkspacePage>();
