@@ -5,6 +5,7 @@ import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.FinanceCommands.ReceiptAllocationCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.RecordReceiptCommand;
+import com.zhubao.erp.finance.domain.ReceiptAllocation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.FinanceReceiptProbe;
 import com.zhubao.erp.finance.domain.FinanceRepository;
@@ -68,6 +69,23 @@ class FinanceReceiptContractTest {
                 .hasMessageContaining("内容不一致");
         assertThat(repository.listReceipts()).hasSize(3);
         assertThat(service.statement(1008L, "").outstandingAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void jdbcAllocationUsesLockedBalanceAndRejectsTheExcess() throws Exception {
+        JdbcFinanceRepository repository = jdbcRepository(new AtomicReference<>("none"));
+        repository.saveReceivable(receivable("AR-JDBC", "80.00"));
+        repository.registerReceipt(storedReceipt("RC-JDBC-1", "80.00", "AR-JDBC", "80.00"), "rc-jdbc-full");
+        assertThatThrownBy(() -> repository.registerReceipt(storedReceipt("RC-JDBC-2", "1.00", "AR-JDBC", "1.00"), "rc-jdbc-over"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能超过尚未核销的余额");
+        assertThat(repository.listReceipts()).hasSize(1);
+        ReceivableLine red = new ReceivableLine("AR-JDBC-RED", 1008L, "恒信珠宝", "2026-10", "RED", "RED|AR-JDBC|1",
+                "MD-REPLAY", "AR-JDBC", "", BigDecimal.ONE, ChargeUnit.PIECE, BigDecimal.ONE, new BigDecimal("-1.00"),
+                "AR-JDBC", "超额红字", "财务", "2026-10-11T00:00:00");
+        assertThatThrownBy(() -> repository.saveReceivable(red))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能超过尚未核销的余额");
     }
 
     @Test
@@ -152,6 +170,11 @@ class FinanceReceiptContractTest {
                 "2026-10-01T00:00:00");
     }
 
+    private CustomerReceipt storedReceipt(String code, String amount, String receivableCode, String allocation) {
+        return new CustomerReceipt(code, 1008L, "恒信珠宝", "2026-10", new BigDecimal(amount), "2026-10-10",
+                List.of(new ReceiptAllocation(receivableCode, new BigDecimal(allocation))), "财务", "2026-10-10T00:00:00");
+    }
+
     private RecordReceiptCommand allocated(String amount, String key, String receivableCode, String allocation) {
         return new RecordReceiptCommand(1008L, "恒信珠宝", "2026-10-10", new BigDecimal(amount),
                 List.of(new ReceiptAllocationCommand(receivableCode, new BigDecimal(allocation))), key);
@@ -183,6 +206,27 @@ class FinanceReceiptContractTest {
                     primary key (receipt_code, line_no)
                 )
                 """;
+        String receivable = """
+                create table fin_receivable_line (
+                    code varchar(80) primary key,
+                    customer_id bigint not null,
+                    customer_name varchar(120) not null,
+                    year_month char(7) not null,
+                    source_type varchar(40) not null,
+                    source_key varchar(160) not null,
+                    mother_order_code varchar(80) not null,
+                    work_order_code varchar(80) not null,
+                    process_name varchar(80) not null,
+                    quantity decimal(18, 3) not null,
+                    charge_unit varchar(20) not null,
+                    unit_price decimal(18, 4) not null,
+                    amount decimal(18, 2) not null,
+                    reverses_code varchar(80) not null,
+                    remark varchar(400) not null,
+                    operator_name varchar(80) not null,
+                    created_at varchar(40) not null
+                )
+                """;
         String migration;
         try (InputStream input = FinanceReceiptContractTest.class.getResourceAsStream(
                 "/db/mysql/V41__m3_finance_receipt_idempotency.sql")) {
@@ -192,6 +236,7 @@ class FinanceReceiptContractTest {
              Statement statement = connection.createStatement()) {
             statement.execute(receipt);
             statement.execute(allocation);
+            statement.execute(receivable);
             for (String part : migration.split(";")) {
                 String sql = part.lines()
                         .filter(line -> !line.trim().startsWith("--"))

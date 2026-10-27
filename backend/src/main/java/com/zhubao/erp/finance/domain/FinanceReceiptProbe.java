@@ -9,4 +9,8 @@ public interface FinanceReceiptProbe {
     };
 
     void beforeAllocationInsert();
+
+    /** 幂等查询之后、余额加锁之前。测试用来插入另一笔已提交核销。 */
+    default void afterIdempotencyRead() {
+    }
 }

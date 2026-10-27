@@ -86,6 +86,17 @@ public class InMemoryFinanceRepository implements FinanceRepository {
 
     @Override
     public void saveReceivable(ReceivableLine line) {
+        if (line.reversesCode() != null && !line.reversesCode().isBlank()) {
+            synchronized (receiptLock) {
+                assertOpenBalances(Map.of(line.reversesCode(), line.amount().abs()));
+                storeReceivable(line);
+            }
+            return;
+        }
+        storeReceivable(line);
+    }
+
+    private void storeReceivable(ReceivableLine line) {
         String existingCode = receivableCodeBySource.putIfAbsent(line.sourceKey(), line.code());
         if (existingCode != null && !existingCode.equals(line.code())) {
             throw new BusinessException("这张单据已经入过账");
@@ -158,6 +169,7 @@ public class InMemoryFinanceRepository implements FinanceRepository {
                     return existing;
                 }
             }
+            receiptProbe.afterIdempotencyRead();
             assertOpenBalances(receipt);
             receipts.put(receipt.code(), receipt);
             if (!key.isEmpty()) {
@@ -194,8 +206,15 @@ public class InMemoryFinanceRepository implements FinanceRepository {
             }
             requested.merge(allocation.receivableCode(), allocation.amount(), BigDecimal::add);
         }
-        for (Map.Entry<String, BigDecimal> entry : requested.entrySet()) {
-            ReceivableLine line = receivablesByCode.get(entry.getKey());
+        assertOpenBalances(requested);
+    }
+
+    private void assertOpenBalances(Map<String, BigDecimal> requested) {
+        List<String> codes = new ArrayList<>(requested.keySet());
+        codes.sort(String::compareTo);
+        for (String code : codes) {
+            BigDecimal requestedAmount = requested.get(code);
+            ReceivableLine line = receivablesByCode.get(code);
             if (line == null) {
                 throw new BusinessException("找不到要核销的账单行");
             }
@@ -215,7 +234,7 @@ public class InMemoryFinanceRepository implements FinanceRepository {
                     }
                 }
             }
-            if (entry.getValue().compareTo(open) > 0) {
+            if (requestedAmount.compareTo(open) > 0) {
                 throw new BusinessException("核销金额不能超过尚未核销的余额");
             }
         }

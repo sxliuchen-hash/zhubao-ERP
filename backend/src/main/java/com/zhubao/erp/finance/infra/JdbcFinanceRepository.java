@@ -33,6 +33,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -171,20 +172,49 @@ public class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public void saveReceivable(ReceivableLine line) {
-        try (Connection connection = dataSource.getConnection()) {
-            insertReceivable(connection, line);
-        } catch (SQLException ex) {
-            if (isDuplicate(ex)) {
-                throw new BusinessException("这张单据已经入过账");
+        if (line.reversesCode() == null || line.reversesCode().isBlank()) {
+            try (Connection connection = dataSource.getConnection()) {
+                insertReceivable(connection, line);
+            } catch (SQLException ex) {
+                if (isDuplicate(ex)) {
+                    throw new BusinessException("这张单据已经入过账");
+                }
+                throw new IllegalStateException("Failed to save receivable: " + line.code(), ex);
             }
-            throw new IllegalStateException("Failed to save receivable: " + line.code(), ex);
+            return;
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                assertOpenBalances(connection, Map.of(line.reversesCode(), line.amount().abs()));
+                insertReceivable(connection, line);
+                connection.commit();
+            } catch (RuntimeException | SQLException ex) {
+                connection.rollback();
+                if (ex instanceof SQLException sql && isDuplicate(sql)) {
+                    throw new BusinessException("这张单据已经入过账");
+                }
+                if (ex instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                throw new IllegalStateException("红字事务失败", ex);
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("红字事务失败", ex);
         }
     }
 
     @Override
     public void saveReceivable(ReceivableLine line, WorkSession session) {
         try {
-            insertReceivable(requireSession(session), line);
+            Connection connection = requireSession(session);
+            if (line.reversesCode() != null && !line.reversesCode().isBlank()) {
+                assertOpenBalances(connection, Map.of(line.reversesCode(), line.amount().abs()));
+            }
+            insertReceivable(connection, line);
         } catch (SQLException ex) {
             if (isDuplicate(ex)) {
                 throw new BusinessException("这张单据已经入过账");
@@ -311,7 +341,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
             return Optional.empty();
         }
         try (Connection connection = dataSource.getConnection()) {
-            return Optional.ofNullable(findReceiptByKey(connection, key));
+            return Optional.ofNullable(findReceiptByKey(connection, key, false));
         } catch (SQLException ex) {
             throw new IllegalStateException("无法读取收款幂等记录", ex);
         }
@@ -325,7 +355,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
             connection.setAutoCommit(false);
             try {
                 if (!key.isEmpty()) {
-                    CustomerReceipt existing = findReceiptByKey(connection, key);
+                    CustomerReceipt existing = findReceiptByKey(connection, key, true);
                     if (existing != null) {
                         if (!sameReceipt(existing, receipt)) {
                             throw new BusinessException("同一幂等键的收款内容不一致");
@@ -334,6 +364,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
                         return existing;
                     }
                 }
+                receiptProbe.afterIdempotencyRead();
                 assertOpenBalances(connection, receipt);
                 insertReceipt(connection, receipt, key);
                 receiptProbe.beforeAllocationInsert();
@@ -344,7 +375,7 @@ public class JdbcFinanceRepository implements FinanceRepository {
                 connection.rollback();
                 if (ex instanceof SQLException sql && isDuplicate(sql) && !key.isEmpty()) {
                     try (Connection lookup = dataSource.getConnection()) {
-                        CustomerReceipt existing = findReceiptByKey(lookup, key);
+                        CustomerReceipt existing = findReceiptByKey(lookup, key, false);
                         if (existing != null && sameReceipt(existing, receipt)) {
                             return existing;
                         }
@@ -373,12 +404,20 @@ public class JdbcFinanceRepository implements FinanceRepository {
             }
             requested.merge(allocation.receivableCode(), allocation.amount(), BigDecimal::add);
         }
-        for (Map.Entry<String, BigDecimal> entry : requested.entrySet()) {
+        assertOpenBalances(connection, requested);
+    }
+
+    /** 按应收编号排序加锁，并在锁内重读当前核销。锁住应收行本身不能代替这次读取。 */
+    private void assertOpenBalances(Connection connection, Map<String, BigDecimal> requested) throws SQLException {
+        List<String> codes = new ArrayList<>(requested.keySet());
+        Collections.sort(codes);
+        for (String code : codes) {
+            BigDecimal requestedAmount = requested.get(code);
             BigDecimal original;
             String reverses;
             String sql = "select amount, reverses_code from fin_receivable_line where code = ? for update";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, entry.getKey());
+                statement.setString(1, code);
                 try (ResultSet rs = statement.executeQuery()) {
                     if (!rs.next()) {
                         throw new BusinessException("找不到要核销的账单行");
@@ -392,28 +431,97 @@ public class JdbcFinanceRepository implements FinanceRepository {
             }
             BigDecimal reds = BigDecimal.ZERO;
             try (PreparedStatement statement = connection.prepareStatement(
-                    "select coalesce(sum(amount), 0) from fin_receivable_line where reverses_code = ? for update")) {
-                statement.setString(1, entry.getKey());
+                    "select amount from fin_receivable_line where reverses_code = ? order by code for update")) {
+                statement.setString(1, code);
                 try (ResultSet rs = statement.executeQuery()) {
-                    if (rs.next()) {
-                        reds = rs.getBigDecimal(1);
+                    while (rs.next()) {
+                        reds = reds.add(rs.getBigDecimal(1));
                     }
                 }
             }
-            BigDecimal used = BigDecimal.ZERO;
-            try (PreparedStatement statement = connection.prepareStatement(
-                    "select coalesce(sum(amount), 0) from fin_receipt_allocation where receivable_code = ?")) {
-                statement.setString(1, entry.getKey());
-                try (ResultSet rs = statement.executeQuery()) {
-                    if (rs.next()) {
-                        used = rs.getBigDecimal(1);
-                    }
-                }
-            }
-            if (entry.getValue().compareTo(original.add(reds).subtract(used)) > 0) {
+            BigDecimal used = lockedAllocationTotal(connection, code);
+            if (requestedAmount.compareTo(original.add(reds).subtract(used)) > 0) {
                 throw new BusinessException("核销金额不能超过尚未核销的余额");
             }
         }
+    }
+
+    /** 锁定当前核销行后再汇总。普通 SUM 在可重复读快照里会漏掉其他事务刚提交的分摊。 */
+    private BigDecimal lockedAllocationTotal(Connection connection, String receivableCode) throws SQLException {
+        BigDecimal used = lockedAmountSum(connection, """
+                select amount from fin_receipt_allocation
+                 where receivable_code = ?
+                 order by receipt_code, line_no
+                 for update
+                """, receivableCode);
+        used = used.add(lockedOperationNet(connection, receivableCode));
+        return used;
+    }
+
+    private BigDecimal lockedOperationNet(Connection connection, String receivableCode) throws SQLException {
+        if (!relationExists(connection, "fin_receipt_allocation_operation_line")) {
+            return BigDecimal.ZERO;
+        }
+        String sql = """
+                select o.action_code, l.amount
+                  from fin_receipt_allocation_operation_line l
+                  join fin_receipt_allocation_operation o on o.code = l.operation_code
+                 where l.receivable_code = ?
+                 order by l.operation_code, l.line_no
+                 for update
+                """;
+        BigDecimal net = BigDecimal.ZERO;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, receivableCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    if ("REVOKE".equals(rs.getString("action_code"))) {
+                        net = net.subtract(amount);
+                    } else {
+                        net = net.add(amount);
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            if (isMissingRelation(ex, "fin_receipt_allocation_operation")) {
+                return BigDecimal.ZERO;
+            }
+            throw ex;
+        }
+        return net;
+    }
+
+    private static BigDecimal lockedAmountSum(Connection connection, String sql, String receivableCode) throws SQLException {
+        BigDecimal used = BigDecimal.ZERO;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, receivableCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    used = used.add(rs.getBigDecimal(1));
+                }
+            }
+        }
+        return used;
+    }
+
+    private static boolean relationExists(Connection connection, String table) throws SQLException {
+        if (hasTable(connection, table) || hasTable(connection, table.toUpperCase())) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean hasTable(Connection connection, String table) throws SQLException {
+        try (ResultSet rs = connection.getMetaData().getTables(connection.getCatalog(), null, table, new String[]{"TABLE"})) {
+            return rs.next();
+        }
+    }
+
+    private static boolean isMissingRelation(SQLException ex, String relation) {
+        String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+        return message.contains(relation.toLowerCase())
+                && (message.contains("not found") || message.contains("doesn't exist") || message.contains("does not exist"));
     }
 
     private void insertReceipt(Connection connection, CustomerReceipt receipt, String key) throws SQLException {
@@ -461,12 +569,12 @@ public class JdbcFinanceRepository implements FinanceRepository {
         }
     }
 
-    private CustomerReceipt findReceiptByKey(Connection connection, String key) throws SQLException {
+    private CustomerReceipt findReceiptByKey(Connection connection, String key, boolean lock) throws SQLException {
         String sql = """
                 select code, customer_id, customer_name, `year_month`, amount, received_on, operator_name, created_at
                   from fin_customer_receipt
                  where idempotency_key = ?
-                """;
+                """ + (lock ? " for update" : "");
         String code;
         long customerId;
         String customerName;
