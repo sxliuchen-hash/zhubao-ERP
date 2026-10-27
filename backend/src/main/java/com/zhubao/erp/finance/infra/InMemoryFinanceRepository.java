@@ -176,6 +176,16 @@ public class InMemoryFinanceRepository implements FinanceRepository {
         }
     }
 
+    @Override
+    public Optional<CustomerReceipt> findReceiptByIdempotency(String idempotencyKey) {
+        String key = idempotencyKey == null ? "" : idempotencyKey.trim();
+        if (key.isEmpty()) {
+            return Optional.empty();
+        }
+        String code = receiptCodeByIdempotency.get(key);
+        return code == null ? Optional.empty() : Optional.ofNullable(receipts.get(code));
+    }
+
     private void assertOpenBalances(CustomerReceipt receipt) {
         Map<String, BigDecimal> requested = new LinkedHashMap<>();
         for (ReceiptAllocation allocation : receipt.allocations()) {

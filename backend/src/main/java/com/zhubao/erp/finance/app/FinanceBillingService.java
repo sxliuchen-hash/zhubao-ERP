@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -169,11 +170,20 @@ public class FinanceBillingService {
     public CustomerReceipt receive(RecordReceiptCommand command, String operator) {
         LocalMonth received = receivedMonth(command.receivedOn());
         BigDecimal amount = FinanceTexts.money(command.amount());
-        List<ReceiptAllocation> allocations = normalizeAllocations(command, amount);
         String idempotencyKey = command.idempotencyKey() == null ? "" : command.idempotencyKey().trim();
         if (idempotencyKey.length() > 80) {
             throw new BusinessException("收款幂等键不能超过 80 个字符");
         }
+        if (!idempotencyKey.isEmpty()) {
+            Optional<CustomerReceipt> stored = finance.findReceiptByIdempotency(idempotencyKey);
+            if (stored.isPresent()) {
+                if (!sameReceiptRequest(stored.get(), command, amount, received.day().toString())) {
+                    throw new BusinessException("同一幂等键的收款内容不一致");
+                }
+                return stored.get();
+            }
+        }
+        List<ReceiptAllocation> allocations = normalizeAllocations(command, amount);
         CustomerReceipt receipt = new CustomerReceipt(
                 FinanceTexts.code("FIN-RC", sequence),
                 command.customerId(),
@@ -487,6 +497,33 @@ public class FinanceBillingService {
                         mother.quantity(),
                         mother.weight()
                 ));
+    }
+
+    /** 回放只核对原请求内容，不再用已经下降的未收余额拒绝同一笔成功收款。 */
+    private boolean sameReceiptRequest(CustomerReceipt existing, RecordReceiptCommand command, BigDecimal amount, String receivedOn) {
+        if (existing.customerId() != command.customerId()
+                || existing.amount().compareTo(amount) != 0
+                || !existing.receivedOn().equals(receivedOn)
+                || !existing.customerName().equals(command.customerName().trim())) {
+            return false;
+        }
+        List<ReceiptAllocationCommand> requested = command.allocations() == null ? List.of() : command.allocations();
+        if (existing.allocations().size() != requested.size()) {
+            return false;
+        }
+        List<ReceiptAllocation> left = existing.allocations().stream()
+                .sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount))
+                .toList();
+        List<ReceiptAllocationCommand> right = requested.stream()
+                .sorted(Comparator.comparing(ReceiptAllocationCommand::receivableCode).thenComparing(ReceiptAllocationCommand::amount))
+                .toList();
+        for (int index = 0; index < left.size(); index++) {
+            if (!left.get(index).receivableCode().equals(right.get(index).receivableCode())
+                    || left.get(index).amount().compareTo(FinanceTexts.money(right.get(index).amount())) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private List<ReceiptAllocation> normalizeAllocations(RecordReceiptCommand command, BigDecimal amount) {

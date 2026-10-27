@@ -39,6 +39,9 @@ public interface FinanceRepository {
      */
     CustomerReceipt registerReceipt(CustomerReceipt receipt, String idempotencyKey);
 
+    /** 按幂等键读取已成功的收款。空键没有记录。余额校验之前必须先走这里。 */
+    Optional<CustomerReceipt> findReceiptByIdempotency(String idempotencyKey);
+
     List<CustomerReceipt> listReceipts();
 
     void saveWorkerRate(WorkerRate rate);

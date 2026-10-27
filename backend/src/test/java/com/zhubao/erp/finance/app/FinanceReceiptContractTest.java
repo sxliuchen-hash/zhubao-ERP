@@ -1,8 +1,11 @@
 package com.zhubao.erp.finance.app;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
+import com.zhubao.erp.finance.domain.FinanceCommands.ReceiptAllocationCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.RecordReceiptCommand;
+import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.FinanceReceiptProbe;
 import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.infra.InMemoryFinanceRepository;
@@ -38,6 +41,33 @@ class FinanceReceiptContractTest {
     void memoryAndJdbcReturnTheOriginalReceiptForTheSameKey() throws Exception {
         assertBehavior(new InMemoryFinanceRepository());
         assertBehavior(jdbcRepository(new AtomicReference<>("none")));
+    }
+
+    @Test
+    void allocatedReceiptReplaysBeforeCheckingTheReducedBalance() {
+        InMemoryFinanceRepository repository = new InMemoryFinanceRepository();
+        repository.saveReceivable(receivable("AR-FULL", "80.00"));
+        repository.saveReceivable(receivable("AR-PART", "80.00"));
+        FinanceBillingService service = service(repository);
+        RecordReceiptCommand full = allocated("80.00", "rc-full-80", "AR-FULL", "80.00");
+        CustomerReceipt first = service.receive(full, "财务");
+        CustomerReceipt replay = service.receive(full, "财务");
+        assertThat(replay.code()).isEqualTo(first.code());
+        assertThat(repository.listReceipts()).hasSize(1);
+
+        RecordReceiptCommand partial = allocated("30.00", "rc-part-30", "AR-PART", "30.00");
+        CustomerReceipt part = service.receive(partial, "财务");
+        service.receive(allocated("50.00", "rc-part-next", "AR-PART", "50.00"), "财务");
+        CustomerReceipt partReplay = service.receive(partial, "财务");
+        assertThat(partReplay.code()).isEqualTo(part.code());
+        assertThat(partReplay.allocations()).singleElement().extracting(item -> item.amount().toPlainString()).isEqualTo("30.00");
+        assertThat(repository.listReceipts()).hasSize(3);
+
+        assertThatThrownBy(() -> service.receive(allocated("70.00", "rc-full-80", "AR-FULL", "70.00"), "财务"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("内容不一致");
+        assertThat(repository.listReceipts()).hasSize(3);
+        assertThat(service.statement(1008L, "").outstandingAmount()).isEqualByComparingTo("0.00");
     }
 
     @Test
@@ -114,6 +144,17 @@ class FinanceReceiptContractTest {
                 throw new IllegalStateException("allocation save failed");
             }
         };
+    }
+
+    private ReceivableLine receivable(String code, String amount) {
+        return new ReceivableLine(code, 1008L, "恒信珠宝", "2026-10", "FIXTURE", "FIX-" + code, "MD-REPLAY", code,
+                "", BigDecimal.ONE, ChargeUnit.PIECE, BigDecimal.ONE, new BigDecimal(amount), "", "历史夹具", "财务",
+                "2026-10-01T00:00:00");
+    }
+
+    private RecordReceiptCommand allocated(String amount, String key, String receivableCode, String allocation) {
+        return new RecordReceiptCommand(1008L, "恒信珠宝", "2026-10-10", new BigDecimal(amount),
+                List.of(new ReceiptAllocationCommand(receivableCode, new BigDecimal(allocation))), key);
     }
 
     private RecordReceiptCommand command(String amount, String key) {

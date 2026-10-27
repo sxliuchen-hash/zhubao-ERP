@@ -305,6 +305,19 @@ public class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public Optional<CustomerReceipt> findReceiptByIdempotency(String idempotencyKey) {
+        String key = idempotencyKey == null ? "" : idempotencyKey.trim();
+        if (key.isEmpty()) {
+            return Optional.empty();
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            return Optional.ofNullable(findReceiptByKey(connection, key));
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取收款幂等记录", ex);
+        }
+    }
+
+    @Override
     public CustomerReceipt registerReceipt(CustomerReceipt receipt, String idempotencyKey) {
         String key = idempotencyKey == null ? "" : idempotencyKey.trim();
         try (Connection connection = dataSource.getConnection()) {
