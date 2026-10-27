@@ -25,7 +25,8 @@ function update(values: Record<string, string>, key: string, event: Event) {
 </template>
 
 <style scoped>
-.operation-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.operation-inputs { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; gap: 12px; margin: 12px 0; }
+@media (max-width: 900px) { .operation-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 label { display: grid; gap: 6px; min-width: 0; font-size: 13px; }
 label:has(textarea) { grid-column: 1 / -1; }
 input, select { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }

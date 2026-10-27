@@ -1844,7 +1844,8 @@ td.finance-amount,
 .desk-task-panel { display: grid; gap: 12px; }
 .desk-task-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 220px));
+  justify-content: start;
   gap: 8px 12px;
   align-items: end;
 }

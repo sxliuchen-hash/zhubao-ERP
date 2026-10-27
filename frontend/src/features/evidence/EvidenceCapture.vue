@@ -640,7 +640,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.evidence-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; align-items: end; margin: 1rem 0; }
+.evidence-filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); gap: .6rem 12px; align-items: end; justify-content: start; margin: 1rem 0; }
+@media (max-width: 900px) { .evidence-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .evidence-filters .field { min-width: 0; }
 .evidence-filters input, .evidence-filters select { width: 100%; }
 .evidence-photo-board { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }

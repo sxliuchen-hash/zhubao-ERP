@@ -80,7 +80,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; });
 .stock-ledger-panel { min-width: 0; }
 header, .ledger-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
 h2, p { margin: 0; }
-.ledger-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ledger-filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); gap: 10px 12px; justify-content: start; align-items: end; }
 .ledger-advanced { grid-column: 1 / -1; }
 label { display: grid; gap: 4px; }
 input, select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 40px; }
@@ -88,5 +88,5 @@ input, select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 4
 .ledger-entry header span { font-size: 12px; color: var(--muted); }
 .ledger-dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 button { min-height: 44px; }
-@media (max-width: 900px) { .ledger-dimensions { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .ledger-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ledger-dimensions { grid-template-columns: 1fr; } }
 </style>

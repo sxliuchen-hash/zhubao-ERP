@@ -286,7 +286,7 @@ async function handleChangePassword() {
 </template>
 
 <style scoped>
-.auth-password-strip { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.auth-password-strip { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; }
 form label { display: grid; gap: 6px; min-width: 0; }
 form input { box-sizing: border-box; width: 100%; min-width: 0; }
 .configuration-sections { display: flex; gap: 10px; flex-wrap: wrap; }

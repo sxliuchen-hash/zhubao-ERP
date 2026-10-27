@@ -131,11 +131,12 @@ function nextReceipt() {
 .bill-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bill-totals { display: grid; grid-template-columns: repeat(4, auto minmax(0, 1fr)); gap: 8px; }
 .bill-totals dd { margin: 0; }
-fieldset { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-fieldset > :is(legend, p, button) { grid-column: 1 / -1; }
+fieldset { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; gap: 12px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+fieldset > :is(legend, p) { grid-column: 1 / -1; }
+fieldset > button { width: auto; justify-self: start; }
 label { display: grid; gap: 4px; min-width: 0; }
 input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 40px; }
 .allocation-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; }
 .bill-table { max-width: 100%; overflow-x: auto; } table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
-@media (max-width: 900px) { .bill-totals { grid-template-columns: auto minmax(0, 1fr); } .allocation-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .allocation-row > button { grid-column: 1 / -1; } input, button { min-height: 44px; } input { font-size: 16px; } }
+@media (max-width: 900px) { fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bill-totals { grid-template-columns: auto minmax(0, 1fr); } .allocation-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .allocation-row > button { grid-column: 1 / -1; } input, button { min-height: 44px; } input { font-size: 16px; } }
 </style>

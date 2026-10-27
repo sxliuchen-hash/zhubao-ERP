@@ -502,7 +502,9 @@ async function confirmShip(retry = false) {
 
 <style scoped>
 .shipping-action-fields { border: 0; min-width: 0; padding: 0; margin: 12px 0; }
-.shipping-action-fields .intake-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+.shipping-action-fields .intake-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); gap: 8px 12px; align-items: end; justify-content: start; }
+.shipping-action-fields .intake-form > button { width: auto; justify-self: start; }
+@media (max-width: 900px) { .shipping-action-fields .intake-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .shipping-review { overflow-wrap: anywhere; }
 .shipping-action-fields button { min-height: 44px; }
 </style>

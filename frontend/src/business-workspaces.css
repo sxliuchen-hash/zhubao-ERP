@@ -76,7 +76,7 @@
 .finance-workspace > .section-block > label { flex: 1 1 160px; max-width: 320px; min-width: 0; }
 :is(.finance-workspace, .progress-board) label { display: grid; gap: 6px; min-width: 0; }
 :is(.finance-workspace, .progress-board) :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
-.finance-workspace .account-admin-grid { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); align-items: end; gap: 12px; }
+.finance-workspace .account-admin-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; align-items: end; gap: 12px; }
 :is(.finance-workspace, .progress-board) :is(.finance-actions, .finance-filters) label { flex: 1 1 160px; min-width: 0; }
 
 @container business-workspace (max-width: 1060px) {

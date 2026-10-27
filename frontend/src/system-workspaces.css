@@ -270,11 +270,12 @@
 
 .system-workspace-shell .hardware-desk :is(.gateway-form, .posting-form) {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 220px));
+  justify-content: start;
   gap: var(--space-3);
   align-items: end;
 }
-.system-workspace-shell .hardware-desk .gateway-form > button { grid-column: 1 / -1; }
+.system-workspace-shell .hardware-desk .gateway-form > button { width: auto; justify-self: start; }
 
 .system-workspace-shell .hardware-desk .gateway-form label {
   display: grid;
@@ -368,7 +369,8 @@
 /* 表单在窄面板内按实际可用宽度换行，复选框保持原生紧凑尺寸。 */
 .system-workspace-shell .security-context-panel .auth-password-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 220px));
+  justify-content: start;
   gap: var(--space-3);
   align-items: end;
 }
@@ -618,7 +620,8 @@
 
 .system-workspace-shell .order-maintenance :is(.maintenance-filters, .maintenance-lookup, .maintenance-fields) {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 220px));
+  justify-content: start;
   gap: var(--space-2);
   align-items: end;
 }
@@ -636,10 +639,12 @@
 }
 
 .system-workspace-shell .order-maintenance .maintenance-filters > .secondary-button,
-.system-workspace-shell .order-maintenance .maintenance-lookup > .secondary-button,
+.system-workspace-shell .order-maintenance .maintenance-lookup > .secondary-button {
+  width: auto;
+  justify-self: start;
+}
 .system-workspace-shell .order-maintenance label:has(textarea) {
   grid-column: 1 / -1;
-  justify-self: start;
 }
 
 .system-workspace-shell .order-maintenance .maintenance-card {
@@ -695,5 +700,13 @@
   .system-workspace-shell :is(.document-case-grid, .operations-focus-grid, .backup-status-list dl, .ops-alert-list dl, .restore-drill-records dl) {
     grid-template-columns: 72px minmax(0, 1fr);
     gap: var(--space-2);
+  }
+}
+
+@media (max-width: 900px) {
+  .system-workspace-shell .hardware-desk :is(.gateway-form, .posting-form),
+  .system-workspace-shell .order-maintenance :is(.maintenance-filters, .maintenance-lookup, .maintenance-fields),
+  .system-workspace-shell .security-context-panel .auth-password-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

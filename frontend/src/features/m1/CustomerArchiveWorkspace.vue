@@ -506,10 +506,10 @@ function money(value: number) {
 .customer-fact:not(.is-current) { display: none; }
 .archive-toolbar,
 .archive-form { display: grid; gap: 10px; }
-.archive-form { grid-template-columns: 1fr 1fr; align-items: end; }
+.archive-form { grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); align-items: end; justify-content: start; }
 .archive-form > label:has(textarea),
-.archive-form > .archive-check,
-.archive-form > button { grid-column: 1 / -1; }
+.archive-form > .archive-check { grid-column: 1 / -1; }
+.archive-form > button { width: auto; justify-self: start; }
 .archive-form label,
 .archive-toolbar label { display: grid; gap: 4px; }
 .archive-form input,
@@ -534,6 +534,7 @@ function money(value: number) {
 .archive-note { color: var(--muted); margin: 0; }
 .archive-form textarea { min-height: 72px; }
 @media (max-width: 900px) {
+  .archive-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .archive-page > header p { display: none; }
   .archive-layout { grid-template-columns: minmax(0, 1fr); }
   .customer-back { display: inline-flex; }

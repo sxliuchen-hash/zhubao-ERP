@@ -78,7 +78,8 @@
 }
 .register-preview-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, .55fr);
+  grid-template-columns: repeat(auto-fill, minmax(180px, 240px));
+  justify-content: start;
   align-items: end;
   gap: 14px;
 }
@@ -165,7 +166,7 @@
   border-radius: 8px;
   overflow-wrap: anywhere;
 }
-.register-correction-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.register-correction-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; gap: 12px; }
 .register-correction-panel > div { grid-column: 1 / -1; display: grid; gap: 4px; overflow-wrap: anywhere; }
 .register-correction-panel button { justify-self: start; }
 .register-field-chips { display: flex; flex-wrap: wrap; gap: 6px; }
