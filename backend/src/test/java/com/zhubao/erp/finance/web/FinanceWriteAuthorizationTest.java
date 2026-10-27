@@ -50,13 +50,18 @@ class FinanceWriteAuthorizationTest {
     @Test
     void companyFinanceCanGeneratePayrollAndMaintainRates() {
         HttpHeaders all = role("ALL", "");
+        int rates = finance.listWorkerRates().size();
+        int payroll = finance.listPayrollLines().size();
         ResponseEntity<String> saved = post("/worker-rates", Map.of(
                 "processName", "雕刻", "unit", "JOB", "unitPrice", "17", "effectiveFrom", "2040-01", "effectiveTo", "2040-01"
         ), all);
-        assertThat(saved.getStatusCode().value()).as(saved.getBody()).isEqualTo(200);
+        assertThat(saved.getStatusCode().value()).as(saved.getBody()).isEqualTo(400);
+        assertThat(saved.getBody()).contains("停止");
         ResponseEntity<String> generated = post("/payroll-runs", Map.of("yearMonth", "2040-01"), all);
-        assertThat(generated.getStatusCode().value()).as(generated.getBody()).isEqualTo(200);
-        assertThat(generated.getBody()).contains("2040-01", "lines");
+        assertThat(generated.getStatusCode().value()).as(generated.getBody()).isEqualTo(400);
+        assertThat(generated.getBody()).contains("停止");
+        assertThat(finance.listWorkerRates()).hasSize(rates);
+        assertThat(finance.listPayrollLines()).hasSize(payroll);
     }
 
     @Test
@@ -91,9 +96,11 @@ class FinanceWriteAuthorizationTest {
         assertThat(snapshot()).isEqualTo(before);
 
         ResponseEntity<String> agreement = post("/price-agreements", agreement(allowed, "授权财务客户", "2042-01"), scoped);
-        assertThat(agreement.getStatusCode().value()).as(agreement.getBody()).isEqualTo(200);
+        assertThat(agreement.getStatusCode().value()).as(agreement.getBody()).isEqualTo(400);
+        assertThat(agreement.getBody()).contains("停止");
         ResponseEntity<String> generated = post("/billing-runs", Map.of("customerId", allowed, "yearMonth", "2041-01"), scoped);
-        assertThat(generated.getStatusCode().value()).as(generated.getBody()).isEqualTo(200);
+        assertThat(generated.getStatusCode().value()).as(generated.getBody()).isEqualTo(400);
+        assertThat(generated.getBody()).contains("停止");
         ResponseEntity<String> received = post("/receipts", receipt(allowed, "授权财务客户"), scoped);
         assertThat(received.getStatusCode().value()).as(received.getBody()).isEqualTo(200);
         ResponseEntity<String> reversed = post("/receivable-reversals", Map.of(
@@ -115,7 +122,9 @@ class FinanceWriteAuthorizationTest {
         assertDenied(post("/price-agreements", agreement(92605L, "NAME-AUTH-CUSTOMER", "2042-02"), scopedByName));
         assertThat(snapshot()).isEqualTo(before);
         ResponseEntity<String> allowed = post("/price-agreements", agreement(92603L, "NAME-AUTH-CUSTOMER", "2042-02"), scopedByName);
-        assertThat(allowed.getStatusCode().value()).as(allowed.getBody()).isEqualTo(200);
+        assertThat(allowed.getStatusCode().value()).as(allowed.getBody()).isEqualTo(400);
+        assertThat(allowed.getBody()).contains("停止");
+        assertThat(snapshot()).isEqualTo(before);
     }
 
     private static Stream<Object[]> companyCommands() {

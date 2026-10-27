@@ -1,5 +1,11 @@
 package com.zhubao.erp.finance.web;
 
+import com.zhubao.erp.finance.domain.ChargeUnit;
+import com.zhubao.erp.finance.domain.FinanceRepository;
+import com.zhubao.erp.finance.domain.PriceAgreement;
+import com.zhubao.erp.finance.domain.PriceLine;
+import com.zhubao.erp.finance.domain.PricingMode;
+import com.zhubao.erp.finance.domain.ReceivableLine;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,6 +16,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +27,9 @@ class FinanceReadAuthorizationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
+
+    @Autowired
+    private FinanceRepository finance;
 
     @Test
     void rejectsAnonymousOperatorAndOutOfScopeFinanceReads() {
@@ -43,10 +53,15 @@ class FinanceReadAuthorizationTest {
         assertThat(operator.getBody()).contains("无权执行");
 
         HttpHeaders financeAll = role("FINANCE_STATISTICIAN", "ALL", "");
+        seedCustomer(91004L, "恒信珠宝");
+        seedCustomer(91005L, "瑞禾珠宝");
+        int agreements = finance.listAgreements().size();
         ResponseEntity<String> saved = exchange("/api/finance/price-agreements", HttpMethod.POST, agreement(91004L, "恒信珠宝"), financeAll);
-        assertThat(saved.getStatusCode().value() + " " + saved.getBody()).startsWith("200");
+        assertThat(saved.getStatusCode().value()).isEqualTo(400);
+        assertThat(saved.getBody()).contains("停止");
         ResponseEntity<String> other = exchange("/api/finance/price-agreements", HttpMethod.POST, agreement(91005L, "瑞禾珠宝"), financeAll);
-        assertThat(other.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(other.getStatusCode().value()).isEqualTo(400);
+        assertThat(finance.listAgreements()).hasSize(agreements);
 
         ResponseEntity<String> statement = exchange("/api/finance/statements?customerId=91004", HttpMethod.GET, null, financeAll);
         assertThat(statement.getStatusCode().is2xxSuccessful()).isTrue();
@@ -108,6 +123,14 @@ class FinanceReadAuthorizationTest {
             headers.set("X-Zhubao-Customer-Scope", customers);
         }
         return headers;
+    }
+
+    private void seedCustomer(long customerId, String customerName) {
+        finance.saveAgreement(new PriceAgreement("AGR-READ-" + customerId, customerId, customerName, PricingMode.PIECE,
+                "2026-01", "2026-12", List.of(new PriceLine("", ChargeUnit.PIECE, BigDecimal.ONE)), "财务", "2026-01-01T00:00:00"));
+        finance.saveReceivable(new ReceivableLine("AR-READ-" + customerId, customerId, customerName, "2026-10", "FIXTURE",
+                "FIX-READ-" + customerId, "MD-READ-" + customerId, "", "", BigDecimal.ONE, ChargeUnit.PIECE, BigDecimal.ONE,
+                new BigDecimal("80.00"), "", "历史夹具", "财务", "2026-10-01T00:00:00"));
     }
 
     private Map<String, Object> agreement(long customerId, String customerName) {

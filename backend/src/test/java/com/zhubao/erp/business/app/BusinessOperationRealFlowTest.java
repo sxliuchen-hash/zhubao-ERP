@@ -259,8 +259,8 @@ class BusinessOperationRealFlowTest {
         }
         assertThat(lossApproval.lossWeight()).isEqualByComparingTo(scenario.expectedLossApproval().lossWeight());
         assertThat(lossApproval.excessLossWeight()).isEqualByComparingTo(scenario.expectedLossApproval().excessLossWeight());
-        assertThat(lossApproval.trialWage()).isEqualByComparingTo(scenario.expectedLossApproval().trialWage());
-        assertThat(lossApproval.formalPayroll()).isEqualTo(scenario.expectedLossApproval().formalPayroll());
+        assertThat(lossApproval.trialWage()).isNull();
+        assertThat(lossApproval.formalPayroll()).isFalse();
         assertThat(repository.findAllLedgers()).hasSize(scenario.expectedLedgerTypes().size());
     }
 

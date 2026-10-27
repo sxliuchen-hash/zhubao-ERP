@@ -686,7 +686,9 @@ MySQL 持久化表：
 
 同一 `requestId` 重复提交返回已经入库的那一张，编号以库里的真实 `id` 为准。内容变化或换账号按「同一请求的内容不一致」「该请求不能跨账号重放」拒绝。
 
-`POST /api/business/order-changes/{id}/applications` 生效时只认草稿在财务确认前固定的 `expectedVersion`。调用方另传一个更新的版本号会被拒绝，不能绕过重新确认。财务确认、拒绝分别是 `finance-confirmations`、`finance-rejections`。金额不变时 `amountUnchanged=true`，不写差额。
+`POST /api/business/order-changes/{id}/finance-submissions` 把草稿送成 `PENDING_REVIEW`，备注为“费用交货后确定”，不写单价或工费。送审不是审核通过。`POST /api/business/order-changes/{id}/reviews` 由其他具备 `ORDER_CHANGE_REVIEW` 的人审核：通过为 `BUSINESS_APPROVED`，拒绝为 `REJECTED`。申请人不能审核自己的申请。车间主任和有顶岗的业务管理可以审核，收货员不能。历史 `FINANCE_CONFIRMED` 仍可生效，不会被改写成新的审核通过。`finance-confirmations` 不再确认单价。`finance-rejections` 只处理旧的待财务确认。
+
+`POST /api/business/order-changes/{id}/applications` 只接受 `BUSINESS_APPROVED`、历史 `FINANCE_CONFIRMED` 或已生效回放。生效时仍核对基准 `expectedVersion`。调用方另传一个更新的版本号会被拒绝。生效不写应收、工资或应付。
 
 已完成工序的重做会生成 `RW-` 轮次号。岗位交付和质检按这个轮次号识别；交接和台账单据号用轮次，库存维度仍是原母单或子单。原交付保留，同一道工序可以在新轮次再报一次。
 
@@ -2385,17 +2387,23 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `GET /api/finance/price-agreements` | `ApiResponse<List<PriceAgreement>>` |
-| `POST /api/finance/price-agreements` | `ApiResponse<PriceAgreement>` |
-| `POST /api/finance/billing-runs` | `ApiResponse<BillingRunResult>` |
+| `POST /api/finance/price-agreements` | 已停止。返回业务错误，不写协议 |
+| `POST /api/finance/billing-runs` | 已停止。返回业务错误，不生成账单 |
 | `GET /api/finance/unpriced` | `ApiResponse<List<UnpricedItem>>` |
 | `POST /api/finance/receivable-reversals` | `ApiResponse<ReceivableLine>` |
-| `POST /api/finance/receipts` | `ApiResponse<CustomerReceipt>` |
+| `POST /api/finance/receipts` | `ApiResponse<CustomerReceipt>`。相同幂等键先回放原收款，再对新请求校验未收余额 |
+| `POST /api/finance/receipts/{code}/allocation-operations` | `ApiResponse<ReceiptAllocationOperation>`。对已有收款追加或撤销核销，不新开收款。请求体为 `requestId`、`action`（`ALLOCATE`/`REVOKE`）、`reason`、`lines` |
+| `GET /api/finance/order-settlements/context` | `ApiResponse<SettlementContextView>`。交齐前只有阻断原因，没有金额入口。没有工资权限时不返回作业人员和员工净额 |
+| `GET /api/finance/order-settlements/{code}` | `ApiResponse<SettlementView>` |
+| `POST /api/finance/order-settlements/drafts` | `ApiResponse<OrderSettlement>`。草稿不入账 |
+| `POST /api/finance/order-settlements/confirmations` | `ApiResponse<OrderSettlement>`。确认时应收、工资、应付和历史接续同一事务提交 |
+| `POST /api/finance/order-settlements/adjustments` | `ApiResponse<OrderSettlement>`。已确认后再记差额，不覆盖原账 |
 | `GET /api/finance/statements` | `ApiResponse<CustomerStatement>` |
 | `GET /api/finance/worker-rates` | `ApiResponse<List<WorkerRate>>` |
-| `POST /api/finance/worker-rates` | `ApiResponse<WorkerRate>` |
+| `POST /api/finance/worker-rates` | 已停止。返回业务错误，不写工价 |
 | `GET /api/finance/payroll-lines` | `ApiResponse<List<PayrollLine>>` |
-| `POST /api/finance/payroll-runs` | `ApiResponse<PayrollGenerateResult>` |
-| `POST /api/finance/payroll-runs/confirmations` | `ApiResponse<PayrollRun>` |
+| `POST /api/finance/payroll-runs` | 已停止。返回业务错误，不重算工资 |
+| `POST /api/finance/payroll-runs/confirmations` | 已停止。返回业务错误，不确认整月工资 |
 | `GET /api/finance/consumable-items` | `ApiResponse<List<ConsumableStockView>>` |
 | `GET /api/finance/consumable-movements` | `ApiResponse<List<ConsumableMovement>>` |
 | `POST /api/finance/consumable-items` | `ApiResponse<com.zhubao.erp.finance.domain.ConsumableItem>` |
