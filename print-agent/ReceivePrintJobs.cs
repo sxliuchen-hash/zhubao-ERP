@@ -48,6 +48,7 @@ namespace Zhubao.PrintReceiver
     {
         public int Status;
         public string Body;
+        public byte[] Bytes;
     }
 
     sealed class BuiltLabel
@@ -58,6 +59,8 @@ namespace Zhubao.PrintReceiver
 
     static class Program
     {
+        const string AgentRelease = "20261027.4";
+
         [STAThread]
         static int Main(string[] args)
         {
@@ -127,7 +130,8 @@ namespace Zhubao.PrintReceiver
                 ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
             }
 
-            Console.WriteLine("打印接收已启动：" + agent.StationId + "，队列 " + agent.Queues.Count + " 条");
+            Console.WriteLine("打印接收 " + AgentRelease + "：" + agent.StationId + "，队列 " + agent.Queues.Count + " 条");
+            if (TryUpdate(agent)) return 0;
             var installed = new List<string>();
             foreach (string printer in System.Drawing.Printing.PrinterSettings.InstalledPrinters)
             {
@@ -391,6 +395,80 @@ namespace Zhubao.PrintReceiver
             return agent;
         }
 
+        internal static bool NeedsUpdate(string localRelease, string remoteRelease)
+        {
+            return !string.IsNullOrWhiteSpace(remoteRelease) && !string.Equals(localRelease, remoteRelease.Trim(), StringComparison.Ordinal);
+        }
+
+        static bool TryUpdate(AgentConfig agent)
+        {
+            try
+            {
+                HttpResult info = Get(agent, "/downloads/print-agent.json");
+                if (info.Status != 200) return false;
+                var root = ParseObject(info.Body);
+                string remote = root == null ? "" : Text(root, "version").Trim();
+                string file = root == null ? "" : Text(root, "file").Trim();
+                string expected = root == null ? "" : Text(root, "sha256").Trim().ToLowerInvariant();
+                if (!NeedsUpdate(AgentRelease, remote)) return false;
+                if (file.Length == 0 || file.IndexOf('/') >= 0 || file.IndexOf('\\') >= 0) file = "ZhubaoPrintReceiver.exe";
+                Console.WriteLine("发现打印程序 " + remote + "，正在从服务器下载。");
+                HttpResult binary = Get(agent, "/downloads/" + Uri.EscapeDataString(file));
+                if (binary.Status != 200 || binary.Bytes == null || binary.Bytes.Length < 1000)
+                    throw new InvalidOperationException("没有下载到新的打印程序");
+                string actual = Sha256(binary.Bytes);
+                if (expected.Length > 0 && !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("下载的打印程序校验不一致");
+                string dir = ExeDirectory();
+                string current = Assembly.GetExecutingAssembly().Location;
+                string next = Path.Combine(dir, "ZhubaoPrintReceiver.next.exe");
+                string bat = Path.Combine(dir, "update-print-receiver.bat");
+                File.WriteAllBytes(next, binary.Bytes);
+                File.WriteAllText(bat, "@echo off\r\ntimeout /t 2 /nobreak >nul\r\nmove /y \"" + next + "\" \"" + current + "\"\r\nstart \"\" \"" + current + "\"\r\n", Encoding.Default);
+                Process.Start(new ProcessStartInfo { FileName = bat, WorkingDirectory = dir, UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden });
+                Console.WriteLine("已下载新程序，即将替换并重新打开。配置文件保持不变。");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("自动更新没有完成，继续使用当前程序：" + ex.Message);
+                return false;
+            }
+        }
+
+        static string Sha256(byte[] bytes)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                byte[] hash = sha.ComputeHash(bytes);
+                var text = new StringBuilder(hash.Length * 2);
+                foreach (byte item in hash) text.Append(item.ToString("x2"));
+                return text.ToString();
+            }
+        }
+
+        static HttpResult Get(AgentConfig agent, string path)
+        {
+            var request = (HttpWebRequest)WebRequest.Create(agent.BaseUrl + path);
+            request.Method = "GET";
+            request.Timeout = 20000;
+            request.ReadWriteTimeout = 20000;
+            request.AllowAutoRedirect = false;
+            request.ProtocolVersion = HttpVersion.Version10;
+            request.KeepAlive = false;
+            try
+            {
+                using (var response = (HttpWebResponse)request.GetResponse())
+                    return ReadResponse(response, true);
+            }
+            catch (WebException ex)
+            {
+                var response = ex.Response as HttpWebResponse;
+                if (response == null) throw;
+                using (response) return ReadResponse(response, true);
+            }
+        }
+
         static string Value(Dictionary<string, string> values, string key)
         {
             string found;
@@ -462,23 +540,34 @@ namespace Zhubao.PrintReceiver
             try
             {
                 using (var response = (HttpWebResponse)request.GetResponse())
-                    return ReadResponse(response);
+                    return ReadResponse(response, false);
             }
             catch (WebException ex)
             {
                 var response = ex.Response as HttpWebResponse;
                 if (response == null) throw;
-                using (response) return ReadResponse(response);
+                using (response) return ReadResponse(response, false);
             }
         }
 
-        static HttpResult ReadResponse(HttpWebResponse response)
+        static HttpResult ReadResponse(HttpWebResponse response, bool keepBytes)
         {
             var result = new HttpResult();
             result.Status = (int)response.StatusCode;
             Stream stream = response.GetResponseStream();
-            if (stream == null) result.Body = "";
-            else using (var reader = new StreamReader(stream, Encoding.UTF8)) result.Body = reader.ReadToEnd();
+            if (stream == null)
+            {
+                result.Body = "";
+                result.Bytes = new byte[0];
+                return result;
+            }
+            using (var memory = new MemoryStream())
+            {
+                stream.CopyTo(memory);
+                result.Bytes = memory.ToArray();
+            }
+            result.Body = Encoding.UTF8.GetString(result.Bytes ?? new byte[0]);
+            if (!keepBytes) result.Bytes = null;
             return result;
         }
 
@@ -550,9 +639,16 @@ namespace Zhubao.PrintReceiver
             spec.HeightMm = height;
             spec.Dpi = dpi;
             spec.TemplateCode = Text(snapshot, "templateCode");
+            spec.BrandTitle = Text(snapshot, "brandTitle");
             object layout;
             var layoutMap = snapshot.TryGetValue("layout", out layout) ? layout as Dictionary<string, object> : null;
             spec.LayoutMode = layoutMap == null ? "" : Text(layoutMap, "mode");
+            spec.QrWidthMm = layoutMap == null ? 0 : DecimalOf(layoutMap, "qrWidthMm");
+            spec.CodeFontPt = layoutMap == null ? 0 : DecimalOf(layoutMap, "codeFontPt");
+            spec.FieldFontPt = layoutMap == null ? 0 : DecimalOf(layoutMap, "fieldFontPt");
+            spec.EmphasisFontPt = layoutMap == null ? 0 : DecimalOf(layoutMap, "emphasisFontPt");
+            spec.TitleFontPt = layoutMap == null ? 0 : DecimalOf(layoutMap, "titleFontPt");
+            spec.FooterFontPt = layoutMap == null ? 0 : DecimalOf(layoutMap, "footerFontPt");
             spec.Lines = lines.ToArray();
             spec.Fields = fieldSpecs.ToArray();
             spec.FooterLeft = Text(snapshot, "footerLeft");
@@ -597,6 +693,8 @@ namespace Zhubao.PrintReceiver
             if (built.Spec.StorageSources == null || built.Spec.StorageSources.Length != 1
                 || built.Spec.StorageSources[0].Marks.Length != 2 || built.Spec.StorageSources[0].Instruction != "避光")
                 throw new InvalidOperationException("保存标识未被读取");
+            if (!Program.NeedsUpdate("20261027.4", "20261027.5") || Program.NeedsUpdate("20261027.4", "20261027.4") || Program.NeedsUpdate("20261027.4", " "))
+                throw new InvalidOperationException("打印程序更新判断错误");
             BuiltLabel legacy = ToLabel("{\"widthMm\":60,\"heightMm\":40,\"dpi\":203,\"primaryCode\":\"MD-1\",\"copies\":1}", 1);
             if (legacy.Spec.WidthMm != 40 || legacy.Spec.HeightMm != 30)
                 throw new InvalidOperationException("旧尺寸没有改成 40×30");
@@ -632,6 +730,14 @@ namespace Zhubao.PrintReceiver
             var serializer = new JavaScriptSerializer();
             serializer.MaxJsonLength = 10 * 1024 * 1024;
             return serializer.DeserializeObject(json) as Dictionary<string, object>;
+        }
+
+        static double DecimalOf(Dictionary<string, object> map, string key)
+        {
+            object value;
+            if (map == null || !map.TryGetValue(key, out value) || value == null) return 0;
+            try { return Convert.ToDouble(value); }
+            catch (Exception) { return 0; }
         }
 
         static string Text(Dictionary<string, object> map, string key)

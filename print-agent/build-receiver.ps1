@@ -10,4 +10,13 @@ $out = Join-Path $root 'ZhubaoPrintReceiver.exe'
     /out:$out (Join-Path $root 'LabelDrawing.cs') (Join-Path $root 'ReceivePrintJobs.cs')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $out -SelfTest
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$download = Join-Path $root '..\frontend\public\downloads'
+New-Item -ItemType Directory -Force -Path $download | Out-Null
+Copy-Item -LiteralPath $out -Destination (Join-Path $download 'ZhubaoPrintReceiver.exe') -Force
+$hash = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLower()
+$release = '20261027.4'
+$jsonPath = Join-Path $download 'print-agent.json'
+$json = "{`n  `"version`": `"$release`",`n  `"file`": `"ZhubaoPrintReceiver.exe`",`n  `"sha256`": `"$hash`"`n}`n"
+[System.IO.File]::WriteAllText($jsonPath, $json, (New-Object System.Text.UTF8Encoding $false))
+Write-Host "已放入网页下载 $release $hash"
