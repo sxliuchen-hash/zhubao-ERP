@@ -71,6 +71,9 @@ public interface BusinessDocumentRepository {
     /** 在当前工作单元里保存拆分决定，不单独提交。 */
     void saveMotherSplitState(MotherSplitState state, WorkSession session);
 
+    /** 在当前工作单元里删除整单生产决定，不单独提交。决定已不是整单生产时拒绝。 */
+    void deleteMotherSplitState(String motherOrderCode, WorkSession session);
+
     Optional<MotherSplitState> findMotherSplitState(String motherOrderCode);
 
     /** 在当前工作单元连接上读取拆分决定，能看见本事务尚未提交的写入。 */

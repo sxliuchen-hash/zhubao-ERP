@@ -3,11 +3,12 @@ import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MotherSplitPanel from './MotherSplitPanel.vue';
 import { fetchMotherLabel, fetchWorkOrderLabel } from '../../services/labelApi';
-import { fetchMotherSplit, keepMotherOrder, splitMotherOrder } from '../../services/motherSplitApi';
+import { fetchMotherSplit, keepMotherOrder, revokeMotherKeep, splitMotherOrder } from '../../services/motherSplitApi';
 
 vi.mock('../../services/motherSplitApi', () => ({
   fetchMotherSplit: vi.fn(),
   keepMotherOrder: vi.fn(),
+  revokeMotherKeep: vi.fn(),
   splitMotherOrder: vi.fn(),
 }));
 
@@ -62,6 +63,7 @@ describe('MotherSplitPanel', () => {
   beforeEach(() => {
     vi.mocked(fetchMotherSplit).mockResolvedValue(undecided);
     vi.mocked(keepMotherOrder).mockReset();
+    vi.mocked(revokeMotherKeep).mockReset();
     vi.mocked(splitMotherOrder).mockReset();
     vi.mocked(fetchMotherLabel).mockReset();
     vi.mocked(fetchWorkOrderLabel).mockReset();
@@ -162,6 +164,26 @@ describe('MotherSplitPanel', () => {
     expect(wrapper.text()).toContain('内壁刻字');
     expect(wrapper.text()).toContain('2026-10-20');
     expect(wrapper.text()).toContain('JG|mother|MD-1');
+    expect(wrapper.text()).toContain('撤销整单生产');
+  });
+
+  it('确认后撤销整单生产并恢复拆分入口，取消时不提交', async () => {
+    vi.mocked(fetchMotherSplit).mockResolvedValue({ ...undecided, decision: 'KEEP', decisionLabel: '不拆', verificationCode: 'A3K7' });
+    vi.mocked(fetchMotherLabel).mockResolvedValue(sticker('MD-1', 'A3K7', 'MOTHER'));
+    vi.mocked(revokeMotherKeep).mockResolvedValue(undecided);
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const wrapper = mount(MotherSplitPanel, { props: { motherOrderCode: 'MD-1' } });
+    await flushPromises();
+    const button = wrapper.findAll('button').find((item) => item.text() === '撤销整单生产')!;
+    await button.trigger('click');
+    expect(revokeMotherKeep).not.toHaveBeenCalled();
+    await button.trigger('click');
+    await flushPromises();
+    expect(revokeMotherKeep).toHaveBeenCalledWith('MD-1', expect.stringMatching(/^revoke-[A-Za-z0-9._:-]{3,59}$/));
+    expect(wrapper.text()).toContain('已撤销整单生产，可以重新拆分');
+    expect(wrapper.find('.split-form').exists()).toBe(true);
+    confirm.mockRestore();
+    wrapper.unmount();
   });
 
   it('数量超过剩余时不提交拆分', async () => {

@@ -8,6 +8,7 @@ import { fetchMotherLabel, fetchWorkOrderLabel, type LabelPayload } from '../../
 import {
   fetchMotherSplit,
   keepMotherOrder,
+  revokeMotherKeep,
   splitMotherOrder,
   type MotherOrderSplitView,
 } from '../../services/motherSplitApi';
@@ -25,7 +26,7 @@ const canPrint = computed(() => !session.value?.effectivePermissions || session.
 const choice = ref('');
 const stickerError = ref('');
 const success = ref('');
-type Arrangement = { key: string; kind: 'keep' | 'split'; code: string; requestId: string; lines?: import('../../services/motherSplitApi').SplitLineRequest[] };
+type Arrangement = { key: string; kind: 'keep' | 'split' | 'revoke'; code: string; requestId: string; lines?: import('../../services/motherSplitApi').SplitLineRequest[] };
 const pending = ref<Arrangement | null>(null);
 const locked = computed(() => submitting.value || Boolean(pending.value));
 let generation = 0;
@@ -48,6 +49,7 @@ const canSplit = computed(() => {
   if (!canArrange.value || !view.value || view.value.decision === 'KEEP') return false;
   return Number(view.value.remainingQuantity) > 0 && Number(view.value.remainingWeight) > 0;
 });
+const canRevoke = computed(() => canArrange.value && view.value?.decision === 'KEEP' && view.value.children.length === 0);
 
 watch(() => props.motherOrderCode, () => {
   void load();
@@ -172,11 +174,16 @@ async function executeArrangement(attempt: Arrangement) {
   const seen = generation;
   submitting.value = true; pending.value = attempt; formError.value = '';
   try {
-    const current = attempt.kind === 'keep' ? await keepMotherOrder(attempt.code, attempt.requestId) : await splitMotherOrder(attempt.code, attempt.lines!, attempt.requestId);
+    const current = attempt.kind === 'keep'
+      ? await keepMotherOrder(attempt.code, attempt.requestId)
+      : attempt.kind === 'revoke'
+        ? await revokeMotherKeep(attempt.code, attempt.requestId)
+        : await splitMotherOrder(attempt.code, attempt.lines!, attempt.requestId);
     if (seen !== generation || attempt.code !== props.motherOrderCode) return;
     pending.value = null; clearRequestId(attempt.key); view.value = current; emit('arranged', current);
-    success.value = attempt.kind === 'keep' ? '整单生产安排已保存' : '子单已生成，剩余来源可稍后继续分配';
-    if (attempt.kind === 'split') lines.value = [draftLine(), draftLine()];
+    success.value = attempt.kind === 'keep' ? '整单生产安排已保存' : attempt.kind === 'revoke' ? '已撤销整单生产，可以重新拆分' : '子单已生成，剩余来源可稍后继续分配';
+    if (attempt.kind === 'revoke') choice.value = '';
+    if (attempt.kind === 'split' || attempt.kind === 'revoke') lines.value = [draftLine(), draftLine()];
     void loadStickers(current);
   } catch (error) {
     if (seen !== generation) return;
@@ -187,6 +194,11 @@ async function executeArrangement(attempt: Arrangement) {
 async function keepWhole() {
   if (locked.value || !canKeep.value) return;
   await executeArrangement({ key: `keep|${props.motherOrderCode}`, kind: 'keep', code: props.motherOrderCode, requestId: ensureRequestId(`keep|${props.motherOrderCode}`, 'keep') });
+}
+async function revokeKeep() {
+  if (locked.value || !canRevoke.value) return;
+  if (!globalThis.confirm('撤销整单生产后，这张母单恢复为待安排，可以再拆成子单。已出的整单贴纸请作废。继续吗？')) return;
+  await executeArrangement({ key: `revoke|${props.motherOrderCode}`, kind: 'revoke', code: props.motherOrderCode, requestId: ensureRequestId(`revoke|${props.motherOrderCode}`, 'revoke') });
 }
 async function splitMany() {
   if (locked.value || !canSplit.value || !view.value) return;
@@ -272,7 +284,9 @@ function scaleStyle(payload: LabelPayload) {
       <button v-if="canKeep && !intakeMode" class="primary-button" type="button" :disabled="submitting" @click="keepWhole">
         不拆，预览流转贴纸
       </button>
-      <p v-if="canKeep" class="split-summary">确认不拆后将按整张母单生产，不能再拆成子单；预览后点击“打印这张”出纸。</p>
+      <p v-if="canKeep" class="split-summary">确认不拆后将按整张母单生产。尚未开工时可以撤销并重新拆分；预览后点击“打印这张”出纸。</p>
+      <p v-if="view.decision === 'KEEP'" class="split-summary">已按整张母单安排生产。尚未报工、质检、发货或记账时可以撤销，恢复后再拆成子单。已出的整单贴纸作废。</p>
+      <button v-if="canRevoke" class="secondary-button" type="button" :disabled="locked" @click="revokeKeep">撤销整单生产</button>
 
       <fieldset v-if="canSplit && (!intakeMode || choice === 'split')" class="split-form" :disabled="locked">
         <h4>按来源分配拆成多张</h4>

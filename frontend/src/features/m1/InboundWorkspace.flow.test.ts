@@ -30,6 +30,7 @@ vi.mock('../../services/mobileIntakeApi', () => ({
 vi.mock('../../services/motherSplitApi', () => ({
   fetchMotherSplit: vi.fn(),
   keepMotherOrder: vi.fn(),
+  revokeMotherKeep: vi.fn(),
   splitMotherOrder: vi.fn(),
 }));
 

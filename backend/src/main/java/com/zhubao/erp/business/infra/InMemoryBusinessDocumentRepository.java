@@ -277,6 +277,21 @@ public class InMemoryBusinessDocumentRepository implements BusinessDocumentRepos
     }
 
     @Override
+    public synchronized void deleteMotherSplitState(String motherOrderCode, WorkSession session) {
+        requireSession(session);
+        MotherSplitState previous = splitStates.get(motherOrderCode);
+        if (previous == null || !MotherSplitState.KEEP.equals(previous.decision())) {
+            throw new BusinessException("这张母单还没有选择整单生产，不能撤销");
+        }
+        splitStates.remove(motherOrderCode);
+        session.onRollback(() -> {
+            synchronized (this) {
+                splitStates.put(motherOrderCode, previous);
+            }
+        });
+    }
+
+    @Override
     public Optional<MotherSplitState> findMotherSplitState(String motherOrderCode) {
         return Optional.ofNullable(splitStates.get(motherOrderCode));
     }

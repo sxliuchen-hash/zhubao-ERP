@@ -7,6 +7,8 @@ import com.zhubao.erp.business.domain.ChildWorkOrderView;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderSplitView;
 import com.zhubao.erp.business.domain.MotherSplitState;
+import com.zhubao.erp.business.domain.OrderAdjustment;
+import com.zhubao.erp.business.domain.ProcessProgressRepository;
 import com.zhubao.erp.business.domain.ReceiptLine;
 import com.zhubao.erp.business.domain.ReceiptLineBalance;
 import com.zhubao.erp.business.domain.OrderCodes;
@@ -18,7 +20,9 @@ import com.zhubao.erp.business.domain.VerificationCodes;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.inventory.domain.OwnerType;
+import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
@@ -35,6 +39,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -44,7 +49,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 母单拆分：不拆仍用母单号；拆开则生成子单，并把对应数量从待加工转入在制。
- * 带请求编号时，库存、子单和拆分决定进入同一次工作单元。
+ * 尚未开工的整单生产可以撤销，恢复为待安排。带请求编号时，决定和调整记录进入同一次工作单元。
  */
 @Service
 public class MotherOrderSplitService {
@@ -56,6 +61,8 @@ public class MotherOrderSplitService {
     private final StockLedgerService stockLedgerService;
     private final BusinessWorkUnit workUnit;
     private OrderChangeRepository orderChanges;
+    private ProcessProgressRepository progress;
+    private FinanceRepository finance;
     /** 本进程已发出、事务可能尚未提交的子单号。 */
     private final Set<String> issuedChildCodes = ConcurrentHashMap.newKeySet();
     private final Object childCodeLock = new Object();
@@ -81,6 +88,16 @@ public class MotherOrderSplitService {
     @Autowired(required = false)
     public void setOrderChanges(OrderChangeRepository orderChanges) {
         this.orderChanges = orderChanges;
+    }
+
+    @Autowired(required = false)
+    public void setProgress(ProcessProgressRepository progress) {
+        this.progress = progress;
+    }
+
+    @Autowired(required = false)
+    public void setFinance(FinanceRepository finance) {
+        this.finance = finance;
     }
 
     public MotherOrderSplitView view(String motherOrderCode) {
@@ -114,6 +131,30 @@ public class MotherOrderSplitService {
         ), session -> {
             applyKeep(code, actor, session);
             return "kept";
+        });
+        return view(code);
+    }
+
+    /**
+     * 撤销尚未开工的整单生产，恢复为待安排。
+     * 子单、交工、进度、质检、发货、改单、财务或已离开待加工的库存都会拒绝。库存本身不改。
+     * 同一请求重试只生效一次。
+     */
+    public MotherOrderSplitView revokeKeep(String motherOrderCode, String operator, String requestId) {
+        requireRequest(requestId, "撤销整单生产必须带请求编号");
+        requireWorkUnit();
+        String actor = operatorOf(operator);
+        String code = motherOrderCode == null ? "" : motherOrderCode.trim();
+        workUnit.execute(new CommandCall(
+                requestId,
+                actor,
+                "MOTHER_KEEP_REVOKE",
+                "MOTHER_ORDER",
+                code,
+                "decision=REVOKE_KEEP"
+        ), session -> {
+            applyRevokeKeep(code, actor, session);
+            return "revoked";
         });
         return view(code);
     }
@@ -180,6 +221,96 @@ public class MotherOrderSplitService {
                 RECORD_TIME.format(LocalDateTime.now())
         ), session);
         return toView(mother, session);
+    }
+
+    private void applyRevokeKeep(String motherOrderCode, String operator, WorkSession session) {
+        documents.lockMotherOrder(motherOrderCode == null ? "" : motherOrderCode.trim(), session);
+        MotherOrderRecord mother = requireMother(motherOrderCode, session);
+        MotherSplitState current = findSplit(mother.code(), session).orElse(null);
+        if (current != null && MotherSplitState.SPLIT.equals(current.decision())) {
+            throw new BusinessException("这张母单已经拆成子单，不能撤销整单生产");
+        }
+        if (current == null || !MotherSplitState.KEEP.equals(current.decision())) {
+            throw new BusinessException("这张母单还没有选择整单生产，不能撤销");
+        }
+        if (documents.motherHasDownstream(mother.code(), session)
+                || !documents.listProcessBatches(mother.code(), session).isEmpty()) {
+            throw new BusinessException("这张母单已有子单、交工或发货，不能撤销整单生产");
+        }
+        if (documents.findQualityRequirementCheck(mother.code(), session).isPresent()
+                || !documents.listQualityRounds(mother.code(), session).isEmpty()) {
+            throw new BusinessException("这张母单已有质检记录，不能撤销整单生产");
+        }
+        if (hasProgress(mother.code(), session)) {
+            throw new BusinessException("这张母单已有工序进度，不能撤销整单生产");
+        }
+        if (orderChanges != null && !orderChanges.listByMother(mother.code()).isEmpty()) {
+            throw new BusinessException("这张母单已有改单，不能撤销整单生产");
+        }
+        if (finance != null && finance.hasMotherPosting(mother.code())) {
+            throw new BusinessException("这张母单已有财务记录，不能撤销整单生产");
+        }
+        requireWaitingStock(mother, session);
+        String verificationCode = blank(current.verificationCode());
+        documents.deleteMotherSplitState(mother.code(), session);
+        documents.saveOrderAdjustment(new OrderAdjustment(
+                "MOTHER",
+                mother.code(),
+                verificationCode.isEmpty() ? "不拆" : "不拆，验证码 " + verificationCode,
+                "未选择，可拆成子单",
+                "撤销整单生产",
+                operator,
+                RECORD_TIME.format(LocalDateTime.now())
+        ), session);
+    }
+
+    private boolean hasProgress(String motherOrderCode, WorkSession session) {
+        if (progress == null) {
+            return false;
+        }
+        for (String process : WorkshopProcesses.DEFAULT_ORDER) {
+            if (progress.find(motherOrderCode, process, session).isPresent()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 收货冲正后仍可撤销；一旦出现其他流水，或待加工余额与母单不一致，就拒绝。 */
+    private void requireWaitingStock(MotherOrderRecord mother, WorkSession session) {
+        List<StockLedgerEntry> ledgers = stockLedgerService.ledgersForMother(mother.code(), session);
+        if (ledgers.isEmpty()) {
+            throw new BusinessException("这张母单没有待加工库存，不能撤销整单生产");
+        }
+        Set<StockDimension> dimensions = new LinkedHashSet<>();
+        for (StockLedgerEntry entry : ledgers) {
+            if (!"inbound_confirm".equals(entry.documentType()) && !"inbound_reversal".equals(entry.documentType())) {
+                throw new BusinessException("这张母单库存已不在待加工，不能撤销整单生产");
+            }
+            if (entry.from() != null && mother.code().equals(entry.from().motherOrderCode())) {
+                dimensions.add(entry.from());
+            }
+            if (entry.to() != null && mother.code().equals(entry.to().motherOrderCode())) {
+                dimensions.add(entry.to());
+            }
+        }
+        BigDecimal waitingQuantity = ZERO;
+        BigDecimal waitingWeight = ZERO;
+        for (StockDimension dimension : dimensions) {
+            StockBalance balance = stockLedgerService.balance(dimension, session);
+            if (balance.quantity().signum() == 0 && balance.weight().signum() == 0) {
+                continue;
+            }
+            if (dimension.stockStatus() != StockStatus.RAW_WAITING || !blank(dimension.workOrderCode()).isEmpty()) {
+                throw new BusinessException("这张母单库存已不在待加工，不能撤销整单生产");
+            }
+            waitingQuantity = waitingQuantity.add(balance.quantity());
+            waitingWeight = waitingWeight.add(balance.weight());
+        }
+        if (waitingQuantity.compareTo(mother.quantity() == null ? ZERO : mother.quantity()) != 0
+                || waitingWeight.compareTo(mother.weight() == null ? ZERO : mother.weight()) != 0) {
+            throw new BusinessException("这张母单库存已不在待加工，不能撤销整单生产");
+        }
     }
 
     /** 拆成多张子单。数量、重量合计不得超过母单剩余，库存走台账从待加工转入在制。 */

@@ -169,6 +169,21 @@ public class BusinessOperationController {
         return ApiResponse.ok(motherOrderSplitService.keep(code, context.operator(), requestId));
     }
 
+    @PostMapping("/mother-orders/{code}/keep-revocations")
+    public ApiResponse<MotherOrderSplitView> revokeMotherKeep(
+            @PathVariable String code,
+            @RequestBody(required = false) KeepMotherOrderRequest body,
+            HttpServletRequest request
+    ) {
+        OperatorContext context = operatorContextResolver.requireSession(request);
+        if (dataAccess != null) dataAccess.assertDocumentCustomer(context, code);
+        String requestId = body == null ? null : body.requestId();
+        if (requestId == null || requestId.isBlank()) {
+            throw new BusinessException("撤销整单生产必须带请求编号");
+        }
+        return ApiResponse.ok(motherOrderSplitService.revokeKeep(code, context.operator(), requestId));
+    }
+
     @PostMapping("/mother-orders/{code}/splits")
     public ApiResponse<MotherOrderSplitView> splitMotherOrder(
             @PathVariable String code,

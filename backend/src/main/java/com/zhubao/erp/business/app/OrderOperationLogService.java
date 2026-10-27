@@ -66,7 +66,7 @@ public class OrderOperationLogService {
         for (String target : targets) {
             String type = target.equals(motherCode) ? "MOTHER" : "WORK_ORDER";
             for (OrderAdjustment adjustment : documents.listOrderAdjustments(type, target)) {
-                rows.add(new Entry(target, "编辑加工要求".equals(adjustment.reason()) ? "编辑加工要求" : "管理员维护", adjustment.operatorName(), adjustment.createdAt(),
+                rows.add(new Entry(target, adjustmentAction(adjustment.reason()), adjustment.operatorName(), adjustment.createdAt(),
                         adjustment.reason() + "；" + adjustment.beforeText() + " → " + adjustment.afterText()));
             }
             for (String process : WorkshopProcesses.DEFAULT_ORDER) {
@@ -102,6 +102,13 @@ public class OrderOperationLogService {
                 label.operatorName(), label.createdAt(), label.eventType() + "；" + label.reason())));
         return rows.stream().sorted(Comparator.comparing((Entry entry) -> text(entry.createdAt()).replace(' ', 'T'))
                 .thenComparing(Entry::targetCode).thenComparing(Entry::action)).toList();
+    }
+
+    private static String adjustmentAction(String reason) {
+        if ("编辑加工要求".equals(reason) || "撤销整单生产".equals(reason)) {
+            return reason;
+        }
+        return "管理员维护";
     }
 
     private String changeStatus(OrderChangeStatus status) {

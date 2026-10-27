@@ -3,15 +3,24 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.business.domain.ChildWorkOrderView;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.MotherOrderSplitView;
+import com.zhubao.erp.business.domain.MotherSplitState;
+import com.zhubao.erp.business.domain.ProcessProgressHead;
+import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
 import com.zhubao.erp.business.domain.SplitMotherOrderLine;
 import com.zhubao.erp.business.domain.VerificationCodes;
+import com.zhubao.erp.business.infra.InMemoryProcessProgressRepository;
+import com.zhubao.erp.finance.domain.ChargeUnit;
+import com.zhubao.erp.finance.domain.ReceivableLine;
+import com.zhubao.erp.finance.infra.InMemoryFinanceRepository;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockBalance;
+import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.security.error.PermissionDeniedException;
@@ -29,7 +38,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -259,6 +270,101 @@ class MotherOrderSplitServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("内容不一致");
         assertThat(documents.listChildWorkOrders("MD-REPLAY-001")).hasSize(2);
+    }
+
+    @Test
+    void revokeKeepRestoresSplitAndReplaysWithoutASecondAdjustment() {
+        inbound("MD-REVOKE-001", "10", "20");
+        MotherOrderSplitView kept = splitService.keep("MD-REVOKE-001", "何琳", "keep-revoke-001");
+        assertThatThrownBy(() -> splitService.revokeKeep("MD-REVOKE-001", "何琳", " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须带请求编号");
+
+        MotherOrderSplitView revoked = splitService.revokeKeep("MD-REVOKE-001", "何琳", "revoke-001");
+        MotherOrderSplitView replayed = splitService.revokeKeep("MD-REVOKE-001", "何琳", "revoke-001");
+
+        assertThat(revoked.decision()).isEmpty();
+        assertThat(replayed.decision()).isEmpty();
+        assertThat(replayed.children()).isEmpty();
+        assertThat(documents.findMotherSplitState("MD-REVOKE-001")).isEmpty();
+        assertThat(documents.verificationCodeExists(kept.verificationCode())).isFalse();
+        assertThat(documents.listOrderAdjustments("MOTHER", "MD-REVOKE-001")).singleElement()
+                .satisfies(adjustment -> {
+                    assertThat(adjustment.reason()).isEqualTo("撤销整单生产");
+                    assertThat(adjustment.beforeText()).contains(kept.verificationCode());
+                    assertThat(adjustment.afterText()).isEqualTo("未选择，可拆成子单");
+                });
+        assertThat(stockLedgerService.ledgers()).extracting(StockLedgerEntry::documentType)
+                .containsExactly("inbound_confirm");
+        assertThat(rawWaiting("MD-REVOKE-001").quantity()).isEqualByComparingTo("10");
+        assertThatThrownBy(() -> splitService.revokeKeep("MD-REVOKE-001", "何琳", "revoke-002"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("还没有选择整单生产");
+        MotherOrderSplitView split = splitService.split(command("MD-REVOKE-001",
+                line("4", "8", List.of("抛光")),
+                line("6", "12", null)), "revoke-then-split");
+        assertThat(split.decision()).isEqualTo("SPLIT");
+        assertThat(split.children()).hasSize(2);
+    }
+
+    @Test
+    void revokeKeepRejectsStartedProductionAndLeavesTheDecision() {
+        inbound("MD-REVOKE-HANDOFF", "10", "20");
+        splitService.keep("MD-REVOKE-HANDOFF", "何琳", "keep-handoff");
+        documents.saveProcessStationHandoff(new ProcessStationHandoff(
+                "MD-REVOKE-HANDOFF", "雕刻", "何琳", "STK-1", "2026-10-27T17:00:00"));
+        assertThatThrownBy(() -> splitService.revokeKeep("MD-REVOKE-HANDOFF", "何琳", "revoke-handoff"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已有子单、交工或发货");
+        assertThat(documents.findMotherSplitState("MD-REVOKE-HANDOFF")).get()
+                .extracting(MotherSplitState::decision)
+                .isEqualTo("KEEP");
+
+        inbound("MD-REVOKE-STOCK", "10", "20");
+        splitService.keep("MD-REVOKE-STOCK", "何琳", "keep-stock");
+        StockBalance waiting = rawWaiting("MD-REVOKE-STOCK");
+        StockDimension from = waiting.dimension();
+        stockLedgerService.transfer(new StockTransferCommand(
+                "work_order_split",
+                "ZD-REVOKE",
+                from,
+                new StockDimension(from.ownerType(), from.ownerCustomerId(), from.customerId(), from.motherOrderCode(),
+                        "ZD-REVOKE", from.materialCode(), from.warehouseCode(), StockStatus.WIP),
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                "测试转出"));
+        assertThatThrownBy(() -> splitService.revokeKeep("MD-REVOKE-STOCK", "何琳", "revoke-stock"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("库存已不在待加工");
+        assertThat(documents.findMotherSplitState("MD-REVOKE-STOCK")).get()
+                .extracting(MotherSplitState::decision)
+                .isEqualTo("KEEP");
+
+        inbound("MD-REVOKE-PROGRESS", "10", "20");
+        splitService.keep("MD-REVOKE-PROGRESS", "何琳", "keep-progress");
+        InMemoryProcessProgressRepository progress = new InMemoryProcessProgressRepository();
+        splitService.setProgress(progress);
+        progress.save(new ProcessProgressHead("MD-REVOKE-PROGRESS", "雕刻", 30, 1, "", "何琳", "2026-10-27T17:00:00"),
+                new WorkSession() {
+                    @Override public Optional<Connection> connection() { return Optional.empty(); }
+                    @Override public void onRollback(Runnable undo) { }
+                });
+        assertThatThrownBy(() -> splitService.revokeKeep("MD-REVOKE-PROGRESS", "何琳", "revoke-progress"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已有工序进度");
+
+        inbound("MD-REVOKE-FINANCE", "10", "20");
+        splitService.keep("MD-REVOKE-FINANCE", "何琳", "keep-finance");
+        InMemoryFinanceRepository finance = new InMemoryFinanceRepository();
+        finance.saveReceivable(new ReceivableLine(
+                "AR-REVOKE", 1001L, "恒信珠宝", "2026-10", "PROCESS", "MD-REVOKE-FINANCE", "MD-REVOKE-FINANCE", "",
+                "抛光", BigDecimal.ONE, ChargeUnit.PIECE, BigDecimal.ONE, BigDecimal.ONE, "", "", "财务", "2026-10-27T17:00:00"));
+        splitService.setFinance(finance);
+        assertThatThrownBy(() -> splitService.revokeKeep("MD-REVOKE-FINANCE", "何琳", "revoke-finance"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已有财务记录");
+        assertThat(documents.listOrderAdjustments("MOTHER", "MD-REVOKE-FINANCE")).isEmpty();
+        assertThat(documents.listOrderAdjustments("MOTHER", "MD-REVOKE-PROGRESS")).isEmpty();
     }
 
     @Test

@@ -52,6 +52,13 @@ export function keepMotherOrder(code: string, requestId: string): Promise<Mother
   );
 }
 
+export function revokeMotherKeep(code: string, requestId: string): Promise<MotherOrderSplitView> {
+  return apiPost<{ requestId: string }, MotherOrderSplitView>(
+    `/api/business/operations/mother-orders/${encodeURIComponent(code)}/keep-revocations`,
+    { requestId },
+  );
+}
+
 export function splitMotherOrder(
   code: string,
   lines: SplitLineRequest[],

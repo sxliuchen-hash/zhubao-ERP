@@ -565,6 +565,21 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     @Override
+    public void deleteMotherSplitState(String motherOrderCode, WorkSession session) {
+        String sql = "delete from biz_mother_order_split where mother_order_code = ? and split_decision = 'KEEP'";
+        try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
+            statement.setString(1, motherOrderCode);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("这张母单还没有选择整单生产，不能撤销");
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("撤销整单生产失败", ex);
+        }
+    }
+
+    @Override
     public Optional<MotherSplitState> findMotherSplitState(String motherOrderCode) {
         try (Connection connection = dataSource.getConnection()) {
             return findMotherSplitState(connection, motherOrderCode);

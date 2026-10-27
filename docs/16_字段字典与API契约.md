@@ -2276,6 +2276,7 @@ PWA 一期边界：
 | `GET /api/business/operations/mother-orders/{code}` | `ApiResponse<MobileIntakeResult>` |
 | `GET /api/business/operations/mother-orders/{code}/split` | `ApiResponse<MotherOrderSplitView>` |
 | `POST /api/business/operations/mother-orders/{code}/keep` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_KEEP`，拆分决定和成功结果同一次提交。同账号同请求回放后重新读取当前视图。缺编号直接拒绝 |
+| `POST /api/business/operations/mother-orders/{code}/keep-revocations` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_KEEP_REVOKE`。只撤销尚未开工的整单生产：删除当前不拆决定并追加调整记录，库存不改。已有子单、交工、分批、工序进度、质检、发货、改单、财务，或库存已离开待加工时拒绝。同账号同请求回放后重新读取当前视图。缺编号直接拒绝。权限与拆单相同 |
 | `POST /api/business/operations/mother-orders/{code}/splits` | `ApiResponse<MotherOrderSplitView>`。必须带 `requestId`。动作是 `MOTHER_SPLIT`，库存转移、子单和母单拆分状态同一次提交。同一请求只生效一次；内容变化必须换新编号。缺编号直接拒绝 |
 | `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
 | `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
