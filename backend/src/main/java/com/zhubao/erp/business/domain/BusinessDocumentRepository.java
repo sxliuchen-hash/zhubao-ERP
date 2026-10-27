@@ -128,6 +128,58 @@ public interface BusinessDocumentRepository {
 
     List<ProcessStationHandoff> listProcessStationHandoffs(String orderCode);
 
+    /**
+     * 按母单读取出货单。带连接的工作单元必须在当前连接上读，确认结单时加锁，避免沿用事务开始时的旧快照。
+     */
+    default List<OutboundOrderRecord> listOutboundOrdersForMother(String motherOrderCode, WorkSession session, boolean lock) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("出货单读取必须使用工作单元连接");
+        }
+        String mother = motherOrderCode == null ? "" : motherOrderCode;
+        return listOutboundOrders().stream().filter(row -> mother.equals(row.motherOrderCode())).toList();
+    }
+
+    /** 读取一道工单的正式交工。确认结单时锁定这些行。 */
+    default List<ProcessStationHandoff> listProcessStationHandoffs(String orderCode, WorkSession session, boolean lock) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("工序交付读取必须使用工作单元连接");
+        }
+        return listProcessStationHandoffs(orderCode);
+    }
+
+    /** 读取质检轮次。确认结单时锁定，不把普通列表查询当成当前事实。 */
+    default List<QualityRound> listQualityRounds(String orderCode, WorkSession session, boolean lock) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("质检轮次读取必须使用工作单元连接");
+        }
+        if (session != null) {
+            return listQualityRounds(orderCode, session);
+        }
+        return listQualityRounds(orderCode);
+    }
+
+    /** 读取质检对照。无轮次时它仍是质量结论。 */
+    default Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode, WorkSession session, boolean lock) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("质检对照读取必须使用工作单元连接");
+        }
+        if (session != null) {
+            return findQualityRequirementCheck(orderCode, session);
+        }
+        return findQualityRequirementCheck(orderCode);
+    }
+
+    /** 读取返工报工。未报工的返工不能当成已经做完。 */
+    default Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode, WorkSession session, boolean lock) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("返工报工读取必须使用工作单元连接");
+        }
+        if (session != null) {
+            return findQualityReworkReport(reworkOrderCode, session);
+        }
+        return findQualityReworkReport(reworkOrderCode);
+    }
+
     List<ProcessStationHandoff> listAllProcessStationHandoffs();
 
     /** 旧库可继续整单交工；分批写入必须先完成新增迁移。 */

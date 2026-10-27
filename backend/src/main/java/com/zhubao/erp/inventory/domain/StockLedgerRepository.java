@@ -45,6 +45,29 @@ public interface StockLedgerRepository {
         return findLedgersByCustomers(Set.of(), motherOrderCode == null ? Set.of() : Set.of(motherOrderCode));
     }
 
+    /** 按母单读取流水。lock 为真时必须看到锁定后的当前行，不能沿用旧快照。 */
+    default List<StockLedgerEntry> ledgersForMother(String motherOrderCode, WorkSession session, boolean lock) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("库存流水读取必须使用工作单元连接");
+        }
+        if (session == null) {
+            return findLedgersByCustomers(Set.of(), motherOrderCode == null ? Set.of() : Set.of(motherOrderCode));
+        }
+        return ledgersForMother(motherOrderCode, session);
+    }
+
+    /** 按母单读取余额。确认结单时锁定该母单的余额行。 */
+    default List<StockBalance> balancesForMother(String motherOrderCode, WorkSession session, boolean lock) {
+        if (session != null && session.connection().isPresent()) {
+            throw new IllegalStateException("库存余额读取必须使用工作单元连接");
+        }
+        String mother = motherOrderCode == null ? "" : motherOrderCode;
+        return findAllBalances().stream()
+                .filter(balance -> balance != null && balance.dimension() != null
+                        && mother.equals(balance.dimension().motherOrderCode()))
+                .toList();
+    }
+
     /**
      * 母单号与单据号相同时，该母单下任意流水都算已入账。
      * 子单还要看单据号、目标工单号或来源工单号，避免把发货单号误当成没有流水。

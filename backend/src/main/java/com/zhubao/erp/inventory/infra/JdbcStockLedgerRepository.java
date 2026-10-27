@@ -203,13 +203,18 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
 
     private List<StockLedgerEntry> queryLedgers(Connection connection, String whereSql, List<Object> parameters)
             throws SQLException {
+        return queryLedgers(connection, whereSql, parameters, false);
+    }
+
+    private List<StockLedgerEntry> queryLedgers(Connection connection, String whereSql, List<Object> parameters, boolean lock)
+            throws SQLException {
         String sql = """
                 select code, source_ledger_code, biz_time, document_type, document_code, owner_type, owner_customer_id,
                        customer_id, mother_order_code, work_order_code, from_work_order_code, material_code,
                        quantity, weight, from_warehouse_code, to_warehouse_code,
                        from_stock_status, to_stock_status, from_batch_code, to_batch_code, from_mother_order_code, remark
                   from inv_stock_ledger
-                """ + whereSql + " order by biz_time, id";
+                """ + whereSql + " order by biz_time, id" + (lock ? " for update" : "");
         List<StockLedgerEntry> entries = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int i = 0; i < parameters.size(); i++) {
@@ -519,6 +524,76 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             statement.setObject(index, null);
         } else {
             statement.setLong(index, value);
+        }
+    }
+
+    @Override
+    public List<StockLedgerEntry> ledgersForMother(String motherOrderCode, WorkSession session, boolean lock) {
+        if (lock && (session == null || session.connection().isEmpty())) {
+            throw new IllegalStateException("库存流水锁定读取必须使用工作单元连接");
+        }
+        if (session != null && session.connection().isEmpty()) {
+            throw new IllegalStateException("库存流水读取必须使用工作单元连接");
+        }
+        try {
+            if (session != null) {
+                return queryLedgers(session.connection().get(), " where mother_order_code = ?", List.of(motherOrderCode), lock);
+            }
+            try (Connection connection = dataSource.getConnection()) {
+                return queryLedgers(connection, " where mother_order_code = ?", List.of(motherOrderCode), false);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load stock ledger entries", ex);
+        }
+    }
+
+    @Override
+    public List<StockBalance> balancesForMother(String motherOrderCode, WorkSession session, boolean lock) {
+        if (lock && (session == null || session.connection().isEmpty())) {
+            throw new IllegalStateException("库存余额锁定读取必须使用工作单元连接");
+        }
+        if (session != null && session.connection().isEmpty()) {
+            throw new IllegalStateException("库存余额读取必须使用工作单元连接");
+        }
+        String sql = """
+                select owner_type, owner_customer_id, customer_id, mother_order_code, work_order_code,
+                       material_code, warehouse_code, stock_status, batch_code, available_quantity, available_weight
+                  from inv_stock_balance
+                 where mother_order_code = ?
+                """ + (lock ? " for update" : "");
+        try {
+            Connection connection = session == null ? dataSource.getConnection() : session.connection().get();
+            boolean own = session == null;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, motherOrderCode);
+                try (ResultSet rs = statement.executeQuery()) {
+                    List<StockBalance> balances = new ArrayList<>();
+                    while (rs.next()) {
+                        balances.add(new StockBalance(
+                                dimension(
+                                        ownerType(rs.getString("owner_type")),
+                                        nullableLong(rs, "owner_customer_id"),
+                                        nullableLong(rs, "customer_id"),
+                                        rs.getString("mother_order_code"),
+                                        rs.getString("work_order_code"),
+                                        rs.getString("material_code"),
+                                        rs.getString("warehouse_code"),
+                                        StockStatus.valueOf(rs.getString("stock_status")),
+                                        rs.getString("batch_code")
+                                ),
+                                rs.getBigDecimal("available_quantity"),
+                                rs.getBigDecimal("available_weight")
+                        ));
+                    }
+                    return List.copyOf(balances);
+                }
+            } finally {
+                if (own) {
+                    connection.close();
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to load stock balances", ex);
         }
     }
 }

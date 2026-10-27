@@ -1089,12 +1089,16 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     private Optional<QualityRequirementCheck> findQualityRequirementCheck(Connection connection, String orderCode) throws SQLException {
+        return findQualityRequirementCheck(connection, orderCode, false);
+    }
+
+    private Optional<QualityRequirementCheck> findQualityRequirementCheck(Connection connection, String orderCode, boolean lock) throws SQLException {
         String sql = """
                 select quality_case_code, order_code, mother_order_code, inspector, outcome,
                        frozen, ledger_code, rework_order_code, created_at
                   from biz_quality_requirement_check
                  where order_code = ?
-                """;
+                """ + (lock ? " for update" : "");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, orderCode);
             try (ResultSet rs = statement.executeQuery()) {
@@ -1182,13 +1186,17 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     private List<QualityRound> listQualityRounds(Connection connection, String orderCode) throws SQLException {
+        return listQualityRounds(connection, orderCode, false);
+    }
+
+    private List<QualityRound> listQualityRounds(Connection connection, String orderCode, boolean lock) throws SQLException {
         String sql = """
                 select round_code, quality_case_code, order_code, mother_order_code, round_no, round_type,
                        rework_order_code, rework_report_ledger, outcome, frozen, ledger_code, inspector, created_at
                   from biz_quality_round
                  where order_code = ?
                  order by round_no
-                """;
+                """ + (lock ? " for update" : "");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, orderCode);
             try (ResultSet rs = statement.executeQuery()) {
@@ -1237,12 +1245,16 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     }
 
     private Optional<QualityReworkReport> findQualityReworkReport(Connection connection, String reworkOrderCode) throws SQLException {
+        return findQualityReworkReport(connection, reworkOrderCode, false);
+    }
+
+    private Optional<QualityReworkReport> findQualityReworkReport(Connection connection, String reworkOrderCode, boolean lock) throws SQLException {
         String sql = """
                 select rework_order_code, quality_case_code, order_code, mother_order_code,
                        ledger_code, operator_name, created_at
                   from biz_quality_rework_report
                  where rework_order_code = ?
-                """;
+                """ + (lock ? " for update" : "");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, reworkOrderCode);
             try (ResultSet rs = statement.executeQuery()) {
@@ -2218,6 +2230,91 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setBigDecimal(4, batch.quantity()); statement.setBigDecimal(5, batch.finalWeight()); statement.setString(6, batch.operator()); statement.setString(7, batch.createdAt());
             statement.executeUpdate();
         } catch (SQLException ex) { throw new IllegalStateException("无法保存分批交工", ex); }
+    }
+
+    @Override
+    public List<OutboundOrderRecord> listOutboundOrdersForMother(String motherOrderCode, WorkSession session, boolean lock) {
+        String sql = """
+                select code, mother_order_code, work_order_code, customer_id, owner_customer_id,
+                       material_code, from_warehouse_code, to_warehouse_code, delivery_date,
+                       delivery_category, delivery_quantity, delivery_quantity_unit, delivery_weight,
+                       express_company, express_no, logistics_raw_text, handler_name_snapshot,
+                       source_register_type, source_line_no, source_sequence_no, operator,
+                       evidence_code, outbound_remark, order_status, ledger_code, created_at
+                  from biz_outbound_order
+                 where mother_order_code = ?
+                 order by code
+                """ + (lock ? " for update" : "");
+        return readLocked(session, lock, "出货单", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, motherOrderCode);
+                try (ResultSet rs = statement.executeQuery()) {
+                    List<OutboundOrderRecord> rows = new ArrayList<>();
+                    while (rs.next()) {
+                        rows.add(mapOutboundOrder(rs));
+                    }
+                    return List.copyOf(rows);
+                }
+            }
+        });
+    }
+
+    @Override
+    public List<ProcessStationHandoff> listProcessStationHandoffs(String orderCode, WorkSession session, boolean lock) {
+        String sql = """
+                select order_code, process_name, operator, ledger_code, created_at
+                  from biz_process_station_handoff
+                 where order_code = ?
+                 order by id
+                """ + (lock ? " for update" : "");
+        return readLocked(session, lock, "工序交付", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, orderCode);
+                try (ResultSet rs = statement.executeQuery()) {
+                    List<ProcessStationHandoff> rows = new ArrayList<>();
+                    while (rs.next()) {
+                        rows.add(mapProcessStationHandoff(rs));
+                    }
+                    return rows;
+                }
+            }
+        });
+    }
+
+    @Override
+    public List<QualityRound> listQualityRounds(String orderCode, WorkSession session, boolean lock) {
+        return readLocked(session, lock, "质检轮次", connection -> listQualityRounds(connection, orderCode, lock));
+    }
+
+    @Override
+    public Optional<QualityRequirementCheck> findQualityRequirementCheck(String orderCode, WorkSession session, boolean lock) {
+        return readLocked(session, lock, "质检对照", connection -> findQualityRequirementCheck(connection, orderCode, lock));
+    }
+
+    @Override
+    public Optional<QualityReworkReport> findQualityReworkReport(String reworkOrderCode, WorkSession session, boolean lock) {
+        return readLocked(session, lock, "返工报工", connection -> findQualityReworkReport(connection, reworkOrderCode, lock));
+    }
+
+    private <T> T readLocked(WorkSession session, boolean lock, String label, SqlReader<T> reader) {
+        if (lock && (session == null || session.connection().isEmpty())) {
+            throw new IllegalStateException(label + "锁定读取必须使用工作单元连接");
+        }
+        try {
+            if (session != null && session.connection().isPresent()) {
+                return reader.read(session.connection().get());
+            }
+            try (Connection connection = dataSource.getConnection()) {
+                return reader.read(connection);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException(label + "读取失败", ex);
+        }
+    }
+
+    @FunctionalInterface
+    private interface SqlReader<T> {
+        T read(Connection connection) throws SQLException;
     }
 
 }

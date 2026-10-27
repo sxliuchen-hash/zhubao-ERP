@@ -176,6 +176,63 @@ public class JdbcOrderRequirementRepository implements OrderRequirementRepositor
         return rows;
     }
 
+    @Override
+    public Optional<OrderRequirementVersion> current(String motherOrderCode, String workOrderCode, WorkSession session, boolean lock) {
+        if (lock && (session == null || session.connection().isEmpty())) {
+            throw new IllegalStateException("订单要求锁定读取必须使用工作单元连接");
+        }
+        if (session == null || session.connection().isEmpty()) {
+            return current(motherOrderCode, workOrderCode);
+        }
+        String sql = """
+                select * from biz_order_requirement_version
+                 where mother_order_code = ? and work_order_code = ?
+                 order by version_no desc limit 1
+                """ + (lock ? " for update" : "");
+        try (PreparedStatement statement = session.connection().get().prepareStatement(sql)) {
+            statement.setString(1, motherOrderCode);
+            statement.setString(2, workOrderCode == null ? "" : workOrderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new OrderRequirementVersion(
+                        rs.getString("id"),
+                        rs.getString("mother_order_code"),
+                        rs.getString("work_order_code"),
+                        rs.getInt("version_no"),
+                        rs.getString("requirement_text"),
+                        rs.getString("due_date"),
+                        rs.getString("route_text"),
+                        rs.getString("change_id"),
+                        rs.getString("effective_at")
+                ));
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取订单要求版本", ex);
+        }
+    }
+
+    @Override
+    public List<ExecutionRound> listByMother(String motherOrderCode, WorkSession session, boolean lock) {
+        if (lock && (session == null || session.connection().isEmpty())) {
+            throw new IllegalStateException("执行轮次锁定读取必须使用工作单元连接");
+        }
+        if (session == null || session.connection().isEmpty()) {
+            return listByMother(motherOrderCode);
+        }
+        String sql = "select * from biz_execution_round where mother_order_code = ? order by created_at, round_work_order_code"
+                + (lock ? " for update" : "");
+        try (PreparedStatement statement = session.connection().get().prepareStatement(sql)) {
+            statement.setString(1, motherOrderCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                return readRounds(rs);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法列出执行轮次", ex);
+        }
+    }
+
     private Connection connection(WorkSession session) {
         if (session == null || session.connection().isEmpty()) {
             throw new IllegalStateException("订单版本写入必须使用工作单元连接");
