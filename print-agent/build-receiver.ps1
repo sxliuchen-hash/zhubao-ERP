@@ -15,7 +15,10 @@ $download = Join-Path $root '..\frontend\public\downloads'
 New-Item -ItemType Directory -Force -Path $download | Out-Null
 Copy-Item -LiteralPath $out -Destination (Join-Path $download 'ZhubaoPrintReceiver.exe') -Force
 $hash = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLower()
-$release = '20261027.4'
+$source = Get-Content -LiteralPath (Join-Path $root 'ReceivePrintJobs.cs') -Raw
+$matched = [regex]::Match($source, 'const string AgentRelease = "([^"]+)"')
+if (-not $matched.Success) { throw '找不到打印程序版本号' }
+$release = $matched.Groups[1].Value
 $jsonPath = Join-Path $download 'print-agent.json'
 $json = "{`n  `"version`": `"$release`",`n  `"file`": `"ZhubaoPrintReceiver.exe`",`n  `"sha256`": `"$hash`"`n}`n"
 [System.IO.File]::WriteAllText($jsonPath, $json, (New-Object System.Text.UTF8Encoding $false))
