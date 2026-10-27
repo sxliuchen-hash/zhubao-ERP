@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Ecc, QrCode } from '../../vendor/qrcodegen';
-import { decodeRaster, openCameraStream, resetBarcodeReaderForTests, type Raster } from './cameraBarcode';
+import { decodeRaster, enableContinuousFocus, nudgeCameraFocus, openCameraStream, rearCameraConstraints, resetBarcodeReaderForTests, sampleScanRegion, type Raster } from './cameraBarcode';
 
 afterEach(() => {
   resetBarcodeReaderForTests();
@@ -37,7 +37,7 @@ describe('openCameraStream', () => {
 
     await expect(openCameraStream()).rejects.toBe(denied);
     expect(getUserMedia).toHaveBeenCalledOnce();
-    expect(getUserMedia).toHaveBeenCalledWith({ audio: false, video: { facingMode: { ideal: 'environment' } } });
+    expect(getUserMedia).toHaveBeenCalledWith(rearCameraConstraints());
   });
 
   it('后置摄像头约束不兼容时回退到默认摄像头', async () => {
@@ -49,6 +49,68 @@ describe('openCameraStream', () => {
     await expect(openCameraStream()).resolves.toBe(stream);
     expect(getUserMedia).toHaveBeenCalledTimes(2);
     expect(getUserMedia).toHaveBeenLastCalledWith({ audio: false, video: true });
+  });
+
+  it('支持连续对焦时打开预览后对准画面中央', async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined);
+    const track = {
+      applyConstraints,
+      getCapabilities: () => ({
+        focusMode: ['manual', 'continuous'],
+        exposureMode: ['continuous'],
+        whiteBalanceMode: ['continuous'],
+        pointsOfInterest: true,
+      }),
+    };
+    const stream = { getVideoTracks: () => [track] } as unknown as MediaStream;
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) } });
+
+    await expect(openCameraStream()).resolves.toBe(stream);
+    expect(applyConstraints).toHaveBeenCalledWith({
+      advanced: [{
+        focusMode: 'continuous',
+        exposureMode: 'continuous',
+        whiteBalanceMode: 'continuous',
+        pointsOfInterest: [{ x: 0.5, y: 0.5 }],
+      }],
+    });
+  });
+
+  it('轻点取景会先单次对焦再回到连续对焦', async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined);
+    const track = {
+      applyConstraints,
+      getCapabilities: () => ({ focusMode: ['single-shot', 'continuous'], pointsOfInterest: true }),
+    } as unknown as MediaStreamTrack;
+
+    await nudgeCameraFocus(track, 0.2, 1.4);
+    expect(applyConstraints).toHaveBeenNthCalledWith(1, {
+      advanced: [{ focusMode: 'single-shot', pointsOfInterest: [{ x: 0.2, y: 1 }] }],
+    });
+    expect(applyConstraints).toHaveBeenNthCalledWith(2, {
+      advanced: [{ focusMode: 'continuous', pointsOfInterest: [{ x: 0.2, y: 1 }] }],
+    });
+  });
+
+  it('设备拒绝连续对焦时仍然返回预览', async () => {
+    const stream = {
+      getVideoTracks: () => [{
+        applyConstraints: vi.fn().mockRejectedValue(new Error('unsupported')),
+        getCapabilities: () => ({ focusMode: ['continuous'] }),
+      }],
+    } as unknown as MediaStream;
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) } });
+    await expect(enableContinuousFocus(stream)).resolves.toBeUndefined();
+    await expect(openCameraStream()).resolves.toBe(stream);
+  });
+
+  it('实时解码只取画面中央并缩小长边', () => {
+    const region = sampleScanRegion(1920, 1080);
+    expect(region.sw).toBeLessThan(1920);
+    expect(region.sh).toBeLessThan(1080);
+    expect(Math.max(region.width, region.height)).toBeLessThanOrEqual(640);
+    expect(region.sx).toBeGreaterThan(0);
+    expect(region.sy).toBeGreaterThan(0);
   });
 
   it('相机被占用时不重复请求', async () => {

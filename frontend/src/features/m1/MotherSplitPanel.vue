@@ -58,6 +58,15 @@ function blankLine() {
     sourceLineNo: number | null; quantity: string; weight: string }> };
 }
 
+// 有来源时直接放一行可输入的数量和重量。只读框在手机上点了不会弹出键盘。
+function draftLine() {
+  const line = blankLine();
+  const sources = view.value?.sourceLines ?? [];
+  if (!sources.length) return line;
+  line.allocations = [{ sourceLineNo: sources.length === 1 ? sources[0].lineNo : null, quantity: '', weight: '' }];
+  return line;
+}
+
 async function load() {
   const seen = ++generation;
   const code = props.motherOrderCode;
@@ -67,7 +76,9 @@ async function load() {
   try {
     const current = await fetchMotherSplit(code);
     if (seen !== generation || code !== props.motherOrderCode) return;
-    view.value = current; emit('arranged', current);
+    view.value = current;
+    lines.value = [draftLine(), draftLine()];
+    emit('arranged', current);
     await loadStickers(current);
   } catch (error) { if (seen === generation) loadError.value = error instanceof Error ? error.message : '母单拆分信息加载失败'; }
 }
@@ -119,7 +130,7 @@ function generateSourceDrafts() {
   lines.value = view.value.sourceLines.filter(source => source.remainingQuantity > 0 && source.remainingWeight > 0).map(source => ({
     ...blankLine(), allocations: [{ sourceLineNo: source.lineNo, quantity: String(source.remainingQuantity), weight: String(source.remainingWeight) }],
   }));
-  while (lines.value.length < 2) lines.value.push(blankLine());
+  while (lines.value.length < 2) lines.value.push(draftLine());
   formError.value = ''; choice.value = 'split';
 }
 
@@ -132,7 +143,7 @@ function toggleProcess(index: number, name: string) {
 }
 
 function addLine() {
-  lines.value.push(blankLine());
+  lines.value.push(draftLine());
 }
 
 function removeLine(index: number) {
@@ -165,7 +176,7 @@ async function executeArrangement(attempt: Arrangement) {
     if (seen !== generation || attempt.code !== props.motherOrderCode) return;
     pending.value = null; clearRequestId(attempt.key); view.value = current; emit('arranged', current);
     success.value = attempt.kind === 'keep' ? '整单生产安排已保存' : '子单已生成，剩余来源可稍后继续分配';
-    if (attempt.kind === 'split') lines.value = [blankLine(), blankLine()];
+    if (attempt.kind === 'split') lines.value = [draftLine(), draftLine()];
     void loadStickers(current);
   } catch (error) {
     if (seen !== generation) return;
@@ -265,30 +276,33 @@ function scaleStyle(payload: LabelPayload) {
 
       <fieldset v-if="canSplit && (!intakeMode || choice === 'split')" class="split-form" :disabled="locked">
         <h4>按来源分配拆成多张</h4>
-        <p>数量和重量分别按真实来源合计；以下工序是正式路线，加工要求文字不会自动转成工序。</p>
+        <p>直接填写每张子单的数量和重量。有多项来源时按来源分别填写，合计不得超过剩余。以下工序是正式路线，加工要求文字不会自动转成工序。</p>
         <button v-if="hasSources" type="button" class="secondary-button" @click="generateSourceDrafts">按明细生成草稿</button>
         <article v-for="(line, index) in lines" :key="index" class="split-line">
           <strong>第 {{ index + 1 }} 张</strong>
-          <label class="field">
+          <label v-if="!hasSources || line.allocations.length === 1" class="field">
             <span>数量（{{ view.quantityUnit }}）</span>
-            <input :value="hasSources ? allocationTotal(line, 'quantity') : line.quantity" :readonly="hasSources" @input="line.quantity = ($event.target as HTMLInputElement).value" inputmode="decimal" :aria-label="`第${index + 1}张数量`" />
+            <input v-if="!hasSources" v-model="line.quantity" type="text" inputmode="decimal" autocomplete="off" autocapitalize="off" enterkeyhint="done" :aria-label="`第${index + 1}张数量`" />
+            <input v-else :value="line.allocations[0].quantity" type="text" inputmode="decimal" autocomplete="off" autocapitalize="off" enterkeyhint="done" :aria-label="`第${index + 1}张数量`" @input="line.allocations[0].quantity = ($event.target as HTMLInputElement).value" />
           </label>
-          <label class="field">
+          <label v-if="!hasSources || line.allocations.length === 1" class="field">
             <span>重量（克）</span>
-            <input :value="hasSources ? allocationTotal(line, 'weight') : line.weight" :readonly="hasSources" @input="line.weight = ($event.target as HTMLInputElement).value" inputmode="decimal" :aria-label="`第${index + 1}张重量`" />
+            <input v-if="!hasSources" v-model="line.weight" type="text" inputmode="decimal" autocomplete="off" autocapitalize="off" enterkeyhint="done" :aria-label="`第${index + 1}张重量`" />
+            <input v-else :value="line.allocations[0].weight" type="text" inputmode="decimal" autocomplete="off" autocapitalize="off" enterkeyhint="done" :aria-label="`第${index + 1}张重量`" @input="line.allocations[0].weight = ($event.target as HTMLInputElement).value" />
           </label>
+          <p v-else class="split-summary">本张合计 {{ allocationTotal(line, 'quantity') || '0' }} {{ view.quantityUnit }} / {{ allocationTotal(line, 'weight') || '0' }} 克</p>
           <div v-if="view.sourceLines?.length" class="source-allocations">
             <div v-for="(allocation, allocationIndex) in line.allocations" :key="allocationIndex" class="split-line">
               <label class="field"><span>来源明细</span><select v-model.number="allocation.sourceLineNo" :aria-label="`第${index + 1}张来源${allocationIndex + 1}`" @change="allocation.quantity = ''; allocation.weight = ''">
                 <option :value="null">请选择来源</option>
                 <option v-for="source in view.sourceLines" :key="source.lineNo" :value="source.lineNo">第 {{ source.lineNo }} 行 · {{ source.materialName }} · 剩余 {{ source.remainingQuantity }} {{ source.quantityUnit }}</option>
               </select></label>
-              <label class="field"><span>分配数量</span><input v-model="allocation.quantity" inputmode="decimal" :aria-label="`第${index + 1}张分配数量${allocationIndex + 1}`" /></label>
-              <label class="field"><span>分配重量（克）</span><input v-model="allocation.weight" inputmode="decimal" :aria-label="`第${index + 1}张分配重量${allocationIndex + 1}`" /></label>
+              <label v-show="line.allocations.length !== 1" class="field"><span>分配数量</span><input v-model="allocation.quantity" type="text" inputmode="decimal" autocomplete="off" autocapitalize="off" enterkeyhint="done" :aria-label="`第${index + 1}张分配数量${allocationIndex + 1}`" /></label>
+              <label v-show="line.allocations.length !== 1" class="field"><span>分配重量（克）</span><input v-model="allocation.weight" type="text" inputmode="decimal" autocomplete="off" autocapitalize="off" enterkeyhint="done" :aria-label="`第${index + 1}张分配重量${allocationIndex + 1}`" /></label>
               <button type="button" class="table-action" @click="fillRemaining(index, allocationIndex)">填入剩余量</button>
-              <button type="button" class="table-action" @click="line.allocations.splice(allocationIndex, 1)">移除来源</button>
+              <button v-if="line.allocations.length > 1" type="button" class="table-action" @click="line.allocations.splice(allocationIndex, 1)">移除来源</button>
             </div>
-            <button type="button" class="table-action" @click="line.allocations.push({ sourceLineNo: null, quantity: '', weight: '' })">增加来源明细</button>
+            <button v-if="(view.sourceLines?.length ?? 0) > 1" type="button" class="table-action" @click="line.allocations.push({ sourceLineNo: null, quantity: '', weight: '' })">增加来源明细</button>
           </div>
           <div class="process-checks">
             <label v-for="name in processOptions" :key="name">
@@ -352,7 +366,8 @@ function scaleStyle(payload: LabelPayload) {
 }
 .split-line {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 220px));
+  justify-content: start;
   gap: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -363,7 +378,13 @@ function scaleStyle(payload: LabelPayload) {
 .split-line > button,
 .split-line > .source-allocations,
 .split-line > .process-checks,
+.split-line > .split-summary,
 .split-line > .field:has(select) { grid-column: 1 / -1; }
+.split-line input,
+.split-line select {
+  width: 100%;
+  min-width: 0;
+}
 .process-checks {
   display: flex;
   flex-wrap: wrap;
@@ -395,7 +416,13 @@ function scaleStyle(payload: LabelPayload) {
   overflow: hidden;
   background: var(--content);
 }
+@media (max-width: 900px) {
+  .split-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .split-line input,
+  .split-line select { font-size: 16px; }
+}
 @media (max-width: 600px) {
+  .split-line { grid-template-columns: 1fr; }
   .sticker-list { --sticker-scale: 1.1; }
 }
 </style>

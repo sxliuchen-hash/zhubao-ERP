@@ -18,6 +18,7 @@ vi.mock('./cameraBarcode', () => ({
   openCameraStream: vi.fn(),
   readLiveBarcode: vi.fn(),
   readBarcodeFromFile: vi.fn(),
+  nudgeCameraFocus: vi.fn(),
 }));
 
 beforeEach(() => {

@@ -84,20 +84,35 @@ describe('MotherSplitPanel', () => {
     denied.unmount();
   });
 
+  it('有来源时数量和重量可直接输入，手机会弹出键盘', async () => {
+    vi.mocked(fetchMotherSplit).mockResolvedValue({ ...undecided, sourceLines: [{ lineNo: 1, materialCode: 'XY', materialName: '星月', goodsName: '珠子', quantity: 10, quantityUnit: '件', weight: 20, remainingQuantity: 10, remainingWeight: 20 }] });
+    const wrapper = mount(MotherSplitPanel, { props: { motherOrderCode: 'MD-1' } });
+    await flushPromises();
+    const quantity = wrapper.get('[aria-label="第1张数量"]').element as HTMLInputElement;
+    const weight = wrapper.get('[aria-label="第1张重量"]').element as HTMLInputElement;
+    expect(quantity.readOnly).toBe(false);
+    expect(quantity.disabled).toBe(false);
+    expect(weight.readOnly).toBe(false);
+    await wrapper.get('[aria-label="第1张数量"]').setValue('1.5');
+    await wrapper.get('[aria-label="第1张重量"]').setValue('2.25');
+    expect(quantity.value).toBe('1.5');
+    expect(weight.value).toBe('2.25');
+    wrapper.unmount();
+  });
+
   it('来源分配自动合计并分别填入数量重量剩余，不猜重量', async () => {
     vi.mocked(fetchMotherSplit).mockResolvedValue({ ...undecided, sourceLines: [{ lineNo: 1, materialCode: 'XY', materialName: '星月', goodsName: '珠子', quantity: 10, quantityUnit: '件', weight: 20, remainingQuantity: 10, remainingWeight: 20 }] });
     vi.mocked(splitMotherOrder).mockRejectedValue(new Error('网络超时'));
     const wrapper = mount(MotherSplitPanel, { props: { motherOrderCode: 'MD-1' } });
     await flushPromises();
     await wrapper.findAll('button').find(button => button.text() === '按明细生成草稿')!.trigger('click');
-    expect((wrapper.get('[aria-label="第1张数量"]').element as HTMLInputElement).readOnly).toBe(true);
-    expect((wrapper.get('[aria-label="第1张数量"]').element as HTMLInputElement).value).toBe('10');
-    await wrapper.get('[aria-label="第1张分配数量1"]').setValue('0.1');
-    await wrapper.get('[aria-label="第1张分配重量1"]').setValue('0.2');
-    await wrapper.findAll('button').filter(button => button.text() === '增加来源明细')[1].trigger('click');
-    await wrapper.get('[aria-label="第2张来源1"]').setValue(1);
-    await wrapper.get('[aria-label="第2张分配数量1"]').setValue('0.2');
-    await wrapper.get('[aria-label="第2张分配重量1"]').setValue('0.3');
+    const firstQuantity = wrapper.get('[aria-label="第1张数量"]').element as HTMLInputElement;
+    expect(firstQuantity.readOnly).toBe(false);
+    expect(firstQuantity.value).toBe('10');
+    await wrapper.get('[aria-label="第1张数量"]').setValue('0.1');
+    await wrapper.get('[aria-label="第1张重量"]').setValue('0.2');
+    await wrapper.get('[aria-label="第2张数量"]').setValue('0.2');
+    await wrapper.get('[aria-label="第2张重量"]').setValue('0.3');
     await wrapper.findAll('button').filter(button => button.text() === '填入剩余量')[0].trigger('click');
     expect((wrapper.get('[aria-label="第1张数量"]').element as HTMLInputElement).value).toBe('9.8');
     expect((wrapper.get('[aria-label="第1张重量"]').element as HTMLInputElement).value).toBe('19.7');

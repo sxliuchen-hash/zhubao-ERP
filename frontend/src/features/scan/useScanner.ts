@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref } from 'vue';
-import { hasLiveCamera, openCameraStream, readBarcodeFromFile, readLiveBarcode } from './cameraBarcode';
+import { hasLiveCamera, nudgeCameraFocus, openCameraStream, readBarcodeFromFile, readLiveBarcode } from './cameraBarcode';
 
 const insecureHint = '当前是 HTTP，手机打不开摄像头。请改用 https:// 加服务器地址打开本页。';
 
@@ -54,7 +54,7 @@ export function useScanner() {
       video.srcObject = opened;
       await video.play();
       if (token !== generation) return null;
-      hint.value = '对准二维码或条码，保持清晰，识别后自动继续';
+      hint.value = '对准二维码或条码，保持清晰，识别后自动继续。画面发虚时轻点画面重新对焦';
       const raw = await readLiveBarcode(video, 20000, () => token !== generation);
       if (token !== generation) return null;
       if (!raw) {
@@ -108,5 +108,10 @@ export function useScanner() {
     }
   }
 
-  return { scanning, cameraActive, hint, videoRef, scanCamera, scanPhoto, stop };
+  function refocus(x = 0.5, y = 0.5) {
+    const track = current?.getVideoTracks?.()?.[0];
+    if (track) void nudgeCameraFocus(track, x, y);
+  }
+
+  return { scanning, cameraActive, hint, videoRef, scanCamera, scanPhoto, stop, refocus };
 }

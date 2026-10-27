@@ -95,6 +95,13 @@ function stopCamera() {
   scannerHint.value = '已停止扫码，可以重新扫码、选图或手输单号';
 }
 
+function refocusAt(event: MouseEvent) {
+  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const x = bounds.width ? (event.clientX - bounds.left) / bounds.width : 0.5;
+  const y = bounds.height ? (event.clientY - bounds.top) / bounds.height : 0.5;
+  scanner.refocus(x, y);
+}
+
 function publish(raw: string) {
   emit('update:modelValue', raw);
   emit('recognize', draftOf(raw));
@@ -159,11 +166,11 @@ async function onPhoto(event: Event) {
         <button type="button" :aria-pressed="guideType === 'qr'" @click="guideType = 'qr'">二维码框</button>
         <button type="button" :aria-pressed="guideType === 'barcode'" @click="guideType = 'barcode'">条形码框</button>
       </div>
-      <div class="scan-viewfinder">
+      <div class="scan-viewfinder" @click="refocusAt">
         <video ref="videoEl" class="intake-camera" muted playsinline autoplay />
         <div class="scan-target" :class="`scan-target--${guideType}`" aria-hidden="true" />
       </div>
-      <p class="scan-help">{{ guideType === 'qr' ? '将完整二维码放入方框内' : '将完整条形码放入宽框内' }}，靠近一些，避开反光</p>
+      <p class="scan-help">{{ guideType === 'qr' ? '将完整二维码放入方框内' : '将完整条形码放入宽框内' }}，靠近一些，避开反光。画面发虚时轻点画面重新对焦</p>
       <button class="secondary-button" type="button" aria-label="停止扫码" @click="stopCamera">停止扫码</button>
     </div>
     <div class="scan-fallback-actions">

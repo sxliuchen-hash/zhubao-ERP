@@ -27,6 +27,93 @@ let qrReader: QRCodeReader | null = null;
 
 const liveFormats = ['qr_code', 'code_128', 'code_39', 'itf', 'ean_13', 'pdf417', 'data_matrix'];
 
+interface CameraCapabilities {
+  focusMode?: string[];
+  exposureMode?: string[];
+  whiteBalanceMode?: string[];
+  pointsOfInterest?: boolean;
+}
+
+export function rearCameraConstraints(): MediaStreamConstraints {
+  return {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    },
+  };
+}
+
+function readCapabilities(track: MediaStreamTrack): CameraCapabilities {
+  const read = track.getCapabilities as undefined | (() => CameraCapabilities);
+  if (!read) return {};
+  try {
+    return read.call(track) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function clampUnit(value: number) {
+  if (!Number.isFinite(value)) return 0.5;
+  return Math.min(1, Math.max(0, value));
+}
+
+export async function enableContinuousFocus(stream: MediaStream) {
+  const track = stream.getVideoTracks?.()?.[0];
+  if (!track?.applyConstraints) return;
+  const caps = readCapabilities(track);
+  const advanced: Record<string, unknown> = {};
+  if (caps.focusMode?.includes('continuous')) advanced.focusMode = 'continuous';
+  if (caps.exposureMode?.includes('continuous')) advanced.exposureMode = 'continuous';
+  if (caps.whiteBalanceMode?.includes('continuous')) advanced.whiteBalanceMode = 'continuous';
+  if (caps.pointsOfInterest) advanced.pointsOfInterest = [{ x: 0.5, y: 0.5 }];
+  if (!Object.keys(advanced).length) return;
+  try {
+    await track.applyConstraints({ advanced: [advanced] } as MediaTrackConstraints);
+  } catch {
+    // 浏览器不接受连续对焦时继续使用默认画面
+  }
+}
+
+export async function nudgeCameraFocus(track: MediaStreamTrack, x = 0.5, y = 0.5) {
+  if (!track.applyConstraints) return;
+  const caps = readCapabilities(track);
+  const point = { x: clampUnit(x), y: clampUnit(y) };
+  const continuous = caps.focusMode?.includes('continuous') ?? false;
+  try {
+    if (caps.focusMode?.includes('single-shot')) {
+      const shot: Record<string, unknown> = { focusMode: 'single-shot' };
+      if (caps.pointsOfInterest) shot.pointsOfInterest = [point];
+      await track.applyConstraints({ advanced: [shot] } as MediaTrackConstraints);
+    }
+    if (continuous) {
+      const next: Record<string, unknown> = { focusMode: 'continuous' };
+      if (caps.pointsOfInterest) next.pointsOfInterest = [point];
+      await track.applyConstraints({ advanced: [next] } as MediaTrackConstraints);
+    }
+  } catch {
+    // 轻点重新对焦失败时保持当前画面
+  }
+}
+
+export function sampleScanRegion(width: number, height: number, maxEdge = 640) {
+  const crop = 0.82;
+  const sw = Math.max(1, Math.round(width * crop));
+  const sh = Math.max(1, Math.round(height * crop));
+  const longest = Math.max(sw, sh);
+  const scale = Math.min(1, maxEdge / longest);
+  return {
+    sx: Math.max(0, Math.round((width - sw) / 2)),
+    sy: Math.max(0, Math.round((height - sh) / 2)),
+    sw,
+    sh,
+    width: Math.max(1, Math.round(sw * scale)),
+    height: Math.max(1, Math.round(sh * scale)),
+  };
+}
+
 export function resetBarcodeReaderForTests() {
   nativeDetector = undefined;
   nativeBroken = false;
@@ -39,18 +126,18 @@ export function hasLiveCamera() {
 
 export async function openCameraStream() {
   const media = navigator.mediaDevices;
+  let stream: MediaStream;
   try {
-    return await media.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: 'environment' } },
-    });
+    stream = await media.getUserMedia(rearCameraConstraints());
   } catch (error) {
     const name = error instanceof Error ? error.name : '';
     if (name !== 'OverconstrainedError' && name !== 'NotFoundError') {
       throw error;
     }
-    return media.getUserMedia({ audio: false, video: true });
+    stream = await media.getUserMedia({ audio: false, video: true });
   }
+  await enableContinuousFocus(stream);
+  return stream;
 }
 
 export async function readLiveBarcode(
@@ -59,12 +146,16 @@ export async function readLiveBarcode(
   shouldStop: () => boolean = () => false,
 ) {
   const started = Date.now();
+  const native = takeNativeDetector();
+  // 没有系统条码识别时，先让相机对焦，再做软件解码，避免一上来卡住预览。
+  if (!native) await delay(150);
+  if (shouldStop()) return null;
   while (Date.now() - started < timeoutMs && !shouldStop()) {
     const value = await detectFrame(video);
     if (value) {
       return value;
     }
-    await delay(280);
+    await delay(native && !nativeBroken ? 60 : 30);
   }
   return null;
 }
@@ -150,9 +241,8 @@ function rasterFromVideo(video: HTMLVideoElement): Raster | null {
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0) {
     return null;
   }
-  const longest = Math.max(video.videoWidth, video.videoHeight);
-  const scale = Math.min(1, 960 / longest);
-  return drawToRaster(video, Math.max(1, Math.round(video.videoWidth * scale)), Math.max(1, Math.round(video.videoHeight * scale)));
+  const region = sampleScanRegion(video.videoWidth, video.videoHeight);
+  return drawToRaster(video, region.width, region.height, region);
 }
 
 function rasterFromBlob(file: Blob) {
@@ -178,7 +268,12 @@ function rasterFromBlob(file: Blob) {
   });
 }
 
-function drawToRaster(source: CanvasImageSource, width: number, height: number): Raster | null {
+function drawToRaster(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  crop?: { sx: number; sy: number; sw: number; sh: number },
+): Raster | null {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -186,7 +281,8 @@ function drawToRaster(source: CanvasImageSource, width: number, height: number):
   if (!context) {
     return null;
   }
-  context.drawImage(source, 0, 0, width, height);
+  if (crop) context.drawImage(source, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, width, height);
+  else context.drawImage(source, 0, 0, width, height);
   const image = context.getImageData(0, 0, width, height);
   return { data: image.data, width: image.width, height: image.height };
 }
