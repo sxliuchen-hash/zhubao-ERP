@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 改单只追加版本。生效前必须有财务确认，确认可以明确选择金额不变。
+ * 改单只追加版本。费用在交货后结单；生效前必须由其他有审核权限的人通过业务审核。
  * 生效后的要求、期限和路线写入当前版本，岗位下次查询读取该版本，不覆盖原单和已有交付。
  */
 @Service
@@ -163,8 +163,30 @@ public class OrderChangeService {
         if (current.status() != OrderChangeStatus.DRAFT) {
             throw new BusinessException("只有草稿可以送审");
         }
-        return visible(saveStatus(current, OrderChangeStatus.DEFERRED_TO_SETTLEMENT, false, BigDecimal.ZERO, BigDecimal.ZERO,
-                "费用交货后确定", account.operator().trim()), account);
+        return visible(saveStatus(current, OrderChangeStatus.PENDING_REVIEW, false, BigDecimal.ZERO, BigDecimal.ZERO,
+                "费用交货后确定", ""), account);
+    }
+
+    /** 费用交货后确定只说明不计价，不能代替业务审核。申请人不能审核自己的申请。 */
+    public OrderChange review(String id, boolean approved, String note, AuthUserAccount account) {
+        requireReviewer(account);
+        OrderChange current = requireVisible(id, account);
+        if (current.status() != OrderChangeStatus.PENDING_REVIEW && current.status() != OrderChangeStatus.DEFERRED_TO_SETTLEMENT) {
+            throw new BusinessException("当前状态不能审核");
+        }
+        if (samePerson(current.createdBy(), account)) {
+            throw new BusinessException("申请人不能审核自己的改单");
+        }
+        String decision = (note == null || note.isBlank()) ? "" : "；" + note.trim();
+        return visible(saveStatus(
+                current,
+                approved ? OrderChangeStatus.BUSINESS_APPROVED : OrderChangeStatus.REJECTED,
+                false,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "费用交货后确定" + decision,
+                account.operator().trim()
+        ), account);
     }
 
     public OrderChange confirmFinance(String id, boolean amountUnchanged, BigDecimal customerUnitPrice, BigDecimal workerFee, String note, AuthUserAccount account) {
@@ -228,7 +250,7 @@ public class OrderChangeService {
             if (latest.status() == OrderChangeStatus.APPLIED) {
                 return "applied";
             }
-            if (latest.status() != OrderChangeStatus.DEFERRED_TO_SETTLEMENT
+            if (latest.status() != OrderChangeStatus.BUSINESS_APPROVED
                     && latest.status() != OrderChangeStatus.FINANCE_CONFIRMED) {
                 throw new BusinessException("业务审核后才能生效");
             }
@@ -523,9 +545,26 @@ public class OrderChangeService {
     }
 
     private boolean canApply(OrderChangeStatus status) {
-        return status == OrderChangeStatus.DEFERRED_TO_SETTLEMENT
+        return status == OrderChangeStatus.BUSINESS_APPROVED
                 || status == OrderChangeStatus.FINANCE_CONFIRMED
                 || status == OrderChangeStatus.APPLIED;
+    }
+
+    private void requireReviewer(AuthUserAccount account) {
+        requireAccount(account);
+        if (permissionGuard != null) {
+            permissionGuard.assertAllowed(PermissionCode.ORDER_CHANGE_REVIEW, BusinessDataAccess.contextOf(account));
+            return;
+        }
+        if (account.role() != RoleCode.WORKSHOP_LEADER && account.role() != RoleCode.BUSINESS_MANAGER
+                && account.role() != RoleCode.GENERAL_MANAGER && account.role() != RoleCode.ADMIN) {
+            throw new PermissionDeniedException("无权审核改单");
+        }
+    }
+
+    private static boolean samePerson(String createdBy, AuthUserAccount account) {
+        String creator = createdBy == null ? "" : createdBy.trim();
+        return creator.equals(account.operator().trim()) || creator.equals(account.username().trim());
     }
 
     private void requireFinance(AuthUserAccount account) {

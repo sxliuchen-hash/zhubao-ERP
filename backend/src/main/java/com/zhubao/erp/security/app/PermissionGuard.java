@@ -75,6 +75,8 @@ public class PermissionGuard {
         grant(PermissionCode.BUSINESS_MOTHER_SPLIT, RoleCode.BUSINESS_MANAGER);
         grant(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, RoleCode.BUSINESS_MANAGER);
         grant(PermissionCode.BUSINESS_LOSS_APPROVAL, RoleCode.BUSINESS_MANAGER);
+        allowManager(PermissionCode.ORDER_CHANGE_REVIEW, RoleCode.WORKSHOP_LEADER);
+        grant(PermissionCode.ORDER_CHANGE_REVIEW, RoleCode.BUSINESS_MANAGER);
         roleMatrix.put(PermissionCode.STOCK_COMPANY_RECEIVE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
         roleMatrix.put(PermissionCode.STOCK_COMPANY_ISSUE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
         roleMatrix.put(PermissionCode.STOCK_COMPANY_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
@@ -152,6 +154,7 @@ public class PermissionGuard {
             case BUSINESS_CUSTOMER_RETURN -> CoverDuties.RETURN;
             case REGISTER_IMPORT_REVIEW, REGISTER_IMPORT_POSTING -> CoverDuties.REGISTER;
             case BUSINESS_LOSS_APPROVAL -> CoverDuties.LOSS;
+            case ORDER_CHANGE_REVIEW -> null;
             case DESK_TASK_ASSIGN, GATEWAY_READING_CONSUME, DOCUMENT_ATTACHMENT_UPLOAD, DOCUMENT_CAPTURE -> null;
             case STOCK_COMPANY_RECEIVE, STOCK_COMPANY_ISSUE, STOCK_COMPANY_RETURN, STOCK_PREP_RECEIVE,
                     STOCK_PREP_ISSUE, STOCK_PREP_RETURN, STOCK_PREP_CUSTOMER_RETURN, STOCK_FREEZE, STOCK_CORRECT -> "";

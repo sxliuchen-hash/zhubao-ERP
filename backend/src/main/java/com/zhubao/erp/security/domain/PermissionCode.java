@@ -12,6 +12,7 @@ public enum PermissionCode {
     BUSINESS_CUSTOMER_RETURN("客户退货入库"),
     BUSINESS_AFTER_SALES_REVIEW("售后复核分流"),
     BUSINESS_LOSS_APPROVAL("损耗审批试算"),
+    ORDER_CHANGE_REVIEW("改单业务审核"),
     REGISTER_IMPORT_REVIEW("登记表复核补录"),
     REGISTER_IMPORT_POSTING("登记表批次入账"),
     MACHINE_OUTPUT_SUBMIT("设备产量提交"),

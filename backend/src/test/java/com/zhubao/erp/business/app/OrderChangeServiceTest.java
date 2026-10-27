@@ -86,11 +86,13 @@ class OrderChangeServiceTest {
         var second = service.draft("MD-CHANGE-001", "", "第二次", "2026-11-02", "change-base-b001", receiver);
         service.submitFinance(first.id(), receiver);
         service.submitFinance(second.id(), receiver);
+        approve(service, first.id());
+        approve(service, second.id());
         service.apply(first.id(), "change-base-apply-a", receiver);
         assertThatThrownBy(() -> service.apply(second.id(), "change-base-apply-b", 1, receiver))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能改写财务确认时固定的基准版本");
-        assertThat(service.present(second.id(), receiver).status()).isEqualTo(OrderChangeStatus.DEFERRED_TO_SETTLEMENT);
+        assertThat(service.present(second.id(), receiver).status()).isEqualTo(OrderChangeStatus.BUSINESS_APPROVED);
     }
 
     @Test
@@ -102,6 +104,7 @@ class OrderChangeServiceTest {
         OrderChangeService effect = effectService(requirements, null);
         var first = effect.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-route-1001", "雕刻、镶嵌", 0, "", receiver);
         effect.submitFinance(first.id(), receiver);
+        approve(effect, first.id());
         effect.apply(first.id(), "change-route-apply", receiver);
         var second = effect.draft("MD-CHANGE-001", "", "", "2026-12-01", "change-route-2001", null, null, "", receiver);
         assertThat(second.oldRequirement()).isEqualTo("改为外圈刻字");
@@ -169,6 +172,7 @@ class OrderChangeServiceTest {
 
         var draft = changes.draft("MD-ROUND-001", "", "外圈重刻", "2026-12-01", "round-draft-0001", null, null, "雕刻", receiver);
         changes.submitFinance(draft.id(), receiver);
+        approve(changes, draft.id());
         changes.apply(draft.id(), "round-apply-0001", receiver);
         String roundCode = requirements.listByMother("MD-ROUND-001").get(0).roundWorkOrderCode();
 
@@ -198,9 +202,17 @@ class OrderChangeServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("业务审核后才能生效");
         service.submitFinance(draft.id(), receiver);
+        assertThat(service.present(draft.id(), receiver).status()).isEqualTo(OrderChangeStatus.PENDING_REVIEW);
+        assertThatThrownBy(() -> service.apply(draft.id(), "change-apply-001", receiver))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("业务审核后才能生效");
+        assertThatThrownBy(() -> service.review(draft.id(), true, "自己通过", receiver))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessageContaining("无权审核改单");
         assertThatThrownBy(() -> service.confirmFinance(draft.id(), true, null, null, "金额不变", receiver))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不再确认单价");
+        approve(service, draft.id());
         var applied = service.apply(draft.id(), "change-apply-001", receiver);
         assertThat(applied.status()).isEqualTo(OrderChangeStatus.APPLIED);
         assertThat(applied.amountUnchanged()).isFalse();
@@ -221,6 +233,7 @@ class OrderChangeServiceTest {
         OrderChangeService effect = effectService(requirements, null);
         var draft = effect.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-effect-001", null, 0, "雕刻", receiver);
         effect.submitFinance(draft.id(), receiver);
+        approve(effect, draft.id());
         var applied = effect.apply(draft.id(), "change-effect-apply", receiver);
         assertThat(applied.status()).isEqualTo(OrderChangeStatus.APPLIED);
         assertThat(documents.findMotherOrderByCode("MD-CHANGE-001").orElseThrow().processingRequirement()).isEqualTo("内壁刻字");
@@ -243,8 +256,10 @@ class OrderChangeServiceTest {
         var first = effect.draft("MD-CHANGE-001", "", "第一次", "2026-11-01", "change-stale-a", receiver);
         var second = effect.draft("MD-CHANGE-001", "", "第二次", "2026-12-01", "change-stale-b", null, 0, "", receiver);
         effect.submitFinance(first.id(), receiver);
+        approve(effect, first.id());
         effect.apply(first.id(), "change-stale-apply-a", receiver);
         effect.submitFinance(second.id(), receiver);
+        approve(effect, second.id());
         assertThatThrownBy(() -> effect.apply(second.id(), "change-stale-apply-b", 0, receiver))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("版本已变化");
@@ -291,6 +306,27 @@ class OrderChangeServiceTest {
         );
         assertThatThrownBy(() -> scoped.draft("MD-CHANGE-001", "", "改抛光", "2026-11-02", "change-process", null, 0, "抛光", carver))
                 .isInstanceOf(PermissionDeniedException.class);
+    }
+
+    @Test
+    void applicantCannotReviewOwnChangeAndRejectionDoesNotApply() {
+        var draft = service.draft("MD-CHANGE-001", "", "改为外圈刻字", "2026-11-01", "change-self-0001", receiver);
+        service.submitFinance(draft.id(), receiver);
+        AuthUserAccount leader = account("收货员", RoleCode.WORKSHOP_LEADER);
+        assertThatThrownBy(() -> service.review(draft.id(), true, "同名通过", leader))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("申请人不能审核自己的改单");
+        AuthUserAccount other = account("另一主管", RoleCode.WORKSHOP_LEADER);
+        var rejected = service.review(draft.id(), false, "路线不对", other);
+        assertThat(rejected.status()).isEqualTo(OrderChangeStatus.REJECTED);
+        assertThatThrownBy(() -> service.apply(draft.id(), "change-self-apply", receiver))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("业务审核后才能生效");
+        assertThat(service.present(draft.id(), receiver).status()).isEqualTo(OrderChangeStatus.REJECTED);
+    }
+
+    private void approve(OrderChangeService target, String id) {
+        target.review(id, true, "要求、路线和交期通过", account("车间主管", RoleCode.WORKSHOP_LEADER));
     }
 
     private OrderChangeService effectService(InMemoryOrderRequirementRepository requirements, BusinessDataAccess access) {

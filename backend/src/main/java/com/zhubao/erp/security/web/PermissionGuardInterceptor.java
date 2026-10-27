@@ -128,6 +128,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         if (path.matches("^/api/business/order-changes/[^/]+/finance-(confirmations|rejections)$")) {
             return PermissionCode.FINANCE_BILLING_POST;
         }
+        if (path.matches("^/api/business/order-changes/[^/]+/reviews$")) {
+            return PermissionCode.ORDER_CHANGE_REVIEW;
+        }
         if (motherSplitPath.matcher(path).matches()) {
             return PermissionCode.BUSINESS_MOTHER_SPLIT;
         }

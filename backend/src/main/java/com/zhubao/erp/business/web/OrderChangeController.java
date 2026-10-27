@@ -78,6 +78,12 @@ public class OrderChangeController {
         return ApiResponse.ok(orderChangeService.rejectFinance(id, body.note(), account(request)));
     }
 
+    @PostMapping("/{id}/reviews")
+    public ApiResponse<OrderChange> review(@PathVariable String id, @RequestBody ReviewRequest body, HttpServletRequest request) {
+        require(body);
+        return ApiResponse.ok(orderChangeService.review(id, body.approved(), body.note(), account(request)));
+    }
+
     @PostMapping("/{id}/applications")
     public ApiResponse<OrderChange> apply(@PathVariable String id, @RequestBody ApplyRequest body, HttpServletRequest request) {
         require(body);
@@ -134,5 +140,8 @@ public class OrderChangeController {
     }
 
     public record ApplyRequest(String requestId, Integer expectedVersion) {
+    }
+
+    public record ReviewRequest(boolean approved, String note) {
     }
 }

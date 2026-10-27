@@ -11,13 +11,15 @@ const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null)
 const canFinance = computed(() => session.value?.effectivePermissions
   ? session.value.effectivePermissions.includes('FINANCE_BILLING_POST')
   : ['ADMIN', 'GENERAL_MANAGER', 'FINANCE_STATISTICIAN'].includes(session.value?.role ?? ''));
+const canReview = computed(() => session.value?.effectivePermissions?.includes('ORDER_CHANGE_REVIEW') === true
+  || ['ADMIN', 'GENERAL_MANAGER', 'WORKSHOP_LEADER'].includes(session.value?.role ?? ''));
 interface OrderChangeRow {
   id: string; motherOrderCode: string; workOrderCode: string; status: string; versionNo: number; expectedVersion: number;
   oldRequirement: string; newRequirement: string; oldDueDate: string; newDueDate: string; oldRoute: string; newRoute: string;
   reworkProcess: string; amountUnchanged: boolean; customerUnitPrice: number | null; workerFee: number | null;
   customerDelta: number | null; workerDelta: number | null; financeNote: string; receivableCode: string; processName: string; workerName: string;
 }
-type Kind = 'draft' | 'submit' | 'confirm' | 'reject' | 'apply';
+type Kind = 'draft' | 'submit' | 'confirm' | 'reject' | 'review' | 'apply';
 interface Command { kind: Kind; path: string; body: Record<string, unknown>; id: string; before: string; success: string; idempotent: boolean }
 const message = ref('');
 const error = ref('');
@@ -61,7 +63,7 @@ function workCode() { return props.target.orderCode === props.target.motherOrder
 function validRow(row: OrderChangeRow | null | undefined, id?: string) {
   return Boolean(row?.id && row.motherOrderCode === props.target.motherOrderCode && (!id || row.id === id));
 }
-function statusLabel(status: string) { return ({ DRAFT: '草稿', PENDING_FINANCE: '待财务确认（已停用）', FINANCE_CONFIRMED: '财务已确认', DEFERRED_TO_SETTLEMENT: '费用交货后确定', REJECTED: '已拒绝', APPLIED: '已生效' } as Record<string, string>)[status] || status; }
+function statusLabel(status: string) { return ({ DRAFT: '草稿', PENDING_FINANCE: '待财务确认（已停用）', FINANCE_CONFIRMED: '财务已确认', DEFERRED_TO_SETTLEMENT: '费用交货后确定', PENDING_REVIEW: '待业务审核', BUSINESS_APPROVED: '业务审核通过', REJECTED: '已拒绝', APPLIED: '已生效' } as Record<string, string>)[status] || status; }
 function rememberEvidence(row: OrderChangeRow) { if (!evidenceTargets.value.some(item => item.id === row.id)) evidenceTargets.value.push(row); }
 function assignSelection(row: OrderChangeRow) {
   if (selectedChange.value?.id !== row.id) {
@@ -73,7 +75,7 @@ function assignSelection(row: OrderChangeRow) {
 }
 function preserveReceipt(row: OrderChangeRow) {
   const receipt = confirmedRows.get(row.id);
-  const rank: Record<string, number> = { DRAFT: 0, PENDING_FINANCE: 1, DEFERRED_TO_SETTLEMENT: 2, FINANCE_CONFIRMED: 2, REJECTED: 3, APPLIED: 3 };
+  const rank: Record<string, number> = { DRAFT: 0, PENDING_FINANCE: 1, DEFERRED_TO_SETTLEMENT: 1, PENDING_REVIEW: 1, FINANCE_CONFIRMED: 2, BUSINESS_APPROVED: 2, REJECTED: 3, APPLIED: 3 };
   return receipt && (rank[receipt.status] ?? -1) > (rank[row.status] ?? -1) ? receipt : row;
 }
 function select(row: OrderChangeRow) {
@@ -164,9 +166,15 @@ async function confirmDelta() {
     customerDelta: customer, workerDelta: worker, receivableCode: receivableCode.value.trim(), processName: processName.value.trim(),
     workerName: workerName.value.trim(), note: financeNote.value.trim() });
 }
+async function reviewChange(approved: boolean) {
+  const current = selectedChange.value;
+  if (!current || locked.value || !canReview.value || !['PENDING_REVIEW', 'DEFERRED_TO_SETTLEMENT'].includes(current.status)) return;
+  await execute({ kind: 'review', id: current.id, before: current.status, path: '/api/business/order-changes/' + encodeURIComponent(current.id) + '/reviews',
+    body: { approved, note: approved ? '业务审核通过' : '业务审核拒绝' }, success: approved ? '业务审核通过，费用仍在交货后确定' : '业务审核已拒绝', idempotent: false });
+}
 async function applyChange() {
   const current = selectedChange.value;
-  if (!current || locked.value || !['DEFERRED_TO_SETTLEMENT', 'FINANCE_CONFIRMED'].includes(current.status)) return;
+  if (!current || locked.value || !['BUSINESS_APPROVED', 'FINANCE_CONFIRMED'].includes(current.status)) return;
   applyAttempt.value = nextRequestAttempt(applyAttempt.value, JSON.stringify([current.id, current.expectedVersion]), 'change-apply');
   await execute({ kind: 'apply', id: current.id, before: current.status, path: '/api/business/order-changes/' + encodeURIComponent(current.id) + '/applications',
     body: { requestId: applyAttempt.value.requestId, expectedVersion: current.expectedVersion }, success: '改单已生效', idempotent: true });
@@ -181,7 +189,7 @@ async function checkUnknown() {
     if (disposed || pending.value !== command) return;
     if (!validRow(row, command.id)) throw new Error('核对响应与原改单不一致');
     assignSelection(row);
-    const progressed = command.kind === 'submit' ? ['PENDING_FINANCE', 'DEFERRED_TO_SETTLEMENT', 'FINANCE_CONFIRMED', 'REJECTED', 'APPLIED'] : ['FINANCE_CONFIRMED', 'DEFERRED_TO_SETTLEMENT', 'REJECTED', 'APPLIED'];
+    const progressed = command.kind === 'submit' ? ['PENDING_FINANCE', 'PENDING_REVIEW', 'DEFERRED_TO_SETTLEMENT', 'FINANCE_CONFIRMED', 'BUSINESS_APPROVED', 'REJECTED', 'APPLIED'] : ['FINANCE_CONFIRMED', 'BUSINESS_APPROVED', 'DEFERRED_TO_SETTLEMENT', 'REJECTED', 'APPLIED'];
     if (progressed.includes(row.status)) {
       pending.value = null;
       confirmedRows.set(row.id, row);
@@ -238,12 +246,16 @@ async function loadTimeline() {
         <dl class="change-diff"><dt>要求</dt><dd>{{ selectedChange.oldRequirement || '空' }} → {{ selectedChange.newRequirement || '空' }}</dd><dt>期限</dt><dd>{{ selectedChange.oldDueDate || '空' }} → {{ selectedChange.newDueDate || '空' }}</dd><dt>路线</dt><dd>{{ selectedChange.oldRoute || '空' }} → {{ selectedChange.newRoute || '空' }}</dd></dl>
         <p v-if="selectedChange.reworkProcess">重做工序：{{ selectedChange.reworkProcess }}；不覆盖原交付。</p>
         <button class="secondary-button" type="button" :disabled="locked || selectedChange.status !== 'DRAFT'" @click="stage('submit')">送审，费用交货后确定</button>
-        <p v-if="selectedChange.status === 'DEFERRED_TO_SETTLEMENT'">费用交货后确定。业务变更可以生效，不在这里填写客户单价或员工工费。</p>
-        <p v-if="selectedChange.status === 'PENDING_FINANCE'">旧的金额确认已停止。请重新处理为费用交货后确定，不能再填写差额。</p>
+        <p v-if="['PENDING_REVIEW', 'DEFERRED_TO_SETTLEMENT'].includes(selectedChange.status)">费用在交货后确定。送审本身不是审核通过，须由其他业务审核人通过后才能生效。</p>
+        <p v-if="selectedChange.status === 'PENDING_FINANCE'">旧的金额确认已停止。历史财务状态只读保留，不能再填写差额。</p>
+        <template v-if="canReview && ['PENDING_REVIEW', 'DEFERRED_TO_SETTLEMENT'].includes(selectedChange.status)">
+          <button class="secondary-button" type="button" :disabled="locked" @click="reviewChange(true)">业务审核通过</button>
+          <button class="secondary-button" type="button" :disabled="locked" @click="reviewChange(false)">业务审核拒绝</button>
+        </template>
         <template v-if="canFinance">
           <details v-if="['FINANCE_CONFIRMED', 'APPLIED'].includes(selectedChange.status)"><summary>历史财务确认</summary><p>{{ selectedChange.amountUnchanged ? '当时记录为金额不变' : '当时记录了差额' }} · 客户单价 {{ selectedChange.customerUnitPrice }} · 工费 {{ selectedChange.workerFee }}</p><p>客户差额 {{ selectedChange.customerDelta }} · 工费差额 {{ selectedChange.workerDelta }} · {{ selectedChange.financeNote }}</p></details>
         </template>
-        <button class="primary-button" type="button" :disabled="locked || !['DEFERRED_TO_SETTLEMENT', 'FINANCE_CONFIRMED'].includes(selectedChange.status)" @click="applyChange">生效改单</button>
+        <button class="primary-button" type="button" :disabled="locked || !['BUSINESS_APPROVED', 'FINANCE_CONFIRMED'].includes(selectedChange.status)" @click="applyChange">生效改单</button>
       </section>
     </div>
     <section v-for="row in evidenceTargets" :key="row.id" v-show="selectedChange?.id === row.id" :inert="selectedChange?.id !== row.id || undefined">

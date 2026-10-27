@@ -87,6 +87,7 @@ class OrderChangeFinanceTest {
                 new BigDecimal("-30.00"), new BigDecimal("-8.00"), "FIN-1", "雕刻", "雕刻工", "减额", financeUser))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不再确认单价");
+        approve(draft.id());
         service.apply(draft.id(), "change-money-apply", receiver);
         service.apply(draft.id(), "change-money-apply", receiver);
         assertThat(finance.findReceivableBySourceKey("CHANGE-RED|" + draft.id())).isEmpty();
@@ -107,6 +108,7 @@ class OrderChangeFinanceTest {
         AuthUserAccount receiver = account("收货员", RoleCode.RECEIVER);
         var draft = service.draft("MD-CHANGE-001", "", "加镶嵌", "2026-11-01", "change-plus-0001", receiver);
         service.submitFinance(draft.id(), receiver);
+        approve(draft.id());
         service.apply(draft.id(), "change-plus-apply", receiver);
         assertThat(finance.findReceivableBySourceKey("CHANGE|" + draft.id() + "|MD-CHANGE-001|镶嵌")).isEmpty();
     }
@@ -123,10 +125,11 @@ class OrderChangeFinanceTest {
         );
         var draft = failing.draft("MD-CHANGE-001", "", "回滚", "2026-11-02", "change-rollback-001", receiver);
         failing.submitFinance(draft.id(), receiver);
+        failing.review(draft.id(), true, "业务审核通过", account("车间主管", RoleCode.WORKSHOP_LEADER));
         assertThatThrownBy(() -> failing.apply(draft.id(), "change-rollback-apply", receiver))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("结果写入失败");
-        assertThat(changes.findById(draft.id()).orElseThrow().status()).isEqualTo(com.zhubao.erp.business.domain.OrderChangeStatus.DEFERRED_TO_SETTLEMENT);
+        assertThat(changes.findById(draft.id()).orElseThrow().status()).isEqualTo(com.zhubao.erp.business.domain.OrderChangeStatus.BUSINESS_APPROVED);
         assertThat(finance.findReceivableBySourceKey("CHANGE-RED|" + draft.id())).isEmpty();
     }
 
@@ -135,6 +138,7 @@ class OrderChangeFinanceTest {
         AuthUserAccount receiver = account("收货员", RoleCode.RECEIVER);
         var draft = service.draft("MD-CHANGE-001", "", "并发", "2026-11-01", "change-race-001", receiver);
         service.submitFinance(draft.id(), receiver);
+        approve(draft.id());
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -161,6 +165,10 @@ class OrderChangeFinanceTest {
             throw new IllegalStateException(ex);
         }
         service.apply(id, "change-race-apply", receiver);
+    }
+
+    private void approve(String id) {
+        service.review(id, true, "要求、路线和交期通过", account("车间主管", RoleCode.WORKSHOP_LEADER));
     }
 
     private AuthUserAccount account(String operator, RoleCode role) {

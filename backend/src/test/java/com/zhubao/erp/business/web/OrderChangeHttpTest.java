@@ -51,11 +51,11 @@ class OrderChangeHttpTest {
         String code = "MD-HTTP-" + System.nanoTime();
         operations.confirmInbound(new ConfirmInboundCommand(
                 code, 1001L, 1001L, "AU9999", "2026-10-10", "顺丰", "SF" + code, "",
-                "测试收货人", "测试收货人", "戒托", "", null, "", "R05-WIP",
-                new BigDecimal("4"), "件", new BigDecimal("8"), "测试收货人", "", "",
+                "库管员 何琳", "库管员 何琳", "戒托", "", null, "", "R05-WIP",
+                new BigDecimal("4"), "件", new BigDecimal("8"), "库管员 何琳", "", "",
                 "内壁刻字", "2026-10-20", "恒信珠宝"
         ));
-        splits.keep(code, "测试收货人");
+        splits.keep(code, "库管员 何琳");
         String other = "MD-HTTP-OTHER-" + System.nanoTime();
         operations.confirmInbound(new ConfirmInboundCommand(
                 other, 2002L, 2002L, "AU9999", "2026-10-10", "顺丰", "SF" + other, "",
@@ -100,13 +100,34 @@ class OrderChangeHttpTest {
                 .andExpect(status().isForbidden());
         mvc.perform(post("/api/business/order-changes/" + id + "/finance-submissions")
                         .header("Authorization", token("warehouse")))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"));
+        ObjectNode applyEarly = mapper.createObjectNode();
+        applyEarly.put("requestId", "http-apply-early-" + code);
+        mvc.perform(post("/api/business/order-changes/" + id + "/applications")
+                        .header("Authorization", token("warehouse"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(applyEarly)))
+                .andExpect(status().isBadRequest());
+        ObjectNode review = mapper.createObjectNode();
+        review.put("approved", true);
+        review.put("note", "要求路线交期通过");
+        mvc.perform(post("/api/business/order-changes/" + id + "/reviews")
+                        .header("Authorization", token("warehouse"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(review)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/business/order-changes/" + id + "/reviews")
+                        .header("Authorization", token("admin"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsBytes(review)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("BUSINESS_APPROVED"));
         mvc.perform(post("/api/business/order-changes/" + id + "/finance-confirmations")
                         .header("Authorization", token("admin"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsBytes(confirm)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.customerUnitPrice").value(70));
+                .andExpect(status().isBadRequest());
 
         mvc.perform(get("/api/business/order-changes/" + id).header("Authorization", token("warehouse")))
                 .andExpect(status().isOk())
@@ -119,7 +140,7 @@ class OrderChangeHttpTest {
         mvc.perform(get("/api/business/order-changes/timeline").param("motherOrderCode", code)
                         .header("Authorization", token("admin")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[1]", containsString("客户单价:70")));
+                .andExpect(jsonPath("$.data[1]", not(containsString("客户单价:70"))));
 
         mvc.perform(get("/api/business/order-changes/timeline").param("motherOrderCode", other)
                         .header("Authorization", token("scope-http")))
@@ -133,8 +154,8 @@ class OrderChangeHttpTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsBytes(apply)))
                 .andExpect(status().isOk());
-        AuthUserAccount leader = accounts.findByUsername("leader").orElseThrow();
-        assertThat(stations.lookup(code, leader).processingRequirement()).isEqualTo("改为外圈刻字");
+        AuthUserAccount admin = accounts.findByUsername("admin").orElseThrow();
+        assertThat(stations.lookup(code, admin).processingRequirement()).isEqualTo("改为外圈刻字");
     }
 
     private String token(String username) {
