@@ -503,6 +503,7 @@ namespace Zhubao.PrintReceiver
             var snapshot = ParseObject(snapshotText);
             if (snapshot == null) throw new InvalidOperationException("标签快照无效");
             var lines = new List<string>();
+            var fieldSpecs = new List<LabelFieldSpec>();
             object fields;
             IList fieldItems = snapshot.TryGetValue("fields", out fields) ? Items(fields) : null;
             if (fieldItems != null)
@@ -513,7 +514,9 @@ namespace Zhubao.PrintReceiver
                     if (field == null) continue;
                     string name = Text(field, "name");
                     string value = Text(field, "value");
-                    if (name.Length > 0 && value.Length > 0) lines.Add(name + "：" + value);
+                    if (value.Length == 0) continue;
+                    fieldSpecs.Add(new LabelFieldSpec { Name = name, Value = value });
+                    if (name.Length > 0) lines.Add(name + "：" + value);
                 }
             }
             object rawLines;
@@ -546,7 +549,12 @@ namespace Zhubao.PrintReceiver
             spec.WidthMm = width;
             spec.HeightMm = height;
             spec.Dpi = dpi;
+            spec.TemplateCode = Text(snapshot, "templateCode");
+            object layout;
+            var layoutMap = snapshot.TryGetValue("layout", out layout) ? layout as Dictionary<string, object> : null;
+            spec.LayoutMode = layoutMap == null ? "" : Text(layoutMap, "mode");
             spec.Lines = lines.ToArray();
+            spec.Fields = fieldSpecs.ToArray();
             spec.FooterLeft = Text(snapshot, "footerLeft");
             spec.FooterRight = Text(snapshot, "footerRight");
             var storageSources = new List<StorageSourceSpec>();
