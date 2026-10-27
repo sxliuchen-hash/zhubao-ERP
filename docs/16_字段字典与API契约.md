@@ -692,6 +692,8 @@ MySQL 持久化表：
 
 改单证据阶段是 `ORDER_CHANGE`，操作类型同名，操作编号是改单号，目标必须是该改单的母单。
 
+`POST /api/business/work-orders/{code}/requirement` 只改子单加工要求。请求体为 `{ requirement, requestId }`，要求不能为空且不超过 500 字。保存后立即成为该子单的当前要求，并追加一条调整记录，原因是「编辑加工要求」。不创建改单，不送财务确认，不改期限、路线、数量、重量或费用。同一 `requestId` 与同一内容回放已保存结果；内容或账号变化按改单请求的同一规则拒绝。母单号、回收站中的子单和没有变化的原文会被拒绝。已印标签不自动更换。期限、路线和费用仍走上面的改单接口。若该子单随后有改单生效，要求版本取大于已有版本的编号，避免覆盖这次直接修改时发生主键冲突。
+
 ### 5.3 `ReportProductionCommand`
 
 页面和导入不再调用 `POST /api/business/operations/production-reports`，该 HTTP 已退出。现场工序交付走 `process-stations`。登记导入和设备读数仍把数量、重量交给岗位服务 `reportProduction`，但必须登录，不能再绕过工序校验。下面的字段仍是这条内部命令的形状。

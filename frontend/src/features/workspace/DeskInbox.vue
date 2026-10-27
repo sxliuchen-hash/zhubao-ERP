@@ -5,6 +5,7 @@ import { fetchPendingApprovalTasks } from '../../services/approvalApi';
 import type { OrderWorkspacePage, OrderWorkspaceRow } from '../../services/orderWorkspaceTypes';
 import type { ApprovalTask } from '../../data/approvalTaskData';
 import type { TraceTarget } from '../scan/traceTarget';
+import OrderKindMark from '../orders/OrderKindMark.vue';
 import { orderFacetLabel, orderProductionStatus, orderQuantityText } from '../orders/orderWorkspaceLabels';
 
 const tabs = inject<Ref<string[]>>('zhubao-visible-tabs', ref([]));
@@ -77,7 +78,7 @@ onBeforeUnmount(() => { disposed = true; orderGeneration += 1; approvalGeneratio
         <p class="inbox-count">当前分类共 {{ orders.totalRows }} 项目标，本次预览 {{ orders.items.length }} 项。</p>
         <p v-if="!orders.items.length">当前分类暂无订单</p>
         <button v-for="row in orders.items" :key="row.rowKey" type="button" class="inbox-row" @click="select(row)">
-          <span><strong>{{ row.goodsName || '货品未填写' }}</strong><small>{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次 {{ row.executionRoundCode }}</template></small><small>{{ row.currentProcess || '工序未提供' }} · {{ orderQuantityText(row.quantity, row.quantityUnit) }}</small></span>
+          <span><strong class="inbox-title"><OrderKindMark :object-type="row.objectType" />{{ row.goodsName || '货品未填写' }}</strong><small>{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次 {{ row.executionRoundCode }}</template></small><small>{{ row.currentProcess || '工序未提供' }} · {{ orderQuantityText(row.quantity, row.quantityUnit) }}</small></span>
           <span><b>{{ orderProductionStatus(row) }}</b><small>交期 {{ row.dueDate || '未填写' }}</small><small class="inbox-row-hint">查看要求与下一步</small></span>
         </button>
       </template>
@@ -108,6 +109,7 @@ onBeforeUnmount(() => { disposed = true; orderGeneration += 1; approvalGeneratio
 .inbox-tools select { padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
 .inbox-row { display: flex; justify-content: space-between; gap: 16px; padding: 16px 0; border: 0; border-bottom: 1px solid var(--line); text-align: left; width: 100%; background: transparent; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; }
 .inbox-row > span { display: grid; gap: 6px; min-width: 0; }
+.inbox-title { display: inline-flex; align-items: center; gap: 6px; }
 .inbox-row > span:last-child { text-align: right; }
 .inbox-count { font-size: 12px; }
 @media (max-width: 900px) {

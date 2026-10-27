@@ -14,6 +14,8 @@ import type { TabKey } from '../workspace/workspaceNavigation';
 import { workspaceTabs } from '../workspace/workspaceNavigation';
 import OrderList from './OrderList.vue';
 import OrderDetail from './OrderDetail.vue';
+import OrderKindMark from './OrderKindMark.vue';
+import WorkOrderRequirementForm from './WorkOrderRequirementForm.vue';
 import MotherAdminPanel from './MotherAdminPanel.vue';
 import type { OpenIntakeAction, OpenLabelAction, OpenOrderChangeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, ProductionMode } from './orderActions';
 import { orderFacetLabel } from './orderWorkspaceLabels';
@@ -178,6 +180,16 @@ function ship() {
   if (identity.value && canShip.value) openShipping?.({ objectType: identity.value.objectType, code: identity.value.code });
 }
 function label() { if (identity.value && canLabel.value) openLabel?.({ objectType: identity.value.objectType, code: identity.value.code }); }
+const childRequirementCode = computed(() => {
+  const current = identity.value;
+  if (!current || current.objectType !== 'WORK_ORDER' || selectedRow.value?.executionRoundCode) return '';
+  return current.code;
+});
+async function savedRequirement() {
+  const current = identity.value;
+  if (!current) return;
+  await scan.lookup({ content: current.code, objectType: current.objectType, intent: 'LOOKUP' });
+}
 function chooseFacet(facet: string) {
   filters.facet = facet;
   void load(1);
@@ -272,7 +284,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
         <button v-for="item in scan.context.relatedTargets" :key="`${item.objectType}:${item.code}`" type="button" class="secondary-button" @click="choose(item)">{{ scanObjectTypeLabel(item.objectType) }} {{ item.code }}</button>
       </template>
       <template v-if="identity && scan.context">
-        <h2>{{ scanObjectTypeLabel(identity.objectType) }} {{ identity.code }}</h2>
+        <h2 class="order-detail-title"><OrderKindMark :object-type="identity.objectType" />{{ scanObjectTypeLabel(identity.objectType) }} {{ identity.code }}</h2>
         <MotherAdminPanel v-if="adminPanelOpen && session?.role === 'ADMIN' && identity.motherOrderCode"
           :key="identity.motherOrderCode" :mother-code="identity.motherOrderCode" @close="adminPanelOpen = false" @saved="load()" @deleted="load()" />
         <p v-if="selectedRow?.executionRoundCode">执行轮次 {{ selectedRow.executionRoundCode }} · 原子单 {{ selectedRow.workOrderCode || '未提供' }}</p>
@@ -281,6 +293,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
             <p v-if="selectedRow">{{ selectedRow.currentProcess || '未提供工序' }} · {{ selectedRow.processPercent === null ? '未记录进度' : `工序进度 ${selectedRow.processPercent}%` }} · {{ selectedRow.processFormallyDelivered === null ? '交工状态未提供' : selectedRow.processFormallyDelivered ? '已正式交工' : '未正式交工' }}</p>
           </template>
         </OrderDetail>
+        <WorkOrderRequirementForm v-if="childRequirementCode" :key="childRequirementCode" :code="childRequirementCode" :requirement="scan.context.requirements.workOrderRequirement || scan.context.order.requirement || ''" @saved="savedRequirement" />
         <div class="order-detail-actions" aria-label="原业务办理入口">
           <button v-for="(action, index) in foregroundActions" :key="action.key" :class="index === 0 ? 'primary-button' : 'secondary-button'" type="button" @click="action.run">{{ action.label }}</button>
           <details v-if="moreActions.length" class="order-more-actions">
@@ -297,6 +310,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 
 <style scoped>
 .order-workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; font-size: 14px; }
+.order-detail-title { display: flex; align-items: center; gap: 8px; }
 .order-list-panel, .order-detail-panel { min-width: 0; background: var(--content); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .order-detail-panel { display: grid; gap: 14px; overflow-wrap: anywhere; }
 .order-detail-panel h2 { margin: 0; font-size: 18px; }

@@ -282,11 +282,13 @@ public class OrderChangeService {
             String now = TIME.format(LocalDateTime.now());
             String storedWork = storedWorkOrder(latest);
             if (requirements != null) {
+                int existingVersion = requirements.current(latest.motherOrderCode(), storedWork)
+                        .map(OrderRequirementVersion::versionNo).orElse(0);
                 requirements.saveVersion(new OrderRequirementVersion(
                         "REQ-" + latest.id(),
                         latest.motherOrderCode(),
                         storedWork,
-                        latest.versionNo(),
+                        Math.max(latest.versionNo(), existingVersion + 1),
                         latest.newRequirement(),
                         latest.newDueDate(),
                         latest.newRoute(),

@@ -4,6 +4,8 @@ import ScanInput from '../scan/ScanInput.vue';
 import type { ScanDraft } from '../scan/scanDraft';
 import type { OpenOrderChangeAction, OrderActionTarget } from '../orders/orderActions';
 import OrderChangePanel from '../orders/OrderChangePanel.vue';
+import OrderKindMark from '../orders/OrderKindMark.vue';
+import WorkOrderRequirementForm from '../orders/WorkOrderRequirementForm.vue';
 import { ApiRequestError } from '../../services/apiClient';
 import {
   fetchProcessProgress, fetchProcessProgressHistory, openProcessProgress, submitProcessProgress,
@@ -150,6 +152,9 @@ async function submit() {
   }
 }
 function editAgain() { receipt.value = null; message.value = ''; }
+function savedRequirement(requirement: string) {
+  if (target.value) target.value = { ...target.value, processingRequirement: requirement };
+}
 function showChange() {
   if (openOrderChange && target.value && !target.value.selectChild) {
     openOrderChange({ objectType: props.initialTarget?.objectType ?? null, code: target.value.orderCode, motherOrderCode: target.value.motherOrderCode });
@@ -196,7 +201,10 @@ async function loadHistory() {
     <form v-else-if="target" aria-label="保存工序进度" @submit.prevent="submit">
       <header class="process-progress-heading"><strong>{{ target.currentProcess }}<small>当前工序</small></strong><span>{{ target.orderCode }}<template v-if="target.customerName"> · {{ target.customerName }}</template></span></header>
       <p class="info-context">下面的百分比只表示「{{ target.currentProcess }}」，下一道工序单独记录。</p>
-      <details class="info-disclosure"><summary>查看加工要求</summary><p>{{ target.processingRequirement || '未记录要求' }}</p></details>
+      <details class="info-disclosure" :open="target.orderCode !== target.motherOrderCode"><summary>加工要求</summary>
+        <WorkOrderRequirementForm v-if="target.orderCode !== target.motherOrderCode" :key="target.orderCode" :code="target.orderCode" :requirement="target.processingRequirement || ''" @saved="savedRequirement" />
+        <p v-else>{{ target.processingRequirement || '未记录要求' }}</p>
+      </details>
       <p v-if="isDelivered">这道工序已经正式交付，不能再用进度代替。可刷新本单工序核对后续工序。</p>
       <fieldset v-else :disabled="submitting || Boolean(receipt) || Boolean(unknownRequest)">
         <div class="progress-choices" role="group" aria-label="工序进度"><label v-for="item in percents" :key="item" :class="{ selected: percent === item }"><input v-model.number="percent" type="radio" :name="progressGroup" :value="item" :aria-label="`进度 ${item}%`" /><strong>{{ item }}%</strong><small>{{ percentLabels[item] }}</small></label></div>
@@ -216,13 +224,15 @@ async function loadHistory() {
       <button class="secondary-button" type="button" :aria-expanded="changeOpen" @click="showChange">{{ changeOpen ? '收起改单办理' : '打开改单办理' }}</button>
       <OrderChangePanel v-if="changeCreated" v-show="changeOpen" :key="target.orderCode" :target="target" />
     </template>
-    <div v-if="!embedded" class="desk-cards"><article v-for="row in rows" :key="row.orderCode + row.currentProcess" class="user-card"><strong>{{ row.orderCode }}</strong><p>母单 {{ row.motherOrderCode }} · {{ row.customerName }}</p><p>{{ row.currentProcess }} {{ row.percent }}% · {{ row.businessStatus }}</p></article></div>
+    <div v-if="!embedded" class="desk-cards"><article v-for="row in rows" :key="row.orderCode + row.currentProcess" class="user-card"><strong class="progress-order-code"><OrderKindMark :kind="row.orderCode === row.motherOrderCode ? 'mother' : 'child'" />{{ row.orderCode }}</strong><p>母单 {{ row.motherOrderCode }} · {{ row.customerName }}</p><p>{{ row.currentProcess }} {{ row.percent }}% · {{ row.businessStatus }}</p></article></div>
   </section>
 </template>
 
 <style scoped>
 .process-progress-panel { display: grid; gap: 12px; }
-.process-progress-panel fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.progress-order-code { display: inline-flex; align-items: center; gap: 6px; }
+.process-progress-panel fieldset { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; align-items: end; }
+.process-progress-panel fieldset > button { width: auto; justify-self: start; }
 .process-progress-panel label { display: grid; gap: 6px; }
 .process-progress-panel input:not([type="file"]), .process-progress-panel select { box-sizing: border-box; width: 100%; min-width: 0; }
 .progress-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }

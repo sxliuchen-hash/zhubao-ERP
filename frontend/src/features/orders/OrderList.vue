@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { OrderWorkspaceRow } from '../../services/orderWorkspaceTypes';
+import OrderKindMark from './OrderKindMark.vue';
 import { orderProductionStatus, orderQuantityText } from './orderWorkspaceLabels';
 defineProps<{ rows: OrderWorkspaceRow[]; selectedKey: string }>();
 const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
@@ -11,7 +12,7 @@ const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
       <thead><tr><th>货品／目标</th><th>客户／母单</th><th>建单人</th><th>数量／重量</th><th>当前工序</th><th>交期</th><th>状态</th></tr></thead>
       <tbody>
         <tr v-for="row in rows" :key="row.rowKey" :class="{ selected: selectedKey === row.rowKey }">
-          <td><button class="table-action" type="button" :aria-label="`查看${row.code}`" @click="emit('select', row)">{{ row.goodsName || '货品未填写' }}</button><small>{{ row.code }}</small><small v-if="row.executionRoundCode">执行轮次：{{ row.executionRoundCode }}</small></td>
+          <td><button class="table-action" type="button" :aria-label="`查看${row.code}`" @click="emit('select', row)">{{ row.goodsName || '货品未填写' }}</button><small class="order-code-line"><OrderKindMark :object-type="row.objectType" />{{ row.code }}</small><small v-if="row.executionRoundCode">执行轮次：{{ row.executionRoundCode }}</small></td>
           <td>{{ row.customerName || '客户未提供' }}<small>{{ row.motherOrderCode }}</small><small v-if="row.executionRoundCode && row.workOrderCode">原子单：{{ row.workOrderCode }}</small></td>
           <td>{{ row.createdBy || '历史未记录' }}</td>
           <td>{{ orderQuantityText(row.quantity, row.quantityUnit) }}<small>{{ row.weight === null ? '重量未填写' : `${row.weight} ${row.weightUnit || ''}` }}</small></td>
@@ -25,7 +26,7 @@ const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
   <div class="order-cards">
     <button v-for="row in rows" :key="row.rowKey" class="order-card" type="button" :aria-label="`查看${row.code}`" @click="emit('select', row)">
       <span class="order-card-title"><strong>{{ row.goodsName || '货品未填写' }}</strong><span>{{ orderProductionStatus(row) }}</span></span>
-      <span>{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次</template></span>
+      <span class="order-code-line"><OrderKindMark :object-type="row.objectType" />{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次</template></span>
       <span class="order-card-quiet">母单 {{ row.motherOrderCode }}<template v-if="row.executionRoundCode && row.workOrderCode"> · 原子单 {{ row.workOrderCode }}</template></span>
       <span v-if="row.customerName">{{ row.customerName }}</span>
       <span>建单人：{{ row.createdBy || '历史未记录' }}</span>
@@ -43,6 +44,7 @@ const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
 .order-table th, .order-table td { text-align: left; padding: 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .order-table th { color: var(--muted); white-space: nowrap; }
 .order-table small { display: block; color: var(--muted); margin-top: 5px; overflow-wrap: anywhere; }
+.order-code-line { display: flex; align-items: center; gap: 6px; }
 .selected { background: var(--action-soft); }
 .order-cards { display: none; }
 @media (max-width: 900px) {

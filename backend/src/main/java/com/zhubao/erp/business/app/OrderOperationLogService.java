@@ -66,7 +66,7 @@ public class OrderOperationLogService {
         for (String target : targets) {
             String type = target.equals(motherCode) ? "MOTHER" : "WORK_ORDER";
             for (OrderAdjustment adjustment : documents.listOrderAdjustments(type, target)) {
-                rows.add(new Entry(target, "管理员维护", adjustment.operatorName(), adjustment.createdAt(),
+                rows.add(new Entry(target, "编辑加工要求".equals(adjustment.reason()) ? "编辑加工要求" : "管理员维护", adjustment.operatorName(), adjustment.createdAt(),
                         adjustment.reason() + "；" + adjustment.beforeText() + " → " + adjustment.afterText()));
             }
             for (String process : WorkshopProcesses.DEFAULT_ORDER) {

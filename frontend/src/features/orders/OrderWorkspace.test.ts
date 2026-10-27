@@ -49,13 +49,20 @@ beforeEach(() => {
 
 describe('统一订单列表与详情', () => {
   it('桌面与手机列表显示原建单人，只有管理员能打开母单维护', async () => {
-    vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([row('WO-1', { createdBy: '收货建单人', operatorName: '当前师傅' })]));
+    vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([
+      row('WO-1', { createdBy: '收货建单人', operatorName: '当前师傅' }),
+      row('MO-9', { rowKey: 'MOTHER_ORDER|MO-9', objectType: 'MOTHER_ORDER', motherOrderCode: 'MO-9' }),
+    ]));
     const auth = ref({ role: 'BUSINESS_MANAGER' });
     const wrapper = mountWorkspace({ 'zhubao-auth-session': auth });
     await flushPromises();
     expect(wrapper.get('.order-table').text()).toContain('收货建单人');
+    expect(wrapper.get('.order-table [aria-label="子单"]').attributes('title')).toBe('子单');
+    expect(wrapper.get('.order-table [aria-label="母单"]').attributes('title')).toBe('母单');
     expect(wrapper.get('.order-cards').text()).toContain('建单人：收货建单人');
     await select(wrapper, 'WO-1');
+    expect((wrapper.get('[aria-label="子单加工要求"]').element as HTMLTextAreaElement).value).toBe('要求-WO-1');
+    expect(wrapper.text()).toContain('不送财务审批');
     expect(wrapper.text()).not.toContain('母单编辑与删除');
     auth.value = { role: 'ADMIN' }; await flushPromises();
     expect(wrapper.text()).toContain('母单编辑与删除');

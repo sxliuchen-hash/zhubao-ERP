@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, type Ref } from 'vue';
 import StatusBadge from '../../components/StatusBadge.vue';
+import OrderKindMark from '../orders/OrderKindMark.vue';
 import { ApiRequestError } from '../../services/apiClient';
 import { fetchProgress, type ProgressRow } from '../../services/progressApi';
 import ProcessProgressPanel from './ProcessProgressPanel.vue';
@@ -176,8 +177,8 @@ function statusTone(row: ProgressRow): Tone {
                 @click="selectRow(row)"
               >
                 <td>{{ row.customerName || row.customerId }}</td>
-                <td class="code">{{ row.motherOrderCode }}</td>
-                <td class="code">{{ childCode(row) }}</td>
+                <td class="code"><span class="progress-code"><OrderKindMark kind="mother" />{{ row.motherOrderCode }}</span></td>
+                <td class="code"><span v-if="childCode(row) !== '—'" class="progress-code"><OrderKindMark kind="child" />{{ childCode(row) }}</span><template v-else>—</template></td>
                 <td>{{ row.currentProcess }}</td>
                 <td>{{ row.dueDate || '—' }}</td>
                 <td>
@@ -200,11 +201,11 @@ function statusTone(row: ProgressRow): Tone {
             @click="selectRow(row)"
           >
             <span class="desk-card-top">
-              <strong class="code">{{ row.motherOrderCode }}</strong>
+              <strong class="code progress-code"><OrderKindMark kind="mother" />{{ row.motherOrderCode }}</strong>
               <StatusBadge :label="row.overdue ? '超期' : row.status" :tone="statusTone(row)" />
             </span>
             <span>{{ row.customerName || row.customerId }} · {{ row.currentProcess }}</span>
-            <span>{{ childCode(row) }} · {{ row.dueDate || '—' }}</span>
+            <span class="progress-code"><OrderKindMark v-if="childCode(row) !== '—'" kind="child" />{{ childCode(row) }} · {{ row.dueDate || '—' }}</span>
           </button>
         </div>
       </div>
@@ -215,7 +216,7 @@ function statusTone(row: ProgressRow): Tone {
             <button class="secondary-button detail-back" type="button" @click="backToList">返回列表</button>
             <StatusBadge :label="activeRow.status" :tone="statusTone(activeRow)" />
           </div>
-          <strong>{{ activeRow.motherOrderCode }}</strong>
+          <strong class="progress-code"><OrderKindMark kind="mother" />{{ activeRow.motherOrderCode }}</strong>
           <dl class="detail-grid">
             <dt>客户</dt>
             <dd>{{ activeRow.customerName || activeRow.customerId }}</dd>
@@ -238,3 +239,7 @@ function statusTone(row: ProgressRow): Tone {
     </section>
   </div>
 </template>
+
+<style scoped>
+.progress-code { display: inline-flex; align-items: center; gap: 6px; }
+</style>

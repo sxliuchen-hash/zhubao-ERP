@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import ScanInput from '../scan/ScanInput.vue';
+import OrderKindMark from '../orders/OrderKindMark.vue';
 import OrderDetail from '../orders/OrderDetail.vue';
 import type { OpenLabelAction } from '../orders/orderActions';
 import type { AuthSession } from '../../services/authApi';
@@ -123,7 +124,7 @@ function rememberProgress(record: ScanProgressRecord) {
     <article v-if="identity && scan.context" class="section-block mobile-order-card">
       <div class="mobile-order-title">
         <div>
-          <p class="mobile-order-kicker">{{ scanObjectTypeLabel(identity.objectType) }}</p>
+          <p class="mobile-order-kicker"><OrderKindMark :object-type="identity.objectType" />{{ scanObjectTypeLabel(identity.objectType) }}</p>
           <h3>{{ identity.code }}</h3>
         </div>
         <span v-if="scan.context.progress.quality" class="mobile-order-status">
@@ -180,7 +181,7 @@ function rememberProgress(record: ScanProgressRecord) {
 .mobile-order-heading p { margin: 4px 0 0; color: var(--muted); }
 .mobile-order-card { display: grid; gap: 12px; }
 .mobile-order-title { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
-.mobile-order-kicker { margin: 0 0 3px; color: var(--muted); font-size: .85rem; }
+.mobile-order-kicker { display: flex; align-items: center; gap: 6px; margin: 0 0 3px; color: var(--muted); font-size: .85rem; }
 .mobile-order-status { padding: 5px 9px; border-radius: 999px; background: var(--surface-soft, var(--content)); white-space: nowrap; }
 .mobile-order-actions, .mobile-order-choices { display: grid; gap: 8px; }
 .mobile-order-choices button { text-align: left; }
