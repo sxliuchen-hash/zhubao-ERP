@@ -34,6 +34,20 @@ describe('原单打印请求与快照', () => {
     expect(vi.mocked(apiPost).mock.calls.map(call => call[1])).toEqual([original, original, original]);
     expect(wrapper.text()).toContain('PB1');
   });
+  it('同内容再次提交只保留最新一批详情，内容变化才另留一批', async () => {
+    const wrapper = panel(); await submit(wrapper);
+    vi.mocked(apiPost).mockResolvedValueOnce({ ...structuredClone(batch), id: 'PB2', jobs: [{ ...job, id: 'J2' }] });
+    await click(wrapper, '另建一批打印草稿'); await click(wrapper, '提交到打印工位');
+    expect(wrapper.text()).toContain('PB2');
+    expect(wrapper.text()).not.toContain('批次 PB1');
+    expect(wrapper.text().match(/刻字/g)).toHaveLength(1);
+    const changed = JSON.stringify({ businessCode: 'WO-1', version: 'V2', instance: 'LI2', qr: 'JG|work_order|WO-1|2|LI2', widthMm: 40, heightMm: 30, dpi: 203, fields: [{ name: '原要求', value: '改刻名' }] });
+    vi.mocked(apiPost).mockResolvedValueOnce({ ...structuredClone(batch), id: 'PB3', contentSnapshot: changed, jobs: [{ ...job, id: 'J3' }] });
+    await click(wrapper, '另建一批打印草稿'); await click(wrapper, '提交到打印工位');
+    expect(wrapper.text()).toContain('批次 PB2');
+    expect(wrapper.text()).toContain('批次 PB3');
+    expect(wrapper.text()).toContain('改刻名');
+  });
   it('成功后刷新失败保留冻结快照，只有显式另建草稿才产生新打印请求', async () => {
     const wrapper = panel(); await submit(wrapper);
     vi.mocked(apiGet).mockRejectedValueOnce(new Error('读取失败'));

@@ -1,5 +1,9 @@
 package com.zhubao.erp.business.app;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
@@ -11,6 +15,7 @@ import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.inventory.domain.ReceiptEntryReversal;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.label.domain.PrintBatch;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobRepository;
 import com.zhubao.erp.label.domain.PrintJobStatus;
@@ -33,9 +38,14 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -53,6 +63,7 @@ public class OrderMaintenanceService {
     private final BusinessWorkUnit workUnit;
     private final StockLedgerService stocks;
     private final FinanceRepository finance;
+    private final ObjectMapper json = new ObjectMapper();
 
     public OrderMaintenanceService(BusinessDocumentRepository documents, PrintJobRepository printJobs,
                                    PrintRoutingRepository routing, PermissionGuard permissions) {
@@ -625,15 +636,55 @@ public class OrderMaintenanceService {
         });
     }
 
+    /**
+     * 按单据打开时，同一贴纸内容只留最新一批。份数不同仍视为同一内容。
+     * 内容变化才另留一批。按任务编号查找不走这里，旧任务仍可单独打开。
+     */
     private List<MaintainedOrder> printsFor(String businessCode) {
         List<MaintainedOrder> rows = new ArrayList<>();
+        Map<String, PrintJob> latestLegacy = new LinkedHashMap<>();
         for (PrintJob job : printJobs.listByBusinessAny(businessCode)) {
-            rows.add(toPrintJob(job));
+            String key = stickerContentKey(job.contentSnapshot());
+            PrintJob previous = latestLegacy.get(key);
+            if (previous == null || text(job.createdAt()).compareTo(text(previous.createdAt())) >= 0) {
+                latestLegacy.put(key, job);
+            }
         }
-        for (PrintTargetJob job : routing.jobsForBusinessAny(businessCode)) {
-            rows.add(toTarget(job));
+        latestLegacy.values().forEach(job -> rows.add(toPrintJob(job)));
+
+        List<PrintTargetJob> targets = routing.jobsForBusinessAny(businessCode);
+        Map<String, String> latestBatch = new LinkedHashMap<>();
+        Map<String, String> batchCreated = new HashMap<>();
+        for (PrintTargetJob job : targets) {
+            String snapshot = routing.batch(job.batchId()).map(PrintBatch::contentSnapshot).orElse("");
+            String key = stickerContentKey(snapshot);
+            String created = text(job.createdAt());
+            String chosen = latestBatch.get(key);
+            if (chosen == null || created.compareTo(batchCreated.getOrDefault(chosen, "")) >= 0) {
+                latestBatch.put(key, job.batchId());
+                batchCreated.put(job.batchId(), created);
+            }
+        }
+        Set<String> kept = new HashSet<>(latestBatch.values());
+        for (PrintTargetJob job : targets) {
+            if (kept.contains(job.batchId())) rows.add(toTarget(job));
         }
         return rows;
+    }
+
+    /** 比较贴纸正文。份数只影响打几张，不单独构成一条内容记录。 */
+    private String stickerContentKey(String snapshot) {
+        if (snapshot == null || snapshot.isBlank()) return "";
+        try {
+            JsonNode tree = json.readTree(snapshot);
+            if (tree instanceof ObjectNode object) {
+                object.remove("copies");
+                return json.writeValueAsString(object);
+            }
+        } catch (JsonProcessingException ex) {
+            return snapshot;
+        }
+        return snapshot;
     }
 
     private MaintainedMotherSummary toSummary(MotherOrderRecord record) {

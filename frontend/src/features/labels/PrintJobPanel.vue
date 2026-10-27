@@ -45,6 +45,34 @@ function fingerprint() {
     label.fields, label.storageSources, label.storageEdition, label.brandTitle, label.footerLeft, label.footerRight, Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(), intent.value]);
 }
 const submitted = computed(() => receipts.value.some(receipt => receipt.fingerprint === fingerprint()));
+function contentKey(receipt: Receipt) {
+  const data = snapshot(receipt);
+  if (!data) return receipt.batch.id;
+  const rest = { ...data };
+  delete rest.copies;
+  return JSON.stringify(rest);
+}
+function needsAttention(receipt: Receipt) {
+  return receipt.batch.jobs.some(job => unknownReroutes.value[job.id] || unknownPaperChecks.value[job.id]);
+}
+/** 同一张单、同一贴纸内容只展示最新一批。内容变化才再留一批详情。待核对的原请求仍留在页面上。 */
+const shownReceipts = computed(() => {
+  const relevant = receipts.value.filter(receipt => (receipt.batch.businessCode || receipt.preview.primaryCode) === props.payload.primaryCode);
+  const latest = new Map<string, Receipt>();
+  const pinned: Receipt[] = [];
+  for (const receipt of relevant) {
+    if (needsAttention(receipt)) pinned.push(receipt);
+    latest.set(contentKey(receipt), receipt);
+  }
+  const seen = new Set<string>();
+  const rows: Receipt[] = [];
+  for (const receipt of [...latest.values(), ...pinned]) {
+    if (seen.has(receipt.batch.id)) continue;
+    seen.add(receipt.batch.id);
+    rows.push(receipt);
+  }
+  return rows;
+});
 async function loadQueues() {
   readError.value = '';
   try { const loaded = await apiGet<PrintQueueView[]>('/api/label/print-queues'); if (!disposed) queues.value = loaded; }
@@ -191,8 +219,8 @@ async function rerouteTarget(job: PrintTargetJobView, receipt: Receipt, retry = 
     <p v-if="pending" class="operation-feedback warning">原打印请求结果待核对：{{ pending.body.businessCode }} · {{ pending.body.requestId }}。目标、份数和原编号已保留。<button class="secondary-button" type="button" :disabled="submitting || Boolean(busyJob) || disabled" @click="submitPrintJob(true)">原打印请求重试</button></p>
     <button v-if="submitted" class="secondary-button" type="button" :disabled="locked || disabled" @click="nextPrint">另建一批打印草稿</button>
     <button class="secondary-button" type="button" :disabled="locked" @click="loadQueues">重读打印队列</button>
-    <button v-if="receipts.length" class="secondary-button" type="button" @click="refreshPrintJob">刷新目标状态</button>
-    <article v-for="receipt in receipts" :key="receipt.batch.id" class="print-targets">
+    <button v-if="shownReceipts.length" class="secondary-button" type="button" @click="refreshPrintJob">刷新目标状态</button>
+    <article v-for="receipt in shownReceipts" :key="receipt.batch.id" class="print-targets">
       <h3>批次 {{ receipt.batch.id }}</h3><p>任务冻结快照：{{ snapshotLabel(receipt) }}。送入系统队列不等于已经出纸。</p>
       <details v-if="snapshot(receipt)" class="frozen-snapshot"><summary>查看任务原始快照</summary><p>二维码：{{ snapshot(receipt)?.qr }}</p><p>纸张：{{ snapshot(receipt)?.widthMm }}×{{ snapshot(receipt)?.heightMm }}mm · {{ snapshot(receipt)?.dpi }} DPI</p><pre>{{ JSON.stringify(snapshot(receipt)?.fields, null, 2) }}</pre></details>
       <p v-if="snapshot(receipt)?.qr && snapshot(receipt)?.qr !== receipt.preview.qrContent" class="operation-feedback warning">任务快照与当时预览的版本或实例不同，请以冻结快照核对。</p>

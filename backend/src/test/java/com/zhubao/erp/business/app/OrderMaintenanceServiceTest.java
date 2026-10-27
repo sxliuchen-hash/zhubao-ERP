@@ -46,6 +46,28 @@ class OrderMaintenanceServiceTest {
     private final OperatorContext keeper = new OperatorContext("库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.TEAM);
 
     @Test
+    void 打开单据时同内容重复打印不逐笔展开() {
+        documents.saveMotherOrder(mother());
+        routing.insertBatch(targetBatch("B-1", "R-1", List.of(target("J-1", "B-1", "A", "Q1", 1, "2026-10-16T12:00")),
+                sticker("刻字", 1), "2026-10-16T12:00"));
+        routing.insertBatch(targetBatch("B-2", "R-2", List.of(
+                target("J-2", "B-2", "A", "Q1", 2, "2026-10-16T13:00"),
+                target("J-2b", "B-2", "B", "Q2", 2, "2026-10-16T13:00")),
+                sticker("刻字", 2), "2026-10-16T13:00"));
+        routing.insertBatch(targetBatch("B-3", "R-3", List.of(target("J-3", "B-3", "A", "Q1", 1, "2026-10-16T14:00")),
+                sticker("改刻名", 1), "2026-10-16T14:00"));
+
+        assertThat(service.search("MD-1", admin).stream()
+                .filter(row -> "PRINT_TARGET".equals(row.targetType()))
+                .map(MaintainedOrder::code))
+                .containsExactlyInAnyOrder("J-2", "J-2b", "J-3");
+        assertThat(service.search("J-1", admin).stream()
+                .filter(row -> "PRINT_TARGET".equals(row.targetType()))
+                .map(MaintainedOrder::code))
+                .containsExactly("J-1");
+    }
+
+    @Test
     void 可按日期客户和建单人列出未回收母单() {
         documents.saveMotherOrder(mother());
         documents.saveMotherOrder(new MotherOrderRecord("MD-2", 2L, null, "AG", "2026-09-01", "", "", "", "", "",
@@ -585,6 +607,20 @@ class OrderMaintenanceServiceTest {
     private ChildWorkOrderRecord child() {
         return new ChildWorkOrderRecord("ZD-1", "MD-1", 1L, "张三", "抛光", "2026-11-01", "AU", "戒指",
                 new BigDecimal("2"), "件", new BigDecimal("10"), "WH", "抛光", "1234", "CL1", "收货员", "2026-10-16T11:00");
+    }
+
+    private PrintTargetJob target(String id, String batchId, String stationId, String queueId, int copies, String at) {
+        return new PrintTargetJob(id, batchId, stationId, queueId, copies, PrintJobStatus.PENDING,
+                "", "", "", "", "", "", at, at);
+    }
+
+    private PrintBatch targetBatch(String id, String requestId, List<PrintTargetJob> jobs, String snapshot, String at) {
+        return new PrintBatch(id, requestId, "MD-1", "MOTHER", jobs.get(0).copies(), "hash", snapshot, "收货员", at, jobs);
+    }
+
+    private String sticker(String requirement, int copies) {
+        return "{\"copies\":" + copies + ",\"qr\":\"JG|mother|MD-1|1|LI1\",\"fields\":[{\"name\":\"要求\",\"value\":\""
+                + requirement + "\"}]}";
     }
 
     private PrintBatch batch() {

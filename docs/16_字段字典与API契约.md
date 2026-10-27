@@ -2298,7 +2298,7 @@ PWA 一期边界：
 | 方法与完整路径 | 返回类型 |
 |---|---|
 | `GET /api/business/order-maintenance/mothers` | 未回收母单列表。可选 `from`、`to`（年-月-日，含当天，按建单日期，缺建单时间时用入库日）、`customer`、`operator`。按日期从新到旧，最多 200 张；响应含 `items`、`total`、`truncated` |
-| `GET /api/business/order-maintenance?code=` | 按母单号、子单号或打印任务编号返回相关单据，包括已在回收站的 |
+| `GET /api/business/order-maintenance?code=` | 按母单号、子单号或打印任务编号返回相关单据，包括已在回收站的。按母单或子单打开时，同一贴纸内容只带出该内容最新一批目标任务，份数不同仍算同一内容；内容变化才另留一批。按打印任务编号查找仍返回该任务 |
 | `GET /api/business/order-maintenance/recycle-bin` | 回收站中的母单、子单和打印任务 |
 | `GET /api/business/order-maintenance/operation-logs?code=` | 仅管理员；以母单、子单或执行轮次号定位母单，返回关联操作事实，字段为 `targetCode`、`action`、`operator`、`createdAt`、`detail`；包括创建、拆单、进度、分批／正式交工、质检、返工、发货、改单当前状态、标签、过程说明和管理员维护。按时间正序，历史缺失信息不补造 |
 | `POST /api/business/order-maintenance/mother-orders/{code}/basic-info` | 仅管理员更正母单基础信息；请求为 `customerId`（稳定客户档案 ID；null 沿用）、`goodsName`（必填，最多 120 字）、`remark`（最多 300 字）、`reason`（必填，最多 200 字）、`requestId`、`expectedRevision`，返回当前 `MaintainedOrder` |
