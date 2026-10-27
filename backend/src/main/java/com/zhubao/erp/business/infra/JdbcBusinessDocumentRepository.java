@@ -250,21 +250,21 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
 
     @Override
     public boolean motherHasDownstream(String motherOrderCode, WorkSession session) {
-        String sql = """
-                select case when exists (select 1 from biz_work_order where mother_order_code = ?)
-                    or exists (select 1 from biz_child_line_allocation where mother_order_code = ?)
-                    or exists (select 1 from biz_process_station_handoff where order_code = ?)
-                    or exists (select 1 from biz_outbound_order where mother_order_code = ?)
-                    or exists (select 1 from biz_outbound_order_item where mother_order_code = ?)
-                    then 1 else 0 end
-                """;
-        try (PreparedStatement statement = requireConnection(session).prepareStatement(sql)) {
-            for (int index = 1; index <= 5; index++) {
-                statement.setString(index, motherOrderCode);
+        // 各表使用锁定读，避免等待母单行锁后仍从旧快照漏读刚提交的拆单或交付。
+        String[] tables = {"biz_work_order", "biz_child_line_allocation", "biz_process_station_handoff",
+                "biz_outbound_order", "biz_outbound_order_item"};
+        try {
+            for (String table : tables) {
+                String column = "biz_process_station_handoff".equals(table) ? "order_code" : "mother_order_code";
+                try (PreparedStatement statement = requireConnection(session).prepareStatement(
+                        "select 1 from " + table + " where " + column + " = ? limit 1 for update")) {
+                    statement.setString(1, motherOrderCode);
+                    try (ResultSet result = statement.executeQuery()) {
+                        if (result.next()) return true;
+                    }
+                }
             }
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() && result.getInt(1) == 1;
-            }
+            return false;
         } catch (SQLException ex) {
             throw new IllegalStateException("无法核对母单下游事实", ex);
         }

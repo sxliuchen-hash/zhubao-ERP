@@ -25,6 +25,23 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
 class MotherOrderAdminServiceTest {
+    @Test
+    void 等待锁后使用最新母单而非事务旧快照() {
+        mother();
+        var stale = documents.findMotherOrderAny("MD-ADMIN").orElseThrow();
+        var snapshotRepository = new InMemoryBusinessDocumentRepository() {
+            @Override
+            public java.util.Optional<MotherOrderRecord> findMotherOrderByCode(String code, com.zhubao.erp.work.domain.WorkSession session) {
+                return java.util.Optional.of(stale);
+            }
+        };
+        snapshotRepository.saveMotherOrder(stale.withSummary(new BigDecimal("4"), new BigDecimal("2")));
+        var service = new MotherOrderAdminService(snapshotRepository, new InMemoryMasterDataRepository(), stocks,
+                mock(FinanceRepository.class), new InMemoryOrderChangeRepository(), new MemoryBusinessWorkUnit(requests), new PermissionGuard());
+        var command = new MotherOrderAdminService.BasicInfo(null, "旧页面货品", "", "旧页面", "admin-current-read", OrderMaintenanceRevision.of(stale));
+        assertThatThrownBy(() -> service.correct("MD-ADMIN", command, admin)).hasMessageContaining("已被修改");
+        assertThat(snapshotRepository.listOrderAdjustments("MOTHER", "MD-ADMIN")).isEmpty();
+    }
     private final InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
     private final InMemoryStockLedgerRepository inventory = new InMemoryStockLedgerRepository();
     private final StockLedgerService stocks = new StockLedgerService(inventory);

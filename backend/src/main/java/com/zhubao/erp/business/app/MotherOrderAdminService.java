@@ -57,8 +57,10 @@ public class MotherOrderAdminService {
         workUnit.execute(new CommandCall(required(command.requestId(), "修改必须带请求编号"), operator.operator(),
                 "ADMIN_MOTHER_BASIC_INFO", "MOTHER", code, OrderMaintenanceRevision.of(command)), session -> {
             documents.lockMotherOrder(code, session);
-            MotherOrderRecord current = documents.findMotherOrderByCode(code, session)
+            // 等待行锁后必须读取最新版本，不能使用命令回放查询已建立的旧事务快照。
+            MotherOrderRecord current = documents.findMotherOrderAny(code, session)
                     .orElseThrow(() -> new BusinessException("母单不存在或已删除"));
+            if (documents.motherRecycle(code, session).isPresent()) throw new BusinessException("母单已删除，请先恢复");
             if (!OrderMaintenanceRevision.of(current).equals(command.expectedRevision())) {
                 throw new BusinessException("母单已被修改，请重新打开后再保存");
             }
