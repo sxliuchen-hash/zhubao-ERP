@@ -20,6 +20,7 @@ import com.zhubao.erp.finance.domain.PriceAgreement;
 import com.zhubao.erp.finance.domain.PriceLine;
 import com.zhubao.erp.finance.domain.PricingMode;
 import com.zhubao.erp.finance.domain.ReceiptAllocation;
+import com.zhubao.erp.finance.domain.ReceiptAllocationOperation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.UnpricedItem;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -218,11 +219,7 @@ public class FinanceBillingService {
         BigDecimal received = allocatedTo(lines);
         BigDecimal prepayment = FinanceTexts.ZERO;
         for (CustomerReceipt receipt : receipts) {
-            BigDecimal used = FinanceTexts.ZERO;
-            for (ReceiptAllocation allocation : receipt.allocations()) {
-                used = used.add(allocation.amount());
-            }
-            prepayment = prepayment.add(receipt.amount().subtract(used));
+            prepayment = prepayment.add(receipt.amount().subtract(usedOnReceipt(receipt)));
         }
         BigDecimal quantity = BigDecimal.ZERO;
         BigDecimal weight = BigDecimal.ZERO;
@@ -572,6 +569,18 @@ public class FinanceBillingService {
                 }
             }
         }
+        for (ReceiptAllocationOperation operation : finance.listAllocationOperations()) {
+            for (ReceiptAllocation allocation : operation.lines()) {
+                if (!line.code().equals(allocation.receivableCode())) {
+                    continue;
+                }
+                if (ReceiptAllocationOperation.REVOKE.equals(operation.action())) {
+                    open = open.add(allocation.amount());
+                } else {
+                    open = open.subtract(allocation.amount());
+                }
+            }
+        }
         return FinanceTexts.money(open);
     }
 
@@ -601,7 +610,58 @@ public class FinanceBillingService {
                 }
             }
         }
+        for (ReceiptAllocationOperation operation : finance.listAllocationOperations()) {
+            for (ReceiptAllocation allocation : operation.lines()) {
+                if (!codes.contains(allocation.receivableCode())) {
+                    continue;
+                }
+                received = ReceiptAllocationOperation.REVOKE.equals(operation.action())
+                        ? received.subtract(allocation.amount())
+                        : received.add(allocation.amount());
+            }
+        }
         return received;
+    }
+
+    private BigDecimal usedOnReceipt(CustomerReceipt receipt) {
+        BigDecimal used = FinanceTexts.ZERO;
+        for (ReceiptAllocation allocation : receipt.allocations()) {
+            used = used.add(allocation.amount());
+        }
+        for (ReceiptAllocationOperation operation : finance.listAllocationOperations()) {
+            if (!receipt.code().equals(operation.receiptCode())) {
+                continue;
+            }
+            for (ReceiptAllocation allocation : operation.lines()) {
+                used = ReceiptAllocationOperation.REVOKE.equals(operation.action()) ? used.subtract(allocation.amount()) : used.add(allocation.amount());
+            }
+        }
+        return used;
+    }
+
+    public ReceiptAllocationOperation allocateExisting(String receiptCode, String requestId, String action, String reason, List<ReceiptAllocationCommand> requested, String operator) {
+        if (requestId == null || !requestId.matches("[A-Za-z0-9._:-]{8,80}")) {
+            throw new BusinessException("核销请求号无效");
+        }
+        CustomerReceipt receipt = finance.listReceipts().stream()
+                .filter(row -> row.code().equals(receiptCode))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("找不到要核销的收款"));
+        List<ReceiptAllocation> lines = new ArrayList<>();
+        for (ReceiptAllocationCommand item : requested == null ? List.<ReceiptAllocationCommand>of() : requested) {
+            lines.add(new ReceiptAllocation(item.receivableCode(), FinanceTexts.money(item.amount())));
+        }
+        return finance.registerAllocationOperation(new ReceiptAllocationOperation(
+                FinanceTexts.code("FIN-AO", sequence), receipt.code(), receipt.customerId(), action, reason,
+                operator, requestId, FinanceTexts.now(), lines
+        ));
+    }
+
+    public CustomerReceipt receipt(String code) {
+        return finance.listReceipts().stream()
+                .filter(row -> row.code().equals(code))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("找不到要核销的收款"));
     }
 
     private String customerName(long customerId, List<ReceivableLine> lines, List<CustomerReceipt> receipts) {

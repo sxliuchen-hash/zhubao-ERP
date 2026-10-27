@@ -557,6 +557,42 @@ public class JdbcOrderSettlementRepository implements OrderSettlementRepository 
     }
 
     @Override
+    public OrderSettlement beginAdjustment(
+            OrderSettlement header,
+            List<OrderSettlementItem> itemRows,
+            List<OrderSettlementSource> sourceRows,
+            WorkSession session
+    ) {
+        Connection connection = require(session);
+        try {
+            lockTarget(header.targetType(), header.targetCode(), session);
+            OrderSettlement current = latest(header.targetType(), header.targetCode(), session)
+                    .orElseThrow(() -> new BusinessException("没有已确认结单可调整"));
+            if (current.status() != SettlementStatus.CONFIRMED) {
+                throw new BusinessException("请先确认结单再调整");
+            }
+            OrderSettlement created = new OrderSettlement(
+                    header.code(), current.rootCode(), current.versionNo() + 1, current.code(),
+                    header.targetType(), header.targetCode(), header.motherOrderCode(), header.customerId(),
+                    header.customerName(), SettlementStatus.DRAFT, 1, header.deliveryRevision(),
+                    header.customerNet(), header.employeeNet(), header.customerWaived(), header.waiveReason(),
+                    header.noInternalLabor(), header.noLaborReason(), header.preparer(), "", header.createdAt(),
+                    "", "", header.legacyState()
+            );
+            insertHeader(connection, created);
+            replaceChildren(connection, created.code(), itemRows, sourceRows);
+            return created;
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            if (duplicate(ex)) {
+                throw new BusinessException("结单调整冲突，请刷新后重试");
+            }
+            throw new IllegalStateException("无法保存结单调整", ex);
+        }
+    }
+
+    @Override
     public void saveLegacyLink(
             String code,
             String settlementCode,

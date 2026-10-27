@@ -51,6 +51,16 @@ public interface OrderSettlementRepository {
     /** 锁定该目标已有结单行，供确认前重读。 */
     void lockTarget(String targetType, String targetCode, WorkSession session);
 
+    /**
+     * 在已确认结单之后另起一份调整草稿。不覆盖原确认，opening 仍只属于首份确认。
+     */
+    OrderSettlement beginAdjustment(
+            OrderSettlement header,
+            List<OrderSettlementItem> items,
+            List<OrderSettlementSource> sources,
+            WorkSession session
+    );
+
     /** 同一旧账只能被一份结单接续。重复插入必须失败并让整个结单回滚。 */
     void saveLegacyLink(String code, String settlementCode, String ledgerKind, String ledgerCode, BigDecimal coveredAmount, WorkSession session);
 

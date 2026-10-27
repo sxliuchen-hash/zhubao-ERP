@@ -153,6 +153,14 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         if (path.equals("/api/finance/receipts")) {
             return PermissionCode.FINANCE_RECEIPT;
         }
+        if (path.matches("^/api/finance/receipts/[^/]+/allocation-operations$")) {
+            return PermissionCode.FINANCE_RECEIPT;
+        }
+        if (path.equals("/api/finance/order-settlements/drafts")
+                || path.equals("/api/finance/order-settlements/confirmations")
+                || path.equals("/api/finance/order-settlements/adjustments")) {
+            return PermissionCode.FINANCE_BILLING_POST;
+        }
         if (path.equals("/api/finance/worker-rates")
                 || path.equals("/api/finance/payroll-runs")
                 || path.equals("/api/finance/payroll-runs/confirmations")) {

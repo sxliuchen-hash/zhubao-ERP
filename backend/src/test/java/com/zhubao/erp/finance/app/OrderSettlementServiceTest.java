@@ -304,6 +304,22 @@ class OrderSettlementServiceTest {
     }
 
     @Test
+    void adjustmentPostsOnlyTheDifferenceFromTheConfirmedSettlement() {
+        deliver("ZD-ADJ", new BigDecimal("1.000"));
+        service.confirm(command("settle-adj-0001", "ZD-ADJ", fixedCustomer("80.00"),
+                piece("PROCESS|ZD-ADJ|雕刻", "carve", "1.000", "30.0000")), financeUser, rights());
+        service.adjust(command("settle-adj-0002", "ZD-ADJ", fixedCustomer("100.00"),
+                piece("PROCESS|ZD-ADJ|雕刻", "carve", "1.000", "30.0000")), financeUser, rights());
+        BigDecimal net = finance.listReceivables().stream().map(ReceivableLine::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(net).isEqualByComparingTo("100.00");
+        assertThat(finance.listPayrollLines()).hasSize(1);
+        assertThatThrownBy(() -> service.adjust(command("settle-adj-0003", "ZD-ADJ", fixedCustomer("100.00"),
+                piece("PROCESS|ZD-ADJ|雕刻", "carve", "1.000", "30.0000")), financeUser, rights()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("没有需要调整的差额");
+    }
+
+    @Test
     void payableFailureRollsBackReceivableAndDraft() {
         deliver("ZD-1", new BigDecimal("1.000"));
         InMemoryFinanceRepository failing = new InMemoryFinanceRepository() {

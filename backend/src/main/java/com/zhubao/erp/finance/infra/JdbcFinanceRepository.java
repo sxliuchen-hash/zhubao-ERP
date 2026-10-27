@@ -18,6 +18,7 @@ import com.zhubao.erp.finance.domain.PriceAgreement;
 import com.zhubao.erp.finance.domain.PriceLine;
 import com.zhubao.erp.finance.domain.PricingMode;
 import com.zhubao.erp.finance.domain.ReceiptAllocation;
+import com.zhubao.erp.finance.domain.ReceiptAllocationOperation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.WorkerRate;
 import com.zhubao.erp.work.domain.WorkSession;
@@ -348,6 +349,87 @@ public class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public List<ReceiptAllocationOperation> listAllocationOperations() {
+        try (Connection connection = dataSource.getConnection()) {
+            if (!relationExists(connection, "fin_receipt_allocation_operation")) {
+                return List.of();
+            }
+            String sql = "select code, receipt_code, customer_id, action_code, reason, operator_name, request_id, created_at from fin_receipt_allocation_operation order by code";
+            try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet rs = statement.executeQuery()) {
+                List<ReceiptAllocationOperation> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(new ReceiptAllocationOperation(
+                            rs.getString("code"), rs.getString("receipt_code"), rs.getLong("customer_id"),
+                            rs.getString("action_code"), rs.getString("reason"), rs.getString("operator_name"),
+                            rs.getString("request_id"), rs.getString("created_at"), loadOperationLines(connection, rs.getString("code"))
+                    ));
+                }
+                return List.copyOf(rows);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取后续核销", ex);
+        }
+    }
+
+    @Override
+    public ReceiptAllocationOperation registerAllocationOperation(ReceiptAllocationOperation operation) {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                ReceiptAllocationOperation existing = findOperation(connection, operation.operator(), operation.requestId());
+                if (existing != null) {
+                    if (!sameOperation(existing, operation)) {
+                        throw new BusinessException("同一幂等键的核销内容不一致");
+                    }
+                    connection.rollback();
+                    return existing;
+                }
+                CustomerReceipt receipt = lockReceipt(connection, operation.receiptCode());
+                if (receipt.customerId() != operation.customerId()) {
+                    throw new BusinessException("不能核销其他客户的收款");
+                }
+                Map<String, BigDecimal> requested = new LinkedHashMap<>();
+                for (ReceiptAllocation line : operation.lines()) {
+                    requested.merge(line.receivableCode(), line.amount(), BigDecimal::add);
+                }
+                if (ReceiptAllocationOperation.ALLOCATE.equals(operation.action())) {
+                    assertOpenBalances(connection, requested);
+                    if (receiptUsed(connection, receipt).add(requested.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)).compareTo(receipt.amount()) > 0) {
+                        throw new BusinessException("核销合计不能超过收款金额");
+                    }
+                } else if (ReceiptAllocationOperation.REVOKE.equals(operation.action())) {
+                    Map<String, BigDecimal> locks = new LinkedHashMap<>();
+                    for (String code : requested.keySet()) {
+                        locks.put(code, BigDecimal.ZERO);
+                    }
+                    assertOpenBalances(connection, locks);
+                    for (Map.Entry<String, BigDecimal> entry : requested.entrySet()) {
+                        if (receiptAllocated(connection, receipt.code(), entry.getKey()).compareTo(entry.getValue()) < 0) {
+                            throw new BusinessException("撤销金额不能超过该收款已核销的金额");
+                        }
+                    }
+                } else {
+                    throw new BusinessException("核销动作无效");
+                }
+                insertOperation(connection, operation);
+                connection.commit();
+                return operation;
+            } catch (RuntimeException | SQLException ex) {
+                connection.rollback();
+                if (ex instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                throw new IllegalStateException("后续核销事务失败", ex);
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("后续核销事务失败", ex);
+        }
+    }
+
+    @Override
     public CustomerReceipt registerReceipt(CustomerReceipt receipt, String idempotencyKey) {
         String key = idempotencyKey == null ? "" : idempotencyKey.trim();
         try (Connection connection = dataSource.getConnection()) {
@@ -567,6 +649,165 @@ public class JdbcFinanceRepository implements FinanceRepository {
                 statement.executeBatch();
             }
         }
+    }
+
+    private CustomerReceipt lockReceipt(Connection connection, String code) throws SQLException {
+        String sql = """
+                select code, customer_id, customer_name, `year_month`, amount, received_on, operator_name, created_at
+                  from fin_customer_receipt where code = ? for update
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    throw new BusinessException("找不到要核销的收款");
+                }
+                return new CustomerReceipt(rs.getString("code"), rs.getLong("customer_id"), rs.getString("customer_name"),
+                        rs.getString("year_month"), rs.getBigDecimal("amount"), rs.getString("received_on"),
+                        loadAllocations(connection, code), rs.getString("operator_name"), rs.getString("created_at"));
+            }
+        }
+    }
+
+    private ReceiptAllocationOperation findOperation(Connection connection, String operator, String requestId) throws SQLException {
+        if (!relationExists(connection, "fin_receipt_allocation_operation")) {
+            throw new BusinessException("后续核销尚未建表");
+        }
+        String sql = """
+                select code, receipt_code, customer_id, action_code, reason, operator_name, request_id, created_at
+                  from fin_receipt_allocation_operation
+                 where operator_name = ? and request_id = ?
+                 for update
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, operator);
+            statement.setString(2, requestId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                String code = rs.getString("code");
+                return new ReceiptAllocationOperation(code, rs.getString("receipt_code"), rs.getLong("customer_id"),
+                        rs.getString("action_code"), rs.getString("reason"), rs.getString("operator_name"),
+                        rs.getString("request_id"), rs.getString("created_at"), loadOperationLines(connection, code));
+            }
+        }
+    }
+
+    private List<ReceiptAllocation> loadOperationLines(Connection connection, String code) throws SQLException {
+        String sql = "select receivable_code, amount from fin_receipt_allocation_operation_line where operation_code = ? order by line_no";
+        List<ReceiptAllocation> lines = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, code);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    lines.add(new ReceiptAllocation(rs.getString("receivable_code"), rs.getBigDecimal("amount")));
+                }
+            }
+        }
+        return lines;
+    }
+
+    private BigDecimal receiptUsed(Connection connection, CustomerReceipt receipt) throws SQLException {
+        BigDecimal used = receipt.allocations().stream().map(ReceiptAllocation::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        String sql = """
+                select o.action_code, l.amount
+                  from fin_receipt_allocation_operation_line l
+                  join fin_receipt_allocation_operation o on o.code = l.operation_code
+                 where o.receipt_code = ?
+                 order by o.code, l.line_no
+                 for update
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, receipt.code());
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    used = "REVOKE".equals(rs.getString("action_code")) ? used.subtract(amount) : used.add(amount);
+                }
+            }
+        }
+        return used;
+    }
+
+    private BigDecimal receiptAllocated(Connection connection, String receiptCode, String receivableCode) throws SQLException {
+        BigDecimal used = BigDecimal.ZERO;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select amount from fin_receipt_allocation where receipt_code = ? and receivable_code = ? order by line_no for update")) {
+            statement.setString(1, receiptCode);
+            statement.setString(2, receivableCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    used = used.add(rs.getBigDecimal(1));
+                }
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                select o.action_code, l.amount
+                  from fin_receipt_allocation_operation_line l
+                  join fin_receipt_allocation_operation o on o.code = l.operation_code
+                 where o.receipt_code = ? and l.receivable_code = ?
+                 order by o.code, l.line_no
+                 for update
+                """)) {
+            statement.setString(1, receiptCode);
+            statement.setString(2, receivableCode);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    used = "REVOKE".equals(rs.getString("action_code")) ? used.subtract(amount) : used.add(amount);
+                }
+            }
+        }
+        return used;
+    }
+
+    private void insertOperation(Connection connection, ReceiptAllocationOperation operation) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into fin_receipt_allocation_operation
+                    (code, receipt_code, customer_id, action_code, reason, operator_name, request_id, created_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            statement.setString(1, operation.code());
+            statement.setString(2, operation.receiptCode());
+            statement.setLong(3, operation.customerId());
+            statement.setString(4, operation.action());
+            statement.setString(5, operation.reason());
+            statement.setString(6, operation.operator());
+            statement.setString(7, operation.requestId());
+            statement.setString(8, operation.createdAt());
+            statement.executeUpdate();
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into fin_receipt_allocation_operation_line
+                    (operation_code, line_no, receivable_code, amount, reverses_ref)
+                values (?, ?, ?, ?, ?)
+                """)) {
+            int lineNo = 1;
+            for (ReceiptAllocation line : operation.lines()) {
+                statement.setString(1, operation.code());
+                statement.setInt(2, lineNo++);
+                statement.setString(3, line.receivableCode());
+                statement.setBigDecimal(4, line.amount());
+                statement.setString(5, "");
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static boolean sameOperation(ReceiptAllocationOperation existing, ReceiptAllocationOperation requested) {
+        if (!existing.receiptCode().equals(requested.receiptCode()) || !existing.action().equals(requested.action())
+                || existing.lines().size() != requested.lines().size()) {
+            return false;
+        }
+        for (int index = 0; index < existing.lines().size(); index++) {
+            if (!existing.lines().get(index).receivableCode().equals(requested.lines().get(index).receivableCode())
+                    || existing.lines().get(index).amount().compareTo(requested.lines().get(index).amount()) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private CustomerReceipt findReceiptByKey(Connection connection, String key, boolean lock) throws SQLException {

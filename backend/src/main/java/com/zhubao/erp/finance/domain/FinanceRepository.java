@@ -44,6 +44,13 @@ public interface FinanceRepository {
 
     List<CustomerReceipt> listReceipts();
 
+    /**
+     * 在原收款上追加或撤销核销。同一操作人和请求号回放原操作；金额仍受未收和预收余额约束。
+     */
+    ReceiptAllocationOperation registerAllocationOperation(ReceiptAllocationOperation operation);
+
+    List<ReceiptAllocationOperation> listAllocationOperations();
+
     void saveWorkerRate(WorkerRate rate);
 
     List<WorkerRate> listWorkerRates();

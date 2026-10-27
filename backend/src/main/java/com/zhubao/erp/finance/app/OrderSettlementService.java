@@ -98,6 +98,19 @@ public class OrderSettlementService {
         return settlements.find(codeOf(result), null).orElseThrow(() -> new IllegalStateException("结单确认后无法读取"));
     }
 
+    /** 已确认结单之后只追加差额，不覆盖原应收、工资和应付。 */
+    public OrderSettlement adjust(SettlementCommand command, OperatorContext actor, Set<String> permissions) {
+        requireUnit();
+        if (!settlements.policyEnabled()) {
+            throw new BusinessException("交货后结单尚未启用");
+        }
+        Prepared prepared = prepare(command, actor, permissions, true);
+        String result = workUnit.execute(new CommandCall(
+                command.requestId(), actorId(actor), "ORDER_SETTLEMENT_ADJUST", "ORDER_SETTLEMENT", command.targetCode(), payload(command)
+        ), session -> write(adjustInSession(prepared, actor, session)));
+        return settlements.find(codeOf(result), null).orElseThrow(() -> new IllegalStateException("结单调整后无法读取"));
+    }
+
     private String confirmInSession(Prepared prepared, OperatorContext actor, WorkSession session) {
         OrderSettlement draft = store(prepared, session);
         String month = YearMonth.now().toString();
@@ -110,6 +123,93 @@ public class OrderSettlementService {
         settlements.savePostings(draft.code(), postings, session);
         OrderSettlement confirmed = settlements.markConfirmed(draft.code(), draft.rowVersion(), actorId(actor), month, now, session);
         return confirmed.code() + "|customer=" + confirmed.customerNet().toPlainString() + "|employee=" + confirmed.employeeNet().toPlainString();
+    }
+
+    private String adjustInSession(Prepared prepared, OperatorContext actor, WorkSession session) {
+        OrderSettlement previous = settlements.latest(prepared.command().targetType(), prepared.command().targetCode(), session)
+                .filter(row -> row.status() == SettlementStatus.CONFIRMED)
+                .orElseThrow(() -> new BusinessException("没有已确认结单可调整"));
+        BigDecimal customerDelta = prepared.customerNet().subtract(previous.customerNet());
+        BigDecimal employeeDelta = prepared.employeeNet().subtract(previous.employeeNet());
+        if (customerDelta.signum() == 0 && employeeDelta.signum() == 0) {
+            throw new BusinessException("没有需要调整的差额");
+        }
+        if (employeeDelta.signum() < 0) {
+            throw new BusinessException("员工工费调减不能自动冲减");
+        }
+        String month = YearMonth.now().toString();
+        String now = FinanceTexts.now();
+        OrderSettlement draft = settlements.beginAdjustment(header(prepared, prepared.assessment()), prepared.items(), sources(prepared.assessment()), session);
+        List<OrderSettlementPosting> postings = new ArrayList<>();
+        if (customerDelta.signum() > 0) {
+            String code = FinanceTexts.code("FIN-AR", sequence);
+            finance.saveReceivable(new ReceivableLine(
+                    code, prepared.assessment().customerId(), prepared.assessment().customerName(), month,
+                    "ORDER_SETTLEMENT", "SETTLEMENT|" + draft.code() + "|DELTA",
+                    prepared.assessment().motherOrderCode(), prepared.assessment().targetCode(), "结单调整",
+                    BigDecimal.ONE.setScale(3, RoundingMode.HALF_UP), ChargeUnit.JOB, customerDelta.setScale(4, RoundingMode.HALF_UP),
+                    customerDelta, "", "结单调整差额", actorId(actor), now
+            ), session);
+            postings.add(new OrderSettlementPosting(1, OrderSettlementPosting.RECEIVABLE, code, customerDelta));
+        } else if (customerDelta.signum() < 0) {
+            postCustomerReduction(prepared, previous, draft, customerDelta, month, now, actor, postings, session);
+        }
+        if (employeeDelta.signum() > 0) {
+            Priced sample = prepared.priced().stream()
+                    .filter(row -> row.item().kind() == SettlementItemKind.EMPLOYEE && row.net().signum() > 0)
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException("员工工费增加必须指定计酬账号"));
+            postPayroll(prepared, draft, sample, employeeDelta, month, now, postings, session);
+            String payableCode = FinanceTexts.code("FIN-AP", sequence);
+            String postingKey = "SETTLEMENT|" + draft.code() + "|" + sample.item().payeeAccount();
+            finance.savePayable(new Payable(
+                    payableCode, "PAYROLL", month, sample.payeeName(), postingKey, prepared.assessment().customerId(),
+                    prepared.assessment().motherOrderCode(), employeeDelta, ZERO, actorId(actor), now,
+                    sample.item().payeeAccount(), "", postingKey
+            ), session);
+            postings.add(new OrderSettlementPosting(9000, OrderSettlementPosting.PAYABLE, payableCode, employeeDelta));
+        }
+        settlements.savePostings(draft.code(), postings, session);
+        OrderSettlement confirmed = settlements.markConfirmed(draft.code(), draft.rowVersion(), actorId(actor), month, now, session);
+        return confirmed.code() + "|customer=" + confirmed.customerNet().toPlainString() + "|employee=" + confirmed.employeeNet().toPlainString();
+    }
+
+    private void postCustomerReduction(
+            Prepared prepared,
+            OrderSettlement previous,
+            OrderSettlement draft,
+            BigDecimal delta,
+            String month,
+            String now,
+            OperatorContext actor,
+            List<OrderSettlementPosting> postings,
+            WorkSession session
+    ) {
+        List<ReceivableLine> roots = finance.listReceivables().stream()
+                .filter(line -> line.reversesCode().isBlank() && line.sourceKey() != null && line.sourceKey().startsWith("SETTLEMENT|" + previous.code()))
+                .toList();
+        if (roots.isEmpty()) {
+            throw new BusinessException("已收部分超过结单金额，不能自动减账");
+        }
+        BigDecimal open = allocatedTo(roots);
+        BigDecimal net = roots.stream().map(ReceivableLine::amount).reduce(ZERO, BigDecimal::add);
+        for (ReceivableLine other : finance.listReceivables()) {
+            if (roots.stream().anyMatch(root -> root.code().equals(other.reversesCode()))) {
+                net = net.add(other.amount());
+            }
+        }
+        if (net.subtract(open).compareTo(delta.abs()) < 0) {
+            throw new BusinessException("已收部分超过结单金额，不能自动减账");
+        }
+        ReceivableLine root = roots.get(0);
+        String code = FinanceTexts.code("FIN-RED", sequence);
+        finance.saveReceivable(new ReceivableLine(
+                code, root.customerId(), root.customerName(), month, "ORDER_SETTLEMENT",
+                "SETTLEMENT|" + draft.code() + "|RED", root.motherOrderCode(), root.workOrderCode(),
+                root.processName(), root.quantity(), root.unit(), root.unitPrice(), delta, root.code(),
+                "结单调整减额", actorId(actor), now
+        ), session);
+        postings.add(new OrderSettlementPosting(1, OrderSettlementPosting.RECEIVABLE, code, delta));
     }
 
     /** 按原净入账额接续。没有历史账时仍按确认行入账；有历史账时只记差额。 */

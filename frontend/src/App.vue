@@ -104,6 +104,7 @@ provide('zhubao-open-aftercare', (row: InventoryBalance) => { if (canAftercare.v
 provide('zhubao-open-order-change', (target: OrderChangeTarget) => { if (canChange.value) orderActionHost.value?.openOrderChange(target); });
 provide('zhubao-open-label-target', (target?: OrderActionTarget | null) => { if (canLabel.value) orderActionHost.value?.openLabel(target ?? null); });
 provide('zhubao-open-bill', (context: BillContext, mode?: BillMode) => { if (canBill.value) orderActionHost.value?.openBill(context, mode); });
+provide('zhubao-open-settlement', (target: OrderActionTarget) => { if (canSettle.value) orderActionHost.value?.openSettlement(target); });
 provide('zhubao-open-orders', openOrders);
 provide('zhubao-open-approval', (code: string) => {
   if (!visibleTabs.value.some(tab => tab.key === 'approvals')) return;
@@ -180,6 +181,9 @@ const canProduction = computed(() => visibleTabs.value.some(tab => authorizedMen
 const canChange = computed(() => authorizedMenuCodes.value?.has('progress') === true);
 const canLabel = computed(() => authorizedMenuCodes.value?.has('label') === true
   && (!authSession.value?.effectivePermissions || authSession.value.effectivePermissions.includes('LABEL_PRINT')));
+const canSettle = computed(() => authSession.value?.dataScope === 'ALL'
+  && authSession.value?.effectivePermissions?.includes('FINANCE_BILLING_POST') === true
+  && authSession.value?.effectivePermissions?.includes('FINANCE_PAYROLL') === true);
 const canBill = computed(() => authorizedMenuCodes.value?.has('finance') === true
   && (!authSession.value?.effectivePermissions || ['FINANCE_CUSTOMER_READ', 'FINANCE_RECEIPT'].some(permission => authSession.value?.effectivePermissions?.includes(permission))));
 const canAftercare = computed(() => authorizedMenuCodes.value?.has('inventory') === true
@@ -528,5 +532,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
-<OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" :can-label="canLabel" :can-bill="canBill" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
+<OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" :can-label="canLabel" :can-bill="canBill" :can-settle="canSettle" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
 </template>

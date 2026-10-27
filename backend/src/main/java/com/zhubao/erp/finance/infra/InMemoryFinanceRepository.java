@@ -15,6 +15,7 @@ import com.zhubao.erp.finance.domain.PayrollLine;
 import com.zhubao.erp.finance.domain.PayrollRun;
 import com.zhubao.erp.finance.domain.PriceAgreement;
 import com.zhubao.erp.finance.domain.ReceiptAllocation;
+import com.zhubao.erp.finance.domain.ReceiptAllocationOperation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.domain.WorkerRate;
 import com.zhubao.erp.work.domain.WorkSession;
@@ -53,6 +54,7 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     private final ConcurrentHashMap<String, PayablePayment> payablePayments = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> paymentCodeByIdempotency = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> receiptCodeByIdempotency = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ReceiptAllocationOperation> allocationOperations = new ConcurrentHashMap<>();
     private final Object paymentLock = new Object();
     private final Object receiptLock = new Object();
     private final FinancePaymentProbe paymentProbe;
@@ -234,6 +236,16 @@ public class InMemoryFinanceRepository implements FinanceRepository {
                     }
                 }
             }
+            for (ReceiptAllocationOperation operation : allocationOperations.values()) {
+                for (ReceiptAllocation allocation : operation.lines()) {
+                    if (!line.code().equals(allocation.receivableCode())) {
+                        continue;
+                    }
+                    open = ReceiptAllocationOperation.REVOKE.equals(operation.action())
+                            ? open.add(allocation.amount())
+                            : open.subtract(allocation.amount());
+                }
+            }
             if (requestedAmount.compareTo(open) > 0) {
                 throw new BusinessException("核销金额不能超过尚未核销的余额");
             }
@@ -254,6 +266,106 @@ public class InMemoryFinanceRepository implements FinanceRepository {
         List<ReceiptAllocation> right = requested.allocations().stream()
                 .sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount))
                 .toList();
+        for (int index = 0; index < left.size(); index++) {
+            if (!left.get(index).receivableCode().equals(right.get(index).receivableCode())
+                    || left.get(index).amount().compareTo(right.get(index).amount()) != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public ReceiptAllocationOperation registerAllocationOperation(ReceiptAllocationOperation operation) {
+        synchronized (receiptLock) {
+            String key = operation.operator() + "|" + operation.requestId();
+            ReceiptAllocationOperation existing = allocationOperations.get(key);
+            if (existing != null) {
+                if (!sameOperation(existing, operation)) {
+                    throw new BusinessException("同一幂等键的核销内容不一致");
+                }
+                return existing;
+            }
+            CustomerReceipt receipt = receipts.get(operation.receiptCode());
+            if (receipt == null) {
+                throw new BusinessException("找不到要核销的收款");
+            }
+            if (receipt.customerId() != operation.customerId()) {
+                throw new BusinessException("不能核销其他客户的收款");
+            }
+            if (!ReceiptAllocationOperation.ALLOCATE.equals(operation.action())
+                    && !ReceiptAllocationOperation.REVOKE.equals(operation.action())) {
+                throw new BusinessException("核销动作无效");
+            }
+            if (operation.lines().isEmpty()) {
+                throw new BusinessException("核销明细不能为空");
+            }
+            if (ReceiptAllocationOperation.ALLOCATE.equals(operation.action())) {
+                assertOpenBalances(new CustomerReceipt(operation.code(), operation.customerId(), receipt.customerName(),
+                        receipt.yearMonth(), operation.lines().stream().map(ReceiptAllocation::amount).reduce(BigDecimal.ZERO, BigDecimal::add),
+                        receipt.receivedOn(), operation.lines(), operation.operator(), operation.createdAt()));
+                BigDecimal used = receiptUsed(receipt).add(operation.lines().stream().map(ReceiptAllocation::amount).reduce(BigDecimal.ZERO, BigDecimal::add));
+                if (used.compareTo(receipt.amount()) > 0) {
+                    throw new BusinessException("核销合计不能超过收款金额");
+                }
+            } else {
+                for (ReceiptAllocation line : operation.lines()) {
+                    if (receiptAllocated(receipt, line.receivableCode()).compareTo(line.amount()) < 0) {
+                        throw new BusinessException("撤销金额不能超过该收款已核销的金额");
+                    }
+                }
+            }
+            allocationOperations.put(key, operation);
+            return operation;
+        }
+    }
+
+    @Override
+    public List<ReceiptAllocationOperation> listAllocationOperations() {
+        return allocationOperations.values().stream().sorted(Comparator.comparing(ReceiptAllocationOperation::code)).toList();
+    }
+
+    private BigDecimal receiptUsed(CustomerReceipt receipt) {
+        BigDecimal used = receipt.allocations().stream().map(ReceiptAllocation::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        for (ReceiptAllocationOperation operation : allocationOperations.values()) {
+            if (!receipt.code().equals(operation.receiptCode())) {
+                continue;
+            }
+            for (ReceiptAllocation line : operation.lines()) {
+                used = ReceiptAllocationOperation.REVOKE.equals(operation.action()) ? used.subtract(line.amount()) : used.add(line.amount());
+            }
+        }
+        return used;
+    }
+
+    private BigDecimal receiptAllocated(CustomerReceipt receipt, String receivableCode) {
+        BigDecimal used = receipt.allocations().stream()
+                .filter(line -> receivableCode.equals(line.receivableCode()))
+                .map(ReceiptAllocation::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        for (ReceiptAllocationOperation operation : allocationOperations.values()) {
+            if (!receipt.code().equals(operation.receiptCode())) {
+                continue;
+            }
+            for (ReceiptAllocation line : operation.lines()) {
+                if (!receivableCode.equals(line.receivableCode())) {
+                    continue;
+                }
+                used = ReceiptAllocationOperation.REVOKE.equals(operation.action()) ? used.subtract(line.amount()) : used.add(line.amount());
+            }
+        }
+        return used;
+    }
+
+    private static boolean sameOperation(ReceiptAllocationOperation existing, ReceiptAllocationOperation requested) {
+        if (!existing.receiptCode().equals(requested.receiptCode())
+                || !existing.action().equals(requested.action())
+                || existing.customerId() != requested.customerId()
+                || existing.lines().size() != requested.lines().size()) {
+            return false;
+        }
+        List<ReceiptAllocation> left = existing.lines().stream().sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount)).toList();
+        List<ReceiptAllocation> right = requested.lines().stream().sorted(Comparator.comparing(ReceiptAllocation::receivableCode).thenComparing(ReceiptAllocation::amount)).toList();
         for (int index = 0; index < left.size(); index++) {
             if (!left.get(index).receivableCode().equals(right.get(index).receivableCode())
                     || left.get(index).amount().compareTo(right.get(index).amount()) != 0) {

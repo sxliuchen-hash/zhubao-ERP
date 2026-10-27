@@ -169,7 +169,7 @@ public class InMemoryOrderSettlementRepository implements OrderSettlementReposit
         if (existing.rowVersion() != expectedVersion) {
             throw new BusinessException("结单草稿已变化，请刷新后重新确认");
         }
-        if (openingExists(existing.targetType(), existing.targetCode(), existing.code())) {
+        if (existing.previousCode().isBlank() && openingExists(existing.targetType(), existing.targetCode(), existing.code())) {
             throw new BusinessException("该单已经有确认结单，不能再次确认首份费用");
         }
         OrderSettlement confirmed = new OrderSettlement(
@@ -202,6 +202,39 @@ public class InMemoryOrderSettlementRepository implements OrderSettlementReposit
                 postings.put(settlementCode, previous);
             }
         });
+    }
+
+    @Override
+    public synchronized OrderSettlement beginAdjustment(
+            OrderSettlement header,
+            List<OrderSettlementItem> itemRows,
+            List<OrderSettlementSource> sourceRows,
+            WorkSession session
+    ) {
+        assertMemory(session);
+        if (session == null) {
+            throw new IllegalStateException("结单调整必须处于业务工作单元");
+        }
+        OrderSettlement current = latest(header.targetType(), header.targetCode(), session)
+                .orElseThrow(() -> new BusinessException("没有已确认结单可调整"));
+        if (current.status() != SettlementStatus.CONFIRMED) {
+            throw new BusinessException("请先确认结单再调整");
+        }
+        OrderSettlement created = new OrderSettlement(
+                header.code(), current.rootCode(), current.versionNo() + 1, current.code(),
+                header.targetType(), header.targetCode(), header.motherOrderCode(), header.customerId(),
+                header.customerName(), SettlementStatus.DRAFT, 1, header.deliveryRevision(),
+                header.customerNet(), header.employeeNet(), header.customerWaived(), header.waiveReason(),
+                header.noInternalLabor(), header.noLaborReason(), header.preparer(), "", header.createdAt(),
+                "", header.postingMonth(), header.legacyState()
+        );
+        put(created, itemRows, sourceRows, List.of());
+        session.onRollback(() -> {
+            synchronized (InMemoryOrderSettlementRepository.this) {
+                remove(created.code());
+            }
+        });
+        return created;
     }
 
     @Override

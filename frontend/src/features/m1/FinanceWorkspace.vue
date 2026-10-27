@@ -26,6 +26,8 @@ import {
   type PayrollLine,
 } from '../../services/financeApi';
 import CustomerBillPanel from '../finance/CustomerBillPanel.vue';
+import SettlementPanel from '../finance/SettlementPanel.vue';
+import { apiPost } from '../../services/apiClient';
 import { validBillContext, type OpenBillAction } from '../finance/billContext';
 import { formatAmount } from '../../utils/formatAmount';
 
@@ -63,6 +65,20 @@ const openTab = inject<((tab: 'inventory') => void) | undefined>('zhubao-open-ta
 const openBill = inject<OpenBillAction | null>('zhubao-open-bill', null);
 const billContext = computed(() => ({ customerId: Number(customerId.value), yearMonth: yearMonth.value.trim() }));
 function showBill(mode: 'statement' | 'receipt') { if (validBillContext(billContext.value)) openBill?.(billContext.value, mode); else error.value = '请先填写正整数客户编号和有效月份'; }
+async function allocateExisting() {
+  if (busy.value) return;
+  busy.value = true; error.value = '';
+  try {
+    const saved = await apiPost<Record<string, unknown>, { code: string }>('/api/finance/receipts/' + encodeURIComponent(allocationReceipt.value.trim()) + '/allocation-operations', {
+      requestId: allocationRequest.value || ('alloc-' + crypto.randomUUID().replace(/-/g, '').slice(0, 16)),
+      action: 'ALLOCATE', reason: '预收后续核销',
+      lines: [{ receivableCode: allocationReceivable.value.trim(), amount: allocationAmount.value }],
+    });
+    allocationRequest.value = '';
+    message.value = '后续核销已入账 ' + saved.code;
+  } catch (caught) { error.value = caught instanceof Error ? caught.message : '后续核销失败'; }
+  finally { busy.value = false; }
+}
 const section = ref<Section>('overview');
 const amountsHidden = ref(false);
 const sectionLabel = computed(() => sections.find((item) => item.key === section.value)?.label ?? '财务');
@@ -71,16 +87,17 @@ const error = ref('');
 const busy = ref(false);
 
 const customerId = ref('');
-const customerName = ref('');
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
 const yearMonth = ref(today.slice(0, 7));
 const statement = ref<CustomerStatement | null>(null);
 const statementReading = ref(false);
 const billing = ref<BillingRunResult | null>(null);
-const mode = ref('WEIGHT');
-const unitPrice = ref('10');
-const processName = ref('雕刻');
-const chargeUnit = ref('GRAM');
+const settlementType = ref('CHILD');
+const settlementCode = ref('');
+const allocationReceipt = ref('');
+const allocationReceivable = ref('');
+const allocationAmount = ref('');
+const allocationRequest = ref('');
 
 const payrollLines = ref<PayrollLine[]>([]);
 const consumables = ref<ConsumableStock[]>([]);
@@ -1039,41 +1056,7 @@ function kindLabel(kind: string) {
         <p class="finance-note">已停止按收货或交工生成本月账单。加工费在交货后结单。</p>
         <button class="table-action" type="button" @click="openTab?.('inventory')">看库存</button>
       </div>
-      <details class="info-disclosure finance-agreement">
-        <summary>维护计价协议</summary>
-        <div class="info-fields">
-      <label>客户名称<input v-model="customerName" aria-label="客户名称" /></label>
-      <label>
-        计价方式
-        <select v-model="mode" aria-label="计价方式">
-          <option value="WEIGHT">按克</option>
-          <option value="PIECE">按件</option>
-          <option value="PROCESS">按工序</option>
-        </select>
-      </label>
-      <label v-if="mode === 'PROCESS'">
-        工序
-        <select v-model="processName" aria-label="工序">
-          <option>雕刻</option>
-          <option>镶嵌</option>
-          <option>抛光</option>
-        </select>
-      </label>
-      <label v-if="mode === 'PROCESS'">
-        单位
-        <select v-model="chargeUnit" aria-label="工序单位">
-          <option value="JOB">元/次</option>
-          <option value="GRAM">元/克</option>
-          <option value="PIECE">元/件</option>
-        </select>
-      </label>
-      <label>
-        单价
-        <input v-model="unitPrice" aria-label="单价" />
-      </label>
-        <p class="finance-note">客户协议已停止新增和改价，历史协议只可查询。</p>
-        </div>
-      </details>
+      <p class="finance-note">客户协议已停止新增和改价，历史协议只可查询。</p>
       <p v-if="statement" class="empty-hint">
         {{ statement.customerName }} 应收 {{ formatAmount(statement.receivableAmount) }} ，已收 {{ formatAmount(statement.receivedAmount) }} ，未收
         {{ formatAmount(statement.outstandingAmount) }} ，预收 {{ formatAmount(statement.prepaymentAmount) }} 。在库
@@ -1121,37 +1104,29 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'receipt'" class="section-block">
-      <h2>客户账单与收款</h2><p>按客户编号与月份进入原客户面板，收起后仍保留请求与回执。收款金额和分摊分别填写，可保留合法预收。</p>
+      <h2>客户账单与收款</h2><p>按客户编号与月份进入原客户面板，收起后仍保留请求与回执。一笔收款可以勾选多张订单核销，未核销部分仍是预收。</p>
       <button v-if="openBill" class="primary-button" type="button" @click="showBill('receipt')">核对客户账单与收款</button>
       <CustomerBillPanel v-else-if="validBillContext(billContext)" :key="customerId + ':' + yearMonth" :context="billContext" initial-mode="receipt" />
       <p v-else>请先填写正整数客户编号和有效月份。</p>
+      <h3>已有预收后续核销</h3>
+      <label>收款单号<input v-model="allocationReceipt" aria-label="预收收款单号" /></label>
+      <label>应收单号<input v-model="allocationReceivable" aria-label="后续核销应收单号" /></label>
+      <label>金额<input v-model="allocationAmount" aria-label="后续核销金额" inputmode="decimal" /></label>
+      <button class="secondary-button" type="button" :disabled="busy" @click="allocateExisting">核销到所选订单</button>
+      <h3>交货后结单</h3>
+      <label>单据类型
+        <select v-model="settlementType" aria-label="结单单据类型">
+          <option value="CHILD">子单</option>
+          <option value="MOTHER">未拆母单</option>
+        </select>
+      </label>
+      <label>单号<input v-model="settlementCode" aria-label="结单单号" /></label>
+      <SettlementPanel v-if="settlementCode.trim()" :target-type="settlementType" :target-code="settlementCode.trim()" />
     </section>
 
     <section v-else-if="section === 'payroll'" class="section-block">
-      <h2>工资试算</h2>
-      <label>
-        工序
-        <select v-model="processName" aria-label="工资工序">
-          <option>雕刻</option>
-          <option>镶嵌</option>
-          <option>抛光</option>
-        </select>
-      </label>
-      <label>
-        单位
-        <select v-model="chargeUnit" aria-label="工资单位">
-          <option value="JOB">元/次</option>
-          <option value="PIECE">元/件</option>
-          <option value="GRAM">元/克</option>
-        </select>
-      </label>
-      <label>
-        工人单价
-        <input v-model="unitPrice" aria-label="工人单价" />
-      </label>
-      <div class="finance-actions">
-        <p class="finance-note">员工工价和整月工资试算已停止。工费在交货后按单确认，这里只查看已确认结果。</p>
-      </div>
+      <h2>已确认工资</h2>
+      <p class="finance-note">员工工价和整月工资试算已停止。工费在交货后按单确认，这里只查看已确认结果。</p>
       <p v-if="payrollLines.length === 0" class="empty-hint">暂无工资行</p>
       <div v-else class="erp-table-wrap finance-register-table" tabindex="0" aria-label="工资明细，可横向滚动">
       <table>

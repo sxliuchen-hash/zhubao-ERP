@@ -8,7 +8,7 @@ import type { InventoryBalance } from '../../data/m1PrototypeData';
 import { openMobileScanTarget } from '../scan/mobileScanBridge';
 import { validBillContext, type BillContext, type BillMode } from '../finance/billContext';
 
-const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean; canQuality?: boolean; canShipping?: boolean; canAftercare?: boolean; canLabel?: boolean; canBill?: boolean }>(), { canProduction: false, canChange: false, canQuality: false, canShipping: false, canAftercare: false, canLabel: false, canBill: false });
+const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean; canQuality?: boolean; canShipping?: boolean; canAftercare?: boolean; canLabel?: boolean; canBill?: boolean; canSettle?: boolean }>(), { canProduction: false, canChange: false, canQuality: false, canShipping: false, canAftercare: false, canLabel: false, canBill: false, canSettle: false });
 const emit = defineEmits<{ active: [open: boolean]; saved: [result: MobileIntakeResult]; changed: [] }>();
 function intakeComponent() {
   return defineAsyncComponent({ loader: () => import('./IntakeActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 });
@@ -30,8 +30,10 @@ function labelComponent() { return defineAsyncComponent({ loader: () => import('
 const OrderLabelPanel = shallowRef(labelComponent());
 function billComponent() { return defineAsyncComponent({ loader: () => import('../finance/CustomerBillPanel.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
 const CustomerBillPanel = shallowRef(billComponent());
+function settlementComponent() { return defineAsyncComponent({ loader: () => import('../finance/SettlementPanel.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
+const SettlementPanel = shallowRef(settlementComponent());
 
-type ActionKind = 'intake' | 'production' | 'change' | 'quality' | 'shipping' | 'aftercare' | 'label' | 'bill';
+type ActionKind = 'intake' | 'production' | 'change' | 'quality' | 'shipping' | 'aftercare' | 'label' | 'bill' | 'settle';
 const activeKind = ref<ActionKind>('intake');
 provide('zhubao-retry-workspace', () => {
   if (activeKind.value === 'intake') IntakeActionPane.value = intakeComponent();
@@ -59,11 +61,11 @@ watch(open, value => {
 const target = ref<OrderActionTarget | null>(null);
 const draftKey = ref('intake:new');
 let aftercareAttempt = 0;
-interface ActionDraft { key: string; kind: ActionKind; target: OrderActionTarget | null; motherOrderCode?: string; balance?: ScanBalanceCandidate; inventoryRow?: InventoryBalance; mode: ProductionMode; entryRevision: number; billContext?: BillContext; billMode?: BillMode }
+interface ActionDraft { key: string; kind: ActionKind; target: OrderActionTarget | null; motherOrderCode?: string; balance?: ScanBalanceCandidate; inventoryRow?: InventoryBalance; mode: ProductionMode; entryRevision: number; billContext?: BillContext; billMode?: BillMode; settlementType?: string }
 const drafts = ref<ActionDraft[]>([]);
-const title = computed(() => ({ intake: '收货办理', production: '工序作业', change: '单据改单', quality: '质量作业', shipping: '发货办理', aftercare: '退货与售后复核', label: '单据标签', bill: '客户账单与收款' }[activeKind.value]));
+const title = computed(() => ({ intake: '收货办理', production: '工序作业', change: '单据改单', quality: '质量作业', shipping: '发货办理', aftercare: '退货与售后复核', label: '单据标签', bill: '客户账单与收款', settle: '交货后结单' }[activeKind.value]));
 const needsScanner = computed(() => activeKind.value === 'intake' || (activeKind.value === 'label' && !target.value?.objectType) || (['production', 'quality', 'shipping'].includes(activeKind.value) && !target.value?.objectType));
-function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : kind === 'quality' ? props.canQuality : kind === 'shipping' ? props.canShipping : kind === 'aftercare' ? props.canAftercare : kind === 'label' ? props.canLabel : kind === 'bill' ? props.canBill : props.canChange; }
+function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : kind === 'quality' ? props.canQuality : kind === 'shipping' ? props.canShipping : kind === 'aftercare' ? props.canAftercare : kind === 'label' ? props.canLabel : kind === 'bill' ? props.canBill : kind === 'settle' ? props.canSettle : props.canChange; }
 const panel = ref<HTMLElement | null>(null);
 const closeButton = ref<HTMLButtonElement | null>(null);
 let opener: HTMLElement | null = null;
@@ -74,6 +76,13 @@ function openIntake(input: OrderActionTarget | null = null) {
 }
 function workTarget(input: OrderActionTarget) { return input.code.trim() && (input.objectType === null || ['MOTHER_ORDER', 'WORK_ORDER'].includes(input.objectType)); }
 function openLabel(input: OrderActionTarget | null = null) { if (!input || workTarget(input)) openDraft('label', input); }
+function openSettlement(input: OrderActionTarget) {
+  if (!props.canSettle || !workTarget(input)) return;
+  const type = input.objectType === 'WORK_ORDER' ? 'CHILD' : 'MOTHER';
+  openDraft('settle', { objectType: input.objectType, code: input.code });
+  const current = drafts.value.find(item => item.key === draftKey.value);
+  if (current) current.settlementType = type;
+}
 function openBill(context: BillContext, mode: BillMode = 'statement') {
   if (!props.canBill || !validBillContext(context)) return;
   reveal({ kind: 'bill', key: 'bill:' + context.customerId + ':' + context.yearMonth, target: { objectType: null, code: String(context.customerId) }, billContext: { ...context }, billMode: mode, mode: 'progress', entryRevision: 1 });
@@ -139,10 +148,10 @@ function keydown(event: KeyboardEvent) {
   if (event.shiftKey && (document.activeElement === first || !panel.value?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
-watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality, () => props.canShipping, () => props.canAftercare, () => props.canLabel, () => props.canBill], () => { if (!allowed(activeKind.value) && open.value) void close(); });
+watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality, () => props.canShipping, () => props.canAftercare, () => props.canLabel, () => props.canBill, () => props.canSettle], () => { if (!allowed(activeKind.value) && open.value) void close(); });
 onMounted(() => window.addEventListener('keydown', keydown));
 onBeforeUnmount(() => { window.removeEventListener('keydown', keydown); restoreBodyScroll(); emit('active', false); });
-defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShipping, openAftercare, openLabel, openBill });
+defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShipping, openAftercare, openLabel, openBill, openSettlement });
 </script>
 
 <template>
@@ -167,6 +176,7 @@ defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShi
             <component :is="InventoryAftercarePanel" v-else-if="draft.kind === 'aftercare' && draft.inventoryRow" :row="draft.inventoryRow" :active="open && allowed(draft.kind) && draft.key === draftKey" @saved="emit('changed')" @new-request="row => openAftercare(row, true)" />
             <component :is="OrderLabelPanel" v-else-if="draft.kind === 'label'" :initial-target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @selected="openLabel" />
             <component :is="CustomerBillPanel" v-else-if="draft.kind === 'bill' && draft.billContext" :context="draft.billContext" :initial-mode="draft.billMode" :entry-revision="draft.entryRevision" />
+            <component :is="SettlementPanel" v-else-if="draft.kind === 'settle' && draft.target" :target-type="draft.settlementType || (draft.target.objectType === 'WORK_ORDER' ? 'CHILD' : 'MOTHER')" :target-code="draft.target.code" @changed="emit('changed')" />
             <component :is="OrderActionLocator" v-else-if="['production', 'quality', 'shipping'].includes(draft.kind)" :initial-target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :allowed-types="draft.kind === 'quality' ? ['MOTHER_ORDER', 'WORK_ORDER', 'REWORK'] : draft.kind === 'shipping' ? ['MOTHER_ORDER', 'WORK_ORDER', 'OUTBOUND_ORDER'] : ['MOTHER_ORDER', 'WORK_ORDER']" @selected="value => draft.kind === 'quality' ? openQuality(value) : draft.kind === 'shipping' ? openShipping({ ...value, ...(draft.balance ? { balance: draft.balance } : {}) }) : openProduction(value, draft.mode)" />
             <component :is="OrderChangePanel" v-else-if="draft.target && draft.motherOrderCode" :target="{ orderCode: draft.target.code, motherOrderCode: draft.motherOrderCode }" @changed="emit('changed')" />
           </div>

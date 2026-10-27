@@ -17,7 +17,7 @@ import OrderDetail from './OrderDetail.vue';
 import OrderKindMark from './OrderKindMark.vue';
 import WorkOrderRequirementForm from './WorkOrderRequirementForm.vue';
 import MotherAdminPanel from './MotherAdminPanel.vue';
-import type { OpenIntakeAction, OpenLabelAction, OpenOrderChangeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, ProductionMode } from './orderActions';
+import type { OpenIntakeAction, OpenLabelAction, OpenOrderChangeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, OrderActionTarget, ProductionMode } from './orderActions';
 import { orderFacetLabel } from './orderWorkspaceLabels';
 
 const workspace = useWorkspaceContext();
@@ -47,6 +47,7 @@ const openProduction = inject<OpenProductionAction | null>('zhubao-open-producti
 const openOrderChange = inject<OpenOrderChangeAction | null>('zhubao-open-order-change', null);
 const openQuality = inject<OpenQualityAction | null>('zhubao-open-quality', null);
 const openShipping = inject<OpenShippingAction | null>('zhubao-open-shipping', null);
+const openSettlement = inject<((target: OrderActionTarget) => void) | null>('zhubao-open-settlement', null);
 const openLabel = inject<OpenLabelAction | null>('zhubao-open-label-target', null);
 const canLabel = computed(() => Boolean(identity.value && ['MOTHER_ORDER', 'WORK_ORDER'].includes(identity.value.objectType)
   && tabs.value.includes('label') && (!session.value?.effectivePermissions || session.value.effectivePermissions.includes('LABEL_PRINT'))));
@@ -225,6 +226,9 @@ const detailActions = computed(() => {
   }
   if (openLabel && canLabel.value) {
     items.push({ key: 'label', label: '预览本单标签', run: label, rank: 40 });
+  }
+  if (openSettlement && ['MOTHER_ORDER', 'WORK_ORDER'].includes(current.objectType)) {
+    items.push({ key: 'settle', label: '交货后结单', run: () => openSettlement?.({ objectType: current.objectType, code: current.code }), rank: 35 });
   }
   return items.sort((left, right) => left.rank - right.rank);
 });
