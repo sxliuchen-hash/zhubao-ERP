@@ -258,29 +258,29 @@ public class OrderDeliveryCompletionQuery {
                 }
                 anyBatch = true;
                 BigDecimal quantity = batch.quantity() == null ? null : scale(batch.quantity());
-                bag.hash("batch|" + batch.batchCode() + "|" + plain(quantity));
+                bag.hash("batch|" + batch.batchCode() + "|" + plain(quantity) + "|w=" + plain(measuredWeight(batch.finalWeight())));
                 if (quantity == null || quantity.signum() < 0) {
                     bag.block("BATCH_INVALID", "交工批次 " + batch.batchCode() + " 数量无效", true);
                     continue;
                 }
                 if (quantity.signum() == 0) {
                     bag.labor.add(new LaborFact("BATCH|" + batch.batchCode(), code, process, batch.batchCode(), ZERO,
-                            true, false, false, batch.operator()));
+                            true, false, false, batch.operator(), measuredWeight(batch.finalWeight())));
                     continue;
                 }
                 batchQty = batchQty.add(quantity);
                 bag.labor.add(new LaborFact("BATCH|" + batch.batchCode(), code, process, batch.batchCode(), quantity,
-                        false, false, false, batch.operator()));
+                        false, false, false, batch.operator(), measuredWeight(batch.finalWeight())));
             }
             if (orderQuantity != null && batchQty.compareTo(orderQuantity) > 0) {
                 bag.block("BATCH_OVER", "工序 " + process + " 的分批数量超过订单数量", true);
             }
             if (handoff != null && !anyBatch) {
                 bag.labor.add(new LaborFact("PROCESS|" + code + "|" + process, code, process, "", orderQuantity,
-                        false, orderQuantity == null, true, handoff.operator()));
+                        false, orderQuantity == null, true, handoff.operator(), null));
             } else if (handoff != null && orderQuantity != null && batchQty.compareTo(orderQuantity) < 0) {
                 bag.labor.add(new LaborFact("GAP|" + code + "|" + process, code, process, "", orderQuantity.subtract(batchQty),
-                        false, false, false, ""));
+                        false, false, false, "", null));
             }
         }
     }
@@ -308,14 +308,15 @@ public class OrderDeliveryCompletionQuery {
                 if (batch.quantity() != null && batch.quantity().signum() > 0) {
                     positive = true;
                     bag.labor.add(new LaborFact("BATCH|" + batch.batchCode(), round.roundWorkOrderCode(), round.processName(),
-                            batch.batchCode(), scale(batch.quantity()), false, false, false, batch.operator()));
+                            batch.batchCode(), scale(batch.quantity()), false, false, false, batch.operator(),
+                            measuredWeight(batch.finalWeight())));
                 }
             }
             if (!positive) {
                 String operator = handoffs.stream().filter(row -> round.processName().equals(row.processName()))
                         .map(ProcessStationHandoff::operator).findFirst().orElse("");
                 bag.labor.add(new LaborFact("ROUND|" + round.roundWorkOrderCode(), round.roundWorkOrderCode(), round.processName(),
-                        "", null, false, true, true, operator));
+                        "", null, false, true, true, operator, null));
             }
         }
     }
@@ -633,6 +634,14 @@ public class OrderDeliveryCompletionQuery {
 
     private static String key(String material, String unit) {
         return (material == null ? "" : material) + "|" + (unit == null ? "" : unit);
+    }
+
+    /** 只保留已经记录的正重量。没有实测重量时保持空，不能拿件数代替。 */
+    private static BigDecimal measuredWeight(BigDecimal weight) {
+        if (weight == null || weight.signum() <= 0) {
+            return null;
+        }
+        return weight.setScale(3, RoundingMode.HALF_UP);
     }
 
     private static BigDecimal scale(BigDecimal value) {

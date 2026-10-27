@@ -6,6 +6,7 @@ import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.domain.OrderDeliveryAssessment;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
+import com.zhubao.erp.business.domain.ProcessBatchHandoff;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.QualityRequirementCheck;
 import com.zhubao.erp.business.domain.QualityVerdicts;
@@ -33,6 +34,7 @@ import com.zhubao.erp.security.domain.PermissionCode;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
 import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -131,6 +133,66 @@ class OrderSettlementServiceTest {
     }
 
     @Test
+    void gramWageUsesRecordedWeightAndDoesNotCompareWithPieceCount() {
+        deliver("ZD-G", new BigDecimal("1.000"));
+        saveBatch("B-G", "ZD-G", new BigDecimal("1.000"), new BigDecimal("10.000"));
+        var confirmed = service.confirm(command("settle-gram-01", "ZD-G", fixedCustomer("20.00"),
+                gram(2, "BATCH|B-G", "carve", "10.000", "2.0000", "")), financeUser, rights());
+        assertThat(confirmed.employeeNet()).isEqualByComparingTo("20.00");
+        assertThat(finance.listPayrollLines()).singleElement().extracting(PayrollLine::quantity).isEqualTo(new BigDecimal("10.000"));
+
+        deliver("ZD-OVER", new BigDecimal("1.000"));
+        saveBatch("B-OVER", "ZD-OVER", new BigDecimal("1.000"), new BigDecimal("10.000"));
+        assertThatThrownBy(() -> service.confirm(command("settle-gram-02", "ZD-OVER", fixedCustomer("20.00"),
+                gram(2, "BATCH|B-OVER", "carve", "6.000", "2.0000", ""),
+                gram(3, "BATCH|B-OVER", "polish", "6.000", "2.0000", "")), financeUser, rights()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("计费重量");
+
+        deliver("ZD-SHARE", new BigDecimal("1.000"));
+        saveBatch("B-SHARE", "ZD-SHARE", new BigDecimal("1.000"), new BigDecimal("10.000"));
+        service.confirm(command("settle-gram-03", "ZD-SHARE", fixedCustomer("20.00"),
+                gram(2, "BATCH|B-SHARE", "carve", "4.000", "2.0000", ""),
+                gram(3, "BATCH|B-SHARE", "polish", "6.000", "2.0000", "")), financeUser, rights());
+        assertThat(finance.listPayrollLines().stream().filter(line -> "ZD-SHARE".equals(line.orderCode()))).hasSize(2);
+
+        deliver("ZD-W", new BigDecimal("1.000"));
+        saveBatch("B-W", "ZD-W", BigDecimal.ZERO.setScale(3), new BigDecimal("8.000"));
+        assertThatThrownBy(() -> service.confirm(command("settle-gram-04", "ZD-W", fixedCustomer("20.00"),
+                piece(2, "BATCH|B-W", "carve", "1.000", "10.0000"),
+                piece(3, "GAP|ZD-W|雕刻", "polish", "1.000", "10.0000")), financeUser, rights()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("补重量不能按件计酬");
+        service.confirm(command("settle-gram-05", "ZD-W", fixedCustomer("20.00"),
+                gram(2, "BATCH|B-W", "carve", "8.000", "1.0000", ""),
+                piece(3, "GAP|ZD-W|雕刻", "polish", "1.000", "10.0000")), financeUser, rights());
+
+        deliver("ZD-E", new BigDecimal("1.000"));
+        assertThatThrownBy(() -> service.confirm(command("settle-gram-06", "ZD-E", fixedCustomer("20.00"),
+                gram(2, "PROCESS|ZD-E|雕刻", "carve", "10.000", "1.0000", "")), financeUser, rights()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("计费重量依据");
+        assertThatThrownBy(() -> service.confirm(command("settle-gram-07", "ZD-E", fixedCustomer("20.00"),
+                gram(2, "PROCESS|ZD-E|雕刻", "carve", "6.000", "1.0000", "台秤确认"),
+                gram(3, "PROCESS|ZD-E|雕刻", "polish", "4.000", "1.0000", "台秤确认")), financeUser, rights()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能把同一来源按克分给多人");
+        service.confirm(command("settle-gram-08", "ZD-E", fixedCustomer("20.00"),
+                gram(2, "PROCESS|ZD-E|雕刻", "carve", "10.000", "1.5000", "台秤确认十克")), financeUser, rights());
+
+        deliver("ZD-U", new BigDecimal("1.000"));
+        saveBatch("B-U", "ZD-U", new BigDecimal("1.000"), new BigDecimal("10.000"));
+        assertThatThrownBy(() -> service.confirm(command("settle-gram-09", "ZD-U", fixedCustomer("20.00"),
+                new OrderSettlementItem(2, SettlementItemKind.EMPLOYEE, "雕刻", "BATCH|B-U", "GRAM",
+                        new BigDecimal("10.000"), "件", "GRAM", new BigDecimal("1.0000"), null, BigDecimal.ZERO, null,
+                        "carve", "", "", "")), financeUser, rights()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数量单位");
+        assertThat(finance.listReceivables().stream().noneMatch(line -> "ZD-OVER".equals(line.workOrderCode())
+                || "ZD-U".equals(line.workOrderCode()))).isTrue();
+    }
+
+    @Test
     void payableFailureRollsBackReceivableAndDraft() {
         deliver("ZD-1", new BigDecimal("1.000"));
         InMemoryFinanceRepository failing = new InMemoryFinanceRepository() {
@@ -210,6 +272,24 @@ class OrderSettlementServiceTest {
 
     private static OrderSettlementItem piece(String source, String payee, String quantity, String price) {
         return piece(2, source, payee, quantity, price);
+    }
+
+    private void saveBatch(String code, String child, BigDecimal quantity, BigDecimal weight) {
+        new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()).execute(
+                new CommandCall("batch-" + code, "tester", "PROCESS_BATCH", "WORK_ORDER", child, code),
+                session -> {
+                    documents.saveProcessBatch(new ProcessBatchHandoff(
+                            code, child, "雕刻", quantity, weight, "交工人", "2026-10-26T01:00:00"
+                    ), session);
+                    return "ok";
+                }
+        );
+    }
+
+    private static OrderSettlementItem gram(int lineNo, String source, String payee, String quantity, String price, String basis) {
+        return new OrderSettlementItem(lineNo, SettlementItemKind.EMPLOYEE, "雕刻", source, "GRAM",
+                new BigDecimal(quantity), "克", "GRAM", new BigDecimal(price), null, BigDecimal.ZERO, null,
+                payee, "", basis, "");
     }
 
     private static OrderSettlementItem piece(int lineNo, String source, String payee, String quantity, String price) {

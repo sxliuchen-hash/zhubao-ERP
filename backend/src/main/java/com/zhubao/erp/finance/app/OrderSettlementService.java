@@ -225,12 +225,12 @@ public class OrderSettlementService {
                 throw new BusinessException("补重量不能按件计酬");
             }
             covered.add(fact.sourceRef());
-            if (("PIECE".equals(row.item().chargeMode()) || "GRAM".equals(row.item().chargeMode())) && fact.quantity() != null) {
-                BigDecimal next = used.getOrDefault(fact.sourceRef(), BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP)).add(row.quantity());
-                if (next.compareTo(fact.quantity()) > 0) {
-                    throw new BusinessException("同一作业的计酬数量不能超过实际作业数量");
-                }
-                used.put(fact.sourceRef(), next);
+            if ("PIECE".equals(row.item().chargeMode())) {
+                assertPieceShare(fact, row, used);
+            } else if ("GRAM".equals(row.item().chargeMode())) {
+                assertGramShare(fact, row, used);
+            } else if (!"FIXED".equals(row.item().chargeMode()) && !"WAIVED".equals(row.item().chargeMode())) {
+                throw new BusinessException("无法识别的计酬方式");
             }
         }
         for (LaborFact fact : assessment.laborFacts()) {
@@ -241,6 +241,54 @@ public class OrderSettlementService {
                 throw new BusinessException("作业 " + fact.processName() + " 尚未确认工费或免计");
             }
         }
+    }
+
+    /** 按件只和同一来源的件数份额比较，不拿重量或人数代替。 */
+    private void assertPieceShare(LaborFact fact, Priced row, Map<String, BigDecimal> used) {
+        if (fact.weightOnly()) {
+            throw new BusinessException("补重量不能按件计酬");
+        }
+        if (!sameUnit(row.item().quantityUnit(), "件", "PIECE")) {
+            throw new BusinessException("按件计酬的数量单位与件数不一致");
+        }
+        if (fact.quantity() == null) {
+            throw new BusinessException("按件计酬缺少相同单位的作业件数");
+        }
+        String key = fact.sourceRef() + "|PIECE";
+        BigDecimal next = used.getOrDefault(key, BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP)).add(row.quantity());
+        if (next.compareTo(fact.quantity()) > 0) {
+            throw new BusinessException("同一作业的计酬件数不能超过实际件数");
+        }
+        used.put(key, next);
+    }
+
+    /** 按克只和已记录的计费重量比较。没有实测重量时允许交货后明确确认，但不能按人数拆同一来源。 */
+    private void assertGramShare(LaborFact fact, Priced row, Map<String, BigDecimal> used) {
+        if (!sameUnit(row.item().quantityUnit(), "克", "GRAM")) {
+            throw new BusinessException("按克计酬的数量单位与重量不一致");
+        }
+        String key = fact.sourceRef() + "|GRAM";
+        BigDecimal measured = fact.measuredWeight();
+        if (measured != null && measured.signum() > 0) {
+            BigDecimal next = used.getOrDefault(key, BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP)).add(row.quantity());
+            if (next.compareTo(measured) > 0) {
+                throw new BusinessException("同一作业的计酬重量不能超过已记录的计费重量");
+            }
+            used.put(key, next);
+            return;
+        }
+        if (row.item().remark() == null || row.item().remark().isBlank()) {
+            throw new BusinessException("没有实测重量时，按克计酬必须写明计费重量依据");
+        }
+        if (used.containsKey(key)) {
+            throw new BusinessException("没有个人实测重量时，不能把同一来源按克分给多人");
+        }
+        used.put(key, row.quantity());
+    }
+
+    private static boolean sameUnit(String actual, String chinese, String code) {
+        String text = actual == null ? "" : actual.trim();
+        return text.isEmpty() || chinese.equals(text) || code.equalsIgnoreCase(text);
     }
 
     private List<Priced> price(SettlementCommand command, OrderDeliveryAssessment assessment, boolean confirming) {
@@ -379,7 +427,7 @@ public class OrderSettlementService {
         }
         for (LaborFact fact : assessment.laborFacts()) {
             rows.add(new OrderSettlementSource(line++, "LABOR", fact.sourceRef(),
-                    fact.processName() + "|" + fact.operatorName() + "|" + fact.quantity()));
+                    fact.processName() + "|" + fact.operatorName() + "|" + fact.quantity() + "|" + fact.measuredWeight()));
         }
         return rows;
     }

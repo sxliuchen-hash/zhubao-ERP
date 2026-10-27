@@ -68,7 +68,8 @@ public record OrderDeliveryAssessment(
             boolean weightOnly,
             boolean manualQuantity,
             boolean stationClose,
-            String operatorName
+            String operatorName,
+            BigDecimal measuredWeight
     ) {
         public LaborFact {
             sourceRef = sourceRef == null ? "" : sourceRef;
