@@ -30,6 +30,15 @@ public class InMemoryOrderSettlementRepository implements OrderSettlementReposit
     private final Map<String, List<OrderSettlementPosting>> postings = new LinkedHashMap<>();
     private boolean enabled;
 
+    public InMemoryOrderSettlementRepository() {
+        this(true);
+    }
+
+    /** 测试可以显式关闭，用来证明未启用时不能确认结单。 */
+    public InMemoryOrderSettlementRepository(boolean enabled) {
+        this.enabled = enabled;
+    }
+
     @Override
     public synchronized boolean policyEnabled() {
         return enabled;

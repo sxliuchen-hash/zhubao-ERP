@@ -55,7 +55,7 @@ class OrderSettlementRepositoryTest {
         assertThat(confirmed.status()).isEqualTo(SettlementStatus.CONFIRMED);
         assertThatThrownBy(() -> repository.markConfirmed("SET-1", 2, "财务", "2026-10", "2026-10-27T10:00:00", session))
                 .isInstanceOf(BusinessException.class);
-        assertThat(repository.policyEnabled()).isFalse();
+        assertThat(repository.policyEnabled()).isTrue();
     }
 
     @Test

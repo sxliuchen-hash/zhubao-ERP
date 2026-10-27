@@ -76,3 +76,4 @@
 76	TABLE	biz_processing_intake_pending
 77	ROW	sys_label_default_revision	revision_code	V77
 78	COLUMN	fin_payroll_line	source_mode
+79	ROW	fin_settlement_policy	policy_code	POST_DELIVERY_ON

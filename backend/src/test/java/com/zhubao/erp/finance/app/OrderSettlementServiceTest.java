@@ -158,7 +158,7 @@ class OrderSettlementServiceTest {
         assertThat(confirmed.customerWaived()).isTrue();
         assertThat(finance.listReceivables()).isEmpty();
         assertThat(finance.listPayables()).isEmpty();
-        InMemoryOrderSettlementRepository closed = new InMemoryOrderSettlementRepository();
+        InMemoryOrderSettlementRepository closed = new InMemoryOrderSettlementRepository(false);
         OrderSettlementService disabled = service(finance, closed);
         assertThatThrownBy(() -> disabled.confirm(waived, financeUser, rights()))
                 .isInstanceOf(BusinessException.class)

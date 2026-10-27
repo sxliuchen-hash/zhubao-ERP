@@ -76,3 +76,4 @@ V75__m3_label_storage_edition.sql
 V76__m3_processing_intake_pending.sql
 V77__m3_label_paper_40x30.sql
 V78__m3_order_settlement.sql
+V79__m3_settlement_policy_on.sql
