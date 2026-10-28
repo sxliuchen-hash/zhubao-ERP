@@ -347,7 +347,7 @@ class MaterialStockServiceTest {
     }
 
     private MaterialStockService service(MemoryBusinessWorkUnit unit) {
-        BusinessOperationService operations = new BusinessOperationService(ledger, null, orders, com.zhubao.erp.business.BusinessWorkFixture.unit());
+        BusinessOperationService operations = new BusinessOperationService(ledger, null, orders);
         MobileIntakeService intakes = new MobileIntakeService(operations, orders, unit, null, ledger);
         return new MaterialStockService(ledger, stockDocuments, orders, unit, operations, intakes, sources, new PermissionGuard());
     }
