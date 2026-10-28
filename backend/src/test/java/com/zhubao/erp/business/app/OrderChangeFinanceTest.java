@@ -13,7 +13,6 @@ import com.zhubao.erp.finance.infra.InMemoryFinanceRepository;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.label.app.PrintJobService;
-import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.infra.InMemoryPrintJobRepository;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.DataScope;
@@ -88,11 +87,9 @@ class OrderChangeFinanceTest {
                 .generate(new PayrollRunCommand(YearMonth.now().toString())))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已停止按交工");
-        PrintJobService printing = new PrintJobService(new InMemoryPrintJobRepository(), "station-secret", changes);
-        PrintJob printed = printing.create("print-change-001", "MD-CHANGE-001", "FLOW", 1, "何琳");
-        assertThat(printed.contentSnapshot()).contains("\"version\":\"V1\"");
-        PrintJob reprinted = printing.retry(printed.id(), "print-change-002", "同版补打", "何琳");
-        assertThat(reprinted.contentSnapshot()).isEqualTo(printed.contentSnapshot());
+        PrintJobService printing = new PrintJobService(new InMemoryPrintJobRepository(), changes);
+        String snapshot = printing.prepareBatchSnapshot("MD-CHANGE-001", "FLOW", 1, receiver);
+        assertThat(snapshot).contains("\"version\":\"V1\"");
     }
 
     @Test

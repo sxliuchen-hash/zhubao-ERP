@@ -2506,13 +2506,9 @@ PWA 一期边界：
 | `GET /api/label/mother-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `GET /api/label/work-orders/{code}` | `ApiResponse<LabelPayload>` |
 | `POST /api/label/reprints` | `ApiResponse<LabelPayload>` |
-| `POST /api/label/print-jobs` | 旧版创建入口已停止接单，返回升级提示；改用打印批次接口并明确选择工位及队列。旧任务快照仍保留。 |
 | `GET /api/label/print-jobs/{id}` | `ApiResponse<PrintJob>`。`SPOOLED` 只表示已送入系统队列 |
-| `POST /api/label/print-jobs/{id}/retries` | 旧版补打入口已停止接单；核纸后以新批次明确选择目标。 |
 | `POST /api/label/print-jobs/{id}/paper-checks` | `ApiResponse<PrintJob>`。人工核实出纸，不把任务改成已出纸 |
 | `POST /api/label/print-jobs/{id}/relabels` | `ApiResponse<PrintJob>`。记录实物换贴，不表示打印队列已经出纸 |
-| `POST /api/label/agents/jobs/claim` | 旧版工位领取入口已停用，返回升级提示。 |
-| `POST /api/label/agents/jobs/{id}/report` | 旧版工位回报入口已停用，返回升级提示。 |
 | `GET /api/label/print-stations`、`GET /api/label/print-queues` | 读取工位公开信息和当前启用队列；不返回工位凭据或 Windows 队列名。 |
 | `POST /api/label/print-stations`、`POST /api/label/print-stations/{id}/rotate-token` | 仅管理员维护工位并轮换独立凭据；新凭据仅在创建／轮换响应中显示一次，服务端保存摘要。 |
 | `GET /api/label/print-queues/all`、`POST /api/label/print-queues` | 仅管理员读取全部队列或维护逻辑队列；队列限定标签类型与纸张毫米尺寸。 |
@@ -2693,3 +2689,5 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 库存退役约定（2026-10-28）：旧 `/api/inventory/prep-stock/*` 与 `/api/inventory/ledger/transfers` 已移除，正式写入统一 `/api/material-stock/*` 业务单据接口。台账内核及库存只读保留。收货仅追加 `biz_receipt_line`，拆单记录来源分配；发货以 `biz_outbound_order` 与台账关联。旧 item 表和历史迁移保留，不再双写或用于新单校验。
 
 硬件契约更新（2026-10-28）：固定设备池 `/api/hardware/devices` 与固定任务 `/integration-tasks` 已退出。`/api/hardware/summary` 只统计现场 POC 的 `pocRecords/pocBlocked`；设备登记、读数与健康证据使用网关接口，不再提供固定 `averageHealth/fallbackRequired`。运维未配置来源时显示未采集，现场记录和证据接口保留。
+
+打印退役约定（2026-10-28）：v1 创建／补打／代理领取／回报路由已移除。唯一正式出纸为 v2 打印批次与每工位凭据；浏览器保留预览。旧任务 GET、人工核纸和换贴历史继续保留；调度将 v2 过期租约置为出纸不明，不自动重新领取。

@@ -19,7 +19,6 @@ import com.zhubao.erp.label.domain.LabelPayload;
 import com.zhubao.erp.label.domain.LabelField;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -27,7 +26,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * 打印任务只记录到系统队列为止。不确定任务保留原状，等待人工核对后再决定补打。
@@ -38,7 +36,6 @@ public class PrintJobService {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final PrintJobRepository jobs;
-    private final String stationToken;
     private final OrderChangeRepository changes;
     private LabelVersionGuard labelGuard;
     private BusinessDocumentRepository documents;
@@ -49,18 +46,16 @@ public class PrintJobService {
     public void setMaterialStocks(com.zhubao.erp.inventory.app.MaterialStockService materialStocks) { this.materialStocks = materialStocks; }
     private final ObjectMapper snapshotMapper = new ObjectMapper();
 
-    public PrintJobService(PrintJobRepository jobs, String stationToken) {
-        this(jobs, stationToken, null);
+    public PrintJobService(PrintJobRepository jobs) {
+        this(jobs, null);
     }
 
     @Autowired
     public PrintJobService(
             PrintJobRepository jobs,
-            @Value("${zhubao.print-agent.token:}") String stationToken,
             OrderChangeRepository changes
     ) {
         this.jobs = jobs;
-        this.stationToken = stationToken == null ? "" : stationToken.trim();
         this.changes = changes;
     }
 
@@ -78,11 +73,6 @@ public class PrintJobService {
     @Autowired(required = false)
     public void setLabelService(LabelService labelService) {
         this.labelService = labelService;
-    }
-
-    public PrintJob create(String requestId, String businessCode, String templateCode, int copies, AuthUserAccount account) {
-        assertPrintable(businessCode, account);
-        return create(requestId, businessCode, templateCode, copies, account == null ? "" : account.operator());
     }
 
     public String prepareBatchSnapshot(String businessCode, String templateCode, int copies, AuthUserAccount account) {
@@ -144,44 +134,6 @@ public class PrintJobService {
         return list().stream().filter(job -> readable(job.businessCode(), account)).toList();
     }
 
-    public PrintJob create(String requestId, String businessCode, String templateCode, int copies, String operator) {
-        requireRequest(requestId);
-        if (businessCode == null || businessCode.isBlank() || templateCode == null || templateCode.isBlank()) {
-            throw new BusinessException("打印任务必须指定业务单号和模板");
-        }
-        if (copies < 1 || copies > 20) {
-            throw new BusinessException("打印份数必须在 1 到 20 之间");
-        }
-        int version = changes == null ? 0 : changes.latestAppliedVersion(businessCode.trim());
-        String snapshot = snapshotForJob(businessCode.trim(), templateCode.trim(), copies, version);
-        String now = TIME.format(LocalDateTime.now());
-        PrintJob stored = jobs.insertIfAbsent(new PrintJob(
-                "PJ-" + UUID.randomUUID().toString().substring(0, 8),
-                requestId.trim(),
-                businessCode.trim(),
-                templateCode.trim(),
-                copies,
-                snapshot,
-                PrintJobStatus.PENDING,
-                "",
-                "",
-                "",
-                "",
-                "",
-                operator == null ? "" : operator.trim(),
-                now,
-                now
-        ));
-        if (!snapshot.equals(stored.contentSnapshot())) {
-            throw new BusinessException("同一请求的内容不一致");
-        }
-        if (stored.id().startsWith("PJ-") && labelGuard != null && stored.createdAt().equals(now)) {
-            labelGuard.recordEvent(motherCode(businessCode.trim()), businessCode.trim(), version == 0 ? "PRINT" : "REISSUE_VERSION",
-                    "V" + version, "", stored.id(), "", operator);
-        }
-        return stored;
-    }
-
     public PrintJob get(String id) {
         expireLeases(TIME.format(LocalDateTime.now()));
         return jobs.findById(id).orElseThrow(() -> new BusinessException("打印任务不存在：" + id));
@@ -208,42 +160,6 @@ public class PrintJobService {
         }
     }
 
-    public PrintJob retry(String id, String requestId, String reason, String operator) {
-        PrintJob original = jobs.findById(id).orElseThrow(() -> new BusinessException("打印任务不存在：" + id));
-        if (original.status() == PrintJobStatus.FAILED || original.status() == PrintJobStatus.UNCERTAIN) {
-            throw new BusinessException("失败或不确定的任务不能直接补打，请先核纸后再建立打印批次");
-        }
-        if (reason == null || reason.isBlank()) {
-            throw new BusinessException("补打必须填写原因");
-        }
-        requireRequest(requestId);
-        String now = TIME.format(LocalDateTime.now());
-        PrintJob stored = jobs.insertIfAbsent(new PrintJob(
-                "PJ-" + UUID.randomUUID().toString().substring(0, 8),
-                requestId.trim(),
-                original.businessCode(),
-                original.templateCode(),
-                original.copies(),
-                original.contentSnapshot(),
-                PrintJobStatus.PENDING,
-                "",
-                "",
-                "",
-                original.id(),
-                reason.trim(),
-                operator == null ? "" : operator.trim(),
-                now,
-                now
-        ));
-        if (!original.contentSnapshot().equals(stored.contentSnapshot())) {
-            throw new BusinessException("同一请求的内容不一致");
-        }
-        if (labelGuard != null && stored.createdAt().equals(now)) {
-            labelGuard.recordEvent(motherCode(original.businessCode()), original.businessCode(), "REPRINT_SAME", "", "", stored.id(), reason.trim(), operator);
-        }
-        return stored;
-    }
-
     public PrintJob verifyPaper(String id, String requestId, String note, String operator) {
         PrintJob job = get(id);
         if (note == null || note.isBlank()) {
@@ -264,30 +180,6 @@ public class PrintJobService {
             labelGuard.recordEvent(motherCode(job.businessCode()), job.businessCode(), "RELABELED", "", "", job.id(), note.trim(), operator);
         }
         return job;
-    }
-
-    public PrintJob claim(String stationId, String token) {
-        assertStation(stationId, token);
-        expireLeases(TIME.format(LocalDateTime.now()));
-        return jobs.claim(stationId.trim(), TIME.format(LocalDateTime.now().plusMinutes(2)), TIME.format(LocalDateTime.now()))
-                .orElseThrow(() -> new BusinessException("当前没有待打印任务"));
-    }
-
-    public PrintJob report(String id, String stationId, String token, String outcome, String failureReason) {
-        assertStation(stationId, token);
-        PrintJob job = get(id);
-        if (!stationId.equals(job.stationId()) || job.status() != PrintJobStatus.LEASED) {
-            throw new BusinessException("只能回报本工位已领取的任务");
-        }
-        PrintJobStatus next = switch (outcome == null ? "" : outcome.trim()) {
-            case "SPOOLED" -> PrintJobStatus.SPOOLED;
-            case "FAILED" -> PrintJobStatus.FAILED;
-            default -> throw new BusinessException("只能回报已送入系统队列或发送前失败");
-        };
-        if (next == PrintJobStatus.FAILED && (failureReason == null || failureReason.isBlank())) {
-            throw new BusinessException("发送前失败必须填写原因");
-        }
-        return replace(job, next, job.leaseUntil(), failureReason == null ? "" : failureReason.trim());
     }
 
     public int expireLeases(String now) {
@@ -419,18 +311,4 @@ public class PrintJobService {
         ));
     }
 
-    private void assertStation(String stationId, String token) {
-        if (stationToken.isBlank()) {
-            throw new BusinessException("打印工位凭据尚未配置");
-        }
-        if (stationId == null || stationId.isBlank() || token == null || !stationToken.equals(token)) {
-            throw new PermissionDeniedException("打印工位凭据无效");
-        }
-    }
-
-    private void requireRequest(String requestId) {
-        if (requestId == null || !requestId.trim().matches("[A-Za-z0-9._:-]{8,64}")) {
-            throw new BusinessException("请求编号无效");
-        }
-    }
 }

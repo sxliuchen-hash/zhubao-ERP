@@ -12,7 +12,7 @@ import { canonicalTarget, useScanContext } from '../scan/useScanContext';
 import ScanInput from '../scan/ScanInput.vue';
 import OrderContextCard from '../scan/OrderContextCard.vue';
 import PrintJobPanel from './PrintJobPanel.vue';
-import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from '../m1/labelPrint';
+import { buildLabelMarkup, labelFaceCss, labelPreviewScale } from '../m1/labelPrint';
 
 const props = withDefaults(defineProps<{ initialTarget?: OrderActionTarget | null; externalPayload?: LabelPayload | null; active?: boolean }>(), { initialTarget: null, externalPayload: null, active: true });
 const emit = defineEmits<{ selected: [target: OrderActionTarget]; previewChanged: [hasPreview: boolean] }>();
@@ -124,7 +124,6 @@ async function reprint() {
 const markup = computed(() => preview.value ? buildLabelMarkup(preview.value) : '');
 const sheetStyle = computed(() => ({ width: `calc(${preview.value?.printerSetting.widthMm ?? 40}mm * var(--label-scale, ${labelPreviewScale}))`, height: `calc(${preview.value?.printerSetting.heightMm ?? 30}mm * var(--label-scale, ${labelPreviewScale}))` }));
 const scaleStyle = computed(() => ({ transform: `scale(var(--label-scale, ${labelPreviewScale}))`, transformOrigin: 'top left', width: `${preview.value?.printerSetting.widthMm ?? 40}mm`, height: `${preview.value?.printerSetting.heightMm ?? 30}mm` }));
-function printBrowser() { if (preview.value && canPrint.value && !locked.value) openLabelPrint(preview.value); }
 function officialPrint() {
   if (!preview.value || !openLabel || !['MOTHER', 'WORK_ORDER'].includes(preview.value.type)) return;
   openLabel({ objectType: preview.value.type === 'MOTHER' ? 'MOTHER_ORDER' : 'WORK_ORDER', code: preview.value.primaryCode });
@@ -149,7 +148,7 @@ function officialPrint() {
         </details>
       </section>
       <section v-if="preview" class="label-preview form-card" aria-label="标签预览">
-        <header class="preview-toolbar"><strong>标签预览</strong><span>{{ preview.printerSetting.widthMm }}×{{ preview.printerSetting.heightMm }}mm · 黑白</span><button class="primary-button" type="button" :disabled="locked || !canPrint" @click="printBrowser">浏览器预览打印</button></header>
+        <header class="preview-toolbar"><strong>标签预览</strong><span>{{ preview.printerSetting.widthMm }}×{{ preview.printerSetting.heightMm }}mm · 黑白</span></header>
         <component :is="'style'">{{ labelFaceCss }}</component><div class="label-mat"><div class="label-sheet" :style="sheetStyle"><div class="label-scale" :style="scaleStyle" v-html="markup"></div></div></div>
         <p class="qr-content-line">二维码内容：{{ preview.qrContent }}。浏览器预览打印不等于厂内出纸。</p>
         <p v-if="external">当前为高级工具生成的预览。工位打印从正式单据重新读取字段和模板，任务内容以服务端冻结快照为准。</p><button v-if="external && openLabel && ['MOTHER', 'WORK_ORDER'].includes(preview.type)" class="secondary-button" type="button" :disabled="locked || !canPrint" @click="officialPrint">进入正式单据工位打印</button>

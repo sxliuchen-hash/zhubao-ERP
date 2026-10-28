@@ -18,9 +18,6 @@ public interface PrintJobRepository {
      */
     PrintJob insertIfAbsent(PrintJob job);
 
-    /** 原子领取一条待打印任务。没有可领任务时返回空。 */
-    Optional<PrintJob> claim(String stationId, String leaseUntil, String now);
-
     List<PrintJob> list();
 
     Optional<PrintJob> findAny(String id);

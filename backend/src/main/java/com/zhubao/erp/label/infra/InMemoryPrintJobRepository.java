@@ -50,25 +50,6 @@ public class InMemoryPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
-    public synchronized Optional<PrintJob> claim(String stationId, String leaseUntil, String now) {
-        Optional<PrintJob> pending = jobs.values().stream()
-                .filter(job -> job.status() == PrintJobStatus.PENDING)
-                .filter(job -> !recycledJobs.containsKey(job.id()))
-                .findFirst();
-        if (pending.isEmpty()) {
-            return Optional.empty();
-        }
-        PrintJob current = pending.get();
-        PrintJob leased = new PrintJob(
-                current.id(), current.requestId(), current.businessCode(), current.templateCode(), current.copies(),
-                current.contentSnapshot(), PrintJobStatus.LEASED, stationId, leaseUntil, "", current.predecessorId(),
-                current.retryReason(), current.createdBy(), current.createdAt(), now
-        );
-        jobs.put(leased.id(), leased);
-        return Optional.of(leased);
-    }
-
-    @Override
     public List<PrintJob> list() {
         return jobs.values().stream().filter(job -> !recycledJobs.containsKey(job.id())).toList();
     }

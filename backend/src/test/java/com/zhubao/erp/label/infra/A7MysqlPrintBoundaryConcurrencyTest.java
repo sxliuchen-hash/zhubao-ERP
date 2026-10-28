@@ -51,7 +51,7 @@ class A7MysqlPrintBoundaryConcurrencyTest {
         String business = "MD-A7-" + suffix;
         JdbcPrintRoutingRepository repository = new JdbcPrintRoutingRepository(source);
         PrintBatchService service = new PrintBatchService(repository,
-                new PrintJobService(new InMemoryPrintJobRepository(), "unused"));
+                new PrintJobService(new InMemoryPrintJobRepository()));
         AuthUserAccount account = account();
         String tokenA = service.saveStation(new PrintStation(stationA, "收货", true, "", "")).token();
         service.saveStation(new PrintStation(stationB, "包装", true, "", ""));

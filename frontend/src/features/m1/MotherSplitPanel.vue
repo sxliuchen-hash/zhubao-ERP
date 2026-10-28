@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import PrintJobPanel from '../labels/PrintJobPanel.vue';
 import type { AuthSession } from '../../services/authApi';
 import { ApiRequestError } from '../../services/apiClient';
 import { storageText } from '../../services/masterDataApi';
-import { buildLabelMarkup, labelFaceCss, labelPreviewScale, openLabelPrint } from './labelPrint';
+import { buildLabelMarkup, labelFaceCss, labelPreviewScale } from './labelPrint';
 import { fetchMotherLabel, fetchWorkOrderLabel, type LabelPayload } from '../../services/labelApi';
 import {
   fetchMotherSplit,
@@ -28,7 +29,8 @@ const stickerError = ref('');
 const success = ref('');
 type Arrangement = { key: string; kind: 'keep' | 'split' | 'revoke'; code: string; requestId: string; lines?: import('../../services/motherSplitApi').SplitLineRequest[] };
 const pending = ref<Arrangement | null>(null);
-const locked = computed(() => submitting.value || Boolean(pending.value));
+const printLocks = ref<Record<string, boolean>>({});
+const locked = computed(() => submitting.value || Boolean(pending.value) || Object.values(printLocks.value).some(Boolean));
 let generation = 0;
 onBeforeUnmount(() => { generation += 1; });
 
@@ -350,7 +352,7 @@ function scaleStyle(payload: LabelPayload) {
             <div class="label-scale" :style="scaleStyle(sticker)" v-html="buildLabelMarkup(sticker)"></div>
           </div>
           <p>二维码 {{ sticker.qrContent }}</p>
-          <button v-if="canPrint" class="table-action" type="button" @click="openLabelPrint(sticker)">打印这张</button>
+          <PrintJobPanel v-if="canPrint" :payload="sticker" @locked="printLocks[sticker.primaryCode] = $event" />
         </article>
       </div>
     </template>

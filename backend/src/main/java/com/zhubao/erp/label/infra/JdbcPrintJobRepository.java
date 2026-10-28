@@ -88,54 +88,6 @@ public class JdbcPrintJobRepository implements PrintJobRepository {
     }
 
     @Override
-    public Optional<PrintJob> claim(String stationId, String leaseUntil, String now) {
-        try (Connection connection = dataSource.getConnection()) {
-            boolean previous = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                String select = "select * from biz_print_job where status_code = 'PENDING' and recycled_at is null order by created_at limit 1 for update";
-                PrintJob pending;
-                try (PreparedStatement statement = connection.prepareStatement(select);
-                     ResultSet rs = statement.executeQuery()) {
-                    if (!rs.next()) {
-                        connection.rollback();
-                        return Optional.empty();
-                    }
-                    pending = map(rs);
-                }
-                PrintJob leased = new PrintJob(
-                        pending.id(), pending.requestId(), pending.businessCode(), pending.templateCode(), pending.copies(),
-                        pending.contentSnapshot(), PrintJobStatus.LEASED, stationId, leaseUntil, "", pending.predecessorId(),
-                        pending.retryReason(), pending.createdBy(), pending.createdAt(), now
-                );
-                try (PreparedStatement update = connection.prepareStatement("""
-                        update biz_print_job
-                           set status_code = 'LEASED', station_id = ?, lease_until = ?, updated_at = ?
-                         where id = ? and status_code = 'PENDING'
-                        """)) {
-                    update.setString(1, stationId);
-                    update.setString(2, leaseUntil);
-                    update.setString(3, now);
-                    update.setString(4, pending.id());
-                    if (update.executeUpdate() != 1) {
-                        connection.rollback();
-                        return Optional.empty();
-                    }
-                }
-                connection.commit();
-                return Optional.of(leased);
-            } catch (RuntimeException ex) {
-                connection.rollback();
-                throw ex;
-            } finally {
-                connection.setAutoCommit(previous);
-            }
-        } catch (SQLException ex) {
-            throw new IllegalStateException("无法领取打印任务", ex);
-        }
-    }
-
-    @Override
     public List<PrintJob> list() {
         String sql = "select * from biz_print_job where recycled_at is null order by created_at";
         try (Connection connection = dataSource.getConnection();

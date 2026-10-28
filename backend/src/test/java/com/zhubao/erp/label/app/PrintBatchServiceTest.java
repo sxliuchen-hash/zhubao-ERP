@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PrintBatchServiceTest {
     private final InMemoryPrintRoutingRepository repository = new InMemoryPrintRoutingRepository();
     private final PrintBatchService service = new PrintBatchService(repository,
-            new PrintJobService(new InMemoryPrintJobRepository(), "legacy-token"));
+            new PrintJobService(new InMemoryPrintJobRepository()));
     private final AuthUserAccount account = new AuthUserAccount("operator", "hash", "操作员",
             RoleCode.WAREHOUSE_KEEPER, DataScope.ALL, true, false, Instant.now(), 0,
             null, List.of(), false, false, List.of());
@@ -199,7 +199,7 @@ class PrintBatchServiceTest {
 
     @Test
     void 客户暗记写入页脚并去掉客户中文名() throws Exception {
-        PrintJobService labels = new PrintJobService(new InMemoryPrintJobRepository(), "legacy-token");
+        PrintJobService labels = new PrintJobService(new InMemoryPrintJobRepository());
         String source = "{\"footerLeft\":\"\",\"footerRight\":\"\","
                 + "\"fields\":[{\"name\":\"客户\",\"value\":\"恒信珠宝\"},{\"name\":\"期限\",\"value\":\"2026-10-20\"}],"
                 + "\"lines\":[\"客户:恒信珠宝\",\"期限:2026-10-20\"]}";
@@ -283,7 +283,7 @@ class PrintBatchServiceTest {
     @Test
     void 同一单据的新旧版本标签可以区分且改派沿用旧快照() {
         InMemoryOrderChangeRepository changes = new InMemoryOrderChangeRepository();
-        PrintJobService versionedLabels = new PrintJobService(new InMemoryPrintJobRepository(), "legacy-token", changes);
+        PrintJobService versionedLabels = new PrintJobService(new InMemoryPrintJobRepository(), changes);
         PrintBatchService versioned = new PrintBatchService(repository, versionedLabels);
         versioned.saveStation(new PrintStation("A", "收货", true, "", ""));
         versioned.saveStation(new PrintStation("B", "包装", true, "", ""));

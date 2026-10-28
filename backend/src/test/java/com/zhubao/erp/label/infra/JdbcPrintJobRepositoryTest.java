@@ -1,6 +1,5 @@
 package com.zhubao.erp.label.infra;
 
-import com.zhubao.erp.label.app.PrintJobService;
 import com.zhubao.erp.label.domain.PrintJob;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import org.h2.jdbcx.JdbcDataSource;
@@ -48,31 +47,35 @@ class JdbcPrintJobRepositoryTest {
                     )
                     """);
         }
-        PrintJobService service = new PrintJobService(new JdbcPrintJobRepository(dataSource), "station-secret");
+        JdbcPrintJobRepository repository = new JdbcPrintJobRepository(dataSource);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         try {
             Future<PrintJob> first = pool.submit(() -> {
                 start.await();
-                return service.create("jdbc-print-race", "MD-JDBC-PRINT", "FLOW", 1, "何琳");
+                return repository.insertIfAbsent(history());
             });
             Future<PrintJob> second = pool.submit(() -> {
                 start.await();
-                return service.create("jdbc-print-race", "MD-JDBC-PRINT", "FLOW", 1, "何琳");
+                return repository.insertIfAbsent(history());
             });
             start.countDown();
             assertThat(first.get().id()).isEqualTo(second.get().id());
         } finally {
             pool.shutdownNow();
         }
-        PrintJob leased = service.claim("STATION-1", "station-secret");
-        PrintJob replay = service.create("jdbc-print-race", "MD-JDBC-PRINT", "FLOW", 1, "何琳");
+        PrintJob original = repository.list().get(0);
+        PrintJob leased = repository.save(new PrintJob(original.id(), original.requestId(), original.businessCode(), original.templateCode(), original.copies(),
+                original.contentSnapshot(), PrintJobStatus.LEASED, "STATION-1", "2099-01-01", "", "", "", "何琳", "2026-10-28", "2026-10-28"));
+        PrintJob replay = repository.insertIfAbsent(history());
         assertThat(replay.id()).isEqualTo(leased.id());
         assertThat(replay.status()).isEqualTo(PrintJobStatus.LEASED);
-        PrintJob reprint = service.retry(leased.id(), "jdbc-print-retry", "同版补打", "何琳");
-        assertThat(reprint.contentSnapshot()).isEqualTo(leased.contentSnapshot());
-        assertThat(reprint.status()).isEqualTo(PrintJobStatus.PENDING);
-        assertThat(service.get(leased.id()).status()).isEqualTo(PrintJobStatus.LEASED);
+        assertThat(repository.findById(leased.id()).orElseThrow().contentSnapshot()).isEqualTo(original.contentSnapshot());
+    }
+
+    private static PrintJob history() {
+        return new PrintJob("PJ-" + UUID.randomUUID().toString().substring(0, 8), "jdbc-print-race", "MD-JDBC-PRINT", "FLOW", 1, "{}", PrintJobStatus.SPOOLED,
+                "STATION-1", "", "", "", "", "何琳", "2026-10-28", "2026-10-28");
     }
 
     private static DataSource dataSource() {

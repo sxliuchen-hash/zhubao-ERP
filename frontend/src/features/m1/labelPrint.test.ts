@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LabelPayload } from '../../services/labelApi';
-import { buildLabelMarkup, buildLabelPrintDocument } from './labelPrint';
+import { buildLabelMarkup, labelFaceCss } from './labelPrint';
 
 const payload: LabelPayload = {
   type: 'MOTHER',
@@ -37,11 +37,9 @@ describe('黑白标签打印', () => {
   });
 
   it('按标签纸毫米尺寸出黑白页，不使用彩色色块', () => {
-    const html = buildLabelPrintDocument(payload);
+    const html = buildLabelMarkup(payload);
 
-    expect(html).toContain('@page { size: 60mm 40mm; margin: 0; }');
     expect(html).toContain('width:60mm;height:40mm');
-    expect(html.match(/class="bw-sheet"/g)).toHaveLength(2);
     expect(html).not.toContain('#f4b740');
     expect(html).not.toContain('#1f2733');
     expect(html).toContain('CC-20260709-001-JL');
@@ -69,14 +67,13 @@ describe('黑白标签打印', () => {
       ],
       printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30, dpi: 300 },
     };
-    const html = buildLabelPrintDocument(compact);
+    const html = buildLabelMarkup(compact);
 
-    expect(html).toContain('@page { size: 40mm 30mm; margin: 0; }');
     expect(html).toContain('class="bw-label bw-label--compact"');
     expect(html).toContain('width:40mm;height:30mm');
     expect(html).toContain('<div class="bw-top"><span class="bw-type">母单</span><span class="bw-code">CC-20260709-001-JL</span></div>');
     expect(html.indexOf('class="bw-top"')).toBeLessThan(html.indexOf('class="bw-qr"'));
-    expect(html).toContain('float: left');
+    expect(labelFaceCss).toContain('float: left');
     expect(html).toContain('K7M2');
     expect(html).toContain('内壁刻字');
     expect(html).not.toContain('<dt>单号</dt>');
@@ -114,7 +111,7 @@ describe('黑白标签打印', () => {
       layout: { mode: 'COMPACT', qrWidthMm: 15, codeFontPt: 10, fieldFontPt: 8,
         emphasisFontPt: 9, titleFontPt: 7, footerFontPt: 6 },
     };
-    const html = buildLabelPrintDocument(configured);
+    const html = buildLabelMarkup(configured);
     expect(html).toContain('--bw-qr-width:15mm;');
     expect(html).toContain('--bw-code-font:10pt;');
     expect(html).toContain('--bw-field-font:8pt;');

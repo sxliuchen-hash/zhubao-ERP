@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,11 +36,6 @@ public class PrintJobController {
         this.authSessionService = authSessionService;
     }
 
-    @PostMapping("/print-jobs")
-    public ApiResponse<PrintJob> create(@RequestBody CreatePrintJobRequest body, HttpServletRequest request) {
-        throw new BusinessException("旧版打印入口已停止接单，请升级客户端并选择工位及队列");
-    }
-
     @GetMapping("/print-jobs/{id}")
     public ApiResponse<PrintJob> get(@PathVariable String id, HttpServletRequest request) {
         return ApiResponse.ok(printJobService.get(id, account(request)));
@@ -50,15 +44,6 @@ public class PrintJobController {
     @GetMapping("/print-jobs")
     public ApiResponse<List<PrintJob>> list(HttpServletRequest request) {
         return ApiResponse.ok(printJobService.list(account(request)));
-    }
-
-    @PostMapping("/print-jobs/{id}/retries")
-    public ApiResponse<PrintJob> retry(
-            @PathVariable String id,
-            @RequestBody RetryPrintJobRequest body,
-            HttpServletRequest request
-    ) {
-        throw new BusinessException("旧版补打入口已停止接单，请核纸后使用新打印批次");
     }
 
     @PostMapping("/print-jobs/{id}/paper-checks")
@@ -85,24 +70,6 @@ public class PrintJobController {
         return ApiResponse.ok(printJobService.relabel(id, body.requestId(), body.reason(), account.operator()));
     }
 
-    @PostMapping("/agents/jobs/claim")
-    public ApiResponse<PrintJob> claim(
-            @RequestHeader("X-Print-Station") String stationId,
-            @RequestHeader("X-Print-Token") String token
-    ) {
-        throw new BusinessException("旧版工位领取入口已停用，请升级厂内打印程序");
-    }
-
-    @PostMapping("/agents/jobs/{id}/report")
-    public ApiResponse<PrintJob> report(
-            @PathVariable String id,
-            @RequestHeader("X-Print-Station") String stationId,
-            @RequestHeader("X-Print-Token") String token,
-            @RequestBody ReportPrintJobRequest body
-    ) {
-        throw new BusinessException("旧版工位回报入口已停用，请升级厂内打印程序");
-    }
-
     private AuthUserAccount account(HttpServletRequest request) {
         OperatorContext context = operatorContextResolver.requireSession(request);
         AuthUserAccount account = authSessionService.currentAccount(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
@@ -121,12 +88,7 @@ public class PrintJobController {
         }
     }
 
-    public record CreatePrintJobRequest(String requestId, String businessCode, String templateCode, int copies) {
-    }
-
     public record RetryPrintJobRequest(String requestId, String reason) {
     }
 
-    public record ReportPrintJobRequest(String outcome, String failureReason) {
-    }
 }

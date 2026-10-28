@@ -2,7 +2,7 @@ import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import StatusBadge from '../components/StatusBadge.vue';
-import { buildLabelPrintDocument } from '../features/m1/labelPrint';
+import { buildLabelMarkup, labelFaceCss } from '../features/m1/labelPrint';
 import type { LabelPayload } from '../services/labelApi';
 import { formatAmount } from './formatAmount';
 
@@ -83,7 +83,7 @@ describe('标签打印不受应用皮肤影响', () => {
   };
 
   it('打印文档只有黑白，不带主操作蓝和品牌暖金', () => {
-    const html = buildLabelPrintDocument(payload);
+    const html = labelFaceCss + buildLabelMarkup(payload);
     expect(html).toContain('background: #fff');
     expect(html).toContain('color: #000');
     expect(html.toLowerCase()).not.toContain('#315fd1');

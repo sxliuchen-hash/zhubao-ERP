@@ -27,8 +27,9 @@ class LabelStorageEditionServiceTest {
         String code = intakes.intake(new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-11-01", "珠子", one, one, "", "XY", "件", "label-storage-intake", "CUSTOMER_DELIVERY", List.of(new MobileIntakeLine("XY", "珠子", one, "件", one))), new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.ALL)).motherOrderCode();
         var labels = new LabelService(documents);
         var editions = new InMemoryLabelStorageEditionRepository(); labels.setStorageEditions(editions);
-        var jobs = new PrintJobService(new InMemoryPrintJobRepository(), ""); jobs.setDocumentAccess(documents, null); jobs.setLabelService(labels);
-        var original = jobs.create("storage-print-1", code, "AUTO", 1, "收货员");
+        var jobs = new PrintJobService(new InMemoryPrintJobRepository()); jobs.setDocumentAccess(documents, null); jobs.setLabelService(labels);
+        var actor = new AuthUserAccount("receiver", "", "收货员", RoleCode.RECEIVER, DataScope.ALL, true, false);
+        var original = jobs.prepareBatchSnapshot(code, "AUTO", 1, actor);
         catalog.saveMaterial(new MaterialProfile("XY", "星月", "", "", true, List.of("DARK"), ""));
         assertThat(labels.generateMotherLabel(code).storageSources().get(0).marks()).containsExactly("冷", "真");
         var service = new LabelStorageEditionService(editions, documents, catalog, labels, unit);
@@ -39,7 +40,8 @@ class LabelStorageEditionServiceTest {
         assertThat(service.history(code)).singleElement().satisfies(row -> assertThat(row.reason()).isEqualTo("现场核对后更新"));
         assertThatThrownBy(() -> labels.reprint(new com.zhubao.erp.label.domain.ReprintLabelCommand("MOTHER", code, "原版补打", "收货员", "old-snapshot"))).hasMessageContaining("原打印任务同版补打");
         assertThat(documents.listReceiptLines(code).get(0).storageRequirements().conditions()).containsExactly("COLD", "VACUUM");
-        assertThat(jobs.retry(original.id(), "storage-reprint-1", "同版补打", "收货员").contentSnapshot()).isEqualTo(original.contentSnapshot());
+        assertThat(jobs.readEdition(original)).isNotEqualTo(jobs.readEdition(jobs.prepareBatchSnapshot(code, "AUTO", 1, actor)));
+        assertThat(original).contains("冷", "真");
         assertThatThrownBy(() -> service.adopt(code, "adopt-stale", 0, "旧界面再次提交", "收货员", "")).hasMessageContaining("重新预览");
     }
 }

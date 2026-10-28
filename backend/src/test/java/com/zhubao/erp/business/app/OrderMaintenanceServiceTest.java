@@ -129,7 +129,7 @@ class OrderMaintenanceServiceTest {
         assertThat(documents.findChildWorkOrderByCode("ZD-1")).isEmpty();
         assertThat(documents.listChildWorkOrders("MD-1")).isEmpty();
         assertThat(routing.claim("A", "lease", "now")).isEmpty();
-        assertThat(printJobs.claim("A", "lease", "now")).isEmpty();
+        assertThat(printJobs.list()).isEmpty();
         assertThat(service.recycleBin(admin)).extracting(MaintainedOrder::code).contains("MD-1", "ZD-1", "J-1", "P-1");
 
         service.restore(new OrderMaintenanceCommands.RestoreCommand("MOTHER", "MD-1"), admin);

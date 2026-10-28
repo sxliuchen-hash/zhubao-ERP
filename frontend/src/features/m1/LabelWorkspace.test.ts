@@ -3,17 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import { customerInitials } from './customerInitials';
 import LabelWorkspace from './LabelWorkspace.vue';
-import { openLabelPrint } from './labelPrint';
+import PrintJobPanel from '../labels/PrintJobPanel.vue';
 import { queryScanContext } from '../../services/scanContextApi';
 import { buildScanContext } from '../scan/scanContextFixture';
-
-vi.mock('./labelPrint', async () => {
-  const actual = await vi.importActual<typeof import('./labelPrint')>('./labelPrint');
-  return {
-    ...actual,
-    openLabelPrint: vi.fn(),
-  };
-});
 
 vi.mock('../../services/scanContextApi', async () => {
   const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
@@ -40,7 +32,7 @@ describe('LabelWorkspace', () => {
     expect(wrapper.text()).not.toContain('CC-20260709-001-JL');
     expect(wrapper.find('.bw-label svg').exists()).toBe(false);
     expect(wrapper.find('.preview-toolbar .primary-button').exists()).toBe(false);
-    expect(openLabelPrint).not.toHaveBeenCalled();
+    expect(wrapper.findComponent(PrintJobPanel).exists()).toBe(false);
   });
 
   it('模板接口失败明确显示原因，不回退本地标签', async () => {
@@ -51,13 +43,13 @@ describe('LabelWorkspace', () => {
     expect(wrapper.find('.bw-label svg').exists()).toBe(false);
   });
 
-  it('提供四种标签类型下拉选项', async () => {
+  it('提供当前五种标签类型下拉选项', async () => {
     mockTemplates();
     const wrapper = mount(LabelWorkspace);
     await flushPromises();
     const typeOptions = wrapper.get('[aria-label="标签类型"]').findAll('option');
 
-    expect(typeOptions.map((option) => option.text())).toEqual(['母单', '子工单', '出货', '返工']);
+    expect(typeOptions.map((option) => option.text())).toEqual(['寄存批次', '母单', '子工单', '出货', '返工']);
   });
 
   it('加载后端模板并可打开模板编辑器', async () => {
@@ -186,8 +178,7 @@ describe('LabelWorkspace', () => {
     expect(wrapper.text()).toContain('内壁刻字');
     expect(wrapper.text()).toContain('2026-10-20');
     expect(wrapper.text()).toContain('JG|work_order|ZD-1');
-    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
-    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'ZD-1' }));
+    expect(wrapper.findComponent(PrintJobPanel).props('payload')).toMatchObject({ primaryCode: 'ZD-1' });
     await wrapper.get('[aria-label="现场贴纸单号"]').setValue('');
     await wrapper.get('[aria-label="打开现场贴纸"]').trigger('click');
     expect(wrapper.find('.preview-toolbar .primary-button').exists()).toBe(false);
@@ -353,8 +344,7 @@ describe('LabelWorkspace', () => {
     expect(wrapper.get('[aria-label="标签预览"]').text()).toContain('MD-NEW-1');
     expect(wrapper.text()).toContain('收货母单标签可直接打印');
     expect(fetchSpy.mock.calls.every(([url]) => !String(url).includes('/keep'))).toBe(true);
-    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
-    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'MD-NEW-1' }));
+    expect(wrapper.findComponent(PrintJobPanel).props('payload')).toMatchObject({ primaryCode: 'MD-NEW-1' });
   });
 
   it('已拆母单仍预览并打印母单标签，同时保留子单选择', async () => {
@@ -388,8 +378,7 @@ describe('LabelWorkspace', () => {
     expect(wrapper.text()).toContain('请选择具体单据');
     expect(wrapper.find('[aria-label="选择ZD-1"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="选择ZD-2"]').exists()).toBe(true);
-    await wrapper.get('.preview-toolbar .primary-button').trigger('click');
-    expect(openLabelPrint).toHaveBeenCalledWith(expect.objectContaining({ primaryCode: 'MD-SPLIT-1', type: 'MOTHER' }));
+    expect(wrapper.findComponent(PrintJobPanel).props('payload')).toMatchObject({ primaryCode: 'MD-SPLIT-1', type: 'MOTHER' });
   });
 
   it('单号不明确时不猜测母单标签', async () => {

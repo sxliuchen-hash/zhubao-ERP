@@ -1,5 +1,5 @@
 ﻿// 厂内打印接收程序。用工位凭据领取任务，绘制标签后送入本机 Windows 队列，再回报结果。
-// 配置文件 print-agent.properties 放在 exe 旁边。同一工位不要同时运行 Java 打印程序。
+// 配置文件 print-agent.properties 放在 exe 旁边。同一工位只运行一个接收程序。
 using System;
 using System.Collections;
 using System.Collections.Generic;
