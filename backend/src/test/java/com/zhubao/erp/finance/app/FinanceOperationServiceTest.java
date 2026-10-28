@@ -1,8 +1,5 @@
 package com.zhubao.erp.finance.app;
 
-import com.zhubao.erp.approval.app.ApprovalService;
-import com.zhubao.erp.approval.domain.ApprovalStatus;
-import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
@@ -63,8 +60,8 @@ class FinanceOperationServiceTest {
         documents = new InMemoryBusinessDocumentRepository();
         stock = new StockLedgerService(new InMemoryStockLedgerRepository());
         approvals = new InMemoryApprovalTaskRepository();
-        billing = new FinanceBillingService(finance, documents, stock);
-        payroll = new FinancePayrollService(finance, documents, new ApprovalService(approvals));
+        billing = new FinanceBillingService(finance, stock);
+        payroll = new FinancePayrollService(finance);
         cost = new FinanceCostService(finance);
         report = new FinanceReportService(finance, billing);
     }

@@ -1,24 +1,16 @@
 package com.zhubao.erp.finance.app;
 
-import com.zhubao.erp.business.domain.BusinessDocumentRepository;
-import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
-import com.zhubao.erp.business.domain.MotherOrderRecord;
-import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.BillingRunResult;
-import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.CustomerStatement;
 import com.zhubao.erp.finance.domain.FinanceCommands.BillingRunCommand;
-import com.zhubao.erp.finance.domain.FinanceCommands.PriceLineCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.ReceiptAllocationCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.RecordReceiptCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.ReverseReceivableCommand;
 import com.zhubao.erp.finance.domain.FinanceCommands.SavePriceAgreementCommand;
 import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.PriceAgreement;
-import com.zhubao.erp.finance.domain.PriceLine;
-import com.zhubao.erp.finance.domain.PricingMode;
 import com.zhubao.erp.finance.domain.ReceiptAllocation;
 import com.zhubao.erp.finance.domain.ReceiptAllocationOperation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
@@ -38,7 +30,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 客户协议、加工费入账、红字和收款。只读母单与工序交付，不嵌进收货和报工事务。
+ * 历史协议、客户账、红字和收款。加工费及工资由交货后结单统一入账。
  */
 @Service
 public class FinanceBillingService {
@@ -46,17 +38,14 @@ public class FinanceBillingService {
     static final String STOCK_NOTE = "实物为当前结存，不按月份回放";
 
     private final FinanceRepository finance;
-    private final BusinessDocumentRepository documents;
     private final StockLedgerService stockLedgerService;
     private final AtomicLong sequence = new AtomicLong();
 
     public FinanceBillingService(
             FinanceRepository finance,
-            BusinessDocumentRepository documents,
             StockLedgerService stockLedgerService
     ) {
         this.finance = finance;
-        this.documents = documents;
         this.stockLedgerService = stockLedgerService;
     }
 
@@ -76,42 +65,6 @@ public class FinanceBillingService {
 
     public List<UnpricedItem> unpriced(String yearMonth, Long customerId) {
         return List.of();
-    }
-
-    private BillingRunResult run(BillingRunCommand command, boolean write) {
-        YearMonth month = FinanceTexts.month(command.yearMonth());
-        List<ReceivableLine> created = new ArrayList<>();
-        List<UnpricedItem> unpriced = new ArrayList<>();
-        for (MotherOrderRecord mother : documents.listMotherOrders()) {
-            if (!sameMonth(motherMonth(mother), month) || skipped(command.customerId(), mother.customerId())) {
-                continue;
-            }
-            billMother(mother, month, created, unpriced, write);
-        }
-        for (ProcessStationHandoff handoff : documents.listAllProcessStationHandoffs()) {
-            if (!sameMonth(FinanceTexts.monthOfTimestamp(handoff.createdAt()), month)) {
-                continue;
-            }
-            if (handoff.orderCode().startsWith("FG-")) {
-                continue;
-            }
-            billProcess(handoff, month, command.customerId(), created, unpriced, write);
-        }
-        return new BillingRunResult(month.toString(), created.size(), created, unpriced);
-    }
-
-    /** 改单减额已停止。客户减额改由交货后结单调整处理。 */
-    public ReceivableLine reverseForChange(
-            String receivableCode,
-            BigDecimal amount,
-            String changeId,
-            String operator,
-            com.zhubao.erp.work.domain.WorkSession session,
-            long customerId,
-            String motherOrderCode,
-            String workOrderCode
-    ) {
-        throw new BusinessException("改单不再冲减加工费，费用在交货后结单");
     }
 
     public ReceivableLine reverse(ReverseReceivableCommand command, String operator) {
@@ -244,256 +197,6 @@ public class FinanceBillingService {
                 receipts,
                 STOCK_NOTE
         );
-    }
-
-    private void billMother(
-            MotherOrderRecord mother,
-            YearMonth month,
-            List<ReceivableLine> created,
-            List<UnpricedItem> unpriced,
-            boolean write
-    ) {
-        if (mother.customerId() == null) {
-            unpriced.add(unpriced(month, null, mother.customerName(), mother.code(), "", "", "母单没有客户"));
-            return;
-        }
-        Optional<PriceAgreement> agreement = activeAgreement(mother.customerId(), month);
-        if (agreement.isEmpty()) {
-            unpriced.add(unpriced(month, mother.customerId(), mother.customerName(), mother.code(), "", "", "没有生效的客户协议"));
-            return;
-        }
-        if (agreement.get().mode() == PricingMode.PROCESS) {
-            return;
-        }
-        String sourceKey = "INBOUND|" + mother.code();
-        if (finance.findReceivableBySourceKey(sourceKey).isPresent()) {
-            return;
-        }
-        PriceLine price = agreement.get().lines().get(0);
-        BigDecimal quantity = price.unit() == ChargeUnit.GRAM ? mother.weight() : mother.quantity();
-        if (quantity == null || quantity.signum() <= 0) {
-            unpriced.add(unpriced(month, mother.customerId(), mother.customerName(), mother.code(), "", "", "来料数量或重量无效"));
-            return;
-        }
-        if (write) {
-            created.add(post(
-                    mother.customerId(),
-                    mother.customerName(),
-                    month,
-                    "INBOUND",
-                    sourceKey,
-                    mother.code(),
-                    "",
-                    "",
-                    quantity,
-                    price,
-                    ""
-            ));
-        }
-    }
-
-    private void billProcess(
-            ProcessStationHandoff handoff,
-            YearMonth month,
-            Long customerFilter,
-            List<ReceivableLine> created,
-            List<UnpricedItem> unpriced,
-            boolean write
-    ) {
-        Optional<BillableOrder> order = resolveOrder(handoff.orderCode());
-        if (order.isEmpty()) {
-            unpriced.add(unpriced(month, null, "", "", handoff.orderCode(), handoff.processName(), "找不到来源单据"));
-            return;
-        }
-        BillableOrder billable = order.get();
-        if (skipped(customerFilter, billable.customerId())) {
-            return;
-        }
-        if (billable.customerId() == null) {
-            unpriced.add(unpriced(month, null, billable.customerName(), billable.motherOrderCode(), billable.orderCode(), handoff.processName(), "单据没有客户"));
-            return;
-        }
-        Optional<PriceAgreement> agreement = activeAgreement(billable.customerId(), month);
-        if (agreement.isEmpty()) {
-            unpriced.add(unpriced(
-                    month,
-                    billable.customerId(),
-                    billable.customerName(),
-                    billable.motherOrderCode(),
-                    billable.orderCode(),
-                    handoff.processName(),
-                    "没有生效的客户协议"
-            ));
-            return;
-        }
-        if (agreement.get().mode() != PricingMode.PROCESS) {
-            return;
-        }
-        Optional<PriceLine> price = agreement.get().lines().stream()
-                .filter(line -> handoff.processName().equals(line.processName()))
-                .findFirst();
-        if (price.isEmpty()) {
-            unpriced.add(unpriced(
-                    month,
-                    billable.customerId(),
-                    billable.customerName(),
-                    billable.motherOrderCode(),
-                    billable.orderCode(),
-                    handoff.processName(),
-                    "协议没有这道工序的单价"
-            ));
-            return;
-        }
-        String sourceKey = "PROCESS|" + billable.orderCode() + "|" + handoff.processName();
-        if (finance.findReceivableBySourceKey(sourceKey).isPresent()) {
-            return;
-        }
-        BigDecimal quantity = switch (price.get().unit()) {
-            case JOB -> BigDecimal.ONE;
-            case GRAM -> billable.weight();
-            case PIECE -> billable.quantity();
-        };
-        if (quantity == null || quantity.signum() <= 0) {
-            unpriced.add(unpriced(
-                    month,
-                    billable.customerId(),
-                    billable.customerName(),
-                    billable.motherOrderCode(),
-                    billable.orderCode(),
-                    handoff.processName(),
-                    "报工数量或重量无效"
-            ));
-            return;
-        }
-        if (write) {
-            created.add(post(
-                    billable.customerId(),
-                    billable.customerName(),
-                    month,
-                    "PROCESS",
-                    sourceKey,
-                    billable.motherOrderCode(),
-                    billable.orderCode(),
-                    handoff.processName(),
-                    quantity,
-                    price.get(),
-                    ""
-            ));
-        }
-    }
-
-    private ReceivableLine post(
-            long customerId,
-            String customerName,
-            YearMonth month,
-            String sourceType,
-            String sourceKey,
-            String motherOrderCode,
-            String workOrderCode,
-            String processName,
-            BigDecimal quantity,
-            PriceLine price,
-            String remark
-    ) {
-        BigDecimal scaledQuantity = FinanceTexts.quantity(quantity);
-        BigDecimal amount = FinanceTexts.money(scaledQuantity.multiply(price.unitPrice()));
-        ReceivableLine line = new ReceivableLine(
-                FinanceTexts.code("FIN-AR", sequence),
-                customerId,
-                FinanceTexts.blank(customerName),
-                month.toString(),
-                sourceType,
-                sourceKey,
-                motherOrderCode,
-                workOrderCode,
-                processName,
-                scaledQuantity,
-                price.unit(),
-                FinanceTexts.price(price.unitPrice()),
-                amount,
-                "",
-                remark,
-                "财务入账",
-                FinanceTexts.now()
-        );
-        finance.saveReceivable(line);
-        return line;
-    }
-
-    private List<PriceLine> normalizeLines(PricingMode mode, List<PriceLineCommand> commands) {
-        List<PriceLine> lines = new ArrayList<>();
-        Set<String> processes = new LinkedHashSet<>();
-        for (PriceLineCommand command : commands) {
-            ChargeUnit unit = FinanceTexts.chargeUnit(command.unit());
-            String process = FinanceTexts.blank(command.processName());
-            if (mode == PricingMode.PROCESS) {
-                FinanceTexts.requireProcess(process);
-                if (!processes.add(process)) {
-                    throw new BusinessException("同一道工序不能有两条单价");
-                }
-            } else if (!process.isEmpty()) {
-                throw new BusinessException("按克或按件的协议不需要填写工序");
-            }
-            if (mode == PricingMode.WEIGHT && unit != ChargeUnit.GRAM) {
-                throw new BusinessException("按克协议的单位必须是克");
-            }
-            if (mode == PricingMode.PIECE && unit != ChargeUnit.PIECE) {
-                throw new BusinessException("按件协议的单位必须是件");
-            }
-            lines.add(new PriceLine(process, unit, FinanceTexts.price(command.unitPrice())));
-        }
-        if (mode != PricingMode.PROCESS && lines.size() != 1) {
-            throw new BusinessException("按克或按件的协议只能有一条单价");
-        }
-        return lines;
-    }
-
-    private void closeOverlappingAgreements(long customerId, YearMonth from, YearMonth to) {
-        for (PriceAgreement current : finance.listAgreements()) {
-            if (current.customerId() != customerId) {
-                continue;
-            }
-            if (!FinanceTexts.overlaps(current.effectiveFrom(), current.effectiveTo(), from, to)) {
-                continue;
-            }
-            YearMonth currentFrom = YearMonth.parse(current.effectiveFrom());
-            if (current.effectiveTo().isBlank() && currentFrom.isBefore(from)) {
-                finance.saveAgreement(current.closeAt(from.minusMonths(1).toString()));
-                continue;
-            }
-            throw new BusinessException("客户在这个月份已经有协议");
-        }
-    }
-
-    private Optional<PriceAgreement> activeAgreement(long customerId, YearMonth month) {
-        return finance.listAgreements().stream()
-                .filter(agreement -> agreement.customerId() == customerId)
-                .filter(agreement -> FinanceTexts.covers(agreement.effectiveFrom(), agreement.effectiveTo(), month))
-                .findFirst();
-    }
-
-    private Optional<BillableOrder> resolveOrder(String orderCode) {
-        Optional<ChildWorkOrderRecord> child = documents.findChildWorkOrderByCode(orderCode);
-        if (child.isPresent()) {
-            ChildWorkOrderRecord record = child.get();
-            return Optional.of(new BillableOrder(
-                    record.code(),
-                    record.motherOrderCode(),
-                    record.customerId(),
-                    record.customerName(),
-                    record.quantity(),
-                    record.weight()
-            ));
-        }
-        return documents.findMotherOrderByCode(orderCode)
-                .map(mother -> new BillableOrder(
-                        mother.code(),
-                        mother.code(),
-                        mother.customerId(),
-                        mother.customerName(),
-                        mother.quantity(),
-                        mother.weight()
-                ));
     }
 
     /** 回放只核对原请求内容，不再用已经下降的未收余额拒绝同一笔成功收款。 */
@@ -682,34 +385,6 @@ public class FinanceBillingService {
                 .orElse("客户 " + customerId);
     }
 
-    private String motherMonth(MotherOrderRecord mother) {
-        String inbound = FinanceTexts.monthOfTimestamp(mother.inboundDate());
-        if (!inbound.isEmpty()) {
-            return inbound;
-        }
-        return FinanceTexts.monthOfTimestamp(mother.createdAt());
-    }
-
-    private boolean sameMonth(String value, YearMonth month) {
-        return month.toString().equals(value);
-    }
-
-    private boolean skipped(Long filter, Long customerId) {
-        return filter != null && (customerId == null || filter.longValue() != customerId);
-    }
-
-    private UnpricedItem unpriced(
-            YearMonth month,
-            Long customerId,
-            String customerName,
-            String motherOrderCode,
-            String workOrderCode,
-            String processName,
-            String reason
-    ) {
-        return new UnpricedItem(month.toString(), customerId, customerName, motherOrderCode, workOrderCode, processName, reason);
-    }
-
     private LocalMonth receivedMonth(String receivedOn) {
         var day = FinanceTexts.day(receivedOn);
         return new LocalMonth(day, YearMonth.from(day));
@@ -718,13 +393,4 @@ public class FinanceBillingService {
     private record LocalMonth(java.time.LocalDate day, YearMonth month) {
     }
 
-    private record BillableOrder(
-            String orderCode,
-            String motherOrderCode,
-            Long customerId,
-            String customerName,
-            BigDecimal quantity,
-            BigDecimal weight
-    ) {
-    }
 }

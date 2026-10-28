@@ -12,7 +12,6 @@ import com.zhubao.erp.business.domain.OrderRequirementVersion;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.domain.WorkshopProcesses;
 import com.zhubao.erp.common.error.BusinessException;
-import com.zhubao.erp.finance.app.OrderChangePostingService;
 import com.zhubao.erp.label.domain.LabelTraceRepository;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -43,23 +42,13 @@ public class OrderChangeService {
     private final OrderChangeRepository changes;
     private final BusinessDocumentRepository documents;
     private final BusinessWorkUnit workUnit;
-    private final OrderChangePostingService posting;
     private final BusinessDataAccess dataAccess;
     private final PermissionGuard permissionGuard;
     private final OrderRequirementRepository requirements;
     private LabelTraceRepository labelTraces;
 
     public OrderChangeService(OrderChangeRepository changes, BusinessDocumentRepository documents, BusinessWorkUnit workUnit) {
-        this(changes, documents, workUnit, null);
-    }
-
-    public OrderChangeService(
-            OrderChangeRepository changes,
-            BusinessDocumentRepository documents,
-            BusinessWorkUnit workUnit,
-            OrderChangePostingService posting
-    ) {
-        this(changes, documents, workUnit, posting, null, null, null);
+        this(changes, documents, workUnit, null, null, null);
     }
 
     @Autowired
@@ -67,7 +56,6 @@ public class OrderChangeService {
             OrderChangeRepository changes,
             BusinessDocumentRepository documents,
             BusinessWorkUnit workUnit,
-            OrderChangePostingService posting,
             BusinessDataAccess dataAccess,
             PermissionGuard permissionGuard,
             OrderRequirementRepository requirements
@@ -75,7 +63,6 @@ public class OrderChangeService {
         this.changes = changes;
         this.documents = documents;
         this.workUnit = workUnit;
-        this.posting = posting;
         this.dataAccess = dataAccess;
         this.permissionGuard = permissionGuard;
         this.requirements = requirements;

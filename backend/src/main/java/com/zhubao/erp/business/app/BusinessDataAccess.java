@@ -10,7 +10,6 @@ import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
-import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -151,27 +150,6 @@ public class BusinessDataAccess {
         if (child == null) return false;
         MotherOrderRecord parent = documents.findMotherOrderByCode(text(child.motherOrderCode())).orElse(null);
         return parent != null && CustomerScopeRules.identityConflicts(child.customerId(), parent.customerId());
-    }
-
-    private boolean areaVisible(OperatorContext context, String area) {
-        if (context.dataScope() == DataScope.CUSTOMER_RANGE) return true;
-        if (context.dataScope() == DataScope.SELF) return false;
-        return switch (area) {
-            case "inbound", "inventory" -> context.role() == RoleCode.RECEIVER || context.role() == RoleCode.WAREHOUSE_KEEPER
-                    || context.role() == RoleCode.BUSINESS_MANAGER;
-            case "production" -> context.role() == RoleCode.WORKSHOP_LEADER || context.role() == RoleCode.BUSINESS_MANAGER;
-            case "quality" -> context.role() == RoleCode.QUALITY_INSPECTOR || context.role() == RoleCode.BUSINESS_MANAGER;
-            default -> false;
-        };
-    }
-
-    private boolean related(OperatorContext context, MotherOrderRecord mother, String orderCode) {
-        String operator = text(context.operator());
-        if (operator.isEmpty()) return false;
-        if (List.of(text(mother.operator()), text(mother.receiverName()), text(mother.unpackSigner())).contains(operator)) return true;
-        String code = orderCode.isEmpty() ? mother.code() : orderCode;
-        return documents.listProcessStationHandoffs(code).stream().anyMatch(row -> operator.equals(row.operator()))
-                || documents.findQualityRequirementCheck(code).map(row -> operator.equals(row.inspector())).orElse(false);
     }
 
     private BusinessOwner ownerOf(String code) {

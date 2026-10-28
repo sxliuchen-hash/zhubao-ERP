@@ -153,7 +153,7 @@ class FinanceReceiptContractTest {
     }
 
     private FinanceBillingService service(FinanceRepository repository) {
-        return new FinanceBillingService(repository, null, new StockLedgerService(new InMemoryStockLedgerRepository()));
+        return new FinanceBillingService(repository, new StockLedgerService(new InMemoryStockLedgerRepository()));
     }
 
     private FinanceReceiptProbe probe(AtomicReference<String> failure) {

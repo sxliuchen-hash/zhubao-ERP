@@ -4,7 +4,6 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.CustomerReceipt;
 import com.zhubao.erp.finance.domain.FinanceCommands.ReceiptAllocationCommand;
-import com.zhubao.erp.finance.domain.ReceiptAllocation;
 import com.zhubao.erp.finance.domain.ReceiptAllocationOperation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.infra.InMemoryFinanceRepository;
@@ -29,7 +28,7 @@ class AllocationFollowUpTest {
                 "", BigDecimal.ONE, ChargeUnit.PIECE, BigDecimal.ONE, new BigDecimal("50.00"), "", "夹具", "财务", "2026-10-01T00:00:00"));
         repository.registerReceipt(new CustomerReceipt("RC-1", 1L, "客户", "2026-10", new BigDecimal("100.00"), "2026-10-02",
                 List.of(), "财务", "2026-10-02T00:00:00"), "receipt-prepay-01");
-        FinanceBillingService service = new FinanceBillingService(repository, null, new StockLedgerService(new InMemoryStockLedgerRepository()));
+        FinanceBillingService service = new FinanceBillingService(repository, new StockLedgerService(new InMemoryStockLedgerRepository()));
         ReceiptAllocationOperation first = service.allocateExisting("RC-1", "alloc-0001", ReceiptAllocationOperation.ALLOCATE, "后续核销",
                 List.of(new ReceiptAllocationCommand("AR-1", new BigDecimal("80.00"))), "财务");
         ReceiptAllocationOperation replay = service.allocateExisting("RC-1", "alloc-0001", ReceiptAllocationOperation.ALLOCATE, "后续核销",

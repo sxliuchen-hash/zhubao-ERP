@@ -1,6 +1,5 @@
 package com.zhubao.erp.finance.app;
 
-import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.FinanceCommands.DepreciationRunCommand;
@@ -197,7 +196,7 @@ class FinanceDashboardServiceTest {
     }
 
     private FinanceDashboardService service(com.zhubao.erp.finance.domain.FinanceRepository repository) {
-        var billing = new FinanceBillingService(repository, new InMemoryBusinessDocumentRepository(), new StockLedgerService(new InMemoryStockLedgerRepository()));
+        var billing = new FinanceBillingService(repository, new StockLedgerService(new InMemoryStockLedgerRepository()));
         return new FinanceDashboardService(
                 new FinanceReportService(repository, billing),
                 billing,

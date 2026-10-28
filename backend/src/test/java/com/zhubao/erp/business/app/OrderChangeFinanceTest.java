@@ -1,14 +1,11 @@
 package com.zhubao.erp.business.app;
 
-import com.zhubao.erp.approval.app.ApprovalService;
-import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.InMemoryOrderChangeRepository;
 import com.zhubao.erp.finance.app.FinanceBillingService;
 import com.zhubao.erp.finance.app.FinancePayrollService;
-import com.zhubao.erp.finance.app.OrderChangePostingService;
 import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.FinanceCommands.PayrollRunCommand;
 import com.zhubao.erp.finance.domain.ReceivableLine;
@@ -68,13 +65,8 @@ class OrderChangeFinanceTest {
                 "MD-CHANGE-001", "MD-CHANGE-001", "雕刻", BigDecimal.ONE, ChargeUnit.JOB,
                 new BigDecimal("100.00"), new BigDecimal("100.00"), "", "原账单", "财务", "2026-10-09T10:00:00"
         ));
-        FinanceBillingService billing = new FinanceBillingService(finance, documents, ledger);
-        service = new OrderChangeService(
-                changes,
-                documents,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),
-                new OrderChangePostingService(finance, billing, documents)
-        );
+        FinanceBillingService billing = new FinanceBillingService(finance, ledger);
+        service = new OrderChangeService(changes, documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
         financeUser = account("财务员", RoleCode.FINANCE_STATISTICIAN);
     }
 
@@ -92,7 +84,7 @@ class OrderChangeFinanceTest {
         service.apply(draft.id(), "change-money-apply", receiver);
         assertThat(finance.findReceivableBySourceKey("CHANGE-RED|" + draft.id())).isEmpty();
         assertThat(finance.listPayrollLines().stream().filter(line -> line.sourceKey().equals("PAY-ADJ|" + draft.id()))).isEmpty();
-        assertThatThrownBy(() -> new FinancePayrollService(finance, documents, new ApprovalService(new InMemoryApprovalTaskRepository()))
+        assertThatThrownBy(() -> new FinancePayrollService(finance)
                 .generate(new PayrollRunCommand(YearMonth.now().toString())))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已停止按交工");
@@ -119,10 +111,7 @@ class OrderChangeFinanceTest {
         CommandResultProbe probe = () -> {
             throw new IllegalStateException("结果写入失败");
         };
-        OrderChangeService failing = new OrderChangeService(
-                changes, documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), probe),
-                new OrderChangePostingService(finance, new FinanceBillingService(finance, documents, new StockLedgerService(new InMemoryStockLedgerRepository())), documents)
-        );
+        OrderChangeService failing = new OrderChangeService(changes, documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), probe));
         var draft = failing.draft("MD-CHANGE-001", "", "回滚", "2026-11-02", "change-rollback-001", receiver);
         failing.submitFinance(draft.id(), receiver);
         failing.review(draft.id(), true, "业务审核通过", account("车间主管", RoleCode.WORKSHOP_LEADER));

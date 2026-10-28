@@ -826,36 +826,6 @@ public class MaterialStockService {
         }
     }
 
-    private void assertCustomerReturnable(StockDesk.CustomerReturnInput input, StockDocumentLine source) {
-        BigDecimal receivedQty = source.quantity();
-        BigDecimal receivedWeight = nz(source.weight());
-        BigDecimal outQty = BigDecimal.ZERO;
-        BigDecimal outWeight = BigDecimal.ZERO;
-        for (StockDocument document : stockDocuments.list()) {
-            if (!StockDocumentKinds.POSTED.equals(document.status())) {
-                continue;
-            }
-            for (StockDocumentLine line : document.lines()) {
-                if (!input.batchCode().trim().equals(line.batchCode())) {
-                    continue;
-                }
-                if (StockDocumentKinds.PREP_ISSUE.equals(document.kind()) || StockDocumentKinds.PREP_CUSTOMER_RETURN.equals(document.kind())
-                        || (StockDocumentKinds.CORRECTION.equals(document.kind()) && StockDocumentKinds.OUT.equals(document.direction()))) {
-                    outQty = outQty.add(line.quantity());
-                    outWeight = outWeight.add(nz(line.weight()));
-                }
-                if (StockDocumentKinds.PREP_RETURN.equals(document.kind())
-                        || (StockDocumentKinds.CORRECTION.equals(document.kind()) && StockDocumentKinds.IN.equals(document.direction()))) {
-                    outQty = outQty.subtract(line.quantity());
-                    outWeight = outWeight.subtract(nz(line.weight()));
-                }
-            }
-        }
-        if (outQty.add(input.quantity()).compareTo(receivedQty) > 0 || outWeight.add(nz(input.weight())).compareTo(receivedWeight) > 0) {
-            throw new BusinessException("退还超过该批次可退数量或重量");
-        }
-    }
-
     private BigDecimal[] usedAmount(String sourceCode, String kind, int sourceLineNo, WorkSession session) {
         BigDecimal quantity = BigDecimal.ZERO;
         BigDecimal weight = BigDecimal.ZERO;

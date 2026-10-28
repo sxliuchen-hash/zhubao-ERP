@@ -10,7 +10,6 @@ import com.zhubao.erp.business.infra.InMemoryOrderChangeRepository;
 import com.zhubao.erp.business.infra.InMemoryOrderRequirementRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
-import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.scan.app.ScanCodeParser;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -53,11 +52,7 @@ class OrderChangeServiceTest {
         documents.saveProcessStationHandoff(new ProcessStationHandoff(
                 "MD-CHANGE-001", "雕刻", "雕刻工", "STK-1", "2026-10-09T10:00:00"
         ));
-        service = new OrderChangeService(
-                new InMemoryOrderChangeRepository(),
-                documents,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository())
-        );
+        service = new OrderChangeService(new InMemoryOrderChangeRepository(), documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
         receiver = account("收货员", RoleCode.RECEIVER);
         finance = account("财务员", RoleCode.FINANCE_STATISTICIAN);
     }
@@ -159,8 +154,7 @@ class OrderChangeServiceTest {
         ));
         InMemoryOrderRequirementRepository requirements = new InMemoryOrderRequirementRepository();
         MemoryBusinessWorkUnit work = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
-        OrderChangeService changes = new OrderChangeService(
-                new InMemoryOrderChangeRepository(), localDocuments, work, null, null, null, requirements);
+        OrderChangeService changes = new OrderChangeService(new InMemoryOrderChangeRepository(), localDocuments, work, null, null, requirements);
         ProcessStationService stations = new ProcessStationService(
                 localDocuments, ledger, operations, new ScanCodeParser(), null, work, requirements);
         AuthUserAccount carver = new AuthUserAccount(
@@ -277,11 +271,7 @@ class OrderChangeServiceTest {
                         "别人的要求", "2026-10-20", "另一客户"
                 ));
         BusinessDataAccess access = new BusinessDataAccess(documents, new StockLedgerService(new InMemoryStockLedgerRepository()));
-        OrderChangeService scoped = new OrderChangeService(
-                new InMemoryOrderChangeRepository(), documents,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),
-                null, access, null, new InMemoryOrderRequirementRepository()
-        );
+        OrderChangeService scoped = new OrderChangeService(new InMemoryOrderChangeRepository(), documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), access, null, new InMemoryOrderRequirementRepository());
         AuthUserAccount limited = new AuthUserAccount(
                 "范围员", "hash", "范围员", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, true, true,
                 Instant.now(), 0, null, List.of("1001"), false, false, List.of()
@@ -330,15 +320,7 @@ class OrderChangeServiceTest {
     }
 
     private OrderChangeService effectService(InMemoryOrderRequirementRepository requirements, BusinessDataAccess access) {
-        return new OrderChangeService(
-                new InMemoryOrderChangeRepository(),
-                documents,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),
-                null,
-                access,
-                null,
-                requirements
-        );
+        return new OrderChangeService(new InMemoryOrderChangeRepository(), documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), access, null, requirements);
     }
 
     private AuthUserAccount account(String operator, RoleCode role) {

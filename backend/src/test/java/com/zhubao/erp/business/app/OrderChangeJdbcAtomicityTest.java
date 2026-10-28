@@ -6,8 +6,6 @@ import com.zhubao.erp.business.domain.OrderChangeStatus;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.JdbcOrderChangeRepository;
 import com.zhubao.erp.business.infra.JdbcOrderRequirementRepository;
-import com.zhubao.erp.finance.app.FinanceBillingService;
-import com.zhubao.erp.finance.app.OrderChangePostingService;
 import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 import com.zhubao.erp.finance.infra.JdbcFinanceRepository;
@@ -64,15 +62,7 @@ class OrderChangeJdbcAtomicityTest {
         CommandResultProbe probe = () -> {
             throw new IllegalStateException("结果写入失败");
         };
-        OrderChangeService service = new OrderChangeService(
-                changes,
-                documents,
-                new JdbcBusinessWorkUnit(dataSource, new JdbcCommandRequestRepository(dataSource), probe),
-                new OrderChangePostingService(finance, new FinanceBillingService(finance, documents, new StockLedgerService(new InMemoryStockLedgerRepository())), documents),
-                null,
-                null,
-                new JdbcOrderRequirementRepository(dataSource)
-        );
+        OrderChangeService service = new OrderChangeService(changes, documents, new JdbcBusinessWorkUnit(dataSource, new JdbcCommandRequestRepository(dataSource), probe), null, null, new JdbcOrderRequirementRepository(dataSource));
         AuthUserAccount receiver = account("收货员", RoleCode.RECEIVER);
         var draft = service.draft("MD-JDBC", "", "改为外圈刻字", "2026-11-01", "jdbc-change-001", receiver);
         service.submitFinance(draft.id(), receiver);
