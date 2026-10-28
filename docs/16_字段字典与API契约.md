@@ -1531,7 +1531,7 @@ PWA 一期边界：
 | JDBC 模式 | `zhubao.business-document.repository=jdbc`，读取/写入 `biz_mother_order`、`biz_mother_order_item`、`biz_outbound_order`、`biz_outbound_order_item` |
 | MySQL profile | `ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY=jdbc`，默认随 `mysql` profile 启用 |
 | 入库落库时机 | `BusinessOperationService.confirmInbound` 完成 `StockLedgerService.transfer` 后保存母单快照和一条物料明细 |
-| 出库落库时机 | `BusinessOperationService.shipFinishedStock` 完成 `StockLedgerService.transfer` 后保存出库单快照和一条出库明细 |
+| 出库落库时机 | `BusinessOperationService.shipFinishedStock` 在同一工作单元内写入 `StockLedgerService` 台账和 `biz_outbound_order` 发货快照；不再写旧 `biz_outbound_order_item` |
 | 防重复 | 调用库存台账前先检查母单号/出库单号是否已存在，存在则拒绝，避免重复库存入账 |
 | 查询接口 | `GET /api/business/documents/mother-orders/{code}`、`GET /api/business/documents/outbound-orders/{code}` |
 
@@ -1609,7 +1609,6 @@ PWA 一期边界：
 
 | 接口 | 权限码 | 允许角色 |
 |---|---|---|
-| `POST /api/inventory/ledger/transfers` | `INVENTORY_LEDGER_TRANSFER` | 仅 `ADMIN`。总经理不再因权限登记自动获得任意库存转移 |
 | `POST /api/business/operations/inbound-confirmations` | `BUSINESS_INBOUND_CONFIRM` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER` |
 | `POST /api/business/operations/process-stations` | `BUSINESS_PRODUCTION_REPORT` | `ADMIN`、`GENERAL_MANAGER`、`OPERATOR`、`WORKSHOP_LEADER` |
 | `POST /api/business/operations/quality-checks` | `BUSINESS_QUALITY_FREEZE` | `ADMIN`、`GENERAL_MANAGER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
@@ -2481,16 +2480,6 @@ PWA 一期边界：
 
 | 方法与完整路径 | 返回类型 |
 |---|---|
-| `POST /api/inventory/ledger/transfers` | `ApiResponse<StockLedgerEntry>` |
-| `GET /api/inventory/prep-stock/customer` | `ApiResponse<List<StockBalance>>`。客户备料批次，母单为空 |
-| `GET /api/inventory/prep-stock/factory` | `ApiResponse<List<StockBalance>>`。厂内未发货实物，客户范围账号看不到其他客户和公司料 |
-| `GET /api/inventory/prep-stock/company` | `ApiResponse<List<StockBalance>>`。公司自有生产物料，仓库、财务、管理员或总经理可见 |
-| `POST /api/inventory/prep-stock/customer-receipts` | `ApiResponse<String>`。必须带 `requestId`。不建加工母单 |
-| `POST /api/inventory/prep-stock/issues` | `ApiResponse<String>`。必须带 `requestId`。同一客户备料批次领用到真实加工母单 |
-| `POST /api/inventory/prep-stock/company-receipts` | `ApiResponse<String>`。必须带 `requestId`。权属始终为公司 |
-| `POST /api/inventory/prep-stock/returns` | `ApiResponse<String>`。必须带 `requestId`。从加工母单待加工退回原备料批次 |
-| `POST /api/inventory/prep-stock/company-issues` | `ApiResponse<String>`。必须带 `requestId`。公司料领用，权属保持公司，待加工转入在制 |
-| `POST /api/inventory/prep-stock/company-returns` | `ApiResponse<String>`。必须带 `requestId`。公司料从在制退回待加工。这组旧接口仍映射到仅管理员拥有的通用库存转移；日常库管改走下面的正式单据接口。 |
 | `GET /api/inventory/material-stock/overview?scope=company\|prep\|processing` | 当前账号可见范围内的批次数、按数量单位分组的账面数量、已知重量、冻结批次数和待核行数。无权限、无数据和加载失败分开返回。重量未知不计入已知重量。 |
 | `GET /api/inventory/material-stock/batches` | 同上筛选。公司料和寄存备料按批次汇总账面、可用、已领用和冻结；待核行不计入可用。加工库存仍按母单或子单状态列出。 |
 | `GET /api/inventory/material-stock/movements` | 只返回指定批次或加工单的流水，含业务名称、前后账面数量和操作人。 |
@@ -2702,3 +2691,5 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 - 质检对照提交和开返工的 `code` 使用最近一次成功识别返回的 `orderCode`。扫码文本变化后，该识别结果失效。
 - 正式操作上下文按库存阶段匹配工单：收货待加工只匹配空工单；不拆母单进入在制及后续状态后，母单号是真实加工工单。仅有历史空工单时仍可返回该余额；它与母单工单或多仓库同时有余额时，上下文为空。
 - 冻结命令的 `defect` 和返工派发的 `reason` 不接受“未判定”这一占位。没有真实缺陷或返工原因时，请求在提交前被拒绝。
+
+库存退役约定（2026-10-28）：旧 `/api/inventory/prep-stock/*` 与 `/api/inventory/ledger/transfers` 已移除，正式写入统一 `/api/material-stock/*` 业务单据接口。台账内核及库存只读保留。收货仅追加 `biz_receipt_line`，拆单记录来源分配；发货以 `biz_outbound_order` 与台账关联。旧 item 表和历史迁移保留，不再双写或用于新单校验。

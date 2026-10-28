@@ -130,7 +130,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setString(30, record.customerName());
             setCourierIdentity(statement, 31, record.courierNo());
             statement.executeUpdate();
-            insertMotherOrderItem(connection, record);
+
         }
     }
 
@@ -252,7 +252,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
     public boolean motherHasDownstream(String motherOrderCode, WorkSession session) {
         // 各表使用锁定读，避免等待母单行锁后仍从旧快照漏读刚提交的拆单或交付。
         String[] tables = {"biz_work_order", "biz_child_line_allocation", "biz_process_station_handoff",
-                "biz_outbound_order", "biz_outbound_order_item"};
+                "biz_outbound_order"};
         try {
             for (String table : tables) {
                 String column = "biz_process_station_handoff".equals(table) ? "order_code" : "mother_order_code";
@@ -485,7 +485,7 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             statement.setString(26, record.createdAt());
             statement.executeUpdate();
         }
-        insertOutboundOrderItem(connection, record);
+
     }
 
     private RuntimeException outboundWriteFailure(OutboundOrderRecord record, SQLException ex) {
@@ -1568,46 +1568,6 @@ public class JdbcBusinessDocumentRepository implements BusinessDocumentRepositor
             return;
         }
         statement.setString(index, courierNo.trim());
-    }
-
-    private void insertMotherOrderItem(Connection connection, MotherOrderRecord record) throws SQLException {
-        String sql = """
-                insert into biz_mother_order_item (
-                    mother_order_code, material_code, quantity, quantity_unit,
-                    weight, weight_unit, ledger_code
-                ) values (?, ?, ?, ?, ?, ?, ?)
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, record.code());
-            statement.setString(2, record.materialCode());
-            statement.setBigDecimal(3, record.quantity());
-            statement.setString(4, record.quantityUnit());
-            statement.setBigDecimal(5, record.weight());
-            statement.setString(6, "g");
-            statement.setString(7, record.ledgerCode());
-            statement.executeUpdate();
-        }
-    }
-
-    private void insertOutboundOrderItem(Connection connection, OutboundOrderRecord record) throws SQLException {
-        String sql = """
-                insert into biz_outbound_order_item (
-                    outbound_order_code, mother_order_code, work_order_code, material_code,
-                    quantity, quantity_unit, weight, weight_unit, ledger_code
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, record.code());
-            statement.setString(2, record.motherOrderCode());
-            statement.setString(3, record.workOrderCode());
-            statement.setString(4, record.materialCode());
-            statement.setBigDecimal(5, record.quantity());
-            statement.setString(6, record.quantityUnit());
-            statement.setBigDecimal(7, record.weight());
-            statement.setString(8, "g");
-            statement.setString(9, record.ledgerCode());
-            statement.executeUpdate();
-        }
     }
 
     private MotherOrderRecord mapMotherOrder(ResultSet rs) throws SQLException {

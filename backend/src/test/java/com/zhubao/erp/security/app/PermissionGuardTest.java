@@ -200,8 +200,6 @@ class PermissionGuardTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, manager))
                 .doesNotThrowAnyException();
-        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.INVENTORY_LEDGER_TRANSFER, manager))
-                .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.GATEWAY_DEVICE_MANAGE, manager))
                 .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.DOCUMENT_CONTENT_MANAGE, manager))

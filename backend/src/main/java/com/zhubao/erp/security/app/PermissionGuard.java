@@ -19,7 +19,6 @@ public class PermissionGuard {
     private final Map<PermissionCode, Set<RoleCode>> roleMatrix = new EnumMap<>(PermissionCode.class);
 
     public PermissionGuard() {
-        allow(PermissionCode.INVENTORY_LEDGER_TRANSFER, RoleCode.ADMIN);
         allowManager(PermissionCode.BUSINESS_INBOUND_CONFIRM, RoleCode.RECEIVER, RoleCode.WAREHOUSE_KEEPER);
         allowManager(PermissionCode.BUSINESS_PRODUCTION_REPORT, RoleCode.OPERATOR, RoleCode.WORKSHOP_LEADER);
         allowManager(PermissionCode.BUSINESS_QUALITY_FREEZE, RoleCode.QUALITY_INSPECTOR, RoleCode.WORKSHOP_LEADER);

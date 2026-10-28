@@ -250,7 +250,7 @@ class MaterialStockServiceTest {
         PermissionGuard guard = new PermissionGuard();
         assertThat(guard.allowedPermissionsFor(RoleCode.WAREHOUSE_KEEPER))
                 .contains(PermissionCode.STOCK_COMPANY_RECEIVE, PermissionCode.STOCK_PREP_CUSTOMER_RETURN)
-                .doesNotContain(PermissionCode.INVENTORY_LEDGER_TRANSFER, PermissionCode.STOCK_CORRECT);
+                .doesNotContain(PermissionCode.STOCK_CORRECT);
         assertThat(guard.allowedPermissionsFor(RoleCode.OPERATOR)).doesNotContain(PermissionCode.STOCK_COMPANY_RECEIVE);
         assertThat(guard.allowedPermissionsFor(RoleCode.BUSINESS_MANAGER)).doesNotContain(PermissionCode.STOCK_PREP_RECEIVE);
         AuthUserAccount operator = account("操作工", RoleCode.OPERATOR, DataScope.ALL, List.of());

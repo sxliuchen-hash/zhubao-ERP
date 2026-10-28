@@ -92,10 +92,7 @@ SELECT 'missing' AS kind, 'mother_ledger' AS item, COUNT(*) AS value
   FROM biz_mother_order m
   LEFT JOIN inv_stock_ledger l ON l.code = m.ledger_code AND l.document_type = 'inbound_confirm' AND l.document_code = m.code
  WHERE l.code IS NULL;
-SELECT 'missing' AS kind, 'mother_item_ledger' AS item, COUNT(*) AS value
-  FROM biz_mother_order_item i
-  LEFT JOIN inv_stock_ledger l ON l.code = i.ledger_code AND l.document_type = 'inbound_confirm' AND l.document_code = i.mother_order_code
- WHERE l.code IS NULL;
+
 SELECT 'missing' AS kind, 'receipt_line_ledger' AS item, COUNT(*) AS value
   FROM biz_receipt_line r
   LEFT JOIN inv_stock_ledger l ON l.code = r.ledger_code AND l.document_type = 'inbound_confirm' AND l.document_code = r.mother_order_code
@@ -118,10 +115,7 @@ SELECT 'missing' AS kind, 'outbound_ledger' AS item, COUNT(*) AS value
   FROM biz_outbound_order o
   LEFT JOIN inv_stock_ledger l ON l.code = o.ledger_code AND l.document_type = 'outbound_shipment' AND l.document_code = o.code
  WHERE l.code IS NULL;
-SELECT 'missing' AS kind, 'outbound_item_ledger' AS item, COUNT(*) AS value
-  FROM biz_outbound_order_item i
-  LEFT JOIN inv_stock_ledger l ON l.code = i.ledger_code AND l.document_type = 'outbound_shipment' AND l.document_code = i.outbound_order_code
- WHERE l.code IS NULL;
+
 SELECT 'missing' AS kind, 'quality_freeze_ledger' AS item, COUNT(*) AS value
   FROM biz_quality_requirement_check c
   LEFT JOIN inv_stock_ledger l ON l.code = c.ledger_code AND l.document_type = 'quality_freeze' AND l.document_code = c.quality_case_code

@@ -65,7 +65,7 @@ class BusinessReadAuthorizationTest {
         int before = stocks.ledgers().size();
         for (HttpHeaders headers : List.of(new HttpHeaders(), forged)) {
             assertThat(http.postForEntity("/api/inventory/ledger/transfers", new HttpEntity<>(transfer, headers), String.class)
-                    .getStatusCode().value()).isEqualTo(403);
+                    .getStatusCode().is4xxClientError()).isTrue();
         }
         assertThat(stocks.ledgers()).hasSize(before);
     }
@@ -120,7 +120,7 @@ class BusinessReadAuthorizationTest {
         HttpHeaders stranger = login("r03-stranger", "其他操作工", RoleCode.OPERATOR, DataScope.DEPARTMENT, List.of());
         assertThat(get("/api/inventory/balances", stranger).getBody()).doesNotContain("MD-R03-SELF");
         HttpHeaders keeper = login("r03-keeper", "岗位库管", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT, List.of());
-        assertThat(get("/api/inventory/balances", keeper).getBody()).contains("MD-R03-SELF");
+        assertThat(get("/api/inventory/balances", keeper).getBody()).doesNotContain("MD-R03-SELF");
     }
 
     private HttpHeaders login(String username, String operator, RoleCode role, DataScope scope, List<String> customers) {

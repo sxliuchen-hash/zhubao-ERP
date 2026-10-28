@@ -1,7 +1,6 @@
 package com.zhubao.erp.security.domain;
 
 public enum PermissionCode {
-    INVENTORY_LEDGER_TRANSFER("库存台账直接转移"),
     BUSINESS_INBOUND_CONFIRM("来料确认入库"),
     BUSINESS_PRODUCTION_REPORT("生产报工"),
     BUSINESS_QUALITY_FREEZE("质检冻结库存"),

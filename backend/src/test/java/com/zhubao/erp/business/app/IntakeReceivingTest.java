@@ -100,7 +100,7 @@ class IntakeReceivingTest {
                 new SplitMotherOrderLine(new BigDecimal("2"), new BigDecimal("3"), List.of("抛光"),
                         List.of(new SplitSourceAllocation(2, new BigDecimal("2"), new BigDecimal("3"))))));
         assertThat(world.documents.listReceiptLines(mother)).hasSize(2);
-        assertThat(world.count("biz_mother_order_item")).isEqualTo(1);
+        assertThat(world.count("biz_mother_order_item")).isZero();
         assertThat(world.ledgers()).isEqualTo(2);
 
         try (Connection connection = world.dataSource.getConnection(); Statement statement = connection.createStatement()) {
@@ -492,6 +492,10 @@ class IntakeReceivingTest {
                 apply(statement, "src/main/resources/db/mysql/V45__m3_mother_order_courier_identity.sql");
                 apply(statement, "src/main/resources/db/mysql/V58__m3_courier_multi_order.sql");
                 apply(statement, "src/main/resources/db/mysql/V60__m3_receipt_line_allocation.sql");
+                statement.execute("alter table biz_receipt_line add storage_conditions varchar(80)");
+                statement.execute("alter table biz_receipt_line add storage_instruction varchar(500)");
+                statement.execute("alter table biz_child_line_allocation add storage_conditions varchar(80)");
+                statement.execute("alter table biz_child_line_allocation add storage_instruction varchar(500)");
             }
             documents = new JdbcBusinessDocumentRepository(dataSource);
             stock = new JdbcStockLedgerRepository(dataSource);

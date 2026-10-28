@@ -36,6 +36,12 @@ class M2ManagementApiSmokeTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private com.zhubao.erp.inventory.app.StockLedgerService stocks;
+
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper json;
+
 
     @Test
     void exposesRegisterImportTemplateApis() {
@@ -562,7 +568,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("13.660"),
                 "remark", "seed finished stock for outbound shipment smoke test"
         );
-        signedPost("/api/inventory/ledger/transfers", seedFinished, String.class);
+        stocks.transfer(json.convertValue(seedFinished, com.zhubao.erp.inventory.domain.StockTransferCommand.class));
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("shipmentCode", "OUT-SMOKE-20260706-026");
@@ -636,7 +642,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("13.660"),
                 "remark", "seed shipped stock for customer return smoke test"
         );
-        signedPost("/api/inventory/ledger/transfers", seedShipped, String.class);
+        stocks.transfer(json.convertValue(seedShipped, com.zhubao.erp.inventory.domain.StockTransferCommand.class));
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("returnCode", "RET-SMOKE-20260707-027");
@@ -699,7 +705,7 @@ class M2ManagementApiSmokeTest {
                 "weight", new BigDecimal("4.550"),
                 "remark", "seed return check stock for after sales review smoke test"
         );
-        signedPost("/api/inventory/ledger/transfers", seedReturnCheck, String.class);
+        stocks.transfer(json.convertValue(seedReturnCheck, com.zhubao.erp.inventory.domain.StockTransferCommand.class));
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("reviewCode", "ASR-SMOKE-20260707-030");

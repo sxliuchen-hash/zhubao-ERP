@@ -59,7 +59,7 @@ class A3MysqlIntakeSplitIntegrationTest {
                 new MobileIntakeLine("PT950", "铂金戒托", new BigDecimal("5"), "件", new BigDecimal("8")))),
                 receiver).motherOrderCode();
         assertThat(queryNumber(dataSource,
-                "select count(*) from biz_mother_order_item where mother_order_code = ?", mother)).isEqualTo(1);
+                "select count(*) from biz_mother_order_item where mother_order_code = ?", mother)).isZero();
         assertThat(queryNumber(dataSource,
                 "select count(*) from biz_receipt_line where mother_order_code = ?", mother)).isEqualTo(2);
         assertThat(queryNumber(dataSource,
@@ -150,8 +150,8 @@ class A3MysqlIntakeSplitIntegrationTest {
         String constraint = "chk_a3_out_" + suffix;
         boolean constraintInstalled = false;
         try {
-            execute(dataSource, "alter table biz_outbound_order_item add constraint " + constraint
-                    + " check (outbound_order_code <> '" + shipment + "')");
+            execute(dataSource, "alter table biz_outbound_order add constraint " + constraint
+                    + " check (code <> '" + shipment + "')");
             constraintInstalled = true;
             assertThatThrownBy(() -> operations.shipFinishedStock(command, receiver.operator()))
                     .isInstanceOf(IllegalStateException.class)
@@ -167,7 +167,7 @@ class A3MysqlIntakeSplitIntegrationTest {
             assertThat(stockQuantity(dataSource, mother, "SHIPPED")).isEqualByComparingTo("0");
         } finally {
             if (constraintInstalled) execute(dataSource,
-                    "alter table biz_outbound_order_item drop check " + constraint);
+                    "alter table biz_outbound_order drop check " + constraint);
         }
 
         var shipped = operations.shipFinishedStock(command, receiver.operator());
@@ -175,7 +175,7 @@ class A3MysqlIntakeSplitIntegrationTest {
         assertThat(queryNumber(dataSource,
                 "select count(*) from biz_outbound_order where code = ?", shipment)).isEqualTo(1);
         assertThat(queryNumber(dataSource,
-                "select count(*) from biz_outbound_order_item where outbound_order_code = ?", shipment)).isEqualTo(1);
+                "select count(*) from biz_outbound_order_item where outbound_order_code = ?", shipment)).isZero();
         assertThat(queryNumber(dataSource,
                 "select count(*) from inv_stock_ledger where document_type = 'outbound_shipment' and document_code = ?",
                 shipment)).isEqualTo(1);
@@ -184,14 +184,11 @@ class A3MysqlIntakeSplitIntegrationTest {
         assertThat(operations.shipFinishedStock(command, receiver.operator()).ledgerCode())
                 .isEqualTo(shipped.ledgerCode());
         assertThat(queryNumber(dataSource,
-                "select count(*) from biz_outbound_order_item where outbound_order_code = ?", shipment)).isEqualTo(1);
+                "select count(*) from biz_outbound_order_item where outbound_order_code = ?", shipment)).isZero();
         assertThat(queryNumber(dataSource, """
-                select count(*) from biz_outbound_order_item i
-                join biz_outbound_order o on o.code = i.outbound_order_code
-                join inv_stock_ledger l on l.code = i.ledger_code
-                where i.outbound_order_code = ? and (i.quantity <> o.delivery_quantity
-                    or i.weight <> o.delivery_weight or i.ledger_code <> o.ledger_code
-                    or l.quantity <> i.quantity or l.weight <> i.weight)
+                select count(*) from biz_outbound_order o
+                join inv_stock_ledger l on l.code = o.ledger_code
+                where o.code = ? and (l.quantity <> o.delivery_quantity or l.weight <> o.delivery_weight)
                 """, shipment)).isZero();
     }
 
