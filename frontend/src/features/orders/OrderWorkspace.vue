@@ -196,6 +196,10 @@ function chooseFacet(facet: string) {
   filters.facet = facet;
   void load(1);
 }
+function chooseSort(sort: 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC' | 'DUE_DESC' | 'GOODS_ASC' | 'GOODS_DESC' | 'CUSTOMER_ASC' | 'CUSTOMER_DESC' | 'CREATOR_ASC' | 'CREATOR_DESC' | 'PROCESS_ASC' | 'PROCESS_DESC' | 'STATUS_ASC' | 'STATUS_DESC') {
+  filters.sort = sort;
+  void load(1);
+}
 function facetCount(facet: string) {
   const count = result.value?.facetCounts?.[facet];
   return count == null ? '' : String(count);
@@ -254,7 +258,6 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
       </div>
       <form class="order-filters" @submit.prevent="load(1)">
         <label class="order-search"><span>搜索</span><input v-model="filters.query" maxlength="100" aria-label="订单搜索" placeholder="单号、运单、货品或客户" /></label>
-        <label><span>排序</span><select v-model="filters.sort" aria-label="订单排序" @change="load(1)"><option value="CREATED_DESC">创建时间由近及远</option><option value="CREATED_ASC">创建时间由远及近</option><option value="DUE_ASC">交期由近及远</option></select></label>
         <button class="primary-button" type="submit" :disabled="loading">查询</button>
         <button v-if="canCreate" type="button" class="secondary-button" @click="openIntake?.()">新建收货</button>
         <details class="info-disclosure order-advanced-filters">
@@ -272,7 +275,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
       <p v-if="error" role="alert" class="operation-feedback danger">{{ accessDenied ? '无权限：' : '' }}{{ error }}</p>
       <template v-if="result">
         <p class="order-count">共 {{ result.totalRows }} 项目标 · 本页 {{ result.items.length }} 项</p>
-        <OrderList :rows="result.items" :selected-key="selectedRow?.rowKey ?? ''" @select="selectRow" />
+        <OrderList :rows="result.items" :selected-key="selectedRow?.rowKey ?? ''" :sort="filters.sort" @select="selectRow" @sort="chooseSort" />
         <p v-if="!result.items.length">当前条件下暂无订单</p>
         <nav class="order-pagination" aria-label="订单分页">
           <button type="button" class="secondary-button" :disabled="result.page <= 1" @click="load(result.page - 1)">上一页</button>

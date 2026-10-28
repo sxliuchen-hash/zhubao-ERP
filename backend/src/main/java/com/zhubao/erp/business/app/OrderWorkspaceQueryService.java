@@ -603,12 +603,49 @@ public class OrderWorkspaceQueryService {
                 .comparing((OrderWorkspaceRow row) -> blank(row.motherOrderCode()))
                 .thenComparing(row -> blank(row.code()))
                 .thenComparing(OrderWorkspaceRow::rowKey);
-        if (OrderWorkspaceQuery.DUE_ASC.equals(sort)) {
-            return Comparator.comparing((OrderWorkspaceRow row) -> blank(row.dueDate()).isEmpty() ? "9999-99-99" : blank(row.dueDate()))
-                    .thenComparing(tie);
+        Comparator<OrderWorkspaceRow> primary = switch (sort == null ? "" : sort) {
+            case OrderWorkspaceQuery.CREATED_ASC -> createdOrder(false);
+            case OrderWorkspaceQuery.DUE_ASC -> dueOrder(true);
+            case OrderWorkspaceQuery.DUE_DESC -> dueOrder(false);
+            case OrderWorkspaceQuery.GOODS_ASC -> textOrder(OrderWorkspaceRow::goodsName, true);
+            case OrderWorkspaceQuery.GOODS_DESC -> textOrder(OrderWorkspaceRow::goodsName, false);
+            case OrderWorkspaceQuery.CUSTOMER_ASC -> textOrder(OrderWorkspaceRow::customerName, true);
+            case OrderWorkspaceQuery.CUSTOMER_DESC -> textOrder(OrderWorkspaceRow::customerName, false);
+            case OrderWorkspaceQuery.CREATOR_ASC -> textOrder(OrderWorkspaceRow::createdBy, true);
+            case OrderWorkspaceQuery.CREATOR_DESC -> textOrder(OrderWorkspaceRow::createdBy, false);
+            case OrderWorkspaceQuery.PROCESS_ASC -> textOrder(OrderWorkspaceRow::currentProcess, true);
+            case OrderWorkspaceQuery.PROCESS_DESC -> textOrder(OrderWorkspaceRow::currentProcess, false);
+            case OrderWorkspaceQuery.STATUS_ASC -> textOrder(OrderWorkspaceRow::businessStatus, true);
+            case OrderWorkspaceQuery.STATUS_DESC -> textOrder(OrderWorkspaceRow::businessStatus, false);
+            default -> createdOrder(true);
+        };
+        return primary.thenComparing(tie);
+    }
+
+    /** 文字按中文顺序比较。空白排在最后，正序和倒序都一样。 */
+    private static Comparator<OrderWorkspaceRow> textOrder(java.util.function.Function<OrderWorkspaceRow, String> field, boolean ascending) {
+        return (left, right) -> compareText(field.apply(left), field.apply(right), ascending);
+    }
+
+    private static int compareText(String left, String right, boolean ascending) {
+        String a = blank(left);
+        String b = blank(right);
+        if (a.isEmpty() && b.isEmpty()) {
+            return 0;
         }
-        boolean newestFirst = !OrderWorkspaceQuery.CREATED_ASC.equals(sort);
-        return createdOrder(newestFirst).thenComparing(tie);
+        if (a.isEmpty()) {
+            return 1;
+        }
+        if (b.isEmpty()) {
+            return -1;
+        }
+        int compared = java.text.Collator.getInstance(java.util.Locale.CHINA).compare(a, b);
+        return ascending ? compared : -compared;
+    }
+
+    /** 未填交期排在最后。由近及远是更早到期的在前。 */
+    private static Comparator<OrderWorkspaceRow> dueOrder(boolean soonestFirst) {
+        return (left, right) -> compareText(left.dueDate(), right.dueDate(), soonestFirst);
     }
 
     /** 创建时间无法识别的行排在最后，避免被当成最新或最旧。 */

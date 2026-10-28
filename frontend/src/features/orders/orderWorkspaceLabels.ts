@@ -22,6 +22,17 @@ export function orderQuantityText(quantity: string | null | undefined, unit: str
   return unit ? `${quantity} ${unit}` : quantity;
 }
 
+/** 工序徽章样式。未知工序用中性色，不拿颜色代替工序名称。 */
+export function processStyle(process: string | null | undefined): string {
+  switch ((process ?? '').trim()) {
+    case '雕刻': return 'engrave';
+    case '镶嵌': return 'set';
+    case '抛光': return 'polish';
+    case '来料': return 'intake';
+    default: return 'other';
+  }
+}
+
 /** 只有仍在生产且尚未交工的当前工序，才按百分比提示下一步。 */
 export function orderProductionStatus(row: OrderWorkspaceRow): string {
   if (['WAITING_START', 'IN_PROCESS'].includes(row.facet) && row.processFormallyDelivered === false) {

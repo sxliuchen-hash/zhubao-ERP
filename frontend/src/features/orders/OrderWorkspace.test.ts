@@ -184,10 +184,11 @@ describe('统一订单列表与详情', () => {
     expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'ORDERS', page: 1, size: 20, sort: 'CREATED_DESC' }));
     expect(wrapper.text()).toContain('共 42 项目标');
     expect(wrapper.text()).toContain('10.5 克');
-    expect(wrapper.text()).toContain('未记录工序进度');
-    expect(wrapper.text()).toContain('工序进度 100%');
-    expect(wrapper.text()).toContain('本工序未正式交工');
-    await wrapper.get('[aria-label="订单排序"]').setValue('DUE_ASC');
+    const processes = wrapper.findAll('.order-table .process-chip');
+    expect(processes[0]!.text()).toBe('抛光');
+    expect(processes[1]!.text()).toContain('100%');
+    expect(wrapper.text()).toContain('未交工');
+    await wrapper.findAll('[aria-label="按交期排序"]')[0]!.trigger('click');
     await flushPromises();
     expect(fetchOrderWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'DUE_ASC', page: 1 }));
     expect(wrapper.get('.order-table tbody tr:first-child').text()).not.toContain('0%');

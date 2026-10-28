@@ -239,6 +239,16 @@ class OrderWorkspaceQueryServiceTest {
         assertThatThrownBy(() -> OrderWorkspaceQuery.parse(null, null, null, null, null, null, "1", "20", "LATEST"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("排序");
+        documents.saveMotherOrder(named("MD-YUN", "云璟", "赵收"));
+        documents.saveMotherOrder(named("MD-JIN", "锦和", "刘晨"));
+        assertThat(service.query(office, orders, OrderWorkspaceQuery.parse(
+                null, null, null, null, null, null, "1", "20", OrderWorkspaceQuery.CUSTOMER_ASC)).items())
+                .extracting(OrderWorkspaceRow::code)
+                .containsSubsequence("MD-JIN", "MD-YUN");
+        assertThat(service.query(office, orders, OrderWorkspaceQuery.parse(
+                null, null, null, null, null, null, "1", "20", OrderWorkspaceQuery.CUSTOMER_DESC)).items())
+                .extracting(OrderWorkspaceRow::code)
+                .containsSubsequence("MD-YUN", "MD-JIN");
     }
 
     @Test
@@ -264,6 +274,15 @@ class OrderWorkspaceQueryServiceTest {
 
     private OrderWorkspaceQuery query() {
         return OrderWorkspaceQuery.parse(null, null, null, null, null, null, null, null);
+    }
+
+    private MotherOrderRecord named(String code, String customerName, String creator) {
+        return new MotherOrderRecord(
+                code, 1001L, 1001L, "MAT", "2026-10-09", "", "", "", "", "",
+                "吊坠", "CUSTOMER", true, "RAW", BigDecimal.ONE, "件", BigDecimal.ONE,
+                "RAW_WAITING", "", "", null, "", creator, "", "", "CONFIRMED", "2026-10-03T08:00:00",
+                "抛光", "2026-11-01", customerName
+        );
     }
 
     private MotherOrderRecord created(String code, String createdAt, String dueDate) {

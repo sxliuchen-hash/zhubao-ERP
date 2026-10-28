@@ -2125,7 +2125,7 @@ PWA 一期边界：
 
 | 方法与完整路径 | 返回类型 |
 |---|---|
-| `GET /api/business/order-workspace?view=&query=&customerId=&process=&facet=&dueBefore=&sort=&page=&size=` | `ApiResponse<OrderWorkspacePage>`。`view` 默认 `ORDERS`，另可取 `PRODUCTION`、`QUALITY`，且必须是当前菜单允许的视图。`query` 最长 100 字，精确匹配单号或运单，货品和客户按关键字包含。`customerId` 只能是档案编号。`dueBefore` 为 `yyyy-MM-dd`，含当天，没有交期的行不进入该筛选。`sort` 默认 `CREATED_DESC`（创建时间由近及远），也可取 `CREATED_ASC`、`DUE_ASC`（交期由近及远，未填交期排在最后）。创建时间无法识别的行排在最后。`page` 从 1 开始，`size` 默认 20、最大 100。非法参数返回可识别错误，不会改成全量查询。`facet` 只是展示分类：`ALL`、`UNSPLIT`、`WAITING_START`、`IN_PROCESS`、`WAITING_QUALITY`、`REWORK`、`READY_TO_SHIP`、`SHIPPED`、`UNKNOWN`。已质检不等于可发货。响应含 `items`、`page`、`size`、`totalRows`、`facetCounts`、`availableViews`、`generatedAt`。行内数量和重量是十进制文本；未知字段为 null。不返回金额、附件地址或库存写入参数 |
+| `GET /api/business/order-workspace?view=&query=&customerId=&process=&facet=&dueBefore=&sort=&page=&size=` | `ApiResponse<OrderWorkspacePage>`。`view` 默认 `ORDERS`，另可取 `PRODUCTION`、`QUALITY`，且必须是当前菜单允许的视图。`query` 最长 100 字，精确匹配单号或运单，货品和客户按关键字包含。`customerId` 只能是档案编号。`dueBefore` 为 `yyyy-MM-dd`，含当天，没有交期的行不进入该筛选。`sort` 默认 `CREATED_DESC`（创建时间由近及远）。表头可改为 `CREATED_ASC`、`DUE_ASC`、`DUE_DESC`、`GOODS_ASC`、`GOODS_DESC`、`CUSTOMER_ASC`、`CUSTOMER_DESC`、`CREATOR_ASC`、`CREATOR_DESC`、`PROCESS_ASC`、`PROCESS_DESC`、`STATUS_ASC`、`STATUS_DESC`。空白和无法识别的创建时间排在最后。`page` 从 1 开始，`size` 默认 20、最大 100。非法参数返回可识别错误，不会改成全量查询。`facet` 只是展示分类：`ALL`、`UNSPLIT`、`WAITING_START`、`IN_PROCESS`、`WAITING_QUALITY`、`REWORK`、`READY_TO_SHIP`、`SHIPPED`、`UNKNOWN`。已质检不等于可发货。响应含 `items`、`page`、`size`、`totalRows`、`facetCounts`、`availableViews`、`generatedAt`。行内数量和重量是十进制文本；未知字段为 null。不返回金额、附件地址或库存写入参数 |
 
 ### DocumentManagementController
 

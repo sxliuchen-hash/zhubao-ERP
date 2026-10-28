@@ -32,7 +32,23 @@ public record OrderWorkspaceQuery(
     public static final String CREATED_DESC = "CREATED_DESC";
     public static final String CREATED_ASC = "CREATED_ASC";
     public static final String DUE_ASC = "DUE_ASC";
-    public static final Set<String> SORTS = Set.of(CREATED_DESC, CREATED_ASC, DUE_ASC);
+    public static final String DUE_DESC = "DUE_DESC";
+    public static final String GOODS_ASC = "GOODS_ASC";
+    public static final String GOODS_DESC = "GOODS_DESC";
+    public static final String CUSTOMER_ASC = "CUSTOMER_ASC";
+    public static final String CUSTOMER_DESC = "CUSTOMER_DESC";
+    public static final String CREATOR_ASC = "CREATOR_ASC";
+    public static final String CREATOR_DESC = "CREATOR_DESC";
+    public static final String PROCESS_ASC = "PROCESS_ASC";
+    public static final String PROCESS_DESC = "PROCESS_DESC";
+    public static final String STATUS_ASC = "STATUS_ASC";
+    public static final String STATUS_DESC = "STATUS_DESC";
+    public static final Set<String> SORTS = Set.of(
+            CREATED_DESC, CREATED_ASC, DUE_ASC, DUE_DESC,
+            GOODS_ASC, GOODS_DESC, CUSTOMER_ASC, CUSTOMER_DESC,
+            CREATOR_ASC, CREATOR_DESC, PROCESS_ASC, PROCESS_DESC,
+            STATUS_ASC, STATUS_DESC
+    );
 
     public OrderWorkspaceQuery {
         sort = blank(sort).isEmpty() ? CREATED_DESC : sort;
