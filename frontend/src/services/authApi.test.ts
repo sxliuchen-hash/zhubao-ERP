@@ -132,16 +132,13 @@ describe('authApi', () => {
       customerScope: ['恒信珠宝', '雅辰饰品'],
       enabled: true,
       demoAccount: false,
-      preApprovalApplicationCode: 'AUTH-PRE-APP-READY-001',
     });
     await updateAuthAccountStatus('planner', {
       enabled: false,
       reason: '离职交接',
-      preApprovalApplicationCode: 'AUTH-PRE-APP-READY-STATUS-001',
     });
     await unlockAuthAccount('planner', {
       reason: '现场核实本人',
-      preApprovalApplicationCode: 'AUTH-PRE-APP-READY-UNLOCK-001',
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts', expect.objectContaining({
@@ -153,15 +150,15 @@ describe('authApi', () => {
       body: expect.stringContaining('"customerScope":["恒信珠宝","雅辰饰品"]'),
     }));
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/auth/accounts', expect.objectContaining({
-      body: expect.stringContaining('"preApprovalApplicationCode":"AUTH-PRE-APP-READY-001"'),
+      body: expect.not.stringContaining('preApprovalApplicationCode'),
     }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/auth/accounts/planner/status', expect.objectContaining({
       method: 'POST',
-      body: expect.stringContaining('"preApprovalApplicationCode":"AUTH-PRE-APP-READY-STATUS-001"'),
+      body: expect.not.stringContaining('preApprovalApplicationCode'),
     }));
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/auth/accounts/planner/unlock', expect.objectContaining({
       method: 'POST',
-      body: expect.stringContaining('"preApprovalApplicationCode":"AUTH-PRE-APP-READY-UNLOCK-001"'),
+      body: expect.not.stringContaining('preApprovalApplicationCode'),
     }));
   });
 

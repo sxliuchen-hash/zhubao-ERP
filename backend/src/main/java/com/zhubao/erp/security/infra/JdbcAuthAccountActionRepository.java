@@ -1,6 +1,5 @@
 package com.zhubao.erp.security.infra;
 
-import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthAccountActionProbe;
 import com.zhubao.erp.security.domain.AuthAccountActionRepository;
 import com.zhubao.erp.security.domain.AuthAccountMutation;
@@ -13,11 +12,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 
-/**
- * JDBC 账号动作事务。先用条件更新锁住仍可执行的申请行，再在同一连接里写账号和审计，最后把申请标为已执行。
- * 任一步失败都回滚，申请仍可重试。锁在数据库行上，不依赖单个 JVM 的 synchronized，因此多个应用实例同时执行时只有一个能提交。
- * 本类不把 H2 兼容模式的结果当成真实 MySQL 验证。
- */
+/** 账号、客户授权和审计使用同一连接提交，最后管理员保护在事务内执行。 */
 @Repository
 @ConditionalOnProperty(name = "zhubao.auth.account-action.repository", havingValue = "jdbc")
 public class JdbcAuthAccountActionRepository implements AuthAccountActionRepository {
@@ -25,50 +20,24 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
     private final DataSource dataSource;
     private final JdbcAuthUserAccountRepository accountRepository;
     private final JdbcAuthAuditRepository auditRepository;
-    private final JdbcAuthAccountPreApprovalApplicationRepository applicationRepository;
     private final AuthAccountActionProbe probe;
     private final JdbcCustomerAuthorizationRepository customerRepository;
 
-    public JdbcAuthAccountActionRepository(
-            DataSource dataSource,
-            JdbcAuthUserAccountRepository accountRepository,
-            JdbcAuthAuditRepository auditRepository,
-            JdbcAuthAccountPreApprovalApplicationRepository applicationRepository
-    ) {
-        this(dataSource, accountRepository, auditRepository, applicationRepository, AuthAccountActionProbe.NONE);
-    }
-
     @Autowired
-    public JdbcAuthAccountActionRepository(DataSource dataSource, JdbcAuthUserAccountRepository accountRepository,
-                                           JdbcAuthAuditRepository auditRepository,
-                                           JdbcAuthAccountPreApprovalApplicationRepository applicationRepository,
-                                           CustomerAuthorizationRepository customerRepository) {
-        this(dataSource, accountRepository, auditRepository, applicationRepository, customerRepository, AuthAccountActionProbe.NONE);
+    public JdbcAuthAccountActionRepository(DataSource dataSource, JdbcAuthUserAccountRepository accounts,
+            JdbcAuthAuditRepository audits, CustomerAuthorizationRepository customers) {
+        this(dataSource, accounts, audits, customers, AuthAccountActionProbe.NONE);
     }
-
-    public JdbcAuthAccountActionRepository(
-            DataSource dataSource,
-            JdbcAuthUserAccountRepository accountRepository,
-            JdbcAuthAuditRepository auditRepository,
-            JdbcAuthAccountPreApprovalApplicationRepository applicationRepository,
-            AuthAccountActionProbe probe
-    ) {
-        this(dataSource, accountRepository, auditRepository, applicationRepository, null, probe);
-    }
-
-    public JdbcAuthAccountActionRepository(DataSource dataSource, JdbcAuthUserAccountRepository accountRepository,
-                                           JdbcAuthAuditRepository auditRepository,
-                                           JdbcAuthAccountPreApprovalApplicationRepository applicationRepository,
-                                           CustomerAuthorizationRepository customerRepository, AuthAccountActionProbe probe) {
+    public JdbcAuthAccountActionRepository(DataSource dataSource, JdbcAuthUserAccountRepository accounts,
+            JdbcAuthAuditRepository audits, CustomerAuthorizationRepository customers, AuthAccountActionProbe probe) {
         this.dataSource = dataSource;
-        this.accountRepository = accountRepository;
-        this.auditRepository = auditRepository;
-        this.applicationRepository = applicationRepository;
+        this.accountRepository = accounts;
+        this.auditRepository = audits;
         this.probe = probe == null ? AuthAccountActionProbe.NONE : probe;
-        if (customerRepository != null && !(customerRepository instanceof JdbcCustomerAuthorizationRepository)) {
+        if (customers != null && !(customers instanceof JdbcCustomerAuthorizationRepository)) {
             throw new IllegalArgumentException("JDBC 账号动作必须使用 JDBC 客户授权仓储");
         }
-        this.customerRepository = (JdbcCustomerAuthorizationRepository) customerRepository;
+        this.customerRepository = (JdbcCustomerAuthorizationRepository) customers;
     }
 
     @Override
@@ -78,12 +47,6 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
             connection.setAutoCommit(false);
             try {
                 accountRepository.assertAdminRemains(connection, mutation);
-                String applicationCode = mutation.application() == null
-                        ? null
-                        : mutation.application().applicationCode();
-                if (applicationCode != null && applicationRepository.lockReady(connection, applicationCode) != 1) {
-                    throw notExecutable(applicationCode);
-                }
                 probe.beforeAccountWrite();
                 accountRepository.apply(connection, mutation);
                 if (mutation.customerAuthorizations() != null && customerRepository != null) {
@@ -91,12 +54,6 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
                 }
                 probe.beforeAuditWrite();
                 auditRepository.insertOn(connection, mutation.audit());
-                if (applicationCode != null) {
-                    probe.beforeApplicationWrite();
-                    if (applicationRepository.markExecuted(connection, applicationCode) != 1) {
-                        throw notExecutable(applicationCode);
-                    }
-                }
                 connection.commit();
             } catch (RuntimeException | SQLException ex) {
                 connection.rollback();
@@ -112,7 +69,4 @@ public class JdbcAuthAccountActionRepository implements AuthAccountActionReposit
         }
     }
 
-    private BusinessException notExecutable(String applicationCode) {
-        return new BusinessException("账号前置审批申请单尚未具备账号动作放行条件：" + applicationCode);
-    }
 }

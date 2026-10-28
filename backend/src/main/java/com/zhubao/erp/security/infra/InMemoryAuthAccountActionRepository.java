@@ -4,8 +4,6 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.AuthAccountActionProbe;
 import com.zhubao.erp.security.domain.AuthAccountActionRepository;
 import com.zhubao.erp.security.domain.AuthAccountMutation;
-import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
-import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationRepository;
 import com.zhubao.erp.security.domain.AuthAuditEvent;
 import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthUserAccount;
@@ -18,7 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
- * 内存中的账号动作事务。同一锁内检查申请、写账号、写审计并消费申请；任一步失败都恢复到进入前的状态。
+ * 内存中的账号动作事务。同一锁内保护最后管理员、写账号、客户授权和审计；任一步失败都恢复到进入前的状态。
  * 这只保证单个进程内的原子性。多实例要使用 JDBC 实现上的条件更新。
  */
 @Repository
@@ -28,51 +26,25 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
     private final Object lock = new Object();
     private final AuthUserAccountRepository accountRepository;
     private final AuthAuditRepository auditRepository;
-    private final AuthAccountPreApprovalApplicationRepository applicationRepository;
     private final AuthAccountActionProbe probe;
     private final CustomerAuthorizationRepository customerRepository;
 
-    public InMemoryAuthAccountActionRepository(
-            AuthUserAccountRepository accountRepository,
-            AuthAuditRepository auditRepository,
-            AuthAccountPreApprovalApplicationRepository applicationRepository
-    ) {
-        this(accountRepository, auditRepository, applicationRepository, AuthAccountActionProbe.NONE);
-    }
-
     @Autowired
-    public InMemoryAuthAccountActionRepository(AuthUserAccountRepository accountRepository,
-                                               AuthAuditRepository auditRepository,
-                                               AuthAccountPreApprovalApplicationRepository applicationRepository,
-                                               CustomerAuthorizationRepository customerRepository) {
-        this(accountRepository, auditRepository, applicationRepository, customerRepository, AuthAccountActionProbe.NONE);
+    public InMemoryAuthAccountActionRepository(AuthUserAccountRepository accounts, AuthAuditRepository audits,
+                                               CustomerAuthorizationRepository customers) {
+        this(accounts, audits, customers, AuthAccountActionProbe.NONE);
     }
-
-    public InMemoryAuthAccountActionRepository(
-            AuthUserAccountRepository accountRepository,
-            AuthAuditRepository auditRepository,
-            AuthAccountPreApprovalApplicationRepository applicationRepository,
-            AuthAccountActionProbe probe
-    ) {
-        this(accountRepository, auditRepository, applicationRepository, null, probe);
-    }
-
-    public InMemoryAuthAccountActionRepository(AuthUserAccountRepository accountRepository,
-                                               AuthAuditRepository auditRepository,
-                                               AuthAccountPreApprovalApplicationRepository applicationRepository,
-                                               CustomerAuthorizationRepository customerRepository,
-                                               AuthAccountActionProbe probe) {
-        this.accountRepository = accountRepository;
-        this.auditRepository = auditRepository;
-        this.applicationRepository = applicationRepository;
+    public InMemoryAuthAccountActionRepository(AuthUserAccountRepository accounts, AuthAuditRepository audits,
+                                               CustomerAuthorizationRepository customers, AuthAccountActionProbe probe) {
+        this.accountRepository = accounts;
+        this.auditRepository = audits;
+        this.customerRepository = customers;
         this.probe = probe == null ? AuthAccountActionProbe.NONE : probe;
-        this.customerRepository = customerRepository;
     }
 
     @Override
     public void commit(AuthAccountMutation mutation) {
         synchronized (lock) {
-            AuthAccountPreApprovalApplication currentApplication = lockApplication(mutation);
             AuthUserAccount previousAccount = accountRepository.findByUsername(mutation.username()).orElse(null);
             if (mutation.removesEnabledAdmin() && previousAccount != null && previousAccount.enabled()
                     && previousAccount.role() == RoleCode.ADMIN && accountRepository.findAll().stream()
@@ -93,34 +65,14 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
                 probe.beforeAuditWrite();
                 AuthAuditEvent savedAudit = auditRepository.save(mutation.audit());
                 auditEventId = savedAudit.eventId();
-                if (currentApplication != null) {
-                    probe.beforeApplicationWrite();
-                    applicationRepository.save(currentApplication.executed());
-                }
             } catch (RuntimeException ex) {
-                restore(mutation.username(), previousAccount, accountWritten, auditEventId, currentApplication);
+                restore(mutation.username(), previousAccount, accountWritten, auditEventId);
                 if (mutation.customerAuthorizations() != null && previousAuthorizations != null) {
                     customerRepository.replace(mutation.username(), previousAuthorizations);
                 }
                 throw ex;
             }
         }
-    }
-
-    private AuthAccountPreApprovalApplication lockApplication(AuthAccountMutation mutation) {
-        if (mutation.application() == null) {
-            return null;
-        }
-        if (applicationRepository == null) {
-            throw new BusinessException("账号前置审批申请单仓储未配置");
-        }
-        AuthAccountPreApprovalApplication current = applicationRepository.findByCode(mutation.application().applicationCode())
-                .orElseThrow(() -> new BusinessException("账号前置审批申请单不存在："
-                        + mutation.application().applicationCode()));
-        if (!current.executable()) {
-            throw new BusinessException("账号前置审批申请单尚未具备账号动作放行条件：" + current.applicationCode());
-        }
-        return current;
     }
 
     private void applyAccount(AuthAccountMutation mutation) {
@@ -156,8 +108,7 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
             String username,
             AuthUserAccount previousAccount,
             boolean accountWritten,
-            String auditEventId,
-            AuthAccountPreApprovalApplication previousApplication
+            String auditEventId
     ) {
         if (auditEventId != null && auditRepository instanceof InMemoryAuthAuditRepository memoryAudit) {
             memoryAudit.discard(auditEventId);
@@ -168,9 +119,6 @@ public class InMemoryAuthAccountActionRepository implements AuthAccountActionRep
             } else if (previousAccount != null) {
                 accountRepository.save(previousAccount);
             }
-        }
-        if (previousApplication != null) {
-            applicationRepository.save(previousApplication);
         }
     }
 }

@@ -62,7 +62,6 @@ zhubao:
       repository: memory
     pre-approval:
       repository: memory
-      enforce-account-actions: false
     account-action:
       repository: memory
   operations:

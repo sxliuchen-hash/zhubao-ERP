@@ -77,7 +77,6 @@ export interface ManageAuthUserAccountRequest {
   customerScope?: string[];
   enabled: boolean;
   demoAccount: boolean;
-  preApprovalApplicationCode?: string;
   allowedProcesses?: string[];
   coverDuties?: string[];
   teamCode?: string;
@@ -99,12 +98,10 @@ export async function deleteAuthAccount(username: string): Promise<void> {
 export interface AuthUserAccountStatusRequest {
   enabled: boolean;
   reason?: string;
-  preApprovalApplicationCode?: string;
 }
 
 export interface AuthUserAccountUnlockRequest {
   reason?: string;
-  preApprovalApplicationCode?: string;
 }
 
 export interface AuthSessionChangedDetail {

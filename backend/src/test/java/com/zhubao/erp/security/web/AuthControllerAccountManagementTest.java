@@ -2,16 +2,10 @@ package com.zhubao.erp.security.web;
 
 import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.document.app.DocumentManagementService;
-import com.zhubao.erp.document.domain.EvidenceAttachment;
 import com.zhubao.erp.document.infra.AttachmentStorageProperties;
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
 import com.zhubao.erp.document.infra.LocalAttachmentObjectStorage;
 import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplication;
-import com.zhubao.erp.security.domain.AuthAccountPreApprovalApplicationCommand;
-import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraft;
-import com.zhubao.erp.security.domain.AuthAccountPreApprovalDraftCommand;
-import com.zhubao.erp.security.domain.AuthAccountPreApprovalEvidenceSummary;
-import com.zhubao.erp.security.domain.AuthAccountPreApprovalReadiness;
 import com.zhubao.erp.security.domain.AuthAuditIntegritySummary;
 import com.zhubao.erp.security.domain.AuthLoginCommand;
 import com.zhubao.erp.security.domain.AuthSession;
@@ -37,7 +31,6 @@ import com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.mock.web.MockMultipartFile;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -66,58 +59,6 @@ class AuthControllerAccountManagementTest {
     }
 
     @Test
-    void preApprovalReadinessRequiresManagementPermission() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.OPERATOR);
-
-        assertThatThrownBy(() -> fixture.controller().accountPreApprovalReadiness(request))
-                .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("OPERATOR")
-                .hasMessageContaining("登录账号管理");
-    }
-
-    @Test
-    void preApprovalDraftRequiresManagementPermission() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.OPERATOR);
-
-        assertThatThrownBy(() -> fixture.controller().draftAccountPreApproval(preApprovalDraftCommand(), request))
-                .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("OPERATOR")
-                .hasMessageContaining("登录账号管理");
-    }
-
-    @Test
-    void preApprovalApplicationRequiresManagementPermission() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.OPERATOR);
-
-        assertThatThrownBy(() -> fixture.controller().submitAccountPreApprovalApplication(
-                preApprovalApplicationCommand(),
-                request
-        ))
-                .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("OPERATOR")
-                .hasMessageContaining("登录账号管理");
-        assertThatThrownBy(() -> fixture.controller().accountPreApprovalApplications(request))
-                .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("OPERATOR")
-                .hasMessageContaining("登录账号管理");
-        assertThatThrownBy(() -> fixture.controller().accountPreApprovalEvidence(request))
-                .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("OPERATOR")
-                .hasMessageContaining("登录账号管理");
-        assertThatThrownBy(() -> fixture.controller().uploadAccountPreApprovalEvidence(
-                "AUTH-PRE-APP-001",
-                new MockMultipartFile("file", "identity-check.pdf", "application/pdf", "demo".getBytes()),
-                request
-        ))
-                .isInstanceOf(PermissionDeniedException.class)
-                .hasMessageContaining("OPERATOR")
-                .hasMessageContaining("登录账号管理");
-    }
-
-    @Test
     void accountListDoesNotUseAnonymousAdminFallback() {
         Fixture fixture = fixture();
 
@@ -125,129 +66,6 @@ class AuthControllerAccountManagementTest {
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessageContaining("登录会话")
                 .hasMessageContaining("显式评审角色");
-    }
-
-    @Test
-    void exposesPreApprovalReadinessThroughControllerBoundary() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.ADMIN);
-
-        ApiResponse<List<AuthAccountPreApprovalReadiness>> readiness =
-                fixture.controller().accountPreApprovalReadiness(request);
-
-        assertThat(readiness.data())
-                .extracting(AuthAccountPreApprovalReadiness::readinessCode)
-                .contains("AUTH-PRE-CREATE-001", "AUTH-PRE-ROLE-001");
-        assertThat(readiness.data())
-                .filteredOn(item -> item.readinessCode().equals("AUTH-PRE-CREATE-001"))
-                .singleElement()
-                .satisfies(item -> assertThat(item.missingCapabilities())
-                        .contains("全局强制申请单号", "审批通过态强制校验"));
-    }
-
-    @Test
-    void evaluatesPreApprovalDraftThroughControllerBoundary() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.ADMIN);
-
-        ApiResponse<AuthAccountPreApprovalDraft> draft =
-                fixture.controller().draftAccountPreApproval(preApprovalDraftCommand(), request);
-
-        assertThat(draft.data().draftCode()).isEqualTo("AUTH-PRE-DRAFT-CREATE_ACCOUNT-PLANNER");
-        assertThat(draft.data().blockingStatus()).isEqualTo("缺少前置材料");
-        assertThat(draft.data().missingEvidence()).contains("直属负责人审批");
-        assertThat(draft.data().missingCapabilities()).contains("审批通过态强制校验");
-    }
-
-    @Test
-    void submitsPreApprovalApplicationThroughControllerBoundary() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.ADMIN);
-
-        ApiResponse<AuthAccountPreApprovalApplication> submitted =
-                fixture.controller().submitAccountPreApprovalApplication(preApprovalApplicationCommand(), request);
-        ApiResponse<List<AuthAccountPreApprovalApplication>> applications =
-                fixture.controller().accountPreApprovalApplications(request);
-
-        assertThat(submitted.data().applicationCode()).startsWith("AUTH-PRE-APP-");
-        assertThat(submitted.data().applicationStatus()).isEqualTo("WAITING_EVIDENCE");
-        assertThat(submitted.data().targetUsername()).isEqualTo("planner");
-        assertThat(submitted.data().sourceSummary()).contains("stored pre-approval application");
-        assertThat(applications.data())
-                .extracting(AuthAccountPreApprovalApplication::applicationCode)
-                .containsExactly(submitted.data().applicationCode());
-    }
-
-    @Test
-    void exposesPreApprovalEvidenceThroughControllerBoundary() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.ADMIN);
-        AuthAccountPreApprovalApplication application = fixture.controller()
-                .submitAccountPreApprovalApplication(preApprovalApplicationCommand(), request)
-                .data();
-        fixture.documentRepository().saveAttachment(new EvidenceAttachment(
-                "ATT-AUTH-PRE-001",
-                "DOC-AUTH-PRE-001",
-                "账号前置审批",
-                application.applicationCode(),
-                "planner-pre-approval.pdf",
-                "application/pdf",
-                "local://evidence/auth-pre-approval/planner-pre-approval.pdf",
-                "audit long-term",
-                "PC 后台上传",
-                "已上传",
-                "系统管理员",
-                "sha256:pre-approval",
-                "2026-07-09 11:20",
-                "无",
-                "green",
-                null
-        ));
-
-        ApiResponse<List<AuthAccountPreApprovalEvidenceSummary>> evidence =
-                fixture.controller().accountPreApprovalEvidence(request);
-
-        assertThat(evidence.data())
-                .singleElement()
-                .satisfies(summary -> {
-                    assertThat(summary.applicationCode()).isEqualTo(application.applicationCode());
-                    assertThat(summary.attachmentCodes()).containsExactly("ATT-AUTH-PRE-001");
-                    assertThat(summary.status()).isEqualTo("已关联证据");
-                    assertThat(summary.documentCode()).isEqualTo("DOC-AUTH-PRE-001");
-                });
-    }
-
-    @Test
-    void uploadsPreApprovalEvidenceThroughControllerBoundary() throws Exception {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.ADMIN);
-        AuthAccountPreApprovalApplication application = fixture.controller()
-                .submitAccountPreApprovalApplication(preApprovalApplicationCommand(), request)
-                .data();
-
-        ApiResponse<AuthAccountPreApprovalEvidenceSummary> uploaded =
-                fixture.controller().uploadAccountPreApprovalEvidence(
-                        application.applicationCode(),
-                        new MockMultipartFile(
-                                "file",
-                                "planner-identity-check.pdf",
-                                "application/pdf",
-                                "%PDF-1.7 identity-check".getBytes()
-                        ),
-                        request
-                );
-
-        assertThat(uploaded.data().applicationCode()).isEqualTo(application.applicationCode());
-        assertThat(uploaded.data().documentCode()).isEqualTo("DOC-" + application.applicationCode());
-        assertThat(uploaded.data().status()).isEqualTo("已关联证据");
-        assertThat(uploaded.data().attachmentCodes()).singleElement().asString().startsWith("ATT-UP-");
-        assertThat(fixture.documentRepository().packages())
-                .filteredOn(documentPackage -> documentPackage.code().equals("DOC-" + application.applicationCode()))
-                .singleElement()
-                .satisfies(documentPackage -> {
-                    assertThat(documentPackage.category()).isEqualTo("账号前置审批");
-                    assertThat(documentPackage.linkedEvidence()).isEqualTo(1);
-                });
     }
 
     @Test
@@ -284,35 +102,6 @@ class AuthControllerAccountManagementTest {
         assertThat(accounts.data())
                 .extracting(AuthUserAccountSummary::username)
                 .contains("planner");
-    }
-
-    @Test
-    void bindsPreApprovalApplicationCodeThroughStatusControllerBoundary() {
-        Fixture fixture = fixture();
-        MockHttpServletRequest request = request(RoleCode.ADMIN);
-        fixture.controller().upsertAccount(new ManageAuthUserAccountCommand(
-                "planner",
-                "Secure-2026-Plan!",
-                "计划员 陈敏",
-                "SALES",
-                "CUSTOMER_RANGE",
-                true,
-                false
-        ), request);
-        fixture.preApprovalApplicationRepository().save(readyPreApprovalApplication(
-                "AUTH-PRE-APP-READY-STATUS-001",
-                "AUTH-PRE-STATUS-001",
-                "账号启停/解锁",
-                "planner"
-        ));
-
-        ApiResponse<AuthUserAccountSummary> disabled = fixture.controller().updateAccountStatus(
-                "planner",
-                new AuthUserAccountStatusCommand(false, "权限回收", "AUTH-PRE-APP-READY-STATUS-001"),
-                request
-        );
-
-        assertThat(disabled.data().enabled()).isFalse();
     }
 
     @Test
@@ -378,19 +167,7 @@ class AuthControllerAccountManagementTest {
                 passwordExpiryPolicy,
                 passwordPolicy
         );
-        AuthUserAccountManagementService accountManagementService = new AuthUserAccountManagementService(
-                accountRepository,
-                passwordHasher,
-                passwordPolicy,
-                passwordExpiryPolicy,
-                auditRepository,
-                null,
-                preApprovalApplicationRepository,
-                null,
-                documentRepository,
-                documentManagementService,
-                false
-        );
+        AuthUserAccountManagementService accountManagementService = new AuthUserAccountManagementService(accountRepository, passwordHasher, passwordPolicy, passwordExpiryPolicy, auditRepository, preApprovalApplicationRepository, null, documentRepository, null, null);
         OperatorContextResolver operatorContextResolver = new OperatorContextResolver(authSessionService, true);
         AuthController controller = new AuthController(
                 authSessionService,
@@ -438,36 +215,6 @@ class AuthControllerAccountManagementTest {
         request.addHeader(OperatorContextResolver.ROLE_HEADER, role.name());
         request.addHeader(OperatorContextResolver.DATA_SCOPE_HEADER, DataScope.ALL.name());
         return request;
-    }
-
-    private AuthAccountPreApprovalDraftCommand preApprovalDraftCommand() {
-        return new AuthAccountPreApprovalDraftCommand(
-                "CREATE_ACCOUNT",
-                "planner",
-                "计划员 陈敏",
-                "SALES",
-                "CUSTOMER_RANGE",
-                List.of("恒信珠宝"),
-                true,
-                false,
-                "新增业务账号",
-                List.of("账号申请单：AUTH-REQ-001")
-        );
-    }
-
-    private AuthAccountPreApprovalApplicationCommand preApprovalApplicationCommand() {
-        return new AuthAccountPreApprovalApplicationCommand(
-                "CREATE_ACCOUNT",
-                "planner",
-                "计划员 陈敏",
-                "SALES",
-                "CUSTOMER_RANGE",
-                List.of("恒信珠宝"),
-                true,
-                false,
-                "新增业务账号前置审批申请",
-                List.of("账号申请单：AUTH-REQ-001")
-        );
     }
 
     private AuthAccountPreApprovalApplication readyPreApprovalApplication(

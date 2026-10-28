@@ -14,6 +14,4 @@ public interface AuthAccountActionProbe {
     default void beforeAuditWrite() {
     }
 
-    default void beforeApplicationWrite() {
-    }
 }

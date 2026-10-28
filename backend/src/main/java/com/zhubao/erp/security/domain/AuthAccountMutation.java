@@ -3,7 +3,7 @@ package com.zhubao.erp.security.domain;
 import java.util.List;
 
 /**
- * 一次账号动作要一起提交的变更。申请单为空表示本次没有前置申请需要消费。
+ * 一次账号动作要一起提交的变更。账号、客户授权和审计同次提交。
  */
 public record AuthAccountMutation(
         Kind kind,
@@ -11,7 +11,6 @@ public record AuthAccountMutation(
         String username,
         Boolean enabled,
         AuthAuditEvent audit,
-        AuthAccountPreApprovalApplication application,
         List<CustomerAuthorization> customerAuthorizations
 ) {
     public enum Kind {
@@ -22,8 +21,8 @@ public record AuthAccountMutation(
     }
 
     public AuthAccountMutation(Kind kind, AuthUserAccount account, String username, Boolean enabled,
-                               AuthAuditEvent audit, AuthAccountPreApprovalApplication application) {
-        this(kind, account, username, enabled, audit, application, null);
+                               AuthAuditEvent audit) {
+        this(kind, account, username, enabled, audit, null);
     }
 
     public AuthAccountMutation {
@@ -38,35 +37,32 @@ public record AuthAccountMutation(
 
     public static AuthAccountMutation save(
             AuthUserAccount account,
-            AuthAuditEvent audit,
-            AuthAccountPreApprovalApplication application
+            AuthAuditEvent audit
     ) {
-        return new AuthAccountMutation(Kind.SAVE, account, account.username(), account.enabled(), audit, application);
+        return new AuthAccountMutation(Kind.SAVE, account, account.username(), account.enabled(), audit);
     }
 
     public static AuthAccountMutation setEnabled(
             String username,
             boolean enabled,
-            AuthAuditEvent audit,
-            AuthAccountPreApprovalApplication application
+            AuthAuditEvent audit
     ) {
-        return new AuthAccountMutation(Kind.SET_ENABLED, null, username, enabled, audit, application);
+        return new AuthAccountMutation(Kind.SET_ENABLED, null, username, enabled, audit);
     }
 
     public static AuthAccountMutation unlock(
             String username,
-            AuthAuditEvent audit,
-            AuthAccountPreApprovalApplication application
+            AuthAuditEvent audit
     ) {
-        return new AuthAccountMutation(Kind.UNLOCK, null, username, null, audit, application);
+        return new AuthAccountMutation(Kind.UNLOCK, null, username, null, audit);
     }
 
     public static AuthAccountMutation delete(String username, AuthAuditEvent audit) {
-        return new AuthAccountMutation(Kind.DELETE, null, username, false, audit, null, List.of());
+        return new AuthAccountMutation(Kind.DELETE, null, username, false, audit, List.of());
     }
 
     public AuthAccountMutation withCustomerAuthorizations(List<CustomerAuthorization> authorizations) {
-        return new AuthAccountMutation(kind, account, username, enabled, audit, application, authorizations);
+        return new AuthAccountMutation(kind, account, username, enabled, audit, authorizations);
     }
 
     /** 判断本次动作是否会移除现有启用管理员资格。检查必须在仓储锁或数据库事务内完成。 */

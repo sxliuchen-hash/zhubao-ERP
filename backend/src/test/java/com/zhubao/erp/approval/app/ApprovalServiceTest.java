@@ -1,6 +1,5 @@
 package com.zhubao.erp.approval.app;
 
-import com.zhubao.erp.approval.domain.AccountPreApprovalTaskCommand;
 import com.zhubao.erp.approval.domain.ApprovalActor;
 import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
@@ -78,7 +77,7 @@ class ApprovalServiceTest {
                 "wageTrial=deferred",
                 "formalPayroll=false"
         );
-        assertThat(service.findPending()).containsExactly(task);
+        assertThat(service.pendingTasks(actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER))).containsExactly(task);
     }
 
     @Test
@@ -88,87 +87,7 @@ class ApprovalServiceTest {
         assertThat(task.status()).isEqualTo(ApprovalStatus.AUTO_APPROVED);
         assertThat(task.locked()).isTrue();
         assertThat(task.decisionOperator()).isEqualTo("SYSTEM");
-        assertThat(service.findPending()).isEmpty();
-    }
-
-    @Test
-    void createsWaitingAccountManagementApprovalSummary() {
-        ApprovalTask task = service.createAccountManagementApprovalTask(
-                "planner",
-                "创建账号",
-                "系统管理员",
-                "ADMIN",
-                "计划员 陈敏",
-                "SALES",
-                "CUSTOMER_RANGE",
-                "恒信珠宝|雅辰饰品",
-                true,
-                false
-        );
-
-        assertThat(task.approvalCode()).startsWith("AUTH-ACC-APP-");
-        assertThat(task.scene()).isEqualTo("ACCOUNT_MANAGEMENT");
-        assertThat(task.businessCode()).isEqualTo("planner");
-        assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
-        assertThat(task.applicant()).isEqualTo("系统管理员");
-        assertThat(task.approver()).isEqualTo("总经理 / IT 管理员");
-        assertThat(task.ownerRole()).isEqualTo("GENERAL_MANAGER");
-        assertThat(task.formalPayroll()).isFalse();
-        assertThat(task.locked()).isFalse();
-        assertThat(task.sourceSummary()).contains(
-                "action=创建账号",
-                "applicantRole=ADMIN",
-                "targetOperator=计划员 陈敏",
-                "targetRole=SALES",
-                "targetDataScope=CUSTOMER_RANGE",
-                "targetCustomerScope=恒信珠宝|雅辰饰品",
-                "enabled=true",
-                "demoAccount=false",
-                "not a blocking IAM workflow"
-        );
-        assertThat(service.findPending()).contains(task);
-    }
-
-    @Test
-    void createsWaitingAccountPreApprovalHandoffTask() {
-        ApprovalTask task = service.createAccountPreApprovalTask(new AccountPreApprovalTaskCommand(
-                "AUTH-PRE-APP-UNIT-001",
-                "AUTH-PRE-CREATE-001",
-                "CREATE_ACCOUNT",
-                "planner",
-                "admin",
-                "ADMIN",
-                "Planner Chen",
-                "SALES",
-                "CUSTOMER_RANGE",
-                List.of("Customer-A", "Customer-B"),
-                "WAITING_EVIDENCE",
-                "missing evidence",
-                false,
-                List.of("manager approval"),
-                List.of("formal e-signature"),
-                List.of("GENERAL_MANAGER", "ADMIN"),
-                "HIGH",
-                "source=pre-approval application"
-        ));
-
-        assertThat(task.approvalCode()).startsWith("AUTH-PRE-TASK-");
-        assertThat(task.scene()).isEqualTo("ACCOUNT_PRE_APPROVAL");
-        assertThat(task.businessCode()).isEqualTo("AUTH-PRE-APP-UNIT-001");
-        assertThat(task.status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
-        assertThat(task.applicant()).isEqualTo("admin");
-        assertThat(task.approver()).isEqualTo("GENERAL_MANAGER|ADMIN");
-        assertThat(task.ownerRole()).isEqualTo("GENERAL_MANAGER");
-        assertThat(task.sourceStatus()).isEqualTo("WAITING_EVIDENCE");
-        assertThat(task.evidenceCode()).isEqualTo("AUTH-PRE-APP-UNIT-001");
-        assertThat(task.sourceSummary()).contains(
-                "applicationCode=AUTH-PRE-APP-UNIT-001",
-                "targetUsername=planner",
-                "targetCustomerScope=Customer-A|Customer-B",
-                "missingEvidence=manager approval",
-                "missingCapabilities=formal e-signature",
-                "not final IAM approval"
-        );
+        assertThat(service.pendingTasks(actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER))).isEmpty();
     }
 
     @Test
@@ -199,8 +118,7 @@ class ApprovalServiceTest {
     @Test
     void hidesTasksOutsideTheViewerSceneAndRejectsSelfApproval() {
         service.createLossApprovalTask(lossCommand(), lossResult(true));
-        ApprovalTask account = service.createAccountManagementApprovalTask(
-                "planner", "创建账号", "系统管理员", "ADMIN", "计划员", "SALES", "SELF", "", true, false);
+        ApprovalTask account = repository.save(new ApprovalTask("AUTH-HISTORY", "ACCOUNT_MANAGEMENT", "planner", "历史账号申请", ApprovalStatus.WAITING_APPROVAL, "系统管理员", "总经理", "GENERAL_MANAGER", "amber", "WAITING", "", "", false, "2026-07-01", null, null, null, false));
         ApprovalActor leader = actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
         ApprovalActor finance = actor("财务", "finance", RoleCode.FINANCE_STATISTICIAN);
         ApprovalActor applicant = actor("operator-a", "operator-a", RoleCode.WORKSHOP_LEADER);
@@ -230,13 +148,10 @@ class ApprovalServiceTest {
                 finance
         )).isInstanceOf(PermissionDeniedException.class).hasMessageContaining("不能审批该场景");
 
-        ApprovalTask acknowledged = service.decide(
-                account.approvalCode(),
-                new ApprovalDecisionCommand("APPROVE", "伪造总经理", "已阅", null),
-                manager
-        );
-        assertThat(acknowledged.decisionOperator()).isEqualTo("总经理");
-        assertThat(acknowledged.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThatThrownBy(() -> service.decide(account.approvalCode(), new ApprovalDecisionCommand("APPROVE", "总经理", "已阅", null), manager))
+                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("历史账号申请只读");
+        assertThat(service.pendingTasks(manager)).noneMatch(task -> task.approvalCode().equals(account.approvalCode()));
+        assertThat(service.findByCode(account.approvalCode()).status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
         assertThat(service.findByCode("LOSS-UNIT-001").status()).isEqualTo(ApprovalStatus.WAITING_APPROVAL);
     }
 

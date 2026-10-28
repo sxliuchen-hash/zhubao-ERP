@@ -35,6 +35,7 @@ public class ApprovalAccess {
         if (actor == null || actor.role() == null || actor.operator().isBlank() || task == null) {
             return false;
         }
+        if (ACCOUNT_MANAGEMENT.equals(task.scene()) || ACCOUNT_PRE_APPROVAL.equals(task.scene())) return false;
         if (task.status() != ApprovalStatus.WAITING_APPROVAL || samePerson(actor, task.applicant())) {
             return false;
         }
@@ -44,6 +45,9 @@ public class ApprovalAccess {
     public void assertCanDecide(ApprovalActor actor, ApprovalTask task) {
         if (actor == null || actor.role() == null || actor.operator().isBlank()) {
             throw new PermissionDeniedException("请先登录后再审批");
+        }
+        if (ACCOUNT_MANAGEMENT.equals(task.scene()) || ACCOUNT_PRE_APPROVAL.equals(task.scene())) {
+            throw new PermissionDeniedException("历史账号申请只读，不能审批该场景；管理员直接管理账号");
         }
         if (task.status() != ApprovalStatus.WAITING_APPROVAL) {
             throw new BusinessException("该审批已处理，不能重复决策");
