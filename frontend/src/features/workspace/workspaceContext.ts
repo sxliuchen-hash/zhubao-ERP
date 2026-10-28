@@ -22,6 +22,7 @@ export interface OrderReturnLocation {
   process: string;
   facet: string;
   dueBefore: string;
+  sort?: 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC';
   page: number;
   scrollTop: number;
 }

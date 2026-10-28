@@ -47,7 +47,8 @@ public class OrderWorkspaceController {
             @RequestParam(required = false) String facet,
             @RequestParam(required = false) String dueBefore,
             @RequestParam(required = false) String page,
-            @RequestParam(required = false) String size
+            @RequestParam(required = false) String size,
+            @RequestParam(required = false) String sort
     ) {
         OperatorContext operator = operatorContextResolver.requireSession(request);
         AuthSession session = authSessionService.session(request.getHeader(AuthSessionService.AUTHORIZATION_HEADER))
@@ -55,7 +56,7 @@ public class OrderWorkspaceController {
         return ApiResponse.ok(orderWorkspaceQueryService.query(
                 operator,
                 new OrderWorkspaceAccess(session.menuCodes(), session.allowedProcesses()),
-                OrderWorkspaceQuery.parse(view, query, customerId, process, facet, dueBefore, page, size)
+                OrderWorkspaceQuery.parse(view, query, customerId, process, facet, dueBefore, page, size, sort)
         ));
     }
 }

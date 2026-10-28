@@ -17,7 +17,8 @@ public record OrderWorkspaceQuery(
         String facet,
         LocalDate dueBefore,
         int page,
-        int size
+        int size,
+        String sort
 ) {
     public static final String ORDERS = "ORDERS";
     public static final String PRODUCTION = "PRODUCTION";
@@ -28,6 +29,14 @@ public record OrderWorkspaceQuery(
             ALL, "UNSPLIT", "WAITING_START", "IN_PROCESS", "WAITING_QUALITY",
             "REWORK", "READY_TO_SHIP", "SHIPPED", "UNKNOWN"
     );
+    public static final String CREATED_DESC = "CREATED_DESC";
+    public static final String CREATED_ASC = "CREATED_ASC";
+    public static final String DUE_ASC = "DUE_ASC";
+    public static final Set<String> SORTS = Set.of(CREATED_DESC, CREATED_ASC, DUE_ASC);
+
+    public OrderWorkspaceQuery {
+        sort = blank(sort).isEmpty() ? CREATED_DESC : sort;
+    }
 
     public static OrderWorkspaceQuery parse(
             String view,
@@ -38,6 +47,20 @@ public record OrderWorkspaceQuery(
             String dueBefore,
             String page,
             String size
+    ) {
+        return parse(view, query, customerId, process, facet, dueBefore, page, size, null);
+    }
+
+    public static OrderWorkspaceQuery parse(
+            String view,
+            String query,
+            String customerId,
+            String process,
+            String facet,
+            String dueBefore,
+            String page,
+            String size,
+            String sort
     ) {
         String normalizedView = blank(view).isEmpty() ? ORDERS : blank(view);
         if (!VIEWS.contains(normalizedView)) {
@@ -51,6 +74,10 @@ public record OrderWorkspaceQuery(
         if (!FACETS.contains(normalizedFacet)) {
             throw new BusinessException("不支持的订单分类");
         }
+        String normalizedSort = blank(sort).isEmpty() ? CREATED_DESC : blank(sort);
+        if (!SORTS.contains(normalizedSort)) {
+            throw new BusinessException("不支持的订单排序");
+        }
         return new OrderWorkspaceQuery(
                 normalizedView,
                 text,
@@ -59,7 +86,8 @@ public record OrderWorkspaceQuery(
                 normalizedFacet,
                 dueDate(dueBefore),
                 number(page, 1, "页码必须从 1 开始"),
-                pageSize(size)
+                pageSize(size),
+                normalizedSort
         );
     }
 

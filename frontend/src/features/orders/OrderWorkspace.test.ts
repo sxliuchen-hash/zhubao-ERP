@@ -181,12 +181,15 @@ describe('统一订单列表与详情', () => {
     vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([row(), row('WO-2', { processPercent: 100 })], { totalRows: 42, facetCounts: { ALL: 42, IN_PROCESS: 35 } }));
     const wrapper = mountWorkspace();
     await flushPromises();
-    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'ORDERS', page: 1, size: 20 }));
+    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'ORDERS', page: 1, size: 20, sort: 'CREATED_DESC' }));
     expect(wrapper.text()).toContain('共 42 项目标');
     expect(wrapper.text()).toContain('10.5 克');
     expect(wrapper.text()).toContain('未记录工序进度');
     expect(wrapper.text()).toContain('工序进度 100%');
     expect(wrapper.text()).toContain('本工序未正式交工');
+    await wrapper.get('[aria-label="订单排序"]').setValue('DUE_ASC');
+    await flushPromises();
+    expect(fetchOrderWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'DUE_ASC', page: 1 }));
     expect(wrapper.get('.order-table tbody tr:first-child').text()).not.toContain('0%');
     expect(queryScanContext).not.toHaveBeenCalled();
     expect(wrapper.find('[aria-label="订单详情"]').exists()).toBe(false);

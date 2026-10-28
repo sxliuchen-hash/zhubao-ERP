@@ -30,6 +30,7 @@ public record OrderWorkspaceRow(
         Boolean processFormallyDelivered,
         String operatorName,
         String updatedAt,
+        String createdAt,
         String createdBy
 ) {
 }

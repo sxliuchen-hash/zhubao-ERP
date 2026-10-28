@@ -27,6 +27,7 @@ export interface OrderWorkspaceRow {
   processFormallyDelivered: boolean | null;
   operatorName: string | null;
   createdBy?: string | null;
+  createdAt?: string | null;
   updatedAt: string | null;
 }
 
@@ -47,6 +48,7 @@ export interface OrderWorkspaceQuery {
   process?: string;
   facet?: string;
   dueBefore?: string;
+  sort?: 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC';
   page?: number;
   size?: number;
 }

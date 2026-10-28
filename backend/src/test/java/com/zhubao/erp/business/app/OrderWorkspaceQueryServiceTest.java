@@ -73,7 +73,7 @@ class OrderWorkspaceQueryServiceTest {
         documents.saveMotherSplitState(new MotherSplitState("MD-BQ", MotherSplitState.SPLIT, "V1", "收货", "2026-10-09T08:00:00"));
         documents.saveChildWorkOrder(child("ZD-BQ", "MD-BQ", 1001L, "恒信珠宝"));
         documents.saveProcessBatch(new com.zhubao.erp.business.domain.ProcessBatchHandoff("PB-Q", "ZD-BQ", "雕刻", BigDecimal.ONE, null, "雕刻工", "2026-10-24T09:00:00"), SESSION);
-        var page = service.query(office, new OrderWorkspaceAccess(List.of("production"), List.of("镶嵌")), new OrderWorkspaceQuery("PRODUCTION", "", null, "", "ALL", null, 1, 20));
+        var page = service.query(office, new OrderWorkspaceAccess(List.of("production"), List.of("镶嵌")), new OrderWorkspaceQuery("PRODUCTION", "", null, "", "ALL", null, 1, 20, OrderWorkspaceQuery.CREATED_DESC));
         assertThat(page.items()).anySatisfy(row -> { assertThat(row.code()).isEqualTo("ZD-BQ"); assertThat(row.currentProcess()).isEqualTo("镶嵌"); assertThat(row.facet()).isEqualTo("IN_PROCESS"); assertThat(row.processFormallyDelivered()).isFalse(); });
     }
 
@@ -199,7 +199,7 @@ class OrderWorkspaceQueryServiceTest {
         assertThat(pieces.quantityUnit()).isEqualTo("颗");
         assertThat(pieces.facet()).isEqualTo("UNSPLIT");
         assertThat(pieces.materialName()).isNull();
-        assertThat(page.items()).extracting(OrderWorkspaceRow::code).containsExactly("MD-S", "MD-P");
+        assertThat(page.items()).extracting(OrderWorkspaceRow::code).containsExactly("MD-P", "MD-S");
     }
 
     @Test
@@ -215,11 +215,30 @@ class OrderWorkspaceQueryServiceTest {
         OrderWorkspacePage due = service.query(office, orders, OrderWorkspaceQuery.parse(
                 null, null, null, null, null, "2026-10-23", "1", "1"));
         assertThat(due.totalRows()).isEqualTo(2);
-        assertThat(due.items()).extracting(OrderWorkspaceRow::code).containsExactly("MD-C");
+        assertThat(due.items()).extracting(OrderWorkspaceRow::code).containsExactly("MD-A");
         assertThat(due.facetCounts().get("ALL")).isEqualTo(2);
         assertThat(due.facetCounts().get("UNSPLIT")).isEqualTo(2);
         assertThat(service.query(office, orders, OrderWorkspaceQuery.parse(null, null, null, null, "UNSPLIT", null, "1", "20")).items())
                 .hasSize(3);
+    }
+
+    @Test
+    void ordersDefaultToNewestCreationTimeAndCanSortByDueDate() {
+        documents.saveMotherOrder(created("MD-OLD", "2026-10-01T08:00:00", "2026-10-30"));
+        documents.saveMotherOrder(created("MD-NEW", "2026-10-28T18:00:00", "2026-10-02"));
+        documents.saveMotherOrder(created("MD-UNKNOWN", "", "2026-10-01"));
+
+        assertThat(service.query(office, orders, query()).items()).extracting(OrderWorkspaceRow::code)
+                .containsExactly("MD-NEW", "MD-OLD", "MD-UNKNOWN");
+        assertThat(service.query(office, orders, OrderWorkspaceQuery.parse(
+                null, null, null, null, null, null, "1", "20", OrderWorkspaceQuery.CREATED_ASC)).items())
+                .extracting(OrderWorkspaceRow::code).containsExactly("MD-OLD", "MD-NEW", "MD-UNKNOWN");
+        assertThat(service.query(office, orders, OrderWorkspaceQuery.parse(
+                null, null, null, null, null, null, "1", "20", OrderWorkspaceQuery.DUE_ASC)).items())
+                .extracting(OrderWorkspaceRow::code).containsExactly("MD-UNKNOWN", "MD-NEW", "MD-OLD");
+        assertThatThrownBy(() -> OrderWorkspaceQuery.parse(null, null, null, null, null, null, "1", "20", "LATEST"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("排序");
     }
 
     @Test
@@ -245,6 +264,15 @@ class OrderWorkspaceQueryServiceTest {
 
     private OrderWorkspaceQuery query() {
         return OrderWorkspaceQuery.parse(null, null, null, null, null, null, null, null);
+    }
+
+    private MotherOrderRecord created(String code, String createdAt, String dueDate) {
+        return new MotherOrderRecord(
+                code, 1001L, 1001L, "MAT", "2026-10-09", "", "", "", "", "",
+                "吊坠", "CUSTOMER", true, "RAW", BigDecimal.ONE, "件", BigDecimal.ONE,
+                "RAW_WAITING", "", "", null, "", "收货", "", "", "CONFIRMED", createdAt,
+                "抛光", dueDate, "锦和"
+        );
     }
 
     private MotherOrderRecord mother(String code, Long customerId, String name, String dueDate, String quantity, String unit) {

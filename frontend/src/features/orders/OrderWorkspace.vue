@@ -23,7 +23,8 @@ import { orderFacetLabel } from './orderWorkspaceLabels';
 const workspace = useWorkspaceContext();
 const saved = workspace.returnLocation.value;
 const filters = reactive({ query: saved?.query ?? '', customerId: saved?.customerId ?? '', process: saved?.process ?? '',
-  facet: saved?.facet ?? 'ALL', dueBefore: saved?.dueBefore ?? '' });
+  facet: saved?.facet ?? 'ALL', dueBefore: saved?.dueBefore ?? '',
+  sort: (saved?.sort ?? 'CREATED_DESC') as 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC' });
 const view = ref<NonNullable<OrderWorkspaceQuery['view']>>(workspace.orderView.value ?? saved?.view ?? 'ORDERS');
 const page = ref(saved?.page ?? 1);
 const result = ref<OrderWorkspacePage | null>(null);
@@ -253,6 +254,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
       </div>
       <form class="order-filters" @submit.prevent="load(1)">
         <label class="order-search"><span>搜索</span><input v-model="filters.query" maxlength="100" aria-label="订单搜索" placeholder="单号、运单、货品或客户" /></label>
+        <label><span>排序</span><select v-model="filters.sort" aria-label="订单排序" @change="load(1)"><option value="CREATED_DESC">创建时间由近及远</option><option value="CREATED_ASC">创建时间由远及近</option><option value="DUE_ASC">交期由近及远</option></select></label>
         <button class="primary-button" type="submit" :disabled="loading">查询</button>
         <button v-if="canCreate" type="button" class="secondary-button" @click="openIntake?.()">新建收货</button>
         <details class="info-disclosure order-advanced-filters">

@@ -10,6 +10,7 @@ export function fetchOrderWorkspace(query: OrderWorkspaceQuery = {}): Promise<Or
   if (query.process) params.set('process', query.process);
   if (query.facet) params.set('facet', query.facet);
   if (query.dueBefore) params.set('dueBefore', query.dueBefore);
+  if (query.sort) params.set('sort', query.sort);
   if (query.page) params.set('page', String(query.page));
   if (query.size) params.set('size', String(query.size));
   const suffix = params.toString();

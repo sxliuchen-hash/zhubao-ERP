@@ -4,6 +4,11 @@ import OrderKindMark from './OrderKindMark.vue';
 import { orderProductionStatus, orderQuantityText } from './orderWorkspaceLabels';
 defineProps<{ rows: OrderWorkspaceRow[]; selectedKey: string }>();
 const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
+function createdText(value: string | null | undefined) {
+  if (!value?.trim()) return '创建时间未记录';
+  const text = value.trim().replace('T', ' ');
+  return `创建于 ${text.length > 16 ? text.slice(0, 16) : text}`;
+}
 </script>
 
 <template>
@@ -14,7 +19,7 @@ const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
         <tr v-for="row in rows" :key="row.rowKey" :class="{ selected: selectedKey === row.rowKey }">
           <td><button class="table-action" type="button" :aria-label="`查看${row.code}`" @click="emit('select', row)">{{ row.goodsName || '货品未填写' }}</button><small class="order-code-line"><OrderKindMark :object-type="row.objectType" />{{ row.code }}</small><small v-if="row.executionRoundCode">执行轮次：{{ row.executionRoundCode }}</small></td>
           <td>{{ row.customerName || '客户未提供' }}<small>{{ row.motherOrderCode }}</small><small v-if="row.executionRoundCode && row.workOrderCode">原子单：{{ row.workOrderCode }}</small></td>
-          <td>{{ row.createdBy || '历史未记录' }}</td>
+          <td>{{ row.createdBy || '历史未记录' }}<small>{{ createdText(row.createdAt) }}</small></td>
           <td>{{ orderQuantityText(row.quantity, row.quantityUnit) }}<small>{{ row.weight === null ? '重量未填写' : `${row.weight} ${row.weightUnit || ''}` }}</small></td>
           <td>{{ row.currentProcess || '未提供工序' }}<small>{{ row.processPercent === null ? '未记录工序进度' : `工序进度 ${row.processPercent}%` }}</small><small v-if="row.processFormallyDelivered !== null">{{ row.processFormallyDelivered ? '本工序已正式交工' : '本工序未正式交工' }}</small></td>
           <td>{{ row.dueDate || '交期未填写' }}</td>
@@ -29,7 +34,7 @@ const emit = defineEmits<{ select: [row: OrderWorkspaceRow] }>();
       <span class="order-code-line"><OrderKindMark :object-type="row.objectType" />{{ row.code }}<template v-if="row.executionRoundCode"> · 执行轮次</template></span>
       <span class="order-card-quiet">母单 {{ row.motherOrderCode }}<template v-if="row.executionRoundCode && row.workOrderCode"> · 原子单 {{ row.workOrderCode }}</template></span>
       <span v-if="row.customerName">{{ row.customerName }}</span>
-      <span>建单人：{{ row.createdBy || '历史未记录' }}</span>
+      <span>建单人：{{ row.createdBy || '历史未记录' }} · {{ createdText(row.createdAt) }}</span>
       <span>{{ orderQuantityText(row.quantity, row.quantityUnit) }} · {{ row.dueDate || '交期未填写' }}</span>
       <span>{{ row.currentProcess || '未提供工序' }} · {{ row.processPercent === null ? '未记录工序进度' : `${row.processPercent}%` }}</span>
       <span v-if="row.processFormallyDelivered !== null" class="order-card-quiet">{{ row.processFormallyDelivered ? '本工序已正式交工' : '本工序未正式交工' }}</span>

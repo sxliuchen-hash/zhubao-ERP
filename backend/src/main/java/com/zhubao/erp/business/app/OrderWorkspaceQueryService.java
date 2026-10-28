@@ -114,7 +114,7 @@ public class OrderWorkspaceQueryService {
         Map<String, Integer> counts = facetCounts(rows);
         List<OrderWorkspaceRow> selected = rows.stream()
                 .filter(row -> OrderWorkspaceQuery.ALL.equals(query.facet()) || query.facet().equals(row.facet()))
-                .sorted(ROW_ORDER)
+                .sorted(orderOf(query.sort()))
                 .toList();
         int from = Math.min((query.page() - 1) * query.size(), selected.size());
         int to = Math.min(from + query.size(), selected.size());
@@ -245,14 +245,14 @@ public class OrderWorkspaceQueryService {
                     MOTHER, mother.code(), mother.code(), null, null, "来料", mother,
                     mother.goodsName(), mother.materialCode(), mother.quantity(), mother.quantityUnit(), mother.weight(),
                     mother.dueDate(), WAITING_SPLIT, "未质检", null, null, null, null, null,
-                    shipped, finished, logistics, mother.courierNo()
+                    shipped, finished, logistics, mother.courierNo(), mother.createdAt()
             );
         }
         return station(
                 MOTHER, mother.code(), mother.code(), null, null, mother,
                 mother.goodsName(), mother.materialCode(), mother.quantity(), mother.quantityUnit(), mother.weight(),
                 mother.dueDate(), WorkshopProcesses.DEFAULT_ORDER, submitted, checks, heads, operators, handoffTimes,
-                shipped, finished, logistics, mother.courierNo()
+                shipped, finished, logistics, mother.courierNo(), mother.createdAt()
         );
     }
 
@@ -270,6 +270,7 @@ public class OrderWorkspaceQueryService {
     ) {
         String due = blank(child.dueDate()).isEmpty() ? mother.dueDate() : child.dueDate();
         String goods = blank(child.goodsName()).isEmpty() ? mother.goodsName() : child.goodsName();
+        String createdAt = blank(child.createdAt()).isEmpty() ? mother.createdAt() : child.createdAt();
         return station(
                 WORK, child.code(), mother.code(), child.code(), null, mother,
                 goods, blank(child.materialCode()).isEmpty() ? mother.materialCode() : child.materialCode(),
@@ -277,7 +278,7 @@ public class OrderWorkspaceQueryService {
                 blank(child.quantityUnit()).isEmpty() ? mother.quantityUnit() : child.quantityUnit(),
                 child.weight() == null ? mother.weight() : child.weight(),
                 due, WorkshopProcesses.split(child.processes()), submitted, checks, heads, operators, handoffTimes,
-                shipped, finished, logistics, mother.courierNo()
+                shipped, finished, logistics, mother.courierNo(), createdAt
         );
     }
 
@@ -299,10 +300,11 @@ public class OrderWorkspaceQueryService {
         List<String> steps = blank(round.processName()).isEmpty()
                 ? WorkshopProcesses.DEFAULT_ORDER
                 : List.of(round.processName());
+        String createdAt = blank(round.createdAt()).isEmpty() ? mother.createdAt() : round.createdAt();
         OrderWorkspaceRow row = station(
                 WORK, round.roundWorkOrderCode(), mother.code(), source.isEmpty() ? null : source, round.roundWorkOrderCode(),
                 mother, mother.goodsName(), mother.materialCode(), mother.quantity(), mother.quantityUnit(), mother.weight(),
-                mother.dueDate(), steps, submitted, checks, heads, operators, handoffTimes, shipped, finished, logistics, mother.courierNo()
+                mother.dueDate(), steps, submitted, checks, heads, operators, handoffTimes, shipped, finished, logistics, mother.courierNo(), createdAt
         );
         if (knownSource) {
             return row;
@@ -332,7 +334,8 @@ public class OrderWorkspaceQueryService {
             Set<String> shipped,
             Map<String, BigDecimal> finished,
             Map<String, Set<String>> logistics,
-            String courierNo
+            String courierNo,
+            String createdAt
     ) {
         List<String> steps = processes == null || processes.isEmpty() ? WorkshopProcesses.DEFAULT_ORDER : processes;
         Set<String> done = submitted.getOrDefault(code, Set.of());
@@ -366,7 +369,7 @@ public class OrderWorkspaceQueryService {
         return build(
                 objectType, code, motherCode, workOrderCode, roundCode, current, mother,
                 goodsName, materialCode, quantity, quantityUnit, weight, dueDate, status, outcome,
-                percent, version, delivered, operator, updated, shipped, finished, logistics, courierNo
+                percent, version, delivered, operator, updated, shipped, finished, logistics, courierNo, createdAt
         );
     }
 
@@ -394,7 +397,8 @@ public class OrderWorkspaceQueryService {
             Set<String> shipped,
             Map<String, BigDecimal> finished,
             Map<String, Set<String>> logistics,
-            String courierNo
+            String courierNo,
+            String createdAt
     ) {
         String key = orderKey(code, motherCode);
         Facet facet = facetOf(status, outcome, shipped.contains(key), finished.get(key));
@@ -425,6 +429,7 @@ public class OrderWorkspaceQueryService {
                 delivered,
                 emptyToNull(operator),
                 emptyToNull(updatedAt),
+                emptyToNull(createdAt),
                 emptyToNull(mother.operator())
         );
     }
@@ -476,7 +481,7 @@ public class OrderWorkspaceQueryService {
                 row.objectType(), row.code(), row.motherOrderCode(), row.workOrderCode(), row.executionRoundCode(), process,
                 row.customerId(), row.customerName(), row.goodsName(), row.materialCode(), row.materialName(), row.quantity(), row.quantityUnit(),
                 row.weight(), row.weightUnit(), row.dueDate(), IN_PROCESS, "IN_PROCESS", row.facetNote(), same ? row.processPercent() : null,
-                same ? row.processProgressVersion() : null, false, same ? row.operatorName() : null, same ? row.updatedAt() : null, row.createdBy());
+                same ? row.processProgressVersion() : null, false, same ? row.operatorName() : null, same ? row.updatedAt() : null, row.createdAt(), row.createdBy());
     }
 
     private boolean matchesView(String view, OrderWorkspaceRow row, List<String> allowedProcesses) {
@@ -571,7 +576,7 @@ public class OrderWorkspaceQueryService {
                 row.executionRoundCode(), row.currentProcess(), row.customerId(), row.customerName(), row.goodsName(),
                 row.materialCode(), row.materialName(), row.quantity(), row.quantityUnit(), row.weight(), row.weightUnit(),
                 row.dueDate(), row.businessStatus(), facet, note, row.processPercent(), row.processProgressVersion(),
-                row.processFormallyDelivered(), row.operatorName(), row.updatedAt(), row.createdBy()
+                row.processFormallyDelivered(), row.operatorName(), row.updatedAt(), row.createdAt(), row.createdBy()
         );
     }
 
@@ -593,12 +598,59 @@ public class OrderWorkspaceQueryService {
         return value == null ? "" : value.trim();
     }
 
-    private static final Comparator<OrderWorkspaceRow> ROW_ORDER = Comparator
-            .comparing((OrderWorkspaceRow row) -> blank(row.dueDate()).isEmpty() ? "9999-99-99" : blank(row.dueDate()))
-            .thenComparing(row -> blank(row.motherOrderCode()))
-            .thenComparing(row -> blank(row.objectType()))
-            .thenComparing(row -> blank(row.code()))
-            .thenComparing(OrderWorkspaceRow::rowKey);
+    private static Comparator<OrderWorkspaceRow> orderOf(String sort) {
+        Comparator<OrderWorkspaceRow> tie = Comparator
+                .comparing((OrderWorkspaceRow row) -> blank(row.motherOrderCode()))
+                .thenComparing(row -> blank(row.code()))
+                .thenComparing(OrderWorkspaceRow::rowKey);
+        if (OrderWorkspaceQuery.DUE_ASC.equals(sort)) {
+            return Comparator.comparing((OrderWorkspaceRow row) -> blank(row.dueDate()).isEmpty() ? "9999-99-99" : blank(row.dueDate()))
+                    .thenComparing(tie);
+        }
+        boolean newestFirst = !OrderWorkspaceQuery.CREATED_ASC.equals(sort);
+        return createdOrder(newestFirst).thenComparing(tie);
+    }
+
+    /** 创建时间无法识别的行排在最后，避免被当成最新或最旧。 */
+    private static Comparator<OrderWorkspaceRow> createdOrder(boolean newestFirst) {
+        return (left, right) -> {
+            java.time.LocalDateTime leftTime = createdTime(left.createdAt());
+            java.time.LocalDateTime rightTime = createdTime(right.createdAt());
+            if (leftTime == null && rightTime == null) {
+                return 0;
+            }
+            if (leftTime == null) {
+                return 1;
+            }
+            if (rightTime == null) {
+                return -1;
+            }
+            int compared = leftTime.compareTo(rightTime);
+            return newestFirst ? -compared : compared;
+        };
+    }
+
+    private static java.time.LocalDateTime createdTime(String value) {
+        String text = blank(value);
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return java.time.OffsetDateTime.parse(text).toLocalDateTime();
+        } catch (RuntimeException ignored) {
+            // 库存和单据里的创建时间多数没有时区。
+        }
+        try {
+            return java.time.LocalDateTime.parse(text);
+        } catch (RuntimeException ignored) {
+            // 只记日期时按当天开始比较。
+        }
+        try {
+            return java.time.LocalDate.parse(text).atStartOfDay();
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
 
     private record Facet(String name, String note) {
     }
