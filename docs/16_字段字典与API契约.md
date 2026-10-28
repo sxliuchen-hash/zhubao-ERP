@@ -1722,7 +1722,6 @@ PWA 一期边界：
 | `GET /api/auth/session` | 使用 `Authorization: Bearer <token>` 读取当前会话。设备上仍有令牌时，打开应用会自动恢复登录 |
 | `POST /api/auth/logout` | 注销当前 token，服务端删除该会话；前端无论后端是否可达都清理本地 token。退出后可以登录其他账号 |
 | `POST /api/auth/password` | 自助改密/续期；成功后清除强制首次改密标记和临时密码消费标记；只接受 Bearer 登录会话，不使用请求头角色兜底 |
-| `GET /api/auth/demo-users` | 仅返回启用且 `demoAccount=true` 的演示账号，按账号名排序；不返回真实账号。无启用演示账号时返回空列表，登录页隐藏演示密码提示和候选列表 |
 | `GET /api/auth/audit-events` | 返回最近登录会话审计事件，默认返回最近审计事件；仓储可切换内存/JDBC |
 | `GET /api/auth/audit-integrity` | 返回最近认证审计事件摘要链校验结果 |
 
@@ -2408,7 +2407,6 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/auth/session` | `ApiResponse<AuthSession>` |
 | `POST /api/auth/logout` | `ApiResponse<Void>` |
 | `POST /api/auth/password` | `ApiResponse<AuthSession>` |
-| `GET /api/auth/demo-users` | `ApiResponse<List<String>>` |
 | `GET /api/auth/audit-events` | `ApiResponse<List<AuthAuditEvent>>` |
 | `GET /api/auth/audit-integrity` | `ApiResponse<AuthAuditIntegritySummary>` |
 | `GET /api/auth/accounts` | `ApiResponse<List<AuthUserAccountSummary>>` |
@@ -2461,3 +2459,5 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 硬件契约更新（2026-10-28）：固定设备池 `/api/hardware/devices` 与固定任务 `/integration-tasks` 已退出。`/api/hardware/summary` 只统计现场 POC 的 `pocRecords/pocBlocked`；设备登记、读数与健康证据使用网关接口，不再提供固定 `averageHealth/fallbackRequired`。运维未配置来源时显示未采集，现场记录和证据接口保留。
 
 打印退役约定（2026-10-28）：v1 创建／补打／代理领取／回报路由已移除。唯一正式出纸为 v2 打印批次与每工位凭据；浏览器保留预览。旧任务 GET、人工核纸和换贴历史继续保留；调度将 v2 过期租约置为出纸不明，不自动重新领取。
+
+2026-10-28：演示账号列表 `/api/auth/demo-users` 已移除。内存空库只初始化必须首次改密的管理员；保存新账号资料统一正式标记，重置密码始终要求首次改密。已存历史账号及迁移不清理。

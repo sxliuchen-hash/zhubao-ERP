@@ -35,7 +35,7 @@ powershell -ExecutionPolicy Bypass -File scripts/maven.ps1 -f backend/pom.xml sp
 pnpm --filter zhubao-erp-frontend dev
 ```
 
-本地默认内存仓储，重启不保证保留数据。MySQL 设置 `SPRING_PROFILES_ACTIVE=mysql` 和 `ZHUBAO_DB_URL`、`ZHUBAO_DB_USERNAME`、`ZHUBAO_DB_PASSWORD`；各模块实际开关及已知安装阻断见项目核心与部署专题。手机摄像头需要 HTTPS。
+本地默认内存仓储，重启不保证保留数据。空库仅初始化 `admin` 管理员，初始密码可用 `ZHUBAO_AUTH_INITIAL_ADMIN_PASSWORD` 设置（本地默认 `admin123`），首次登录必须改密；其他账号由管理员建立，不再注入演示账号。MySQL 设置 `SPRING_PROFILES_ACTIVE=mysql` 和 `ZHUBAO_DB_URL`、`ZHUBAO_DB_USERNAME`、`ZHUBAO_DB_PASSWORD`；各模块实际开关及已知安装阻断见项目核心与部署专题。手机摄像头需要 HTTPS。
 
 ## 验证与交付
 

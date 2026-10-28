@@ -111,7 +111,7 @@ function openEditor(account?: AuthUserAccountSummary, passwordOnly = false) {
     teamCode: account.teamCode ?? '', departmentCode: account.departmentCode ?? '',
     allowedProcesses: [...(account.allowedProcesses ?? [])],
     coverDuties: account.role === 'BUSINESS_MANAGER' && account.coverDuties?.length ? [...account.coverDuties] : [...defaultCoverDuties],
-    enabled: account.enabled, demoAccount: account.demoAccount,
+    enabled: account.enabled, demoAccount: false,
   } : emptyEditor();
   void nextTick(() => editorSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
 }

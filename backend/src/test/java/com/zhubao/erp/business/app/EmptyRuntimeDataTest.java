@@ -16,5 +16,11 @@ class EmptyRuntimeDataTest {
         assertThat(documents.attachments()).isEmpty();
         assertThat(documents.auditEvents()).isEmpty();
         assertThat(devices.findAll()).isEmpty();
+        var accounts = new com.zhubao.erp.security.infra.InMemoryAuthUserAccountRepository(new com.zhubao.erp.security.app.PasswordHasher(), "Bootstrap-Test-2026!");
+        assertThat(accounts.findAll()).singleElement().satisfies(admin -> {
+            assertThat(admin.username()).isEqualTo("admin");
+            assertThat(admin.demoAccount()).isFalse();
+            assertThat(admin.passwordChangeRequired()).isTrue();
+        });
     }
 }

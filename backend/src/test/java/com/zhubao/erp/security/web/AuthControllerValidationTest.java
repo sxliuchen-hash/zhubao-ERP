@@ -31,7 +31,7 @@ class AuthControllerValidationTest {
         PasswordHasher hasher = new PasswordHasher();
         AuthSessionService sessions = new AuthSessionService(
                 new NavigationMenuService(new InMemoryNavigationMenuRepository()),
-                new InMemoryAuthAuditRepository(), new InMemoryAuthUserAccountRepository(hasher),
+                new InMemoryAuthAuditRepository(), com.zhubao.erp.security.infra.AuthAccountFixture.repository(hasher),
                 hasher, new PasswordExpiryPolicy(), new PasswordPolicy());
         mvc = MockMvcBuilders.standaloneSetup(new AuthController(sessions, null, null, null))
                 .setControllerAdvice(new GlobalExceptionHandler())

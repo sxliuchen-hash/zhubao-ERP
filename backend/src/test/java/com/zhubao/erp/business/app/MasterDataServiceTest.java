@@ -70,7 +70,7 @@ class MasterDataServiceTest {
 
     @Test
     void newCustomerJoinsTheCreatorRestrictedScope() {
-        InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(new PasswordHasher());
+        InMemoryAuthUserAccountRepository accounts = com.zhubao.erp.security.infra.AuthAccountFixture.repository(new PasswordHasher());
         accounts.save(new AuthUserAccount("recv", "hash", "收货员", RoleCode.RECEIVER,
                 DataScope.CUSTOMER_RANGE, true, false, List.of("1001")));
         CustomerAuthorizationService authorizations = new CustomerAuthorizationService(new InMemoryCustomerAuthorizationRepository());

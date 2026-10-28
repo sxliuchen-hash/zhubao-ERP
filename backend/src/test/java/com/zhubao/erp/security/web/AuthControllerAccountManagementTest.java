@@ -151,7 +151,7 @@ class AuthControllerAccountManagementTest {
 
     private Fixture fixture() {
         InMemoryAuthAuditRepository auditRepository = new InMemoryAuthAuditRepository();
-        InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository accountRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
                 new InMemoryAuthAccountPreApprovalApplicationRepository();
         InMemoryDocumentManagementRepository documentRepository = new InMemoryDocumentManagementRepository();

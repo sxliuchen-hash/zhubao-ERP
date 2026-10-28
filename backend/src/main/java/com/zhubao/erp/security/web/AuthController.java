@@ -83,11 +83,6 @@ public class AuthController {
         ));
     }
 
-    @GetMapping("/demo-users")
-    public ApiResponse<List<String>> demoUsers() {
-        return ApiResponse.ok(authSessionService.demoUsernames());
-    }
-
     @GetMapping("/audit-events")
     public ApiResponse<List<AuthAuditEvent>> auditEvents() {
         return ApiResponse.ok(authSessionService.auditEvents(20));

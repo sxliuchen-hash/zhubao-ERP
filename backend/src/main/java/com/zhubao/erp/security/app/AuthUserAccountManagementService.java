@@ -144,7 +144,7 @@ public class AuthUserAccountManagementService {
         Instant passwordChangedAt = passwordProvided ? Instant.now() : existing.passwordChangedAt();
         int failedLoginCount = existing == null || passwordProvided ? 0 : existing.failedLoginCount();
         Instant lockedUntil = existing == null || passwordProvided ? null : existing.lockedUntil();
-        boolean passwordChangeRequired = passwordProvided ? !command.demoAccount() : existing.passwordChangeRequired();
+        boolean passwordChangeRequired = passwordProvided || existing.passwordChangeRequired();
         boolean temporaryPasswordConsumed = passwordProvided ? false : existing.temporaryPasswordConsumed();
 
         AuthUserAccount proposed = new AuthUserAccount(
@@ -154,7 +154,7 @@ public class AuthUserAccountManagementService {
                 role,
                 dataScope,
                 command.enabled(),
-                command.demoAccount(),
+                false,
                 passwordChangedAt,
                 failedLoginCount,
                 lockedUntil,

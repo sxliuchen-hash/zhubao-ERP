@@ -427,15 +427,6 @@ public class AuthSessionService {
         return revokedCount;
     }
 
-    public List<String> demoUsernames() {
-        return userAccountRepository.findAll().stream()
-                .filter(AuthUserAccount::enabled)
-                .filter(AuthUserAccount::demoAccount)
-                .map(AuthUserAccount::username)
-                .sorted()
-                .toList();
-    }
-
     public List<AuthAuditEvent> auditEvents(int limit) {
         return authAuditRepository.findRecent(limit);
     }

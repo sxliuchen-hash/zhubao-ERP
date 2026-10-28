@@ -42,6 +42,15 @@ class M2ManagementApiSmokeTest {
     private com.fasterxml.jackson.databind.ObjectMapper json;
 
 
+    @Autowired private com.zhubao.erp.security.domain.AuthUserAccountRepository testAccounts;
+    @Autowired private com.zhubao.erp.security.app.PasswordHasher testHasher;
+    @Autowired private com.zhubao.erp.business.domain.MasterDataRepository testCustomers;
+    @org.junit.jupiter.api.BeforeEach
+    void 建立烟测需要的账号和客户() {
+        if (testAccounts.findByUsername("operator").isEmpty()) com.zhubao.erp.security.infra.AuthAccountFixture.seed(testAccounts, testHasher);
+        if (testCustomers.findCustomer(1001L).isEmpty()) com.zhubao.erp.business.infra.MasterDataFixture.seed(testCustomers);
+    }
+
     @Test
     void exposesRegisterImportTemplateApis() {
         ResponseEntity<String> templates = restTemplate.getForEntity("/api/register-import/templates", String.class);

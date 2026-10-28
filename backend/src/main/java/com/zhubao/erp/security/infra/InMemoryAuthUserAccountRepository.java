@@ -24,17 +24,14 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
     private final Map<String, AuthUserAccount> accounts = new ConcurrentHashMap<>();
 
     public InMemoryAuthUserAccountRepository(PasswordHasher passwordHasher) {
-        save(demo("admin", "admin123", "系统管理员", RoleCode.ADMIN, DataScope.ALL, passwordHasher));
-        save(demo("leader", "leader123", "车间组长 马杰", RoleCode.WORKSHOP_LEADER, DataScope.TEAM, passwordHasher));
-        save(demo("qc", "qc123", "质检员 周娜", RoleCode.QUALITY_INSPECTOR, DataScope.DEPARTMENT, passwordHasher));
-        save(demo("warehouse", "warehouse123", "库管员 何琳", RoleCode.WAREHOUSE_KEEPER, DataScope.DEPARTMENT, passwordHasher));
-        save(demo("operator", "operator123", "操作工 王强", RoleCode.OPERATOR, DataScope.SELF, passwordHasher));
-        save(demo("carve", "carve123", "雕刻工 林海", RoleCode.OPERATOR, DataScope.SELF, passwordHasher)
-                .withAllowedProcesses(List.of("雕刻")));
-        save(demo("inlay", "inlay123", "镶嵌工 赵敏", RoleCode.OPERATOR, DataScope.SELF, passwordHasher)
-                .withAllowedProcesses(List.of("镶嵌")));
-        save(demo("polish", "polish123", "抛光工 陈刚", RoleCode.OPERATOR, DataScope.SELF, passwordHasher)
-                .withAllowedProcesses(List.of("抛光")));
+        this(passwordHasher, "admin123");
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public InMemoryAuthUserAccountRepository(PasswordHasher hasher,
+            @org.springframework.beans.factory.annotation.Value("${zhubao.auth.initial-admin-password:admin123}") String initialPassword) {
+        save(new AuthUserAccount("admin", hasher.hash(initialPassword), "系统管理员", RoleCode.ADMIN, DataScope.ALL,
+                true, false, Instant.now(), 0, null, List.of(), true, false, List.of()));
     }
 
     @Override
@@ -193,17 +190,6 @@ public class InMemoryAuthUserAccountRepository implements AuthUserAccountReposit
             );
         });
         return consumed.get();
-    }
-
-    private AuthUserAccount demo(
-            String username,
-            String password,
-            String operator,
-            RoleCode role,
-            DataScope dataScope,
-            PasswordHasher passwordHasher
-    ) {
-        return new AuthUserAccount(username, passwordHasher.hash(password), operator, role, dataScope, true, true);
     }
 
     private String normalize(String value) {

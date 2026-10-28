@@ -114,7 +114,7 @@ class AuthAccountActionContractTest {
     private DirectHarness directHarness(boolean jdbc) throws SQLException {
         AtomicReference<String> failure = new AtomicReference<>("none");
         if (!jdbc) {
-            var accounts = new InMemoryAuthUserAccountRepository(new PasswordHasher());
+            var accounts = com.zhubao.erp.security.infra.AuthAccountFixture.repository(new PasswordHasher());
             var audits = new InMemoryAuthAuditRepository();
             var customers = new InMemoryCustomerAuthorizationRepository();
             var applications = new InMemoryAuthAccountPreApprovalApplicationRepository();

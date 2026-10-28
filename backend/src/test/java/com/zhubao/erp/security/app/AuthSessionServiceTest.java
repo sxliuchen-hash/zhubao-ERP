@@ -36,23 +36,6 @@ class AuthSessionServiceTest {
     private final PasswordPolicy passwordPolicy = new PasswordPolicy();
 
     @Test
-    void demoUsernamesExcludesProductionAndDisabledAccounts() {
-        InMemoryAuthUserAccountRepository repository = new InMemoryAuthUserAccountRepository(passwordHasher);
-        repository.save(new AuthUserAccount(
-                "trial-admin", "unused-hash", "试用管理员", RoleCode.ADMIN, DataScope.ALL, true, false
-        ));
-        repository.updateEnabled("leader", false);
-        AuthSessionService service = service(repository);
-
-        assertThat(service.demoUsernames())
-                .containsExactly("admin", "carve", "inlay", "operator", "polish", "qc", "warehouse");
-
-        repository.findAll().stream().filter(AuthUserAccount::demoAccount)
-                .forEach(account -> repository.updateEnabled(account.username(), false));
-        assertThat(service.demoUsernames()).isEmpty();
-    }
-
-    @Test
     void logsInDemoUserAndResolvesOperatorContextFromBearerToken() {
         AuthSessionService service = service();
 
@@ -181,16 +164,8 @@ class AuthSessionServiceTest {
     }
 
     @Test
-    void exposesSortedDemoUsernames() {
-        AuthSessionService service = service();
-
-        assertThat(service.demoUsernames()).containsExactly(
-                "admin", "carve", "inlay", "leader", "operator", "polish", "qc", "warehouse");
-    }
-
-    @Test
     void logsInRepositoryBackedProductionAccountWithPasswordHash() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         userRepository.save(new AuthUserAccount(
                 "planner",
                 passwordHasher.hash("planner-strong-pass"),
@@ -213,7 +188,7 @@ class AuthSessionServiceTest {
 
     @Test
     void temporaryPasswordSessionMustChangePasswordBeforeResolvingOperatorContext() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         userRepository.save(new AuthUserAccount(
                 "planner",
                 passwordHasher.hash("Secure-2026-Temp!"),
@@ -271,7 +246,7 @@ class AuthSessionServiceTest {
 
     @Test
     void rejectsExpiredProductionPasswordAfterPasswordMatches() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         userRepository.save(new AuthUserAccount(
                 "planner",
                 passwordHasher.hash("Secure-2026-Expired!"),
@@ -304,7 +279,7 @@ class AuthSessionServiceTest {
 
     @Test
     void rejectsDisabledUserAccount() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         userRepository.save(new AuthUserAccount(
                 "disabled",
                 passwordHasher.hash("disabled-pass"),
@@ -323,7 +298,7 @@ class AuthSessionServiceTest {
 
     @Test
     void locksAccountAfterRepeatedFailedLoginsAndRecordsAuditReason() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         AuthSessionService service = service(userRepository);
 
         for (int i = 0; i < 5; i++) {
@@ -352,7 +327,7 @@ class AuthSessionServiceTest {
 
     @Test
     void successfulLoginClearsFailedLoginCounter() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         AuthSessionService service = service(userRepository);
 
         assertThatThrownBy(() -> service.login(new AuthLoginCommand("qc", "bad-password")))
@@ -373,7 +348,7 @@ class AuthSessionServiceTest {
 
     @Test
     void changesOwnPasswordWithBearerSessionAndRefreshesExpiryFields() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         java.time.Instant oldChangedAt = java.time.Instant.now().minus(java.time.Duration.ofDays(30));
         userRepository.save(new AuthUserAccount(
                 "planner",
@@ -423,7 +398,7 @@ class AuthSessionServiceTest {
 
     @Test
     void ownPasswordChangeRequiresBearerSessionAndRejectsBadCurrentPassword() {
-        InMemoryAuthUserAccountRepository userRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository userRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         AuthSessionService service = service(userRepository);
         AuthSession session = service.login(new AuthLoginCommand("leader", "leader123"));
 
@@ -473,7 +448,7 @@ class AuthSessionServiceTest {
 
     @Test
     void expiredRevokedAndChangedSessionsUseTheSameClientContract() throws Exception {
-        InMemoryAuthUserAccountRepository repository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository repository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         InMemoryAuthLoginSessionRepository sessions = new InMemoryAuthLoginSessionRepository();
         AuthSessionService service = service(repository, sessions);
         AuthSession expired = service.login(new AuthLoginCommand("operator", "operator123"));
@@ -511,7 +486,7 @@ class AuthSessionServiceTest {
 
     @Test
     void 服务重启后保持登录临近过期会顺延退出后可换账号() {
-        InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository accounts = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         InMemoryAuthLoginSessionRepository sessions = new InMemoryAuthLoginSessionRepository();
         AuthSessionService first = service(accounts, sessions);
         AuthSession operator = first.login(new AuthLoginCommand("operator", "operator123"));
@@ -538,12 +513,12 @@ class AuthSessionServiceTest {
     }
 
     private AuthSessionService service() {
-        return service(new InMemoryAuthUserAccountRepository(passwordHasher));
+        return service(com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher));
     }
 
     @Test
     void 历史客户名称授权转换稳定Id且歧义名称不扩大权限() {
-        InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository accounts = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         accounts.save(new AuthUserAccount("restricted", passwordHasher.hash("StrongPass2026"), "限定人员",
                 RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, true, false, List.of("恒信珠宝")));
         MasterDataService catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
@@ -562,7 +537,7 @@ class AuthSessionServiceTest {
 
     @Test
     void 会话吊销未执行时也拒绝权限变更和同名重建的旧令牌() {
-        InMemoryAuthUserAccountRepository repository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository repository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         AuthSessionService service = service(repository);
         AuthSession first = service.login(new AuthLoginCommand("operator", "operator123"));
         repository.save(new AuthUserAccount("operator", passwordHasher.hash("operator123"), "操作工",

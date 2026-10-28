@@ -784,7 +784,7 @@ class AuthUserAccountManagementServiceTest {
 
     private Fixture fixture(boolean enforcePreApprovalForAccountActions) {
         InMemoryAuthAuditRepository auditRepository = new InMemoryAuthAuditRepository();
-        InMemoryAuthUserAccountRepository accountRepository = new InMemoryAuthUserAccountRepository(passwordHasher);
+        InMemoryAuthUserAccountRepository accountRepository = com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher);
         InMemoryApprovalTaskRepository approvalRepository = new InMemoryApprovalTaskRepository();
         InMemoryAuthAccountPreApprovalApplicationRepository preApprovalApplicationRepository =
                 new InMemoryAuthAccountPreApprovalApplicationRepository();

@@ -85,7 +85,7 @@ class OperatorContextResolverTest {
     }
 
     private AuthSessionService service() {
-        return service(new InMemoryAuthUserAccountRepository(passwordHasher));
+        return service(com.zhubao.erp.security.infra.AuthAccountFixture.repository(passwordHasher));
     }
 
     private AuthSessionService service(AuthUserAccountRepository userRepository) {
