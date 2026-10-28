@@ -1,7 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildRegisterImportPostingPlan } from '../../data/registerImportTemplates';
-import { registerImportReviewBatches } from '../../test/fixtures/registerImport';
+import { registerImportReviewBatches, registerMetadataFixture, blockedPostingPlanFixture } from '../../test/fixtures/registerImport';
 import { fetchAuthSession, type AuthSession } from '../../services/authApi';
 import SampleLibraryWorkspace from './SampleLibraryWorkspace.vue';
 import {
@@ -10,6 +9,7 @@ import {
   fetchRegisterImportBatch,
   fetchRegisterImportBatches,
   fetchRegisterImportPostingPlan,
+  fetchRegisterImportWorkspace,
   postRegisterImportBatch,
   previewRegisterImport,
 } from '../../services/registerImportApi';
@@ -24,6 +24,7 @@ vi.mock('../../services/registerImportApi', () => ({
   fetchRegisterImportBatch: vi.fn(),
   fetchRegisterImportBatches: vi.fn(),
   fetchRegisterImportPostingPlan: vi.fn(),
+  fetchRegisterImportWorkspace: vi.fn(),
   postRegisterImportBatch: vi.fn(),
   previewRegisterImport: vi.fn(),
 }));
@@ -37,10 +38,11 @@ vi.mock('../../services/businessDocumentApi', () => ({
 
 describe('SampleLibraryWorkspace', () => {
   beforeEach(() => {
+    vi.mocked(fetchRegisterImportWorkspace).mockResolvedValue(registerMetadataFixture);
     vi.mocked(fetchAuthSession).mockResolvedValue({ operator: '登记复核员' } as AuthSession);
     vi.mocked(fetchRegisterImportBatches).mockResolvedValue(registerImportReviewBatches);
     vi.mocked(fetchRegisterImportBatch).mockRejectedValue(new Error('API 未配置，当前使用本地评审样例'));
-    vi.mocked(fetchRegisterImportPostingPlan).mockImplementation(async (batchNo) => buildRegisterImportPostingPlan(registerImportReviewBatches.find((item) => item.importBatchNo === batchNo) ?? registerImportReviewBatches[0]));
+    vi.mocked(fetchRegisterImportPostingPlan).mockImplementation(async (batchNo) => blockedPostingPlanFixture(registerImportReviewBatches.find((item) => item.importBatchNo === batchNo) ?? registerImportReviewBatches[0]));
     vi.mocked(correctRegisterImportRow).mockRejectedValue(new Error('API 未配置，当前使用本地评审样例'));
     vi.mocked(fetchMachineOutputsByImportBatch).mockResolvedValue([]);
     vi.mocked(fetchMotherOrder).mockRejectedValue(new Error('未查询结构化母单'));
@@ -50,6 +52,31 @@ describe('SampleLibraryWorkspace', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('元数据失败不回退本地模板，重试后继续使用后端模板', async () => {
+    vi.mocked(fetchRegisterImportWorkspace).mockRejectedValueOnce(new Error('模板服务不可用'));
+    const wrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
+    expect(wrapper.text()).toContain('模板服务不可用');
+    expect(wrapper.findAll('.register-template-row')).toHaveLength(0);
+    expect(wrapper.find('form[aria-label="登记表上传预检"]').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '重试模板读取')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.register-template-row')).toHaveLength(4);
+  });
+
+  it('计划失败保留批次并阻止入账，只能重试后端计划', async () => {
+    vi.mocked(fetchRegisterImportPostingPlan).mockRejectedValueOnce(new Error('计划服务不可用'));
+    const wrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
+    expect(wrapper.text()).toContain(registerImportReviewBatches[0].importBatchNo);
+    expect(wrapper.text()).toContain('计划服务不可用');
+    expect(wrapper.find('[aria-label="登记表入账映射计划"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('本地推导');
+    await wrapper.findAll('button').find(button => button.text() === '重试读取计划')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[aria-label="登记表入账映射计划"]').exists()).toBe(true);
   });
 
   it('切换模板时同步展示对应字段与校验规则', async () => {
@@ -359,6 +386,7 @@ describe('SampleLibraryWorkspace', () => {
     });
 
     const wrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
     await wrapper.find('select').setValue('REG-OUTBOUND');
     const fileInput = wrapper.find('input[type="file"]');
     const file = new File(['xlsx'], '出货登记表.xlsx', {
@@ -433,6 +461,7 @@ describe('SampleLibraryWorkspace', () => {
     });
 
     const wrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
     await wrapper.find('select').setValue('REG-OUTBOUND');
     const fileInput = wrapper.find('input[type="file"]');
     const file = new File(['xlsx'], '出货登记表.xlsx', {
@@ -856,6 +885,7 @@ describe('SampleLibraryWorkspace', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     const wrapper = mount(SampleLibraryWorkspace);
+    await flushPromises();
     const fileInput = wrapper.find('input[type="file"]');
     const file = new File(['xlsx'], '出货登记表.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

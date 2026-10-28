@@ -4,10 +4,9 @@ import StatusBadge from '../../components/StatusBadge.vue';
 import type { Tone } from '../../data/m1PrototypeData';
 import { fetchAuthSession } from '../../services/authApi';
 import {
-  buildRegisterImportPostingPlan,
-  registerImportSummary,
-  registerImportTemplates,
   registerRuleTone,
+  type RegisterImportTemplate,
+  type RegisterImportSummary,
   type RegisterImportBatch,
   type RegisterImportBatchRow,
   type RegisterImportPostingDraft,
@@ -22,6 +21,7 @@ import {
   fetchRegisterImportBatch,
   fetchRegisterImportBatches,
   fetchRegisterImportPostingPlan,
+  fetchRegisterImportWorkspace,
   postRegisterImportBatch,
   previewRegisterImport,
 } from '../../services/registerImportApi';
@@ -52,7 +52,7 @@ function parserStatusLabel(status: string) {
   return '解析器待接入';
 }
 
-function keyFieldLabel(template: (typeof registerImportTemplates)[number]) {
+function keyFieldLabel(template: RegisterImportTemplate) {
   return template.fields.find((field) =>
     field.targetField.includes('paperExpressText')
     || field.targetField.includes('operatorSignatureName')
@@ -143,7 +143,23 @@ async function submitRegisterPreview() {
   }
 }
 
-const selectedRegisterTemplateCode = ref(registerImportTemplates[0].code);
+const registerImportTemplates = ref<RegisterImportTemplate[]>([]);
+const registerImportSummary = ref<RegisterImportSummary>({ templates: 0, fields: 0, requiredFields: 0, commandReadyTemplates: 0, parserStatus: '未读取' });
+const registerMetadataError = ref('');
+const registerMetadataLoading = ref(false);
+const selectedRegisterTemplateCode = ref('');
+async function loadRegisterMetadata() {
+  registerMetadataLoading.value = true;
+  registerMetadataError.value = '';
+  try {
+    const data = await fetchRegisterImportWorkspace();
+    registerImportTemplates.value = data.templates;
+    registerImportSummary.value = data.summary;
+    if (!data.templates.some(item => item.code === selectedRegisterTemplateCode.value)) selectedRegisterTemplateCode.value = data.templates[0]?.code ?? '';
+  } catch (error) {
+    registerMetadataError.value = error instanceof Error ? error.message : '模板读取失败';
+  } finally { registerMetadataLoading.value = false; }
+}
 const registerBusinessDate = ref(new Date().toISOString().slice(0, 10));
 const selectedRegisterFile = ref<File | null>(null);
 const registerPreview = ref<RegisterImportPreview | null>(null);
@@ -163,7 +179,6 @@ const registerBatchSource = ref('尚未读取');
 const registerPostingPlan = ref<RegisterImportPostingPlan | null>(null);
 const registerPostingPlanLoading = ref(false);
 const registerPostingPlanError = ref('');
-const registerPostingPlanSource = ref('本地映射计划');
 const registerPostingExecutionLoading = ref(false);
 const registerPostingExecutionError = ref('');
 const registerPostingExecutionResult = ref<RegisterImportPostingExecutionResult | null>(null);
@@ -181,7 +196,7 @@ const registerBusinessDocumentLoading = ref(false);
 const registerBusinessDocumentError = ref('');
 
 const selectedRegisterTemplate = computed(() =>
-  registerImportTemplates.find((template) => template.code === selectedRegisterTemplateCode.value) ?? registerImportTemplates[0],
+  registerImportTemplates.value.find((template) => template.code === selectedRegisterTemplateCode.value) ?? registerImportTemplates.value[0],
 );
 const activeRegisterTemplate = selectedRegisterTemplate;
 
@@ -210,7 +225,6 @@ const selectedPostingDrafts = computed(() => registerPostingPlan.value?.drafts.s
 const canExecuteRegisterPosting = computed(() =>
   Boolean(selectedRegisterBatch.value)
   && Boolean(registerPostingPlan.value)
-  && registerPostingPlanSource.value === '后端入账映射计划'
   && ['READY', 'WARNING'].includes(registerPostingPlan.value?.status ?? '')
   && !registerPostingPlanLoading.value
   && !registerPostingExecutionLoading.value
@@ -232,7 +246,6 @@ const activeCorrectionTarget = computed(() =>
 );
 const canSubmitRegisterCorrection = computed(() =>
   Boolean(activeCorrectionTarget.value)
-  && registerPostingPlanSource.value === '后端入账映射计划'
   && Boolean(registerCorrectionValue.value.trim())
   && !registerCorrectionLoading.value
   && !registerPostingExecutionLoading.value
@@ -268,6 +281,7 @@ const registerBusinessDocuments = computed(() => [
 ]);
 
 onMounted(() => {
+  void loadRegisterMetadata();
   void loadRegisterReviewBatches();
 });
 
@@ -307,7 +321,7 @@ async function loadRegisterReviewBatches() {
       selectedRegisterBatchNo.value = batches[0].importBatchNo;
       registerBatchDetail.value = batches[0];
       registerBatchSource.value = '后端结构化批次';
-      await loadRegisterPostingPlan(batches[0].importBatchNo, batches[0]);
+      await loadRegisterPostingPlan(batches[0].importBatchNo);
     } else {
       selectedRegisterBatchNo.value = '';
       registerBatchDetail.value = null;
@@ -348,24 +362,24 @@ async function selectRegisterBatch(importBatchNo: string) {
     registerBatchSource.value = '读取失败';
     registerBatchError.value = error instanceof Error ? error.message : '批次详情读取失败';
   }
-  await loadRegisterPostingPlan(importBatchNo, registerBatchDetail.value ?? fallbackBatch);
+  await loadRegisterPostingPlan(importBatchNo);
 }
 
-async function loadRegisterPostingPlan(importBatchNo: string, fallbackBatch: RegisterImportBatch | null) {
+let postingPlanGeneration = 0;
+async function loadRegisterPostingPlan(importBatchNo: string) {
+  const generation = ++postingPlanGeneration;
   registerPostingPlanError.value = '';
   registerPostingPlanLoading.value = true;
+  registerPostingPlan.value = null;
   try {
-    registerPostingPlan.value = await fetchRegisterImportPostingPlan(importBatchNo);
-    registerPostingPlanSource.value = '后端入账映射计划';
+    const plan = await fetchRegisterImportPostingPlan(importBatchNo);
+    if (generation !== postingPlanGeneration || selectedRegisterBatchNo.value !== importBatchNo) return;
+    if (plan.importBatchNo !== importBatchNo) throw new Error('映射计划与所选批次不一致');
+    registerPostingPlan.value = plan;
   } catch (error) {
-    if (fallbackBatch) {
-      registerPostingPlan.value = buildRegisterImportPostingPlan(fallbackBatch);
-    }
-    registerPostingPlanSource.value = '本地映射计划';
-    registerPostingPlanError.value = error instanceof Error ? error.message : '入账映射计划读取失败';
+    if (generation === postingPlanGeneration && selectedRegisterBatchNo.value === importBatchNo) registerPostingPlanError.value = error instanceof Error ? error.message : '入账映射计划读取失败';
   } finally {
-    registerPostingPlanLoading.value = false;
-    syncRegisterCorrectionTarget();
+    if (generation === postingPlanGeneration) { registerPostingPlanLoading.value = false; syncRegisterCorrectionTarget(); }
   }
 }
 
@@ -397,10 +411,6 @@ async function submitRegisterCorrection() {
     registerCorrectionError.value = '请先选择需要补录的阻断字段';
     return;
   }
-  if (registerPostingPlanSource.value !== '后端入账映射计划') {
-    registerCorrectionError.value = '当前是本地推导计划，不能提交补录；请先连接后端并读取 posting plan';
-    return;
-  }
   if (!correctionValue) {
     registerCorrectionError.value = '请输入补录值';
     return;
@@ -420,7 +430,7 @@ async function submitRegisterCorrection() {
       batch.importBatchNo === detail.importBatchNo ? detail : batch,
     );
     registerBatchSource.value = '后端结构化批次';
-    await loadRegisterPostingPlan(batchNo, detail);
+    await loadRegisterPostingPlan(batchNo);
     registerCorrectionMessage.value = `已补录第 ${target.draft.sourceLineNo} 行 ${target.issue.field}`;
     registerCorrectionValue.value = '';
   } catch (error) {
@@ -442,10 +452,6 @@ async function executeRegisterPosting() {
   const batchNo = selectedRegisterBatch.value?.importBatchNo;
   if (!batchNo || !registerPostingPlan.value) {
     registerPostingExecutionError.value = '请先选择已确认的登记表批次';
-    return;
-  }
-  if (registerPostingPlanSource.value !== '后端入账映射计划') {
-    registerPostingExecutionError.value = '当前是本地推导计划，不能执行入账；请先连接后端并读取 posting plan';
     return;
   }
   if (registerPostingPlan.value.status === 'BLOCKED') {
@@ -477,7 +483,6 @@ async function executeRegisterPosting() {
       );
       registerBatchSource.value = '后端结构化批次';
       registerPostingPlan.value = plan;
-      registerPostingPlanSource.value = '后端入账映射计划';
       await Promise.all([
         loadRegisterMachineOutputs(batchNo),
         loadRegisterBusinessDocuments(result),
@@ -561,8 +566,7 @@ async function confirmRegisterPreview() {
     selectedRegisterBatchNo.value = confirmed.importBatchNo;
     registerBatchDetail.value = confirmed;
     registerBatchSource.value = '本次确认结果';
-    registerPostingPlan.value = buildRegisterImportPostingPlan(confirmed);
-    registerPostingPlanSource.value = '本地映射计划';
+    await loadRegisterPostingPlan(confirmed.importBatchNo);
   } catch (error) {
     registerConfirmError.value = error instanceof Error ? error.message : '确认导入批次失败';
   } finally {
@@ -571,7 +575,7 @@ async function confirmRegisterPreview() {
 }
 
 const registerTemplateRows = computed(() =>
-  registerImportTemplates.map((template) => ({
+  registerImportTemplates.value.map((template) => ({
     ...template,
     requiredFields: template.fields.filter((field) => field.required).length,
     blockerRules: template.validationRules.filter((rule) => rule.level === 'BLOCK').length,
@@ -581,6 +585,8 @@ const registerTemplateRows = computed(() =>
 
 <template>
   <div class="sample-control-workbench page-stack">
+    <p v-if="registerMetadataError" class="operation-feedback danger" role="alert">模板读取失败：{{ registerMetadataError }} <button type="button" class="secondary-button" @click="loadRegisterMetadata">重试模板读取</button></p>
+    <p v-else-if="registerMetadataLoading" role="status">正在读取登记模板…</p>
     <ol class="register-workflow" aria-label="登记导入流程">
       <li><span>1</span><div><strong>上传预检</strong><small>选择模板与 Excel 文件</small></div></li>
       <li><span>2</span><div><strong>复核确认</strong><small>处理阻断与警告信息</small></div></li>
@@ -616,7 +622,7 @@ const registerTemplateRows = computed(() =>
           </article>
         </div>
         </details>
-        <form class="register-preview-console" aria-label="登记表上传预检" @submit.prevent="submitRegisterPreview">
+        <form v-if="selectedRegisterTemplate" class="register-preview-console" aria-label="登记表上传预检" @submit.prevent="submitRegisterPreview">
           <div class="register-preview-title">
             <span class="eyebrow">UPLOAD PREVIEW</span>
             <strong>登记表上传预检</strong>
@@ -638,7 +644,7 @@ const registerTemplateRows = computed(() =>
               <span>Excel 文件</span>
               <input type="file" accept=".xlsx" @change="onRegisterFileChange">
             </label>
-            <button class="primary-button" type="submit" :disabled="registerPreviewLoading">
+            <button class="primary-button" type="submit" :disabled="registerPreviewLoading || registerMetadataLoading || !!registerMetadataError">
               {{ registerPreviewLoading ? '预检中' : '上传预检' }}
             </button>
           </div>
@@ -798,7 +804,7 @@ const registerTemplateRows = computed(() =>
         </section>
       </div>
 
-      <aside class="register-detail-panel">
+      <aside v-if="activeRegisterTemplate" class="register-detail-panel">
         <div class="section-heading compact-heading">
           <div>
             <span class="eyebrow">ACTIVE TEMPLATE</span>
@@ -952,6 +958,7 @@ const registerTemplateRows = computed(() =>
             <dt>复核备注</dt>
             <dd>{{ selectedRegisterBatch.confirmRemark }}</dd>
           </dl>
+          <p v-if="registerPostingPlanError" class="register-preview-error" role="alert">{{ registerPostingPlanError }}；批次保留，尚未取得可执行计划。<button type="button" class="secondary-button" :disabled="registerPostingPlanLoading" @click="loadRegisterPostingPlan(selectedRegisterBatch.importBatchNo)">重试读取计划</button></p>
           <section v-if="registerPostingPlan" class="register-posting-plan-card" aria-label="登记表入账映射计划">
             <div class="register-posting-plan-head">
               <div>
@@ -959,7 +966,7 @@ const registerTemplateRows = computed(() =>
                 <strong>入账映射计划</strong>
               </div>
               <div class="register-posting-actions">
-                <StatusBadge :label="registerPostingPlanLoading ? '映射读取中' : registerPostingPlanSource" tone="blue" />
+                <StatusBadge :label="registerPostingPlanLoading ? '映射读取中' : '后端入账映射计划'" tone="blue" />
                 <button
                   type="button"
                   class="secondary-button"
@@ -987,9 +994,6 @@ const registerTemplateRows = computed(() =>
                 <small>缺主数据或称重字段</small>
               </article>
             </div>
-            <p v-if="registerPostingPlanError" class="register-preview-error">
-              {{ registerPostingPlanError }}；当前显示本地推导计划，不执行入账。
-            </p>
             <p v-if="registerPostingExecutionError" class="register-preview-error">
               {{ registerPostingExecutionError }}
             </p>

@@ -1,4 +1,4 @@
-import type { RegisterImportBatch } from '../../data/registerImportTemplates';
+import type { RegisterImportBatch, RegisterImportPostingPlan } from '../../data/registerImportTemplates';
 
 export const registerImportReviewBatches: RegisterImportBatch[] = [
   {
@@ -101,3 +101,29 @@ export const registerImportReviewBatches: RegisterImportBatch[] = [
     ],
   },
 ];
+
+export const registerMetadataFixture = {
+  templates: [
+    ['REG-INBOUND', '签收入库登记表', 'IN-001', 'courierNo'],
+    ['REG-OUTBOUND', '交货情况登记表', 'OUT-001', 'paperExpressText'],
+    ['REG-POLISHING', '工作项目记录单（日）', 'POL-001', 'handoffAuditStatus'],
+    ['REG-ENGRAVING', '雕刻机统计单（日）', 'ENG-001', 'operatorSignatureName'],
+  ].map(([code, name, rule, target]) => ({ code, name, sourceFile: name + '.xlsx',
+    businessFlow: code === 'REG-OUTBOUND' ? '成品库存 -> 打包出货 -> 已发货库存' : '登记表复核',
+    targetCommand: '业务命令', targetLedgerType: '正式台账', parserStatus: 'COMMAND_READY' as const, nextAction: '上传预检',
+    fields: [{ sourceColumn: '品类', targetField: target, targetObject: '业务单据', required: true, normalizeRule: '后端返回', validationRule: '后端校验' },
+      { sourceColumn: '行号', targetField: 'sourceRegisterLineNo', targetObject: '业务单据', required: true, normalizeRule: '保留来源', validationRule: '必填' }],
+    validationRules: [{ code: rule, level: 'BLOCK' as const, description: '后端校验', fallback: '补录后重试' }],
+  })),
+  summary: { templates: 4, fields: 8, requiredFields: 8, commandReadyTemplates: 4, parserStatus: 'COMMAND_READY' },
+};
+
+export function blockedPostingPlanFixture(batch: RegisterImportBatch): RegisterImportPostingPlan {
+  return { importBatchNo: batch.importBatchNo, templateCode: batch.templateCode, templateName: batch.templateName,
+    targetCommand: batch.targetCommand, status: 'BLOCKED', totalRows: batch.totalRows, readyDrafts: 0,
+    warningDrafts: 0, blockedDrafts: batch.rows.length, nextAction: '待业务单据入账映射',
+    drafts: batch.rows.map(row => ({ importBatchNo: batch.importBatchNo, sourceLineNo: row.sourceLineNo,
+      sourceRegisterSequence: row.sourceRegisterSequence, targetCommand: batch.targetCommand, status: 'BLOCKED',
+      mappedFields: row.normalizedFields, warningMessages: row.messages,
+      missingFields: [{ field: 'motherOrderCode', level: 'BLOCK', message: 'motherOrderCode 缺失', fallback: '补录后重试' }] })) };
+}
