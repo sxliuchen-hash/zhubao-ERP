@@ -1,16 +1,5 @@
 import { apiGet, apiPost } from './apiClient';
 
-export interface MobileIntakeLookup {
-  found: boolean;
-  motherOrderCode: string;
-  courierNo: string;
-  customerName: string;
-  processingRequirement: string;
-  dueDate: string;
-  goodsName: string;
-  candidates?: Array<{ motherOrderCode: string; customerName: string; createdAt: string; goodsName: string; processingRequirement: string; dueDate: string }>;
-}
-
 export interface MobileIntakeRequest {
   pendingCode?: string;
   pendingVersion?: number;
@@ -44,12 +33,6 @@ export interface MobileIntakeResult {
   weight: number;
   ledgerCode: string;
   qrContent: string;
-}
-
-export function lookupMobileIntake(courierNo: string): Promise<MobileIntakeLookup> {
-  return apiGet<MobileIntakeLookup>(
-    `/api/business/operations/mobile-intakes?courierNo=${encodeURIComponent(courierNo)}`,
-  );
 }
 
 export function submitMobileIntake(body: MobileIntakeRequest): Promise<MobileIntakeResult> {

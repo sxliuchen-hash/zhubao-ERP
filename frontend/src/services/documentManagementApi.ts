@@ -90,10 +90,6 @@ export async function fetchDocumentSummary(): Promise<DocumentManagementSummary>
   return apiGet<DocumentManagementSummary>('/api/documents/summary');
 }
 
-export async function fetchDocumentPackages(): Promise<DocumentPackage[]> {
-  return apiGet<DocumentPackage[]>('/api/documents/packages');
-}
-
 export async function fetchDocumentPackagesPage(
   query: DocumentPackagePageQuery = {},
 ): Promise<DocumentPackagePage> {
@@ -104,10 +100,6 @@ export async function fetchDocumentPackagesPage(
   if (keyword) params.set('keyword', keyword);
   const suffix = params.toString();
   return apiGet<DocumentPackagePage>(`/api/documents/packages/page${suffix ? `?${suffix}` : ''}`);
-}
-
-export async function fetchEvidenceAttachments(): Promise<EvidenceAttachment[]> {
-  return apiGet<EvidenceAttachment[]>('/api/documents/attachments');
 }
 
 export async function fetchEvidenceAttachmentsPage(

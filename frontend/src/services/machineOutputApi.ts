@@ -64,37 +64,6 @@ export interface MachineOutputMachineMatchSuggestion {
   suggestedAction: string;
 }
 
-export interface SubmitMachineOutputRequest {
-  code?: string;
-  workDate: string;
-  customerId?: number;
-  customerNameSnapshot?: string;
-  productCategory: string;
-  machineId?: number;
-  machineNoSnapshot: string;
-  workOrderCode?: string;
-  workProcessId?: number;
-  workReportCode?: string;
-  outputQuantity: number | string;
-  quantityUnit?: string;
-  operatorEmployeeId?: number;
-  operatorSignatureName: string;
-  signatureMediaId?: number;
-  sourceRegisterType?: string;
-  sourceLineNo?: number;
-  machineLineNo?: string;
-  sourceSequenceNo?: string;
-  importBatchNo?: string;
-  ledgerCode?: string;
-  status?: string;
-  remark?: string;
-  operator?: string;
-}
-
-export async function fetchMachineOutputs(limit = 20): Promise<MachineOutputRecord[]> {
-  return apiGet<MachineOutputRecord[]>(`/api/machine-outputs?limit=${limit}`);
-}
-
 export async function fetchMachineOutputSummary(limit = 100): Promise<MachineOutputSummary> {
   return apiGet<MachineOutputSummary>(`/api/machine-outputs/summary?limit=${limit}`);
 }
@@ -111,10 +80,6 @@ export async function fetchMachineOutputsByImportBatch(importBatchNo: string): P
   return apiGet<MachineOutputRecord[]>(
     `/api/machine-outputs/import-batches/${encodeURIComponent(importBatchNo)}`,
   );
-}
-
-export async function submitMachineOutput(request: SubmitMachineOutputRequest): Promise<MachineOutputRecord> {
-  return apiPost<SubmitMachineOutputRequest, MachineOutputRecord>('/api/machine-outputs', request);
 }
 
 export interface BindMachineOutputRequest {
@@ -138,37 +103,4 @@ export async function bindMachineOutput(
     '/api/machine-outputs/machine-bindings',
     request,
   );
-}
-
-export interface MachineProfile {
-  id: number;
-  machineNo: string;
-  machineName: string;
-  machineType: string;
-  location: string;
-  enabled: boolean;
-  remark: string;
-  createdBy: string;
-  createdAt: string;
-}
-
-export interface SaveMachineProfileRequest {
-  id?: number;
-  machineNo: string;
-  machineName: string;
-  machineType?: string;
-  location?: string;
-  enabled?: boolean;
-  remark?: string;
-  operator?: string;
-}
-
-// 查询机器档案主数据
-export async function fetchMachineProfiles(): Promise<MachineProfile[]> {
-  return apiGet<MachineProfile[]>('/api/machine-profiles');
-}
-
-// 新增或更新机器档案（需要 MACHINE_OUTPUT_SUBMIT 权限）
-export async function saveMachineProfile(request: SaveMachineProfileRequest): Promise<MachineProfile> {
-  return apiPost<SaveMachineProfileRequest, MachineProfile>('/api/machine-profiles', request);
 }

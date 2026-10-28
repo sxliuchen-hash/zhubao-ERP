@@ -49,7 +49,6 @@ vi.mock('../../services/businessWorkspaceApi', () => ({
 
 vi.mock('../../services/mobileIntakeApi', () => ({
   fetchMotherOrder: vi.fn().mockRejectedValue(new Error('母单不存在')),
-  lookupMobileIntake: vi.fn(),
   submitMobileIntake: vi.fn(),
 }));
 
@@ -71,7 +70,6 @@ vi.mock('../../services/qualityCheckApi', () => ({
 
 vi.mock('../../services/documentCaptureApi', () => ({
   fetchCaptures: vi.fn().mockResolvedValue([]),
-  uploadCapture: vi.fn(),
 }));
 
 vi.mock('../../services/scanContextApi', async () => {

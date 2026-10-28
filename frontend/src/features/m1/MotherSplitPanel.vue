@@ -237,10 +237,6 @@ async function splitMany() {
   } catch (error) { formError.value = error instanceof Error ? error.message : '请核对子单来源分配'; }
 }
 
-function round3(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
-
 function sheetStyle(payload: LabelPayload) {
   return {
     width: `calc(${payload.printerSetting.widthMm}mm * var(--sticker-scale, ${labelPreviewScale}))`,

@@ -122,13 +122,6 @@ async function handleIntakeSaved(result: MobileIntakeResult) {
   await loadInboundWorkspace();
 }
 
-function videoTone(video: string): Tone {
-  if (video === '失败') return 'red';
-  if (video === '截取中') return 'amber';
-  if (video === '已关联') return 'green';
-  return 'gray';
-}
-
 function statusTone(status: string): Tone {
   if (status.includes('异常')) return 'red';
   if (status.includes('待')) return 'amber';

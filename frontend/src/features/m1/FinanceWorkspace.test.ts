@@ -3,15 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../services/apiClient';
 import FinanceWorkspace from './FinanceWorkspace.vue';
 import {
-  confirmPayroll,
   fetchConsumables,
   fetchFinanceDashboard,
   fetchFinanceDetails,
   fetchOperatingStatement,
   fetchPayables,
   fetchStatement,
-  generateBilling,
-  generatePayroll,
   issueConsumable,
   payPayable,
   purchaseConsumable,
@@ -20,19 +17,12 @@ import {
   saveConsumableItem,
   saveFixedAsset,
   saveOutsource,
-  savePriceAgreement,
-  saveWorkerRate,
   type FinanceDashboard,
 } from '../../services/financeApi';
 
 vi.mock('../../services/financeApi', () => ({
   fetchStatement: vi.fn(),
-  savePriceAgreement: vi.fn(),
-  generateBilling: vi.fn(),
   recordReceipt: vi.fn(),
-  saveWorkerRate: vi.fn(),
-  generatePayroll: vi.fn(),
-  confirmPayroll: vi.fn(),
   fetchConsumables: vi.fn(),
   saveConsumableItem: vi.fn(),
   purchaseConsumable: vi.fn(),
@@ -150,7 +140,6 @@ describe('FinanceWorkspace', () => {
     vi.mocked(fetchConsumables).mockResolvedValue([]);
     vi.mocked(fetchPayables).mockResolvedValue([]);
     vi.mocked(fetchStatement).mockReset();
-    vi.mocked(generateBilling).mockReset();
     vi.mocked(fetchOperatingStatement).mockReset();
     vi.mocked(fetchFinanceDashboard).mockResolvedValue(dashboardOf());
     vi.mocked(fetchFinanceDetails).mockResolvedValue({
@@ -341,13 +330,8 @@ describe('FinanceWorkspace', () => {
   });
 
   function expectNoPosting() {
-    expect(generateBilling).not.toHaveBeenCalled();
     expect(recordReceipt).not.toHaveBeenCalled();
     expect(payPayable).not.toHaveBeenCalled();
-    expect(generatePayroll).not.toHaveBeenCalled();
-    expect(confirmPayroll).not.toHaveBeenCalled();
-    expect(savePriceAgreement).not.toHaveBeenCalled();
-    expect(saveWorkerRate).not.toHaveBeenCalled();
     expect(saveConsumableItem).not.toHaveBeenCalled();
     expect(purchaseConsumable).not.toHaveBeenCalled();
     expect(issueConsumable).not.toHaveBeenCalled();

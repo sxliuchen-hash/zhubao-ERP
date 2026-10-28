@@ -8,7 +8,7 @@ import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest'
 const props = defineProps<{ target: { orderCode: string; motherOrderCode: string } }>();
 const emit = defineEmits<{ changed: [] }>();
 const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
-const canFinance = computed(() => session.value?.effectivePermissions
+const canSeeHistoricalMoney = computed(() => session.value?.effectivePermissions
   ? session.value.effectivePermissions.includes('FINANCE_BILLING_POST')
   : ['ADMIN', 'GENERAL_MANAGER', 'FINANCE_STATISTICIAN'].includes(session.value?.role ?? ''));
 const canReview = computed(() => session.value?.effectivePermissions?.includes('ORDER_CHANGE_REVIEW') === true
@@ -19,7 +19,7 @@ interface OrderChangeRow {
   reworkProcess: string; amountUnchanged: boolean; customerUnitPrice: number | null; workerFee: number | null;
   customerDelta: number | null; workerDelta: number | null; financeNote: string; receivableCode: string; processName: string; workerName: string;
 }
-type Kind = 'draft' | 'submit' | 'confirm' | 'reject' | 'review' | 'apply';
+type Kind = 'draft' | 'submit' | 'review' | 'apply';
 interface Command { kind: Kind; path: string; body: Record<string, unknown>; id: string; before: string; success: string; idempotent: boolean }
 const message = ref('');
 const error = ref('');
@@ -43,18 +43,8 @@ const reading = ref(false);
 const checking = ref(false);
 const locked = computed(() => submitting.value || Boolean(pending.value));
 const receipts = ref<Array<{ id: string; text: string }>>([]);
-const financeNote = ref('');
-const customerPrice = ref('');
-const workerFee = ref('');
-const customerDelta = ref('');
-const workerDelta = ref('');
-const receivableCode = ref('');
-const processName = ref('');
-const workerName = ref('');
 const timeline = ref<string[]>([]);
 const confirmedRows = new Map<string, OrderChangeRow>();
-const financeDrafts = new Map<string, string[]>();
-const financeFields = [financeNote, customerPrice, workerFee, customerDelta, workerDelta, receivableCode, processName, workerName];
 let disposed = false;
 let readGeneration = 0;
 let timelineGeneration = 0;
@@ -66,11 +56,6 @@ function validRow(row: OrderChangeRow | null | undefined, id?: string) {
 function statusLabel(status: string) { return ({ DRAFT: '草稿', PENDING_FINANCE: '待财务确认（已停用）', FINANCE_CONFIRMED: '财务已确认', DEFERRED_TO_SETTLEMENT: '费用交货后确定', PENDING_REVIEW: '待业务审核', BUSINESS_APPROVED: '业务审核通过', REJECTED: '已拒绝', APPLIED: '已生效' } as Record<string, string>)[status] || status; }
 function rememberEvidence(row: OrderChangeRow) { if (!evidenceTargets.value.some(item => item.id === row.id)) evidenceTargets.value.push(row); }
 function assignSelection(row: OrderChangeRow) {
-  if (selectedChange.value?.id !== row.id) {
-    if (selectedChange.value) financeDrafts.set(selectedChange.value.id, financeFields.map(field => field.value));
-    const saved = financeDrafts.get(row.id);
-    financeFields.forEach((field, index) => { field.value = saved?.[index] ?? ''; });
-  }
   selectedChange.value = row; rememberEvidence(row);
 }
 function preserveReceipt(row: OrderChangeRow) {
@@ -107,7 +92,6 @@ onMounted(loadChanges);
 function knownRejection(caught: unknown) { return caught instanceof ApiRequestError && caught.status >= 400 && caught.status < 500 && caught.status !== 408; }
 async function execute(command: Command, retry = false) {
   if (submitting.value || (!retry && pending.value)) return;
-  if (['confirm', 'reject'].includes(command.kind) && !canFinance.value) return;
   ++readGeneration; reading.value = false; submitting.value = true; error.value = '';
   try {
     const saved = await apiPost<Record<string, unknown>, OrderChangeRow>(command.path, command.body);
@@ -145,26 +129,12 @@ async function newDraft() {
   await loadChanges();
 }
 async function reloadBase() { if (!locked.value && !draftSaved.value && !reading.value) { draftBase.value = null; changeAttempt.value = null; await loadChanges(); } }
-async function stage(kind: 'submit' | 'confirm' | 'reject', body: Record<string, unknown> = {}) {
+async function submitChange() {
   const current = selectedChange.value;
-  if (!current || locked.value || (kind === 'submit' ? current.status !== 'DRAFT' : current.status !== 'PENDING_FINANCE')) return;
-  if (kind !== 'submit' && !canFinance.value) return;
-  const suffix = { submit: 'finance-submissions', confirm: 'finance-confirmations', reject: 'finance-rejections' }[kind];
-  const success = { submit: '已送审，费用交货后确定', confirm: '财务确认完成', reject: '财务已拒绝' }[kind];
-  await execute({ kind, id: current.id, before: current.status, path: '/api/business/order-changes/' + encodeURIComponent(current.id) + '/' + suffix, body, success, idempotent: false });
-}
-async function confirmUnchanged() { await stage('confirm', { amountUnchanged: true, note: financeNote.value.trim() || '金额不变' }); }
-function decimal(value: string) { return /^-?\d+(\.\d+)?$/.test(value.trim()) && Number.isFinite(Number(value)); }
-async function confirmDelta() {
-  if (!canFinance.value || locked.value) return;
-  const customer = customerDelta.value.trim() || '0'; const worker = workerDelta.value.trim() || '0';
-  if (![customerPrice.value, workerFee.value, customer, worker].every(decimal)) { error.value = '请填写有效客户单价、工费和差额'; return; }
-  if (Number(customer) < 0 && !receivableCode.value.trim()) { error.value = '减额必须指定原应收行'; return; }
-  if ((Number(customer) > 0 || Number(worker) !== 0) && !processName.value.trim()) { error.value = '增额或工费差额必须指定工序'; return; }
-  if (Number(worker) !== 0 && !workerName.value.trim()) { error.value = '工费差额必须指定工人'; return; }
-  await stage('confirm', { amountUnchanged: false, customerUnitPrice: customerPrice.value.trim(), workerFee: workerFee.value.trim(),
-    customerDelta: customer, workerDelta: worker, receivableCode: receivableCode.value.trim(), processName: processName.value.trim(),
-    workerName: workerName.value.trim(), note: financeNote.value.trim() });
+  if (!current || locked.value || current.status !== 'DRAFT') return;
+  await execute({ kind: 'submit', id: current.id, before: current.status,
+    path: '/api/business/order-changes/' + encodeURIComponent(current.id) + '/finance-submissions',
+    body: {}, success: '已送审，费用交货后确定', idempotent: false });
 }
 async function reviewChange(approved: boolean) {
   const current = selectedChange.value;
@@ -245,14 +215,14 @@ async function loadTimeline() {
         <p>目标 {{ selectedChange.workOrderCode || selectedChange.motherOrderCode }} · 基准版本 {{ selectedChange.expectedVersion }} · 申请版本 {{ selectedChange.versionNo }}</p>
         <dl class="change-diff"><dt>要求</dt><dd>{{ selectedChange.oldRequirement || '空' }} → {{ selectedChange.newRequirement || '空' }}</dd><dt>期限</dt><dd>{{ selectedChange.oldDueDate || '空' }} → {{ selectedChange.newDueDate || '空' }}</dd><dt>路线</dt><dd>{{ selectedChange.oldRoute || '空' }} → {{ selectedChange.newRoute || '空' }}</dd></dl>
         <p v-if="selectedChange.reworkProcess">重做工序：{{ selectedChange.reworkProcess }}；不覆盖原交付。</p>
-        <button class="secondary-button" type="button" :disabled="locked || selectedChange.status !== 'DRAFT'" @click="stage('submit')">送审，费用交货后确定</button>
+        <button class="secondary-button" type="button" :disabled="locked || selectedChange.status !== 'DRAFT'" @click="submitChange">送审，费用交货后确定</button>
         <p v-if="['PENDING_REVIEW', 'DEFERRED_TO_SETTLEMENT'].includes(selectedChange.status)">费用在交货后确定。送审本身不是审核通过，须由其他业务审核人通过后才能生效。</p>
         <p v-if="selectedChange.status === 'PENDING_FINANCE'">旧的金额确认已停止。历史财务状态只读保留，不能再填写差额。</p>
         <template v-if="canReview && ['PENDING_REVIEW', 'DEFERRED_TO_SETTLEMENT'].includes(selectedChange.status)">
           <button class="secondary-button" type="button" :disabled="locked" @click="reviewChange(true)">业务审核通过</button>
           <button class="secondary-button" type="button" :disabled="locked" @click="reviewChange(false)">业务审核拒绝</button>
         </template>
-        <template v-if="canFinance">
+        <template v-if="canSeeHistoricalMoney">
           <details v-if="['FINANCE_CONFIRMED', 'APPLIED'].includes(selectedChange.status)"><summary>历史财务确认</summary><p>{{ selectedChange.amountUnchanged ? '当时记录为金额不变' : '当时记录了差额' }} · 客户单价 {{ selectedChange.customerUnitPrice }} · 工费 {{ selectedChange.workerFee }}</p><p>客户差额 {{ selectedChange.customerDelta }} · 工费差额 {{ selectedChange.workerDelta }} · {{ selectedChange.financeNote }}</p></details>
         </template>
         <button class="primary-button" type="button" :disabled="locked || !['BUSINESS_APPROVED', 'FINANCE_CONFIRMED'].includes(selectedChange.status)" @click="applyChange">生效改单</button>

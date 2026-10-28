@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchDocumentAuditEvents,
-  fetchDocumentPackages,
   fetchDocumentPackagesPage,
   fetchDocumentSummary,
-  fetchEvidenceAttachments,
   fetchEvidenceAttachmentsPage,
   fetchAttachmentPreviewUrl,
   uploadEvidenceAttachment,
@@ -109,8 +107,6 @@ describe('documentManagementApi', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchDocumentSummary()).resolves.toMatchObject({ packages: 4, attachments: 5 });
-    await expect(fetchDocumentPackages()).resolves.toHaveLength(1);
-    await expect(fetchEvidenceAttachments()).resolves.toHaveLength(1);
     await expect(fetchDocumentAuditEvents()).resolves.toHaveLength(1);
     await expect(
       uploadEvidenceAttachment({
@@ -125,14 +121,14 @@ describe('documentManagementApi', () => {
     await expect(fetchAttachmentPreviewUrl('ATT-UP-001')).resolves.toMatchObject({
       url: '/api/documents/attachments/ATT-UP-001/content?expiresAt=1783374000&purpose=preview&resolution=original&token=signed-preview-token',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(6);
-    expect(String(fetchMock.mock.calls[5][0])).toContain('/preview-url?purpose=preview&requestId=');
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(String(fetchMock.mock.calls[3][0])).toContain('/preview-url?purpose=preview&requestId=');
     await fetchAttachmentPreviewUrl('ATT-UP-001', 'download');
-    expect(String(fetchMock.mock.calls[6][0])).toContain('/preview-url?purpose=download&requestId=');
+    expect(String(fetchMock.mock.calls[4][0])).toContain('/preview-url?purpose=download&requestId=');
     await fetchAttachmentPreviewUrl('ATT-UP-001', 'preview', 'thumbnail');
-    expect(String(fetchMock.mock.calls[7][0])).toContain('/preview-url?purpose=preview&resolution=thumbnail&requestId=');
+    expect(String(fetchMock.mock.calls[5][0])).toContain('/preview-url?purpose=preview&resolution=thumbnail&requestId=');
     await fetchAttachmentPreviewUrl('ATT-UP-001', 'preview', 'poster');
-    expect(String(fetchMock.mock.calls[8][0])).toContain('/preview-url?purpose=preview&resolution=poster&requestId=');
+    expect(String(fetchMock.mock.calls[6][0])).toContain('/preview-url?purpose=preview&resolution=poster&requestId=');
   });
 
   it('loads the first attachment page with encoded document code and parses the page response', async () => {

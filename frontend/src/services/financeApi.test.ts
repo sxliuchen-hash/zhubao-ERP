@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from './apiClient';
-import { fetchFinanceDashboard, fetchFinanceDetails, fetchStatement, generateBilling } from './financeApi';
+import { fetchFinanceDashboard, fetchFinanceDetails, fetchStatement} from './financeApi';
 
 describe('financeApi', () => {
   beforeEach(() => {
@@ -36,25 +36,6 @@ describe('financeApi', () => {
     );
     expect(statement.customerName).toBe('恒信珠宝');
     expect(statement.lines).toEqual([]);
-  });
-
-  it('生成本月账单时把空客户留空', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        code: 0,
-        message: 'ok',
-        data: { createdCount: 0, unpriced: [] },
-      }),
-    } as Response);
-
-    await generateBilling('2026-10', '');
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/finance/billing-runs');
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      yearMonth: '2026-10',
-      customerId: null,
-    });
   });
 
   it('经营总览只发 GET，并带上月份和客户', async () => {

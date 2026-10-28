@@ -1,21 +1,5 @@
 import { apiGet, apiPost } from './apiClient';
 
-export interface PriceLine {
-  processName: string;
-  unit: string;
-  unitPrice: number;
-}
-
-export interface PriceAgreement {
-  code: string;
-  customerId: number;
-  customerName: string;
-  mode: string;
-  effectiveFrom: string;
-  effectiveTo: string;
-  lines: PriceLine[];
-}
-
 export interface ReceivableLine {
   code: string;
   customerId: number;
@@ -57,18 +41,6 @@ export interface CustomerStatement {
   lines: ReceivableLine[];
   receipts: CustomerReceipt[];
   stockNote: string;
-}
-
-export interface UnpricedItem {
-  motherOrderCode: string;
-  workOrderCode: string;
-  processName: string;
-  reason: string;
-}
-
-export interface BillingRunResult {
-  createdCount: number;
-  unpriced: UnpricedItem[];
 }
 
 export interface PayrollLine {
@@ -127,24 +99,6 @@ export function fetchStatement(customerId: string, yearMonth: string): Promise<C
   return apiGet(`/api/finance/statements?customerId=${encodeURIComponent(customerId)}${month}`);
 }
 
-export function savePriceAgreement(body: {
-  customerId: number;
-  customerName: string;
-  mode: string;
-  effectiveFrom: string;
-  effectiveTo: string;
-  lines: PriceLine[];
-}): Promise<PriceAgreement> {
-  return apiPost('/api/finance/price-agreements', body);
-}
-
-export function generateBilling(yearMonth: string, customerId: string): Promise<BillingRunResult> {
-  return apiPost('/api/finance/billing-runs', {
-    yearMonth,
-    customerId: customerId ? Number(customerId) : null,
-  });
-}
-
 export function recordReceipt(body: {
   customerId: number;
   customerName: string;
@@ -154,24 +108,6 @@ export function recordReceipt(body: {
   idempotencyKey?: string;
 }): Promise<CustomerReceipt> {
   return apiPost('/api/finance/receipts', body);
-}
-
-export function saveWorkerRate(body: {
-  processName: string;
-  unit: string;
-  unitPrice: number;
-  effectiveFrom: string;
-  effectiveTo: string;
-}): Promise<unknown> {
-  return apiPost('/api/finance/worker-rates', body);
-}
-
-export function generatePayroll(yearMonth: string): Promise<{ lines: PayrollLine[]; missingRates: UnpricedItem[] }> {
-  return apiPost('/api/finance/payroll-runs', { yearMonth });
-}
-
-export function confirmPayroll(yearMonth: string): Promise<unknown> {
-  return apiPost('/api/finance/payroll-runs/confirmations', { yearMonth });
 }
 
 export function fetchConsumables(): Promise<ConsumableStock[]> {

@@ -7,7 +7,7 @@ import { fetchProcessingPendings, saveProcessingPending } from '../../services/p
 import { ApiRequestError } from '../../services/apiClient';
 import IntakePanel from './IntakePanel.vue';
 import { queryScanContext } from '../../services/scanContextApi';
-import { fetchMotherOrder, lookupMobileIntake, submitMobileIntake } from '../../services/mobileIntakeApi';
+import { fetchMotherOrder, submitMobileIntake } from '../../services/mobileIntakeApi';
 import { bindEvidence, fetchEvidenceBoard, uploadEvidenceFile } from '../../services/evidenceApi';
 import { buildScanContext } from '../scan/scanContextFixture';
 import { fetchCustomers, fetchMaterials, fetchShortcuts, fetchTemplates, removeShortcut, saveCustomer, saveMaterial, saveShortcut } from '../../services/masterDataApi';
@@ -34,7 +34,6 @@ vi.mock('../../services/scanContextApi', async () => {
 });
 
 vi.mock('../../services/mobileIntakeApi', () => ({
-  lookupMobileIntake: vi.fn(),
   submitMobileIntake: vi.fn(),
   fetchMotherOrder: vi.fn(),
 }));
@@ -159,7 +158,6 @@ describe('收货面板', () => {
     vi.mocked(fetchShortcuts).mockResolvedValue([]);
     vi.mocked(fetchTemplates).mockResolvedValue([]);
     vi.mocked(submitMobileIntake).mockReset();
-    vi.mocked(lookupMobileIntake).mockReset();
     vi.mocked(fetchMotherOrder).mockReset();
     vi.mocked(uploadEvidenceFile).mockReset();
     vi.mocked(bindEvidence).mockReset();
@@ -201,15 +199,6 @@ describe('收货面板', () => {
 
   it('建单前可以选文件，同一次确认复用请求编号，改内容后换新编号', async () => {
     vi.mocked(submitMobileIntake).mockRejectedValue(new Error('网络超时'));
-    vi.mocked(lookupMobileIntake).mockResolvedValue({
-      found: false,
-      motherOrderCode: '',
-      courierNo: 'SF1048329001',
-      customerName: '',
-      processingRequirement: '',
-      dueDate: '',
-      goodsName: '',
-    });
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
     await pickEvidence(wrapper, 'unpack.jpg', 'image/jpeg');
@@ -239,15 +228,6 @@ describe('收货面板', () => {
 
   it('超时后保留原请求号，不按运单猜测母单', async () => {
     vi.mocked(submitMobileIntake).mockRejectedValue(new Error('网络超时'));
-    vi.mocked(lookupMobileIntake).mockResolvedValue({
-      found: true,
-      motherOrderCode: 'MD-20261012-001',
-      courierNo: 'SF1048329001',
-      customerName: '恒信珠宝',
-      processingRequirement: '抛光',
-      dueDate: '2026-10-20',
-      goodsName: '戒托',
-    });
     vi.mocked(fetchMotherOrder).mockResolvedValue({
       alreadyExists: true,
       motherOrderCode: 'MD-20261012-001',
@@ -268,7 +248,6 @@ describe('收货面板', () => {
     await flushPromises();
 
     expect(submitMobileIntake).toHaveBeenCalledTimes(1);
-    expect(lookupMobileIntake).not.toHaveBeenCalled();
     expect(fetchMotherOrder).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('网络超时');
     await create!.trigger('click');
@@ -313,7 +292,6 @@ describe('收货面板', () => {
 
   it('登录过期和网络中断都保留已填内容，并沿用原请求', async () => {
     vi.mocked(submitMobileIntake).mockRejectedValue(new ApiRequestError('未登录', 401, 401));
-    vi.mocked(lookupMobileIntake).mockRejectedValue(new Error('网络中断'));
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
     const create = () => wrapper.findAll('button').find((button) => ['确认建单并入库', '用原请求核对建单结果'].includes(button.text()));
@@ -389,16 +367,13 @@ describe('收货面板', () => {
     expect(wrapper.get('[aria-label="快递单号"]').element).toHaveProperty('value', '');
   });
 
-  it('超时核对期间改号，不把原运单的母单带到新输入', async () => {
+  it('未知结果修改输入不自动查询旧运单或生成新单', async () => {
     vi.mocked(submitMobileIntake).mockRejectedValue(new Error('网络超时'));
-    let finishLookup: (value: Awaited<ReturnType<typeof lookupMobileIntake>>) => void = () => {};
-    vi.mocked(lookupMobileIntake).mockImplementation(() => new Promise(resolve => { finishLookup = resolve; }));
     const wrapper = mountPanel();
     await fillNewWaybill(wrapper);
     await wrapper.findAll('button').find((button) => button.text() === '确认建单并入库')!.trigger('click');
     await flushPromises();
     await wrapper.get('[aria-label="快递单号"]').setValue('SF-NEW');
-    finishLookup({ found: true, motherOrderCode: 'MD-OLD', courierNo: 'SF1048329001', customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20', goodsName: '戒托' });
     await flushPromises();
     expect(fetchMotherOrder).not.toHaveBeenCalled();
     expect(wrapper.emitted('saved')).toBeUndefined();

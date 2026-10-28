@@ -73,20 +73,6 @@ export interface ProductionReportRequest {
   remark?: string;
 }
 
-export interface ProductionReportResult {
-  workOrderCode: string;
-  ledgerCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  fromStockStatus: string;
-  toStockStatus: string;
-  quantity: number;
-  weight: number;
-  process: string;
-  operator: string;
-  handoffCode?: string;
-}
-
 export interface QualityFreezeRequest {
   qualityCaseCode: string;
   motherOrderCode: string;
@@ -103,21 +89,6 @@ export interface QualityFreezeRequest {
   defect: string;
   evidenceCode?: string;
   remark?: string;
-}
-
-export interface QualityFreezeResult {
-  qualityCaseCode: string;
-  workOrderCode: string;
-  ledgerCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  fromStockStatus: string;
-  toStockStatus: string;
-  quantity: number;
-  weight: number;
-  process: string;
-  inspector: string;
-  evidenceCode?: string;
 }
 
 export interface ReworkDispatchRequest {
@@ -139,22 +110,6 @@ export interface ReworkDispatchRequest {
   remark?: string;
 }
 
-export interface ReworkDispatchResult {
-  reworkOrderCode: string;
-  qualityCaseCode: string;
-  workOrderCode: string;
-  ledgerCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  fromStockStatus: string;
-  toStockStatus: string;
-  quantity: number;
-  weight: number;
-  process: string;
-  operator: string;
-  evidenceCode?: string;
-}
-
 export interface ReworkReportRequest {
   reworkOrderCode: string;
   qualityCaseCode: string;
@@ -173,22 +128,6 @@ export interface ReworkReportRequest {
   remark?: string;
 }
 
-export interface ReworkReportResult {
-  reworkOrderCode: string;
-  qualityCaseCode: string;
-  workOrderCode: string;
-  ledgerCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  fromStockStatus: string;
-  toStockStatus: string;
-  quantity: number;
-  weight: number;
-  process: string;
-  operator: string;
-  evidenceCode?: string;
-}
-
 export interface QualityReleaseRequest {
   qualityCaseCode: string;
   motherOrderCode: string;
@@ -205,22 +144,6 @@ export interface QualityReleaseRequest {
   releaseResult: string;
   evidenceCode?: string;
   remark?: string;
-}
-
-export interface QualityReleaseResult {
-  qualityCaseCode: string;
-  workOrderCode: string;
-  ledgerCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  fromStockStatus: string;
-  toStockStatus: string;
-  quantity: number;
-  weight: number;
-  process: string;
-  inspector: string;
-  releaseResult: string;
-  evidenceCode?: string;
 }
 
 export interface OutboundShipmentRequest {

@@ -15,7 +15,6 @@ import {
   saveConsumableItem,
   saveFixedAsset,
   saveOutsource,
-  type BillingRunResult,
   type ConsumableStock,
   type CustomerStatement,
   type FinanceDashboard,
@@ -23,8 +22,7 @@ import {
   type FinanceDetailPage,
   type OperatingStatement,
   type PayableView,
-  type PayrollLine,
-} from '../../services/financeApi';
+  type PayrollLine} from '../../services/financeApi';
 import CustomerBillPanel from '../finance/CustomerBillPanel.vue';
 import SettlementPanel from '../finance/SettlementPanel.vue';
 import { apiPost } from '../../services/apiClient';
@@ -91,7 +89,6 @@ const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai'
 const yearMonth = ref(today.slice(0, 7));
 const statement = ref<CustomerStatement | null>(null);
 const statementReading = ref(false);
-const billing = ref<BillingRunResult | null>(null);
 const settlementType = ref('CHILD');
 const settlementCode = ref('');
 const allocationReceipt = ref('');
@@ -117,7 +114,7 @@ let overviewSeq = 0;
 let detailSeq = 0;
 let statementSeq = 0;
 let disposed = false;
-watch([customerId, yearMonth], () => { ++statementSeq; statement.value = null; billing.value = null; statementReading.value = false; }, { flush: 'sync' });
+watch([customerId, yearMonth], () => { ++statementSeq; statement.value = null; statementReading.value = false; }, { flush: 'sync' });
 const payableCode = ref('');
 const payAmount = ref('');
 const payDate = ref(today);
@@ -1095,12 +1092,6 @@ function kindLabel(kind: string) {
           <span>{{ line.workOrderCode || '—' }}</span>
         </article>
       </div>
-      <p v-if="billing && billing.unpriced.length === 0 && billing.createdCount === 0" class="empty-hint">没有新的可入账单</p>
-      <ul v-if="billing && billing.unpriced.length">
-        <li v-for="(item, index) in billing.unpriced" :key="index">
-          {{ item.motherOrderCode || item.workOrderCode }} {{ item.processName }} {{ item.reason }}
-        </li>
-      </ul>
     </section>
 
     <section v-else-if="section === 'receipt'" class="section-block">

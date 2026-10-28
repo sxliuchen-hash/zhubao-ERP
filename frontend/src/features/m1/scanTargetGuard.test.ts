@@ -44,7 +44,6 @@ vi.mock('../../services/businessOperationApi', () => ({
   releaseQualityStock: vi.fn(), reportRework: vi.fn(),
 }));
 vi.mock('../../services/mobileIntakeApi', () => ({
-  lookupMobileIntake: vi.fn(),
   submitMobileIntake: vi.fn(),
   fetchMotherOrder: vi.fn(),
 }));
@@ -71,7 +70,6 @@ vi.mock('../../services/qualityCheckApi', () => ({
 }));
 vi.mock('../../services/documentCaptureApi', () => ({
   fetchCaptures: vi.fn().mockResolvedValue([]),
-  uploadCapture: vi.fn(),
 }));
 
 function stationView(orderCode: string) {

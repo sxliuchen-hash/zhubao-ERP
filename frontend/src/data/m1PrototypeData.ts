@@ -1,22 +1,6 @@
 // 业务单据类型。来料、生产、质检、库存和审批列表只显示接口返回的单据，这里不再放样例清单。
 export type Tone = 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'gray';
 
-export interface Metric {
-  label: string;
-  value: string;
-  delta: string;
-  tone: Tone;
-}
-
-export interface WorkQueueItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  owner: string;
-  due: string;
-  severity: 'high' | 'medium' | 'normal';
-}
-
 export interface InboundOrder {
   operationContext?: import('../types/businessOperationContext').BusinessOperationContext;
   code: string;
