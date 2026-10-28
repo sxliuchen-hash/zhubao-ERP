@@ -36,7 +36,7 @@ class DocumentCaptureServiceTest {
     void storesUnpackVideoOnMotherOrderAndDeduplicatesChecksum() {
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         documents.saveMotherOrder(motherOrder());
-        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository repository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         DocumentCaptureService service = service(documents, repository, 8, 32);
         OperatorContext receiver = new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.ALL);
         byte[] video = mp4("unpack-video");
@@ -73,7 +73,7 @@ class DocumentCaptureServiceTest {
     void rejectsOversizedVideoAndOutOfScopeCustomer() {
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         documents.saveMotherOrder(motherOrder());
-        DocumentCaptureService service = service(documents, new InMemoryDocumentManagementRepository(), 8, 4);
+        DocumentCaptureService service = service(documents, com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded(), 8, 4);
         OperatorContext receiver = new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.ALL);
         byte[] video = "12345".getBytes(StandardCharsets.UTF_8);
 
@@ -121,7 +121,7 @@ class DocumentCaptureServiceTest {
         documents.saveChildWorkOrder(new com.zhubao.erp.business.domain.ChildWorkOrderRecord(
                 "ZD-CAP-1", "MD-CAP-001", 1001L, "恒信珠宝", "抛光", "2026-10-20",
                 "MAT", "戒托", BigDecimal.ONE, "件", BigDecimal.ONE, "RAW", "抛光", "V1", "", "收货员 何琴", "2026-10-08"));
-        DocumentCaptureService service = service(documents, new InMemoryDocumentManagementRepository(), 8, 32);
+        DocumentCaptureService service = service(documents, com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded(), 8, 32);
         OperatorContext receiver = new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.ALL);
         byte[] video = mp4("child-ok");
         assertThat(service.capture("work_order", "ZD-CAP-1", "PROCESS", "a.mp4", "video/mp4",
@@ -139,7 +139,7 @@ class DocumentCaptureServiceTest {
     void uncertainMetadataWriteKeepsCaptureOriginalForReconciliation() throws Exception {
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         documents.saveMotherOrder(motherOrder());
-        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        InMemoryDocumentManagementRepository repository = spy(com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded());
         doThrow(new IllegalStateException("提交结果未知"))
                 .when(repository).saveAttachment(argThat(attachment -> attachment.code().startsWith("ATT-CAP-")));
         DocumentCaptureService service = service(documents, repository, 8, 32);

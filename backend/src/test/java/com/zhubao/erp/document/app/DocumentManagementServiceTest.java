@@ -63,7 +63,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void uploadsAttachmentAndExposesPreviewContent() throws Exception {
-        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository repository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());
         byte[] content = jpeg("weight photo demo");
 
@@ -136,7 +136,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void signsImageResolutionAndRebuildsMissingDerivativeWithoutChangingOriginal() throws Exception {
-        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository repository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());
         BufferedImage image = new BufferedImage(900, 450, BufferedImage.TYPE_INT_RGB);
         var graphics = image.createGraphics();
@@ -184,7 +184,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void videoPosterUrlUsesPreviewOnlyAndCannotAuthorizeOriginal() {
-        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository repository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());
         byte[] incompleteMp4 = new byte[]{0, 0, 0, 12, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
         var uploaded = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-20260706-014",
@@ -204,7 +204,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void inventoriesLocalFilesAndRetiresStoredContent() {
-        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository repository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         AttachmentStorageProperties properties = new AttachmentStorageProperties();
         properties.setProvider("local");
         properties.setLocalRoot(tempDir.toString());
@@ -265,7 +265,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void failedRetirementKeepsActiveMetadataAndOriginal() {
-        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        InMemoryDocumentManagementRepository repository = spy(com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded());
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());
         var uploaded = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-20260706-014",
                 "weight-photo.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", jpeg("original"));
@@ -280,7 +280,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void restartInSameMinuteCannotReplaceEarlierAttachmentMetadata() {
-        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository repository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         Clock fixedClock = Clock.fixed(Instant.parse("2026-10-18T00:00:00Z"), ZoneId.of("UTC"));
         DocumentManagementService firstProcess = new DocumentManagementService(
                 repository, localStorage(), new DocumentPreviewTokenProperties(), fixedClock);
@@ -301,7 +301,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void interruptedRetirementAuditReportsAppliedStateAndKeepsOriginal() {
-        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        InMemoryDocumentManagementRepository repository = spy(com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded());
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());
         var uploaded = service.uploadAttachment("DOC-INBOUND-20260706-001", "称重交接", "HO-20260706-014",
                 "weight-photo.jpg", "image/jpeg", "PC 后台上传", "库管员", "无", jpeg("original"));
@@ -320,7 +320,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void uncertainMetadataWriteKeepsPublishedOriginalForReconciliation() throws Exception {
-        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        InMemoryDocumentManagementRepository repository = spy(com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded());
         doThrow(new IllegalStateException("提交结果未知"))
                 .when(repository).saveAttachment(argThat(attachment -> attachment.code().startsWith("ATT-UP-")));
         DocumentManagementService service = new DocumentManagementService(repository, localStorage());
@@ -338,7 +338,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void reportsMissingTamperedUnregisteredAndPendingObjectsWithoutChangingFiles() throws Exception {
-        InMemoryDocumentManagementRepository repository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository repository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         AttachmentStorageProperties properties = new AttachmentStorageProperties();
         properties.setLocalRoot(tempDir.toString());
         DocumentManagementService service = new DocumentManagementService(repository,
@@ -365,7 +365,7 @@ class DocumentManagementServiceTest {
 
     @Test
     void auditInterruptionLeavesPendingUntilAdministratorVerifiesOriginalAfterRestart() {
-        InMemoryDocumentManagementRepository repository = spy(new InMemoryDocumentManagementRepository());
+        InMemoryDocumentManagementRepository repository = spy(com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded());
         doThrow(new IllegalStateException("审计库中断"))
                 .when(repository).saveAuditEvent(argThat(event -> event.eventCode().startsWith("DOC-AUD-ATT-UP-")));
         AttachmentStorageProperties properties = new AttachmentStorageProperties();
@@ -440,7 +440,7 @@ class DocumentManagementServiceTest {
     }
 
     private DocumentManagementService newService() {
-        return new DocumentManagementService(new InMemoryDocumentManagementRepository(), localStorage());
+        return new DocumentManagementService(com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded(), localStorage());
     }
 
     private LocalAttachmentObjectStorage localStorage() {
@@ -458,6 +458,7 @@ class DocumentManagementServiceTest {
     }
 
     private static final class QueryTrackingDocumentRepository extends InMemoryDocumentManagementRepository {
+        private QueryTrackingDocumentRepository() { com.zhubao.erp.document.infra.DocumentRepositoryFixture.seed(this); }
         private int attachmentsCalls;
         private int findAttachmentByCodeCalls;
 

@@ -48,7 +48,7 @@ class DeskTaskServiceTest {
         documents = new InMemoryBusinessDocumentRepository();
         tasks = new InMemoryDeskTaskRepository();
         accounts = new AccountBook();
-        InMemoryMasterDataRepository customers = new InMemoryMasterDataRepository();
+        InMemoryMasterDataRepository customers = com.zhubao.erp.business.infra.MasterDataFixture.withCustomers();
         customers.saveCustomer(new CustomerProfile(1099, "C-1099", "停用客户", "", "", "", "", false));
         documents.saveMotherOrder(mother("MD-HX-001", 1001, "恒信珠宝"));
         documents.saveMotherOrder(mother("MD-YC-001", 1002, "雅辰饰品"));

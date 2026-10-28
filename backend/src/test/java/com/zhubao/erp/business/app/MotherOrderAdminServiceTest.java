@@ -36,7 +36,7 @@ class MotherOrderAdminServiceTest {
             }
         };
         snapshotRepository.saveMotherOrder(stale.withSummary(new BigDecimal("4"), new BigDecimal("2")));
-        var service = new MotherOrderAdminService(snapshotRepository, new InMemoryMasterDataRepository(), stocks,
+        var service = new MotherOrderAdminService(snapshotRepository, com.zhubao.erp.business.infra.MasterDataFixture.withCustomers(), stocks,
                 mock(FinanceRepository.class), new InMemoryOrderChangeRepository(), new MemoryBusinessWorkUnit(requests), new PermissionGuard());
         var command = new MotherOrderAdminService.BasicInfo(null, "旧页面货品", "", "旧页面", "admin-current-read", OrderMaintenanceRevision.of(stale));
         assertThatThrownBy(() -> service.correct("MD-ADMIN", command, admin)).hasMessageContaining("已被修改");
@@ -49,7 +49,7 @@ class MotherOrderAdminServiceTest {
     private final OperatorContext admin = new OperatorContext("管理员", RoleCode.ADMIN, DataScope.ALL);
 
     private MotherOrderAdminService service(MemoryBusinessWorkUnit workUnit) {
-        return new MotherOrderAdminService(documents, new InMemoryMasterDataRepository(), stocks,
+        return new MotherOrderAdminService(documents, com.zhubao.erp.business.infra.MasterDataFixture.withCustomers(), stocks,
                 mock(FinanceRepository.class), new InMemoryOrderChangeRepository(), workUnit, new PermissionGuard());
     }
 

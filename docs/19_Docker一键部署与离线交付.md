@@ -426,3 +426,5 @@ sh ./verify-bundle.sh --manifest runtime-backups/zhubao_bundle_20261018_010000.m
 - 容器日志采集到集中日志平台。
 
 2026-10-28：DEMO 工作台仓储与 `ZHUBAO_BUSINESS_REPOSITORY/ZHUBAO_BUSINESS_SNAPSHOT_CODE` 已退出。工作台读取正式单据与台账；持久化仍由各真实领域仓储（如 `ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY`）选择，不受旧变量控制。
+
+网关不再自动登记样例设备，`ZHUBAO_GATEWAY_DEMO_DEVICE_KEY` 已退出。新设备由管理员登记并分配各自密钥；已存储的设备不自动禁用或删除。

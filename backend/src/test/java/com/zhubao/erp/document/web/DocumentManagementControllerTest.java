@@ -165,7 +165,7 @@ class DocumentManagementControllerTest {
         BusinessDataAccess access = mock(BusinessDataAccess.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
         OperatorContext operator = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.SELF);
-        var attachment = new InMemoryDocumentManagementRepository().attachments().get(0);
+        var attachment = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded().attachments().get(0);
         when(resolver.requireSession(request)).thenReturn(operator);
         when(service.attachmentByCode(attachment.code())).thenReturn(attachment);
         doThrow(new PermissionDeniedException("无权读取其他客户附件"))

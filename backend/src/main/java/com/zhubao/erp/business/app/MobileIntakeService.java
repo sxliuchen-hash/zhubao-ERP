@@ -33,8 +33,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,13 +42,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 public class MobileIntakeService {
-
-    private static final Map<String, Long> KNOWN_CUSTOMERS = Map.of(
-            "恒信珠宝", 1001L,
-            "雅辰饰品", 1002L,
-            "璟瑞工贸", 1003L,
-            "瑞禾珠宝", 1004L
-    );
 
     private final BusinessOperationService businessOperationService;
     private final BusinessDocumentRepository businessDocumentRepository;
@@ -369,11 +360,7 @@ public class MobileIntakeService {
         if (provided != null && provided > 0) {
             return provided;
         }
-        Long known = KNOWN_CUSTOMERS.get(customerName);
-        if (known != null) {
-            return known;
-        }
-        return Math.floorMod(customerName.hashCode(), 800_000) + 200_000L;
+        throw new BusinessException("请选择已建立档案的客户，不能以名称生成客户身份");
     }
 
     private void assertCustomerAllowed(OperatorContext operator, String customerName, Long customerId) {

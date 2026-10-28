@@ -58,7 +58,7 @@ class MaterialStockServiceTest {
         orders = new InMemoryBusinessDocumentRepository();
         stockDocuments = new InMemoryStockDocumentRepository();
         sources = new InMemoryMotherRequirementSourceRepository();
-        catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         service = service(new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
         keeper = account("库管员", RoleCode.WAREHOUSE_KEEPER, DataScope.ALL, List.of());
     }

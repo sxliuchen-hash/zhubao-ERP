@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class MasterDataServiceTest {
     @Test
     void stableIdAndHistoricalSnapshotSurviveRename() {
-        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        MasterDataService catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         CustomerProfile customer = catalog.saveCustomer(new CustomerProfile(0, "", "新客户", "", "", "", "", true));
         MaterialProfile material = catalog.saveMaterial(new MaterialProfile("", "18K 白金", "", "", true));
         assertThat(customer.customerId()).isGreaterThan(1004);
@@ -74,7 +74,7 @@ class MasterDataServiceTest {
         accounts.save(new AuthUserAccount("recv", "hash", "收货员", RoleCode.RECEIVER,
                 DataScope.CUSTOMER_RANGE, true, false, List.of("1001")));
         CustomerAuthorizationService authorizations = new CustomerAuthorizationService(new InMemoryCustomerAuthorizationRepository());
-        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository(), authorizations, accounts);
+        MasterDataService catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers(), authorizations, accounts);
         OperatorContext receiver = new OperatorContext("收货员", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, false, "", List.of("1001"));
 
         CustomerProfile created = catalog.saveCustomer(new CustomerProfile(0, "", "翠玉坊", "", "", "", "", true), receiver, "recv");
@@ -95,7 +95,7 @@ class MasterDataServiceTest {
 
     @Test
     void requirementShortcutsStaySharedAndRejectDuplicates() {
-        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        MasterDataService catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         RequirementShortcut first = catalog.saveShortcut(new RequirementShortcut(0, "镜面抛光", 0));
         RequirementShortcut second = catalog.saveShortcut(new RequirementShortcut(0, "改圈", 0));
         assertThat(first.shortcutId()).isPositive();

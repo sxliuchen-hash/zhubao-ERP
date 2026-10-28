@@ -51,7 +51,7 @@ class RequirementOrderSnapshotTest {
         StockLedgerService stocks = new StockLedgerService(stock);
         MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
         InMemoryMotherRequirementSourceRepository sources = new InMemoryMotherRequirementSourceRepository();
-        InMemoryMasterDataRepository catalog = new InMemoryMasterDataRepository();
+        InMemoryMasterDataRepository catalog = com.zhubao.erp.business.infra.MasterDataFixture.withCustomers();
         MasterDataService master = new MasterDataService(catalog);
         MobileIntakeService intake = new MobileIntakeService(
                 new BusinessOperationService(stocks, null, documents, unit),
@@ -64,7 +64,7 @@ class RequirementOrderSnapshotTest {
         String saved = RequirementText.compose(basic.steps(), "孔径 2 毫米");
 
         MobileIntakeResult created = intake.intake(new MobileIntakeCommand(
-                "SF1048329001", "恒信珠宝", null, saved, "2026-10-20", "戒托",
+                "SF1048329001", "恒信珠宝", 1001L, saved, "2026-10-20", "戒托",
                 new BigDecimal("1"), new BigDecimal("2.500"), "", "AU9999", "件",
                 "snap-req-1", "COURIER", List.of(), basic.templateCode(), basic.version()), receiver);
 
@@ -142,7 +142,7 @@ class RequirementOrderSnapshotTest {
         OperatorContext receiver = new OperatorContext("收货员 何琴", RoleCode.RECEIVER, DataScope.ALL);
 
         assertThatThrownBy(() -> intake.intake(new MobileIntakeCommand(
-                "SF1048329001", "恒信珠宝", null, "长".repeat(501), "2026-10-20", "戒托",
+                "SF1048329001", "恒信珠宝", 1001L, "长".repeat(501), "2026-10-20", "戒托",
                 new BigDecimal("1"), new BigDecimal("2.500"), "", "AU9999", "件", "snap-long-1"), receiver))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("500");

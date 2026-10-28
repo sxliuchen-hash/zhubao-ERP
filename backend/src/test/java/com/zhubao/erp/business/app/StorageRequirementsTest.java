@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class StorageRequirementsTest {
     @Test void 旧请求保留条件而显式空列表清除且拒绝冲突条件() {
-        var service = new MasterDataService(new InMemoryMasterDataRepository());
+        var service = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         var first = service.saveMaterial(new MaterialProfile("XY", "星月", "", "", true, List.of("VACUUM", "COLD"), "保持密封"));
         assertThat(first.storageConditions()).containsExactly("COLD", "VACUUM");
         var oldClient = service.saveMaterial(new MaterialProfile("XY", "星月", "", "改备注", true));
@@ -28,7 +28,7 @@ class StorageRequirementsTest {
         assertThat(StorageRequirements.read(null, null)).isNull();
     }
     @Test void 来源收料和拆单冻结保存条件且修改档案不改历史() {
-        var catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        var catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         catalog.saveMaterial(new MaterialProfile("XY", "星月", "", "", true, List.of("COLD", "VACUUM"), "密封"));
         var docs = new InMemoryBusinessDocumentRepository();
         var ledgers = new StockLedgerService(new InMemoryStockLedgerRepository());

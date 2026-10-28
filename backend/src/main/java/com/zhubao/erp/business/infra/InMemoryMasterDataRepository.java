@@ -26,15 +26,11 @@ public class InMemoryMasterDataRepository implements MasterDataRepository {
     private final ConcurrentHashMap<String, MaterialProfile> materials = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, RequirementShortcut> shortcuts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, RequirementTemplate> templates = new ConcurrentHashMap<>();
-    private final AtomicLong nextCustomerId = new AtomicLong(1004);
+    private final AtomicLong nextCustomerId = new AtomicLong(0);
     private final AtomicLong nextShortcutId = new AtomicLong(0);
     private final AtomicLong nextTemplateId = new AtomicLong(2);
 
     public InMemoryMasterDataRepository() {
-        saveCustomer(new CustomerProfile(1001, "C-1001", "恒信珠宝", "", "", "", "", true));
-        saveCustomer(new CustomerProfile(1002, "C-1002", "雅辰饰品", "", "", "", "", true));
-        saveCustomer(new CustomerProfile(1003, "C-1003", "璟瑞工贸", "", "", "", "", true));
-        saveCustomer(new CustomerProfile(1004, "C-1004", "瑞禾珠宝", "", "", "", "", true));
         saveMaterial(new MaterialProfile("AU9999", "足金", "黄金", "", true));
         templates.put("TPL-BEAD-BASIC", new RequirementTemplate(1, "TPL-BEAD-BASIC", "常规珠型加工",
                 List.of("开粗", "车形（车成珠型）", "抛光"), true, 1, 1, ""));
@@ -61,6 +57,7 @@ public class InMemoryMasterDataRepository implements MasterDataRepository {
         long id = profile.customerId() > 0 ? profile.customerId() : nextCustomerId.incrementAndGet();
         CustomerProfile saved = new CustomerProfile(id, profile.customerCode().isBlank() ? "C-" + id : profile.customerCode(),
                 profile.name(), profile.aliases(), profile.contact(), profile.phone(), profile.remark(), profile.enabled());
+        nextCustomerId.accumulateAndGet(id, Math::max);
         customers.put(id, saved);
         return saved;
     }

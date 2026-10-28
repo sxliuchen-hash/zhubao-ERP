@@ -65,7 +65,7 @@ class JdbcDocumentManagementRepositoryTest {
         assertThat(repository.findAttachmentByCode("ATT-BIZ-003")).contains(otherBusiness);
         assertThat(repository.findAttachmentByCode("ATT-NOT-FOUND")).isEmpty();
 
-        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository memory = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         memory.saveAttachment(first);
         memory.saveAttachment(second);
         memory.saveAttachment(otherBusiness);
@@ -96,7 +96,7 @@ class JdbcDocumentManagementRepositoryTest {
                 .containsExactly("ATT-PAGE-003");
         assertThat(last.hasMore()).isFalse();
 
-        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository memory = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         memory.saveAttachment(pageAttachment("ATT-PAGE-001", "BUS-PAGE-001"));
         memory.saveAttachment(pageAttachment("ATT-PAGE-002", "BUS-PAGE-002"));
         memory.saveAttachment(pageAttachment("ATT-PAGE-003", "BUS-PAGE-003"));
@@ -127,7 +127,7 @@ class JdbcDocumentManagementRepositoryTest {
 
     @Test
     void pagesAttachmentsByBusinessCodeAcrossDocumentsAndStableCursorAfterInsert() throws SQLException {
-        InMemoryDocumentManagementRepository memoryRepository = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository memoryRepository = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         List<EvidenceAttachment> initial = List.of(
                 pageAttachment("ATT-BIZ-PAGE-001", "BUS-PAGE-001", "DOC-PAGE-001"),
                 pageAttachment("ATT-BIZ-PAGE-002", "BUS-PAGE-002", "DOC-PAGE-OTHER"),
@@ -213,7 +213,7 @@ class JdbcDocumentManagementRepositoryTest {
                 .containsExactly("DOC-PAGE-PKG-003");
         assertThat(last.hasMore()).isFalse();
 
-        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository memory = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         memory.savePackage(pagePackage("DOC-PAGE-PKG-001", "BUS-PAGE-PKG-001"));
         memory.savePackage(pagePackage("DOC-PAGE-PKG-002", "BUS-PAGE-PKG-002"));
         memory.savePackage(pagePackage("DOC-PAGE-PKG-003", "BUS-PAGE-PKG-003"));
@@ -278,7 +278,7 @@ class JdbcDocumentManagementRepositoryTest {
                 .extracting(DocumentPackage::code)
                 .containsExactly("DOC-PAGE-SPECIAL");
 
-        InMemoryDocumentManagementRepository memory = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository memory = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         memory.savePackage(codeMatch);
         memory.savePackage(pagePackage("DOC-PAGE-NONE-001", "BUS-PAGE-NONE-001"));
         memory.savePackage(titleMatch);

@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class LabelStorageEditionServiceTest {
     @Test void 换贴创建新保存版本而同版补打保留原快照() {
-        var catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        var catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         catalog.saveMaterial(new MaterialProfile("XY", "星月", "", "", true, List.of("COLD", "VACUUM"), ""));
         var documents = new InMemoryBusinessDocumentRepository();
         var unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());

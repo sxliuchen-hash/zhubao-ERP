@@ -60,7 +60,7 @@ class MobileIntakeServiceTest {
     void sameWaybillCreatesAnotherMotherWithNewRequest() {
         MobileIntakeResult created = service.intake(command("镶嵌主石", "2026-10-20"), receiver);
 
-        MobileIntakeCommand second = new MobileIntakeCommand("SF1048329001", "恒信珠宝", null,
+        MobileIntakeCommand second = new MobileIntakeCommand("SF1048329001", "恒信珠宝", 1001L,
                 "另一条要求", "2026-11-01", "18K 金戒托", new BigDecimal("12"),
                 new BigDecimal("18.500"), "", "MAT-MOBILE", "件", "intake-second-01");
         MobileIntakeResult again = service.intake(second, receiver);
@@ -100,7 +100,7 @@ class MobileIntakeServiceTest {
 
     @Test
     void withoutCourierCreatesMotherAndReplaysByRequestOnly() {
-        MobileIntakeCommand delivery = new MobileIntakeCommand("", "恒信珠宝", null,
+        MobileIntakeCommand delivery = new MobileIntakeCommand("", "恒信珠宝", 1001L,
                 "抛光", "2026-10-20", "戒托", new BigDecimal("2"), new BigDecimal("3.5"),
                 "", "MAT-1", "件", "delivery-request-01", "CUSTOMER_DELIVERY");
         MobileIntakeResult first = service.intake(delivery, receiver);
@@ -114,7 +114,7 @@ class MobileIntakeServiceTest {
 
     private void assertWaybillNotUsedAsEvidence(String waybill, String requestId) {
         MobileIntakeResult created = service.intake(new MobileIntakeCommand(
-                waybill, "恒信珠宝", null, "抛光", "2026-10-20", "戒托",
+                waybill, "恒信珠宝", 1001L, "抛光", "2026-10-20", "戒托",
                 new BigDecimal("1"), new BigDecimal("2.5"), "顺丰", "MAT-MOBILE", "件", requestId), receiver);
         MotherOrderRecord saved = documents.findMotherOrderByCode(created.motherOrderCode()).orElseThrow();
         assertThat(saved.courierNo()).isEqualTo(waybill);
@@ -131,7 +131,7 @@ class MobileIntakeServiceTest {
         return new MobileIntakeCommand(
                 "SF1048329001",
                 "恒信珠宝",
-                null,
+                1001L,
                 requirement,
                 dueDate,
                 "18K 金戒托",

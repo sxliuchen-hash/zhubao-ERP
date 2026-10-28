@@ -21,7 +21,7 @@ class PrepReceiptEvidenceTest {
     @TempDir Path root;
     @Test void 寄存待核和已入库均用真实收货编号上传关联且拒绝越权伪造操作() {
         var orders = new InMemoryBusinessDocumentRepository(); var stocks = new StockLedgerService(new InMemoryStockLedgerRepository());
-        var stockDocs = new InMemoryStockDocumentRepository(); var documents = new InMemoryDocumentManagementRepository(); var links = new InMemoryBusinessEvidenceLinkRepository();
+        var stockDocs = new InMemoryStockDocumentRepository(); var documents = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded(); var links = new InMemoryBusinessEvidenceLinkRepository();
         var access = new BusinessDataAccess(orders, stocks, null, stockDocs);
         var settings = new AttachmentStorageProperties(); settings.setLocalRoot(root.toString());
         var storage = new LocalAttachmentObjectStorage(settings); var management = new DocumentManagementService(documents, storage);

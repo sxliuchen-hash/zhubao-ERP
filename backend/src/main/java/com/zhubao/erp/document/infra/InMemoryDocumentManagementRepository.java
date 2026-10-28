@@ -22,18 +22,9 @@ public class InMemoryDocumentManagementRepository implements DocumentManagementR
 
     private final Map<String, PackageEntry> packages = new LinkedHashMap<>();
     private final Map<String, AttachmentEntry> attachments = new LinkedHashMap<>();
-    private final List<DocumentAuditEvent> auditEvents = new ArrayList<>(DocumentManagementSeedData.auditEvents());
+    private final List<DocumentAuditEvent> auditEvents = new ArrayList<>();
     private long nextPackageId = 1;
     private long nextAttachmentId = 1;
-
-    public InMemoryDocumentManagementRepository() {
-        for (DocumentPackage documentPackage : DocumentManagementSeedData.packages()) {
-            packages.put(documentPackage.code(), new PackageEntry(nextPackageId++, documentPackage));
-        }
-        for (EvidenceAttachment attachment : DocumentManagementSeedData.attachments()) {
-            attachments.put(attachment.code(), new AttachmentEntry(nextAttachmentId++, attachment));
-        }
-    }
 
     @Override
     public synchronized List<DocumentPackage> packages() {

@@ -89,7 +89,7 @@ class RequirementTemplateServiceTest {
     }
 
     private MasterDataRepository repository(boolean jdbc) throws Exception {
-        if (!jdbc) return new InMemoryMasterDataRepository();
+        if (!jdbc) return com.zhubao.erp.business.infra.MasterDataFixture.withCustomers();
         JdbcDataSource dataSource = new JdbcDataSource();
         dataSource.setURL("jdbc:h2:mem:tpl_" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");
         String sql = Files.readString(Path.of("src/main/resources/db/mysql/V69__m3_requirement_template.sql"));

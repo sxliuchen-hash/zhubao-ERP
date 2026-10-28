@@ -31,7 +31,7 @@ class MultiMaterialIntakeSplitTest {
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         StockLedgerService ledgers = new StockLedgerService(new InMemoryStockLedgerRepository());
         MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
-        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        MasterDataService catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         MobileIntakeService intake = new MobileIntakeService(
                 new BusinessOperationService(ledgers, null, documents, unit), documents, unit, catalog, ledgers);
         MobileIntakeCommand command = new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
@@ -52,7 +52,7 @@ class MultiMaterialIntakeSplitTest {
         MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
         MobileIntakeService intake = new MobileIntakeService(
                 new BusinessOperationService(ledgers, null, documents, unit), documents, unit,
-                new MasterDataService(new InMemoryMasterDataRepository()), ledgers);
+                new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers()), ledgers);
         MobileIntakeCommand command = new MobileIntakeCommand("", "恒信珠宝", 1001L, "抛光", "2026-10-20",
                 "戒托", amount("2"), amount("2"), "", "AU9999", "件", "mixed-units-intake",
                 "CUSTOMER_DELIVERY", List.of(new MobileIntakeLine("AU9999", "戒托", amount("1"), "件", amount("1")),
@@ -68,7 +68,7 @@ class MultiMaterialIntakeSplitTest {
         InMemoryStockLedgerRepository stock = new InMemoryStockLedgerRepository();
         StockLedgerService ledgers = new StockLedgerService(stock);
         MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
-        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        MasterDataService catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         MaterialProfile secondMaterial = catalog.saveMaterial(new MaterialProfile("", "18K 白金", "", "", true));
         MobileIntakeService intake = new MobileIntakeService(
                 new BusinessOperationService(ledgers, null, documents, unit), documents, unit, catalog, ledgers);

@@ -26,7 +26,6 @@ import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.env.MockEnvironment;
 
 import java.math.BigDecimal;
 
@@ -42,10 +41,8 @@ class DeviceGatewayServiceTest {
     @BeforeEach
     void setUp() {
         PasswordHasher passwordHasher = new PasswordHasher();
-        MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("zhubao.gateway.demo-device-key", DEVICE_KEY);
         InMemoryGatewayDeviceRepository deviceRepository =
-                new InMemoryGatewayDeviceRepository(passwordHasher, environment);
+                devices(passwordHasher);
         InMemoryDeviceReadingRepository readingRepository = new InMemoryDeviceReadingRepository();
         InMemoryReadingConsumptionRepository consumptionRepository = new InMemoryReadingConsumptionRepository();
         stockLedgerService = new StockLedgerService(new InMemoryStockLedgerRepository());
@@ -55,6 +52,20 @@ class DeviceGatewayServiceTest {
                 new DeviceReadingNormalizer(), passwordHasher,
                 new GatewayRateLimiter(1000, 60), new GatewayReplayGuard(false, 300),
                 businessOperationService);
+    }
+
+    private static InMemoryGatewayDeviceRepository devices(PasswordHasher hasher) {
+        var repository = new InMemoryGatewayDeviceRepository();
+        for (String code : java.util.List.of("SCALE-01", "SCAN-PC-01", "PRN-LABEL-01", "CAM-UNPACK-01")) {
+            var types = switch (code) {
+                case "SCALE-01" -> java.util.List.of(com.zhubao.erp.gateway.domain.DeviceReadingType.SCALE_WEIGHT, com.zhubao.erp.gateway.domain.DeviceReadingType.HEARTBEAT);
+                case "SCAN-PC-01" -> java.util.List.of(com.zhubao.erp.gateway.domain.DeviceReadingType.SCAN_EVENT, com.zhubao.erp.gateway.domain.DeviceReadingType.HEARTBEAT);
+                case "PRN-LABEL-01" -> java.util.List.of(com.zhubao.erp.gateway.domain.DeviceReadingType.PRINT_ACK, com.zhubao.erp.gateway.domain.DeviceReadingType.HEARTBEAT);
+                default -> java.util.List.of(com.zhubao.erp.gateway.domain.DeviceReadingType.VIDEO_CLIP_MARK, com.zhubao.erp.gateway.domain.DeviceReadingType.HEARTBEAT);
+            };
+            repository.save(new com.zhubao.erp.gateway.domain.GatewayDevice(code, "测试设备", types, hasher.hash(DEVICE_KEY), true, "测试工位", "人工录入", "2026-10-28"));
+        }
+        return repository;
     }
 
     private StockLedgerService stockLedgerService;
@@ -240,10 +251,8 @@ class DeviceGatewayServiceTest {
     @Test
     void enforcesRateLimitPerDevice() {
         PasswordHasher passwordHasher = new PasswordHasher();
-        MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("zhubao.gateway.demo-device-key", DEVICE_KEY);
         DeviceGatewayService limitedService = new DeviceGatewayService(
-                new InMemoryGatewayDeviceRepository(passwordHasher, environment),
+                devices(passwordHasher),
                 new InMemoryDeviceReadingRepository(),
                 new InMemoryReadingConsumptionRepository(),
                 new DeviceReadingNormalizer(),
@@ -266,10 +275,8 @@ class DeviceGatewayServiceTest {
     @Test
     void enforcesReplayProtectionWhenEnabled() {
         PasswordHasher passwordHasher = new PasswordHasher();
-        MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("zhubao.gateway.demo-device-key", DEVICE_KEY);
         DeviceGatewayService guardedService = new DeviceGatewayService(
-                new InMemoryGatewayDeviceRepository(passwordHasher, environment),
+                devices(passwordHasher),
                 new InMemoryDeviceReadingRepository(),
                 new InMemoryReadingConsumptionRepository(),
                 new DeviceReadingNormalizer(),
@@ -308,8 +315,8 @@ class DeviceGatewayServiceTest {
     }
 
     @Test
-    void weighHandoverWithPostingContextWritesLedgerUsingScaleWeight() {
-        // Seed WIP stock so the linked production report can move WIP -> SEMI_FINISHED.
+    void 未提供真实账号的设备交工不能绕过岗位校验() {
+        // 先建立库存事实，拒绝无真实账号的设备交工。
         seedWip("MD-GW-001", "ZD-GW-001", "MAT-18K-RING", 1001L, "WIP-LINE-01");
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "ST,GS,+000123.45,g"));
 
@@ -318,13 +325,11 @@ class DeviceGatewayServiceTest {
                 1001L, 1001L, "MD-GW-001", "ZD-GW-001", "MAT-18K-RING",
                 "WIP-LINE-01", "SEMI-FINISHED", new BigDecimal("10"), "抛光");
 
-        ReadingConsumption consumption = service.consume(consume, OPERATOR);
-
-        assertThat(consumption.posted()).isTrue();
-        assertThat(consumption.ledgerCode()).startsWith("STK-");
-        // The scale weight (123.45g) drove the ledger, not the piece count.
-        assertThat(stockLedgerService.ledgers())
-                .anyMatch(entry -> entry.weight().compareTo(new BigDecimal("123.45")) == 0);
+        int before = stockLedgerService.ledgers().size();
+        assertThatThrownBy(() -> service.consume(consume, OPERATOR)).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须登录并经过岗位校验");
+        assertThat(stockLedgerService.ledgers()).hasSize(before);
+        assertThat(service.recentConsumptions(10)).isEmpty();
     }
 
     @Test

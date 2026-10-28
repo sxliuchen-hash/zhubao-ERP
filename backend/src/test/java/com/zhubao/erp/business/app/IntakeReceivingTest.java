@@ -276,7 +276,7 @@ class IntakeReceivingTest {
         return new MobileIntakeCommand(
                 courier,
                 customer,
-                null,
+                "雅辰饰品".equals(customer) ? 1002L : 1001L,
                 requirement,
                 "2026-10-20",
                 "18K 金戒托",

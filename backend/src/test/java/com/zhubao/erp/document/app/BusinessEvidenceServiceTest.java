@@ -612,7 +612,7 @@ class BusinessEvidenceServiceTest {
 
     @Test
     void metadataFailureKeepsOriginalForReconciliationAndRetryCanSave() throws Exception {
-        InMemoryDocumentManagementRepository delegate = new InMemoryDocumentManagementRepository();
+        InMemoryDocumentManagementRepository delegate = com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded();
         FailOnceRepository repository = new FailOnceRepository(delegate);
         InMemoryBusinessDocumentRepository business = new InMemoryBusinessDocumentRepository();
         business.saveMotherOrder(mother(MOTHER, INBOUND_LEDGER));
@@ -984,7 +984,7 @@ class BusinessEvidenceServiceTest {
     private Fixture memoryFixture() {
         return fixture(
                 new InMemoryBusinessDocumentRepository(),
-                new InMemoryDocumentManagementRepository(),
+                com.zhubao.erp.document.infra.DocumentRepositoryFixture.seeded(),
                 new InMemoryBusinessEvidenceLinkRepository()
         );
     }
@@ -1177,6 +1177,7 @@ class BusinessEvidenceServiceTest {
     }
 
     private static final class QueryTrackingDocumentRepository extends InMemoryDocumentManagementRepository {
+        private QueryTrackingDocumentRepository() { com.zhubao.erp.document.infra.DocumentRepositoryFixture.seed(this); }
         private int attachmentsCalls;
         private int attachmentsByBusinessCodeCalls;
         private int attachmentsPageByBusinessCodeCalls;

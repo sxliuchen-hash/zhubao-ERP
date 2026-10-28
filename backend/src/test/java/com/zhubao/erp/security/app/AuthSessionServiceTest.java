@@ -546,7 +546,7 @@ class AuthSessionServiceTest {
         InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(passwordHasher);
         accounts.save(new AuthUserAccount("restricted", passwordHasher.hash("StrongPass2026"), "限定人员",
                 RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE, true, false, List.of("恒信珠宝")));
-        MasterDataService catalog = new MasterDataService(new InMemoryMasterDataRepository());
+        MasterDataService catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         AuthSessionService auth = service(accounts);
         auth.setMasterDataService(catalog);
         AuthSession session = auth.login(new AuthLoginCommand("restricted", "StrongPass2026"));

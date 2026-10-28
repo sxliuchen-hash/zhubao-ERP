@@ -3,10 +3,7 @@ package com.zhubao.erp.gateway.infra;
 import com.zhubao.erp.gateway.domain.DeviceReadingType;
 import com.zhubao.erp.gateway.domain.GatewayDevice;
 import com.zhubao.erp.gateway.domain.GatewayDeviceRepository;
-import com.zhubao.erp.security.app.PasswordHasher;
-import jakarta.annotation.PostConstruct;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Repository;
 
 import javax.sql.DataSource;
@@ -14,8 +11,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -27,38 +22,11 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "zhubao.gateway.repository", havingValue = "jdbc")
 public class JdbcGatewayDeviceRepository implements GatewayDeviceRepository {
 
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final DataSource dataSource;
-    private final PasswordHasher passwordHasher;
-    private final Environment environment;
 
-    public JdbcGatewayDeviceRepository(DataSource dataSource, PasswordHasher passwordHasher, Environment environment) {
+    public JdbcGatewayDeviceRepository(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.passwordHasher = passwordHasher;
-        this.environment = environment;
-    }
-
-    @PostConstruct
-    void seedReviewDevicesWhenEmpty() {
-        if (!findAll().isEmpty()) {
-            return;
-        }
-        String demoKey = environment.getProperty("zhubao.gateway.demo-device-key", "zhubao-device-demo");
-        String keyHash = passwordHasher.hash(demoKey);
-        String now = TIME_FORMATTER.format(LocalDateTime.now());
-        insert(new GatewayDevice("SCALE-01", "称重台电子秤桥接",
-                List.of(DeviceReadingType.SCALE_WEIGHT, DeviceReadingType.HEARTBEAT), keyHash, true,
-                "打包称重台", "读数异常或桥接离线时人工读数并拍照留证", now));
-        insert(new GatewayDevice("SCAN-PC-01", "PC 扫码枪桥接",
-                List.of(DeviceReadingType.SCAN_EVENT, DeviceReadingType.HEARTBEAT), keyHash, true,
-                "收货/复核工位", "扫码失败时手工录入编码并二次确认", now));
-        insert(new GatewayDevice("PRN-LABEL-01", "标签打印机回执桥接",
-                List.of(DeviceReadingType.PRINT_ACK, DeviceReadingType.HEARTBEAT), keyHash, true,
-                "标签打印工位", "回执失败时导出 PDF 标签人工打印并记录补打原因", now));
-        insert(new GatewayDevice("CAM-UNPACK-01", "拆包摄像头截取标记桥接",
-                List.of(DeviceReadingType.VIDEO_CLIP_MARK, DeviceReadingType.HEARTBEAT), keyHash, true,
-                "拆包台", "截取失败时人工上传 MP4 兜底", now));
     }
 
     @Override
