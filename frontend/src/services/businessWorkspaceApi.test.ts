@@ -109,7 +109,7 @@ describe('businessWorkspaceApi mappers', () => {
 
   it('maps inventory ledger and evidence contracts', () => {
     const model = mapInventoryWorkspace({
-      dataSource: 'DEMO',
+      dataSource: 'LIVE',
       balances: [
         {
           owner: '恒信珠宝',
@@ -158,7 +158,7 @@ describe('businessWorkspaceApi mappers', () => {
       ],
     });
 
-    expect(model.dataSource).toBe('DEMO');
+    expect(model.dataSource).toBe('LIVE');
     expect(model.balances[0].operationContext).toEqual(operationContext);
     expect(model.balances[0].qty).toBe(10);
     expect(model.balances[0].quantityUnit).toBe('');

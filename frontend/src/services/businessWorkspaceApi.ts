@@ -97,28 +97,28 @@ interface InventoryLedgerEntryDto {
 }
 
 export interface InboundWorkspaceModel {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   checkpoints: InboundCheckpoint[];
   orders: InboundOrder[];
   risks: InboundRisk[];
 }
 
 export interface ProductionWorkspaceModel {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   stationLoads: ProductionStationLoad[];
   workOrders: WorkOrder[];
   handoffs: ProductionHandoff[];
 }
 
 export interface QualityWorkspaceModel {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   metrics: QualityMetric[];
   cases: QualityCase[];
   lossApprovals: LossApproval[];
 }
 
 export interface InventoryWorkspaceModel {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   balances: InventoryBalance[];
   ledgerEntries: InventoryLedgerEntry[];
   timeline: TraceEvent[];
@@ -126,28 +126,28 @@ export interface InventoryWorkspaceModel {
 }
 
 interface InboundWorkspaceDto {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   checkpoints: ReviewStatDto[];
   orders: InboundOrderDto[];
   risks: ActionItemDto[];
 }
 
 interface ProductionWorkspaceDto {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   stationLoads: ReviewStatDto[];
   workOrders: WorkOrderDto[];
   handoffs: ProductionHandoffDto[];
 }
 
 interface QualityWorkspaceDto {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   metrics: QualityMetric[];
   cases: QualityCase[];
   lossApprovals: LossApproval[];
 }
 
 interface InventoryWorkspaceDto {
-  dataSource?: 'LIVE' | 'DEMO';
+  dataSource?: 'LIVE';
   balances: Array<Omit<InventoryBalance, 'qty'> & { quantity: number | string; quantityUnit?: string }>;
   ledgerEntries: InventoryLedgerEntryDto[];
   timeline: TraceEvent[];

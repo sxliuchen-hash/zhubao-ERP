@@ -116,7 +116,6 @@ function aftercareSelected() {
 
 <template>
   <div class="inventory-trace-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
-    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <div class="finance-sections" role="tablist" aria-label="库存分区">
       <button type="button" class="table-action" :class="{ active: stockTab === 'company' }" :aria-selected="stockTab === 'company'" @click="stockTab = 'company'">公司自有物料</button>
       <button type="button" class="table-action" :class="{ active: stockTab === 'prep' }" :aria-selected="stockTab === 'prep'" @click="stockTab = 'prep'">客户寄存备料</button>

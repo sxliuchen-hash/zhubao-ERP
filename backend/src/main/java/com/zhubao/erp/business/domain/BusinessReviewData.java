@@ -176,7 +176,7 @@ public final class BusinessReviewData {
             String dataSource
     ) {
         public InboundWorkspaceData(List<ReviewStat> checkpoints, List<InboundOrder> orders, List<ActionItem> risks) {
-            this(checkpoints, orders, risks, "DEMO");
+            this(checkpoints, orders, risks, "LIVE");
         }
     }
 
@@ -187,7 +187,7 @@ public final class BusinessReviewData {
             String dataSource
     ) {
         public ProductionWorkspaceData(List<ReviewStat> stationLoads, List<WorkOrder> workOrders, List<ProductionHandoff> handoffs) {
-            this(stationLoads, workOrders, handoffs, "DEMO");
+            this(stationLoads, workOrders, handoffs, "LIVE");
         }
     }
 
@@ -198,7 +198,7 @@ public final class BusinessReviewData {
             String dataSource
     ) {
         public QualityWorkspaceData(List<ReviewStat> metrics, List<QualityCase> cases, List<LossApproval> lossApprovals) {
-            this(metrics, cases, lossApprovals, "DEMO");
+            this(metrics, cases, lossApprovals, "LIVE");
         }
     }
 
@@ -210,7 +210,7 @@ public final class BusinessReviewData {
             String dataSource
     ) {
         public InventoryWorkspaceData(List<InventoryBalance> balances, List<InventoryLedgerEntry> ledgerEntries, List<TraceEvent> timeline, List<ActionItem> evidence) {
-            this(balances, ledgerEntries, timeline, evidence, "DEMO");
+            this(balances, ledgerEntries, timeline, evidence, "LIVE");
         }
     }
 
@@ -221,7 +221,7 @@ public final class BusinessReviewData {
             String dataSource
     ) {
         public MobileWorkspaceData(List<MobileTask> tasks, List<ReviewStat> capabilities, List<ActionItem> offlineDrafts) {
-            this(tasks, capabilities, offlineDrafts, "DEMO");
+            this(tasks, capabilities, offlineDrafts, "LIVE");
         }
     }
 
@@ -234,7 +234,7 @@ public final class BusinessReviewData {
             String dataSource
     ) {
         public BusinessWorkspaceSummary(int inboundOrders, int activeWorkOrders, int pendingQualityCases, int inventoryLedgerEntries, int mobileTasks) {
-            this(inboundOrders, activeWorkOrders, pendingQualityCases, inventoryLedgerEntries, mobileTasks, "DEMO");
+            this(inboundOrders, activeWorkOrders, pendingQualityCases, inventoryLedgerEntries, mobileTasks, "LIVE");
         }
     }
 }

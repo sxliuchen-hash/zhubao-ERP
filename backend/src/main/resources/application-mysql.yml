@@ -14,9 +14,6 @@ zhubao:
       repository: ${ZHUBAO_CUSTOMER_AUTHORIZATION_REPOSITORY:jdbc}
   inventory:
     repository: jdbc
-  business:
-    repository: ${ZHUBAO_BUSINESS_REPOSITORY:memory}
-    snapshot-code: ${ZHUBAO_BUSINESS_SNAPSHOT_CODE:}
   approval:
     repository: ${ZHUBAO_APPROVAL_REPOSITORY:memory}
   documents:

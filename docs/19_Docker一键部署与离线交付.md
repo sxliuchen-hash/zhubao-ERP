@@ -208,7 +208,6 @@ Compose 服务：
 | `ZHUBAO_DB_USERNAME` | `zhubao` | 数据库用户 |
 | `ZHUBAO_DB_PASSWORD` | `change-me` | 数据库密码，生产必须修改 |
 | `ZHUBAO_DB_ROOT_PASSWORD` | `change-root-me` | MySQL root 密码，生产必须修改 |
-| `ZHUBAO_BUSINESS_REPOSITORY` | `jdbc` | 业务工作台仓储 |
 | `ZHUBAO_APPROVAL_REPOSITORY` | `jdbc` | 审批任务仓储 |
 | `ZHUBAO_DOCUMENTS_REPOSITORY` | `jdbc` | 文档附件元数据仓储 |
 | `ZHUBAO_AUTH_USERS_REPOSITORY` | `jdbc` | 登录账号仓储；Compose 默认写入 `auth_user_account` |
@@ -425,3 +424,5 @@ sh ./verify-bundle.sh --manifest runtime-backups/zhubao_bundle_20261018_010000.m
 - 多租户或多客户隔离部署。
 - 照片和视频的独立附件备份与恢复闭环，以及后续按需切换的 NAS/S3/COS 对象存储。
 - 容器日志采集到集中日志平台。
+
+2026-10-28：DEMO 工作台仓储与 `ZHUBAO_BUSINESS_REPOSITORY/ZHUBAO_BUSINESS_SNAPSHOT_CODE` 已退出。工作台读取正式单据与台账；持久化仍由各真实领域仓储（如 `ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY`）选择，不受旧变量控制。

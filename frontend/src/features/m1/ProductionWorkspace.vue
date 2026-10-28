@@ -206,7 +206,6 @@ function machineMatchTone(readiness: MachineOutputMachineMatchSuggestion['readin
 
 <template>
   <div class="production-desk page-stack" :class="{ 'is-detail': detailOpen }">
-    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <button class="secondary-button" type="button" @click="openManual">扫码或手输工序单据</button>
     <ProductionPanel
       v-if="manualCreated"

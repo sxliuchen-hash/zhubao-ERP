@@ -147,7 +147,6 @@ function selectQualityCase(code: string) {
 
 <template>
   <div class="quality-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
-    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <button class="secondary-button" type="button" @click="openManual">扫码或手输质检单据</button>
     <QualityPanel
       v-if="manualCreated"

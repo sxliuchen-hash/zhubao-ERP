@@ -28,7 +28,7 @@ public class JdbcDataSourceConfiguration {
      */
     static final class AnyJdbcRepository implements Condition {
         private static final List<String> PREFIXES = List.of(
-                "business", "business-document", "inventory", "approval", "documents", "finance",
+                "business-document", "inventory", "approval", "documents", "finance",
                 "register-import", "machine-output", "machine-profile", "label-template", "gateway",
                 "hardware.poc", "security.menu", "security.customer-authorization", "auth.users", "auth.audit", "auth.pre-approval"
         );

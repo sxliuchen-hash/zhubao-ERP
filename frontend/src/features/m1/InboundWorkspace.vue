@@ -248,7 +248,6 @@ function backToList() {
 
 <template>
   <div class="inbound-desk page-stack" :class="{ 'is-detail': detailOpen }">
-    <p v-if="workspace.dataSource === 'DEMO'" class="operation-feedback warning">当前显示评审样例，仅用于演示。</p>
     <button v-if="canCreate" class="primary-button" type="button" @click="openIntake?.()">新建收货</button>
     <IntakePanel
       v-if="!openIntake"

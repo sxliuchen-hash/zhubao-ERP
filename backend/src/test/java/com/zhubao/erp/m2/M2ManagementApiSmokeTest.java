@@ -29,8 +29,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static com.zhubao.erp.document.AttachmentTestMedia.jpeg;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "zhubao.business.workspace.demo-enabled=true")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class M2ManagementApiSmokeTest {
 
     @Autowired

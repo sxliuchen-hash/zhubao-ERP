@@ -109,7 +109,7 @@ class KeptMotherOperationContextTest {
         var parser = new ScanCodeParser();
         var stations = new ProcessStationService(documents, stocks, operations, parser);
         var quality = new QualityRequirementService(documents, stocks, operations, parser);
-        var workspaces = new BusinessWorkspaceService(null, documents, new ProgressBoardService(documents), stocks, null, false);
+        var workspaces = new BusinessWorkspaceService(documents, new ProgressBoardService(documents), stocks, null, null);
         operations.confirmInbound(new ConfirmInboundCommand(MOTHER, 7001L, 7001L, "MAT-REAL", "2026-10-10", "", "", "",
                 "收货员", "收货员", "戒托", "", null, "", RAW, bd("2"), "件", bd("12.5"), "收货员", "", "",
                 "无划痕", "2099-01-01", "真实客户"));

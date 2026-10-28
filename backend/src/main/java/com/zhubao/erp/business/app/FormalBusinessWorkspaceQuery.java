@@ -252,8 +252,8 @@ final class FormalBusinessWorkspaceQuery {
         if (stocks == null) {
             return List.of();
         }
-        // 全部数据一次读取。名单为空只是没有客户过滤条件，读取后仍按单据归属收敛，不把空名单当成全部客户。
-        if (operator.dataScope() == DataScope.ALL || operator.customerScope().isEmpty()) {
+        // 全范围或岗位范围按单据事实过滤；客户范围空名单不读取全表。
+        if (operator.dataScope() == DataScope.ALL || (operator.dataScope() != DataScope.CUSTOMER_RANGE && operator.customerScope().isEmpty())) {
             return stocks.ledgers();
         }
         if (operator.customerScope().isEmpty()) {

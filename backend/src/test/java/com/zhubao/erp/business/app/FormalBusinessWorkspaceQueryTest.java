@@ -3,9 +3,7 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.business.domain.*;
-import com.zhubao.erp.business.infra.BusinessWorkspaceSeedData;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
-import com.zhubao.erp.business.infra.InMemoryBusinessWorkspaceRepository;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.*;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
@@ -21,8 +19,7 @@ class FormalBusinessWorkspaceQueryTest {
     private final InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
     private final StockLedgerService stocks = new StockLedgerService(new InMemoryStockLedgerRepository());
     private final ApprovalService approvals = new ApprovalService(new InMemoryApprovalTaskRepository());
-    private final InMemoryBusinessWorkspaceRepository demo = new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData());
-    private final BusinessWorkspaceService service = new BusinessWorkspaceService(demo, documents, new ProgressBoardService(documents), stocks, approvals, false);
+    private final BusinessWorkspaceService service = new BusinessWorkspaceService(documents, new ProgressBoardService(documents), stocks, approvals, null);
 
     @Test
     void defaultEmptyWorkspaceDoesNotExposeReviewSeedOrWriteRecords() {
@@ -135,15 +132,6 @@ class FormalBusinessWorkspaceQueryTest {
         stocks.transfer(new StockTransferCommand("inbound_confirm", "OTHER", null, otherWarehouse, BigDecimal.ONE, BigDecimal.ONE, "另一个实际库位"));
         assertThat(service.inbound().orders()).singleElement().satisfies(order -> assertThat(order.operationContext()).isNull());
         assertThat(service.inventory().balances()).hasSize(2).allSatisfy(balance -> assertThat(balance.operationContext()).isNotNull());
-    }
-
-    @Test
-    void explicitDemoModeIsLabeledAndDoesNotMergeRealRecords() {
-        receipt("MD-LIVE", 7001L, "真实客户", "收货员");
-        BusinessWorkspaceService demoService = new BusinessWorkspaceService(demo, documents, new ProgressBoardService(documents), stocks, approvals, true);
-        assertThat(demoService.inbound().dataSource()).isEqualTo("DEMO");
-        assertThat(demoService.inbound().orders()).hasSize(4).noneMatch(order -> "MD-LIVE".equals(order.code()));
-        assertThat(demoService.summary().dataSource()).isEqualTo("DEMO");
     }
 
     @Test

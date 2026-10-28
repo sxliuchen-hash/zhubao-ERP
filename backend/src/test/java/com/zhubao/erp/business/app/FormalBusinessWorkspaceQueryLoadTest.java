@@ -15,8 +15,6 @@ import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.MotherSplitState;
 import com.zhubao.erp.business.domain.ProcessStationHandoff;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
-import com.zhubao.erp.business.infra.InMemoryBusinessWorkspaceRepository;
-import com.zhubao.erp.business.infra.BusinessWorkspaceSeedData;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
 import com.zhubao.erp.inventory.domain.StockBalance;
@@ -67,14 +65,7 @@ class FormalBusinessWorkspaceQueryLoadTest {
         Map<String, Integer> approvalCalls = new LinkedHashMap<>();
         BusinessDocumentRepository countedDocuments = counting(BusinessDocumentRepository.class, documents, documentCalls);
         ApprovalTaskRepository countedApprovals = counting(ApprovalTaskRepository.class, new InMemoryApprovalTaskRepository(), approvalCalls);
-        BusinessWorkspaceService service = new BusinessWorkspaceService(
-                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData()),
-                countedDocuments,
-                new ProgressBoardService(countedDocuments),
-                new StockLedgerService(stock),
-                new ApprovalService(countedApprovals),
-                false
-        );
+        BusinessWorkspaceService service = new BusinessWorkspaceService(countedDocuments, new ProgressBoardService(countedDocuments), new StockLedgerService(stock), new ApprovalService(countedApprovals), null);
 
         service.summary();
         Map<String, Reading> readings = new LinkedHashMap<>();
@@ -131,7 +122,7 @@ class FormalBusinessWorkspaceQueryLoadTest {
         assertThat(inbound.orders()).hasSize(MOTHERS);
         assertThat(inventory.ledgerEntries()).hasSize(MOTHERS * LEDGERS_PER_MOTHER);
         assertThat(stock.ledgerSize()).isEqualTo(MOTHERS * LEDGERS_PER_MOTHER);
-        assertThat(fingerprint).isEqualTo("f3a90636747b81025e52486c353db93037f9e87f30cd66b9d5f817782274886b");
+        assertThat(fingerprint).isEqualTo("bf2bf553091c72f30a2e23fedff3a53ba2fb368f2cfd573b963fe324936ff7bb");
         assertThat(readings.get("summary").ledgerReads()).isEqualTo(1);
         assertThat(readings.get("summary").balanceReads()).isEqualTo(1);
         assertThat(readings.get("summary").approvalCalls()).containsExactly(Map.entry("findAll", 1));
@@ -252,14 +243,7 @@ class FormalBusinessWorkspaceQueryLoadTest {
     }
 
     private static BusinessWorkspaceService workspace(InMemoryBusinessDocumentRepository documents, FixtureStock stock) {
-        return new BusinessWorkspaceService(
-                new InMemoryBusinessWorkspaceRepository(new BusinessWorkspaceSeedData()),
-                documents,
-                new ProgressBoardService(documents),
-                new StockLedgerService(stock),
-                new ApprovalService(new InMemoryApprovalTaskRepository()),
-                false
-        );
+        return new BusinessWorkspaceService(documents, new ProgressBoardService(documents), new StockLedgerService(stock), new ApprovalService(new InMemoryApprovalTaskRepository()), null);
     }
 
     private static void seedCustomer(InMemoryBusinessDocumentRepository documents, FixtureStock first, FixtureStock second,

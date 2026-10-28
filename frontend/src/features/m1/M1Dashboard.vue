@@ -60,7 +60,6 @@ const visibleTabs = inject<Ref<string[]>>('zhubao-visible-tabs', ref(['inbound',
 const selectedCode = ref('');
 const dispatchRows = ref<DispatchRow[]>([]);
 const loadError = ref('');
-const demoData = ref(false);
 const loading = ref(false);
 const refreshedAt = ref('');
 const canOpen = (tab: DeskTab) => visibleTabs.value.includes(tab);
@@ -106,14 +105,12 @@ onMounted(() => {
 
 async function loadDispatchRows() {
   loadError.value = '';
-  demoData.value = false;
   loading.value = true;
   const errors: string[] = [];
   const rows: DispatchRow[] = [];
 
   if (canOpen('inbound')) try {
     const inbound = await fetchInboundWorkspace();
-    demoData.value ||= inbound.dataSource === 'DEMO';
     rows.push(...inbound.orders.map(inboundRow));
   } catch (error) {
     errors.push(error instanceof Error ? error.message : '来料单据加载失败');
@@ -121,7 +118,6 @@ async function loadDispatchRows() {
 
   if (canOpen('production')) try {
     const production = await fetchProductionWorkspace();
-    demoData.value ||= production.dataSource === 'DEMO';
     rows.push(...production.workOrders.map(workOrderRow));
   } catch (error) {
     errors.push(error instanceof Error ? error.message : '工单加载失败');
@@ -129,7 +125,6 @@ async function loadDispatchRows() {
 
   if (canOpen('quality')) try {
     const quality = await fetchQualityWorkspace();
-    demoData.value ||= quality.dataSource === 'DEMO';
     rows.push(...quality.cases.map(qualityRow));
   } catch (error) {
     errors.push(error instanceof Error ? error.message : '质检单加载失败');
@@ -435,7 +430,6 @@ async function voidTask(task: DeskTask) {
 
 <template>
   <div class="command-center-v3 page-stack">
-    <p v-if="demoData" class="operation-feedback warning">当前待办含评审样例，仅用于演示。</p>
     <section class="module-master-panel dashboard-start" aria-label="开始业务">
       <div class="floor-toolbar dashboard-start-toolbar">
         <div>
