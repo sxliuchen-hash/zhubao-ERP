@@ -4,11 +4,6 @@ import HardwareIntegrationWorkspace from './HardwareIntegrationWorkspace.vue';
 import { fetchHardwareWorkspace } from '../../services/hardwareIntegrationApi';
 import { fetchAuthSession, type AuthSession } from '../../services/authApi';
 
-const hardwareDevices = [{
-  code: 'CAM-TEST-001', name: '拆包台摄像头', scene: '拆包留证', protocol: 'USB',
-  status: 'manual' as const, fallback: '人工上传照片或视频',
-}];
-
 vi.mock('../../services/hardwareIntegrationApi', () => ({ fetchHardwareWorkspace: vi.fn() }));
 vi.mock('../../services/authApi', () => ({ fetchAuthSession: vi.fn() }));
 vi.mock('../../services/deviceGatewayApi', () => ({
@@ -21,7 +16,7 @@ vi.mock('../../services/deviceGatewayApi', () => ({
 describe('HardwareIntegrationWorkspace', () => {
   beforeEach(() => {
     vi.mocked(fetchAuthSession).mockResolvedValue(null);
-    vi.mocked(fetchHardwareWorkspace).mockResolvedValue({ devices: [], tasks: [], pocRecords: [], pocEvidence: [], summary: { totalDevices: 0, fallbackRequired: 0, averageHealth: 0, pocRecords: 0, pocBlocked: 0 } });
+    vi.mocked(fetchHardwareWorkspace).mockResolvedValue({ pocRecords: [], pocEvidence: [], summary: { pocRecords: 0, pocBlocked: 0 } });
   });
 
   it('接口失败保持设备空态并显示原因，普通账号不显示模拟推送', async () => {
@@ -34,12 +29,12 @@ describe('HardwareIntegrationWorkspace', () => {
     expect(wrapper.text()).not.toContain('模拟设备推送');
   });
 
-  it('加载 API 设备，管理员仅在明确标记的诊断区使用模拟工具', async () => {
-    vi.mocked(fetchHardwareWorkspace).mockResolvedValueOnce({ devices: hardwareDevices, tasks: [], pocRecords: [], pocEvidence: [], summary: { totalDevices: hardwareDevices.length, fallbackRequired: 0, averageHealth: 0, pocRecords: 0, pocBlocked: 0 } });
+  it('没有固定健康数据，管理员保留明确标记的诊断工具', async () => {
+    vi.mocked(fetchHardwareWorkspace).mockResolvedValueOnce({ pocRecords: [], pocEvidence: [], summary: { pocRecords: 0, pocBlocked: 0 } });
     vi.mocked(fetchAuthSession).mockResolvedValueOnce({ role: 'ADMIN' } as AuthSession);
     const wrapper = mount(HardwareIntegrationWorkspace);
     await flushPromises();
-    expect(wrapper.text()).toContain('拆包台摄像头');
+    expect(wrapper.text()).toContain('暂无现场验证记录');
     expect(wrapper.find('details[aria-label="管理员诊断区"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('提交会写入真实网关读数记录');
   });

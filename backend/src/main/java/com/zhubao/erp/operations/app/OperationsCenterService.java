@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhubao.erp.gateway.app.DeviceGatewayService;
 import com.zhubao.erp.gateway.domain.GatewayDeviceView;
-import com.zhubao.erp.hardware.app.HardwareIntegrationService;
-import com.zhubao.erp.hardware.domain.HardwareDevice;
 import com.zhubao.erp.operations.domain.OperationsCenterSnapshot;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,7 +64,6 @@ public class OperationsCenterService {
     private final String logFile;
     private final int frontendProbeTimeoutMs;
     private final int backupRpoHours;
-    private final ObjectProvider<HardwareIntegrationService> hardwareServices;
     private final ObjectProvider<DeviceGatewayService> gatewayServices;
 
     public OperationsCenterService(
@@ -88,7 +85,6 @@ public class OperationsCenterService {
                 logFile,
                 frontendProbeTimeoutMs,
                 backupRpoHours,
-                null,
                 null
         );
     }
@@ -103,7 +99,6 @@ public class OperationsCenterService {
             @Value("${zhubao.operations.log-file:}") String logFile,
             @Value("${zhubao.operations.frontend-probe-timeout-ms:800}") int frontendProbeTimeoutMs,
             @Value("${zhubao.operations.backup-rpo-hours:24}") int backupRpoHours,
-            ObjectProvider<HardwareIntegrationService> hardwareServices,
             ObjectProvider<DeviceGatewayService> gatewayServices
     ) {
         this.environment = environment;
@@ -114,7 +109,6 @@ public class OperationsCenterService {
         this.logFile = logFile;
         this.frontendProbeTimeoutMs = frontendProbeTimeoutMs;
         this.backupRpoHours = backupRpoHours;
-        this.hardwareServices = hardwareServices;
         this.gatewayServices = gatewayServices;
     }
 
@@ -344,12 +338,6 @@ public class OperationsCenterService {
     private List<OperationsCenterSnapshot.HardwarePresence> hardwarePresences(Instant now) {
         String checkedAt = DISPLAY_TIME.format(now);
         List<OperationsCenterSnapshot.HardwarePresence> nodes = new ArrayList<>();
-        HardwareIntegrationService hardware = hardwareServices == null ? null : hardwareServices.getIfAvailable();
-        if (hardware != null) {
-            for (HardwareDevice device : hardware.findDevices()) {
-                nodes.add(workshopHardware(device, checkedAt));
-            }
-        }
         DeviceGatewayService gateway = gatewayServices == null ? null : gatewayServices.getIfAvailable();
         if (gateway != null) {
             for (GatewayDeviceView device : gateway.devices()) {
@@ -357,29 +345,6 @@ public class OperationsCenterService {
             }
         }
         return nodes;
-    }
-
-    private OperationsCenterSnapshot.HardwarePresence workshopHardware(HardwareDevice device, String checkedAt) {
-        String status = switch (device.status()) {
-            case ONLINE -> "在线";
-            case DEGRADED -> "降级";
-            case MANUAL -> "人工";
-        };
-        String tone = switch (device.status()) {
-            case ONLINE -> "green";
-            case DEGRADED -> "amber";
-            case MANUAL -> "blue";
-        };
-        return new OperationsCenterSnapshot.HardwarePresence(
-                device.code(),
-                device.name(),
-                device.scene(),
-                status,
-                device.protocol(),
-                "兜底：" + device.fallback(),
-                checkedAt,
-                tone
-        );
     }
 
     private OperationsCenterSnapshot.HardwarePresence gatewayHardware(GatewayDeviceView device, String checkedAt) {
@@ -837,7 +802,7 @@ public class OperationsCenterService {
                     "DB-BACKUP-POC",
                     "MySQL 逻辑备份",
                     "未接入真实目录",
-                    "评审样例：2026-07-06 23:30:00",
+                    "未采集",
                     DISPLAY_TIME.format(now.plusSeconds(backupRpoHours * 3600L)),
                     "zhubao.operations.backup-root 未配置",
                     "未计算",
@@ -924,7 +889,7 @@ public class OperationsCenterService {
                     "RESTORE-DRILL-POC",
                     "恢复演练校验",
                     "未接入真实目录",
-                    "评审样例：2026-07-06 23:45:00",
+                    "未采集",
                     DISPLAY_TIME.format(nextDueFromNow),
                     "zhubao.operations.backup-root 未配置",
                     "未计算",
@@ -1219,38 +1184,7 @@ public class OperationsCenterService {
             ));
         }
 
-        return List.of(
-                new OperationsCenterSnapshot.ErrorSummary(
-                        "ERR-NVR-001",
-                        "视频截取",
-                        "P1",
-                        1,
-                        DISPLAY_TIME.format(now.minusSeconds(2_700)),
-                        "现场实施负责人",
-                        "检查 NVR 通道映射，失败允许人工上传视频片段。",
-                        "amber"
-                ),
-                new OperationsCenterSnapshot.ErrorSummary(
-                        "ERR-DB-001",
-                        "数据库备份",
-                        "P1",
-                        backupRoot == null || backupRoot.isBlank() ? 1 : 0,
-                        DISPLAY_TIME.format(now.minusSeconds(3_600)),
-                        "运维负责人",
-                        "配置备份目录、checksum、恢复演练记录和告警阈值。",
-                        backupRoot == null || backupRoot.isBlank() ? "amber" : "green"
-                ),
-                new OperationsCenterSnapshot.ErrorSummary(
-                        "ERR-AUTH-001",
-                        "登录权限",
-                        "P2",
-                        1,
-                        DISPLAY_TIME.format(now.minusSeconds(7_200)),
-                        "平台负责人",
-                        "当前只有轻量请求头权限守卫，仍需接入真实登录和菜单权限。",
-                        "blue"
-                )
-        );
+        return List.of();
     }
 
     private List<OperationsCenterSnapshot.OperationAlert> operationAlerts(
@@ -1346,10 +1280,10 @@ public class OperationsCenterService {
         Path path = logFile == null || logFile.isBlank() ? null : Path.of(logFile);
         if (path == null) {
             return new LogProbe(
-                    "REVIEW_SAMPLE",
-                    "未配置 zhubao.operations.log-file，当前显示评审样例日志。",
+                    "NOT_CONFIGURED",
+                    "未配置日志来源，尚未采集日志。",
                     "amber",
-                    fallbackLogs(now),
+                    List.of(),
                     List.of()
             );
         }
@@ -1426,43 +1360,6 @@ public class OperationsCenterService {
                     List.of()
             );
         }
-    }
-
-    private List<OperationsCenterSnapshot.RecentLogEntry> fallbackLogs(Instant now) {
-        return List.of(
-                new OperationsCenterSnapshot.RecentLogEntry(
-                        DISPLAY_TIME.format(now.minusSeconds(420)),
-                        "INFO",
-                        "business-operation",
-                        "生产报工写入库存台账，workOrder=ZD-20260706-021，status=WIP->SEMI_FINISHED。",
-                        "TRACE-OPS-001",
-                        "green"
-                ),
-                new OperationsCenterSnapshot.RecentLogEntry(
-                        DISPLAY_TIME.format(now.minusSeconds(360)),
-                        "WARN",
-                        "hardware-video",
-                        "NVR 视频截取任务失败，已转人工上传兜底，task=INT-VID-001。",
-                        "TRACE-OPS-002",
-                        "amber"
-                ),
-                new OperationsCenterSnapshot.RecentLogEntry(
-                        DISPLAY_TIME.format(now.minusSeconds(240)),
-                        "INFO",
-                        "document-storage",
-                        "附件元数据写入仓储，storage=local://evidence，repository=memory/JDBC 可切换。",
-                        "TRACE-OPS-003",
-                        "blue"
-                ),
-                new OperationsCenterSnapshot.RecentLogEntry(
-                        DISPLAY_TIME.format(now.minusSeconds(120)),
-                        "INFO",
-                        "approval",
-                        "损耗审批任务保持轻量闭环，formalPayroll=false，等待真实工资锁账边界。",
-                        "TRACE-OPS-004",
-                        "green"
-                )
-        );
     }
 
     private List<OperationsCenterSnapshot.ErrorSummary> summarizeLogErrors(

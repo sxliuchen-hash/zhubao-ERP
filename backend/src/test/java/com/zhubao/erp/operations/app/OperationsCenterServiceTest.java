@@ -1,8 +1,5 @@
 package com.zhubao.erp.operations.app;
 
-import com.zhubao.erp.document.domain.DocumentManagementRepository;
-import com.zhubao.erp.hardware.app.HardwareIntegrationService;
-import com.zhubao.erp.hardware.domain.HardwarePocRecordRepository;
 import com.zhubao.erp.operations.domain.OperationsCenterSnapshot;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
@@ -33,16 +30,7 @@ class OperationsCenterServiceTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<DataSource> dataSources = mock(ObjectProvider.class);
         when(dataSources.getIfAvailable()).thenReturn(null);
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                dataSources,
-                "http://localhost:5173/",
-                "",
-                tempDir.toString(),
-                "",
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), dataSources, "http://localhost:5173/", "", tempDir.toString(), "", 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 
@@ -73,16 +61,7 @@ class OperationsCenterServiceTest {
         Files.writeString(restore, "restore ok; tables=12\n");
         Files.writeString(tempDir.resolve("verify-restore-20260707.log.sha256"), "ignored sidecar\n");
 
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                tempDir.toString(),
-                "",
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost:5173/", "", tempDir.toString(), "", 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 
@@ -134,16 +113,7 @@ class OperationsCenterServiceTest {
                 }
                 """);
 
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                tempDir.toString(),
-                "",
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost:5173/", "", tempDir.toString(), "", 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 
@@ -166,16 +136,7 @@ class OperationsCenterServiceTest {
 
     @Test
     void reportsCosBackupAsDisabledWithoutBlockingLocalDeployments() {
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                "",
-                "",
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost:5173/", "", "", "", 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
         OperationsCenterSnapshot.ServiceStatus cosService = findService(snapshot, "COS_BACKUP");
@@ -194,16 +155,7 @@ class OperationsCenterServiceTest {
                 .withProperty("zhubao.operations.cos.enabled", "true")
                 .withProperty("zhubao.operations.cos.bucket", "zhubao-prod-1250000000");
 
-        OperationsCenterService service = new OperationsCenterService(
-                environment,
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                "",
-                "",
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(environment, noDataSourceProvider(), "http://localhost:5173/", "", "", "", 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
         OperationsCenterSnapshot.ServiceStatus cosService = findService(snapshot, "COS_BACKUP");
@@ -225,16 +177,7 @@ class OperationsCenterServiceTest {
                 .withProperty("zhubao.operations.cos.credentials-mode", "temporary")
                 .withProperty("zhubao.operations.cos.lifecycle-policy", "180d-retention-versioning");
 
-        OperationsCenterService service = new OperationsCenterService(
-                environment,
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                "",
-                "",
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(environment, noDataSourceProvider(), "http://localhost:5173/", "", "", "", 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
         OperationsCenterSnapshot.ServiceStatus cosService = findService(snapshot, "COS_BACKUP");
@@ -259,16 +202,7 @@ class OperationsCenterServiceTest {
 
         try {
             String probeUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
-            OperationsCenterService service = new OperationsCenterService(
-                    new MockEnvironment(),
-                    noDataSourceProvider(),
-                    "http://localhost/",
-                    probeUrl,
-                    "",
-                    "",
-                    800,
-                    24
-            );
+            OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost/", probeUrl, "", "", 800, 24);
 
             OperationsCenterSnapshot snapshot = service.snapshot();
             OperationsCenterSnapshot.ServiceStatus frontend = findService(snapshot, "FRONTEND");
@@ -284,16 +218,7 @@ class OperationsCenterServiceTest {
 
     @Test
     void reportsFrontendProbeAsNotConfiguredWhenProbeUrlIsBlank() {
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                "",
-                "",
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost:5173/", "", "", "", 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
         OperationsCenterSnapshot.ServiceStatus frontend = findService(snapshot, "FRONTEND");
@@ -322,16 +247,7 @@ class OperationsCenterServiceTest {
 
         try {
             String probeUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
-            OperationsCenterService service = new OperationsCenterService(
-                    new MockEnvironment(),
-                    noDataSourceProvider(),
-                    "http://localhost/",
-                    probeUrl,
-                    "",
-                    "",
-                    800,
-                    24
-            );
+            OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost/", probeUrl, "", "", 800, 24);
 
             OperationsCenterSnapshot snapshot = service.snapshot();
             OperationsCenterSnapshot.ServiceStatus pwa = findService(snapshot, "PWA_ASSETS");
@@ -355,16 +271,7 @@ class OperationsCenterServiceTest {
                 "2026-07-07 08:03:00 INFO document-storage 附件元数据写入仓储"
         ));
 
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                "",
-                log.toString(),
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost:5173/", "", "", log.toString(), 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 
@@ -387,26 +294,7 @@ class OperationsCenterServiceTest {
 
     @Test
     void reportsHardwarePresenceAndStorageUsage() {
-        @SuppressWarnings("unchecked")
-        ObjectProvider<HardwareIntegrationService> hardwareServices = mock(ObjectProvider.class);
-        DocumentManagementRepository documents = mock(DocumentManagementRepository.class);
-        HardwarePocRecordRepository pocRecords = mock(HardwarePocRecordRepository.class);
-        when(documents.attachments()).thenReturn(List.of());
-        when(pocRecords.findAll()).thenReturn(List.of());
-        when(hardwareServices.getIfAvailable()).thenReturn(new HardwareIntegrationService(pocRecords, documents));
-
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                "",
-                "",
-                800,
-                24,
-                hardwareServices,
-                null
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost:5173/", "", "", "", 800, 24, null);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 
@@ -416,14 +304,9 @@ class OperationsCenterServiceTest {
         assertThat(snapshot.runtimeMetrics())
                 .extracting(OperationsCenterSnapshot.RuntimeMetric::code)
                 .contains("DISK");
-        assertThat(snapshot.hardwareNodes())
-                .extracting(OperationsCenterSnapshot.HardwarePresence::code)
-                .contains("SCAN-PC-01", "CAM-UNPACK-01");
-        assertThat(snapshot.hardwareNodes())
-                .filteredOn(node -> "SCAN-PC-01".equals(node.code()))
-                .singleElement()
-                .satisfies(node -> assertThat(node.status()).isEqualTo("在线"));
-        assertThat(findService(snapshot, "HARDWARE").detail()).contains("在线");
+        assertThat(snapshot.hardwareNodes()).isEmpty();
+        assertThat(snapshot.recentLogs()).isEmpty();
+        assertThat(snapshot.errorSummaries()).isEmpty();
     }
 
     @Test
@@ -434,16 +317,7 @@ class OperationsCenterServiceTest {
                 "2026-07-07 08:01:00 ERROR database-backup mysqldump failed checksum missing"
         ));
 
-        OperationsCenterService service = new OperationsCenterService(
-                new MockEnvironment(),
-                noDataSourceProvider(),
-                "http://localhost:5173/",
-                "",
-                tempDir.toString(),
-                log.toString(),
-                800,
-                24
-        );
+        OperationsCenterService service = new OperationsCenterService(new MockEnvironment(), noDataSourceProvider(), "http://localhost:5173/", "", tempDir.toString(), log.toString(), 800, 24);
 
         OperationsCenterSnapshot snapshot = service.snapshot();
 

@@ -1,14 +1,5 @@
-import type { HardwareDevice, HardwarePocRecord, IntegrationTask, Tone } from '../data/m1PrototypeData';
+import type { HardwarePocRecord, Tone } from '../data/m1PrototypeData';
 import { apiGet } from './apiClient';
-
-interface HardwareDeviceDto {
-  code: string;
-  name: string;
-  scene: string;
-  protocol: string;
-  status: 'ONLINE' | 'DEGRADED' | 'MANUAL';
-  fallback: string;
-}
 
 interface HardwarePocRecordDto {
   code: string;
@@ -23,9 +14,6 @@ interface HardwarePocRecordDto {
 }
 
 interface HardwareSummaryDto {
-  totalDevices: number;
-  fallbackRequired: number;
-  averageHealth: number;
   pocRecords: number;
   pocBlocked: number;
 }
@@ -45,35 +33,22 @@ export interface HardwarePocEvidenceSummary {
 }
 
 export interface HardwareWorkspaceModel {
-  devices: HardwareDevice[];
-  tasks: IntegrationTask[];
   pocRecords: HardwarePocRecord[];
   pocEvidence: HardwarePocEvidenceSummary[];
   summary: HardwareSummaryDto;
 }
 
 export async function fetchHardwareWorkspace(): Promise<HardwareWorkspaceModel> {
-  const [devices, tasks, pocRecords, pocEvidence, summary] = await Promise.all([
-    apiGet<HardwareDeviceDto[]>('/api/hardware/devices'),
-    apiGet<IntegrationTask[]>('/api/hardware/integration-tasks'),
+  const [pocRecords, pocEvidence, summary] = await Promise.all([
     apiGet<HardwarePocRecordDto[]>('/api/hardware/poc-records'),
     apiGet<HardwarePocEvidenceSummary[]>('/api/hardware/poc-evidence'),
     apiGet<HardwareSummaryDto>('/api/hardware/summary'),
   ]);
 
   return {
-    devices: devices.map(mapDevice),
-    tasks,
     pocRecords: pocRecords.map(mapPocRecord),
     pocEvidence,
     summary,
-  };
-}
-
-export function mapDevice(device: HardwareDeviceDto): HardwareDevice {
-  return {
-    ...device,
-    status: device.status.toLowerCase() as HardwareDevice['status'],
   };
 }
 

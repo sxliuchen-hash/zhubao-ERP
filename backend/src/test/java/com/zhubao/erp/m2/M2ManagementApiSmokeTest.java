@@ -177,32 +177,14 @@ class M2ManagementApiSmokeTest {
 
     @Test
     void exposesHardwareIntegrationApis() {
-        ResponseEntity<String> devices = restTemplate.getForEntity("/api/hardware/devices", String.class);
-        ResponseEntity<String> tasks = restTemplate.getForEntity("/api/hardware/integration-tasks", String.class);
-        ResponseEntity<String> pocRecords = restTemplate.getForEntity("/api/hardware/poc-records", String.class);
-        ResponseEntity<String> pocEvidence = restTemplate.getForEntity("/api/hardware/poc-evidence", String.class);
-        ResponseEntity<String> summary = restTemplate.getForEntity("/api/hardware/summary", String.class);
-
-        assertThat(devices.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(devices.getBody()).contains("CAM-UNPACK-01", "SCALE-01");
-        assertThat(tasks.getBody()).contains("INT-VID-001", "人工上传");
-        assertThat(pocRecords.getBody()).contains("POC-SCAN-20260706-001", "弱光扫码");
-        assertThat(pocEvidence.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(pocEvidence.getBody()).contains(
-                "POC-SCAN-20260706-001",
-                "DOC-HW-POC-20260706-001",
-                "ATT-HW-20260706-001",
-                "已关联证据",
-                "POC-VID-20260706-001",
-                "待补证据"
-        );
-        assertThat(summary.getBody()).contains(
-                "\"totalDevices\":5",
-                "\"fallbackRequired\":4",
-                "\"averageHealth\":70",
-                "\"pocRecords\":4",
-                "\"pocBlocked\":1"
-        );
+        for (String path : List.of("/api/hardware/poc-records", "/api/hardware/poc-evidence")) {
+            var response = restTemplate.getForEntity(path, String.class);
+            assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+            assertThat(response.getBody()).contains("\"data\":[]");
+        }
+        assertThat(restTemplate.getForEntity("/api/hardware/summary", String.class).getBody())
+                .contains("\"pocRecords\":0", "\"pocBlocked\":0")
+                .doesNotContain("averageHealth", "fallbackRequired");
     }
 
     @Test

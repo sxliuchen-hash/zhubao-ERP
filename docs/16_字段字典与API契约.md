@@ -2446,8 +2446,6 @@ PWA 一期边界：
 
 | 方法与完整路径 | 返回类型 |
 |---|---|
-| `GET /api/hardware/devices` | `ApiResponse<List<HardwareDevice>>` |
-| `GET /api/hardware/integration-tasks` | `ApiResponse<List<IntegrationTask>>` |
 | `GET /api/hardware/poc-records` | `ApiResponse<List<HardwarePocRecord>>` |
 | `GET /api/hardware/poc-evidence` | `ApiResponse<List<HardwarePocEvidenceSummary>>` |
 | `GET /api/hardware/summary` | `ApiResponse<HardwareSummary>` |
@@ -2693,3 +2691,5 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 - 冻结命令的 `defect` 和返工派发的 `reason` 不接受“未判定”这一占位。没有真实缺陷或返工原因时，请求在提交前被拒绝。
 
 库存退役约定（2026-10-28）：旧 `/api/inventory/prep-stock/*` 与 `/api/inventory/ledger/transfers` 已移除，正式写入统一 `/api/material-stock/*` 业务单据接口。台账内核及库存只读保留。收货仅追加 `biz_receipt_line`，拆单记录来源分配；发货以 `biz_outbound_order` 与台账关联。旧 item 表和历史迁移保留，不再双写或用于新单校验。
+
+硬件契约更新（2026-10-28）：固定设备池 `/api/hardware/devices` 与固定任务 `/integration-tasks` 已退出。`/api/hardware/summary` 只统计现场 POC 的 `pocRecords/pocBlocked`；设备登记、读数与健康证据使用网关接口，不再提供固定 `averageHealth/fallbackRequired`。运维未配置来源时显示未采集，现场记录和证据接口保留。

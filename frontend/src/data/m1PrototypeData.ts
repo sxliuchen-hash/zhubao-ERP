@@ -75,25 +75,6 @@ export interface TraceEvent {
   evidence: string;
 }
 
-export interface HardwareDevice {
-  code: string;
-  name: string;
-  scene: string;
-  protocol: string;
-  status: 'online' | 'degraded' | 'manual';
-  fallback: string;
-}
-
-export interface IntegrationTask {
-  id: string;
-  title: string;
-  target: string;
-  health: number;
-  lastRun: string;
-  nextAction: string;
-  owner: string;
-}
-
 export interface HardwarePocRecord {
   code: string;
   deviceCode: string;

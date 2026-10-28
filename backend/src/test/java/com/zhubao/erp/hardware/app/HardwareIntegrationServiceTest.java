@@ -1,50 +1,31 @@
 package com.zhubao.erp.hardware.app;
 
 import com.zhubao.erp.document.infra.InMemoryDocumentManagementRepository;
-import com.zhubao.erp.hardware.domain.HardwareDeviceStatus;
+import com.zhubao.erp.hardware.domain.HardwarePocRecord;
 import com.zhubao.erp.hardware.infra.InMemoryHardwarePocRecordRepository;
 import org.junit.jupiter.api.Test;
-
+import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HardwareIntegrationServiceTest {
+    @Test
+    void 空库没有固定设备或现场记录() {
+        var service = new HardwareIntegrationService(new InMemoryHardwarePocRecordRepository(), new InMemoryDocumentManagementRepository());
+        assertThat(service.findPocRecords()).isEmpty();
+        assertThat(service.findPocEvidence()).isEmpty();
+        assertThat(service.blockedPocCount()).isZero();
+    }
 
     @Test
-    void exposesHardwareFallbackAndHealthBaseline() {
-        HardwareIntegrationService service = new HardwareIntegrationService(
-                new InMemoryHardwarePocRecordRepository(),
-                new InMemoryDocumentManagementRepository()
-        );
-
-        assertThat(service.findDevices()).hasSize(5);
-        assertThat(service.fallbackRequiredCount()).isEqualTo(4);
-        assertThat(service.averageHealth()).isEqualTo(70);
-        assertThat(service.findDevices())
-                .anySatisfy(device -> {
-                    assertThat(device.code()).isEqualTo("SCAN-PC-01");
-                    assertThat(device.status()).isEqualTo(HardwareDeviceStatus.ONLINE);
-                });
-        assertThat(service.findTasks())
-                .anySatisfy(task -> assertThat(task.nextAction()).contains("人工上传"));
-        assertThat(service.findPocRecords()).hasSize(4);
+    void 缺少原始证据的现场记录不能显示已验证() {
+        var record = new HardwarePocRecord("POC-TEST", "TEST", "现场称重", "2026-10-28", "阻断", "", "待复测", "核验人", "补证据");
+        var service = new HardwareIntegrationService(() -> List.of(record), new InMemoryDocumentManagementRepository());
         assertThat(service.blockedPocCount()).isEqualTo(1);
-        assertThat(service.findPocRecords())
-                .anySatisfy(record -> {
-                    assertThat(record.code()).isEqualTo("POC-SCAN-20260706-001");
-                    assertThat(record.nextAction()).contains("弱光 POC");
-                });
-        assertThat(service.findPocEvidence()).hasSize(4);
-        assertThat(service.findPocEvidence())
-                .anySatisfy(evidence -> {
-                    assertThat(evidence.pocCode()).isEqualTo("POC-SCAN-20260706-001");
-                    assertThat(evidence.documentCode()).isEqualTo("DOC-HW-POC-20260706-001");
-                    assertThat(evidence.attachmentCodes()).contains("ATT-HW-20260706-001");
-                    assertThat(evidence.status()).isEqualTo("已关联证据");
-                })
-                .anySatisfy(evidence -> {
-                    assertThat(evidence.pocCode()).isEqualTo("POC-VID-20260706-001");
-                    assertThat(evidence.status()).isEqualTo("待补证据");
-                    assertThat(evidence.missingEvidence()).isEqualTo(1);
-                });
+        assertThat(service.findPocEvidence()).singleElement().satisfies(evidence -> {
+            assertThat(evidence.pocCode()).isEqualTo(record.code());
+            assertThat(evidence.status()).isEqualTo("待补证据");
+            assertThat(evidence.missingEvidence()).isEqualTo(1);
+            assertThat(evidence.latestUploadedAt()).isEmpty();
+        });
     }
 }
