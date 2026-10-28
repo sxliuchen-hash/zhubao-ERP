@@ -76,14 +76,14 @@ public class PermissionGuard {
         grant(PermissionCode.BUSINESS_LOSS_APPROVAL, RoleCode.BUSINESS_MANAGER);
         allowManager(PermissionCode.ORDER_CHANGE_REVIEW, RoleCode.WORKSHOP_LEADER);
         grant(PermissionCode.ORDER_CHANGE_REVIEW, RoleCode.BUSINESS_MANAGER);
-        roleMatrix.put(PermissionCode.STOCK_COMPANY_RECEIVE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
-        roleMatrix.put(PermissionCode.STOCK_COMPANY_ISSUE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
-        roleMatrix.put(PermissionCode.STOCK_COMPANY_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
-        roleMatrix.put(PermissionCode.STOCK_PREP_RECEIVE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER));
-        roleMatrix.put(PermissionCode.STOCK_PREP_ISSUE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER));
-        roleMatrix.put(PermissionCode.STOCK_PREP_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER));
-        roleMatrix.put(PermissionCode.STOCK_PREP_CUSTOMER_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
-        roleMatrix.put(PermissionCode.STOCK_FREEZE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER));
+        roleMatrix.put(PermissionCode.STOCK_COMPANY_RECEIVE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.BUSINESS_MANAGER));
+        roleMatrix.put(PermissionCode.STOCK_COMPANY_ISSUE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.BUSINESS_MANAGER));
+        roleMatrix.put(PermissionCode.STOCK_COMPANY_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.BUSINESS_MANAGER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_RECEIVE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER, RoleCode.BUSINESS_MANAGER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_ISSUE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER, RoleCode.BUSINESS_MANAGER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.RECEIVER, RoleCode.BUSINESS_MANAGER));
+        roleMatrix.put(PermissionCode.STOCK_PREP_CUSTOMER_RETURN, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.BUSINESS_MANAGER));
+        roleMatrix.put(PermissionCode.STOCK_FREEZE, EnumSet.of(RoleCode.WAREHOUSE_KEEPER, RoleCode.BUSINESS_MANAGER));
         roleMatrix.put(PermissionCode.STOCK_CORRECT, EnumSet.of(RoleCode.ADMIN));
         // 待办指派不自动交给总经理。业务管理只要已有任一顶岗即可指派。
         allow(PermissionCode.DESK_TASK_ASSIGN, RoleCode.WORKSHOP_LEADER, RoleCode.SALES);
@@ -141,6 +141,10 @@ public class PermissionGuard {
     }
 
     private static boolean coverAllows(PermissionCode permission, java.util.List<String> duties) {
+        if (permission == PermissionCode.STOCK_PREP_RECEIVE || permission == PermissionCode.STOCK_PREP_ISSUE
+                || permission == PermissionCode.STOCK_PREP_RETURN) {
+            return CoverDuties.contains(duties, CoverDuties.RECEIVER) || CoverDuties.contains(duties, CoverDuties.WAREHOUSE);
+        }
         String duty = switch (permission) {
             case BUSINESS_INBOUND_CONFIRM -> CoverDuties.INTAKE;
             case BUSINESS_PRODUCTION_REPORT, BUSINESS_REWORK_REPORT, MACHINE_OUTPUT_SUBMIT -> CoverDuties.REPORT;
@@ -155,8 +159,9 @@ public class PermissionGuard {
             case BUSINESS_LOSS_APPROVAL -> CoverDuties.LOSS;
             case ORDER_CHANGE_REVIEW -> null;
             case DESK_TASK_ASSIGN, GATEWAY_READING_CONSUME, DOCUMENT_ATTACHMENT_UPLOAD, DOCUMENT_CAPTURE -> null;
-            case STOCK_COMPANY_RECEIVE, STOCK_COMPANY_ISSUE, STOCK_COMPANY_RETURN, STOCK_PREP_RECEIVE,
-                    STOCK_PREP_ISSUE, STOCK_PREP_RETURN, STOCK_PREP_CUSTOMER_RETURN, STOCK_FREEZE, STOCK_CORRECT -> "";
+            case STOCK_COMPANY_RECEIVE, STOCK_COMPANY_ISSUE, STOCK_COMPANY_RETURN,
+                    STOCK_PREP_CUSTOMER_RETURN, STOCK_FREEZE -> CoverDuties.WAREHOUSE;
+            case STOCK_CORRECT -> "";
             default -> "";
         };
         if (duty == null) {

@@ -252,7 +252,18 @@ class MaterialStockServiceTest {
                 .contains(PermissionCode.STOCK_COMPANY_RECEIVE, PermissionCode.STOCK_PREP_CUSTOMER_RETURN)
                 .doesNotContain(PermissionCode.STOCK_CORRECT);
         assertThat(guard.allowedPermissionsFor(RoleCode.OPERATOR)).doesNotContain(PermissionCode.STOCK_COMPANY_RECEIVE);
-        assertThat(guard.allowedPermissionsFor(RoleCode.BUSINESS_MANAGER)).doesNotContain(PermissionCode.STOCK_PREP_RECEIVE);
+        assertThat(guard.allowedPermissionsFor(RoleCode.BUSINESS_MANAGER))
+                .contains(PermissionCode.STOCK_PREP_RECEIVE, PermissionCode.STOCK_COMPANY_RECEIVE, PermissionCode.STOCK_FREEZE)
+                .doesNotContain(PermissionCode.STOCK_CORRECT);
+        assertThat(guard.effectivePermissions(RoleCode.BUSINESS_MANAGER, List.of("INTAKE")))
+                .doesNotContain(PermissionCode.STOCK_PREP_RECEIVE, PermissionCode.STOCK_COMPANY_RECEIVE);
+        assertThat(guard.effectivePermissions(RoleCode.BUSINESS_MANAGER, List.of("RECEIVER")))
+                .contains(PermissionCode.STOCK_PREP_RECEIVE, PermissionCode.STOCK_PREP_ISSUE, PermissionCode.STOCK_PREP_RETURN)
+                .doesNotContain(PermissionCode.STOCK_COMPANY_RECEIVE, PermissionCode.STOCK_PREP_CUSTOMER_RETURN, PermissionCode.STOCK_FREEZE);
+        assertThat(guard.effectivePermissions(RoleCode.BUSINESS_MANAGER, List.of("WAREHOUSE")))
+                .contains(PermissionCode.STOCK_PREP_RECEIVE, PermissionCode.STOCK_COMPANY_RECEIVE,
+                        PermissionCode.STOCK_PREP_CUSTOMER_RETURN, PermissionCode.STOCK_FREEZE)
+                .doesNotContain(PermissionCode.STOCK_CORRECT);
         AuthUserAccount operator = account("操作工", RoleCode.OPERATOR, DataScope.ALL, List.of());
         assertThatThrownBy(() -> service.overview(query("company"), operator)).isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> service.receiveCompany(companyReceipt("1", true, "denied-company"), operator))
@@ -266,6 +277,21 @@ class MaterialStockServiceTest {
         ), true, "scope-customer-b"), keeper);
         AuthUserAccount limited = account("甲的库管", RoleCode.WAREHOUSE_KEEPER, DataScope.CUSTOMER_RANGE, List.of("1001"));
         assertThat(service.cards(query("prep"), limited)).extracting(StockDesk.BatchCard::customerId).containsExactly(1001L);
+        AuthUserAccount receiverDuty = new AuthUserAccount("liuchen", "hash", "刘晨", RoleCode.BUSINESS_MANAGER, DataScope.ALL,
+                true, false, Instant.now(), 0, null, List.of(), false, false, List.of(), List.of("RECEIVER"));
+        assertThat(service.receivePrep(prepReceipt(1001L, "甲", List.of(
+                new StockDesk.LineInput("AU9999", "克", BigDecimal.ONE, BigDecimal.ONE, "")
+        ), true, "bm-prep-receive"), receiverDuty)).isNotBlank();
+        AuthUserAccount intakeOnly = new AuthUserAccount("intake", "hash", "只收货", RoleCode.BUSINESS_MANAGER, DataScope.ALL,
+                true, false, Instant.now(), 0, null, List.of(), false, false, List.of(), List.of("INTAKE"));
+        assertThatThrownBy(() -> service.receivePrep(prepReceipt(1001L, "甲", List.of(
+                new StockDesk.LineInput("AU9999", "克", BigDecimal.ONE, BigDecimal.ONE, "")
+        ), true, "bm-prep-denied"), intakeOnly)).isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> service.receiveCompany(companyReceipt("1", true, "bm-company-denied"), receiverDuty))
+                .isInstanceOf(PermissionDeniedException.class);
+        AuthUserAccount warehouseDuty = new AuthUserAccount("keeper-cover", "hash", "库管顶岗", RoleCode.BUSINESS_MANAGER, DataScope.ALL,
+                true, false, Instant.now(), 0, null, List.of(), false, false, List.of(), List.of("WAREHOUSE"));
+        assertThat(service.receiveCompany(companyReceipt("1", true, "bm-company-ok"), warehouseDuty)).isNotBlank();
         assertThatThrownBy(() -> service.cards(new StockDesk.Query("prep", 1002L, "", "", "", "", "", "", "", ""), limited))
                 .isInstanceOf(PermissionDeniedException.class);
     }
@@ -321,7 +347,7 @@ class MaterialStockServiceTest {
     }
 
     private MaterialStockService service(MemoryBusinessWorkUnit unit) {
-        BusinessOperationService operations = new BusinessOperationService(ledger, null, orders);
+        BusinessOperationService operations = new BusinessOperationService(ledger, null, orders, com.zhubao.erp.business.BusinessWorkFixture.unit());
         MobileIntakeService intakes = new MobileIntakeService(operations, orders, unit, null, ledger);
         return new MaterialStockService(ledger, stockDocuments, orders, unit, operations, intakes, sources, new PermissionGuard());
     }

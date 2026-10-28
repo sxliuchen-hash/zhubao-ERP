@@ -30,6 +30,7 @@ const restoredFiles = ref<EvidenceDraftFile[] | undefined>(undefined);
 const draftRestoring = ref(false);
 const draftError = ref('');
 const draftDirty = ref(false);
+const keepDraft = ref(true);
 let draftRevision = 0;
 let draftTimer: ReturnType<typeof setTimeout> | undefined;
 let draftGeneration = 0;
@@ -179,11 +180,42 @@ async function persistStockDraft(owner = draftOwner.value) {
   try { await writeIntakeDraft(owner, `prep:${props.draftScope}`, stockSnapshot()); if (owner === (session.value?.username ?? '')) { draftError.value = ''; if (revision === draftRevision) draftDirty.value = false; } }
   catch (error) { if (owner === (session.value?.username ?? '')) draftError.value = error instanceof Error ? error.message : '寄存本机草稿保存失败'; throw error; }
 }
+function blankPrepEntry() {
+  sourceProcessedMother.value = '';
+  receiptEvidenceCode.value = '';
+  evidenceDraftKey.value = crypto.randomUUID();
+  materialCode.value = '';
+  quantity.value = '';
+  weight.value = '';
+  quantityUnit.value = '克';
+  customerId.value = '';
+  customerName.value = '';
+  externalRef.value = '';
+  sourceNote.value = '';
+  handoverPerson.value = '';
+  goodsName.value = '';
+  dueDate.value = '';
+  requirement.value = '';
+  templateCode.value = '';
+  templateVersion.value = 0;
+  extraLines.value = [];
+  confirmLines.value = [];
+  formError.value = '';
+  action.value = 'receive';
+}
+function discardLocalDraft() {
+  keepDraft.value = false;
+  if (draftTimer) clearTimeout(draftTimer);
+  draftDirty.value = false;
+  blankPrepEntry();
+  action.value = '';
+}
 function startReceipt() {
   if (locked.value) return;
-  if (receiptEvidenceCode.value || sourceProcessedMother.value) { sourceProcessedMother.value = ''; receiptEvidenceCode.value = ''; evidenceDraftKey.value = crypto.randomUUID(); quantity.value = ''; weight.value = ''; extraLines.value = []; }
-  action.value = 'receive'; formError.value = '';
+  if (receiptEvidenceCode.value || sourceProcessedMother.value) blankPrepEntry();
+  else { action.value = 'receive'; formError.value = ''; }
 }
+defineExpose({ discardLocalDraft });
 watch(() => session.value?.username ?? '', async (owner, previous) => {
   if (!owner && !previous) { applySeed(); return; }
   if (previous && !draftRestoring.value) void persistStockDraft(previous).catch(() => {});
@@ -214,7 +246,7 @@ watch(() => [stockSnapshot().form, evidenceFiles.value, pendingCommand.value, re
   draftDirty.value = true; ++draftRevision;
   if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(() => { void persistStockDraft().catch(() => {}); }, 120);
 }, { deep: true });
-onBeforeUnmount(() => { if (draftTimer) clearTimeout(draftTimer); void persistStockDraft().catch(() => {}); });
+onBeforeUnmount(() => { if (draftTimer) clearTimeout(draftTimer); if (keepDraft.value) void persistStockDraft().catch(() => {}); });
 
 function beforeLeave(event: BeforeUnloadEvent) { if (draftDirty.value || draftError.value || pendingCommand.value) { event.preventDefault(); event.returnValue = ''; } }
 onMounted(() => { window.addEventListener('beforeunload', beforeLeave); void load(); void loadCatalog(); });
@@ -600,6 +632,7 @@ function correct() {
         <label>来源说明<input v-model="sourceNote" aria-label="来源说明" /></label>
         <label>交接人<input v-model="handoverPerson" aria-label="交接人" /></label>
         <label class="archive-check"><input v-model="postNow" type="checkbox" aria-label="立即入账" /> 重量已明确，立即入账</label>
+        <button type="button" class="secondary-button" :disabled="submitting" @click="blankPrepEntry">清除本笔备料</button>
         <button class="primary-button" type="button" :disabled="submitting || Boolean(sourceProcessedMother)" @click="receive">{{ readyToPost ? '确认入库' : '保存待核' }}</button>
       </template>
       <template v-else-if="action === 'issue'">

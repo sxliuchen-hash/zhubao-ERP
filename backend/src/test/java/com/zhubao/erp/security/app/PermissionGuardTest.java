@@ -121,6 +121,12 @@ class PermissionGuardTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.LABEL_PRINT, cover))
                 .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_RECEIVE, cover))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_COMPANY_RECEIVE, cover))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_RECEIVE, reportOnly))
+                .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.BUSINESS_OUTBOUND_SHIPMENT, cover))
                 .isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.FINANCE_PAYROLL, cover))
@@ -236,5 +242,30 @@ class PermissionGuardTest {
                 .doesNotContain(PermissionCode.DESK_TASK_ASSIGN);
         assertThat(permissionGuard.effectivePermissions(RoleCode.GENERAL_MANAGER, java.util.List.of()))
                 .doesNotContain(PermissionCode.DESK_TASK_ASSIGN);
+    }
+
+    @Test
+    void 业务管理可另授收货员和库管岗位() {
+        OperatorContext receiver = new OperatorContext("收货顶岗", RoleCode.BUSINESS_MANAGER, DataScope.ALL, false, "",
+                java.util.List.of(), java.util.List.of("RECEIVER"));
+        OperatorContext warehouse = new OperatorContext("库管顶岗", RoleCode.BUSINESS_MANAGER, DataScope.ALL, false, "",
+                java.util.List.of(), java.util.List.of("WAREHOUSE"));
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_RECEIVE, receiver)).doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_ISSUE, receiver)).doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_RETURN, receiver)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_COMPANY_RECEIVE, receiver))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_CUSTOMER_RETURN, receiver))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_FREEZE, receiver))
+                .isInstanceOf(PermissionDeniedException.class);
+
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_RECEIVE, warehouse)).doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_COMPANY_RECEIVE, warehouse)).doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_PREP_CUSTOMER_RETURN, warehouse)).doesNotThrowAnyException();
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_FREEZE, warehouse)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.STOCK_CORRECT, warehouse))
+                .isInstanceOf(PermissionDeniedException.class);
     }
 }

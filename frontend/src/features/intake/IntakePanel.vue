@@ -147,6 +147,7 @@ const reuseRequirements = ref(false);
 const reuseDueDate = ref(false);
 const prepReceiptCode = ref('');
 const prepSeed = ref<{ customerId: number | null; customerName: string; sourceNote: string; lines: Array<{ materialCode: string; quantityUnit: string; quantity: string; weight: string; externalRef: string }>; sourceDraftKey: string } | null>(null);
+const prepPanel = ref<{ discardLocalDraft?: () => void } | null>(null);
 let restoreGeneration = 0;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const intakeScan = reactive(useScanContext());
@@ -219,7 +220,9 @@ function startNextIntake(mode: 'same-waybill' | 'same-customer' | 'new' = 'new')
   const previous = { customerId: customerId.value, customerName: created.value?.customerName || customerName.value,
     courier: created.value?.courierNo || newExpressCode.value || manualCourier.value, sourceType: sourceType.value,
     requirement: processingRequirement.value, dueDate: dueDate.value, template: requirementTemplateCode.value, templateVersion: requirementTemplateVersion.value };
-  productionDecision.value = ''; pendingRecord.value = null; prepReceiptCode.value = ''; prepOpen.value = false;
+  productionDecision.value = ''; pendingRecord.value = null;
+  if (mode === 'new') forgetPrepDraft();
+  else { prepReceiptCode.value = ''; prepOpen.value = false; }
   formStage.value = 1; savedQuantityUnit.value = '';
   if (traceTarget.value?.intent === 'INTAKE') traceTarget.value = null;
   scanText.value = ''; clearIntakeTarget(); evidenceDraftKey.value = crypto.randomUUID();
@@ -628,6 +631,19 @@ function openPending(row: ProcessingIntakePending) {
   catch { formError.value = '待核资料无法识别，请保留编号核对'; }
   finally { restoring.value = false; }
 }
+function forgetPrepDraft() {
+  prepPanel.value?.discardLocalDraft?.();
+  prepCreated.value = false;
+  prepOpen.value = false;
+  prepSeed.value = null;
+  prepReceiptCode.value = '';
+  if (accountKey.value) void deleteIntakeDraft(accountKey.value, `prep:${props.draftScope}`);
+}
+function requestDiscardPrepDraft() {
+  if (!prepCreated.value || businessLocked.value || arrangementLocked.value) return;
+  if (!globalThis.confirm('删除后，本机这份寄存备料草稿和未上传文件无法恢复。已经入账的寄存单仍留在库存里。继续吗？')) return;
+  forgetPrepDraft();
+}
 async function clearLocalDraft() {
   if (businessLocked.value || arrangementLocked.value || !accountKey.value) return;
   if (!globalThis.confirm('清除本机草稿及文件后，未上传的文件无法恢复；服务端已保存业务和证据保留。继续吗？')) return;
@@ -867,7 +883,8 @@ onMounted(loadCatalog);
 
   <section v-if="prepCreated" class="section-block intake-prep-draft" aria-label="寄存备料草稿">
     <button class="secondary-button" type="button" :aria-expanded="prepOpen" @click="togglePrepDraft">{{ prepOpen ? '收起寄存草稿' : '返回寄存草稿' }}</button>
-    <PrepStockPanel v-show="prepOpen" scope="prep" :key="accountKey" :draft-scope="props.draftScope" :source-processed-mother="prepSeed?.sourceDraftKey === evidenceDraftKey ? created?.motherOrderCode : undefined" :initial-draft="prepSeed" :initial-source="newExpressCode ? `运单 ${newExpressCode}` : ''" @received="onPrepReceived" :inert="!prepOpen || undefined" />
+    <button class="secondary-button" type="button" aria-label="删除寄存草稿" :disabled="businessLocked || arrangementLocked" @click="requestDiscardPrepDraft">删除寄存草稿</button>
+    <PrepStockPanel ref="prepPanel" v-show="prepOpen" scope="prep" :key="accountKey" :draft-scope="props.draftScope" :source-processed-mother="prepSeed?.sourceDraftKey === evidenceDraftKey ? created?.motherOrderCode : undefined" :initial-draft="prepSeed" :initial-source="newExpressCode ? `运单 ${newExpressCode}` : ''" @received="onPrepReceived" :inert="!prepOpen || undefined" />
   </section>
 
   <article v-if="savedMother" ref="savedPanel" class="field-card intake-saved intake-create" aria-label="已保存母单">

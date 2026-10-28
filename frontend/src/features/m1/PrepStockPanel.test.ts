@@ -36,6 +36,8 @@ describe('PrepStockPanel', () => {
     await wrapper.get('.stock-head .primary-button').trigger('click');
     expect(wrapper.get('[aria-label="寄存数量"]').element).toHaveProperty('value', '');
     expect(wrapper.get('[aria-label="寄存重量"]').element).toHaveProperty('value', '');
+    expect(wrapper.get('[aria-label="寄存物料"]').element).toHaveProperty('value', '');
+    expect(wrapper.text()).not.toContain('不能重复寄存收货');
     wrapper.unmount();
   });
 

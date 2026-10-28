@@ -30,6 +30,8 @@ const coverDutyOptions = [
   { code: 'RETURN', label: '退货', packaged: false },
   { code: 'REGISTER', label: '登记导入', packaged: false },
   { code: 'LOSS', label: '损耗审批', packaged: false },
+  { code: 'RECEIVER', label: '收货员', packaged: false },
+  { code: 'WAREHOUSE', label: '库管', packaged: false },
 ];
 const defaultCoverDuties = coverDutyOptions.filter((item) => item.packaged).map((item) => item.code);
 const editorMode = ref<'create' | 'edit' | 'password' | null>(null);
@@ -271,7 +273,7 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <p v-if="organizationHint" class="operation-feedback danger">{{ organizationHint }}</p>
             </div>
             <div v-if="editorMode !== 'password' && editor.role === 'BUSINESS_MANAGER'" class="cover-duty-panel">
-              <p>默认勾选收货、报工、质检，以及拆单、标签和客户档案。其余项默认不勾，可以按人另加或取消。数据范围在上面单独选。</p>
+              <p>默认勾选收货、报工、质检，以及拆单、标签和客户档案。收货员可办理客户寄存收货、领用和退回；库管还包括公司料、退还客户和冻结。这两项和其余项默认不勾，可以按人另加或取消。数据范围在上面单独选。</p>
               <div class="user-checks" aria-label="业务管理权限">
                 <label v-for="duty in coverDutyOptions" :key="duty.code">
                   <input v-model="editor.coverDuties" type="checkbox" :value="duty.code" :aria-label="`顶岗${duty.label}`" />

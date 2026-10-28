@@ -651,7 +651,9 @@ public class AuthSessionService {
             case "approvals" -> CoverDuties.contains(user.coverDuties(), CoverDuties.LOSS);
             case "inventory" -> CoverDuties.contains(user.coverDuties(), CoverDuties.SHIP)
                     || CoverDuties.contains(user.coverDuties(), CoverDuties.RETURN)
-                    || CoverDuties.contains(user.coverDuties(), CoverDuties.QUALITY);
+                    || CoverDuties.contains(user.coverDuties(), CoverDuties.QUALITY)
+                    || CoverDuties.contains(user.coverDuties(), CoverDuties.RECEIVER)
+                    || CoverDuties.contains(user.coverDuties(), CoverDuties.WAREHOUSE);
             default -> true;
         }).toList();
     }

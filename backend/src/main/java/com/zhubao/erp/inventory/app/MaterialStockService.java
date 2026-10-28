@@ -31,6 +31,7 @@ import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
+import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -981,7 +982,7 @@ public class MaterialStockService {
     private void assertRead(String scope, AuthUserAccount account) {
         requireAccount(account);
         if ("company".equals(scope) && !canReadCompany(account)) {
-            throw new PermissionDeniedException("公司自有物料仅仓库、财务、管理员或总经理可以查看");
+            throw new PermissionDeniedException("公司自有物料仅库管、财务、管理员、总经理或已勾选库管的业务管理可以查看");
         }
         if (!"company".equals(scope) && !Set.of(RoleCode.ADMIN, RoleCode.GENERAL_MANAGER, RoleCode.WAREHOUSE_KEEPER,
                 RoleCode.RECEIVER, RoleCode.FINANCE_STATISTICIAN, RoleCode.BUSINESS_MANAGER).contains(account.role())) {
@@ -1007,7 +1008,7 @@ public class MaterialStockService {
     private void assertDocumentVisible(StockDocument document, AuthUserAccount account) {
         if (OwnerType.COMPANY.name().equals(document.ownerType())) {
             if (!canReadCompany(account)) {
-                throw new PermissionDeniedException("公司自有物料仅仓库、财务、管理员或总经理可以查看");
+                throw new PermissionDeniedException("公司自有物料仅库管、财务、管理员、总经理或已勾选库管的业务管理可以查看");
             }
         } else {
             assertCustomer(account, document.customerId());
@@ -1052,13 +1053,14 @@ public class MaterialStockService {
 
     private boolean canReadCompany(AuthUserAccount account) {
         return account.role() == RoleCode.ADMIN || account.role() == RoleCode.WAREHOUSE_KEEPER
-                || account.role() == RoleCode.FINANCE_STATISTICIAN || account.role() == RoleCode.GENERAL_MANAGER;
+                || account.role() == RoleCode.FINANCE_STATISTICIAN || account.role() == RoleCode.GENERAL_MANAGER
+                || account.role() == RoleCode.BUSINESS_MANAGER && CoverDuties.contains(account.coverDuties(), CoverDuties.WAREHOUSE);
     }
 
     private OwnerType ownerOf(String scope, Long customerId, AuthUserAccount account) {
         if ("company".equals(normalizeScope(scope))) {
             if (!canReadCompany(account)) {
-                throw new PermissionDeniedException("公司自有物料仅仓库、财务、管理员或总经理可以查看");
+                throw new PermissionDeniedException("公司自有物料仅库管、财务、管理员、总经理或已勾选库管的业务管理可以查看");
             }
             return OwnerType.COMPANY;
         }

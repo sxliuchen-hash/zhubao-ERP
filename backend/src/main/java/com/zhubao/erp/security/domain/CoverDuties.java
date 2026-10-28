@@ -20,8 +20,12 @@ public final class CoverDuties {
     public static final String RETURN = "RETURN";
     public static final String REGISTER = "REGISTER";
     public static final String LOSS = "LOSS";
+    /** 客户寄存收货、领用建单和退回备料。默认不勾。 */
+    public static final String RECEIVER = "RECEIVER";
+    /** 收货员的寄存动作，再加上公司料、退还客户和冻结。默认不勾。 */
+    public static final String WAREHOUSE = "WAREHOUSE";
     private static final List<String> ORDER = List.of(
-            INTAKE, REPORT, QUALITY, SPLIT, LABEL, MASTER, SHIP, RETURN, REGISTER, LOSS);
+            INTAKE, REPORT, QUALITY, SPLIT, LABEL, MASTER, SHIP, RETURN, REGISTER, LOSS, RECEIVER, WAREHOUSE);
     private static final List<String> DEFAULTS = List.of(INTAKE, REPORT, QUALITY, SPLIT, LABEL, MASTER);
 
     private CoverDuties() {

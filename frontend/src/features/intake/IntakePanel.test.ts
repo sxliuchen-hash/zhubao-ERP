@@ -635,6 +635,20 @@ describe('收货面板', () => {
     wrapper.unmount();
   });
 
+  it('新建收货可以删除本机寄存备料草稿', async () => {
+    const wrapper = mountPanel(true);
+    await fillNewWaybill(wrapper);
+    await wrapper.get('[aria-label="收货用途"]').setValue('prep');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
+    await wrapper.get('[aria-label="删除寄存草稿"]').trigger('click');
+    expect(wrapper.find('[aria-label="寄存备料草稿"]').exists()).toBe(true);
+    confirm.mockReturnValueOnce(true);
+    await wrapper.get('[aria-label="删除寄存草稿"]').trigger('click');
+    expect(wrapper.find('[aria-label="寄存备料草稿"]').exists()).toBe(false);
+    confirm.mockRestore();
+    wrapper.unmount();
+  });
+
   it('加工请求完成后父级草稿区收起，不销毁另一个用途尚未完成的寄存实例', async () => {
     let finish!: (value: Awaited<ReturnType<typeof submitMobileIntake>>) => void;
     vi.mocked(submitMobileIntake).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
@@ -657,6 +671,8 @@ describe('收货面板', () => {
     await wrapper.findAll('button').find(button => button.text() === '返回寄存草稿')!.trigger('click');
     expect(wrapper.getComponent({ name: 'PrepStockPanel' }).vm.$).toBe(prep);
     expect(submitMobileIntake).toHaveBeenCalledOnce();
+    await wrapper.findAll('button').find(button => button.text() === '全新收料')!.trigger('click');
+    expect(wrapper.find('[aria-label="寄存备料草稿"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
