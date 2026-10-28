@@ -41,6 +41,15 @@ export interface OrderWorkspacePage {
   generatedAt: string;
 }
 
+export type OrderSort =
+  | 'CREATED_DESC' | 'CREATED_ASC'
+  | 'DUE_ASC' | 'DUE_DESC'
+  | 'GOODS_ASC' | 'GOODS_DESC'
+  | 'CUSTOMER_ASC' | 'CUSTOMER_DESC'
+  | 'CREATOR_ASC' | 'CREATOR_DESC'
+  | 'PROCESS_ASC' | 'PROCESS_DESC'
+  | 'STATUS_ASC' | 'STATUS_DESC';
+
 export interface OrderWorkspaceQuery {
   view?: 'ORDERS' | 'PRODUCTION' | 'QUALITY';
   query?: string;
@@ -48,7 +57,7 @@ export interface OrderWorkspaceQuery {
   process?: string;
   facet?: string;
   dueBefore?: string;
-  sort?: 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC';
+  sort?: OrderSort;
   page?: number;
   size?: number;
 }

@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue';
 import type { ScanObjectType } from '../../services/scanContextApi';
+import type { OrderSort } from '../../services/orderWorkspaceTypes';
 import type { WorkspaceSection } from './workspaceNavigation';
 import type { ApprovalDecisionSession } from '../../data/approvalTaskData';
 
@@ -22,7 +23,7 @@ export interface OrderReturnLocation {
   process: string;
   facet: string;
   dueBefore: string;
-  sort?: 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC';
+  sort?: OrderSort;
   page: number;
   scrollTop: number;
 }

@@ -3,7 +3,7 @@ import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, watch, type
 import type { AuthSession } from '../../services/authApi';
 import { ApiRequestError } from '../../services/apiClient';
 import { fetchOrderWorkspace } from '../../services/orderWorkspaceApi';
-import type { OrderWorkspacePage, OrderWorkspaceQuery, OrderWorkspaceRow } from '../../services/orderWorkspaceTypes';
+import type { OrderSort, OrderWorkspacePage, OrderWorkspaceQuery, OrderWorkspaceRow } from '../../services/orderWorkspaceTypes';
 import { scanObjectTypeLabel, type ScanContextQuery, type ScanRelatedTarget } from '../../services/scanContextApi';
 import ScanInput from '../scan/ScanInput.vue';
 import { canonicalTarget, useScanContext } from '../scan/useScanContext';
@@ -24,7 +24,7 @@ const workspace = useWorkspaceContext();
 const saved = workspace.returnLocation.value;
 const filters = reactive({ query: saved?.query ?? '', customerId: saved?.customerId ?? '', process: saved?.process ?? '',
   facet: saved?.facet ?? 'ALL', dueBefore: saved?.dueBefore ?? '',
-  sort: (saved?.sort ?? 'CREATED_DESC') as 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC' });
+  sort: (saved?.sort ?? 'CREATED_DESC') as OrderSort });
 const view = ref<NonNullable<OrderWorkspaceQuery['view']>>(workspace.orderView.value ?? saved?.view ?? 'ORDERS');
 const page = ref(saved?.page ?? 1);
 const result = ref<OrderWorkspacePage | null>(null);
@@ -196,7 +196,7 @@ function chooseFacet(facet: string) {
   filters.facet = facet;
   void load(1);
 }
-function chooseSort(sort: 'CREATED_DESC' | 'CREATED_ASC' | 'DUE_ASC' | 'DUE_DESC' | 'GOODS_ASC' | 'GOODS_DESC' | 'CUSTOMER_ASC' | 'CUSTOMER_DESC' | 'CREATOR_ASC' | 'CREATOR_DESC' | 'PROCESS_ASC' | 'PROCESS_DESC' | 'STATUS_ASC' | 'STATUS_DESC') {
+function chooseSort(sort: OrderSort) {
   filters.sort = sort;
   void load(1);
 }
