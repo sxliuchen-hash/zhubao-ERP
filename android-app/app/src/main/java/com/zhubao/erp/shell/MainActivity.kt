@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
+import android.graphics.Color
+import android.os.Build
 import android.provider.Settings
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -132,7 +134,10 @@ class MainActivity : ComponentActivity() {
         settings.javaScriptCanOpenWindowsAutomatically = false
         settings.setSupportMultipleWindows(false)
         settings.mediaPlaybackRequiresUserGesture = false
+        disableForceDark(settings)
         settings.userAgentString = settings.userAgentString + " ZhubaoErpShell/" + BuildConfig.VERSION_NAME
+        // 内容还没画出来时，露出和页面一致的底色，而不是系统默认的纯白。
+        webView.setBackgroundColor(Color.parseColor("#F5F5F2"))
         webView.webViewClient = ErpWebViewClient()
         webView.webChromeClient = ErpChromeClient()
         webView.setDownloadListener { url, _, _, _, _ ->
@@ -147,6 +152,17 @@ class MainActivity : ComponentActivity() {
             } else {
                 showError("下载地址无效", "请返回证据清单重新点击下载。")
             }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun disableForceDark(settings: WebSettings) {
+        // 安卓 10 起，系统深色会强制反色 WebView。浅色工作台在部分机型上会整页绘成白色。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            settings.isAlgorithmicDarkeningAllowed = false
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            settings.forceDark = WebSettings.FORCE_DARK_OFF
         }
     }
 

@@ -41,7 +41,8 @@ function reset() {
   editing.value = null;
   name.value = '';
   stepsText.value = '';
-  sortOrder.value = String((templates.value.at(-1)?.sortOrder ?? 0) + 1);
+  const lastTemplate = templates.value[templates.value.length - 1];
+  sortOrder.value = String((lastTemplate?.sortOrder ?? 0) + 1);
 }
 
 async function submit() {

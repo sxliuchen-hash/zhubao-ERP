@@ -124,7 +124,9 @@ provide('zhubao-open-order', (target: Omit<TraceTarget, 'intent' | 'token'>) => 
 const authSession = ref<AuthSession | null>(null);
 const sessionMark = computed(() => {
   const name = authSession.value?.operator?.trim() ?? '';
-  const last = name.split(/\s+/).filter(Boolean).at(-1) ?? '';
+  // 安卓 10 旧 WebView 没有 Array.prototype.at。这里在登录后第一帧就会算，缺方法时整页渲染成空白。
+  const parts = name.split(/\s+/).filter(Boolean);
+  const last = parts[parts.length - 1] ?? '';
   return last.slice(0, 1) || '我';
 });
 provide('zhubao-auth-session', authSession);

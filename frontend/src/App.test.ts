@@ -35,6 +35,20 @@ describe('App', () => {
     vi.mocked(queryScanContext).mockReset().mockImplementation(async input => buildScanContext({ objectType: input.objectType ?? 'MOTHER_ORDER', code: input.content }));
   });
 
+  it('still opens the workbench on a WebView without Array.prototype.at', async () => {
+    const original = Array.prototype.at;
+    Reflect.deleteProperty(Array.prototype, 'at');
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
+    try {
+      const wrapper = mount(App);
+      await flushPromises();
+      expect(wrapper.text()).toContain('今天好');
+      expect(wrapper.find('.session-avatar').text()).toBe('王');
+    } finally {
+      if (original) Object.defineProperty(Array.prototype, 'at', { configurable: true, writable: true, value: original });
+    }
+  });
+
   it('shows the login page before a session exists', async () => {
     const wrapper = mount(App);
     await flushPromises();

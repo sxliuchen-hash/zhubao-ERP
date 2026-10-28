@@ -116,7 +116,10 @@ function openDraft(kind: ActionKind, input: OrderActionTarget | null, mode: Prod
   if (kind === 'aftercare') {
     const baseKey = draftKey.value;
     if (newAttempt) draftKey.value += `:attempt-${++aftercareAttempt}`;
-    else draftKey.value = drafts.value.filter(draft => draft.key === baseKey || draft.key.startsWith(`${baseKey}:attempt-`)).at(-1)?.key ?? baseKey;
+    else {
+      const matched = drafts.value.filter(draft => draft.key === baseKey || draft.key.startsWith(`${baseKey}:attempt-`));
+      draftKey.value = matched[matched.length - 1]?.key ?? baseKey;
+    }
   }
   reveal({ key: draftKey.value, kind, target: selected, motherOrderCode, ...(balance ? { balance: { ...balance } } : {}), ...(inventoryRow ? { inventoryRow: JSON.parse(JSON.stringify(inventoryRow)) as InventoryBalance } : {}), mode, entryRevision: 1 });
 }
@@ -143,7 +146,7 @@ function keydown(event: KeyboardEvent) {
   const controls = Array.from(panel.value?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') ?? [])
     .filter(element => element.getClientRects().length > 0);
   const first = controls[0];
-  const last = controls.at(-1);
+  const last = controls[controls.length - 1];
   if (!first || !last) return;
   if (event.shiftKey && (document.activeElement === first || !panel.value?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }

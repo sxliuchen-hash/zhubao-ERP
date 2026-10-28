@@ -43,7 +43,7 @@
 
 1. **连接与证书：**只加载预设 HTTPS 域名，提供断网、超时和服务不可用提示。当前云端使用自签证书；正式 APK 需让目标手机完整信任证书，优先使用域名与受信任证书，不通过忽略 SSL 错误继续访问。Android [WebView 文档](https://developer.android.com/reference/android/webkit/WebViewClient)要求证书错误时中止连接。
 2. **扫码与上传：**在 WebView 中处理网页相机申请和 Android 运行时相机权限；处理 `<input type="file">` 的拍照、相册、文件选择与返回结果。按现有 JPEG、PNG、MP4、WebM 和大小限制，在目标手机测试真实文件类型、上传、签名预览链接与外部窗口。相关回调见 Android [WebChromeClient 文档](https://developer.android.com/reference/android/webkit/WebChromeClient)。
-3. **页面行为：**处理系统返回键、键盘遮挡、状态栏与安全区域、重新进入应用、登录失效、附件预览和允许的外部链接。保持后端角色、客户范围及工序权限判定，不在 APK 内另设业务权限。
+3. **页面行为：**处理系统返回键、键盘遮挡、状态栏与安全区域、重新进入应用、登录失效、附件预览和允许的外部链接。保持后端角色、客户范围及工序权限判定，不在 APK 内另设业务权限。安卓 10 的系统深色不能强制反色网页，容器关闭强制深色；旧 WebView 缺少的数组等方法由网页补齐。容器内不注册 Service Worker。
 4. **打印交互：**手机上保留标签预览；用户明确点击“提交到打印工位”后创建任务，显示任务编号和状态。收货保存不自动出纸；重复点击和网络重试使用同一个 `requestId`。状态为“已送入电脑打印队列”时不显示“已出纸”。
 5. **安装更新：**确定固定包名、应用名称、图标和 `versionCode`；使用专用发布密钥签名，安全备份密钥和密码。内部提供受控 APK 下载及版本说明，验证同包名、同签名的新版本可覆盖安装。Android [签名规则](https://developer.android.com/studio/publish/app-signing)要求 APK 安装和更新均带数字签名。
 

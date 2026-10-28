@@ -102,7 +102,8 @@ const canOpenAftercare = computed(() => {
 });
 function localAftercareDraft(row: InventoryBalance, newAttempt = false) {
   const baseKey = balanceKey(row);
-  const key = newAttempt ? `${baseKey}:attempt-${++localAttempt}` : localAftercare.value.filter(draft => draft.key === baseKey || draft.key.startsWith(`${baseKey}:attempt-`)).at(-1)?.key ?? baseKey;
+  const matched = localAftercare.value.filter(draft => draft.key === baseKey || draft.key.startsWith(`${baseKey}:attempt-`));
+  const key = newAttempt ? `${baseKey}:attempt-${++localAttempt}` : matched[matched.length - 1]?.key ?? baseKey;
   if (!localAftercare.value.some(draft => draft.key === key)) localAftercare.value.push({ key, row: JSON.parse(JSON.stringify(row)) as InventoryBalance });
   localAftercareKey.value = key;
 }
