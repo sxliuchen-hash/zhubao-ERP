@@ -1,0 +1,22 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="07 状态与办理门槛｜不再用一个整单状态包办所有判断",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.4",ranksep="0.55"];
+  node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.17,0.12"];
+  edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+  process [label="工序位置／完成事实\n该袋必要环节是否做完"];
+  quality [label="质量处置事实\n该份额是否放行，有无冻结"];
+  physical [label="库存与袋余额\n同来源、数量可发、重量具备"];
+  authorization [label="登录有效权限及客户范围\n该账号是否有权办理"];
+  query [label="统一可发查询\n任一条件不满足，返回具体原因"];
+  ship [label="允许本袋发货\n其他袋仍可处于返工或待加工"];
+  process -> query; quality -> query; physical -> query; authorization -> query; query -> ship;
+  example [shape=note,label="例：质检合格，但穿串未完成\n质量轴通过，工序轴未完成 → 不可发",color="#71717a",fillcolor="#fafafa"];
+  process -> example [style=dashed,arrowhead=none];
+  all [label="执行目标交齐判断\n全部来源份额、有效处置、净发货一起核对"];
+  unresolved [label="待加工／返工／待核／待发\n任何一项未清，整单仍未交齐",color="#71717a",fillcolor="#fafafa"];
+  fee [label="满足交齐后才能填写双工费\n保存草稿不入账，确认才入账",color="#2563eb",fillcolor="#eff6ff"];
+  settlement [label="费用确认 ≠ 客户款已收 ≠ 员工款已付\n收款和付款各有自己的核销事实",color="#2563eb",fillcolor="#eff6ff"];
+  ship -> all [label="实际出库后累积净交付"];
+  unresolved -> all [label="需全部处理"];
+  all -> fee [label="来源与数量闭合"];
+  fee -> settlement;
+}

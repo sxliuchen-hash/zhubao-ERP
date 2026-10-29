@@ -1,0 +1,29 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="06 简单报工与提交边界｜照片先上传，业务一次提交",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.45",ranksep="0.5"];
+  node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.18,0.12"];
+  edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+  scan [label="员工：扫码 → 自动定位袋和可做工序"];
+  photo [label="拍照，确认本次数量\n异常时才展开损耗／部分交出"];
+  upload [label="上传到已存在的加工目标\n原件发布＋附件元数据"];
+  keep [label="上传失败：保留照片和表单\n不能记成报工成功",color="#71717a",fillcolor="#fafafa"];
+  submit [label="一次提交\n原请求号＋袋版本＋数量去向＋图片ID"];
+  replay [shape=diamond,label="原请求已成功？"];
+  subgraph cluster_unit {
+    label="同一业务工作单元／同一数据库连接【拟改造】";color="#b45309";fontname="SimSun";fontsize=18;
+    validate [label="校验有效权限、袋版本与数量\n核对图片及同单引用"];
+    record [label="保存报工、输出袋及处置\n必要库存流水＋照片引用"];
+    commit [label="保存原请求结果并提交"];
+    validate -> record; record -> commit;
+  }
+  result [label="返回同一真实报工批次\n该打印则生成待打印对象"];
+  rollback [label="失败：业务整体回滚\n已上传图片保留供原请求重试",color="#71717a",fillcolor="#fafafa"];
+  unknown [label="网络超时：结果待核对\n查询或重放原请求，不另建一笔",color="#71717a",fillcolor="#fafafa"];
+  scan -> photo; photo -> upload;
+  upload -> keep [label="失败"]; keep -> upload [label="仅重试文件"];
+  upload -> submit [label="上传成功，取得图片ID"];
+  submit -> replay; replay -> result [label="是，返回原结果"];
+  replay -> validate [label="否"];
+  validate -> rollback [label="校验失败"]; record -> rollback [label="任一步失败"];
+  commit -> result; submit -> unknown [style=dashed,label="请求结果未知"];
+  unknown -> replay [label="核对原请求"];
+}

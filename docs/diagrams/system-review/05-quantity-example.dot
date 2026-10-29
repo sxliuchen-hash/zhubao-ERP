@@ -1,0 +1,27 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="05 数量示例｜500颗来料，最终交462颗，减少38颗有去向",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.45",ranksep="0.55"];
+  node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#2563eb",fillcolor="#eff6ff",margin="0.2,0.13"];
+  edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+  input [label="原来料 500颗\n原始记录始终保留"];
+  stages [label="切料交480 → 取胚交470 → 打孔交465\n减少20＋10＋5＝35颗"];
+  loss [label="已确认加工损耗 35颗\n实物及去向另按实际记录",fillcolor="#fafafa",color="#71717a"];
+  inspect [label="本批送检 465颗"];
+  good [label="合格 450颗"];
+  rework [label="返工 15颗"];
+  first [label="第一次发货 300颗\n发货单一"];
+  left [label="留存可发 150颗"];
+  restored [label="返工复检合格 12颗"];
+  scrap [label="确认报废 3颗\n不冒充已交付",fillcolor="#fafafa",color="#71717a"];
+  second [label="第二次发货 162颗\n150＋12，发货单二"];
+  delivered [label="累计实际交付 462颗\n300＋162"];
+  reconcile [label="500＝462已交＋35损耗＋3报废\n且无剩余未处理事项，才进入结单核对",color="#b45309",fillcolor="#fff7ed"];
+  input -> stages; stages -> inspect [label="实际产出"]; stages -> loss [label="累计减少"];
+  inspect -> good [label="450"]; inspect -> rework [label="15"];
+  good -> first [label="300"]; good -> left [label="150"];
+  rework -> restored [label="12"]; rework -> scrap [label="3"];
+  left -> second; restored -> second;
+  first -> delivered; second -> delivered;
+  delivered -> reconcile; loss -> reconcile [style=dashed]; scrap -> reconcile [style=dashed];
+  note [shape=note,label="目标设计示例，不是线上真实单据。\n例中发货份额的其余必要工序均已完成。",color="#71717a",fillcolor="#fafafa",fontsize=13];
+  input -> note [style=dashed,arrowhead=none];
+}

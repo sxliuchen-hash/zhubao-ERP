@@ -1,0 +1,16 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="09 功能逻辑图｜输入 → 办理 → 输出 → 下一步门槛",labelloc=t,rankdir=LR,bgcolor="white",pad="0.3",nodesep="0.35",ranksep="0.55"];
+  node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#2563eb",fillcolor="#eff6ff",margin="0.2,0.15"];
+  edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+  root [label="共享订单工作区\n查询与办理真实业务\n功能分组不等于新增菜单"];
+  intake [label="收料与客户【沿用＋约束接续】\l输入：客户、来料及来源明细\l办理：收货、来源分配、整单或拆单\l输出：母单与单一内容执行目标\l门槛：不同材质／要求／来源须拆开\l"];
+  production [label="生产与报工【改造】\l输入：实际路线、活动袋、可交数量\l办理：独立工序拍照、交出及损耗\l输出：报工批次、下道实物、真实处置\l门槛：照片有效，数量及去向闭合\l",color="#b45309",fillcolor="#fff7ed"];
+  quality [label="质量与返工【改造】\l输入：待检袋与本批检查数量\l办理：条款判定、分流、返工、复检\l输出：放行份额与待处理份额\l门槛：不覆盖历史，不重复计算缺陷数\l",color="#b45309",fillcolor="#fff7ed"];
+  inventory [label="库存与追溯【沿用＋扩展处置】\l输入：真实业务产生的实物变化\l办理：记台账、转状态、核对袋分配\l输出：可信余额与来去向\l门槛：单据、袋、库存同次提交\l"];
+  shipment [label="发货与打印【改造】\l输入：同一客户的多个可发袋\l办理：汇总、核对、确认出库\l输出：独立发货单、40×30贴纸、A5\l门槛：本袋路线和质量均满足交付\l",color="#b45309",fillcolor="#fff7ed"];
+  finance [label="结单与财务【沿用＋口径接续】\l输入：原加工目标的交齐事实\l办理：双工费确认、收付款核销\l输出：应收、工资、应付与核销记录\l门槛：交齐才填费，草稿不入账\l"];
+  access [label="扫码、照片与权限【部分新增】\l输入：旧厂内码或新交付链接\l办理：识别对象、验证身份及范围\l输出：公开交付或授权内部详情\l门槛：扫码本身不授予内部权限\l",color="#b45309",fillcolor="#fff7ed"];
+  supporting [label="配置、审批、运维及独立业务\l输入：规则、账号、证据及运行状态\l办理：配置、审计、备份与恢复\l输出：稳定规则与可恢复运行环境\l边界：打样、金工独立，流程待细化\l",color="#71717a",fillcolor="#fafafa"];
+  root -> intake; root -> production; root -> quality; root -> inventory;
+  root -> shipment; root -> finance; root -> access; root -> supporting;
+}

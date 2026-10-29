@@ -1,0 +1,18 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="10 改造依赖与试点｜保持现有架构，先跑通一条真实业务链",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.45",ranksep="0.55"];
+  node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.18,0.12"];
+  edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+  p0 [label="P0 旧流程缺陷修复\n母单库存漏查、实物与重量核对\n可独立处理，不等新流程全做完",color="#2563eb",fillcolor="#eff6ff"];
+  p12 [label="P1＋P2 身份与基础\n材质路线、来源、袋及旧码兼容"];
+  p34 [label="P3＋P4 现场生产纵向试验\n拍照、实际数量、损耗、部分质检返工"];
+  p56 [label="P5＋P6 交付与费用闭合\n多袋汇总出库、交齐和结单口径"];
+  p7 [label="P7 输出与设备\n旧厂内样式保持\n新40×30发货标签＋A5"];
+  p8 [label="P8 对外扫码\n公开交付页＋内部授权详情"];
+  p9 [label="P9 端到端现场验收与新单启用\n先一种材质／一套路线／真实岗位\n旧单显式接续，不自动改写"];
+  retain [label="整个过程中保持\n库存唯一台账、同事务、有效权限\n原请求回放、旧标签、备份恢复",color="#71717a",fillcolor="#fafafa"];
+  p0 -> p12 [style=dashed,label="独立支线，不构成新模型依赖"];
+  p12 -> p34; p34 -> p56;
+  p56 -> p7; p56 -> p8;
+  p7 -> p9; p8 -> p9;
+  retain -> p34 [style=dashed,arrowhead=none]; retain -> p56 [style=dashed,arrowhead=none];
+}

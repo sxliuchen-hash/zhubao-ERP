@@ -1,0 +1,25 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="08 打印与扫码逻辑｜同次交付快照，两类输出，分权限查看",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.4",ranksep="0.55"];
+  node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.18,0.12"];
+  edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+  confirmed [label="确认发货后形成同一份交付快照\n独立发货单号＋逐袋数量与来源"];
+  label [label="单袋发货贴纸\n40×30 mm"];
+  a5 [label="汇总发货单\nA5，逐袋明细及续页"];
+  existing [label="现有厂内加工贴纸\n40×30 mm，样式尽量保持",color="#2563eb",fillcolor="#eff6ff"];
+  agent [label="现有标签工位与标签机\n输出冻结原图",color="#2563eb",fillcolor="#eff6ff"];
+  office [label="独立办公打印入口\n经办选择A5打印机"];
+  link [label="发货袋／汇总二维码\nHTTPS公开访问标识"];
+  scan [shape=diamond,label="查看者是否有\n有效内部登录？"];
+  public [label="未登录持码页\n仅本袋／本次交付白名单信息\n和明确允许公开的照片"];
+  role [label="服务端岗位／顶岗＋客户范围\n另核对财务读取权限",color="#2563eb",fillcolor="#eff6ff"];
+  internal [label="有权查看的加工、照片、质量\n库存、账单及关联单据",color="#2563eb",fillcolor="#eff6ff"];
+  old [label="旧厂内码继续识别\n不为客户网页强制重印旧标签",color="#2563eb",fillcolor="#eff6ff"];
+  confirmed -> label; confirmed -> a5;
+  label -> agent; a5 -> office; existing -> agent;
+  label -> link; a5 -> link; link -> scan;
+  scan -> public [label="否"]; scan -> role [label="是"];
+  role -> internal [label="仅允许范围"];
+  existing -> old; old -> role;
+  note [shape=note,label="打印与扫码不扣库存、不重复出库。\n持有二维码不等于客户身份或财务权限。",color="#71717a",fillcolor="#fafafa"];
+  confirmed -> note [style=dashed,arrowhead=none];
+}

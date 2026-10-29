@@ -1,0 +1,28 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="04 对象与编号关系｜加工身份、实物袋、发货单分别编号",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.45",ranksep="0.6"];
+  node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#2563eb",fillcolor="#eff6ff",margin="0.18,0.12"];
+  edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+  customer [label="客户\n稳定客户ID"];
+  mother [label="来料母单\n原始收料身份"];
+  source [label="收料／备料领用来源明细\n一份来源可以拆出多个执行目标"];
+  target [label="加工执行目标\n不拆母单 或 拆分子单"];
+  route [label="本单要求及路线版本"];
+  bag [label="实物袋【新增】\n独立袋号＋同一内容与状态组合",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
+  event [label="报工／质量／分袋历史\n关闭父袋只追溯，不再次计余量",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
+  shipline [label="发货袋明细【新增】\n本次交付快照＋来源执行目标",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
+  ship [label="发货汇总单【新增】\n独立发货单号，同一客户",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
+  fee [label="原加工目标的结单／账单\n不因合并发货重复计费"];
+  customer -> mother [label="1 对 多"];
+  mother -> source [label="包含来源"];
+  mother -> target [label="1个整单目标 或 多个子单"];
+  source -> target [label="每个新执行目标固定1份来源"];
+  target -> route [label="1 对 有序版本"];
+  target -> bag [label="1 对 多袋"];
+  bag -> event [label="1 对 多次事实"];
+  bag -> shipline [label="拆出真实发货袋后对应1次有效出库"];
+  ship -> shipline [label="1 对 多"];
+  customer -> ship [label="一次仅1个客户"];
+  target -> shipline [style=dashed,label="可跨多次发货；一单也可汇总多目标"];
+  target -> fee [label="交齐后确认费用"];
+  shipline -> fee [style=dashed,label="来源追溯，不是自动计费"];
+}

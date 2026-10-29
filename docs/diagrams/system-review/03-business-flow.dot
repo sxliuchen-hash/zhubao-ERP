@@ -1,0 +1,33 @@
+digraph G {
+  graph [fontname="SimSun",fontsize=22,label="03 目标业务流程｜按袋分流，合格部分可以先发",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.4",ranksep="0.45"];
+  node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.18,0.12"];
+  edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+  intake [label="收料母单\n保存原始数量、重量和来源"];
+  homogeneous [shape=diamond,label="材质、要求、来源\n是否单一？"];
+  keep [label="不拆母单作为执行目标"];
+  child [label="按不同内容拆子单"];
+  arrange [label="确定实际路线，建立实物袋"];
+  work [label="按路线逐道办理\n拍照报工、数量交接、质量节点"];
+  loss [label="损耗／报废／退料／待核\n分别记录真实去向",fillcolor="#fafafa",color="#71717a"];
+  qc [label="质量节点：按本批数量判定\n部分通过，部分返工或其他处置"];
+  pass [label="合格份额独立成袋"];
+  redo [label="返工份额独立成袋\n选择重做环节并拍照报工"];
+  remain [label="完成实际路线其余必要环节\n如穿串；不预设质检必须最后"];
+  gate [shape=diamond,label="路线完成、质量放行\n数量重量完整、无冻结？"];
+  pending [label="显示具体待办／阻断原因"];
+  ready [label="本袋可发\n其他袋返工不阻止本袋"];
+  draft [label="同一客户选择多加工单的袋\n创建独立发货草稿，必要时分袋"];
+  confirm [label="核对后一次确认出库\n汇总＋明细＋台账同次提交"];
+  print [label="40×30单袋贴纸＋A5汇总单\n客户扫码查看本次交付"];
+  completion [shape=diamond,label="全部应交范围闭合\n无待加工／返工／待核／待发？"];
+  settlement [label="交货后填写并确认双工费\n再按实际收付款核销"];
+  intake -> homogeneous;
+  homogeneous -> keep [label="是"]; homogeneous -> child [label="否"];
+  keep -> arrange; child -> arrange; arrange -> work;
+  work -> loss [label="发生减少或差异"]; work -> qc [label="到达质量节点"];
+  qc -> pass [label="通过份额"]; qc -> redo [label="返工份额"]; qc -> loss [label="其他份额"];
+  redo -> qc [label="完成返工后复检"];
+  pass -> remain; remain -> gate; gate -> pending [label="否"]; gate -> ready [label="是"];
+  ready -> draft; draft -> confirm; confirm -> print; confirm -> completion;
+  completion -> settlement [label="是"]; completion -> pending [label="否，继续剩余份额"];
+}
