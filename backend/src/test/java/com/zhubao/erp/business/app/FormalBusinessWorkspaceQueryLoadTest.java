@@ -4,10 +4,8 @@ import com.zhubao.erp.approval.app.ApprovalService;
 import com.zhubao.erp.approval.domain.ApprovalTaskRepository;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.business.domain.BusinessDocumentRepository;
-import com.zhubao.erp.business.domain.BusinessReviewData.BusinessWorkspaceSummary;
 import com.zhubao.erp.business.domain.BusinessReviewData.InboundWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.InventoryWorkspaceData;
-import com.zhubao.erp.business.domain.BusinessReviewData.MobileWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.ProductionWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.QualityWorkspaceData;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
@@ -67,15 +65,15 @@ class FormalBusinessWorkspaceQueryLoadTest {
         ApprovalTaskRepository countedApprovals = counting(ApprovalTaskRepository.class, new InMemoryApprovalTaskRepository(), approvalCalls);
         BusinessWorkspaceService service = new BusinessWorkspaceService(countedDocuments, new ProgressBoardService(countedDocuments), new StockLedgerService(stock), new ApprovalService(countedApprovals), null);
 
-        service.summary();
+        service.inbound();
+        service.production();
+        service.quality();
+        service.inventory();
         Map<String, Reading> readings = new LinkedHashMap<>();
-        BusinessWorkspaceSummary[] summaryHolder = new BusinessWorkspaceSummary[1];
-        readings.put("summary", read("summary", documentCalls, approvalCalls, stock, () -> summaryHolder[0] = service.summary()));
         InboundWorkspaceData inbound;
         ProductionWorkspaceData production;
         QualityWorkspaceData quality;
         InventoryWorkspaceData inventory;
-        MobileWorkspaceData mobile;
 
         documentCalls.clear();
         approvalCalls.clear();
@@ -105,14 +103,7 @@ class FormalBusinessWorkspaceQueryLoadTest {
         inventory = service.inventory();
         readings.put("inventory", reading("inventory", started, documentCalls, approvalCalls, stock));
 
-        documentCalls.clear();
-        approvalCalls.clear();
-        stock.reset();
-        started = System.nanoTime();
-        mobile = service.mobile();
-        readings.put("mobile", reading("mobile", started, documentCalls, approvalCalls, stock));
-
-        String fingerprint = fingerprint(summaryHolder[0], inbound, production, quality, inventory, mobile);
+        String fingerprint = fingerprint(inbound, production, quality, inventory);
         String report = report(readings, fingerprint);
         Path output = Path.of(".cache", "r14-baseline.txt");
         Files.createDirectories(output.getParent());
@@ -122,17 +113,8 @@ class FormalBusinessWorkspaceQueryLoadTest {
         assertThat(inbound.orders()).hasSize(MOTHERS);
         assertThat(inventory.ledgerEntries()).hasSize(MOTHERS * LEDGERS_PER_MOTHER);
         assertThat(stock.ledgerSize()).isEqualTo(MOTHERS * LEDGERS_PER_MOTHER);
-        assertThat(fingerprint).isEqualTo("bf2bf553091c72f30a2e23fedff3a53ba2fb368f2cfd573b963fe324936ff7bb");
-        assertThat(readings.get("summary").ledgerReads()).isEqualTo(1);
-        assertThat(readings.get("summary").balanceReads()).isEqualTo(1);
-        assertThat(readings.get("summary").approvalCalls()).containsExactly(Map.entry("findAll", 1));
-        assertThat(readings.get("summary").documentCalls()).containsExactly(
-                Map.entry("listAllChildWorkOrders", 1),
-                Map.entry("listAllMotherSplitStates", 1),
-                Map.entry("listAllProcessStationHandoffs", 1),
-                Map.entry("listAllQualityRequirementChecks", 1),
-                Map.entry("listMotherOrders", 1)
-        );
+        // 指纹仅覆盖四个现行视图，已退役的手机任务和汇总响应不再参与。
+        assertThat(fingerprint).isEqualTo("087f43fb86a5fd7617239a091494a9f48075664dc9e71ef42617c5721d406274");
         assertThat(readings.get("inbound").ledgerReads()).isZero();
         assertThat(readings.get("inbound").balanceReads()).isEqualTo(1);
         assertThat(readings.get("inbound").documentCalls()).containsExactly(Map.entry("listMotherOrders", 1));
@@ -145,10 +127,6 @@ class FormalBusinessWorkspaceQueryLoadTest {
         assertThat(readings.get("inventory").balanceReads()).isEqualTo(1);
         assertThat(readings.get("inventory").documentCalls()).containsEntry("listAllProcessStationHandoffs", 1);
         assertThat(readings.get("inventory").documentCalls()).doesNotContainKey("findMotherOrderByCode");
-        assertThat(readings.get("mobile").ledgerReads()).isEqualTo(1);
-        assertThat(readings.get("mobile").balanceReads()).isEqualTo(1);
-        assertThat(readings.get("mobile").documentCalls()).doesNotContainKey("findChildWorkOrderByCode");
-        assertThat(readings.get("mobile").documentCalls()).doesNotContainKey("findMotherSplitState");
         assertThat(stock.rangeReads()).isZero();
     }
 
@@ -169,8 +147,6 @@ class FormalBusinessWorkspaceQueryLoadTest {
             assertThat(rangedService.production(operator)).isEqualTo(fullService.production(operator));
             assertThat(rangedService.quality(operator)).isEqualTo(fullService.quality(operator));
             assertThat(rangedService.inventory(operator)).isEqualTo(fullService.inventory(operator));
-            assertThat(rangedService.mobile(operator)).isEqualTo(fullService.mobile(operator));
-            assertThat(rangedService.summary(operator)).isEqualTo(fullService.summary(operator));
         }
         full.reset();
         ranged.reset();
@@ -187,16 +163,6 @@ class FormalBusinessWorkspaceQueryLoadTest {
         assertThat(ranged.ledgerReads()).isZero();
     }
 
-    private static Reading read(String name, Map<String, Integer> documentCalls, Map<String, Integer> approvalCalls,
-                                FixtureStock stock, Runnable action) {
-        documentCalls.clear();
-        approvalCalls.clear();
-        stock.reset();
-        long started = System.nanoTime();
-        action.run();
-        return reading(name, started, documentCalls, approvalCalls, stock);
-    }
-
     private static Reading reading(String name, long started, Map<String, Integer> documentCalls,
                                    Map<String, Integer> approvalCalls, FixtureStock stock) {
         long elapsed = System.nanoTime() - started;
@@ -209,16 +175,14 @@ class FormalBusinessWorkspaceQueryLoadTest {
                 .collect(LinkedHashMap::new, (map, entry) -> map.put(entry.getKey(), entry.getValue()), Map::putAll);
     }
 
-    private static String fingerprint(BusinessWorkspaceSummary summary, InboundWorkspaceData inbound,
+    private static String fingerprint(InboundWorkspaceData inbound,
                                       ProductionWorkspaceData production, QualityWorkspaceData quality,
-                                      InventoryWorkspaceData inventory, MobileWorkspaceData mobile) throws Exception {
+                                      InventoryWorkspaceData inventory) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        add(digest, summary);
         add(digest, inbound);
         add(digest, production);
         add(digest, quality);
         add(digest, inventory);
-        add(digest, mobile);
         return HexFormat.of().formatHex(digest.digest());
     }
 
@@ -234,7 +198,7 @@ class FormalBusinessWorkspaceQueryLoadTest {
                 .append(" / in-memory repositories, not MySQL\n");
         report.append("sample=mothers:").append(MOTHERS)
                 .append(", ledgers:").append(MOTHERS * LEDGERS_PER_MOTHER)
-                .append(", method=one warmup summary then one timed call per entry, JDK dynamic proxy counts document and approval reads\n");
+                .append(", method=one warmup per active entry then one timed call per entry, JDK dynamic proxy counts document and approval reads\n");
         report.append("fingerprint=").append(fingerprint).append('\n');
         for (Reading reading : readings.values()) {
             report.append(reading).append('\n');

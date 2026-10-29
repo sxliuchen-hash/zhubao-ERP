@@ -23,13 +23,11 @@ class FormalBusinessWorkspaceQueryTest {
 
     @Test
     void defaultEmptyWorkspaceDoesNotExposeReviewSeedOrWriteRecords() {
-        assertThat(service.summary().dataSource()).isEqualTo("LIVE");
-        assertThat(service.summary().inboundOrders()).isZero();
+        assertThat(service.inbound().dataSource()).isEqualTo("LIVE");
+        assertThat(service.inbound().orders()).isEmpty();
         assertThat(service.production().workOrders()).isEmpty();
         assertThat(service.quality().cases()).isEmpty();
         assertThat(service.inventory().balances()).isEmpty();
-        assertThat(service.mobile().tasks()).isEmpty();
-        assertThat(service.mobile().offlineDrafts()).isEmpty();
         assertThat(stocks.ledgers()).isEmpty();
         assertThat(documents.listMotherOrders()).isEmpty();
     }
@@ -55,7 +53,6 @@ class FormalBusinessWorkspaceQueryTest {
             assertThat(entry.beforeBalance()).isEqualTo("0 / 0 g");
             assertThat(entry.afterBalance()).isEqualTo("2 / 12.5 g");
         });
-        assertThat(service.mobile().tasks()).extracting("code").containsExactly("MD-LIVE");
         assertThat(stocks.ledgers()).hasSize(1);
     }
 
@@ -158,7 +155,6 @@ class FormalBusinessWorkspaceQueryTest {
             assertThat(order.operationContext().stockStatus()).isEqualTo("REWORK");
         });
         assertThat(service.quality().cases()).singleElement().satisfies(item -> assertThat(item.code()).isEqualTo("QC-OLD"));
-        assertThat(service.mobile().tasks()).extracting("code").containsExactly("ZD-OLD");
     }
 
     @Test

@@ -62,10 +62,6 @@ vi.mock('../../services/qualityCheckApi', () => ({
   submitQualityRecheck: vi.fn(),
   releaseQualityRound: vi.fn(),
 }));
-vi.mock('../../services/documentCaptureApi', () => ({
-  fetchCaptures: vi.fn().mockResolvedValue([]),
-}));
-
 function stationView(orderCode: string) {
   return {
     orderCode,

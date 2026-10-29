@@ -56,17 +56,6 @@ final class FormalBusinessWorkspaceQuery {
         this.accounts = accounts;
     }
 
-    BusinessWorkspaceSummary summary(OperatorContext operator) {
-        Snapshot snapshot = load(operator, View.SUMMARY);
-        InboundWorkspaceData inbound = inbound(operator, snapshot);
-        ProductionWorkspaceData production = production(operator, snapshot);
-        QualityWorkspaceData quality = quality(operator, snapshot);
-        InventoryWorkspaceData inventory = inventory(operator, snapshot);
-        MobileWorkspaceData mobile = mobile(operator, snapshot, production, quality);
-        return new BusinessWorkspaceSummary(inbound.orders().size(), production.workOrders().size(),
-                quality.cases().size(), inventory.ledgerEntries().size(), mobile.tasks().size(), "LIVE");
-    }
-
     InboundWorkspaceData inbound(OperatorContext operator) {
         return inbound(operator, load(operator, View.INBOUND));
     }
@@ -81,11 +70,6 @@ final class FormalBusinessWorkspaceQuery {
 
     InventoryWorkspaceData inventory(OperatorContext operator) {
         return inventory(operator, load(operator, View.INVENTORY));
-    }
-
-    MobileWorkspaceData mobile(OperatorContext operator) {
-        Snapshot snapshot = load(operator, View.MOBILE);
-        return mobile(operator, snapshot, production(operator, snapshot), quality(operator, snapshot));
     }
 
     private InboundWorkspaceData inbound(OperatorContext operator, Snapshot snapshot) {
@@ -198,25 +182,6 @@ final class FormalBusinessWorkspaceQuery {
         return new InventoryWorkspaceData(balances, List.copyOf(entries), List.copyOf(timeline), List.of(), "LIVE");
     }
 
-    private MobileWorkspaceData mobile(OperatorContext operator, Snapshot snapshot, ProductionWorkspaceData production,
-                                       QualityWorkspaceData qualityData) {
-        List<MobileTask> tasks = new ArrayList<>(rows(operator, "mobile", snapshot).stream().filter(row -> !ProgressBoardService.QUALITY_DONE.equals(row.status()))
-                .filter(row -> !"inbound".equals(row.openTab()) || context(row.motherOrderCode(), "", Set.of(StockStatus.RAW_WAITING), snapshot) != null)
-                .map(row -> new MobileTask(row.workOrderCode(), row.currentProcess(),
-                        "inbound".equals(row.openTab()) ? "确认拆单方式" : "quality".equals(row.openTab()) ? "质检核对" : "岗位报工",
-                        "按正式单据处理", row.status())).toList());
-        for (WorkOrder order : production.workOrders()) {
-            if (order.operationContext() == null || tasks.stream().anyMatch(task -> task.code().equals(order.code()))) continue;
-            tasks.add(new MobileTask(order.code(), order.process(), "岗位报工", "按正式单据处理", order.status()));
-        }
-        for (QualityCase qualityCase : qualityData.cases()) {
-            if (qualityCase.operationContext() == null || "FINISHED".equals(qualityCase.operationContext().stockStatus())
-                    || tasks.stream().anyMatch(task -> task.code().equals(qualityCase.workOrder()))) continue;
-            tasks.add(new MobileTask(qualityCase.workOrder(), qualityCase.process(), "质检核对", "按正式单据处理", qualityCase.status()));
-        }
-        return new MobileWorkspaceData(List.copyOf(tasks), List.of(), List.of(), "LIVE");
-    }
-
     private Snapshot load(OperatorContext operator, View view) {
         EnumSet<Part> parts = partsFor(view);
         List<MotherOrderRecord> mothers = parts.contains(Part.MOTHERS) && documents != null ? documents.listMotherOrders() : List.of();
@@ -300,7 +265,6 @@ final class FormalBusinessWorkspaceQuery {
             case PRODUCTION -> EnumSet.of(Part.MOTHERS, Part.CHILDREN, Part.HANDOFFS, Part.CHECKS, Part.SPLITS, Part.BALANCES, Part.LEDGERS, Part.PROGRESS);
             case QUALITY -> EnumSet.of(Part.MOTHERS, Part.CHILDREN, Part.HANDOFFS, Part.CHECKS, Part.SPLITS, Part.BALANCES, Part.LEDGERS, Part.PROGRESS, Part.APPROVALS);
             case INVENTORY -> EnumSet.of(Part.MOTHERS, Part.CHILDREN, Part.HANDOFFS, Part.CHECKS, Part.BALANCES, Part.LEDGERS);
-            case MOBILE, SUMMARY -> EnumSet.allOf(Part.class);
         };
     }
 
@@ -309,7 +273,7 @@ final class FormalBusinessWorkspaceQuery {
             return List.of();
         }
         return snapshot.progressBase.stream()
-                .filter(row -> visibleOrder(row.workOrderCode(), operator, "mobile".equals(area) ? row.openTab() : area, snapshot))
+                .filter(row -> visibleOrder(row.workOrderCode(), operator, area, snapshot))
                 .toList();
     }
 
@@ -540,7 +504,7 @@ final class FormalBusinessWorkspaceQuery {
     }
 
     private enum View {
-        INBOUND, PRODUCTION, QUALITY, INVENTORY, MOBILE, SUMMARY
+        INBOUND, PRODUCTION, QUALITY, INVENTORY
     }
 
     private enum Part {

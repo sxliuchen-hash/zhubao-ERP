@@ -1,10 +1,8 @@
 package com.zhubao.erp.business.web;
 
 import com.zhubao.erp.business.app.BusinessWorkspaceService;
-import com.zhubao.erp.business.domain.BusinessReviewData.BusinessWorkspaceSummary;
 import com.zhubao.erp.business.domain.BusinessReviewData.InboundWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.InventoryWorkspaceData;
-import com.zhubao.erp.business.domain.BusinessReviewData.MobileWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.ProductionWorkspaceData;
 import com.zhubao.erp.business.domain.BusinessReviewData.QualityWorkspaceData;
 import com.zhubao.erp.common.api.ApiResponse;
@@ -49,13 +47,4 @@ public class BusinessWorkspaceController {
         return ApiResponse.ok(businessWorkspaceService.inventory(operatorContextResolver.resolve(request)));
     }
 
-    @GetMapping("/mobile")
-    public ApiResponse<MobileWorkspaceData> mobile(HttpServletRequest request) {
-        return ApiResponse.ok(businessWorkspaceService.mobile(operatorContextResolver.resolve(request)));
-    }
-
-    @GetMapping("/summary")
-    public ApiResponse<BusinessWorkspaceSummary> summary(HttpServletRequest request) {
-        return ApiResponse.ok(businessWorkspaceService.summary(operatorContextResolver.resolve(request)));
-    }
 }

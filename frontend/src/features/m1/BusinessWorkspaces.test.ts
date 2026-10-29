@@ -60,10 +60,6 @@ vi.mock('../../services/qualityCheckApi', () => ({
   openQualityRework: vi.fn(),
 }));
 
-vi.mock('../../services/documentCaptureApi', () => ({
-  fetchCaptures: vi.fn().mockResolvedValue([]),
-}));
-
 vi.mock('../../services/scanContextApi', async () => {
   const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
   return { ...actual, queryScanContext: vi.fn() };

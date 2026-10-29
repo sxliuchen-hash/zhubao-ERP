@@ -37,12 +37,4 @@ public class BusinessWorkspaceService {
     public InventoryWorkspaceData inventory(OperatorContext operator) {
         return formalQuery.inventory(operator);
     }
-    public MobileWorkspaceData mobile() { return mobile(SYSTEM_CONTEXT); }
-    public MobileWorkspaceData mobile(OperatorContext operator) {
-        return formalQuery.mobile(operator);
-    }
-    public BusinessWorkspaceSummary summary() { return summary(SYSTEM_CONTEXT); }
-    public BusinessWorkspaceSummary summary(OperatorContext operator) {
-        return formalQuery.summary(operator);
-    }
 }

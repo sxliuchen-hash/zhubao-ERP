@@ -166,9 +166,6 @@ public final class BusinessReviewData {
     public record TraceEvent(String time, String node, String bizCode, String operator, String evidence) {
     }
 
-    public record MobileTask(String code, String scene, String nextAction, String required, String status) {
-    }
-
     public record InboundWorkspaceData(
             List<ReviewStat> checkpoints,
             List<InboundOrder> orders,
@@ -214,27 +211,4 @@ public final class BusinessReviewData {
         }
     }
 
-    public record MobileWorkspaceData(
-            List<MobileTask> tasks,
-            List<ReviewStat> capabilities,
-            List<ActionItem> offlineDrafts,
-            String dataSource
-    ) {
-        public MobileWorkspaceData(List<MobileTask> tasks, List<ReviewStat> capabilities, List<ActionItem> offlineDrafts) {
-            this(tasks, capabilities, offlineDrafts, "LIVE");
-        }
-    }
-
-    public record BusinessWorkspaceSummary(
-            int inboundOrders,
-            int activeWorkOrders,
-            int pendingQualityCases,
-            int inventoryLedgerEntries,
-            int mobileTasks,
-            String dataSource
-    ) {
-        public BusinessWorkspaceSummary(int inboundOrders, int activeWorkOrders, int pendingQualityCases, int inventoryLedgerEntries, int mobileTasks) {
-            this(inboundOrders, activeWorkOrders, pendingQualityCases, inventoryLedgerEntries, mobileTasks, "LIVE");
-        }
-    }
 }

@@ -1339,15 +1339,11 @@ MySQL 持久化表：
 
 退售后统一使用真实会话身份和业务工作单元，缺少请求号或装配直接拒绝；同账号同请求同内容回放原台账号，改变内容拒绝。母单锁取得后当前读核对原业务单号，另换请求号也不能重复入账。库存与请求结果同次提交，保存失败回滚。
 
-### 8.1 `MobileTask`
+### 8.1 移动作业读取
 
-| 字段 | 说明 |
-|---|---|
-| `code` | 工单、质检单或任务编码 |
-| `scene` | 移动作业场景 |
-| `nextAction` | 下一步动作 |
-| `required` | 必填信息 |
-| `status` | 移动作业状态 |
+手机与桌面共用 `GET /api/business/order-workspace` 的列表及共享详情、动作接口，使用相同的有效权限和客户／组织范围。只有 `mobile` 菜单时仍可读取 `ORDERS` 视图，生产和质量专门视图继续要求各自菜单。
+
+旧 `MobileTask`、`GET /api/business/workspaces/mobile` 和 `GET /api/business/workspaces/summary` 已退出，旧地址返回 404；不再维护独立手机任务拼装或跨工作台汇总。
 
 PWA 一期边界：
 
@@ -2106,8 +2102,6 @@ PWA 一期边界：
 | `GET /api/business/workspaces/production` | `ApiResponse<ProductionWorkspaceData>` |
 | `GET /api/business/workspaces/quality` | `ApiResponse<QualityWorkspaceData>` |
 | `GET /api/business/workspaces/inventory` | `ApiResponse<InventoryWorkspaceData>` |
-| `GET /api/business/workspaces/mobile` | `ApiResponse<MobileWorkspaceData>` |
-| `GET /api/business/workspaces/summary` | `ApiResponse<BusinessWorkspaceSummary>` |
 
 ### ProgressBoardController
 

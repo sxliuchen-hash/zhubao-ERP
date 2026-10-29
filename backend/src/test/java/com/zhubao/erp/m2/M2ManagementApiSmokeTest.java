@@ -41,6 +41,9 @@ class M2ManagementApiSmokeTest {
     @Autowired
     private com.fasterxml.jackson.databind.ObjectMapper json;
 
+    @Autowired
+    private com.zhubao.erp.business.domain.BusinessDocumentRepository workspaceDocuments;
+
 
     @Autowired private com.zhubao.erp.security.domain.AuthUserAccountRepository testAccounts;
     @Autowired private com.zhubao.erp.security.app.PasswordHasher testHasher;
@@ -354,81 +357,51 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
-    void exposesBusinessWorkspaceApis() {
-        ResponseEntity<String> inbound = restTemplate.getForEntity("/api/business/workspaces/inbound", String.class);
-        ResponseEntity<String> production = restTemplate.getForEntity("/api/business/workspaces/production", String.class);
-        ResponseEntity<String> quality = restTemplate.getForEntity("/api/business/workspaces/quality", String.class);
-        ResponseEntity<String> inventory = restTemplate.getForEntity("/api/business/workspaces/inventory", String.class);
-        ResponseEntity<String> mobile = restTemplate.getForEntity("/api/business/workspaces/mobile", String.class);
-        ResponseEntity<String> summary = restTemplate.getForEntity("/api/business/workspaces/summary", String.class);
-
-        assertThat(inbound.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(inbound.getBody()).contains("MD-20260706-004", "拆包视频截取失败", "拆箱签字");
-        assertThat(production.getBody()).contains("HO-20260706-021", "审批阻断", "雕刻", "ENG-03");
-        assertThat(quality.getBody()).contains("LOSS-20260706-009", "损耗阻断");
-        assertThat(inventory.getBody()).contains("LEDGER-20260706-001", "视频证据");
-        assertThat(mobile.getBody()).contains("DRAFT-QC-003", "离线草稿");
-        assertThat(summary.getBody()).contains("\"activeWorkOrders\":5", "\"mobileTasks\":3");
-        // 本类显式验证演示契约；正式单据不并入演示视图。
-        int inboundOrders = Integer.parseInt(summary.getBody().replaceAll(".*\"inboundOrders\":(\\d+).*", "$1"));
-        assertThat(inboundOrders).isGreaterThanOrEqualTo(4);
+    void exposesBusinessWorkspaceApis() throws Exception {
+        for (String view : List.of("inbound", "production", "quality", "inventory")) {
+            ResponseEntity<String> response = signedGet("/api/business/workspaces/" + view, String.class);
+            assertThat(response.getStatusCode().is2xxSuccessful()).as(view).isTrue();
+            assertThat(json.readTree(response.getBody()).path("data").path("dataSource").asText()).isEqualTo("LIVE");
+            assertThat(response.getBody()).doesNotContain("DRAFT-QC-003", "preview-demo", "离线草稿");
+        }
+        for (String retired : List.of("mobile", "summary")) {
+            assertThat(signedGet("/api/business/workspaces/" + retired, String.class).getStatusCode().value()).isEqualTo(404);
+        }
     }
 
     @Test
-    void filtersBusinessWorkspaceApisByDataScopeHeaders() {
-        HttpHeaders selfHeaders = new HttpHeaders();
-        selfHeaders.set("X-Zhubao-Operator", "warehouse-review");
-        selfHeaders.set("X-Zhubao-Role", "WAREHOUSE_KEEPER");
-        selfHeaders.set("X-Zhubao-Data-Scope", "TEAM");
+    void filtersBusinessWorkspaceApisBySessionCustomerScope() throws Exception {
+        workspaceDocuments.saveMotherOrder(workspaceMother("MD-WORKSPACE-A", 1001L, "恒信珠宝"));
+        workspaceDocuments.saveMotherOrder(workspaceMother("MD-WORKSPACE-B", 1002L, "另一个客户"));
+        testAccounts.save(new com.zhubao.erp.security.domain.AuthUserAccount(
+                "workspace-scope", testHasher.hash("workspace-scope123"), "范围烟测业务员",
+                com.zhubao.erp.security.domain.RoleCode.SALES, com.zhubao.erp.security.domain.DataScope.CUSTOMER_RANGE,
+                true, true, List.of("1001")));
+        testAccounts.save(new com.zhubao.erp.security.domain.AuthUserAccount(
+                "workspace-empty", testHasher.hash("workspace-empty123"), "空范围烟测业务员",
+                com.zhubao.erp.security.domain.RoleCode.SALES, com.zhubao.erp.security.domain.DataScope.CUSTOMER_RANGE,
+                true, true, List.of()));
 
-        ResponseEntity<String> selfInbound = restTemplate.exchange(
-                "/api/business/workspaces/inbound",
-                HttpMethod.GET,
-                new HttpEntity<>(selfHeaders),
-                String.class
-        );
-        ResponseEntity<String> selfSummary = restTemplate.exchange(
-                "/api/business/workspaces/summary",
-                HttpMethod.GET,
-                new HttpEntity<>(selfHeaders),
-                String.class
-        );
+        HttpHeaders headers = new HttpHeaders();
+        headers.addAll(sessionHeaders("workspace-scope"));
+        headers.set("X-Zhubao-Customer-Scope", "1002");
+        ResponseEntity<String> response = restTemplate.exchange("/api/business/workspaces/inbound", HttpMethod.GET,
+                new HttpEntity<>(headers), String.class);
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(json.readTree(response.getBody()).path("data").path("orders").findValuesAsText("code"))
+                .contains("MD-WORKSPACE-A").doesNotContain("MD-WORKSPACE-B");
+        ResponseEntity<String> empty = restTemplate.exchange("/api/business/workspaces/inbound", HttpMethod.GET,
+                new HttpEntity<>(sessionHeaders("workspace-empty")), String.class);
+        assertThat(empty.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(json.readTree(empty.getBody()).path("data").path("orders").isEmpty()).isTrue();
+    }
 
-        assertThat(selfInbound.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(selfInbound.getBody()).contains("MD-20260706-001", "MD-20260706-004");
-        assertThat(selfInbound.getBody()).doesNotContain("MD-20260706-003", "璟瑞工贸");
-        assertThat(selfSummary.getBody()).contains(
-                "\"inboundOrders\":3",
-                "\"activeWorkOrders\":0",
-                "\"inventoryLedgerEntries\":1",
-                "\"mobileTasks\":0"
-        );
-
-        HttpHeaders customerHeaders = new HttpHeaders();
-        customerHeaders.set("X-Zhubao-Operator", "sales-review");
-        customerHeaders.set("X-Zhubao-Role", "SALES");
-        customerHeaders.set("X-Zhubao-Data-Scope", "CUSTOMER_RANGE");
-        customerHeaders.set("X-Zhubao-Customer-Scope", "ZD-20260706-001;ZD-20260706-002;ZD-20260706-009");
-
-        ResponseEntity<String> customerProduction = restTemplate.exchange(
-                "/api/business/workspaces/production",
-                HttpMethod.GET,
-                new HttpEntity<>(customerHeaders),
-                String.class
-        );
-        ResponseEntity<String> customerSummary = restTemplate.exchange(
-                "/api/business/workspaces/summary",
-                HttpMethod.GET,
-                new HttpEntity<>(customerHeaders),
-                String.class
-        );
-
-        assertThat(customerProduction.getBody()).contains("ZD-20260706-001", "ZD-20260706-009");
-        assertThat(customerProduction.getBody()).doesNotContain("ZD-20260706-006", "雅辰饰品");
-        assertThat(customerSummary.getBody()).contains(
-                "\"inboundOrders\":0",
-                "\"activeWorkOrders\":3"
-        );
+    private static com.zhubao.erp.business.domain.MotherOrderRecord workspaceMother(String code, Long customerId, String customer) {
+        return new com.zhubao.erp.business.domain.MotherOrderRecord(
+                code, customerId, customerId, "MAT-18K-RING", "2026-10-29", "", "", "", "收货员", "",
+                "烟测货品", "CUSTOMER", true, "RAW", BigDecimal.ONE, "件", BigDecimal.ONE,
+                "RAW_WAITING", "", "", null, "", "收货员", "", "", "已入库", "2026-10-29T09:00:00",
+                "抛光", "2099-01-01", customer);
     }
 
     @Test
