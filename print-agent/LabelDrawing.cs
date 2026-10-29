@@ -353,29 +353,84 @@ namespace Zhubao.PrintReceiver
                 float y = bodyTop;
                 float qrBottom = string.IsNullOrWhiteSpace(spec.Qr) ? bodyTop : bodyTop + qr;
                 var fields = VisibleFields(spec);
-                for (int index = 0; index < fields.Count; index++)
+                float fieldScale = FitFieldScale(canvas, fields, nameFont, valueFont, emphasis, right - textX);
+                Font drawName = nameFont;
+                Font drawValue = valueFont;
+                Font drawEmphasis = emphasis;
+                Font scaledName = null;
+                Font scaledValue = null;
+                Font scaledEmphasis = null;
+                if (fieldScale < 0.999f)
                 {
-                    if (y >= contentBottom)
+                    scaledName = LabelFont(nameFont.Size * fieldScale, false);
+                    scaledValue = LabelFont(valueFont.Size * fieldScale, true);
+                    scaledEmphasis = LabelFont(emphasis.Size * fieldScale, true);
+                    drawName = scaledName;
+                    drawValue = scaledValue;
+                    drawEmphasis = scaledEmphasis;
+                }
+                try
+                {
+                    for (int index = 0; index < fields.Count; index++)
                     {
-                        clipped = true;
-                        break;
+                        if (y >= contentBottom)
+                        {
+                            clipped = true;
+                            break;
+                        }
+                        Font valueFace = index == 0 ? drawEmphasis : drawValue;
+                        y = DrawFlowField(canvas, CompactName(fields[index].Name) + "：", fields[index].Value ?? "", drawName, valueFace, y, textX, pad, right, qrBottom, contentBottom, Px(dpi, 0.45), paint, ref clipped);
+                        if (clipped) break;
                     }
-                    Font valueFace = index == 0 ? emphasis : valueFont;
-                    y = DrawFlowField(canvas, CompactName(fields[index].Name) + "：", fields[index].Value ?? "", nameFont, valueFace, y, textX, pad, right, qrBottom, contentBottom, Px(dpi, 0.45), paint, ref clipped);
-                    if (clipped) break;
+                }
+                finally
+                {
+                    if (scaledName != null) scaledName.Dispose();
+                    if (scaledValue != null) scaledValue.Dispose();
+                    if (scaledEmphasis != null) scaledEmphasis.Dispose();
                 }
                 if (ShowFooter(spec))
                 {
                     double footerPt = LayoutNumber(spec.FooterFontPt, 6);
                     using (var footerFont = LabelFont(FontPx(footerPt, dpi, textScale), false))
                     {
-                        float footerTop = y + Px(dpi, 0.5);
-                        if (footerTop + footerFont.Height > contentBottom) clipped = true;
-                        else if (paint) DrawFooter(canvas, spec, footerFont, dpi, pad, right, footerTop, contentBottom);
+                        // 脚注跟在正文后面，并且不能高于二维码底边，否则横线会切开二维码或最后一行。
+                        float gap = Px(dpi, 0.35);
+                        float block = footerFont.Height + Px(dpi, 0.7);
+                        float footerTop = Math.Max(y, qrBottom) + gap;
+                        if (footerTop + block <= contentBottom)
+                        {
+                            if (paint) DrawFooter(canvas, spec, footerFont, dpi, pad, right, footerTop, contentBottom);
+                        }
+                        else if (y + gap + block <= contentBottom)
+                        {
+                            float footerLeft = y + gap < qrBottom ? textX : pad;
+                            if (paint) DrawFooter(canvas, spec, footerFont, dpi, footerLeft, right, y + gap, contentBottom);
+                        }
+                        else clipped = true;
                     }
                 }
             }
             return clipped;
+        }
+
+        /** 差一点就能排进一行时略缩字段字号，避免日期被拆成单独一个数字。很长的内容仍换行。 */
+        static float FitFieldScale(Graphics canvas, List<LabelFieldSpec> fields, Font nameFont, Font valueFont, Font emphasis, float column)
+        {
+            if (fields == null || fields.Count == 0 || column < 8f) return 1f;
+            float widest = 0f;
+            for (int index = 0; index < fields.Count; index++)
+            {
+                string name = CompactName(fields[index].Name) + "：";
+                string value = fields[index].Value ?? "";
+                Font valueFace = index == 0 ? emphasis : valueFont;
+                float width = TextWidth(canvas, name, nameFont) + TextWidth(canvas, value, valueFace);
+                if (width > widest) widest = width;
+            }
+            if (widest <= column) return 1f;
+            float ratio = column / widest;
+            if (ratio < 0.68f) return 1f;
+            return Math.Max(0.68f, ratio);
         }
 
         static float DrawFlowField(Graphics canvas, string name, string value, Font nameFont, Font valueFont, float y, float shortLeft, float fullLeft, float right, float floatBottom, float contentBottom, float gap, bool paint, ref bool clipped)
@@ -694,6 +749,32 @@ namespace Zhubao.PrintReceiver
                 if (crowdedBitmap.Width != 472 || crowdedBitmap.Height != 354)
                     throw new InvalidOperationException("缩小字号后纸张尺寸被改变");
             }
+            var photo = new LabelSpec
+            {
+                TypeLabel = "母单",
+                Code = "MD-20261029-0001",
+                Qr = "JG|mother|MD-20261029-0001|0|LIphoto",
+                WidthMm = 40,
+                HeightMm = 30,
+                Dpi = 300,
+                TemplateCode = "CUSTOM",
+                Fields = new[]
+                {
+                    new LabelFieldSpec { Name = "交期", Value = "2026-10-30" },
+                    new LabelFieldSpec { Name = "名称", Value = "星月-归圆莲花" },
+                    new LabelFieldSpec { Name = "数量", Value = "1109 颗" },
+                    new LabelFieldSpec { Name = "要求", Value = "归圆莲花5.31" }
+                },
+                FooterRight = "JS"
+            };
+            float photoScale = ChosenTextScale(photo);
+            if (photoScale < 0.999f)
+                throw new InvalidOperationException("短字段脚注把字号缩小了 " + photoScale);
+            using (Bitmap photoBitmap = Render(photo))
+            {
+                if (!string.IsNullOrEmpty(samplePath))
+                    photoBitmap.Save(Path.Combine(Path.GetDirectoryName(samplePath), "zhubao-label-photo.png"), System.Drawing.Imaging.ImageFormat.Png);
+            }
             return "二维码 " + size + " 模块，画面 472×354，冷真圆章与空间校验通过";
         }
 
@@ -724,12 +805,9 @@ namespace Zhubao.PrintReceiver
         private static float TextWidth(Graphics canvas, string text, Font font)
         {
             if (string.IsNullOrEmpty(text)) return 0f;
-            // GenericTypographic 会把中文测窄，整句被当成一行，画出去后被贴纸边裁掉。
+            // GenericTypographic 略窄于实际笔画。只补一小段，避免整行被当成放得下；不要按整字宽去估，否则日期和名称会在中间断开。
             float measured = canvas.MeasureString(text, font, int.MaxValue, StringFormat.GenericTypographic).Width;
-            float floor = 0f;
-            foreach (char item in text)
-                floor += item <= 0x00FF ? font.Size * 0.56f : font.Size;
-            return Math.Max(measured, floor);
+            return measured + Math.Max(1.5f, font.Size * 0.2f);
         }
 
         private static float DrawLine(Graphics canvas, string text, Font font, float x, float y, float maxWidth, float bottom, bool paint = true)
