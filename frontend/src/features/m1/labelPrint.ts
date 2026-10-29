@@ -64,9 +64,8 @@ export const labelFaceCss = `
 .bw-fields dt, .bw-fields dd { margin: 0; min-width: 0; }
 .bw-fields dd {
   font-weight: 700;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .bw-foot {
   grid-column: 1 / -1;
@@ -177,7 +176,7 @@ export function buildLabelMarkup(payload: LabelPayload): string {
       ? `<div class="bw-foot"><span>${escapeHtml(footerLeft)}</span><span>${escapeHtml(footerRight)}</span></div>`
       : '';
 
-  const type = `<span class="bw-type">${escapeHtml(payload.typeLabel)}</span>`;
+  const type = `<span class="bw-type">${escapeHtml(printKindMark(payload.type, payload.typeLabel))}</span>`;
   const code = `<span class="bw-code">${escapeHtml(payload.primaryCode)}</span>`;
   const heading = compact
       ? `<div class="bw-top">${type}${code}</div>`
@@ -237,6 +236,13 @@ function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** 贴纸角标。母单、子单只印一个字。 */
+export function printKindMark(type: LabelPayload['type'], typeLabel: string): string {
+  if (type === 'MOTHER' || typeLabel === '母单' || typeLabel === '母框') return '母';
+  if (type === 'WORK_ORDER' || typeLabel === '子工单' || typeLabel === '子单' || typeLabel === '子框') return '子';
+  return typeLabel;
 }
 
 function compactFieldName(name: string, compact: boolean): string {

@@ -76,8 +76,9 @@ namespace Zhubao.PrintReceiver
                 double qrMm = LayoutNumber(spec.QrWidthMm, compact ? 17 : 18);
                 if (storageHeight > 0 && (spec.WidthMm < 35 || storageHeight + Px(dpi, qrMm + 7) > height))
                     throw new ArgumentException("保存标识与来源说明空间不足，请调整标签尺寸或按来源明细打印");
-                if (compact) DrawCompact(canvas, spec, dpi, left, top, right, bottom);
-                else DrawStandard(canvas, spec, dpi, left, top, right, bottom);
+                float textScale = ChooseTextScale(spec, dpi, left, top, right, bottom, width, height);
+                if (compact) DrawCompact(canvas, spec, dpi, left, top, right, bottom, textScale, true);
+                else DrawStandard(canvas, spec, dpi, left, top, right, bottom, textScale, true);
                 if (storageHeight > 0)
                     DrawStorage(canvas, spec, dpi, (int)left, (int)(height - Px(dpi, 0.6) - storageHeight), (int)(right - left));
                 using (var borderPen = new Pen(Color.Black, Math.Max(1f, border)))
@@ -188,18 +189,19 @@ namespace Zhubao.PrintReceiver
             return visible;
         }
 
-        static void DrawStandard(Graphics canvas, LabelSpec spec, int dpi, float left, float top, float right, float bottom)
+        static bool DrawStandard(Graphics canvas, LabelSpec spec, int dpi, float left, float top, float right, float bottom, float textScale, bool paint)
         {
             double titlePt = LayoutNumber(spec.TitleFontPt, 7);
             double codePt = LayoutNumber(spec.CodeFontPt, 9);
             double fieldPt = LayoutNumber(spec.FieldFontPt, 6.5);
             double footerPt = LayoutNumber(spec.FooterFontPt, 6);
-            using (var typeFont = LabelFont((float)(titlePt * dpi / 72.0), true))
-            using (var codeFont = LabelFont((float)(codePt * dpi / 72.0), true))
-            using (var nameFont = LabelFont((float)(fieldPt * dpi / 72.0), false))
-            using (var valueFont = LabelFont((float)(fieldPt * dpi / 72.0), true))
-            using (var brandFont = LabelFont((float)(6 * dpi / 72.0), false))
-            using (var footerFont = LabelFont((float)(footerPt * dpi / 72.0), false))
+            bool clipped = false;
+            using (var typeFont = LabelFont(FontPx(titlePt, dpi, textScale), true))
+            using (var codeFont = LabelFont(FontPx(codePt, dpi, textScale), true))
+            using (var nameFont = LabelFont(FontPx(fieldPt, dpi, textScale), false))
+            using (var valueFont = LabelFont(FontPx(fieldPt, dpi, textScale), true))
+            using (var brandFont = LabelFont(FontPx(6, dpi, textScale), false))
+            using (var footerFont = LabelFont(FontPx(footerPt, dpi, textScale), false))
             using (var pen = new Pen(Color.Black, Math.Max(1f, Px(dpi, 0.25))))
             {
                 float footerBlock = ShowFooter(spec) ? footerFont.Height + Px(dpi, 1.05) : 0;
@@ -209,73 +211,143 @@ namespace Zhubao.PrintReceiver
                 float rowHeight = Math.Max(Px(dpi, 12), rowBottom - top);
                 if (qr > rowHeight) qr = rowHeight;
                 float qrY = top + Math.Max(0, (rowHeight - qr) / 2f);
-                if (!string.IsNullOrWhiteSpace(spec.Qr))
+                if (paint && !string.IsNullOrWhiteSpace(spec.Qr))
                     DrawQr(canvas, spec.Qr, (int)left, (int)qrY, (int)qr);
                 float mainX = left + qr + Px(dpi, 1.2);
                 float mainRight = right;
-                string type = spec.TypeLabel ?? "";
+                string type = KindMark(spec.TypeLabel);
                 float typeWidth = string.IsNullOrEmpty(type) ? 0 : TextWidth(canvas, type, typeFont) + Px(dpi, 1.4);
                 float headHeight = Math.Max(typeFont.Height * 1.35f, brandFont.Height);
                 string brand = spec.BrandTitle ?? "";
                 if (brand.Length > 0)
-                    DrawLine(canvas, brand, brandFont, mainX, top + (headHeight - brandFont.Height) / 2f, mainRight - mainX - typeWidth - Px(dpi, 1), top + headHeight + 2);
+                    DrawLine(canvas, brand, brandFont, mainX, top + (headHeight - brandFont.Height) / 2f, mainRight - mainX - typeWidth - Px(dpi, 1), top + headHeight + 2, paint);
                 if (typeWidth > 0)
                 {
                     float typeX = mainRight - typeWidth;
-                    canvas.DrawRectangle(pen, typeX, top, typeWidth, headHeight);
-                    canvas.DrawString(type, typeFont, Brushes.Black, typeX + Px(dpi, 0.7), top + (headHeight - typeFont.Height) / 2f, StringFormat.GenericTypographic);
+                    if (paint)
+                    {
+                        canvas.DrawRectangle(pen, typeX, top, typeWidth, headHeight);
+                        canvas.DrawString(type, typeFont, Brushes.Black, typeX + Px(dpi, 0.7), top + (headHeight - typeFont.Height) / 2f, StringFormat.GenericTypographic);
+                    }
                 }
                 float y = top + headHeight + Px(dpi, 0.5);
-                y = DrawWrapped(canvas, spec.Code ?? "", codeFont, mainX, y, mainRight - mainX, rowBottom, 3);
+                y = DrawWrapped(canvas, spec.Code ?? "", codeFont, mainX, y, mainRight - mainX, rowBottom, 3, paint);
                 y += Px(dpi, 0.15);
                 float nameColumn = Px(dpi, 8);
                 foreach (var field in VisibleFields(spec))
                 {
-                    float lineHeight = Math.Max(nameFont.Height, valueFont.Height);
-                    if (y + lineHeight > rowBottom) break;
-                    float nameWidth = TextWidth(canvas, field.Name, nameFont);
-                    canvas.DrawString(field.Name, nameFont, Brushes.Black, mainX, y, StringFormat.GenericTypographic);
+                    float lineHeight = Math.Max(nameFont.Size, valueFont.Size) * 1.18f;
+                    if (y + lineHeight > rowBottom)
+                    {
+                        clipped = true;
+                        break;
+                    }
+                    string name = field.Name ?? "";
+                    float nameWidth = TextWidth(canvas, name, nameFont);
+                    if (paint) canvas.DrawString(name, nameFont, Brushes.Black, mainX, y, StringFormat.GenericTypographic);
                     float valueX = mainX + Math.Max(nameColumn, nameWidth) + Px(dpi, 0.6);
-                    canvas.DrawString(Fit(canvas, field.Value, valueFont, mainRight - valueX), valueFont, Brushes.Black, valueX, y, StringFormat.GenericTypographic);
-                    y += lineHeight + Px(dpi, 0.15);
+                    y = DrawFlowField(canvas, "", field.Value ?? "", valueFont, valueFont, y, valueX, valueX, mainRight, y, rowBottom, Px(dpi, 0.15), paint, ref clipped);
+                    if (clipped) break;
                 }
-                DrawFooter(canvas, spec, footerFont, dpi, left, right, bottom - footerBlock, bottom);
+                if (paint) DrawFooter(canvas, spec, footerFont, dpi, left, right, bottom - footerBlock, bottom);
             }
+            return clipped;
         }
 
-        /** 与网页 40×30 紧凑贴纸一致：顶栏是类型和单号，二维码靠左，字段在右侧并换行。 */
+        /** 与网页 40×30 紧凑贴纸一致：顶栏是类型和单号，二维码靠左，字段绕开二维码换行。 */
         static float Px(int dpi, double mm)
         {
             return (float)(mm * dpi / 25.4);
         }
 
-        static void DrawCompact(Graphics canvas, LabelSpec spec, int dpi, float pad, float top, float right, float contentBottom)
+        static float FontPx(double points, int dpi, float textScale)
+        {
+            return (float)(points * textScale * dpi / 72.0);
+        }
+
+        /** 母单、子单贴纸只印一个字。其他类型保持原字。 */
+        public static string KindMark(string typeLabel)
+        {
+            if (typeLabel == "母单" || typeLabel == "母框") return "母";
+            if (typeLabel == "子工单" || typeLabel == "子单" || typeLabel == "子框") return "子";
+            return typeLabel ?? "";
+        }
+
+        /** 当前快照排进版心所需的文字缩放。1 表示原字号放得下。 */
+        public static float ChosenTextScale(LabelSpec spec)
+        {
+            if (spec == null) throw new ArgumentException("标签快照无效");
+            if (spec.WidthMm < 10 || spec.HeightMm < 10 || spec.WidthMm > 200 || spec.HeightMm > 200)
+                throw new ArgumentException("标签尺寸无效");
+            int dpi = spec.Dpi >= 100 && spec.Dpi <= 600 ? spec.Dpi : 300;
+            int width = Math.Max(1, (int)Math.Round(spec.WidthMm * dpi / 25.4));
+            int height = Math.Max(1, (int)Math.Round(spec.HeightMm * dpi / 25.4));
+            bool compact = IsCompact(spec);
+            float border = Px(dpi, compact ? 0.2 : 0.3);
+            float padX = Px(dpi, compact ? 0.8 : 1.3);
+            float padTop = Px(dpi, compact ? 0.8 : 1.1);
+            float padBottom = Px(dpi, compact ? 0.8 : 0.9);
+            int storageHeight = StorageHeight(spec, dpi);
+            float left = border + padX;
+            float top = border + padTop;
+            float right = width - border - padX;
+            float bottom = height - border - padBottom - storageHeight;
+            if (storageHeight > 0) bottom -= Px(dpi, 1);
+            return ChooseTextScale(spec, dpi, left, top, right, bottom, width, height);
+        }
+
+        static float ChooseTextScale(LabelSpec spec, int dpi, float left, float top, float right, float bottom, int pixelWidth, int pixelHeight)
+        {
+            float scale = 1f;
+            using (var probe = new Bitmap(Math.Max(1, pixelWidth), Math.Max(1, pixelHeight)))
+            {
+                probe.SetResolution(dpi, dpi);
+                using (var canvas = Graphics.FromImage(probe))
+                {
+                    canvas.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    for (int attempt = 0; attempt < 6; attempt++)
+                    {
+                        bool clipped = IsCompact(spec)
+                            ? DrawCompact(canvas, spec, dpi, left, top, right, bottom, scale, false)
+                            : DrawStandard(canvas, spec, dpi, left, top, right, bottom, scale, false);
+                        if (!clipped) return scale;
+                        float next = scale * 0.88f;
+                        if (next < 0.62f) return 0.62f;
+                        scale = next;
+                    }
+                }
+            }
+            return scale;
+        }
+
+        static bool DrawCompact(Graphics canvas, LabelSpec spec, int dpi, float pad, float top, float right, float contentBottom, float textScale, bool paint)
         {
             double titlePt = LayoutNumber(spec.TitleFontPt, 7.5);
             double codePt = LayoutNumber(spec.CodeFontPt, 8.5);
             double fieldPt = LayoutNumber(spec.FieldFontPt, 7.5);
             double emphasisPt = LayoutNumber(spec.EmphasisFontPt, 8.5);
-            using (var typeFont = LabelFont((float)(titlePt * dpi / 72.0), true))
-            using (var codeFont = LabelFont((float)(codePt * dpi / 72.0), true))
-            using (var nameFont = LabelFont((float)(fieldPt * dpi / 72.0), false))
-            using (var valueFont = LabelFont((float)(fieldPt * dpi / 72.0), true))
-            using (var emphasis = LabelFont((float)(emphasisPt * dpi / 72.0), true))
+            bool clipped = false;
+            using (var typeFont = LabelFont(FontPx(titlePt, dpi, textScale), true))
+            using (var codeFont = LabelFont(FontPx(codePt, dpi, textScale), true))
+            using (var nameFont = LabelFont(FontPx(fieldPt, dpi, textScale), false))
+            using (var valueFont = LabelFont(FontPx(fieldPt, dpi, textScale), true))
+            using (var emphasis = LabelFont(FontPx(emphasisPt, dpi, textScale), true))
             using (var pen = new Pen(Color.Black, Math.Max(1f, Px(dpi, 0.25))))
             {
-                string type = spec.TypeLabel ?? "";
+                string type = KindMark(spec.TypeLabel);
                 float typeWidth = string.IsNullOrEmpty(type) ? 0 : TextWidth(canvas, type, typeFont) + Px(dpi, 1);
                 float rowHeight = Math.Max(typeFont.Height * 1.2f, codeFont.Height);
-                if (typeWidth > 0)
+                if (typeWidth > 0 && paint)
                 {
                     canvas.DrawRectangle(pen, pad, top, typeWidth, rowHeight);
                     canvas.DrawString(type, typeFont, Brushes.Black, pad + Px(dpi, 0.5), top + (rowHeight - typeFont.Height) / 2f, StringFormat.GenericTypographic);
                 }
                 float codeX = pad + typeWidth + (typeWidth > 0 ? Px(dpi, 0.8) : 0);
-                DrawLine(canvas, spec.Code ?? "", codeFont, codeX, top + (rowHeight - codeFont.Height) / 2f, right - codeX, top + rowHeight + 2);
+                DrawLine(canvas, spec.Code ?? "", codeFont, codeX, top + (rowHeight - codeFont.Height) / 2f, right - codeX, top + rowHeight + 2, paint);
                 float bodyTop = top + rowHeight + Px(dpi, 0.45);
                 float qr = Math.Min(Px(dpi, LayoutNumber(spec.QrWidthMm, 17)), (right - pad) * 0.46f);
                 if (qr > contentBottom - bodyTop) qr = Math.Max(Px(dpi, 12), contentBottom - bodyTop);
-                if (!string.IsNullOrWhiteSpace(spec.Qr))
+                if (paint && !string.IsNullOrWhiteSpace(spec.Qr))
                     DrawQr(canvas, spec.Qr, (int)pad, (int)bodyTop, (int)qr);
                 float textX = pad + (string.IsNullOrWhiteSpace(spec.Qr) ? 0 : qr + Px(dpi, 0.8));
                 float y = bodyTop;
@@ -283,62 +355,90 @@ namespace Zhubao.PrintReceiver
                 var fields = VisibleFields(spec);
                 for (int index = 0; index < fields.Count; index++)
                 {
-                    if (y >= contentBottom) break;
+                    if (y >= contentBottom)
+                    {
+                        clipped = true;
+                        break;
+                    }
                     Font valueFace = index == 0 ? emphasis : valueFont;
-                    y = DrawFlowField(canvas, CompactName(fields[index].Name) + "：", fields[index].Value ?? "", nameFont, valueFace, y, textX, pad, right, qrBottom, contentBottom, Px(dpi, 0.45));
+                    y = DrawFlowField(canvas, CompactName(fields[index].Name) + "：", fields[index].Value ?? "", nameFont, valueFace, y, textX, pad, right, qrBottom, contentBottom, Px(dpi, 0.45), paint, ref clipped);
+                    if (clipped) break;
                 }
                 if (ShowFooter(spec))
                 {
                     double footerPt = LayoutNumber(spec.FooterFontPt, 6);
-                    using (var footerFont = LabelFont((float)(footerPt * dpi / 72.0), false))
-                        DrawFooter(canvas, spec, footerFont, dpi, pad, right, y + Px(dpi, 0.5), contentBottom);
+                    using (var footerFont = LabelFont(FontPx(footerPt, dpi, textScale), false))
+                    {
+                        float footerTop = y + Px(dpi, 0.5);
+                        if (footerTop + footerFont.Height > contentBottom) clipped = true;
+                        else if (paint) DrawFooter(canvas, spec, footerFont, dpi, pad, right, footerTop, contentBottom);
+                    }
                 }
             }
+            return clipped;
         }
 
-        static float DrawFlowField(Graphics canvas, string name, string value, Font nameFont, Font valueFont, float y, float shortLeft, float fullLeft, float right, float floatBottom, float contentBottom, float gap)
+        static float DrawFlowField(Graphics canvas, string name, string value, Font nameFont, Font valueFont, float y, float shortLeft, float fullLeft, float right, float floatBottom, float contentBottom, float gap, bool paint, ref bool clipped)
         {
             // 与网页 line-height: 1.18 对齐。GDI 的 Font.Height 含额外行距，会把后面的字段挤出贴纸。
             float lineHeight = Math.Max(nameFont.Size, valueFont.Size) * 1.18f;
+            if (lineHeight < 1f) lineHeight = 1f;
             string restName = name ?? "";
             string restValue = value ?? "";
             int guard = 0;
-            while ((restName.Length > 0 || restValue.Length > 0) && guard < 48)
+            while ((restName.Length > 0 || restValue.Length > 0) && guard < 64)
             {
                 guard++;
-                if (y + lineHeight > contentBottom) return contentBottom;
+                if (y + lineHeight > contentBottom)
+                {
+                    clipped = true;
+                    break;
+                }
                 float x = y < floatBottom ? shortLeft : fullLeft;
                 float width = right - x;
-                if (width < 2) return y;
+                if (width < 2f)
+                {
+                    if (y < floatBottom) { y = floatBottom; continue; }
+                    clipped = true;
+                    break;
+                }
                 if (restName.Length > 0)
                 {
                     int count = FitCount(canvas, restName, nameFont, width);
                     if (count == 0)
                     {
-                        y += lineHeight;
-                        continue;
+                        if (y < floatBottom) { y = floatBottom; continue; }
+                        clipped = true;
+                        break;
                     }
                     string piece = restName.Substring(0, count);
-                    canvas.DrawString(piece, nameFont, Brushes.Black, x, y, StringFormat.GenericTypographic);
+                    if (paint) canvas.DrawString(piece, nameFont, Brushes.Black, x, y, StringFormat.GenericTypographic);
                     restName = restName.Substring(count);
                     x += TextWidth(canvas, piece, nameFont);
                     width = right - x;
-                    if (restName.Length > 0 || width < 2)
+                    if (restName.Length > 0 || width < 2f)
                     {
                         y += lineHeight;
                         continue;
                     }
                 }
-                int valueCount = FitCount(canvas, restValue, valueFont, width);
-                if (valueCount == 0)
+                if (restValue.Length == 0)
                 {
                     y += lineHeight;
                     continue;
                 }
-                canvas.DrawString(restValue.Substring(0, valueCount), valueFont, Brushes.Black, x, y, StringFormat.GenericTypographic);
+                int valueCount = FitCount(canvas, restValue, valueFont, width);
+                if (valueCount == 0)
+                {
+                    if (y < floatBottom) { y = floatBottom; continue; }
+                    clipped = true;
+                    break;
+                }
+                if (paint) canvas.DrawString(restValue.Substring(0, valueCount), valueFont, Brushes.Black, x, y, StringFormat.GenericTypographic);
                 restValue = restValue.Substring(valueCount);
                 if (restValue.Length > 0) y += lineHeight;
             }
+            if (restName.Length > 0 || restValue.Length > 0) clipped = true;
             return y + lineHeight + gap;
         }
 
@@ -515,6 +615,22 @@ namespace Zhubao.PrintReceiver
                 FooterRight = "",
                 StorageSources = new[] { new StorageSourceSpec { SourceLabel = "明细1", Marks = new[] { "冷", "真" }, Instruction = "" } }
             };
+            var brief = new LabelSpec
+            {
+                TypeLabel = "母单",
+                Code = "MD-1",
+                Qr = content,
+                WidthMm = 40,
+                HeightMm = 30,
+                Dpi = 300,
+                Fields = new[]
+                {
+                    new LabelFieldSpec { Name = "客户", Value = "何琴" },
+                    new LabelFieldSpec { Name = "验证码", Value = "AB12" }
+                }
+            };
+            if (ChosenTextScale(brief) < 0.999f)
+                throw new InvalidOperationException("短字段被过度缩小 " + ChosenTextScale(brief));
             using (Bitmap bitmap = Render(spec))
             {
                 if (bitmap.Width != 472 || bitmap.Height != 354)
@@ -543,6 +659,41 @@ namespace Zhubao.PrintReceiver
             bool rejected = false;
             try { using (Bitmap unexpected = Render(spec)) { } } catch (ArgumentException) { rejected = true; }
             if (!rejected) throw new InvalidOperationException("保存说明空间不足时应拒绝打印");
+            if (KindMark("母单") != "母" || KindMark("母框") != "母" || KindMark("子工单") != "子" || KindMark("子单") != "子" || KindMark("子框") != "子" || KindMark("出货") != "出货")
+                throw new InvalidOperationException("子母单角标错误");
+            using (var probe = new Bitmap(120, 40))
+            using (var measure = Graphics.FromImage(probe))
+            using (var font = new Font("Microsoft YaHei", 16, FontStyle.Regular, GraphicsUnit.Pixel))
+            {
+                string sample = "抛光后镀金并镶嵌小钻";
+                int count = FitCount(measure, sample, font, 36);
+                if (count <= 0 || count >= sample.Length)
+                    throw new InvalidOperationException("长字段没有换行 " + count);
+            }
+            var crowded = new LabelSpec
+            {
+                TypeLabel = "子工单",
+                Code = "ZD-20261029-0001",
+                Qr = content,
+                WidthMm = 40,
+                HeightMm = 30,
+                Dpi = 300,
+                Fields = new[]
+                {
+                    new LabelFieldSpec { Name = "验证码", Value = "AB12" },
+                    new LabelFieldSpec { Name = "客户", Value = "恒信珠宝" },
+                    new LabelFieldSpec { Name = "加工要求", Value = new string('镶', 160) },
+                    new LabelFieldSpec { Name = "期限", Value = "2026-10-25" }
+                }
+            };
+            float crowdedScale = ChosenTextScale(crowded);
+            if (crowdedScale >= 0.999f)
+                throw new InvalidOperationException("长字段没有缩小字号 " + crowdedScale);
+            using (Bitmap crowdedBitmap = Render(crowded))
+            {
+                if (crowdedBitmap.Width != 472 || crowdedBitmap.Height != 354)
+                    throw new InvalidOperationException("缩小字号后纸张尺寸被改变");
+            }
             return "二维码 " + size + " 模块，画面 472×354，冷真圆章与空间校验通过";
         }
 
@@ -572,19 +723,25 @@ namespace Zhubao.PrintReceiver
 
         private static float TextWidth(Graphics canvas, string text, Font font)
         {
-            return canvas.MeasureString(text, font, int.MaxValue, StringFormat.GenericTypographic).Width;
+            if (string.IsNullOrEmpty(text)) return 0f;
+            // GenericTypographic 会把中文测窄，整句被当成一行，画出去后被贴纸边裁掉。
+            float measured = canvas.MeasureString(text, font, int.MaxValue, StringFormat.GenericTypographic).Width;
+            float floor = 0f;
+            foreach (char item in text)
+                floor += item <= 0x00FF ? font.Size * 0.56f : font.Size;
+            return Math.Max(measured, floor);
         }
 
-        private static float DrawLine(Graphics canvas, string text, Font font, float x, float y, float maxWidth, float bottom)
+        private static float DrawLine(Graphics canvas, string text, Font font, float x, float y, float maxWidth, float bottom, bool paint = true)
         {
             if (string.IsNullOrWhiteSpace(text) || y + font.Height > bottom) return y;
-            canvas.DrawString(Fit(canvas, text, font, maxWidth), font, Brushes.Black, x, y, StringFormat.GenericTypographic);
+            if (paint) canvas.DrawString(Fit(canvas, text, font, maxWidth), font, Brushes.Black, x, y, StringFormat.GenericTypographic);
             return y + font.Height + 2;
         }
 
-        private static float DrawWrapped(Graphics canvas, string text, Font font, float x, float y, float maxWidth, float bottom, int maxLines)
+        private static float DrawWrapped(Graphics canvas, string text, Font font, float x, float y, float maxWidth, float bottom, int maxLines, bool paint = true)
         {
-            string remaining = text;
+            string remaining = text ?? "";
             for (int line = 0; line < maxLines && remaining.Length > 0 && y + font.Height <= bottom; line++)
             {
                 int count = remaining.Length;
@@ -592,7 +749,7 @@ namespace Zhubao.PrintReceiver
                 string piece = remaining.Substring(0, count);
                 if (line == maxLines - 1 && count < remaining.Length)
                     piece = Fit(canvas, remaining, font, maxWidth);
-                canvas.DrawString(piece, font, Brushes.Black, x, y, StringFormat.GenericTypographic);
+                if (paint) canvas.DrawString(piece, font, Brushes.Black, x, y, StringFormat.GenericTypographic);
                 y += font.Height + 1;
                 if (line == maxLines - 1) break;
                 remaining = remaining.Substring(Math.Max(1, count));

@@ -59,7 +59,7 @@ namespace Zhubao.PrintReceiver
 
     static class Program
     {
-        const string AgentRelease = "20261027.5";
+        const string AgentRelease = "20261029.2";
 
         [STAThread]
         static int Main(string[] args)

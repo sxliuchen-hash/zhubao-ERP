@@ -71,7 +71,9 @@ describe('黑白标签打印', () => {
 
     expect(html).toContain('class="bw-label bw-label--compact"');
     expect(html).toContain('width:40mm;height:30mm');
-    expect(html).toContain('<div class="bw-top"><span class="bw-type">母单</span><span class="bw-code">CC-20260709-001-JL</span></div>');
+    expect(html).toContain('<div class="bw-top"><span class="bw-type">母</span><span class="bw-code">CC-20260709-001-JL</span></div>');
+    expect(html).not.toContain('母单</span>');
+    expect(html).not.toContain('母框</span>');
     expect(html.indexOf('class="bw-top"')).toBeLessThan(html.indexOf('class="bw-qr"'));
     expect(labelFaceCss).toContain('float: left');
     expect(html).toContain('K7M2');
@@ -132,5 +134,17 @@ describe('黑白标签打印', () => {
     expect(html).not.toContain('bw-label--compact');
     expect(html).toContain('--bw-qr-width:20mm;');
     expect(html).not.toContain('500pt');
+  });
+
+  it('子单角标印子，出货等其他类型保持原文', () => {
+    const child = buildLabelMarkup({ ...payload, type: 'WORK_ORDER', typeLabel: '子工单' });
+    const legacy = buildLabelMarkup({ ...payload, type: 'WORK_ORDER', typeLabel: '子单' });
+    const outbound = buildLabelMarkup({ ...payload, type: 'OUTBOUND', typeLabel: '出货' });
+    expect(child).toContain('<span class="bw-type">子</span>');
+    expect(legacy).toContain('<span class="bw-type">子</span>');
+    expect(child).not.toContain('子框</span>');
+    expect(outbound).toContain('<span class="bw-type">出货</span>');
+    expect(labelFaceCss).toContain('overflow-wrap: anywhere');
+    expect(labelFaceCss).not.toMatch(/\.bw-fields dd \{[^}]*nowrap/);
   });
 });
