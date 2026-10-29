@@ -8,6 +8,7 @@ import {
   fetchFinanceDetails,
   fetchOperatingStatement,
   fetchPayables,
+  fetchPendingSettlements,
   fetchStatement,
   issueConsumable,
   payPayable,
@@ -31,6 +32,7 @@ vi.mock('../../services/financeApi', () => ({
   runDepreciation: vi.fn(),
   saveOutsource: vi.fn(),
   fetchPayables: vi.fn(),
+  fetchPendingSettlements: vi.fn(),
   payPayable: vi.fn(),
   fetchOperatingStatement: vi.fn(),
   fetchFinanceDashboard: vi.fn(),
@@ -158,6 +160,18 @@ describe('FinanceWorkspace', () => {
     await flushPromises();
     await wrapper.findAll('button').find(button => button.text() === label)?.trigger('click');
   }
+
+  it('缺项清单按月末读取，失败重试不触发任何入账', async () => {
+    vi.mocked(fetchPendingSettlements).mockRejectedValueOnce(new Error('清单暂不可用')).mockResolvedValueOnce([{ yearMonth: '2026-10', customerId: 101, customerName: '客户甲', motherOrderCode: 'MD-1', workOrderCode: 'ZD-1', processName: '交货后结单', reason: '历史待核：覆盖关系不明' }]);
+    const wrapper = mount(FinanceWorkspace); await flushPromises();
+    await selectSection(wrapper, '收款');
+    const read = () => wrapper.findAll('button').find(item => item.text() === '读取缺项清单')!;
+    await read().trigger('click'); await flushPromises();
+    expect(wrapper.text()).toContain('清单暂不可用');
+    await read().trigger('click'); await flushPromises();
+    expect(wrapper.text()).toContain('ZD-1'); expect(wrapper.text()).toContain('历史待核：覆盖关系不明');
+    expectNoPosting();
+  });
 
   it('采购和领用使用输入值，空表单不会写入固定样例', async () => {
     const wrapper = mount(FinanceWorkspace);

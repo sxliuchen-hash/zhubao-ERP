@@ -105,8 +105,8 @@ class RequirementOrderSnapshotTest {
         ScanCodeParser parser = new ScanCodeParser();
         BusinessDataAccess access = new BusinessDataAccess(documents, stocks);
         BusinessOperationService operations = new BusinessOperationService(stocks, null, documents, unit);
-        ProcessStationService stations = new ProcessStationService(documents, stocks, operations, parser, access);
-        QualityRequirementService quality = new QualityRequirementService(documents, stocks, operations, parser, access);
+        ProcessStationService stations = new ProcessStationService(documents, stocks, operations, parser, access, com.zhubao.erp.business.BusinessWorkFixture.unit());
+        QualityRequirementService quality = new QualityRequirementService(documents, stocks, operations, parser, access, com.zhubao.erp.business.BusinessWorkFixture.unit());
         ScanContextService context = new ScanContextService(
                 new BusinessDocumentService(documents), stocks, access, stations, quality, new PermissionGuard(), parser);
         AuthUserAccount inspector = new AuthUserAccount(

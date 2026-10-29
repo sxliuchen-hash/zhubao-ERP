@@ -146,9 +146,9 @@ public class DeviceGatewayService {
         return readingRepository.findByDeviceCode(deviceCode.trim(), clampLimit(limit));
     }
 
-    /** 内部兼容入口；HTTP 消费必须使用带真实账号的重载。 */
+    /** 旧无账号入口只保留拒绝，不能产生消费或库存事实。 */
     public ReadingConsumption consume(ConsumeReadingCommand command, OperatorContext operatorContext) {
-        return consumeInternal(command, operatorContext, null);
+        throw new BusinessException("设备读数消费必须登录");
     }
 
     public ReadingConsumption consume(ConsumeReadingCommand command, OperatorContext operatorContext, AuthUserAccount account) {
@@ -229,7 +229,7 @@ public class DeviceGatewayService {
                 command.postingFromWarehouseCode().trim(), command.postingToWarehouseCode().trim(),
                 command.postingQuantity(), null, weight, null,
                 blankToDefault(command.postingProcess(), "设备读数报工"), null, null, reading.deviceCode(),
-                null, null, null, null, "gateway-device", null, null, null, operatorContext.operator(),
+                null, null, null, null, null, "gateway-device", null, null, operatorContext.operator(),
                 operatorContext.operator(), reading.readingCode(), "设备网关读数 " + reading.readingCode() + " 联动报工"
         );
         ProductionReportResult result = processStationService.reportProduction(

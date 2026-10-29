@@ -77,6 +77,17 @@ class OrderSettlementServiceTest {
     }
 
     @Test
+    void 缺项清单复用旧账覆盖判定且不提前入账() {
+        deliver("ZD-1", BigDecimal.ONE);
+        finance.saveReceivable(oldReceivable("OLD-UNKNOWN", "", "30.00", ""));
+        var review = service.reviewLegacy(deliveries.assess(OrderDeliveryAssessment.CHILD, "ZD-1"));
+        assertThat(review.hasHistory()).isTrue();
+        assertThat(review.blocker()).contains("历史待核", "覆盖关系不明确");
+        assertThat(finance.listReceivables()).hasSize(1);
+        assertThat(settlements.count("")).isZero();
+    }
+
+    @Test
     void confirmPostsReceivablePayrollAndPayableOnce() {
         deliver("ZD-1", new BigDecimal("1.000"));
         SettlementCommand command = command("settle-0001", "ZD-1", fixedCustomer("80.00"), piece("PROCESS|ZD-1|雕刻", "carve", "1.000", "30.0000"));

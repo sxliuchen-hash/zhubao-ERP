@@ -45,13 +45,8 @@ class OrderChangeJdbcAtomicityTest {
         DataSource dataSource = dataSource();
         createSchema(dataSource);
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
-        new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository()), null, documents)
-                .confirmInbound(new ConfirmInboundCommand(
-                        "MD-JDBC", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-JDBC", "",
-                        "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                        new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单",
-                        "内壁刻字", "2026-10-20", "恒信珠宝"
-                ));
+        new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository()), null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit())
+                .confirmInbound(new ConfirmInboundCommand("MD-JDBC", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-JDBC", "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
         JdbcFinanceRepository finance = new JdbcFinanceRepository(dataSource);
         finance.saveReceivable(new ReceivableLine(
                 "FIN-1", 1001L, "恒信珠宝", "2026-10", "PROCESS", "PROCESS|MD-JDBC|雕刻",

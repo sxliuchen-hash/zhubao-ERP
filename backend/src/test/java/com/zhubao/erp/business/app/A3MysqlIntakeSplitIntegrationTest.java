@@ -141,12 +141,7 @@ class A3MysqlIntakeSplitIntegrationTest {
         ledgers.transfer(new StockTransferCommand("quality_release", "QC-A3-" + suffix, wip, finished,
                 child.quantity(), child.weight(), "A3 隔离样本转入成品"));
         String shipment = "OUT-A3-" + suffix;
-        ShipFinishedStockCommand command = new ShipFinishedStockCommand(
-                shipment, mother, child.code(), 1001L, null, child.materialCode(),
-                "FINISHED-CUSTOMER", "SHIPPED-CUSTOMER", "2026-10-19", "成品",
-                child.quantity(), child.quantityUnit(), child.weight(), "顺丰", "SF-A3-" + suffix,
-                "", "A3_TEST", 1, "1", "A3 操作员", receiver.operator(), "", "A3 出库核验",
-                "a3-out-shipment-" + suffix);
+        ShipFinishedStockCommand command = new ShipFinishedStockCommand(shipment, mother, child.code(), 1001L, null, child.materialCode(), "FINISHED-CUSTOMER", "SHIPPED-CUSTOMER", "2026-10-19", "成品", child.quantity(), child.quantityUnit(), child.weight(), "顺丰", "SF-A3-" + suffix, "", "A3_TEST", 1, "1", "A3 操作员", receiver.operator(), "", "A3 出库核验", "a3-out-shipment-" + suffix);
         String constraint = "chk_a3_out_" + suffix;
         boolean constraintInstalled = false;
         try {

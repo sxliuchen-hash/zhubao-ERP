@@ -51,7 +51,7 @@ import com.zhubao.erp.business.domain.ProcessStationReportCommand;
  * 三个工序岗位扫码。只展示账号绑定的工序，并按单上的顺序交付。
  * 中间工序写入台账但留在在制；最后一道再把在制转入半成品。
  * 带请求编号的交付进入业务工作单元：不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。
- * 未带请求编号的交付和通用报工仍各自提交。带编号的通用报工与现场交付进入同一次回放。
+ * 所有交付必须携带稳定请求编号并进入同次回放。
  */
 @Service
 public class ProcessStationService {
@@ -222,7 +222,7 @@ public class ProcessStationService {
 
     /**
      * 带请求编号时，不拆母单首次转在制、工序流水、交付事实和成功结果同一次提交。
-     * 同账号、同请求、同规范化内容回放原结果。未带编号时仍各自提交，不回放。
+     * 同账号、同请求、同规范化内容回放原结果；缺少编号直接拒绝。
      * 未装配工作单元时，带编号的调用直接拒绝，不能退回旧路径。
      */
     public ProcessStationReportResult report(String rawCode, String requestedProcess, AuthUserAccount account, String requestId) {
@@ -237,18 +237,7 @@ public class ProcessStationService {
             String labelExceptionReason
     ) {
         requireAccount(account);
-        documents.supportsProcessBatches();
-        if ((requestId == null || requestId.isBlank()) && workUnit != null && documents.supportsProcessBatches()) {
-            return report(rawCode, requestedProcess, account, "legacy-" + UUID.randomUUID(), labelExceptionReason);
-        }
-        if (requestId == null || requestId.isBlank()) {
-            synchronized (this) {
-        StationTicket ticket = resolve(rawCode);
-        assertCustomer(ticket, account);
-        assertLabel(rawCode, ticket, labelExceptionReason, account);
-        return stationResult(postStation(defaultCommand(ticket, requestedProcess, account.operator()), account, null));
-            }
-        }
+        if (requestId == null || requestId.isBlank()) throw new BusinessException("交工必须提供稳定请求编号");
         if (workUnit == null) {
             throw new BusinessException("工序交付回放尚未装配");
         }
@@ -280,7 +269,7 @@ public class ProcessStationService {
 
     /**
      * 通用报工沿用现场整单交付规则，并完整保存请求中的报工登记字段。
-     * 未带请求编号时库存流水和交付事实各自提交，不回放。
+     * 缺少请求编号时拒绝，不能回退为各自提交。
      */
     public ProductionReportResult reportProduction(ReportProductionCommand submittedCommand, AuthUserAccount account) {
         return reportProduction(submittedCommand, account, null);
@@ -296,15 +285,7 @@ public class ProcessStationService {
             String requestId
     ) {
         requireAccount(account);
-        documents.supportsProcessBatches();
-        if ((requestId == null || requestId.isBlank()) && workUnit != null && documents.supportsProcessBatches()) {
-            return reportProduction(submittedCommand, account, "legacy-" + UUID.randomUUID());
-        }
-        if (requestId == null || requestId.isBlank()) {
-            synchronized (this) {
-                return postStation(submittedCommand, account, null);
-            }
-        }
+        if (requestId == null || requestId.isBlank()) throw new BusinessException("交工必须提供稳定请求编号");
         if (workUnit == null) {
             throw new BusinessException("工序交付回放尚未装配");
         }
@@ -362,9 +343,7 @@ public class ProcessStationService {
                 last ? "production_report" : STATION_DOCUMENT,
                 ticket.orderCode(), from, to, command.quantity(), command.weight(), productionRemark(command)
         );
-        StockLedgerEntry entry = session == null
-                ? stockLedgerService.transfer(transfer)
-                : stockLedgerService.transfer(transfer, session);
+        StockLedgerEntry entry = stockLedgerService.transfer(transfer, session);
         handoffSaveProbe.beforeHandoffSave();
         ProcessStationHandoff handoff = new ProcessStationHandoff(
                 ticket.orderCode(),
@@ -373,11 +352,7 @@ public class ProcessStationService {
                 entry.code(),
                 RECORD_TIME.format(LocalDateTime.now())
         );
-        if (session == null) {
-            documents.saveProcessStationHandoff(handoff);
-        } else {
-            documents.saveProcessStationHandoff(handoff, session);
-        }
+        documents.saveProcessStationHandoff(handoff, session);
         return new ProductionReportResult(
                 ticket.orderCode(), entry.code(), from.warehouseCode(), to.warehouseCode(),
                 from.stockStatus(), to.stockStatus(), entry.quantity(), entry.weight(), process, operator, command.handoffCode()

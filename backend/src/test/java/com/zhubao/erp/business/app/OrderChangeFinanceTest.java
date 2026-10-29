@@ -50,12 +50,7 @@ class OrderChangeFinanceTest {
         finance = new InMemoryFinanceRepository();
         changes = new InMemoryOrderChangeRepository();
         StockLedgerService ledger = new StockLedgerService(new InMemoryStockLedgerRepository());
-        new BusinessOperationService(ledger, null, documents).confirmInbound(new ConfirmInboundCommand(
-                "MD-CHANGE-001", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-CHANGE-002", "",
-                "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单",
-                "内壁刻字", "2026-10-20", "恒信珠宝"
-        ));
+        new BusinessOperationService(ledger, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit()).confirmInbound(new ConfirmInboundCommand("MD-CHANGE-001", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-CHANGE-002", "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
         documents.saveProcessStationHandoff(new ProcessStationHandoff(
                 "MD-CHANGE-001", "雕刻", "雕刻工", "STK-1", "2026-10-09T10:00:00"
         ));

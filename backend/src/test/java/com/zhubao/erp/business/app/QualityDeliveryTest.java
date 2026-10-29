@@ -232,12 +232,12 @@ class QualityDeliveryTest {
         World oldPath = world.withProbes(CommandResultProbe.NONE, () -> {
             throw new IllegalStateException("质检事实保存失败");
         });
-        assertThatThrownBy(() -> oldPath.quality().submit(check("MD-QC-OLD", QualityVerdicts.FAIL, "划伤"), inspector))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("质检事实保存失败");
-        assertThat(world.semi("MD-QC-OLD", 1001L)).isEqualByComparingTo("0");
-        assertThat(world.frozen("MD-QC-OLD", 1001L)).isEqualByComparingTo("10");
-        assertThat(world.freezes("MD-QC-OLD")).isEqualTo(1);
+        assertThatThrownBy(() -> oldPath.quality().submit(new QualityCheckCommand(sticker("MD-QC-OLD"), "别人", List.of(new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "划伤"))), inspector))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("质检动作必须提供稳定请求编号");
+        assertThat(world.semi("MD-QC-OLD", 1001L)).isEqualByComparingTo("10");
+        assertThat(world.frozen("MD-QC-OLD", 1001L)).isEqualByComparingTo("0");
+        assertThat(world.freezes("MD-QC-OLD")).isZero();
         assertThat(world.hasCheck("MD-QC-OLD")).isFalse();
         assertThat(world.rounds("MD-QC-OLD")).isZero();
 
@@ -313,9 +313,9 @@ class QualityDeliveryTest {
         world.operations().confirmInbound(inbound(code, customerId, customerName));
         world.splits().keep(code, "何琳");
         AuthUserAccount worker = account("操作工 王强", "雕刻", "镶嵌", "抛光");
-        world.station().report(sticker(code), "雕刻", worker);
-        world.station().report(sticker(code), "镶嵌", worker);
-        world.station().report(sticker(code), "抛光", worker);
+        world.station().report(sticker(code), "雕刻", worker, "fixture-" + java.util.UUID.randomUUID());
+        world.station().report(sticker(code), "镶嵌", worker, "fixture-" + java.util.UUID.randomUUID());
+        world.station().report(sticker(code), "抛光", worker, "fixture-" + java.util.UUID.randomUUID());
     }
 
     private String sticker(String code) {
@@ -323,7 +323,7 @@ class QualityDeliveryTest {
     }
 
     private QualityCheckCommand check(String code, String verdict, String reason) {
-        return new QualityCheckCommand(sticker(code), "别人", List.of(new QualityCheckLineCommand(1, verdict, reason)));
+        return new QualityCheckCommand(sticker(code), "别人", List.of(new QualityCheckLineCommand(1, verdict, reason)), "fixture-" + java.util.UUID.randomUUID());
     }
 
     private QualityRecheckCommand recheck(String code, String verdict, String reason, String requestId) {
@@ -339,11 +339,7 @@ class QualityDeliveryTest {
     }
 
     private ConfirmInboundCommand inbound(String code, long customerId, String customerName) {
-        return new ConfirmInboundCommand(
-                code, customerId, customerId, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""),
-                "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "测试入库", "内壁刻字", "2026-10-20", customerName
-        );
+        return new ConfirmInboundCommand(code, customerId, customerId, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "测试入库", "内壁刻字", "2026-10-20", customerName, "fixture-" + java.util.UUID.randomUUID());
     }
 
     private AuthUserAccount inspector(String operator) {
@@ -407,12 +403,11 @@ class QualityDeliveryTest {
 
         private MemoryWorld(CommandResultProbe resultProbe, QualityFactSaveProbe factProbe) {
             this.stocks = new StockLedgerService(stock);
-            this.operations = new BusinessOperationService(stocks, null, documents);
+            this.operations = new BusinessOperationService(stocks, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit());
             this.splits = new MotherOrderSplitService(documents, stocks);
-            this.station = new ProcessStationService(documents, stocks, operations, new ScanCodeParser());
+            this.station = new ProcessStationService(documents, stocks, operations, new ScanCodeParser(), null, com.zhubao.erp.business.BusinessWorkFixture.unit());
             BusinessWorkUnit unit = new MemoryBusinessWorkUnit(requests, resultProbe);
-            this.quality = new QualityRequirementService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
+            this.quality = new QualityRequirementService(documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
         }
 
         @Override
@@ -511,8 +506,7 @@ class QualityDeliveryTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, QualityFactSaveProbe factProbe) {
             BusinessWorkUnit unit = new MemoryBusinessWorkUnit(requests, resultProbe);
-            QualityRequirementService next = new QualityRequirementService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
+            QualityRequirementService next = new QualityRequirementService(documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
             return new WorldView(next, this);
         }
 
@@ -644,18 +638,22 @@ class QualityDeliveryTest {
                 apply(statement, "src/main/resources/db/mysql/V35__m3_quality_requirement_check.sql");
                 apply(statement, "src/main/resources/db/mysql/V44__m3_command_request.sql");
                 apply(statement, "src/main/resources/db/mysql/V45__m3_mother_order_courier_identity.sql");
+                apply(statement, "src/main/resources/db/mysql/V60__m3_receipt_line_allocation.sql");
+                statement.execute("alter table biz_receipt_line add storage_conditions varchar(80)");
+                statement.execute("alter table biz_receipt_line add storage_instruction varchar(500)");
+                statement.execute("alter table biz_child_line_allocation add storage_conditions varchar(80)");
+                statement.execute("alter table biz_child_line_allocation add storage_instruction varchar(500)");
                 apply(statement, "src/main/resources/db/mysql/V46__m3_quality_round.sql");
             }
             documents = new JdbcBusinessDocumentRepository(dataSource);
             stock = new JdbcStockLedgerRepository(dataSource);
             requests = new JdbcCommandRequestRepository(dataSource);
             stocks = new StockLedgerService(stock);
-            operations = new BusinessOperationService(stocks, null, documents);
+            operations = new BusinessOperationService(stocks, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit(dataSource));
             splits = new MotherOrderSplitService(documents, stocks);
-            station = new ProcessStationService(documents, stocks, operations, new ScanCodeParser());
+            station = new ProcessStationService(documents, stocks, operations, new ScanCodeParser(), null, com.zhubao.erp.business.BusinessWorkFixture.unit(dataSource));
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            quality = new QualityRequirementService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
+            quality = new QualityRequirementService(documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
         }
 
         @Override
@@ -762,8 +760,7 @@ class QualityDeliveryTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, QualityFactSaveProbe factProbe) {
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            QualityRequirementService next = new QualityRequirementService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
+            QualityRequirementService next = new QualityRequirementService(documents, stocks, operations, new ScanCodeParser(), null, unit, factProbe);
             return new WorldView(next, this);
         }
 

@@ -142,16 +142,16 @@ class FormalBusinessWorkspaceQueryTest {
         StockDimension semi = new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, "MD-OLD", "ZD-OLD", "MAT-REAL", "SEMI", StockStatus.SEMI_FINISHED);
         stocks.transfer(new StockTransferCommand("work_order_split", "ZD-OLD", raw, wip, new BigDecimal("2"), new BigDecimal("12.5"), "正式拆单"));
         stocks.transfer(new StockTransferCommand("production_report", "ZD-OLD", wip, semi, new BigDecimal("2"), new BigDecimal("12.5"), "生产报工；工序：抛光；操作人：张工"));
-        BusinessOperationService operations = new BusinessOperationService(stocks, approvals, documents);
+        BusinessOperationService operations = new BusinessOperationService(stocks, approvals, documents, com.zhubao.erp.business.BusinessWorkFixture.unit());
         operations.freezeQualityStock(new FreezeQualityStockCommand("QC-OLD", "MD-OLD", "ZD-OLD", 7001L, 7001L, "MAT-REAL",
-                "SEMI", "FROZEN", new BigDecimal("2"), new BigDecimal("12.5"), "抛光", "质检员", "表面划伤", "", ""));
+                "SEMI", "FROZEN", new BigDecimal("2"), new BigDecimal("12.5"), "抛光", "质检员", "表面划伤", "", ""), com.zhubao.erp.business.BusinessWorkFixture.session());
         assertThat(service.quality().cases()).singleElement().satisfies(item -> {
             assertThat(item.code()).isEqualTo("QC-OLD");
             assertThat(item.defect()).isEqualTo("表面划伤");
             assertThat(item.operationContext().stockStatus()).isEqualTo("FROZEN");
         });
         operations.dispatchRework(new DispatchReworkCommand("FG-OLD", "QC-OLD", "MD-OLD", "ZD-OLD", 7001L, 7001L, "MAT-REAL",
-                "FROZEN", "REWORK", new BigDecimal("2"), new BigDecimal("12.5"), "抛光", "返工员", "消除划伤", "", ""));
+                "FROZEN", "REWORK", new BigDecimal("2"), new BigDecimal("12.5"), "抛光", "返工员", "消除划伤", "", ""), com.zhubao.erp.business.BusinessWorkFixture.session());
         assertThat(service.production().workOrders()).singleElement().satisfies(order -> {
             assertThat(order.code()).isEqualTo("ZD-OLD");
             assertThat(order.process()).isEqualTo("抛光");
@@ -163,10 +163,7 @@ class FormalBusinessWorkspaceQueryTest {
 
     @Test
     void inventoryKeepsDecimalUnitAndBatchAndHidesNonProcessingStock() {
-        new BusinessOperationService(stocks, approvals, documents).confirmInbound(new ConfirmInboundCommand(
-                "MD-GRAM", 7001L, 7001L, "MAT-REAL", "2026-10-10", "", "", "", "收货员", "收货员", "金珠",
-                "", null, "", "RAW", new BigDecimal("10.500"), "克", new BigDecimal("10.500"), "收货员",
-                "", "", "车形", "2099-01-01", "真实客户"));
+        new BusinessOperationService(stocks, approvals, documents, com.zhubao.erp.business.BusinessWorkFixture.unit()).confirmInbound(new ConfirmInboundCommand("MD-GRAM", 7001L, 7001L, "MAT-REAL", "2026-10-10", "", "", "", "收货员", "收货员", "金珠", "", null, "", "RAW", new BigDecimal("10.500"), "克", new BigDecimal("10.500"), "收货员", "", "", "车形", "2099-01-01", "真实客户", "fixture-" + java.util.UUID.randomUUID()));
         stocks.transfer(new StockTransferCommand("company_receipt", "CO-1", null,
                 new StockDimension(OwnerType.COMPANY, null, null, "", null, "MAT-CO", "RAW-COMPANY",
                         StockStatus.RAW_WAITING, "CO-BATCH"),
@@ -202,8 +199,6 @@ class FormalBusinessWorkspaceQueryTest {
     }
 
     private void receipt(String code, Long customerId, String customer, String operator) {
-        new BusinessOperationService(stocks, approvals, documents).confirmInbound(new ConfirmInboundCommand(code, customerId, customerId,
-                "MAT-REAL", "2026-10-10", "", "", "", operator, operator, "真实来料", "", null, "", "RAW",
-                new BigDecimal("2"), "件", new BigDecimal("12.5"), operator, "", "", "无划痕", "2099-01-01", customer));
+        new BusinessOperationService(stocks, approvals, documents, com.zhubao.erp.business.BusinessWorkFixture.unit()).confirmInbound(new ConfirmInboundCommand(code, customerId, customerId, "MAT-REAL", "2026-10-10", "", "", "", operator, operator, "真实来料", "", null, "", "RAW", new BigDecimal("2"), "件", new BigDecimal("12.5"), operator, "", "", "无划痕", "2099-01-01", customer, "fixture-" + java.util.UUID.randomUUID()));
     }
 }

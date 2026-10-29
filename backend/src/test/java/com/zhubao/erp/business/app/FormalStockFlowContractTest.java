@@ -86,7 +86,7 @@ class FormalStockFlowContractTest {
 
     private void deliverAllStations(Flow flow, String mother, String order, BigDecimal quantity, BigDecimal weight) {
         for (String process : List.of("雕刻", "镶嵌", "抛光")) {
-            var result = flow.stations().report(order, process, account(process));
+            var result = flow.stations().report(order, process, account(process), "fixture-" + java.util.UUID.randomUUID());
             boolean last = "抛光".equals(process);
             assertThat(result.movedToSemiFinished()).isEqualTo(last);
             assertBalance(flow, dimension(mother, order, StockStatus.WIP),
@@ -128,18 +128,15 @@ class FormalStockFlowContractTest {
         StockLedgerRepository repository = jdbc ? new JdbcStockLedgerRepository(dataSource) : new InMemoryStockLedgerRepository();
         StockLedgerService stocks = new StockLedgerService(repository);
         var documents = new InMemoryBusinessDocumentRepository();
-        var operations = new BusinessOperationService(stocks, null, documents);
+        var unit = com.zhubao.erp.business.BusinessWorkFixture.unit(dataSource);
+        var operations = new BusinessOperationService(stocks, null, documents, unit);
         return new Flow(stocks, operations, new MotherOrderSplitService(documents, stocks),
-                new ProcessStationService(documents, stocks, operations, new ScanCodeParser()),
+                new ProcessStationService(documents, stocks, operations, new ScanCodeParser(), null, unit),
                 jdbc ? new JdbcStockLedgerRepository(dataSource) : repository);
     }
 
     private void inbound(Flow flow, String mother) {
-        flow.operations().confirmInbound(new ConfirmInboundCommand(
-                mother, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + mother,
-                "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                bd("10"), "件", bd("20"), "何琳", "", "测试入库", "内壁刻字", "2026-10-20", "恒信珠宝"
-        ));
+        flow.operations().confirmInbound(new ConfirmInboundCommand(mother, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + mother, "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", bd("10"), "件", bd("20"), "何琳", "", "测试入库", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
     }
 
     private StockDimension dimension(String mother, String workOrder, StockStatus status) {

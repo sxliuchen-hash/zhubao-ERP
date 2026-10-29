@@ -7,6 +7,9 @@ public interface ApprovalTaskRepository {
 
     ApprovalTask save(ApprovalTask task);
 
+    /** 新申请与原请求结果同次提交，不得覆盖既有申请或已作出的审批决定。 */
+    ApprovalTask insert(ApprovalTask task, com.zhubao.erp.work.domain.WorkSession session);
+
     /**
      * 仅当任务仍为待审批时写入决策。并发决策只有一次成功。
      */

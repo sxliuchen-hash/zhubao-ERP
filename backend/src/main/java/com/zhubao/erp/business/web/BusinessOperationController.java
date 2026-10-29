@@ -207,10 +207,7 @@ public class BusinessOperationController {
         OperatorContext context = operatorContextResolver.requireSession(request);
         if (dataAccess != null) dataAccess.assertCustomer(context, command.customerId(), "");
         ConfirmInboundCommand inbound = BusinessCommandActors.withActor(command, context.operator());
-        if (inbound.requestId() != null && !inbound.requestId().isBlank()) {
-            return ApiResponse.ok(businessOperationService.confirmInbound(inbound, context.operator()));
-        }
-        return ApiResponse.ok(businessOperationService.confirmInbound(inbound));
+        return ApiResponse.ok(businessOperationService.confirmInbound(inbound, context.operator()));
     }
 
     @GetMapping("/process-stations")

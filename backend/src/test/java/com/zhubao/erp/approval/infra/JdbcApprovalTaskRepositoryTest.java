@@ -7,7 +7,6 @@ import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.RoleCode;
-import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,9 +59,32 @@ class JdbcApprovalTaskRepositoryTest {
     }
 
     @Test
+    void 新申请与请求及审计同次提交且不能覆盖既有决定() throws Exception {
+        com.zhubao.erp.business.BusinessWorkFixture.unit(dataSource);
+        var requests = new com.zhubao.erp.work.infra.JdbcCommandRequestRepository(dataSource);
+        var fail = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var unit = new com.zhubao.erp.work.app.JdbcBusinessWorkUnit(dataSource, requests,
+                () -> { if (fail.get()) throw new IllegalStateException("请求结果失败"); });
+        var call = new com.zhubao.erp.work.domain.CommandCall("jdbc-loss-request", "worker", "LOSS_APPROVAL", "WORK_ORDER", "WO-1", "原申请");
+        assertThatThrownBy(() -> unit.execute(call, session -> repository.insert(waitingTask(), session).approvalCode()))
+                .hasMessage("请求结果失败");
+        assertThat(repository.findAll()).isEmpty();
+        assertThat(auditEventCount()).isZero();
+        fail.set(false);
+        assertThat(unit.execute(call, session -> repository.insert(waitingTask(), session).approvalCode())).isEqualTo("LOSS-JDBC-001");
+        assertThat(unit.execute(call, session -> { throw new AssertionError("回放不应再次创建"); })).isEqualTo("LOSS-JDBC-001");
+        new ApprovalService(repository).decide("LOSS-JDBC-001", new ApprovalDecisionCommand("APPROVE", "", "确认", ""),
+                new ApprovalActor("leader-a", "leader", RoleCode.WORKSHOP_LEADER));
+        assertThatThrownBy(() -> unit.execute(new com.zhubao.erp.work.domain.CommandCall("jdbc-loss-another", "worker", "LOSS_APPROVAL", "WORK_ORDER", "WO-1", "另一请求"),
+                session -> repository.insert(waitingTask(), session).approvalCode())).hasMessageContaining("申请单号已存在");
+        assertThat(repository.findByCode("LOSS-JDBC-001")).get().satisfies(task -> assertThat(task.status()).isEqualTo(ApprovalStatus.APPROVED));
+        assertThat(auditEventCount()).isEqualTo(2);
+    }
+
+    @Test
     void updatesDecisionAndKeepsAuditHistory() {
         ApprovalService service = new ApprovalService(repository);
-        service.createLossApprovalTask(lossCommand(), lossResult(true));
+        repository.save(waitingTask());
 
         ApprovalActor leader = new ApprovalActor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
         ApprovalTask decided = service.decide(
@@ -111,29 +133,6 @@ class JdbcApprovalTaskRepositoryTest {
                 null,
                 null,
                 false
-        );
-    }
-
-    private ApproveLossCommand lossCommand() {
-        return new ApproveLossCommand(
-                "LOSS-JDBC-001",
-                "MD-JDBC-001",
-                "ZD-JDBC-001",
-                1001L,
-                null,
-                "MAT-JDBC",
-                "polish",
-                "operator-a",
-                "leader-a",
-                bd("121.150"),
-                bd("116.550"),
-                bd("0.000"),
-                bd("2.0"),
-                bd("56"),
-                bd("0.80"),
-                bd("6.00"),
-                "HO-JDBC-001",
-                "jdbc test"
         );
     }
 

@@ -14,16 +14,12 @@ import com.zhubao.erp.business.domain.FreezeQualityStockCommand;
 import com.zhubao.erp.business.domain.InboundConfirmationResult;
 import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
-import com.zhubao.erp.business.domain.OutboundShipmentResult;
-import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
-import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.business.domain.ReportReworkCommand;
 import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
 import com.zhubao.erp.business.domain.ReworkReportResult;
-import com.zhubao.erp.business.domain.ShipFinishedStockCommand;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
@@ -46,34 +42,9 @@ class BusinessOperationServiceTest {
     @Test
     void confirmInboundWritesCustomerOwnedRawStockLedger() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
-        BusinessOperationService service = new BusinessOperationService(new StockLedgerService(repository));
+        BusinessOperationService service = new BusinessOperationService(new StockLedgerService(repository), null, new InMemoryBusinessDocumentRepository(), com.zhubao.erp.business.BusinessWorkFixture.unit());
 
-        InboundConfirmationResult result = service.confirmInbound(new ConfirmInboundCommand(
-                "MD-20260706-001",
-                1001L,
-                null,
-                "MAT-18K-RING",
-                "2026-07-06",
-                "顺丰",
-                "SF1048329001",
-                "张先生",
-                "何琳",
-                "何琳",
-                "戒托来料",
-                "签收入库登记表",
-                4,
-                "1",
-                "RAW-CUSTOMER",
-                bd("320"),
-                "件",
-                bd("486.250"),
-                "库管员 何琳",
-                "SF1048329001",
-                "拆包称重确认",
-                "戒托抛光",
-                "2026-07-20",
-                "恒信珠宝"
-        ));
+        InboundConfirmationResult result = service.confirmInbound(new ConfirmInboundCommand("MD-20260706-001", 1001L, null, "MAT-18K-RING", "2026-07-06", "顺丰", "SF1048329001", "张先生", "何琳", "何琳", "戒托来料", "签收入库登记表", 4, "1", "RAW-CUSTOMER", bd("320"), "件", bd("486.250"), "库管员 何琳", "SF1048329001", "拆包称重确认", "戒托抛光", "2026-07-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
 
         assertThat(result.motherOrderCode()).isEqualTo("MD-20260706-001");
         assertThat(result.stockStatus()).isEqualTo(StockStatus.RAW_WAITING);
@@ -100,38 +71,9 @@ class BusinessOperationServiceTest {
     void confirmInboundPersistsStructuredMotherOrderWhenDocumentRepositoryIsProvided() {
         InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
         InMemoryBusinessDocumentRepository documentRepository = new InMemoryBusinessDocumentRepository();
-        BusinessOperationService service = new BusinessOperationService(
-                new StockLedgerService(stockRepository),
-                null,
-                documentRepository
-        );
+        BusinessOperationService service = new BusinessOperationService(new StockLedgerService(stockRepository), null, documentRepository, com.zhubao.erp.business.BusinessWorkFixture.unit());
 
-        InboundConfirmationResult result = service.confirmInbound(new ConfirmInboundCommand(
-                "MD-DOC-20260708-001",
-                1001L,
-                null,
-                "MAT-18K-RING",
-                "2026-07-08",
-                "顺丰",
-                "SF-DOC-001",
-                "张先生",
-                "何琳",
-                "何琳",
-                "戒托来料",
-                "签收入库登记表",
-                5,
-                "2",
-                "RAW-CUSTOMER",
-                bd("12"),
-                "件",
-                bd("18.500"),
-                "库管员 何琳",
-                "ATT-IN-DOC-001",
-                "结构化母单测试",
-                "戒托抛光",
-                "2026-07-20",
-                "恒信珠宝"
-        ));
+        InboundConfirmationResult result = service.confirmInbound(new ConfirmInboundCommand("MD-DOC-20260708-001", 1001L, null, "MAT-18K-RING", "2026-07-08", "顺丰", "SF-DOC-001", "张先生", "何琳", "何琳", "戒托来料", "签收入库登记表", 5, "2", "RAW-CUSTOMER", bd("12"), "件", bd("18.500"), "库管员 何琳", "ATT-IN-DOC-001", "结构化母单测试", "戒托抛光", "2026-07-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
 
         assertThat(documentRepository.findMotherOrderByCode("MD-DOC-20260708-001"))
                 .hasValueSatisfying(record -> {
@@ -148,105 +90,16 @@ class BusinessOperationServiceTest {
                 });
         assertThat(stockRepository.findAllLedgers()).hasSize(1);
 
-        assertThatThrownBy(() -> service.confirmInbound(new ConfirmInboundCommand(
-                "MD-DOC-20260708-001",
-                1001L,
-                null,
-                "MAT-18K-RING",
-                "2026-07-08",
-                "顺丰",
-                "SF-DOC-001",
-                "张先生",
-                "何琳",
-                "何琳",
-                "戒托来料",
-                "签收入库登记表",
-                5,
-                "2",
-                "RAW-CUSTOMER",
-                bd("12"),
-                "件",
-                bd("18.500"),
-                "库管员 何琳",
-                "ATT-IN-DOC-001",
-                "重复结构化母单测试",
-                "戒托抛光",
-                "2026-07-20",
-                "恒信珠宝"
-        ))).isInstanceOf(BusinessException.class)
+        assertThatThrownBy(() -> service.confirmInbound(new ConfirmInboundCommand("MD-DOC-20260708-001", 1001L, null, "MAT-18K-RING", "2026-07-08", "顺丰", "SF-DOC-001", "张先生", "何琳", "何琳", "戒托来料", "签收入库登记表", 5, "2", "RAW-CUSTOMER", bd("12"), "件", bd("18.500"), "库管员 何琳", "ATT-IN-DOC-001", "重复结构化母单测试", "戒托抛光", "2026-07-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("结构化母单已存在");
         assertThat(stockRepository.findAllLedgers()).hasSize(1);
-    }
-
-    @Test
-    void reportProductionMovesWipToSemiFinishedForSameWorkOrderDimension() {
-        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
-        StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
-        StockDimension wip = dimension(StockStatus.WIP, "WIP-LINE-01");
-
-        stockLedgerService.transfer(new StockTransferCommand(
-                "split_work_order",
-                "ZD-20260706-006",
-                null,
-                wip,
-                bd("300"),
-                bd("683.200"),
-                "测试预置在制库存"
-        ));
-
-        ProductionReportResult result = service.reportProduction(new ReportProductionCommand(
-                "MD-20260706-002",
-                "ZD-20260706-006",
-                1002L,
-                null,
-                "MAT-SILVER-CHAIN",
-                "WIP-LINE-01",
-                "SEMI-FINISHED",
-                bd("210"),
-                "件",
-                bd("478.240"),
-                "2026-07-06",
-                "焊接",
-                "人工",
-                "银链",
-                "WELD-02",
-                "焊接",
-                "15:00",
-                "进行中",
-                "称重待补",
-                "待交单审核",
-                "工作项目记录单（日）",
-                12,
-                "1",
-                "王强",
-                null,
-                "HO-20260706-018",
-                "扫码报工确认"
-        ));
-
-        StockDimension semiFinished = dimension(StockStatus.SEMI_FINISHED, "SEMI-FINISHED");
-        StockBalance wipBalance = repository.findBalance(wip);
-        StockBalance semiFinishedBalance = repository.findBalance(semiFinished);
-        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
-
-        assertThat(result.workOrderCode()).isEqualTo("ZD-20260706-006");
-        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.WIP);
-        assertThat(result.toStockStatus()).isEqualTo(StockStatus.SEMI_FINISHED);
-        assertThat(result.handoffCode()).isEqualTo("HO-20260706-018");
-        assertThat(wipBalance.quantity()).isEqualByComparingTo("90");
-        assertThat(wipBalance.weight()).isEqualByComparingTo("204.960");
-        assertThat(semiFinishedBalance.quantity()).isEqualByComparingTo("210");
-        assertThat(semiFinishedBalance.weight()).isEqualByComparingTo("478.240");
-        assertThat(ledger.documentType()).isEqualTo("production_report");
-        assertThat(ledger.remark()).contains("焊接", "王强", "WELD-02", "银链", "数量单位", "件", "交单审核", "来源登记表", "工作项目记录单（日）", "原表行号", "12", "纸质序号", "1", "HO-20260706-018");
     }
 
     @Test
     void freezeQualityStockMovesSemiFinishedToFrozenForSameWorkOrderDimension() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
         StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, null, com.zhubao.erp.business.BusinessWorkFixture.unit());
         StockDimension semiFinished = dimension(StockStatus.SEMI_FINISHED, "SEMI-FINISHED");
 
         stockLedgerService.transfer(new StockTransferCommand(
@@ -275,7 +128,7 @@ class BusinessOperationServiceTest {
                 "焊点偏移 6 件",
                 "PHOTO-QC-20260706-022",
                 "质检异常冻结"
-        ));
+        ), com.zhubao.erp.business.BusinessWorkFixture.session());
 
         StockDimension frozen = dimension(StockStatus.FROZEN, "FROZEN-QC");
         StockBalance semiFinishedBalance = repository.findBalance(semiFinished);
@@ -299,7 +152,7 @@ class BusinessOperationServiceTest {
     void dispatchReworkMovesFrozenToReworkForSameWorkOrderDimension() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
         StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, null, com.zhubao.erp.business.BusinessWorkFixture.unit());
         StockDimension frozen = dimension(StockStatus.FROZEN, "FROZEN-QC");
 
         stockLedgerService.transfer(new StockTransferCommand(
@@ -329,7 +182,7 @@ class BusinessOperationServiceTest {
                 "焊点偏移返工",
                 "PHOTO-QC-20260706-022",
                 "冻结库存派发返工"
-        ));
+        ), com.zhubao.erp.business.BusinessWorkFixture.session());
 
         StockDimension rework = dimension(StockStatus.REWORK, "REWORK-LINE-01");
         StockBalance frozenBalance = repository.findBalance(frozen);
@@ -353,7 +206,7 @@ class BusinessOperationServiceTest {
     void reportReworkMovesReworkToSemiFinishedForSameWorkOrderDimension() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
         StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, null, com.zhubao.erp.business.BusinessWorkFixture.unit());
         StockDimension rework = dimension(StockStatus.REWORK, "REWORK-LINE-01");
 
         stockLedgerService.transfer(new StockTransferCommand(
@@ -382,7 +235,7 @@ class BusinessOperationServiceTest {
                 "王强",
                 "PHOTO-REWORK-20260706-022",
                 "返工完成报工"
-        ));
+        ), com.zhubao.erp.business.BusinessWorkFixture.session());
 
         StockDimension semiFinished = dimension(StockStatus.SEMI_FINISHED, "SEMI-FINISHED");
         StockBalance reworkBalance = repository.findBalance(rework);
@@ -406,7 +259,7 @@ class BusinessOperationServiceTest {
     void releaseQualityStockMovesSemiFinishedToFinishedForSameWorkOrderDimension() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
         StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, null, com.zhubao.erp.business.BusinessWorkFixture.unit());
         StockDimension semiFinished = dimension(StockStatus.SEMI_FINISHED, "SEMI-FINISHED");
 
         stockLedgerService.transfer(new StockTransferCommand(
@@ -435,7 +288,7 @@ class BusinessOperationServiceTest {
                 "复检合格，允许成品入库",
                 "PHOTO-RELEASE-20260706-022",
                 "复检放行转成品库存"
-        ));
+        ), com.zhubao.erp.business.BusinessWorkFixture.session());
 
         StockDimension finished = dimension(StockStatus.FINISHED, "FINISHED-CUSTOMER");
         StockBalance semiFinishedBalance = repository.findBalance(semiFinished);
@@ -456,155 +309,10 @@ class BusinessOperationServiceTest {
     }
 
     @Test
-    void shipFinishedStockMovesFinishedToShippedForSameWorkOrderDimension() {
-        InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
-        StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
-        StockDimension finished = dimension(StockStatus.FINISHED, "FINISHED-CUSTOMER");
-
-        stockLedgerService.transfer(new StockTransferCommand(
-                "quality_release",
-                "QC-20260706-022",
-                null,
-                finished,
-                bd("6"),
-                bd("13.660"),
-                "测试预置成品库存"
-        ));
-
-        OutboundShipmentResult result = service.shipFinishedStock(new ShipFinishedStockCommand(
-                "OUT-20260706-022",
-                "MD-20260706-002",
-                "ZD-20260706-006",
-                1002L,
-                null,
-                "MAT-SILVER-CHAIN",
-                "FINISHED-CUSTOMER",
-                "SHIPPED-CUSTOMER",
-                "2026-07-06",
-                "成品",
-                bd("6"),
-                "件",
-                bd("13.660"),
-                "顺丰",
-                "SF-OUT-20260706-022",
-                "顺丰 SF-OUT-20260706-022",
-                "交货情况登记表",
-                3,
-                "1",
-                "何琳",
-                "库管员 何琳",
-                "ATT-OUT-20260706-022",
-                "客户成品出库"
-        ));
-
-        StockDimension shipped = dimension(StockStatus.SHIPPED, "SHIPPED-CUSTOMER");
-        StockBalance finishedBalance = repository.findBalance(finished);
-        StockBalance shippedBalance = repository.findBalance(shipped);
-        StockLedgerEntry ledger = repository.findAllLedgers().get(1);
-
-        assertThat(result.shipmentCode()).isEqualTo("OUT-20260706-022");
-        assertThat(result.fromStockStatus()).isEqualTo(StockStatus.FINISHED);
-        assertThat(result.toStockStatus()).isEqualTo(StockStatus.SHIPPED);
-        assertThat(result.logisticsNo()).isEqualTo("SF-OUT-20260706-022");
-        assertThat(finishedBalance.quantity()).isEqualByComparingTo("0");
-        assertThat(finishedBalance.weight()).isEqualByComparingTo("0.000");
-        assertThat(shippedBalance.quantity()).isEqualByComparingTo("6");
-        assertThat(shippedBalance.weight()).isEqualByComparingTo("13.660");
-        assertThat(ledger.documentType()).isEqualTo("outbound_shipment");
-        assertThat(ledger.documentCode()).isEqualTo("OUT-20260706-022");
-        assertThat(ledger.remark()).contains("2026-07-06", "成品", "数量单位", "件", "顺丰", "纸质快递栏", "顺丰 SF-OUT-20260706-022", "何琳", "来源登记表", "交货情况登记表", "原表行号", "3", "纸质序号", "1", "SF-OUT-20260706-022", "库管员 何琳", "ATT-OUT-20260706-022");
-    }
-
-    @Test
-    void shipFinishedStockPersistsStructuredOutboundOrderWhenDocumentRepositoryIsProvided() {
-        InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
-        InMemoryBusinessDocumentRepository documentRepository = new InMemoryBusinessDocumentRepository();
-        StockLedgerService stockLedgerService = new StockLedgerService(stockRepository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, documentRepository);
-        StockDimension finished = dimension(StockStatus.FINISHED, "FINISHED-CUSTOMER");
-
-        stockLedgerService.transfer(new StockTransferCommand(
-                "quality_release",
-                "QC-DOC-20260708-001",
-                null,
-                finished,
-                bd("6"),
-                bd("13.660"),
-                "测试预置成品库存"
-        ));
-
-        OutboundShipmentResult result = service.shipFinishedStock(new ShipFinishedStockCommand(
-                "OUT-DOC-20260708-001",
-                "MD-20260706-002",
-                "ZD-20260706-006",
-                1002L,
-                null,
-                "MAT-SILVER-CHAIN",
-                "FINISHED-CUSTOMER",
-                "SHIPPED-CUSTOMER",
-                "2026-07-08",
-                "成品",
-                bd("6"),
-                "件",
-                bd("13.660"),
-                "顺丰",
-                "SF-OUT-DOC-001",
-                "顺丰 SF-OUT-DOC-001",
-                "交货情况登记表",
-                7,
-                "3",
-                "何琳",
-                "库管员 何琳",
-                "ATT-OUT-DOC-001",
-                "结构化出库单测试"
-        ));
-
-        assertThat(documentRepository.findOutboundOrderByCode("OUT-DOC-20260708-001"))
-                .hasValueSatisfying(record -> {
-                    assertThat(record.ledgerCode()).isEqualTo(result.ledgerCode());
-                    assertThat(record.motherOrderCode()).isEqualTo("MD-20260706-002");
-                    assertThat(record.workOrderCode()).isEqualTo("ZD-20260706-006");
-                    assertThat(record.status()).isEqualTo("SHIPPED");
-                    assertThat(record.logisticsNo()).isEqualTo("SF-OUT-DOC-001");
-                    assertThat(record.sourceRegisterLineNo()).isEqualTo(7);
-                });
-        assertThat(stockRepository.findAllLedgers()).hasSize(2);
-
-        assertThatThrownBy(() -> service.shipFinishedStock(new ShipFinishedStockCommand(
-                "OUT-DOC-20260708-001",
-                "MD-20260706-002",
-                "ZD-20260706-006",
-                1002L,
-                null,
-                "MAT-SILVER-CHAIN",
-                "FINISHED-CUSTOMER",
-                "SHIPPED-CUSTOMER",
-                "2026-07-08",
-                "成品",
-                bd("1"),
-                "件",
-                bd("1.000"),
-                "顺丰",
-                "SF-OUT-DOC-001",
-                "顺丰 SF-OUT-DOC-001",
-                "交货情况登记表",
-                7,
-                "3",
-                "何琳",
-                "库管员 何琳",
-                "ATT-OUT-DOC-001",
-                "重复结构化出库单测试"
-        ))).isInstanceOf(BusinessException.class)
-                .hasMessageContaining("结构化出库单已存在");
-        assertThat(stockRepository.findAllLedgers()).hasSize(2);
-    }
-
-    @Test
     void returnCustomerShipmentMovesShippedBackToFinishedForSameWorkOrderDimension() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
         StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, com.zhubao.erp.business.BusinessWorkFixture.documents("MD-20260706-002", 1002L), com.zhubao.erp.business.BusinessWorkFixture.unit());
         StockDimension shipped = dimension(StockStatus.SHIPPED, "SHIPPED-CUSTOMER");
 
         stockLedgerService.transfer(new StockTransferCommand(
@@ -617,24 +325,7 @@ class BusinessOperationServiceTest {
                 "测试预置已发货库存"
         ));
 
-        CustomerReturnResult result = service.returnCustomerShipment(new CustomerReturnCommand(
-                "RET-20260707-022",
-                "OUT-20260706-022",
-                "MD-20260706-002",
-                "ZD-20260706-006",
-                1002L,
-                null,
-                "MAT-SILVER-CHAIN",
-                "SHIPPED-CUSTOMER",
-                "RETURN-CHECK",
-                bd("2"),
-                bd("4.550"),
-                "SF-RET-20260707-022",
-                "客户退回复核",
-                "库管员 何琳",
-                "ATT-RET-20260707-022",
-                "客户退货待复核"
-        ));
+        CustomerReturnResult result = service.returnCustomerShipment(new CustomerReturnCommand("RET-20260707-022", "OUT-20260706-022", "MD-20260706-002", "ZD-20260706-006", 1002L, null, "MAT-SILVER-CHAIN", "SHIPPED-CUSTOMER", "RETURN-CHECK", bd("2"), bd("4.550"), "SF-RET-20260707-022", "客户退回复核", "库管员 何琳", "ATT-RET-20260707-022", "客户退货待复核", "fixture-" + java.util.UUID.randomUUID()));
 
         StockDimension returnedFinished = dimension(StockStatus.FINISHED, "RETURN-CHECK");
         StockBalance shippedBalance = repository.findBalance(shipped);
@@ -659,7 +350,7 @@ class BusinessOperationServiceTest {
     void reviewAfterSalesReturnMovesReturnCheckStockToReworkForSameWorkOrderDimension() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
         StockLedgerService stockLedgerService = new StockLedgerService(repository);
-        BusinessOperationService service = new BusinessOperationService(stockLedgerService);
+        BusinessOperationService service = new BusinessOperationService(stockLedgerService, null, com.zhubao.erp.business.BusinessWorkFixture.documents("MD-20260706-002", 1002L), com.zhubao.erp.business.BusinessWorkFixture.unit());
         StockDimension returnCheck = dimension(StockStatus.FINISHED, "RETURN-CHECK");
 
         stockLedgerService.transfer(new StockTransferCommand(
@@ -672,25 +363,7 @@ class BusinessOperationServiceTest {
                 "测试预置退货复核库存"
         ));
 
-        AfterSalesReviewResult result = service.reviewAfterSalesReturn(new AfterSalesReviewCommand(
-                "ASR-20260707-022",
-                "RET-20260707-022",
-                "OUT-20260706-022",
-                "MD-20260706-002",
-                "ZD-20260706-006",
-                1002L,
-                null,
-                "MAT-SILVER-CHAIN",
-                "RETURN-CHECK",
-                "REWORK-LINE-01",
-                bd("2"),
-                bd("4.550"),
-                AfterSalesReviewDisposition.REWORK,
-                "周娜",
-                "客户退回件焊点偏移，转返工",
-                "PHOTO-ASR-20260707-022",
-                "售后复核分流"
-        ));
+        AfterSalesReviewResult result = service.reviewAfterSalesReturn(new AfterSalesReviewCommand("ASR-20260707-022", "RET-20260707-022", "OUT-20260706-022", "MD-20260706-002", "ZD-20260706-006", 1002L, null, "MAT-SILVER-CHAIN", "RETURN-CHECK", "REWORK-LINE-01", bd("2"), bd("4.550"), AfterSalesReviewDisposition.REWORK, "周娜", "客户退回件焊点偏移，转返工", "PHOTO-ASR-20260707-022", "售后复核分流", "fixture-" + java.util.UUID.randomUUID()));
 
         StockDimension rework = dimension(StockStatus.REWORK, "REWORK-LINE-01");
         StockBalance returnCheckBalance = repository.findBalance(returnCheck);
@@ -720,28 +393,9 @@ class BusinessOperationServiceTest {
     @Test
     void approveLossCalculatesOverLimitLossAndWageTrialSnapshot() {
         InMemoryStockLedgerRepository repository = new InMemoryStockLedgerRepository();
-        BusinessOperationService service = new BusinessOperationService(new StockLedgerService(repository));
+        BusinessOperationService service = new BusinessOperationService(new StockLedgerService(repository), new ApprovalService(new InMemoryApprovalTaskRepository()), new com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository(), com.zhubao.erp.business.BusinessWorkFixture.unit());
 
-        LossApprovalResult result = service.approveLoss(new ApproveLossCommand(
-                "LOSS-20260706-009",
-                "MD-20260706-001",
-                "ZD-20260706-001",
-                1001L,
-                null,
-                "MAT-18K-RING",
-                "抛光",
-                "李华",
-                "车间组长 马杰",
-                bd("121.150"),
-                bd("116.550"),
-                bd("0.000"),
-                bd("2.0"),
-                bd("56"),
-                bd("0.80"),
-                bd("6.00"),
-                "HO-20260706-021",
-                "超标损耗审批 smoke"
-        ));
+        LossApprovalResult result = service.approveLoss(new ApproveLossCommand("LOSS-20260706-009", "MD-20260706-001", "ZD-20260706-001", 1001L, null, "MAT-18K-RING", "抛光", "李华", "车间组长 马杰", bd("121.150"), bd("116.550"), bd("0.000"), bd("2.0"), "HO-20260706-021", "超标损耗审批 smoke", "fixture-" + java.util.UUID.randomUUID()));
 
         assertThat(result.approvalCode()).isEqualTo("LOSS-20260706-009");
         assertThat(result.lossWeight()).isEqualByComparingTo("4.600");
@@ -761,31 +415,9 @@ class BusinessOperationServiceTest {
     void approveLossCreatesLightweightApprovalTaskWhenApprovalServiceIsProvided() {
         InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
         InMemoryApprovalTaskRepository approvalRepository = new InMemoryApprovalTaskRepository();
-        BusinessOperationService service = new BusinessOperationService(
-                new StockLedgerService(stockRepository),
-                new ApprovalService(approvalRepository)
-        );
+        BusinessOperationService service = new BusinessOperationService(new StockLedgerService(stockRepository), new ApprovalService(approvalRepository), null, com.zhubao.erp.business.BusinessWorkFixture.unit());
 
-        LossApprovalResult result = service.approveLoss(new ApproveLossCommand(
-                "LOSS-20260706-099",
-                "MD-20260706-099",
-                "ZD-20260706-099",
-                1001L,
-                null,
-                "MAT-18K-RING",
-                "polish",
-                "operator-a",
-                "leader-a",
-                bd("121.150"),
-                bd("116.550"),
-                bd("0.000"),
-                bd("2.0"),
-                bd("56"),
-                bd("0.80"),
-                bd("6.00"),
-                "HO-20260706-099",
-                "loss approval task linkage"
-        ));
+        LossApprovalResult result = service.approveLoss(new ApproveLossCommand("LOSS-20260706-099", "MD-20260706-099", "ZD-20260706-099", 1001L, null, "MAT-18K-RING", "polish", "operator-a", "leader-a", bd("121.150"), bd("116.550"), bd("0.000"), bd("2.0"), "HO-20260706-099", "loss approval task linkage", "fixture-" + java.util.UUID.randomUUID()));
 
         assertThat(result.approvalStatus()).isEqualTo("WAITING_APPROVAL");
         assertThat(stockRepository.findAllLedgers()).isEmpty();

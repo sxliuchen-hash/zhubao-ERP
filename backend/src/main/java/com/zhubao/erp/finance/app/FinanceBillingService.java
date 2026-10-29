@@ -39,14 +39,18 @@ public class FinanceBillingService {
 
     private final FinanceRepository finance;
     private final StockLedgerService stockLedgerService;
+    private final PendingSettlementQuery pendingSettlements;
     private final AtomicLong sequence = new AtomicLong();
 
-    public FinanceBillingService(
-            FinanceRepository finance,
-            StockLedgerService stockLedgerService
-    ) {
+    public FinanceBillingService(FinanceRepository finance, StockLedgerService stocks) {
+        this(finance, stocks, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public FinanceBillingService(FinanceRepository finance, StockLedgerService stocks, PendingSettlementQuery pendingSettlements) {
         this.finance = finance;
-        this.stockLedgerService = stockLedgerService;
+        this.stockLedgerService = stocks;
+        this.pendingSettlements = pendingSettlements;
     }
 
     public List<PriceAgreement> agreements(Long customerId) {
@@ -64,7 +68,8 @@ public class FinanceBillingService {
     }
 
     public List<UnpricedItem> unpriced(String yearMonth, Long customerId) {
-        return List.of();
+        FinanceTexts.month(yearMonth);
+        return pendingSettlements == null ? List.of() : pendingSettlements.list(yearMonth, customerId);
     }
 
     public ReceivableLine reverse(ReverseReceivableCommand command, String operator) {

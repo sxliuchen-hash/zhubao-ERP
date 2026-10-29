@@ -44,7 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 确认发货的回放与同一次提交。
- * 只覆盖带请求编号的成品出库，以及未带编号时仍各自提交的旧路径。
+ * 覆盖带请求编号的成品出库，并拒绝无编号旧入口。
  * 质检和工序测试不能说明这里已经安全。
  */
 class ShippingDeliveryTest {
@@ -165,13 +165,11 @@ class ShippingDeliveryTest {
         });
         assertThatThrownBy(() -> oldPath.operations().shipFinishedStock(
                 order("OUT-SHIP-OLD", "MD-SHIP-OLD", "ZD-SHIP-OLD", 1001L, "10", "20", "YT60000001", null)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("出库单保存失败");
-        assertThat(world.finished("MD-SHIP-OLD", "ZD-SHIP-OLD", 1001L)).isEqualByComparingTo("0");
-        assertThat(world.shipped("MD-SHIP-OLD", "ZD-SHIP-OLD", 1001L)).isEqualByComparingTo("10");
+                .isInstanceOf(BusinessException.class).hasMessageContaining("稳定请求编号");
+        assertThat(world.finished("MD-SHIP-OLD", "ZD-SHIP-OLD", 1001L)).isEqualByComparingTo("10");
+        assertThat(world.shipped("MD-SHIP-OLD", "ZD-SHIP-OLD", 1001L)).isZero();
         assertThat(world.hasOutbound("OUT-SHIP-OLD")).isFalse();
-        assertThat(world.shipmentLedgers("MD-SHIP-OLD")).isEqualTo(1);
-        assertThat(world.hasRequest("req-ship-old")).isFalse();
+        assertThat(world.shipmentLedgers("MD-SHIP-OLD")).isZero();
 
         seed(world, "MD-SHIP-RACE", "ZD-SHIP-RACE", 1001L);
         raceSame(world, "MD-SHIP-RACE", "ZD-SHIP-RACE", "OUT-SHIP-RACE", "req-ship-race");
@@ -282,32 +280,7 @@ class ShippingDeliveryTest {
             String logisticsNo,
             String requestId
     ) {
-        return new ShipFinishedStockCommand(
-                shipment,
-                mother,
-                work,
-                customerId,
-                customerId,
-                "AU9999",
-                "FINISHED-CUSTOMER",
-                "SHIPPED-CUSTOMER",
-                "2026-10-12",
-                "成品",
-                new BigDecimal(quantity),
-                "件",
-                new BigDecimal(weight),
-                "顺丰",
-                logisticsNo,
-                "",
-                "",
-                null,
-                "",
-                "何琳",
-                ACTOR,
-                "",
-                "确认发货",
-                requestId
-        );
+        return new ShipFinishedStockCommand(shipment, mother, work, customerId, customerId, "AU9999", "FINISHED-CUSTOMER", "SHIPPED-CUSTOMER", "2026-10-12", "成品", new BigDecimal(quantity), "件", new BigDecimal(weight), "顺丰", logisticsNo, "", "", null, "", "何琳", ACTOR, "", "确认发货", requestId);
     }
 
     private static StockDimension dimension(String mother, String work, long customerId, String warehouse, StockStatus status) {
@@ -357,8 +330,7 @@ class ShippingDeliveryTest {
         private MemoryWorld(CommandResultProbe resultProbe, OutboundSaveProbe outboundProbe) {
             this.stocks = new StockLedgerService(stock);
             BusinessWorkUnit unit = new MemoryBusinessWorkUnit(requests, resultProbe);
-            this.operations = new BusinessOperationService(
-                    stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
+            this.operations = new BusinessOperationService(stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
         }
 
         @Override
@@ -422,8 +394,7 @@ class ShippingDeliveryTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, OutboundSaveProbe outboundProbe) {
             BusinessWorkUnit unit = new MemoryBusinessWorkUnit(requests, resultProbe);
-            BusinessOperationService next = new BusinessOperationService(
-                    stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
+            BusinessOperationService next = new BusinessOperationService(stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
             return new WorldView(next, this);
         }
 
@@ -513,8 +484,7 @@ class ShippingDeliveryTest {
             requests = new JdbcCommandRequestRepository(dataSource);
             stocks = new StockLedgerService(stock);
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            operations = new BusinessOperationService(
-                    stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
+            operations = new BusinessOperationService(stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
         }
 
         @Override
@@ -586,8 +556,7 @@ class ShippingDeliveryTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, OutboundSaveProbe outboundProbe) {
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            BusinessOperationService next = new BusinessOperationService(
-                    stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
+            BusinessOperationService next = new BusinessOperationService(stocks, null, documents, unit, MotherOrderSaveProbe.NONE, outboundProbe);
             return new WorldView(next, this);
         }
 

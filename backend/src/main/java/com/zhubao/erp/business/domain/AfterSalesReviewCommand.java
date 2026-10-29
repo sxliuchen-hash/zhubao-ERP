@@ -23,6 +23,7 @@ public record AfterSalesReviewCommand(
         String inspector,
         @NotBlank String finding,
         String evidenceCode,
-        String remark
+        String remark,
+        @NotBlank String requestId
 ) {
 }

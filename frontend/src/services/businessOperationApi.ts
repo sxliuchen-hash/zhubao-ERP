@@ -43,109 +43,6 @@ export interface InboundConfirmationResult {
   evidenceCode?: string;
 }
 
-export interface ProductionReportRequest {
-  motherOrderCode: string;
-  workOrderCode: string;
-  customerId: number;
-  ownerCustomerId?: number;
-  materialCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  quantity: number;
-  quantityUnit?: string;
-  weight: string;
-  workDate?: string;
-  process: string;
-  processCategory?: string;
-  productCategory?: string;
-  machineNo?: string;
-  workItemName?: string;
-  startedAt?: string;
-  finishedAt?: string;
-  completionStatus?: string;
-  handoffAuditStatus?: string;
-  sourceRegisterType?: string;
-  sourceRegisterLineNo?: number;
-  sourceRegisterSequence?: string;
-  operator: string;
-  operatorSignatureName?: string;
-  handoffCode?: string;
-  remark?: string;
-}
-
-export interface QualityFreezeRequest {
-  qualityCaseCode: string;
-  motherOrderCode: string;
-  workOrderCode: string;
-  customerId: number;
-  ownerCustomerId?: number;
-  materialCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  quantity: number;
-  weight: string;
-  process: string;
-  inspector: string;
-  defect: string;
-  evidenceCode?: string;
-  remark?: string;
-}
-
-export interface ReworkDispatchRequest {
-  reworkOrderCode: string;
-  qualityCaseCode: string;
-  motherOrderCode: string;
-  workOrderCode: string;
-  customerId: number;
-  ownerCustomerId?: number;
-  materialCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  quantity: number;
-  weight: string;
-  process: string;
-  operator: string;
-  reason: string;
-  evidenceCode?: string;
-  remark?: string;
-}
-
-export interface ReworkReportRequest {
-  reworkOrderCode: string;
-  qualityCaseCode: string;
-  motherOrderCode: string;
-  workOrderCode: string;
-  customerId: number;
-  ownerCustomerId?: number;
-  materialCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  quantity: number;
-  weight: string;
-  process: string;
-  operator: string;
-  evidenceCode?: string;
-  remark?: string;
-}
-
-export interface QualityReleaseRequest {
-  qualityCaseCode: string;
-  motherOrderCode: string;
-  workOrderCode: string;
-  customerId: number;
-  ownerCustomerId?: number;
-  materialCode: string;
-  fromWarehouseCode: string;
-  toWarehouseCode: string;
-  quantity: number;
-  weight: string;
-  process: string;
-  inspector: string;
-  releaseResult: string;
-  evidenceCode?: string;
-  remark?: string;
-}
-
 export interface OutboundShipmentRequest {
   shipmentCode: string;
   motherOrderCode: string;
@@ -205,6 +102,7 @@ export interface CustomerReturnRequest {
   operator: string;
   evidenceCode?: string;
   remark?: string;
+  requestId?: string;
 }
 
 export interface CustomerReturnResult {
@@ -244,6 +142,7 @@ export interface AfterSalesReviewRequest {
   finding: string;
   evidenceCode?: string;
   remark?: string;
+  requestId?: string;
 }
 
 export interface AfterSalesReviewResult {
@@ -278,11 +177,9 @@ export interface LossApprovalRequest {
   outputWeight: string;
   reasonableTransferWeight: string;
   standardLossRatePercent: string;
-  acceptedQuantity: number;
-  pieceRate: string;
-  lossDeductionUnitPrice: string;
   evidenceCode?: string;
   remark?: string;
+  requestId?: string;
 }
 
 export interface LossApprovalResult {
@@ -300,11 +197,11 @@ export interface LossApprovalResult {
   actualLossRatePercent: number;
   overLimit: boolean;
   approvalStatus: string;
-  acceptedQuantity: number;
-  pieceRate: number;
-  pieceWage: number;
-  lossDeduction: number;
-  trialWage: number;
+  acceptedQuantity: number | null;
+  pieceRate: number | null;
+  pieceWage: number | null;
+  lossDeduction: number | null;
+  trialWage: number | null;
   formalPayroll: boolean;
   operator: string;
   approver: string;
@@ -353,9 +250,9 @@ function requireFields<T extends object>(request: T, fields: Array<[keyof T, str
     }
   }
   const numericFields: Array<[string, string]> = [
-    ['quantity', '本次数量'], ['weight', '本次重量'], ['acceptedQuantity', '验收数量'], ['inputWeight', '投入重量'],
-    ['outputWeight', '产出重量'], ['reasonableTransferWeight', '合理转移重量'], ['pieceRate', '计件单价'],
-    ['standardLossRatePercent', '标准损耗率'], ['lossDeductionUnitPrice', '损耗扣减单价'],
+    ['quantity', '本次数量'], ['weight', '本次重量'], ['inputWeight', '投入重量'],
+    ['outputWeight', '产出重量'], ['reasonableTransferWeight', '合理转移重量'],
+    ['standardLossRatePercent', '标准损耗率'],
   ];
   for (const [key, label] of numericFields) {
     const value = (request as Record<string, unknown>)[key];
@@ -407,8 +304,8 @@ export async function shipFinishedStock(
 export function buildCustomerReturnRequest(row: InventoryBalance, extra: Partial<CustomerReturnRequest> = {}): CustomerReturnRequest {
   return requireFields(withConfirmedAmounts(row, extra, () => ({
     toWarehouseCode: 'RETURN-CHECK', returnCode: '', originalShipmentCode: '',
-    returnLogisticsNo: '', reason: '', operator: '',
-  })), [['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['operator', '操作人']]);
+    returnLogisticsNo: '', reason: '', operator: '', requestId: '',
+  })), [['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['operator', '操作人'], ['requestId', '请求编号']]);
 }
 
 export async function returnCustomerShipment(row: InventoryBalance, extra: Partial<CustomerReturnRequest> = {}): Promise<CustomerReturnResult> {
@@ -420,9 +317,9 @@ export function buildAfterSalesReviewRequest(row: InventoryBalance, extra: Parti
   return requireFields(withConfirmedAmounts(row, extra, () => ({
     toWarehouseCode: extra.disposition ? target[extra.disposition] : '',
     reviewCode: '', returnCode: '', originalShipmentCode: '', disposition: extra.disposition as AfterSalesReviewDisposition,
-    inspector: '', finding: '',
+    inspector: '', finding: '', requestId: '',
   })), [['reviewCode', '售后复核单号'], ['returnCode', '退货单号'], ['originalShipmentCode', '原出库单号'],
-    ['disposition', '处理结论'], ['inspector', '质检员'], ['finding', '复核说明']]);
+    ['disposition', '处理结论'], ['inspector', '质检员'], ['finding', '复核说明'], ['requestId', '请求编号']]);
 }
 
 export async function reviewAfterSalesReturn(row: InventoryBalance, extra: Partial<AfterSalesReviewRequest> = {}): Promise<AfterSalesReviewResult> {
@@ -432,12 +329,12 @@ export async function reviewAfterSalesReturn(row: InventoryBalance, extra: Parti
 export function buildLossApprovalRequest(row: LossApproval, extra: Partial<LossApprovalRequest> = {}): LossApprovalRequest {
   return requireFields({ ...context(row), approvalCode: row.code, process: row.process, operator: '', approver: '',
     inputWeight: '', outputWeight: '', reasonableTransferWeight: '', standardLossRatePercent: '',
-    acceptedQuantity: undefined as unknown as number, pieceRate: '', lossDeductionUnitPrice: '', ...extra,
+    ...extra,
   }, [['approvalCode', '损耗申请单号'], ['operator', '报工人'], ['approver', '审批人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量'], ['outputWeight', '产出重量'],
-    ['reasonableTransferWeight', '合理转移重量'], ['standardLossRatePercent', '标准损耗率'],
-    ['acceptedQuantity', '验收数量'], ['pieceRate', '计件单价'], ['lossDeductionUnitPrice', '损耗扣减单价']]);
+    ['reasonableTransferWeight', '合理转移重量'], ['standardLossRatePercent', '标准损耗率'], ['requestId', '请求编号']]);
 }
 
 export async function approveLoss(row: LossApproval, extra: Partial<LossApprovalRequest> = {}): Promise<LossApprovalResult> {
-  return apiPost('/api/business/operations/loss-approvals', buildLossApprovalRequest(row, { ...extra, approver: await actor() }));
+  const operator = await actor();
+  return apiPost('/api/business/operations/loss-approvals', buildLossApprovalRequest(row, { ...extra, operator, approver: operator }));
 }

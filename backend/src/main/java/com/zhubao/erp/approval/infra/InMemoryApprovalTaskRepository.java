@@ -19,6 +19,17 @@ public class InMemoryApprovalTaskRepository implements ApprovalTaskRepository {
     private final Map<String, ApprovalTask> tasks = new LinkedHashMap<>();
 
     @Override
+    public synchronized ApprovalTask insert(ApprovalTask task, com.zhubao.erp.work.domain.WorkSession session) {
+        if (session == null) throw new IllegalStateException("审批申请必须处于业务工作单元");
+        if (session.connection().isPresent()) throw new IllegalStateException("内存审批仓储不能接入 JDBC 工作单元，请统一仓储配置");
+        if (tasks.putIfAbsent(task.approvalCode(), task) != null) {
+            throw new com.zhubao.erp.common.error.BusinessException("申请单号已存在，请核对原申请");
+        }
+        session.onRollback(() -> { synchronized (this) { tasks.remove(task.approvalCode(), task); } });
+        return task;
+    }
+
+    @Override
     public synchronized ApprovalTask save(ApprovalTask task) {
         tasks.put(task.approvalCode(), task);
         return task;

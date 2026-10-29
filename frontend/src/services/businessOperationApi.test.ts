@@ -64,20 +64,20 @@ describe('正式单据操作', () => {
 
   it('退货必须明确原出库与本次物流，售后处理由用户选择', () => {
     expect(() => buildCustomerReturnRequest(inventory, { returnCode: 'RET-REAL', quantity: 12, weight: '25.75' })).toThrow('原出库单号');
-    expect(buildCustomerReturnRequest(inventory, { returnCode: 'RET-REAL', originalShipmentCode: 'OUT-9',
+    expect(buildCustomerReturnRequest(inventory, { requestId: 'return-request-1', returnCode: 'RET-REAL', originalShipmentCode: 'OUT-9',
       returnLogisticsNo: 'RET-TRACK', reason: '客户退回', operator: '库管', quantity: 12, weight: '25.75',
     })).toMatchObject({ originalShipmentCode: 'OUT-9', returnLogisticsNo: 'RET-TRACK', quantity: 12, weight: '25.75' });
-    expect(buildAfterSalesReviewRequest(inventory, { reviewCode: 'ASR-1', returnCode: 'RET-REAL',
+    expect(buildAfterSalesReviewRequest(inventory, { requestId: 'review-request-1', reviewCode: 'ASR-1', returnCode: 'RET-REAL',
       originalShipmentCode: 'OUT-9', disposition: 'RELEASE', inspector: '质检', finding: '复核合格', quantity: 3, weight: '6.20',
     })).toMatchObject({ disposition: 'RELEASE', toWarehouseCode: 'FINISHED-CUSTOMER', quantity: 3, weight: '6.20' });
   });
 
-  it('损耗试算必须有完整实测和计价输入，审批人取当前会话', async () => {
+  it('损耗申请只要求实物输入和稳定请求，身份取当前会话', async () => {
     expect(() => buildLossApprovalRequest(loss, { operator: '报工人', approver: '组长' })).toThrow('投入重量');
     await approveLoss(loss, { operator: '实际报工人', inputWeight: '30', outputWeight: '29', reasonableTransferWeight: '0',
-      standardLossRatePercent: '2', acceptedQuantity: 12, pieceRate: '1.2', lossDeductionUnitPrice: '4', approver: '冒名审批人' });
+      standardLossRatePercent: '2', requestId: 'loss-request-1', approver: '冒名审批人' });
     expect(apiPost).toHaveBeenCalledWith('/api/business/operations/loss-approvals', expect.objectContaining({
-      operator: '实际报工人', approver: '当前账号', inputWeight: '30', outputWeight: '29', pieceRate: '1.2' }));
+      operator: '当前账号', approver: '当前账号', inputWeight: '30', outputWeight: '29', requestId: 'loss-request-1' }));
   });
 
   it('来料不生成纸质行号、样例日期或称重', () => {

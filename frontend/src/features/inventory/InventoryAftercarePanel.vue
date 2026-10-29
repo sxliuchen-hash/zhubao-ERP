@@ -71,8 +71,15 @@ async function submit(kind: Mode) {
   const values = JSON.parse(JSON.stringify(operationDraft(form.operationValues.value))) as ReturnType<typeof operationDraft>;
   const required = kind === 'return' ? ['originalShipmentCode', 'returnCode', 'returnLogisticsNo', 'reason'] : ['originalShipmentCode', 'returnCode', 'reviewCode', 'disposition', 'finding'];
   if (required.some(key => !String((values as Record<string, unknown>)[key] ?? '').trim())) { error.value = '请补齐本次办理的业务单号及必填说明'; return; }
+  values.requestId = `aftercare-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
   const command: Command = { mode: kind, values, documentCode: String(kind === 'return' ? values.returnCode : values.reviewCode) };
+  await send(command);
+}
+async function send(command: Command) {
+  if (busy.value) return;
   busy.value = true;
+  error.value = '';
+  const { mode: kind, values } = command;
   try {
     if (kind === 'return') {
       const result = await returnCustomerShipment(row, values);
@@ -83,11 +90,11 @@ async function submit(kind: Mode) {
       if (!result?.ledgerCode || result.reviewCode !== command.documentCode || result.workOrderCode !== context?.workOrderCode) throw new Error('售后回执与本单不一致，请保留原单号核对台账');
       if (!disposed) reviewResult.value = result;
     }
-    if (!disposed) emit('saved');
+    if (!disposed) { unknown.value = null; emit('saved'); }
   } catch (caught) {
     if (disposed) return;
     const known = caught instanceof ApiRequestError && caught.status >= 400 && caught.status < 500 && caught.status !== 408;
-    if (!known) unknown.value = command;
+    unknown.value = known ? null : command;
     error.value = caught instanceof Error ? caught.message : '退售后办理失败';
   } finally { busy.value = false; }
 }
@@ -101,7 +108,7 @@ async function submit(kind: Mode) {
     <nav class="button-row" aria-label="退售后办理方式"><button v-if="canReturn" class="secondary-button" type="button" :aria-pressed="mode === 'return'" @click="mode = 'return'">退货入库</button><button v-if="canReview" class="secondary-button" type="button" :aria-pressed="mode === 'review'" @click="mode = 'review'">售后复核</button></nav>
     <p v-if="!canReturn && !canReview">当前库存状态或有效权限不支持办理，请核对原出库、退货单和库存来源。</p>
     <p v-if="error" class="operation-feedback danger" role="alert">{{ error }}</p>
-    <p v-if="unknown" class="operation-feedback warning" role="status">原{{ unknown.mode === 'return' ? '退货' : '售后复核' }} {{ unknown.documentCode }} 结果待核对，原内容已保留。此处暂停提交，请先核对原单台账，避免重复入库。<button class="secondary-button" type="button" @click="showLedger(unknown.documentCode)">核对原单台账</button></p>
+    <p v-if="unknown" class="operation-feedback warning" role="status">原{{ unknown.mode === 'return' ? '退货' : '售后复核' }} {{ unknown.documentCode }} 结果待核对，原内容已保留。原内容已锁定，可用同一请求重试或核对原单台账。<button class="secondary-button" type="button" :disabled="busy" @click="send(unknown)">{{ busy ? '重试中…' : '原请求重试' }}</button><button class="secondary-button" type="button" @click="showLedger(unknown.documentCode)">核对原单台账</button></p>
     <fieldset v-show="mode === 'return' && canReturn" :disabled="busy || Boolean(unknown) || Boolean(returnResult)">
       <legend>退货入库</legend>
       <OperationInputs v-model="returnValues" :fields="[['originalShipmentCode', '原出库单号'], ['returnCode', '退货单号'], ['returnLogisticsNo', '退货运单号'], ['reason', '退货原因'], ['quantity', '本次数量', 'number'], ['weight', '本次重量（克）', 'number'], ['evidenceCode', '证据编号']]" />

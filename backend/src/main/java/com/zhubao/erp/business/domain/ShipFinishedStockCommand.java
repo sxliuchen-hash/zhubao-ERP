@@ -32,7 +32,7 @@ public record ShipFinishedStockCommand(
         String remark,
         String requestId
 ) {
-    /** 旧调用不带请求编号。这种调用不回放，也不进入业务工作单元。 */
+    /** 兼容旧构造器仅用于缺少请求编号的拒绝校验，不能写入。 */
     public ShipFinishedStockCommand(
             String shipmentCode,
             String motherOrderCode,

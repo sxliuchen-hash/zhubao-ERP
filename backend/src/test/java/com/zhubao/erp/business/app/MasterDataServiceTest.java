@@ -41,8 +41,7 @@ class MasterDataServiceTest {
 
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
-        MobileIntakeService intake = new MobileIntakeService(new BusinessOperationService(
-                new StockLedgerService(new InMemoryStockLedgerRepository()), null, documents, unit),
+        MobileIntakeService intake = new MobileIntakeService(new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository()), null, documents, unit),
                 documents, unit, catalog);
         var command = new MobileIntakeCommand("", "客户端旧名称", customer.customerId(), "抛光", "2026-10-20",
                 "戒托", BigDecimal.ONE, BigDecimal.ONE, "", material.materialCode(), "件",

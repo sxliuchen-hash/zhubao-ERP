@@ -116,9 +116,9 @@ public class FinanceReportService {
                 outsource = outsource.add(payable.amount());
             }
         }
-        if (!billingService.unpriced(month.toString(), customerId).isEmpty()) {
-            gaps.add("已交货但尚未结单，收入未包含这些单");
-        }
+        var pending = billingService.unpriced(month.toString(), customerId);
+        if (pending.stream().anyMatch(row -> row.reason().startsWith("已交货"))) gaps.add("已交货但尚未结单，收入未包含这些单");
+        if (pending.stream().anyMatch(row -> row.reason().contains("待核"))) gaps.add("历史账或交货证据待核，未自动补入收入");
         BigDecimal result = revenue.subtract(wage).subtract(consumable).subtract(depreciation).subtract(outsource);
         return new OperatingStatement(
                 month.toString(),

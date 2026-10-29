@@ -494,6 +494,11 @@ describe('M1 business workspaces', () => {
   });
 
   it('shows only the signed-in station submit button', async () => {
+    vi.mocked(queryScanContext).mockImplementation(async request => {
+      const context = contextForQuery(request);
+      context.order.quantity = 8; context.order.weight = 12.4; context.order.quantityUnit = '件';
+      return context;
+    });
     vi.mocked(lookupProcessStation).mockResolvedValue({
       orderCode: 'ZD-100',
       customerName: '恒信珠宝',
@@ -522,7 +527,7 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('2026-10-20');
     expect(wrapper.text()).toContain('上一道是否已交');
     expect(wrapper.text()).toContain('无上一道');
-    expect(wrapper.text()).toContain('勾选不是报工');
+    expect(wrapper.text()).toContain('点击下方“确认交工”才会提交');
     expect(wrapper.text()).not.toContain('提交雕刻');
     expect(wrapper.text()).not.toContain('提交镶嵌');
     expect(wrapper.text()).not.toContain('提交抛光');
@@ -530,14 +535,13 @@ describe('M1 business workspaces', () => {
 
     await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
     expect(submitProcessStation).not.toHaveBeenCalled();
-    await wrapper.get('[aria-label="完成核对"]').trigger('click');
+    expect(wrapper.get('[aria-label="确认雕刻交工"]').element).toHaveProperty('disabled', false);
     expect(submitProcessStation).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('提交雕刻');
     expect(wrapper.text()).not.toContain('提交镶嵌');
     expect(wrapper.text()).not.toContain('提交抛光');
   });
 
-  it('shows the server rejection when the previous station is not handed in', async () => {
+  it('blocks submission when the previous station is not handed in', async () => {
     vi.mocked(lookupProcessStation).mockResolvedValue({
       orderCode: 'ZD-100',
       customerName: '恒信珠宝',
@@ -559,15 +563,12 @@ describe('M1 business workspaces', () => {
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
-    await wrapper.get('[aria-label="完成核对"]').trigger('click');
-    const submit = wrapper.findAll('button').find((button) => button.text() === '提交镶嵌');
-    expect(submit).toBeTruthy();
-    await submit!.trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('上一道「雕刻」还没交，不能交「镶嵌」');
-    expect(wrapper.text()).toContain('未交');
+    expect(wrapper.text()).toContain('上一道「雕刻」还未交工，当前不能提交「镶嵌」');
+    expect(wrapper.find('[aria-label="核对 1 内壁刻字"]').exists()).toBe(false);
+    const submit = wrapper.get('[aria-label="确认镶嵌交工"]');
+    expect(submit.element).toHaveProperty('disabled', true);
+    await submit.trigger('click');
+    expect(submitProcessStation).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain('提交雕刻');
     expect(wrapper.text()).not.toContain('提交抛光');
   });

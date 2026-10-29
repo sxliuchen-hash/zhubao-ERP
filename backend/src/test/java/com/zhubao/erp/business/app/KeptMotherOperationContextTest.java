@@ -33,24 +33,20 @@ class KeptMotherOperationContextTest {
         flow.splits().keep(MOTHER, "收货员");
         assertContext(flow.workspaces().production().workOrders().get(0).operationContext(), "", RAW, StockStatus.RAW_WAITING);
 
-        flow.stations().report(MOTHER, "雕刻", worker("雕刻"));
+        flow.stations().report(MOTHER, "雕刻", worker("雕刻"), "fixture-" + java.util.UUID.randomUUID());
         assertContext(flow.workspaces().production().workOrders().get(0).operationContext(), MOTHER, RAW, StockStatus.WIP);
         assertThat(flow.workspaces().inbound().orders().get(0).operationContext()).isNull();
-        flow.stations().report(MOTHER, "镶嵌", worker("镶嵌"));
+        flow.stations().report(MOTHER, "镶嵌", worker("镶嵌"), "fixture-" + java.util.UUID.randomUUID());
         assertContext(flow.workspaces().production().workOrders().get(0).operationContext(), MOTHER, RAW, StockStatus.WIP);
-        flow.stations().report(MOTHER, "抛光", worker("抛光"));
+        flow.stations().report(MOTHER, "抛光", worker("抛光"), "fixture-" + java.util.UUID.randomUUID());
         assertContext(flow.workspaces().quality().cases().get(0).operationContext(), MOTHER, RAW, StockStatus.SEMI_FINISHED);
 
-        var check = flow.quality().submit(new QualityCheckCommand(MOTHER, null,
-                List.of(new QualityCheckLineCommand(1, QualityVerdicts.PASS, ""))), inspector());
+        var check = flow.quality().submit(new QualityCheckCommand(MOTHER, null, List.of(new QualityCheckLineCommand(1, QualityVerdicts.PASS, "")), "fixture-" + java.util.UUID.randomUUID()), inspector());
         assertContext(flow.workspaces().quality().cases().get(0).operationContext(), MOTHER, RAW, StockStatus.SEMI_FINISHED);
-        flow.quality().release(new ReleaseQualityStockCommand(check.qualityCaseCode(), MOTHER, MOTHER, 7001L, 7001L,
-                "MAT-REAL", RAW, "FINISHED", bd("2"), bd("12.5"), "抛光", null, "合格", "", ""), inspector());
-        assertContext(flow.workspaces().quality().cases().get(0).operationContext(), MOTHER, "FINISHED", StockStatus.FINISHED);
+        flow.quality().releaseRound(new QualityFollowCommand(MOTHER, "fixture-release-" + java.util.UUID.randomUUID()), inspector());
+        assertContext(flow.workspaces().quality().cases().get(0).operationContext(), MOTHER, RAW, StockStatus.FINISHED);
 
-        flow.operations().shipFinishedStock(new ShipFinishedStockCommand("CK-KEEP-CONTEXT", MOTHER, MOTHER, 7001L, 7001L,
-                "MAT-REAL", "FINISHED", "SHIPPED", "2026-10-10", "成品", bd("2"), "件", bd("12.5"),
-                "顺丰", "SF123456789012", "", "", null, "", "库管员", "库管员", "", ""));
+        flow.operations().shipFinishedStock(new ShipFinishedStockCommand("CK-KEEP-CONTEXT", MOTHER, MOTHER, 7001L, 7001L, "MAT-REAL", RAW, "SHIPPED", "2026-10-10", "成品", bd("2"), "件", bd("12.5"), "顺丰", "SF123456789012", "", "", null, "", "库管员", "库管员", "", "", "fixture-" + java.util.UUID.randomUUID()));
         assertThat(flow.workspaces().inventory().balances()).singleElement().satisfies(balance ->
                 assertContext(balance.operationContext(), MOTHER, "SHIPPED", StockStatus.SHIPPED));
     }
@@ -61,10 +57,9 @@ class KeptMotherOperationContextTest {
         Flow flow = flow(jdbc);
         flow.splits().keep(MOTHER, "收货员");
         finish(flow);
-        flow.quality().submit(new QualityCheckCommand(MOTHER, null,
-                List.of(new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "表面划伤"))), inspector());
+        flow.quality().submit(new QualityCheckCommand(MOTHER, null, List.of(new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "表面划伤")), "fixture-" + java.util.UUID.randomUUID()), inspector());
         assertContext(flow.workspaces().quality().cases().get(0).operationContext(), MOTHER, RAW, StockStatus.FROZEN);
-        flow.quality().openRework(MOTHER, inspector());
+        flow.quality().openRework(MOTHER, inspector(), "fixture-" + java.util.UUID.randomUUID());
         assertContext(flow.workspaces().quality().cases().get(0).operationContext(), MOTHER, RAW, StockStatus.REWORK);
         assertContext(flow.workspaces().production().workOrders().get(0).operationContext(), MOTHER, RAW, StockStatus.REWORK);
     }
@@ -74,7 +69,7 @@ class KeptMotherOperationContextTest {
     void doesNotChooseOneWarehouseAfterFirstReport(boolean jdbc) throws SQLException {
         Flow flow = flow(jdbc);
         flow.splits().keep(MOTHER, "收货员");
-        flow.stations().report(MOTHER, "雕刻", worker("雕刻"));
+        flow.stations().report(MOTHER, "雕刻", worker("雕刻"), "fixture-" + java.util.UUID.randomUUID());
         StockDimension other = new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, MOTHER, MOTHER,
                 "MAT-REAL", "WIP-OTHER", StockStatus.WIP);
         flow.stocks().transfer(new StockTransferCommand("inventory_adjustment", "ADJUST-KEEP", null, other,
@@ -90,7 +85,7 @@ class KeptMotherOperationContextTest {
     void doesNotChooseBetweenLegacyEmptyWorkOrderAndMotherWorkOrder(boolean jdbc) throws SQLException {
         Flow flow = flow(jdbc);
         flow.splits().keep(MOTHER, "收货员");
-        flow.stations().report(MOTHER, "雕刻", worker("雕刻"));
+        flow.stations().report(MOTHER, "雕刻", worker("雕刻"), "fixture-" + java.util.UUID.randomUUID());
         StockDimension legacy = new StockDimension(OwnerType.CUSTOMER, 7001L, 7001L, MOTHER, null,
                 "MAT-REAL", RAW, StockStatus.WIP);
         flow.stocks().transfer(new StockTransferCommand("inventory_adjustment", "LEGACY-KEEP", null, legacy,
@@ -103,21 +98,21 @@ class KeptMotherOperationContextTest {
 
     private Flow flow(boolean jdbc) throws SQLException {
         var documents = new InMemoryBusinessDocumentRepository();
-        var stocks = new StockLedgerService(StockRepositoryFixture.create(jdbc));
-        var operations = new BusinessOperationService(stocks, null, documents);
+        var dataSource = jdbc ? StockRepositoryFixture.jdbcDataSource() : null;
+        var stocks = new StockLedgerService(jdbc ? new com.zhubao.erp.inventory.infra.JdbcStockLedgerRepository(dataSource) : new com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository());
+        var unit = com.zhubao.erp.business.BusinessWorkFixture.unit(dataSource);
+        var operations = new BusinessOperationService(stocks, null, documents, unit);
         var splits = new MotherOrderSplitService(documents, stocks);
         var parser = new ScanCodeParser();
-        var stations = new ProcessStationService(documents, stocks, operations, parser);
-        var quality = new QualityRequirementService(documents, stocks, operations, parser);
+        var stations = new ProcessStationService(documents, stocks, operations, parser, null, unit);
+        var quality = new QualityRequirementService(documents, stocks, operations, parser, null, unit);
         var workspaces = new BusinessWorkspaceService(documents, new ProgressBoardService(documents), stocks, null, null);
-        operations.confirmInbound(new ConfirmInboundCommand(MOTHER, 7001L, 7001L, "MAT-REAL", "2026-10-10", "", "", "",
-                "收货员", "收货员", "戒托", "", null, "", RAW, bd("2"), "件", bd("12.5"), "收货员", "", "",
-                "无划痕", "2099-01-01", "真实客户"));
+        operations.confirmInbound(new ConfirmInboundCommand(MOTHER, 7001L, 7001L, "MAT-REAL", "2026-10-10", "", "", "", "收货员", "收货员", "戒托", "", null, "", RAW, bd("2"), "件", bd("12.5"), "收货员", "", "", "无划痕", "2099-01-01", "真实客户", "fixture-" + java.util.UUID.randomUUID()));
         return new Flow(stocks, operations, splits, stations, quality, workspaces);
     }
 
     private void finish(Flow flow) {
-        for (String process : WorkshopProcesses.DEFAULT_ORDER) flow.stations().report(MOTHER, process, worker(process));
+        for (String process : WorkshopProcesses.DEFAULT_ORDER) flow.stations().report(MOTHER, process, worker(process), "fixture-" + java.util.UUID.randomUUID());
     }
 
     private void assertContext(OperationContext context, String workOrder, String warehouse, StockStatus status) {

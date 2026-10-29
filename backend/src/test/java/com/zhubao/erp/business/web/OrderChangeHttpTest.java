@@ -49,20 +49,10 @@ class OrderChangeHttpTest {
     @Test
     void directHttpHidesMoneyAndRejectsAnotherCustomer() throws Exception {
         String code = "MD-HTTP-" + System.nanoTime();
-        operations.confirmInbound(new ConfirmInboundCommand(
-                code, 1001L, 1001L, "AU9999", "2026-10-10", "顺丰", "SF" + code, "",
-                "库管员 何琳", "库管员 何琳", "戒托", "", null, "", "R05-WIP",
-                new BigDecimal("4"), "件", new BigDecimal("8"), "库管员 何琳", "", "",
-                "内壁刻字", "2026-10-20", "恒信珠宝"
-        ));
+        operations.confirmInbound(new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-10", "顺丰", "SF" + code, "", "库管员 何琳", "库管员 何琳", "戒托", "", null, "", "R05-WIP", new BigDecimal("4"), "件", new BigDecimal("8"), "库管员 何琳", "", "", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
         splits.keep(code, "库管员 何琳");
         String other = "MD-HTTP-OTHER-" + System.nanoTime();
-        operations.confirmInbound(new ConfirmInboundCommand(
-                other, 2002L, 2002L, "AU9999", "2026-10-10", "顺丰", "SF" + other, "",
-                "别人", "别人", "戒托", "", null, "", "R05-WIP",
-                new BigDecimal("1"), "件", new BigDecimal("2"), "别人", "", "",
-                "别人的要求", "2026-10-20", "另一客户"
-        ));
+        operations.confirmInbound(new ConfirmInboundCommand(other, 2002L, 2002L, "AU9999", "2026-10-10", "顺丰", "SF" + other, "", "别人", "别人", "戒托", "", null, "", "R05-WIP", new BigDecimal("1"), "件", new BigDecimal("2"), "别人", "", "", "别人的要求", "2026-10-20", "另一客户", "fixture-" + java.util.UUID.randomUUID()));
         accounts.save(new AuthUserAccount(
                 "scope-http", passwordHasher.hash("scope-http123"), "范围员", RoleCode.RECEIVER, DataScope.CUSTOMER_RANGE,
                 true, false, Instant.now(), 0, null, List.of("1001"), false, false, List.of()

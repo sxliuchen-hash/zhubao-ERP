@@ -18,10 +18,8 @@ import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OutboundShipmentResult;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
-import com.zhubao.erp.business.domain.ProductionReportResult;
 import com.zhubao.erp.business.domain.QualityFreezeResult;
 import com.zhubao.erp.business.domain.QualityReleaseResult;
-import com.zhubao.erp.business.domain.ReportProductionCommand;
 import com.zhubao.erp.business.domain.ReportReworkCommand;
 import com.zhubao.erp.business.domain.ReleaseQualityStockCommand;
 import com.zhubao.erp.business.domain.ReworkDispatchResult;
@@ -43,7 +41,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Optional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -130,7 +127,7 @@ public class BusinessOperationService {
     }
 
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command) {
-        return postInbound(command, null);
+        return confirmInbound(command, command.operator());
     }
 
     /**
@@ -139,7 +136,7 @@ public class BusinessOperationService {
      */
     public InboundConfirmationResult confirmInbound(ConfirmInboundCommand command, String actorId) {
         if (command.requestId() == null || command.requestId().isBlank()) {
-            return confirmInbound(command);
+            throw new BusinessException("入库必须提供稳定请求编号");
         }
         if (workUnit == null) {
             throw new BusinessException("入库回放尚未装配");
@@ -183,12 +180,8 @@ public class BusinessOperationService {
                 command.weight(),
                 buildRemark(command)
         );
-        StockLedgerEntry entry = session == null
-                ? stockLedgerService.transfer(transfer)
-                : stockLedgerService.transfer(transfer, session);
-        if (session != null) {
-            motherOrderSaveProbe.beforeMotherSave();
-        }
+        StockLedgerEntry entry = postTransfer(transfer, session);
+        motherOrderSaveProbe.beforeMotherSave();
 
         InboundConfirmationResult result = new InboundConfirmationResult(
                 command.motherOrderCode(),
@@ -201,7 +194,7 @@ public class BusinessOperationService {
                 command.evidenceCode()
         );
         saveMotherOrder(command, rawCustomerStock, entry, session);
-        if (session != null && masterData != null && !blankToEmpty(command.sourceRegisterType()).startsWith("INTAKE_LINES:")) {
+        if (masterData != null && !blankToEmpty(command.sourceRegisterType()).startsWith("INTAKE_LINES:")) {
             var material = masterData.materialForIntake(command.materialCode());
             businessDocumentRepository.saveReceiptLine(command.motherOrderCode(), new com.zhubao.erp.business.domain.ReceiptLine(1,
                     command.materialCode(), material.name(), command.goodsName(), command.quantity(), command.quantityUnit(), command.weight(), entry.code(),
@@ -234,60 +227,9 @@ public class BusinessOperationService {
         return postInbound(command, session);
     }
 
-    public ProductionReportResult reportProduction(ReportProductionCommand command) {
-        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
-        StockDimension fromWip = new StockDimension(
-                OwnerType.CUSTOMER,
-                ownerCustomerId,
-                command.customerId(),
-                command.motherOrderCode(),
-                command.workOrderCode(),
-                command.materialCode(),
-                command.fromWarehouseCode(),
-                StockStatus.WIP
-        );
-        StockDimension toSemiFinished = new StockDimension(
-                OwnerType.CUSTOMER,
-                ownerCustomerId,
-                command.customerId(),
-                command.motherOrderCode(),
-                command.workOrderCode(),
-                command.materialCode(),
-                command.toWarehouseCode(),
-                StockStatus.SEMI_FINISHED
-        );
-
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
-                "production_report",
-                command.workOrderCode(),
-                fromWip,
-                toSemiFinished,
-                command.quantity(),
-                command.weight(),
-                buildRemark(command)
-        ));
-
-        return new ProductionReportResult(
-                command.workOrderCode(),
-                entry.code(),
-                command.fromWarehouseCode(),
-                command.toWarehouseCode(),
-                fromWip.stockStatus(),
-                toSemiFinished.stockStatus(),
-                entry.quantity(),
-                entry.weight(),
-                command.process(),
-                command.operator(),
-                command.handoffCode()
-        );
-    }
-
-    public QualityFreezeResult freezeQualityStock(FreezeQualityStockCommand command) {
-        return freezeQualityStock(command, null);
-    }
-
     /** 带工作单元时，冻结流水不另开连接。 */
     public QualityFreezeResult freezeQualityStock(FreezeQualityStockCommand command, WorkSession session) {
+        if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromSemiFinished = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -336,12 +278,9 @@ public class BusinessOperationService {
         );
     }
 
-    public ReworkDispatchResult dispatchRework(DispatchReworkCommand command) {
-        return dispatchRework(command, null);
-    }
-
     /** 带工作单元时，开返工流水不另开连接。 */
     public ReworkDispatchResult dispatchRework(DispatchReworkCommand command, WorkSession session) {
+        if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFrozen = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -391,12 +330,9 @@ public class BusinessOperationService {
         );
     }
 
-    public ReworkReportResult reportRework(ReportReworkCommand command) {
-        return reportRework(command, null);
-    }
-
     /** 带工作单元时，返工报工流水不另开连接。 */
     public ReworkReportResult reportRework(ReportReworkCommand command, WorkSession session) {
+        if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromRework = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -446,12 +382,9 @@ public class BusinessOperationService {
         );
     }
 
-    public QualityReleaseResult releaseQualityStock(ReleaseQualityStockCommand command) {
-        return releaseQualityStock(command, null);
-    }
-
     /** 带工作单元时，放行流水不另开连接。 */
     public QualityReleaseResult releaseQualityStock(ReleaseQualityStockCommand command, WorkSession session) {
+        if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromSemiFinished = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -502,8 +435,7 @@ public class BusinessOperationService {
     }
 
     public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command) {
-        assertShipmentLabel(command, command == null ? "" : command.operator());
-        return postShipment(command, null);
+        return shipFinishedStock(command, command.operator());
     }
 
     private void assertShipmentLabel(ShipFinishedStockCommand command, String operator) {
@@ -522,13 +454,13 @@ public class BusinessOperationService {
 
     /**
      * 带请求编号的确认发货。库存流水、出货单和成功结果同一次提交。
-     * 同账号、同请求、同规范化内容回放原结果。未带编号时仍各自提交，不回放。
+     * 同账号、同请求、同规范化内容回放原结果；缺少编号直接拒绝。
      * 未装配工作单元时，带编号的调用直接拒绝，不能退回旧路径。
      */
     public OutboundShipmentResult shipFinishedStock(ShipFinishedStockCommand command, String actorId) {
         assertShipmentLabel(command, actorId);
         if (command.requestId() == null || command.requestId().isBlank()) {
-            return shipFinishedStock(command);
+            throw new BusinessException("发货必须提供稳定请求编号");
         }
         if (workUnit == null) {
             throw new BusinessException("发货回放尚未装配");
@@ -549,9 +481,7 @@ public class BusinessOperationService {
     }
 
     private OutboundShipmentResult postShipment(ShipFinishedStockCommand command, WorkSession session) {
-        if (session != null && businessDocumentRepository != null) {
-            businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
-        }
+        businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
         assertOutboundOrderAvailable(command.shipmentCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFinished = new StockDimension(
@@ -599,40 +529,34 @@ public class BusinessOperationService {
                 command.operator(),
                 command.evidenceCode()
         );
-        if (businessDocumentRepository != null) {
-            outboundSaveProbe.beforeOutboundSave();
-            saveOutboundOrder(command, entry, session);
-        }
+        outboundSaveProbe.beforeOutboundSave();
+        saveOutboundOrder(command, entry, session);
         return result;
     }
 
     public CustomerReturnResult returnCustomerShipment(CustomerReturnCommand command) {
         if (workUnit == null || businessDocumentRepository == null) {
-            return postReturn(command, null);
+            throw new BusinessException("退货工作单元或单据仓储尚未装配");
         }
         String requestId = command.requestId() == null ? "" : command.requestId().trim();
-        if (requestId.isEmpty()) {
-            requestId = "customer-return-" + command.returnCode().trim();
-        }
         if (!requestId.matches("[A-Za-z0-9._:-]{8,64}")) {
             throw new BusinessException("退货请求编号无效");
         }
-        String actor = command.operator() == null || command.operator().isBlank() ? "return-operator" : command.operator().trim();
+        String actor = command.operator();
         String text = workUnit.execute(new CommandCall(
                 requestId,
                 actor,
                 "CUSTOMER_RETURN",
                 "MOTHER_ORDER",
                 command.motherOrderCode(),
-                returnPayload(command)
+                commandPayload(command)
         ), session -> returnResult(postReturn(command, session)));
         return readReturn(text);
     }
 
     private CustomerReturnResult postReturn(CustomerReturnCommand command, WorkSession session) {
-        if (session != null && businessDocumentRepository != null) {
-            businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
-        }
+        businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
+        assertAftercareDocumentAvailable("customer_return", command.returnCode(), command.motherOrderCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromShipped = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -683,24 +607,6 @@ public class BusinessOperationService {
         );
     }
 
-    private static String returnPayload(CustomerReturnCommand command) {
-        Long owner = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
-        return String.join(";",
-                "original=" + command.originalShipmentCode(),
-                "mother=" + command.motherOrderCode(),
-                "work=" + command.workOrderCode(),
-                "customer=" + command.customerId(),
-                "owner=" + owner,
-                "material=" + command.materialCode(),
-                "from=" + command.fromWarehouseCode(),
-                "to=" + command.toWarehouseCode(),
-                "quantity=" + command.quantity().toPlainString(),
-                "weight=" + command.weight().toPlainString(),
-                "logistics=" + command.returnLogisticsNo(),
-                "reason=" + command.reason()
-        );
-    }
-
     private static String returnResult(CustomerReturnResult result) {
         try {
             return "return:" + RETURN_JSON.writeValueAsString(result);
@@ -718,6 +624,18 @@ public class BusinessOperationService {
     }
 
     public AfterSalesReviewResult reviewAfterSalesReturn(AfterSalesReviewCommand command) {
+        if (workUnit == null || businessDocumentRepository == null) {
+            throw new BusinessException("售后复核工作单元或单据仓储尚未装配");
+        }
+        String text = workUnit.execute(new CommandCall(command.requestId(), command.inspector(),
+                "AFTER_SALES_REVIEW", "MOTHER_ORDER", command.motherOrderCode(), commandPayload(command)),
+                session -> commandPayload(postAfterSalesReview(command, session)));
+        return commandResult(text, AfterSalesReviewResult.class);
+    }
+
+    private AfterSalesReviewResult postAfterSalesReview(AfterSalesReviewCommand command, WorkSession session) {
+        businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
+        assertAftercareDocumentAvailable("after_sales_review", command.reviewCode(), command.motherOrderCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromReturnCheck = new StockDimension(
                 OwnerType.CUSTOMER,
@@ -741,7 +659,7 @@ public class BusinessOperationService {
                 targetStatus
         );
 
-        StockLedgerEntry entry = stockLedgerService.transfer(new StockTransferCommand(
+        StockLedgerEntry entry = postTransfer(new StockTransferCommand(
                 "after_sales_review",
                 command.reviewCode(),
                 fromReturnCheck,
@@ -749,7 +667,7 @@ public class BusinessOperationService {
                 command.quantity(),
                 command.weight(),
                 buildRemark(command)
-        ));
+        ), session);
 
         return new AfterSalesReviewResult(
                 command.reviewCode(),
@@ -771,6 +689,16 @@ public class BusinessOperationService {
     }
 
     public LossApprovalResult approveLoss(ApproveLossCommand command) {
+        if (workUnit == null || approvalService == null) {
+            throw new BusinessException("损耗申请工作单元或审批仓储尚未装配");
+        }
+        String text = workUnit.execute(new CommandCall(command.requestId(), command.operator(),
+                "LOSS_APPROVAL", "WORK_ORDER", command.workOrderCode(), commandPayload(command)),
+                session -> commandPayload(postLoss(command, session)));
+        return commandResult(text, LossApprovalResult.class);
+    }
+
+    private LossApprovalResult postLoss(ApproveLossCommand command, WorkSession session) {
         BigDecimal rawLossWeight = command.inputWeight()
                 .subtract(command.outputWeight())
                 .subtract(command.reasonableTransferWeight());
@@ -801,7 +729,7 @@ public class BusinessOperationService {
                 actualLossRatePercent,
                 overLimit,
                 overLimit ? "WAITING_APPROVAL" : "AUTO_APPROVED",
-                command.acceptedQuantity() == null ? null : command.acceptedQuantity().setScale(3, RoundingMode.HALF_UP),
+                null,
                 null,
                 null,
                 null,
@@ -811,9 +739,7 @@ public class BusinessOperationService {
                 command.approver(),
                 command.evidenceCode()
         );
-        if (approvalService != null) {
-            approvalService.createLossApprovalTask(command, result);
-        }
+        approvalService.createLossApprovalTask(result, session);
         return result;
     }
 
@@ -841,19 +767,32 @@ public class BusinessOperationService {
     }
 
     private StockLedgerEntry postTransfer(StockTransferCommand command, WorkSession session) {
-        if (session == null) {
-            return stockLedgerService.transfer(command);
-        }
+        if (session == null) throw new IllegalStateException("库存写入必须处于业务工作单元");
         return stockLedgerService.transfer(command, session);
+    }
+
+    private static String commandPayload(Object value) {
+        try { return RETURN_JSON.writeValueAsString(value); }
+        catch (JsonProcessingException ex) { throw new IllegalStateException("无法保存业务请求或结果", ex); }
+    }
+
+    private void assertAftercareDocumentAvailable(String type, String code, String mother, WorkSession session) {
+        if (stockLedgerService.lockedLedgersForMother(mother, session).stream()
+                .anyMatch(entry -> type.equals(entry.documentType()) && code.equals(entry.documentCode()))) {
+            throw new BusinessException("业务单号已入账，请核对原请求和台账");
+        }
+    }
+
+    private static <T> T commandResult(String value, Class<T> type) {
+        try { return RETURN_JSON.readValue(value, type); }
+        catch (JsonProcessingException ex) { throw new IllegalStateException("无法读取业务请求结果", ex); }
     }
 
     private void assertMotherOrderAvailable(String code, WorkSession session) {
         if (businessDocumentRepository == null) {
             return;
         }
-        boolean exists = session == null
-                ? businessDocumentRepository.motherOrderExists(code)
-                : businessDocumentRepository.motherOrderExists(code, session);
+        boolean exists = businessDocumentRepository.motherOrderExists(code, session);
         if (exists) {
             throw new BusinessException("结构化母单已存在，不能重复确认入库：" + code);
         }
@@ -863,9 +802,7 @@ public class BusinessOperationService {
         if (businessDocumentRepository == null) {
             return;
         }
-        boolean exists = session == null
-                ? businessDocumentRepository.outboundOrderExists(code)
-                : businessDocumentRepository.outboundOrderExists(code, session);
+        boolean exists = businessDocumentRepository.outboundOrderExists(code, session);
         if (exists) {
             throw new BusinessException("结构化出库单已存在，不能重复确认出库：" + code);
         }
@@ -912,11 +849,7 @@ public class BusinessOperationService {
                 command.dueDate().trim(),
                 blankToEmpty(command.customerName())
         );
-        if (session == null) {
-            businessDocumentRepository.saveMotherOrder(record);
-        } else {
-            businessDocumentRepository.saveMotherOrder(record, session);
-        }
+        businessDocumentRepository.saveMotherOrder(record, session);
     }
 
     private void assertRequiredText(String value, String message) {
@@ -963,11 +896,7 @@ public class BusinessOperationService {
                 entry.code(),
                 RECORD_TIME.format(LocalDateTime.now())
         );
-        if (session == null) {
-            businessDocumentRepository.saveOutboundOrder(record);
-        } else {
-            businessDocumentRepository.saveOutboundOrder(record, session);
-        }
+        businessDocumentRepository.saveOutboundOrder(record, session);
     }
 
     private String blankToEmpty(String value) {
@@ -981,31 +910,7 @@ public class BusinessOperationService {
         return value.trim();
     }
 
-    private String buildRemark(ReportProductionCommand command) {
-        StringBuilder remark = new StringBuilder("生产报工；工序：")
-                .append(command.process())
-                .append("；操作人：")
-                .append(command.operator());
-        appendField(remark, "工序日期", command.workDate());
-        appendField(remark, "工序类型", command.processCategory());
-        appendField(remark, "品类", command.productCategory());
-        appendField(remark, "数量单位", command.quantityUnit());
-        appendField(remark, "机器编号", command.machineNo());
-        appendField(remark, "操机签字", command.operatorSignatureName());
-        appendField(remark, "工作项目", command.workItemName());
-        appendField(remark, "开始时间", command.startedAt());
-        appendField(remark, "完成时间", command.finishedAt());
-        appendField(remark, "完成情况", command.completionStatus());
-        appendField(remark, "交单审核", command.handoffAuditStatus());
-        appendRegisterSource(remark, command.sourceRegisterType(), command.sourceRegisterLineNo(), command.sourceRegisterSequence());
-        if (command.handoffCode() != null && !command.handoffCode().isBlank()) {
-            remark.append("；交接：").append(command.handoffCode());
-        }
-        if (command.remark() != null && !command.remark().isBlank()) {
-            remark.append("；备注：").append(command.remark());
-        }
-        return remark.toString();
-    }
+
 
     private String buildRemark(FreezeQualityStockCommand command) {
         StringBuilder remark = new StringBuilder("质检冻结；工序：")

@@ -53,11 +53,11 @@ class QualityRequirementServiceTest {
         stockRepository = new InMemoryStockLedgerRepository();
         stockLedgerService = new StockLedgerService(stockRepository);
         documents = new InMemoryBusinessDocumentRepository();
-        operations = new BusinessOperationService(stockLedgerService, null, documents);
+        operations = new BusinessOperationService(stockLedgerService, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit());
         splitService = new MotherOrderSplitService(documents, stockLedgerService);
         ScanCodeParser parser = new ScanCodeParser();
-        stationService = new ProcessStationService(documents, stockLedgerService, operations, parser);
-        qualityService = new QualityRequirementService(documents, stockLedgerService, operations, parser);
+        stationService = new ProcessStationService(documents, stockLedgerService, operations, parser, null, com.zhubao.erp.business.BusinessWorkFixture.unit());
+        qualityService = new QualityRequirementService(documents, stockLedgerService, operations, parser, null, com.zhubao.erp.business.BusinessWorkFixture.unit());
     }
 
     @Test
@@ -84,11 +84,7 @@ class QualityRequirementServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("请先登录");
 
-        assertThatThrownBy(() -> qualityService.submit(new QualityCheckCommand(
-                sticker,
-                "别人",
-                List.of(line(1, QualityVerdicts.PASS, ""), line(2, QualityVerdicts.PASS, ""))
-        ), inspector))
+        assertThatThrownBy(() -> qualityService.submit(new QualityCheckCommand(sticker, "别人", List.of(line(1, QualityVerdicts.PASS, ""), line(2, QualityVerdicts.PASS, "")), "fixture-" + java.util.UUID.randomUUID()), inspector))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("都要有结果");
         assertThat(documents.findQualityRequirementCheck(childCode)).isEmpty();
@@ -129,7 +125,7 @@ class QualityRequirementServiceTest {
         )), inspector))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已经做过质检对照");
-        assertThatThrownBy(() -> qualityService.openRework(sticker, inspector))
+        assertThatThrownBy(() -> qualityService.openRework(sticker, inspector, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能开返工");
     }
@@ -195,7 +191,7 @@ class QualityRequirementServiceTest {
         assertThat(freezeLedger.remark()).contains("质检员 周娜", "石位松", "MD-QC-FAIL", childCode);
         assertThat(freezeLedger.remark()).doesNotContain("车间组长 马杰");
 
-        QualityReworkResult rework = qualityService.openRework(sticker, inspector);
+        QualityReworkResult rework = qualityService.openRework(sticker, inspector, "fixture-" + java.util.UUID.randomUUID());
 
         assertThat(rework.reworkOrderCode()).isEqualTo("FG-" + childCode);
         assertThat(rework.qualityCaseCode()).isEqualTo(submitted.qualityCaseCode());
@@ -218,7 +214,7 @@ class QualityRequirementServiceTest {
         assertThat(reworkLedger.remark()).contains(submitted.qualityCaseCode(), "MD-QC-FAIL", childCode, "质检员 周娜");
         assertThat(documents.findQualityRequirementCheck(childCode).orElseThrow().reworkOrderCode())
                 .isEqualTo(rework.reworkOrderCode());
-        assertThatThrownBy(() -> qualityService.openRework(sticker, inspector))
+        assertThatThrownBy(() -> qualityService.openRework(sticker, inspector, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已经开过返工");
     }
@@ -249,7 +245,7 @@ class QualityRequirementServiceTest {
                     assertThat(line.verdict()).isEqualTo(QualityVerdicts.CONCESSION);
                     assertThat(line.reason()).isEqualTo("刻线略浅，客户接受");
                 });
-        assertThatThrownBy(() -> qualityService.openRework(sticker, qc()))
+        assertThatThrownBy(() -> qualityService.openRework(sticker, qc(), "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能开返工");
     }
@@ -298,7 +294,7 @@ class QualityRequirementServiceTest {
     }
 
     private QualityCheckCommand command(String sticker, String ignoredInspector, List<QualityCheckLineCommand> lines) {
-        return new QualityCheckCommand(sticker, ignoredInspector, lines);
+        return new QualityCheckCommand(sticker, ignoredInspector, lines, "fixture-" + java.util.UUID.randomUUID());
     }
 
     private QualityCheckLineCommand line(int lineNo, String verdict, String reason) {
@@ -312,9 +308,9 @@ class QualityRequirementServiceTest {
     }
 
     private void finish(String sticker) {
-        stationService.report(sticker, "雕刻", worker("雕刻"));
-        stationService.report(sticker, "镶嵌", worker("镶嵌"));
-        stationService.report(sticker, "抛光", worker("抛光"));
+        stationService.report(sticker, "雕刻", worker("雕刻"), "fixture-" + java.util.UUID.randomUUID());
+        stationService.report(sticker, "镶嵌", worker("镶嵌"), "fixture-" + java.util.UUID.randomUUID());
+        stationService.report(sticker, "抛光", worker("抛光"), "fixture-" + java.util.UUID.randomUUID());
     }
 
     private String splitOneChild(String motherCode, String requirement) {
@@ -327,32 +323,7 @@ class QualityRequirementServiceTest {
     }
 
     private void inbound(String code, String quantity, String weight, String requirement) {
-        operations.confirmInbound(new ConfirmInboundCommand(
-                code,
-                1001L,
-                1001L,
-                "AU9999",
-                "2026-10-08",
-                "顺丰",
-                "SF" + code.replace("-", ""),
-                "",
-                "何琳",
-                "何琳",
-                "戒托",
-                "",
-                null,
-                "",
-                "RAW-CUSTOMER",
-                new BigDecimal(quantity),
-                "件",
-                new BigDecimal(weight),
-                "何琳",
-                "",
-                "测试入库",
-                requirement,
-                "2026-10-20",
-                "恒信珠宝"
-        ));
+        operations.confirmInbound(new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal(quantity), "件", new BigDecimal(weight), "何琳", "", "测试入库", requirement, "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
     }
 
     private AuthUserAccount qc() {

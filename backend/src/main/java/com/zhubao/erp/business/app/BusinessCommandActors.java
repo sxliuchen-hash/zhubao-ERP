@@ -70,87 +70,6 @@ public final class BusinessCommandActors {
         );
     }
 
-    public static FreezeQualityStockCommand withActor(FreezeQualityStockCommand command, String actor) {
-        return new FreezeQualityStockCommand(
-                command.qualityCaseCode(),
-                command.motherOrderCode(),
-                command.workOrderCode(),
-                command.customerId(),
-                command.ownerCustomerId(),
-                command.materialCode(),
-                command.fromWarehouseCode(),
-                command.toWarehouseCode(),
-                command.quantity(),
-                command.weight(),
-                command.process(),
-                actor,
-                command.defect(),
-                command.evidenceCode(),
-                command.remark()
-        );
-    }
-
-    public static DispatchReworkCommand withActor(DispatchReworkCommand command, String actor) {
-        return new DispatchReworkCommand(
-                command.reworkOrderCode(),
-                command.qualityCaseCode(),
-                command.motherOrderCode(),
-                command.workOrderCode(),
-                command.customerId(),
-                command.ownerCustomerId(),
-                command.materialCode(),
-                command.fromWarehouseCode(),
-                command.toWarehouseCode(),
-                command.quantity(),
-                command.weight(),
-                command.process(),
-                actor,
-                command.reason(),
-                command.evidenceCode(),
-                command.remark()
-        );
-    }
-
-    public static ReportReworkCommand withActor(ReportReworkCommand command, String actor) {
-        return new ReportReworkCommand(
-                command.reworkOrderCode(),
-                command.qualityCaseCode(),
-                command.motherOrderCode(),
-                command.workOrderCode(),
-                command.customerId(),
-                command.ownerCustomerId(),
-                command.materialCode(),
-                command.fromWarehouseCode(),
-                command.toWarehouseCode(),
-                command.quantity(),
-                command.weight(),
-                command.process(),
-                actor,
-                command.evidenceCode(),
-                command.remark()
-        );
-    }
-
-    public static ReleaseQualityStockCommand withActor(ReleaseQualityStockCommand command, String actor) {
-        return new ReleaseQualityStockCommand(
-                command.qualityCaseCode(),
-                command.motherOrderCode(),
-                command.workOrderCode(),
-                command.customerId(),
-                command.ownerCustomerId(),
-                command.materialCode(),
-                command.fromWarehouseCode(),
-                command.toWarehouseCode(),
-                command.quantity(),
-                command.weight(),
-                command.process(),
-                actor,
-                command.releaseResult(),
-                command.evidenceCode(),
-                command.remark()
-        );
-    }
-
     public static ShipFinishedStockCommand withActor(ShipFinishedStockCommand command, String actor) {
         return new ShipFinishedStockCommand(
                 command.shipmentCode(),
@@ -220,7 +139,8 @@ public final class BusinessCommandActors {
                 actor,
                 command.finding(),
                 command.evidenceCode(),
-                command.remark()
+                command.remark(),
+                command.requestId()
         );
     }
 
@@ -239,11 +159,9 @@ public final class BusinessCommandActors {
                 command.outputWeight(),
                 command.reasonableTransferWeight(),
                 command.standardLossRatePercent(),
-                command.acceptedQuantity(),
-                command.pieceRate(),
-                command.lossDeductionUnitPrice(),
                 command.evidenceCode(),
-                command.remark()
+                command.remark(),
+                command.requestId()
         );
     }
 }

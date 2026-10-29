@@ -23,7 +23,7 @@ public record CustomerReturnCommand(
         String operator,
         String evidenceCode,
         String remark,
-        String requestId
+        @NotBlank String requestId
 ) {
     public CustomerReturnCommand(
             String returnCode,

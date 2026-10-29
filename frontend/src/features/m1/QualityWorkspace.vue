@@ -1,23 +1,17 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref } from 'vue';
 import type { OpenQualityAction } from '../orders/orderActions';
 import { useTraceTarget } from '../scan/useTraceTarget';
-import OperationInputs from './OperationInputs.vue';
+import LossApplicationPanel from '../quality/LossApplicationPanel.vue';
 import QualityPanel from '../quality/QualityPanel.vue';
-import { createAmountForm } from './operationAmounts';
-import { operationDraft } from './operationDraft';
 import { useDeskFilter } from './useDeskFilter';
 import StatusBadge from '../../components/StatusBadge.vue';
-import type { LossApproval, Tone } from '../../data/m1PrototypeData';
+import type { Tone } from '../../data/m1PrototypeData';
 import { ApiRequestError } from '../../services/apiClient';
 import {
   fetchQualityWorkspace,
   type QualityWorkspaceModel,
 } from '../../services/businessWorkspaceApi';
-import {
-  approveLoss,
-  type LossApprovalResult,
-} from '../../services/businessOperationApi';
 
 const emptyQuality = (): QualityWorkspaceModel => ({
   metrics: [],
@@ -44,10 +38,7 @@ const loading = ref(false);
 const statusKeyword = ref('');
 const advancedOpen = ref(false);
 const detailOpen = ref(false);
-const { operationValues, resetAmounts } = createAmountForm();
-const approvingLoss = ref(false);
-const lossApprovalResult = ref<LossApprovalResult | null>(null);
-const lossApprovalError = ref('');
+const lossLocked = ref(false);
 const selectedQualityCaseCode = ref('');
 const { keyword, filtered: filteredCases } = useDeskFilter(
   () => workspace.value.cases,
@@ -70,7 +61,6 @@ const activeApproval = computed(
     workspace.value.lossApprovals.find((item) => item.workOrder === activeCase.value?.workOrder),
 );
 
-watch(activeCase, (item) => { resetAmounts(item?.operationContext); });
 
 function qualityCaseTone(status: string, action = ''): Tone {
   if (status.includes('完成')) return 'green';
@@ -109,39 +99,14 @@ async function loadQualityWorkspace() {
   }
 }
 
-async function approveActiveLoss() {
-  if (!activeCase.value) return;
-
-  approvingLoss.value = true;
-  lossApprovalResult.value = null;
-  lossApprovalError.value = '';
-
-  try {
-    const draft = operationDraft(operationValues.value);
-    if (!operationValues.value.approvalCode?.trim()) throw new Error('请填写损耗申请单号');
-    const application: LossApproval = {
-      code: operationValues.value.approvalCode.trim(), workOrder: activeCase.value.workOrder,
-      process: activeCase.value.process, operationContext: activeCase.value.operationContext,
-      standard: '', actual: '', evidence: '', action: '待申请', tone: 'amber',
-    };
-    lossApprovalResult.value = await approveLoss(application, draft);
-    await loadQualityWorkspace();
-  } catch (error) {
-    lossApprovalError.value = error instanceof Error ? error.message : '提交损耗申请失败';
-  } finally {
-    approvingLoss.value = false;
-  }
-}
-
 function backToList() {
   detailOpen.value = false;
 }
 
 function selectQualityCase(code: string) {
+  if (lossLocked.value) return;
   selectedQualityCaseCode.value = code;
   detailOpen.value = true;
-  lossApprovalResult.value = null;
-  lossApprovalError.value = '';
 }
 </script>
 
@@ -256,22 +221,8 @@ function selectQualityCase(code: string) {
             <dd>{{ activeApproval?.code ?? '无' }}</dd>
           </dl>
           <button v-if="openQuality" class="primary-button" type="button" @click="openQuality({ objectType: null, code: activeCase.workOrder })">办理本单质检</button>
-          <p class="operation-feedback">冻结、返工、复检和放行从本单质检办理。下方保留损耗申请与工资试算。</p>
-          <OperationInputs v-model="operationValues" :fields="[['approvalCode', '损耗申请单号'], ['operator', '损耗报工人'], ['process', '损耗所属工序'], ['inputWeight', '投入重量（克）', 'number'], ['outputWeight', '产出重量（克）', 'number'], ['reasonableTransferWeight', '合理转移重量（克）', 'number'], ['standardLossRatePercent', '标准损耗率（%）', 'number'], ['acceptedQuantity', '验收数量', 'number'], ['pieceRate', '计件单价', 'number'], ['lossDeductionUnitPrice', '损耗扣减单价', 'number']]" />
-          <div class="detail-actions">
-            <button class="secondary-button" type="button" :disabled="approvingLoss" @click="approveActiveLoss">
-              {{ approvingLoss ? '正在试算' : '提交损耗申请' }}
-            </button>
-          </div>
-          <div v-if="lossApprovalResult" class="operation-feedback success">
-            <strong>损耗申请已生成工资试算</strong>
-            <span>{{ lossApprovalResult.approvalCode }} / {{ lossApprovalResult.approvalStatus }}</span>
-            <small>试算 {{ lossApprovalResult.trialWage }}，不进入正式工资</small>
-          </div>
-          <div v-else-if="lossApprovalError" class="operation-feedback danger">
-            <strong>提交损耗申请失败</strong>
-            <span>{{ lossApprovalError }}</span>
-          </div>
+          <p class="operation-feedback">冻结、返工、复检和放行从本单质检办理。</p>
+          <LossApplicationPanel :key="activeCase.workOrder" :application="{ code: '', workOrder: activeCase.workOrder, process: activeCase.process, operationContext: activeCase.operationContext, standard: '', actual: '', evidence: '', action: '待申请', tone: 'amber' }" @locked="lossLocked = $event" @changed="loadQualityWorkspace" />
         </section>
 
       </aside>

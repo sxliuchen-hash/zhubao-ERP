@@ -51,9 +51,7 @@ class RegisterImportPostingExecutionServiceTest {
     private final RegisterImportPostingPlanService postingPlanService = new RegisterImportPostingPlanService(confirmationService);
     private final InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
     private final StockLedgerService stockLedgerService = new StockLedgerService(stockRepository);
-    private final BusinessOperationService businessOperationService = new BusinessOperationService(
-            stockLedgerService
-    );
+    private final BusinessOperationService businessOperationService = new BusinessOperationService(stockLedgerService, null, new com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository(), com.zhubao.erp.business.BusinessWorkFixture.unit());
     private final InMemoryMachineOutputRepository machineOutputRepository = new InMemoryMachineOutputRepository();
     private final MachineOutputService machineOutputService = new MachineOutputService(
             machineOutputRepository
@@ -73,10 +71,7 @@ class RegisterImportPostingExecutionServiceTest {
                 "现场复核通过"
         ));
 
-        RegisterImportPostingExecutionResult result = service.post(
-                batch.importBatchNo(),
-                new PostRegisterImportBatchCommand(false, "库管员 何琳", "M3.78 显式入账测试")
-        );
+        RegisterImportPostingExecutionResult result = service.post(batch.importBatchNo(), new PostRegisterImportBatchCommand(false, "库管员 何琳", "M3.78 显式入账测试"), new AuthUserAccount("importer", "", "导入员", RoleCode.ADMIN, DataScope.ALL, true, false));
         RegisterImportBatch postedBatch = confirmationService.batch(batch.importBatchNo());
         RegisterImportPostingPlan postedPlan = postingPlanService.plan(batch.importBatchNo());
 
@@ -90,7 +85,7 @@ class RegisterImportPostingExecutionServiceTest {
         assertThat(postedBatch.status()).isEqualTo("POSTED");
         assertThat(postedBatch.rows().get(0).status()).isEqualTo("POSTED");
         assertThat(postedPlan.status()).isEqualTo("POSTED");
-        assertThatThrownBy(() -> service.post(batch.importBatchNo(), null))
+        assertThatThrownBy(() -> service.post(batch.importBatchNo(), null, new AuthUserAccount("importer", "", "导入员", RoleCode.ADMIN, DataScope.ALL, true, false)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能重复执行");
     }
@@ -103,7 +98,7 @@ class RegisterImportPostingExecutionServiceTest {
                 "现场复核通过"
         ));
 
-        assertThatThrownBy(() -> service.post(batch.importBatchNo(), null))
+        assertThatThrownBy(() -> service.post(batch.importBatchNo(), null, new AuthUserAccount("importer", "", "导入员", RoleCode.ADMIN, DataScope.ALL, true, false)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("存在阻断行");
         assertThat(stockRepository.findAllLedgers()).isEmpty();

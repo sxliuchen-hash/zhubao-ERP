@@ -26,6 +26,22 @@ public class JdbcApprovalTaskRepository implements ApprovalTaskRepository {
     }
 
     @Override
+    public ApprovalTask insert(ApprovalTask task, com.zhubao.erp.work.domain.WorkSession session) {
+        Connection connection = session == null ? null : session.connection().orElse(null);
+        if (connection == null) throw new IllegalStateException("JDBC 审批申请必须使用工作单元连接");
+        try {
+            insertTask(connection, task);
+            insertAuditEvent(connection, task);
+            return task;
+        } catch (SQLException ex) {
+            if (ex.getSQLState() != null && ex.getSQLState().startsWith("23")) {
+                throw new com.zhubao.erp.common.error.BusinessException("申请单号已存在，请核对原申请");
+            }
+            throw new IllegalStateException("无法保存审批申请", ex);
+        }
+    }
+
+    @Override
     public Optional<ApprovalTask> decideIfWaiting(ApprovalTask task) {
         try (Connection connection = dataSource.getConnection()) {
             boolean previousAutoCommit = connection.getAutoCommit();

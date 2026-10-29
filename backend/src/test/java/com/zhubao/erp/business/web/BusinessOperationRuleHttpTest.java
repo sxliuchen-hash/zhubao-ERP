@@ -58,10 +58,13 @@ class BusinessOperationRuleHttpTest {
     @Autowired private ProcessStationService stations;
     @Autowired private QualityRequirementService quality;
     @Autowired private AuthUserAccountRepository accounts;
+    @Autowired private com.zhubao.erp.business.domain.MasterDataRepository masterData;
     private final java.util.Map<String, AuthUserAccount> originalAccounts = new java.util.HashMap<>();
 
     @BeforeEach
     void prepareProcessRuleAccounts() {
+        if (accounts.findByUsername("operator").isEmpty()) com.zhubao.erp.security.infra.AuthAccountFixture.seed(accounts, new com.zhubao.erp.security.app.PasswordHasher());
+        if (masterData.findCustomer(1001L).isEmpty()) com.zhubao.erp.business.infra.MasterDataFixture.seed(masterData);
         // 这些场景验证工序顺序，明确赋予测试数据范围，避免被默认本人范围提前拦截。
         for (String username : List.of("operator", "carve", "inlay", "polish", "qc")) {
             AuthUserAccount account = accounts.findByUsername(username).orElseThrow();
@@ -201,11 +204,11 @@ class BusinessOperationRuleHttpTest {
     void registerStyleReportRejectsPartialUnreviewedAndForgedFormalDimensions() {
         String code = keptMother();
         AuthUserAccount carve = accounts.findByUsername("carve").orElseThrow();
-        assertThatThrownBy(() -> stations.reportProduction(production(code, "雕刻", "2"), carve))
+        assertThatThrownBy(() -> stations.reportProduction(production(code, "雕刻", "2"), carve, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> stations.reportProduction(unreviewed(code), carve))
+        assertThatThrownBy(() -> stations.reportProduction(unreviewed(code), carve, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> stations.reportProduction(forged(code), carve))
+        assertThatThrownBy(() -> stations.reportProduction(forged(code), carve, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class);
         assertThat(documents.listProcessStationHandoffs(code)).isEmpty();
         assertThat(quantity(code, StockStatus.RAW_WAITING)).isEqualByComparingTo("4");
@@ -220,7 +223,7 @@ class BusinessOperationRuleHttpTest {
         postAs("qc", "/quality-checks/releases", new QualityFollowCommand(code, "req-release-nocheck-" + code))
                 .andExpect(status().isBadRequest());
         postAs("qc", "/quality-checks", new QualityCheckCommand(code, "冒名质检员", List.of(
-                new QualityCheckLineCommand(1, QualityVerdicts.PASS, ""))))
+                new QualityCheckLineCommand(1, QualityVerdicts.PASS, "")), "fixture-" + java.util.UUID.randomUUID()))
                 .andExpect(status().isOk());
         postAs("qc", "/quality-checks/releases", new QualityFollowCommand(code, "req-release-" + code))
                 .andExpect(status().isOk())
@@ -231,7 +234,7 @@ class BusinessOperationRuleHttpTest {
         String failed = keptMother();
         finish(failed);
         postAs("qc", "/quality-checks", new QualityCheckCommand(failed, null, List.of(
-                new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "内壁漏刻"))))
+                new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "内壁漏刻")), "fixture-" + java.util.UUID.randomUUID()))
                 .andExpect(status().isOk());
         postAs("qc", "/quality-checks/releases", new QualityFollowCommand(failed, "req-release-fail-" + failed))
                 .andExpect(status().isBadRequest());
@@ -246,7 +249,7 @@ class BusinessOperationRuleHttpTest {
         AuthUserAccount outsideInspector = new AuthUserAccount("outside-qc", "hash", "受限质检", RoleCode.QUALITY_INSPECTOR,
                 DataScope.DEPARTMENT, true, false, List.of("1002"));
         assertThatThrownBy(() -> stations.lookup(code, outsideWorker)).isInstanceOf(PermissionDeniedException.class);
-        assertThatThrownBy(() -> stations.reportProduction(production(code, "雕刻", "4"), outsideWorker)).isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> stations.reportProduction(production(code, "雕刻", "4"), outsideWorker, "fixture-" + java.util.UUID.randomUUID())).isInstanceOf(PermissionDeniedException.class);
         assertThatThrownBy(() -> quality.lookup(code, outsideInspector)).isInstanceOf(PermissionDeniedException.class);
         assertThat(documents.listProcessStationHandoffs(code)).isEmpty();
     }
@@ -258,9 +261,9 @@ class BusinessOperationRuleHttpTest {
     }
 
     private void finish(String code) throws Exception {
-        postAs("carve", "/process-stations", new ProcessStationReportCommand(code, "雕刻")).andExpect(status().isOk());
-        postAs("inlay", "/process-stations", new ProcessStationReportCommand(code, "镶嵌")).andExpect(status().isOk());
-        postAs("polish", "/process-stations", new ProcessStationReportCommand(code, "抛光")).andExpect(status().isOk());
+        postAs("carve", "/process-stations", new ProcessStationReportCommand(code, "雕刻", "finish-carve-" + code)).andExpect(status().isOk());
+        postAs("inlay", "/process-stations", new ProcessStationReportCommand(code, "镶嵌", "finish-inlay-" + code)).andExpect(status().isOk());
+        postAs("polish", "/process-stations", new ProcessStationReportCommand(code, "抛光", "finish-polish-" + code)).andExpect(status().isOk());
     }
 
     private String keptMother() {
@@ -271,9 +274,7 @@ class BusinessOperationRuleHttpTest {
     }
 
     private ConfirmInboundCommand inbound(String code) {
-        return new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-10", "顺丰", "SF" + code.replace("-", ""),
-                "", "测试收货人", "测试收货人", "戒托", "", null, "", WAREHOUSE,
-                bd("4"), "件", bd("8"), "测试收货人", "", "", "内壁刻字", "2026-10-20", "恒信珠宝");
+        return new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-10", "顺丰", "SF" + code.replace("-", ""), "", "测试收货人", "测试收货人", "戒托", "", null, "", WAREHOUSE, bd("4"), "件", bd("8"), "测试收货人", "", "", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID());
     }
 
     private ReportProductionCommand production(String code, String process, String quantity) {

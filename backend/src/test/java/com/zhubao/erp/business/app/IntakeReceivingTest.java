@@ -294,33 +294,7 @@ class IntakeReceivingTest {
     }
 
     private ConfirmInboundCommand inbound(String requestId, String mother, String weight, long customerId, String customerName) {
-        return new ConfirmInboundCommand(
-                mother,
-                customerId,
-                customerId,
-                "MAT-1",
-                "2026-10-12",
-                "顺丰",
-                "SF9" + mother,
-                "",
-                "寄货人",
-                "收货员甲",
-                "戒托",
-                null,
-                null,
-                "",
-                "RAW-CUSTOMER",
-                new BigDecimal("2"),
-                "件",
-                new BigDecimal(weight),
-                receiver.operator(),
-                "",
-                "确认入库",
-                "戒托抛光",
-                "2026-10-20",
-                customerName,
-                requestId
-        );
+        return new ConfirmInboundCommand(mother, customerId, customerId, "MAT-1", "2026-10-12", "顺丰", "SF9" + mother, "", "寄货人", "收货员甲", "戒托", null, null, "", "RAW-CUSTOMER", new BigDecimal("2"), "件", new BigDecimal(weight), receiver.operator(), "", "确认入库", "戒托抛光", "2026-10-20", customerName, requestId);
     }
 
     private interface World {
@@ -387,8 +361,7 @@ class IntakeReceivingTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, MotherOrderSaveProbe motherProbe) {
             BusinessWorkUnit unit = new MemoryBusinessWorkUnit(requests, resultProbe);
-            BusinessOperationService next = new BusinessOperationService(
-                    new StockLedgerService(stock), null, documents, unit, motherProbe);
+            BusinessOperationService next = new BusinessOperationService(new StockLedgerService(stock), null, documents, unit, motherProbe);
             return new WorldView(new MobileIntakeService(next, documents, unit), next, this);
         }
     }
@@ -569,8 +542,7 @@ class IntakeReceivingTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, MotherOrderSaveProbe motherProbe) {
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            BusinessOperationService next = new BusinessOperationService(
-                    new StockLedgerService(stock), null, documents, unit, motherProbe);
+            BusinessOperationService next = new BusinessOperationService(new StockLedgerService(stock), null, documents, unit, motherProbe);
             return new WorldView(new MobileIntakeService(next, documents, unit), next, this);
         }
 

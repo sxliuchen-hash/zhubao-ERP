@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 /**
- * 提交复检。不覆盖初检。requestId 可空；有值时与本轮事实同一次提交。
+ * 提交复检。不覆盖初检。requestId 必填，与本轮事实同一次提交。
  */
 public record QualityRecheckCommand(
         @NotBlank(message = "请先扫贴纸") String code,

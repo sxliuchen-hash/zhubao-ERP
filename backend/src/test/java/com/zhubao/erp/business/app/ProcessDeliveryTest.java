@@ -160,10 +160,10 @@ class ProcessDeliveryTest {
             throw new IllegalStateException("交接保存失败");
         });
         assertThatThrownBy(() -> oldPath.station().report(sticker("MD-ST-OLD"), "雕刻", carving))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("交接保存失败");
-        assertThat(world.raw("MD-ST-OLD", 1001L)).isEqualByComparingTo("0");
-        assertThat(world.wip("MD-ST-OLD", 1001L)).isEqualByComparingTo("10");
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("交工必须提供稳定请求编号");
+        assertThat(world.raw("MD-ST-OLD", 1001L)).isEqualByComparingTo("10");
+        assertThat(world.wip("MD-ST-OLD", 1001L)).isEqualByComparingTo("0");
         assertThat(world.handoffs("MD-ST-OLD")).isZero();
         assertThat(world.hasRequest("req-station-old")).isFalse();
 
@@ -250,32 +250,7 @@ class ProcessDeliveryTest {
     }
 
     private ConfirmInboundCommand inbound(String code, long customerId, String customerName) {
-        return new ConfirmInboundCommand(
-                code,
-                customerId,
-                customerId,
-                "AU9999",
-                "2026-10-08",
-                "顺丰",
-                "SF" + code.replace("-", ""),
-                "",
-                "何琳",
-                "何琳",
-                "戒托",
-                "",
-                null,
-                "",
-                "RAW-CUSTOMER",
-                new BigDecimal("10"),
-                "件",
-                new BigDecimal("20"),
-                "何琳",
-                "",
-                "测试入库",
-                "内壁刻字",
-                "2026-10-20",
-                customerName
-        );
+        return new ConfirmInboundCommand(code, customerId, customerId, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "测试入库", "内壁刻字", "2026-10-20", customerName, "fixture-" + java.util.UUID.randomUUID());
     }
 
     private AuthUserAccount account(String operator, String... processes) {
@@ -327,11 +302,10 @@ class ProcessDeliveryTest {
 
         private MemoryWorld(CommandResultProbe resultProbe, HandoffSaveProbe handoffProbe) {
             this.stocks = new StockLedgerService(stock);
-            this.operations = new BusinessOperationService(stocks, null, documents);
+            this.operations = new BusinessOperationService(stocks, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit());
             this.splits = new MotherOrderSplitService(documents, stocks);
             BusinessWorkUnit unit = new MemoryBusinessWorkUnit(requests, resultProbe);
-            this.station = new ProcessStationService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
+            this.station = new ProcessStationService(documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
         }
 
         @Override
@@ -397,8 +371,7 @@ class ProcessDeliveryTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, HandoffSaveProbe handoffProbe) {
             BusinessWorkUnit unit = new MemoryBusinessWorkUnit(requests, resultProbe);
-            ProcessStationService next = new ProcessStationService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
+            ProcessStationService next = new ProcessStationService(documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
             return new WorldView(next, this);
         }
 
@@ -522,16 +495,20 @@ class ProcessDeliveryTest {
                         """);
                 apply(statement, "src/main/resources/db/mysql/V44__m3_command_request.sql");
                 apply(statement, "src/main/resources/db/mysql/V45__m3_mother_order_courier_identity.sql");
+                apply(statement, "src/main/resources/db/mysql/V60__m3_receipt_line_allocation.sql");
+                statement.execute("alter table biz_receipt_line add storage_conditions varchar(80)");
+                statement.execute("alter table biz_receipt_line add storage_instruction varchar(500)");
+                statement.execute("alter table biz_child_line_allocation add storage_conditions varchar(80)");
+                statement.execute("alter table biz_child_line_allocation add storage_instruction varchar(500)");
             }
             documents = new JdbcBusinessDocumentRepository(dataSource);
             stock = new JdbcStockLedgerRepository(dataSource);
             requests = new JdbcCommandRequestRepository(dataSource);
             stocks = new StockLedgerService(stock);
-            operations = new BusinessOperationService(stocks, null, documents);
+            operations = new BusinessOperationService(stocks, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit(dataSource));
             splits = new MotherOrderSplitService(documents, stocks);
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            station = new ProcessStationService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
+            station = new ProcessStationService(documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
         }
 
         @Override
@@ -605,8 +582,7 @@ class ProcessDeliveryTest {
         @Override
         public World withProbes(CommandResultProbe resultProbe, HandoffSaveProbe handoffProbe) {
             BusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, requests, resultProbe);
-            ProcessStationService next = new ProcessStationService(
-                    documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
+            ProcessStationService next = new ProcessStationService(documents, stocks, operations, new ScanCodeParser(), null, unit, handoffProbe);
             return new WorldView(next, this);
         }
 

@@ -113,12 +113,7 @@ class PrintJobServiceTest {
     void anotherCustomerCannotReadOrCreateTheJob() {
         InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
         StockLedgerService ledger = new StockLedgerService(new InMemoryStockLedgerRepository());
-        new BusinessOperationService(ledger, null, documents).confirmInbound(new ConfirmInboundCommand(
-                "MD-PRINT-AUTH", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-PRINT-AUTH", "",
-                "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                new BigDecimal("1"), "件", new BigDecimal("1"), "何琳", "", "",
-                "内壁刻字", "2026-10-20", "恒信珠宝"
-        ));
+        new BusinessOperationService(ledger, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit()).confirmInbound(new ConfirmInboundCommand("MD-PRINT-AUTH", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-PRINT-AUTH", "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("1"), "件", new BigDecimal("1"), "何琳", "", "", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
         PrintJobService guarded = new PrintJobService(repository);
         guarded.setDocumentAccess(documents, new BusinessDataAccess(documents, ledger));
         AuthUserAccount owner = account(DataScope.ALL, List.of());

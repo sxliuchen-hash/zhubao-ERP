@@ -65,7 +65,7 @@ public class RegisterImportPostingExecutionService {
     }
 
     public RegisterImportPostingExecutionResult post(String importBatchNo, PostRegisterImportBatchCommand command) {
-        return postInternal(importBatchNo, command, null);
+        throw new BusinessException("登记表入账必须登录");
     }
 
     public RegisterImportPostingExecutionResult post(String importBatchNo, PostRegisterImportBatchCommand command, AuthUserAccount account) {
@@ -87,7 +87,7 @@ public class RegisterImportPostingExecutionService {
             throw new BusinessException("入账映射计划存在警告行，请显式 allowWarnings 后再执行：" + importBatchNo);
         }
 
-        String operator = account == null ? normalizeOperator(command, batch) : account.operator();
+        String operator = account.operator();
         String postedAt = POST_TIME_FORMATTER.format(LocalDateTime.now());
         List<PreparedPosting> preparedPostings = plan.drafts().stream()
                 .filter(draft -> !"POSTED".equals(draft.status()))
@@ -155,9 +155,7 @@ public class RegisterImportPostingExecutionService {
     private RegisterImportPostingExecutionItem execute(String templateCode, PreparedPosting posting, AuthUserAccount account) {
         Object command = posting.businessCommand();
         if (command instanceof ConfirmInboundCommand inboundCommand) {
-            InboundConfirmationResult result = account == null
-                    ? businessOperationService.confirmInbound(inboundCommand)
-                    : businessOperationService.confirmInbound(inboundCommand, account.operator());
+            InboundConfirmationResult result = businessOperationService.confirmInbound(inboundCommand, account.operator());
             return item(posting.draft(), result.motherOrderCode(), result.ledgerCode(), "已执行 ConfirmInboundCommand");
         }
         if (command instanceof ShipFinishedStockCommand outboundCommand) {
@@ -342,13 +340,6 @@ public class RegisterImportPostingExecutionService {
 
     private boolean allowWarnings(PostRegisterImportBatchCommand command) {
         return command != null && Boolean.TRUE.equals(command.allowWarnings());
-    }
-
-    private String normalizeOperator(PostRegisterImportBatchCommand command, RegisterImportBatch batch) {
-        if (command != null && command.operator() != null && !command.operator().isBlank()) {
-            return command.operator().trim();
-        }
-        return batch.confirmedBy();
     }
 
     private String postingRemark(

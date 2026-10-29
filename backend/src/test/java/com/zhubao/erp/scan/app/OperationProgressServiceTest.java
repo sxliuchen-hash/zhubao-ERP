@@ -102,13 +102,13 @@ class OperationProgressServiceTest {
         StockLedgerService stocks = new StockLedgerService(stockRepository);
         InMemoryFinanceRepository finance = new InMemoryFinanceRepository();
         finance.replacePayroll("2026-10", List.of(payrollLine()));
-        BusinessOperationService operations = new BusinessOperationService(stocks, null, repository);
+        BusinessOperationService operations = new BusinessOperationService(stocks, null, repository, com.zhubao.erp.business.BusinessWorkFixture.unit());
         MotherOrderSplitService splits = new MotherOrderSplitService(repository, stocks);
         ScanCodeParser parser = new ScanCodeParser();
         BusinessDataAccess access = new BusinessDataAccess(repository, stocks);
         PermissionGuard permissions = new PermissionGuard();
-        ProcessStationService stations = new ProcessStationService(repository, stocks, operations, parser, access);
-        QualityRequirementService quality = new QualityRequirementService(repository, stocks, operations, parser, access);
+        ProcessStationService stations = new ProcessStationService(repository, stocks, operations, parser, access, com.zhubao.erp.business.BusinessWorkFixture.unit());
+        QualityRequirementService quality = new QualityRequirementService(repository, stocks, operations, parser, access, com.zhubao.erp.business.BusinessWorkFixture.unit());
         OperationProgressService service = new OperationProgressService(progress, repository, access, permissions);
         ScanContextService context = new ScanContextService(
                 new BusinessDocumentService(repository), stocks, access, stations, quality, permissions, parser, progress
@@ -235,7 +235,7 @@ class OperationProgressServiceTest {
         assertUnchanged(baseline, facts(repository, stocks, finance, "MD-S4-SPLIT"));
 
         String sticker = "JG|work_order|" + child;
-        stations.report(sticker, "雕刻", carver);
+        stations.report(sticker, "雕刻", carver, "fixture-" + java.util.UUID.randomUUID());
         FormalFacts afterHandoff = facts(repository, stocks, finance, "MD-S4-SPLIT");
         ScanProgressRecord supplement = service.save(command(child, "MD-S4-SPLIT", "PRODUCTION", "雕刻", "", "交付后补一句", "req-after-handoff"), carver);
         ScanProgressRecord stillOpen = service.save(command(child, "MD-S4-SPLIT", "PRODUCTION", "镶嵌", "", "镶嵌还在做", "req-setting-open"), setter);
@@ -244,13 +244,13 @@ class OperationProgressServiceTest {
         assertThat(repository.findMotherOrderByCode("MD-S4-SPLIT").orElseThrow().status()).isEqualTo("INBOUND_CONFIRMED");
         assertUnchanged(afterHandoff, facts(repository, stocks, finance, "MD-S4-SPLIT"));
 
-        stations.report(sticker, "镶嵌", setter);
-        stations.report(sticker, "抛光", worker("抛光"));
+        stations.report(sticker, "镶嵌", setter, "fixture-" + java.util.UUID.randomUUID());
+        stations.report(sticker, "抛光", worker("抛光"), "fixture-" + java.util.UUID.randomUUID());
         quality.submit(new QualityCheckCommand(sticker, "别人写的姓名", List.of(
                 new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "刻字错了"),
                 new QualityCheckLineCommand(2, QualityVerdicts.PASS, ""),
                 new QualityCheckLineCommand(3, QualityVerdicts.PASS, "")
-        )), inspector);
+        ), "fixture-" + java.util.UUID.randomUUID()), inspector);
         QualityRequirementCheck submitted = repository.findQualityRequirementCheck(child).orElseThrow();
         FormalFacts afterQuality = facts(repository, stocks, finance, "MD-S4-SPLIT");
         ScanProgressRecord qualityNote = service.save(command(child, "MD-S4-SPLIT", "QUALITY", "", "1", "初检后补充说明", "req-quality-0001"), inspector);
@@ -350,12 +350,7 @@ class OperationProgressServiceTest {
     }
 
     private void inbound(BusinessOperationService operations, String code, long customerId, String customerName) {
-        operations.confirmInbound(new ConfirmInboundCommand(
-                code, customerId, customerId, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""),
-                "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "测试入库",
-                THREE_LINES, "2026-10-20", customerName
-        ));
+        operations.confirmInbound(new ConfirmInboundCommand(code, customerId, customerId, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "测试入库", THREE_LINES, "2026-10-20", customerName, "fixture-" + java.util.UUID.randomUUID()));
     }
 
     private OutboundOrderRecord outbound(String child) {

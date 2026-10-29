@@ -273,3 +273,18 @@ export function fetchFinanceDetails(query: {
   params.set('size', String(query.size));
   return apiGet(`/api/finance/dashboard/details?${params.toString()}`);
 }
+
+export interface PendingSettlement {
+  yearMonth: string;
+  customerId: number | null;
+  customerName: string;
+  motherOrderCode: string;
+  workOrderCode: string;
+  processName: string;
+  reason: string;
+}
+
+export function fetchPendingSettlements(yearMonth: string, customerId?: number): Promise<PendingSettlement[]> {
+  return apiGet('/api/finance/unpriced?yearMonth=' + encodeURIComponent(yearMonth)
+    + (customerId == null ? '' : '&customerId=' + encodeURIComponent(customerId)));
+}

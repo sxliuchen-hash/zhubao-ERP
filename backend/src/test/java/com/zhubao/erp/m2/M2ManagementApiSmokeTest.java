@@ -271,33 +271,17 @@ class M2ManagementApiSmokeTest {
     }
 
     @Test
-    void exposesOperationsCenterApis() {
+    void exposesOperationsCenterApis() throws Exception {
         ResponseEntity<String> center = restTemplate.getForEntity("/api/operations/center", String.class);
-
         assertThat(center.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(center.getBody()).contains(
-                "\"overallStatus\"",
-                "\"services\"",
-                "后端 API",
-                "前端 PWA",
-                "数据库连接",
-                "数据库备份",
-                "\"runtimeMetrics\"",
-                "JVM 内存",
-                "\"errorSummaries\"",
-                "视频截取",
-                "\"recentLogs\"",
-                "TRACE-OPS-001",
-                "\"backupStatuses\"",
-                "DB-BACKUP-POC",
-                "RESTORE-DRILL-POC",
-                "\"fileSize\"",
-                "\"checksum\"",
-                "\"alerts\"",
-                "OPS-ALERT",
-                "\"checklist\"",
-                "OPS-CHK-008"
-        );
+        var data = json.readTree(center.getBody()).path("data");
+        for (String key : List.of("summary", "services", "runtimeMetrics", "errorSummaries", "recentLogs", "backupStatuses", "alerts", "checklist")) {
+            assertThat(data.has(key)).as(key).isTrue();
+        }
+        assertThat(data.path("recentLogs").isEmpty()).isTrue();
+        assertThat(data.path("errorSummaries").isEmpty()).isTrue();
+        assertThat(data.path("hardwareNodes").isEmpty()).isTrue();
+        assertThat(center.getBody()).contains("未配置", "OPS-CHK-008").doesNotContain("TRACE-OPS-001");
     }
 
     @Test

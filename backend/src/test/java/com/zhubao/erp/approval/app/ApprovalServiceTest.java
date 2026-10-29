@@ -6,7 +6,6 @@ import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.infra.InMemoryApprovalTaskRepository;
 import com.zhubao.erp.business.app.BusinessDataAccess;
-import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -42,7 +41,7 @@ class ApprovalServiceTest {
             }
         };
         ApprovalService scoped = new ApprovalService(new InMemoryApprovalTaskRepository(), documents);
-        scoped.createLossApprovalTask(lossCommand(), lossResult(true));
+        scoped.createLossApprovalTask(lossResult(true), com.zhubao.erp.business.BusinessWorkFixture.session());
         OperatorContext context = new OperatorContext("leader-a", RoleCode.WORKSHOP_LEADER, DataScope.TEAM);
         ApprovalActor assigned = new ApprovalActor("leader-a", "leader", RoleCode.WORKSHOP_LEADER, context);
         ApprovalActor other = new ApprovalActor("leader-b", "leader-b", RoleCode.WORKSHOP_LEADER, context);
@@ -63,7 +62,7 @@ class ApprovalServiceTest {
 
     @Test
     void createsWaitingApprovalTaskForOverLimitLossTrial() {
-        ApprovalTask task = service.createLossApprovalTask(lossCommand(), lossResult(true));
+        ApprovalTask task = service.createLossApprovalTask(lossResult(true), com.zhubao.erp.business.BusinessWorkFixture.session());
 
         assertThat(task.approvalCode()).isEqualTo("LOSS-UNIT-001");
         assertThat(task.scene()).isEqualTo("LOSS_APPROVAL");
@@ -82,7 +81,7 @@ class ApprovalServiceTest {
 
     @Test
     void autoApprovesLossTaskWhenLossIsWithinConfiguredThreshold() {
-        ApprovalTask task = service.createLossApprovalTask(lossCommand(), lossResult(false));
+        ApprovalTask task = service.createLossApprovalTask(lossResult(false), com.zhubao.erp.business.BusinessWorkFixture.session());
 
         assertThat(task.status()).isEqualTo(ApprovalStatus.AUTO_APPROVED);
         assertThat(task.locked()).isTrue();
@@ -92,7 +91,7 @@ class ApprovalServiceTest {
 
     @Test
     void decidesWaitingApprovalOnceAndRecordsTheSessionOperator() {
-        service.createLossApprovalTask(lossCommand(), lossResult(true));
+        service.createLossApprovalTask(lossResult(true), com.zhubao.erp.business.BusinessWorkFixture.session());
         ApprovalActor leader = actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
 
         ApprovalTask decided = service.decide(
@@ -117,7 +116,7 @@ class ApprovalServiceTest {
 
     @Test
     void hidesTasksOutsideTheViewerSceneAndRejectsSelfApproval() {
-        service.createLossApprovalTask(lossCommand(), lossResult(true));
+        service.createLossApprovalTask(lossResult(true), com.zhubao.erp.business.BusinessWorkFixture.session());
         ApprovalTask account = repository.save(new ApprovalTask("AUTH-HISTORY", "ACCOUNT_MANAGEMENT", "planner", "历史账号申请", ApprovalStatus.WAITING_APPROVAL, "系统管理员", "总经理", "GENERAL_MANAGER", "amber", "WAITING", "", "", false, "2026-07-01", null, null, null, false));
         ApprovalActor leader = actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
         ApprovalActor finance = actor("财务", "finance", RoleCode.FINANCE_STATISTICIAN);
@@ -157,7 +156,7 @@ class ApprovalServiceTest {
 
     @Test
     void concurrentDecisionsSucceedOnlyOnce() throws Exception {
-        service.createLossApprovalTask(lossCommand(), lossResult(true));
+        service.createLossApprovalTask(lossResult(true), com.zhubao.erp.business.BusinessWorkFixture.session());
         ApprovalActor leader = actor("leader-a", "leader", RoleCode.WORKSHOP_LEADER);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch ready = new CountDownLatch(2);
@@ -191,29 +190,6 @@ class ApprovalServiceTest {
 
     private ApprovalActor actor(String operator, String username, RoleCode role) {
         return new ApprovalActor(operator, username, role);
-    }
-
-    private ApproveLossCommand lossCommand() {
-        return new ApproveLossCommand(
-                "LOSS-UNIT-001",
-                "MD-UNIT-001",
-                "ZD-UNIT-001",
-                1001L,
-                null,
-                "MAT-UNIT",
-                "polish",
-                "operator-a",
-                "leader-a",
-                bd("121.150"),
-                bd("116.550"),
-                bd("0.000"),
-                bd("2.0"),
-                bd("56"),
-                bd("0.80"),
-                bd("6.00"),
-                "HO-UNIT-001",
-                "unit test"
-        );
     }
 
     private LossApprovalResult lossResult(boolean overLimit) {

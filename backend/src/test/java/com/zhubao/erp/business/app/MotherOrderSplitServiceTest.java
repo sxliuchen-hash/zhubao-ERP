@@ -71,7 +71,7 @@ class MotherOrderSplitServiceTest {
         stockRepository = new InMemoryStockLedgerRepository();
         stockLedgerService = new StockLedgerService(stockRepository);
         documents = new InMemoryBusinessDocumentRepository();
-        operations = new BusinessOperationService(stockLedgerService, null, documents);
+        operations = new BusinessOperationService(stockLedgerService, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit());
         splitService = new MotherOrderSplitService(
                 documents,
                 stockLedgerService,
@@ -94,7 +94,7 @@ class MotherOrderSplitServiceTest {
 
     @Test
     void 多材质不能整单或跨材质子单且失败不占用来源() {
-        var catalog = new MasterDataService(new com.zhubao.erp.business.infra.InMemoryMasterDataRepository());
+        var catalog = new MasterDataService(com.zhubao.erp.business.infra.MasterDataFixture.withCustomers());
         catalog.saveMaterial(new com.zhubao.erp.business.domain.MaterialProfile("PT950", "铂金", "", "", true));
         var unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
         var currentOperations = new BusinessOperationService(stockLedgerService, null, documents, unit);
@@ -390,7 +390,7 @@ class MotherOrderSplitServiceTest {
         InMemoryStockLedgerRepository stocks = new InMemoryStockLedgerRepository();
         StockLedgerService ledger = new StockLedgerService(new SecondSessionSaveFails(stocks));
         InMemoryBusinessDocumentRepository docs = new InMemoryBusinessDocumentRepository();
-        BusinessOperationService ops = new BusinessOperationService(ledger, null, docs);
+        BusinessOperationService ops = new BusinessOperationService(ledger, null, docs, com.zhubao.erp.business.BusinessWorkFixture.unit());
         MotherOrderSplitService splits = new MotherOrderSplitService(
                 docs,
                 ledger,
@@ -466,32 +466,7 @@ class MotherOrderSplitServiceTest {
     }
 
     private ConfirmInboundCommand inboundCommand(String code, String quantity, String weight) {
-        return new ConfirmInboundCommand(
-                code,
-                1001L,
-                1001L,
-                "AU9999",
-                "2026-10-08",
-                "顺丰",
-                "SF" + code.replace("-", ""),
-                "",
-                "何琳",
-                "何琳",
-                "戒托",
-                "",
-                null,
-                "",
-                "RAW-CUSTOMER",
-                new BigDecimal(quantity),
-                "件",
-                new BigDecimal(weight),
-                "何琳",
-                "",
-                "测试入库",
-                "内壁刻字",
-                "2026-10-20",
-                "恒信珠宝"
-        );
+        return new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal(quantity), "件", new BigDecimal(weight), "何琳", "", "测试入库", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID());
     }
 
     private SplitMotherOrderCommand command(String motherOrderCode, SplitMotherOrderLine... lines) {

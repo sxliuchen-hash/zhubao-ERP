@@ -61,12 +61,12 @@ class ScanContextServiceTest {
         InMemoryStockLedgerRepository stockRepository = new InMemoryStockLedgerRepository();
         stocks = new StockLedgerService(stockRepository);
         repository = new InMemoryBusinessDocumentRepository();
-        operations = new BusinessOperationService(stocks, null, repository);
+        operations = new BusinessOperationService(stocks, null, repository, com.zhubao.erp.business.BusinessWorkFixture.unit());
         splits = new MotherOrderSplitService(repository, stocks);
         ScanCodeParser parser = new ScanCodeParser();
         BusinessDataAccess access = new BusinessDataAccess(repository, stocks);
-        stations = new ProcessStationService(repository, stocks, operations, parser, access);
-        quality = new QualityRequirementService(repository, stocks, operations, parser, access);
+        stations = new ProcessStationService(repository, stocks, operations, parser, access, com.zhubao.erp.business.BusinessWorkFixture.unit());
+        quality = new QualityRequirementService(repository, stocks, operations, parser, access, com.zhubao.erp.business.BusinessWorkFixture.unit());
         context = new ScanContextService(
                 new BusinessDocumentService(repository),
                 stocks,
@@ -202,8 +202,8 @@ class ScanContextServiceTest {
                 new QualityCheckLineCommand(1, QualityVerdicts.FAIL, "刻字错了"),
                 new QualityCheckLineCommand(2, QualityVerdicts.PASS, ""),
                 new QualityCheckLineCommand(3, QualityVerdicts.PASS, "")
-        )), inspector());
-        quality.openRework(sticker, inspector());
+        ), "fixture-" + java.util.UUID.randomUUID()), inspector());
+        quality.openRework(sticker, inspector(), "fixture-" + java.util.UUID.randomUUID());
         int ledgers = stocks.ledgers().size();
 
         ScanContextResponse response = context.query(
@@ -382,9 +382,9 @@ class ScanContextServiceTest {
     private String finishedChild(String motherCode) {
         String childCode = splitChild(motherCode, THREE_LINES);
         String sticker = "JG|work_order|" + childCode;
-        stations.report(sticker, "雕刻", worker("雕刻"));
-        stations.report(sticker, "镶嵌", worker("镶嵌"));
-        stations.report(sticker, "抛光", worker("抛光"));
+        stations.report(sticker, "雕刻", worker("雕刻"), "fixture-" + java.util.UUID.randomUUID());
+        stations.report(sticker, "镶嵌", worker("镶嵌"), "fixture-" + java.util.UUID.randomUUID());
+        stations.report(sticker, "抛光", worker("抛光"), "fixture-" + java.util.UUID.randomUUID());
         return childCode;
     }
 
@@ -421,32 +421,7 @@ class ScanContextServiceTest {
     }
 
     private void inbound(String code, String quantity, String weight, String requirement) {
-        operations.confirmInbound(new ConfirmInboundCommand(
-                code,
-                1001L,
-                1001L,
-                "AU9999",
-                "2026-10-08",
-                "顺丰",
-                "SF" + code.replace("-", ""),
-                "",
-                "何琳",
-                "何琳",
-                "戒托",
-                "",
-                null,
-                "",
-                "RAW-CUSTOMER",
-                new BigDecimal(quantity),
-                "件",
-                new BigDecimal(weight),
-                "何琳",
-                "",
-                "测试入库",
-                requirement,
-                "2026-10-20",
-                "恒信珠宝"
-        ));
+        operations.confirmInbound(new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal(quantity), "件", new BigDecimal(weight), "何琳", "", "测试入库", requirement, "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
     }
 
     private StockDimension finished(StockDimension from, String warehouse) {

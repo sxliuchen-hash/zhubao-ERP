@@ -43,12 +43,7 @@ class OrderChangeServiceTest {
     void setUp() {
         documents = new InMemoryBusinessDocumentRepository();
         StockLedgerService ledger = new StockLedgerService(new InMemoryStockLedgerRepository());
-        new BusinessOperationService(ledger, null, documents).confirmInbound(new ConfirmInboundCommand(
-                "MD-CHANGE-001", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-CHANGE-001", "",
-                "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单",
-                "内壁刻字", "2026-10-20", "恒信珠宝"
-        ));
+        new BusinessOperationService(ledger, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit()).confirmInbound(new ConfirmInboundCommand("MD-CHANGE-001", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-CHANGE-001", "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
         documents.saveProcessStationHandoff(new ProcessStationHandoff(
                 "MD-CHANGE-001", "雕刻", "雕刻工", "STK-1", "2026-10-09T10:00:00"
         ));
@@ -142,21 +137,15 @@ class OrderChangeServiceTest {
         InMemoryBusinessDocumentRepository localDocuments = new InMemoryBusinessDocumentRepository();
         InMemoryStockLedgerRepository stocks = new InMemoryStockLedgerRepository();
         StockLedgerService ledger = new StockLedgerService(stocks);
-        BusinessOperationService operations = new BusinessOperationService(ledger, null, localDocuments);
-        operations.confirmInbound(new ConfirmInboundCommand(
-                "MD-ROUND-001", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-ROUND-001", "",
-                "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单",
-                "内壁刻字", "2026-10-20", "恒信珠宝"
-        ));
+        BusinessOperationService operations = new BusinessOperationService(ledger, null, localDocuments, com.zhubao.erp.business.BusinessWorkFixture.unit());
+        operations.confirmInbound(new ConfirmInboundCommand("MD-ROUND-001", 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF-ROUND-001", "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "原单", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
         localDocuments.saveMotherSplitState(new MotherSplitState(
                 "MD-ROUND-001", MotherSplitState.KEEP, "VC-R", "收货员", "2026-10-08T00:00:00"
         ));
         InMemoryOrderRequirementRepository requirements = new InMemoryOrderRequirementRepository();
         MemoryBusinessWorkUnit work = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
         OrderChangeService changes = new OrderChangeService(new InMemoryOrderChangeRepository(), localDocuments, work, null, null, requirements);
-        ProcessStationService stations = new ProcessStationService(
-                localDocuments, ledger, operations, new ScanCodeParser(), null, work, requirements);
+        ProcessStationService stations = new ProcessStationService(localDocuments, ledger, operations, new ScanCodeParser(), null, work, requirements);
         AuthUserAccount carver = new AuthUserAccount(
                 "雕刻工", "hash", "雕刻工", RoleCode.OPERATOR, DataScope.ALL, true, true,
                 Instant.now(), 0, null, List.of(), false, false, List.of("雕刻")
@@ -180,8 +169,7 @@ class OrderChangeServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已经交过");
 
-        QualityRequirementService quality = new QualityRequirementService(
-                localDocuments, ledger, operations, new ScanCodeParser(), null, work, requirements);
+        QualityRequirementService quality = new QualityRequirementService(localDocuments, ledger, operations, new ScanCodeParser(), null, work, requirements);
         AuthUserAccount inspector = account("质检员", RoleCode.QUALITY_INSPECTOR);
         var view = quality.lookup(roundCode, inspector);
         assertThat(view.orderCode()).isEqualTo(roundCode);
@@ -234,10 +222,7 @@ class OrderChangeServiceTest {
         assertThat(documents.listProcessStationHandoffs("MD-CHANGE-001")).hasSize(1);
         assertThat(requirements.listByMother("MD-CHANGE-001")).singleElement()
                 .satisfies(round -> assertThat(round.processName()).isEqualTo("雕刻"));
-        var station = new ProcessStationService(
-                documents, new StockLedgerService(new InMemoryStockLedgerRepository()), null, new ScanCodeParser(),
-                null, null, HandoffSaveProbe.NONE, requirements
-        );
+        var station = new ProcessStationService(documents, new StockLedgerService(new InMemoryStockLedgerRepository()), null, new ScanCodeParser(), null, null, HandoffSaveProbe.NONE, requirements);
         AuthUserAccount leader = account("组长", RoleCode.WORKSHOP_LEADER);
         assertThat(station.lookup("MD-CHANGE-001", leader).processingRequirement()).isEqualTo("改为外圈刻字");
         assertThat(station.lookup("MD-CHANGE-001", leader).dueDate()).isEqualTo("2026-11-01");
@@ -263,13 +248,8 @@ class OrderChangeServiceTest {
 
     @Test
     void otherCustomerAndNonFinanceCannotSeeForeignOrderOrAmounts() {
-        new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository()), null, documents)
-                .confirmInbound(new ConfirmInboundCommand(
-                        "MD-OTHER", 2002L, 2002L, "AU9999", "2026-10-08", "顺丰", "SF-OTHER", "",
-                        "别人", "别人", "戒托", "", null, "", "RAW-CUSTOMER",
-                        new BigDecimal("1"), "件", new BigDecimal("2"), "别人", "", "原单",
-                        "别人的要求", "2026-10-20", "另一客户"
-                ));
+        new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository()), null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit())
+                .confirmInbound(new ConfirmInboundCommand("MD-OTHER", 2002L, 2002L, "AU9999", "2026-10-08", "顺丰", "SF-OTHER", "", "别人", "别人", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("1"), "件", new BigDecimal("2"), "别人", "", "原单", "别人的要求", "2026-10-20", "另一客户", "fixture-" + java.util.UUID.randomUUID()));
         BusinessDataAccess access = new BusinessDataAccess(documents, new StockLedgerService(new InMemoryStockLedgerRepository()));
         OrderChangeService scoped = new OrderChangeService(new InMemoryOrderChangeRepository(), documents, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), access, null, new InMemoryOrderRequirementRepository());
         AuthUserAccount limited = new AuthUserAccount(

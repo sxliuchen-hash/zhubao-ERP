@@ -56,7 +56,7 @@ describe('单内退售后', () => {
     expect(wrapper.text()).toContain('RET-1 / STK-RET');
     wrapper.unmount();
   });
-  it('非幂等接口结果未知时保留原单并停止重交，只读核对不发第二次写请求', async () => {
+  it('结果未知锁定原内容，原请求重试仍用相同编号和库存维度', async () => {
     vi.mocked(returnCustomerShipment).mockRejectedValueOnce(new ApiRequestError('响应超时', 408, 408));
     const wrapper = mount(InventoryAftercarePanel, { props: { row } });
     await fillReturn(wrapper);
@@ -72,6 +72,13 @@ describe('单内退售后', () => {
     expect(fetchStockLedgers).toHaveBeenCalledOnce();
     expect(returnCustomerShipment).toHaveBeenCalledOnce();
     expect(wrapper.emitted('saved')).toBeUndefined();
+    const first = structuredClone(vi.mocked(returnCustomerShipment).mock.calls[0]);
+    expect(first[1]?.requestId).toMatch(/^aftercare-/);
+    vi.mocked(returnCustomerShipment).mockRejectedValueOnce(new ApiRequestError('仍未确认', 503, 503));
+    await wrapper.findAll('button').find(button => button.text() === '原请求重试')!.trigger('click');
+    await flushPromises();
+    expect(returnCustomerShipment).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(returnCustomerShipment).mock.calls[1]).toEqual(first);
     wrapper.unmount();
   });
   it('售后结论必须明确选择，调用原复核契约并保留原完整库存维度', async () => {

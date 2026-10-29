@@ -267,9 +267,7 @@ public class MobileIntakeService {
                 command.dueDate().trim(),
                 customerName
         );
-        InboundConfirmationResult confirmed = session == null
-                ? businessOperationService.confirmInbound(inbound)
-                : businessOperationService.postInboundInSession(inbound, session);
+        InboundConfirmationResult confirmed = businessOperationService.postInboundInSession(inbound, session);
         if (!command.lines().isEmpty()) {
             if (session == null || stockLedgerService == null) throw new BusinessException("逐材质收货工作单元尚未装配");
             BigDecimal totalQuantity = BigDecimal.ZERO;

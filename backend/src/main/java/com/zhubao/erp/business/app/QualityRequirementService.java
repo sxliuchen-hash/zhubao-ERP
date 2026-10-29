@@ -56,12 +56,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
-import java.util.Objects;
 
 /**
  * 质检对照加工要求。质检员取当前登录账号，不合格才调用现有冻结命令。
  * 带请求编号的初检、开返工、返工报工、复检和放行进入业务工作单元。
- * 未带请求编号时，库存和质检事实仍各自提交，不回放。
+ * 缺少稳定请求编号直接拒绝，库存和质检事实不能各自提交。
  */
 @Service
 public class QualityRequirementService {
@@ -197,7 +196,7 @@ public class QualityRequirementService {
 
     /**
      * 带请求编号时，初检条款、轮次、适用冻结流水和成功结果同一次提交。
-     * 同账号、同请求、同规范化内容回放原结果。未带编号时仍各自提交，不回放。
+     * 同账号、同请求、同规范化内容回放原结果。缺少编号直接拒绝。
      * 未装配工作单元时，带编号的调用直接拒绝，不能退回旧路径。
      */
     public QualityCheckResult submit(QualityCheckCommand command, AuthUserAccount account, String requestId) {
@@ -206,9 +205,7 @@ public class QualityRequirementService {
         if (labelGuard != null && command != null) {
             labelGuard.check(command.code(), ticket.motherOrderCode(), ticket.orderCode(), command.labelExceptionReason(), account);
         }
-        if (requestId == null || requestId.isBlank()) {
-            return postInitial(command, account, ticket, null);
-        }
+        if (requestId == null || requestId.isBlank()) throw new BusinessException("质检动作必须提供稳定请求编号");
         requireWorkUnit();
         List<QualityCheckLine> judged = previewLines(ticket, command.lines());
         String text = workUnit.execute(new CommandCall(
@@ -233,9 +230,7 @@ public class QualityRequirementService {
     public QualityReworkResult openRework(String rawCode, AuthUserAccount account, String requestId) {
         requireAccount(account);
         Ticket ticket = requireTicket(rawCode, account);
-        if (requestId == null || requestId.isBlank()) {
-            return postRework(account, ticket, null);
-        }
+        if (requestId == null || requestId.isBlank()) throw new BusinessException("质检动作必须提供稳定请求编号");
         requireWorkUnit();
         QualityRequirementCheck check = findCheck(ticket.orderCode(), null)
                 .orElseThrow(() -> new BusinessException("请先提交质检对照"));
@@ -254,9 +249,7 @@ public class QualityRequirementService {
         requireAccount(account);
         Ticket ticket = requireTicket(command == null ? null : command.code(), account);
         String requestId = command == null ? null : command.requestId();
-        if (requestId == null || requestId.isBlank()) {
-            return postReport(account, ticket, null);
-        }
+        if (requestId == null || requestId.isBlank()) throw new BusinessException("质检动作必须提供稳定请求编号");
         requireWorkUnit();
         QualityRequirementCheck check = findCheck(ticket.orderCode(), null)
                 .orElseThrow(() -> new BusinessException("请先提交质检对照"));
@@ -275,9 +268,7 @@ public class QualityRequirementService {
         requireAccount(account);
         Ticket ticket = requireTicket(command == null ? null : command.code(), account);
         String requestId = command == null ? null : command.requestId();
-        if (requestId == null || requestId.isBlank()) {
-            return postRecheck(command, account, ticket, null);
-        }
+        if (requestId == null || requestId.isBlank()) throw new BusinessException("质检动作必须提供稳定请求编号");
         requireWorkUnit();
         List<QualityCheckLine> judged = judge(ProcessingRequirementClauses.split(ticket.processingRequirement()), command.lines());
         QualityReworkReport report = reportOf(findCheck(ticket.orderCode(), null).orElse(null), null);
@@ -298,9 +289,7 @@ public class QualityRequirementService {
         requireAccount(account);
         Ticket ticket = requireTicket(command == null ? null : command.code(), account);
         String requestId = command == null ? null : command.requestId();
-        if (requestId == null || requestId.isBlank()) {
-            return postRelease(account, ticket, null);
-        }
+        if (requestId == null || requestId.isBlank()) throw new BusinessException("质检动作必须提供稳定请求编号");
         requireWorkUnit();
         QualityRound latest = latestRound(visibleRounds(ticket.orderCode(), findCheck(ticket.orderCode(), null).orElse(null), null));
         String marker = latest == null ? "" : latest.roundCode() + "/" + latest.outcome();
@@ -316,32 +305,6 @@ public class QualityRequirementService {
     }
 
     /** 桌面放行仍用原命令。能否放行看最新轮次和真实库存，不把原质检的冻结标志改成未冻结。 */
-    public QualityReleaseResult release(ReleaseQualityStockCommand submitted, AuthUserAccount account) {
-        requireAccount(account);
-        ReleaseQualityStockCommand command = BusinessCommandActors.withActor(submitted, account.operator().trim());
-        Ticket ticket = resolve(command.workOrderCode());
-        assertCustomer(ticket, account);
-        Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
-        if (!Objects.equals(ticket.motherOrderCode(), command.motherOrderCode())
-                || !Objects.equals(ticket.customerId(), command.customerId())
-                || !Objects.equals(ticket.ownerCustomerId(), ownerCustomerId)
-                || !Objects.equals(ticket.materialCode(), command.materialCode())
-                || !Objects.equals(ticket.warehouseCode(), command.fromWarehouseCode())
-                || !lastProcess(ticket).equals(command.process())) {
-            throw new BusinessException("放行的客户、母单、物料、来源仓库和工序必须与正式工单一致");
-        }
-        QualityRequirementCheck check = findCheck(ticket.orderCode(), null)
-                .orElseThrow(() -> new BusinessException("请先完成质检对照，不能直接放行"));
-        QualityRound latest = latestRound(visibleRounds(ticket.orderCode(), check, null));
-        String block = releaseBlock(ticket, latest, null);
-        if (!block.isEmpty()
-                || !Objects.equals(check.motherOrderCode(), ticket.motherOrderCode())
-                || !Objects.equals(check.qualityCaseCode(), command.qualityCaseCode())) {
-            throw new BusinessException(block.isEmpty() ? "只有最新轮次合格或让步才能放行" : block);
-        }
-        return businessOperationService.releaseQualityStock(command);
-    }
-
     private QualityCheckResult postInitial(
             QualityCheckCommand command,
             AuthUserAccount account,
@@ -765,34 +728,18 @@ public class QualityRequirementService {
     }
 
     private void saveCheck(QualityRequirementCheck check, WorkSession session) {
-        if (session == null) {
-            documents.saveQualityRequirementCheck(check);
-            return;
-        }
         documents.saveQualityRequirementCheck(check, session);
     }
 
     private void saveRound(QualityRound round, WorkSession session) {
-        if (session == null) {
-            documents.saveQualityRound(round);
-            return;
-        }
         documents.saveQualityRound(round, session);
     }
 
     private void saveReport(QualityReworkReport report, WorkSession session) {
-        if (session == null) {
-            documents.saveQualityReworkReport(report);
-            return;
-        }
         documents.saveQualityReworkReport(report, session);
     }
 
     private void attachRework(String orderCode, String reworkOrderCode, WorkSession session) {
-        if (session == null) {
-            documents.attachQualityRework(orderCode, reworkOrderCode);
-            return;
-        }
         documents.attachQualityRework(orderCode, reworkOrderCode, session);
     }
 

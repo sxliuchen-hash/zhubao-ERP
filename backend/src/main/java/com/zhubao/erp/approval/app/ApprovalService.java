@@ -5,7 +5,6 @@ import com.zhubao.erp.approval.domain.ApprovalDecisionCommand;
 import com.zhubao.erp.approval.domain.ApprovalStatus;
 import com.zhubao.erp.approval.domain.ApprovalTask;
 import com.zhubao.erp.approval.domain.ApprovalTaskRepository;
-import com.zhubao.erp.business.domain.ApproveLossCommand;
 import com.zhubao.erp.business.domain.LossApprovalResult;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.common.error.BusinessException;
@@ -36,7 +35,11 @@ public class ApprovalService {
         this.businessDataAccess = businessDataAccess;
     }
 
-    public ApprovalTask createLossApprovalTask(ApproveLossCommand command, LossApprovalResult result) {
+    public ApprovalTask createLossApprovalTask(LossApprovalResult result, com.zhubao.erp.work.domain.WorkSession session) {
+        return repository.insert(lossTask(result), session);
+    }
+
+    private ApprovalTask lossTask(LossApprovalResult result) {
         String createdAt = now();
         ApprovalStatus status = result.overLimit() ? ApprovalStatus.WAITING_APPROVAL : ApprovalStatus.AUTO_APPROVED;
         ApprovalTask task = new ApprovalTask(
@@ -59,7 +62,7 @@ public class ApprovalService {
                 status == ApprovalStatus.AUTO_APPROVED ? "Within configured loss threshold." : null,
                 status == ApprovalStatus.AUTO_APPROVED
         );
-        return repository.save(task);
+        return task;
     }
 
     /**

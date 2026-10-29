@@ -7,6 +7,8 @@ import {
   fetchFinanceDetails,
   fetchOperatingStatement,
   fetchPayables,
+  fetchPendingSettlements,
+  type PendingSettlement,
   fetchStatement,
   issueConsumable,
   payPayable,
@@ -89,6 +91,24 @@ const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai'
 const yearMonth = ref(today.slice(0, 7));
 const statement = ref<CustomerStatement | null>(null);
 const statementReading = ref(false);
+const pendingSettlements = ref<PendingSettlement[] | null>(null);
+const pendingReading = ref(false);
+const pendingError = ref('');
+let pendingSequence = 0;
+const settlementLocked = ref(false);
+async function loadPendingSettlements() {
+  const parsed = normalizedCustomer(customerId.value);
+  if (!parsed.ok) { pendingError.value = '请填写有效客户编号或留空查看授权范围'; return; }
+  const sequence = ++pendingSequence;
+  pendingReading.value = true; pendingError.value = '';
+  try {
+    const rows = await fetchPendingSettlements(yearMonth.value.trim(), parsed.id ? Number(parsed.id) : undefined);
+    if (sequence === pendingSequence) pendingSettlements.value = rows;
+  } catch (caught) {
+    if (sequence === pendingSequence) { pendingSettlements.value = null; pendingError.value = caught instanceof Error ? caught.message : '缺项清单读取失败'; }
+  } finally { if (sequence === pendingSequence) pendingReading.value = false; }
+}
+watch([yearMonth, customerId], () => { ++pendingSequence; pendingReading.value = false; pendingSettlements.value = null; pendingError.value = ''; });
 const settlementType = ref('CHILD');
 const settlementCode = ref('');
 const allocationReceipt = ref('');
@@ -710,6 +730,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  ++pendingSequence;
   disposed = true;
   ++statementSeq;
   overviewSeq += 1;
@@ -748,13 +769,13 @@ function kindLabel(kind: string) {
           type="button"
           class="table-action"
           :class="{ active: section === item.key }"
-          @click="section = item.key"
+          :disabled="settlementLocked" @click="section = item.key"
         >
           {{ item.label }}
         </button>
         <details class="info-disclosure finance-other-sections">
           <summary>{{ sections.slice(3).some(item => item.key === section) ? sectionLabel : '更多财务功能' }}</summary>
-          <div class="info-toolbar"><button v-for="item in sections.slice(3)" :key="item.key" type="button" class="table-action" :class="{ active: section === item.key }" @click="section = item.key">{{ item.label }}</button></div>
+          <div class="info-toolbar"><button v-for="item in sections.slice(3)" :key="item.key" type="button" class="table-action" :class="{ active: section === item.key }" :disabled="settlementLocked" @click="section = item.key">{{ item.label }}</button></div>
         </details>
       </div>
     </header>
@@ -1106,13 +1127,22 @@ function kindLabel(kind: string) {
       <button class="secondary-button" type="button" :disabled="busy" @click="allocateExisting">核销到所选订单</button>
       <h3>交货后结单</h3>
       <label>单据类型
-        <select v-model="settlementType" aria-label="结单单据类型">
+        <select v-model="settlementType" aria-label="结单单据类型" :disabled="settlementLocked">
           <option value="CHILD">子单</option>
           <option value="MOTHER">未拆母单</option>
         </select>
       </label>
-      <label>单号<input v-model="settlementCode" aria-label="结单单号" /></label>
-      <SettlementPanel v-if="settlementCode.trim()" :target-type="settlementType" :target-code="settlementCode.trim()" />
+      <label>单号<input v-model="settlementCode" aria-label="结单单号" :disabled="settlementLocked" /></label>
+      <SettlementPanel v-if="settlementCode.trim()" :target-type="settlementType" :target-code="settlementCode.trim()" @locked="settlementLocked = $event" />
+      <details aria-label="待结单与历史待核"><summary>待结单与历史待核</summary>
+        <p>截至所选月末，按真实交货与结单凭据核对；日期不明单据会单独标记。</p>
+        <button class="secondary-button" type="button" :disabled="pendingReading" @click="loadPendingSettlements">{{ pendingReading ? '正在读取' : '读取缺项清单' }}</button>
+        <p v-if="pendingError" role="alert">{{ pendingError }}</p>
+        <p v-else-if="pendingSettlements?.length === 0">授权范围内暂无待结单或待核项。</p>
+        <article v-for="row in pendingSettlements || []" :key="row.motherOrderCode + '/' + row.workOrderCode" class="desk-card">
+          <strong>{{ row.workOrderCode || row.motherOrderCode }} · {{ row.customerName }}</strong><span>{{ row.reason }}</span>
+        </article>
+      </details>
     </section>
 
     <section v-else-if="section === 'payroll'" class="section-block">

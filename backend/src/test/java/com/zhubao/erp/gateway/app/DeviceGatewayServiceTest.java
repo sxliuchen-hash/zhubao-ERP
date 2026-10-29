@@ -46,7 +46,7 @@ class DeviceGatewayServiceTest {
         InMemoryDeviceReadingRepository readingRepository = new InMemoryDeviceReadingRepository();
         InMemoryReadingConsumptionRepository consumptionRepository = new InMemoryReadingConsumptionRepository();
         stockLedgerService = new StockLedgerService(new InMemoryStockLedgerRepository());
-        businessOperationService = new BusinessOperationService(stockLedgerService);
+        businessOperationService = new BusinessOperationService(stockLedgerService, null, null, com.zhubao.erp.business.BusinessWorkFixture.unit());
         service = new DeviceGatewayService(
                 deviceRepository, readingRepository, consumptionRepository,
                 new DeviceReadingNormalizer(), passwordHasher,
@@ -142,9 +142,7 @@ class DeviceGatewayServiceTest {
     void consumesReadyScaleReadingIntoWeighHandover() {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "ST,GS,+000123.45,g"));
 
-        ReadingConsumption consumption = service.consume(
-                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "子工单", "ZD-20260706-001", "打包称重"),
-                OPERATOR);
+        ReadingConsumption consumption = service.consume(bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "子工单", "ZD-20260706-001", "打包称重"), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false));
 
         assertThat(consumption.consumptionCode()).isEqualTo("RC-" + reading.readingCode());
         assertThat(consumption.operator()).isEqualTo("周凯");
@@ -157,16 +155,14 @@ class DeviceGatewayServiceTest {
     void rejectsIntentThatDoesNotMatchReadingType() {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
 
-        assertThatThrownBy(() -> service.consume(
-                bridgeConsume(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR))
+        assertThatThrownBy(() -> service.consume(bridgeConsume(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("只能用于");
     }
 
     @Test
     void rejectsConsumingUnknownReading() {
-        assertThatThrownBy(() -> service.consume(
-                bridgeConsume("DR-NOPE", "DISMISS", "", "", ""), OPERATOR))
+        assertThatThrownBy(() -> service.consume(bridgeConsume("DR-NOPE", "DISMISS", "", "", ""), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("未找到读数");
     }
@@ -176,23 +172,20 @@ class DeviceGatewayServiceTest {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "garbled"));
         assertThat(reading.status()).isEqualTo(DeviceReadingStatus.BLOCKED);
 
-        assertThatThrownBy(() -> service.consume(
-                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
+        assertThatThrownBy(() -> service.consume(bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("只能忽略");
 
-        ReadingConsumption dismissed = service.consume(
-                bridgeConsume(reading.readingCode(), "DISMISS", "", "", "无效报文"), OPERATOR);
+        ReadingConsumption dismissed = service.consume(bridgeConsume(reading.readingCode(), "DISMISS", "", "", "无效报文"), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false));
         assertThat(dismissed.intent().name()).isEqualTo("DISMISS");
     }
 
     @Test
     void rejectsDoubleConsumption() {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
-        service.consume(bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR);
+        service.consume(bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false));
 
-        assertThatThrownBy(() -> service.consume(
-                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR))
+        assertThatThrownBy(() -> service.consume(bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已被消费");
     }
@@ -259,7 +252,7 @@ class DeviceGatewayServiceTest {
                 passwordHasher,
                 new GatewayRateLimiter(2, 60),
                 new GatewayReplayGuard(false, 300),
-                new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository())));
+                new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository()), null, null, com.zhubao.erp.business.BusinessWorkFixture.unit()));
 
         limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
         limitedService.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.7g"));
@@ -283,7 +276,7 @@ class DeviceGatewayServiceTest {
                 passwordHasher,
                 new GatewayRateLimiter(1000, 60),
                 new GatewayReplayGuard(true, 300),
-                new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository())));
+                new BusinessOperationService(new StockLedgerService(new InMemoryStockLedgerRepository()), null, null, com.zhubao.erp.business.BusinessWorkFixture.unit()));
 
         String timestamp = java.time.Instant.now().toString();
         SubmitDeviceReadingCommand first = new SubmitDeviceReadingCommand(
@@ -308,8 +301,7 @@ class DeviceGatewayServiceTest {
         DeviceReading reading = service.ingest(new SubmitDeviceReadingCommand(
                 "SCAN-PC-01", DEVICE_KEY, "SCAN_EVENT", "WO|ZD-20260706-009|PROC=POLISH", "子工单", "ZD-20260706-009", ""));
 
-        ReadingConsumption consumption = service.consume(
-                bridgeConsume(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR);
+        ReadingConsumption consumption = service.consume(bridgeConsume(reading.readingCode(), "SCAN_TO_REPORT", "", "", ""), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false));
 
         assertThat(consumption.businessRefCode()).isEqualTo("ZD-20260706-009");
     }
@@ -326,7 +318,7 @@ class DeviceGatewayServiceTest {
                 "WIP-LINE-01", "SEMI-FINISHED", new BigDecimal("10"), "抛光");
 
         int before = stockLedgerService.ledgers().size();
-        assertThatThrownBy(() -> service.consume(consume, OPERATOR)).isInstanceOf(BusinessException.class)
+        assertThatThrownBy(() -> service.consume(consume, OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("必须登录并经过岗位校验");
         assertThat(stockLedgerService.ledgers()).hasSize(before);
         assertThat(service.recentConsumptions(10)).isEmpty();
@@ -336,8 +328,7 @@ class DeviceGatewayServiceTest {
     void weighHandoverWithoutPostingContextStaysPureBridgeRecord() {
         DeviceReading reading = service.ingest(command("SCALE-01", "SCALE_WEIGHT", "88.6g"));
 
-        ReadingConsumption consumption = service.consume(
-                bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR);
+        ReadingConsumption consumption = service.consume(bridgeConsume(reading.readingCode(), "WEIGH_HANDOVER", "", "", ""), OPERATOR, new com.zhubao.erp.security.domain.AuthUserAccount("operator", "", OPERATOR.operator(), OPERATOR.role(), OPERATOR.dataScope(), true, false));
 
         assertThat(consumption.posted()).isFalse();
         assertThat(consumption.ledgerCode()).isEmpty();
@@ -364,5 +355,41 @@ class DeviceGatewayServiceTest {
         return new ConsumeReadingCommand(
                 readingCode, intent, refType, refCode, note,
                 null, null, null, null, null, null, null, null, null);
+    }
+
+    @Test
+    void 报工成功而消费保存失败时复用读数请求不会重复交工() {
+        var documents = new com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository();
+        var unit = com.zhubao.erp.business.BusinessWorkFixture.unit();
+        var operations = new BusinessOperationService(stockLedgerService, null, documents, unit);
+        operations.confirmInbound(new com.zhubao.erp.business.domain.ConfirmInboundCommand(
+                "MD-GATEWAY", 1001L, 1001L, "MAT", "2026-10-29", "", "", "", "收货", "收货", "戒托", "", null, "",
+                "RAW", new BigDecimal("10"), "件", new BigDecimal("20"), "收货", "", "", "要求", "2026-11-30", "客户甲", "gateway-inbound-001"));
+        new com.zhubao.erp.business.app.MotherOrderSplitService(documents, stockLedgerService).keep("MD-GATEWAY", "收货");
+        var station = new com.zhubao.erp.business.app.ProcessStationService(documents, stockLedgerService, operations,
+                new com.zhubao.erp.scan.app.ScanCodeParser(), null, unit);
+        var consumptions = org.mockito.Mockito.spy(new InMemoryReadingConsumptionRepository());
+        var first = new java.util.concurrent.atomic.AtomicBoolean(true);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            if (first.getAndSet(false)) throw new IllegalStateException("消费保存失败");
+            return invocation.callRealMethod();
+        }).when(consumptions).save(org.mockito.ArgumentMatchers.any());
+        var hasher = new PasswordHasher();
+        var gateway = new DeviceGatewayService(devices(hasher), new InMemoryDeviceReadingRepository(), consumptions,
+                new DeviceReadingNormalizer(), hasher, new GatewayRateLimiter(1000, 60), new GatewayReplayGuard(false, 300), operations, station);
+        var account = new com.zhubao.erp.security.domain.AuthUserAccount("worker", "", "雕刻工", RoleCode.OPERATOR,
+                DataScope.SELF, true, false).withAllowedProcesses(java.util.List.of("雕刻"));
+        var reading = gateway.ingest(command("SCALE-01", "SCALE_WEIGHT", "20g"));
+        var consume = new ConsumeReadingCommand(reading.readingCode(), "WEIGH_HANDOVER", "母单", "MD-GATEWAY", "交工",
+                1001L, 1001L, "MD-GATEWAY", "MD-GATEWAY", "MAT", "RAW", "RAW", new BigDecimal("10"), "雕刻");
+        assertThatThrownBy(() -> gateway.consume(consume, OPERATOR, account)).hasMessage("消费保存失败");
+        int afterReport = stockLedgerService.ledgers().size();
+        assertThat(documents.listProcessStationHandoffs("MD-GATEWAY")).hasSize(1);
+        ReadingConsumption retried = gateway.consume(consume, OPERATOR, account);
+        assertThat(retried.posted()).isTrue();
+        assertThat(stockLedgerService.ledgers()).hasSize(afterReport);
+        assertThat(documents.listProcessStationHandoffs("MD-GATEWAY")).hasSize(1);
+        assertThat(gateway.recentConsumptions(10)).hasSize(1);
+        assertThatThrownBy(() -> gateway.consume(consume, OPERATOR, null)).hasMessageContaining("必须登录");
     }
 }

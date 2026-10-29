@@ -38,12 +38,9 @@ class ProcessProgressServiceTest {
         documents = new InMemoryBusinessDocumentRepository();
         InMemoryStockLedgerRepository stocks = new InMemoryStockLedgerRepository();
         StockLedgerService ledger = new StockLedgerService(stocks);
-        BusinessOperationService operations = new BusinessOperationService(ledger, null, documents);
+        BusinessOperationService operations = new BusinessOperationService(ledger, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit());
         BusinessDataAccess access = new BusinessDataAccess(documents, ledger);
-        ProcessStationService stations = new ProcessStationService(
-                documents, ledger, operations, new ScanCodeParser(), access,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository())
-        );
+        ProcessStationService stations = new ProcessStationService(documents, ledger, operations, new ScanCodeParser(), access, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
         progress = new InMemoryProcessProgressRepository();
         service = new ProcessProgressService(
                 stations, progress, documents, access,
@@ -118,11 +115,6 @@ class ProcessProgressServiceTest {
     }
 
     private ConfirmInboundCommand inbound(String code) {
-        return new ConfirmInboundCommand(
-                code, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + code, "",
-                "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER",
-                new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "测试",
-                "内壁刻字", "2026-10-20", "恒信珠宝"
-        );
+        return new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + code, "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal("10"), "件", new BigDecimal("20"), "何琳", "", "测试", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID());
     }
 }

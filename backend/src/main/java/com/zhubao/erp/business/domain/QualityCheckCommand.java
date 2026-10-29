@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * 提交质检对照。inspector 即使另传了名字也不采用，质检员取当前登录账号的操作人。
- * requestId 可空。有值时初检条款、轮次、适用冻结和成功结果同一次提交。
+ * requestId 必填，初检条款、轮次、适用冻结和成功结果同一次提交。
  */
 public record QualityCheckCommand(
         @NotBlank(message = "请先扫贴纸") String code,

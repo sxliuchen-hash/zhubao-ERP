@@ -129,6 +129,11 @@ public class StockLedgerService {
         return repository.ledgersForMother(motherOrderCode, session);
     }
 
+    /** 母单行锁取得后，以当前读核对本单流水，避免等待锁期间沿用旧快照。 */
+    public List<StockLedgerEntry> lockedLedgersForMother(String motherOrderCode, WorkSession session) {
+        return repository.ledgersForMother(motherOrderCode, session, true);
+    }
+
     /** 按母单范围判断单据是否已有库存流水，不把整本台账载入内存。 */
     public boolean hasOrderMovement(String motherOrderCode, String orderCode) {
         return repository.hasOrderMovement(motherOrderCode, orderCode);

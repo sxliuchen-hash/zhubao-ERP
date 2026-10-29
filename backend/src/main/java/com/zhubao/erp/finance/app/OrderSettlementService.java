@@ -383,6 +383,20 @@ public class OrderSettlementService {
         );
     }
 
+    /** 缺项清单复用结单的旧账覆盖判定，只读且不提前生成账务。 */
+    public LegacyReview reviewLegacy(OrderDeliveryAssessment assessment) {
+        try {
+            boolean receivables = !historicalReceivables(assessment, null).isEmpty();
+            boolean payroll = !historicalPayroll(assessment, null).isEmpty();
+            return new LegacyReview(receivables || payroll, "");
+        } catch (BusinessException exception) {
+            if (!exception.getMessage().startsWith("历史待核")) throw exception;
+            return new LegacyReview(true, exception.getMessage());
+        }
+    }
+
+    public record LegacyReview(boolean hasHistory, String blocker) { }
+
     private List<ReceivableLine> historicalReceivables(OrderDeliveryAssessment assessment, WorkSession session) {
         Scope scope = scope(assessment);
         List<ReceivableLine> matched = new ArrayList<>();

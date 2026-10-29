@@ -48,9 +48,9 @@ class ProcessStationServiceTest {
         stockRepository = new InMemoryStockLedgerRepository();
         stockLedgerService = new StockLedgerService(stockRepository);
         documents = new InMemoryBusinessDocumentRepository();
-        operations = new BusinessOperationService(stockLedgerService, null, documents);
+        operations = new BusinessOperationService(stockLedgerService, null, documents, com.zhubao.erp.business.BusinessWorkFixture.unit());
         splitService = new MotherOrderSplitService(documents, stockLedgerService);
-        stationService = new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser());
+        stationService = new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser(), null, com.zhubao.erp.business.BusinessWorkFixture.unit());
     }
 
     @Test
@@ -72,7 +72,7 @@ class ProcessStationServiceTest {
         ProcessStationView unbound = stationService.lookup(sticker, account("操作工 王强"));
         assertThat(unbound.stations()).isEmpty();
         assertThat(unbound.message()).contains("不能报工");
-        assertThatThrownBy(() -> stationService.report(sticker, "雕刻", account("操作工 王强")))
+        assertThatThrownBy(() -> stationService.report(sticker, "雕刻", account("操作工 王强"), "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("当前账号不能做这道工序");
         assertThat(documents.listProcessStationHandoffs(childCode)).isEmpty();
@@ -92,15 +92,15 @@ class ProcessStationServiceTest {
         assertThat(inlayView.stations()).extracting(ProcessStationCard::processName).containsExactly("镶嵌");
         assertThat(inlayView.stations().get(0).previousProcessName()).isEqualTo("雕刻");
         assertThat(inlayView.stations().get(0).previousSubmitted()).isFalse();
-        assertThatThrownBy(() -> stationService.report(sticker, "镶嵌", inlay))
+        assertThatThrownBy(() -> stationService.report(sticker, "镶嵌", inlay, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("雕刻")
                 .hasMessageContaining("还没交");
-        assertThatThrownBy(() -> stationService.report(sticker, "抛光", polish))
+        assertThatThrownBy(() -> stationService.report(sticker, "抛光", polish, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("还没交");
 
-        ProcessStationReportResult carved = stationService.report(sticker, "雕刻", carving);
+        ProcessStationReportResult carved = stationService.report(sticker, "雕刻", carving, "fixture-" + java.util.UUID.randomUUID());
 
         assertThat(carved.movedToSemiFinished()).isFalse();
         assertThat(carved.stockStatus()).isEqualTo("WIP");
@@ -113,15 +113,15 @@ class ProcessStationServiceTest {
                 .doesNotContain("production_report");
         assertThat(stationService.lookup(sticker, inlay).stations().get(0).previousSubmitted()).isTrue();
 
-        ProcessStationReportResult inlaid = stationService.report(sticker, "镶嵌", inlay);
+        ProcessStationReportResult inlaid = stationService.report(sticker, "镶嵌", inlay, "fixture-" + java.util.UUID.randomUUID());
         assertThat(inlaid.movedToSemiFinished()).isFalse();
         assertThat(quantity(childCode, StockStatus.WIP)).isEqualByComparingTo("4");
 
-        assertThatThrownBy(() -> stationService.report(sticker, "雕刻", carving))
+        assertThatThrownBy(() -> stationService.report(sticker, "雕刻", carving, "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已经交过");
 
-        ProcessStationReportResult polished = stationService.report(sticker, "抛光", polish);
+        ProcessStationReportResult polished = stationService.report(sticker, "抛光", polish, "fixture-" + java.util.UUID.randomUUID());
         assertThat(polished.movedToSemiFinished()).isTrue();
         assertThat(polished.stockStatus()).isEqualTo("SEMI_FINISHED");
         assertThat(quantity(childCode, StockStatus.WIP)).isEqualByComparingTo("0");
@@ -146,7 +146,7 @@ class ProcessStationServiceTest {
         assertThat(view.stations()).extracting(ProcessStationCard::processName).containsExactly("雕刻");
         assertThat(rawWaiting("MD-KEEP-STATION").quantity()).isEqualByComparingTo("10");
 
-        stationService.report(sticker, "雕刻", account("雕刻工 林海", "雕刻"));
+        stationService.report(sticker, "雕刻", account("雕刻工 林海", "雕刻"), "fixture-" + java.util.UUID.randomUUID());
 
         assertThat(rawWaiting("MD-KEEP-STATION").quantity()).isEqualByComparingTo("0");
         assertThat(quantity("MD-KEEP-STATION", StockStatus.WIP)).isEqualByComparingTo("10");
@@ -155,8 +155,8 @@ class ProcessStationServiceTest {
                 .contains("work_order_split", "process_station_report")
                 .doesNotContain("production_report");
 
-        stationService.report(sticker, "镶嵌", account("镶嵌工 赵敏", "镶嵌"));
-        stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光"));
+        stationService.report(sticker, "镶嵌", account("镶嵌工 赵敏", "镶嵌"), "fixture-" + java.util.UUID.randomUUID());
+        stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光"), "fixture-" + java.util.UUID.randomUUID());
 
         assertThat(quantity("MD-KEEP-STATION", StockStatus.WIP)).isEqualByComparingTo("0");
         assertThat(quantity("MD-KEEP-STATION", StockStatus.SEMI_FINISHED)).isEqualByComparingTo("10");
@@ -172,17 +172,17 @@ class ProcessStationServiceTest {
         String childCode = split.children().get(0).code();
         String sticker = "JG|work_order|" + childCode;
 
-        assertThatThrownBy(() -> stationService.report(sticker, "镶嵌", account("镶嵌工 赵敏", "镶嵌")))
+        assertThatThrownBy(() -> stationService.report(sticker, "镶嵌", account("镶嵌工 赵敏", "镶嵌"), "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("没有「镶嵌」");
-        assertThatThrownBy(() -> stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光")))
+        assertThatThrownBy(() -> stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光"), "fixture-" + java.util.UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("雕刻");
 
-        stationService.report(sticker, "雕刻", account("雕刻工 林海", "雕刻"));
+        stationService.report(sticker, "雕刻", account("雕刻工 林海", "雕刻"), "fixture-" + java.util.UUID.randomUUID());
         assertThat(quantity(childCode, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("0");
 
-        ProcessStationReportResult polished = stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光"));
+        ProcessStationReportResult polished = stationService.report(sticker, "抛光", account("抛光工 陈刚", "抛光"), "fixture-" + java.util.UUID.randomUUID());
         assertThat(polished.movedToSemiFinished()).isTrue();
         assertThat(quantity(childCode, StockStatus.SEMI_FINISHED)).isEqualByComparingTo("3");
     }
@@ -190,14 +190,7 @@ class ProcessStationServiceTest {
     @Test
     void productionReplayCommitsOnceAndRejectsStaleOrForeignRetry() {
         String childCode = splitOneChild("MD-REPLAY-STATION");
-        ProcessStationService replay = new ProcessStationService(
-                documents,
-                stockLedgerService,
-                operations,
-                new ScanCodeParser(),
-                null,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository())
-        );
+        ProcessStationService replay = new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser(), null, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
         AuthUserAccount carving = account("雕刻工 林海", "雕刻");
         ReportProductionCommand command = production(childCode, "MD-REPLAY-STATION", "4", "8", "雕刻");
 
@@ -224,17 +217,9 @@ class ProcessStationServiceTest {
     @Test
     void productionFailureRollsBackHandoffAndStock() {
         String childCode = splitOneChild("MD-ROLLBACK-STATION");
-        ProcessStationService replay = new ProcessStationService(
-                documents,
-                stockLedgerService,
-                operations,
-                new ScanCodeParser(),
-                null,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),
-                () -> {
+        ProcessStationService replay = new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser(), null, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), () -> {
                     throw new BusinessException("模拟报工中途失败");
-                }
-        );
+                });
         int ledgersBefore = stockLedgerService.ledgers().size();
 
         assertThatThrownBy(() -> replay.reportProduction(
@@ -261,8 +246,7 @@ class ProcessStationServiceTest {
 
 
     private ProcessStationService batchService(com.zhubao.erp.work.domain.CommandResultProbe probe) {
-        return new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser(), null,
-                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), probe));
+        return new ProcessStationService(documents, stockLedgerService, operations, new ScanCodeParser(), null, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), probe));
     }
     private com.zhubao.erp.business.domain.ProcessStationReportCommand batch(String code, String process, String id, String quantity, String weight) {
         return new com.zhubao.erp.business.domain.ProcessStationReportCommand(code, process, "req-" + id, null, new BigDecimal(quantity), weight == null ? null : new BigDecimal(weight));
@@ -329,32 +313,7 @@ class ProcessStationServiceTest {
     }
 
     private void inbound(String code, String quantity, String weight) {
-        operations.confirmInbound(new ConfirmInboundCommand(
-                code,
-                1001L,
-                1001L,
-                "AU9999",
-                "2026-10-08",
-                "顺丰",
-                "SF" + code.replace("-", ""),
-                "",
-                "何琳",
-                "何琳",
-                "戒托",
-                "",
-                null,
-                "",
-                "RAW-CUSTOMER",
-                new BigDecimal(quantity),
-                "件",
-                new BigDecimal(weight),
-                "何琳",
-                "",
-                "测试入库",
-                "内壁刻字",
-                "2026-10-20",
-                "恒信珠宝"
-        ));
+        operations.confirmInbound(new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal(quantity), "件", new BigDecimal(weight), "何琳", "", "测试入库", "内壁刻字", "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
     }
 
     private ReportProductionCommand production(String workOrder, String mother, String quantity, String weight, String process) {
