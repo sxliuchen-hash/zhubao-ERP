@@ -1,0 +1,616 @@
+{
+  "归档日期": "2026-10-29",
+  "归档文件": "瘦身过程材料.zip",
+  "归档SHA256": "268d02f86f4669fb5e468c560d833623f01e811ce86f4fcc089fac919355142e",
+  "文件数": 101,
+  "原始总字节数": 879561,
+  "说明": "按原相对路径保存。材料反映实施时点，停止日常维护，不作为当前执行入口。恢复前在隔离目录核对；现行状态见docs/系统级代码瘦身报告.md。",
+  "文件": [
+    {
+      "原路径": ".tools/slim-batch11-manifest.json",
+      "字节数": 5895,
+      "SHA256": "0f1c005dd019c9a82104a2bd8e2454333ac70d168ceafdf28f3ff54f767c64e2",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-batch12-manifest.json",
+      "字节数": 1909,
+      "SHA256": "0e062f53d52cffdd9aa203eb2606dca1e0b74f510c6ce3832ea2ebc9fcc31e24",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-c3-final.log",
+      "字节数": 6108,
+      "SHA256": "9d3a8cbcf379655a05f0ee247f2b0ce5d85729d4744d8a23d994da0bddd4ae96",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-c3-front-final.log",
+      "字节数": 617,
+      "SHA256": "47d3cf4051d6bbf45b45e48d62fa8191fd33d78ca8ecfb6d9117357b4342e513",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-c3-manifest.json",
+      "字节数": 1729,
+      "SHA256": "06da92c83a0af85a3c026118556c15085db9cb3db3ba38d92c14a85263fa0f49",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-contract-tests.log",
+      "字节数": 44423,
+      "SHA256": "fbffff841185c9717257112574830a21f7710175c9c940c37e2641c1c1e4a530",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-css-candidates.json",
+      "字节数": 2921,
+      "SHA256": "074195793a985ca480fb5c1fbe61923691bdc37381296ed6e0f67e39c6287703",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-css-extra.json",
+      "字节数": 384,
+      "SHA256": "c00f935a4fc2af6886a94aa0eb65bc36e5419752ef86ceeda093e175d63d2147",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-css-removed.json",
+      "字节数": 13056,
+      "SHA256": "f274206364905027ef0b9619f52d206ab1087226e544f9b1efb19a98d9624c59",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-current-results.json",
+      "字节数": 5769,
+      "SHA256": "95167739a4b8d44ecc84ae6f8847fd8970b70a9dd6e6de095f1ae3a0e6b034a7",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-current-tests.log",
+      "字节数": 49399,
+      "SHA256": "105d726d5faa8c4baadad6b7935bca338e78d9cf69809600b9b7fc742ceda700",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-current-type.log",
+      "字节数": 0,
+      "SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-deps.log",
+      "字节数": 166,
+      "SHA256": "3c200baf57b0989098525c447037f21352bc19232284d5c6695f4c5df434beb6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-final-build.log",
+      "字节数": 7053,
+      "SHA256": "84b89cc33669ace35b5c412db26bbb95444c5f64c878dc049e340d0e0e4eac5a",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-final-type.log",
+      "字节数": 0,
+      "SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-finance-front-final.log",
+      "字节数": 475,
+      "SHA256": "3fb0119ca67e13461aef487247e920f320a4785c6f85667a9d52e93715c7e0f4",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-fixes-tests.log",
+      "字节数": 11100,
+      "SHA256": "4e79aaf8b845f69b833164e6e5d098078bacfa7b2cc59768201e780373abd105",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-front-all.log",
+      "字节数": 18379,
+      "SHA256": "77327b8f206fbe5666a3c0b7ac016a076b2dfbbd73af8965673e30402aad17c3",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-front-final.log",
+      "字节数": 493,
+      "SHA256": "709b110f4043bad316c536a4a0d02fc11de48735d8a769d55a183eddee17ca4e",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-front-fixes.log",
+      "字节数": 1872,
+      "SHA256": "0115c991b917ab181810455971a7245673f8c61e052de58b58597c530fe31666",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-front.log",
+      "字节数": 1438,
+      "SHA256": "aa0275ac7c6334ac8896c7a5811cfa5f6dae59e596e87098161d9fb266957073",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-loss-front.log",
+      "字节数": 32594,
+      "SHA256": "54e3df82eaa7f56ee064f28b958ac954f162ed8e400985684afed8b3fbad705f",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-mobile-query.log",
+      "字节数": 3850,
+      "SHA256": "3ec0a5d473adda68794747738dc6d38f4062ed16be7665b4550cde17b741ef5f",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-navigation-final.log",
+      "字节数": 515,
+      "SHA256": "fa59944786f3a39d58c0cb5c0007866b8402f4d8c8627007ba004913d1d32e05",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-ops-smoke.log",
+      "字节数": 5956,
+      "SHA256": "a6d34f6b0b476a3800e7579d2df8bac2c2e5e9ffc0e6583bf54bf3bfe09c1434",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-pages-front.log",
+      "字节数": 6210,
+      "SHA256": "9915de3778b42a94588f3125b8d76e1bdba66a6faf2846f552b871af78754a90",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-pages-targeted.log",
+      "字节数": 32421,
+      "SHA256": "2b013bf538db37248a9c85174b3459c9717f0a5ddd8d58581ceb6c0d06339799",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-pages-type.log",
+      "字节数": 0,
+      "SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-progress-docs.patch",
+      "字节数": 3715,
+      "SHA256": "298fc811520027bb57f12acfc22fb2ddb6cca1fffadf40d9ec6e7eb9df355108",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-query-shared.log",
+      "字节数": 4282,
+      "SHA256": "a2506763b7a76efc3f62e6b2017ed02e8a4cf236f082a1c1f2bcc09568ffaaab",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-remaining-tests.log",
+      "字节数": 10484,
+      "SHA256": "50d79b9d496cb82ac0fcc02c8254415329aac8985990bab3434426a420b1a4ed",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-retry-tests.log",
+      "字节数": 110212,
+      "SHA256": "42e71e7ab33fb47c779cdfbc786c4b5625754db8f59279ffbc1e27593611f662",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-scan-final.log",
+      "字节数": 358,
+      "SHA256": "73a0d37208e3328e244eebb1e2b4714eeec86dad1040f3b4dfd7ed0cffb6a08c",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-shared-fixes.log",
+      "字节数": 1890,
+      "SHA256": "bbe042e5db55e88772547ddfe36179d3adafc6750b7c6b5bd9f58d303439fd72",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-shared-front.log",
+      "字节数": 5804,
+      "SHA256": "2bb7c23480dbfdb427efb8d3a1779eca1593a6c996cc078c9bfca9514a2d463c",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-smoke.log",
+      "字节数": 31500,
+      "SHA256": "82dc70705fded38e4589f34e16107e91e312bd81e99a52c86f3d8b7ac93b9791",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-tail-backend.log",
+      "字节数": 8646,
+      "SHA256": "5b528802065e19b5efd9e287fb1b752ca4dabb465b2609aa7c332bb9efc151ed",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-tail-front-fixes.log",
+      "字节数": 454,
+      "SHA256": "085dcf0f3e55e176833e7807f307b307463f2182681b6289779e17dcf895a6ac",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim-tail-manifest.json",
+      "字节数": 995,
+      "SHA256": "99d68b73d71774236caa494fbb3cd4ef4f15df2bfdf4e7822c4d8911c8ff077c",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim14-backend.log",
+      "字节数": 10808,
+      "SHA256": "4d24eac7ac192555dfd12a87497724f0c8dba33141018e449ffeaf2d90cf96d6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim14-frontend.log",
+      "字节数": 471,
+      "SHA256": "301ea596cef84687ad3972e18377c2db6c897366f73715f5bee23f4f2a8c4fc8",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim14-load-final.log",
+      "字节数": 3133,
+      "SHA256": "94b693e7292dab11ebafb3d982e7e96359775a44d1cab42831b2bd31a6d3fcb1",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim14-types.log",
+      "字节数": 0,
+      "SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim14_docs.py",
+      "字节数": 4295,
+      "SHA256": "cab006d806088fb8ec490b858ee45de763266d98721a7fc509396f243c98ab67",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim14_edit.py",
+      "字节数": 4296,
+      "SHA256": "623130aceb20e4b641161f3b9a9d3d43b1f50bfbe7a1e3ed87dc59a6f782a766",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim14_smoke.py",
+      "字节数": 3702,
+      "SHA256": "f1accd3db3ca75a26a4d5f9229472e12476438af3837e673a0b6dc629dc4aed5",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_account_tests.py",
+      "字节数": 6652,
+      "SHA256": "315d43ca4b166fecac40a46e34aa4012e3478a54306b00094ae6dd672868fd58",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_accounts.py",
+      "字节数": 11350,
+      "SHA256": "30068df75cbea06470bf926cb07994b5030d7a1a8dea8d22b58db5f1ecacd768",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_aftercare.py",
+      "字节数": 8131,
+      "SHA256": "e5a30b2112847d60defd7d9b427c121d0f91403ef1dce1f63a13175d572131fa",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_aftercare_frontend.py",
+      "字节数": 2738,
+      "SHA256": "4dd6ae12afbfac0246bf73ab07775e9fb5fc80ae6644c3b7fca8a639a40653a9",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_archive_materials.py",
+      "字节数": 10415,
+      "SHA256": "926185631aac9731d34a2bd3b80614db3ece90e875706620093497ffd7e9cd90",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_batch11_docs.py",
+      "字节数": 7128,
+      "SHA256": "fb55e05971514077d832006e3200ed4ed663ba6b6e01d791c4e40b5258465153",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_batch11_manifest.py",
+      "字节数": 990,
+      "SHA256": "4757ca7070c363c1b3d11d758bface96b90ec7099e383cf66617771365734af5",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_batch12_docs.py",
+      "字节数": 6981,
+      "SHA256": "b2dfb7b1b5e69f362ae951a2da60cd30ad6cdbc92f6f7441f83b1b762b094ce6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_batch_stats.py",
+      "字节数": 1352,
+      "SHA256": "8cb64519134fbdd4abb5b7b036e2c33b80dc49cda2cab913451e4dac7e4dcade",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_check_css.py",
+      "字节数": 827,
+      "SHA256": "3f4114ef2d96f782099268ade19c1c1878fb5361127fbabd44ac789e82ab46d6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_css.cjs",
+      "字节数": 4606,
+      "SHA256": "2f04d36bff109351c9d6f594e3540130abefd1c2b8417b22831c8fa216c7d281",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_css_nested.py",
+      "字节数": 2229,
+      "SHA256": "5da551ff8a5ba9064dfb2bd309d531ca723cd8cf409d658a32d06e6d1727d78e",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_css_preserve.cjs",
+      "字节数": 5089,
+      "SHA256": "b4f1005b29d1b8c3b0c45e8019d2d3fab73638f6e44370e4bd2455c1f5a44ef6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_desktop_shells.py",
+      "字节数": 2768,
+      "SHA256": "b8df508121b02851f8535ba831938b2862f3ed366951dd1162c6d5ec7111ba66",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_extra_css.py",
+      "字节数": 1130,
+      "SHA256": "f5ccccd5bae63da20a4f1e87c1a5e5595373ce4830da97f8b076eee1749a3ea4",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_finish_navigation.py",
+      "字节数": 1142,
+      "SHA256": "635a44afbe156f3982bf2f0c699f613051472ab9de91516f566407e82fc0444f",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_fix_fixtures.py",
+      "字节数": 1332,
+      "SHA256": "77d492d916e54c237b6bf764bcb5e217876dfc3d93bf2c7b652487d504b3c309",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_fix_work_tests.py",
+      "字节数": 3667,
+      "SHA256": "933b2b7aed86218b10cf96b4db6dc3622aadd3eab63a8f3ea539be136e81abf1",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_helpers.py",
+      "字节数": 1473,
+      "SHA256": "cd202346b28a51f8ee67066434e2ad3d9f100d2d34702e004d9718c397dd108a",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_keep_report_actor.py",
+      "字节数": 513,
+      "SHA256": "22e81af04bdad1e9d5ca727b4c0a5d0ef252e49b33d73118394676da21b137b4",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_loss_oldhelpers.py",
+      "字节数": 3197,
+      "SHA256": "1e3b33df45de1bb9de5195fd8721f8e98700cd8fdecf853d3c94a8df95b01d9d",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_loss_types.py",
+      "字节数": 3318,
+      "SHA256": "6dd0f07d7cd80660051b66febea7cf04aa924f13899d8a7f0121398cc768641d",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_loss_workspace.py",
+      "字节数": 2262,
+      "SHA256": "8792464fd846ba450c9f55fe6fa1997d004dcefae303a9759c898ed99be1fe35",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_machine_panel.py",
+      "字节数": 2891,
+      "SHA256": "bd7d858360531fef7e9fa59ad13784a4caf6ef7630abc49ad0c138f7cc48eaa6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_migrate_page_tests.py",
+      "字节数": 4881,
+      "SHA256": "4a9c40996e7033890c517846d10cb9288bffffb1fd65d493759c24cfd22c60e8",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_mobile_shared.py",
+      "字节数": 4588,
+      "SHA256": "bc2db118d0f02283c3adba70164047e923e46a0d17e30e87491e8f6cb50c7397",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_next_audit.py",
+      "字节数": 1432,
+      "SHA256": "ca4190ed50341e0d74ccf98b56617855283087c144baba036209b85c506013ce",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_ops_smoke.py",
+      "字节数": 1138,
+      "SHA256": "d0d039eadff38cdba9518ec8f02eb82c8a6cbd67f8c5cc3f0d0bcf1aec33726c",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_private_paths.py",
+      "字节数": 3913,
+      "SHA256": "967d39150837269e5c57eb79ebfb683bd2b84e7e04bccf270edcfaf91af3f9c7",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_query_facts.py",
+      "字节数": 2195,
+      "SHA256": "973495c878fd5916341d56607cae455a1ac029fb9f6a704b07d1d7a7f952fcc6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_request_docs.py",
+      "字节数": 6141,
+      "SHA256": "18a368c114c202536c4af7fd23b26f4f9bdf57c27eda558fc503bbd2db372d7e",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_request_tests.py",
+      "字节数": 5226,
+      "SHA256": "184e5f479622004cf1f0f98d0ba1118bda22a337b6c9d09b1ac48c9832d71073",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_requests.py",
+      "字节数": 5044,
+      "SHA256": "eb059b563f32da9edd2edcd1467bd1a6f13a3694abd5f6efd21c221d9f6ed0f7",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_retire_shell_tests.py",
+      "字节数": 1385,
+      "SHA256": "075ac5931a24196ef5014a3fbb67979766bce3542435435bc373cf240dcda502",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_review_css.py",
+      "字节数": 218,
+      "SHA256": "5d09b4b14c42fc572f51aa3b08c26caf571867590dd77260147ca3c0e3764c40",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_shared_scan_tests.py",
+      "字节数": 2624,
+      "SHA256": "d26bb8b10806c5598bb2afe0bc2430730408d6cd9dc4faab482ea321738f96ea",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_tail.py",
+      "字节数": 2629,
+      "SHA256": "6038b9cfb97ca09cab09f7d26a7b5b877ee29a5a3fcb387ab8ce3adc3ad2cbe6",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/slim_test_summary.py",
+      "字节数": 1235,
+      "SHA256": "ed32272f8cea3aad9d39ad51122246663af75556cab0e2bdb0bb1b6a0e43cf7b",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": ".tools/__pycache__/slim_helpers.cpython-312.pyc",
+      "字节数": 3268,
+      "SHA256": "7d523d007a58245ef79403ee90e38dd0db63f3c98d7bc5ca4560331f9683e2c4",
+      "原由Git跟踪": false
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/前端入口可达性.csv",
+      "字节数": 47441,
+      "SHA256": "7dc574357053f20966166e934927f8251689129d4a1df48a5ff6408736cfd885",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/前端局部函数单次出现.csv",
+      "字节数": 287,
+      "SHA256": "ece8013215cabbd267670b5e559f4caebd7aee2ffbf90b9c00fc06fdea48bdd8",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/前端无外部生产引用导出.csv",
+      "字节数": 14683,
+      "SHA256": "cfeb1873521601ef4d588d696c0b9ed2d14716476e5237965646ee3e46b45dba",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/前端闲置导入候选.csv",
+      "字节数": 56,
+      "SHA256": "f426025dc4979373f00f9546083425845779b39d07881faf1bdd975f607c3810",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/后端无显式类型消费者.csv",
+      "字节数": 41175,
+      "SHA256": "0dbf0b14c0ab2a969b520554e94bebfdfd896b40a61a2b1798d1cf2ff778064f",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/后端私有方法单次出现.csv",
+      "字节数": 2267,
+      "SHA256": "ebd2cf30a626a99a2a739168cef315da4a16ec4f265b80c77bc7ff1572e23895",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/复核脚本.py",
+      "字节数": 6264,
+      "SHA256": "4bf41d4fc8b2ba87e85d4f20894064d2eae26f122071ebb9f8edce8fe22c57a8",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/扫描摘要.json",
+      "字节数": 539,
+      "SHA256": "7e2a74439a44541fde915dc038bfeff5a37fed0aefcb01bbcca9d7b225fe1cac",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/样式候选.csv",
+      "字节数": 1894,
+      "SHA256": "7783199ccb319717a8712f4f9ad7fd9a77fe57f74e0588fcbf33794afad3e172",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/补充引用复核.py",
+      "字节数": 5072,
+      "SHA256": "5102f34c5057484d92ad88069eb3d52b5481e99ca46a6b9844136a6003908a31",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/补充引用证据.csv",
+      "字节数": 55906,
+      "SHA256": "2bc678e007cee353def5a2e867e9c37ea8de4e8aed1c9d35c8eac844e5191df0",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/补充调查摘要.json",
+      "字节数": 352,
+      "SHA256": "876f1ae235821b9f7fde64e700879f72861ba448f57aee7a11bdc3edda09393b",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/补充调查说明.md",
+      "字节数": 11053,
+      "SHA256": "6b79fbc3a174077686f98eef07bb1a70bc15fdafe69d8162b535af11e0a43841",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-deprecation-audit/调查报告.md",
+      "字节数": 28636,
+      "SHA256": "19069ffc2fbc4b7ef26220e9102b6446cd934002cf4449b9857868786a0d78ff",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/archive/2026-10-28-slim-implementation/实施记录.md",
+      "字节数": 17791,
+      "SHA256": "cb463761d977448dc07b4244c2876832055d1f4fcdcd3e778d9ac627a78d0ca8",
+      "原由Git跟踪": true
+    },
+    {
+      "原路径": "docs/系统级代码瘦身方案.md",
+      "字节数": 48270,
+      "SHA256": "851e633a40e015bc9f37390df44a82e5bb6706a0f47a52c2f0d4c8f8ad204e0a",
+      "原由Git跟踪": true
+    }
+  ]
+}
