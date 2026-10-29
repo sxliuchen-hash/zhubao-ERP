@@ -10,4 +10,6 @@ export interface PrintBatchView { id: string; jobs: PrintTargetJobView[]; conten
 export interface PrintBatchCommand {
   requestId: string; businessCode: string; templateCode: string; copiesPerTarget: number;
   targets: Array<{ stationId: string; queueId: string }>;
+  previewImage: LabelPrintImage;
 }
+export interface LabelPrintImage { snapshotHash: string; pngBase64: string }

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { LabelPayload } from '../../services/labelApi';
-import type { PrintBatchCommand, PrintBatchView, PrintQueueView, PrintTargetJobView } from '../../services/printRoutingTypes';
+import type { LabelPrintImage, PrintBatchCommand, PrintBatchView, PrintQueueView, PrintTargetJobView } from '../../services/printRoutingTypes';
 import { ApiRequestError, apiGet, apiPost } from '../../services/apiClient';
 import { nextRequestAttempt, type RequestAttempt } from '../field/stableRequest';
 
-const props = defineProps<{ payload: LabelPayload; disabled?: boolean }>();
+const props = defineProps<{ payload: LabelPayload; previewImage?: LabelPrintImage | null; disabled?: boolean }>();
 const emit = defineEmits<{ locked: [value: boolean] }>();
 const queues = ref<PrintQueueView[]>([]);
 const selectedTargets = ref<string[]>([]);
@@ -42,7 +42,7 @@ function queuesFor(payload: LabelPayload) {
 function fingerprint() {
   const label = props.payload;
   return JSON.stringify([label.type, label.primaryCode, label.templateCode || 'FLOW', label.qrContent, label.printerSetting, label.layout,
-    label.fields, label.storageSources, label.storageEdition, label.brandTitle, label.footerLeft, label.footerRight, Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(), intent.value]);
+    label.fields, label.storageSources, label.storageEdition, label.brandTitle, label.footerLeft, label.footerRight, props.previewImage, Number(copiesPerTarget.value), chosenTargets.value.map(queue => [queue.stationId, queue.queueId]).sort(), intent.value]);
 }
 const submitted = computed(() => receipts.value.some(receipt => receipt.fingerprint === fingerprint()));
 function contentKey(receipt: Receipt) {
@@ -83,6 +83,7 @@ async function submitPrintJob(retry = false) {
   if (props.disabled || (retry && !pending.value)) return;
   if (submitting.value || busyJob.value || Object.keys(unknownReroutes.value).length || Object.keys(unknownPaperChecks.value).length || (pending.value && !retry)) return;
   if (!retry && submitted.value) { feedback.value = '该请求已提交，请核对已有批次状态。'; return; }
+  if (!retry && (!props.previewImage || !props.payload.snapshotHash || props.previewImage.snapshotHash !== props.payload.snapshotHash)) { error.value = '请等待标签画面生成，内容变化后请重新读取标签'; return; }
   if (!retry && (!chosenTargets.value.length || !Number.isInteger(Number(copiesPerTarget.value)) || Number(copiesPerTarget.value) < 1 || Number(copiesPerTarget.value) > 20)) { error.value = '请选择打印目标并填写每目标 1 到 20 份'; return; }
   let command = retry ? pending.value : null;
   if (!command) {
@@ -91,6 +92,7 @@ async function submitPrintJob(retry = false) {
     command = { fingerprint: key, preview: JSON.parse(JSON.stringify(props.payload)) as LabelPayload, sheets: estimatedSheets.value, body: {
       requestId: printAttempt.value.requestId, businessCode: props.payload.primaryCode, templateCode: props.payload.templateCode || 'FLOW',
       copiesPerTarget: Number(copiesPerTarget.value), targets: chosenTargets.value.map(queue => ({ stationId: queue.stationId, queueId: queue.queueId })),
+      previewImage: { ...props.previewImage! },
     } };
   }
   ++readGeneration;
@@ -136,6 +138,7 @@ function snapshot(receipt: Receipt): Record<string, unknown> | null {
   catch { return null; }
 }
 function snapshotLabel(receipt: Receipt) { const data = snapshot(receipt); return data ? `${String(data.businessCode || data.primaryCode || receipt.batch.businessCode || '')} · ${String(data.version || '')} · ${String(data.instance || '')}` : '未返回任务快照，请核对任务编号'; }
+function frozenImage(receipt: Receipt) { const data = snapshot(receipt)?.previewImage as LabelPrintImage | undefined; return data ? `data:image/png;base64,${data.pngBase64}` : ''; }
 function queuesForReceipt(receipt: Receipt) {
   const data = snapshot(receipt);
   const qr = String(data?.qr || '');
@@ -214,7 +217,7 @@ async function rerouteTarget(job: PrintTargetJobView, receipt: Receipt, retry = 
       <legend>选择工位和打印队列</legend><p v-if="!eligibleQueues.length">暂无匹配当前标签类型和纸张尺寸的队列；请由管理员配置工位及队列。</p>
       <label v-for="queue in eligibleQueues" :key="`${queue.stationId}|${queue.queueId}`"><input v-model="selectedTargets" type="checkbox" :value="`${queue.stationId}|${queue.queueId}`" />{{ queue.stationId }} · {{ queue.name }}（{{ queue.queueId }}）</label>
       <label>每目标份数<input v-model.number="copiesPerTarget" type="number" min="1" max="20" aria-label="每目标份数" /></label><p>目标 {{ chosenTargets.length }} 个 × 每目标 {{ copiesPerTarget }} 份 = 预计 {{ estimatedSheets }} 张；每个目标都会独立打印。</p>
-      <button class="primary-button" type="button" :disabled="locked || disabled || submitted || !chosenTargets.length" @click="submitPrintJob()">{{ submitting ? '提交中…' : '提交到打印工位' }}</button>
+      <button class="primary-button" type="button" :disabled="locked || disabled || submitted || !chosenTargets.length || !previewImage" @click="submitPrintJob()">{{ submitting ? '提交中…' : '提交到打印工位' }}</button>
     </fieldset>
     <p v-if="pending" class="operation-feedback warning">原打印请求结果待核对：{{ pending.body.businessCode }} · {{ pending.body.requestId }}。目标、份数和原编号已保留。<button class="secondary-button" type="button" :disabled="submitting || Boolean(busyJob) || disabled" @click="submitPrintJob(true)">原打印请求重试</button></p>
     <button v-if="submitted" class="secondary-button" type="button" :disabled="locked || disabled" @click="nextPrint">另建一批打印草稿</button>
@@ -222,7 +225,7 @@ async function rerouteTarget(job: PrintTargetJobView, receipt: Receipt, retry = 
     <button v-if="shownReceipts.length" class="secondary-button" type="button" @click="refreshPrintJob">刷新目标状态</button>
     <article v-for="receipt in shownReceipts" :key="receipt.batch.id" class="print-targets">
       <h3>批次 {{ receipt.batch.id }}</h3><p>任务冻结快照：{{ snapshotLabel(receipt) }}。送入系统队列不等于已经出纸。</p>
-      <details v-if="snapshot(receipt)" class="frozen-snapshot"><summary>查看任务原始快照</summary><p>二维码：{{ snapshot(receipt)?.qr }}</p><p>纸张：{{ snapshot(receipt)?.widthMm }}×{{ snapshot(receipt)?.heightMm }}mm · {{ snapshot(receipt)?.dpi }} DPI</p><pre>{{ JSON.stringify(snapshot(receipt)?.fields, null, 2) }}</pre></details>
+      <details v-if="snapshot(receipt)" class="frozen-snapshot"><summary>查看任务原始快照</summary><template v-if="frozenImage(receipt)"><img :src="frozenImage(receipt)" alt="本批次冻结打印画面" class="frozen-image" /><a :href="frozenImage(receipt)" :download="`${receipt.batch.id}.png`">下载本批次打印图片</a></template><p>二维码：{{ snapshot(receipt)?.qr }}</p><p>纸张：{{ snapshot(receipt)?.widthMm }}×{{ snapshot(receipt)?.heightMm }}mm · {{ snapshot(receipt)?.dpi }} DPI</p><pre>{{ JSON.stringify(snapshot(receipt)?.fields, null, 2) }}</pre></details>
       <p v-if="snapshot(receipt)?.qr && snapshot(receipt)?.qr !== receipt.preview.qrContent" class="operation-feedback warning">任务快照与当时预览的版本或实例不同，请以冻结快照核对。</p>
       <div v-for="job in receipt.batch.jobs" :key="job.id" class="print-target-job">
         <template v-if="job.status === 'FAILED'">
@@ -255,4 +258,5 @@ input, select, button { min-height: 40px; max-width: 100%; box-sizing: border-bo
 input[type='checkbox'] { min-height: 20px; }
 h3, p { margin: 0; }
 .frozen-snapshot pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.frozen-image { display: block; max-width: 100%; margin: 8px 0; }
 </style>

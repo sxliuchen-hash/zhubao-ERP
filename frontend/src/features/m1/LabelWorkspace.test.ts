@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { customerInitials } from './customerInitials';
 import LabelWorkspace from './LabelWorkspace.vue';
 import PrintJobPanel from '../labels/PrintJobPanel.vue';
+import { renderLabelPreviewImage } from '../labels/labelPreviewImage';
 import { queryScanContext } from '../../services/scanContextApi';
 import { buildScanContext } from '../scan/scanContextFixture';
 
@@ -11,6 +12,8 @@ vi.mock('../../services/scanContextApi', async () => {
   const actual = await vi.importActual<typeof import('../../services/scanContextApi')>('../../services/scanContextApi');
   return { ...actual, queryScanContext: vi.fn() };
 });
+// jsdom 没有画布解码器；此处核验页面与任务的图片接续，真实绘制另用浏览器检查。
+vi.mock('../labels/labelPreviewImage', () => ({ renderLabelPreviewImage: vi.fn(async payload => ({ snapshotHash: payload.snapshotHash, pngBase64: 'preview-png' })) }));
 
 describe('LabelWorkspace', () => {
   afterEach(() => {
@@ -139,6 +142,7 @@ describe('LabelWorkspace', () => {
       const payload = url.includes('/api/label/work-orders/')
         ? {
           type: 'WORK_ORDER',
+          snapshotHash: 'a'.repeat(64),
           typeLabel: '子工单',
           primaryCode: 'ZD-1',
           qrContent: 'JG|work_order|ZD-1',
@@ -173,10 +177,11 @@ describe('LabelWorkspace', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('已从单据打开子工单标签：ZD-1');
-    expect(wrapper.text()).toContain('B8N4');
-    expect(wrapper.text()).toContain('恒信珠宝');
-    expect(wrapper.text()).toContain('内壁刻字');
-    expect(wrapper.text()).toContain('2026-10-20');
+    expect(wrapper.get('img[alt="标签最终打印画面"]').attributes('src')).toBe('data:image/png;base64,preview-png');
+    expect(renderLabelPreviewImage).toHaveBeenCalledWith(expect.objectContaining({ fields: expect.arrayContaining([
+      { name: '验证码', value: 'B8N4' }, { name: '客户', value: '恒信珠宝' },
+      { name: '加工要求', value: '内壁刻字' }, { name: '期限', value: '2026-10-20' },
+    ]) }));
     expect(wrapper.text()).toContain('JG|work_order|ZD-1');
     expect(wrapper.findComponent(PrintJobPanel).props('payload')).toMatchObject({ primaryCode: 'ZD-1' });
     await wrapper.get('[aria-label="现场贴纸单号"]').setValue('');
@@ -208,7 +213,7 @@ describe('LabelWorkspace', () => {
       }
       const payload = url.includes('/api/label/work-orders/')
         ? {
-          type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1', qrContent: 'JG|work_order|ZD-1|0|LI1',
+          snapshotHash: 'a'.repeat(64), type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1', qrContent: 'JG|work_order|ZD-1|0|LI1',
           fields: [{ name: '客户', value: '恒信珠宝' }], footerLeft: '', footerRight: '', printedAt: '',
           brandTitle: '珠宝来料加工系统', templateCode: 'FLOW',
           printerSetting: { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 },
@@ -257,7 +262,7 @@ describe('LabelWorkspace', () => {
       } else if (url.includes('/api/label/print-batches') && method === 'POST') {
         data = { id: 'PB-1', jobs: [original] };
       } else if (url.includes('/api/label/work-orders/')) {
-        data = { type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1',
+        data = { snapshotHash: 'a'.repeat(64), type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1',
           qrContent: 'JG|work_order|ZD-1|0|LI1', fields: [], footerLeft: '', footerRight: '',
           printedAt: '', brandTitle: '珠宝来料加工系统', templateCode: 'FLOW',
           printerSetting: { widthMm: 60, heightMm: 40, dpi: 203, printerName: '', copies: 1 } };
@@ -297,6 +302,7 @@ describe('LabelWorkspace', () => {
         return { ok: true, json: async () => ({ code: 0, message: 'ok', data: { id: `PB-${requestIds.length}`, jobs: [] } }) } as Response;
       }
       const payload = url.includes('/api/label/work-orders/') ? {
+        snapshotHash: String(version).repeat(64),
         type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'ZD-1',
         qrContent: `JG|work_order|ZD-1|${version}|LI${version}`,
         fields: [], footerLeft: '', footerRight: '', printedAt: '',

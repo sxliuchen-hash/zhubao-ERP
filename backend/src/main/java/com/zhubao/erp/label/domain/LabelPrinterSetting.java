@@ -3,8 +3,8 @@ package com.zhubao.erp.label.domain;
 /**
  * 标签打印机设置。随标签模板一起维护，前端据此设置打印尺寸、份数并提示目标打印机。
  *
- * <p>说明：浏览器端无法静默选择系统打印机，{@code printerName} 仅作为界面提示/记录，
- * 实际打印仍走浏览器打印对话框；尺寸与份数用于生成打印样式与默认份数。</p>
+ * <p>{@code printerName} 仅作为界面提示/记录。浏览器按尺寸和 DPI 生成最终预览图片，
+ * 工位通过队列映射选择本机打印机，并按实际毫米尺寸输出同一张图片。</p>
  */
 public record LabelPrinterSetting(
         int widthMm,

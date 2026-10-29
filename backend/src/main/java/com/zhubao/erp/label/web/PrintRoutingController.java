@@ -4,6 +4,7 @@ import com.zhubao.erp.common.api.ApiResponse;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.app.PrintBatchService;
 import com.zhubao.erp.label.domain.PrintBatch;
+import com.zhubao.erp.label.domain.LabelPrintImage;
 import com.zhubao.erp.label.domain.PrintQueue;
 import com.zhubao.erp.label.domain.PrintStation;
 import com.zhubao.erp.label.domain.PrintTarget;
@@ -67,8 +68,9 @@ public class PrintRoutingController {
     @PostMapping("/print-batches")
     public ApiResponse<PrintBatch> create(@RequestBody CreateBatchRequest body, HttpServletRequest request) {
         permissions.assertAllowed(PermissionCode.LABEL_PRINT, operators.requireSession(request));
-        return ApiResponse.ok(service.create(body.requestId(), body.businessCode(), body.templateCode(),
-                body.copiesPerTarget(), body.targets(), account(request), body.customerMark()));
+        if (!body.customerMark().isBlank()) throw new BusinessException("请在标签预览中设置客户暗记后再打印");
+        return ApiResponse.ok(service.createFromPreview(body.requestId(), body.businessCode(), body.templateCode(),
+                body.copiesPerTarget(), body.targets(), account(request), body.previewImage()));
     }
     @GetMapping("/print-target-jobs/{id}/lineage")
     public ApiResponse<PrintBatchService.PrintLineage> lineage(@PathVariable String id, HttpServletRequest request) {
@@ -99,7 +101,10 @@ public class PrintRoutingController {
     }
     @PostMapping("/agents/v2/jobs/claim")
     public ApiResponse<PrintBatchService.ClaimedPrintJob> claim(@RequestHeader("X-Print-Station") String station,
-                                                                 @RequestHeader("X-Print-Token") String token) {
+                                                                 @RequestHeader("X-Print-Token") String token,
+                                                                 @RequestHeader(value = "X-Print-Renderer", defaultValue = "") String renderer) {
+        // 旧程序会忽略 PNG 并重新排版，必须在领取任务前拦住。
+        if (!"PNG/1".equals(renderer)) throw new BusinessException("打印接收程序版本过旧，请关闭后重新打开以更新");
         return ApiResponse.ok(service.claim(station, token));
     }
     @PostMapping("/agents/v2/jobs/{id}/report")
@@ -118,7 +123,7 @@ public class PrintRoutingController {
                 current.failedLoginCount(), current.lockedUntil(), context.customerScope(),
                 current.passwordChangeRequired(), current.temporaryPasswordConsumed(), current.allowedProcesses());
     }
-    /** 客户暗记可缺省。旧客户端不传时保持空字符串，不改变原标签快照。 */
+    /** 最终画面随请求冻结；不接受没有预览图片的旧客户端创建新任务。 */
     public static final class CreateBatchRequest {
         private String requestId;
         private String businessCode;
@@ -126,6 +131,7 @@ public class PrintRoutingController {
         private int copiesPerTarget;
         private List<PrintTarget> targets = List.of();
         private String customerMark = "";
+        private LabelPrintImage previewImage;
 
         public String requestId() { return requestId; }
         public String businessCode() { return businessCode; }
@@ -133,12 +139,14 @@ public class PrintRoutingController {
         public int copiesPerTarget() { return copiesPerTarget; }
         public List<PrintTarget> targets() { return targets == null ? List.of() : targets; }
         public String customerMark() { return customerMark == null ? "" : customerMark; }
+        public LabelPrintImage previewImage() { return previewImage; }
         public void setRequestId(String requestId) { this.requestId = requestId; }
         public void setBusinessCode(String businessCode) { this.businessCode = businessCode; }
         public void setTemplateCode(String templateCode) { this.templateCode = templateCode; }
         public void setCopiesPerTarget(int copiesPerTarget) { this.copiesPerTarget = copiesPerTarget; }
         public void setTargets(List<PrintTarget> targets) { this.targets = targets; }
         public void setCustomerMark(String customerMark) { this.customerMark = customerMark; }
+        public void setPreviewImage(LabelPrintImage previewImage) { this.previewImage = previewImage; }
     }
     public record PaperCheck(String result) {}
     public record RerouteRequest(String requestId, PrintTarget target, String reason) {}

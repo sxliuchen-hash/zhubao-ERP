@@ -48,6 +48,28 @@ namespace Zhubao.PrintReceiver
 
     public static class LabelPrinter
     {
+        /** 最终预览已经排版完成，工位只还原像素，不再调整字体、换行或脚注。 */
+        public static Bitmap LoadPreview(string pngBase64, int widthMm, int heightMm, int dpi)
+        {
+            if (string.IsNullOrEmpty(pngBase64))
+                throw new ArgumentException("旧任务缺少预览画面，请取消后重新提交");
+            if (pngBase64.Length > 2800000 || dpi < 100 || dpi > 600
+                || widthMm < 10 || widthMm > 200 || heightMm < 10 || heightMm > 200)
+                throw new ArgumentException("标签预览图片或纸张尺寸无效");
+            byte[] bytes = Convert.FromBase64String(pngBase64);
+            using (var stream = new MemoryStream(bytes))
+            using (var image = Image.FromStream(stream, true, true))
+            {
+                if (image.RawFormat.Guid != System.Drawing.Imaging.ImageFormat.Png.Guid
+                    || image.Width != (int)Math.Round(widthMm * dpi / 25.4)
+                    || image.Height != (int)Math.Round(heightMm * dpi / 25.4))
+                    throw new ArgumentException("标签预览图片与纸张尺寸或 DPI 不一致");
+                var bitmap = new Bitmap(image);
+                bitmap.SetResolution(dpi, dpi);
+                return bitmap;
+            }
+        }
+
         public static Bitmap Render(LabelSpec spec)
         {
             if (spec == null) throw new ArgumentException("标签快照无效");

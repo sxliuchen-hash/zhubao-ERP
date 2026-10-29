@@ -1,4 +1,4 @@
-﻿// 厂内打印接收程序。用工位凭据领取任务，绘制标签后送入本机 Windows 队列，再回报结果。
+﻿// 厂内打印接收程序。用工位凭据领取最终预览画面，按纸张尺寸送入本机 Windows 队列，再回报结果。
 // 配置文件 print-agent.properties 放在 exe 旁边。同一工位只运行一个接收程序。
 using System;
 using System.Collections;
@@ -55,11 +55,12 @@ namespace Zhubao.PrintReceiver
     {
         public LabelSpec Spec;
         public int Copies;
+        public string PreviewPng;
     }
 
     static class Program
     {
-        const string AgentRelease = "20261029.3";
+        const string AgentRelease = "20261029.4";
 
         [STAThread]
         static int Main(string[] args)
@@ -105,6 +106,7 @@ namespace Zhubao.PrintReceiver
                 TestConfig();
                 TestHttp();
                 TestSnapshot();
+                TestPreviewImage();
                 string samplePath = string.IsNullOrEmpty(renderSample)
                     ? Path.Combine(Path.GetTempPath(), "zhubao-label-sample.png")
                     : renderSample;
@@ -193,9 +195,10 @@ namespace Zhubao.PrintReceiver
                     if (!agent.Queues.ContainsKey(claim.QueueId))
                         throw new InvalidOperationException("本机未映射打印队列 " + claim.QueueId);
                     string printerName = agent.Queues[claim.QueueId];
-                    using (Bitmap bitmap = LabelPrinter.Render(built.Spec))
+                    using (Bitmap bitmap = LabelPrinter.LoadPreview(built.PreviewPng, built.Spec.WidthMm, built.Spec.HeightMm, built.Spec.Dpi))
                     {
-                        bitmap.Save(Path.Combine(inbox, safeId + ".png"), ImageFormat.Png);
+                        // 保留收到的原始 PNG，便于与网页下载图片直接比对文件摘要。
+                        File.WriteAllBytes(Path.Combine(inbox, safeId + ".png"), Convert.FromBase64String(built.PreviewPng));
                         LabelPrinter.Print(printerName, bitmap, built.Copies, built.Spec.WidthMm, built.Spec.HeightMm);
                     }
                     Report(agent, claim.Id, "SPOOLED", "");
@@ -305,6 +308,8 @@ namespace Zhubao.PrintReceiver
         {
             if (context.Request.Headers["X-Print-Station"] != "STATION-1" || context.Request.Headers["X-Print-Token"] != "PS-example")
                 throw new InvalidOperationException("工位凭据头不正确");
+            if (context.Request.Headers["X-Print-Renderer"] != "PNG/1")
+                throw new InvalidOperationException("预览图片打印能力头未传入");
             // 保活连接被服务器关掉后，.NET 不会重发 POST，窗口会报连接被关闭。
             if (context.Request.KeepAlive || context.Request.ProtocolVersion != HttpVersion.Version10)
                 throw new InvalidOperationException("领取必须使用会在响应后关闭的 HTTP/1.0 连接");
@@ -525,6 +530,7 @@ namespace Zhubao.PrintReceiver
             request.KeepAlive = false;
             request.Headers["X-Print-Station"] = agent.StationId;
             request.Headers["X-Print-Token"] = agent.Token;
+            request.Headers["X-Print-Renderer"] = "PNG/1";
             if (body == null) body = new byte[0];
             if (body.Length == 0)
             {
@@ -679,6 +685,9 @@ namespace Zhubao.PrintReceiver
             var built = new BuiltLabel();
             built.Spec = spec;
             built.Copies = useCopies;
+            object rawPreview;
+            var preview = snapshot.TryGetValue("previewImage", out rawPreview) ? rawPreview as Dictionary<string, object> : null;
+            built.PreviewPng = preview == null ? "" : Text(preview, "pngBase64");
             return built;
         }
 
@@ -707,6 +716,40 @@ namespace Zhubao.PrintReceiver
             {
                 if (ex.Message.IndexOf("保存标识载荷无效") < 0) throw;
             }
+        }
+
+        static void TestPreviewImage()
+        {
+            string png;
+            using (var original = new Bitmap(472, 354))
+            using (var stream = new MemoryStream())
+            {
+                using (var canvas = Graphics.FromImage(original)) canvas.Clear(Color.White);
+                original.SetPixel(10, 10, Color.Black);
+                original.SetPixel(300, 200, Color.Red);
+                original.Save(stream, ImageFormat.Png);
+                png = Convert.ToBase64String(stream.ToArray());
+            }
+            string json = new JavaScriptSerializer().Serialize(new { widthMm = 40, heightMm = 30, dpi = 300,
+                previewImage = new { pngBase64 = png } });
+            BuiltLabel built = ToLabel(json, 2);
+            using (Bitmap restored = LabelPrinter.LoadPreview(built.PreviewPng, built.Spec.WidthMm, built.Spec.HeightMm, built.Spec.Dpi))
+            {
+                if (restored.Width != 472 || restored.Height != 354 || built.Copies != 2
+                    || restored.GetPixel(10, 10).ToArgb() != Color.Black.ToArgb()
+                    || restored.GetPixel(300, 200).ToArgb() != Color.Red.ToArgb()
+                    || restored.GetPixel(20, 20).ToArgb() != Color.White.ToArgb())
+                    throw new InvalidOperationException("工位改变了预览画面的像素");
+            }
+            bool rejected = false;
+            try { using (var image = LabelPrinter.LoadPreview("", 40, 30, 300)) { } }
+            catch (ArgumentException) { rejected = true; }
+            if (!rejected) throw new InvalidOperationException("无预览图片的旧任务未被拒绝");
+            rejected = false;
+            try { using (var image = LabelPrinter.LoadPreview(png, 60, 40, 300)) { } }
+            catch (ArgumentException) { rejected = true; }
+            if (!rejected) throw new InvalidOperationException("预览图片与纸张不匹配时未被拒绝");
+            Console.WriteLine("预览画面原样还原、份数和旧任务拒绝检查通过");
         }
 
         static string ShortReason(string message)

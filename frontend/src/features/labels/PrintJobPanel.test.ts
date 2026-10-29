@@ -5,12 +5,13 @@ import type { LabelPayload } from '../../services/labelApi';
 import PrintJobPanel from './PrintJobPanel.vue';
 
 vi.mock('../../services/apiClient', async () => ({ ...await vi.importActual<typeof import('../../services/apiClient')>('../../services/apiClient'), apiGet: vi.fn(), apiPost: vi.fn() }));
-const payload: LabelPayload = { type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'WO-1', qrContent: 'JG|work_order|WO-1|1|LI1', fields: [], footerLeft: '', footerRight: '', printedAt: '', brandTitle: '珠宝', templateCode: 'FLOW', printerSetting: { widthMm: 40, heightMm: 30, dpi: 203, printerName: '', copies: 1 } };
+const payload: LabelPayload = { snapshotHash: 'a'.repeat(64), type: 'WORK_ORDER', typeLabel: '子工单', primaryCode: 'WO-1', qrContent: 'JG|work_order|WO-1|1|LI1', fields: [], footerLeft: '', footerRight: '', printedAt: '', brandTitle: '珠宝', templateCode: 'FLOW', printerSetting: { widthMm: 40, heightMm: 30, dpi: 203, printerName: '', copies: 1 } };
+const previewImage = { snapshotHash: payload.snapshotHash!, pngBase64: 'frozen-png' };
 const frozen = JSON.stringify({ businessCode: 'WO-1', version: 'V1', instance: 'LI1', qr: payload.qrContent, widthMm: 40, heightMm: 30, dpi: 203, fields: [{ name: '原要求', value: '刻字' }] });
 const job = { id: 'J1', targetStationId: 'A', targetQueueId: 'Q1', status: 'PENDING', copies: 1, paperCheckResult: '', failureReason: '', predecessorId: '', retryReason: '' };
 const batch = { id: 'PB1', businessCode: 'WO-1', contentSnapshot: frozen, jobs: [job] };
 const wrappers: ReturnType<typeof mount<typeof PrintJobPanel>>[] = [];
-function panel() { const wrapper = mount(PrintJobPanel, { props: { payload } }); wrappers.push(wrapper); return wrapper; }
+function panel() { const wrapper = mount(PrintJobPanel, { props: { payload, previewImage } }); wrappers.push(wrapper); return wrapper; }
 async function click(wrapper: ReturnType<typeof panel>, text: string) { await wrapper.findAll('button').find(button => button.text() === text)!.trigger('click'); await flushPromises(); }
 async function submit(wrapper: ReturnType<typeof panel>) { await flushPromises(); await wrapper.get('input[type=checkbox]').setValue(true); await click(wrapper, '提交到打印工位'); }
 beforeEach(() => {
@@ -22,6 +23,20 @@ beforeEach(() => {
 });
 afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()));
 describe('原单打印请求与快照', () => {
+  it('只提交已生成的预览图片，任务图片不随后续预览变化', async () => {
+    const wrapper = panel();
+    await wrapper.setProps({ previewImage: null });
+    await submit(wrapper);
+    expect(apiPost).not.toHaveBeenCalled();
+    await wrapper.setProps({ previewImage });
+    await click(wrapper, '提交到打印工位');
+    expect(vi.mocked(apiPost).mock.calls[0][1]).toMatchObject({ previewImage });
+    await click(wrapper, '另建一批打印草稿');
+    await wrapper.setProps({ previewImage: { ...previewImage, snapshotHash: 'b'.repeat(64) } });
+    await click(wrapper, '提交到打印工位');
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('内容变化后请重新读取标签');
+  });
   it('超时冻结原目标份数和编号，版本变化及冲突仍不能绕过原请求', async () => {
     vi.mocked(apiPost).mockRejectedValueOnce(new Error('超时')).mockRejectedValueOnce(new ApiRequestError('快照版本冲突', 409, 40901)).mockResolvedValueOnce(structuredClone(batch));
     const wrapper = panel(); await submit(wrapper);

@@ -2,8 +2,10 @@ package com.zhubao.erp.label.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.label.domain.LabelEdition;
+import com.zhubao.erp.label.domain.LabelPrintImage;
 import com.zhubao.erp.label.domain.PrintBatch;
 import com.zhubao.erp.label.domain.PrintJobStatus;
 import com.zhubao.erp.label.domain.PrintQueue;
@@ -16,6 +18,11 @@ import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import javax.imageio.ImageIO;
+import javax.imageio.stream.ImageInputStream;
+import java.util.Base64;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
@@ -82,7 +89,21 @@ public class PrintBatchService {
 
     public PrintBatch create(String requestId, String businessCode, String templateCode, int copies,
                              List<PrintTarget> requested, AuthUserAccount account, String customerMark) {
+        return create(requestId, businessCode, templateCode, copies, requested, account, customerMark, null);
+    }
+
+    public PrintBatch createFromPreview(String requestId, String businessCode, String templateCode, int copies,
+                                       List<PrintTarget> requested, AuthUserAccount account, LabelPrintImage image) {
+        if (image == null) throw new BusinessException("请更新网页并生成标签预览后再打印");
+        return create(requestId, businessCode, templateCode, copies, requested, account, "", image);
+    }
+
+    private PrintBatch create(String requestId, String businessCode, String templateCode, int copies,
+                              List<PrintTarget> requested, AuthUserAccount account, String customerMark,
+                              LabelPrintImage image) {
         requireRequest(requestId);
+        if (businessCode == null || businessCode.isBlank() || templateCode == null || templateCode.isBlank())
+            throw new BusinessException("打印单号或模板无效");
         if (requested == null || requested.isEmpty() || requested.size() > 20)
             throw new BusinessException("请选择 1 到 20 个打印目标");
         if (copies < 1 || copies > 20) throw new BusinessException("每目标份数须为 1 到 20");
@@ -94,11 +115,17 @@ public class PrintBatchService {
             if (seen.add(target.stationId() + "|" + target.queueId())) targets.add(target);
         }
         targets.sort(java.util.Comparator.comparing(PrintTarget::stationId).thenComparing(PrintTarget::queueId));
+        PrintBatch existing = repository.batchByRequest(requestId.trim()).orElse(null);
+        // 原请求可能已成功后才遇到断网。回放原画面，不再用更新后的单据或模板替换它。
+        if (existing != null && image != null) {
+            labels.assertBatchReadable(existing.businessCode(), account);
+            String original = withPreviewImage(existing.contentSnapshot(), image);
+            return sameOrReject(existing, batchHash(businessCode, templateCode, copies, original, targets), account.username());
+        }
         String snapshot = labels.withCustomerMark(
                 labels.prepareBatchSnapshot(businessCode, templateCode, copies, account), customerMark);
-        String key = businessCode.trim() + "|" + templateCode.trim() + "|" + copies + "|" + snapshot + "|" + targets;
-        String hash = digest(key);
-        PrintBatch existing = repository.batchByRequest(requestId.trim()).orElse(null);
+        if (image != null) snapshot = withPreviewImage(snapshot, image);
+        String hash = batchHash(businessCode, templateCode, copies, snapshot, targets);
         if (existing != null) return sameOrReject(existing, hash, account.username());
         validateTargets(targets, snapshot, businessCode);
         String now = TIME.format(LocalDateTime.now());
@@ -109,6 +136,45 @@ public class PrintBatchService {
         PrintBatch inserted = repository.insertOriginalBatch(new PrintBatch(batchId, requestId.trim(), businessCode.trim(),
                 templateCode.trim(), copies, hash, snapshot, account.username(), now, jobs));
         return sameOrReject(inserted, hash, account.username());
+    }
+
+    private String batchHash(String businessCode, String templateCode, int copies, String snapshot, List<PrintTarget> targets) {
+        return digest(businessCode.trim() + "|" + templateCode.trim() + "|" + copies + "|" + snapshot + "|" + targets);
+    }
+
+    private String withPreviewImage(String snapshot, LabelPrintImage image) {
+        if (image.snapshotHash() == null || !image.snapshotHash().matches("[a-f0-9]{64}"))
+            throw new BusinessException("标签预览指纹无效，请重新读取标签");
+        if (image.pngBase64() == null || image.pngBase64().isEmpty() || image.pngBase64().length() > 2_800_000)
+            throw new BusinessException("标签预览图片为空或超过 2MB");
+        try {
+            ObjectNode root = (ObjectNode) mapper.readTree(snapshot);
+            if (!image.snapshotHash().equals(root.path("snapshotHash").asText()))
+                throw new BusinessException("标签内容或模板已变化，请重新读取并核对预览后打印");
+            int dpi = root.path("dpi").asInt();
+            int widthMm = root.path("widthMm").asInt();
+            int heightMm = root.path("heightMm").asInt();
+            if (dpi < 100 || dpi > 600 || widthMm < 10 || widthMm > 200 || heightMm < 10 || heightMm > 200)
+                throw new BusinessException("标签纸张尺寸或 DPI 无效");
+            byte[] bytes = Base64.getDecoder().decode(image.pngBase64());
+            try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+                var readers = ImageIO.getImageReaders(input);
+                if (!readers.hasNext()) throw new BusinessException("标签预览必须为有效 PNG 图片");
+                var reader = readers.next();
+                try {
+                    reader.setInput(input);
+                    if (!"png".equalsIgnoreCase(reader.getFormatName())
+                            || reader.getWidth(0) != Math.round(widthMm * dpi / 25.4)
+                            || reader.getHeight(0) != Math.round(heightMm * dpi / 25.4))
+                        throw new BusinessException("标签预览图片与纸张尺寸或 DPI 不一致");
+                    reader.read(0);
+                } finally { reader.dispose(); }
+            }
+            root.set("previewImage", mapper.valueToTree(image));
+            return mapper.writeValueAsString(root);
+        } catch (IOException | IllegalArgumentException ex) {
+            throw new BusinessException("标签预览图片无效，请重新生成预览");
+        }
     }
 
     /**
