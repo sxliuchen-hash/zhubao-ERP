@@ -56,13 +56,6 @@ public record DeskTask(
         }
     }
 
-    public DeskTask withCode(String code) {
-        return new DeskTask(code, kind, title, note, customerId, customerName, motherOrderCode,
-                assigneeUsername, assigneeName, dueDate, status, creatorUsername, createdAt, requestId, version,
-                completedAt, completedBy, resultNote, completeRequestId, cancelledAt, cancelledBy, cancelReason,
-                cancelRequestId);
-    }
-
     private static String text(String value) {
         return value == null ? "" : value.trim();
     }

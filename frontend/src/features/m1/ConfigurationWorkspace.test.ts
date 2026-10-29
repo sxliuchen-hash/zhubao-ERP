@@ -47,7 +47,10 @@ describe('ConfigurationWorkspace', () => {
     expect(wrapper.text()).toContain('个人安全');
     expect(wrapper.text()).toContain('登录会话');
     expect(wrapper.text()).toContain('自助改密');
-    expect(wrapper.text()).toContain('操作员 / 操作工');
+    const identity = wrapper.get('.security-identity-grid');
+    expect(identity.findAll('article').map(item => item.get('strong').text())).toEqual([
+      '操作员', '操作工', '本人任务', 'CUST-001',
+    ]);
     expect(wrapper.text()).toContain('本人任务');
     expect(wrapper.text()).toContain('CUST-001');
     expect(fetchStoredContent).not.toHaveBeenCalled();

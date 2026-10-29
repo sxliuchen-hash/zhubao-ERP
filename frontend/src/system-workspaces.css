@@ -15,7 +15,7 @@
   overflow-wrap: anywhere;
 }
 
-.system-workspace-shell :is(.module-command-main, .operations-command-main, .security-context-main, .security-context-side) {
+.system-workspace-shell :is(.module-command-main, .operations-command-main, .security-context-main) {
   display: grid;
   gap: var(--space-4);
   align-content: start;
@@ -246,13 +246,6 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: var(--space-3);
-}
-
-.system-workspace-shell .document-linked-list article {
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
-  align-items: start;
 }
 
 .system-workspace-shell :is(.document-gap-stack, .document-audit-list) :is(span, small),

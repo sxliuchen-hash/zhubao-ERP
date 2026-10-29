@@ -31,10 +31,6 @@ public class NavigationMenuService {
                 .toList();
     }
 
-    public List<NavigationMenuItem> fullMenuTree() {
-        return repository.findMenuItems();
-    }
-
     private Map<RoleCode, Set<String>> roleMenus() {
         return repository.findRoleMenuBindings();
     }

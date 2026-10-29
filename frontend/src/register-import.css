@@ -154,10 +154,10 @@
 .register-posting-plan-head { justify-content: space-between; }
 .register-preview-blockers, .register-posting-missing-list,
 .register-posting-result, .register-business-document-result,
-.register-machine-output-result, .register-batch-row-list { display: grid; gap: 12px; min-width: 0; }
+.register-machine-output-result { display: grid; gap: 12px; min-width: 0; }
 .register-preview-blockers article, .register-posting-missing-list article,
 .register-posting-result > *, .register-business-document-result > *,
-.register-machine-output-result > *, .register-batch-row-list article {
+.register-machine-output-result > * {
   display: grid;
   gap: 6px;
   padding: 12px;

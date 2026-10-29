@@ -299,7 +299,8 @@ class PrintBatchServiceTest {
         PrintBatch fresh = versioned.create("edition-new-0001", "MD-EDITION", "FLOW", 1,
                 List.of(new PrintTarget("A", "Q1")), account);
         LabelEdition freshEdition = versionedLabels.readEdition(fresh.contentSnapshot());
-        assertThat(oldEdition.distinguishes(freshEdition)).isTrue();
+        assertThat(freshEdition.businessCode()).isEqualTo(oldEdition.businessCode());
+        assertThat(freshEdition.version()).isNotEqualTo(oldEdition.version());
         assertThat(freshEdition.instance()).isNotEqualTo(oldEdition.instance());
         assertThat(versionedLabels.readEdition(repository.batch(oldBatch.id()).orElseThrow().contentSnapshot())
                 .version()).isEqualTo("0");
@@ -315,7 +316,7 @@ class PrintBatchServiceTest {
         PrintBatchService.PrintLineage lineage = versioned.lineage(moved.jobs().get(0).id(), account);
         assertThat(lineage.sourceBatchId()).isEqualTo(oldBatch.id());
         assertThat(lineage.labelVersion()).isEqualTo("0");
-        assertThat(versionedLabels.readEdition(moved.contentSnapshot()).distinguishes(freshEdition)).isTrue();
+        assertThat(versionedLabels.readEdition(moved.contentSnapshot()).version()).isEqualTo(oldEdition.version());
     }
 
     @Test

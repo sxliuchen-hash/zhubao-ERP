@@ -78,10 +78,6 @@ public final class EvidenceCodes {
                 .orElse("");
     }
 
-    public static Set<String> scenes() {
-        return SCENE_LABELS.keySet();
-    }
-
     /**
      * 把采集接口的旧别名收成持久化单据类型。无法识别时返回空串。
      */

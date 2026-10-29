@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  approveLoss, buildAfterSalesReviewRequest, buildConfirmInboundRequest, buildCustomerReturnRequest,
+  approveLoss, buildAfterSalesReviewRequest, buildCustomerReturnRequest,
   buildLossApprovalRequest, buildOutboundShipmentRequest, shipFinishedStock,
 } from './businessOperationApi';
 import { fetchAuthSession } from './authApi';
 import { apiPost } from './apiClient';
 import type { AuthSession } from './authApi';
-import type { InboundOrder, InventoryBalance, LossApproval } from '../data/m1PrototypeData';
+import type { InventoryBalance, LossApproval } from '../data/m1PrototypeData';
 
 vi.mock('./authApi', () => ({ fetchAuthSession: vi.fn() }));
 vi.mock('./apiClient', () => ({ apiPost: vi.fn() }));
@@ -80,14 +80,4 @@ describe('正式单据操作', () => {
       operator: '当前账号', approver: '当前账号', inputWeight: '30', outputWeight: '29', requestId: 'loss-request-1' }));
   });
 
-  it('来料不生成纸质行号、样例日期或称重', () => {
-    const inbound = { code: 'MD-REAL', customer: '实际客户', inboundDate: '2026-10-10', operationContext } as InboundOrder;
-    expect(() => buildConfirmInboundRequest(inbound, { operator: '收货人', processingRequirement: '镜面抛光', dueDate: '2026-10-20' }))
-      .toThrow('留空不会自动沿用整批重量');
-    const request = buildConfirmInboundRequest(inbound, {
-      operator: '收货人', processingRequirement: '镜面抛光', dueDate: '2026-10-20', quantity: 12, weight: '25.75',
-    });
-    expect(request).toMatchObject({ customerId: 57, materialCode: 'MAT-REAL', inboundDate: '2026-10-10', quantity: 12, weight: '25.75' });
-    expect(request).not.toHaveProperty('sourceRegisterLineNo');
-  });
 });

@@ -11,12 +11,12 @@
 .info-facts dt { color: var(--muted); font-size: 12px; }
 .info-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .info-context { margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-.finance-workspace .finance-analysis, .finance-workspace .finance-agreement { flex: 1 1 100%; width: 100%; }
+.finance-workspace .finance-analysis { flex: 1 1 100%; width: 100%; }
 .finance-analysis > :is(.finance-chart-grid, .finance-lower-grid) { margin-top: 14px; }
 .finance-other-sections .info-toolbar { padding: 8px 0; }
 @media (max-width: 900px) {
   .info-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .info-fields label:has(textarea), .info-fields .info-wide { grid-column: 1 / -1; }
+  .info-fields label:has(textarea) { grid-column: 1 / -1; }
   .info-fields input, .info-fields select { min-height: 44px; font-size: 16px; }
   .info-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

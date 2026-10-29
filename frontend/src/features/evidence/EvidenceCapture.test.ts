@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { bindEvidence, fetchHistoricalEvidencePage, fetchLinkedEvidencePage, uploadEvidenceFile } from '../../services/evidenceApi';
 import type { EvidenceLink, EvidencePage } from '../../services/evidenceApi';
-import { confirmInbound } from '../../services/businessOperationApi';
+import { submitMobileIntake } from '../../services/mobileIntakeApi';
 import EvidenceCapture from './EvidenceCapture.vue';
 import { stampPhotoTimestamp } from './photoStamp';
 
@@ -17,10 +17,7 @@ vi.mock('../../services/evidenceApi', () => ({
   bindEvidence: vi.fn(),
 }));
 
-vi.mock('../../services/businessOperationApi', () => ({
-  confirmInbound: vi.fn(),
-  reportProduction: vi.fn(),
-}));
+vi.mock('../../services/mobileIntakeApi', () => ({ submitMobileIntake: vi.fn() }));
 
 const board = {
   links: [],
@@ -84,7 +81,7 @@ describe('现场证据采集', () => {
     vi.mocked(fetchLinkedEvidencePage).mockReset();
     vi.mocked(uploadEvidenceFile).mockReset();
     vi.mocked(bindEvidence).mockReset();
-    vi.mocked(confirmInbound).mockReset();
+    vi.mocked(submitMobileIntake).mockReset();
     vi.mocked(stampPhotoTimestamp).mockReset();
     vi.mocked(stampPhotoTimestamp).mockImplementation(async (file: File) => file);
     vi.mocked(fetchHistoricalEvidencePage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false });
@@ -172,7 +169,7 @@ describe('现场证据采集', () => {
     await wrapper.get('li button').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('失败');
-    expect(confirmInbound).not.toHaveBeenCalled();
+    expect(submitMobileIntake).not.toHaveBeenCalled();
 
     await wrapper.get('li button').trigger('click');
     await flushPromises();
@@ -180,7 +177,7 @@ describe('现场证据采集', () => {
     expect(vi.mocked(uploadEvidenceFile).mock.calls[1][0].businessCode).toBe('MD-1');
     expect(bindEvidence).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain('已关联');
-    expect(confirmInbound).not.toHaveBeenCalled();
+    expect(submitMobileIntake).not.toHaveBeenCalled();
   });
 
   it('上传成功但关联失败时只重试关联', async () => {
@@ -202,7 +199,7 @@ describe('现场证据采集', () => {
     await flushPromises();
     expect(uploadEvidenceFile).toHaveBeenCalledTimes(1);
     expect(bindEvidence).toHaveBeenCalledTimes(2);
-    expect(confirmInbound).not.toHaveBeenCalled();
+    expect(submitMobileIntake).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('已关联');
   });
 

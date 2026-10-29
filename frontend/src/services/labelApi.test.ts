@@ -122,8 +122,9 @@ describe('labelApi', () => {
     expect(fetchMock.mock.calls[1][1]?.method).toBe('POST');
   });
 
-  it('提供四种标签类型下拉选项', () => {
+  it('提供五种标签类型下拉选项', () => {
     expect(labelTypeOptions.map((option) => option.value)).toEqual([
+      'STOCK_BATCH',
       'MOTHER',
       'WORK_ORDER',
       'OUTBOUND',

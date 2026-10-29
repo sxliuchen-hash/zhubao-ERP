@@ -1,34 +1,26 @@
 /* 业务页面按内容区宽度适配；协同与系统继续使用自己的命名容器。 */
 .ops-workspace { container: business-workspace / inline-size; }
 
-:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) :is(p, dd, strong, small) {
+:is(.command-center-v3, .inventory-trace-desk, .finance-workspace) :is(p, dd, strong, small) {
   overflow-wrap: anywhere;
 }
-:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) :is(.module-table-wrap, .erp-table-wrap) {
+:is(.command-center-v3, .inventory-trace-desk, .finance-workspace) :is(.module-table-wrap, .erp-table-wrap) {
   min-width: 0;
   max-width: 100%;
 }
-:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) table { min-width: 720px; }
-:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) th { white-space: nowrap; }
-:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk) td { min-width: 88px; }
-:is(.command-center-v3, .inbound-desk, .production-desk, .quality-desk, .inventory-trace-desk, .progress-board, .finance-workspace) table .table-action { white-space: nowrap; }
-.production-desk :is(.production-dispatch-table, .production-handoff-grid),
-.progress-board .progress-table,
-.quality-desk .quality-dispatch-table,
+:is(.command-center-v3, .inventory-trace-desk, .finance-workspace) table { min-width: 720px; }
+:is(.command-center-v3, .inventory-trace-desk, .finance-workspace) th { white-space: nowrap; }
+:is(.command-center-v3, .inventory-trace-desk) td { min-width: 88px; }
+:is(.command-center-v3, .inventory-trace-desk, .finance-workspace) table .table-action { white-space: nowrap; }
 .inventory-trace-desk .inventory-dispatch-table,
 .approval-workspace .approval-task-table,
 .command-center-v3 .floor-dispatch-table { min-width: 0; }
-.production-desk :is(.production-dispatch-table, .production-handoff-grid) :is(th, td),
-.progress-board .progress-table :is(th, td),
-.quality-desk .quality-dispatch-table :is(th, td),
 .inventory-trace-desk .inventory-dispatch-table :is(th, td),
 .approval-workspace .approval-task-table :is(th, td),
 .command-center-v3 .floor-dispatch-table :is(th, td) {
   min-width: 0;
   white-space: normal;
 }
-.production-desk .operation-inputs.operation-inputs,
-.quality-desk .operation-inputs.operation-inputs,
 .inventory-trace-desk .operation-inputs.operation-inputs {
   grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
 }
@@ -63,32 +55,28 @@
 .timeline :is(time, small, span) { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .inventory-trace-desk .module-work-grid,
 .inventory-trace-desk .module-detail-grid,
-.inventory-trace-desk .module-rule-panel,
-.inventory-trace-desk .ledger-table { min-width: 0; max-width: 100%; }
-.inventory-trace-desk .ledger-table { overflow-x: auto; }
-.inventory-trace-desk .ledger-row { min-width: 650px; grid-template-columns: 100px minmax(170px, 1.5fr) 100px 100px minmax(180px, 1.5fr); }
-.inventory-trace-desk .ledger-row > * { min-width: 0; overflow-wrap: anywhere; }
+.inventory-trace-desk .module-rule-panel { min-width: 0; max-width: 100%; }
 
 /* 财务与进度的表单和明细共用紧凑间距，输入控件不能撑开窄屏。 */
-.finance-workspace, .progress-board { display: grid; gap: 16px; min-width: 0; }
+.finance-workspace { display: grid; gap: 16px; min-width: 0; }
 .finance-workspace > .section-block { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; min-width: 0; }
 .finance-workspace > .section-block > :is(div, form, p, ul) { flex-basis: 100%; min-width: 0; }
 .finance-workspace > .section-block > label { flex: 1 1 160px; max-width: 320px; min-width: 0; }
-:is(.finance-workspace, .progress-board) label { display: grid; gap: 6px; min-width: 0; }
-:is(.finance-workspace, .progress-board) :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
+:is(.finance-workspace) label { display: grid; gap: 6px; min-width: 0; }
+:is(.finance-workspace) :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
 .finance-workspace .account-admin-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 220px)); justify-content: start; align-items: end; gap: 12px; }
-:is(.finance-workspace, .progress-board) :is(.finance-actions, .finance-filters) label { flex: 1 1 160px; min-width: 0; }
+:is(.finance-workspace) :is(.finance-actions, .finance-filters) label { flex: 1 1 160px; min-width: 0; }
 
 @container business-workspace (max-width: 1060px) {
-  :is(.inbound-work-grid, .production-work-grid, .quality-work-grid, .inventory-work-grid, .command-grid-v2) {
+  :is(.inventory-work-grid, .command-grid-v2) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: none;
   }
-  .ops-workspace :is(.inbound-work-grid, .production-work-grid, .quality-work-grid, .inventory-work-grid, .command-grid-v2) > * { grid-area: auto; }
+  .ops-workspace :is(.inventory-work-grid, .command-grid-v2) > * { grid-area: auto; }
 }
 @container business-workspace (max-width: 560px) {
   .finance-workspace > .section-block > label,
-  :is(.finance-workspace, .progress-board) :is(.finance-actions, .finance-filters) label {
+  :is(.finance-workspace) :is(.finance-actions, .finance-filters) label {
     flex: 1 1 calc(50% - 8px);
     max-width: calc(50% - 8px);
   }

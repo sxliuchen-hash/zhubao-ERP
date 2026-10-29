@@ -498,7 +498,6 @@ h3 { font-size: 14px; }
 .mission-kpi-grid,
 .module-stat-grid,
 .hero-kpis,
-.sample-kpi-grid,
 .register-kpi-strip {
   min-width: 0;
   max-width: 100%;
@@ -515,7 +514,6 @@ h3 { font-size: 14px; }
 .evidence-slot-panel,
 .module-rule-panel,
 .security-context-panel,
-.sample-command-surface,
 .sample-table-panel,
 .register-detail-panel,
 .register-import-panel,
@@ -525,9 +523,7 @@ h3 { font-size: 14px; }
 .document-active-case,
 .operations-panel,
 .active-record-panel,
-.dispatch-console-v3,
-.control-filter-bar,
-.toolbar-band {
+.dispatch-console-v3 {
   border: 1px solid var(--line);
   border-radius: var(--radius-surface);
   background: var(--surface);
@@ -543,7 +539,6 @@ h3 { font-size: 14px; }
 .operations-hero,
 .module-command-surface,
 .document-upload-console,
-.sample-command-surface,
 .security-context-panel {
   padding: 12px;
 }
@@ -600,7 +595,6 @@ h3 { font-size: 14px; }
 .mission-kpi-grid,
 .module-stat-grid,
 .hero-kpis,
-.sample-kpi-grid,
 .register-kpi-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -645,8 +639,7 @@ h3 { font-size: 14px; }
 
 .mission-kpi-grid article,
 .module-stat-grid article,
-.active-object-card,
-.handoff-focus-panel {
+.active-object-card {
   border-left: 3px solid var(--tone, var(--accent));
 }
 
@@ -707,7 +700,6 @@ textarea { min-height: 72px; }
 
 .primary-button,
 .secondary-button,
-.danger-button,
 .table-action,
 .link-button {
   min-height: 36px;
@@ -730,7 +722,6 @@ textarea { min-height: 72px; }
   color: var(--accent-dark);
 }
 
-.danger-button,
 .link-button.danger,
 button.danger {
   border: 1px solid var(--danger);
@@ -738,7 +729,6 @@ button.danger {
   color: var(--danger);
 }
 
-.danger-button:hover,
 .link-button.danger:hover,
 button.danger:hover {
   background: #fdecec;
@@ -756,8 +746,7 @@ button[aria-busy="true"] {
 
 .module-table-wrap,
 .erp-table-wrap,
-.document-table-wrap,
-.readiness-table-wrap {
+.document-table-wrap {
   overflow: auto;
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
@@ -860,8 +849,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 .feedback.error { background: #fff1f0; color: var(--red); }
 .operation-feedback.warning { background: #fff8eb; color: var(--amber); }
 
-.progress-bar,
-.mini-progress span,
 .health-meter i {
   display: block;
   height: 6px;
@@ -870,8 +857,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   background: #e6eef2;
 }
 
-.progress-bar b,
-.mini-progress b,
 .health-meter b {
   display: block;
   height: 100%;
@@ -881,8 +866,7 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 .evidence-health,
 .rule-stack,
 .document-gap-stack,
-.document-audit-list,
-.document-linked-list {
+.document-audit-list {
   display: grid;
   gap: 8px;
 }
@@ -891,25 +875,12 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 .rule-stack article,
 .document-gap-stack article,
 .document-audit-list article,
-.document-linked-list article,
 .hardware-poc-list article {
   border: 1px solid var(--line);
   border-left: 3px solid var(--tone, var(--accent));
   border-radius: 6px;
   padding: 8px;
 }
-
-.ledger-table { display: grid; gap: 4px; }
-
-.ledger-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 6px;
-  align-items: center;
-  font-size: 13px;
-}
-
-.ledger-head { color: var(--muted); font-size: 12px; }
 
 .eyebrow { display: none; }
 
@@ -958,7 +929,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   .mission-kpi-grid,
   .module-stat-grid,
   .hero-kpis,
-  .sample-kpi-grid,
   .register-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .top-strip,
@@ -1149,7 +1119,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 
   .primary-button,
   .secondary-button,
-  .danger-button,
   .table-action,
   .link-button { min-height: 44px; }
 
@@ -1159,8 +1128,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   .erp-table-wrap td,
   .document-table-wrap th,
   .document-table-wrap td,
-  .readiness-table-wrap th,
-  .readiness-table-wrap td,
   .ops-table-wrap th,
   .ops-table-wrap td,
   .template-table th,
@@ -1169,7 +1136,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   .module-table-wrap table,
   .erp-table-wrap table,
   .document-table-wrap table,
-  .readiness-table-wrap table,
   .ops-table-wrap table,
   .template-table { min-width: 640px; }
 }
@@ -1178,7 +1144,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   .mission-kpi-grid,
   .module-stat-grid,
   .hero-kpis,
-  .sample-kpi-grid,
   .register-kpi-strip { grid-template-columns: 1fr 1fr; }
 
   .top-strip,
@@ -1216,7 +1181,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 
   .primary-button,
   .secondary-button,
-  .danger-button,
   .table-action,
   .link-button { min-height: 44px; }
 
@@ -1228,7 +1192,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   dd,
   .detail-grid dt { overflow-wrap: anywhere; }
 
-  .intake-page,
   .quality-check-panel { max-width: none; }
 
   .intake-form .button-row {
@@ -1245,22 +1208,17 @@ tr[aria-selected="true"] { background: var(--action-soft); }
   }
 }
 
-.intake-page { max-width: 560px; }
-
 .field-job {
   min-width: 0;
   max-width: 100%;
 }
 
-.field-modes,
 .field-process-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.field-modes .primary-button,
-.field-modes .secondary-button,
 .field-process-list .primary-button,
 .field-process-list .secondary-button {
   width: 100%;
@@ -1382,7 +1340,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 }
 
 @media (max-width: 900px) {
-  .field-identity { display: none; }
   .inventory-coach { display: none; }
   .field-dock {
     position: fixed;
@@ -1399,7 +1356,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 }
 
 @media (max-width: 390px) {
-  .field-modes,
   .field-process-list {
     grid-template-columns: 1fr;
   }
@@ -1509,7 +1465,6 @@ tr[aria-selected="true"] { background: var(--action-soft); }
 
 .finance-crumb,
 .finance-note,
-.finance-scope,
 .finance-legend {
   color: var(--ink-muted);
 }
@@ -1803,7 +1758,6 @@ td.finance-amount,
   }
 }
 
-.inbound-filters,
 .production-filters {
   display: flex;
   flex-wrap: wrap;
@@ -1812,14 +1766,9 @@ td.finance-amount,
   margin-bottom: 8px;
 }
 
-.inbound-cards,
-.production-cards,
-.production-handoff-cards,
 .desk-cards,
 .detail-back { display: none; }
 
-.inbound-card,
-.production-card,
 .production-handoff-card,
 .desk-card {
   display: grid;
@@ -1834,7 +1783,6 @@ td.finance-amount,
   cursor: pointer;
 }
 
-.production-card,
 .production-handoff-card,
 .desk-card {
   min-width: 0;
@@ -1858,15 +1806,6 @@ td.finance-amount,
 .desk-task-action input { min-width: 0; }
 .desk-task-panel .desk-card { cursor: default; }
 
-.inbound-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.production-card-top,
-.production-handoff-top,
 .desk-card-top {
   display: flex;
   flex-wrap: wrap;
@@ -1876,13 +1815,6 @@ td.finance-amount,
   min-width: 0;
 }
 
-.production-card-top .code,
-.production-handoff-top .code {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.production-legacy-note,
 .production-note {
   margin: 8px 0 0;
   color: var(--muted);
@@ -1892,26 +1824,14 @@ td.finance-amount,
 .production-note summary { cursor: pointer; }
 
 @media (max-width: 900px) {
-  .inbound-table-wrap,
-  .production-table-wrap,
-  .production-handoff-table,
   .desk-table-wrap,
-  .ledger-desktop,
   .finance-register-table { display: none; }
-  .inbound-cards,
-  .production-cards,
-  .production-handoff-cards,
   .desk-cards { display: grid; gap: 8px; }
   .detail-back { display: inline-flex; }
 
-  .inbound-desk:not(.is-detail) .module-side-panel,
-  .inbound-desk:not(.is-detail) .evidence-slot-panel,
-  .production-desk:not(.is-detail) .module-side-panel,
   .desk-page:not(.is-detail) .module-side-panel,
   .desk-page:not(.is-detail) .document-detail { display: none; }
 
-  .inbound-desk.is-detail .module-master-panel,
-  .production-desk.is-detail .module-master-panel,
   .desk-page.is-detail .module-master-panel,
   .desk-page.is-detail .document-master { display: none; }
 }
@@ -2033,7 +1953,6 @@ a:focus-visible {
   .brand-mark,
   .primary-button,
   .secondary-button,
-  .danger-button,
   .table-action,
   .status-badge,
   .nav-icon-wrap {

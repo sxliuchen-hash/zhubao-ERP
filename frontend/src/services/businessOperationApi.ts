@@ -1,47 +1,8 @@
-import type { InboundOrder, InventoryBalance, LossApproval } from '../data/m1PrototypeData';
+import type { InventoryBalance, LossApproval } from '../data/m1PrototypeData';
 import { apiPost } from './apiClient';
 import { fetchAuthSession } from './authApi';
 import type { BusinessOperationContext } from '../types/businessOperationContext';
 import { confirmedQuantityAndWeight } from './operationAmountPolicy';
-
-export interface ConfirmInboundRequest {
-  motherOrderCode: string;
-  customerId: number;
-  ownerCustomerId?: number;
-  materialCode: string;
-  inboundDate?: string;
-  expressCompany?: string;
-  courierNo?: string;
-  senderName?: string;
-  receiverName?: string;
-  unpackSigner?: string;
-  goodsName?: string;
-  sourceRegisterType?: string;
-  sourceRegisterLineNo?: number;
-  sourceRegisterSequence?: string;
-  warehouseCode: string;
-  quantity: number;
-  quantityUnit?: string;
-  weight: string;
-  operator: string;
-  evidenceCode?: string;
-  remark?: string;
-  processingRequirement: string;
-  dueDate: string;
-  customerName?: string;
-  requestId?: string;
-}
-
-export interface InboundConfirmationResult {
-  motherOrderCode: string;
-  ledgerCode: string;
-  warehouseCode: string;
-  stockStatus: string;
-  quantity: number;
-  weight: number;
-  operator: string;
-  evidenceCode?: string;
-}
 
 export interface OutboundShipmentRequest {
   shipmentCode: string;
@@ -268,20 +229,6 @@ async function actor(): Promise<string> {
   const session = await fetchAuthSession();
   if (!session?.operator) throw new Error('请登录后再提交业务操作');
   return session.operator;
-}
-
-export function buildConfirmInboundRequest(order: InboundOrder, extra: Partial<ConfirmInboundRequest> = {}): ConfirmInboundRequest {
-  return requireFields(withConfirmedAmounts(order, extra, (stock) => ({
-    warehouseCode: stock.fromWarehouseCode,
-    inboundDate: order.inboundDate, expressCompany: order.expressCompany, courierNo: order.courierNo,
-    senderName: order.senderName, receiverName: order.receiverName, unpackSigner: order.unpackSigner,
-    goodsName: order.goodsName, customerName: order.customer, quantityUnit: '件',
-    operator: '', processingRequirement: '', dueDate: '',
-  })), [['operator', '操作人'], ['processingRequirement', '加工要求'], ['dueDate', '完成期限']]);
-}
-
-export async function confirmInbound(order: InboundOrder, extra: Partial<ConfirmInboundRequest> = {}): Promise<InboundConfirmationResult> {
-  return apiPost('/api/business/operations/inbound-confirmations', buildConfirmInboundRequest(order, { ...extra, operator: await actor() }));
 }
 
 export function buildOutboundShipmentRequest(

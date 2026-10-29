@@ -352,7 +352,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 .order-scan-tools > summary { cursor: pointer; min-height: 36px; align-content: center; }
 .order-more-actions { flex: 1 1 100%; }
 .order-more-actions > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.order-pagination, .order-legacy-actions, .order-detail-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.order-pagination, .order-detail-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .order-pagination { justify-content: end; margin-top: 16px; }
 @media (min-width: 1200px) { .has-detail { grid-template-columns: minmax(0, 1fr) minmax(340px, 38%); gap: 16px; } }
 @media (min-width: 901px) and (max-width: 1199px) { .has-detail .order-list-panel { display: none; } }
@@ -366,6 +366,6 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
   .order-list-panel, .order-detail-panel { padding: 12px; }
   .order-filters input, .order-filters select { font-size: 16px; min-height: 44px; }
   .order-filters button, .order-pagination button { min-height: 44px; }
-  .order-detail-panel button, .order-legacy-actions button { min-height: 44px; }
+  .order-detail-panel button { min-height: 44px; }
 }
 </style>
