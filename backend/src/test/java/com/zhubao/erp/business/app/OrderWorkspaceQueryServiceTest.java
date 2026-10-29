@@ -66,6 +66,20 @@ class OrderWorkspaceQueryServiceTest {
         service = new OrderWorkspaceQueryService(documents, null, progress, requirements, null);
     }
 
+    @Test
+    void 手机菜单使用同一订单读取但不获得其他视图或扩大客户范围() {
+        documents.saveMotherOrder(mother("MD-MOBILE", 1001L, "客户甲", "2026-11-01", "1", "件"));
+        var mobile = new OrderWorkspaceAccess(List.of("mobile"), List.of());
+        assertThat(service.query(office, mobile, query()).availableViews()).containsExactly("ORDERS");
+        var emptyScope = new OperatorContext("手机岗位", RoleCode.OPERATOR, DataScope.CUSTOMER_RANGE);
+        assertThat(service.query(emptyScope, mobile, query()).items()).isEmpty();
+        assertThatThrownBy(() -> service.query(office, mobile,
+                new OrderWorkspaceQuery("PRODUCTION", "", null, "", "ALL", null, 1, 20, OrderWorkspaceQuery.CREATED_DESC)))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> service.query(office, new OrderWorkspaceAccess(List.of(), List.of()), query()))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
+
     @Test void partialUpstreamIsVisibleToDownstreamAccountWithoutCompletingEitherProcess() {
         documents.saveMotherOrder(mother("MD-BQ", 1001L, "恒信珠宝", "2026-10-23", "10", "件"));
         assertThat(service.query(office, orders, OrderWorkspaceQuery.parse(null, "MD-BQ", null, null, null, null, null, null)).items())

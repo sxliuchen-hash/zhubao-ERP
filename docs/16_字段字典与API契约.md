@@ -2123,7 +2123,7 @@ PWA 一期边界：
 
 ### OrderWorkspaceController
 
-来源：[OrderWorkspaceController](../backend/src/main/java/com/zhubao/erp/business/web/OrderWorkspaceController.java)。只读，不写库存、工序、发货或证据。必须使用登录会话。没有来料、进度、生产、质检或库存菜单时拒绝，不把无权限变成空页。
+来源：[OrderWorkspaceController](../backend/src/main/java/com/zhubao/erp/business/web/OrderWorkspaceController.java)。只读，不写库存、工序、发货或证据。必须使用登录会话。来料、进度、生产、质检、库存或手机菜单可读取 `ORDERS`；只有手机菜单时不开放 `PRODUCTION/QUALITY` 专门视图。所有视图继续执行原客户／本人／班组／部门范围；没有这些菜单时拒绝，不把无权限变成空页。
 
 订单行新增 `createdBy`，取原母单的建单人快照，子单和执行轮次也保留该来源；当前工序操作人仍使用 `operatorName`，两者不能互相替代。历史未记录时返回 null，页面显示“历史未记录”。
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, watch, type Ref } from 'vue';
+import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, reactive, ref, watch, type Ref } from 'vue';
 import type { AuthSession } from '../../services/authApi';
 import { ApiRequestError } from '../../services/apiClient';
 import { fetchOrderWorkspace } from '../../services/orderWorkspaceApi';
@@ -11,7 +11,6 @@ import { useTraceTarget } from '../scan/useTraceTarget';
 import type { TraceTarget } from '../scan/traceTarget';
 import { useWorkspaceContext } from '../workspace/useWorkspaceContext';
 import type { TabKey } from '../workspace/workspaceNavigation';
-import { workspaceTabs } from '../workspace/workspaceNavigation';
 import OrderList from './OrderList.vue';
 import OrderDetail from './OrderDetail.vue';
 import OrderKindMark from './OrderKindMark.vue';
@@ -61,10 +60,18 @@ const canWork = computed(() => Boolean(identity.value && ['MOTHER_ORDER', 'WORK_
   && tabs.value.some(tab => ['production', 'progress', 'mobile'].includes(tab))
   && (!session.value?.effectivePermissions || session.value.effectivePermissions.includes('BUSINESS_PRODUCTION_REPORT'))));
 const refresh = inject<Ref<number>>('zhubao-order-refresh', ref(0));
-const canCreate = computed(() => openIntake && tabs.value.includes('inbound') && session.value?.effectivePermissions?.includes('BUSINESS_INBOUND_CONFIRM'));
+const canCreate = computed(() => openIntake && tabs.value.some(tab => tab === 'inbound' || tab === 'mobile') && session.value?.effectivePermissions?.includes('BUSINESS_INBOUND_CONFIRM'));
+const quickActions = computed(() => {
+  const permissions = session.value?.effectivePermissions ?? [];
+  return [
+    { label: '扫码报工', allowed: openProduction && tabs.value.some(tab => ['production', 'progress', 'mobile'].includes(tab)) && permissions.includes('BUSINESS_PRODUCTION_REPORT'), run: () => openProduction?.(null, 'station') },
+    { label: '扫码质检', allowed: openQuality && tabs.value.some(tab => ['quality', 'mobile'].includes(tab)) && ['BUSINESS_QUALITY_FREEZE', 'BUSINESS_REWORK_DISPATCH', 'BUSINESS_REWORK_REPORT', 'BUSINESS_QUALITY_RELEASE'].some(permission => permissions.includes(permission)), run: () => openQuality?.(null) },
+    { label: '扫码发货', allowed: openShipping && tabs.value.some(tab => ['inventory', 'mobile'].includes(tab)) && permissions.includes('BUSINESS_OUTBOUND_SHIPMENT'), run: () => openShipping?.(null) },
+  ].filter(action => action.allowed);
+});
 const trace = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
-const legacyTabs = computed(() => workspaceTabs.filter(tab => ['inbound', 'production', 'progress', 'quality'].includes(tab.key) && tabs.value.includes(tab.key)));
-const legacyLabel: Partial<Record<TabKey, string>> = { inbound: '来料记录、母单与拆单', production: '生产记录与设备产量', progress: '原进度查询与历史', quality: '质检记录、损耗与工资试算' };
+const MachineOutputPanel = defineAsyncComponent(() => import('../production/MachineOutputPanel.vue'));
+const machineToolsCreated = ref(false);
 const serverViews = ref<OrderWorkspacePage['availableViews']>(['ORDERS', 'PRODUCTION', 'QUALITY']);
 const allowedViews = computed(() => serverViews.value.filter(item =>
   item === 'ORDERS' || (item === 'PRODUCTION' ? tabs.value.some(key => key === 'production' || key === 'progress') : tabs.value.includes('quality'))));
@@ -252,7 +259,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 <template>
   <div class="order-workspace page-stack" :class="{ 'has-detail': detailOpen }">
     <section class="order-list-panel" aria-label="订单查询列表">
-      <details class="order-legacy-pages"><summary>其他业务记录与工具</summary><div class="order-legacy-actions"><button v-for="tab in legacyTabs" :key="tab.key" type="button" class="secondary-button" @click="openTab(tab.key)">{{ legacyLabel[tab.key] || tab.label }}</button></div></details>
+      <nav v-if="!detailOpen && quickActions.length" class="button-row order-quick-actions" aria-label="本岗办理"><button v-for="action in quickActions" :key="action.label" type="button" class="secondary-button" @click="action.run">{{ action.label }}</button></nav>
       <div class="order-facet-tabs" role="tablist" aria-label="订单分类">
         <button v-for="facet in facets" :key="facet" type="button" class="order-facet-tab" :aria-selected="filters.facet === facet" @click="chooseFacet(facet)">{{ orderFacetLabel(facet) }}<small v-if="facetCount(facet)">{{ facetCount(facet) }}</small></button>
       </div>
@@ -283,6 +290,9 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
           <button type="button" class="secondary-button" :disabled="result.page * result.size >= result.totalRows" @click="load(result.page + 1)">下一页</button>
         </nav>
       </template>
+      <details v-if="view === 'PRODUCTION' && tabs.includes('production')" class="section-block" @toggle="($event.target as HTMLDetailsElement).open && (machineToolsCreated = true)">
+        <summary>设备产量与机器档案绑定</summary><MachineOutputPanel v-if="machineToolsCreated" />
+      </details>
     </section>
     <aside v-if="detailOpen" class="order-detail-panel" aria-label="订单详情">
       <button type="button" class="secondary-button" @click="back">返回列表</button>

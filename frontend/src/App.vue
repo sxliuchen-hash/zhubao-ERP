@@ -41,11 +41,11 @@ const orderWorkspaceOpen = ref(false);
 const authRevision = ref(0);
 const orderWorkspaceLoader = () => import('./features/orders/OrderWorkspace.vue');
 const workspaceLoaders = {
-  inbound: () => import('./features/m1/InboundWorkspace.vue'),
+  inbound: orderWorkspaceLoader,
   customers: () => import('./features/m1/CustomerArchiveWorkspace.vue'),
-  production: () => import('./features/m1/ProductionWorkspace.vue'),
-  progress: () => import('./features/m1/ProgressWorkspace.vue'),
-  quality: () => import('./features/m1/QualityWorkspace.vue'),
+  production: orderWorkspaceLoader,
+  progress: orderWorkspaceLoader,
+  quality: orderWorkspaceLoader,
   inventory: () => import('./features/m1/InventoryTraceWorkspace.vue'),
   finance: () => import('./features/m1/FinanceWorkspace.vue'),
   approvals: () => import('./features/m1/ApprovalWorkspace.vue'),
@@ -56,7 +56,7 @@ const workspaceLoaders = {
   label: () => import('./features/m1/LabelWorkspace.vue'),
   hardware: () => import('./features/m1/HardwareIntegrationWorkspace.vue'),
   operations: () => import('./features/m1/OperationsCenterWorkspace.vue'),
-  mobile: () => import('./features/m1/MobileOpsWorkspace.vue'),
+  mobile: orderWorkspaceLoader,
 };
 const workspaceLoadAttempt = ref(0);
 provide('zhubao-retry-workspace', () => { workspaceLoadAttempt.value += 1; });
@@ -171,7 +171,7 @@ const activeLocation = computed(() => orderWorkspaceOpen.value ? activeOrderView
 const showDeskTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'dashboard'));
 const showInventoryTab = computed(() => visibleTabs.value.some((tab) => tab.key === 'inventory'));
 const orderDockTabs = computed(() => mobileOrderTabs(visibleTabs.value));
-const canReadOrders = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['inbound', 'production', 'progress', 'quality', 'inventory'].includes(tab.key)));
+const canReadOrders = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['inbound', 'production', 'progress', 'quality', 'inventory', 'mobile'].includes(tab.key)));
 const canIntake = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && (tab.key === 'inbound' || tab.key === 'mobile'))
   && (authSession.value?.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_INBOUND_CONFIRM')
     : ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER'].includes(authSession.value?.role ?? '')
@@ -229,7 +229,7 @@ watch(moreOpen, (open) => {
 
 watch(visibleTabs, (nextTabs) => {
   if (!nextTabs.some((tab) => tab.key === activeTab.value)) {
-    activeTab.value = nextTabs[0]?.key ?? 'dashboard';
+    activateTab(nextTabs[0]?.key ?? 'dashboard');
   }
 }, { immediate: true });
 
@@ -318,6 +318,11 @@ function intakeSaved(result: MobileIntakeResult) {
 }
 
 function activateTab(tab: TabKey) {
+  if (!visibleTabs.value.some(item => item.key === tab)) return;
+  if (['inbound', 'production', 'progress', 'quality', 'mobile'].includes(tab)) {
+    openOrders(tab === 'quality' ? 'QUALITY' : tab === 'inbound' || tab === 'mobile' ? 'ORDERS' : 'PRODUCTION');
+    return;
+  }
   if (visibleTabs.value.some((item) => item.key === tab)) {
     orderWorkspaceOpen.value = false;
     if (traceTarget.value?.intent === 'LOOKUP') traceTarget.value = null;
@@ -364,15 +369,7 @@ function startDockScan() {
     openOrders();
     return;
   }
-  if (!visibleTabs.value.some((tab) => tab.key === 'mobile')) return;
-  const switching = activeTab.value !== 'mobile';
-  armMobileScan();
-  if (switching) activateTab('mobile');
-  else {
-    void nextTick(() => {
-      if (!openMobileScanTarget()) cancelMobileScan();
-    });
-  }
+
 }
 
 function flattenMenuCodes(items: NavigationMenuItem[]): string[] {

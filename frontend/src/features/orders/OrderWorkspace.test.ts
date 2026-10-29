@@ -48,6 +48,35 @@ beforeEach(() => {
 });
 
 describe('统一订单列表与详情', () => {
+  it.each([
+    ['RECEIVER', 'BUSINESS_INBOUND_CONFIRM', '新建收货'],
+    ['OPERATOR', 'BUSINESS_PRODUCTION_REPORT', '扫码报工'],
+    ['QUALITY_INSPECTOR', 'BUSINESS_QUALITY_FREEZE', '扫码质检'],
+    ['WAREHOUSE_KEEPER', 'BUSINESS_OUTBOUND_SHIPMENT', '扫码发货'],
+  ])('手机 %s 按有效权限打开同一办理容器，列表保留', async (role, permission, label) => {
+    const open = vi.fn();
+    const wrapper = mountWorkspace({ 'zhubao-visible-tabs': ref(['mobile']),
+      'zhubao-auth-session': ref({ role, effectivePermissions: [permission] }),
+      'zhubao-open-intake': open, 'zhubao-open-production': open, 'zhubao-open-quality': open, 'zhubao-open-shipping': open });
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === label)!.trigger('click');
+    expect(open).toHaveBeenCalledOnce();
+    expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(true);
+    expect(wrapper.find('.production-panel, .quality-check-panel, .intake-page').exists()).toBe(false);
+    wrapper.unmount();
+  });
+  it('菜单和有效权限同时限制手机快捷操作，顶岗名称本身不产生额外入口', async () => {
+    const auth = ref({ role: 'BUSINESS_MANAGER', coverDuties: ['INTAKE', 'REPORT', 'QUALITY'], effectivePermissions: [] as string[] });
+    const wrapper = mountWorkspace({ 'zhubao-visible-tabs': ref(['mobile']), 'zhubao-auth-session': auth,
+      'zhubao-open-intake': vi.fn(), 'zhubao-open-production': vi.fn(), 'zhubao-open-quality': vi.fn(), 'zhubao-open-shipping': vi.fn() });
+    await flushPromises();
+    expect(wrapper.find('.order-quick-actions').exists()).toBe(false);
+    auth.value.effectivePermissions.push('BUSINESS_PRODUCTION_REPORT'); await flushPromises();
+    expect(wrapper.get('.order-quick-actions').text()).toBe('扫码报工');
+    expect(wrapper.text()).not.toContain('扫码质检');
+    expect(wrapper.text()).not.toContain('扫码发货');
+    wrapper.unmount();
+  });
   it('桌面与手机列表显示原建单人，只有管理员能打开母单维护', async () => {
     vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([
       row('WO-1', { createdBy: '收货建单人', operatorName: '当前师傅' }),

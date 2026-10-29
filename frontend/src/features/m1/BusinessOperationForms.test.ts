@@ -1,12 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
-import ProductionWorkspace from './ProductionWorkspace.vue';
-import QualityWorkspace from './QualityWorkspace.vue';
-import { fetchInventoryWorkspace, fetchProductionWorkspace, fetchQualityWorkspace } from '../../services/businessWorkspaceApi';
+import LossApplicationPanel from '../quality/LossApplicationPanel.vue';
+import { fetchInventoryWorkspace, fetchQualityWorkspace } from '../../services/businessWorkspaceApi';
 import { returnCustomerShipment, approveLoss } from '../../services/businessOperationApi';
 
-vi.mock('../../services/businessWorkspaceApi', () => ({ fetchInventoryWorkspace: vi.fn(), fetchProductionWorkspace: vi.fn(), fetchQualityWorkspace: vi.fn() }));
+vi.mock('../../services/businessWorkspaceApi', () => ({ fetchInventoryWorkspace: vi.fn(), fetchQualityWorkspace: vi.fn() }));
 vi.mock('../../services/businessOperationApi', () => ({
   shipFinishedStock: vi.fn(), returnCustomerShipment: vi.fn(), reviewAfterSalesReturn: vi.fn(),
   approveLoss: vi.fn(),
@@ -23,7 +22,7 @@ describe('业务操作真实输入', () => {
   it('没有历史损耗审批时，也能为当前质检单提交首次申请', async () => {
     const qualityCase = { code: 'QC-REAL', workOrder: 'ZD-REAL', process: '抛光', inspector: '质检员', defect: '缺陷', action: '待处理', status: '待质检' };
     vi.mocked(fetchQualityWorkspace).mockResolvedValue({ metrics: [], cases: [qualityCase], lossApprovals: [], dataSource: 'LIVE' });
-    const wrapper = mount(QualityWorkspace);
+    const wrapper = mount(LossApplicationPanel, { props: { application: { code: '', workOrder: qualityCase.workOrder, process: qualityCase.process, standard: '', actual: '', evidence: '', action: '', tone: 'amber', operationContext: { customerId: 1, ownerCustomerId: 1, motherOrderCode: 'MD-REAL', workOrderCode: 'ZD-REAL', materialCode: 'MAT', warehouseCode: 'SEMI', ownerType: 'CUSTOMER', stockStatus: 'SEMI_FINISHED', quantity: 1, weight: 10 } } } });
     await flushPromises();
     const submit = () => wrapper.findAll('button').find(button => button.text() === '提交损耗申请')!.trigger('click');
     await submit();
@@ -34,7 +33,11 @@ describe('业务操作真实输入', () => {
     await wrapper.get('[aria-label="投入重量（克）"]').setValue('10');
     await submit();
     await flushPromises();
-    expect(approveLoss).toHaveBeenCalledWith(expect.objectContaining({ code: 'LOSS-REAL', workOrder: 'ZD-REAL', process: '抛光' }), { approvalCode: 'LOSS-REAL', inputWeight: '10' });
+    expect(approveLoss).not.toHaveBeenCalled();
+    for (const [label, value] of [['产出重量（克）', '9'], ['合理转移重量（克）', '0'], ['标准损耗率（%）', '2']]) await wrapper.get(`[aria-label="${label}"]`).setValue(value);
+    vi.mocked(approveLoss).mockResolvedValueOnce({ approvalCode: 'LOSS-REAL', workOrderCode: 'ZD-REAL', approvalStatus: 'WAITING_APPROVAL', lossWeight: 1, excessLossWeight: 0.8 } as Awaited<ReturnType<typeof approveLoss>>);
+    await submit(); await flushPromises();
+    expect(approveLoss).toHaveBeenCalledWith(expect.objectContaining({ workOrder: 'ZD-REAL', process: '抛光' }), expect.objectContaining({ approvalCode: 'LOSS-REAL', inputWeight: '10', outputWeight: '9', requestId: expect.stringMatching(/^loss-/) }));
   });
 
   it('退货从加工库存选中已出库单后按原维度提交，页面不再提供旧确认出库', async () => {
@@ -71,14 +74,4 @@ describe('业务操作真实输入', () => {
     }));
   });
 
-  it('生产页不再提供工单池旧报工', async () => {
-    const workOrder = { code: 'ZD-REAL', customer: '实际客户', material: '物料', process: '抛光', processCategory: '', productCategory: '',
-      machineNo: '', workItemName: '', startedAt: '', finishedAt: '', completionStatus: '', handoffAuditStatus: '',
-      assignee: '', plannedQty: 10, finishedQty: 0, status: '加工中', progress: 0 };
-    vi.mocked(fetchProductionWorkspace).mockResolvedValue({ stationLoads: [], workOrders: [workOrder], handoffs: [], dataSource: 'LIVE' });
-    const wrapper = mount(ProductionWorkspace);
-    await flushPromises();
-    expect(wrapper.text()).not.toContain('提交报工');
-    expect(wrapper.find('[aria-label="本次完成数量"]').exists()).toBe(false);
-  });
 });

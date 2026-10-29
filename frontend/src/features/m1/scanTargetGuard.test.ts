@@ -5,8 +5,9 @@ import type { AuthSession } from '../../services/authApi';
 import { queryScanContext } from '../../services/scanContextApi';
 import { hasLiveCamera, openCameraStream, readLiveBarcode } from '../scan/cameraBarcode';
 import { buildScanContext } from '../scan/scanContextFixture';
-import MobileOpsWorkspace from './MobileOpsWorkspace.vue';
-import QualityWorkspace from './QualityWorkspace.vue';
+import IntakePanel from '../intake/IntakePanel.vue';
+import ProductionPanel from '../production/ProductionPanel.vue';
+import QualityPanel from '../quality/QualityPanel.vue';
 import LabelWorkspace from './LabelWorkspace.vue';
 import { fetchQualityWorkspace } from '../../services/businessWorkspaceApi';
 import { submitMobileIntake } from '../../services/mobileIntakeApi';
@@ -14,16 +15,9 @@ import { lookupProcessStation, submitProcessStation } from '../../services/proce
 import { lookupQualityCheck, submitQualityCheck } from '../../services/qualityCheckApi';
 import { fetchCustomers, fetchMaterials, fetchShortcuts } from '../../services/masterDataApi';
 
-function mountMobileOps() {
-  return mount(MobileOpsWorkspace, {
-    global: { provide: { 'zhubao-auth-session': ref({ role: 'ADMIN' } as AuthSession) } },
-  });
-}
-
-async function openMobileAction(wrapper: ReturnType<typeof mountMobileOps>, label: string) {
-  const button = wrapper.findAll('.mobile-order-shortcuts button').find((item) => item.text() === label);
-  expect(button).toBeTruthy();
-  await button!.trigger('click');
+function mountFieldPanel(component: typeof IntakePanel | typeof ProductionPanel) {
+  return mount(component, { props: { title: '岗位作业', intro: '', field: true },
+    global: { provide: { 'zhubao-auth-session': ref({ role: 'ADMIN' } as AuthSession) } } });
 }
 
 vi.mock('../../services/scanContextApi', async () => {
@@ -119,11 +113,11 @@ describe('现场入口防串单', () => {
     vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({
       objectType: 'WORK_ORDER',
       code: 'ZD-100',
-      customerName: '恒信珠宝',
+      customerName: '恒信珠宝', quantity: 1, weight: 2.5,
     }));
     vi.mocked(lookupProcessStation).mockResolvedValue(stationView('ZD-100'));
-    const wrapper = mountMobileOps();
-    await openMobileAction(wrapper, '岗位报工');
+    vi.mocked(submitProcessStation).mockResolvedValue({ orderCode: 'ZD-100', processName: '雕刻', ledgerCode: 'L-1', movedToSemiFinished: false, stockStatus: 'WIP' });
+    const wrapper = mountFieldPanel(ProductionPanel);
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('  JG|work_order|ZD-100  ');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -135,17 +129,16 @@ describe('现场入口防串单', () => {
     expect(lookupProcessStation).toHaveBeenCalledWith('ZD-100');
     expect(submitProcessStation).not.toHaveBeenCalled();
     await wrapper.get('[aria-label="核对 1 内壁刻字"]').setValue(true);
-    await wrapper.get('[aria-label="完成核对"]').trigger('click');
     expect(submitProcessStation).not.toHaveBeenCalled();
-    await wrapper.get('button').element;
-    const submit = wrapper.findAll('button').find((button) => button.text() === '提交雕刻');
+    const submit = wrapper.findAll('button').find((button) => button.text() === '确认雕刻交工');
     expect(submit).toBeTruthy();
     await submit!.trigger('click');
     expect(submitProcessStation).toHaveBeenCalledWith('ZD-100', '雕刻', expect.stringMatching(/^station-/));
 
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-200');
-    expect(wrapper.text()).toContain('贴纸已变化，请重新识别');
-    expect(wrapper.findAll('button').some((button) => button.text() === '提交雕刻')).toBe(false);
+    expect(wrapper.find('[aria-label="核对 1 内壁刻字"]').exists()).toBe(false);
+    expect(lookupProcessStation).not.toHaveBeenCalledWith('ZD-200');
+    expect(wrapper.findAll('button').some((button) => button.text() === '确认雕刻交工')).toBe(false);
     expect(submitProcessStation).toHaveBeenCalledTimes(1);
   });
 
@@ -159,8 +152,7 @@ describe('现场入口防串单', () => {
         { objectType: 'WORK_ORDER', code: 'ZD-2', motherOrderCode: 'MD-1', requirement: '乙', quantity: 1, quantityUnit: '件' },
       ],
     }));
-    const wrapper = mountMobileOps();
-    await openMobileAction(wrapper, '岗位报工');
+    const wrapper = mountFieldPanel(ProductionPanel);
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|mother|MD-1');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -173,7 +165,7 @@ describe('现场入口防串单', () => {
     vi.mocked(queryScanContext).mockResolvedValueOnce(buildScanContext({
       objectType: 'WORK_ORDER',
       code: 'ZD-2',
-      customerName: '恒信珠宝',
+      customerName: '恒信珠宝', quantity: 1, weight: 2.5,
     }));
     vi.mocked(lookupProcessStation).mockResolvedValue(stationView('ZD-2'));
     await wrapper.get('[aria-label="选择ZD-2"]').trigger('click');
@@ -185,14 +177,13 @@ describe('现场入口防串单', () => {
     });
     expect(lookupProcessStation).toHaveBeenCalledWith('ZD-2');
     expect(lookupProcessStation).not.toHaveBeenCalledWith('ZD-1');
-    expect(wrapper.find('[aria-label="完成核对"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="核对 1 内壁刻字"]').exists()).toBe(true);
     expect(wrapper.findAll('button').some((button) => button.text().startsWith('提交'))).toBe(false);
   });
 
   it('收货失败不会打开新建母单，成功时用规范化运单号而不是原始输入', async () => {
     vi.mocked(queryScanContext).mockRejectedValueOnce(new Error('未找到对应单据'));
-    const wrapper = mountMobileOps();
-    await wrapper.get('.mobile-order-create').trigger('click');
+    const wrapper = mountFieldPanel(IntakePanel);
     await wrapper.get('[aria-label="快递单号"]').setValue('CC20261012001');
     await wrapper.get('[aria-label="识别单号"]').trigger('click');
     await flushPromises();
@@ -221,14 +212,14 @@ describe('现场入口防串单', () => {
     await wrapper.get('[aria-label="数量"]').setValue('1');
     await wrapper.get('[aria-label="重量"]').setValue('2.5');
     await wrapper.findAll('button').find((button) => button.text() === '下一步：要求与证据')!.trigger('click');
-    const create = wrapper.findAll('button').find((button) => button.text() === '生成母单');
+    const create = wrapper.findAll('button').find((button) => button.text() === '确认建单并入库');
     await create!.trigger('click');
     await flushPromises();
     expect(submitMobileIntake).toHaveBeenCalledWith(expect.objectContaining({ courierNo: 'SF1048329001' }));
     expect(submitMobileIntake).not.toHaveBeenCalledWith(expect.objectContaining({ courierNo: 'sf 1048329001' }));
   });
 
-  it('切到岗位报工会停掉收货摄像头，迟到条码不能改岗位目标', async () => {
+  it('共享面板暂停时停掉收货摄像头，迟到条码不触发新目标', async () => {
     const stop = vi.fn();
     vi.mocked(hasLiveCamera).mockReturnValue(true);
     vi.mocked(openCameraStream).mockResolvedValue({ getTracks: () => [{ stop }] } as unknown as MediaStream);
@@ -236,12 +227,11 @@ describe('现场入口防串单', () => {
     vi.mocked(readLiveBarcode).mockImplementation(() => new Promise((resolve) => {
       finish = resolve;
     }));
-    const wrapper = mountMobileOps();
-    await wrapper.get('.mobile-order-create').trigger('click');
+    const suspended = ref(false);
+    const wrapper = mount(IntakePanel, { props: { title: '收货资料', intro: '', field: true }, global: { provide: { 'zhubao-scan-suspended': suspended, 'zhubao-auth-session': ref({ role: 'ADMIN' } as AuthSession) } } });
     await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
     await flushPromises();
-    await wrapper.get('.mobile-order-back').trigger('click');
-    await openMobileAction(wrapper, '岗位报工');
+    suspended.value = true; await flushPromises();
     expect(stop).toHaveBeenCalled();
     finish('JG|mother|MD-LATE');
     await flushPromises();
@@ -251,7 +241,7 @@ describe('现场入口防串单', () => {
 
   it('质检查不到单时不回落到列表里的默认质检单', async () => {
     vi.mocked(queryScanContext).mockRejectedValueOnce(new Error('未找到对应单据'));
-    const wrapper = mount(QualityWorkspace);
+    const wrapper = mount(QualityPanel, { props: { title: '质检', intro: '' } });
     await flushPromises();
     await wrapper.get('[aria-label="质检贴纸"]').setValue('JG|work_order|MISSING');
     await wrapper.get('[aria-label="识别质检贴纸"]').trigger('click');

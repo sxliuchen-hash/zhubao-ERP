@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { nextTick, ref } from 'vue';
+import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../services/apiClient';
 import type { AuthSession } from '../../services/authApi';
@@ -18,26 +18,18 @@ import {
   fetchProductionWorkspace,
   fetchQualityWorkspace,
 } from '../../services/businessWorkspaceApi';
-import InboundWorkspace from './InboundWorkspace.vue';
+import QualityPanel from '../quality/QualityPanel.vue';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
-import MobileOpsWorkspace from './MobileOpsWorkspace.vue';
+import IntakePanel from '../intake/IntakePanel.vue';
+import ProductionPanel from '../production/ProductionPanel.vue';
 import { lookupProcessStation, submitProcessStation } from '../../services/processStationApi';
 import { lookupQualityCheck, openQualityRework, submitQualityCheck } from '../../services/qualityCheckApi';
 import { queryScanContext } from '../../services/scanContextApi';
 import { contextForQuery } from '../scan/scanContextFixture';
-import ProductionWorkspace from './ProductionWorkspace.vue';
-import QualityWorkspace from './QualityWorkspace.vue';
 
-function mountMobileOps() {
-  return mount(MobileOpsWorkspace, {
-    global: { provide: { 'zhubao-auth-session': ref({ role: 'ADMIN' } as AuthSession) } },
-  });
-}
-
-async function openMobileAction(wrapper: ReturnType<typeof mountMobileOps>, label: string) {
-  const button = wrapper.findAll('.mobile-order-shortcuts button').find((item) => item.text() === label);
-  expect(button).toBeTruthy();
-  await button!.trigger('click');
+function mountFieldPanel(component: typeof IntakePanel | typeof ProductionPanel) {
+  return mount(component, { props: { title: '岗位作业', intro: '', field: true },
+    global: { provide: { 'zhubao-auth-session': ref({ role: 'ADMIN' } as AuthSession) } } });
 }
 
 vi.mock('../../services/businessWorkspaceApi', () => ({
@@ -260,151 +252,6 @@ describe('M1 business workspaces', () => {
     vi.mocked(queryScanContext).mockImplementation(async (request) => contextForQuery(request));
   });
 
-  it('renders inbound documents returned by the api', async () => {
-    const wrapper = mount(InboundWorkspace);
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('今日母单池');
-    expect(wrapper.find('table.inbound-dispatch-table').exists()).toBe(true);
-    expect(wrapper.text()).toContain('入库证据槽');
-    expect(wrapper.text()).not.toContain('入库校验规则');
-    expect(wrapper.text()).toContain('确认入库');
-    expect(wrapper.text()).toContain('拆包视频截取失败');
-    expect(wrapper.text()).toContain('MD-API-001');
-  });
-
-  it('shows an empty inbound list and the failure reason when the api is unavailable', async () => {
-    vi.mocked(fetchInboundWorkspace).mockRejectedValueOnce(new Error('来料接口不可用'));
-    const wrapper = mount(InboundWorkspace);
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('来料接口不可用');
-    expect(wrapper.text()).toContain('暂无来料单据');
-    expect(wrapper.text()).not.toContain('MD-API-001');
-    expect(wrapper.find('.active-object-card').exists()).toBe(false);
-  });
-
-  it('renders production station load and weighing handoff controls', async () => {
-    const wrapper = mount(ProductionWorkspace);
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('工序交付');
-    expect(wrapper.text()).toContain('今日工单池');
-    expect(wrapper.find('table.production-dispatch-table').exists()).toBe(true);
-    expect(wrapper.findAll('table.production-dispatch-table tbody tr.is-selected')).toHaveLength(1);
-    expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-006');
-    expect(wrapper.text()).toContain('称重交接阻断');
-    expect(wrapper.text()).toContain('设备产量汇总');
-    expect(wrapper.text()).toContain('机器档案待匹配');
-    expect(wrapper.text()).toContain('机器档案匹配建议');
-    expect(wrapper.text()).not.toContain('报工校验规则');
-    expect(wrapper.text()).not.toContain('提交报工');
-    expect(wrapper.text()).not.toContain('不是回放路径');
-    expect(wrapper.text()).toContain('审批阻断');
-
-    await wrapper.findAll('table.production-dispatch-table tbody tr')[0].trigger('click');
-
-    expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
-    expect(wrapper.classes()).toContain('is-detail');
-  });
-
-  it('filters production orders and keeps the filter after returning from detail', async () => {
-    const wrapper = mount(ProductionWorkspace);
-    await flushPromises();
-
-    await wrapper.get('[aria-label="客户筛选"]').setValue('恒信');
-    expect(wrapper.get('table.production-dispatch-table').text()).toContain('ZD-20260706-001');
-    expect(wrapper.get('table.production-dispatch-table').text()).not.toContain('ZD-20260706-006');
-
-    await wrapper.get('.production-card').trigger('click');
-    expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
-    expect(wrapper.classes()).toContain('is-detail');
-
-    await wrapper.get('.detail-back').trigger('click');
-    expect(wrapper.classes()).not.toContain('is-detail');
-    expect((wrapper.get('[aria-label="客户筛选"]').element as HTMLInputElement).value).toBe('恒信');
-    expect(wrapper.find('.active-object-card > strong').text()).toBe('ZD-20260706-001');
-  });
-
-  it('shows an empty production list while loading and when the api returns nothing', async () => {
-    let release: (value: Awaited<ReturnType<typeof fetchProductionWorkspace>>) => void = () => {};
-    vi.mocked(fetchProductionWorkspace).mockReturnValue(new Promise((resolve) => {
-      release = resolve;
-    }));
-    const wrapper = mount(ProductionWorkspace);
-    await nextTick();
-    expect(wrapper.text()).toContain('正在加载工单');
-    expect(wrapper.text()).not.toContain('暂无工单');
-
-    release({ stationLoads: [], workOrders: [], handoffs: [] });
-    await flushPromises();
-    expect(wrapper.text()).toContain('接口没有返回工单');
-    expect(wrapper.text()).toContain('暂无工单');
-    expect(wrapper.text()).toContain('暂无称重交接');
-    expect(wrapper.find('.active-object-card').exists()).toBe(false);
-  });
-
-  it('keeps the production failure and permission text instead of an empty success', async () => {
-    vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new Error('工单接口不可用'));
-    const failed = mount(ProductionWorkspace);
-    await flushPromises();
-    expect(failed.text()).toContain('工单接口不可用');
-    expect(failed.text()).toContain('暂无工单');
-    expect(failed.text()).not.toContain('无权限');
-    expect(failed.text()).not.toContain('ZD-20260706-001');
-
-    vi.mocked(fetchProductionWorkspace).mockRejectedValueOnce(new ApiRequestError('无权查看生产工单', 403, 40301));
-    const denied = mount(ProductionWorkspace);
-    await flushPromises();
-    expect(denied.text()).toContain('无权限');
-    expect(denied.text()).toContain('无权查看生产工单');
-    expect(denied.find('.active-object-card').exists()).toBe(false);
-    expect(denied.text()).not.toContain('ZD-20260706-001');
-  });
-
-  it('renders quality metrics and loss approvals', async () => {
-    const wrapper = mount(QualityWorkspace);
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('今日质检池');
-    expect(wrapper.find('table.quality-dispatch-table').exists()).toBe(true);
-    expect(wrapper.findAll('table.quality-dispatch-table tbody tr.is-selected')).toHaveLength(1);
-    expect(wrapper.find('.active-object-card > strong').text()).toBe('QC-20260706-021');
-    expect(wrapper.text()).toContain('损耗审批');
-    expect(wrapper.text()).toContain('提交损耗申请');
-    expect(wrapper.text()).toContain('对照加工要求');
-    expect(wrapper.text()).not.toContain('冻结异常库存');
-    expect(wrapper.text()).not.toContain('生成返工工单');
-    expect(wrapper.text()).not.toContain('复检放行入库');
-    expect(wrapper.text()).toContain('LOSS-20260706-009');
-
-    await wrapper.findAll('table.quality-dispatch-table tbody tr')[1].trigger('click');
-
-    expect(wrapper.find('.active-object-card > strong').text()).toBe('QC-20260706-022');
-    expect(wrapper.classes()).toContain('is-detail');
-  });
-
-  it('filters quality cases and keeps the filter after returning', async () => {
-    const wrapper = mount(QualityWorkspace);
-    await flushPromises();
-    await wrapper.findAll('button').find((button) => button.text() === '更多筛选')!.trigger('click');
-    await wrapper.get('[aria-label="质检状态筛选"]').setValue('已完成');
-    expect(wrapper.get('table.quality-dispatch-table').text()).toContain('QC-20260706-022');
-    expect(wrapper.get('table.quality-dispatch-table').text()).not.toContain('QC-20260706-021');
-    await wrapper.get('.desk-card').trigger('click');
-    expect(wrapper.classes()).toContain('is-detail');
-    await wrapper.get('.detail-back').trigger('click');
-    expect(wrapper.classes()).not.toContain('is-detail');
-    expect((wrapper.get('[aria-label="质检状态筛选"]').element as HTMLInputElement).value).toBe('已完成');
-
-    vi.mocked(fetchQualityWorkspace).mockRejectedValueOnce(new ApiRequestError('无权查看质检', 403, 40301));
-    const denied = mount(QualityWorkspace);
-    await flushPromises();
-    expect(denied.text()).toContain('无权限');
-    expect(denied.text()).toContain('无权查看质检');
-    expect(denied.find('.active-object-card').exists()).toBe(false);
-  });
-
   it('renders inventory ledger details and trace evidence', async () => {
     const wrapper = mount(InventoryTraceWorkspace);
     await flushPromises();
@@ -453,11 +300,9 @@ describe('M1 business workspaces', () => {
   });
 
   it('renders the mobile intake form', async () => {
-    const wrapper = mountMobileOps();
-    await wrapper.get('.mobile-order-create').trigger('click');
+    const wrapper = mountFieldPanel(IntakePanel);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('手机收货');
     expect(wrapper.text()).toContain('快递单号');
     expect(wrapper.find('[aria-label="快递单号"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="拍面单"]').exists()).toBe(true);
@@ -467,8 +312,7 @@ describe('M1 business workspaces', () => {
     const clicks = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
     const media = navigator.mediaDevices;
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
-    const wrapper = mountMobileOps();
-    await wrapper.get('.mobile-order-create').trigger('click');
+    const wrapper = mountFieldPanel(IntakePanel);
     await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
 
     expect(wrapper.text()).not.toContain('当前浏览器不能直接扫码');
@@ -483,8 +327,7 @@ describe('M1 business workspaces', () => {
     const getUserMedia = vi.fn();
     const media = navigator.mediaDevices;
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
-    const wrapper = mountMobileOps();
-    await wrapper.get('.mobile-order-create').trigger('click');
+    const wrapper = mountFieldPanel(IntakePanel);
     await wrapper.get('[aria-label="打开摄像头"]').trigger('click');
 
     expect(wrapper.text()).toContain('请改用 https://');
@@ -514,8 +357,7 @@ describe('M1 business workspaces', () => {
       }],
       message: '',
     });
-    const wrapper = mountMobileOps();
-    await openMobileAction(wrapper, '岗位报工');
+    const wrapper = mountFieldPanel(ProductionPanel);
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -558,8 +400,7 @@ describe('M1 business workspaces', () => {
       message: '',
     });
     vi.mocked(submitProcessStation).mockRejectedValue(new Error('上一道「雕刻」还没交，不能交「镶嵌」'));
-    const wrapper = mountMobileOps();
-    await openMobileAction(wrapper, '岗位报工');
+    const wrapper = mountFieldPanel(ProductionPanel);
     await wrapper.get('[aria-label="贴纸二维码"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别贴纸"]').trigger('click');
     await flushPromises();
@@ -593,7 +434,7 @@ describe('M1 business workspaces', () => {
         { lineNo: 3, clause: '镜面抛光', verdict: '', reason: '' },
       ],
     });
-    const wrapper = mount(QualityWorkspace);
+    const wrapper = mount(QualityPanel, { props: { title: '对照加工要求', intro: '' } });
     await flushPromises();
     await wrapper.get('[aria-label="质检贴纸"]').setValue('JG|work_order|ZD-100');
     await wrapper.get('[aria-label="识别质检贴纸"]').trigger('click');
@@ -660,46 +501,4 @@ describe('M1 business workspaces', () => {
     expect(wrapper.text()).toContain('库存已从冻结转入返工');
   });
 
-  it('手机现场有质检入口，操作页不出现收款', async () => {
-    vi.mocked(lookupQualityCheck).mockResolvedValue({
-      orderCode: 'ZD-100',
-      motherOrderCode: 'MD-100',
-      customerName: '恒信珠宝',
-      dueDate: '2026-10-20',
-      processingRequirement: '内壁刻字',
-      ready: true,
-      blockReason: '',
-      inspector: '质检员 周娜',
-      qualityCaseCode: '',
-      outcome: '',
-      frozen: false,
-      reworkOrderCode: '',
-      lines: [{ lineNo: 1, clause: '内壁刻字', verdict: '', reason: '' }],
-      roundCode: '',
-      roundNo: 0,
-      roundType: '',
-      reworkReported: false,
-      canRecheck: false,
-      recheckBlock: '',
-      canRelease: false,
-      releaseBlock: '',
-      rounds: [],
-    });
-    const wrapper = mountMobileOps();
-    expect(wrapper.text()).not.toContain('收款');
-    await openMobileAction(wrapper, '发货');
-    expect(wrapper.text()).toContain('确认发货');
-    expect(wrapper.text()).not.toContain('收款');
-
-    await wrapper.get('.mobile-order-back').trigger('click');
-    await openMobileAction(wrapper, '质检');
-    await wrapper.get('[aria-label="质检贴纸"]').setValue('JG|work_order|ZD-100');
-    await wrapper.get('[aria-label="识别质检贴纸"]').trigger('click');
-    await flushPromises();
-    expect(wrapper.text()).toContain('手机质检');
-    expect(wrapper.text()).toContain('质检员 周娜');
-    expect(wrapper.text()).toContain('质检员取当前登录账号');
-    expect(wrapper.find('[aria-label="质检员姓名"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('收款');
-  });
 });

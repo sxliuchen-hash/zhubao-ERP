@@ -11,6 +11,7 @@ import type { ScanIntent, ScanObjectType, ScanRelatedTarget } from '../../servic
 
 const scan = reactive(useScanContext());
 const traceTarget = inject<Ref<TraceTarget | null>>('zhubao-trace-target', ref(null));
+const openIntake = inject<((target: { objectType: NonNullable<ReturnType<typeof canonicalTarget>>['objectType']; code: string }) => void) | null>('zhubao-open-intake', null);
 const openTab = inject<(tab: string) => void>('zhubao-open-tab', () => {});
 const openProduction = inject<OpenProductionAction | null>('zhubao-open-production', null);
 const openQuality = inject<OpenQualityAction | null>('zhubao-open-quality', null);
@@ -70,6 +71,7 @@ function choose(related: ScanRelatedTarget) {
 function jump(intent: ScanIntent, tab: string) {
   const target = identity.value;
   if (!target || scan.context?.requiresSelection || !traceTarget.value) return;
+  if (intent === 'INTAKE' && openIntake) { openIntake({ objectType: target.objectType, code: target.code }); return; }
   if (intent === 'PRODUCTION' && openProduction) { openProduction({ objectType: target.objectType, code: target.code }, 'station'); return; }
   if (intent === 'QUALITY' && openQuality) { openQuality({ objectType: target.objectType, code: target.code }); return; }
   if (intent === 'SHIPPING' && openShipping) { openShipping({ objectType: target.objectType, code: target.code }); return; }

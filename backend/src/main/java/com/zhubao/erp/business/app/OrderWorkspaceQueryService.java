@@ -337,17 +337,9 @@ public class OrderWorkspaceQueryService {
             String courierNo,
             String createdAt
     ) {
-        List<String> steps = processes == null || processes.isEmpty() ? WorkshopProcesses.DEFAULT_ORDER : processes;
         Set<String> done = submitted.getOrDefault(code, Set.of());
-        String current = steps.get(steps.size() - 1);
-        String status = WAITING_QUALITY;
-        for (String step : steps) {
-            if (!done.contains(step)) {
-                current = step;
-                status = done.isEmpty() ? WAITING_START : IN_PROCESS;
-                break;
-            }
-        }
+        String current = WorkshopProcesses.current(processes, done);
+        String status = done.contains(current) ? WAITING_QUALITY : done.isEmpty() ? WAITING_START : IN_PROCESS;
         QualityRequirementCheck check = checks.get(code);
         String outcome = check == null ? "未质检" : blank(check.outcome());
         if (check != null) {
@@ -552,7 +544,7 @@ public class OrderWorkspaceQueryService {
         Set<String> menus = new LinkedHashSet<>(menuCodes);
         List<String> views = new ArrayList<>();
         if (menus.contains("inbound") || menus.contains("progress") || menus.contains("production")
-                || menus.contains("quality") || menus.contains("inventory")) {
+                || menus.contains("quality") || menus.contains("inventory") || menus.contains("mobile")) {
             views.add(OrderWorkspaceQuery.ORDERS);
         }
         if (menus.contains("production") || menus.contains("progress")) {

@@ -115,7 +115,7 @@ describe('App', () => {
     expect(wrapper.find('[aria-label="版本升级通知"]').exists()).toBe(false);
     expect(localStorage.getItem('zhubao-upgrade-notice-20261020')).toBe('1');
   });
-  it('岗位导航读取同一 Q1，并保留原业务工具入口而不循环回到岗位列表', async () => {
+  it('岗位导航统一读取 Q1，设备工具接续后不再进入旧业务页面', async () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(allMenuCodes));
     const wrapper = mount(App); await flushPromises();
     await wrapper.get('[data-tab="production"]').trigger('click'); await flushPromises();
@@ -123,12 +123,12 @@ describe('App', () => {
     expect(wrapper.get('h1').text()).toBe('生产作业');
     expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'PRODUCTION', size: 20 }));
     expect(wrapper.get('[data-tab="production"]').classes()).toContain('active');
+    expect(wrapper.text()).toContain('设备产量与机器档案绑定');
     await wrapper.get('[data-tab="quality"]').trigger('click'); await flushPromises();
     expect(wrapper.get('h1').text()).toBe('质量作业');
     expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'QUALITY', size: 20 }));
-    await wrapper.findAll('.order-legacy-actions button').find(button => button.text() === '质检记录、损耗与工资试算')!.trigger('click'); await flushPromises();
-    expect(wrapper.get('h1').text()).toBe('质检');
-    expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(false); wrapper.unmount();
+    expect(wrapper.find('.order-legacy-actions').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(true); wrapper.unmount();
   });
   it('只有进度菜单仍可进入生产岗位查询，空菜单不会展开为全量管理菜单', async () => {
     vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['dashboard', 'progress']));
@@ -152,10 +152,19 @@ describe('App', () => {
     await wrapper.get('[aria-label="扫码"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.get('h1').text()).toBe('手机作业');
-    expect(wrapper.get('.mobile-tab[data-mobile-section="more"]').classes()).toContain('active');
+    expect(wrapper.get('h1').text()).toBe('订单中心');
+    expect(wrapper.get('.mobile-tab[data-mobile-section="orders"]').classes()).toContain('active');
     wrapper.unmount();
     if (mediaDevices) Object.defineProperty(navigator, 'mediaDevices', mediaDevices);
+  });
+
+  it('只有手机菜单也直接使用统一订单页，不恢复旧手机工作台', async () => {
+    vi.mocked(fetchAuthSession).mockResolvedValueOnce(sessionWithMenus(['mobile']));
+    const wrapper = mount(App); await flushPromises();
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(true), { timeout: 5000 });
+    expect(wrapper.get('h1').text()).toBe('订单中心');
+    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'ORDERS' }));
+    wrapper.unmount();
   });
 
   it('opens the permitted field workspace first on a phone', async () => {
@@ -246,7 +255,7 @@ describe('App', () => {
     expect(wrapper.get('[aria-label="更多"]').text()).not.toContain('来料');
     await wrapper.get('.mobile-tab[data-mobile-section="orders"]').trigger('click');
     await vi.waitFor(() => expect(wrapper.find('[aria-label="订单查询列表"]').exists()).toBe(true), { timeout: 5000 });
-    expect(wrapper.get('[aria-label="订单查询列表"]').text()).toContain('来料');
+    expect(fetchOrderWorkspace).toHaveBeenCalledWith(expect.objectContaining({ view: 'ORDERS' }));
   });
 
   it('opens an authorized module from the mobile more sheet without a second page state', async () => {

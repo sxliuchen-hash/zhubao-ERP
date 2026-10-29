@@ -179,25 +179,13 @@ public class ProgressBoardService {
             Map<String, Set<String>> submitted,
             Map<String, QualityRequirementCheck> checks
     ) {
-        List<String> steps = processes.isEmpty() ? WorkshopProcesses.DEFAULT_ORDER : processes;
         Set<String> done = submitted.getOrDefault(orderCode, Set.of());
-        String current = steps.get(steps.size() - 1);
-        String status = WAITING_QUALITY;
-        boolean allDone = true;
-        for (String step : steps) {
-            if (!done.contains(step)) {
-                current = step;
-                status = done.isEmpty() ? WAITING_START : IN_PROCESS;
-                allDone = false;
-                break;
-            }
-        }
+        String current = WorkshopProcesses.current(processes, done);
+        String status = done.contains(current) ? WAITING_QUALITY : done.isEmpty() ? WAITING_START : IN_PROCESS;
         QualityRequirementCheck check = checks.get(orderCode);
         String outcome = check == null ? NO_QUALITY : blank(check.outcome());
         if (check != null) {
             status = !check.reworkOrderCode().isBlank() ? REWORK : QUALITY_DONE;
-        } else if (allDone) {
-            status = WAITING_QUALITY;
         }
         String tab = switch (status) {
             case WAITING_START, IN_PROCESS -> "production";

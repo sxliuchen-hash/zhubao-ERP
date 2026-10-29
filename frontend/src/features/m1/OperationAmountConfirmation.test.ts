@@ -1,8 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryTraceWorkspace from './InventoryTraceWorkspace.vue';
-import ProductionWorkspace from './ProductionWorkspace.vue';
-import { fetchInventoryWorkspace, fetchProductionWorkspace } from '../../services/businessWorkspaceApi';
+import { fetchInventoryWorkspace } from '../../services/businessWorkspaceApi';
 import { returnCustomerShipment } from '../../services/businessOperationApi';
 
 vi.mock('../../services/businessWorkspaceApi', () => ({
@@ -63,20 +62,4 @@ describe('可见的数量重量', () => {
     expect(sent.weight).toBe('6.20');
   });
 
-  it('生产页工单详情不再收集旧报工数量', async () => {
-    vi.mocked(fetchProductionWorkspace).mockResolvedValue({
-      stationLoads: [],
-      workOrders: [{
-        code: 'ZD-REAL', customer: '客户', material: '物料', process: '抛光', processCategory: '', productCategory: '',
-        machineNo: '', workItemName: '', startedAt: '', finishedAt: '', completionStatus: '', handoffAuditStatus: '',
-        assignee: '', plannedQty: 10, finishedQty: 0, status: '加工中', progress: 0, operationContext: context,
-      }],
-      handoffs: [],
-      dataSource: 'LIVE',
-    });
-    const wrapper = mount(ProductionWorkspace);
-    await flushPromises();
-    expect(wrapper.find('[aria-label="本次完成数量"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('提交报工');
-  });
 });

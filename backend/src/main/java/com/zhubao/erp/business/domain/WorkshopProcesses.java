@@ -17,6 +17,13 @@ public final class WorkshopProcesses {
     private WorkshopProcesses() {
     }
 
+    /** 查询共用的正式交工位置：首个未交工工序；全交齐后保留末道，不以百分比推断交工。 */
+    public static String current(List<String> processes, Set<String> submitted) {
+        List<String> steps = processes == null || processes.isEmpty() ? DEFAULT_ORDER : processes;
+        for (String step : steps) if (!submitted.contains(step)) return step;
+        return steps.get(steps.size() - 1);
+    }
+
     /**
      * 按默认顺序保留勾选的工序。传入 null 表示沿用全部默认工序；空列表表示全部勾掉。
      */
