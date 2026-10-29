@@ -65,6 +65,7 @@ export const labelFaceCss = `
 .bw-fields dd {
   font-weight: 700;
   min-width: 0;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .bw-foot {
@@ -136,7 +137,7 @@ export const labelFaceCss = `
   display: inline;
   font-weight: 700;
   overflow: visible;
-  white-space: normal;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .bw-label--compact .bw-fields dt::after { content: '：'; }

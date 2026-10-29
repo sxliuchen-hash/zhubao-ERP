@@ -60,7 +60,7 @@ namespace Zhubao.PrintReceiver
 
     static class Program
     {
-        const string AgentRelease = "20261029.4";
+        const string AgentRelease = "20261029.5";
 
         [STAThread]
         static int Main(string[] args)
@@ -199,7 +199,11 @@ namespace Zhubao.PrintReceiver
                     {
                         // 保留收到的原始 PNG，便于与网页下载图片直接比对文件摘要。
                         File.WriteAllBytes(Path.Combine(inbox, safeId + ".png"), Convert.FromBase64String(built.PreviewPng));
-                        LabelPrinter.Print(printerName, bitmap, built.Copies, built.Spec.WidthMm, built.Spec.HeightMm);
+                        LabelPrinter.Print(printerName, bitmap, built.Copies, built.Spec.WidthMm, built.Spec.HeightMm, delegate(string settings)
+                        {
+                            File.AppendAllText(Path.Combine(inbox, safeId + ".print.txt"), settings + Environment.NewLine, new UTF8Encoding(false));
+                            Console.WriteLine(settings);
+                        });
                     }
                     Report(agent, claim.Id, "SPOOLED", "");
                     Console.WriteLine("已送入系统队列 " + claim.Id + " → " + printerName + "。请看标签机是否出纸。");

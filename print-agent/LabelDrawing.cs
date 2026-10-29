@@ -558,7 +558,7 @@ namespace Zhubao.PrintReceiver
                 || System.Text.RegularExpressions.Regex.IsMatch(right, "^[A-Z]{1,8}$");
         }
 
-        public static void Print(string printerName, Bitmap image, int copies, int widthMm, int heightMm)
+        public static void Print(string printerName, Bitmap image, int copies, int widthMm, int heightMm, Action<string> reportSettings)
         {
             if (copies < 1 || copies > 20) throw new ArgumentException("打印份数无效");
             string installed = ResolveInstalledPrinter(printerName);
@@ -578,18 +578,27 @@ namespace Zhubao.PrintReceiver
                 document.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
                 document.DefaultPageSettings.Landscape = false;
                 document.PrinterSettings.DefaultPageSettings.Landscape = false;
-                document.PrintPage += (sender, args) =>
+                document.QueryPageSettings += (sender, args) =>
                 {
                     args.PageSettings.Landscape = false;
                     args.PageSettings.PaperSize = paper;
                     args.PageSettings.Margins = new Margins(0, 0, 0, 0);
+                };
+                document.PrintPage += (sender, args) =>
+                {
                     // 页面坐标默认是 1/100 英寸。按打印机 DPI 当像素去画，300 DPI 会把 40×30 放大成约 120×90。
                     args.Graphics.PageUnit = GraphicsUnit.Millimeter;
                     float marginX = args.PageSettings.HardMarginX / 100f * 25.4f;
                     float marginY = args.PageSettings.HardMarginY / 100f * 25.4f;
                     args.Graphics.TranslateTransform(-marginX, -marginY);
-                    RectangleF destination = MillimeterDestination(widthMm, heightMm);
-                    args.Graphics.DrawImage(image, destination);
+                    RectangleF area = args.PageSettings.PrintableArea;
+                    var printableMm = new RectangleF(area.X * 0.254f, area.Y * 0.254f, area.Width * 0.254f, area.Height * 0.254f);
+                    RectangleF destination = PrintableDestination(widthMm, heightMm, printableMm);
+                    reportSettings(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "纸张={0}×{1}mm；驱动纸张={2:F2}×{3:F2}mm；可打印区域={4}；硬边距={5:F2},{6:F2}mm；绘制区域={7}；打印DPI={8}×{9}；图片={10}×{11}px",
+                        widthMm, heightMm, args.PageSettings.PaperSize.Width * 0.254f, args.PageSettings.PaperSize.Height * 0.254f,
+                        printableMm, marginX, marginY, destination, args.Graphics.DpiX, args.Graphics.DpiY, image.Width, image.Height));
+                    DrawPreview(args.Graphics, image, destination);
                     args.HasMorePages = false;
                 };
                 // 部分标签机驱动把最大份数报成 1。超过上限时逐张送入，避免份数被悄悄丢掉。
@@ -625,7 +634,8 @@ namespace Zhubao.PrintReceiver
                     nearest = candidate;
                 }
             }
-            if (nearest != null && nearestGap <= 8) return nearest;
+            // 不能把小一两毫米的纸型当成 40×30，否则驱动会在绘制前截掉边缘。
+            if (nearest != null && Math.Abs(nearest.Width - wantWidth) <= 1 && Math.Abs(nearest.Height - wantHeight) <= 1) return nearest;
             return new PaperSize(widthMm + "x" + heightMm + "mm", wantWidth, wantHeight);
         }
 
@@ -639,6 +649,26 @@ namespace Zhubao.PrintReceiver
         {
             if (widthMm < 10 || heightMm < 10) throw new ArgumentException("标签尺寸无效");
             return new RectangleF(0, 0, widthMm, heightMm);
+        }
+
+        /** 整图保持比例排进实际可打印区域，硬边距之外的像素无法通过负偏移印出来。 */
+        public static RectangleF PrintableDestination(int widthMm, int heightMm, RectangleF printableMm)
+        {
+            RectangleF available = RectangleF.Intersect(MillimeterDestination(widthMm, heightMm), printableMm);
+            if (available.Width <= 0 || available.Height <= 0)
+                throw new ArgumentException("打印机没有可用的打印区域，请检查驱动纸张尺寸");
+            float scale = Math.Min(1f, Math.Min(available.Width / widthMm, available.Height / heightMm));
+            float width = widthMm * scale;
+            float height = heightMm * scale;
+            return new RectangleF(available.X + (available.Width - width) / 2, available.Y + (available.Height - height) / 2, width, height);
+        }
+
+        /** 点阵输出避免插值产生灰边；源区域显式使用像素，不让图片 DPI 隐式参与裁切。 */
+        public static void DrawPreview(Graphics canvas, Bitmap image, RectangleF destination)
+        {
+            canvas.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+            canvas.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+            canvas.DrawImage(image, destination, new RectangleF(0, 0, image.Width, image.Height), GraphicsUnit.Pixel);
         }
 
         public static string ResolveInstalledPrinter(string name)
@@ -658,6 +688,7 @@ namespace Zhubao.PrintReceiver
 
         public static string SelfCheck(string samplePath)
         {
+            CheckPrintableArea();
             int[] expected = { 0x5412, 0x5125, 0x5E7C, 0x5B4B, 0x45F9, 0x40CE, 0x4F97, 0x4AA0 };
             for (int mask = 0; mask < expected.Length; mask++)
             {
@@ -798,6 +829,55 @@ namespace Zhubao.PrintReceiver
                     photoBitmap.Save(Path.Combine(Path.GetDirectoryName(samplePath), "zhubao-label-photo.png"), System.Drawing.Imaging.ImageFormat.Png);
             }
             return "二维码 " + size + " 模块，画面 472×354，冷真圆章与空间校验通过";
+        }
+
+        private static void CheckPrintableArea()
+        {
+            var areas = new[] { new RectangleF(0, 0, 40, 30), new RectangleF(2, 1, 36, 28),
+                new RectangleF(1.5f, 0.6f, 37, 28.8f), new RectangleF(0, 0, 39.5f, 29.5f) };
+            using (var image = new Bitmap(400, 300))
+            {
+                image.SetResolution(300, 300);
+                using (var source = Graphics.FromImage(image))
+                {
+                    source.Clear(Color.White);
+                    foreach (int x in new[] { 0, 376 })
+                        foreach (int y in new[] { 0, 276 }) source.FillRectangle(Brushes.Black, x, y, 24, 24);
+                }
+                foreach (int dpi in new[] { 203, 300 })
+                foreach (RectangleF area in areas)
+                {
+                    RectangleF destination = PrintableDestination(40, 30, area);
+                    if (destination.Left < area.Left - 0.001f || destination.Top < area.Top - 0.001f
+                        || destination.Right > area.Right + 0.001f || destination.Bottom > area.Bottom + 0.001f
+                        || Math.Abs(destination.Width / destination.Height - 4f / 3f) > 0.001f)
+                        throw new InvalidOperationException("整图越过可打印区域或被拉伸");
+                    using (var printed = new Bitmap((int)Math.Round(40 * dpi / 25.4), (int)Math.Round(30 * dpi / 25.4)))
+                    {
+                        printed.SetResolution(dpi, dpi);
+                        using (var canvas = Graphics.FromImage(printed))
+                        {
+                            canvas.PageUnit = GraphicsUnit.Millimeter;
+                            canvas.Clear(Color.White);
+                            canvas.SetClip(area);
+                            DrawPreview(canvas, image, destination);
+                            foreach (float x in new[] { 0.03f, 0.97f })
+                            foreach (float y in new[] { 0.04f, 0.96f })
+                            {
+                                int px = (int)Math.Round((destination.X + destination.Width * x) * dpi / 25.4);
+                                int py = (int)Math.Round((destination.Y + destination.Height * y) * dpi / 25.4);
+                                if (printed.GetPixel(px, py).R > 50)
+                                    throw new InvalidOperationException("可打印区域裁掉了预览角标 " + dpi + " DPI");
+                            }
+                        }
+                    }
+                }
+            }
+            bool rejected = false;
+            try { PrintableDestination(40, 30, RectangleF.Empty); }
+            catch (ArgumentException) { rejected = true; }
+            if (!rejected) throw new InvalidOperationException("无可打印区域时未停止输出");
+            Console.WriteLine("203/300 DPI、四种硬边距场景的整图比例与四角像素检查通过");
         }
 
         private static void DrawQr(Graphics canvas, string content, int left, int top, int box)
