@@ -64,6 +64,10 @@ public class CustomerStatementCutoffQuery {
                 withheldGoldwork = true;
                 continue;
             }
+            if (isSensitive(entry)) {
+                pending.add("内部费用不在客户对账范围内");
+                continue;
+            }
             if (entry.bizTime() == null || entry.bizTime().isAfter(cutoff)) {
                 afterCutoff.add(movementText(entry) + " 未计入本次截止日");
                 continue;
@@ -151,6 +155,12 @@ public class CustomerStatementCutoffQuery {
             return true;
         }
         return entry.to() != null && entry.to().stockStatus() == StockStatus.SHIPPED;
+    }
+
+    private static boolean isSensitive(StockLedgerEntry entry) {
+        String type = entry.documentType() == null ? "" : entry.documentType().toLowerCase(java.util.Locale.ROOT);
+        return type.contains("payroll") || type.contains("wage") || type.contains("cost")
+                || type.contains("工资") || type.contains("成本") || type.contains("工费");
     }
 
     private static boolean isLoss(StockLedgerEntry entry) {
