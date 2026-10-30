@@ -1724,6 +1724,7 @@ PWA 一期边界：
 | `POST /api/documents/attachments/uploads` | `DOCUMENT_ATTACHMENT_UPLOAD` | `ADMIN`、`GENERAL_MANAGER`、`RECEIVER`、`WAREHOUSE_KEEPER`、`QUALITY_INSPECTOR`、`WORKSHOP_LEADER` |
 | `GET /api/auth/account-options`、`GET /api/auth/accounts`、`GET /api/auth/accounts/pre-approval-applications`、`GET /api/auth/accounts/pre-approval-evidence`、`POST /api/auth/accounts`、`POST /api/auth/accounts/{username}/status`、`POST /api/auth/accounts/{username}/unlock`、`POST /api/auth/accounts/{username}/delete`、`POST /api/auth/accounts/{username}/session-revocations` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN` |
 | `GET/POST /api/security/customer-authorizations`、`POST /api/security/customer-authorizations/revocations` | `CUSTOMER_AUTHORIZATION_MANAGE` | 仅 `ADMIN` |
+| `POST /api/security/customer-portal/bindings`、`POST /api/security/customer-portal/bindings/{username}/disable`、`POST /api/security/customer-portal/presented-claims`、`POST /api/security/customer-portal/credentials`、`POST /api/security/customer-portal/credential-recoveries` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN`。绑定只接受稳定客户编号；自填编号、凭据签发和找回拒绝，不返回成功 |
 
 ### 13.3 错误响应
 
@@ -1946,6 +1947,14 @@ PWA 一期边界：
 保存字段包括 `username/password/operator/role/dataScope/customerScope/enabled/allowedProcesses/coverDuties/teamCode/departmentCode`。`CUSTOMER_RANGE` 空名单拒绝，其他岗位按真实参与及组织范围过滤；未提供的工序、顶岗和组织字段沿用已有值。密码不得写入审计或响应。`demoAccount` 是历史账号标记，不应作为正式账号的密码策略例外。
 
 前置就绪度、草稿、新申请及专属材料上传入口已移除，`enforce-account-actions` 配置退出。旧 payload 的 `preApprovalApplicationCode` 不再作为放行条件，也不消费历史申请。`ACCOUNT_MANAGEMENT/ACCOUNT_PRE_APPROVAL` 历史任务可按原授权读取，不进入可审批待办，也不能决策；损耗等业务审批保持有效。
+
+客户入口身份不出现在内部账号的角色目录里，也不能用 `POST /api/auth/accounts` 创建、改角色、启停或删除。
+
+### 14.4.1 客户入口身份
+
+管理员用 `POST /api/security/customer-portal/bindings` 把一个新账号绑定到已启用的客户档案编号。请求只含 `username` 和 `customerId`。一个账号只对应一个客户主体。空编号、不存在的编号、已停用客户、借用财务、库管或业务管理等内部账号，都会拒绝。绑定写入 `auth_customer_portal_binding`，账号角色为 `CUSTOMER_PORTAL`，数据范围只有该编号，没有内部菜单、财务、库管或顶岗权限。
+
+`POST /api/security/customer-portal/presented-claims` 拒绝按客户名称、客户编码或客户自填编号认领。`POST /api/security/customer-portal/credentials` 和 `POST /api/security/customer-portal/credential-recoveries` 在凭据交付与找回方式核定前拒绝，不生成口令，客户身份因此不能登录。`POST /api/security/customer-portal/bindings/{username}/disable` 停用身份并撤销该账号仍有效的会话。同客户多人和同一集团多主体仍待核，不能追加绑定。这些接口不写库存、客户账或工资。
 
 ### 14.5 菜单树接口
 

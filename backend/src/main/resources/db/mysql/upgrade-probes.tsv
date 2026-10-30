@@ -103,3 +103,4 @@
 103	TABLE	inv_tool_loan
 104	TABLE	inv_tool_disposition
 105	TABLE	inv_material_stocktake
+106	TABLE	auth_customer_portal_binding

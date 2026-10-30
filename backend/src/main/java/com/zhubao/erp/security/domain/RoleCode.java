@@ -10,5 +10,7 @@ public enum RoleCode {
     OPERATOR,
     QUALITY_INSPECTOR,
     WAREHOUSE_KEEPER,
-    FINANCE_STATISTICIAN
+    FINANCE_STATISTICIAN,
+    /** 客户手机只读入口。没有内部岗位权限，也不能携带全部数据范围或顶岗。 */
+    CUSTOMER_PORTAL
 }

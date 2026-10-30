@@ -19,6 +19,9 @@ public class NavigationMenuService {
     }
 
     public List<NavigationMenuItem> menuTreeFor(RoleCode role) {
+        if (role == RoleCode.CUSTOMER_PORTAL) {
+            return List.of();
+        }
         Set<String> allowedCodes = roleMenus().getOrDefault(role, Set.of("dashboard"));
         return repository.findMenuItems().stream()
                 .filter(item -> allowedCodes.contains(item.code()))

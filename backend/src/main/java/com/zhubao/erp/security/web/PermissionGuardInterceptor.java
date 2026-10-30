@@ -58,6 +58,10 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/hardware/gateway/devices", PermissionCode.GATEWAY_DEVICE_MANAGE),
             Map.entry("/api/security/customer-authorizations", PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE),
             Map.entry("/api/security/customer-authorizations/revocations", PermissionCode.CUSTOMER_AUTHORIZATION_MANAGE),
+            Map.entry("/api/security/customer-portal/bindings", PermissionCode.AUTH_ACCOUNT_MANAGE),
+            Map.entry("/api/security/customer-portal/presented-claims", PermissionCode.AUTH_ACCOUNT_MANAGE),
+            Map.entry("/api/security/customer-portal/credentials", PermissionCode.AUTH_ACCOUNT_MANAGE),
+            Map.entry("/api/security/customer-portal/credential-recoveries", PermissionCode.AUTH_ACCOUNT_MANAGE),
             Map.entry("/api/auth/accounts", PermissionCode.AUTH_ACCOUNT_MANAGE),
             Map.entry("/api/documents/attachments/uploads", PermissionCode.DOCUMENT_ATTACHMENT_UPLOAD),
             Map.entry("/api/documents/captures", PermissionCode.DOCUMENT_CAPTURE),
@@ -116,6 +120,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             return PermissionCode.REGISTER_IMPORT_POSTING;
         }
         if (authAccountStatusPath.matcher(path).matches()) {
+            return PermissionCode.AUTH_ACCOUNT_MANAGE;
+        }
+        if (path.matches("^/api/security/customer-portal/bindings/[^/]+/disable$")) {
             return PermissionCode.AUTH_ACCOUNT_MANAGE;
         }
         if (gatewayDeviceManagePath.matcher(path).matches()) {

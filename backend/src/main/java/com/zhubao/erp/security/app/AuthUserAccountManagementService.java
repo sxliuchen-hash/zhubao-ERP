@@ -95,6 +95,7 @@ public class AuthUserAccountManagementService {
     public AuthAccountOptions accountOptions(PermissionGuard permissionGuard, OperatorContext operatorContext) {
         requireAdmin(operatorContext);
         return new AuthAccountOptions(java.util.Arrays.stream(RoleCode.values())
+                .filter(role -> role != RoleCode.CUSTOMER_PORTAL)
                 .map(role -> new AuthAccountOptions.RoleOption(role.name(), roleLabel(role),
                         permissionGuard.allowedPermissionsFor(role).stream()
                                 .sorted()
@@ -125,6 +126,7 @@ public class AuthUserAccountManagementService {
         RoleCode role = parseRole(command.role());
         DataScope dataScope = parseDataScope(command.dataScope());
         AuthUserAccount existing = accountRepository.findByUsername(username).orElse(null);
+        rejectCustomerPortal(role, existing);
         List<String> customerScope = customerScopeFor(dataScope, command.customerScope(), existing);
         boolean passwordProvided = command.password() != null && !command.password().isBlank();
         List<String> allowedProcesses = command.allowedProcesses() == null
@@ -203,6 +205,7 @@ public class AuthUserAccountManagementService {
     ) {
         requireAdmin(operatorContext);
         AuthUserAccount account = requireAccount(username);
+        rejectCustomerPortal(account.role(), account);
         String action = (enabled ? "启用账号" : "停用账号")
                 + reasonSuffix(reason);
         String transactionalReason = action + (enabled || authSessionService == null ? "" : "；会话吊销在提交后执行");
@@ -223,6 +226,7 @@ public class AuthUserAccountManagementService {
     ) {
         requireAdmin(operatorContext);
         AuthUserAccount account = requireAccount(username);
+        rejectCustomerPortal(account.role(), account);
         String action = "管理员解锁账号" + reasonSuffix(reason);
         actionRepository.commit(AuthAccountMutation.unlock(
                 account.username(),
@@ -235,6 +239,7 @@ public class AuthUserAccountManagementService {
     public void delete(String username, OperatorContext operatorContext) {
         requireAdmin(operatorContext);
         AuthUserAccount account = requireAccount(username);
+        rejectCustomerPortal(account.role(), account);
         String ownUsername = operatorContext.headerBased() || authSessionService == null ? ""
                 : authSessionService.session("Bearer " + operatorContext.sessionToken())
                         .map(com.zhubao.erp.security.domain.AuthSession::username).orElse("");
@@ -586,7 +591,15 @@ public class AuthUserAccountManagementService {
             case QUALITY_INSPECTOR -> "质检员";
             case WAREHOUSE_KEEPER -> "库管员";
             case FINANCE_STATISTICIAN -> "财务统计";
+            case CUSTOMER_PORTAL -> "客户只读";
         };
+    }
+
+    /** 客户入口身份单独绑定和停用，不能从内部账号管理改角色、范围、顶岗或口令。 */
+    private static void rejectCustomerPortal(RoleCode role, AuthUserAccount existing) {
+        if (role == RoleCode.CUSTOMER_PORTAL || (existing != null && existing.role() == RoleCode.CUSTOMER_PORTAL)) {
+            throw new BusinessException("客户身份不能通过内部账号管理办理");
+        }
     }
 
     private String dataScopeLabel(DataScope dataScope) {

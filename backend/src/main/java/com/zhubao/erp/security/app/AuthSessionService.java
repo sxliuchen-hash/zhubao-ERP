@@ -13,6 +13,9 @@ import com.zhubao.erp.security.domain.AuthLoginSessionRepository;
 import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthTokenDigest;
 import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.CustomerPortalBinding;
+import com.zhubao.erp.security.domain.CustomerPortalBindingRepository;
+import com.zhubao.erp.security.domain.CustomerPortalRules;
 import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.infra.InMemoryAuthLoginSessionRepository;
@@ -59,6 +62,7 @@ public class AuthSessionService {
     private final CustomerAuthorizationService customerAuthorizationService;
     private final PermissionGuard permissionGuard;
     private MasterDataService masterDataService;
+    private CustomerPortalBindingRepository portalBindings;
 
     public AuthSessionService(
             NavigationMenuService navigationMenuService,
@@ -128,6 +132,11 @@ public class AuthSessionService {
         this.masterDataService = masterDataService;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCustomerPortalBindings(CustomerPortalBindingRepository portalBindings) {
+        this.portalBindings = portalBindings;
+    }
+
     public AuthSession login(AuthLoginCommand command) {
         String username = normalize(command.username());
         Optional<AuthUserAccount> account = userAccountRepository.findByUsername(username);
@@ -140,6 +149,11 @@ public class AuthSessionService {
         if (account.isEmpty() || !account.get().enabled()) {
             recordAudit("LOGIN", username, "", "", "DENIED", "用户名或密码错误", "");
             throw new PermissionDeniedException("用户名或密码错误");
+        }
+        if (account.get().role() == RoleCode.CUSTOMER_PORTAL) {
+            recordAudit("LOGIN", account.get().username(), account.get().operator(), account.get().role().name(),
+                    "DENIED", "客户凭据交付方式尚未核定，不能登录", "");
+            throw new PermissionDeniedException("客户凭据交付方式尚未核定，不能登录");
         }
         if (!passwordHasher.matches(command.password(), account.get().passwordHash())) {
             recordFailedLogin(account.get(), now);
@@ -275,6 +289,15 @@ public class AuthSessionService {
     }
 
     private List<String> effectiveCustomerScope(AuthUserAccount user) {
+        if (user.role() == RoleCode.CUSTOMER_PORTAL) {
+            if (portalBindings == null) {
+                return List.of();
+            }
+            return portalBindings.findByUsername(user.username())
+                    .filter(CustomerPortalBinding::enabled)
+                    .map(binding -> List.of(Long.toString(binding.customerId())))
+                    .orElse(List.of());
+        }
         if (user.dataScope() != DataScope.CUSTOMER_RANGE) return user.customerScope();
         List<String> saved = customerAuthorizationService == null ? user.customerScope()
                 : customerAuthorizationService.effectiveCustomerScope(user.username(), user.customerScope());
@@ -286,6 +309,11 @@ public class AuthSessionService {
                 .orElseThrow(() -> new PermissionDeniedException("自助改密需要登录会话"));
         AuthUserAccount currentAccount = userAccountRepository.findByUsername(entry.user().username())
                 .orElseThrow(SessionInvalidException::new);
+        if (currentAccount.role() == RoleCode.CUSTOMER_PORTAL) {
+            recordAudit("PASSWORD_CHANGE", currentAccount.username(), currentAccount.operator(),
+                    currentAccount.role().name(), "DENIED", "客户凭据交付与找回方式尚未核定，不能找回凭据", entry.token());
+            throw new PermissionDeniedException("客户凭据交付与找回方式尚未核定，不能找回凭据");
+        }
         Instant now = Instant.now();
         if (!currentAccount.enabled()) {
             recordAudit(
@@ -514,6 +542,7 @@ public class AuthSessionService {
             );
             throw new SessionInvalidException();
         }
+        assertPortalIdentity(rawToken, session, current);
         Instant expiresAt = renewIfCloseToExpiry(session, now);
         return Optional.of(new SessionEntry(rawToken, current, expiresAt));
     }
@@ -670,7 +699,28 @@ public class AuthSessionService {
             case QUALITY_INSPECTOR -> "质检员";
             case WAREHOUSE_KEEPER -> "库管员";
             case FINANCE_STATISTICIAN -> "财务统计";
+            case CUSTOMER_PORTAL -> "客户只读";
         };
+    }
+
+    /** 客户会话只能代表一个已绑定主体，不能借内部全部数据权限或顶岗。 */
+    private void assertPortalIdentity(String rawToken, AuthLoginSession session, AuthUserAccount user) {
+        if (user.role() != RoleCode.CUSTOMER_PORTAL) {
+            return;
+        }
+        try {
+            if (portalBindings == null) {
+                throw new PermissionDeniedException("客户绑定尚未配置");
+            }
+            CustomerPortalBinding binding = portalBindings.findByUsername(user.username())
+                    .orElseThrow(() -> new PermissionDeniedException("客户身份没有绑定客户主体"));
+            CustomerPortalRules.assertRestricted(user, binding);
+        } catch (PermissionDeniedException ex) {
+            loginSessions.removeByTokenHash(session.tokenHash());
+            recordAudit("SESSION_RESOLVE", session.username(), session.operator(), session.role(),
+                    "DENIED", ex.getMessage(), rawToken);
+            throw ex;
+        }
     }
 
     private String dataScopeLabel(DataScope dataScope) {

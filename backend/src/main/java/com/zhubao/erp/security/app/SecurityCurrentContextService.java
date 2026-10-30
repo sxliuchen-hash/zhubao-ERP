@@ -67,6 +67,7 @@ public class SecurityCurrentContextService {
             case QUALITY_INSPECTOR -> "质检员";
             case WAREHOUSE_KEEPER -> "库管员";
             case FINANCE_STATISTICIAN -> "财务统计";
+            case CUSTOMER_PORTAL -> "客户只读";
         };
     }
 

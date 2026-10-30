@@ -225,6 +225,28 @@ public record AuthUserAccount(
         );
     }
 
+    public AuthUserAccount withEnabled(boolean nextEnabled) {
+        return new AuthUserAccount(
+                username,
+                passwordHash,
+                operator,
+                role,
+                dataScope,
+                nextEnabled,
+                demoAccount,
+                passwordChangedAt,
+                failedLoginCount,
+                lockedUntil,
+                customerScope,
+                passwordChangeRequired,
+                temporaryPasswordConsumed,
+                allowedProcesses,
+                coverDuties,
+                teamCode,
+                departmentCode
+        );
+    }
+
     public AuthUserAccount withCustomerScope(List<String> scope) {
         return new AuthUserAccount(
                 username,
