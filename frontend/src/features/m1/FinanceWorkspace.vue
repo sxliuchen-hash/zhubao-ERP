@@ -26,6 +26,7 @@ import {
   type PayableView,
   type PayrollLine} from '../../services/financeApi';
 import CustomerBillPanel from '../finance/CustomerBillPanel.vue';
+import DeliveryChargePane from '../finance/DeliveryChargePane.vue';
 import SettlementPanel from '../finance/SettlementPanel.vue';
 import { apiPost } from '../../services/apiClient';
 import { validBillContext, type OpenBillAction } from '../finance/billContext';
@@ -112,6 +113,7 @@ watch([yearMonth, customerId], () => { ++pendingSequence; pendingReading.value =
 const settlementType = ref('CHILD');
 const settlementCode = ref('');
 const allocationReceipt = ref('');
+const deliveryChargeId = ref('');
 const allocationReceivable = ref('');
 const allocationAmount = ref('');
 const allocationRequest = ref('');
@@ -1119,6 +1121,8 @@ function kindLabel(kind: string) {
       <h2>客户账单与收款</h2><p>按客户编号与月份进入原客户面板，收起后仍保留请求与回执。一笔收款可以勾选多张订单核销，未核销部分仍是预收。</p>
       <button v-if="openBill" class="primary-button" type="button" @click="showBill('receipt')">核对客户账单与收款</button>
       <CustomerBillPanel v-else-if="validBillContext(billContext)" :key="customerId + ':' + yearMonth" :context="billContext" initial-mode="receipt" />
+      <label>本次发货单<input v-model="deliveryChargeId" aria-label="本次发货单号" /></label>
+      <DeliveryChargePane v-if="deliveryChargeId.trim()" :delivery-id="deliveryChargeId.trim()" customer-name="本次客户" shipped-quantity="" quantity-unit="颗" />
       <p v-else>请先填写正整数客户编号和有效月份。</p>
       <h3>已有预收后续核销</h3>
       <label>收款单号<input v-model="allocationReceipt" aria-label="预收收款单号" /></label>
