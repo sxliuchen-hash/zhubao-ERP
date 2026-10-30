@@ -1,6 +1,6 @@
 import { loginAuthSession } from '../../services/authApi';
 import { apiGet, apiPost } from '../../services/apiClient';
-import type { CustomerEvidenceDetail, CustomerEvidenceItem, CustomerOwnedStock } from './customerStock';
+import type { CustomerEvidenceDetail, CustomerEvidenceItem, CustomerOwnedStock, CustomerStatement } from './customerStock';
 
 export function loginCustomer(username: string, password: string) {
   return loginAuthSession({ username, password });
@@ -8,6 +8,10 @@ export function loginCustomer(username: string, password: string) {
 
 export function loadOwnedStock(): Promise<CustomerOwnedStock> {
   return apiGet<CustomerOwnedStock>('/api/customer-portal/owned-stock');
+}
+
+export function loadStatement(cutoff: string): Promise<CustomerStatement> {
+  return apiGet<CustomerStatement>(`/api/customer-portal/statements?cutoff=${encodeURIComponent(cutoff)}`);
 }
 
 export function loadEvidence(): Promise<CustomerEvidenceDetail> {

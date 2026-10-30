@@ -3,13 +3,14 @@ import entrySource from '../../customer-main.ts?raw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomerStockPage from './CustomerStockPage.vue';
 import { bucketMeaning, filterLines, weightText, type CustomerStockLine } from './customerStock';
-import { downloadEvidence, loadEvidence, loadOwnedStock, loginCustomer } from './customerPortalApi';
+import { downloadEvidence, loadEvidence, loadOwnedStock, loadStatement, loginCustomer } from './customerPortalApi';
 
 vi.mock('./customerPortalApi', () => ({
   loginCustomer: vi.fn(),
   loadOwnedStock: vi.fn(),
   loadEvidence: vi.fn(),
   downloadEvidence: vi.fn(),
+  loadStatement: vi.fn(),
 }));
 
 const photo = {
@@ -93,6 +94,30 @@ describe('客户手机库存', () => {
     await flushPromises();
     expect(downloadEvidence).toHaveBeenCalledWith(photo);
     expect(withPhoto.text()).toContain('已下载 bead.jpg');
+    await withPhoto.get('button[type="button"]').trigger('click');
+    const statementButton = withPhoto.findAll('button').find((button) => button.text() === '读取对账');
+    await statementButton?.trigger('click');
+    expect(withPhoto.text()).toContain('请指定截止日');
+    expect(loadStatement).not.toHaveBeenCalled();
+    vi.mocked(loadStatement).mockResolvedValue({
+      customerId: 1,
+      cutoff: '2026-10-03T00:00:00Z',
+      receivedQuantity: '1000',
+      shippedQuantity: '300',
+      lossQuantity: '10',
+      lossWeight: '未称',
+      factoryAndOutside: '截止日的在厂与在外尚未核定',
+      bills: '账单可见范围尚未核定',
+      afterCutoff: [],
+      pending: [],
+      exportText: '收料,1000\n出厂,300\n损耗,10',
+    });
+    await withPhoto.get('input[placeholder="2026-10-03T00:00:00Z"]').setValue('2026-10-03T00:00:00Z');
+    await statementButton?.trigger('click');
+    await flushPromises();
+    expect(withPhoto.text()).toContain('收料 1000');
+    expect(withPhoto.text()).toContain('收料,1000');
+    expect(withPhoto.text()).toContain('账单可见范围尚未核定');
     expect(withPhoto.text()).not.toContain('工资');
     withPhoto.unmount();
   });

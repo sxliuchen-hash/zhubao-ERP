@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { downloadEvidence, loadEvidence, loadOwnedStock, loginCustomer } from './customerPortalApi';
+import { downloadEvidence, loadEvidence, loadOwnedStock, loadStatement, loginCustomer } from './customerPortalApi';
 import {
   bucketLabel,
   bucketMeaning,
@@ -8,6 +8,7 @@ import {
   weightText,
   type CustomerEvidenceDetail,
   type CustomerOwnedStock,
+  type CustomerStatement,
   type CustomerStockLine,
 } from './customerStock';
 
@@ -22,6 +23,9 @@ const material = ref('');
 const selected = ref<CustomerStockLine | null>(null);
 const readAt = ref('');
 const downloadName = ref('');
+const cutoff = ref('');
+const statement = ref<CustomerStatement | null>(null);
+const statementMessage = ref('');
 
 const visibleLines = computed(() => filterLines(stock.value?.lines ?? [], material.value));
 
@@ -59,6 +63,20 @@ function selectLine(line: CustomerStockLine) {
   downloadName.value = '';
 }
 
+async function readStatement() {
+  statement.value = null;
+  statementMessage.value = '';
+  if (!cutoff.value.trim()) {
+    statementMessage.value = '请指定截止日';
+    return;
+  }
+  try {
+    statement.value = await loadStatement(cutoff.value.trim());
+  } catch (error) {
+    statementMessage.value = error instanceof Error ? error.message : '对账读取失败';
+  }
+}
+
 async function downloadGranted() {
   const item = evidence.value?.items[0];
   if (!item) return;
@@ -81,6 +99,17 @@ async function downloadGranted() {
     <section v-else>
       <p v-if="readAt">本次读取时间 {{ readAt }}</p>
       <button type="button" @click="refresh">刷新</button>
+      <label>截止时点<input v-model="cutoff" placeholder="2026-10-03T00:00:00Z" /></label>
+      <button type="button" @click="readStatement">读取对账</button>
+      <p v-if="statementMessage" class="pending">{{ statementMessage }}</p>
+      <article v-if="statement">
+        <p>收料 {{ statement.receivedQuantity }}</p>
+        <p>出厂 {{ statement.shippedQuantity }}</p>
+        <p>损耗 {{ statement.lossQuantity }} {{ statement.lossWeight }}</p>
+        <p>{{ statement.factoryAndOutside }}</p>
+        <p>{{ statement.bills }}</p>
+        <pre>{{ statement.exportText }}</pre>
+      </article>
       <p v-if="errorText" class="error">{{ errorText }}</p>
       <template v-else-if="stock">
         <label>筛选<input v-model="material" placeholder="材质或单位" /></label>

@@ -33,6 +33,20 @@ export interface CustomerEvidenceItem {
   downloadTicket: string;
 }
 
+export interface CustomerStatement {
+  customerId: number;
+  cutoff: string;
+  receivedQuantity: string | number;
+  shippedQuantity: string | number;
+  lossQuantity: string | number;
+  lossWeight: string;
+  factoryAndOutside: string;
+  bills: string;
+  afterCutoff: string[];
+  pending: string[];
+  exportText: string;
+}
+
 export interface CustomerEvidenceDetail {
   customerId: number;
   visibility: string;
