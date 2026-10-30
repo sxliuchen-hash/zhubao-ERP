@@ -1,0 +1,25 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=23,label="拍照计数与数量回填｜接口先预留，算法后续开发",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.5",ranksep="0.6"];
+ node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.2,0.14"];
+ edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+ photo [label="扫码定位当前袋与工序\n拍摄、上传本次现场照片\n合适的同图可同时计数与作证据",color="#2563eb",fillcolor="#eff6ff"];
+ manual [label="手工填写数量\n始终可用，不依赖识别服务",color="#2563eb",fillcolor="#eff6ff"];
+ subgraph cluster_future {
+  label="后续C1｜识别接口与算法适配器";fontname="SimSun";fontsize=19;color="#a1a1aa";style=dashed;
+  request [label="提交独立识别请求\n图片ID＋目标／袋版本／节点／字段／单位"];
+  algorithm [label="算法适配器\n读取获准原图，生成识别结果\n具体算法及部署后续选定"];
+  result [label="识别建议数量＋结果编号\n原图、原上下文与算法版本可追溯\n失败／不支持不伪装成0"];
+  request -> algorithm;algorithm -> result;
+ }
+ context [label="回填前检查当前上下文\n换单、分袋或换字段后迟到结果不得串值"];
+ draft [label="当前数量输入栏\n回填建议数，人工核对或修改\n草稿保留识别原数与最终数"];
+ submit [label="原报工命令正常提交\n服务端核对权限、袋版本、照片与数量闭合\n识别接口不代替报工接口",color="#2563eb",fillcolor="#eff6ff"];
+ saved [label="原业务事务\n报工＋必要库存变动＋照片／识别引用＋请求结果\n原请求回放不重复记账",color="#2563eb",fillcolor="#eff6ff"];
+ note [shape=note,label="识别、回填和人工修改都不直接改变库存或费用。\n识别差异不自动成为损耗，置信度不代替质量放行。\n识别失败可用本次照片与手填数量继续；不绕过报工必拍照。",color="#71717a",fillcolor="#fafafa"];
+ photo -> manual;photo -> request [style=dashed,label="后续可选计数"];
+ manual -> draft;
+ result -> context [style=dashed,label="建议回填"];
+ context -> draft;
+ algorithm -> manual [style=dashed,label="失败／不支持则手填",constraint=false];
+ draft -> submit;submit -> saved;saved -> note [style=dashed,arrowhead=none];
+}

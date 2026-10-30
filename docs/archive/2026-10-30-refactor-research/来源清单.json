@@ -1,0 +1,41 @@
+{
+  "日期": "2026-10-30",
+  "来源提交": "792eefc",
+  "文件": [
+    {
+      "原路径": "docs/工序报工与分袋交付改进方案.md",
+      "归档路径": "docs/archive/2026-10-30-refactor-research/工序报工与分袋交付改进方案.md",
+      "原文SHA256": "a4e7f28ef1c5c99568e5b1a4258259dcb302df2b135e54cd997854b2254c1cd5",
+      "归档SHA256": "10492690960b53e25ee8bc296fba764215f7c8c7a28cd3788c87d0aa68fab969",
+      "整合章节": "process-bags"
+    },
+    {
+      "原路径": "docs/工序报工与分袋交付实施计划.md",
+      "归档路径": "docs/archive/2026-10-30-refactor-research/工序报工与分袋交付实施计划.md",
+      "原文SHA256": "5edcfa8f30c7a965b928aeba9c55434c5310eb6e8bd46dd8a4b7d7282ca2bfbd",
+      "归档SHA256": "950b4b86561eddc06938c14b00a72e391653505c886580e45e64a5e08997d341",
+      "整合章节": "implementation"
+    },
+    {
+      "原路径": "docs/加工费灵活计费与财务设计复盘.md",
+      "归档路径": "docs/archive/2026-10-30-refactor-research/加工费灵活计费与财务设计复盘.md",
+      "原文SHA256": "3b6a0d039f8a010418b17214563d4f366f253e259099ae6ba2be11780407a4cf",
+      "归档SHA256": "c15e03897a3f9721fc7e5d29ddaca86f1a2230850ead0131b15b4488dc854e5b",
+      "整合章节": "finance"
+    },
+    {
+      "原路径": "docs/客户库存与本厂物料资产管理调研.md",
+      "归档路径": "docs/archive/2026-10-30-refactor-research/客户库存与本厂物料资产管理调研.md",
+      "原文SHA256": "502e83e087fc65776aa11434f624490fd88ea8a32b2b1ee415c2fbeab02ad8e7",
+      "归档SHA256": "6471138d30a741330baef9f4cb3a9e8552bb21b6a4ce566d9bce0dcc73d0eed6",
+      "整合章节": "customer-stock"
+    },
+    {
+      "原路径": "docs/系统设计复盘与功能图解.md",
+      "归档路径": "docs/archive/2026-10-30-refactor-research/系统设计复盘与功能图解.md",
+      "原文SHA256": "3f23d6e3766abfaef67cc32429d851a84c6e011d1bea596cd65ce568d5f22dea",
+      "归档SHA256": "858ea33f9bd08f7557e1d37c3630f66c2ed3e220517f18ed4e83bfd680b1b2e4",
+      "整合章节": "architecture"
+    }
+  ]
+}
