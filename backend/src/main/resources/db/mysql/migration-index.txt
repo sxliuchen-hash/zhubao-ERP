@@ -95,3 +95,4 @@ V94__m3_customer_return_source.sql
 V95__m3_customer_delivery_bill.sql
 V96__m3_public_delivery_access.sql
 V97__m3_factory_item.sql
+V98__m3_company_material_receipt.sql
