@@ -158,6 +158,51 @@ class BusinessWorkUnitTest {
         assertThat(harness.requests()).isEqualTo(2);
     }
 
+    @Test
+    void 独立连接写入不进入失败回滚的命令() throws Exception {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1");
+        dataSource.setUser("sa");
+        dataSource.setPassword("");
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            String sql = Files.readString(Path.of("src/main/resources/db/mysql/V44__m3_command_request.sql"), StandardCharsets.UTF_8);
+            for (String item : MigrationCatalog.statements(sql)) {
+                statement.execute(item);
+            }
+            statement.execute("create table probe_unit_ledger (code varchar(40) primary key, note varchar(80) not null)");
+        }
+        try (Connection outside = dataSource.getConnection();
+             PreparedStatement statement = outside.prepareStatement(
+                     "insert into probe_unit_ledger(code, note) values (?, ?)")) {
+            outside.setAutoCommit(true);
+            statement.setString(1, "OUTSIDE");
+            statement.setString(2, "独立连接");
+            statement.executeUpdate();
+        }
+        JdbcBusinessWorkUnit unit = new JdbcBusinessWorkUnit(dataSource, new JdbcCommandRequestRepository(dataSource));
+        assertThatThrownBy(() -> unit.execute(call("req-outside", "wh", "SHIP", "WORK_ORDER", "ZD-1", "outside"), session -> {
+            Connection bound = WorkSessionBindings.requiredJdbc(session);
+            try (PreparedStatement statement = bound.prepareStatement(
+                    "insert into probe_unit_ledger(code, note) values (?, ?)")) {
+                statement.setString(1, "INSIDE");
+                statement.setString(2, "会话内");
+                statement.executeUpdate();
+            } catch (SQLException ex) {
+                throw new IllegalStateException(ex);
+            }
+            throw new IllegalStateException("命令失败");
+        })).isInstanceOf(IllegalStateException.class);
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("select code from probe_unit_ledger order by code")) {
+            assertThat(rows.next()).isTrue();
+            assertThat(rows.getString(1)).isEqualTo("OUTSIDE");
+            assertThat(rows.next()).isFalse();
+        }
+    }
+
     private CommandCall call(String requestId, String actorId, String action, String targetType, String targetCode, String payload) {
         return new CommandCall(requestId, actorId, action, targetType, targetCode, payload);
     }
