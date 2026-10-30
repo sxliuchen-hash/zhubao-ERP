@@ -27,6 +27,7 @@ import {
   type PayrollLine} from '../../services/financeApi';
 import CustomerBillPanel from '../finance/CustomerBillPanel.vue';
 import DeliveryChargePane from '../finance/DeliveryChargePane.vue';
+import EmployeeSettlementPane from '../finance/EmployeeSettlementPane.vue';
 import SettlementPanel from '../finance/SettlementPanel.vue';
 import { apiPost } from '../../services/apiClient';
 import { validBillContext, type OpenBillAction } from '../finance/billContext';
@@ -114,6 +115,7 @@ const settlementType = ref('CHILD');
 const settlementCode = ref('');
 const allocationReceipt = ref('');
 const deliveryChargeId = ref('');
+const employeeTargetCode = ref('');
 const allocationReceivable = ref('');
 const allocationAmount = ref('');
 const allocationRequest = ref('');
@@ -1123,6 +1125,8 @@ function kindLabel(kind: string) {
       <CustomerBillPanel v-else-if="validBillContext(billContext)" :key="customerId + ':' + yearMonth" :context="billContext" initial-mode="receipt" />
       <label>本次发货单<input v-model="deliveryChargeId" aria-label="本次发货单号" /></label>
       <DeliveryChargePane v-if="deliveryChargeId.trim()" :delivery-id="deliveryChargeId.trim()" customer-name="本次客户" shipped-quantity="" quantity-unit="颗" />
+      <label>员工核算目标<input v-model="employeeTargetCode" aria-label="员工核算目标" /></label>
+      <EmployeeSettlementPane v-if="employeeTargetCode.trim()" :target-code="employeeTargetCode.trim()" employee-quantity="" outsourcing-quantity="0" :loss-quantity="null" />
       <p v-else>请先填写正整数客户编号和有效月份。</p>
       <h3>已有预收后续核销</h3>
       <label>收款单号<input v-model="allocationReceipt" aria-label="预收收款单号" /></label>
