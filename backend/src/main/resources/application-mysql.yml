@@ -57,6 +57,8 @@ zhubao:
     repository: ${ZHUBAO_OUTSOURCING_COMPLETION_REPOSITORY:jdbc}
   outsourcing-fee-basis:
     repository: ${ZHUBAO_OUTSOURCING_FEE_BASIS_REPOSITORY:jdbc}
+  delivery-draft:
+    repository: ${ZHUBAO_DELIVERY_DRAFT_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:
