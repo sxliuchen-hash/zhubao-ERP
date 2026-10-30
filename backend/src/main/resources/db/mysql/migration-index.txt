@@ -97,3 +97,4 @@ V96__m3_public_delivery_access.sql
 V97__m3_factory_item.sql
 V98__m3_company_material_receipt.sql
 V99__m3_company_material_issue.sql
+V100__m3_company_material_consumption.sql

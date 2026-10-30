@@ -206,7 +206,8 @@ class CompanyMaterialIssueReturnTest {
         OperatorContextResolver actors = mock(OperatorContextResolver.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(actors.resolve(request)).thenReturn(admin);
-        CompanyMaterialIssueController controller = new CompanyMaterialIssueController(service, actors);
+        CompanyMaterialIssueController controller = new CompanyMaterialIssueController(
+                service, new CompanyMaterialConsumptionService(stocks, issues, unit, guard), actors);
         CompanyMaterialIssue issued = controller.issue(new CompanyMaterialIssueController.IssueRequest(
                 "f03-http-ly", bead.itemId(), received.batchCode(), "WH-01", "WS-01",
                 new BigDecimal("5"), null, "颗", "MD-1"), request).data();
@@ -225,10 +226,12 @@ class CompanyMaterialIssueReturnTest {
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : new String[]{
                     "V44__m3_command_request.sql", "V36__m3_finance_operations.sql",
-                    "V97__m3_factory_item.sql", "V98__m3_company_material_receipt.sql", "V99__m3_company_material_issue.sql"}) {
+                    "V97__m3_factory_item.sql", "V98__m3_company_material_receipt.sql", "V99__m3_company_material_issue.sql",
+                    "V100__m3_company_material_consumption.sql"}) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql/" + file), StandardCharsets.UTF_8);
                 for (String item : MigrationCatalog.statements(sql)) {
-                    if (item.trim().regionMatches(true, 0, "create", 0, 6)) {
+                    String trimmed = item.trim();
+                    if (trimmed.regionMatches(true, 0, "create", 0, 6) || trimmed.regionMatches(true, 0, "alter", 0, 5)) {
                         statement.execute(item);
                     }
                 }

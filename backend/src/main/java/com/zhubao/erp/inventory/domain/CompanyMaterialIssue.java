@@ -13,6 +13,7 @@ public record CompanyMaterialIssue(
         String workshopCode,
         BigDecimal quantity,
         BigDecimal returnedQuantity,
+        BigDecimal consumedQuantity,
         String unit,
         StockMeasurement.Weight weight,
         String targetCode,

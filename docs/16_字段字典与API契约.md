@@ -1222,6 +1222,12 @@ MySQL 持久化表：
 
 可领不足返回「可领数量不足」。退回过多返回「退回数量不能超过可退」。单位不一致返回「退回单位必须与原领用一致」。
 
+### 7.4.4 公司料实际耗用
+
+`POST /api/inventory/company-material-issues/{issueId}/consumptions` 把尚未结清的领用分成耗用、退回和留下。例如领用 100，确认为耗用 70、退回 20、留下 10。废料数量包含在耗用里，不另外再加一次。金额未传时标未齐，不写成 0。费用记在业务目标上，不生成客户应收。同一 `requestId` 不重复计成本和数量。
+
+去向不相等返回「耗用、退回和留下必须等于尚未结清的领用」。废料超过耗用返回「废料不能超过实际耗用」。
+
 ### 7.5 `ShipFinishedStockCommand`
 
 `POST /api/business/operations/outbound-shipments` 使用该命令模型。该接口是 成品出库写台账基线。

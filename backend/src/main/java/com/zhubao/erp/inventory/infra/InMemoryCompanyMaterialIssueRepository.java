@@ -1,6 +1,7 @@
 package com.zhubao.erp.inventory.infra;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.domain.CompanyMaterialConsumption;
 import com.zhubao.erp.inventory.domain.CompanyMaterialIssue;
 import com.zhubao.erp.inventory.domain.CompanyMaterialIssueRepository;
 import com.zhubao.erp.inventory.domain.CompanyMaterialReturn;
@@ -44,13 +45,44 @@ public class InMemoryCompanyMaterialIssueRepository implements CompanyMaterialIs
             if (current.version() != expectedVersion) {
                 throw new BusinessException("领用单已被其他人修改，请刷新后重试");
             }
-            if (current.returnedQuantity().add(quantity).compareTo(current.quantity()) > 0) {
+            if (current.returnedQuantity().add(current.consumedQuantity()).add(quantity).compareTo(current.quantity()) > 0) {
                 throw new BusinessException("退回数量不能超过可退");
             }
             CompanyMaterialIssue next = new CompanyMaterialIssue(
                     current.issueId(), current.itemId(), current.batchCode(), current.fromWarehouse(), current.workshopCode(),
-                    current.quantity(), current.returnedQuantity().add(quantity), current.unit(), current.weight(),
+                    current.quantity(), current.returnedQuantity().add(quantity), current.consumedQuantity(), current.unit(), current.weight(),
                     current.targetCode(), current.version() + 1);
+            issues.put(issueId, next);
+            if (session != null) {
+                session.onRollback(() -> {
+                    synchronized (issues) {
+                        issues.put(issueId, current);
+                    }
+                });
+            }
+            return next;
+        }
+    }
+
+    @Override
+    public CompanyMaterialIssue dispose(String issueId, BigDecimal consumed, BigDecimal returned, BigDecimal kept,
+                                        int expectedVersion, WorkSession session) {
+        synchronized (issues) {
+            CompanyMaterialIssue current = issues.get(issueId);
+            if (current == null) {
+                throw new BusinessException("领用单不存在");
+            }
+            if (current.version() != expectedVersion) {
+                throw new BusinessException("领用单已被其他人修改，请刷新后重试");
+            }
+            BigDecimal open = current.quantity().subtract(current.returnedQuantity()).subtract(current.consumedQuantity());
+            if (consumed.add(returned).add(kept).compareTo(open) != 0) {
+                throw new BusinessException("耗用、退回和留下必须等于尚未结清的领用");
+            }
+            CompanyMaterialIssue next = new CompanyMaterialIssue(
+                    current.issueId(), current.itemId(), current.batchCode(), current.fromWarehouse(), current.workshopCode(),
+                    current.quantity(), current.returnedQuantity().add(returned), current.consumedQuantity().add(consumed),
+                    current.unit(), current.weight(), current.targetCode(), current.version() + 1);
             issues.put(issueId, next);
             if (session != null) {
                 session.onRollback(() -> {
@@ -76,5 +108,22 @@ public class InMemoryCompanyMaterialIssueRepository implements CompanyMaterialIs
     @Override
     public Optional<CompanyMaterialReturn> findReturn(String returnId) {
         return Optional.ofNullable(returns.get(returnId));
+    }
+
+    private final ConcurrentHashMap<String, CompanyMaterialConsumption> consumptions = new ConcurrentHashMap<>();
+
+    @Override
+    public void insert(CompanyMaterialConsumption consumption, WorkSession session) {
+        if (consumptions.putIfAbsent(consumption.consumptionId(), consumption) != null) {
+            throw new BusinessException("耗用确认已存在");
+        }
+        if (session != null) {
+            session.onRollback(() -> consumptions.remove(consumption.consumptionId(), consumption));
+        }
+    }
+
+    @Override
+    public Optional<CompanyMaterialConsumption> findConsumption(String consumptionId) {
+        return Optional.ofNullable(consumptions.get(consumptionId));
     }
 }

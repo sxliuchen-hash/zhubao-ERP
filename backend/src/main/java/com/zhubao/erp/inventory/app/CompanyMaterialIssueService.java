@@ -73,7 +73,7 @@ public class CompanyMaterialIssueService {
             stocks.add(new CompanyMaterialBalance(item.itemId(), batch, workshop, counted, unitText, measured), session);
             String id = "LY-" + token();
             issues.insert(new CompanyMaterialIssue(
-                    id, item.itemId(), batch, from, workshop, counted, BigDecimal.ZERO, unitText, measured, target, 1), session);
+                    id, item.itemId(), batch, from, workshop, counted, BigDecimal.ZERO, BigDecimal.ZERO, unitText, measured, target, 1), session);
             return id;
         });
         return issues.find(issueId).orElseThrow(() -> new BusinessException("领用单不存在"));
