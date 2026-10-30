@@ -49,12 +49,12 @@ class ScanContextServiceTest {
     private static final String THREE_LINES = "内壁刻字\n镶一颗主石\n\n镜面抛光";
 
     private InMemoryBusinessDocumentRepository repository;
-    private StockLedgerService stocks;
+    protected StockLedgerService stocks;
     private BusinessOperationService operations;
     private MotherOrderSplitService splits;
     private ProcessStationService stations;
     private QualityRequirementService quality;
-    private ScanContextService context;
+    protected ScanContextService context;
 
     @BeforeEach
     void setUp() {
@@ -420,7 +420,7 @@ class ScanContextServiceTest {
         ));
     }
 
-    private void inbound(String code, String quantity, String weight, String requirement) {
+    protected void inbound(String code, String quantity, String weight, String requirement) {
         operations.confirmInbound(new ConfirmInboundCommand(code, 1001L, 1001L, "AU9999", "2026-10-08", "顺丰", "SF" + code.replace("-", ""), "", "何琳", "何琳", "戒托", "", null, "", "RAW-CUSTOMER", new BigDecimal(quantity), "件", new BigDecimal(weight), "何琳", "", "测试入库", requirement, "2026-10-20", "恒信珠宝", "fixture-" + java.util.UUID.randomUUID()));
     }
 
@@ -449,7 +449,7 @@ class ScanContextServiceTest {
         return account("receiver", "收货员 何琳", RoleCode.RECEIVER, DataScope.ALL, List.of());
     }
 
-    private AuthUserAccount warehouse() {
+    protected AuthUserAccount warehouse() {
         return account("warehouse", "库管员 何琳", RoleCode.WAREHOUSE_KEEPER, DataScope.ALL, List.of());
     }
 

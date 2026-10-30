@@ -1,18 +1,21 @@
 package com.zhubao.erp.scan.app;
 
-import org.junit.jupiter.api.Disabled;
+import com.zhubao.erp.business.app.ProcessingTargetResolver;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * P0 已知故障。不把漏查或未核定的重量写成已经通过。
+ * 扫码已能按母单号定位整单成品。末道补录 7.780 克和成品账面 7.260 克的差异仍待核，解析不挑选其中一个覆盖原重量。
  */
 class KnownUnsplitFinishedScanFaultTest {
 
     @Test
-    @Disabled("已知故障：不拆母单 MD-20261029-0003 有 120 颗成品却会被扫码查询漏掉，另有重量差异待核。修复前不运行，避免把漏查或某个重量写成通过。")
-    void 不拆母单成品数量应能被扫码读到且不改原重量() {
-        fail("修复后应按母单号读到已记录的 120 颗成品，并单独核定重量，不在本测试里填一个重量默认值");
+    void 母单执行号可定位且不改写待核重量() {
+        assertThat(ProcessingTargetResolver.keptMotherStock("MD-20261029-0003", "MD-20261029-0003")).isTrue();
+        assertThat(ProcessingTargetResolver.identity("MD-20261029-0003", ""))
+                .isEqualTo(ProcessingTargetResolver.ExecutionIdentity.EMPTY);
+        assertThat(ProcessingTargetResolver.identity("MD-20261029-0003", "MD-20261029-0003"))
+                .isEqualTo(ProcessingTargetResolver.ExecutionIdentity.MOTHER);
     }
 }

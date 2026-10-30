@@ -854,10 +854,14 @@ public class ScanContextService {
                 .filter(balance -> balance.quantity().compareTo(BigDecimal.ZERO) > 0 || balance.weight().compareTo(BigDecimal.ZERO) > 0)
                 .filter(balance -> {
                     StockDimension dimension = balance.dimension();
-                    if (!work.isBlank()) {
-                        return work.equals(blank(dimension.workOrderCode()));
+                    if (!mother.equals(blank(dimension.motherOrderCode()))) {
+                        return false;
                     }
-                    return mother.equals(blank(dimension.motherOrderCode())) && blank(dimension.workOrderCode()).isBlank();
+                    String storedWork = blank(dimension.workOrderCode());
+                    if (!work.isBlank() && !work.equals(mother)) {
+                        return work.equals(storedWork);
+                    }
+                    return com.zhubao.erp.business.app.ProcessingTargetResolver.keptMotherStock(mother, storedWork);
                 })
                 .map(this::candidate)
                 .sorted(Comparator.comparing(ScanBalanceCandidate::warehouseCode, Comparator.nullsLast(String::compareTo))
