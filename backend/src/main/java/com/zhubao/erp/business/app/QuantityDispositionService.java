@@ -53,6 +53,7 @@ public class QuantityDispositionService {
     private final DocumentManagementRepository documents;
     private final StockLedgerService stocks;
     private final BusinessWorkUnit workUnit;
+    private WeighingMarker reweigh = WeighingMarker.NONE;
 
     public QuantityDispositionService(ActivityBagRepository bags, ActivityBagService bagService,
                                       RouteSnapshotRepository routes, ProcessAvailabilityQuery availability,
@@ -70,6 +71,11 @@ public class QuantityDispositionService {
         this.documents = documents;
         this.stocks = stocks;
         this.workUnit = workUnit;
+    }
+
+    /** 数量减少后的新袋需要另称。不把原袋重量抄到子袋。 */
+    public void setReweigh(WeighingMarker reweigh) {
+        this.reweigh = reweigh == null ? WeighingMarker.NONE : reweigh;
     }
 
     public QuantityDispositionResult dispose(QuantityDispositionCommand command, OperatorContext actor) {
@@ -264,8 +270,10 @@ public class QuantityDispositionService {
     }
 
     private ActivityBag openChild(ActivityBag parent, BigDecimal quantity, WorkSession session) {
-        return bagService.open(parent.targetCode(), parent.materialCode(), parent.requirementVersion(),
+        ActivityBag child = bagService.open(parent.targetCode(), parent.materialCode(), parent.requirementVersion(),
                 parent.sourceKey(), quantity, StockMeasurement.unknown(), session);
+        reweigh.markPending(child.id(), session);
+        return child;
     }
 
     private RouteSnapshot confirmed(String targetCode) {

@@ -81,3 +81,4 @@ V80__m3_route_snapshot.sql
 V81__m3_activity_bag.sql
 V82__m3_whole_bag_report.sql
 V83__m3_quantity_disposition.sql
+V84__m3_bag_weight.sql

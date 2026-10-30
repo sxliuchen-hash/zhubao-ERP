@@ -81,3 +81,4 @@
 81	TABLE	biz_activity_bag
 82	TABLE	biz_whole_bag_report
 83	TABLE	biz_quantity_disposition
+84	TABLE	biz_bag_weight
