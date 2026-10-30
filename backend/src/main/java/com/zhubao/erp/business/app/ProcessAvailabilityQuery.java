@@ -6,6 +6,7 @@ import com.zhubao.erp.business.domain.BusinessKind;
 import com.zhubao.erp.business.domain.BusinessTargetReference;
 import com.zhubao.erp.business.domain.NodePortionBalance;
 import com.zhubao.erp.business.domain.NodePortionReader;
+import com.zhubao.erp.business.domain.PendingQuantity;
 import com.zhubao.erp.business.domain.ProcessAvailableQuantity;
 import com.zhubao.erp.business.domain.ProcessCatalog;
 import com.zhubao.erp.business.domain.RouteSnapshot;
@@ -14,6 +15,7 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -33,13 +35,21 @@ public class ProcessAvailabilityQuery {
     private final RouteSnapshotRepository routes;
     private final NodePortionReader portions;
     private final PermissionGuard permissions;
+    private final PendingQuantity pending;
 
     public ProcessAvailabilityQuery(ActivityBagRepository bags, RouteSnapshotRepository routes,
                                     NodePortionReader portions, PermissionGuard permissions) {
+        this(bags, routes, portions, permissions, (bagId, stepId) -> BigDecimal.ZERO);
+    }
+
+    @Autowired
+    public ProcessAvailabilityQuery(ActivityBagRepository bags, RouteSnapshotRepository routes,
+                                    NodePortionReader portions, PermissionGuard permissions, PendingQuantity pending) {
         this.bags = bags;
         this.routes = routes;
         this.portions = portions;
         this.permissions = permissions;
+        this.pending = pending == null ? (bagId, stepId) -> BigDecimal.ZERO : pending;
     }
 
     public ProcessAvailableQuantity lookup(String bagId, OperatorContext actor) {
@@ -71,7 +81,7 @@ public class ProcessAvailabilityQuery {
         }
         boolean anyArrived = steps.stream().anyMatch(step -> step.arrived().signum() > 0);
         StepView waiting = steps.stream()
-                .filter(step -> step.index() > 0 && step.arrived().signum() == 0)
+                .filter(step -> step.index() > 0 && !step.explicit())
                 .findFirst()
                 .orElse(null);
         if (waiting != null && anyArrived) {
@@ -108,7 +118,8 @@ public class ProcessAvailabilityQuery {
             Optional<NodePortionBalance> stored = portions.find(bag.id(), stepId);
             BigDecimal arrived;
             BigDecimal handled;
-            if (stored.isPresent()) {
+            boolean explicit = stored.isPresent();
+            if (explicit) {
                 arrived = stored.get().arrived();
                 handled = stored.get().handled();
             } else if (index == 0) {
@@ -118,7 +129,11 @@ public class ProcessAvailabilityQuery {
                 arrived = BigDecimal.ZERO;
                 handled = BigDecimal.ZERO;
             }
-            steps.add(new StepView(index, stepId, ProcessCatalog.require(stepId).name(), arrived, handled));
+            BigDecimal held = pending.pending(bag.id(), stepId);
+            if (held == null || held.signum() < 0) {
+                held = BigDecimal.ZERO;
+            }
+            steps.add(new StepView(index, stepId, ProcessCatalog.require(stepId).name(), arrived, handled, held, explicit));
         }
         return List.copyOf(steps);
     }
@@ -150,9 +165,10 @@ public class ProcessAvailabilityQuery {
         return bagId.trim();
     }
 
-    private record StepView(int index, String stepId, String stepName, BigDecimal arrived, BigDecimal handled) {
+    private record StepView(int index, String stepId, String stepName, BigDecimal arrived, BigDecimal handled,
+                            BigDecimal pending, boolean explicit) {
         private BigDecimal remaining() {
-            return arrived.subtract(handled);
+            return arrived.subtract(handled).subtract(pending);
         }
     }
 }

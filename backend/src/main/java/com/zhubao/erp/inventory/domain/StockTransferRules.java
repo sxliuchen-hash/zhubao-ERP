@@ -50,6 +50,31 @@ public final class StockTransferRules {
         }
     }
 
+    /**
+     * 加工损耗或退回只扣在制数量。必须有已称重量。
+     * 不关联原收货流水，也不能写成退还客户或收货冲正。
+     */
+    public static void verifyProcessConsumption(StockLedgerEntry entry) {
+        Objects.requireNonNull(entry, "库存台账不能为空");
+        if (!"process_loss".equals(entry.documentType()) && !"process_return".equals(entry.documentType())) {
+            throw new IllegalArgumentException("加工损耗或退回的业务类型不正确");
+        }
+        requireText(entry.code(), "库存台账号不能为空");
+        requireText(entry.documentCode(), "库存业务单号不能为空");
+        if (entry.to() != null || entry.from() == null) {
+            throw new IllegalArgumentException("加工损耗或退回只扣减在制余额");
+        }
+        if (entry.sourceLedgerCode() != null && !entry.sourceLedgerCode().isBlank()) {
+            throw new IllegalArgumentException("加工损耗或退回不能写成收货冲正");
+        }
+        if (entry.quantity() == null || entry.quantity().signum() <= 0 || entry.weight() == null || entry.weight().signum() <= 0) {
+            throw new IllegalArgumentException("加工损耗或退回必须有正数数量和已称重量，未知重量不能按 0 入账");
+        }
+        verifyPrecision(entry.quantity());
+        verifyPrecision(entry.weight());
+        verifyDimension(entry.from());
+    }
+
     /** 实物离厂或冲减只扣来源余额，不转入另一种库存状态。 */
     public static void verifyDeparture(StockLedgerEntry entry) {
         Objects.requireNonNull(entry, "库存台账不能为空");

@@ -70,6 +70,22 @@ public class StockLedgerService {
         return repository.appendDeparture(entry, session);
     }
 
+    /**
+     * 记录加工损耗或退回。只扣在制余额，不关联原收货，也不把数量转成报废或退还客户。
+     * 重量必须已经称过；调用方不能把未知重量传成 0。
+     */
+    public StockLedgerEntry postProcessConsumption(String documentType, String documentCode, StockDimension from,
+                                                   BigDecimal quantity, BigDecimal weight, String remark, WorkSession session) {
+        if (session == null) {
+            throw new BusinessException("加工损耗必须处于业务工作单元");
+        }
+        StockLedgerEntry entry = new StockLedgerEntry(
+                nextCode(), Instant.now(), documentType, documentCode, from, null, quantity, weight,
+                remark == null ? "" : remark, null);
+        com.zhubao.erp.inventory.domain.StockTransferRules.verifyProcessConsumption(entry);
+        return repository.appendProcessConsumption(entry, session);
+    }
+
     public StockLedgerEntry reverseInbound(ReceiptEntryReversal reversal, WorkSession session) {
         if (session == null) {
             throw new BusinessException("收货冲正必须处于业务工作单元");

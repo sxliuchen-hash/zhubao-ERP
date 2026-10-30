@@ -29,6 +29,11 @@ public interface StockLedgerRepository {
         throw new UnsupportedOperationException("当前仓储未实现库存离厂");
     }
 
+    /** 加工损耗或退回只扣在制余额，不关联原收货，也不转入报废。 */
+    default StockLedgerEntry appendProcessConsumption(StockLedgerEntry entry, WorkSession session) {
+        throw new UnsupportedOperationException("当前仓储未实现加工损耗");
+    }
+
     List<StockLedgerEntry> findAllLedgers();
 
     /**

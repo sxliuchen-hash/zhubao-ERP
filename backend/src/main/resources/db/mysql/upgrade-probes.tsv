@@ -80,3 +80,4 @@
 80	TABLE	biz_route_snapshot
 81	TABLE	biz_activity_bag
 82	TABLE	biz_whole_bag_report
+83	TABLE	biz_quantity_disposition

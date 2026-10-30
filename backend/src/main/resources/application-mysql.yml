@@ -37,6 +37,8 @@ zhubao:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
   whole-bag-report:
     repository: ${ZHUBAO_WHOLE_BAG_REPORT_REPOSITORY:jdbc}
+  quantity-disposition:
+    repository: ${ZHUBAO_QUANTITY_DISPOSITION_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:

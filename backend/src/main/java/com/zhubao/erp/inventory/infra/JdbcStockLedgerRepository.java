@@ -72,6 +72,22 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     }
 
     @Override
+    public StockLedgerEntry appendProcessConsumption(StockLedgerEntry entry, WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("加工损耗必须使用工作单元连接");
+        }
+        StockTransferRules.verifyProcessConsumption(entry);
+        Connection connection = session.connection().get();
+        try {
+            insertLedger(connection, entry);
+            debitBalance(connection, entry);
+            return entry;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("加工损耗写入失败", ex);
+        }
+    }
+
+    @Override
     public StockLedgerEntry save(StockLedgerEntry entry, WorkSession session) {
         StockTransferRules.verify(entry);
         if (session == null || session.connection().isEmpty()) {
