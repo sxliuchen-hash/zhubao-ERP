@@ -18,9 +18,13 @@ public record OutsourcingPositionView(
         BigDecimal outQuantity,
         BigDecimal pendingQuantity,
         boolean outsourcingCountsAsInHouseStock,
+        List<DispatchLine> dispatches,
         List<ReturnLine> returns,
         List<SourceLine> sources
 ) {
+    public record DispatchLine(String dispatchId, int version, BigDecimal quantity, BigDecimal stillOut) {
+    }
+
     public record ReturnLine(
             String dispatchId,
             BigDecimal receivedQty,
@@ -33,6 +37,7 @@ public record OutsourcingPositionView(
     public record SourceLine(
             String bagId,
             BigDecimal quantity,
+            int version,
             String holder,
             boolean inHouseStock,
             String sourceKey

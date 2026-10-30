@@ -99,6 +99,7 @@ provide('zhubao-intake-receipt', intakeReceipt);
 provide('zhubao-open-intake', (target?: OrderActionTarget | null) => { if (canIntake.value) orderActionHost.value?.openIntake(target ?? null); });
 provide('zhubao-open-production', (target?: OrderActionTarget | null, mode?: ProductionMode) => { if (canProduction.value) orderActionHost.value?.openProduction(target ?? null, mode); });
 provide('zhubao-open-quality', (target?: OrderActionTarget | null) => { if (canQuality.value) orderActionHost.value?.openQuality(target ?? null); });
+provide('zhubao-open-outsourcing', (target?: OrderActionTarget | null) => { if (canOutsource.value) orderActionHost.value?.openOutsourcing(target ?? null); });
 provide('zhubao-open-shipping', (target?: ShippingActionTarget | null) => { if (canShipping.value) orderActionHost.value?.openShipping(target ?? null); });
 provide('zhubao-open-aftercare', (row: InventoryBalance) => { if (canAftercare.value) orderActionHost.value?.openAftercare(row); });
 provide('zhubao-open-order-change', (target: OrderChangeTarget) => { if (canChange.value) orderActionHost.value?.openOrderChange(target); });
@@ -196,6 +197,8 @@ const canShipping = computed(() => visibleTabs.value.some(tab => authorizedMenuC
   && (authSession.value?.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_OUTBOUND_SHIPMENT')
     : ['ADMIN', 'GENERAL_MANAGER', 'WAREHOUSE_KEEPER', 'SALES'].includes(authSession.value?.role ?? '')
       || (authSession.value?.role === 'BUSINESS_MANAGER' && authSession.value.coverDuties?.includes('SHIP') === true)));
+const canOutsource = computed(() => authSession.value?.effectivePermissions?.includes('OUTSOURCING_VIEW') === true
+  || authSession.value?.effectivePermissions?.includes('OUTSOURCING_MAINTAIN') === true);
 const canQuality = computed(() => visibleTabs.value.some(tab => authorizedMenuCodes.value?.has(tab.key) && ['quality', 'mobile'].includes(tab.key))
   && (authSession.value?.effectivePermissions ? ['BUSINESS_QUALITY_FREEZE', 'BUSINESS_REWORK_DISPATCH', 'BUSINESS_REWORK_REPORT', 'BUSINESS_QUALITY_RELEASE'].some(permission => authSession.value?.effectivePermissions?.includes(permission))
     : ['ADMIN', 'GENERAL_MANAGER', 'WORKSHOP_LEADER', 'QUALITY_INSPECTOR'].includes(authSession.value?.role ?? '')
@@ -531,5 +534,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <M1Dashboard v-if="activeTab === 'dashboard' && !orderWorkspaceOpen" :key="authRevision" />
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
-<OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" :can-label="canLabel" :can-bill="canBill" :can-settle="canSettle" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
+<OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" :can-label="canLabel" :can-bill="canBill" :can-settle="canSettle" :can-outsource="canOutsource" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
 </template>

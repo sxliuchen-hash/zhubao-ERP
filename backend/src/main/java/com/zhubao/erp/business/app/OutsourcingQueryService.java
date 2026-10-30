@@ -70,12 +70,15 @@ public class OutsourcingQueryService {
                 inHouse = inHouse.add(bag.quantity());
             }
             sources.add(new OutsourcingPositionView.SourceLine(
-                    bag.id(), bag.quantity(), holder, inHouseStock, bag.sourceKey()));
+                    bag.id(), bag.quantity(), bag.version(), holder, inHouseStock, bag.sourceKey()));
         }
         BigDecimal out = custody.entrustedQuantity(task.taskId());
+        List<OutsourcingPositionView.DispatchLine> dispatchLines = new ArrayList<>();
         List<OutsourcingPositionView.ReturnLine> lines = new ArrayList<>();
         for (OutsourcingDispatch dispatch : dispatches.listByTask(task.taskId())) {
             OutsourcingReturnBalance balance = returnView.balance(dispatch.dispatchId());
+            dispatchLines.add(new OutsourcingPositionView.DispatchLine(
+                    dispatch.dispatchId(), dispatch.version(), dispatch.quantity(), balance.stillOut()));
             for (OutsourcingReturn row : returns.listByDispatch(dispatch.dispatchId())) {
                 lines.add(new OutsourcingPositionView.ReturnLine(
                         dispatch.dispatchId(), row.receivedQty(), row.unprocessedQty(), row.lossQty(), balance.stillOut()));
@@ -84,7 +87,7 @@ public class OutsourcingQueryService {
         String partyName = this.sources.findParty(task.partyId()).map(party -> party.name()).orElse("");
         return new OutsourcingPositionView(
                 task.taskId(), task.targetCode(), task.nodeId(), task.partyId(), partyName,
-                task.ownerType().name(), task.ownerRef(), inHouse, out, out, false, lines, sources);
+                task.ownerType().name(), task.ownerRef(), inHouse, out, out, false, dispatchLines, lines, sources);
     }
 
     public OutsourcingDispatch dispatch(String dispatchId, OperatorContext actor) {

@@ -8,7 +8,7 @@ import type { InventoryBalance } from '../../data/m1PrototypeData';
 import { openMobileScanTarget } from '../scan/mobileScanBridge';
 import { validBillContext, type BillContext, type BillMode } from '../finance/billContext';
 
-const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean; canQuality?: boolean; canShipping?: boolean; canAftercare?: boolean; canLabel?: boolean; canBill?: boolean; canSettle?: boolean }>(), { canProduction: false, canChange: false, canQuality: false, canShipping: false, canAftercare: false, canLabel: false, canBill: false, canSettle: false });
+const props = withDefaults(defineProps<{ canIntake: boolean; canProduction?: boolean; canChange?: boolean; canQuality?: boolean; canShipping?: boolean; canAftercare?: boolean; canLabel?: boolean; canBill?: boolean; canSettle?: boolean; canOutsource?: boolean }>(), { canProduction: false, canChange: false, canQuality: false, canShipping: false, canAftercare: false, canLabel: false, canBill: false, canSettle: false, canOutsource: false });
 const emit = defineEmits<{ active: [open: boolean]; saved: [result: MobileIntakeResult]; changed: [] }>();
 function intakeComponent() {
   return defineAsyncComponent({ loader: () => import('./IntakeActionPane.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 });
@@ -32,8 +32,10 @@ function billComponent() { return defineAsyncComponent({ loader: () => import('.
 const CustomerBillPanel = shallowRef(billComponent());
 function settlementComponent() { return defineAsyncComponent({ loader: () => import('../finance/SettlementPanel.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
 const SettlementPanel = shallowRef(settlementComponent());
+function outsourcingComponent() { return defineAsyncComponent({ loader: () => import('../outsourcing/OutsourcingWorkspace.vue').then(module => module.default), loadingComponent: WorkspaceLoadState, errorComponent: WorkspaceLoadState, timeout: 30_000 }); }
+const OutsourcingWorkspace = shallowRef(outsourcingComponent());
 
-type ActionKind = 'intake' | 'production' | 'change' | 'quality' | 'shipping' | 'aftercare' | 'label' | 'bill' | 'settle';
+type ActionKind = 'intake' | 'production' | 'change' | 'quality' | 'shipping' | 'aftercare' | 'label' | 'bill' | 'settle' | 'outsourcing';
 const activeKind = ref<ActionKind>('intake');
 provide('zhubao-retry-workspace', () => {
   if (activeKind.value === 'intake') IntakeActionPane.value = intakeComponent();
@@ -44,6 +46,7 @@ provide('zhubao-retry-workspace', () => {
   else if (activeKind.value === 'aftercare') InventoryAftercarePanel.value = aftercareComponent();
   else if (activeKind.value === 'label') OrderLabelPanel.value = labelComponent();
   else if (activeKind.value === 'bill') CustomerBillPanel.value = billComponent();
+  else if (activeKind.value === 'outsourcing') OutsourcingWorkspace.value = outsourcingComponent();
   else OrderChangePanel.value = changeComponent();
 });
 const open = ref(false);
@@ -63,9 +66,9 @@ const draftKey = ref('intake:new');
 let aftercareAttempt = 0;
 interface ActionDraft { key: string; kind: ActionKind; target: OrderActionTarget | null; motherOrderCode?: string; balance?: ScanBalanceCandidate; inventoryRow?: InventoryBalance; mode: ProductionMode; entryRevision: number; billContext?: BillContext; billMode?: BillMode; settlementType?: string }
 const drafts = ref<ActionDraft[]>([]);
-const title = computed(() => ({ intake: '收货办理', production: '工序作业', change: '单据改单', quality: '质量作业', shipping: '发货办理', aftercare: '退货与售后复核', label: '单据标签', bill: '客户账单与收款', settle: '交货后结单' }[activeKind.value]));
+const title = computed(() => ({ intake: '收货办理', production: '工序作业', change: '单据改单', quality: '质量作业', shipping: '发货办理', aftercare: '退货与售后复核', label: '单据标签', bill: '客户账单与收款', settle: '交货后结单', outsourcing: '外协发外与收回' }[activeKind.value]));
 const needsScanner = computed(() => activeKind.value === 'intake' || (activeKind.value === 'label' && !target.value?.objectType) || (['production', 'quality', 'shipping'].includes(activeKind.value) && !target.value?.objectType));
-function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : kind === 'quality' ? props.canQuality : kind === 'shipping' ? props.canShipping : kind === 'aftercare' ? props.canAftercare : kind === 'label' ? props.canLabel : kind === 'bill' ? props.canBill : kind === 'settle' ? props.canSettle : props.canChange; }
+function allowed(kind: ActionKind) { return kind === 'intake' ? props.canIntake : kind === 'production' ? props.canProduction : kind === 'quality' ? props.canQuality : kind === 'shipping' ? props.canShipping : kind === 'aftercare' ? props.canAftercare : kind === 'label' ? props.canLabel : kind === 'bill' ? props.canBill : kind === 'settle' ? props.canSettle : kind === 'outsourcing' ? props.canOutsource : props.canChange; }
 const panel = ref<HTMLElement | null>(null);
 const closeButton = ref<HTMLButtonElement | null>(null);
 let opener: HTMLElement | null = null;
@@ -95,6 +98,9 @@ function openOrderChange(input: OrderChangeTarget) {
 }
 function openQuality(input: OrderActionTarget | null = null) {
   if (!input || workTarget(input) || (input.objectType === 'REWORK' && input.code.trim())) openDraft('quality', input);
+}
+function openOutsourcing(input: OrderActionTarget | null = null) {
+  if (input && workTarget(input)) openDraft('outsourcing', input);
 }
 function openShipping(input: ShippingActionTarget | null = null) {
   if (!input || workTarget(input) || (input.objectType === 'OUTBOUND_ORDER' && input.code.trim())) openDraft('shipping', input, 'progress', undefined, input?.balance);
@@ -151,10 +157,10 @@ function keydown(event: KeyboardEvent) {
   if (event.shiftKey && (document.activeElement === first || !panel.value?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
-watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality, () => props.canShipping, () => props.canAftercare, () => props.canLabel, () => props.canBill, () => props.canSettle], () => { if (!allowed(activeKind.value) && open.value) void close(); });
+watch([() => props.canIntake, () => props.canProduction, () => props.canChange, () => props.canQuality, () => props.canShipping, () => props.canAftercare, () => props.canLabel, () => props.canBill, () => props.canSettle, () => props.canOutsource], () => { if (!allowed(activeKind.value) && open.value) void close(); });
 onMounted(() => window.addEventListener('keydown', keydown));
 onBeforeUnmount(() => { window.removeEventListener('keydown', keydown); restoreBodyScroll(); emit('active', false); });
-defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShipping, openAftercare, openLabel, openBill, openSettlement });
+defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShipping, openAftercare, openLabel, openBill, openSettlement, openOutsourcing });
 </script>
 
 <template>
@@ -175,6 +181,7 @@ defineExpose({ openIntake, openProduction, openOrderChange, openQuality, openShi
             <component :is="IntakeActionPane" v-if="draft.kind === 'intake'" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @saved="emit('saved', $event)" @navigate="close" />
             <component :is="ProductionActionPane" v-else-if="draft.kind === 'production' && draft.target?.objectType" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" :initial-mode="draft.mode" :entry-revision="draft.entryRevision" @changed="emit('changed')" @selected="openProduction" />
             <component :is="QualityActionPane" v-else-if="draft.kind === 'quality' && draft.target?.objectType" :target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @changed="emit('changed')" @selected="openQuality" />
+            <component :is="OutsourcingWorkspace" v-else-if="draft.kind === 'outsourcing' && draft.target" :order-code="draft.target.code" :active="open && allowed(draft.kind) && draft.key === draftKey" @changed="emit('changed')" />
             <component :is="ShippingActionPane" v-else-if="draft.kind === 'shipping' && draft.target?.objectType" :target="draft.target" :balance="draft.balance" :active="open && allowed(draft.kind) && draft.key === draftKey" @changed="emit('changed')" @selected="openShipping" />
             <component :is="InventoryAftercarePanel" v-else-if="draft.kind === 'aftercare' && draft.inventoryRow" :row="draft.inventoryRow" :active="open && allowed(draft.kind) && draft.key === draftKey" @saved="emit('changed')" @new-request="row => openAftercare(row, true)" />
             <component :is="OrderLabelPanel" v-else-if="draft.kind === 'label'" :initial-target="draft.target" :active="open && allowed(draft.kind) && draft.key === draftKey" @selected="openLabel" />

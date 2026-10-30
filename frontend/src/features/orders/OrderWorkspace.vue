@@ -16,7 +16,7 @@ import OrderDetail from './OrderDetail.vue';
 import OrderKindMark from './OrderKindMark.vue';
 import WorkOrderRequirementForm from './WorkOrderRequirementForm.vue';
 import MotherAdminPanel from './MotherAdminPanel.vue';
-import type { OpenIntakeAction, OpenLabelAction, OpenOrderChangeAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, OrderActionTarget, ProductionMode } from './orderActions';
+import type { OpenIntakeAction, OpenLabelAction, OpenOrderChangeAction, OpenOutsourcingAction, OpenProductionAction, OpenQualityAction, OpenShippingAction, OrderActionTarget, ProductionMode } from './orderActions';
 import { orderFacetLabel } from './orderWorkspaceLabels';
 
 const workspace = useWorkspaceContext();
@@ -46,6 +46,7 @@ const openIntake = inject<OpenIntakeAction | null>('zhubao-open-intake', null);
 const openProduction = inject<OpenProductionAction | null>('zhubao-open-production', null);
 const openOrderChange = inject<OpenOrderChangeAction | null>('zhubao-open-order-change', null);
 const openQuality = inject<OpenQualityAction | null>('zhubao-open-quality', null);
+const openOutsourcing = inject<OpenOutsourcingAction | null>('zhubao-open-outsourcing', null);
 const openShipping = inject<OpenShippingAction | null>('zhubao-open-shipping', null);
 const openSettlement = inject<((target: OrderActionTarget) => void) | null>('zhubao-open-settlement', null);
 const openLabel = inject<OpenLabelAction | null>('zhubao-open-label-target', null);
@@ -232,6 +233,10 @@ const detailActions = computed(() => {
   }
   if (canInspect.value) {
     items.push({ key: 'inspect', label: '质检、返工与放行', run: inspect, rank: facet === 'WAITING_QUALITY' || facet === 'REWORK' || view.value === 'QUALITY' ? 1 : 25 });
+  }
+  if (openOutsourcing && ['MOTHER_ORDER', 'WORK_ORDER'].includes(current.objectType)
+    && ['OUTSOURCING_VIEW', 'OUTSOURCING_MAINTAIN'].some(permission => session.value?.effectivePermissions?.includes(permission))) {
+    items.push({ key: 'outsource', label: '外协发外与收回', run: () => openOutsourcing?.({ objectType: current.objectType, code: current.code }), rank: 28 });
   }
   if (openShipping && canShip.value) {
     items.push({ key: 'ship', label: '核对库存与发货', run: ship, rank: facet === 'READY_TO_SHIP' ? 0 : 30 });
