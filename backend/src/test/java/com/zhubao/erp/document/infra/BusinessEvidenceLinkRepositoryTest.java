@@ -1,6 +1,9 @@
 package com.zhubao.erp.document.infra;
 
 import com.zhubao.erp.document.domain.BusinessEvidenceLink;
+import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
+import com.zhubao.erp.work.domain.CommandCall;
+import com.zhubao.erp.work.infra.InMemoryCommandRequestRepository;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkPage;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
 import org.h2.jdbcx.JdbcDataSource;
@@ -143,6 +146,21 @@ class BusinessEvidenceLinkRepositoryTest {
                     )
                     """);
         }
+    }
+
+    @Test
+    void 命令失败不留下新引用且原母单引用仍在() {
+        memory.insert(link("LINK-M", "MOTHER_ORDER", "MD-1", "ATT-M"));
+        MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        assertThatThrownBy(() -> unit.execute(
+                new CommandCall("evidence01", "tester", "BIND", "MOTHER_ORDER", "MD-1", "new-link"),
+                session -> {
+                    memory.insert(link("LINK-N", "MOTHER_ORDER", "MD-1", "ATT-N"), session);
+                    throw new IllegalStateException("失败");
+                })).isInstanceOf(IllegalStateException.class);
+        assertThat(memory.findByTarget("MOTHER_ORDER", "MD-1"))
+                .extracting(BusinessEvidenceLink::linkCode)
+                .containsExactly("LINK-M");
     }
 
     private BusinessEvidenceLink link(String linkCode, String targetType, String targetCode, String attachmentCode) {

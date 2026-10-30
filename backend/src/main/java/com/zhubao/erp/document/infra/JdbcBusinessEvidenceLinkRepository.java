@@ -150,8 +150,31 @@ public class JdbcBusinessEvidenceLinkRepository implements BusinessEvidenceLinkR
                     linked_at, link_key_hash
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection()) {
+            write(connection, sql, link);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存业务证据引用：" + link.linkCode(), ex);
+        }
+    }
+
+    @Override
+    public void insert(BusinessEvidenceLink link, com.zhubao.erp.work.domain.WorkSession session) {
+        String sql = """
+                insert into doc_business_evidence_link (
+                    link_code, attachment_code, target_type, target_code, stage, scene,
+                    operation_type, operation_code, process_name, clause_no, operator_name,
+                    linked_at, link_key_hash
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try {
+            write(com.zhubao.erp.work.app.WorkSessionBindings.requiredJdbc(session), sql, link);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存业务证据引用：" + link.linkCode(), ex);
+        }
+    }
+
+    private void write(Connection connection, String sql, BusinessEvidenceLink link) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, link.linkCode());
             statement.setString(2, link.attachmentCode());
             statement.setString(3, link.targetType());

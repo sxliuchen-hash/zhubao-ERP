@@ -4,6 +4,7 @@ import com.zhubao.erp.document.domain.BusinessEvidenceLink;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkPage;
 import com.zhubao.erp.document.domain.BusinessEvidenceLinkRepository;
 import com.zhubao.erp.document.domain.EvidenceLinkKey;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
@@ -80,6 +81,18 @@ public class InMemoryBusinessEvidenceLinkRepository implements BusinessEvidenceL
             throw new IllegalStateException("证据引用已存在");
         }
         links.add(new LinkEntry(nextId++, link));
+    }
+
+    @Override
+    public synchronized void insert(BusinessEvidenceLink link, WorkSession session) {
+        insert(link);
+        if (session != null) {
+            session.onRollback(() -> {
+                synchronized (this) {
+                    links.removeIf(entry -> entry.link().linkCode().equals(link.linkCode()));
+                }
+            });
+        }
     }
 
     private void validatePage(long afterId, int limit) {
