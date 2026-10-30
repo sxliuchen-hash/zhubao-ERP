@@ -41,6 +41,8 @@ zhubao:
     repository: ${ZHUBAO_QUANTITY_DISPOSITION_REPOSITORY:jdbc}
   bag-weight:
     repository: ${ZHUBAO_BAG_WEIGHT_REPOSITORY:jdbc}
+  portion-inspection:
+    repository: ${ZHUBAO_PORTION_INSPECTION_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:
