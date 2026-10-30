@@ -95,6 +95,9 @@ public class LabelService {
             throw new BusinessException("缺少标签主编码");
         }
         String code = command.primaryCode().trim();
+        if (type == LabelType.SHIPPING_BAG) {
+            throw new BusinessException("发货袋贴纸只能从已确认交付快照生成");
+        }
         if (type == LabelType.STOCK_BATCH) return generateStockBatchLabel(code, command.templateCode());
         if (type == LabelType.MOTHER && businessDocumentRepository != null) return generateMotherLabel(code, command.templateCode());
         if (type == LabelType.WORK_ORDER && businessDocumentRepository != null) {

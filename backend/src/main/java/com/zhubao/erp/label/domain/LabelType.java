@@ -18,7 +18,10 @@ public enum LabelType {
     REWORK("返工", "rework"),
 
     /** 客户寄存实物批次，主编码来自原收货批次。 */
-    STOCK_BATCH("寄存批次", "stock_batch");
+    STOCK_BATCH("寄存批次", "stock_batch"),
+
+    /** 发货袋贴纸。纸型仍是 40×30，版式独立，不替换厂内工单模板。 */
+    SHIPPING_BAG("发货袋", "shipping_bag");
 
     private final String label;
     private final String scanType;

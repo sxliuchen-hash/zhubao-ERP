@@ -243,7 +243,16 @@ function escapeHtml(value: string): string {
 export function printKindMark(type: LabelPayload['type'], typeLabel: string): string {
   if (type === 'MOTHER' || typeLabel === '母单' || typeLabel === '母框') return '母';
   if (type === 'WORK_ORDER' || typeLabel === '子工单' || typeLabel === '子单' || typeLabel === '子框') return '子';
+  if (type === 'SHIPPING_BAG') return '发';
   return typeLabel;
+}
+
+/** 发货袋长字段只提示放不下，不缩小字号，也不改 40×30 纸型。 */
+export function shippingBagOverflow(payload: LabelPayload): string[] {
+  if (payload.type !== 'SHIPPING_BAG') return [];
+  return payload.fields
+    .filter((field) => field.value.trim().length > 18)
+    .map((field) => `${field.name}放不下，完整内容见A5和扫码页`);
 }
 
 function compactFieldName(name: string, compact: boolean): string {

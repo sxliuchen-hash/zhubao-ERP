@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LabelPayload } from '../../services/labelApi';
-import { buildLabelMarkup, labelFaceCss } from './labelPrint';
+import { buildLabelMarkup, labelFaceCss, shippingBagOverflow } from './labelPrint';
 
 const payload: LabelPayload = {
   type: 'MOTHER',
@@ -144,6 +144,30 @@ describe('黑白标签打印', () => {
     expect(legacy).toContain('<span class="bw-type">子</span>');
     expect(child).not.toContain('子框</span>');
     expect(outbound).toContain('<span class="bw-type">出货</span>');
+    const shipping = buildLabelMarkup({
+      ...payload,
+      type: 'SHIPPING_BAG',
+      typeLabel: '发货袋',
+      primaryCode: 'FH-20261030-0001-1',
+      qrContent: 'SB|FH-20261030-0001|1',
+      templateCode: 'SHIPPING_BAG_40X30',
+      fields: [
+        { name: '数量', value: '80颗' },
+        { name: '要求', value: '孔径与方向的完整对外要求不能静默截断。' },
+      ],
+      printerSetting: { ...payload.printerSetting, widthMm: 40, heightMm: 30, dpi: 300 },
+    });
+    expect(shipping).toContain('<span class="bw-type">发</span>');
+    expect(shipping).toContain('FH-20261030-0001-1');
+    expect(shipping).toContain('width:40mm;height:30mm');
+    expect(shipping).not.toContain('font-size:4pt');
+    expect(shippingBagOverflow({
+      ...payload,
+      type: 'SHIPPING_BAG',
+      typeLabel: '发货袋',
+      fields: [{ name: '要求', value: '孔径与方向的完整对外要求不能静默截断。' }],
+    })).toEqual(['要求放不下，完整内容见A5和扫码页']);
+    expect(shippingBagOverflow({ ...payload, type: 'WORK_ORDER', typeLabel: '子工单' })).toEqual([]);
     expect(labelFaceCss).toContain('overflow-wrap: anywhere');
     expect(labelFaceCss).not.toMatch(/\.bw-fields dd \{[^}]*nowrap/);
   });

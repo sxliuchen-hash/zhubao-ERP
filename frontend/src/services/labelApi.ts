@@ -1,7 +1,7 @@
 import { apiGet, apiPost } from './apiClient';
 
 // 标签类型：母单 / 子工单 / 出货 / 返工
-export type LabelType = 'MOTHER' | 'WORK_ORDER' | 'OUTBOUND' | 'REWORK' | 'STOCK_BATCH';
+export type LabelType = 'MOTHER' | 'WORK_ORDER' | 'OUTBOUND' | 'REWORK' | 'STOCK_BATCH' | 'SHIPPING_BAG';
 
 // 标签上的一个信息字段（键值对）
 export interface LabelField {
