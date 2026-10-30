@@ -696,6 +696,24 @@ MySQL 持久化表：
 
 `POST /api/business/work-orders/{code}/requirement` 只改子单加工要求。请求体为 `{ requirement, requestId }`，要求不能为空且不超过 500 字。保存后立即成为该子单的当前要求，并追加一条调整记录，原因是「编辑加工要求」。不创建改单，不送财务确认，不改期限、路线、数量、重量或费用。同一 `requestId` 与同一内容回放已保存结果；内容或账号变化按改单请求的同一规则拒绝。母单号、回收站中的子单和没有变化的原文会被拒绝。已印标签不自动更换。期限、路线和费用仍走上面的改单接口。若该子单随后有改单生效，要求版本取大于已有版本的编号，避免覆盖这次直接修改时发生主键冲突。
 
+### 5.2.4 袋上加工质量
+
+这些端点转调已经实现的袋查询和命令，不另写第二套报工或库存服务。原 `process-stations` 仍是旧整单交工入口。拍照计数算法没有端点。
+
+| 方法 | 作用 |
+|---|---|
+| `GET /api/business/production-quality/bags/{bagId}/availability` | 当前可处理量、下一步和阻断原因。不写库存、工资或完成事实 |
+| `POST /api/business/production-quality/whole-bag-reports` | 正常整袋报工。同一 `requestId` 回放原批次。没有有效照片或袋版本过期会拒绝 |
+| `POST /api/business/production-quality/dispositions` | 部分交出、损耗、报废、退回和待核 |
+| `POST /api/business/production-quality/weights` | 零数量补录实际重量 |
+| `POST /api/business/production-quality/inspections` | 按袋份额质检 |
+| `POST /api/business/production-quality/releases` | 放行已检合格数量。重复放行不双计 |
+| `POST /api/business/production-quality/freezes` | 冻结明确数量 |
+| `GET /api/business/production-quality/bags/{bagId}/shippable` | 厂内可发查询。`location=OUTSOURCING` 表示外协未回 |
+| `POST /api/business/production-quality/reworks` | 按不合格份额开返工 |
+
+错袋返回「袋不存在」。过期袋版本返回「袋已被其他人修改，请刷新后重试」。客户范围为空返回「客户范围为空，不能报工」。同一请求内容变化返回「同一请求的内容不一致」。
+
 ### 5.3 `ReportProductionCommand`
 
 页面和导入不再调用 `POST /api/business/operations/production-reports`，该 HTTP 已退出。现场工序交付走 `process-stations`。登记导入和设备读数仍把数量、重量交给岗位服务 `reportProduction`，但必须登录，不能再绕过工序校验。下面的字段仍是这条内部命令的形状。
@@ -2055,6 +2073,15 @@ PWA 一期边界：
 | `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
 | `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
 | `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。整单动作 `PROCESS_HANDOFF`；传本次数量时为 `PROCESS_BATCH_HANDOFF` 并要求 `requestId`，详见 5.2.1。相同编号原内容回放，批次累计与正式交付同事务 |
+| `GET /api/business/production-quality/bags/{bagId}/availability` | `ApiResponse<ProcessAvailableQuantity>`。只读，见 5.2.4 |
+| `POST /api/business/production-quality/whole-bag-reports` | `ApiResponse<WholeBagReport>`。动作 `WHOLE_BAG_REPORT` |
+| `POST /api/business/production-quality/dispositions` | `ApiResponse<QuantityDispositionResult>`。动作 `QUANTITY_DISPOSITION` |
+| `POST /api/business/production-quality/weights` | `ApiResponse<BagWeightFact>`。动作 `WEIGHT_SUPPLEMENT` |
+| `POST /api/business/production-quality/inspections` | `ApiResponse<PortionInspection>`。动作 `PORTION_INSPECTION` |
+| `POST /api/business/production-quality/releases` | `ApiResponse<PortionRelease>`。动作 `PORTION_RELEASE` |
+| `POST /api/business/production-quality/freezes` | `ApiResponse<PortionRelease>`。动作 `PORTION_FREEZE` |
+| `GET /api/business/production-quality/bags/{bagId}/shippable` | `ApiResponse<ShippableView>`。只读 |
+| `POST /api/business/production-quality/reworks` | `ApiResponse<ReworkTask>`。动作 `REWORK_PORTION` |
 | `GET /api/business/operations/quality-checks` | `ApiResponse<QualityCheckView>` |
 | `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>`。可选 `requestId`。有值时动作是 `QUALITY_CHECK`，初检轮次、适用冻结和成功结果同一次提交 |
 | `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>`。可选 `requestId`。有值时动作是 `QUALITY_REWORK` |
