@@ -54,7 +54,8 @@ public enum PermissionCode {
     ASSET_VIEW("资产查阅"),
     ASSET_CUSTODY("资产保管交接"),
     OUTSOURCING_VIEW("外协查阅"),
-    OUTSOURCING_MAINTAIN("外协办理");
+    OUTSOURCING_MAINTAIN("外协办理"),
+    FACTORY_ITEM_MANAGE("本厂物品档案");
 
     private final String label;
 

@@ -65,6 +65,8 @@ zhubao:
     repository: ${ZHUBAO_CUSTOMER_DELIVERY_BILL_REPOSITORY:jdbc}
   public-delivery:
     repository: ${ZHUBAO_PUBLIC_DELIVERY_REPOSITORY:jdbc}
+  factory-item:
+    repository: ${ZHUBAO_FACTORY_ITEM_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:
