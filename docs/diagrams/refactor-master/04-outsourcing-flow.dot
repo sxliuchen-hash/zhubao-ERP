@@ -1,0 +1,19 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=23,label="外协实物流转与费用｜已确认需要追踪，尚未实施",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.5",ranksep="0.6"];
+ node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.2,0.14"];
+ edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+ source [label="客户料／本厂料及原加工目标\n原来源、权属、要求和实际路线保留"];
+ task [label="外协任务与所发袋份额\n外协方、执行环节、经办人和交接证据\n部分发外先分袋，不把一袋同时记在两处"];
+ send [label="确认发外\n本厂 → 外协保管\n不生成客户发货、应收或员工产量"];
+ outside [label="外协中与在外结存\n按来源、袋、单位和外协方核对\n不算厂内现货，不从客户受托总量消失"];
+ receive [label="分批收回并关联原发外行\n实收数量、适用实重和交接记录\n未加工退回不能虚报工序完成"];
+ check [label="核数与相应验收后回接原路线\n按实际份额确认外协作业一次\n收回不自动质量放行，不重复内部报工"];
+ next [label="继续加工／质量／返工\n全部必要条件满足后才进入可发范围"];
+ fee [label="外协费用独立核对确认\n关联原任务及真实依据\n形成供应商应付，实际付款不重复计成本",color="#2563eb",fillcolor="#eff6ff"];
+ discrepancy [label="少回差异／损耗／报废分别处理\n未核清保持待核\n不自动补损耗、扣员工工资或外协费",color="#71717a",fillcolor="#fafafa"];
+ note [shape=note,label="示例：发外200颗＝收回150＋确认损耗5＋仍在外45。\n当前我方管理实物＝本厂＋外协；加工中如包含外协，外协为其中项。\n外协直发客户、转送其他外协方等特殊流程待核，不假造返厂。",color="#71717a",fillcolor="#fafafa"];
+ source -> task;task -> send;send -> outside;outside -> receive;receive -> check;check -> next;
+ task -> fee [style=dashed,label="按约定依据独立确认"];
+ outside -> discrepancy [label="分次核对剩余和异常"];
+ next -> note [style=dashed,arrowhead=none];discrepancy -> note [style=dashed,arrowhead=none];fee -> note [style=dashed,arrowhead=none];
+}

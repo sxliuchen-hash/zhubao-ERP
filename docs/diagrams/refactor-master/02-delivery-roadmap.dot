@@ -9,12 +9,16 @@ digraph G {
  r4 [label="阶段4：本厂物料｜I3—I4\n珠料、配件、耗材、刀具与工具\n耗用、余量、领还及唯一数量账"];
  r5 [label="阶段5：客户只读｜I2\n手机网页登录和客户绑定\n可信库存、明细、证据及对账"];
  r6 [label="阶段6：固定资产｜A1\n技术相对独立，优先级后置\n实物变动与原金额卡片接续",color="#71717a",fillcolor="#fafafa"];
+ outsourcing [label="已确认O1：外协链路\n发外、分批收回、在外结存\n原权属与工序接续，费用独立"];
  count [label="后续可选C1：拍照计数接入\n图片 → 算法 → 建议数量\n人工核对后原报工提交；不阻塞手填主线",color="#71717a",fillcolor="#fafafa"];
  pilot [label="各范围分别试点与启用｜P9及适用I5\n核对历史、实物、金额、权限与真实操作\n先一个客户／材质或物品类别，不要求全部模块等齐",color="#2563eb",fillcolor="#eff6ff"];
  note [shape=note,label="实线表示所需事实／契约依赖；虚线表示范围或优先级安排。\n客户页可提前设计，开放需其可见库存及权限可信。\n旧单旧账不自动改写；已有新事实的回退须保留读取与办理能力。",color="#71717a",fillcolor="#fafafa"];
  r0 -> r1;r1 -> r2;r2 -> r3;
  r1 -> r4 [label="共用物料、单位及事务契约"];
  r2 -> r5 [label="加工及质量状态可信"];
+ r2 -> outsourcing [label="共用袋、工序与实物事实"];
+ outsourcing -> r5 [label="有在外物料的客户范围"];
+ outsourcing -> pilot [label="外协范围"];
  r2 -> count [style=dashed,label="契约先预留，算法后续开发"];
  r3 -> r5 [label="实际出库与来源接续"];
  r4 -> r6 [style=dashed,label="首期实物后安排"];

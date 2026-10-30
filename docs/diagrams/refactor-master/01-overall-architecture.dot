@@ -19,12 +19,13 @@ digraph G {
  }
  subgraph cluster_material {
   label="首期实物管理";fontname="SimSun";fontsize=19;color="#cbd5e1";
-  inventory [label="客户与公司物料数量\n寄存、在制、可交、冻结、处置\n袋为明细，不另立余额"];
+  inventory [label="客户与公司物料数量\n本厂／外协保管；寄存、在制、可交\n袋为明细，不另立余额"];
   factory [label="自有珠料／配件\n入库、领用、实际耗用\n余料退回与废料"];
   tools [label="耗材／刀具／工具\n耗材明确计耗时点\n重复工具领还与保管"];
   {rank=same;inventory;factory;tools;}
  }
  asset [label="后置：固定资产\n原资产号＋实物卡片\n位置、保管、交接、维修、处置"];
+ outsourcing [label="O1：外协发外与收回\n原来源、原权属、原路线\n分批收回与在外量；不是客户发货"];
  evidence [label="现有证据与标签设施\n照片引用接入业务事务\n原厂内40×30样式保持\n新增发货40×30及独立A5",color="#2563eb",fillcolor="#eff6ff"];
  base [label="保留的共同底座\n唯一权威物料数量账；原应收、工资、应付与收付款\nBusinessWorkUnit／WorkSession；内存／JDBC；附件、审计、升级与备份\n耗材逐类接续，原账来源和已记金额不重复",color="#2563eb",fillcolor="#eff6ff"];
  note [shape=note,label="所有目标能力均待实施，拍照计数算法后续独立开发。\n识别建议只回填草稿，人工核对后走原提交，不自动扣库存或记费用。\n模块仍在同一应用内，不重建库存或财务总账；打样与金工独立。",color="#71717a",fillcolor="#fafafa"];
@@ -32,6 +33,9 @@ digraph G {
  contract -> source;contract -> production;contract -> shipping;contract -> finance;
  source -> inventory [label="内部流转保留来源"];
  production -> inventory [label="份额及真实变动"];
+ production -> outsourcing [label="原节点的执行方式"];
+ outsourcing -> inventory [label="保管流转，不改所有权"];
+ outsourcing -> base [label="外协费用独立来源，不计内部工资"];
  shipping -> evidence [label="已确认快照"];
  finance -> base [label="应收与员工应付分别确认"];
  inventory -> factory [style=dashed,arrowhead=none,label="同权属与计量规则"];
