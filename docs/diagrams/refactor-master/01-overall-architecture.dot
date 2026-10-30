@@ -1,0 +1,44 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=23,label="大版本整体目标架构｜保留现有底座，逐步替换业务闭环",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.38",ranksep="0.6"];
+ node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.2,0.14"];
+ edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+ staff [label="厂内电脑／手机\n扫码报工、库管、财务",color="#2563eb",fillcolor="#eff6ff"];
+ client [label="客户手机网页登录\n只读自己的物料与加工库存"];
+ public [label="公开发货扫码\n只读指定交付摘要"];
+ {rank=same;staff;client;public;}
+ access [label="现有登录与服务端授权\n内部有效岗位／顶岗；客户身份绑定；公开字段白名单\n明细、照片、下载及导出同样检查权限",color="#2563eb",fillcolor="#eff6ff"];
+ contract [label="共用业务契约\n加工目标与来源；规则／路线快照；有效袋份额；单位与称重；可办理条件\n这是各模块共用的规则，不是新增通用流程引擎",color="#71717a",fillcolor="#fafafa"];
+ subgraph cluster_main {
+  label="加工与交付主线｜现有业务模块内扩展";fontname="SimSun";fontsize=19;color="#cbd5e1";
+  source [label="收料／寄存与领用\n保留原来源和权属"];
+  production [label="加工目标＋袋\n路线、拍照报工、实际损耗\n部分质量与返工"];
+  shipping [label="独立发货单＋袋明细\n同客户多加工来源\n确认才出库"];
+  finance [label="两条费用确认\n客户每次发货后出账\n员工整单完成后核算"];
+  {rank=same;source;production;shipping;finance;}
+  source -> production;production -> shipping;shipping -> finance;
+ }
+ subgraph cluster_material {
+  label="首期实物管理";fontname="SimSun";fontsize=19;color="#cbd5e1";
+  inventory [label="客户与公司物料数量\n寄存、在制、可交、冻结、处置\n袋为明细，不另立余额"];
+  factory [label="自有珠料／配件\n入库、领用、实际耗用\n余料退回与废料"];
+  tools [label="耗材／刀具／工具\n耗材明确计耗时点\n重复工具领还与保管"];
+  {rank=same;inventory;factory;tools;}
+ }
+ asset [label="后置：固定资产\n原资产号＋实物卡片\n位置、保管、交接、维修、处置"];
+ evidence [label="现有证据与标签设施\n照片引用接入业务事务\n原厂内40×30样式保持\n新增发货40×30及独立A5",color="#2563eb",fillcolor="#eff6ff"];
+ base [label="保留的共同底座\n唯一权威物料数量账；原应收、工资、应付与收付款\nBusinessWorkUnit／WorkSession；内存／JDBC；附件、审计、升级与备份\n耗材逐类接续，原账来源和已记金额不重复",color="#2563eb",fillcolor="#eff6ff"];
+ note [shape=note,label="所有目标能力均待实施。\n模块仍在同一应用内；不重建微服务、第二本库存账或第二套财务账。\n打样与金工独立，按需要轻度关联。",color="#71717a",fillcolor="#fafafa"];
+ staff -> access;client -> access;public -> access;access -> contract;
+ contract -> source;contract -> production;contract -> shipping;contract -> finance;
+ source -> inventory [label="内部流转保留来源"];
+ production -> inventory [label="份额及真实变动"];
+ shipping -> evidence [label="已确认快照"];
+ finance -> base [label="应收与员工应付分别确认"];
+ inventory -> factory [style=dashed,arrowhead=none,label="同权属与计量规则"];
+ factory -> tools [style=dashed,arrowhead=none,label="同物唯一数量账"];
+ inventory -> base;factory -> base;tools -> base;
+ contract -> asset [style=dashed,label="共用身份及审计"];
+ asset -> base [label="原值、折旧与付款分清"];
+ evidence -> base [label="原件＋引用接续"];
+ base -> note [style=dashed,arrowhead=none];
+}

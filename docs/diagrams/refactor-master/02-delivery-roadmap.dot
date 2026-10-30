@@ -1,0 +1,24 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=23,label="整体重构交付依赖｜先贯通一个真实闭环，再扩大范围",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.5",ranksep="0.65"];
+ node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.2,0.14"];
+ edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+ r0 [label="阶段0：规则与基准\nP0旧故障兼容修复可独立做；I0实物样本\n核清旧单、旧费用、原标签基准"];
+ r1 [label="阶段1：共用基础｜P1—P2\n目标、来源、路线、袋、计量与有效权限\n明确新旧办理规则，保留旧码"];
+ r2 [label="阶段2：加工与质量｜P3—P4、I1\n拍照报工、实际数量与损耗\n部分放行、返工及可信库存"];
+ r3 [label="阶段3：交付与费用｜P5—P8、F1—F6\n多来源发货、客户按次账、员工整单费\n保留厂内标签，新增发货标签／A5和公开摘要"];
+ r4 [label="阶段4：本厂物料｜I3—I4\n珠料、配件、耗材、刀具与工具\n耗用、余量、领还及唯一数量账"];
+ r5 [label="阶段5：客户只读｜I2\n手机网页登录和客户绑定\n可信库存、明细、证据及对账"];
+ r6 [label="阶段6：固定资产｜A1\n技术相对独立，优先级后置\n实物变动与原金额卡片接续",color="#71717a",fillcolor="#fafafa"];
+ pilot [label="各范围分别试点与启用｜P9及适用I5\n核对历史、实物、金额、权限与真实操作\n先一个客户／材质或物品类别，不要求全部模块等齐",color="#2563eb",fillcolor="#eff6ff"];
+ note [shape=note,label="实线表示所需事实／契约依赖；虚线表示范围或优先级安排。\n客户页可提前设计，开放需其可见库存及权限可信。\n旧单旧账不自动改写；已有新事实的回退须保留读取与办理能力。",color="#71717a",fillcolor="#fafafa"];
+ r0 -> r1;r1 -> r2;r2 -> r3;
+ r1 -> r4 [label="共用物料、单位及事务契约"];
+ r2 -> r5 [label="加工及质量状态可信"];
+ r3 -> r5 [label="实际出库与来源接续"];
+ r4 -> r6 [style=dashed,label="首期实物后安排"];
+ r3 -> pilot [label="加工交付范围"];
+ r4 -> pilot [label="本厂物品范围"];
+ r5 -> pilot [label="客户访问范围"];
+ r6 -> pilot [style=dashed,label="资产后续范围"];
+ pilot -> note [style=dashed,arrowhead=none];
+}
