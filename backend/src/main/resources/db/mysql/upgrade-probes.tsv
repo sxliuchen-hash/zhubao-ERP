@@ -88,3 +88,4 @@
 88	TABLE	biz_outsourcing_task
 89	TABLE	biz_outsourcing_dispatch
 90	TABLE	biz_outsourcing_return
+91	TABLE	fin_outsourcing_fee_basis
