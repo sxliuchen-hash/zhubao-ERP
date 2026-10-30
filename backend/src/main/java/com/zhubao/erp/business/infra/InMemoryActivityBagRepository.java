@@ -42,6 +42,11 @@ public class InMemoryActivityBagRepository implements ActivityBagRepository {
     }
 
     @Override
+    public Optional<ActivityBag> lock(String id, WorkSession session) {
+        return find(id);
+    }
+
+    @Override
     public List<ActivityBag> listByTarget(String targetCode) {
         return bags.values().stream().filter(bag -> bag.targetCode().equals(targetCode)).toList();
     }

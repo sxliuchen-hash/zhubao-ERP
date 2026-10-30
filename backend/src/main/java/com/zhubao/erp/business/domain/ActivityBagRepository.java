@@ -11,5 +11,7 @@ public interface ActivityBagRepository {
 
     Optional<ActivityBag> find(String id);
 
+    Optional<ActivityBag> lock(String id, WorkSession session);
+
     List<ActivityBag> listByTarget(String targetCode);
 }

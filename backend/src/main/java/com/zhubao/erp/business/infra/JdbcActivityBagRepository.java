@@ -62,6 +62,20 @@ public class JdbcActivityBagRepository implements ActivityBagRepository {
     }
 
     @Override
+    public Optional<ActivityBag> lock(String id, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select * from biz_activity_bag where bag_id=? for update")) {
+            statement.setString(1, id);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? Optional.of(map(rows)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定袋", ex);
+        }
+    }
+
+    @Override
     public List<ActivityBag> listByTarget(String targetCode) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(

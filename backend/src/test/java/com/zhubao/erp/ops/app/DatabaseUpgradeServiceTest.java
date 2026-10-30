@@ -35,7 +35,7 @@ class DatabaseUpgradeServiceTest {
     @Test
     void realCatalogKeepsContiguousVersionsThroughV76() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(88);
+        assertThat(scripts).hasSize(89);
         assertThat(scripts.get(75).fileName()).isEqualTo("V76__m3_processing_intake_pending.sql");
         assertThat(scripts.get(76).fileName()).isEqualTo("V77__m3_label_paper_40x30.sql");
         assertThat(scripts.get(76).probe().expectedValue()).isEqualTo("V77");
@@ -53,6 +53,8 @@ class DatabaseUpgradeServiceTest {
         assertThat(scripts.get(86).fileName()).isEqualTo("V87__m3_rework_task.sql");
         assertThat(scripts.get(87).fileName()).isEqualTo("V88__m3_outsourcing_source.sql");
         assertThat(scripts.get(87).probe().tableName()).isEqualTo("biz_outsourcing_task");
+        assertThat(scripts.get(88).fileName()).isEqualTo("V89__m3_outsourcing_dispatch.sql");
+        assertThat(scripts.get(88).probe().tableName()).isEqualTo("biz_outsourcing_dispatch");
         assertThat(scripts.get(74).fileName()).isEqualTo("V75__m3_label_storage_edition.sql");
         assertThat(scripts.get(73).fileName()).isEqualTo("V74__m3_material_storage_requirements.sql");
         assertThat(scripts.get(0).version()).isEqualTo(1);
