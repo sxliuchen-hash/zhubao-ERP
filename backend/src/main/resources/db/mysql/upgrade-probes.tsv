@@ -92,3 +92,4 @@
 92	TABLE	biz_delivery_draft
 93	TABLE	biz_delivery_confirmed_source
 94	TABLE	biz_customer_return_source
+95	TABLE	fin_customer_delivery_bill

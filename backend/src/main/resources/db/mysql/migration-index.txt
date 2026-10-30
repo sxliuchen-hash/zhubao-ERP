@@ -92,3 +92,4 @@ V91__m3_outsourcing_completion.sql
 V92__m3_delivery_draft.sql
 V93__m3_delivery_confirmation.sql
 V94__m3_customer_return_source.sql
+V95__m3_customer_delivery_bill.sql
