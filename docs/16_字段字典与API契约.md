@@ -1725,6 +1725,7 @@ PWA 一期边界：
 | `GET /api/auth/account-options`、`GET /api/auth/accounts`、`GET /api/auth/accounts/pre-approval-applications`、`GET /api/auth/accounts/pre-approval-evidence`、`POST /api/auth/accounts`、`POST /api/auth/accounts/{username}/status`、`POST /api/auth/accounts/{username}/unlock`、`POST /api/auth/accounts/{username}/delete`、`POST /api/auth/accounts/{username}/session-revocations` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN` |
 | `GET/POST /api/security/customer-authorizations`、`POST /api/security/customer-authorizations/revocations` | `CUSTOMER_AUTHORIZATION_MANAGE` | 仅 `ADMIN` |
 | `POST /api/security/customer-portal/bindings`、`POST /api/security/customer-portal/bindings/{username}/disable`、`POST /api/security/customer-portal/presented-claims`、`POST /api/security/customer-portal/credentials`、`POST /api/security/customer-portal/credential-recoveries` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN`。绑定只接受稳定客户编号；自填编号、凭据签发和找回拒绝，不返回成功 |
+| `GET /api/customer-portal/owned-stock` | 客户身份登录会话 | 只读绑定客户的自有库存。不接收客户编号，不写出库或改库存 |
 
 ### 13.3 错误响应
 
@@ -1955,6 +1956,10 @@ PWA 一期边界：
 管理员用 `POST /api/security/customer-portal/bindings` 把一个新账号绑定到已启用的客户档案编号。请求只含 `username` 和 `customerId`。一个账号只对应一个客户主体。空编号、不存在的编号、已停用客户、借用财务、库管或业务管理等内部账号，都会拒绝。绑定写入 `auth_customer_portal_binding`，账号角色为 `CUSTOMER_PORTAL`，数据范围只有该编号，没有内部菜单、财务、库管或顶岗权限。
 
 `POST /api/security/customer-portal/presented-claims` 拒绝按客户名称、客户编码或客户自填编号认领。`POST /api/security/customer-portal/credentials` 和 `POST /api/security/customer-portal/credential-recoveries` 在凭据交付与找回方式核定前拒绝，不生成口令，客户身份因此不能登录。`POST /api/security/customer-portal/bindings/{username}/disable` 停用身份并撤销该账号仍有效的会话。同客户多人和同一集团多主体仍待核，不能追加绑定。这些接口不写库存、客户账或工资。
+
+### 14.4.2 客户自有库存
+
+`GET /api/customer-portal/owned-stock` 只接受客户身份的登录会话，不接受请求头兜底，也不接收客户编号参数。结果按 `ownerType=CUSTOMER` 且 `ownerCustomerId` 等于绑定客户汇总，分成寄存、本厂、外协、质量和已发。同一材质的不同单位分开。外协数量已从本厂加工量中划出，再加一次就会重复。公司料即使单据上写了该客户，也不出现。重量未知时 `knownWeight` 为空，不返回 0；只知道一部分时标记为不完整。已发不计入当前在厂。打样和金工来源状态是 `NOT_IMPLEMENTED`，有未接入余额时 `withheld=true`，不会当成已经核对过的空库存。查询不写库存、出库或客户账。
 
 ### 14.5 菜单树接口
 
