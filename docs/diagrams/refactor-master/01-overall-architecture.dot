@@ -10,7 +10,7 @@ digraph G {
  contract [label="共用业务契约\n加工目标与来源；规则／路线快照；有效袋份额；单位与称重；可办理条件\n数量输入：手填保留，预留拍照计数结果回填\n这是各模块共用的规则，不是新增通用流程引擎",color="#71717a",fillcolor="#fafafa"];
  subgraph cluster_main {
   label="加工与交付主线｜现有业务模块内扩展";fontname="SimSun";fontsize=19;color="#cbd5e1";
-  source [label="收料／寄存与领用\n保留原来源和权属"];
+  source [label="保护母单登记与存量身份\n原号、原收货来源、原照片\n旧码接入统一新模型",color="#2563eb",fillcolor="#eff6ff"];
   production [label="加工目标＋袋\n路线、拍照报工、实际损耗\n部分质量与返工"];
   shipping [label="独立发货单＋袋明细\n同客户多加工来源\n确认才出库"];
   finance [label="两条费用确认\n客户每次发货后出账\n员工整单完成后核算"];
@@ -28,7 +28,7 @@ digraph G {
  outsourcing [label="O1：外协发外与收回\n原来源、原权属、原路线\n分批收回与在外量；不是客户发货"];
  evidence [label="现有证据与标签设施\n照片引用接入业务事务\n原厂内40×30样式保持\n新增发货40×30及独立A5",color="#2563eb",fillcolor="#eff6ff"];
  base [label="保留的共同底座\n唯一权威物料数量账；原应收、工资、应付与收付款\nBusinessWorkUnit／WorkSession；内存／JDBC；附件、审计、升级与备份\n耗材逐类接续，原账来源和已记金额不重复",color="#2563eb",fillcolor="#eff6ff"];
- note [shape=note,label="所有目标能力均待实施，拍照计数算法后续独立开发。\n识别建议只回填草稿，人工核对后走原提交，不自动扣库存或记费用。\n模块仍在同一应用内，不重建库存或财务总账；打样与金工独立。",color="#71717a",fillcolor="#fafafa"];
+ note [shape=note,label="统一新模型建设，一期完整验收后集中切换，不长期维持完整旧流程。\n重点保护母单、原工单码和照片；接续不重复收货／入库。\n计数算法、资产增强后置；技术及库存账务底座按适用性复用。",color="#71717a",fillcolor="#fafafa"];
  staff -> access;client -> access;public -> access;access -> contract;
  contract -> source;contract -> production;contract -> shipping;contract -> finance;
  source -> inventory [label="内部流转保留来源"];
