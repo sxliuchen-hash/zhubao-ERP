@@ -73,6 +73,8 @@ zhubao:
     repository: ${ZHUBAO_COMPANY_MATERIAL_ISSUE_REPOSITORY:jdbc}
   consumable-adoption:
     repository: ${ZHUBAO_CONSUMABLE_ADOPTION_REPOSITORY:jdbc}
+  consumable-cost:
+    repository: ${ZHUBAO_CONSUMABLE_COST_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:

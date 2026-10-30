@@ -99,3 +99,4 @@
 99	TABLE	inv_company_material_issue
 100	TABLE	inv_company_material_consumption
 101	TABLE	inv_consumable_adoption
+102	TABLE	inv_consumable_cost_event

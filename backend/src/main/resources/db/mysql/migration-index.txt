@@ -99,3 +99,4 @@ V98__m3_company_material_receipt.sql
 V99__m3_company_material_issue.sql
 V100__m3_company_material_consumption.sql
 V101__m3_consumable_adoption.sql
+V102__m3_consumable_cost.sql
