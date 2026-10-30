@@ -19,4 +19,12 @@ public interface DeliveryDraftRepository {
     List<DeliveryDraftLine> lines(String deliveryId);
 
     List<String> listIds(WorkSession session);
+
+    Optional<DeliveryDraft> lock(String deliveryId, WorkSession session);
+
+    void confirm(DeliveryDraft confirmed, List<DeliveryConfirmedSource> sources, int expectedVersion, WorkSession session);
+
+    List<DeliveryConfirmedSource> confirmedSources(String deliveryId);
+
+    boolean bagConfirmed(String bagId);
 }

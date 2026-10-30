@@ -37,7 +37,7 @@ public record DeliveryDraft(
         }
         logisticsNote = bounded(logisticsNote, 200, "物流说明过长");
         remark = bounded(remark, 500, "备注过长");
-        if (status != DeliveryDraftStatus.DRAFT) {
+        if (status == null) {
             throw new BusinessException("交付草稿状态不正确");
         }
         if (version < 1) {

@@ -2,6 +2,7 @@ package com.zhubao.erp.business.infra;
 
 import com.zhubao.erp.business.domain.BusinessKind;
 import com.zhubao.erp.business.domain.BusinessTargetRole;
+import com.zhubao.erp.business.domain.DeliveryConfirmedSource;
 import com.zhubao.erp.business.domain.DeliveryDraft;
 import com.zhubao.erp.business.domain.DeliveryDraftLine;
 import com.zhubao.erp.business.domain.DeliveryDraftRepository;
@@ -105,6 +106,113 @@ public class JdbcDeliveryDraftRepository implements DeliveryDraftRepository {
         } catch (SQLException ex) {
             throw new IllegalStateException("无法读取交付单号", ex);
         }
+    }
+
+    @Override
+    public Optional<DeliveryDraft> lock(String deliveryId, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select * from biz_delivery_draft where delivery_id=? for update")) {
+            statement.setString(1, deliveryId);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? Optional.of(mapHeader(rows)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定交付草稿", ex);
+        }
+    }
+
+    @Override
+    public void confirm(DeliveryDraft confirmed, List<DeliveryConfirmedSource> sources, int expectedVersion, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                update biz_delivery_draft
+                   set status_code=?, version_no=?
+                 where delivery_id=? and version_no=? and status_code=?
+                """)) {
+            statement.setString(1, confirmed.status().name());
+            statement.setInt(2, confirmed.version());
+            statement.setString(3, confirmed.deliveryId());
+            statement.setInt(4, expectedVersion);
+            statement.setString(5, DeliveryDraftStatus.DRAFT.name());
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("交付草稿已被其他人修改，请刷新后重试");
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法确认交付草稿", ex);
+        }
+        for (DeliveryConfirmedSource source : sources) {
+            insertConfirmed(connection, source);
+        }
+    }
+
+    @Override
+    public List<DeliveryConfirmedSource> confirmedSources(String deliveryId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     select * from biz_delivery_confirmed_source
+                      where delivery_id=?
+                      order by line_no
+                     """)) {
+            statement.setString(1, deliveryId);
+            try (ResultSet rows = statement.executeQuery()) {
+                List<DeliveryConfirmedSource> result = new ArrayList<>();
+                while (rows.next()) {
+                    result.add(mapConfirmed(rows));
+                }
+                return result;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取已确认交付", ex);
+        }
+    }
+
+    @Override
+    public boolean bagConfirmed(String bagId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "select bag_id from biz_delivery_confirmed_source where bag_id=?")) {
+            statement.setString(1, bagId);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取已交付袋", ex);
+        }
+    }
+
+    private void insertConfirmed(Connection connection, DeliveryConfirmedSource source) {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into biz_delivery_confirmed_source(
+                    delivery_id, line_no, bag_id, outbound_code, ledger_code, quantity, weight_value)
+                values (?,?,?,?,?,?,?)
+                """)) {
+            statement.setString(1, source.deliveryId());
+            statement.setInt(2, source.lineNo());
+            statement.setString(3, source.bagId());
+            statement.setString(4, source.outboundCode());
+            statement.setString(5, source.ledgerCode());
+            statement.setBigDecimal(6, source.quantity());
+            statement.setBigDecimal(7, source.weight());
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            if (duplicate(ex)) {
+                throw new BusinessException("该袋已经交付");
+            }
+            throw new IllegalStateException("无法保存已确认交付", ex);
+        }
+    }
+
+    private DeliveryConfirmedSource mapConfirmed(ResultSet rows) throws SQLException {
+        return new DeliveryConfirmedSource(
+                rows.getString("delivery_id"),
+                rows.getInt("line_no"),
+                rows.getString("bag_id"),
+                rows.getString("outbound_code"),
+                rows.getString("ledger_code"),
+                rows.getBigDecimal("quantity"),
+                rows.getBigDecimal("weight_value")
+        );
     }
 
     private void insertLine(Connection connection, DeliveryDraftLine line) {

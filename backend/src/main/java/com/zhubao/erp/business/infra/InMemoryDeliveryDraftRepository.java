@@ -1,8 +1,10 @@
 package com.zhubao.erp.business.infra;
 
+import com.zhubao.erp.business.domain.DeliveryConfirmedSource;
 import com.zhubao.erp.business.domain.DeliveryDraft;
 import com.zhubao.erp.business.domain.DeliveryDraftLine;
 import com.zhubao.erp.business.domain.DeliveryDraftRepository;
+import com.zhubao.erp.business.domain.DeliveryDraftStatus;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,6 +22,8 @@ public class InMemoryDeliveryDraftRepository implements DeliveryDraftRepository 
 
     private final CopyOnWriteArrayList<DeliveryDraft> headers = new CopyOnWriteArrayList<>();
     private final ConcurrentHashMap<String, List<DeliveryDraftLine>> lines = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<DeliveryConfirmedSource>> confirmed = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, DeliveryConfirmedSource> confirmedBags = new ConcurrentHashMap<>();
 
     @Override
     public void save(DeliveryDraft draft, List<DeliveryDraftLine> draftLines, WorkSession session) {
@@ -58,5 +62,66 @@ public class InMemoryDeliveryDraftRepository implements DeliveryDraftRepository 
     @Override
     public List<String> listIds(WorkSession session) {
         return headers.stream().map(DeliveryDraft::deliveryId).sorted().toList();
+    }
+
+    @Override
+    public Optional<DeliveryDraft> lock(String deliveryId, WorkSession session) {
+        return find(deliveryId);
+    }
+
+    @Override
+    public void confirm(DeliveryDraft next, List<DeliveryConfirmedSource> sources, int expectedVersion, WorkSession session) {
+        int index = indexOf(next.deliveryId());
+        if (index < 0) {
+            throw new BusinessException("交付草稿不存在");
+        }
+        DeliveryDraft current = headers.get(index);
+        if (current.version() != expectedVersion) {
+            throw new BusinessException("交付草稿已被其他人修改，请刷新后重试");
+        }
+        if (current.status() != DeliveryDraftStatus.DRAFT) {
+            throw new BusinessException("该交付单已经确认");
+        }
+        List<DeliveryConfirmedSource> stored = List.copyOf(sources);
+        for (DeliveryConfirmedSource source : stored) {
+            if (confirmedBags.containsKey(source.bagId())) {
+                throw new BusinessException("该袋已经交付");
+            }
+        }
+        headers.set(index, next);
+        confirmed.put(next.deliveryId(), stored);
+        for (DeliveryConfirmedSource source : stored) {
+            confirmedBags.put(source.bagId(), source);
+        }
+        if (session != null) {
+            session.onRollback(() -> {
+                headers.set(index, current);
+                confirmed.remove(next.deliveryId(), stored);
+                for (DeliveryConfirmedSource source : stored) {
+                    confirmedBags.remove(source.bagId(), source);
+                }
+            });
+        }
+    }
+
+    @Override
+    public List<DeliveryConfirmedSource> confirmedSources(String deliveryId) {
+        return confirmed.getOrDefault(deliveryId, List.of()).stream()
+                .sorted(Comparator.comparingInt(DeliveryConfirmedSource::lineNo))
+                .toList();
+    }
+
+    @Override
+    public boolean bagConfirmed(String bagId) {
+        return bagId != null && confirmedBags.containsKey(bagId);
+    }
+
+    private int indexOf(String deliveryId) {
+        for (int index = 0; index < headers.size(); index++) {
+            if (headers.get(index).deliveryId().equals(deliveryId)) {
+                return index;
+            }
+        }
+        return -1;
     }
 }

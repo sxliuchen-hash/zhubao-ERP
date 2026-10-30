@@ -90,3 +90,4 @@ V89__m3_outsourcing_dispatch.sql
 V90__m3_outsourcing_return.sql
 V91__m3_outsourcing_completion.sql
 V92__m3_delivery_draft.sql
+V93__m3_delivery_confirmation.sql

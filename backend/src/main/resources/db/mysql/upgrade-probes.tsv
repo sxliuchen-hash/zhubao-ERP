@@ -90,3 +90,4 @@
 90	TABLE	biz_outsourcing_return
 91	TABLE	fin_outsourcing_fee_basis
 92	TABLE	biz_delivery_draft
+93	TABLE	biz_delivery_confirmed_source
