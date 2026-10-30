@@ -101,3 +101,4 @@ V100__m3_company_material_consumption.sql
 V101__m3_consumable_adoption.sql
 V102__m3_consumable_cost.sql
 V103__m3_tool_custody.sql
+V104__m3_tool_disposition.sql

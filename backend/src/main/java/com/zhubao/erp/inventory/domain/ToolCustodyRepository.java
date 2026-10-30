@@ -18,6 +18,10 @@ public interface ToolCustodyRepository {
 
     Optional<ToolLoan> find(String loanId);
 
+    ToolLoan settle(String loanId, BigDecimal quantity, int expectedVersion, WorkSession session);
+
+    void record(ToolDisposition disposition, WorkSession session);
+
     List<ToolLoan> loansOf(String itemId);
 
     /** 按持有人稳定身份汇总未还数量，不按姓名合并。 */

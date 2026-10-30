@@ -7,6 +7,7 @@ import com.zhubao.erp.inventory.domain.FactoryItemCategory;
 import com.zhubao.erp.inventory.domain.FactoryItemRepository;
 import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.inventory.domain.ToolCustodyRepository;
+import com.zhubao.erp.inventory.domain.ToolDisposition;
 import com.zhubao.erp.inventory.domain.ToolLoan;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.app.RefactorPermissionContract;
@@ -96,6 +97,55 @@ public class ToolCustodyService {
             return id;
         });
         return tools.find(loanId).orElseThrow(() -> new BusinessException("借出单不存在"));
+    }
+
+    public ToolLoan giveBack(String requestId, OperatorContext actor, String loanId, int version, BigDecimal quantity) {
+        RefactorPermissionContract.assertAction(permissions, PermissionCode.STOCK_COMPANY_RETURN, actor);
+        BigDecimal counted = positive(quantity);
+        String id = text(loanId);
+        String saved = unit.execute(new CommandCall(
+                requestId, actor.operator(), "RETURN_TOOL", "TOOL_LOAN", id,
+                id + "\n" + version + "\n" + counted.toPlainString()
+        ), session -> {
+            ToolLoan current = tools.find(id).orElseThrow(() -> new BusinessException("借出单不存在"));
+            tools.settle(id, counted, version, session);
+            tools.addStock(current.itemId(), current.warehouseCode(), counted, current.unit(), session);
+            return id;
+        });
+        return tools.find(saved).orElseThrow(() -> new BusinessException("借出单不存在"));
+    }
+
+    public ToolDisposition scrap(String requestId, OperatorContext actor, String loanId, int version, BigDecimal quantity, String reason) {
+        return dispose(requestId, actor, loanId, version, quantity, reason, ToolDisposition.SCRAP, true);
+    }
+
+    public ToolDisposition damage(String requestId, OperatorContext actor, String loanId, BigDecimal quantity, String reason) {
+        return dispose(requestId, actor, loanId, 0, quantity, reason, ToolDisposition.DAMAGE, false);
+    }
+
+    private ToolDisposition dispose(String requestId, OperatorContext actor, String loanId, int version, BigDecimal quantity,
+                                    String reason, String kind, boolean closeQuantity) {
+        RefactorPermissionContract.assertAction(permissions, PermissionCode.STOCK_COMPANY_ISSUE, actor);
+        BigDecimal counted = positive(quantity);
+        String why = required(reason, "请填写原因", 80);
+        String id = text(loanId);
+        String saved = unit.execute(new CommandCall(
+                requestId, actor.operator(), kind + "_TOOL", "TOOL_LOAN", id,
+                id + "\n" + version + "\n" + counted.toPlainString() + "\n" + why
+        ), session -> {
+            ToolLoan current = tools.find(id).orElseThrow(() -> new BusinessException("借出单不存在"));
+            if (current.outstanding().compareTo(counted) < 0) {
+                throw new BusinessException("处置数量不能超过未还");
+            }
+            if (closeQuantity) {
+                tools.settle(id, counted, version, session);
+            }
+            String dispositionId = "TD-" + token();
+            tools.record(new ToolDisposition(dispositionId, id, current.holderId(), kind, counted, why), session);
+            return dispositionId;
+        });
+        ToolLoan loan = tools.find(id).orElseThrow(() -> new BusinessException("借出单不存在"));
+        return new ToolDisposition(saved, id, loan.holderId(), kind, counted, why);
     }
 
     public BigDecimal stock(String itemId, String warehouseCode) {

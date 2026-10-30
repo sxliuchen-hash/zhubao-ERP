@@ -2,6 +2,7 @@ package com.zhubao.erp.inventory.infra;
 
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.domain.ToolCustodyRepository;
+import com.zhubao.erp.inventory.domain.ToolDisposition;
 import com.zhubao.erp.inventory.domain.ToolLoan;
 import com.zhubao.erp.work.app.WorkSessionBindings;
 import com.zhubao.erp.work.domain.WorkSession;
@@ -141,6 +142,64 @@ public class JdbcToolCustodyRepository implements ToolCustodyRepository {
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存工具借出", ex);
+        }
+    }
+
+    @Override
+    public ToolLoan settle(String loanId, BigDecimal quantity, int expectedVersion, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement query = connection.prepareStatement("select * from inv_tool_loan where loan_id=? for update")) {
+            query.setString(1, loanId);
+            try (ResultSet rows = query.executeQuery()) {
+                if (!rows.next()) {
+                    throw new BusinessException("借出单不存在");
+                }
+                ToolLoan current = map(rows);
+                if (current.version() != expectedVersion) {
+                    throw new BusinessException("借出单已被其他人修改，请刷新后重试");
+                }
+                if (current.returnedQuantity().add(quantity).compareTo(current.quantity()) > 0) {
+                    throw new BusinessException("归还数量不能超过未还");
+                }
+                try (PreparedStatement update = connection.prepareStatement("""
+                        update inv_tool_loan
+                           set returned_quantity=returned_quantity+?, version_no=version_no+1
+                         where loan_id=? and version_no=?
+                        """)) {
+                    update.setBigDecimal(1, quantity);
+                    update.setString(2, loanId);
+                    update.setInt(3, expectedVersion);
+                    if (update.executeUpdate() != 1) {
+                        throw new BusinessException("借出单已被其他人修改，请刷新后重试");
+                    }
+                }
+                return new ToolLoan(
+                        current.loanId(), current.itemId(), current.holderId(), current.holderName(), current.quantity(),
+                        current.returnedQuantity().add(quantity), current.unit(), current.pieceCode(), current.warehouseCode(),
+                        current.version() + 1);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法结清工具借出", ex);
+        }
+    }
+
+    @Override
+    public void record(ToolDisposition disposition, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into inv_tool_disposition(
+                    disposition_id, loan_id, holder_id, kind, quantity, reason)
+                values (?,?,?,?,?,?)
+                """)) {
+            statement.setString(1, disposition.dispositionId());
+            statement.setString(2, disposition.loanId());
+            statement.setString(3, disposition.holderId());
+            statement.setString(4, disposition.kind());
+            statement.setBigDecimal(5, disposition.quantity());
+            statement.setString(6, disposition.reason());
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存工具处置", ex);
         }
     }
 
