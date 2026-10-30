@@ -16,6 +16,7 @@ import com.zhubao.erp.finance.domain.FinanceRepository;
 import com.zhubao.erp.finance.domain.FixedAsset;
 import com.zhubao.erp.finance.domain.Payable;
 import com.zhubao.erp.finance.domain.PayablePayment;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -34,10 +35,17 @@ public class FinanceCostService {
     static final String ISSUE = "ISSUE";
 
     private final FinanceRepository finance;
+    private final ConsumableQuantityWriteGate writes;
     private final AtomicLong sequence = new AtomicLong();
 
     public FinanceCostService(FinanceRepository finance) {
+        this(finance, null);
+    }
+
+    @Autowired
+    public FinanceCostService(FinanceRepository finance, @Autowired(required = false) ConsumableQuantityWriteGate writes) {
         this.finance = finance;
+        this.writes = writes;
     }
 
     public List<ConsumableStockView> consumableStocks() {
@@ -71,6 +79,7 @@ public class FinanceCostService {
     public ConsumableMovement purchase(PurchaseConsumableCommand command, String operator) {
         FinanceTexts.month(command.yearMonth());
         ConsumableItem item = requireItem(command.itemCode());
+        assertWritable(item.code());
         BigDecimal quantity = FinanceTexts.quantity(command.quantity());
         BigDecimal amount = FinanceTexts.money(command.amount());
         String payableCode = FinanceTexts.code("FIN-AP", sequence);
@@ -107,6 +116,7 @@ public class FinanceCostService {
     public ConsumableMovement issue(IssueConsumableCommand command, String operator) {
         FinanceTexts.month(command.yearMonth());
         ConsumableItem item = requireItem(command.itemCode());
+        assertWritable(item.code());
         BigDecimal quantity = FinanceTexts.quantity(command.quantity());
         OnHand onHand = onHand(item.code());
         if (quantity.compareTo(onHand.quantity()) > 0) {
@@ -231,6 +241,12 @@ public class FinanceCostService {
                 FinanceTexts.now()
         );
         return finance.registerPayablePayment(payment, idempotencyKey);
+    }
+
+    private void assertWritable(String itemCode) {
+        if (writes != null) {
+            writes.assertWritable(itemCode);
+        }
     }
 
     private ConsumableItem requireItem(String code) {
