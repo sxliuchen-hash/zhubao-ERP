@@ -23,6 +23,11 @@ public record DesignArtifactReference(
         }
     }
 
+    /** 外部引用默认只在内部使用，不因保存说明而变成客户可见。 */
+    public String audience() {
+        return "INTERNAL";
+    }
+
     private static String required(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new BusinessException(message);

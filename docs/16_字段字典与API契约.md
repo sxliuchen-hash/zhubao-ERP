@@ -1726,6 +1726,8 @@ PWA 一期边界：
 | `GET/POST /api/security/customer-authorizations`、`POST /api/security/customer-authorizations/revocations` | `CUSTOMER_AUTHORIZATION_MANAGE` | 仅 `ADMIN` |
 | `POST /api/security/customer-portal/bindings`、`POST /api/security/customer-portal/bindings/{username}/disable`、`POST /api/security/customer-portal/presented-claims`、`POST /api/security/customer-portal/credentials`、`POST /api/security/customer-portal/credential-recoveries` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN`。绑定只接受稳定客户编号；自填编号、凭据签发和找回拒绝，不返回成功 |
 | `GET /api/customer-portal/owned-stock` | 客户身份登录会话 | 只读绑定客户的自有库存。不接收客户编号，不写出库或改库存 |
+| `POST /api/security/customer-evidence/grants` | `AUTH_ACCOUNT_MANAGE` | 仅 `ADMIN`。逐张获准图片、PDF 或确认凭据；工资、成本和模型引用拒绝 |
+| `GET /api/customer-portal/evidence`、`POST /api/customer-portal/evidence/downloads`、`POST /api/customer-portal/evidence/direct-downloads` | 客户身份登录会话 | 只读获准证据。直接下载拒绝。不改原件 |
 
 ### 13.3 错误响应
 
@@ -1960,6 +1962,10 @@ PWA 一期边界：
 ### 14.4.2 客户自有库存
 
 `GET /api/customer-portal/owned-stock` 只接受客户身份的登录会话，不接受请求头兜底，也不接收客户编号参数。结果按 `ownerType=CUSTOMER` 且 `ownerCustomerId` 等于绑定客户汇总，分成寄存、本厂、外协、质量和已发。同一材质的不同单位分开。外协数量已从本厂加工量中划出，再加一次就会重复。公司料即使单据上写了该客户，也不出现。重量未知时 `knownWeight` 为空，不返回 0；只知道一部分时标记为不完整。已发不计入当前在厂。打样和金工来源状态是 `NOT_IMPLEMENTED`，有未接入余额时 `withheld=true`，不会当成已经核对过的空库存。查询不写库存、出库或客户账。
+
+### 14.4.3 客户证据
+
+管理员用 `POST /api/security/customer-evidence/grants` 逐张获准图片、PDF 或确认凭据。没有获准记录时，`GET /api/customer-portal/evidence` 的 `visibility` 为 `UNDECIDED`，不把未核定范围显示成空清单已核对完成。详情只含获准编号、附件号、文件名、类型和下载票据，不含存放位置。`POST /api/customer-portal/evidence/downloads` 必须带上详情里的票据；改附件号、其他客户或只拿附件号调用 `POST /api/customer-portal/evidence/direct-downloads` 都会拒绝。工资、工费和成本文件不能获准。模型引用的对外身份固定为 `INTERNAL`，存放说明不进入客户字段。获准不改附件原件。客户身份也不能走内部附件预览。
 
 ### 14.5 菜单树接口
 

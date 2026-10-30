@@ -450,6 +450,9 @@ public class DocumentManagementController {
             HttpServletRequest request
     ) {
         OperatorContext context = operatorContextResolver.requireSession(request);
+        if (context.role() == RoleCode.CUSTOMER_PORTAL) {
+            throw new PermissionDeniedException("客户不能使用内部附件下载");
+        }
         EvidenceAttachment attachment = documentManagementService.attachmentByCode(code);
         dataAccess.assertCanRead(context, attachment.businessCode());
         return ResponseEntity.ok()
