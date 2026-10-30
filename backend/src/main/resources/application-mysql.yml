@@ -77,6 +77,8 @@ zhubao:
     repository: ${ZHUBAO_CONSUMABLE_COST_REPOSITORY:jdbc}
   tool-custody:
     repository: ${ZHUBAO_TOOL_CUSTODY_REPOSITORY:jdbc}
+  material-stocktake:
+    repository: ${ZHUBAO_MATERIAL_STOCKTAKE_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:
