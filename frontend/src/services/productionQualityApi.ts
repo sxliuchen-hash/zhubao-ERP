@@ -36,18 +36,22 @@ export function submitWholeBagReport(body: WholeBagReportBody): Promise<WholeBag
   return apiPost<WholeBagReportBody, WholeBagReportResponse>('/api/business/production-quality/whole-bag-reports', body);
 }
 
-export interface PortionQualityView {
+export interface ShippablePortion {
   bagId: string;
   quantity: number;
-  clauses: string[];
-  released: number;
-  frozen: number;
-  reworkBagId: string;
   blockingReasons: string[];
 }
 
-export function fetchPortionQuality(bagId: string): Promise<PortionQualityView> {
-  return apiGet<PortionQualityView>(`/api/business/production-quality/bags/${encodeURIComponent(bagId)}/shippable`);
+export function fetchShippablePortion(bagId: string): Promise<ShippablePortion> {
+  return apiGet<ShippablePortion>(`/api/business/production-quality/bags/${encodeURIComponent(bagId)}/shippable`);
+}
+
+export function submitPortionRelease(body: { requestId: string; bagId: string; bagVersion: number; quantity: number }): Promise<{ released: number; frozen: number }> {
+  return apiPost('/api/business/production-quality/releases', body);
+}
+
+export function submitPortionRework(body: { requestId: string; bagId: string; bagVersion: number; round: number }): Promise<{ reworkBagId: string; targetCode: string }> {
+  return apiPost('/api/business/production-quality/reworks', body);
 }
 
 export function submitPortionInspection(body: {
