@@ -85,3 +85,4 @@
 85	TABLE	biz_portion_inspection
 86	TABLE	biz_portion_release
 87	TABLE	biz_rework_task
+88	TABLE	biz_outsourcing_task
