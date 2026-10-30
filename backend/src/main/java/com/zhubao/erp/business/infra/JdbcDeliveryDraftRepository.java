@@ -147,6 +147,27 @@ public class JdbcDeliveryDraftRepository implements DeliveryDraftRepository {
     }
 
     @Override
+    public void abandon(DeliveryDraft abandoned, int expectedVersion, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                update biz_delivery_draft
+                   set status_code=?, version_no=?
+                 where delivery_id=? and version_no=? and status_code=?
+                """)) {
+            statement.setString(1, abandoned.status().name());
+            statement.setInt(2, abandoned.version());
+            statement.setString(3, abandoned.deliveryId());
+            statement.setInt(4, expectedVersion);
+            statement.setString(5, DeliveryDraftStatus.DRAFT.name());
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("交付草稿已被其他人修改，请刷新后重试");
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法作废交付草稿", ex);
+        }
+    }
+
+    @Override
     public List<DeliveryConfirmedSource> confirmedSources(String deliveryId) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""

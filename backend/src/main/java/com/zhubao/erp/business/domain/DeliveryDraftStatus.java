@@ -5,5 +5,6 @@ package com.zhubao.erp.business.domain;
  */
 public enum DeliveryDraftStatus {
     DRAFT,
-    CONFIRMED
+    CONFIRMED,
+    ABANDONED
 }

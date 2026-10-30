@@ -105,6 +105,26 @@ public class InMemoryDeliveryDraftRepository implements DeliveryDraftRepository 
     }
 
     @Override
+    public void abandon(DeliveryDraft abandoned, int expectedVersion, WorkSession session) {
+        int index = indexOf(abandoned.deliveryId());
+        if (index < 0) {
+            throw new BusinessException("交付草稿不存在");
+        }
+        DeliveryDraft current = headers.get(index);
+        if (current.version() != expectedVersion) {
+            throw new BusinessException("交付草稿已被其他人修改，请刷新后重试");
+        }
+        if (current.status() != DeliveryDraftStatus.DRAFT) {
+            throw new BusinessException("已确认交付不能当作草稿作废");
+        }
+        headers.set(index, abandoned);
+        if (session != null) {
+            int at = index;
+            session.onRollback(() -> headers.set(at, current));
+        }
+    }
+
+    @Override
     public List<DeliveryConfirmedSource> confirmedSources(String deliveryId) {
         return confirmed.getOrDefault(deliveryId, List.of()).stream()
                 .sorted(Comparator.comparingInt(DeliveryConfirmedSource::lineNo))

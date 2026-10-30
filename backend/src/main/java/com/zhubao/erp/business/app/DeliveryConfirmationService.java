@@ -80,6 +80,9 @@ public class DeliveryConfirmationService {
         if (draft.version() != expectedVersion) {
             throw new BusinessException("交付草稿已被其他人修改，请刷新后重试");
         }
+        if (draft.status() == DeliveryDraftStatus.ABANDONED) {
+            throw new BusinessException("该交付草稿已作废");
+        }
         if (draft.status() != DeliveryDraftStatus.DRAFT) {
             throw new BusinessException("该交付单已经确认");
         }

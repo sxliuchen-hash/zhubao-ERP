@@ -24,6 +24,8 @@ public interface DeliveryDraftRepository {
 
     void confirm(DeliveryDraft confirmed, List<DeliveryConfirmedSource> sources, int expectedVersion, WorkSession session);
 
+    void abandon(DeliveryDraft abandoned, int expectedVersion, WorkSession session);
+
     List<DeliveryConfirmedSource> confirmedSources(String deliveryId);
 
     boolean bagConfirmed(String bagId);
