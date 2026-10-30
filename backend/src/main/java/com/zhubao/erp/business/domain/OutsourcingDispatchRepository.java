@@ -12,6 +12,10 @@ public interface OutsourcingDispatchRepository {
 
     void save(OutsourcingDispatch dispatch, WorkSession session);
 
+    Optional<OutsourcingDispatch> lock(String dispatchId, WorkSession session);
+
+    void update(OutsourcingDispatch next, int expectedVersion, WorkSession session);
+
     Optional<OutsourcingDispatch> find(String dispatchId);
 
     Optional<OutsourcingDispatch> findByRequest(String requestId);

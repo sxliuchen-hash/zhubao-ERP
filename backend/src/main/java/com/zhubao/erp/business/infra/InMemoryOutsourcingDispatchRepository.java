@@ -32,8 +32,39 @@ public class InMemoryOutsourcingDispatchRepository implements OutsourcingDispatc
     }
 
     @Override
+    public Optional<OutsourcingDispatch> lock(String dispatchId, WorkSession session) {
+        return find(dispatchId);
+    }
+
+    @Override
+    public void update(OutsourcingDispatch next, int expectedVersion, WorkSession session) {
+        int index = indexOf(next.dispatchId());
+        if (index < 0) {
+            throw new BusinessException("外协发外不存在");
+        }
+        OutsourcingDispatch current = rows.get(index);
+        if (current.version() != expectedVersion) {
+            throw new BusinessException("外协发外已被其他人修改，请刷新后重试");
+        }
+        rows.set(index, next);
+        if (session != null) {
+            int at = index;
+            session.onRollback(() -> rows.set(at, current));
+        }
+    }
+
+    @Override
     public Optional<OutsourcingDispatch> find(String dispatchId) {
         return rows.stream().filter(row -> row.dispatchId().equals(dispatchId)).findFirst();
+    }
+
+    private int indexOf(String dispatchId) {
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).dispatchId().equals(dispatchId)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Override

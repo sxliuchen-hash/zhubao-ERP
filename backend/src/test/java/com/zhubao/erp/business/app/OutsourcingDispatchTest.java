@@ -12,6 +12,7 @@ import com.zhubao.erp.business.domain.ProcessStep;
 import com.zhubao.erp.business.domain.RouteSnapshot;
 import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
 import com.zhubao.erp.business.infra.InMemoryOutsourcingDispatchRepository;
+import com.zhubao.erp.business.infra.InMemoryOutsourcingReturnRepository;
 import com.zhubao.erp.business.infra.InMemoryOutsourcingSourceRepository;
 import com.zhubao.erp.business.infra.InMemoryRouteSnapshotRepository;
 import com.zhubao.erp.business.infra.JdbcActivityBagRepository;
@@ -240,7 +241,7 @@ class OutsourcingDispatchTest {
     private static OutsourcingDispatchService service(com.zhubao.erp.business.domain.OutsourcingSourceRepository sources,
                                                       OutsourcingDispatchRepository dispatches,
                                                       ActivityBagRepository bags, BusinessWorkUnit unit) {
-        return new OutsourcingDispatchService(sources, dispatches, bags,
+        return new OutsourcingDispatchService(sources, dispatches, new InMemoryOutsourcingReturnRepository(), bags,
                 new BagSplitService(bags, new ActivityBagService(bags), unit), unit);
     }
 

@@ -87,3 +87,4 @@
 87	TABLE	biz_rework_task
 88	TABLE	biz_outsourcing_task
 89	TABLE	biz_outsourcing_dispatch
+90	TABLE	biz_outsourcing_return

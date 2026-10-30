@@ -87,3 +87,4 @@ V86__m3_portion_release.sql
 V87__m3_rework_task.sql
 V88__m3_outsourcing_source.sql
 V89__m3_outsourcing_dispatch.sql
+V90__m3_outsourcing_return.sql

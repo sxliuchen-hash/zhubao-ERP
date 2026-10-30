@@ -4,6 +4,8 @@ import com.zhubao.erp.business.domain.ActivityBag;
 import com.zhubao.erp.business.domain.ActivityBagRepository;
 import com.zhubao.erp.business.domain.OutsourcingDispatch;
 import com.zhubao.erp.business.domain.OutsourcingDispatchRepository;
+import com.zhubao.erp.business.domain.OutsourcingReturn;
+import com.zhubao.erp.business.domain.OutsourcingReturnRepository;
 import com.zhubao.erp.business.domain.OutsourcingSourceRepository;
 import com.zhubao.erp.business.domain.OutsourcingTask;
 import com.zhubao.erp.common.error.BusinessException;
@@ -15,6 +17,7 @@ import com.zhubao.erp.work.domain.WorkSession;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -28,14 +31,17 @@ public class OutsourcingDispatchService {
 
     private final OutsourcingSourceRepository sources;
     private final OutsourcingDispatchRepository dispatches;
+    private final OutsourcingReturnRepository returns;
     private final ActivityBagRepository bags;
     private final BagSplitService splits;
     private final BusinessWorkUnit workUnit;
 
     public OutsourcingDispatchService(OutsourcingSourceRepository sources, OutsourcingDispatchRepository dispatches,
-                                      ActivityBagRepository bags, BagSplitService splits, BusinessWorkUnit workUnit) {
+                                      OutsourcingReturnRepository returns, ActivityBagRepository bags,
+                                      BagSplitService splits, BusinessWorkUnit workUnit) {
         this.sources = sources;
         this.dispatches = dispatches;
+        this.returns = returns;
         this.bags = bags;
         this.splits = splits;
         this.workUnit = workUnit;
@@ -59,16 +65,35 @@ public class OutsourcingDispatchService {
         return dispatches.find(result).orElseThrow(() -> new IllegalStateException("外协发外保存后无法读取"));
     }
 
-    /** 该任务仍在外的数量。只读发外明细，不写库存。 */
+    /** 该任务仍在外的数量。已收回和已确认损耗不再计入，查询不写库存。 */
     public BigDecimal entrustedQuantity(String taskId) {
         return dispatches.listByTask(taskId).stream()
-                .map(OutsourcingDispatch::quantity)
+                .map(this::stillOut)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    /** 袋当前保管方。没有发外记录时仍在本厂。 */
+    /** 袋当前保管方。收回的份额回到本厂；没有发外记录时仍在本厂。 */
     public String holderOf(String bagId) {
-        return dispatches.findBySentBag(bagId).map(OutsourcingDispatch::partyId).orElse(IN_HOUSE);
+        if (returns.inHouse(bagId)) {
+            return IN_HOUSE;
+        }
+        Optional<String> outParty = returns.currentOutParty(bagId);
+        if (outParty.isPresent()) {
+            return outParty.get();
+        }
+        return dispatches.findBySentBag(bagId)
+                .filter(row -> stillOut(row).signum() > 0)
+                .filter(row -> bags.find(bagId).map(ActivityBag::activeLeaf).orElse(false))
+                .map(OutsourcingDispatch::partyId)
+                .orElse(IN_HOUSE);
+    }
+
+    private BigDecimal stillOut(OutsourcingDispatch dispatch) {
+        BigDecimal used = BigDecimal.ZERO;
+        for (OutsourcingReturn row : returns.listByDispatch(dispatch.dispatchId())) {
+            used = used.add(row.receivedQty()).add(row.unprocessedQty()).add(row.lossQty());
+        }
+        return dispatch.quantity().subtract(used);
     }
 
     private String send(String requestId, String actor, String taskId, String bagId, int bagVersion,

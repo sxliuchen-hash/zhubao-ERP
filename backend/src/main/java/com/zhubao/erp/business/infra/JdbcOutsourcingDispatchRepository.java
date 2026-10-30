@@ -58,6 +58,39 @@ public class JdbcOutsourcingDispatchRepository implements OutsourcingDispatchRep
     }
 
     @Override
+    public Optional<OutsourcingDispatch> lock(String dispatchId, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select * from biz_outsourcing_dispatch where dispatch_id=? for update")) {
+            statement.setString(1, dispatchId);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? Optional.of(map(rows)) : Optional.empty();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定外协发外", ex);
+        }
+    }
+
+    @Override
+    public void update(OutsourcingDispatch next, int expectedVersion, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                update biz_outsourcing_dispatch
+                   set version_no=?
+                 where dispatch_id=? and version_no=?
+                """)) {
+            statement.setInt(1, next.version());
+            statement.setString(2, next.dispatchId());
+            statement.setInt(3, expectedVersion);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("外协发外已被其他人修改，请刷新后重试");
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法更新外协发外", ex);
+        }
+    }
+
+    @Override
     public Optional<OutsourcingDispatch> find(String dispatchId) {
         return list("dispatch_id=?", dispatchId).stream().findFirst();
     }

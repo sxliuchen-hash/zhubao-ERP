@@ -51,6 +51,8 @@ zhubao:
     repository: ${ZHUBAO_OUTSOURCING_SOURCE_REPOSITORY:jdbc}
   outsourcing-dispatch:
     repository: ${ZHUBAO_OUTSOURCING_DISPATCH_REPOSITORY:jdbc}
+  outsourcing-return:
+    repository: ${ZHUBAO_OUTSOURCING_RETURN_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:
