@@ -77,3 +77,6 @@ V76__m3_processing_intake_pending.sql
 V77__m3_label_paper_40x30.sql
 V78__m3_order_settlement.sql
 V79__m3_settlement_policy_on.sql
+V80__m3_route_snapshot.sql
+V81__m3_activity_bag.sql
+V82__m3_whole_bag_report.sql

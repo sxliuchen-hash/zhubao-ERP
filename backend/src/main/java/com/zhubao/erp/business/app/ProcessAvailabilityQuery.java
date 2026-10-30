@@ -14,6 +14,7 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
+import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import java.util.Optional;
  * 按已到份额、已确认路线和有效权限给出当前可处理量。
  * 只读；不写库存、工资、交工或完成事实。上道没有交来时，不用原袋数量补齐。
  */
+@Service
 public class ProcessAvailabilityQuery {
 
     private final ActivityBagRepository bags;

@@ -77,3 +77,6 @@
 77	ROW	sys_label_default_revision	revision_code	V77
 78	COLUMN	fin_payroll_line	source_mode
 79	ROW	fin_settlement_policy	policy_code	POST_DELIVERY_ON
+80	TABLE	biz_route_snapshot
+81	TABLE	biz_activity_bag
+82	TABLE	biz_whole_bag_report

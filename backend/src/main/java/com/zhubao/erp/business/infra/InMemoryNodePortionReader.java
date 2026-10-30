@@ -2,16 +2,20 @@ package com.zhubao.erp.business.infra;
 
 import com.zhubao.erp.business.domain.NodePortionBalance;
 import com.zhubao.erp.business.domain.NodePortionReader;
+import com.zhubao.erp.business.domain.NodePortionWriter;
 import com.zhubao.erp.work.domain.WorkSession;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 节点份额的内存读取。尚未提供 JDBC 实现，MySQL 档案不能把本类当成已落库。
- * 保存只供后续报工命令和测试安排份额；可办理查询不会调用它。
+ * 节点份额的内存实现。MySQL 档案改走 JDBC，不能在目标库上继续使用本类。
  */
-public class InMemoryNodePortionReader implements NodePortionReader {
+@Repository
+@ConditionalOnProperty(name = "zhubao.whole-bag-report.repository", havingValue = "memory", matchIfMissing = true)
+public class InMemoryNodePortionReader implements NodePortionReader, NodePortionWriter {
 
     private final ConcurrentHashMap<String, NodePortionBalance> rows = new ConcurrentHashMap<>();
 
