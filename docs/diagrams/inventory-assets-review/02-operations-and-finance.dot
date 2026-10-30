@@ -1,0 +1,41 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=23,label="实物操作与费用关系｜目标流程，尚未实施",labelloc=t,rankdir=LR,bgcolor="white",pad="0.3",nodesep="0.4",ranksep="0.55"];
+ node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.16,0.12"];
+ edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+ subgraph cluster_customer {
+  label="客户物料";fontname="SimSun";fontsize=19;color="#cbd5e1";
+  c1 [label="收料核实\n保留来源及单位"];
+  c2 [label="寄存可用备料\n领用转加工"];
+  c3 [label="逐袋加工／质量\n实际数量与处置"];
+  c4 [label="必要环节完成\n合格份额可分批发"];
+  c5 [label="本次确认发货\n扣本次实物，保留来源"];
+  c6 [label="本次客户加工费\n整体完成另核员工费",fillcolor="#eff6ff",color="#2563eb"];
+  c1 -> c2;c2 -> c3;c3 -> c4;c4 -> c5;c5 -> c6;
+ }
+ subgraph cluster_company {
+  label="首期：自有珠料与配件";fontname="SimSun";fontsize=19;color="#cbd5e1";
+  m1 [label="采购入库\n关联供应商／金额来源"];
+  m2 [label="领到车间／加工目标\n仍是公司在厂实物"];
+  m3 [label="按实分流\n耗用／余料／废料"];
+  m4 [label="耗用确认成本\n余料退回或留车间",fillcolor="#eff6ff",color="#2563eb"];
+  m1 -> m2;m2 -> m3;m3 -> m4;
+ }
+ subgraph cluster_consumable {
+  label="首期：耗材、刀具与工具";fontname="SimSun";fontsize=19;color="#cbd5e1";
+  t1 [label="明确物品类别\n同物唯一数量账"];
+  t2 [label="一次性耗材\n选择领用计耗或耗用计耗"];
+  t3 [label="只在选定时点记一次成本\n退回／更正关联原明细",fillcolor="#eff6ff",color="#2563eb"];
+  t4 [label="重复使用工具／模具\n借还、移交、损坏和报废"];
+  t1 -> t2;t2 -> t3;t1 -> t4;
+ }
+ subgraph cluster_asset {
+  label="后续：固定资产";fontname="SimSun";fontsize=19;color="#cbd5e1";
+  a1 [label="登记同一资产卡片\n原值与实物身份关联"];
+  a2 [label="位置／保管人／状态\n交接、维修与盘点"];
+  a3 [label="停用／处置记录\n确定后续折旧规则"];
+  a4 [label="资产折旧与资金事实\n采购付款不再重复计成本",fillcolor="#eff6ff",color="#2563eb"];
+  a1 -> a2;a2 -> a3;a2 -> a4 [label="正常使用按期折旧"];a3 -> a4 [label="处置生效后调整后续规则"];
+ }
+ note [shape=note,label="共同规则\n来源可追溯；单位不混加；未知重量单列。\n应同时生效的单据、数量、金额来源及请求结果同次提交。\n盘点保留账面快照，经复核追加调整，不直接覆盖余额。",fillcolor="#fafafa",color="#71717a"];
+ c6 -> note [style=dashed,arrowhead=none];m4 -> note [style=dashed,arrowhead=none];t3 -> note [style=dashed,arrowhead=none];a4 -> note [style=dashed,arrowhead=none];
+}

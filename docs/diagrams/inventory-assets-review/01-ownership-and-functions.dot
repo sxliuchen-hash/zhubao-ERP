@@ -1,0 +1,32 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=23,label="库存与资产功能架构｜目标设计，尚未实施",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.35",ranksep="0.6"];
+ node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.18,0.14"];
+ edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+ client [label="客户手机网页登录\n只读绑定客户的数据"];
+ staff [label="厂内岗位登录\n按权限办理与查询",fillcolor="#eff6ff",color="#2563eb"];
+ public [label="公开发货扫码\n只看指定交付摘要"];
+ clientview [label="客户库存视图\n备料／加工中／可交／返工\n待核与已发历史单列"];
+ internal [label="内部库存与资产工作区\n权属、来源、数量、位置\n领退、耗用、盘点与实物卡片"];
+ delivery [label="指定发货快照\n逐袋来源与本次交付"];
+ {rank=same;client;staff;public;}
+ {rank=same;clientview;internal;delivery;}
+ scope [label="共用身份与授权边界\n稳定客户ID＋物料规格／单位＋来源＋袋／资产编号\n外部接口明确字段，详情／照片／导出同样鉴权",fillcolor="#fafafa",color="#71717a"];
+ subgraph cluster_material {
+  label="物料实物事实";fontname="SimSun";fontsize=18;color="#cbd5e1";
+  customer [label="客户物料\n寄存 → 加工 → 质量 → 发货\n来源及活动袋份额"];
+  company [label="首期：自有珠料／配件\n入库 → 领用 → 耗用／退回\n关联加工不改变来料权属"];
+  consumable [label="首期：耗材／刀具／工具\n耗材明确计耗时点\n工具借还、保管与报废"];
+  ledger [label="物料数量账与来源记录\n生产料沿用库存台账\n耗材逐类接续，同物只有一套权威数量账",fillcolor="#eff6ff",color="#2563eb"];
+  {rank=same;customer;company;consumable;}
+  customer -> ledger;company -> ledger;consumable -> ledger;
+ }
+ asset [label="后续：逐件固定资产卡片\n位置／保管人／状态\n交接／维修／处置／盘点"];
+ finance [label="财务事实与资金\n客户每次发货出账；员工整单核算\n材料／耗材成本、资产折旧、应付与付款\n各自有来源，避免重复记费",fillcolor="#eff6ff",color="#2563eb"];
+ note [shape=note,label="查询视图不另造库存；袋不另立总账。\n实物在厂 ≠ 可发货；领用 ≠ 全部耗用；付款 ≠ 当期成本。\n逐件资产不强套生产物料的颗数与克模型。",fillcolor="#fafafa",color="#71717a"];
+ client -> clientview;staff -> internal;public -> delivery;
+ clientview -> scope;internal -> scope;delivery -> scope;
+ scope -> customer;scope -> company;scope -> consumable;scope -> asset;
+ ledger -> finance [label="耗用／交付等有效来源"];
+ asset -> finance [label="延用现有资产号"];
+ finance -> note [style=dashed,arrowhead=none];
+}
