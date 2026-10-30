@@ -101,12 +101,12 @@
 <!-- finance -->
 <g id="node7" class="node">
 <title>finance</title>
-<path fill="#eff6ff" stroke="#2563eb" d="M525.55,-362.1C525.55,-362.1 268.75,-362.1 268.75,-362.1 262.75,-362.1 256.75,-356.1 256.75,-350.1 256.75,-350.1 256.75,-270 256.75,-270 256.75,-264 262.75,-258 268.75,-258 268.75,-258 525.55,-258 525.55,-258 531.55,-258 537.55,-264 537.55,-270 537.55,-270 537.55,-350.1 537.55,-350.1 537.55,-356.1 531.55,-362.1 525.55,-362.1"/>
-<text text-anchor="start" x="271.15" y="-336.1" font-family="SimSun" font-size="16.00">结单与财务【沿用＋口径接续】</text>
-<text text-anchor="start" x="271.15" y="-319.6" font-family="SimSun" font-size="16.00">输入：原加工目标的交齐事实</text>
-<text text-anchor="start" x="271.15" y="-303.1" font-family="SimSun" font-size="16.00">办理：双工费确认、收付款核销</text>
-<text text-anchor="start" x="271.15" y="-286.6" font-family="SimSun" font-size="16.00">输出：应收、工资、应付与核销记录</text>
-<text text-anchor="start" x="271.15" y="-270.1" font-family="SimSun" font-size="16.00">门槛：交齐才填费，草稿不入账</text>
+<path fill="#fff7ed" stroke="#b45309" d="M533.42,-362.1C533.42,-362.1 260.88,-362.1 260.88,-362.1 254.88,-362.1 248.87,-356.1 248.87,-350.1 248.87,-350.1 248.87,-270 248.87,-270 248.87,-264 254.87,-258 260.88,-258 260.88,-258 533.42,-258 533.42,-258 539.42,-258 545.42,-264 545.42,-270 545.42,-270 545.42,-350.1 545.42,-350.1 545.42,-356.1 539.42,-362.1 533.42,-362.1"/>
+<text text-anchor="start" x="263.27" y="-336.1" font-family="SimSun" font-size="16.00">客户账单与员工核算【改造】</text>
+<text text-anchor="start" x="263.27" y="-319.6" font-family="SimSun" font-size="16.00">输入：本次已发／整单完成的两类事实</text>
+<text text-anchor="start" x="263.27" y="-303.1" font-family="SimSun" font-size="16.00">办理：客户按次出账、员工整单核费</text>
+<text text-anchor="start" x="263.27" y="-286.6" font-family="SimSun" font-size="16.00">输出：各自确认的应收、工资与应付</text>
+<text text-anchor="start" x="263.27" y="-270.1" font-family="SimSun" font-size="16.00">门槛：两种资格分开，草稿不入账</text>
 </g>
 <!-- root&#45;&gt;finance -->
 <g id="edge6" class="edge">

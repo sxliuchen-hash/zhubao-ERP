@@ -19,7 +19,7 @@ digraph G {
   stock [label="沿用库存台账\n袋分配明细不能成为另一套库存"];
   doc [label="沿用附件存储【扩展引用事务】\n先上传，再随报工绑定照片",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   delivery [label="交齐判定【改造】\n逐袋净交付＋有效处置闭合",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
-  money [label="沿用交货后双工费结单\n应收、工资、应付及收付款"];
+  money [label="客户按次出账／员工整单核算【改造】\n确认分离，沿用应收、工资和收付款",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   print [label="保留厂内40×30\n新增发货40×30＋A5",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   public [label="客户公开交付页【新增】\n内部详情仍按岗位与财务权限",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   unit -> stock; unit -> doc;

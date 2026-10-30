@@ -8,13 +8,13 @@ digraph G {
   inspect [label="本批送检 465颗"];
   good [label="合格 450颗"];
   rework [label="返工 15颗"];
-  first [label="第一次发货 300颗\n发货单一"];
+  first [label="第一次发货 300颗\n本次可先出客户账"];
   left [label="留存可发 150颗"];
   restored [label="返工复检合格 12颗"];
   scrap [label="确认报废 3颗\n不冒充已交付",fillcolor="#fafafa",color="#71717a"];
-  second [label="第二次发货 162颗\n150＋12，发货单二"];
+  second [label="第二次发货 162颗\n150＋12，本次另出客户账"];
   delivered [label="累计实际交付 462颗\n300＋162"];
-  reconcile [label="500＝462已交＋35损耗＋3报废\n且无剩余未处理事项，才进入结单核对",color="#b45309",fillcolor="#fff7ed"];
+  reconcile [label="500＝462已交＋35损耗＋3报废\n且无剩余未处理事项，进入员工整单核算",color="#b45309",fillcolor="#fff7ed"];
   input -> stages; stages -> inspect [label="实际产出"]; stages -> loss [label="累计减少"];
   inspect -> good [label="450"]; inspect -> rework [label="15"];
   good -> first [label="300"]; good -> left [label="150"];

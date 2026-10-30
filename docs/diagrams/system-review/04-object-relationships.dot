@@ -11,7 +11,8 @@ digraph G {
   event [label="报工／质量／分袋历史\n关闭父袋只追溯，不再次计余量",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   shipline [label="发货袋明细【新增】\n本次交付快照＋来源执行目标",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   ship [label="发货汇总单【新增】\n独立发货单号，同一客户",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
-  fee [label="原加工目标的结单／账单\n不因合并发货重复计费"];
+  fee [label="员工整单工费核算\n不因分批发货重复工资"];
+  customerbill [label="本次客户加工费账单【新增】\n按已发范围独立确认应收",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   customer -> mother [label="1 对 多"];
   mother -> source [label="包含来源"];
   mother -> target [label="1个整单目标 或 多个子单"];
@@ -23,6 +24,7 @@ digraph G {
   ship -> shipline [label="1 对 多"];
   customer -> ship [label="一次仅1个客户"];
   target -> shipline [style=dashed,label="可跨多次发货；一单也可汇总多目标"];
-  target -> fee [label="交齐后确认费用"];
-  shipline -> fee [style=dashed,label="来源追溯，不是自动计费"];
+  target -> fee [label="整单完成后核算"];
+  ship -> customerbill [label="每次已发建立出账范围"];
+  shipline -> customerbill [style=dashed,label="逐袋来源与收费项目对应"];
 }

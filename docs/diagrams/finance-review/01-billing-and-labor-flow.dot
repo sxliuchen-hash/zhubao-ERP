@@ -1,0 +1,20 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=22,label="财务目标流程｜客户每次发货后出账，员工整单完成后核算",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.4",ranksep="0.55"];
+ node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.18,0.12"];
+ edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+ source [label="同一加工目标的真实作业与交付事实"];
+ ship [label="每次确认发货\n本次袋明细＋来源加工单"];
+ draft [label="本次客户加工费草稿\n多项目、数量单价、减免与补收"];
+ confirm [label="独立确认客户账单\n不要求整单交齐或员工工费已确认"];
+ ar [label="形成客户应收\n确认版本＋来源＋请求结果同次提交",color="#2563eb",fillcolor="#eff6ff"];
+ receipt [label="实际收款／已有预收分配\n一笔款可核销多张账单",color="#2563eb",fillcolor="#eff6ff"];
+ balance [label="客户已收、未收及账单调整\n对外不展示员工工资",color="#2563eb",fillcolor="#eff6ff"];
+ complete [label="加工目标整体处理完成\n来源、返工、处置及应交范围闭合"];
+ labor [label="核对全部作业及计酬人员\n独立确认员工整单工费"];
+ wage [label="形成工资成本及员工应付\n不是再计一份成本",color="#2563eb",fillcolor="#eff6ff"];
+ pay [label="实际付款与员工余额\n不随客户收款自动变成已付",color="#2563eb",fillcolor="#eff6ff"];
+ note [shape=note,label="客户先出账时，员工成本可以尚未确认。\n经营结果标明成本未齐，不能当作零成本利润。",color="#71717a",fillcolor="#fafafa"];
+ source -> ship; ship -> draft; draft -> confirm; confirm -> ar; ar -> receipt; receipt -> balance;
+ source -> complete; complete -> labor; labor -> wage; wage -> pay;
+ ar -> note [style=dashed,arrowhead=none]; wage -> note [style=dashed,arrowhead=none];
+}

@@ -20,7 +20,8 @@ digraph G {
   confirm [label="核对后一次确认出库\n汇总＋明细＋台账同次提交"];
   print [label="40×30单袋贴纸＋A5汇总单\n客户扫码查看本次交付"];
   completion [shape=diamond,label="全部应交范围闭合\n无待加工／返工／待核／待发？"];
-  settlement [label="交货后填写并确认双工费\n再按实际收付款核销"];
+  customerbill [label="本次已发可独立填客户账\n数量单价、调整或议定金额，确认后收款"];
+  settlement [label="加工目标完成后独立核员工工费\n确认工资与应付，再实际付款"];
   intake -> homogeneous;
   homogeneous -> keep [label="是"]; homogeneous -> child [label="否"];
   keep -> arrange; child -> arrange; arrange -> work;
@@ -28,6 +29,6 @@ digraph G {
   qc -> pass [label="通过份额"]; qc -> redo [label="返工份额"]; qc -> loss [label="其他份额"];
   redo -> qc [label="完成返工后复检"];
   pass -> remain; remain -> gate; gate -> pending [label="否"]; gate -> ready [label="是"];
-  ready -> draft; draft -> confirm; confirm -> print; confirm -> completion;
+  ready -> draft; draft -> confirm; confirm -> print; confirm -> customerbill; confirm -> completion;
   completion -> settlement [label="是"]; completion -> pending [label="否，继续剩余份额"];
 }

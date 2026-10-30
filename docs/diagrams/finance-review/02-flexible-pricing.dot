@@ -1,0 +1,19 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=22,label="灵活计费逻辑｜出账范围固定，项目算法按约定选择",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.4",ranksep="0.55"];
+ node [fontname="SimSun",fontsize=16,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.18,0.12"];
+ edge [fontname="SimSun",fontsize=12,color="#64748b",arrowsize=0.7];
+ scope [label="真实已确认发货单\n本次客户、袋、加工来源及实发份额"];
+ source [label="选择本行计费依据\n实发量／投料分摊／实际加工／人工确认"];
+ q [label="数量 × 单价\n例：300颗 × 2元＝600元"];
+ exclude [label="（基数 − 免计数量）× 单价\n扣数量，不是扣金额"];
+ fixed [label="固定／议定金额\n特殊算法保留计算说明"];
+ additional [label="可选补收／扣减项目\n按数量单价或直接金额＋原因依据"];
+ net [label="各收费行合计＋补收−扣减\n服务端重算，保存参数与计算快照"];
+ check [label="核对本次覆盖、单位、金额和已用扣减\n同一实物多收费项目不重复计交付量"];
+ draft [label="草稿不入账\n确认后才写客户应收"];
+ loss [shape=note,label="实物损耗 ≠ 不计费数量 ≠ 赔偿扣款。\n已按实发量收费，不默认再扣一次损耗。",color="#71717a",fillcolor="#fafafa"];
+ scope -> source; source -> q; source -> exclude; source -> fixed;
+ q -> net; exclude -> net; fixed -> net; additional -> net;
+ net -> check; check -> draft;
+ source -> loss [style=dashed,arrowhead=none];
+}

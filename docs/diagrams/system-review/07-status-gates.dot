@@ -13,10 +13,13 @@ digraph G {
   process -> example [style=dashed,arrowhead=none];
   all [label="执行目标交齐判断\n全部来源份额、有效处置、净发货一起核对"];
   unresolved [label="待加工／返工／待核／待发\n任何一项未清，整单仍未交齐",color="#71717a",fillcolor="#fafafa"];
-  fee [label="满足交齐后才能填写双工费\n保存草稿不入账，确认才入账",color="#2563eb",fillcolor="#eff6ff"];
+  customerbill [label="本次客户账单可填写与独立确认\n不等整单完成，也不等员工核算"];
+  fee [label="整单完成后独立核员工工费\n确认工资及应付，不再写一份客户应收"];
   settlement [label="费用确认 ≠ 客户款已收 ≠ 员工款已付\n收款和付款各有自己的核销事实",color="#2563eb",fillcolor="#eff6ff"];
   ship -> all [label="实际出库后累积净交付"];
+  ship -> customerbill [label="本次确认出库后"];
   unresolved -> all [label="需全部处理"];
   all -> fee [label="来源与数量闭合"];
   fee -> settlement;
+  customerbill -> settlement;
 }
