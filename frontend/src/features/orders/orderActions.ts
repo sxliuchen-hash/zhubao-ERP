@@ -8,7 +8,7 @@ export interface OrderActionTarget {
 }
 
 export type OpenIntakeAction = (target?: OrderActionTarget | null) => void;
-export type ProductionMode = 'progress' | 'station';
+export type ProductionMode = 'progress' | 'bag' | 'station';
 export type OpenProductionAction = (target?: OrderActionTarget | null, mode?: ProductionMode) => void;
 export type OpenQualityAction = (target?: OrderActionTarget | null) => void;
 export type OpenLabelAction = (target?: OrderActionTarget | null) => void;
