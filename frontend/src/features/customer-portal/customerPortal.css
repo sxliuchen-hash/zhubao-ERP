@@ -1,0 +1,45 @@
+.customer-portal {
+  box-sizing: border-box;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  color: #17212b;
+  background: #f4f7f8;
+  min-height: 100vh;
+}
+
+.customer-portal * { box-sizing: border-box; }
+
+.customer-portal h1 { font-size: 22px; margin: 0 0 8px; }
+
+.customer-portal form,
+.customer-portal section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.customer-portal label { display: block; margin: 8px 0; }
+
+.customer-portal input,
+.customer-portal button {
+  width: 100%;
+  min-height: 40px;
+  font-size: 16px;
+}
+
+.customer-portal button { margin-top: 8px; }
+
+.customer-portal .pending,
+.customer-portal .error { color: #8a3b12; }
+
+.customer-portal ul { list-style: none; padding: 0; margin: 0; }
+
+.customer-portal li {
+  border-top: 1px solid #e4eaee;
+  padding: 10px 0;
+}
+
+.customer-portal .note { color: #52606d; font-size: 14px; }
