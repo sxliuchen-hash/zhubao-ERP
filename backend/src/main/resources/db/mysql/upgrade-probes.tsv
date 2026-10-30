@@ -91,3 +91,4 @@
 91	TABLE	fin_outsourcing_fee_basis
 92	TABLE	biz_delivery_draft
 93	TABLE	biz_delivery_confirmed_source
+94	TABLE	biz_customer_return_source
