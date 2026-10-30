@@ -84,3 +84,4 @@ V83__m3_quantity_disposition.sql
 V84__m3_bag_weight.sql
 V85__m3_portion_inspection.sql
 V86__m3_portion_release.sql
+V87__m3_rework_task.sql

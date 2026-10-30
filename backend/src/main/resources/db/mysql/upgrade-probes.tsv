@@ -84,3 +84,4 @@
 84	TABLE	biz_bag_weight
 85	TABLE	biz_portion_inspection
 86	TABLE	biz_portion_release
+87	TABLE	biz_rework_task
