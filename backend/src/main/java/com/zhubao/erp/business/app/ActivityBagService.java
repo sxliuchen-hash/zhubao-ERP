@@ -6,6 +6,8 @@ import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.work.domain.WorkSession;
 
+import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -13,6 +15,7 @@ import java.util.UUID;
 /**
  * 袋只记录同一目标、材质、要求和来源下的份额。关闭的父袋不计入可办理量。
  */
+@Service
 public class ActivityBagService {
 
     private final ActivityBagRepository repository;

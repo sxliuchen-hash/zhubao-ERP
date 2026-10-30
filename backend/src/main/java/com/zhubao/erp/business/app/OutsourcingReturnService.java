@@ -15,6 +15,8 @@ import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
 
+import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,7 @@ import java.util.UUID;
  * 未加工退回只回到本厂，不写工序完成、质检放行、客户出货或工资。
  * 实重单独保存；未知重量不是 0，也不按颗数分摊到子袋。
  */
+@Service
 public class OutsourcingReturnService {
 
     private final OutsourcingDispatchRepository dispatches;

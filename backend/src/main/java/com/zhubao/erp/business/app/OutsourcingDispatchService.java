@@ -15,6 +15,8 @@ import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
 
+import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +27,7 @@ import java.util.UUID;
  * 不生成客户出货、应收或员工产量。在外数量由发外明细汇总，不另设可手改余额。
  * 未知重量保持未知，不按颗数分摊，也不写成 0。
  */
+@Service
 public class OutsourcingDispatchService {
 
     public static final String IN_HOUSE = "IN_HOUSE";

@@ -714,6 +714,19 @@ MySQL 持久化表：
 
 错袋返回「袋不存在」。过期袋版本返回「袋已被其他人修改，请刷新后重试」。客户范围为空返回「客户范围为空，不能报工」。同一请求内容变化返回「同一请求的内容不一致」。
 
+### 5.2.5 外协发外与收回
+
+这些端点转调已经实现的外协任务、发外和收回。查询不写发外、收回、库存、客户账或工资。在外数量不能当成厂内现货。外协查阅和外协办理不授予原有岗位，管理员除外。
+
+| 方法 | 作用 |
+|---|---|
+| `GET /api/business/outsourcing/tasks/{taskId}` | 本厂、在外、待核、分次收回和来源。可选 `attachmentCode`，附件不属于该目标时拒绝 |
+| `GET /api/business/outsourcing/dispatches/{dispatchId}` | 原发外行。不存在或客户不在范围内时拒绝 |
+| `POST /api/business/outsourcing/dispatches` | 确认所发数量。同一 `requestId` 回放原发外 |
+| `POST /api/business/outsourcing/returns` | 按原发外行收回。未传重量按未知处理，不写成 0 |
+
+错发外行返回「外协发外不存在」。未授权附件返回「未授权附件」。客户不在范围内返回「客户不在当前账号范围内」。没有外协权限返回角色无权执行。
+
 ### 5.3 `ReportProductionCommand`
 
 页面和导入不再调用 `POST /api/business/operations/production-reports`，该 HTTP 已退出。现场工序交付走 `process-stations`。登记导入和设备读数仍把数量、重量交给岗位服务 `reportProduction`，但必须登录，不能再绕过工序校验。下面的字段仍是这条内部命令的形状。
@@ -2082,6 +2095,10 @@ PWA 一期边界：
 | `POST /api/business/production-quality/freezes` | `ApiResponse<PortionRelease>`。动作 `PORTION_FREEZE` |
 | `GET /api/business/production-quality/bags/{bagId}/shippable` | `ApiResponse<ShippableView>`。只读 |
 | `POST /api/business/production-quality/reworks` | `ApiResponse<ReworkTask>`。动作 `REWORK_PORTION` |
+| `GET /api/business/outsourcing/tasks/{taskId}` | `ApiResponse<OutsourcingPositionView>`。只读，见 5.2.5 |
+| `GET /api/business/outsourcing/dispatches/{dispatchId}` | `ApiResponse<OutsourcingDispatch>`。只读 |
+| `POST /api/business/outsourcing/dispatches` | `ApiResponse<OutsourcingDispatch>`。动作 `OUTSOURCE_DISPATCH` |
+| `POST /api/business/outsourcing/returns` | `ApiResponse<OutsourcingReturn>`。动作 `OUTSOURCE_RETURN` |
 | `GET /api/business/operations/quality-checks` | `ApiResponse<QualityCheckView>` |
 | `POST /api/business/operations/quality-checks` | `ApiResponse<QualityCheckResult>`。可选 `requestId`。有值时动作是 `QUALITY_CHECK`，初检轮次、适用冻结和成功结果同一次提交 |
 | `POST /api/business/operations/quality-checks/rework` | `ApiResponse<QualityReworkResult>`。可选 `requestId`。有值时动作是 `QUALITY_REWORK` |

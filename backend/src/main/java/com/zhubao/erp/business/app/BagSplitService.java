@@ -8,6 +8,8 @@ import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
 
+import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +17,7 @@ import java.util.List;
 /**
  * 一次命令关闭父袋并建立子份额。打印失败后用原请求回放，不再分出新袋。
  */
+@Service
 public class BagSplitService {
 
     private final ActivityBagRepository repository;

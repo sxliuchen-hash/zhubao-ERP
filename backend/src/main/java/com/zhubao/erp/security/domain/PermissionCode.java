@@ -52,7 +52,9 @@ public enum PermissionCode {
     GOLDWORK_VIEW("金工查阅"),
     GOLDWORK_MAINTAIN("金工办理"),
     ASSET_VIEW("资产查阅"),
-    ASSET_CUSTODY("资产保管交接");
+    ASSET_CUSTODY("资产保管交接"),
+    OUTSOURCING_VIEW("外协查阅"),
+    OUTSOURCING_MAINTAIN("外协办理");
 
     private final String label;
 

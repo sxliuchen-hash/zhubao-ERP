@@ -19,7 +19,8 @@ class RefactorPermissionContractTest {
     @Test
     void 新动作不进入原有岗位且客户空绑定被拒绝() {
         assertThat(guard.allowedPermissionsFor(RoleCode.OPERATOR)).doesNotContain(
-                PermissionCode.SAMPLING_MAINTAIN, PermissionCode.GOLDWORK_MAINTAIN, PermissionCode.ASSET_CUSTODY);
+                PermissionCode.SAMPLING_MAINTAIN, PermissionCode.GOLDWORK_MAINTAIN, PermissionCode.ASSET_CUSTODY,
+                PermissionCode.OUTSOURCING_VIEW, PermissionCode.OUTSOURCING_MAINTAIN);
         assertThat(guard.allowedPermissionsFor(RoleCode.RECEIVER)).doesNotContain(PermissionCode.SAMPLING_VIEW);
         assertThat(guard.allowedPermissionsFor(RoleCode.WAREHOUSE_KEEPER)).doesNotContain(PermissionCode.ASSET_VIEW);
         assertThat(guard.allowedPermissionsFor(RoleCode.FINANCE_STATISTICIAN)).doesNotContain(PermissionCode.GOLDWORK_VIEW);
