@@ -218,6 +218,11 @@ class LabelServiceTest {
         assertThat(reprinted.fields()).extracting(LabelField::value).contains("K7M2");
         assertThat(businessRepository.listLabelReprints("MOTHER", "MO20260709002"))
                 .singleElement().satisfies(log -> assertThat(log.verificationCode()).isEqualTo("K7M2"));
+        LabelPayload again = service.generateMotherLabel("MO20260709002");
+        assertThat(again.primaryCode()).isEqualTo("MO20260709002");
+        assertThat(again.qrContent()).isEqualTo(payload.qrContent());
+        assertThat(again.snapshotHash()).isEqualTo(payload.snapshotHash());
+        assertThat(again.qrContent()).startsWith("JG|mother|MO20260709002|0|");
     }
 
     @Test

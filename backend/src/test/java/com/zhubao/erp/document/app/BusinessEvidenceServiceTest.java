@@ -176,6 +176,32 @@ class BusinessEvidenceServiceTest {
     }
 
     @Test
+    void 绑定后母单号和照片校验值保持不变() {
+        Fixture fixture = fixture(
+                new InMemoryBusinessDocumentRepository(),
+                new InMemoryDocumentManagementRepository(),
+                new InMemoryBusinessEvidenceLinkRepository()
+        );
+        prepareFacts(fixture);
+        EvidenceAttachmentUploadResult uploaded = upload(fixture, EvidenceCodes.MOTHER_ORDER, MOTHER,
+                "UNPACK", "a".getBytes(StandardCharsets.UTF_8));
+        EvidenceAttachment before = fixture.documents.findAttachmentByCode(uploaded.code()).orElseThrow();
+
+        BusinessEvidenceLink link = fixture.evidence.bind(bind(
+                uploaded.code(), EvidenceCodes.MOTHER_ORDER, MOTHER, EvidenceCodes.INTAKE, "UNPACK",
+                EvidenceCodes.INBOUND_CONFIRM, INBOUND_LEDGER, "", ""
+        ), fixture.receiver);
+
+        EvidenceAttachment after = fixture.documents.findAttachmentByCode(uploaded.code()).orElseThrow();
+        assertThat(link.targetCode()).isEqualTo(MOTHER);
+        assertThat(link.attachmentCode()).isEqualTo(before.code());
+        assertThat(after.code()).isEqualTo(before.code());
+        assertThat(after.businessCode()).isEqualTo(MOTHER);
+        assertThat(after.checksum()).isEqualTo(before.checksum());
+        assertThat(after.storageLocation()).isEqualTo(before.storageLocation());
+    }
+
+    @Test
     void bindInsertFailureRechecksTargetAndReturnsOnlyMatchingDimensions() {
         QueryTrackingDocumentRepository documents = new QueryTrackingDocumentRepository();
         InsertFailingLinkRepository links = new InsertFailingLinkRepository();
