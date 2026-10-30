@@ -69,6 +69,8 @@ zhubao:
     repository: ${ZHUBAO_FACTORY_ITEM_REPOSITORY:jdbc}
   company-material-receipt:
     repository: ${ZHUBAO_COMPANY_MATERIAL_RECEIPT_REPOSITORY:jdbc}
+  company-material-issue:
+    repository: ${ZHUBAO_COMPANY_MATERIAL_ISSUE_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:

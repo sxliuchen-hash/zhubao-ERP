@@ -96,3 +96,4 @@
 96	TABLE	biz_public_delivery_access
 97	TABLE	inv_factory_item
 98	TABLE	inv_company_material_receipt
+99	TABLE	inv_company_material_issue

@@ -101,6 +101,52 @@ public class JdbcCompanyMaterialReceiptRepository implements CompanyMaterialRece
     }
 
     @Override
+    public void take(String itemId, String batchCode, String warehouseCode, BigDecimal quantity, String unit,
+                     StockMeasurement.Weight weight, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try {
+            CompanyMaterialBalance current = lock(connection, itemId, batchCode, warehouseCode);
+            if (current == null || current.quantity().compareTo(quantity) < 0) {
+                throw new BusinessException("可领数量不足");
+            }
+            if (!current.unit().equals(unit)) {
+                throw new BusinessException("单位必须与来源批次一致");
+            }
+            StockMeasurement.Weight left = CompanyMaterialBalances.remainder(current.weight(), weight);
+            BigDecimal leftQuantity = current.quantity().subtract(quantity);
+            if (leftQuantity.signum() == 0) {
+                try (PreparedStatement statement = connection.prepareStatement("""
+                        delete from inv_company_material_balance
+                         where item_id=? and batch_code=? and warehouse_code=?
+                        """)) {
+                    statement.setString(1, itemId);
+                    statement.setString(2, batchCode);
+                    statement.setString(3, warehouseCode);
+                    statement.executeUpdate();
+                }
+                return;
+            }
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    update inv_company_material_balance
+                       set quantity=?, weight_state=?, weight_value=?
+                     where item_id=? and batch_code=? and warehouse_code=?
+                    """)) {
+                statement.setBigDecimal(1, leftQuantity);
+                statement.setString(2, left.state().name());
+                setDecimal(statement, 3, left.value());
+                statement.setString(4, itemId);
+                statement.setString(5, batchCode);
+                statement.setString(6, warehouseCode);
+                if (statement.executeUpdate() != 1) {
+                    throw new BusinessException("公司料批次已被其他人修改，请刷新后重试");
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法扣减公司料批次", ex);
+        }
+    }
+
+    @Override
     public Optional<CompanyMaterialReceipt> find(String receiptId) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(

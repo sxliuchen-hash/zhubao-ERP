@@ -5,10 +5,12 @@ import com.zhubao.erp.inventory.domain.CompanyMaterialBalance;
 import com.zhubao.erp.inventory.domain.CompanyMaterialBalances;
 import com.zhubao.erp.inventory.domain.CompanyMaterialReceipt;
 import com.zhubao.erp.inventory.domain.CompanyMaterialReceiptRepository;
+import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -44,6 +46,35 @@ public class InMemoryCompanyMaterialReceiptRepository implements CompanyMaterial
                         } else {
                             balances.put(key, current);
                         }
+                    }
+                });
+            }
+        }
+    }
+
+    @Override
+    public void take(String itemId, String batchCode, String warehouseCode, BigDecimal quantity, String unit,
+                     StockMeasurement.Weight weight, WorkSession session) {
+        String key = key(itemId, batchCode, warehouseCode);
+        synchronized (balances) {
+            CompanyMaterialBalance current = balances.get(key);
+            if (current == null || current.quantity().compareTo(quantity) < 0) {
+                throw new BusinessException("可领数量不足");
+            }
+            if (!current.unit().equals(unit)) {
+                throw new BusinessException("单位必须与来源批次一致");
+            }
+            StockMeasurement.Weight left = CompanyMaterialBalances.remainder(current.weight(), weight);
+            BigDecimal leftQuantity = current.quantity().subtract(quantity);
+            if (leftQuantity.signum() == 0) {
+                balances.remove(key);
+            } else {
+                balances.put(key, new CompanyMaterialBalance(itemId, batchCode, warehouseCode, leftQuantity, unit, left));
+            }
+            if (session != null) {
+                session.onRollback(() -> {
+                    synchronized (balances) {
+                        balances.put(key, current);
                     }
                 });
             }

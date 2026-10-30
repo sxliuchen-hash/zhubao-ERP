@@ -1216,6 +1216,12 @@ MySQL 持久化表：
 
 未知金额写成 0 返回「未知金额不能写成 0」。耗材返回「耗材不在这张采购入库里」。工资或外协应付返回「工资或外协应付不能当作公司料入库来源」。已关联过的应付返回「这笔应付已经对应过入库」。
 
+### 7.4.3 公司料领用与退回
+
+`POST /api/inventory/company-material-issues` 按原批次领到车间或业务目标。`POST /api/inventory/company-material-issues/{issueId}/returns` 按原领用退回。权属仍是公司。领用不计消耗，也不写成客户来料。退回不能超过可退，单位和批次不变。重量未传保持未知，不写成 0。同一 `requestId` 回放原单。
+
+可领不足返回「可领数量不足」。退回过多返回「退回数量不能超过可退」。单位不一致返回「退回单位必须与原领用一致」。
+
 ### 7.5 `ShipFinishedStockCommand`
 
 `POST /api/business/operations/outbound-shipments` 使用该命令模型。该接口是 成品出库写台账基线。

@@ -35,6 +35,19 @@ public final class CompanyMaterialBalances {
         return StockMeasurement.known(left.value().add(right.value()));
     }
 
+    public static StockMeasurement.Weight remainder(StockMeasurement.Weight source, StockMeasurement.Weight moved) {
+        if (moved.state() != StockMeasurement.WeightState.KNOWN) {
+            return StockMeasurement.unknown();
+        }
+        if (source.state() != StockMeasurement.WeightState.KNOWN) {
+            throw new BusinessException("来源重量未知，不能按已知重量领出");
+        }
+        if (moved.value().compareTo(source.value()) > 0) {
+            throw new BusinessException("领用重量不能超过批次重量");
+        }
+        return StockMeasurement.known(source.value().subtract(moved.value()));
+    }
+
     public static BigDecimal knownAmount(BigDecimal amount) {
         if (amount == null) {
             return null;
