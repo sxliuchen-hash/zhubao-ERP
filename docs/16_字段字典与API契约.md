@@ -1262,6 +1262,10 @@ MySQL 持久化表：
 
 `POST /api/inventory/consumable-issues` 领用。`POST /api/inventory/consumable-issues/{issueId}/consumptions` 实际耗用。计耗方式未选定时页面不提交。
 
+### 7.4.11 盘点复核界面
+
+`POST /api/inventory/stocktakes/{stocktakeId}/confirmations` 确认差额。页面把账面和未还分开。没有差异确认权限时不提交，重复点击不重复确认。
+
 ### 7.5 `ShipFinishedStockCommand`
 
 `POST /api/business/operations/outbound-shipments` 使用该命令模型。该接口是 成品出库写台账基线。
