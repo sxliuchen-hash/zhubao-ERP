@@ -23,8 +23,10 @@ digraph G {
   print [label="保留厂内40×30\n新增发货40×30＋A5",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   public [label="客户公开交付页【新增】\n内部详情仍按岗位与财务权限",color="#b45309",fillcolor="#fff7ed",style="rounded,filled,dashed"];
   unit -> stock; unit -> doc;
-  shipment -> delivery; delivery -> money;
+  shipment -> delivery;
+  shipment -> money [label="客户按本次已发"];
+  delivery -> money [label="员工按整单完成"];
   shipment -> print; shipment -> public;
-  separate [label="打样、金工：独立业务边界\n仅轻度引用，专属流程待细化",color="#71717a",fillcolor="#fafafa"];
+  separate [label="本版：独立打样、独立金工\n各自路线、版本、计量与收费资格\n共用库存、证据及费用技术",color="#b45309",fillcolor="#fff7ed"];
   original -> separate [style=dashed,label="可选关联",dir=both];
 }

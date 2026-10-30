@@ -1,0 +1,23 @@
+digraph G {
+ graph [fontname="SimSun",fontsize=23,label="Grok执行分组｜11组、105个节点，逐卡验收与交接",labelloc=t,rankdir=TB,bgcolor="white",pad="0.3",nodesep="0.42",ranksep="0.65"];
+ node [fontname="SimSun",fontsize=17,shape=box,style="rounded,filled",color="#b45309",fillcolor="#fff7ed",margin="0.2,0.14"];
+ edge [fontname="SimSun",fontsize=13,color="#64748b",arrowsize=0.7];
+ a [label="A组｜8节点\n版本及母单／标签／照片基准\n业务确认、三类身份、事务及权限",color="#2563eb",fillcolor="#eff6ff"];
+ b [label="B组｜11节点\n路线、来源、计量、袋、旧码\n证据事务、数量输入及模型版本引用"];
+ c [label="C组｜10节点\n普通加工报工、实际损耗\n部分质量、放行与返工"];
+ d [label="D组｜6节点\n外协任务与发外\n分批收回、在外量及费用依据"];
+ e [label="E组｜14节点\n交付、退货、客户按次账与员工整单费\n40×30、A5及公开扫码"];
+ f [label="F组｜10节点\n自有物料、耗材及工具\n领退、耗用、借还与盘点"];
+ g [label="G组｜6节点\n客户手机登录与本人库存\n证据、对账查询及越权验证"];
+ h [label="H组｜8节点\n固定资产增强\n采购、交接、维修、折旧、处置及盘点"];
+ s [label="S组｜8节点\n独立打样、版本确认及交付\n按次样费／免收与正常加工轻关联"];
+ m [label="M组｜10节点\n独立金工、计量、投入产出\n回收补料、作业、交付及费用"];
+ z [label="Z组｜14节点\n三业务＋资产全链、MySQL、接续与恢复\n真机出纸、旧写口退出、整体验证及实际包\nZ13准备放行材料；Z14获明确授权才切换",color="#2563eb",fillcolor="#eff6ff"];
+ rule [shape=note,label="每次只指定一张GR卡：核依赖 → 实现 → 定向验证 → 提交 → 交接 → 停止。\n105个主节点，较大界面按预定子节点执行；准确依赖见各卡。\n编制时均未执行，动态进度只看项目核心；业务未决只限制相应节点。\n普通开发不写生产；拍照计数算法不在本册实现范围。",color="#71717a",fillcolor="#fafafa"];
+ a -> b;b -> c;c -> d;d -> e;e -> f;e -> g;f -> h;
+ e -> s [label="交付／费用共用技术"];
+ f -> m [label="补料来源等共用能力"];
+ {rank=same;g;h;s;m;}
+ g -> z;h -> z;s -> z;m -> z;
+ z -> rule [style=dashed,arrowhead=none];
+}

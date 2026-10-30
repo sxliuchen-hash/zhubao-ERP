@@ -29,7 +29,7 @@ digraph G {
   t1 -> t2;t2 -> t3;t1 -> t4;
  }
  subgraph cluster_asset {
-  label="后续：固定资产";fontname="SimSun";fontsize=19;color="#cbd5e1";
+  label="本版：固定资产增强";fontname="SimSun";fontsize=19;color="#cbd5e1";
   a1 [label="登记同一资产卡片\n原值与实物身份关联"];
   a2 [label="位置／保管人／状态\n交接、维修与盘点"];
   a3 [label="停用／处置记录\n确定后续折旧规则"];

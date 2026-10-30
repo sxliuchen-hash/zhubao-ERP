@@ -10,7 +10,11 @@ digraph G {
   shipment [label="发货与打印【改造】\l输入：同一客户的多个可发袋\l办理：汇总、核对、确认出库\l输出：独立发货单、40×30贴纸、A5\l门槛：本袋路线和质量均满足交付\l",color="#b45309",fillcolor="#fff7ed"];
   finance [label="客户账单与员工核算【改造】\l输入：本次已发／整单完成的两类事实\l办理：客户按次出账、员工整单核费\l输出：各自确认的应收、工资与应付\l门槛：两种资格分开，草稿不入账\l",color="#b45309",fillcolor="#fff7ed"];
   access [label="扫码、照片与权限【部分新增】\l输入：旧厂内码或新交付链接\l办理：识别对象、验证身份及范围\l输出：公开交付或授权内部详情\l门槛：扫码本身不授予内部权限\l",color="#b45309",fillcolor="#fff7ed"];
-  supporting [label="配置、审批、运维及独立业务\l输入：规则、账号、证据及运行状态\l办理：配置、审计、备份与恢复\l输出：稳定规则与可恢复运行环境\l边界：打样、金工独立，流程待细化\l",color="#71717a",fillcolor="#fafafa"];
+  supporting [label="配置、审批与运维\l输入：规则、账号、证据及运行状态\l办理：配置、审计、备份与恢复\l输出：稳定规则与可恢复运行环境\l",color="#71717a",fillcolor="#fafafa"];
+  sampling [label="独立打样【本版新增】\l输入：需求版本、设计引用、来料／自备料\l办理：平设、建模、珠型确认、加工、分次交付\l输出：确认样品版本、按次样费或明确免收\l门槛：轻量凭据留存，不强制上传大模型\l",color="#b45309",fillcolor="#fff7ed"];
+  goldwork [label="独立金工【本版新增】\l输入：金工要求、件数及核定计量来源\l办理：平设、建模、倒模、执模、抛光金及交付\l输出：实际投入产出、回收补料及费用依据\l门槛：精度、成色及收费细则先核定\l",color="#b45309",fillcolor="#fff7ed"];
+  asset [label="固定资产增强【本版改造】\l输入：原资产卡、采购与实物信息\l办理：领用交接、位置、维修、盘点、处置\l输出：实物责任及折旧连续记录\l门槛：原资产身份保留，已记费用不重复\l",color="#b45309",fillcolor="#fff7ed"];
   root -> intake; root -> production; root -> quality; root -> inventory;
   root -> shipment; root -> finance; root -> access; root -> supporting;
+  root -> sampling; root -> goldwork; root -> asset;
 }

@@ -20,7 +20,7 @@ digraph G {
   {rank=same;customer;company;consumable;}
   customer -> ledger;company -> ledger;consumable -> ledger;
  }
- asset [label="后续：逐件固定资产卡片\n位置／保管人／状态\n交接／维修／处置／盘点"];
+ asset [label="本版：逐件固定资产卡片\n位置／保管人／状态\n交接／维修／处置／盘点"];
  finance [label="财务事实与资金\n客户每次发货出账；员工整单核算\n材料／耗材成本、资产折旧、应付与付款\n各自有来源，避免重复记费",fillcolor="#eff6ff",color="#2563eb"];
  note [shape=note,label="查询视图不另造库存；袋不另立总账。\n实物在厂 ≠ 可发货；领用 ≠ 全部耗用；付款 ≠ 当期成本。\n逐件资产不强套生产物料的颗数与克模型。",fillcolor="#fafafa",color="#71717a"];
  client -> clientview;staff -> internal;public -> delivery;
