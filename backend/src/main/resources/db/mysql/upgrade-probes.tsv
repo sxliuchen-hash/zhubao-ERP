@@ -93,3 +93,4 @@
 93	TABLE	biz_delivery_confirmed_source
 94	TABLE	biz_customer_return_source
 95	TABLE	fin_customer_delivery_bill
+96	TABLE	biz_public_delivery_access
