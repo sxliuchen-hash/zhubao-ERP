@@ -2769,6 +2769,14 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/goldwork/orders/{goldworkCode}/deliveries` | `ApiResponse<List<GoldworkDeliveryView>>`。查询不写应收 |
 | `POST /api/goldwork/orders/{goldworkCode}/deliveries` | `ApiResponse<GoldworkDeliveryView>`。动作 `DELIVER_GOLDWORK`。`goldPrice`、`amount` 有值，或 `shipAsProcessing`、`countCustomerGoldAsSales` 为真时拒绝。同一请求回放 |
 
+### GoldworkCompletionController
+
+来源：[GoldworkCompletionController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkCompletionController.java)。尝试结清金工单。有待核质量、待核处置、未称重回收，或已有产出却没有回收记录时拒绝。外协不能算员工产量。计酬尚未核定时也不能把单据改成完成，不写工资，不写材料成本。权限为 `GOLDWORK_MAINTAIN`。无新表。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/goldwork/orders/{goldworkCode}/completion` | 不返回成功体。未满足结清条件时拒绝，金工单保持进行中 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。
