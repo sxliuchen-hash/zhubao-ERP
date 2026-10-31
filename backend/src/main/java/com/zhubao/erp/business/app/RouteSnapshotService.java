@@ -8,13 +8,16 @@ import com.zhubao.erp.business.domain.RouteSnapshot;
 import com.zhubao.erp.business.domain.RouteSnapshotRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.domain.WorkSession;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.UUID;
 
 /**
  * 保存三类业务各自的路线快照。打样和金工不要求先有对方或普通母单。
+ * 仓储由当前档案决定：默认内存，MySQL 使用 JDBC。
  */
+@Service
 public class RouteSnapshotService {
 
     private final RouteSnapshotRepository repository;

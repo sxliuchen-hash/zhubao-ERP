@@ -37,6 +37,10 @@ zhubao:
     repository: ${ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY:jdbc}
   whole-bag-report:
     repository: ${ZHUBAO_WHOLE_BAG_REPORT_REPOSITORY:jdbc}
+  activity-bag:
+    repository: ${ZHUBAO_ACTIVITY_BAG_REPOSITORY:jdbc}
+  route-snapshot:
+    repository: ${ZHUBAO_ROUTE_SNAPSHOT_REPOSITORY:jdbc}
   quantity-disposition:
     repository: ${ZHUBAO_QUANTITY_DISPOSITION_REPOSITORY:jdbc}
   bag-weight:
