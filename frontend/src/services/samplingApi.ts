@@ -82,6 +82,66 @@ export function rejectSamplingVersion(samplingCode: string, body: {
   return apiPost(`/api/sampling/orders/${encodeURIComponent(samplingCode)}/versions/rejections`, body);
 }
 
+export interface SamplingMaterialUseView {
+  useId: string;
+  samplingCode: string;
+  owner: string;
+  sourceId: string;
+  sourceLineNo: number | null;
+  stockMoveId: string;
+  materialCode: string;
+  batchCode: string;
+  quantity: number;
+  unit: string;
+  weightState: string;
+  weightValue: number | null;
+  returnedQuantity: number;
+  inputQuantity: number | null;
+  version: number;
+}
+
+export function pickSamplingMaterial(samplingCode: string, body: {
+  requestId: string;
+  receiptId: string;
+  sourceDocumentCode: string;
+  lineNo: number | null;
+  workshopCode: string;
+  quantity: number;
+  weight: number | null;
+  unit: string;
+}): Promise<SamplingMaterialUseView> {
+  return apiPost(`/api/sampling/orders/${encodeURIComponent(samplingCode)}/material-uses`, body);
+}
+
+export interface SamplingOperationView {
+  reportId: string;
+  samplingCode: string;
+  stepId: string;
+  stepName: string;
+  versionKind: string;
+  versionNo: number;
+  makingChoice: string;
+  makingChoiceLabel: string;
+  quantity: number;
+  unit: string;
+  attachmentCode: string;
+  workerName: string;
+  reportedOn: string;
+}
+
+export function reportSamplingOperation(samplingCode: string, body: {
+  requestId: string;
+  stepId: string;
+  versionKind: string;
+  versionNo: number;
+  makingChoices: string[];
+  quantity: number;
+  unit: string;
+  attachmentCode: string;
+}): Promise<SamplingOperationView> {
+  return apiPost(`/api/sampling/orders/${encodeURIComponent(samplingCode)}/operations`, body);
+}
+
 export function openSamplingOrder(body: {
   requestId: string;
   customerId: number;
