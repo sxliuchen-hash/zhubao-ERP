@@ -2339,6 +2339,15 @@ PWA 一期边界：
 | `GET /api/finance/fixed-asset-cards` | `ApiResponse<List<FixedAssetCardView>>`。没有实物行时，型号、序列号、位置、保管人和使用状态为 `PENDING`，标签为待补，版本为 0。查询不补写历史 |
 | `POST /api/finance/fixed-asset-cards/supplements` | `ApiResponse<FixedAssetCardView>`。动作 `ADOPT_FIXED_ASSET_CARD`。请求体为 `requestId`、`assetCode`、`expectedVersion`，以及可选的 `model`、`serialNumber`、`location`、`custodian`、`useStatus`。空字段保持待补。使用状态只接受在用或闲置。已登记字段不能在这里改写。同一请求回放原结果；内容变化必须换请求编号。过期版本拒绝 |
 
+### FixedAssetAcquisitionController
+
+来源：[FixedAssetAcquisitionController](../backend/src/main/java/com/zhubao/erp/finance/web/FixedAssetAcquisitionController.java)。原值只写在资产卡片上。付款另记，不记折旧。没有付款凭据时不能标成已付。已有卡片走 `EXISTING_CARD`，不补一笔采购。已有应付走 `COVERED_PAYABLE`，同一张应付只能对应一次。权限为 `FINANCE_ASSET`；形成应付、关联已有应付或登记付款时还要 `FINANCE_PAYABLE`。已有库需备份后追加 `V109__m3_fixed_asset_acquisition.sql`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/finance/fixed-asset-acquisitions` | `ApiResponse<List<FixedAssetAcquisitionView>>`。可按 `assetCode` 过滤。查询不写卡片、应付或付款。金额未齐时原值和已付为空，不返回 0 |
+| `POST /api/finance/fixed-asset-acquisitions` | `ApiResponse<FixedAssetAcquisitionView>`。动作 `RECEIVE_FIXED_ASSET`。`source` 为 `PURCHASE`、`EXISTING_CARD` 或 `COVERED_PAYABLE`。新购置金额明确时同一次提交创建卡片和未付应付；付款必须同时有金额、日期和凭据。同一请求回放。工资、外协和物料应付不能当作资产原值 |
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。

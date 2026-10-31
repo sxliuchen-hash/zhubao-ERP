@@ -475,6 +475,17 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public void saveAsset(FixedAsset asset, WorkSession session) {
+        FixedAsset previous = assets.putIfAbsent(asset.code(), asset);
+        if (previous != null) {
+            throw new BusinessException("旧卡已存在，不能重建");
+        }
+        if (session != null) {
+            session.onRollback(() -> assets.remove(asset.code(), asset));
+        }
+    }
+
+    @Override
     public List<FixedAsset> listAssets() {
         return assets.values().stream()
                 .sorted(Comparator.comparing(FixedAsset::code))
@@ -585,6 +596,27 @@ public class InMemoryFinanceRepository implements FinanceRepository {
         return existing.payableCode().equals(requested.payableCode())
                 && existing.amount().compareTo(requested.amount()) == 0
                 && existing.paidOn().equals(requested.paidOn());
+    }
+
+    @Override
+    public PayablePayment registerPayablePayment(PayablePayment payment, String idempotencyKey, WorkSession session) {
+        String key = idempotencyKey == null ? "" : idempotencyKey.trim();
+        Payable previous = payables.get(payment.payableCode());
+        PayablePayment saved = registerPayablePayment(payment, key);
+        if (session != null) {
+            session.onRollback(() -> {
+                payablePayments.remove(saved.code());
+                if (!key.isEmpty()) {
+                    paymentCodeByIdempotency.remove(key);
+                }
+                if (previous == null) {
+                    payables.remove(payment.payableCode());
+                } else {
+                    payables.put(payment.payableCode(), previous);
+                }
+            });
+        }
+        return saved;
     }
 
     @Override

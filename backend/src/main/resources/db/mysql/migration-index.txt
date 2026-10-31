@@ -106,3 +106,4 @@ V105__m3_material_stocktake.sql
 V106__m3_customer_portal_binding.sql
 V107__m3_customer_evidence_grant.sql
 V108__m3_fixed_asset_physical.sql
+V109__m3_fixed_asset_acquisition.sql

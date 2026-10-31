@@ -180,6 +180,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         }
         if (path.equals("/api/finance/fixed-assets")
                 || path.equals("/api/finance/fixed-asset-cards/supplements")
+                || path.equals("/api/finance/fixed-asset-acquisitions")
                 || path.equals("/api/finance/depreciation-runs")) {
             return PermissionCode.FINANCE_ASSET;
         }

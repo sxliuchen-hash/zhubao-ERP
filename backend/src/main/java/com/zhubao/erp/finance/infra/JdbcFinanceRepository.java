@@ -1298,6 +1298,33 @@ public class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public void saveAsset(FixedAsset asset, WorkSession session) {
+        String sql = """
+                insert into fin_fixed_asset (
+                    code, asset_name, category_name, original_value, residual_value, start_month,
+                    useful_months, operator_name, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = requireSession(session).prepareStatement(sql)) {
+            statement.setString(1, asset.code());
+            statement.setString(2, asset.name());
+            statement.setString(3, asset.category());
+            statement.setBigDecimal(4, asset.originalValue());
+            statement.setBigDecimal(5, asset.residualValue());
+            statement.setString(6, asset.startMonth());
+            statement.setInt(7, asset.usefulMonths());
+            statement.setString(8, asset.operator());
+            statement.setString(9, asset.createdAt());
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            if (isDuplicate(ex)) {
+                throw new BusinessException("旧卡已存在，不能重建");
+            }
+            throw new IllegalStateException("Failed to save fixed asset: " + asset.code(), ex);
+        }
+    }
+
+    @Override
     public List<FixedAsset> listAssets() {
         String sql = "select * from fin_fixed_asset order by code";
         try (Connection connection = dataSource.getConnection();
@@ -1583,6 +1610,46 @@ public class JdbcFinanceRepository implements FinanceRepository {
         return existing.payableCode().equals(requested.payableCode())
                 && existing.amount().compareTo(requested.amount()) == 0
                 && existing.paidOn().equals(requested.paidOn());
+    }
+
+    @Override
+    public PayablePayment registerPayablePayment(PayablePayment payment, String idempotencyKey, WorkSession session) {
+        Connection connection = requireSession(session);
+        try {
+            Payable payable = lockPayable(connection, payment.payableCode());
+            if (payable == null) {
+                throw new BusinessException("找不到应付");
+            }
+            if (payable.paidAmount().add(payment.amount()).compareTo(payable.amount()) > 0) {
+                throw new BusinessException("付款金额不能超过尚未支付的余额");
+            }
+            insertPaymentOn(connection, payment);
+            if (addPaidAmount(connection, payable.code(), payment.amount()) != 1) {
+                throw new BusinessException("付款金额不能超过尚未支付的余额");
+            }
+            return payment;
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法登记资产付款", ex);
+        }
+    }
+
+    private void insertPaymentOn(Connection connection, PayablePayment payment) throws SQLException {
+        String sql = """
+                insert into fin_payable_payment (
+                    code, payable_code, amount, paid_on, operator_name, created_at
+                ) values (?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, payment.code());
+            statement.setString(2, payment.payableCode());
+            statement.setBigDecimal(3, payment.amount());
+            statement.setString(4, payment.paidOn());
+            statement.setString(5, payment.operator());
+            statement.setString(6, payment.createdAt());
+            statement.executeUpdate();
+        }
     }
 
     @Override

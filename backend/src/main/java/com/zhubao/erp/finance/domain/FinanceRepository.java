@@ -80,6 +80,9 @@ public interface FinanceRepository {
 
     void saveAsset(FixedAsset asset);
 
+    /** 在当前工作单元里新增资产卡片。失败时随本命令回滚，不另开连接提交。 */
+    void saveAsset(FixedAsset asset, WorkSession session);
+
     List<FixedAsset> listAssets();
 
     void saveDepreciation(DepreciationEntry entry);
@@ -104,6 +107,11 @@ public interface FinanceRepository {
      * 空键不参与去重，但仍禁止超付。内存用锁；JDBC 用单事务、应付行锁和条件更新。
      */
     PayablePayment registerPayablePayment(PayablePayment payment, String idempotencyKey);
+
+    /**
+     * 在当前工作单元里登记付款。不单独提交，失败时不留下已付金额。
+     */
+    PayablePayment registerPayablePayment(PayablePayment payment, String idempotencyKey, WorkSession session);
 
     List<PayablePayment> listPayablePayments();
 }
