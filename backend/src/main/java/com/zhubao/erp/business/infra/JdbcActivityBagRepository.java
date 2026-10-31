@@ -93,6 +93,49 @@ public class JdbcActivityBagRepository implements ActivityBagRepository {
         }
     }
 
+    @Override
+    public List<ActivityBag> listBySource(String sourceKey) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "select * from biz_activity_bag where source_key=? order by bag_id")) {
+            statement.setString(1, sourceKey);
+            try (ResultSet rows = statement.executeQuery()) {
+                List<ActivityBag> result = new ArrayList<>();
+                while (rows.next()) {
+                    result.add(map(rows));
+                }
+                return result;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法按来源读取袋", ex);
+        }
+    }
+
+    @Override
+    public void lockSource(String sourceKey, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try {
+            try (PreparedStatement insert = connection.prepareStatement("""
+                    insert into biz_source_allocation_guard (source_key) values (?)
+                    on duplicate key update source_key = source_key
+                    """)) {
+                insert.setString(1, sourceKey);
+                insert.executeUpdate();
+            }
+            try (PreparedStatement lock = connection.prepareStatement(
+                    "select source_key from biz_source_allocation_guard where source_key=? for update")) {
+                lock.setString(1, sourceKey);
+                try (ResultSet rows = lock.executeQuery()) {
+                    if (!rows.next()) {
+                        throw new IllegalStateException("无法锁定来源");
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定来源", ex);
+        }
+    }
+
     private Integer lockVersion(Connection connection, String id) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "select version_no from biz_activity_bag where bag_id=? for update")) {

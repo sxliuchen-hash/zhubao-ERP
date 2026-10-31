@@ -37,6 +37,14 @@ public class ActivityBagService {
         return repository.listByTarget(targetCode).stream().filter(ActivityBag::activeLeaf).toList();
     }
 
+    public List<ActivityBag> openBySource(String sourceKey) {
+        return repository.listBySource(sourceKey).stream().filter(ActivityBag::activeLeaf).toList();
+    }
+
+    public void lockSource(String sourceKey, WorkSession session) {
+        repository.lockSource(sourceKey, session);
+    }
+
     /**
      * 分出的子袋使用新的袋号，长度与自动袋号相同，避免在原号后追加序号超出字段。
      * 父子关系记在父袋号上。子袋不复制原袋重量。

@@ -50,4 +50,9 @@ public class InMemoryActivityBagRepository implements ActivityBagRepository {
     public List<ActivityBag> listByTarget(String targetCode) {
         return bags.values().stream().filter(bag -> bag.targetCode().equals(targetCode)).toList();
     }
+
+    @Override
+    public List<ActivityBag> listBySource(String sourceKey) {
+        return bags.values().stream().filter(bag -> bag.sourceKey().equals(sourceKey)).toList();
+    }
 }
