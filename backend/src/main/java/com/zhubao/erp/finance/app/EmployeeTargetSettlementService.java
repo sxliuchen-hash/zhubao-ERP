@@ -103,24 +103,22 @@ public class EmployeeTargetSettlementService {
         String month = YearMonth.now().toString();
         String mother = target.startsWith("ZD-") ? "" : target;
         List<String> codes = new ArrayList<>();
-        BigDecimal gross = NO_LOSS_DEDUCTION;
         for (EmployeeWorkShare share : shares) {
             BigDecimal amount = share.quantity().multiply(share.unitPrice()).setScale(2, RoundingMode.HALF_UP);
-            gross = gross.add(amount).setScale(2, RoundingMode.HALF_UP);
             String code = "WG" + UUID.randomUUID().toString().replace("-", "");
             finance.savePayrollLine(new PayrollLine(
                     code, month, share.payeeAccount(), target, share.processName(), mother, customerId,
                     share.quantity(), chargeUnit(closure.quantityUnit()), share.unitPrice(), amount, NO_LOSS_DEDUCTION, amount, true,
                     sourceKey(target, share), PayrollLine.POST_DELIVERY, share.payeeAccount()
             ), session);
+            finance.savePayable(new Payable(
+                    "AP" + UUID.randomUUID().toString().replace("-", ""), "工资", month, share.payeeAccount(),
+                    target, customerId, mother, amount, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    actor.operator(), RECORDED_AT.format(LocalDateTime.now()),
+                    share.payeeAccount(), "", sourceKey(target, share)
+            ), session);
             codes.add(code);
         }
-        finance.savePayable(new Payable(
-                "AP" + UUID.randomUUID().toString().replace("-", ""), "工资", month, shares.get(0).payeeAccount(),
-                target, customerId, mother, gross, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
-                actor.operator(), DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(LocalDateTime.now()),
-                shares.get(0).payeeAccount(), "", "employee-target:" + target
-        ), session);
         return String.join(",", codes);
     }
 

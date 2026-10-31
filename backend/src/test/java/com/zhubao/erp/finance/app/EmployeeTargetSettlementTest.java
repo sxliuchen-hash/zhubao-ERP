@@ -47,15 +47,37 @@ class EmployeeTargetSettlementTest {
         });
         assertThat(lines.stream().map(PayrollLine::quantity).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("462");
         assertThat(lines.stream().map(PayrollLine::grossAmount).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("924.00");
-        assertThat(finance.listPayables()).singleElement().satisfies(payable -> {
-            assertThat(payable.kind()).isEqualTo("工资");
-            assertThat(payable.amount()).isEqualByComparingTo("924.00");
-        });
+        assertThat(finance.listPayables()).extracting(payable -> payable.payeeAccount())
+                .containsExactlyInAnyOrder("payee-a", "payee-b");
+        assertThat(finance.listPayables()).extracting(payable -> payable.amount().toPlainString())
+                .containsExactlyInAnyOrder("600.00", "324.00");
+        assertThat(replay).hasSize(2);
+        assertThat(finance.listPayables()).hasSize(2);
         assertThat(finance.listReceivables()).isEmpty();
         assertThatThrownBy(() -> service.settle(actor, "e07-settle2", "MD-20261030-1001", 7L, shares))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("该目标已经核算过工资");
         assertThat(finance.listPayrollLines()).hasSize(2);
+    }
+
+    @Test
+    void 两名员工的工资分别挂到各自应付() {
+        InMemoryFinanceRepository finance = new InMemoryFinanceRepository();
+        EmployeeTargetSettlementService service = service(finance, Map.of(
+                "MD-20261030-1013", closure(BusinessKind.PROCESSING, EmployeeClosureKind.CLOSED_NORMAL, "10", "0", null)));
+        service.settle(actor, "rf13-split1", "MD-20261030-1013", 7L, List.of(
+                new EmployeeWorkShare("payee-a", "抛光", new BigDecimal("6"), new BigDecimal("2"), false),
+                new EmployeeWorkShare("payee-b", "抛光", new BigDecimal("4"), new BigDecimal("2"), false)));
+        assertThat(finance.listPayables()).anySatisfy(payable -> {
+            assertThat(payable.payeeAccount()).isEqualTo("payee-a");
+            assertThat(payable.amount()).isEqualByComparingTo("12.00");
+        });
+        assertThat(finance.listPayables()).anySatisfy(payable -> {
+            assertThat(payable.payeeAccount()).isEqualTo("payee-b");
+            assertThat(payable.amount()).isEqualByComparingTo("8.00");
+        });
+        assertThat(finance.listPayables()).extracting(payable -> payable.amount())
+                .doesNotContain(new BigDecimal("20.00"));
     }
 
     @Test
