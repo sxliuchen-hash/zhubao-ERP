@@ -119,3 +119,4 @@
 119	TABLE	smp_sampling_fee
 120	ROW	sys_navigation_menu	code	sampling
 121	TABLE	smp_sampling_production_link
+122	TABLE	gld_goldwork_order

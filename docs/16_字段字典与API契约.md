@@ -2696,6 +2696,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `POST /api/sampling/production-links` | `ApiResponse<SamplingProductionLinkView>`。动作 `LINK_SAMPLING_PRODUCTION`。母单必须已存在，版本必须已确认。同一请求回放 |
 | `POST /api/sampling/production-links/revocations` | `ApiResponse<SamplingProductionLinkView>`。动作 `UNLINK_SAMPLING_PRODUCTION`。只删除引用 |
 
+### GoldworkOrderController
+
+来源：[GoldworkOrderController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkOrderController.java)。独立金工单，单号为 `GJ-`。默认路线含平设、建模、倒模、执模和抛光（金）。抛光（珠）、打样节点和普通工序不能写入。不接收母单号或打样号。不返回件数、重量、成色或金额。状态只有进行中。查询为 `GOLDWORK_VIEW`，建单为 `GOLDWORK_MAINTAIN`，均不授予原有岗位。已有库需备份后追加 `V122__m3_goldwork_order.sql`。MySQL 配置使用 `zhubao.goldwork-order.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders` | `ApiResponse<List<GoldworkOrderView>>`。可按 `customerId` 过滤。查询不写金工单 |
+| `POST /api/goldwork/orders` | `ApiResponse<GoldworkOrderView>`。动作 `OPEN_GOLDWORK_ORDER`。`routeSteps` 为空时冻结当前默认金工路线。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

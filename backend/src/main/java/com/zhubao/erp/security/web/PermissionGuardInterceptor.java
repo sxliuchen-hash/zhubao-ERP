@@ -101,6 +101,14 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
 
     private PermissionCode permissionFor(HttpServletRequest request) {
         String path = request.getRequestURI();
+        if (path.equals("/api/goldwork/orders")) {
+            if (GET.equals(request.getMethod())) {
+                return PermissionCode.GOLDWORK_VIEW;
+            }
+            if (POST.equals(request.getMethod())) {
+                return PermissionCode.GOLDWORK_MAINTAIN;
+            }
+        }
         if (path.equals("/api/sampling/orders")
                 || path.matches("^/api/sampling/orders/[^/]+/versions$")
                 || path.matches("^/api/sampling/orders/[^/]+/material-uses$")
