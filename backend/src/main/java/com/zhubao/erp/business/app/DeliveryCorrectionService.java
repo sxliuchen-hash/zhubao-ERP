@@ -3,6 +3,7 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.business.domain.DeliveryConfirmedSource;
 import com.zhubao.erp.business.domain.DeliveryCorrectionIntent;
 import com.zhubao.erp.business.domain.DeliveryDownstream;
+import com.zhubao.erp.business.domain.DownstreamFact;
 import com.zhubao.erp.business.domain.DeliveryDraft;
 import com.zhubao.erp.business.domain.DeliveryDraftLine;
 import com.zhubao.erp.business.domain.DeliveryDraftRepository;
@@ -52,8 +53,8 @@ public class DeliveryCorrectionService {
             }
         }
         return new DeliveryImpact(draft.deliveryId(), draft.status(), DeliveryImpact.HANDOVER_UNDECIDED,
-                List.copyOf(sources), downstream.hasConfirmedCharge(draft.deliveryId()),
-                downstream.hasConfirmedRefund(draft.deliveryId()));
+                List.copyOf(sources), downstream.chargeFact(draft.deliveryId()).label(),
+                downstream.refundFact(draft.deliveryId()).label());
     }
 
     public DeliveryDraft apply(String requestId, String actorId, String deliveryId, int expectedVersion,
@@ -78,8 +79,8 @@ public class DeliveryCorrectionService {
         }
         boolean consumed = drafts.confirmedSources(draft.deliveryId()).stream()
                 .anyMatch(source -> consumed(source.outboundCode()).signum() > 0);
-        boolean charge = downstream.hasConfirmedCharge(draft.deliveryId());
-        boolean refund = downstream.hasConfirmedRefund(draft.deliveryId());
+        boolean charge = downstream.chargeFact(draft.deliveryId()) == DownstreamFact.CONFIRMED;
+        boolean refund = downstream.refundFact(draft.deliveryId()) == DownstreamFact.CONFIRMED;
         if (intent == DeliveryCorrectionIntent.OVERWRITE_QUANTITY) {
             throw new BusinessException(consumed ? "不能直接覆盖已消费数量" : "不能直接覆盖已确认交付数量");
         }

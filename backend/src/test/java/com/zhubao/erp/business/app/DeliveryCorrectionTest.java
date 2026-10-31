@@ -43,8 +43,8 @@ class DeliveryCorrectionTest {
         DeliveryImpact impact = harness.correction.impact(confirmed.deliveryId());
         assertThat(impact.handover()).isEqualTo("待核");
         assertThat(impact.handover()).isNotEqualTo("未交接");
-        assertThat(impact.confirmedChargeRecord()).isTrue();
-        assertThat(impact.confirmedRefundRecord()).isTrue();
+        assertThat(impact.confirmedChargeRecord()).isEqualTo("已确认");
+        assertThat(impact.confirmedRefundRecord()).isEqualTo("已确认");
         assertThat(impact.sources()).singleElement().satisfies(source -> {
             assertThat(source.originalQuantity()).isEqualByComparingTo("80");
             assertThat(source.consumedQuantity()).isEqualByComparingTo("30");
@@ -193,13 +193,17 @@ class DeliveryCorrectionTest {
         }
 
         @Override
-        public boolean hasConfirmedCharge(String deliveryId) {
-            return charge;
+        public com.zhubao.erp.business.domain.DownstreamFact chargeFact(String deliveryId) {
+            return charge
+                    ? com.zhubao.erp.business.domain.DownstreamFact.CONFIRMED
+                    : com.zhubao.erp.business.domain.DownstreamFact.ABSENT;
         }
 
         @Override
-        public boolean hasConfirmedRefund(String deliveryId) {
-            return refund;
+        public com.zhubao.erp.business.domain.DownstreamFact refundFact(String deliveryId) {
+            return refund
+                    ? com.zhubao.erp.business.domain.DownstreamFact.CONFIRMED
+                    : com.zhubao.erp.business.domain.DownstreamFact.ABSENT;
         }
     }
 }

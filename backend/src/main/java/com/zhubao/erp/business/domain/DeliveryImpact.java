@@ -11,8 +11,8 @@ public record DeliveryImpact(
         DeliveryDraftStatus status,
         String handover,
         List<SourceImpact> sources,
-        boolean confirmedChargeRecord,
-        boolean confirmedRefundRecord
+        String confirmedChargeRecord,
+        String confirmedRefundRecord
 ) {
     public static final String HANDOVER_UNDECIDED = "待核";
 

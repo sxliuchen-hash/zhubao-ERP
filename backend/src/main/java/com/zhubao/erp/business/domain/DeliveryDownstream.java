@@ -9,7 +9,7 @@ public interface DeliveryDownstream {
 
     BigDecimal consumedQuantity(String sourceCode);
 
-    boolean hasConfirmedCharge(String deliveryId);
+    DownstreamFact chargeFact(String deliveryId);
 
-    boolean hasConfirmedRefund(String deliveryId);
+    DownstreamFact refundFact(String deliveryId);
 }
