@@ -31,6 +31,7 @@ import EmployeeSettlementPane from '../finance/EmployeeSettlementPane.vue';
 import SettlementPanel from '../finance/SettlementPanel.vue';
 import FixedAssetCardPane from '../assets/FixedAssetCardPane.vue';
 import FixedAssetCustodyPane from '../assets/FixedAssetCustodyPane.vue';
+import FixedAssetRepairPane from '../assets/FixedAssetRepairPane.vue';
 import { apiPost } from '../../services/apiClient';
 import { validBillContext, type OpenBillAction } from '../finance/billContext';
 import { formatAmount } from '../../utils/formatAmount';
@@ -1264,6 +1265,7 @@ function kindLabel(kind: string) {
       <button class="table-action" type="button" :disabled="busy" @click="depreciateAssets">计提本月折旧</button>
       <FixedAssetCardPane />
       <FixedAssetCustodyPane />
+      <FixedAssetRepairPane />
     </section>
 
     <section v-else-if="section === 'payable'" class="section-block">

@@ -39,6 +39,54 @@ export interface FixedAssetAcquisitionView {
   paid: boolean;
 }
 
+export interface FixedAssetRepairView {
+  repairId: string;
+  assetCode: string;
+  originalValue: number;
+  repairedOn: string;
+  handoverLabel: string;
+  evidenceLabel: string;
+  state: string;
+  stateLabel: string;
+  payableCode: string;
+  costAmount: number | null;
+  paidAmount: number | null;
+  paid: boolean;
+}
+
+export function fetchAssetRepairs(assetCode: string): Promise<FixedAssetRepairView[]> {
+  return apiGet(`/api/finance/fixed-asset-repairs?assetCode=${encodeURIComponent(assetCode)}`);
+}
+
+export function recordAssetRepair(body: {
+  requestId: string;
+  assetCode: string;
+  repairedOn: string;
+  handoverName: string;
+  evidenceCode: string;
+}): Promise<FixedAssetRepairView> {
+  return apiPost('/api/finance/fixed-asset-repairs', body);
+}
+
+export function confirmAssetRepair(body: {
+  requestId: string;
+  repairId: string;
+  amount: number | null;
+  evidenceCode: string;
+}): Promise<FixedAssetRepairView> {
+  return apiPost('/api/finance/fixed-asset-repairs/cost-confirmations', body);
+}
+
+export function payAssetRepair(body: {
+  requestId: string;
+  repairId: string;
+  amount: number | null;
+  paidOn: string;
+  voucher: string;
+}): Promise<FixedAssetRepairView> {
+  return apiPost('/api/finance/fixed-asset-repairs/payments', body);
+}
+
 export function fetchFixedAssetCards(): Promise<FixedAssetCardView[]> {
   return apiGet('/api/finance/fixed-asset-cards');
 }
