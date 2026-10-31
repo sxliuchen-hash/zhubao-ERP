@@ -2742,6 +2742,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `POST /api/goldwork/orders/{goldworkCode}/supplements` | `ApiResponse<GoldworkSupplementView>`。动作 `ISSUE_GOLDWORK_SUPPLEMENT`。公司自备不填来源行号，客户补料必须填已入账明细。同一请求回放 |
 | `POST /api/goldwork/orders/{goldworkCode}/supplements/returns` | `ApiResponse<GoldworkSupplementView>`。动作 `RETURN_GOLDWORK_SUPPLEMENT`。必须指向一笔补料，不能写回最初来料。同一请求回放 |
 
+### GoldworkOperationController
+
+来源：[GoldworkOperationController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkOperationController.java)。按本金工单已冻结的金工工序提交报工，必须引用属于该单、类型为 `GOLDWORK` 的 jpeg 或 png 照片。珠料工序不能报。未知重量保持为空。不写库存，不生成工资，不结束在制。同一张照片不能再次使用。查询为 `GOLDWORK_VIEW`，报工为 `GOLDWORK_MAINTAIN`。已有库需备份后追加 `V127__m3_goldwork_operation.sql`。MySQL 配置使用 `zhubao.goldwork-operation.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders/{goldworkCode}/operations` | `ApiResponse<List<GoldworkOperationView>>`。查询不写库存或工资 |
+| `POST /api/goldwork/orders/{goldworkCode}/operations` | `ApiResponse<GoldworkOperationView>`。动作 `REPORT_GOLDWORK_OPERATION`。`settleWage`、`postStock`、`closeWip` 为真时拒绝。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

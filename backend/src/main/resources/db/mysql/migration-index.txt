@@ -124,3 +124,4 @@ V123__m3_goldwork_material.sql
 V124__m3_goldwork_movement.sql
 V125__m3_goldwork_recovery.sql
 V126__m3_goldwork_supplement.sql
+V127__m3_goldwork_operation.sql
