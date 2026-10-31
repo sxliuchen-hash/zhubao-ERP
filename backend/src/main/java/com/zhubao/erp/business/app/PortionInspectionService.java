@@ -71,7 +71,7 @@ public class PortionInspectionService {
     private String save(String requestId, String bagId, int bagVersion, String requirementVersion,
                         BigDecimal pass, BigDecimal rework, BigDecimal scrap, BigDecimal pending,
                         List<String> failedClauses, BigDecimal counted, WorkSession session) {
-        ActivityBag current = bags.find(bagId).orElseThrow(() -> new BusinessException("袋不存在"));
+        ActivityBag current = bags.lock(bagId, session).orElseThrow(() -> new BusinessException("袋不存在"));
         if (current.version() != bagVersion) {
             throw new BusinessException("袋已被其他人修改，请刷新后重试");
         }
