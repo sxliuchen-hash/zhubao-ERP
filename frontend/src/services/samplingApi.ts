@@ -142,6 +142,58 @@ export function reportSamplingOperation(samplingCode: string, body: {
   return apiPost(`/api/sampling/orders/${encodeURIComponent(samplingCode)}/operations`, body);
 }
 
+export interface SamplingDeliveryView {
+  deliveryId: string;
+  samplingCode: string;
+  versionKind: string;
+  versionNo: number;
+  materialUseId: string;
+  sourceOwner: string;
+  quantity: number;
+  unit: string;
+  credentialCode: string;
+  deliveredOn: string;
+  remainingQuantity: number;
+  orderClosed: boolean;
+  orderStatus: string;
+  feeState: string;
+}
+
+export function deliverSampling(samplingCode: string, body: {
+  requestId: string;
+  versionKind: string;
+  versionNo: number;
+  materialUseId: string;
+  quantity: number;
+  unit: string;
+  credentialCode: string;
+}): Promise<SamplingDeliveryView> {
+  return apiPost(`/api/sampling/orders/${encodeURIComponent(samplingCode)}/deliveries`, body);
+}
+
+export interface SamplingFeeView {
+  feeId: string;
+  deliveryId: string;
+  samplingCode: string;
+  decision: string;
+  amount: number | null;
+  reason: string;
+  receivableCode: string;
+  motherOrderCode: string;
+  wagePosted: boolean;
+}
+
+export function settleSamplingFee(samplingCode: string, deliveryId: string, body: {
+  requestId: string;
+  amount: number | null;
+  waive: boolean;
+  reason: string;
+  motherOrderCode: string;
+  settleWages: boolean;
+}): Promise<SamplingFeeView> {
+  return apiPost(`/api/sampling/orders/${encodeURIComponent(samplingCode)}/deliveries/${encodeURIComponent(deliveryId)}/fee`, body);
+}
+
 export function openSamplingOrder(body: {
   requestId: string;
   customerId: number;

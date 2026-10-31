@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import SamplingProductionPane from './SamplingProductionPane.vue';
+import SamplingSettlementPane from './SamplingSettlementPane.vue';
 import SamplingVersionPane from './SamplingVersionPane.vue';
 import { fetchSamplingOrders, openSamplingOrder, type SamplingOrderView } from '../../services/samplingApi';
 
@@ -93,5 +94,6 @@ async function submit() {
     </form>
     <SamplingVersionPane />
     <SamplingProductionPane />
+    <SamplingSettlementPane />
   </section>
 </template>
