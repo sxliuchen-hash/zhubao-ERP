@@ -2628,6 +2628,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `POST /api/security/customer-authorizations` | `ApiResponse<CustomerAuthorization>` |
 | `POST /api/security/customer-authorizations/revocations` | `ApiResponse<RevokeResult>` |
 
+### SamplingOrderController
+
+来源：[SamplingOrderController](../backend/src/main/java/com/zhubao/erp/sampling/web/SamplingOrderController.java)。独立打样单，单号为 `DY-`。不接收母单号，也不由调用方指定打样号。不返回数量或金额。状态只有进行中，完结资格未核定。查询为 `SAMPLING_VIEW`，建单为 `SAMPLING_MAINTAIN`，均不授予原有岗位。客户范围账号必须已绑定客户，且只能看到范围内客户。已有库需备份后追加 `V114__m3_sampling_order.sql`。MySQL 配置使用 `zhubao.sampling-order.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/sampling/orders` | `ApiResponse<List<SamplingOrderView>>`。可按 `customerId` 过滤。查询不写打样单、库存或母单 |
+| `POST /api/sampling/orders` | `ApiResponse<SamplingOrderView>`。动作 `OPEN_SAMPLING_ORDER`。请求体为 `requestId`、`customerId`、`materialIntent`（`CUSTOMER_SUPPLIED` 或 `COMPANY_PREPARED`）、`requirement`、`ownerName`。`motherOrderCode` 和 `samplingCode` 必须为空。同一请求回放原单；内容变化必须换请求编号。客户必须存在且未停用 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

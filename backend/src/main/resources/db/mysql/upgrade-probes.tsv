@@ -111,3 +111,4 @@
 111	TABLE	fin_fixed_asset_repair
 112	TABLE	fin_fixed_asset_disposition
 113	TABLE	fin_fixed_asset_stocktake
+114	TABLE	smp_sampling_order
