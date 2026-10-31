@@ -30,6 +30,7 @@ export type TabKey =
   | 'documents'
   | 'sample'
   | 'sampling'
+  | 'goldwork'
   | 'label'
   | 'hardware'
   | 'operations'
@@ -65,6 +66,7 @@ export const workspaceTabs: WorkspaceTab[] = [
   { key: 'progress', label: '进度', meta: '在制筛选', code: 'PG', section: 'orders' },
   { key: 'production', label: '生产', meta: '派工报工', code: 'MO', section: 'production' },
   { key: 'sampling', label: '打样', meta: '独立样品', code: 'DY', section: 'production' },
+  { key: 'goldwork', label: '金工', meta: '独立金工', code: 'GJ', section: 'production' },
   { key: 'quality', label: '质检', meta: '返工放行', code: 'QC', section: 'quality' },
   { key: 'inventory', label: '库存', meta: '出库退货', code: 'ST', section: 'inventory' },
   { key: 'customers', label: '客户档案', meta: '账单与进度', code: 'CU', section: 'customers' },

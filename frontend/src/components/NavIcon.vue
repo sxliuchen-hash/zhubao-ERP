@@ -54,6 +54,10 @@ defineProps<{
       <circle cx="12" cy="12" r="3" />
       <path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3" />
     </template>
+    <template v-else-if="name === 'goldwork'">
+      <path d="M12 4.5 18.5 8v8L12 19.5 5.5 16V8z" />
+      <path d="M12 8.5v7" />
+    </template>
     <template v-else-if="name === 'sample'">
       <path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />
       <path d="M14 3.5V8h4" />

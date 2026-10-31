@@ -54,6 +54,7 @@ const workspaceLoaders = {
   documents: () => import('./features/m1/DocumentManagementWorkspace.vue'),
   sample: () => import('./features/m1/SampleLibraryWorkspace.vue'),
   sampling: () => import('./features/sampling/SamplingOrderWorkspace.vue'),
+  goldwork: () => import('./features/goldwork/GoldworkOrderWorkspace.vue'),
   label: () => import('./features/m1/LabelWorkspace.vue'),
   hardware: () => import('./features/m1/HardwareIntegrationWorkspace.vue'),
   operations: () => import('./features/m1/OperationsCenterWorkspace.vue'),

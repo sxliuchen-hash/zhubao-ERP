@@ -22,10 +22,11 @@ describe('workspaceNavigation', () => {
     expect(desktopNavigationGroups(workspaceTabs.filter(tab => tab.key === 'inventory')).flatMap(group => group.tabs).map(tab => tab.key)).toEqual(['inventory']);
   });
   it('把现有页面各归入一个展示分区，登记导入和打样分开', () => {
-    expect(workspaceTabs).toHaveLength(18);
-    expect(new Set(workspaceTabs.map((tab) => tab.key)).size).toBe(18);
+    expect(workspaceTabs).toHaveLength(19);
+    expect(new Set(workspaceTabs.map((tab) => tab.key)).size).toBe(19);
     expect(workspaceTabs.find((tab) => tab.key === 'sample')?.label).toBe('登记导入');
     expect(workspaceTabs.find((tab) => tab.key === 'sampling')?.label).toBe('打样');
+    expect(workspaceTabs.find((tab) => tab.key === 'goldwork')?.label).toBe('金工');
     expect(workspaceTabs.map((tab) => tab.key)).not.toContain('orders');
     expect(workspaceTabs.map((tab) => tab.key)).not.toContain('tools');
     expect(isTabKey('progress')).toBe(true);
@@ -44,6 +45,7 @@ describe('workspaceNavigation', () => {
     expect(mobileOrderTabs(visible).map((tab) => tab.key)).toEqual(['inbound', 'progress', 'production', 'quality']);
     expect(mobileMoreTabs(visible).map((tab) => tab.key)).toEqual([
       'sampling',
+      'goldwork',
       'customers',
       'finance',
       'approvals',
@@ -61,6 +63,6 @@ describe('workspaceNavigation', () => {
 
   it('更多里的筛选只匹配名称和说明', () => {
     expect(filterWorkspaceTabs(workspaceTabs, '打印').map((tab) => tab.key)).toEqual(['label']);
-    expect(filterWorkspaceTabs(workspaceTabs, '  ')).toHaveLength(18);
+    expect(filterWorkspaceTabs(workspaceTabs, '  ')).toHaveLength(19);
   });
 });
