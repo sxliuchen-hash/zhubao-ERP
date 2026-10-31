@@ -2637,6 +2637,17 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/sampling/orders` | `ApiResponse<List<SamplingOrderView>>`。可按 `customerId` 过滤。查询不写打样单、库存或母单 |
 | `POST /api/sampling/orders` | `ApiResponse<SamplingOrderView>`。动作 `OPEN_SAMPLING_ORDER`。请求体为 `requestId`、`customerId`、`materialIntent`（`CUSTOMER_SUPPLIED` 或 `COMPANY_PREPARED`）、`requirement`、`ownerName`。`motherOrderCode` 和 `samplingCode` 必须为空。同一请求回放原单；内容变化必须换请求编号。客户必须存在且未停用 |
 
+### SamplingVersionController
+
+来源：[SamplingVersionController](../backend/src/main/java/com/zhubao/erp/sampling/web/SamplingVersionController.java)。为已有打样单追加平设、模型或珠型版本，并单独记录确认或驳回。已确认或已驳回的正文不能改写，也不能在原版本上改决定。新版本另起序号。模型只保存文件名、格式、版本、存放说明和凭据编号，不接收文件本体；有引用时 `backupClaim` 为 `NOT_BACKED_UP`。没有模型文件时仍可凭尺寸参数办理。查询为 `SAMPLING_VIEW`，登记和决定为 `SAMPLING_MAINTAIN`。已有库需备份后追加 `V115__m3_sampling_version.sql`。MySQL 配置使用 `zhubao.sampling-version.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/sampling/orders/{samplingCode}/versions` | `ApiResponse<List<SamplingVersionView>>`。查询不写版本或确认 |
+| `POST /api/sampling/orders/{samplingCode}/versions` | `ApiResponse<SamplingVersionView>`。动作 `ADD_SAMPLING_VERSION`。`kind` 为 `FLAT`、`MODEL` 或 `BEAD`。`versionNo` 必须为空。平设和珠型必须有尺寸参数，且不能带模型引用。模型可以只有参数，或带完整引用。存放说明不能是网址或本机路径 |
+| `POST /api/sampling/orders/{samplingCode}/versions/confirmations` | `ApiResponse<SamplingVersionView>`。动作 `CONFIRM_SAMPLING_VERSION`。同一请求回放。再次确认拒绝 |
+| `POST /api/sampling/orders/{samplingCode}/versions/rejections` | `ApiResponse<SamplingVersionView>`。动作 `REJECT_SAMPLING_VERSION`。必须有驳回原因。已确认的版本不能改成驳回 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

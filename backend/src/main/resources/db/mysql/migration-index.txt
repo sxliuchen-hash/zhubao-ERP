@@ -112,3 +112,4 @@ V111__m3_fixed_asset_repair.sql
 V112__m3_fixed_asset_disposition.sql
 V113__m3_fixed_asset_stocktake.sql
 V114__m3_sampling_order.sql
+V115__m3_sampling_version.sql
