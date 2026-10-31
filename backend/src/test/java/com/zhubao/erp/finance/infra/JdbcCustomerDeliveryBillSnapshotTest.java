@@ -26,12 +26,7 @@ class JdbcCustomerDeliveryBillSnapshotTest {
 
     @Test
     void 新仓储仍能按已提交快照复算() throws Exception {
-        JdbcDataSource dataSource = new JdbcDataSource();
-        dataSource.setURL("jdbc:h2:mem:bill-snapshot-" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1");
-        dataSource.setUser("sa");
-        dataSource.setPassword("");
-        apply(dataSource, "V95__m3_customer_delivery_bill.sql");
-        apply(dataSource, "V133__m3_customer_bill_snapshot.sql");
+        JdbcDataSource dataSource = database();
         String billId = "CB" + "a".repeat(32);
         CustomerDeliveryBill bill = new CustomerDeliveryBill(
                 billId, "rf15-jdbc1", billId, "FH-20261030-1501", 7L,
@@ -60,6 +55,48 @@ class JdbcCustomerDeliveryBillSnapshotTest {
         });
         assertThat(CustomerBillSnapshot.recompute("FH-20261030-1501", loaded).totalAmount()).isEqualByComparingTo("17.00");
         assertThat(input.exemptQuantity()).isEqualByComparingTo(loaded.get(0).exemptQuantity());
+    }
+
+    @Test
+    void 混合单位来源读回可复算且来源与账单一起回滚() throws Exception {
+        JdbcDataSource dataSource = database();
+        String billId = "CB" + "b".repeat(32);
+        var sourceRows = List.of(new com.zhubao.erp.finance.domain.CustomerChargeSource("MD-20261030-1001", "颗", new BigDecimal("10")),
+                new com.zhubao.erp.finance.domain.CustomerChargeSource("MD-20261030-1002", "件", new BigDecimal("2")));
+        var input = new CustomerChargeLine("整单加工费", "", CustomerChargeMethod.AGREED_AMOUNT, "", null, null, null, null,
+                new BigDecimal("100"), null, "本次议定");
+        var snapshot = com.zhubao.erp.finance.domain.CustomerChargeCalculator.calculate(
+                new com.zhubao.erp.finance.domain.CustomerChargeCoverage("FH-20261030-5001", null, "", null, sourceRows), List.of(input));
+        var repository = new JdbcCustomerDeliveryBillRepository(dataSource);
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            repository.save(new CustomerDeliveryBill(billId, "rf50-jdbc-ok", billId, "FH-20261030-5001", 7L, CustomerDeliveryBillKind.INITIAL,
+                    snapshot.totalAmount(), 1), List.of(CustomerDeliveryBillLine.capture(billId, 1, input, snapshot.lines().get(0), snapshot)), session(connection));
+            connection.commit();
+        }
+        var reader = new JdbcCustomerDeliveryBillRepository(dataSource);
+        assertThat(reader.lines(billId).get(0).coverageSources()).isEqualTo(sourceRows);
+        assertThat(CustomerBillSnapshot.recompute("FH-20261030-5001", reader.lines(billId)).totalAmount()).isEqualByComparingTo("100");
+        String rollback = "CB" + "c".repeat(32);
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            repository.save(new CustomerDeliveryBill(rollback, "rf50-jdbc-no", rollback, "FH-20261030-5002", 7L, CustomerDeliveryBillKind.INITIAL,
+                    snapshot.totalAmount(), 1), List.of(CustomerDeliveryBillLine.capture(rollback, 1, input, snapshot.lines().get(0), snapshot)), session(connection));
+            connection.rollback();
+        }
+        assertThat(reader.find(rollback)).isEmpty();
+        assertThat(reader.lines(rollback)).isEmpty();
+    }
+
+    private static JdbcDataSource database() throws Exception {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:bill-snapshot-" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1");
+        dataSource.setUser("sa");
+        dataSource.setPassword("");
+        apply(dataSource, "V95__m3_customer_delivery_bill.sql");
+        apply(dataSource, "V133__m3_customer_bill_snapshot.sql");
+        apply(dataSource, "V136__m3_customer_bill_sources.sql");
+        return dataSource;
     }
 
     private static void apply(JdbcDataSource dataSource, String file) throws Exception {

@@ -322,7 +322,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     public List<StockBalance> findAllBalances() {
         String sql = """
                 select owner_type, owner_customer_id, customer_id, mother_order_code, work_order_code,
-                       material_code, warehouse_code, stock_status, batch_code, available_quantity, available_weight
+                       material_code, warehouse_code, stock_status, batch_code, available_quantity, available_weight, weight_pending
                   from inv_stock_balance
                  order by owner_type, customer_id, mother_order_code, work_order_code, material_code, warehouse_code, stock_status
                 """;
@@ -344,7 +344,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                                 rs.getString("batch_code")
                         ),
                         rs.getBigDecimal("available_quantity"),
-                        rs.getBigDecimal("available_weight")
+                        rs.getBigDecimal("available_weight"), rs.getBoolean("weight_pending")
                 ));
             }
         } catch (SQLException ex) {
@@ -356,7 +356,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     @Override
     public StockBalance findBalance(StockDimension dimension) {
         String sql = """
-                select available_quantity, available_weight
+                select available_quantity, available_weight, weight_pending
                   from inv_stock_balance
                  where dimension_key = ?
                 """;
@@ -365,7 +365,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             statement.setString(1, dimensionKey(dimension));
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
-                    return new StockBalance(dimension, rs.getBigDecimal("available_quantity"), rs.getBigDecimal("available_weight"));
+                    return new StockBalance(dimension, rs.getBigDecimal("available_quantity"), rs.getBigDecimal("available_weight"), rs.getBoolean("weight_pending"));
                 }
             }
         } catch (SQLException ex) {
@@ -465,7 +465,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     private void debitQuantity(Connection connection, StockLedgerEntry entry) throws SQLException {
         String sql = """
                 update inv_stock_balance
-                   set available_quantity = available_quantity - ?, last_ledger_code = ?
+                   set available_quantity = available_quantity - ?, last_ledger_code = ?, weight_pending = true
                  where dimension_key = ?
                    and available_quantity >= ?
                 """;
@@ -481,12 +481,12 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     }
 
     private StockBalance readBalance(Connection connection, StockDimension dimension) throws SQLException {
-        String sql = "select available_quantity, available_weight from inv_stock_balance where dimension_key = ?";
+        String sql = "select available_quantity, available_weight, weight_pending from inv_stock_balance where dimension_key = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, dimensionKey(dimension));
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
-                    return new StockBalance(dimension, rs.getBigDecimal("available_quantity"), rs.getBigDecimal("available_weight"));
+                    return new StockBalance(dimension, rs.getBigDecimal("available_quantity"), rs.getBigDecimal("available_weight"), rs.getBoolean("weight_pending"));
                 }
             }
         }
@@ -615,7 +615,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
         }
         String sql = """
                 select owner_type, owner_customer_id, customer_id, mother_order_code, work_order_code,
-                       material_code, warehouse_code, stock_status, batch_code, available_quantity, available_weight
+                       material_code, warehouse_code, stock_status, batch_code, available_quantity, available_weight, weight_pending
                   from inv_stock_balance
                  where mother_order_code = ?
                 """ + (lock ? " for update" : "");
@@ -640,7 +640,7 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                                         rs.getString("batch_code")
                                 ),
                                 rs.getBigDecimal("available_quantity"),
-                                rs.getBigDecimal("available_weight")
+                                rs.getBigDecimal("available_weight"), rs.getBoolean("weight_pending")
                         ));
                     }
                     return List.copyOf(balances);

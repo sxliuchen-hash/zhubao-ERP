@@ -16,6 +16,7 @@ public record FinanceContinuityView(
         List<String> awaitingCustomerBill,
         List<String> awaitingEmployeeSettlement,
         boolean costIncomplete,
-        BigDecimal recognizedProfit
+        BigDecimal recognizedProfit,
+        List<String> awaitingReceiptCoverage
 ) {
 }

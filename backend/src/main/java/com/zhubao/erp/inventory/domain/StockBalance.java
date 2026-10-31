@@ -5,6 +5,10 @@ import java.math.BigDecimal;
 public record StockBalance(
         StockDimension dimension,
         BigDecimal quantity,
-        BigDecimal weight
+        BigDecimal weight,
+        boolean weightPending
 ) {
+    public StockBalance(StockDimension dimension, BigDecimal quantity, BigDecimal weight) {
+        this(dimension, quantity, weight, false);
+    }
 }

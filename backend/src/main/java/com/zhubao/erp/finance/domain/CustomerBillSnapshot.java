@@ -24,12 +24,13 @@ public final class CustomerBillSnapshot {
             requireCurrentRule(line);
             if (!same(first.shippedQuantity(), line.shippedQuantity())
                     || !same(first.lossQuantity(), line.lossQuantity())
-                    || !first.coverageUnit().equals(line.coverageUnit())) {
+                    || !first.coverageUnit().equals(line.coverageUnit())
+                    || !first.coverageSources().equals(line.coverageSources())) {
                 throw new BusinessException("账单快照的交付覆盖不一致，不能复算");
             }
         }
         CustomerChargeCoverage coverage = new CustomerChargeCoverage(
-                deliveryId, first.shippedQuantity(), first.coverageUnit(), first.lossQuantity());
+                deliveryId, first.shippedQuantity(), first.coverageUnit(), first.lossQuantity(), first.coverageSources());
         List<CustomerChargeLine> inputs = new ArrayList<>();
         for (CustomerDeliveryBillLine line : lines) {
             inputs.add(line.chargeLine());
@@ -50,7 +51,8 @@ public final class CustomerBillSnapshot {
 
     private static void requireCurrentRule(CustomerDeliveryBillLine line) {
         if (line.quantityScale() == null || line.priceScale() == null || line.moneyScale() == null
-                || line.rounding() == null || line.coverageUnit() == null || line.shippedQuantity() == null
+                || line.rounding() == null || line.coverageUnit() == null
+                || (line.coverageSources().isEmpty() && line.shippedQuantity() == null)
                 || line.method() == null) {
             throw new BusinessException("账单快照不完整，不能复算");
         }

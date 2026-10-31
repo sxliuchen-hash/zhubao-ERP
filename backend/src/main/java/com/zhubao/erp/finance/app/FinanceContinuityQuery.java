@@ -1,5 +1,6 @@
 package com.zhubao.erp.finance.app;
 
+import com.zhubao.erp.business.domain.DeliveryDraftRepository;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBill;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBillRepository;
 import com.zhubao.erp.finance.domain.FinanceContinuityView;
@@ -12,12 +13,16 @@ import com.zhubao.erp.finance.domain.ReceiptAllocationOperation;
 import com.zhubao.erp.finance.domain.ReceivableLine;
 
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.TreeSet;
 
 /**
  * 读取已确认加工费、收款分摊和员工应付余额。查询不写应收、工资或退款。
@@ -27,10 +32,17 @@ public class FinanceContinuityQuery {
 
     private final FinanceRepository finance;
     private final CustomerDeliveryBillRepository bills;
+    private final DeliveryDraftRepository drafts;
 
     public FinanceContinuityQuery(FinanceRepository finance, CustomerDeliveryBillRepository bills) {
+        this(finance, bills, null);
+    }
+
+    @Autowired
+    public FinanceContinuityQuery(FinanceRepository finance, CustomerDeliveryBillRepository bills, DeliveryDraftRepository drafts) {
         this.finance = finance;
         this.bills = bills;
+        this.drafts = drafts;
     }
 
     public FinanceContinuityView read(List<String> confirmedDeliveryIds, List<String> closedTargetCodes) {
@@ -39,24 +51,58 @@ public class FinanceContinuityQuery {
         Set<String> billIds = billIds(deliveryIds);
         Set<String> incomeCodes = new HashSet<>();
         BigDecimal income = BigDecimal.ZERO;
+        Set<String> requiredTargets = new TreeSet<>(targets);
+        Map<String, BigDecimal> legacyCoverage = new HashMap<>();
+        for (String deliveryId : deliveryIds) {
+            var initial = bills.findInitial(deliveryId).orElse(null);
+            if (initial != null) {
+                for (var coverage : bills.coverages(initial.billId())) {
+                    legacyCoverage.merge(coverage.receivableCode(), coverage.amount(), BigDecimal::add);
+                }
+                var history = bills.listByRoot(initial.rootBillId());
+                var latest = history.get(history.size() - 1);
+                income = income.add(latest.totalAmount());
+                for (var line : bills.lines(latest.billId())) {
+                    if (!line.targetCode().isBlank()) requiredTargets.add(line.targetCode());
+                    for (var source : line.coverageSources()) requiredTargets.add(source.targetCode());
+                }
+            }
+            if (drafts != null) {
+                for (var line : drafts.lines(deliveryId)) requiredTargets.add(line.targetCode());
+            }
+        }
         for (ReceivableLine receivable : finance.listReceivables()) {
             if (!"DELIVERY_BILL".equals(receivable.sourceType()) || receivable.sourceKey() == null
                     || !receivable.sourceKey().startsWith("delivery-bill:")) {
                 continue;
             }
             if (billIds.contains(receivable.sourceKey().substring("delivery-bill:".length()))) {
-                income = income.add(receivable.amount());
                 incomeCodes.add(receivable.code());
             }
         }
-        BigDecimal collected = BigDecimal.ZERO;
+        Map<String, BigDecimal> allocated = new HashMap<>();
         for (ReceiptAllocationOperation operation : finance.listAllocationOperations()) {
             BigDecimal sign = ReceiptAllocationOperation.REVOKE.equals(operation.action())
                     ? BigDecimal.ONE.negate() : BigDecimal.ONE;
             for (ReceiptAllocation line : operation.lines()) {
-                if (incomeCodes.contains(line.receivableCode())) {
-                    collected = collected.add(line.amount().multiply(sign));
-                }
+                allocated.merge(line.receivableCode(), line.amount().multiply(sign), BigDecimal::add);
+            }
+        }
+        BigDecimal collected = incomeCodes.stream().map(code -> allocated.getOrDefault(code, BigDecimal.ZERO))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<String> receiptPending = new ArrayList<>();
+        for (var coverage : legacyCoverage.entrySet()) {
+            var source = finance.findReceivableByCode(coverage.getKey()).orElse(null);
+            BigDecimal received = allocated.getOrDefault(coverage.getKey(), BigDecimal.ZERO);
+            if (source == null) {
+                receiptPending.add(coverage.getKey());
+            } else if (coverage.getValue().compareTo(source.amount()) == 0) {
+                collected = collected.add(received);
+            } else if (received.compareTo(source.amount()) == 0) {
+                collected = collected.add(coverage.getValue());
+            } else if (received.signum() != 0) {
+                // 部分收款只核销到旧应收，不能擅自决定归属哪一次分批交付。
+                receiptPending.add(coverage.getKey());
             }
         }
         BigDecimal labor = BigDecimal.ZERO;
@@ -84,20 +130,20 @@ public class FinanceContinuityQuery {
             }
         }
         List<String> awaitingSettlement = new ArrayList<>();
-        for (String target : closedTargetCodes == null ? List.<String>of() : closedTargetCodes) {
+        for (String target : requiredTargets) {
             String prefix = "employee-target:" + target + ":";
             boolean settled = finance.listPayrollLines().stream()
-                    .anyMatch(line -> line.sourceKey() != null && line.sourceKey().startsWith(prefix));
-            if (!settled) {
+                    .anyMatch(line -> line.confirmed() && line.sourceKey() != null && line.sourceKey().startsWith(prefix));
+            if (!targets.contains(target) || !settled) {
                 awaitingSettlement.add(target);
             }
         }
-        boolean costIncomplete = !awaitingSettlement.isEmpty();
-        BigDecimal uncollected = income.subtract(collected);
+        boolean costIncomplete = !awaitingSettlement.isEmpty() || (!deliveryIds.isEmpty() && requiredTargets.isEmpty());
+        BigDecimal uncollected = receiptPending.isEmpty() ? income.subtract(collected) : null;
         return new FinanceContinuityView(
-                income, collected, uncollected, labor, paid, labor.subtract(paid),
+                income, receiptPending.isEmpty() ? collected : null, uncollected, labor, paid, labor.subtract(paid),
                 List.copyOf(awaitingBills), List.copyOf(awaitingSettlement), costIncomplete,
-                costIncomplete ? null : income.subtract(labor));
+                costIncomplete ? null : income.subtract(labor), receiptPending.stream().sorted().toList());
     }
 
     /** 应付余额来自已确认工资应付减去付款，不把付款再计一次成本。 */

@@ -256,6 +256,66 @@ class CustomerDeliveryBillingTest {
         assertThat(failing.finance.listReceivables()).hasSize(1);
     }
 
+    @Test
+    void 整单议定价也须核清来源且可明确选择旧凭据() {
+        Harness harness = harness(new GuardedCustomerBillAuthorization(new com.zhubao.erp.security.app.PermissionGuard()));
+        String delivery = confirmDelivery(harness, new BigDecimal("10"), "blank-target");
+        harness.finance.saveReceivable(receivable("YS-FIRST", "100"));
+        harness.finance.saveReceivable(receivable("YS-SECOND", "100"));
+        List<CustomerChargeLine> lines = List.of(agreed("100"));
+        assertThatThrownBy(() -> harness.billing.confirm(actor, "rf16-blank01", delivery, lines, null, null))
+                .isInstanceOf(BusinessException.class).hasMessage("旧凭据来源不明，须指定凭据");
+        assertThat(harness.finance.listReceivables()).hasSize(2);
+        CustomerDeliveryBill bill = harness.billing.confirm(actor, "rf16-select1", delivery, lines, null, new BigDecimal("100"), "YS-SECOND");
+        assertThat(harness.bills.coveredTotal("YS-FIRST")).isEqualByComparingTo("0");
+        assertThat(harness.bills.coveredTotal("YS-SECOND")).isEqualByComparingTo("100");
+        assertThat(harness.finance.listReceivables()).hasSize(2);
+        assertThat(harness.billing.confirm(actor, "rf16-select1", delivery, lines, null, new BigDecimal("100"), "YS-SECOND").billId())
+                .isEqualTo(bill.billId());
+        assertThatThrownBy(() -> harness.billing.confirm(actor, "rf16-select1", delivery, lines, null, new BigDecimal("100"), "YS-FIRST"))
+                .isInstanceOf(BusinessException.class).hasMessage("同一请求的内容不一致");
+        assertThat(harness.bills.coverages(bill.billId())).singleElement().satisfies(row -> assertThat(row.receivableCode()).isEqualTo("YS-SECOND"));
+    }
+
+    @Test
+    void 单笔旧账不能由空收费目标绕过也不能指定其他来源() {
+        Harness harness = harness(new GuardedCustomerBillAuthorization(new com.zhubao.erp.security.app.PermissionGuard()));
+        String delivery = confirmDelivery(harness, new BigDecimal("10"), "single-blank");
+        harness.finance.saveReceivable(receivable("YS-ONLY", "100"));
+        assertThatThrownBy(() -> harness.billing.confirm(actor, "rf16-one-blank", delivery, List.of(agreed("100")), null, null))
+                .isInstanceOf(BusinessException.class).hasMessage("已有正式凭据，须先核清覆盖");
+        assertThatThrownBy(() -> harness.billing.confirm(actor, "rf16-wrong-id", delivery, List.of(agreed("100")), null, new BigDecimal("100"), "YS-OTHER"))
+                .isInstanceOf(BusinessException.class).hasMessage("指定旧凭据不属于本次交付或额度已用完");
+        assertThat(harness.bills.findInitial(delivery)).isEmpty();
+        assertThat(harness.finance.listReceivables()).hasSize(1);
+    }
+
+    @Test
+    void 混合单位按项目和议定金额出账及调整均保留独立覆盖() {
+        Harness harness = harness(new GuardedCustomerBillAuthorization(new com.zhubao.erp.security.app.PermissionGuard()));
+        String delivery = confirmDelivery(harness, new BigDecimal("10"), "mixed-units", true);
+        List<CustomerChargeLine> lines = List.of(charge("10", "2"), new CustomerChargeLine(
+                "配件费", "MD-20261030-1002", CustomerChargeMethod.QUANTITY, "件", new BigDecimal("2"), new BigDecimal("3"), null, null, null, null, ""));
+        CustomerDeliveryBill bill = harness.billing.confirm(actor, "rf50-mixed-bill", delivery, lines, null, null);
+        assertThat(bill.totalAmount()).isEqualByComparingTo("26");
+        var snapshot = CustomerBillSnapshot.recompute(delivery, harness.bills.lines(bill.billId()));
+        assertThat(snapshot.coverage().shippedQuantity()).isNull();
+        assertThat(snapshot.coverage().sources()).hasSize(2).anySatisfy(source -> {
+            assertThat(source.quantityUnit()).isEqualTo("颗"); assertThat(source.quantity()).isEqualByComparingTo("10");
+        }).anySatisfy(source -> { assertThat(source.quantityUnit()).isEqualTo("件"); assertThat(source.quantity()).isEqualByComparingTo("2"); });
+        CustomerDeliveryBill adjusted = harness.billing.adjust(actor, "rf50-mixed-agreed", delivery, List.of(agreed("100")), null);
+        assertThat(CustomerBillSnapshot.recompute(delivery, harness.bills.lines(adjusted.billId())).totalAmount()).isEqualByComparingTo("100");
+        assertThat(harness.finance.listReceivables().stream().map(ReceivableLine::amount).reduce(BigDecimal.ZERO, BigDecimal::add))
+                .isEqualByComparingTo("100");
+        assertThatThrownBy(() -> harness.billing.adjust(actor, "rf50-loss-unit", delivery, List.of(agreed("100")), BigDecimal.ONE))
+                .isInstanceOf(BusinessException.class).hasMessage("混合单位损耗须按项目分别核定");
+    }
+
+    private static CustomerChargeLine agreed(String amount) {
+        return new CustomerChargeLine("整单加工费", "", CustomerChargeMethod.AGREED_AMOUNT, "", null, null, null, null,
+                new BigDecimal(amount), null, "本次交付议定");
+    }
+
     private static ReceivableLine receivable(String code, String amount) {
         return new ReceivableLine(
                 code, 7L, "甲", "2026-10", "ORDER_SETTLEMENT", "old-" + code,
@@ -268,6 +328,10 @@ class CustomerDeliveryBillingTest {
     }
 
     private static String confirmDelivery(Harness harness, BigDecimal quantity, String marker) {
+        return confirmDelivery(harness, quantity, marker, false);
+    }
+
+    private static String confirmDelivery(Harness harness, BigDecimal quantity, String marker, boolean mixed) {
         harness.documents.saveMotherOrder(new MotherOrderRecord("MD-20261030-1001", 7L, 7L, "牙骨",
                 null, null, null, null, null, null, null, "CUSTOMER", true, "WH-01",
                 new BigDecimal("500"), "颗", null, null, null, null, null, null,
@@ -275,17 +339,27 @@ class CustomerDeliveryBillingTest {
         String bagId = "BAG-" + marker;
         harness.bags.save(new ActivityBag(bagId, "MD-20261030-1001", "牙骨", "REQ-1", "LINE-1", "", false,
                 quantity, StockMeasurement.known(new BigDecimal("5")), 1), 0, null);
+        var selections = new java.util.ArrayList<DeliverySourceSelection>();
+        selections.add(new DeliverySourceSelection(bagId, 1, "MD-20261030-1001", "颗"));
+        if (mixed) {
+            harness.documents.saveMotherOrder(new MotherOrderRecord("MD-20261030-1002", 7L, 7L, "牙骨",
+                    null, null, null, null, null, null, null, "CUSTOMER", true, "WH-01",
+                    new BigDecimal("2"), "件", null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+            harness.bags.save(new ActivityBag(bagId + "-2", "MD-20261030-1002", "牙骨", "REQ-1", "LINE-2", "", false,
+                    new BigDecimal("2"), StockMeasurement.known(BigDecimal.ONE), 1), 0, null);
+            selections.add(new DeliverySourceSelection(bagId + "-2", 1, "MD-20261030-1002", "件"));
+        }
         var sheet = new com.zhubao.erp.business.app.DeliveryDraftService(
                 harness.store, harness.bags, new com.zhubao.erp.business.app.DocumentProcessingTargetCustomer(harness.documents),
-                ignored -> true, harness.unit).open("e06-draft-" + marker, "clerk-01", 7L, "", "", List.of(
-                new DeliverySourceSelection(bagId, 1, "MD-20261030-1001", "颗")));
+                ignored -> true, harness.unit).open("e06-draft-" + marker, "clerk-01", 7L, "", "", selections);
         harness.unit.execute(new CommandCall("e06-seed-" + marker, "clerk-01", "SEED_CONFIRM", "DELIVERY_DRAFT",
                 sheet.draft().deliveryId(), sheet.draft().deliveryId()), session -> {
+            var sources = new java.util.ArrayList<DeliveryConfirmedSource>();
+            sources.add(new DeliveryConfirmedSource(sheet.draft().deliveryId(), 1, bagId, sheet.draft().deliveryId() + "-1", "STK-E06", quantity, new BigDecimal("5")));
+            if (mixed) sources.add(new DeliveryConfirmedSource(sheet.draft().deliveryId(), 2, bagId + "-2", sheet.draft().deliveryId() + "-2", "STK-E06-2", new BigDecimal("2"), BigDecimal.ONE));
             harness.store.confirm(new DeliveryDraft(
                     sheet.draft().deliveryId(), sheet.draft().requestId(), 7L, sheet.draft().businessKind(),
-                    "", "", DeliveryDraftStatus.CONFIRMED, 2), List.of(new DeliveryConfirmedSource(
-                    sheet.draft().deliveryId(), 1, bagId, sheet.draft().deliveryId() + "-1", "STK-E06",
-                    quantity, new BigDecimal("5"))), 1, session);
+                    "", "", DeliveryDraftStatus.CONFIRMED, 2), sources, 1, session);
             return sheet.draft().deliveryId();
         });
         return sheet.draft().deliveryId();

@@ -163,7 +163,7 @@ final class FormalBusinessWorkspaceQuery {
             String frozen = dimension.stockStatus() == StockStatus.FROZEN ? plain(balance.quantity()) : "0";
             return new InventoryBalance(ownerLabel(dimension, mother), batchLabel(dimension),
                     dimension.materialCode(), dimension.warehouseCode(), status(dimension.stockStatus()), plain(balance.quantity()),
-                    weight(balance.weight()), frozen, context(balance), unit);
+                    balance.weightPending() ? "待复称" : weight(balance.weight()), frozen, context(balance), unit);
         }).toList();
         List<InventoryLedgerEntry> entries = new ArrayList<>();
         List<TraceEvent> timeline = new ArrayList<>();
@@ -406,7 +406,7 @@ final class FormalBusinessWorkspaceQuery {
     private OperationContext context(StockBalance balance) {
         StockDimension dimension = balance.dimension();
         return new OperationContext(dimension.customerId(), dimension.ownerCustomerId(), dimension.motherOrderCode(), text(dimension.workOrderCode()),
-                dimension.materialCode(), dimension.warehouseCode(), dimension.ownerType().name(), dimension.stockStatus().name(), balance.quantity(), balance.weight());
+                dimension.materialCode(), dimension.warehouseCode(), dimension.ownerType().name(), dimension.stockStatus().name(), balance.quantity(), balance.weightPending() ? null : balance.weight());
     }
 
     private String ledgerOperator(StockLedgerEntry entry, Snapshot snapshot) {

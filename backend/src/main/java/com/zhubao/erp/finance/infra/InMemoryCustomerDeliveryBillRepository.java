@@ -105,4 +105,10 @@ public class InMemoryCustomerDeliveryBillRepository implements CustomerDeliveryB
                 .map(CustomerBillCoverage::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
+
+    @Override
+    public List<CustomerBillCoverage> coverages(String billId) {
+        return coverages.values().stream().flatMap(List::stream)
+                .filter(coverage -> billId.equals(coverage.billId())).toList();
+    }
 }

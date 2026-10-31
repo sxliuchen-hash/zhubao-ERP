@@ -26,4 +26,6 @@ public interface CustomerDeliveryBillRepository {
     void saveCoverage(CustomerBillCoverage coverage, BigDecimal receivableAmount, WorkSession session);
 
     BigDecimal coveredTotal(String receivableCode);
+
+    List<CustomerBillCoverage> coverages(String billId);
 }

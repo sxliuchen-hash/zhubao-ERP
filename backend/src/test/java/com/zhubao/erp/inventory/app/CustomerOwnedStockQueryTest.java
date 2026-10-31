@@ -109,6 +109,23 @@ class CustomerOwnedStockQueryTest {
             assertThat(source.withheld()).isTrue();
         });
         assertThat(ledger.writes).isZero();
+        var realLedger = new com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository();
+        var stock = new StockLedgerService(realLedger);
+        var dimension = new StockDimension(OwnerType.CUSTOMER, customerId, customerId,
+                "MD-20261030-0002", "", "复核料", "WH", StockStatus.WIP);
+        stock.transfer(new com.zhubao.erp.inventory.domain.StockTransferCommand("inbound_confirm", "RF51-IN", null,
+                dimension, new BigDecimal("200"), new BigDecimal("20"), "原称重"));
+        new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()).execute(
+                new com.zhubao.erp.work.domain.CommandCall("rf51-query-loss", "clerk", "OUTSIDE_LOSS", "BAG", "BAG-RF51", "5"),
+                session -> { stock.postUnweighedLoss("RF51-RETURN", dimension, new BigDecimal("5"), session); return "RF51-RETURN"; });
+        var pendingView = new CustomerOwnedStockQuery(realLedger, identities, outside(customerId), code -> "颗")
+                .query(portal(customerId));
+        assertThat(pendingView.lines()).singleElement().satisfies(item -> {
+            assertThat(item.quantity()).isEqualByComparingTo("195");
+            assertThat(item.weightRead()).isEqualTo(CustomerOwnedStockView.WeightRead.UNKNOWN);
+            assertThat(item.knownWeight()).isNull();
+            assertThat(item.reconciliationPending()).isTrue();
+        });
         assertThatThrownBy(() -> query.query(new OperatorContext("财务", RoleCode.FINANCE_STATISTICIAN, DataScope.ALL,
                 false, "", List.of(), List.of(), "finance", "", "")))
                 .isInstanceOf(PermissionDeniedException.class);

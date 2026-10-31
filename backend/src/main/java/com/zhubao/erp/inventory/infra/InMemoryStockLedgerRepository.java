@@ -119,7 +119,7 @@ public class InMemoryStockLedgerRepository implements StockLedgerRepository {
             throw new BusinessException("来源库存数量不足");
         }
         balances.put(entry.from(), new StockBalance(
-                source.dimension(), source.quantity().subtract(entry.quantity()), source.weight()));
+                source.dimension(), source.quantity().subtract(entry.quantity()), source.weight(), true));
         ledgers.add(entry);
         session.onRollback(() -> {
             synchronized (this) {
@@ -213,7 +213,8 @@ public class InMemoryStockLedgerRepository implements StockLedgerRepository {
         return new StockBalance(
                 current.dimension(),
                 current.quantity().add(quantityDelta),
-                current.weight().add(weightDelta)
+                current.weight().add(weightDelta),
+                current.weightPending()
         );
     }
 }

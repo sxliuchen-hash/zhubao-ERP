@@ -225,13 +225,14 @@ class OutsourcingReturnTest {
         }
     }
 
-    @Test
-    void 确认损耗只扣原库存数量且失败回滚() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void 确认损耗只扣原库存数量且失败回滚(boolean explicitTarget) {
         InMemoryStockLedgerRepository ledger = new InMemoryStockLedgerRepository();
         StockLedgerService stock = new StockLedgerService(ledger);
         Fixture fixture = memory();
         StockDimension source = new StockDimension(
-                OwnerType.CUSTOMER, 10086L, 10086L, "MD-20261030-0311", "", "牙骨", "WH", StockStatus.WIP);
+                OwnerType.CUSTOMER, 10086L, 10086L, "MD-20261030-0311", explicitTarget ? "MD-20261030-0311" : "", "牙骨", "WH", StockStatus.WIP);
         stock.transfer(new StockTransferCommand(
                 "inbound_confirm", "RF11-IN", null, source, new BigDecimal("200"), new BigDecimal("7.260"), "原收货"));
         OutsourcingReturnService returns = new OutsourcingReturnService(
@@ -250,6 +251,7 @@ class OutsourcingReturnTest {
         StockBalance after = ledger.findBalance(source);
         assertThat(after.quantity()).isEqualByComparingTo("195");
         assertThat(after.weight()).isEqualByComparingTo("7.260");
+        assertThat(after.weightPending()).isTrue();
         assertThat(ledger.findAllLedgers().stream().filter(entry -> "outsourcing_loss".equals(entry.documentType())))
                 .singleElement()
                 .satisfies(entry -> {
@@ -280,6 +282,67 @@ class OutsourcingReturnTest {
         assertThat(fixture.returnRows().listByDispatch(other.dispatch().dispatchId())).isEmpty();
     }
 
+    @Test
+    void 母单外协损耗不能借子单或已发库存扣减() {
+        for (String scenario : List.of("CHILD", "SHIPPED", "UNKNOWN_OWNER")) {
+            boolean shipped = "SHIPPED".equals(scenario);
+            boolean unknownOwner = "UNKNOWN_OWNER".equals(scenario);
+            Fixture fixture = memory();
+            InMemoryStockLedgerRepository ledger = new InMemoryStockLedgerRepository();
+            StockLedgerService stock = new StockLedgerService(ledger);
+            StockDimension unrelated = new StockDimension(OwnerType.CUSTOMER, 10086L, 10086L,
+                    "MD-20261030-0311", shipped || unknownOwner ? "" : "ZD-20261030-9999", "牙骨", "WH",
+                    shipped ? StockStatus.SHIPPED : StockStatus.WIP);
+            stock.transfer(new StockTransferCommand("inbound_confirm", "SOURCE-RF11", null, unrelated,
+                    new BigDecimal("10"), BigDecimal.ONE, "其他来源"));
+            Sent sent = send(fixture, "BAG-SOURCE", "MD-20261030-0311", new BigDecimal("10"), unknownOwner ? "客户甲" : "10086");
+            OutsourcingReturnService service = new OutsourcingReturnService(
+                    fixture.dispatchRows(), fixture.returnRows(), fixture.sources(), fixture.bags(),
+                    new BagSplitService(fixture.bags(), new ActivityBagService(fixture.bags()), fixture.unit()), fixture.unit(), stock);
+            assertThatThrownBy(() -> service.receive("rf11-wrong-source", "clerk-01", sent.dispatch().dispatchId(), 1,
+                    new BigDecimal("8"), BigDecimal.ZERO, new BigDecimal("2"), StockMeasurement.known(new BigDecimal("0.8"))))
+                    .isInstanceOf(BusinessException.class).hasMessage(unknownOwner ? "无法确认损耗的原物料权属" : "无法确认损耗的原库存");
+            assertThat(ledger.findBalance(unrelated).quantity()).isEqualByComparingTo("10");
+            assertThat(fixture.returnRows().listByDispatch(sent.dispatch().dispatchId())).isEmpty();
+            assertThat(fixture.bags().find(sent.dispatch().sentBagId()).orElseThrow().closed()).isFalse();
+        }
+    }
+
+    @Test
+    void jdbc收回损耗与库存和重量待核使用同一事务() throws Exception {
+        JdbcDataSource ds = dataSource();
+        var unit = new JdbcBusinessWorkUnit(ds, new JdbcCommandRequestRepository(ds));
+        Fixture fixture = new Fixture(new JdbcActivityBagRepository(ds), new JdbcOutsourcingSourceRepository(ds),
+                new JdbcOutsourcingDispatchRepository(ds), new JdbcOutsourcingReturnRepository(ds), unit);
+        var ledger = new com.zhubao.erp.inventory.infra.JdbcStockLedgerRepository(ds);
+        var stock = new StockLedgerService(ledger);
+        StockDimension source = new StockDimension(OwnerType.CUSTOMER, 10086L, 10086L,
+                "MD-20261030-0311", "", "牙骨", "WH", StockStatus.WIP);
+        stock.transfer(new StockTransferCommand("inbound_confirm", "JDBC-LOSS-IN", null, source,
+                new BigDecimal("200"), new BigDecimal("7.260"), "原收货"));
+        Sent sent = send(fixture, "BAG-LOSS-JDBC", "MD-20261030-0311", new BigDecimal("200"));
+        var service = new OutsourcingReturnService(fixture.dispatchRows(), fixture.returnRows(), fixture.sources(), fixture.bags(),
+                new BagSplitService(fixture.bags(), new ActivityBagService(fixture.bags()), unit), unit, stock);
+        service.receive("rf11-jdbc-return", "clerk-01", sent.dispatch().dispatchId(), 1,
+                new BigDecimal("150"), BigDecimal.ZERO, new BigDecimal("5"), StockMeasurement.known(new BigDecimal("2.250")));
+        assertThat(ledger.findBalance(source).quantity()).isEqualByComparingTo("195");
+        assertThat(ledger.findBalance(source).weightPending()).isTrue();
+        StockDimension other = new StockDimension(OwnerType.CUSTOMER, 10086L, 10086L,
+                "MD-20261030-0312", "", "牙骨", "WH", StockStatus.WIP);
+        stock.transfer(new StockTransferCommand("inbound_confirm", "JDBC-FAIL-IN", null, other,
+                new BigDecimal("20"), BigDecimal.ONE, "另一单原收货"));
+        Sent failingSent = send(fixture, "BAG-LOSS-FAIL", "MD-20261030-0312", new BigDecimal("20"));
+        var failing = new JdbcBusinessWorkUnit(ds, new JdbcCommandRequestRepository(ds), () -> { throw new IllegalStateException("失败"); });
+        var failedService = new OutsourcingReturnService(fixture.dispatchRows(), fixture.returnRows(), fixture.sources(), fixture.bags(),
+                new BagSplitService(fixture.bags(), new ActivityBagService(fixture.bags()), failing), failing, stock);
+        assertThatThrownBy(() -> failedService.receive("rf11-jdbc-failed", "clerk-01", failingSent.dispatch().dispatchId(), 1,
+                new BigDecimal("10"), BigDecimal.ZERO, new BigDecimal("5"), null)).isInstanceOf(IllegalStateException.class);
+        assertThat(ledger.findBalance(other).quantity()).isEqualByComparingTo("20");
+        assertThat(ledger.findBalance(other).weightPending()).isFalse();
+        assertThat(fixture.returnRows().listByDispatch(failingSent.dispatch().dispatchId())).isEmpty();
+        assertThat(fixture.bags().find(failingSent.bag().id()).orElseThrow().closed()).isFalse();
+    }
+
     private static Fixture memory() {
         return new Fixture(new InMemoryActivityBagRepository(), new InMemoryOutsourcingSourceRepository(),
                 new InMemoryOutsourcingDispatchRepository(), new InMemoryOutsourcingReturnRepository(),
@@ -287,6 +350,10 @@ class OutsourcingReturnTest {
     }
 
     private static Sent send(Fixture fixture, String bagId, String target, BigDecimal quantity) {
+        return send(fixture, bagId, target, quantity, "10086");
+    }
+
+    private static Sent send(Fixture fixture, String bagId, String target, BigDecimal quantity, String ownerRef) {
         InMemoryRouteSnapshotRepository routes = new InMemoryRouteSnapshotRepository();
         routes.insert(new RouteSnapshot("RS-" + target, BusinessKind.PROCESSING, target, 1,
                 ProcessCatalog.defaults(BusinessKind.PROCESSING, "牙骨").stream().map(ProcessStep::id).toList(), true), null);
@@ -301,17 +368,14 @@ class OutsourcingReturnTest {
             sources.register("reg-" + bagId, OutsourcingCounterpart.OUTSOURCING_PARTY, "WX-POLISH-01", "甲抛光", "clerk-01");
         }
         OutsourcingTask task = sources.openTask("task-" + bagId, "WX-POLISH-01", target, "POLISH_BEAD",
-                bagId, OwnerType.CUSTOMER, "10086", "clerk-01");
+                bagId, OwnerType.CUSTOMER, ownerRef, "clerk-01");
         OutsourcingDispatch dispatch = fixture.dispatchService().dispatch(
                 "dsp-" + bagId, "clerk-01", task.taskId(), bagId, 1, quantity);
         return new Sent(bag, task, dispatch);
     }
 
     private static JdbcDataSource dataSource() throws Exception {
-        JdbcDataSource dataSource = new JdbcDataSource();
-        dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1");
-        dataSource.setUser("sa");
-        dataSource.setPassword("");
+        JdbcDataSource dataSource = com.zhubao.erp.inventory.support.StockRepositoryFixture.jdbcDataSource();
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : new String[]{
                     "V44__m3_command_request.sql", "V81__m3_activity_bag.sql",

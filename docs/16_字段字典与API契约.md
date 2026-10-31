@@ -2288,6 +2288,12 @@ PWA 一期边界：
 
 ### FinanceController
 
+按次账单应用服务补充（2026-11-01）：`CustomerDeliveryBillingService.confirm`保留原调用方式，新增末尾`coveredReceivableCode`参数用于明确选择旧应收。覆盖候选由真实交付明细和客户归属确定，不由可空的收费目标决定；指定编号参与原请求内容核对。此服务尚无独立HTTP路由，页面／路由接线继续按RF-18处理。
+
+计费快照的`coverage.sources`按目标、单位分别保存数量；混单位时全局`shippedQuantity=null`、`quantityUnit=""`，禁止把不同单位相加。收费金额可按项目汇总或议定；混单位的单个`lossQuantity`不能提交，免计量应按项目核定。V136保存来源，已有单单位快照仍可复算。
+
+`FinanceContinuityView`的收入为所选交付最新账单总额，包含明确覆盖的旧应收；收款按实际核销和覆盖范围核对。部分旧收款无法唯一归属分批覆盖时，`collected`、`uncollected`为空，`awaitingReceiptCoverage`列出待核旧应收编号。缺少核算范围或员工费用未齐时`recognizedProfit`为空，不把未知工费视为零。
+
 来源：[FinanceController](../backend/src/main/java/com/zhubao/erp/finance/web/FinanceController.java)。
 
 | 方法与完整路径 | 返回类型 |
@@ -2467,6 +2473,8 @@ PWA 一期边界：
 | `POST /api/inventory/material-stock/corrections` | 冲正。仅管理员 `STOCK_CORRECT`。没有收货来源时拒绝，不补造历史入库。 |
 | `GET /api/inventory/ledgers` | `ApiResponse<List<StockLedgerEntry>>` |
 | `GET /api/inventory/balances` | `ApiResponse<List<StockBalance>>` |
+
+`StockBalance.weightPending`表示原账面重量不能视为当前剩余实称重量。未称外协损耗在同事务标记待复称，`weight`保留原数值供追溯；内部办理上下文不预填该重量，客户库存返回未知／不完整并提示待核。V135为历史未称损耗补标记，不改原重量或台账。新的实称转移使用实际重量记录去向。
 
 ### LabelController
 

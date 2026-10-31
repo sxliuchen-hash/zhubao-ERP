@@ -647,6 +647,7 @@ public class MaterialStockService {
                     + "|" + dimension.warehouseCode() + "|" + dimension.batchCode();
             Accumulator group = groups.computeIfAbsent(key, ignored -> new Accumulator(dimension));
             group.add(dimension.stockStatus(), balance.quantity(), balance.weight());
+            group.weightPending |= balance.weightPending();
         }
         List<StockDesk.BatchCard> cards = new ArrayList<>();
         for (Accumulator group : groups.values()) {
@@ -655,9 +656,9 @@ public class MaterialStockService {
             String updated = latestTime(group.dimension.batchCode());
             cards.add(new StockDesk.BatchCard(scope, ownerLabel(group.dimension, null), group.dimension.ownerType().name(),
                     group.dimension.customerId(), group.dimension.materialCode(), group.dimension.batchCode(), group.dimension.warehouseCode(),
-                    "", "", groupLabel(group), unit, plain(group.bookQty), plain(group.bookWeight), plain(group.frozenQty), plain(group.frozenWeight),
-                    plain(group.availableQty), plain(group.availableWeight), plain(group.issuedQty), plain(group.issuedWeight),
-                    plain(group.bookWeight), false, receipt == null, receipt == null ? "" : sourceDocumentOf(receipt),
+                    "", "", groupLabel(group), unit, plain(group.bookQty), group.weightPending ? "待复称" : plain(group.bookWeight), plain(group.frozenQty), group.weightPending ? "待复称" : plain(group.frozenWeight),
+                    plain(group.availableQty), group.weightPending ? "待复称" : plain(group.availableWeight), plain(group.issuedQty), group.weightPending ? "待复称" : plain(group.issuedWeight),
+                    group.weightPending ? "待复称" : plain(group.bookWeight), false, receipt == null, receipt == null ? "" : sourceDocumentOf(receipt),
                     receipt == null ? "" : receipt.externalRef(), updated, receipt == null ? 0 : receipt.lineNo()));
         }
         return cards;
@@ -691,12 +692,13 @@ public class MaterialStockService {
             MotherOrderRecord mother = orders.findMotherOrderByCode(dimension.motherOrderCode()).orElse(null);
             String unit = mother == null || mother.quantityUnit() == null || mother.quantityUnit().isBlank() ? "单位未记录" : mother.quantityUnit();
             boolean frozen = dimension.stockStatus() == StockStatus.FROZEN;
+            String weight = balance.weightPending() ? "待复称" : plain(balance.weight());
             cards.add(new StockDesk.BatchCard("processing", ownerLabel(dimension, mother), dimension.ownerType().name(),
                     dimension.customerId(), dimension.materialCode(), dimension.batchCode(), dimension.warehouseCode(),
                     dimension.motherOrderCode(), text(dimension.workOrderCode()), statusLabel(dimension.stockStatus()), unit,
-                    plain(balance.quantity()), plain(balance.weight()), frozen ? plain(balance.quantity()) : "0",
-                    frozen ? plain(balance.weight()) : "0", frozen ? "0" : plain(balance.quantity()), frozen ? "0" : plain(balance.weight()),
-                    "0", "0", plain(balance.weight()), false, false, dimension.motherOrderCode(), "", "", 0));
+                    plain(balance.quantity()), weight, frozen ? plain(balance.quantity()) : "0",
+                    frozen ? weight : "0", frozen ? "0" : plain(balance.quantity()), frozen ? "0" : weight,
+                    "0", "0", weight, false, false, dimension.motherOrderCode(), "", "", 0));
         }
         return cards;
     }
@@ -1346,6 +1348,7 @@ public class MaterialStockService {
         private BigDecimal frozenWeight = BigDecimal.ZERO;
         private BigDecimal bookQty = BigDecimal.ZERO;
         private BigDecimal bookWeight = BigDecimal.ZERO;
+        private boolean weightPending;
 
         private Accumulator(StockDimension dimension) {
             this.dimension = dimension;

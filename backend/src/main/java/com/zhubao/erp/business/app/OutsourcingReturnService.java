@@ -160,14 +160,19 @@ public class OutsourcingReturnService {
 
     private StockDimension soleSource(OutsourcingTask task, ActivityBag bag) {
         Long ownerId = ownerId(task.ownerRef());
+        if (task.ownerType() == com.zhubao.erp.inventory.domain.OwnerType.CUSTOMER && ownerId == null) {
+            throw new BusinessException("无法确认损耗的原物料权属");
+        }
         List<StockBalance> matches = stock.balances().stream()
                 .filter(balance -> balance.quantity().signum() > 0)
                 .filter(balance -> bag.materialCode().equals(balance.dimension().materialCode()))
                 .filter(balance -> balance.dimension().ownerType() == task.ownerType())
                 .filter(balance -> sameTarget(balance.dimension(), bag.targetCode()))
-                .filter(balance -> ownerId == null
-                        || ownerId.equals(balance.dimension().customerId())
-                        || ownerId.equals(balance.dimension().ownerCustomerId()))
+                .filter(balance -> switch (balance.dimension().stockStatus()) {
+                    case RAW_WAITING, WIP, SEMI_FINISHED, REWORK -> true;
+                    default -> false;
+                })
+                .filter(balance -> ownerId == null || ownerId.equals(balance.dimension().ownerCustomerId()))
                 .toList();
         if (matches.size() != 1) {
             throw new BusinessException("无法确认损耗的原库存");
@@ -176,7 +181,12 @@ public class OutsourcingReturnService {
     }
 
     private static boolean sameTarget(StockDimension dimension, String targetCode) {
-        return targetCode.equals(dimension.motherOrderCode()) || targetCode.equals(dimension.workOrderCode());
+        var target = com.zhubao.erp.business.domain.BusinessTargetReference.fromCode(targetCode);
+        if (target.processingMother()) {
+            return targetCode.equals(dimension.motherOrderCode())
+                    && (dimension.workOrderCode().isBlank() || targetCode.equals(dimension.workOrderCode()));
+        }
+        return targetCode.equals(dimension.workOrderCode());
     }
 
     private static Long ownerId(String ownerRef) {

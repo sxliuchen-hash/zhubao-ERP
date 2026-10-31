@@ -2,6 +2,7 @@ package com.zhubao.erp.finance.infra;
 
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.CustomerBillCoverage;
+import com.zhubao.erp.finance.domain.CustomerChargeSource;
 import com.zhubao.erp.finance.domain.CustomerChargeDirection;
 import com.zhubao.erp.finance.domain.CustomerChargeMethod;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBill;
@@ -63,6 +64,9 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
             }
             throw new IllegalStateException("无法保存客户账单", ex);
         }
+        if (!lines.isEmpty()) {
+            insertSources(connection, bill.billId(), lines.get(0).coverageSources());
+        }
         for (CustomerDeliveryBillLine line : lines) {
             insertLine(connection, line);
         }
@@ -90,6 +94,7 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
 
     @Override
     public List<CustomerDeliveryBillLine> lines(String billId) {
+        List<CustomerChargeSource> sources = sources(billId);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      select * from fin_customer_delivery_bill_line where bill_id=? order by line_no
@@ -111,12 +116,47 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
                             text(rows.getString("basis_text")), rows.getBigDecimal("shipped_quantity"),
                             rows.getBigDecimal("loss_quantity"), rows.getString("coverage_unit"),
                             integer(rows, "quantity_scale"), integer(rows, "price_scale"),
-                            integer(rows, "money_scale"), rows.getString("rounding_mode")));
+                            integer(rows, "money_scale"), rows.getString("rounding_mode"), sources));
                 }
                 return result;
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("无法读取客户账单明细", ex);
+        }
+    }
+
+    private void insertSources(Connection connection, String billId, List<CustomerChargeSource> sources) {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into fin_customer_bill_source(bill_id, source_no, target_code, quantity_unit, shipped_quantity)
+                values (?,?,?,?,?)
+                """)) {
+            for (int index = 0; index < sources.size(); index++) {
+                CustomerChargeSource source = sources.get(index);
+                statement.setString(1, billId);
+                statement.setInt(2, index + 1);
+                statement.setString(3, source.targetCode());
+                statement.setString(4, source.quantityUnit());
+                statement.setBigDecimal(5, source.quantity());
+                statement.executeUpdate();
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存账单交付来源", ex);
+        }
+    }
+
+    private List<CustomerChargeSource> sources(String billId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("select target_code, quantity_unit, shipped_quantity from fin_customer_bill_source where bill_id=? order by source_no")) {
+            statement.setString(1, billId);
+            try (ResultSet rows = statement.executeQuery()) {
+                List<CustomerChargeSource> sources = new ArrayList<>();
+                while (rows.next()) {
+                    sources.add(new CustomerChargeSource(rows.getString(1), rows.getString(2), rows.getBigDecimal(3)));
+                }
+                return List.copyOf(sources);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取账单交付来源", ex);
         }
     }
 
@@ -243,6 +283,21 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
             return coveredOn(connection, receivableCode);
         } catch (SQLException ex) {
             throw new IllegalStateException("无法读取旧凭据覆盖", ex);
+        }
+    }
+
+    @Override
+    public List<CustomerBillCoverage> coverages(String billId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("select receivable_code, amount from fin_customer_bill_coverage where bill_id=? order by receivable_code")) {
+            statement.setString(1, billId);
+            try (ResultSet rows = statement.executeQuery()) {
+                List<CustomerBillCoverage> result = new ArrayList<>();
+                while (rows.next()) result.add(new CustomerBillCoverage(billId, rows.getString(1), rows.getBigDecimal(2)));
+                return List.copyOf(result);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取账单旧凭据覆盖", ex);
         }
     }
 

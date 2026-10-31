@@ -64,6 +64,22 @@ class MaterialStockServiceTest {
     }
 
     @Test
+    void 加工库存未称损耗后显示待复称() {
+        var source = new com.zhubao.erp.inventory.domain.StockDimension(OwnerType.CUSTOMER, 1001L, 1001L,
+                "MD-20261030-1001", "MD-20261030-1001", "AU9999", "WH", StockStatus.WIP);
+        ledger.transfer(new com.zhubao.erp.inventory.domain.StockTransferCommand("inbound_confirm", "WEIGHT-DESK-IN", null,
+                source, BigDecimal.TEN, BigDecimal.ONE, "原称重"));
+        new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()).execute(
+                new com.zhubao.erp.work.domain.CommandCall("rf51-desk-loss", "仓管", "OUTSIDE_LOSS", "BAG", "BAG-DESK", "1"),
+                session -> { ledger.postUnweighedLoss("DESK-LOSS", source, BigDecimal.ONE, session); return "DESK-LOSS"; });
+        assertThat(service.cards(query("processing"), keeper)).singleElement().satisfies(card -> {
+            assertThat(card.bookQuantity()).isEqualTo("9");
+            assertThat(card.bookWeight()).isEqualTo("待复称");
+            assertThat(card.availableWeight()).isEqualTo("待复称");
+        });
+    }
+
+    @Test
     void 寄存标签只读取真实批次并遵守客户范围() {
         service.receivePrep(prepReceipt(1001L, "甲", List.of(new StockDesk.LineInput("AU9999", "克", BigDecimal.TEN, BigDecimal.TEN, "")), true, "batch-label-001"), keeper);
         var batch = onlyBatch("prep");

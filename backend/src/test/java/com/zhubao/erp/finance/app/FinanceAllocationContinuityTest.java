@@ -115,6 +115,68 @@ class FinanceAllocationContinuityTest {
         assertThat(query.read(List.of(), List.of("MD-1")).confirmedIncome()).isEqualByComparingTo("0");
     }
 
+    @Test
+    void 本次覆盖的旧账和收款不丢失且空核算范围不显示利润() {
+        InMemoryFinanceRepository finance = new InMemoryFinanceRepository();
+        InMemoryCustomerDeliveryBillRepository bills = new InMemoryCustomerDeliveryBillRepository();
+        String billId = "CB" + "e".repeat(32);
+        bills.save(new CustomerDeliveryBill(billId, "rf17-covered", billId, "FH-20261030-1701", 7L,
+                CustomerDeliveryBillKind.INITIAL, new BigDecimal("100"), 1), List.of(), null);
+        finance.saveReceivable(legacy("YS-COVERED"));
+        finance.saveReceipt(new com.zhubao.erp.finance.domain.CustomerReceipt("RC-OLD", 7L, "甲", "2026-10",
+                new BigDecimal("100"), "2026-10-31", List.of(), "账务员", "2026-10-31T00:00:00"));
+        bills.saveCoverage(new com.zhubao.erp.finance.domain.CustomerBillCoverage(billId, "YS-COVERED", new BigDecimal("100")), new BigDecimal("100"), null);
+        finance.registerAllocationOperation(oldAllocation("ALLOC-COVERED", "YS-COVERED", "100"));
+        var query = new FinanceContinuityQuery(finance, bills);
+        var view = query.read(List.of("FH-20261030-1701"), List.of());
+        assertThat(view.confirmedIncome()).isEqualByComparingTo("100");
+        assertThat(view.collected()).isEqualByComparingTo("100");
+        assertThat(view.uncollected()).isEqualByComparingTo("0");
+        assertThat(view.costIncomplete()).isTrue();
+        assertThat(view.recognizedProfit()).isNull();
+        assertThat(view.awaitingReceiptCoverage()).isEmpty();
+    }
+
+    @Test
+    void 分批覆盖遇部分旧收款须待核不擅自比例分摊() {
+        InMemoryFinanceRepository finance = new InMemoryFinanceRepository();
+        InMemoryCustomerDeliveryBillRepository bills = new InMemoryCustomerDeliveryBillRepository();
+        finance.saveReceivable(legacy("YS-PARTIAL"));
+        finance.saveReceipt(new com.zhubao.erp.finance.domain.CustomerReceipt("RC-OLD", 7L, "甲", "2026-10",
+                new BigDecimal("50"), "2026-10-31", List.of(), "账务员", "2026-10-31T00:00:00"));
+        for (String amount : List.of("40", "60")) {
+            String billId = "CB" + amount.repeat(16);
+            bills.save(new CustomerDeliveryBill(billId, "rf17-part-" + amount, billId, "FH-20261030-00" + amount, 7L,
+                    CustomerDeliveryBillKind.INITIAL, new BigDecimal(amount), 1), List.of(), null);
+            bills.saveCoverage(new com.zhubao.erp.finance.domain.CustomerBillCoverage(billId, "YS-PARTIAL", new BigDecimal(amount)), new BigDecimal("100"), null);
+        }
+        finance.registerAllocationOperation(oldAllocation("ALLOC-PARTIAL", "YS-PARTIAL", "50"));
+        var query = new FinanceContinuityQuery(finance, bills);
+        var partial = query.read(List.of("FH-20261030-0040"), List.of());
+        assertThat(partial.confirmedIncome()).isEqualByComparingTo("40");
+        assertThat(partial.collected()).isNull();
+        assertThat(partial.uncollected()).isNull();
+        assertThat(partial.awaitingReceiptCoverage()).containsExactly("YS-PARTIAL");
+        var all = query.read(List.of("FH-20261030-0040", "FH-20261030-0060"), List.of());
+        assertThat(all.confirmedIncome()).isEqualByComparingTo("100");
+        assertThat(all.collected()).isEqualByComparingTo("50");
+        assertThat(all.uncollected()).isEqualByComparingTo("50");
+        finance.registerAllocationOperation(new ReceiptAllocationOperation("REVOKE-OLD", "RC-OLD", 7L,
+                ReceiptAllocationOperation.REVOKE, "更正", "账务员", "REVOKE-OLD", "2026-10-31T00:00:00",
+                List.of(new ReceiptAllocation("YS-PARTIAL", new BigDecimal("20")))));
+        assertThat(query.read(List.of("FH-20261030-0040", "FH-20261030-0060"), List.of()).collected()).isEqualByComparingTo("30");
+    }
+
+    private static ReceivableLine legacy(String code) {
+        return new ReceivableLine(code, 7L, "甲", "2026-10", "ORDER_SETTLEMENT", "old-" + code, "MD-1", "MD-1",
+                "旧加工费", BigDecimal.ONE, com.zhubao.erp.finance.domain.ChargeUnit.JOB, new BigDecimal("100"), new BigDecimal("100"), "", "", "账务员", "2026-10-31T00:00:00");
+    }
+
+    private static ReceiptAllocationOperation oldAllocation(String code, String receivable, String amount) {
+        return new ReceiptAllocationOperation(code, "RC-OLD", 7L, ReceiptAllocationOperation.ALLOCATE, "", "账务员", code,
+                "2026-10-31T00:00:00", List.of(new ReceiptAllocation(receivable, new BigDecimal(amount))));
+    }
+
     private static ReceivableLine receivable(String code, String sourceKey, String amount) {
         return new ReceivableLine(code, 7L, "甲", "2026-10", "DELIVERY_BILL", sourceKey,
                 "MD-1", "MD-1", "加工费", BigDecimal.ONE, com.zhubao.erp.finance.domain.ChargeUnit.JOB,

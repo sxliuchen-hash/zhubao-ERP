@@ -88,6 +88,9 @@ public class CustomerOwnedStockQuery {
             Group group = groups.computeIfAbsent(dimension.materialCode() + "\n" + unit,
                     key -> new Group(dimension.materialCode(), unit));
             group.add(bucketOf(dimension.stockStatus()), balance.quantity(), weightOf(balance));
+            if (balance.weightPending()) {
+                group.pending.add(bucketOf(dimension.stockStatus()));
+            }
             group.targets.add(dimension.workOrderCode());
             group.targets.add(dimension.motherOrderCode());
         }
@@ -155,7 +158,7 @@ public class CustomerOwnedStockQuery {
     }
 
     private static StockMeasurement.Weight weightOf(StockBalance balance) {
-        if (balance.weight() == null) {
+        if (balance.weightPending() || balance.weight() == null) {
             return StockMeasurement.unknown();
         }
         return StockMeasurement.known(balance.weight());

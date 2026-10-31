@@ -112,6 +112,13 @@ class ScanContextServiceTest {
         assertThat(response.operationContext().selectedBalance().stockStatus()).isEqualTo("WIP");
         assertThat(stocks.ledgers()).hasSize(ledgers);
         assertThat(repository.findQualityRequirementCheck(childCode)).isEmpty();
+        StockBalance source = stocks.balances().stream().filter(balance -> childCode.equals(balance.dimension().workOrderCode())
+                && balance.dimension().stockStatus() == StockStatus.WIP).findFirst().orElseThrow();
+        com.zhubao.erp.business.BusinessWorkFixture.unit().execute(
+                new com.zhubao.erp.work.domain.CommandCall("rf51-scan-loss", "仓管", "OUTSIDE_LOSS", "BAG", "BAG-SCAN", "1"),
+                session -> { stocks.postUnweighedLoss("SCAN-LOSS", source.dimension(), BigDecimal.ONE, session); return "SCAN-LOSS"; });
+        var pending = context.query(new ScanContextRequest("JG|work_order|" + childCode, null, ScanIntent.LOOKUP), admin());
+        assertThat(pending.operationContext().selectedBalance().weight()).isNull();
     }
 
     @Test

@@ -32,12 +32,18 @@ public final class StockRepositoryFixture {
         migrateSourceWorkOrder(dataSource);
         migrateBatchCode(dataSource);
         migrateReversal(dataSource);
+        migrateWeightPending(dataSource);
         return dataSource;
     }
 
     /** V64 允许收货冲正只扣原余额，并记录原流水号。 */
     public static void migrateReversal(JdbcDataSource dataSource) throws SQLException {
         applyMigration(dataSource, "db/mysql/V64__m3_stock_ledger_reversal.sql");
+    }
+
+    public static void migrateWeightPending(JdbcDataSource dataSource) throws SQLException {
+        applyMigration(dataSource, "db/mysql/V132__m3_outsourcing_loss_weight.sql");
+        applyMigration(dataSource, "db/mysql/V135__m3_stock_weight_pending.sql");
     }
 
     /** V50 给余额和流水加批次列。H2 不能一条 ALTER 加多列，按 ADD COLUMN 拆开，已发布脚本不改。 */

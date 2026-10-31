@@ -14,22 +14,36 @@ public record CustomerChargeCoverage(
         String deliveryId,
         BigDecimal shippedQuantity,
         String quantityUnit,
-        BigDecimal lossQuantity
+        BigDecimal lossQuantity,
+        List<CustomerChargeSource> sources
 ) {
+    public CustomerChargeCoverage(String deliveryId, BigDecimal shippedQuantity, String quantityUnit, BigDecimal lossQuantity) {
+        this(deliveryId, shippedQuantity, quantityUnit, lossQuantity, List.of());
+    }
+
     public CustomerChargeCoverage {
         if (deliveryId == null || deliveryId.isBlank()) {
             throw new BusinessException("计费缺少交付覆盖");
         }
         deliveryId = deliveryId.trim();
-        if (shippedQuantity == null || shippedQuantity.signum() < 0) {
+        sources = sources == null ? List.of() : List.copyOf(sources);
+        boolean mixed = sources.stream().map(CustomerChargeSource::quantityUnit).distinct().count() > 1;
+        if (!sources.isEmpty()) {
+            quantityUnit = mixed ? "" : sources.get(0).quantityUnit();
+            shippedQuantity = mixed ? null : sources.stream().map(CustomerChargeSource::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+        if (!mixed && (shippedQuantity == null || shippedQuantity.signum() < 0)) {
             throw new BusinessException("实发数量无效");
         }
-        shippedQuantity = shippedQuantity.setScale(3, RoundingMode.HALF_UP);
+        shippedQuantity = shippedQuantity == null ? null : shippedQuantity.setScale(3, RoundingMode.HALF_UP);
         quantityUnit = quantityUnit == null ? "" : quantityUnit.trim();
-        if (quantityUnit.isEmpty()) {
+        if (!mixed && quantityUnit.isEmpty()) {
             throw new BusinessException("数量单位不能为空");
         }
         if (lossQuantity != null) {
+            if (mixed) {
+                throw new BusinessException("混合单位损耗须按项目分别核定");
+            }
             if (lossQuantity.signum() < 0) {
                 throw new BusinessException("损耗数量无效");
             }

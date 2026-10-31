@@ -906,7 +906,7 @@ public class ScanContextService {
                 blank(dimension.workOrderCode()),
                 dimension.stockStatus().name(),
                 balance.quantity(),
-                balance.weight()
+                balance.weightPending() ? null : balance.weight()
         );
     }
 
