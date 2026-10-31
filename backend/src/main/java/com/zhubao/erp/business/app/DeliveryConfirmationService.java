@@ -14,7 +14,13 @@ import com.zhubao.erp.business.domain.DeliveryDraftStatus;
 import com.zhubao.erp.business.domain.DeliveryInHouseCheck;
 import com.zhubao.erp.business.domain.DeliveryStockPlace;
 import com.zhubao.erp.business.domain.DeliveryStockPlaceLookup;
+import com.zhubao.erp.business.domain.NodePortionBalance;
+import com.zhubao.erp.business.domain.NodePortionReader;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
+import com.zhubao.erp.business.domain.PortionRelease;
+import com.zhubao.erp.business.domain.PortionReleaseRepository;
+import com.zhubao.erp.business.domain.RouteSnapshot;
+import com.zhubao.erp.business.domain.RouteSnapshotRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockDimension;
@@ -25,8 +31,10 @@ import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -50,11 +58,23 @@ public class DeliveryConfirmationService {
     private final StockLedgerService stock;
     private final BusinessDocumentRepository documents;
     private final BusinessWorkUnit workUnit;
+    private final PortionReleaseRepository releases;
+    private final RouteSnapshotRepository routes;
+    private final NodePortionReader portions;
 
     public DeliveryConfirmationService(DeliveryDraftRepository drafts, ActivityBagRepository bags,
                                        DeliveryStockPlaceLookup places, DeliveryInHouseCheck inHouse,
                                        StockLedgerService stock, BusinessDocumentRepository documents,
                                        BusinessWorkUnit workUnit) {
+        this(drafts, bags, places, inHouse, stock, documents, workUnit, null, null, null);
+    }
+
+    @Autowired
+    public DeliveryConfirmationService(DeliveryDraftRepository drafts, ActivityBagRepository bags,
+                                       DeliveryStockPlaceLookup places, DeliveryInHouseCheck inHouse,
+                                       StockLedgerService stock, BusinessDocumentRepository documents,
+                                       BusinessWorkUnit workUnit, PortionReleaseRepository releases,
+                                       RouteSnapshotRepository routes, NodePortionReader portions) {
         this.drafts = drafts;
         this.bags = bags;
         this.places = places;
@@ -62,6 +82,9 @@ public class DeliveryConfirmationService {
         this.stock = stock;
         this.documents = documents;
         this.workUnit = workUnit;
+        this.releases = releases;
+        this.routes = routes;
+        this.portions = portions;
     }
 
     public DeliveryConfirmation confirm(String requestId, String actorId, String deliveryId, int expectedVersion) {
@@ -135,6 +158,7 @@ public class DeliveryConfirmationService {
         if (drafts.bagConfirmed(bag.id())) {
             throw new BusinessException("该袋已经交付");
         }
+        assertShippable(bag, line.quantity());
         BusinessTargetReference reference = BusinessTargetReference.fromCode(line.targetCode());
         DeliveryStockPlace place = places.place(reference).orElseThrow(() -> new BusinessException("加工目标不存在"));
         if (place.customerId() != draft.customerId()) {
@@ -144,6 +168,37 @@ public class DeliveryConfirmationService {
             throw new BusinessException("所选袋与加工目标材质不一致");
         }
         return new Resolved(bag, place);
+    }
+
+    private void assertShippable(ActivityBag bag, BigDecimal quantity) {
+        if (releases == null) {
+            return;
+        }
+        PortionRelease hold = releases.find(bag.id()).orElse(new PortionRelease(bag.id(), BigDecimal.ZERO, BigDecimal.ZERO));
+        BigDecimal free = hold.released().subtract(hold.frozen());
+        if (hold.frozen().signum() > 0 && free.signum() <= 0) {
+            throw new BusinessException("冻结份额不能发出");
+        }
+        if (free.compareTo(quantity) < 0) {
+            throw new BusinessException("质量尚未放行");
+        }
+        if (routes != null && portions != null && !stringingDone(bag)) {
+            throw new BusinessException("穿串未完，不能仅凭质检合格发出");
+        }
+    }
+
+    private boolean stringingDone(ActivityBag bag) {
+        BusinessKind kind = BusinessTargetReference.parse(bag.targetCode()).kind();
+        RouteSnapshot route = routes.list(kind, bag.targetCode()).stream()
+                .filter(RouteSnapshot::confirmed)
+                .max(Comparator.comparingInt(RouteSnapshot::version))
+                .orElse(null);
+        if (route == null || !route.stepIds().contains("STRING")) {
+            return true;
+        }
+        NodePortionBalance stringing = portions.find(bag.id(), "STRING").orElse(null);
+        return stringing != null && stringing.arrived().signum() > 0
+                && stringing.handled().compareTo(stringing.arrived()) == 0;
     }
 
     private DeliveryConfirmedSource ship(String actor, DeliveryDraft draft, DeliveryDraftLine line, Resolved resolved,

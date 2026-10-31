@@ -9,9 +9,14 @@ import com.zhubao.erp.business.domain.DeliveryDraftStatus;
 import com.zhubao.erp.business.domain.DeliverySourceSelection;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
+import com.zhubao.erp.business.domain.PortionRelease;
+import com.zhubao.erp.business.domain.RouteSnapshot;
 import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.InMemoryDeliveryDraftRepository;
+import com.zhubao.erp.business.infra.InMemoryNodePortionReader;
+import com.zhubao.erp.business.infra.InMemoryPortionReleaseRepository;
+import com.zhubao.erp.business.infra.InMemoryRouteSnapshotRepository;
 import com.zhubao.erp.business.infra.JdbcActivityBagRepository;
 import com.zhubao.erp.business.infra.JdbcBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.JdbcDeliveryDraftRepository;
@@ -179,9 +184,12 @@ class DeliveryConfirmationTest {
         InMemoryBusinessDocumentRepository customers = customers();
         DeliveryDraftService draftService = new DeliveryDraftService(
                 draftStore, bags, new DocumentProcessingTargetCustomer(customers), bagId -> true, unit);
+        InMemoryPortionReleaseRepository releases = new InMemoryPortionReleaseRepository();
         DeliveryConfirmationService confirmation = new DeliveryConfirmationService(
                 draftStore, bags, new DocumentDeliveryStockPlaceLookup(customers), bagId -> true,
-                stock, documents, unit);
+                stock, documents, unit, releases, new InMemoryRouteSnapshotRepository(), new InMemoryNodePortionReader());
+        releases.save(new PortionRelease("BAG-B", new BigDecimal("80"), BigDecimal.ZERO), null);
+        releases.save(new PortionRelease("BAG-A", new BigDecimal("40"), BigDecimal.ZERO), null);
         receive(stock, finished("MD-20261030-1001", "MD-20261030-1001"), "QC-J1", "80", "5");
         saveBag(bags, unit, "BAG-B", "MD-20261030-1001", "80", "5", "e02-jbag-b1");
         var first = draftService.open("e02-jdraft1", "clerk-01", 7L, "顺丰", "", List.of(
@@ -244,12 +252,15 @@ class DeliveryConfirmationTest {
         InMemoryStockLedgerRepository ledger = new InMemoryStockLedgerRepository();
         StockLedgerService stock = new StockLedgerService(ledger);
         MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        InMemoryPortionReleaseRepository releases = new InMemoryPortionReleaseRepository();
+        InMemoryRouteSnapshotRepository routes = new InMemoryRouteSnapshotRepository();
+        InMemoryNodePortionReader portions = new InMemoryNodePortionReader();
         DeliveryDraftService drafts = new DeliveryDraftService(
                 draftStore, bags, new DocumentProcessingTargetCustomer(documents), bagId -> true, unit);
         DeliveryConfirmationService confirmation = new DeliveryConfirmationService(
                 draftStore, bags, new DocumentDeliveryStockPlaceLookup(documents), bagId -> true,
-                stock, documents, unit);
-        return new Fixture(bags, documents, draftStore, drafts, confirmation, stock, ledger, unit);
+                stock, documents, unit, releases, routes, portions);
+        return new Fixture(bags, documents, draftStore, drafts, confirmation, stock, ledger, unit, releases, routes, portions);
     }
 
     private static InMemoryBusinessDocumentRepository customers() {
@@ -261,6 +272,7 @@ class DeliveryConfirmationTest {
 
     private static void saveBag(Fixture fixture, String bagId, String target, String quantity, String weight, String requestId) {
         saveBag(fixture.bags, fixture.unit, bagId, target, quantity, weight, requestId);
+        fixture.releases.save(new PortionRelease(bagId, new BigDecimal(quantity), BigDecimal.ZERO), null);
     }
 
     private static void saveBag(ActivityBagRepository bags, com.zhubao.erp.work.app.BusinessWorkUnit unit,
@@ -360,6 +372,33 @@ class DeliveryConfirmationTest {
         return dataSource;
     }
 
+    @Test
+    void 没有放行冻结或穿串未完都不能确认发货() {
+        Fixture fixture = memoryFixture();
+        receive(fixture.stock, finished("MD-20261030-1001", "MD-20261030-1001"), "QC-RF08", "10", "1");
+        saveBag(fixture.bags, fixture.unit, "BAG-HOLD", "MD-20261030-1001", "10", "1", "rf08-bag-01");
+        var draft = fixture.drafts.open("rf08-draft1", "clerk-01", 7L, "", "", List.of(
+                new DeliverySourceSelection("BAG-HOLD", 1, "MD-20261030-1001", "颗")));
+        assertThatThrownBy(() -> fixture.confirmation.confirm("rf08-conf01", "clerk-01", draft.draft().deliveryId(), 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("质量尚未放行");
+        assertThat(fixture.documents.listOutboundOrders()).isEmpty();
+
+        fixture.releases.save(new PortionRelease("BAG-HOLD", new BigDecimal("10"), new BigDecimal("10")), null);
+        assertThatThrownBy(() -> fixture.confirmation.confirm("rf08-conf02", "clerk-01", draft.draft().deliveryId(), 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("冻结份额不能发出");
+
+        fixture.releases.save(new PortionRelease("BAG-HOLD", new BigDecimal("10"), BigDecimal.ZERO), null);
+        fixture.routes.insert(new RouteSnapshot(
+                "RS-RF08", BusinessKind.PROCESSING, "MD-20261030-1001", 1, List.of("STRING"), true), null);
+        assertThatThrownBy(() -> fixture.confirmation.confirm("rf08-conf03", "clerk-01", draft.draft().deliveryId(), 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("穿串未完，不能仅凭质检合格发出");
+        assertThat(fixture.ledger.findBalance(finished("MD-20261030-1001", "MD-20261030-1001")).quantity())
+                .isEqualByComparingTo("10");
+    }
+
     private record Fixture(
             InMemoryActivityBagRepository bags,
             InMemoryBusinessDocumentRepository documents,
@@ -368,7 +407,10 @@ class DeliveryConfirmationTest {
             DeliveryConfirmationService confirmation,
             StockLedgerService stock,
             InMemoryStockLedgerRepository ledger,
-            MemoryBusinessWorkUnit unit
+            MemoryBusinessWorkUnit unit,
+            InMemoryPortionReleaseRepository releases,
+            InMemoryRouteSnapshotRepository routes,
+            InMemoryNodePortionReader portions
     ) {
     }
 }
