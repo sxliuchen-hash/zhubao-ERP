@@ -1,6 +1,7 @@
 package com.zhubao.erp.business.web;
 
 import com.zhubao.erp.business.app.ActivityBagService;
+import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.app.PortionInspectionService;
 import com.zhubao.erp.business.app.PortionReleaseService;
 import com.zhubao.erp.business.app.ProcessAvailabilityQuery;
@@ -10,8 +11,11 @@ import com.zhubao.erp.business.app.WeighingService;
 import com.zhubao.erp.business.app.WholeBagReportService;
 import com.zhubao.erp.business.domain.ActivityBag;
 import com.zhubao.erp.business.domain.BusinessKind;
+import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
+import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.RouteSnapshot;
 import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
+import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.InMemoryBagWeightRepository;
 import com.zhubao.erp.business.infra.InMemoryNodePortionReader;
 import com.zhubao.erp.business.infra.InMemoryPortionInspectionRepository;
@@ -29,6 +33,8 @@ import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.security.app.OperatorContextResolver;
 import com.zhubao.erp.security.app.PermissionGuard;
+import com.zhubao.erp.security.domain.AuthUserAccount;
+import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
@@ -44,9 +50,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -141,6 +149,80 @@ class ProductionQualityApiTest {
         mvc.perform(post("/api/business/production-quality/whole-bag-reports").contentType(MediaType.APPLICATION_JSON).content(ready))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("客户范围为空，不能报工"));
+    }
+
+    @Test
+    void 岗位权限不能操作其他客户本人或班组的袋() throws Exception {
+        InMemoryActivityBagRepository bags = new InMemoryActivityBagRepository();
+        InMemoryBusinessDocumentRepository documents = new InMemoryBusinessDocumentRepository();
+        documents.saveMotherOrder(new MotherOrderRecord(
+                "MD-20261030-0801", 7L, null, "牙骨", "2026-10-30", "", "", "", "", "",
+                "手串", "CUSTOMER", true, "WH", new BigDecimal("500"), "颗", null,
+                "RAW_WAITING", "", null, null, null, "甲班组员", "", "", "OPEN", "2026-10-30 08:00:00",
+                "", "2026-11-30", "甲客户"));
+        documents.saveChildWorkOrder(new ChildWorkOrderRecord(
+                "ZD-20261030-0802", "MD-20261030-0801", 7L, "甲客户", "要求", null,
+                "牙骨", "货品", new BigDecimal("10"), "颗", null, "WH", "", null, null, "甲班组员", null));
+        ActivityBag motherBag = new ActivityBagService(bags).open(
+                "MD-20261030-0801", "牙骨", "REQ-1", "LINE-1", new BigDecimal("500"), StockMeasurement.unknown(), null);
+        ActivityBag teamBag = new ActivityBagService(bags).open(
+                "ZD-20261030-0802", "牙骨", "REQ-1", "LINE-1", new BigDecimal("10"), StockMeasurement.unknown(), null);
+        AuthUserAccountRepository accounts = mock(AuthUserAccountRepository.class);
+        when(accounts.findAll()).thenReturn(List.of(new AuthUserAccount(
+                "mate", "x", "甲班组员", RoleCode.OPERATOR, DataScope.TEAM, true, false, Instant.now(), 0, null,
+                List.of(), false, false, List.of(), List.of(), "T1", "")));
+        BusinessDataAccess access = new BusinessDataAccess(
+                documents, new StockLedgerService(new InMemoryStockLedgerRepository()), accounts);
+        OperatorContextResolver scoped = mock(OperatorContextResolver.class);
+        ProductionQualityController controller = new ProductionQualityController(
+                new ProcessAvailabilityQuery(bags, new InMemoryRouteSnapshotRepository(), new InMemoryNodePortionReader(), new PermissionGuard()),
+                null, null, null, null, null, null, scoped, bags, access);
+        MockMvc scopedMvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
+
+        when(scoped.resolve(any())).thenReturn(customer("8"));
+        scopedMvc.perform(get("/api/business/production-quality/bags/" + motherBag.id() + "/availability"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("单号不在当前账号的业务数据范围内"));
+        scopedMvc.perform(get("/api/business/production-quality/bags/" + motherBag.id() + "/shippable"))
+                .andExpect(status().isForbidden());
+        scopedMvc.perform(post("/api/business/production-quality/whole-bag-reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestId\":\"rf09-cross01\",\"bagId\":\"" + motherBag.id()
+                                + "\",\"bagVersion\":1,\"expectedStepId\":\"CUT\",\"quantity\":{\"confirmedQuantity\":500},\"attachmentCode\":\"ATT-1\",\"progressPercent\":null}"))
+                .andExpect(status().isForbidden());
+
+        when(scoped.resolve(any())).thenReturn(customer("7"));
+        scopedMvc.perform(get("/api/business/production-quality/bags/" + motherBag.id() + "/availability"))
+                .andExpect(status().isOk());
+
+        when(scoped.resolve(any())).thenReturn(self("别人"));
+        scopedMvc.perform(get("/api/business/production-quality/bags/" + motherBag.id() + "/availability"))
+                .andExpect(status().isForbidden());
+        when(scoped.resolve(any())).thenReturn(self("甲班组员"));
+        scopedMvc.perform(get("/api/business/production-quality/bags/" + motherBag.id() + "/availability"))
+                .andExpect(status().isOk());
+
+        when(scoped.resolve(any())).thenReturn(team("T2"));
+        scopedMvc.perform(get("/api/business/production-quality/bags/" + teamBag.id() + "/availability"))
+                .andExpect(status().isForbidden());
+        when(scoped.resolve(any())).thenReturn(team("T1"));
+        scopedMvc.perform(get("/api/business/production-quality/bags/" + teamBag.id() + "/availability"))
+                .andExpect(status().isOk());
+    }
+
+    private static OperatorContext customer(String customerId) {
+        return new OperatorContext("操作工", RoleCode.OPERATOR, DataScope.CUSTOMER_RANGE, false, "",
+                List.of(customerId), List.of(), "op", "", "");
+    }
+
+    private static OperatorContext self(String name) {
+        return new OperatorContext(name, RoleCode.OPERATOR, DataScope.SELF, false, "",
+                List.of(), List.of(), name, "", "");
+    }
+
+    private static OperatorContext team(String teamCode) {
+        return new OperatorContext("组长", RoleCode.WORKSHOP_LEADER, DataScope.TEAM, false, "",
+                List.of(), List.of(), "lead", teamCode, "");
     }
 
     private static void assertThatBatch(String first, String second) {
