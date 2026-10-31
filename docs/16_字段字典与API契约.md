@@ -2714,6 +2714,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/goldwork/orders/{goldworkCode}/materials` | `ApiResponse<List<GoldworkMaterialLineView>>`。查询不写库存 |
 | `POST /api/goldwork/orders/{goldworkCode}/materials` | `ApiResponse<GoldworkMaterialLineView>`。动作 `RECEIVE_GOLDWORK_MATERIAL`。公司自备不填来源行号，客户来料必须填已入账明细。同一请求回放 |
 
+### GoldworkMovementController
+
+来源：[GoldworkMovementController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkMovementController.java)。按本金工单已冻结工序记录投入、产出、在制或明确处置。净重和毛重分开保存，毛重不会抄进净重。短重不会自动写成损耗或赔偿。成色与来料不同时必须写明已经发生的转换，不能提交换算系数。不按同颗数守恒改来料，不写库存账，也不结束金工单。处置只能是退回、实物报废或待核。查询为 `GOLDWORK_VIEW`，记录为 `GOLDWORK_MAINTAIN`。已有库需备份后追加 `V124__m3_goldwork_movement.sql`。MySQL 配置使用 `zhubao.goldwork-movement.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders/{goldworkCode}/movements` | `ApiResponse<List<GoldworkMovementView>>`。查询不写库存 |
+| `POST /api/goldwork/orders/{goldworkCode}/movements` | `ApiResponse<GoldworkMovementView>`。动作 `RECORD_GOLDWORK_MOVEMENT`。`useGrossAsNet`、`inferShortage`、`conversionFactor`、`enforcePieceConservation` 为真或有值时拒绝。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

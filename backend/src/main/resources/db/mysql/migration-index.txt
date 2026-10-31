@@ -121,3 +121,4 @@ V120__m3_sampling_menu.sql
 V121__m3_sampling_production_link.sql
 V122__m3_goldwork_order.sql
 V123__m3_goldwork_material.sql
+V124__m3_goldwork_movement.sql

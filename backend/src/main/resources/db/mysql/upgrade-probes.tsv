@@ -121,3 +121,4 @@
 121	TABLE	smp_sampling_production_link
 122	TABLE	gld_goldwork_order
 123	TABLE	gld_goldwork_material
+124	TABLE	gld_goldwork_movement
