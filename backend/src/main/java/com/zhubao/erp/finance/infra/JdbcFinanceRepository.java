@@ -1369,6 +1369,23 @@ public class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public void saveDepreciation(DepreciationEntry entry, WorkSession session) {
+        String sql = "insert into fin_depreciation_entry (code, asset_code, `year_month`, amount) values (?, ?, ?, ?)";
+        try (PreparedStatement statement = requireSession(session).prepareStatement(sql)) {
+            statement.setString(1, entry.code());
+            statement.setString(2, entry.assetCode());
+            statement.setString(3, entry.yearMonth());
+            statement.setBigDecimal(4, entry.amount());
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            if (isDuplicate(ex)) {
+                throw new BusinessException("这个月的折旧已经生成");
+            }
+            throw new IllegalStateException("Failed to save depreciation: " + entry.code(), ex);
+        }
+    }
+
+    @Override
     public List<DepreciationEntry> listDepreciations() {
         String sql = "select code, asset_code, `year_month`, amount from fin_depreciation_entry order by code";
         try (Connection connection = dataSource.getConnection();

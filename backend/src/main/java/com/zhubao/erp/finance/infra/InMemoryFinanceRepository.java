@@ -501,6 +501,17 @@ public class InMemoryFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public void saveDepreciation(DepreciationEntry entry, WorkSession session) {
+        String key = entry.assetCode() + "|" + entry.yearMonth();
+        if (depreciations.putIfAbsent(key, entry) != null) {
+            throw new BusinessException("这个月的折旧已经生成");
+        }
+        if (session != null) {
+            session.onRollback(() -> depreciations.remove(key, entry));
+        }
+    }
+
+    @Override
     public List<DepreciationEntry> listDepreciations() {
         return depreciations.values().stream()
                 .sorted(Comparator.comparing(DepreciationEntry::code))

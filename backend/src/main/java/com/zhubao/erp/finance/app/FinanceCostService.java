@@ -272,6 +272,11 @@ public class FinanceCostService {
         return new OnHand(quantity, amount);
     }
 
+    /** 当前管理算法下的计划折旧。不是税务或会计结论。 */
+    public BigDecimal plannedDepreciation(FixedAsset asset, int index) {
+        return depreciationAmount(asset, index);
+    }
+
     private BigDecimal depreciationAmount(FixedAsset asset, int index) {
         BigDecimal base = asset.originalValue().subtract(asset.residualValue());
         BigDecimal monthly = base.divide(BigDecimal.valueOf(asset.usefulMonths()), 2, RoundingMode.HALF_UP);

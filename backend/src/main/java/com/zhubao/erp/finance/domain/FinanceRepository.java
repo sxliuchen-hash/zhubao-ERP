@@ -87,6 +87,9 @@ public interface FinanceRepository {
 
     void saveDepreciation(DepreciationEntry entry);
 
+    /** 在当前工作单元里追加折旧。已有月份不能覆盖。 */
+    void saveDepreciation(DepreciationEntry entry, WorkSession session);
+
     List<DepreciationEntry> listDepreciations();
 
     void savePayable(Payable payable);

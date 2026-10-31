@@ -2368,6 +2368,14 @@ PWA 一期边界：
 | `POST /api/finance/fixed-asset-repairs/cost-confirmations` | `ApiResponse<FixedAssetRepairView>`。动作 `CONFIRM_ASSET_REPAIR`。必须有金额和凭据。同一维修只确认一次 |
 | `POST /api/finance/fixed-asset-repairs/payments` | `ApiResponse<FixedAssetRepairView>`。动作 `PAY_ASSET_REPAIR`。必须已确认，并且有付款金额、日期和凭据。不新增应付 |
 
+### FixedAssetDepreciationController
+
+来源：[FixedAssetDepreciationController](../backend/src/main/java/com/zhubao/erp/finance/web/FixedAssetDepreciationController.java)。沿用按使用月数均分、末期调尾差的管理算法，不表示满足全部会计或税务处理。已有月份不覆盖。传入停用或报废生效月会被拒绝。权限为 `FINANCE_ASSET`。无新表。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/finance/depreciation-continuations` | `ApiResponse<FixedAssetDepreciationRun>`。动作 `CONTINUE_ASSET_DEPRECIATION`。同一月重复运行返回已有分录，不新增。`algorithm` 为 `USEFUL_MONTHS_WITH_FINAL_TAIL` |
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。
