@@ -107,6 +107,8 @@ zhubao:
     repository: ${ZHUBAO_SAMPLING_PRODUCTION_LINK_REPOSITORY:jdbc}
   goldwork-order:
     repository: ${ZHUBAO_GOLDWORK_ORDER_REPOSITORY:jdbc}
+  goldwork-material:
+    repository: ${ZHUBAO_GOLDWORK_MATERIAL_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:

@@ -2705,6 +2705,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/goldwork/orders` | `ApiResponse<List<GoldworkOrderView>>`。可按 `customerId` 过滤。查询不写金工单 |
 | `POST /api/goldwork/orders` | `ApiResponse<GoldworkOrderView>`。动作 `OPEN_GOLDWORK_ORDER`。`routeSteps` 为空时冻结当前默认金工路线。同一请求回放 |
 
+### GoldworkMaterialController
+
+来源：[GoldworkMaterialController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkMaterialController.java)。引用已有公司收货或该客户已入账来料明细，记录申报件数、净重、毛重、单位和成色。空值表示未知，不是 0。精度状态固定为未核定，不写入库存账，也不把申报截成三位。不同成色或单位不能相加；同成色在精度核定前也不能相加。权属跟随金工单的公司自备或客户来料，外协不改变权属。查询为 `GOLDWORK_VIEW`，接收为 `GOLDWORK_MAINTAIN`，均不授予原有岗位。已有库需备份后追加 `V123__m3_goldwork_material.sql`。MySQL 配置使用 `zhubao.goldwork-material.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders/{goldworkCode}/materials` | `ApiResponse<List<GoldworkMaterialLineView>>`。查询不写库存 |
+| `POST /api/goldwork/orders/{goldworkCode}/materials` | `ApiResponse<GoldworkMaterialLineView>`。动作 `RECEIVE_GOLDWORK_MATERIAL`。公司自备不填来源行号，客户来料必须填已入账明细。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。
