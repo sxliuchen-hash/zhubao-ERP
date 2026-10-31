@@ -1,6 +1,7 @@
 package com.zhubao.erp.finance.infra;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.finance.domain.CustomerBillCoverage;
 import com.zhubao.erp.finance.domain.CustomerChargeDirection;
 import com.zhubao.erp.finance.domain.CustomerChargeMethod;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBill;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import javax.sql.DataSource;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -209,6 +211,69 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
                 rows.getString("delivery_id"), rows.getLong("customer_id"),
                 CustomerDeliveryBillKind.valueOf(rows.getString("bill_kind")),
                 rows.getBigDecimal("total_amount"), rows.getInt("version_no"));
+    }
+
+    @Override
+    public void saveCoverage(CustomerBillCoverage coverage, BigDecimal receivableAmount, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try {
+            lockCoverage(connection, coverage.receivableCode());
+            if (coveredOn(connection, coverage.receivableCode()).add(coverage.amount()).compareTo(receivableAmount) > 0) {
+                throw new BusinessException("覆盖金额超过旧凭据剩余额度");
+            }
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    insert into fin_customer_bill_coverage(bill_id, receivable_code, amount)
+                    values (?,?,?)
+                    """)) {
+                statement.setString(1, coverage.billId());
+                statement.setString(2, coverage.receivableCode());
+                statement.setBigDecimal(3, coverage.amount());
+                statement.executeUpdate();
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存旧凭据覆盖", ex);
+        }
+    }
+
+    @Override
+    public BigDecimal coveredTotal(String receivableCode) {
+        try (Connection connection = dataSource.getConnection()) {
+            return coveredOn(connection, receivableCode);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取旧凭据覆盖", ex);
+        }
+    }
+
+    private void lockCoverage(Connection connection, String receivableCode) throws SQLException {
+        try (PreparedStatement insert = connection.prepareStatement("""
+                insert into fin_customer_bill_coverage_guard (receivable_code) values (?)
+                on duplicate key update receivable_code = receivable_code
+                """)) {
+            insert.setString(1, receivableCode);
+            insert.executeUpdate();
+        }
+        try (PreparedStatement lock = connection.prepareStatement(
+                "select receivable_code from fin_customer_bill_coverage_guard where receivable_code=? for update")) {
+            lock.setString(1, receivableCode);
+            try (ResultSet rows = lock.executeQuery()) {
+                if (!rows.next()) {
+                    throw new IllegalStateException("无法锁定旧凭据");
+                }
+            }
+        }
+    }
+
+    private BigDecimal coveredOn(Connection connection, String receivableCode) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select coalesce(sum(amount), 0) from fin_customer_bill_coverage where receivable_code=?")) {
+            statement.setString(1, receivableCode);
+            try (ResultSet rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getBigDecimal(1);
+            }
+        }
     }
 
     private static boolean duplicate(SQLException ex) {

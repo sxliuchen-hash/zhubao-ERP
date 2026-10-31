@@ -170,19 +170,116 @@ class CustomerDeliveryBillingTest {
         assertThat(failing.finance.listPayrollLines()).isEmpty();
     }
 
+    @Test
+    void 同一旧凭据不能重复抵两次发货() {
+        Harness harness = harness((actor, customerId) -> { });
+        harness.finance.saveReceivable(receivable("YS-OLD", "100.00"));
+        String first = confirmDelivery(harness, new BigDecimal("100"), "rf16a");
+        List<CustomerChargeLine> lines = List.of(charge("100", "1"));
+        CustomerDeliveryBill bill = harness.billing.confirm(
+                actor, "rf16-bill-a", first, lines, null, new BigDecimal("100.00"));
+        assertThat(harness.billing.confirm(actor, "rf16-bill-a", first, lines, null, new BigDecimal("100.00")).billId())
+                .isEqualTo(bill.billId());
+        assertThat(harness.bills.coveredTotal("YS-OLD")).isEqualByComparingTo("100.00");
+        assertThat(harness.finance.findReceivableByCode("YS-OLD").orElseThrow().amount()).isEqualByComparingTo("100.00");
+        assertThat(harness.finance.listReceivables()).hasSize(1);
+
+        String second = confirmDelivery(harness, new BigDecimal("100"), "rf16b");
+        assertThatThrownBy(() -> harness.billing.confirm(
+                actor, "rf16-bill-b", second, lines, null, new BigDecimal("100.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("没有可核清的旧凭据");
+        assertThat(harness.bills.findInitial(second)).isEmpty();
+        CustomerDeliveryBill another = harness.billing.confirm(actor, "rf16-bill-c", second, lines, null, null);
+        assertThat(another.totalAmount()).isEqualByComparingTo("100.00");
+        assertThat(harness.finance.listReceivables()).hasSize(2);
+        assertThat(harness.finance.findReceivableBySourceKey("delivery-bill:" + another.billId()).orElseThrow().amount())
+                .isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void 旧凭据按剩余额度分次覆盖且调整不退回() {
+        Harness harness = harness((actor, customerId) -> { });
+        harness.finance.saveReceivable(receivable("YS-PART", "100.00"));
+        String first = confirmDelivery(harness, new BigDecimal("100"), "rf16c");
+        harness.billing.confirm(actor, "rf16-part1", first, List.of(charge("100", "1")), null, new BigDecimal("40.00"));
+        String second = confirmDelivery(harness, new BigDecimal("100"), "rf16d");
+        CustomerDeliveryBill secondBill = harness.billing.confirm(
+                actor, "rf16-part2", second, List.of(charge("100", "1")), null, new BigDecimal("60.00"));
+        assertThat(harness.bills.coveredTotal("YS-PART")).isEqualByComparingTo("100.00");
+        assertThat(harness.finance.findReceivableByCode("YS-PART").orElseThrow().amount()).isEqualByComparingTo("100.00");
+        assertThat(harness.finance.findReceivableBySourceKey("delivery-bill:" + secondBill.billId()).orElseThrow().amount())
+                .isEqualByComparingTo("40.00");
+        assertThatThrownBy(() -> harness.billing.confirm(
+                actor, "rf16-part3", confirmDelivery(harness, new BigDecimal("10"), "rf16e"),
+                List.of(charge("10", "1")), null, new BigDecimal("1.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("没有可核清的旧凭据");
+
+        harness.billing.adjust(actor, "rf16-adj01", first, List.of(charge("80", "1")), null);
+        assertThat(harness.bills.coveredTotal("YS-PART")).isEqualByComparingTo("100.00");
+        assertThat(harness.finance.findReceivableByCode("YS-PART").orElseThrow().amount()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void 多笔旧凭据来源不明时拒绝覆盖() {
+        Harness harness = harness((actor, customerId) -> { });
+        harness.finance.saveReceivable(receivable("YS-ONE", "60.00"));
+        harness.finance.saveReceivable(receivable("YS-TWO", "40.00"));
+        String deliveryId = confirmDelivery(harness, new BigDecimal("100"), "rf16f");
+        assertThatThrownBy(() -> harness.billing.confirm(
+                actor, "rf16-mix01", deliveryId, List.of(charge("100", "1")), null, new BigDecimal("100.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("旧凭据来源不明，须指定凭据");
+        assertThat(harness.bills.findInitial(deliveryId)).isEmpty();
+        assertThat(harness.bills.coveredTotal("YS-ONE")).isEqualByComparingTo("0");
+        assertThat(harness.finance.listReceivables()).hasSize(2);
+    }
+
+    @Test
+    void 覆盖写入失败后不留下额度() {
+        Harness failing = harness((actor, customerId) -> { });
+        failing.finance.saveReceivable(receivable("YS-ROLL", "100.00"));
+        String deliveryId = confirmDelivery(failing, new BigDecimal("100"), "rf16g");
+        CustomerDeliveryBillingService broken = new CustomerDeliveryBillingService(
+                failing.store, new com.zhubao.erp.business.app.DocumentDeliveryStockPlaceLookup(failing.documents),
+                failing.bills, failing.finance, failing.authorization,
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(), () -> {
+                    throw new IllegalStateException("失败");
+                }));
+        assertThatThrownBy(() -> broken.confirm(
+                actor, "rf16-roll1", deliveryId, List.of(charge("100", "1")), null, new BigDecimal("100.00")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(failing.bills.findInitial(deliveryId)).isEmpty();
+        assertThat(failing.bills.coveredTotal("YS-ROLL")).isEqualByComparingTo("0");
+        assertThat(failing.finance.findReceivableByCode("YS-ROLL").orElseThrow().amount()).isEqualByComparingTo("100.00");
+        assertThat(failing.finance.listReceivables()).hasSize(1);
+    }
+
+    private static ReceivableLine receivable(String code, String amount) {
+        return new ReceivableLine(
+                code, 7L, "甲", "2026-10", "ORDER_SETTLEMENT", "old-" + code,
+                "MD-20261030-1001", "MD-20261030-1001", "旧结单", BigDecimal.ONE, ChargeUnit.JOB,
+                new BigDecimal(amount), new BigDecimal(amount), "", "", "账务员", "2026-10-30T00:00:00");
+    }
+
     private static String confirmDelivery(Harness harness, BigDecimal quantity) {
+        return confirmDelivery(harness, quantity, quantity.stripTrailingZeros().toPlainString());
+    }
+
+    private static String confirmDelivery(Harness harness, BigDecimal quantity, String marker) {
         harness.documents.saveMotherOrder(new MotherOrderRecord("MD-20261030-1001", 7L, 7L, "牙骨",
                 null, null, null, null, null, null, null, "CUSTOMER", true, "WH-01",
                 new BigDecimal("500"), "颗", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null));
-        String bagId = "BAG-" + quantity.stripTrailingZeros().toPlainString();
+        String bagId = "BAG-" + marker;
         harness.bags.save(new ActivityBag(bagId, "MD-20261030-1001", "牙骨", "REQ-1", "LINE-1", "", false,
                 quantity, StockMeasurement.known(new BigDecimal("5")), 1), 0, null);
         var sheet = new com.zhubao.erp.business.app.DeliveryDraftService(
                 harness.store, harness.bags, new com.zhubao.erp.business.app.DocumentProcessingTargetCustomer(harness.documents),
-                ignored -> true, harness.unit).open("e06-draft-" + bagId, "clerk-01", 7L, "", "", List.of(
+                ignored -> true, harness.unit).open("e06-draft-" + marker, "clerk-01", 7L, "", "", List.of(
                 new DeliverySourceSelection(bagId, 1, "MD-20261030-1001", "颗")));
-        harness.unit.execute(new CommandCall("e06-seed-" + bagId, "clerk-01", "SEED_CONFIRM", "DELIVERY_DRAFT",
+        harness.unit.execute(new CommandCall("e06-seed-" + marker, "clerk-01", "SEED_CONFIRM", "DELIVERY_DRAFT",
                 sheet.draft().deliveryId(), sheet.draft().deliveryId()), session -> {
             harness.store.confirm(new DeliveryDraft(
                     sheet.draft().deliveryId(), sheet.draft().requestId(), 7L, sheet.draft().businessKind(),

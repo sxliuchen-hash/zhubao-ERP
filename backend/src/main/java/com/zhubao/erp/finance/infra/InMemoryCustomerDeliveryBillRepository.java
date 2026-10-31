@@ -1,6 +1,7 @@
 package com.zhubao.erp.finance.infra;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.finance.domain.CustomerBillCoverage;
 import com.zhubao.erp.finance.domain.CustomerChargeMethod;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBill;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBillKind;
@@ -10,6 +11,8 @@ import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +25,8 @@ public class InMemoryCustomerDeliveryBillRepository implements CustomerDeliveryB
 
     private final CopyOnWriteArrayList<CustomerDeliveryBill> bills = new CopyOnWriteArrayList<>();
     private final ConcurrentHashMap<String, List<CustomerDeliveryBillLine>> lines = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<CustomerBillCoverage>> coverages = new ConcurrentHashMap<>();
+    private final Object coverageGate = new Object();
 
     @Override
     public void save(CustomerDeliveryBill bill, List<CustomerDeliveryBillLine> billLines, WorkSession session) {
@@ -69,5 +74,35 @@ public class InMemoryCustomerDeliveryBillRepository implements CustomerDeliveryB
     @Override
     public List<CustomerDeliveryBillLine> lines(String billId) {
         return lines.getOrDefault(billId, List.of());
+    }
+
+    @Override
+    public void saveCoverage(CustomerBillCoverage coverage, BigDecimal receivableAmount, WorkSession session) {
+        synchronized (coverageGate) {
+            BigDecimal used = coveredTotal(coverage.receivableCode());
+            if (used.add(coverage.amount()).compareTo(receivableAmount) > 0) {
+                throw new BusinessException("覆盖金额超过旧凭据剩余额度");
+            }
+            List<CustomerBillCoverage> stored = new ArrayList<>(coverages.getOrDefault(coverage.receivableCode(), List.of()));
+            stored.add(coverage);
+            coverages.put(coverage.receivableCode(), List.copyOf(stored));
+            if (session != null) {
+                session.onRollback(() -> {
+                    synchronized (coverageGate) {
+                        List<CustomerBillCoverage> current = new ArrayList<>(
+                                coverages.getOrDefault(coverage.receivableCode(), List.of()));
+                        current.remove(coverage);
+                        coverages.put(coverage.receivableCode(), List.copyOf(current));
+                    }
+                });
+            }
+        }
+    }
+
+    @Override
+    public BigDecimal coveredTotal(String receivableCode) {
+        return coverages.getOrDefault(receivableCode, List.of()).stream()
+                .map(CustomerBillCoverage::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

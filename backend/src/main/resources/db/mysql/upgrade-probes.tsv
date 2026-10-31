@@ -131,3 +131,4 @@
 131	TABLE	biz_source_allocation_guard
 132	COLUMN	inv_stock_ledger	weight
 133	COLUMN	fin_customer_delivery_bill_line	basis_text
+134	TABLE	fin_customer_bill_coverage

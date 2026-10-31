@@ -11,6 +11,7 @@ import com.zhubao.erp.business.domain.DeliveryStockPlaceLookup;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.CustomerBillAuthorization;
+import com.zhubao.erp.finance.domain.CustomerBillCoverage;
 import com.zhubao.erp.finance.domain.CustomerChargeCalculator;
 import com.zhubao.erp.finance.domain.CustomerChargeCoverage;
 import com.zhubao.erp.finance.domain.CustomerChargeLine;
@@ -29,6 +30,7 @@ import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -90,20 +92,17 @@ public class CustomerDeliveryBillingService {
         if (snapshot.totalAmount().signum() < 0) {
             throw new BusinessException("净额为负，不能直接生成负加工费");
         }
-        BigDecimal legacy = legacyAmount(lines);
-        BigDecimal covered = coveredAmount == null ? BigDecimal.ZERO : coveredAmount;
-        if (legacy.signum() == 0 && coveredAmount != null && covered.signum() != 0) {
-            throw new BusinessException("没有可核清的旧凭据");
-        }
-        if (legacy.signum() != 0 && (coveredAmount == null || covered.compareTo(legacy) != 0)) {
-            throw new BusinessException(coveredAmount == null ? "已有正式凭据，须先核清覆盖" : "覆盖金额与已有凭据不一致");
-        }
+        BigDecimal covered = acceptedCoverage(lines, coveredAmount);
         BigDecimal delta = snapshot.totalAmount().subtract(covered);
         String billId = "CB" + UUID.randomUUID().toString().replace("-", "");
         CustomerDeliveryBill bill = new CustomerDeliveryBill(
                 billId, requestId, billId, draft.deliveryId(), draft.customerId(),
                 CustomerDeliveryBillKind.INITIAL, snapshot.totalAmount(), 1);
         bills.save(bill, billLines(billId, lines, snapshot), session);
+        if (covered.signum() > 0) {
+            ReceivableLine source = soleLegacy(lines);
+            bills.saveCoverage(new CustomerBillCoverage(billId, source.code(), covered), source.amount(), session);
+        }
         if (delta.signum() != 0) {
             finance.saveReceivable(receivable(actor, draft, lines, snapshot, billId, delta, ""), session);
         }
@@ -168,7 +167,58 @@ public class CustomerDeliveryBillingService {
                 new CustomerChargeCoverage(draft.deliveryId(), shipped, unit, lossQuantity), lines);
     }
 
-    private BigDecimal legacyAmount(List<CustomerChargeLine> lines) {
+    private BigDecimal acceptedCoverage(List<CustomerChargeLine> lines, BigDecimal coveredAmount) {
+        List<ReceivableLine> open = openLegacy(lines);
+        BigDecimal covered = coveredAmount == null ? BigDecimal.ZERO : coveredAmount.setScale(2, RoundingMode.HALF_UP);
+        if (covered.signum() < 0) {
+            throw new BusinessException("覆盖金额无效");
+        }
+        if (open.isEmpty()) {
+            if (covered.signum() != 0) {
+                throw new BusinessException("没有可核清的旧凭据");
+            }
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (open.size() > 1) {
+            throw new BusinessException("旧凭据来源不明，须指定凭据");
+        }
+        if (covered.signum() == 0) {
+            throw new BusinessException("已有正式凭据，须先核清覆盖");
+        }
+        BigDecimal remaining = open.get(0).amount().subtract(bills.coveredTotal(open.get(0).code()));
+        if (covered.compareTo(remaining) > 0) {
+            throw new BusinessException("覆盖金额超过旧凭据剩余额度");
+        }
+        return covered;
+    }
+
+    private ReceivableLine soleLegacy(List<CustomerChargeLine> lines) {
+        List<ReceivableLine> open = openLegacy(lines);
+        if (open.size() != 1) {
+            throw new BusinessException("旧凭据来源不明，须指定凭据");
+        }
+        return open.get(0);
+    }
+
+    private List<ReceivableLine> openLegacy(List<CustomerChargeLine> lines) {
+        Set<String> mothers = mothers(lines);
+        List<ReceivableLine> open = new ArrayList<>();
+        for (ReceivableLine receivable : finance.listReceivables()) {
+            if (!mothers.contains(receivable.motherOrderCode()) || "DELIVERY_BILL".equals(receivable.sourceType())) {
+                continue;
+            }
+            if (receivable.amount() == null || receivable.amount().signum() <= 0) {
+                continue;
+            }
+            BigDecimal remaining = receivable.amount().subtract(bills.coveredTotal(receivable.code()));
+            if (remaining.signum() > 0) {
+                open.add(receivable);
+            }
+        }
+        return open;
+    }
+
+    private Set<String> mothers(List<CustomerChargeLine> lines) {
         Set<String> mothers = new HashSet<>();
         for (CustomerChargeLine line : lines) {
             if (line.targetCode().isBlank()) {
@@ -177,13 +227,7 @@ public class CustomerDeliveryBillingService {
             DeliveryStockPlace place = places.place(BusinessTargetReference.fromCode(line.targetCode())).orElse(null);
             mothers.add(place == null ? line.targetCode() : place.motherOrderCode());
         }
-        BigDecimal sum = BigDecimal.ZERO;
-        for (ReceivableLine receivable : finance.listReceivables()) {
-            if (mothers.contains(receivable.motherOrderCode()) && !"DELIVERY_BILL".equals(receivable.sourceType())) {
-                sum = sum.add(receivable.amount());
-            }
-        }
-        return sum;
+        return mothers;
     }
 
     private ReceivableLine receivable(OperatorContext actor, DeliveryDraft draft, List<CustomerChargeLine> lines,

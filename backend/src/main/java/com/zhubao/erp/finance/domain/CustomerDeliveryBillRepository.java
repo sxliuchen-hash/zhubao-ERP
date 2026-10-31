@@ -2,6 +2,7 @@ package com.zhubao.erp.finance.domain;
 
 import com.zhubao.erp.work.domain.WorkSession;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,4 +22,8 @@ public interface CustomerDeliveryBillRepository {
     List<CustomerDeliveryBill> listByRoot(String rootBillId);
 
     List<CustomerDeliveryBillLine> lines(String billId);
+
+    void saveCoverage(CustomerBillCoverage coverage, BigDecimal receivableAmount, WorkSession session);
+
+    BigDecimal coveredTotal(String receivableCode);
 }

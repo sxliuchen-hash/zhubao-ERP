@@ -131,3 +131,4 @@ V130__m3_goldwork_menu.sql
 V131__m3_source_allocation_guard.sql
 V132__m3_outsourcing_loss_weight.sql
 V133__m3_customer_bill_snapshot.sql
+V134__m3_customer_bill_coverage.sql
