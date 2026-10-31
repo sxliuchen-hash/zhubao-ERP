@@ -110,3 +110,4 @@ V109__m3_fixed_asset_acquisition.sql
 V110__m3_fixed_asset_custody.sql
 V111__m3_fixed_asset_repair.sql
 V112__m3_fixed_asset_disposition.sql
+V113__m3_fixed_asset_stocktake.sql

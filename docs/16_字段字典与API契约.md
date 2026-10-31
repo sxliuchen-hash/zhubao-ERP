@@ -2385,6 +2385,16 @@ PWA 一期边界：
 | `GET /api/finance/fixed-asset-dispositions?assetCode=` | `ApiResponse<List<FixedAssetDispositionView>>`。查询不删卡、不记折旧 |
 | `POST /api/finance/fixed-asset-dispositions` | `ApiResponse<FixedAssetDispositionView>`。动作 `RECORD_ASSET_DISPOSITION`。`kind` 为 `STOP`、`SCRAP` 或 `DISPOSE`。没有 `receiptCode` 时不能填写回款金额 |
 
+### FixedAssetStocktakeController
+
+来源：[FixedAssetStocktakeController](../backend/src/main/java/com/zhubao/erp/finance/web/FixedAssetStocktakeController.java)。按卡片保存盘点时点的位置和保管。确认只追加差异，不改原值。未见或未扫不报废。盘点后若位置、保管或处置已变化，必须重新盘点。登记实盘为 `FINANCE_ASSET`，确认差异为 `FACTORY_STOCKTAKE_CONFIRM`。已有库需备份后追加 `V113__m3_fixed_asset_stocktake.sql`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `POST /api/finance/fixed-asset-stocktakes` | `ApiResponse<FixedAssetStocktake>`。动作 `OPEN_ASSET_STOCKTAKE` |
+| `POST /api/finance/fixed-asset-stocktakes/counts` | `ApiResponse<FixedAssetStocktake>`。动作 `COUNT_ASSET_STOCKTAKE`。`seen` 为 `PRESENT` 或 `ABSENT` |
+| `POST /api/finance/fixed-asset-stocktakes/confirmations` | `ApiResponse<FixedAssetStocktake>`。动作 `CONFIRM_ASSET_STOCKTAKE`。重复确认不改原快照 |
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。
