@@ -2677,6 +2677,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/sampling/orders/{samplingCode}/deliveries` | `ApiResponse<List<SamplingDeliveryView>>`。查询不写交付 |
 | `POST /api/sampling/orders/{samplingCode}/deliveries` | `ApiResponse<SamplingDeliveryView>`。动作 `DELIVER_SAMPLING`。数量不能超过该版本已报工份额。同一请求回放 |
 
+### SamplingFeeController
+
+来源：[SamplingFeeController](../backend/src/main/java/com/zhubao/erp/sampling/web/SamplingFeeController.java)。每次交付单独确认议定样费，或明确免收。免收必须有原因，不写零元应收，也不写工资。样费不能填写母单号抵大货。金额为 0 会拒绝。`SAMPLING_FEE_WAIVE` 不授予原有岗位。确认收费还要 `FINANCE_BILLING_POST`。已有库需备份后追加 `V119__m3_sampling_fee.sql`。MySQL 配置使用 `zhubao.sampling-fee.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/sampling/orders/{samplingCode}/deliveries/{deliveryId}/fee` | `ApiResponse<SamplingFeeView>`。尚未确认时拒绝，不返回 0 |
+| `POST /api/sampling/orders/{samplingCode}/deliveries/{deliveryId}/fee` | `ApiResponse<SamplingFeeView>`。动作 `SETTLE_SAMPLING_FEE`。`waive` 为真时不传金额。`settleWages` 为真时拒绝。同一请求回放，不能改口 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

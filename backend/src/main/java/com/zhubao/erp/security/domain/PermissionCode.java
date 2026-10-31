@@ -49,6 +49,7 @@ public enum PermissionCode {
     DESK_TASK_ASSIGN("待办指派"),
     SAMPLING_VIEW("打样查阅"),
     SAMPLING_MAINTAIN("打样办理"),
+    SAMPLING_FEE_WAIVE("打样免收"),
     GOLDWORK_VIEW("金工查阅"),
     GOLDWORK_MAINTAIN("金工办理"),
     ASSET_VIEW("资产查阅"),

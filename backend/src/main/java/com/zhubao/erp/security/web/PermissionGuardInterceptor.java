@@ -105,7 +105,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
                 || path.matches("^/api/sampling/orders/[^/]+/versions$")
                 || path.matches("^/api/sampling/orders/[^/]+/material-uses$")
                 || path.matches("^/api/sampling/orders/[^/]+/operations$")
-                || path.matches("^/api/sampling/orders/[^/]+/deliveries$")) {
+                || path.matches("^/api/sampling/orders/[^/]+/deliveries$")
+                || path.matches("^/api/sampling/orders/[^/]+/deliveries/[^/]+/fee$")) {
             if (GET.equals(request.getMethod())) {
                 return PermissionCode.SAMPLING_VIEW;
             }
