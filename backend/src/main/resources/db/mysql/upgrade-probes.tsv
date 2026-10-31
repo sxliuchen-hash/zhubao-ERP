@@ -123,3 +123,4 @@
 123	TABLE	gld_goldwork_material
 124	TABLE	gld_goldwork_movement
 125	TABLE	gld_goldwork_recovery
+126	TABLE	gld_goldwork_supplement

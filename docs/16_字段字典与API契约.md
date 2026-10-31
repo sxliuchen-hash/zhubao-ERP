@@ -2732,6 +2732,16 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/goldwork/orders/{goldworkCode}/recoveries` | `ApiResponse<List<GoldworkRecoveryView>>`。查询不写库存或费用 |
 | `POST /api/goldwork/orders/{goldworkCode}/recoveries` | `ApiResponse<GoldworkRecoveryView>`。动作 `RECORD_GOLDWORK_RECOVERY`。`clearAsLoss`、`addToFinished`、`feeOffset`、`autoReturn`、`inferWeight` 为真或有值时拒绝。同一请求回放 |
 
+### GoldworkSupplementController
+
+来源：[GoldworkSupplementController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkSupplementController.java)。客户补料和公司补料各记一条独立来源，退补再另记一行并指向原补料。最初来料的数量、来源和权属不改。不在旧行上加数，不静默改所有权，补料费尚未核定时不能提交金额。不写库存账。查询为 `GOLDWORK_VIEW`，补料和退补为 `GOLDWORK_MAINTAIN`。已有库需备份后追加 `V126__m3_goldwork_supplement.sql`。MySQL 配置使用 `zhubao.goldwork-supplement.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders/{goldworkCode}/supplements` | `ApiResponse<List<GoldworkSupplementView>>`。查询不写库存或费用 |
+| `POST /api/goldwork/orders/{goldworkCode}/supplements` | `ApiResponse<GoldworkSupplementView>`。动作 `ISSUE_GOLDWORK_SUPPLEMENT`。公司自备不填来源行号，客户补料必须填已入账明细。同一请求回放 |
+| `POST /api/goldwork/orders/{goldworkCode}/supplements/returns` | `ApiResponse<GoldworkSupplementView>`。动作 `RETURN_GOLDWORK_SUPPLEMENT`。必须指向一笔补料，不能写回最初来料。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。
