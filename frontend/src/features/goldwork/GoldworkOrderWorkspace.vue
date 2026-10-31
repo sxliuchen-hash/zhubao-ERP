@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import GoldworkMaterialPane from './GoldworkMaterialPane.vue';
 import GoldworkProductionPane from './GoldworkProductionPane.vue';
+import GoldworkSettlementPane from './GoldworkSettlementPane.vue';
 import GoldworkRecoveryPane from './GoldworkRecoveryPane.vue';
 import { fetchGoldworkOrders, openGoldworkOrder, type GoldworkOrderView } from '../../services/goldworkApi';
 
@@ -97,5 +98,6 @@ async function submit() {
     <GoldworkMaterialPane />
     <GoldworkRecoveryPane />
     <GoldworkProductionPane />
+    <GoldworkSettlementPane />
   </section>
 </template>

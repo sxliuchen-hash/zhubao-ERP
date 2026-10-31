@@ -226,6 +226,32 @@ export function decideGoldworkQuality(goldworkCode: string, body: {
   return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/qualities`, body);
 }
 
+export interface GoldworkDeliveryView {
+  deliveryId: string;
+  goldworkCode: string;
+  qualityId: string;
+  netWeight: number | null;
+  purity: string;
+  feeState: string;
+  receivablePosted: boolean;
+  salesPosted: boolean;
+  ordinaryShipment: boolean;
+}
+
+export function deliverGoldwork(goldworkCode: string, body: {
+  requestId: string;
+  qualityId: string;
+  pieceCount: number | null;
+  netWeight: number | null;
+  weightUnit: string;
+  goldPrice: number | null;
+  amount: number | null;
+  shipAsProcessing: boolean;
+  countCustomerGoldAsSales: boolean;
+}): Promise<GoldworkDeliveryView> {
+  return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/deliveries`, body);
+}
+
 export function openGoldworkOrder(body: {
   requestId: string;
   customerId: number;
