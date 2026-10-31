@@ -113,3 +113,4 @@
 113	TABLE	fin_fixed_asset_stocktake
 114	TABLE	smp_sampling_order
 115	TABLE	smp_sampling_version
+116	TABLE	smp_sampling_material_use

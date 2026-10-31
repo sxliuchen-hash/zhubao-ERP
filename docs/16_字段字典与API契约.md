@@ -2648,6 +2648,17 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `POST /api/sampling/orders/{samplingCode}/versions/confirmations` | `ApiResponse<SamplingVersionView>`。动作 `CONFIRM_SAMPLING_VERSION`。同一请求回放。再次确认拒绝 |
 | `POST /api/sampling/orders/{samplingCode}/versions/rejections` | `ApiResponse<SamplingVersionView>`。动作 `REJECT_SAMPLING_VERSION`。必须有驳回原因。已确认的版本不能改成驳回 |
 
+### SamplingMaterialController
+
+来源：[SamplingMaterialController](../backend/src/main/java/com/zhubao/erp/sampling/web/SamplingMaterialController.java)。按打样单上的来料或公司自备，领用真实来源并可以退回。公司备料走原批次领用，权属保持公司。客户来料只在同一客户、同一批次和同一仓库的待加工与打样在制之间移动，母单号保持空白。打样库不另记实物余额。实际投入未登记时为空，不写成 0。未知重量不能写成 0。重复请求不重复领用。查询为 `SAMPLING_VIEW`。领用还要 `STOCK_COMPANY_ISSUE` 或 `STOCK_PREP_ISSUE`，退回还要对应退回权限，登记投入为 `SAMPLING_MAINTAIN`。已有库需备份后追加 `V116__m3_sampling_material.sql`。MySQL 配置使用 `zhubao.sampling-material.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/sampling/orders/{samplingCode}/material-uses` | `ApiResponse<List<SamplingMaterialUseView>>`。查询不写库存 |
+| `POST /api/sampling/orders/{samplingCode}/material-uses` | `ApiResponse<SamplingMaterialUseView>`。动作 `PICK_SAMPLING_MATERIAL`。公司自备传 `receiptId` 和 `workshopCode`。客户来料传 `sourceDocumentCode` 和 `lineNo`。同一请求回放 |
+| `POST /api/sampling/orders/{samplingCode}/material-uses/{useId}/returns` | `ApiResponse<SamplingMaterialUseView>`。动作 `RETURN_SAMPLING_MATERIAL`。退回原来源，不改变权属 |
+| `POST /api/sampling/orders/{samplingCode}/material-uses/{useId}/inputs` | `ApiResponse<SamplingMaterialUseView>`。动作 `RECORD_SAMPLING_INPUT`。只登记实际投入，不另建余额，也不能重复登记 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

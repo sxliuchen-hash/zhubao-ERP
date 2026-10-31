@@ -1,5 +1,7 @@
 package com.zhubao.erp.inventory.domain;
 
+import com.zhubao.erp.business.domain.BusinessKind;
+import com.zhubao.erp.business.domain.BusinessTargetReference;
 import com.zhubao.erp.common.error.BusinessException;
 
 import java.util.Objects;
@@ -32,6 +34,10 @@ public final class StockTransferRules {
             return;
         }
         verifyDimension(entry.from());
+        if (isSamplingCustomer(entry)) {
+            verifySamplingCustomer(entry);
+            return;
+        }
         if (isPrepIssue(entry) || isPrepReturn(entry)) {
             verifyPrepBridge(entry);
             return;
@@ -109,6 +115,43 @@ public final class StockTransferRules {
         }
         if (balance.weight().compareTo(entry.weight()) < 0) {
             throw new BusinessException("来源库存重量不足");
+        }
+    }
+
+    private static boolean isSamplingCustomer(StockLedgerEntry entry) {
+        return "sampling_customer_issue".equals(entry.documentType())
+                || "sampling_customer_return".equals(entry.documentType());
+    }
+
+    /**
+     * 客户来料领到打样或退回来源。权属、客户、批次和仓库不变，母单号保持空白。
+     */
+    private static void verifySamplingCustomer(StockLedgerEntry entry) {
+        boolean issue = "sampling_customer_issue".equals(entry.documentType());
+        StockDimension from = entry.from();
+        StockDimension to = entry.to();
+        if (from.ownerType() != OwnerType.CUSTOMER || to.ownerType() != OwnerType.CUSTOMER
+                || !Objects.equals(from.customerId(), to.customerId())
+                || !Objects.equals(from.ownerCustomerId(), to.ownerCustomerId())
+                || !from.materialCode().equals(to.materialCode())
+                || !from.batchCode().equals(to.batchCode())
+                || !from.warehouseCode().equals(to.warehouseCode())) {
+            throw new IllegalArgumentException("打样领料不能改变客户、物料、批次或仓库");
+        }
+        if (!from.motherOrderCode().isBlank() || !to.motherOrderCode().isBlank()) {
+            throw new IllegalArgumentException("打样领料不能占用加工母单");
+        }
+        StockDimension holding = issue ? to : from;
+        StockDimension source = issue ? from : to;
+        if (source.stockStatus() != StockStatus.RAW_WAITING || holding.stockStatus() != StockStatus.WIP) {
+            throw new IllegalArgumentException("打样领料只在客户待加工和打样在制之间移动");
+        }
+        if (source.workOrderCode() != null && !source.workOrderCode().isBlank()) {
+            throw new IllegalArgumentException("客户来料来源不能已经挂在其他工单");
+        }
+        if (holding.workOrderCode() == null || holding.workOrderCode().isBlank()
+                || BusinessTargetReference.fromCode(holding.workOrderCode()).kind() != BusinessKind.SAMPLING) {
+            throw new IllegalArgumentException("打样领料只能挂到打样单");
         }
     }
 

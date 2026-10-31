@@ -17,6 +17,7 @@ import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
+import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -68,15 +69,37 @@ public class CompanyMaterialIssueService {
         String issueId = unit.execute(new CommandCall(
                 requestId, actor.operator(), "ISSUE_COMPANY_MATERIAL", "COMPANY_MATERIAL_ISSUE", item.itemId(),
                 payload(item.itemId(), batch, from, workshop, counted, measured, unitText, target)
-        ), session -> {
-            stocks.take(item.itemId(), batch, from, counted, unitText, measured, session);
-            stocks.add(new CompanyMaterialBalance(item.itemId(), batch, workshop, counted, unitText, measured), session);
-            String id = "LY-" + token();
-            issues.insert(new CompanyMaterialIssue(
-                    id, item.itemId(), batch, from, workshop, counted, BigDecimal.ZERO, BigDecimal.ZERO, unitText, measured, target, 1), session);
-            return id;
-        });
+        ), session -> writeIssue(session, item, batch, from, workshop, counted, unitText, measured, target));
         return issues.find(issueId).orElseThrow(() -> new BusinessException("领用单不存在"));
+    }
+
+    /**
+     * 在调用方的工作单元里领用。调用方必须已经核对领用权限。
+     * 权属仍是公司，目标编号只是去向说明。
+     */
+    public String issueWithin(WorkSession session, String itemId, String batchCode, String fromWarehouse,
+                              String workshopCode, BigDecimal quantity, BigDecimal weight, String unitName, String targetCode) {
+        if (session == null) {
+            throw new BusinessException("领用必须处于工作单元");
+        }
+        BigDecimal counted = quantity(quantity);
+        StockMeasurement.Weight measured = weight(weight);
+        String unitText = required(unitName, "请填写单位", 16);
+        String batch = required(batchCode, "请选择原批次", 40);
+        String from = required(fromWarehouse, "请填写仓库", 40);
+        String workshop = required(workshopCode, "请填写车间", 40);
+        if (from.equals(workshop)) {
+            throw new BusinessException("领用要离开原仓库");
+        }
+        String target = targetCode == null ? "" : targetCode.trim();
+        if (target.length() > 40) {
+            throw new BusinessException("业务目标过长");
+        }
+        FactoryItem found = item(itemId);
+        if (!found.unit().equals(unitText)) {
+            throw new BusinessException("单位必须与物品档案一致");
+        }
+        return writeIssue(session, found, batch, from, workshop, counted, unitText, measured, target);
     }
 
     public CompanyMaterialReturn returnIssued(String requestId, OperatorContext actor, String issueId, int version,
@@ -89,24 +112,52 @@ public class CompanyMaterialIssueService {
         String returnId = unit.execute(new CommandCall(
                 requestId, actor.operator(), "RETURN_COMPANY_MATERIAL", "COMPANY_MATERIAL_ISSUE", id,
                 id + "\n" + version + "\n" + counted.toPlainString() + "\n" + weightText(measured) + "\n" + unitText
-        ), session -> {
-            CompanyMaterialIssue current = issues.find(id).orElseThrow(() -> new BusinessException("领用单不存在"));
-            if (!current.unit().equals(unitText)) {
-                throw new BusinessException("退回单位必须与原领用一致");
-            }
-            CompanyMaterialIssue updated = issues.addReturned(id, counted, version, session);
-            stocks.take(current.itemId(), current.batchCode(), current.workshopCode(), counted, unitText, measured, session);
-            stocks.add(new CompanyMaterialBalance(
-                    current.itemId(), current.batchCode(), current.fromWarehouse(), counted, unitText, measured), session);
-            String code = "TH-" + token();
-            issues.insert(new CompanyMaterialReturn(code, updated.issueId(), counted, unitText, measured), session);
-            return code;
-        });
+        ), session -> returnWithin(session, id, version, counted, unitText, measured));
         return issues.findReturn(returnId).orElseThrow(() -> new BusinessException("退回单不存在"));
+    }
+
+    /** 在调用方的工作单元里按原领用退回。调用方必须已经核对退回权限。 */
+    public String returnWithin(WorkSession session, String issueId, int version, BigDecimal quantity, BigDecimal weight, String unitName) {
+        if (session == null) {
+            throw new BusinessException("退回必须处于工作单元");
+        }
+        BigDecimal counted = quantity(quantity);
+        StockMeasurement.Weight measured = weight(weight);
+        String unitText = required(unitName, "请填写单位", 16);
+        return returnWithin(session, text(issueId), version, counted, unitText, measured);
     }
 
     public OwnerType owner() {
         return OwnerType.COMPANY;
+    }
+
+    public int currentVersion(String issueId) {
+        return issues.find(text(issueId)).orElseThrow(() -> new BusinessException("领用单不存在")).version();
+    }
+
+    private String writeIssue(WorkSession session, FactoryItem item, String batch, String from, String workshop,
+                              BigDecimal counted, String unitText, StockMeasurement.Weight measured, String target) {
+        stocks.take(item.itemId(), batch, from, counted, unitText, measured, session);
+        stocks.add(new CompanyMaterialBalance(item.itemId(), batch, workshop, counted, unitText, measured), session);
+        String id = "LY-" + token();
+        issues.insert(new CompanyMaterialIssue(
+                id, item.itemId(), batch, from, workshop, counted, BigDecimal.ZERO, BigDecimal.ZERO, unitText, measured, target, 1), session);
+        return id;
+    }
+
+    private String returnWithin(WorkSession session, String issueId, int version, BigDecimal counted, String unitText,
+                                StockMeasurement.Weight measured) {
+        CompanyMaterialIssue current = issues.find(issueId).orElseThrow(() -> new BusinessException("领用单不存在"));
+        if (!current.unit().equals(unitText)) {
+            throw new BusinessException("退回单位必须与原领用一致");
+        }
+        CompanyMaterialIssue updated = issues.addReturned(issueId, counted, version, session);
+        stocks.take(current.itemId(), current.batchCode(), current.workshopCode(), counted, unitText, measured, session);
+        stocks.add(new CompanyMaterialBalance(
+                current.itemId(), current.batchCode(), current.fromWarehouse(), counted, unitText, measured), session);
+        String code = "TH-" + token();
+        issues.insert(new CompanyMaterialReturn(code, updated.issueId(), counted, unitText, measured), session);
+        return code;
     }
 
     private FactoryItem item(String itemId) {

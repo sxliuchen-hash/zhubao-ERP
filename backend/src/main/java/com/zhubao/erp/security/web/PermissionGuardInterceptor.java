@@ -102,7 +102,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
     private PermissionCode permissionFor(HttpServletRequest request) {
         String path = request.getRequestURI();
         if (path.equals("/api/sampling/orders")
-                || path.matches("^/api/sampling/orders/[^/]+/versions$")) {
+                || path.matches("^/api/sampling/orders/[^/]+/versions$")
+                || path.matches("^/api/sampling/orders/[^/]+/material-uses$")) {
             if (GET.equals(request.getMethod())) {
                 return PermissionCode.SAMPLING_VIEW;
             }
@@ -111,7 +112,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             }
         }
         if (POST.equals(request.getMethod())
-                && path.matches("^/api/sampling/orders/[^/]+/versions/(confirmations|rejections)$")) {
+                && (path.matches("^/api/sampling/orders/[^/]+/versions/(confirmations|rejections)$")
+                || path.matches("^/api/sampling/orders/[^/]+/material-uses/[^/]+/(returns|inputs)$"))) {
             return PermissionCode.SAMPLING_MAINTAIN;
         }
         if (GET.equals(request.getMethod()) && path.startsWith("/api/finance/")) {
