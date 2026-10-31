@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import SamplingVersionPane from './SamplingVersionPane.vue';
 import { fetchSamplingOrders, openSamplingOrder, type SamplingOrderView } from '../../services/samplingApi';
 
 const orders = ref<SamplingOrderView[]>([]);
@@ -89,5 +90,6 @@ async function submit() {
       <label>负责人 <input v-model="ownerName" aria-label="负责人" /></label>
       <button type="submit">建立打样单</button>
     </form>
+    <SamplingVersionPane />
   </section>
 </template>
