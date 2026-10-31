@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import GoldworkMaterialPane from './GoldworkMaterialPane.vue';
 import { fetchGoldworkOrders, openGoldworkOrder, type GoldworkOrderView } from '../../services/goldworkApi';
 
 const orders = ref<GoldworkOrderView[]>([]);
@@ -91,5 +92,6 @@ async function submit() {
       <label>负责人 <input v-model="ownerName" aria-label="负责人" /></label>
       <button type="submit">建立金工单</button>
     </form>
+    <GoldworkMaterialPane />
   </section>
 </template>
