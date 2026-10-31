@@ -81,7 +81,10 @@ class OutsourcingCompletionSourceTest {
         assertThat(completion.nodeId()).isEqualTo("POLISH_BEAD");
         assertThat(completion.bagId()).isEqualTo(returned.receivedBagId());
         assertThat(portions.find(returned.receivedBagId(), "POLISH_BEAD").orElseThrow().handled()).isEqualByComparingTo("150");
+        assertThat(portions.find(returned.receivedBagId(), "GROOVE").orElseThrow().arrived()).isEqualByComparingTo("150");
+        assertThat(portions.find(returned.receivedBagId(), "GROOVE").orElseThrow().handled()).isEqualByComparingTo("0");
         assertThat(portions.find(returned.remainderBagId(), "POLISH_BEAD")).isEmpty();
+        assertThat(portions.find(returned.remainderBagId(), "GROOVE")).isEmpty();
         assertThat(releases.find(returned.receivedBagId())).isEmpty();
         OutsourcingFeeBasis basis = fees.findByCompletion(completion.completionId()).orElseThrow();
         assertThat(basis.quantity()).isEqualByComparingTo("150");
@@ -100,6 +103,7 @@ class OutsourcingCompletionSourceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("未加工退回不能记成外协完工");
         assertThat(portions.find(raw.unprocessedBagId(), "POLISH_BEAD")).isEmpty();
+        assertThat(portions.find(raw.unprocessedBagId(), "GROOVE")).isEmpty();
         assertThat(completions.findByReturn(raw.returnId())).isEmpty();
         assertThat(fees.findByCompletion("missing")).isEmpty();
     }

@@ -117,6 +117,14 @@ public class OutsourcingCompletionService {
         });
         PortionRelease before = releases.find(bag.id()).orElse(new PortionRelease(bag.id(), BigDecimal.ZERO, BigDecimal.ZERO));
         portionWriter.save(new NodePortionBalance(bag.id(), step.id(), returned.receivedQty(), returned.receivedQty()), session);
+        int index = route.stepIds().indexOf(step.id());
+        if (index >= 0 && index + 1 < route.stepIds().size()) {
+            String nextStep = route.stepIds().get(index + 1);
+            NodePortionBalance next = portionReader.find(bag.id(), nextStep, session)
+                    .orElse(new NodePortionBalance(bag.id(), nextStep, BigDecimal.ZERO, BigDecimal.ZERO));
+            portionWriter.save(new NodePortionBalance(
+                    bag.id(), nextStep, next.arrived().add(returned.receivedQty()), next.handled()), session);
+        }
         String completionId = "OC" + UUID.randomUUID().toString().replace("-", "");
         OutsourcingCompletion completion = new OutsourcingCompletion(
                 completionId, requestId, returned.returnId(), task.taskId(), returned.dispatchId(),
