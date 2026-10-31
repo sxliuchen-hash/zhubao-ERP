@@ -513,6 +513,7 @@ const allMenuCodes = [
   'approvals',
   'label',
   'sample',
+  'sampling',
   'documents',
   'hardware',
   'configuration',

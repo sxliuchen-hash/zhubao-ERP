@@ -116,3 +116,5 @@
 116	TABLE	smp_sampling_material_use
 117	TABLE	smp_sampling_operation
 118	TABLE	smp_sampling_delivery
+119	TABLE	smp_sampling_fee
+120	ROW	sys_navigation_menu	code	sampling

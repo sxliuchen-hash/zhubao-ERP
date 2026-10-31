@@ -29,6 +29,10 @@ public class InMemoryNavigationMenuRepository implements NavigationMenuRepositor
                     PermissionCode.MASTER_DATA_MANAGE.name()
             )),
             menu("label", "标签", "打印 / 模板", "/label", List.of()),
+            menu("sampling", "打样", "独立样品", "/sampling", List.of(
+                    PermissionCode.SAMPLING_VIEW.name(),
+                    PermissionCode.SAMPLING_MAINTAIN.name()
+            )),
             menu("production", "生产工单", "排产 / 报工", "/production", List.of(
                     PermissionCode.BUSINESS_PRODUCTION_REPORT.name(),
                     PermissionCode.MACHINE_OUTPUT_SUBMIT.name()
@@ -82,7 +86,7 @@ public class InMemoryNavigationMenuRepository implements NavigationMenuRepositor
     private final Map<RoleCode, Set<String>> roleMenus = new EnumMap<>(RoleCode.class);
 
     public InMemoryNavigationMenuRepository() {
-        allow(RoleCode.ADMIN, "dashboard", "inbound", "customers", "label", "production", "progress", "quality", "inventory", "approvals", "finance",
+        allow(RoleCode.ADMIN, "dashboard", "inbound", "customers", "label", "production", "sampling", "progress", "quality", "inventory", "approvals", "finance",
                 "configuration", "users", "documents", "sample", "hardware", "operations", "mobile");
         allow(RoleCode.GENERAL_MANAGER, "dashboard", "inbound", "customers", "label", "production", "progress", "quality", "inventory", "approvals", "finance",
                 "configuration", "documents", "sample", "hardware", "operations", "mobile");

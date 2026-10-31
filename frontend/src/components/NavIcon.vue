@@ -50,6 +50,10 @@ defineProps<{
       <path d="M3.5 12.5V5.5h7l10 10-7 7z" />
       <circle class="is-fill" cx="8" cy="9" r="1.2" />
     </template>
+    <template v-else-if="name === 'sampling'">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3" />
+    </template>
     <template v-else-if="name === 'sample'">
       <path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />
       <path d="M14 3.5V8h4" />
