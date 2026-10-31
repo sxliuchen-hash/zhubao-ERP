@@ -99,6 +99,8 @@ zhubao:
     repository: ${ZHUBAO_SAMPLING_MATERIAL_REPOSITORY:jdbc}
   sampling-operation:
     repository: ${ZHUBAO_SAMPLING_OPERATION_REPOSITORY:jdbc}
+  sampling-delivery:
+    repository: ${ZHUBAO_SAMPLING_DELIVERY_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:

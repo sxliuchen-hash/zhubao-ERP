@@ -2668,6 +2668,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/sampling/orders/{samplingCode}/operations` | `ApiResponse<List<SamplingOperationView>>`。查询不写报工 |
 | `POST /api/sampling/orders/{samplingCode}/operations` | `ApiResponse<SamplingOperationView>`。动作 `REPORT_SAMPLING_OPERATION`。`stepId` 为打样节点。`makingChoices` 最多一项，`CARVE` 或 `SHAPE`，且只用于选料与加工。同一请求回放 |
 
+### SamplingDeliveryController
+
+来源：[SamplingDeliveryController](../backend/src/main/java/com/zhubao/erp/sampling/web/SamplingDeliveryController.java)。按已确认版本的已报工数量分次交付。交完已报份额也不结束打样单，完结资格尚未核定。不创建普通发货。样费状态为 `UNCONFIRMED`，不返回 0。可带本单领用编号，权属原样返回。权限为 `SAMPLING_MAINTAIN`。已有库需备份后追加 `V118__m3_sampling_delivery.sql`。MySQL 配置使用 `zhubao.sampling-delivery.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/sampling/orders/{samplingCode}/deliveries` | `ApiResponse<List<SamplingDeliveryView>>`。查询不写交付 |
+| `POST /api/sampling/orders/{samplingCode}/deliveries` | `ApiResponse<SamplingDeliveryView>`。动作 `DELIVER_SAMPLING`。数量不能超过该版本已报工份额。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

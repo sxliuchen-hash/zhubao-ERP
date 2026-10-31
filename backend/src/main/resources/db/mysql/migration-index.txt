@@ -115,3 +115,4 @@ V114__m3_sampling_order.sql
 V115__m3_sampling_version.sql
 V116__m3_sampling_material.sql
 V117__m3_sampling_operation.sql
+V118__m3_sampling_delivery.sql
