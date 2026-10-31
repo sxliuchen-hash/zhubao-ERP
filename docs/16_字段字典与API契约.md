@@ -2348,6 +2348,15 @@ PWA 一期边界：
 | `GET /api/finance/fixed-asset-acquisitions` | `ApiResponse<List<FixedAssetAcquisitionView>>`。可按 `assetCode` 过滤。查询不写卡片、应付或付款。金额未齐时原值和已付为空，不返回 0 |
 | `POST /api/finance/fixed-asset-acquisitions` | `ApiResponse<FixedAssetAcquisitionView>`。动作 `RECEIVE_FIXED_ASSET`。`source` 为 `PURCHASE`、`EXISTING_CARD` 或 `COVERED_PAYABLE`。新购置金额明确时同一次提交创建卡片和未付应付；付款必须同时有金额、日期和凭据。同一请求回放。工资、外协和物料应付不能当作资产原值 |
 
+### FixedAssetCustodyController
+
+来源：[FixedAssetCustodyController](../backend/src/main/java/com/zhubao/erp/finance/web/FixedAssetCustodyController.java)。追加前后位置、保管人和使用状态。不改原值，不记折旧或应付。权限为 `ASSET_CUSTODY`，不授予原有财务、库管或总经理岗位。已有库需备份后追加 `V110__m3_fixed_asset_custody.sql`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/finance/fixed-asset-custody-transfers?assetCode=` | `ApiResponse<List<FixedAssetCustodyView>>`。按版本列出交接。未登记的前后值标签为待补。查询不写交接 |
+| `POST /api/finance/fixed-asset-custody-transfers` | `ApiResponse<FixedAssetCustodyView>`。动作 `TRANSFER_FIXED_ASSET`。请求体为 `requestId`、`assetCode`、`expectedVersion`，以及要变更的 `location`、`custodian`、`useStatus`。空字段表示不改该项。过期版本拒绝。同一请求回放。使用状态只接受在用或闲置 |
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。
