@@ -14,6 +14,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -41,6 +43,25 @@ public class JdbcNodePortionRepository implements NodePortionReader, NodePortion
             return read(WorkSessionBindings.requiredJdbc(session), bagId, stepId, true);
         } catch (SQLException ex) {
             throw new IllegalStateException("无法锁定节点份额", ex);
+        }
+    }
+
+    @Override
+    public List<NodePortionBalance> list(String bagId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "select step_id, arrived, handled from biz_node_portion where bag_id=?")) {
+            statement.setString(1, bagId);
+            try (ResultSet rows = statement.executeQuery()) {
+                List<NodePortionBalance> result = new ArrayList<>();
+                while (rows.next()) {
+                    result.add(new NodePortionBalance(
+                            bagId, rows.getString("step_id"), rows.getBigDecimal("arrived"), rows.getBigDecimal("handled")));
+                }
+                return result;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取节点份额", ex);
         }
     }
 

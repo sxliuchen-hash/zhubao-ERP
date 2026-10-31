@@ -2,6 +2,7 @@ package com.zhubao.erp.business.domain;
 
 import com.zhubao.erp.work.domain.WorkSession;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -14,5 +15,9 @@ public interface NodePortionReader {
 
     default Optional<NodePortionBalance> find(String bagId, String stepId, WorkSession session) {
         return find(bagId, stepId);
+    }
+
+    default List<NodePortionBalance> list(String bagId) {
+        return List.of();
     }
 }

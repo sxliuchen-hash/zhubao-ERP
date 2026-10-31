@@ -1,10 +1,20 @@
 package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ActivityBag;
+import com.zhubao.erp.business.domain.BusinessKind;
+import com.zhubao.erp.business.domain.NodePortionBalance;
+import com.zhubao.erp.business.domain.ProcessAvailableQuantity;
+import com.zhubao.erp.business.domain.RouteSnapshot;
 import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
+import com.zhubao.erp.business.infra.InMemoryNodePortionReader;
+import com.zhubao.erp.business.infra.InMemoryRouteSnapshotRepository;
 import com.zhubao.erp.business.infra.JdbcActivityBagRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.domain.StockMeasurement;
+import com.zhubao.erp.security.app.PermissionGuard;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.ops.infra.MigrationCatalog;
 import com.zhubao.erp.work.app.JdbcBusinessWorkUnit;
 import com.zhubao.erp.work.app.MemoryBusinessWorkUnit;
@@ -53,6 +63,38 @@ class BagSplitServiceTest {
                 .isEqualByComparingTo("10");
         assertThatThrownBy(() -> service.split("split-002", "wh", parent.id(), List.of(new BigDecimal("10"))))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 父袋停在取胚时子袋不回到切料() {
+        InMemoryActivityBagRepository repository = new InMemoryActivityBagRepository();
+        InMemoryNodePortionReader portions = new InMemoryNodePortionReader();
+        InMemoryRouteSnapshotRepository routes = new InMemoryRouteSnapshotRepository();
+        ActivityBagService bagService = new ActivityBagService(repository);
+        ActivityBag parent = bagService.open(
+                "MD-20261030-0505", "牙骨", "REQ-1", "LINE-1", new BigDecimal("10"), StockMeasurement.unknown(), null);
+        routes.insert(new RouteSnapshot(
+                "RS-RF05", BusinessKind.PROCESSING, parent.targetCode(), 1, List.of("CUT", "BLANK"), true), null);
+        portions.save(new NodePortionBalance(parent.id(), "CUT", new BigDecimal("10"), new BigDecimal("10")), null);
+        portions.save(new NodePortionBalance(parent.id(), "BLANK", new BigDecimal("10"), BigDecimal.ZERO), null);
+        BagSplitService service = new BagSplitService(
+                repository, bagService, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()), portions, portions);
+        String split = service.split("rf05-split", "wh", parent.id(), List.of(new BigDecimal("4"), new BigDecimal("6")));
+        ProcessAvailabilityQuery query = new ProcessAvailabilityQuery(repository, routes, portions, new PermissionGuard());
+        OperatorContext operator = new OperatorContext("操作工", RoleCode.OPERATOR, DataScope.ALL);
+        BigDecimal blankArrived = BigDecimal.ZERO;
+        BigDecimal cutHandled = BigDecimal.ZERO;
+        for (String id : split.split(",")) {
+            ProcessAvailableQuantity view = query.lookup(id, operator);
+            assertThat(view.stepId()).isEqualTo("BLANK");
+            assertThat(view.availableQuantity()).isEqualByComparingTo(repository.find(id).orElseThrow().quantity());
+            blankArrived = blankArrived.add(portions.find(id, "BLANK").orElseThrow().arrived());
+            cutHandled = cutHandled.add(portions.find(id, "CUT").orElseThrow().handled());
+        }
+        assertThat(blankArrived).isEqualByComparingTo("10");
+        assertThat(cutHandled).isEqualByComparingTo("10");
+        assertThat(query.lookup(parent.id(), operator).availableQuantity()).isEqualByComparingTo("0");
+        assertThat(portions.list(parent.id())).hasSize(2);
     }
 
     @Test

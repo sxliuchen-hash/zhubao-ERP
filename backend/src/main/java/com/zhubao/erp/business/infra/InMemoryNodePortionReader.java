@@ -42,6 +42,11 @@ public class InMemoryNodePortionReader implements NodePortionReader, NodePortion
         }
     }
 
+    @Override
+    public java.util.List<NodePortionBalance> list(String bagId) {
+        return rows.values().stream().filter(row -> row.bagId().equals(bagId)).toList();
+    }
+
     public int size() {
         return rows.size();
     }

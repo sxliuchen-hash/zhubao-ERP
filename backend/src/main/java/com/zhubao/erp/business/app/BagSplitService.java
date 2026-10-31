@@ -2,14 +2,19 @@ package com.zhubao.erp.business.app;
 
 import com.zhubao.erp.business.domain.ActivityBag;
 import com.zhubao.erp.business.domain.ActivityBagRepository;
+import com.zhubao.erp.business.domain.NodePortionBalance;
+import com.zhubao.erp.business.domain.NodePortionReader;
+import com.zhubao.erp.business.domain.NodePortionWriter;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,11 +28,21 @@ public class BagSplitService {
     private final ActivityBagRepository repository;
     private final ActivityBagService bags;
     private final BusinessWorkUnit unit;
+    private final NodePortionReader portions;
+    private final NodePortionWriter portionWriter;
 
     public BagSplitService(ActivityBagRepository repository, ActivityBagService bags, BusinessWorkUnit unit) {
+        this(repository, bags, unit, null, null);
+    }
+
+    @Autowired
+    public BagSplitService(ActivityBagRepository repository, ActivityBagService bags, BusinessWorkUnit unit,
+                           NodePortionReader portions, NodePortionWriter portionWriter) {
         this.repository = repository;
         this.bags = bags;
         this.unit = unit;
+        this.portions = portions;
+        this.portionWriter = portionWriter;
     }
 
     public String split(String requestId, String actorId, String parentId, List<BigDecimal> quantities) {
@@ -63,6 +78,38 @@ public class BagSplitService {
             children.add(bags.openShare(parent, quantity, session).id());
         }
         bags.close(parent.id(), session);
+        copyPosition(parent, children, quantities, session);
         return children;
+    }
+
+    /**
+     * 子袋沿用父袋已经到达和已经处理的份额，按数量拆开。
+     * 不新开报工，也不把未开工的第一道数量再算一遍。
+     */
+    private void copyPosition(ActivityBag parent, List<String> childIds, List<BigDecimal> quantities, WorkSession session) {
+        if (portions == null || portionWriter == null || parent.quantity().signum() == 0) {
+            return;
+        }
+        for (NodePortionBalance row : portions.list(parent.id())) {
+            BigDecimal arrivedLeft = row.arrived();
+            BigDecimal handledLeft = row.handled();
+            for (int index = 0; index < childIds.size(); index++) {
+                boolean last = index == childIds.size() - 1;
+                BigDecimal arrived = last ? arrivedLeft : share(row.arrived(), quantities.get(index), parent.quantity());
+                BigDecimal handled = last ? handledLeft : share(row.handled(), quantities.get(index), parent.quantity());
+                if (handled.compareTo(arrived) > 0) {
+                    handled = arrived;
+                }
+                if (!last) {
+                    arrivedLeft = arrivedLeft.subtract(arrived);
+                    handledLeft = handledLeft.subtract(handled);
+                }
+                portionWriter.save(new NodePortionBalance(childIds.get(index), row.stepId(), arrived, handled), session);
+            }
+        }
+    }
+
+    private static BigDecimal share(BigDecimal amount, BigDecimal child, BigDecimal parent) {
+        return amount.multiply(child).divide(parent, 3, RoundingMode.DOWN);
     }
 }
