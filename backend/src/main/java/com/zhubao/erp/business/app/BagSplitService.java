@@ -3,7 +3,6 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.business.domain.ActivityBag;
 import com.zhubao.erp.business.domain.ActivityBagRepository;
 import com.zhubao.erp.common.error.BusinessException;
-import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
@@ -15,7 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 一次命令关闭父袋并建立子份额。打印失败后用原请求回放，不再分出新袋。
+ * 一次命令关闭父袋并建立子份额。子袋使用新的袋号，不在父号后追加序号。
+ * 打印失败后用原请求回放，不再分出新袋。
  */
 @Service
 public class BagSplitService {
@@ -60,12 +60,7 @@ public class BagSplitService {
         }
         List<String> children = new ArrayList<>();
         for (BigDecimal quantity : quantities) {
-            ActivityBag child = new ActivityBag(
-                    parent.id() + "-" + (children.size() + 1), parent.targetCode(), parent.materialCode(),
-                    parent.requirementVersion(), parent.sourceKey(), parent.id(), false, quantity,
-                    StockMeasurement.unknown(), 1);
-            repository.save(child, 0, session);
-            children.add(child.id());
+            children.add(bags.openShare(parent, quantity, session).id());
         }
         bags.close(parent.id(), session);
         return children;
