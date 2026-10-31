@@ -43,6 +43,34 @@ export function fetchFixedAssetCards(): Promise<FixedAssetCardView[]> {
   return apiGet('/api/finance/fixed-asset-cards');
 }
 
+export interface FixedAssetCustodyView {
+  transferId: string;
+  assetCode: string;
+  originalValue: number;
+  fromLocationLabel: string;
+  toLocationLabel: string;
+  fromCustodianLabel: string;
+  toCustodianLabel: string;
+  fromStatusLabel: string;
+  toStatusLabel: string;
+  version: number;
+}
+
+export function fetchAssetCustody(assetCode: string): Promise<FixedAssetCustodyView[]> {
+  return apiGet(`/api/finance/fixed-asset-custody-transfers?assetCode=${encodeURIComponent(assetCode)}`);
+}
+
+export function transferAssetCustody(body: {
+  requestId: string;
+  assetCode: string;
+  expectedVersion: number;
+  location: string;
+  custodian: string;
+  useStatus: string;
+}): Promise<FixedAssetCustodyView> {
+  return apiPost('/api/finance/fixed-asset-custody-transfers', body);
+}
+
 export function receiveFixedAsset(body: {
   requestId: string;
   source: string;
