@@ -22,8 +22,14 @@ import com.zhubao.erp.business.infra.JdbcOutsourcingDispatchRepository;
 import com.zhubao.erp.business.infra.JdbcOutsourcingReturnRepository;
 import com.zhubao.erp.business.infra.JdbcOutsourcingSourceRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.OwnerType;
+import com.zhubao.erp.inventory.domain.StockBalance;
+import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockMeasurement;
+import com.zhubao.erp.inventory.domain.StockStatus;
+import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.ops.infra.MigrationCatalog;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.app.JdbcBusinessWorkUnit;
@@ -217,6 +223,61 @@ class OutsourcingReturnTest {
             Thread.currentThread().interrupt();
             return ex;
         }
+    }
+
+    @Test
+    void 确认损耗只扣原库存数量且失败回滚() {
+        InMemoryStockLedgerRepository ledger = new InMemoryStockLedgerRepository();
+        StockLedgerService stock = new StockLedgerService(ledger);
+        Fixture fixture = memory();
+        StockDimension source = new StockDimension(
+                OwnerType.CUSTOMER, 10086L, 10086L, "MD-20261030-0311", "", "牙骨", "WH", StockStatus.WIP);
+        stock.transfer(new StockTransferCommand(
+                "inbound_confirm", "RF11-IN", null, source, new BigDecimal("200"), new BigDecimal("7.260"), "原收货"));
+        OutsourcingReturnService returns = new OutsourcingReturnService(
+                fixture.dispatchRows(), fixture.returnRows(), fixture.sources(), fixture.bags(),
+                new BagSplitService(fixture.bags(), new ActivityBagService(fixture.bags()), fixture.unit()),
+                fixture.unit(), stock);
+        Sent sent = send(fixture, "BAG-RF11", "MD-20261030-0311", new BigDecimal("200"));
+        OutsourcingReturn row = returns.receive(
+                "rf11-ret-01", "clerk-01", sent.dispatch().dispatchId(), 1,
+                new BigDecimal("150"), BigDecimal.ZERO, new BigDecimal("5"),
+                StockMeasurement.known(new BigDecimal("2.250")));
+        returns.receive(
+                "rf11-ret-01", "clerk-01", sent.dispatch().dispatchId(), 1,
+                new BigDecimal("150"), BigDecimal.ZERO, new BigDecimal("5"),
+                StockMeasurement.known(new BigDecimal("2.250")));
+        StockBalance after = ledger.findBalance(source);
+        assertThat(after.quantity()).isEqualByComparingTo("195");
+        assertThat(after.weight()).isEqualByComparingTo("7.260");
+        assertThat(ledger.findAllLedgers().stream().filter(entry -> "outsourcing_loss".equals(entry.documentType())))
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.quantity()).isEqualByComparingTo("5");
+                    assertThat(entry.weight()).isNull();
+                    assertThat(entry.from().ownerType()).isEqualTo(OwnerType.CUSTOMER);
+                });
+        assertThat(fixture.bags().find(row.receivedBagId()).orElseThrow().quantity()).isEqualByComparingTo("150");
+        assertThat(fixture.bags().find(row.remainderBagId()).orElseThrow().quantity()).isEqualByComparingTo("45");
+        assertThat(fixture.bags().find(row.lossBagId()).orElseThrow().closed()).isTrue();
+        assertThat(fixture.returns().balance(sent.dispatch().dispatchId()).stillOut()).isEqualByComparingTo("45");
+
+        MemoryBusinessWorkUnit failingUnit = new MemoryBusinessWorkUnit(
+                new InMemoryCommandRequestRepository(), () -> {
+            throw new IllegalStateException("失败");
+        });
+        OutsourcingReturnService failing = new OutsourcingReturnService(
+                fixture.dispatchRows(), fixture.returnRows(), fixture.sources(), fixture.bags(),
+                new BagSplitService(fixture.bags(), new ActivityBagService(fixture.bags()), failingUnit),
+                failingUnit, stock);
+        Sent other = send(fixture, "BAG-RF11B", "MD-20261030-0311", new BigDecimal("20"));
+        assertThatThrownBy(() -> failing.receive(
+                "rf11-fail01", "clerk-01", other.dispatch().dispatchId(), 1,
+                new BigDecimal("10"), BigDecimal.ZERO, new BigDecimal("5"), null))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(ledger.findBalance(source).quantity()).isEqualByComparingTo("195");
+        assertThat(ledger.findBalance(source).weight()).isEqualByComparingTo("7.260");
+        assertThat(fixture.returnRows().listByDispatch(other.dispatch().dispatchId())).isEmpty();
     }
 
     private static Fixture memory() {

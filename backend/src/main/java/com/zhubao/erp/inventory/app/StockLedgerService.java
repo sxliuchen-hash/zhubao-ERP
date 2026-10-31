@@ -86,6 +86,19 @@ public class StockLedgerService {
         return repository.appendProcessConsumption(entry, session);
     }
 
+    /**
+     * 外协已确认的实损只扣原库存数量。重量未知时余额重量保持不变。
+     */
+    public StockLedgerEntry postUnweighedLoss(String documentCode, StockDimension from, BigDecimal quantity, WorkSession session) {
+        if (session == null) {
+            throw new BusinessException("外协损耗必须处于业务工作单元");
+        }
+        StockLedgerEntry entry = new StockLedgerEntry(
+                nextCode(), Instant.now(), "outsourcing_loss", documentCode, from, null, quantity, null,
+                "外协确认损耗，重量未称", null);
+        return repository.appendUnweighedLoss(entry, session);
+    }
+
     public StockLedgerEntry reverseInbound(ReceiptEntryReversal reversal, WorkSession session) {
         if (session == null) {
             throw new BusinessException("收货冲正必须处于业务工作单元");

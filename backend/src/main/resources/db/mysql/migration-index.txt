@@ -129,3 +129,4 @@ V128__m3_goldwork_quality.sql
 V129__m3_goldwork_delivery.sql
 V130__m3_goldwork_menu.sql
 V131__m3_source_allocation_guard.sql
+V132__m3_outsourcing_loss_weight.sql

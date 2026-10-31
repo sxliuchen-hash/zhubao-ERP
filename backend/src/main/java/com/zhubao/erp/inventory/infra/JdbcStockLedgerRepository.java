@@ -88,6 +88,26 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
     }
 
     @Override
+    public StockLedgerEntry appendUnweighedLoss(StockLedgerEntry entry, WorkSession session) {
+        if (session == null || session.connection().isEmpty()) {
+            throw new IllegalStateException("外协损耗必须使用工作单元连接");
+        }
+        if (entry.weight() != null || entry.to() != null || entry.from() == null
+                || !"outsourcing_loss".equals(entry.documentType())
+                || entry.quantity() == null || entry.quantity().signum() <= 0) {
+            throw new IllegalArgumentException("外协损耗只扣数量，未知重量不能按 0 入账");
+        }
+        Connection connection = session.connection().get();
+        try {
+            insertLedger(connection, entry);
+            debitQuantity(connection, entry);
+            return entry;
+        } catch (SQLException ex) {
+            throw new IllegalStateException("外协损耗写入失败", ex);
+        }
+    }
+
+    @Override
     public StockLedgerEntry save(StockLedgerEntry entry, WorkSession session) {
         StockTransferRules.verify(entry);
         if (session == null || session.connection().isEmpty()) {
@@ -402,7 +422,11 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
             statement.setString(11, entry.to() == null || entry.from() == null ? null : entry.from().workOrderCode());
             statement.setString(12, anchor.materialCode());
             statement.setBigDecimal(13, entry.quantity());
-            statement.setBigDecimal(14, entry.weight());
+            if (entry.weight() == null) {
+                statement.setNull(14, java.sql.Types.DECIMAL);
+            } else {
+                statement.setBigDecimal(14, entry.weight());
+            }
             statement.setString(15, entry.from() == null ? null : entry.from().warehouseCode());
             statement.setString(16, entry.to() == null ? null : entry.to().warehouseCode());
             statement.setString(17, entry.from() == null ? null : entry.from().stockStatus().name());
@@ -434,6 +458,24 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
                 // 条件扣减已经作出足额判定，此处重读只用于提供具体失败原因。
                 StockTransferRules.requireSufficient(readBalance(connection, entry.from()), entry);
                 throw new BusinessException("来源库存不足，请刷新后重试");
+            }
+        }
+    }
+
+    private void debitQuantity(Connection connection, StockLedgerEntry entry) throws SQLException {
+        String sql = """
+                update inv_stock_balance
+                   set available_quantity = available_quantity - ?, last_ledger_code = ?
+                 where dimension_key = ?
+                   and available_quantity >= ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBigDecimal(1, entry.quantity());
+            statement.setString(2, entry.code());
+            statement.setString(3, dimensionKey(entry.from()));
+            statement.setBigDecimal(4, entry.quantity());
+            if (statement.executeUpdate() == 0) {
+                throw new BusinessException("来源库存数量不足");
             }
         }
     }

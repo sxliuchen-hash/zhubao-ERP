@@ -34,6 +34,13 @@ public interface StockLedgerRepository {
         throw new UnsupportedOperationException("当前仓储未实现加工损耗");
     }
 
+    /**
+     * 外协确认损耗只扣数量。重量未知时不减余额重量，也不把未知写成 0。
+     */
+    default StockLedgerEntry appendUnweighedLoss(StockLedgerEntry entry, WorkSession session) {
+        throw new UnsupportedOperationException("当前仓储未实现未称重损耗");
+    }
+
     List<StockLedgerEntry> findAllLedgers();
 
     /**

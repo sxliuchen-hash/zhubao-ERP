@@ -10,11 +10,15 @@ import com.zhubao.erp.business.domain.OutsourcingReturnRepository;
 import com.zhubao.erp.business.domain.OutsourcingSourceRepository;
 import com.zhubao.erp.business.domain.OutsourcingTask;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.app.StockLedgerService;
+import com.zhubao.erp.inventory.domain.StockBalance;
+import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -36,16 +40,25 @@ public class OutsourcingReturnService {
     private final ActivityBagRepository bags;
     private final BagSplitService splits;
     private final BusinessWorkUnit workUnit;
+    private final StockLedgerService stock;
 
     public OutsourcingReturnService(OutsourcingDispatchRepository dispatches, OutsourcingReturnRepository returns,
                                     OutsourcingSourceRepository sources, ActivityBagRepository bags,
                                     BagSplitService splits, BusinessWorkUnit workUnit) {
+        this(dispatches, returns, sources, bags, splits, workUnit, null);
+    }
+
+    @Autowired
+    public OutsourcingReturnService(OutsourcingDispatchRepository dispatches, OutsourcingReturnRepository returns,
+                                    OutsourcingSourceRepository sources, ActivityBagRepository bags,
+                                    BagSplitService splits, BusinessWorkUnit workUnit, StockLedgerService stock) {
         this.dispatches = dispatches;
         this.returns = returns;
         this.sources = sources;
         this.bags = bags;
         this.splits = splits;
         this.workUnit = workUnit;
+        this.stock = stock;
     }
 
     public OutsourcingReturn receive(String requestId, String actorId, String dispatchId, int dispatchVersion,
@@ -129,7 +142,48 @@ public class OutsourcingReturnService {
                 received, unprocessed, loss, weight,
                 placement.receivedBagId(), placement.unprocessedBagId(), placement.lossBagId(), placement.remainderBagId());
         returns.save(row, session);
+        postConfirmedLoss(task, outBag, loss, returnId, session);
         return returnId;
+    }
+
+    /**
+     * 实损从原权属库存扣数量。收回和仍在外的份额留在总账里。
+     * 这次收回的实称重量不属于损耗，未知损耗重量不写成 0。
+     */
+    private void postConfirmedLoss(OutsourcingTask task, ActivityBag bag, BigDecimal loss, String returnId, WorkSession session) {
+        if (stock == null || loss.signum() == 0) {
+            return;
+        }
+        StockDimension source = soleSource(task, bag);
+        stock.postUnweighedLoss(returnId, source, loss, session);
+    }
+
+    private StockDimension soleSource(OutsourcingTask task, ActivityBag bag) {
+        Long ownerId = ownerId(task.ownerRef());
+        List<StockBalance> matches = stock.balances().stream()
+                .filter(balance -> balance.quantity().signum() > 0)
+                .filter(balance -> bag.materialCode().equals(balance.dimension().materialCode()))
+                .filter(balance -> balance.dimension().ownerType() == task.ownerType())
+                .filter(balance -> sameTarget(balance.dimension(), bag.targetCode()))
+                .filter(balance -> ownerId == null
+                        || ownerId.equals(balance.dimension().customerId())
+                        || ownerId.equals(balance.dimension().ownerCustomerId()))
+                .toList();
+        if (matches.size() != 1) {
+            throw new BusinessException("无法确认损耗的原库存");
+        }
+        return matches.get(0).dimension();
+    }
+
+    private static boolean sameTarget(StockDimension dimension, String targetCode) {
+        return targetCode.equals(dimension.motherOrderCode()) || targetCode.equals(dimension.workOrderCode());
+    }
+
+    private static Long ownerId(String ownerRef) {
+        if (ownerRef == null || !ownerRef.trim().matches("\\d+")) {
+            return null;
+        }
+        return Long.valueOf(ownerRef.trim());
     }
 
     private Placement place(ActivityBag bag, BigDecimal received, BigDecimal unprocessed, BigDecimal loss,
