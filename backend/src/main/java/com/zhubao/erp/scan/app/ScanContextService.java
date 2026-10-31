@@ -1,6 +1,10 @@
 package com.zhubao.erp.scan.app;
 
 import com.zhubao.erp.business.app.BusinessDataAccess;
+import com.zhubao.erp.business.domain.ActivityBag;
+import com.zhubao.erp.business.domain.ActivityBagRepository;
+import com.zhubao.erp.business.domain.BusinessTargetReference;
+import com.zhubao.erp.business.domain.BusinessTargetRole;
 import com.zhubao.erp.business.app.BusinessDocumentService;
 import com.zhubao.erp.business.app.ProcessStationService;
 import com.zhubao.erp.business.app.QualityRequirementService;
@@ -105,6 +109,7 @@ public class ScanContextService {
     private final PermissionGuard permissions;
     private final ScanCodeParser parser;
     private final OperationProgressRepository progressRecords;
+    private final ActivityBagRepository bags;
 
     public ScanContextService(
             BusinessDocumentService documents,
@@ -115,7 +120,20 @@ public class ScanContextService {
             PermissionGuard permissions,
             ScanCodeParser parser
     ) {
-        this(documents, stocks, dataAccess, stations, quality, permissions, parser, null);
+        this(documents, stocks, dataAccess, stations, quality, permissions, parser, null, null);
+    }
+
+    public ScanContextService(
+            BusinessDocumentService documents,
+            StockLedgerService stocks,
+            BusinessDataAccess dataAccess,
+            ProcessStationService stations,
+            QualityRequirementService quality,
+            PermissionGuard permissions,
+            ScanCodeParser parser,
+            OperationProgressRepository progressRecords
+    ) {
+        this(documents, stocks, dataAccess, stations, quality, permissions, parser, progressRecords, null);
     }
 
     @Autowired
@@ -127,7 +145,8 @@ public class ScanContextService {
             QualityRequirementService quality,
             PermissionGuard permissions,
             ScanCodeParser parser,
-            OperationProgressRepository progressRecords
+            OperationProgressRepository progressRecords,
+            ActivityBagRepository bags
     ) {
         this.documents = documents;
         this.stocks = stocks;
@@ -137,6 +156,7 @@ public class ScanContextService {
         this.permissions = permissions;
         this.parser = parser;
         this.progressRecords = progressRecords;
+        this.bags = bags;
     }
 
     public ScanContextResponse query(ScanContextRequest request, AuthUserAccount account) {
@@ -152,10 +172,15 @@ public class ScanContextService {
         if (resolution.options() != null) {
             return selection(resolution.options());
         }
-        return assemble(resolution.hit(), account, intent);
+        ScanContextResponse response = assemble(resolution.hit(), account, intent);
+        return resolution.bagId() == null ? response : withBag(response, resolution.bagId());
     }
 
     private Resolution resolve(String content, ScanObjectType objectType, ScanIntent intent, OperatorContext operator) {
+        Resolution bag = resolveBag(content, intent, operator);
+        if (bag != null) {
+            return bag;
+        }
         if (content.startsWith("JG|")) {
             var parsed = parser.resolve(content, intent.name());
             if (objectType != null && objectType != parsed.objectType()) {
@@ -1020,13 +1045,58 @@ public class ScanContextService {
     ) {
     }
 
-    private record Resolution(Hit hit, List<ScanRelatedTarget> options) {
+    private Resolution resolveBag(String content, ScanIntent intent, OperatorContext operator) {
+        if (bags == null) {
+            return null;
+        }
+        BagCodeReader.Decision decision = BagCodeReader.read(bags, content);
+        if (decision == null) {
+            return null;
+        }
+        if (decision.directBagId() != null) {
+            ActivityBag bag = bags.find(decision.directBagId()).orElse(null);
+            if (bag == null) {
+                return null;
+            }
+            BusinessTargetReference reference = BusinessTargetReference.parse(bag.targetCode());
+            ScanObjectType type = reference.role() == BusinessTargetRole.WORK_ORDER
+                    ? ScanObjectType.WORK_ORDER : ScanObjectType.MOTHER_ORDER;
+            return Resolution.found(loadExplicit(type, bag.targetCode(), intent, operator), bag.id());
+        }
+        List<ScanRelatedTarget> options = new ArrayList<>();
+        for (String id : decision.choices()) {
+            ActivityBag bag = bags.find(id).orElse(null);
+            if (bag == null || !bag.activeLeaf()) {
+                continue;
+            }
+            options.add(new ScanRelatedTarget(
+                    ScanObjectType.WORK_ORDER, bag.id(), bag.targetCode(),
+                    decision.closedParent() ? "父袋已关闭" : null, bag.quantity(), null));
+        }
+        return options.isEmpty() ? null : Resolution.choose(options);
+    }
+
+    private ScanContextResponse withBag(ScanContextResponse response, String bagId) {
+        ScanContextTarget current = response.target();
+        ScanContextTarget target = new ScanContextTarget(
+                current.objectType(), current.code(), current.motherOrderCode(), current.workOrderCode(),
+                current.reworkOrderCode(), current.outboundOrderCode(), current.reference() + "|bag:" + bagId);
+        return new ScanContextResponse(
+                target, response.order(), response.requirements(), response.progress(), response.relatedTargets(),
+                response.requiresSelection(), response.actions(), response.operationContext());
+    }
+
+    private record Resolution(Hit hit, List<ScanRelatedTarget> options, String bagId) {
         private static Resolution found(Hit hit) {
-            return new Resolution(hit, null);
+            return new Resolution(hit, null, null);
+        }
+
+        private static Resolution found(Hit hit, String bagId) {
+            return new Resolution(hit, null, bagId);
         }
 
         private static Resolution choose(List<ScanRelatedTarget> options) {
-            return new Resolution(null, options);
+            return new Resolution(null, options, null);
         }
     }
 }

@@ -29,6 +29,9 @@ public final class BagCodeReader {
         if (leaves.isEmpty()) {
             return null;
         }
+        if (scanned != null && scanned.activeLeaf()) {
+            return new Decision(scanned.id(), List.of(), false);
+        }
         if (scanned != null && scanned.closed()) {
             return new Decision(null, leaves, true);
         }

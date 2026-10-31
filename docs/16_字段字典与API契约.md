@@ -2563,7 +2563,7 @@ V61 新增工位、队列、批次和目标任务表；原任务的 `PENDING`／
 | `objectType` | 可选。`MOTHER_ORDER`、`WORK_ORDER`、`OUTBOUND_ORDER`、`REWORK`、`EXPRESS_NO`。与 `JG\|` 贴纸类型冲突时拒绝 |
 | `intent` | 可选。`LOOKUP`、`INTAKE`、`PRODUCTION`、`QUALITY`、`SHIPPING`。省略视为 `LOOKUP`。不能代替岗位权限 |
 
-响应分组为 `target`、`order`、`requirements`、`progress`、`relatedTargets`、`requiresSelection`、`actions`、`operationContext`。未知数量、重量和客户用空值，不补 0。母单要求与子单快照分字段保留，来源分别为 `MOTHER_ORDER`、`WORK_ORDER`。岗位要求来源为 `PROCESS`。`progress.progressRecords` 返回该单据已保存的过程说明；没有记录时为 `[]`，不编造。`progress.reinspection.available` 只在已有合格或让步的复检轮次时为 `true`，原因仍说明原不合格记录保留。没有这种复检结论时为 `false`，不能把原不合格当成已经放行。
+响应分组为 `target`、`order`、`requirements`、`progress`、`relatedTargets`、`requiresSelection`、`actions`、`operationContext`。扫到具体活动袋时直接定位该袋，`target.reference` 在原单据引用后追加 `|bag:` 和袋号，单据号仍是母单或子单。同一目标有多袋，或扫到已关闭父袋时，`requiresSelection` 为真，选项是活动子袋，不把父袋当成可办理袋。未知数量、重量和客户用空值，不补 0。母单要求与子单快照分字段保留，来源分别为 `MOTHER_ORDER`、`WORK_ORDER`。岗位要求来源为 `PROCESS`。`progress.progressRecords` 返回该单据已保存的过程说明；没有记录时为 `[]`，不编造。`progress.reinspection.available` 只在已有合格或让步的复检轮次时为 `true`，原因仍说明原不合格记录保留。没有这种复检结论时为 `false`，不能把原不合格当成已经放行。
 
 `progress.progressRecords[]` 字段：
 

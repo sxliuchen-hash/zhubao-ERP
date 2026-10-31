@@ -1,11 +1,13 @@
 package com.zhubao.erp.scan.app;
 
+import com.zhubao.erp.business.app.ActivityBagService;
 import com.zhubao.erp.business.app.BusinessDataAccess;
 import com.zhubao.erp.business.app.BusinessDocumentService;
 import com.zhubao.erp.business.app.BusinessOperationService;
 import com.zhubao.erp.business.app.MotherOrderSplitService;
 import com.zhubao.erp.business.app.ProcessStationService;
 import com.zhubao.erp.business.app.QualityRequirementService;
+import com.zhubao.erp.business.domain.ActivityBag;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.business.domain.ConfirmInboundCommand;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
@@ -14,8 +16,10 @@ import com.zhubao.erp.business.domain.QualityCheckLineCommand;
 import com.zhubao.erp.business.domain.QualityVerdicts;
 import com.zhubao.erp.business.domain.SplitMotherOrderCommand;
 import com.zhubao.erp.business.domain.SplitMotherOrderLine;
+import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockBalance;
 import com.zhubao.erp.inventory.domain.StockDimension;
@@ -23,6 +27,7 @@ import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
 import com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository;
 import com.zhubao.erp.scan.domain.ScanContextAction;
+import com.zhubao.erp.scan.domain.ScanRelatedTarget;
 import com.zhubao.erp.scan.domain.ScanContextRequest;
 import com.zhubao.erp.scan.domain.ScanContextResponse;
 import com.zhubao.erp.scan.domain.ScanIntent;
@@ -386,6 +391,40 @@ class ScanContextServiceTest {
         stations.report(sticker, "镶嵌", worker("镶嵌"), "fixture-" + java.util.UUID.randomUUID());
         stations.report(sticker, "抛光", worker("抛光"), "fixture-" + java.util.UUID.randomUUID());
         return childCode;
+    }
+
+    @Test
+    void 扫活动袋直达本袋扫目标码则选择() {
+        String child = splitChild("MD-20261030-0006", "袋要求");
+        InMemoryActivityBagRepository bagRepository = new InMemoryActivityBagRepository();
+        ActivityBagService bagService = new ActivityBagService(bagRepository);
+        ActivityBag parent = bagService.open(
+                child, "牙骨", "REQ-1", "LINE-1", new BigDecimal("10"), StockMeasurement.unknown(), null);
+        bagRepository.save(new ActivityBag(
+                "BAG-A", child, "牙骨", "REQ-1", "LINE-1", parent.id(), false,
+                new BigDecimal("4"), StockMeasurement.unknown(), 1), 0, null);
+        bagRepository.save(new ActivityBag(
+                "BAG-B", child, "牙骨", "REQ-1", "LINE-1", parent.id(), false,
+                new BigDecimal("6"), StockMeasurement.unknown(), 1), 0, null);
+        bagService.close(parent.id(), null);
+        ScanContextService scanning = new ScanContextService(
+                new BusinessDocumentService(repository), stocks, new BusinessDataAccess(repository, stocks),
+                stations, quality, new PermissionGuard(), new ScanCodeParser(), null, bagRepository);
+
+        ScanContextResponse direct = scanning.query(new ScanContextRequest("BAG-A", null, ScanIntent.LOOKUP), admin());
+        assertThat(direct.requiresSelection()).isFalse();
+        assertThat(direct.target().code()).isEqualTo(child);
+        assertThat(direct.target().reference()).isEqualTo("WORK_ORDER:" + child + "|bag:BAG-A");
+
+        ScanContextResponse choices = scanning.query(
+                new ScanContextRequest("JG|work_order|" + child, null, ScanIntent.LOOKUP), admin());
+        assertThat(choices.requiresSelection()).isTrue();
+        assertThat(choices.relatedTargets()).extracting(ScanRelatedTarget::code).containsExactly("BAG-A", "BAG-B");
+
+        ScanContextResponse closed = scanning.query(new ScanContextRequest(parent.id(), null, ScanIntent.LOOKUP), admin());
+        assertThat(closed.requiresSelection()).isTrue();
+        assertThat(closed.target().code()).isNull();
+        assertThat(closed.relatedTargets()).extracting(ScanRelatedTarget::code).containsExactly("BAG-A", "BAG-B");
     }
 
     private String splitChild(String motherCode, String requirement) {

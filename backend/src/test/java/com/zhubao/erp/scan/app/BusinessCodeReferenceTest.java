@@ -34,6 +34,13 @@ class BusinessCodeReferenceTest {
         assertThat(choice.closedParent()).isTrue();
         assertThat(choice.directBagId()).isNull();
         assertThat(choice.choices()).containsExactly("BAG-A", "BAG-B");
+        BagCodeReader.Decision active = BagCodeReader.read(repository, "BAG-A");
+        assertThat(active.directBagId()).isEqualTo("BAG-A");
+        assertThat(active.choices()).isEmpty();
+        assertThat(active.closedParent()).isFalse();
+        BagCodeReader.Decision target = BagCodeReader.read(repository, parent.targetCode());
+        assertThat(target.directBagId()).isNull();
+        assertThat(target.choices()).containsExactly("BAG-A", "BAG-B");
         assertThat(BagCodeReader.reference("DY-20261030-0001").kind()).isEqualTo(BusinessKind.SAMPLING);
         assertThat(BagCodeReader.reference("GJ-20261030-0001").kind()).isEqualTo(BusinessKind.GOLDWORK);
         assertThat(BagCodeReader.reference("MD-20261030-0001").processingMother()).isTrue();
