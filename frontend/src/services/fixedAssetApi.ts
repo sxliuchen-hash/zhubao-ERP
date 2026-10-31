@@ -87,6 +87,20 @@ export function payAssetRepair(body: {
   return apiPost('/api/finance/fixed-asset-repairs/payments', body);
 }
 
+export interface FixedAssetDepreciationRun {
+  yearMonth: string;
+  algorithm: string;
+  entries: Array<{ code: string; assetCode: string; yearMonth: string; amount: number }>;
+}
+
+export function continueAssetDepreciation(body: {
+  requestId: string;
+  yearMonth: string;
+  stopEffectiveMonth: string | null;
+}): Promise<FixedAssetDepreciationRun> {
+  return apiPost('/api/finance/depreciation-continuations', body);
+}
+
 export function fetchFixedAssetCards(): Promise<FixedAssetCardView[]> {
   return apiGet('/api/finance/fixed-asset-cards');
 }
