@@ -106,7 +106,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
                 || path.matches("^/api/sampling/orders/[^/]+/material-uses$")
                 || path.matches("^/api/sampling/orders/[^/]+/operations$")
                 || path.matches("^/api/sampling/orders/[^/]+/deliveries$")
-                || path.matches("^/api/sampling/orders/[^/]+/deliveries/[^/]+/fee$")) {
+                || path.matches("^/api/sampling/orders/[^/]+/deliveries/[^/]+/fee$")
+                || path.equals("/api/sampling/production-links")) {
             if (GET.equals(request.getMethod())) {
                 return PermissionCode.SAMPLING_VIEW;
             }
@@ -116,7 +117,8 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
         }
         if (POST.equals(request.getMethod())
                 && (path.matches("^/api/sampling/orders/[^/]+/versions/(confirmations|rejections)$")
-                || path.matches("^/api/sampling/orders/[^/]+/material-uses/[^/]+/(returns|inputs)$"))) {
+                || path.matches("^/api/sampling/orders/[^/]+/material-uses/[^/]+/(returns|inputs)$")
+                || path.equals("/api/sampling/production-links/revocations"))) {
             return PermissionCode.SAMPLING_MAINTAIN;
         }
         if (GET.equals(request.getMethod()) && path.startsWith("/api/finance/")) {

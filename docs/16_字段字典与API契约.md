@@ -2686,6 +2686,16 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/sampling/orders/{samplingCode}/deliveries/{deliveryId}/fee` | `ApiResponse<SamplingFeeView>`。尚未确认时拒绝，不返回 0 |
 | `POST /api/sampling/orders/{samplingCode}/deliveries/{deliveryId}/fee` | `ApiResponse<SamplingFeeView>`。动作 `SETTLE_SAMPLING_FEE`。`waive` 为真时不传金额。`settleWages` 为真时拒绝。同一请求回放，不能改口 |
 
+### SamplingProductionLinkController
+
+来源：[SamplingProductionLinkController](../backend/src/main/java/com/zhubao/erp/sampling/web/SamplingProductionLinkController.java)。按明确操作把已确认样品版本抄进引用快照。不改母单加工要求原文，不建母单，不领料，不收费。样品后来新增版本不改已有快照。取消关联不删除样品。没有关联时返回 `linked=false`，不阻止原母单登记和打印。查询为 `SAMPLING_VIEW`，关联和取消为 `SAMPLING_MAINTAIN`。已有库需备份后追加 `V121__m3_sampling_production_link.sql`。MySQL 配置使用 `zhubao.sampling-production-link.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/sampling/production-links?motherCode=` | `ApiResponse<SamplingProductionLinkView>`。没有关联时 `linked` 为 false |
+| `POST /api/sampling/production-links` | `ApiResponse<SamplingProductionLinkView>`。动作 `LINK_SAMPLING_PRODUCTION`。母单必须已存在，版本必须已确认。同一请求回放 |
+| `POST /api/sampling/production-links/revocations` | `ApiResponse<SamplingProductionLinkView>`。动作 `UNLINK_SAMPLING_PRODUCTION`。只删除引用 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

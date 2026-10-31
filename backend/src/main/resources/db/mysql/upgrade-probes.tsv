@@ -118,3 +118,4 @@
 118	TABLE	smp_sampling_delivery
 119	TABLE	smp_sampling_fee
 120	ROW	sys_navigation_menu	code	sampling
+121	TABLE	smp_sampling_production_link
