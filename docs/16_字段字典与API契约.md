@@ -2751,6 +2751,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/goldwork/orders/{goldworkCode}/operations` | `ApiResponse<List<GoldworkOperationView>>`。查询不写库存或工资 |
 | `POST /api/goldwork/orders/{goldworkCode}/operations` | `ApiResponse<GoldworkOperationView>`。动作 `REPORT_GOLDWORK_OPERATION`。`settleWage`、`postStock`、`closeWip` 为真时拒绝。同一请求回放 |
 
+### GoldworkQualityController
+
+来源：[GoldworkQualityController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkQualityController.java)。对一条金工报工记录本次检查份额，结论为放行、返工或待核。不使用珠料质检默认。返工必须指向同一报工的原轮次，并另记下一轮，不改原结论，也不改报工成色和收费。未填份额不能提交。查询为 `GOLDWORK_VIEW`，判定为 `GOLDWORK_MAINTAIN`。已有库需备份后追加 `V128__m3_goldwork_quality.sql`。MySQL 配置使用 `zhubao.goldwork-quality.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders/{goldworkCode}/qualities` | `ApiResponse<List<GoldworkQualityView>>`。查询不改成色或收费 |
+| `POST /api/goldwork/orders/{goldworkCode}/qualities` | `ApiResponse<GoldworkQualityView>`。动作 `DECIDE_GOLDWORK_QUALITY`。`useBeadDefault`、`changePurity`、`changeFee` 为真，或提交了不同成色时拒绝。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。
