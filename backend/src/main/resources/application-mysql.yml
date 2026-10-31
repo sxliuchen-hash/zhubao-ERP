@@ -119,6 +119,8 @@ zhubao:
     repository: ${ZHUBAO_GOLDWORK_OPERATION_REPOSITORY:jdbc}
   goldwork-quality:
     repository: ${ZHUBAO_GOLDWORK_QUALITY_REPOSITORY:jdbc}
+  goldwork-delivery:
+    repository: ${ZHUBAO_GOLDWORK_DELIVERY_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:

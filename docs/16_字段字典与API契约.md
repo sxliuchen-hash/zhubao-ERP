@@ -2760,6 +2760,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/goldwork/orders/{goldworkCode}/qualities` | `ApiResponse<List<GoldworkQualityView>>`。查询不改成色或收费 |
 | `POST /api/goldwork/orders/{goldworkCode}/qualities` | `ApiResponse<GoldworkQualityView>`。动作 `DECIDE_GOLDWORK_QUALITY`。`useBeadDefault`、`changePurity`、`changeFee` 为真，或提交了不同成色时拒绝。同一请求回放 |
 
+### GoldworkDeliveryController
+
+来源：[GoldworkDeliveryController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkDeliveryController.java)。只交付结论为放行、且没有后续轮次的份额。费用状态固定为未确认。不能提交金价或金额，不能写成普通发货，也不能把客户来料记成销售收入。同一放行份额不能重复交付。不结束金工单。查询为 `GOLDWORK_VIEW`，交付为 `GOLDWORK_MAINTAIN`。已有库需备份后追加 `V129__m3_goldwork_delivery.sql`。MySQL 配置使用 `zhubao.goldwork-delivery.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders/{goldworkCode}/deliveries` | `ApiResponse<List<GoldworkDeliveryView>>`。查询不写应收 |
+| `POST /api/goldwork/orders/{goldworkCode}/deliveries` | `ApiResponse<GoldworkDeliveryView>`。动作 `DELIVER_GOLDWORK`。`goldPrice`、`amount` 有值，或 `shipAsProcessing`、`countCustomerGoldAsSales` 为真时拒绝。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。

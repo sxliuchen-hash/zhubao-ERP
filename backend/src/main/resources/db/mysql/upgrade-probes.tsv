@@ -126,3 +126,4 @@
 126	TABLE	gld_goldwork_supplement
 127	TABLE	gld_goldwork_operation
 128	TABLE	gld_goldwork_quality
+129	TABLE	gld_goldwork_delivery
