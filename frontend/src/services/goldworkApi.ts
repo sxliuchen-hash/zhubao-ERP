@@ -89,6 +89,86 @@ export function recordGoldworkMovement(goldworkCode: string, body: {
   return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/movements`, body);
 }
 
+export interface GoldworkRecoveryView {
+  recoveryId: string;
+  goldworkCode: string;
+  sourceLineId: string;
+  outputMovementId: string;
+  kind: string;
+  owner: string;
+  netWeight: number | null;
+  precisionState: string;
+  postedToLedger: boolean;
+  feeOffset: boolean;
+}
+
+export function recordGoldworkRecovery(goldworkCode: string, body: {
+  requestId: string;
+  sourceLineId: string;
+  outputMovementId: string;
+  kind: string;
+  pieceCount: number | null;
+  netWeight: number | null;
+  grossWeight: number | null;
+  weightUnit: string;
+  purity: string;
+  clearAsLoss: boolean;
+  addToFinished: boolean;
+  feeOffset: number | null;
+  autoReturn: boolean;
+  inferWeight: boolean;
+}): Promise<GoldworkRecoveryView> {
+  return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/recoveries`, body);
+}
+
+export interface GoldworkSupplementView {
+  supplementId: string;
+  goldworkCode: string;
+  originalLineId: string;
+  priorSupplementId: string;
+  direction: string;
+  owner: string;
+  sourceId: string;
+  netWeight: number | null;
+  postedToLedger: boolean;
+  feePosted: boolean;
+}
+
+export function issueGoldworkSupplement(goldworkCode: string, body: {
+  requestId: string;
+  originalLineId: string;
+  sourceId: string;
+  sourceLineNo: number | null;
+  purpose: string;
+  pieceCount: number | null;
+  netWeight: number | null;
+  grossWeight: number | null;
+  weightUnit: string;
+  purity: string;
+  addOntoOriginal: boolean;
+  changeOwner: boolean;
+  feeAmount: number | null;
+}): Promise<GoldworkSupplementView> {
+  return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/supplements`, body);
+}
+
+export function returnGoldworkSupplement(goldworkCode: string, body: {
+  requestId: string;
+  originalLineId: string;
+  priorSupplementId: string;
+  purpose: string;
+  pieceCount: number | null;
+  netWeight: number | null;
+  grossWeight: number | null;
+  weightUnit: string;
+  purity: string;
+  addOntoOriginal: boolean;
+  changeOwner: boolean;
+  feeAmount: number | null;
+}): Promise<GoldworkSupplementView> {
+  return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/supplements/returns`, body);
+}
+
 export function openGoldworkOrder(body: {
   requestId: string;
   customerId: number;

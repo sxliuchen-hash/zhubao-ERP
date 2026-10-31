@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import GoldworkMaterialPane from './GoldworkMaterialPane.vue';
+import GoldworkRecoveryPane from './GoldworkRecoveryPane.vue';
 import { fetchGoldworkOrders, openGoldworkOrder, type GoldworkOrderView } from '../../services/goldworkApi';
 
 const orders = ref<GoldworkOrderView[]>([]);
@@ -93,5 +94,6 @@ async function submit() {
       <button type="submit">建立金工单</button>
     </form>
     <GoldworkMaterialPane />
+    <GoldworkRecoveryPane />
   </section>
 </template>
