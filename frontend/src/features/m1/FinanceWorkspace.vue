@@ -33,6 +33,7 @@ import FixedAssetCardPane from '../assets/FixedAssetCardPane.vue';
 import FixedAssetCustodyPane from '../assets/FixedAssetCustodyPane.vue';
 import FixedAssetRepairPane from '../assets/FixedAssetRepairPane.vue';
 import FixedAssetDepreciationPane from '../assets/FixedAssetDepreciationPane.vue';
+import FixedAssetDispositionPane from '../assets/FixedAssetDispositionPane.vue';
 import { apiPost } from '../../services/apiClient';
 import { validBillContext, type OpenBillAction } from '../finance/billContext';
 import { formatAmount } from '../../utils/formatAmount';
@@ -1268,6 +1269,7 @@ function kindLabel(kind: string) {
       <FixedAssetCustodyPane />
       <FixedAssetRepairPane />
       <FixedAssetDepreciationPane />
+      <FixedAssetDispositionPane />
     </section>
 
     <section v-else-if="section === 'payable'" class="section-block">

@@ -101,6 +101,38 @@ export function continueAssetDepreciation(body: {
   return apiPost('/api/finance/depreciation-continuations', body);
 }
 
+export interface FixedAssetDispositionView {
+  dispositionId: string;
+  assetCode: string;
+  originalValue: number;
+  kind: string;
+  kindLabel: string;
+  occurredOn: string;
+  basis: string;
+  depreciationImpact: string;
+  depreciationImpactLabel: string;
+  netValue: number | null;
+  receiptCode: string;
+  proceedsAmount: number | null;
+  received: boolean;
+}
+
+export function fetchAssetDispositions(assetCode: string): Promise<FixedAssetDispositionView[]> {
+  return apiGet(`/api/finance/fixed-asset-dispositions?assetCode=${encodeURIComponent(assetCode)}`);
+}
+
+export function recordAssetDisposition(body: {
+  requestId: string;
+  assetCode: string;
+  kind: string;
+  occurredOn: string;
+  basis: string;
+  receiptCode: string;
+  proceeds: number | null;
+}): Promise<FixedAssetDispositionView> {
+  return apiPost('/api/finance/fixed-asset-dispositions', body);
+}
+
 export function fetchFixedAssetCards(): Promise<FixedAssetCardView[]> {
   return apiGet('/api/finance/fixed-asset-cards');
 }
