@@ -111,6 +111,8 @@ zhubao:
     repository: ${ZHUBAO_GOLDWORK_MATERIAL_REPOSITORY:jdbc}
   goldwork-movement:
     repository: ${ZHUBAO_GOLDWORK_MOVEMENT_REPOSITORY:jdbc}
+  goldwork-recovery:
+    repository: ${ZHUBAO_GOLDWORK_RECOVERY_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:

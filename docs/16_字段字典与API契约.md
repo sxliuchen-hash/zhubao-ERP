@@ -2723,6 +2723,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `GET /api/goldwork/orders/{goldworkCode}/movements` | `ApiResponse<List<GoldworkMovementView>>`。查询不写库存 |
 | `POST /api/goldwork/orders/{goldworkCode}/movements` | `ApiResponse<GoldworkMovementView>`。动作 `RECORD_GOLDWORK_MOVEMENT`。`useGrossAsNet`、`inferShortage`、`conversionFactor`、`enforcePieceConservation` 为真或有值时拒绝。同一请求回放 |
 
+### GoldworkRecoveryController
+
+来源：[GoldworkRecoveryController](../backend/src/main/java/com/zhubao/erp/goldwork/web/GoldworkRecoveryController.java)。对照已记录的成品产出，另记可回收金料、余料、实物报废或不可恢复损耗。未知重量保持为空。不把回收并进成品，不折抵客户费用，不按短重补重量，也不自动返还。权属跟随来料，不写库存账。查询为 `GOLDWORK_VIEW`，记录为 `GOLDWORK_MAINTAIN`。已有库需备份后追加 `V125__m3_goldwork_recovery.sql`。MySQL 配置使用 `zhubao.goldwork-recovery.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/goldwork/orders/{goldworkCode}/recoveries` | `ApiResponse<List<GoldworkRecoveryView>>`。查询不写库存或费用 |
+| `POST /api/goldwork/orders/{goldworkCode}/recoveries` | `ApiResponse<GoldworkRecoveryView>`。动作 `RECORD_GOLDWORK_RECOVERY`。`clearAsLoss`、`addToFinished`、`feeOffset`、`autoReturn`、`inferWeight` 为真或有值时拒绝。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。
