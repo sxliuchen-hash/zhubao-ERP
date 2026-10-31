@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import GoldworkMaterialPane from './GoldworkMaterialPane.vue';
+import GoldworkProductionPane from './GoldworkProductionPane.vue';
 import GoldworkRecoveryPane from './GoldworkRecoveryPane.vue';
 import { fetchGoldworkOrders, openGoldworkOrder, type GoldworkOrderView } from '../../services/goldworkApi';
 
@@ -95,5 +96,6 @@ async function submit() {
     </form>
     <GoldworkMaterialPane />
     <GoldworkRecoveryPane />
+    <GoldworkProductionPane />
   </section>
 </template>

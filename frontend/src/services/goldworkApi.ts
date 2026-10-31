@@ -169,6 +169,63 @@ export function returnGoldworkSupplement(goldworkCode: string, body: {
   return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/supplements/returns`, body);
 }
 
+export interface GoldworkOperationView {
+  reportId: string;
+  goldworkCode: string;
+  stepId: string;
+  stepLabel: string;
+  netWeight: number | null;
+  attachmentCode: string;
+  postedToLedger: boolean;
+  payrollPosted: boolean;
+}
+
+export function reportGoldworkOperation(goldworkCode: string, body: {
+  requestId: string;
+  stepId: string;
+  pieceCount: number | null;
+  netWeight: number | null;
+  weightUnit: string;
+  purity: string;
+  attachmentCode: string;
+  settleWage: boolean;
+  postStock: boolean;
+  closeWip: boolean;
+}): Promise<GoldworkOperationView> {
+  return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/operations`, body);
+}
+
+export interface GoldworkQualityView {
+  qualityId: string;
+  goldworkCode: string;
+  reportId: string;
+  priorQualityId: string;
+  roundNo: number;
+  outcome: string;
+  netWeight: number | null;
+  purity: string;
+  note: string;
+  purityChanged: boolean;
+  feeChanged: boolean;
+}
+
+export function decideGoldworkQuality(goldworkCode: string, body: {
+  requestId: string;
+  reportId: string;
+  priorQualityId: string;
+  outcome: string;
+  pieceCount: number | null;
+  netWeight: number | null;
+  weightUnit: string;
+  purity: string;
+  note: string;
+  useBeadDefault: boolean;
+  changePurity: boolean;
+  changeFee: boolean;
+}): Promise<GoldworkQualityView> {
+  return apiPost(`/api/goldwork/orders/${encodeURIComponent(goldworkCode)}/qualities`, body);
+}
+
 export function openGoldworkOrder(body: {
   requestId: string;
   customerId: number;
