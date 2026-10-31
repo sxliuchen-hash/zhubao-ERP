@@ -114,3 +114,4 @@ V113__m3_fixed_asset_stocktake.sql
 V114__m3_sampling_order.sql
 V115__m3_sampling_version.sql
 V116__m3_sampling_material.sql
+V117__m3_sampling_operation.sql

@@ -114,3 +114,4 @@
 114	TABLE	smp_sampling_order
 115	TABLE	smp_sampling_version
 116	TABLE	smp_sampling_material_use
+117	TABLE	smp_sampling_operation

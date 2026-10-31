@@ -2659,6 +2659,15 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 | `POST /api/sampling/orders/{samplingCode}/material-uses/{useId}/returns` | `ApiResponse<SamplingMaterialUseView>`。动作 `RETURN_SAMPLING_MATERIAL`。退回原来源，不改变权属 |
 | `POST /api/sampling/orders/{samplingCode}/material-uses/{useId}/inputs` | `ApiResponse<SamplingMaterialUseView>`。动作 `RECORD_SAMPLING_INPUT`。只登记实际投入，不另建余额，也不能重复登记 |
 
+### SamplingOperationController
+
+来源：[SamplingOperationController](../backend/src/main/java/com/zhubao/erp/sampling/web/SamplingOperationController.java)。只接受打样自己的节点。不要求先跑完普通 15 道工序，也不写母单、库存或工资。报工版本必须已经确认。没有有效现场照片、历史照片、不属于本单的照片或已经用过的照片都会拒绝。雕刻和车型不能同时选择。权限为 `SAMPLING_MAINTAIN`，不因生产报工权限放行。已有库需备份后追加 `V117__m3_sampling_operation.sql`。MySQL 配置使用 `zhubao.sampling-operation.repository=jdbc`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/sampling/orders/{samplingCode}/operations` | `ApiResponse<List<SamplingOperationView>>`。查询不写报工 |
+| `POST /api/sampling/orders/{samplingCode}/operations` | `ApiResponse<SamplingOperationView>`。动作 `REPORT_SAMPLING_OPERATION`。`stepId` 为打样节点。`makingChoices` 最多一项，`CARVE` 或 `SHAPE`，且只用于选料与加工。同一请求回放 |
+
 ### SecurityContextController
 
 来源：[SecurityContextController](../backend/src/main/java/com/zhubao/erp/security/web/SecurityContextController.java)。
