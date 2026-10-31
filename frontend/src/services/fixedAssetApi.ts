@@ -133,6 +133,50 @@ export function recordAssetDisposition(body: {
   return apiPost('/api/finance/fixed-asset-dispositions', body);
 }
 
+export interface FixedAssetStocktake {
+  stocktakeId: string;
+  assetCode: string;
+  countedAt: string;
+  bookLocation: string | null;
+  bookCustodian: string | null;
+  bookStatus: string | null;
+  bookVersion: number;
+  seen: string | null;
+  countLocation: string | null;
+  countCustodian: string | null;
+  exceptionText: string;
+  status: string;
+  version: number;
+}
+
+export function openAssetStocktake(body: {
+  requestId: string;
+  assetCode: string;
+  countedAt: string;
+}): Promise<FixedAssetStocktake> {
+  return apiPost('/api/finance/fixed-asset-stocktakes', body);
+}
+
+export function countAssetStocktake(body: {
+  requestId: string;
+  stocktakeId: string;
+  expectedVersion: number;
+  seen: string;
+  location: string;
+  custodian: string;
+  exceptionText: string;
+}): Promise<FixedAssetStocktake> {
+  return apiPost('/api/finance/fixed-asset-stocktakes/counts', body);
+}
+
+export function confirmAssetStocktake(body: {
+  requestId: string;
+  stocktakeId: string;
+  expectedVersion: number;
+}): Promise<FixedAssetStocktake> {
+  return apiPost('/api/finance/fixed-asset-stocktakes/confirmations', body);
+}
+
 export function fetchFixedAssetCards(): Promise<FixedAssetCardView[]> {
   return apiGet('/api/finance/fixed-asset-cards');
 }
