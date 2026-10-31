@@ -75,6 +75,31 @@ class CustomerDeliveryBillingTest {
         assertThat(harness.finance.findReceivableBySourceKey("delivery-bill:" + adjusted.billId()).orElseThrow().amount())
                 .isEqualByComparingTo("-124.00");
         assertThat(harness.finance.listPayrollLines()).isEmpty();
+
+        assertThatThrownBy(() -> harness.billing.confirm(actor, "e06-bill01", deliveryId, List.of(
+                new CustomerChargeLine("加工费", "MD-20261030-1001", CustomerChargeMethod.QUANTITY, "颗",
+                        new BigDecimal("462"), new BigDecimal("2"), new BigDecimal("462"), new BigDecimal("5"),
+                        null, null, "")), new BigDecimal("38"), null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("同一请求的内容不一致");
+        assertThat(harness.finance.listReceivables()).hasSize(2);
+    }
+
+    @Test
+    void 不能用其他目标的旧账覆盖本次交付() {
+        Harness harness = harness((actor, customerId) -> { });
+        harness.finance.saveReceivable(new ReceivableLine(
+                "YS-OTHER", 7L, "甲", "2026-10", "ORDER_SETTLEMENT", "other-settlement",
+                "MD-20261030-1999", "MD-20261030-1999", "别人的旧账", BigDecimal.ONE, ChargeUnit.JOB,
+                new BigDecimal("100.00"), new BigDecimal("100.00"), "", "", "账务员", "2026-10-30T00:00:00"));
+        String deliveryId = confirmDelivery(harness, new BigDecimal("10"));
+        assertThatThrownBy(() -> harness.billing.confirm(actor, "rf14-other1", deliveryId, List.of(
+                new CustomerChargeLine("加工费", "MD-20261030-1999", CustomerChargeMethod.QUANTITY, "颗",
+                        new BigDecimal("10"), new BigDecimal("2"), null, null, null, null, "")),
+                null, new BigDecimal("100.00")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("计费目标不属于本次交付");
+        assertThat(harness.bills.findInitial(deliveryId)).isEmpty();
     }
 
     @Test

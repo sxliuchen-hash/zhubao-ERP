@@ -150,9 +150,16 @@ public class CustomerDeliveryBillingService {
             throw new BusinessException("只有已确认交付才能出客户账单");
         }
         String unit = draftLines.get(0).quantityUnit();
+        Set<String> targets = new HashSet<>();
         for (DeliveryDraftLine line : draftLines) {
             if (!unit.equals(line.quantityUnit())) {
                 throw new BusinessException("不能把不同单位的数量加在一起");
+            }
+            targets.add(line.targetCode());
+        }
+        for (CustomerChargeLine line : lines) {
+            if (!line.targetCode().isBlank() && !targets.contains(line.targetCode())) {
+                throw new BusinessException("计费目标不属于本次交付");
             }
         }
         BigDecimal shipped = sources.stream().map(DeliveryConfirmedSource::quantity)
@@ -211,10 +218,17 @@ public class CustomerDeliveryBillingService {
         StringBuilder text = new StringBuilder(deliveryId).append('|').append(loss).append('|').append(covered);
         for (CustomerChargeLine line : lines) {
             text.append('\n').append(line.name()).append('|').append(line.method()).append('|')
-                    .append(line.quantity()).append('|').append(line.unitPrice()).append('|')
-                    .append(line.directAmount()).append('|').append(line.basis());
+                    .append(line.targetCode()).append('|').append(line.quantityUnit()).append('|')
+                    .append(line.direction() == null ? "" : line.direction().name()).append('|')
+                    .append(plain(line.quantity())).append('|').append(plain(line.unitPrice())).append('|')
+                    .append(plain(line.baseQuantity())).append('|').append(plain(line.exemptQuantity())).append('|')
+                    .append(plain(line.directAmount())).append('|').append(line.basis());
         }
         return text.toString();
+    }
+
+    private static String plain(BigDecimal value) {
+        return value == null ? "" : value.stripTrailingZeros().toPlainString();
     }
 
     private static String required(String deliveryId) {
