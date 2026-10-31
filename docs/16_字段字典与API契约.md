@@ -2357,6 +2357,17 @@ PWA 一期边界：
 | `GET /api/finance/fixed-asset-custody-transfers?assetCode=` | `ApiResponse<List<FixedAssetCustodyView>>`。按版本列出交接。未登记的前后值标签为待补。查询不写交接 |
 | `POST /api/finance/fixed-asset-custody-transfers` | `ApiResponse<FixedAssetCustodyView>`。动作 `TRANSFER_FIXED_ASSET`。请求体为 `requestId`、`assetCode`、`expectedVersion`，以及要变更的 `location`、`custodian`、`useStatus`。空字段表示不改该项。过期版本拒绝。同一请求回放。使用状态只接受在用或闲置 |
 
+### FixedAssetRepairController
+
+来源：[FixedAssetRepairController](../backend/src/main/java/com/zhubao/erp/finance/web/FixedAssetRepairController.java)。先登记维修，再明确确认费用。确认只产生一笔应付。付款不另记成本，也不把资产报废或改原值。未确认时费用为空，不写成 0。登记权限为 `FINANCE_ASSET`，确认和付款还要 `FINANCE_PAYABLE`。已有库需备份后追加 `V111__m3_fixed_asset_repair.sql`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/finance/fixed-asset-repairs?assetCode=` | `ApiResponse<List<FixedAssetRepairView>>`。`RECORDED` 的状态标签为维修中。查询不写费用 |
+| `POST /api/finance/fixed-asset-repairs` | `ApiResponse<FixedAssetRepairView>`。动作 `RECORD_ASSET_REPAIR`。记录对象、日期、交接和凭据。不产生应付 |
+| `POST /api/finance/fixed-asset-repairs/cost-confirmations` | `ApiResponse<FixedAssetRepairView>`。动作 `CONFIRM_ASSET_REPAIR`。必须有金额和凭据。同一维修只确认一次 |
+| `POST /api/finance/fixed-asset-repairs/payments` | `ApiResponse<FixedAssetRepairView>`。动作 `PAY_ASSET_REPAIR`。必须已确认，并且有付款金额、日期和凭据。不新增应付 |
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。

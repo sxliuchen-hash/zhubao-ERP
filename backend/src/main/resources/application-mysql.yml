@@ -85,6 +85,8 @@ zhubao:
     repository: ${ZHUBAO_FIXED_ASSET_ACQUISITION_REPOSITORY:jdbc}
   fixed-asset-custody:
     repository: ${ZHUBAO_FIXED_ASSET_CUSTODY_REPOSITORY:jdbc}
+  fixed-asset-repair:
+    repository: ${ZHUBAO_FIXED_ASSET_REPAIR_REPOSITORY:jdbc}
   master-data:
     repository: ${ZHUBAO_MASTER_DATA_REPOSITORY:jdbc}
   finance:
