@@ -2330,6 +2330,15 @@ PWA 一期边界：
 
 `POST /api/finance/receipts` 仍先按服务端会话核对客户写入范围，请求里的客户名称不能代替授权。请求体可以带 `idempotencyKey`，最长 80 字符。收款单和核销行在同一事务写入。同一键且客户、金额、收款日、客户名称和核销明细一致时返回原收款单；内容不同则拒绝；并发同键只产生一笔收款。不传键时不去重。登记成功后如果账单查询失败，页面保留并展示收款单号，只重试查询，不把这次失败当成收款失败。已有库另需受控执行 V41，为 `fin_customer_receipt` 增加可空的 `idempotency_key`。V36 的 `year_month` 仍未修改，真实 MySQL 8.4 空库升级仍会停在 V36，因此 V40 和 V41 还不能在那条失败路径之后自动执行。
 
+### FixedAssetCardController
+
+来源：[FixedAssetCardController](../backend/src/main/java/com/zhubao/erp/finance/web/FixedAssetCardController.java)。沿用已有 `FIN-AST` 编码。不接收原值，不新建卡片，不记折旧或应付。权限为 `FINANCE_ASSET`。已有库需备份后追加 `V108__m3_fixed_asset_physical.sql`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/finance/fixed-asset-cards` | `ApiResponse<List<FixedAssetCardView>>`。没有实物行时，型号、序列号、位置、保管人和使用状态为 `PENDING`，标签为待补，版本为 0。查询不补写历史 |
+| `POST /api/finance/fixed-asset-cards/supplements` | `ApiResponse<FixedAssetCardView>`。动作 `ADOPT_FIXED_ASSET_CARD`。请求体为 `requestId`、`assetCode`、`expectedVersion`，以及可选的 `model`、`serialNumber`、`location`、`custodian`、`useStatus`。空字段保持待补。使用状态只接受在用或闲置。已登记字段不能在这里改写。同一请求回放原结果；内容变化必须换请求编号。过期版本拒绝 |
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。

@@ -105,3 +105,4 @@
 105	TABLE	inv_material_stocktake
 106	TABLE	auth_customer_portal_binding
 107	TABLE	doc_customer_evidence_grant
+108	TABLE	fin_fixed_asset_physical
