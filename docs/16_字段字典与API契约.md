@@ -2376,6 +2376,15 @@ PWA 一期边界：
 |---|---|
 | `POST /api/finance/depreciation-continuations` | `ApiResponse<FixedAssetDepreciationRun>`。动作 `CONTINUE_ASSET_DEPRECIATION`。同一月重复运行返回已有分录，不新增。`algorithm` 为 `USEFUL_MONTHS_WITH_FINAL_TAIL` |
 
+### FixedAssetDispositionController
+
+来源：[FixedAssetDispositionController](../backend/src/main/java/com/zhubao/erp/finance/web/FixedAssetDispositionController.java)。记录停用、报废或处置，原卡保留。净值留空，折旧影响为待核，不写生效月，不生成收款或工资扣款。回款必须指向已经存在的收款单。权限为 `FINANCE_ASSET`；读取收款金额还要 `FINANCE_RECEIPT`。已有库需备份后追加 `V112__m3_fixed_asset_disposition.sql`。
+
+| 方法与完整路径 | 返回类型 |
+|---|---|
+| `GET /api/finance/fixed-asset-dispositions?assetCode=` | `ApiResponse<List<FixedAssetDispositionView>>`。查询不删卡、不记折旧 |
+| `POST /api/finance/fixed-asset-dispositions` | `ApiResponse<FixedAssetDispositionView>`。动作 `RECORD_ASSET_DISPOSITION`。`kind` 为 `STOP`、`SCRAP` 或 `DISPOSE`。没有 `receiptCode` 时不能填写回款金额 |
+
 ### DeviceGatewayController
 
 来源：[DeviceGatewayController](../backend/src/main/java/com/zhubao/erp/gateway/web/DeviceGatewayController.java)。

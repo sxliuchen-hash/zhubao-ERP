@@ -109,3 +109,4 @@
 109	TABLE	fin_fixed_asset_acquisition
 110	TABLE	fin_fixed_asset_custody
 111	TABLE	fin_fixed_asset_repair
+112	TABLE	fin_fixed_asset_disposition

@@ -195,6 +195,9 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
                 || path.equals("/api/finance/fixed-asset-repairs/payments")) {
             return PermissionCode.FINANCE_PAYABLE;
         }
+        if (path.equals("/api/finance/fixed-asset-dispositions")) {
+            return PermissionCode.FINANCE_ASSET;
+        }
         if (path.equals("/api/finance/outsource-bills") || path.equals("/api/finance/payable-payments")) {
             return PermissionCode.FINANCE_PAYABLE;
         }
