@@ -67,7 +67,7 @@ class WholeBagReportServiceTest {
         assertThat(fixture.portions().find(fixture.bag().id(), "BLANK").orElseThrow().arrived()).isEqualByComparingTo("500");
         ActivityBag bag = fixture.bags().find(fixture.bag().id()).orElseThrow();
         assertThat(bag.quantity()).isEqualByComparingTo("500");
-        assertThat(bag.version()).isEqualTo(1);
+        assertThat(bag.version()).isEqualTo(2);
         assertThat(bag.weight().state()).isEqualTo(StockMeasurement.WeightState.UNKNOWN);
         assertThat(fixture.links().findByTarget(EvidenceCodes.MOTHER_ORDER, bag.targetCode()))
                 .extracting(BusinessEvidenceLink::operationCode)
@@ -118,7 +118,7 @@ class WholeBagReportServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("正常整袋报工必须一次提交当前可处理数量");
         assertThatThrownBy(() -> fixture.service().report(new WholeBagReportCommand(
-                "bag-c02-07", fixture.bag().id(), fixture.bag().version(),
+                "bag-c02-07", fixture.bag().id(), fixture.bag().version(), "CUT",
                 new QuantityInput(QuantityInput.Source.PHOTO_COUNT, new BigDecimal("500"), new BigDecimal("500"), "COUNT-1"),
                 "ATT-1", null), operator()))
                 .isInstanceOf(BusinessException.class)
@@ -217,7 +217,74 @@ class WholeBagReportServiceTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(reports.findByRequest("bag-c02-12")).isEmpty();
         assertThat(portions.find(second.id(), "CUT")).isEmpty();
+        assertThat(bags.find(second.id()).orElseThrow().version()).isEqualTo(1);
         assertThat(links.findAll()).extracting(BusinessEvidenceLink::attachmentCode).containsExactly("ATT-JDBC");
+    }
+
+    @Test
+    void 过期表单不能被解释为下一道且竞争只留下一批() throws Exception {
+        Fixture fixture = memoryFixture(new BigDecimal("500"));
+        WholeBagReportCommand cutting = command("rf01-cut", fixture.bag(), "ATT-1", new BigDecimal("500"), null);
+        WholeBagReportCommand competing = command("rf01-race", fixture.bag(), "ATT-2", new BigDecimal("500"), null);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            java.util.List<java.util.concurrent.Future<Object>> futures = java.util.List.of(
+                    pool.submit(() -> fixture.service().report(cutting, operator())),
+                    pool.submit(() -> {
+                        try {
+                            return fixture.service().report(competing, operator());
+                        } catch (RuntimeException ex) {
+                            return ex;
+                        }
+                    }));
+            int saved = 0;
+            int rejected = 0;
+            for (java.util.concurrent.Future<Object> future : futures) {
+                Object value = future.get();
+                if (value instanceof WholeBagReport report) {
+                    saved++;
+                    assertThat(report.stepId()).isEqualTo("CUT");
+                } else if (value instanceof BusinessException ex) {
+                    rejected++;
+                    assertThat(ex.getMessage()).isEqualTo("袋已被其他人修改，请刷新后重试");
+                } else {
+                    throw new AssertionError(value);
+                }
+            }
+            assertThat(saved).isEqualTo(1);
+            assertThat(rejected).isEqualTo(1);
+        } finally {
+            pool.shutdownNow();
+        }
+        ActivityBag after = fixture.bags().find(fixture.bag().id()).orElseThrow();
+        assertThat(after.version()).isEqualTo(2);
+        assertThat(fixture.reports().findByRequest("rf01-cut").isPresent()
+                ^ fixture.reports().findByRequest("rf01-race").isPresent()).isTrue();
+        assertThat(fixture.portions().find(after.id(), "BLANK").orElseThrow().arrived()).isEqualByComparingTo("500");
+        assertThat(fixture.links().findAll()).hasSize(1);
+
+        WholeBagReportCommand staleNext = new WholeBagReportCommand(
+                "rf01-blank", after.id(), 1, "BLANK", QuantityInput.manual(new BigDecimal("500")), "ATT-2", null);
+        assertThatThrownBy(() -> fixture.service().report(staleNext, operator()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("袋已被其他人修改，请刷新后重试");
+        WholeBagReportCommand staleStep = new WholeBagReportCommand(
+                "rf01-stale-step", after.id(), after.version(), "CUT",
+                QuantityInput.manual(new BigDecimal("500")), "ATT-2", null);
+        assertThatThrownBy(() -> fixture.service().report(staleStep, operator()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("当前工序已变化，请刷新后重试");
+        assertThat(fixture.reports().findByRequest("rf01-blank")).isEmpty();
+        assertThat(fixture.reports().findByRequest("rf01-stale-step")).isEmpty();
+        assertThat(fixture.portions().find(after.id(), "BLANK").orElseThrow().handled()).isEqualByComparingTo("0");
+        assertThat(fixture.links().findAll()).hasSize(1);
+
+        String winner = fixture.reports().findByRequest("rf01-cut").isPresent() ? "rf01-cut" : "rf01-race";
+        String photo = "rf01-cut".equals(winner) ? "ATT-1" : "ATT-2";
+        WholeBagReport again = fixture.service().report(
+                command(winner, fixture.bag(), photo, new BigDecimal("500"), null), operator());
+        assertThat(again.stepId()).isEqualTo("CUT");
+        assertThat(again.batchCode()).isEqualTo(fixture.reports().findByRequest(winner).orElseThrow().batchCode());
     }
 
     private static OperatorContext operator() {
@@ -226,7 +293,8 @@ class WholeBagReportServiceTest {
 
     private static WholeBagReportCommand command(String requestId, ActivityBag bag, String attachment,
                                                  BigDecimal quantity, Integer progress) {
-        return new WholeBagReportCommand(requestId, bag.id(), bag.version(), QuantityInput.manual(quantity), attachment, progress);
+        return new WholeBagReportCommand(
+                requestId, bag.id(), bag.version(), "CUT", QuantityInput.manual(quantity), attachment, progress);
     }
 
     private static EvidenceAttachment photo(String code, String target, String media, String status, String objectType) {

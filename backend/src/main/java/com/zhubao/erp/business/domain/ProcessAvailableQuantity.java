@@ -9,6 +9,7 @@ import java.util.List;
  */
 public record ProcessAvailableQuantity(
         String bagId,
+        int bagVersion,
         String targetCode,
         String stepId,
         String stepName,

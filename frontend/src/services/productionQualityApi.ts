@@ -2,6 +2,7 @@ import { apiGet, apiPost } from './apiClient';
 
 export interface BagAvailability {
   bagId: string;
+  bagVersion: number;
   targetCode: string;
   stepId: string;
   stepName: string;
@@ -15,6 +16,7 @@ export interface WholeBagReportBody {
   requestId: string;
   bagId: string;
   bagVersion: number;
+  expectedStepId: string;
   quantity: { confirmedQuantity: number };
   attachmentCode: string;
   progressPercent: number | null;

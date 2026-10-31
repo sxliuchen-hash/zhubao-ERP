@@ -702,8 +702,8 @@ MySQL 持久化表：
 
 | 方法 | 作用 |
 |---|---|
-| `GET /api/business/production-quality/bags/{bagId}/availability` | 当前可处理量、下一步和阻断原因。不写库存、工资或完成事实 |
-| `POST /api/business/production-quality/whole-bag-reports` | 正常整袋报工。同一 `requestId` 回放原批次。没有有效照片或袋版本过期会拒绝 |
+| `GET /api/business/production-quality/bags/{bagId}/availability` | 当前可处理量、袋版本、当前工序、下一步和阻断原因。不写库存、工资或完成事实 |
+| `POST /api/business/production-quality/whole-bag-reports` | 正常整袋报工。请求带当前袋版本和预期工序。同一 `requestId` 回放原批次。没有有效照片、工序已变化或袋版本过期会拒绝。成功后袋版本加一 |
 | `POST /api/business/production-quality/dispositions` | 部分交出、损耗、报废、退回和待核 |
 | `POST /api/business/production-quality/weights` | 零数量补录实际重量 |
 | `POST /api/business/production-quality/inspections` | 按袋份额质检 |
@@ -2178,8 +2178,8 @@ PWA 一期边界：
 | `POST /api/business/operations/inbound-confirmations` | `ApiResponse<InboundConfirmationResult>` |
 | `GET /api/business/operations/process-stations` | `ApiResponse<ProcessStationView>` |
 | `POST /api/business/operations/process-stations` | `ApiResponse<ProcessStationReportResult>`。整单动作 `PROCESS_HANDOFF`；传本次数量时为 `PROCESS_BATCH_HANDOFF` 并要求 `requestId`，详见 5.2.1。相同编号原内容回放，批次累计与正式交付同事务 |
-| `GET /api/business/production-quality/bags/{bagId}/availability` | `ApiResponse<ProcessAvailableQuantity>`。只读，见 5.2.4 |
-| `POST /api/business/production-quality/whole-bag-reports` | `ApiResponse<WholeBagReport>`。动作 `WHOLE_BAG_REPORT` |
+| `GET /api/business/production-quality/bags/{bagId}/availability` | `ApiResponse<ProcessAvailableQuantity>`。含 `bagVersion` 与 `stepId`。只读，见 5.2.4 |
+| `POST /api/business/production-quality/whole-bag-reports` | `ApiResponse<WholeBagReport>`。动作 `WHOLE_BAG_REPORT`。请求含 `bagVersion` 与 `expectedStepId` |
 | `POST /api/business/production-quality/dispositions` | `ApiResponse<QuantityDispositionResult>`。动作 `QUANTITY_DISPOSITION` |
 | `POST /api/business/production-quality/weights` | `ApiResponse<BagWeightFact>`。动作 `WEIGHT_SUPPLEMENT` |
 | `POST /api/business/production-quality/inspections` | `ApiResponse<PortionInspection>`。动作 `PORTION_INSPECTION` |

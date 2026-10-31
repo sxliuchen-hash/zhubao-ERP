@@ -35,10 +35,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 一次正常整袋报工。校验本次照片、数量和袋版本，并按原请求回放同一批次。
- * 不要求先记 100%，不写库存，也不产生工资。部分数量和损耗去向不在本命令办理。
+ * 一次正常整袋报工。校验预期工序、本次照片、数量和袋版本，成功后推进袋版本。
+ * 同一请求回放原批次。过期表单不能被解释为下一道。不要求先记 100%，不写库存，也不产生工资。
  */
 @Service
 public class WholeBagReportService {
@@ -57,6 +58,7 @@ public class WholeBagReportService {
     private final BusinessEvidenceLinkRepository links;
     private final BusinessWorkUnit workUnit;
     private final Probe probe;
+    private final ConcurrentHashMap<String, Object> bagLocks = new ConcurrentHashMap<>();
 
     @Autowired
     public WholeBagReportService(ActivityBagRepository bags, ProcessAvailabilityQuery availability,
@@ -104,27 +106,35 @@ public class WholeBagReportService {
         if (command.progressPercent() != null && !PROGRESS.contains(command.progressPercent())) {
             throw new BusinessException("进度只能是 0%、30%、60%、90% 或 100%，也可以不填");
         }
-        ActivityBag bag = bags.find(text(command.bagId())).orElseThrow(() -> new BusinessException("袋不存在"));
-        BusinessTargetReference reference = BusinessTargetReference.parse(bag.targetCode());
-        if (reference.kind() != BusinessKind.PROCESSING) {
-            throw new BusinessException("普通加工报工只能用于母单或子单");
+        String bagId = text(command.bagId());
+        synchronized (bagLocks.computeIfAbsent(bagId, ignored -> new Object())) {
+            ActivityBag bag = bags.find(bagId).orElseThrow(() -> new BusinessException("袋不存在"));
+            BusinessTargetReference reference = BusinessTargetReference.parse(bag.targetCode());
+            if (reference.kind() != BusinessKind.PROCESSING) {
+                throw new BusinessException("普通加工报工只能用于母单或子单");
+            }
+            String targetType = reference.role() == BusinessTargetRole.WORK_ORDER
+                    ? EvidenceCodes.WORK_ORDER : EvidenceCodes.MOTHER_ORDER;
+            String payload = bag.id() + "|" + command.bagVersion() + "|" + text(command.expectedStepId()) + "|"
+                    + input.confirmedQuantity().toPlainString()
+                    + "|MANUAL|" + text(command.attachmentCode()) + "|"
+                    + (command.progressPercent() == null ? "" : command.progressPercent());
+            String text = workUnit.execute(new CommandCall(
+                    command.requestId(), actor.operator().trim(), ACTION, targetType, bag.targetCode(), payload
+            ), session -> WholeBagReportText.write(execute(command, actor, bag.id(), targetType, input, session)));
+            return WholeBagReportText.read(text);
         }
-        String targetType = reference.role() == BusinessTargetRole.WORK_ORDER
-                ? EvidenceCodes.WORK_ORDER : EvidenceCodes.MOTHER_ORDER;
-        String payload = bag.id() + "|" + command.bagVersion() + "|" + input.confirmedQuantity().toPlainString()
-                + "|MANUAL|" + text(command.attachmentCode()) + "|"
-                + (command.progressPercent() == null ? "" : command.progressPercent());
-        String text = workUnit.execute(new CommandCall(
-                command.requestId(), actor.operator().trim(), ACTION, targetType, bag.targetCode(), payload
-        ), session -> WholeBagReportText.write(execute(command, actor, bag.id(), targetType, input, session)));
-        return WholeBagReportText.read(text);
     }
 
     private WholeBagReport execute(WholeBagReportCommand command, OperatorContext actor, String bagId,
                                    String targetType, QuantityInput input, WorkSession session) {
-        ActivityBag current = bags.find(bagId).orElseThrow(() -> new BusinessException("袋不存在"));
+        ActivityBag current = bags.lock(bagId, session).orElseThrow(() -> new BusinessException("袋不存在"));
         if (current.version() != command.bagVersion()) {
             throw new BusinessException("袋已被其他人修改，请刷新后重试");
+        }
+        String expectedStep = text(command.expectedStepId());
+        if (expectedStep.isBlank()) {
+            throw new BusinessException("请按当前工序提交");
         }
         ProcessAvailableQuantity available = availability.lookup(current.id(), actor);
         if (available.blockingReasons().contains("缺少生产报工权限")) {
@@ -132,6 +142,9 @@ public class WholeBagReportService {
         }
         if (!available.actionable()) {
             throw new BusinessException(available.blockingReasons().get(0));
+        }
+        if (!expectedStep.equals(available.stepId())) {
+            throw new BusinessException("当前工序已变化，请刷新后重试");
         }
         if (input.confirmedQuantity().compareTo(available.availableQuantity()) != 0) {
             throw new BusinessException("正常整袋报工必须一次提交当前可处理数量");
@@ -150,6 +163,10 @@ public class WholeBagReportService {
                 command.progressPercent(), now);
         reports.save(report, session);
         links.insert(link(report, targetType), session);
+        bags.save(new ActivityBag(
+                current.id(), current.targetCode(), current.materialCode(), current.requirementVersion(),
+                current.sourceKey(), current.parentId(), current.closed(), current.quantity(), current.weight(),
+                current.version() + 1), current.version(), session);
         probe.afterPrepared();
         return report;
     }

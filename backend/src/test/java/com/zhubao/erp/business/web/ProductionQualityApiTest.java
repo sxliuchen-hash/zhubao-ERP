@@ -111,10 +111,11 @@ class ProductionQualityApiTest {
         mvc.perform(get("/api/business/production-quality/bags/" + bag.id() + "/availability"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.availableQuantity").value(500))
+                .andExpect(jsonPath("$.data.bagVersion").value(1))
                 .andExpect(jsonPath("$.data.stepId").value("CUT"));
 
         String body = """
-                {"requestId":"http-c08-01","bagId":"%s","bagVersion":1,"quantity":{"confirmedQuantity":500},"attachmentCode":"","progressPercent":null}
+                {"requestId":"http-c08-01","bagId":"%s","bagVersion":1,"expectedStepId":"CUT","quantity":{"confirmedQuantity":500},"attachmentCode":"","progressPercent":null}
                 """.formatted(bag.id());
         mvc.perform(post("/api/business/production-quality/whole-bag-reports").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())

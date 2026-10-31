@@ -155,7 +155,7 @@ public class ProcessAvailabilityQuery {
                                                    BigDecimal available, String nextStepId, String nextStepName,
                                                    List<String> blocks) {
         return new ProcessAvailableQuantity(
-                bag.id(), bag.targetCode(), stepId, stepName, available, nextStepId, nextStepName, blocks);
+                bag.id(), bag.version(), bag.targetCode(), stepId, stepName, available, nextStepId, nextStepName, blocks);
     }
 
     private static String required(String bagId) {

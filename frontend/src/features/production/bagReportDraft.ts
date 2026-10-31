@@ -6,6 +6,8 @@ export interface BagReportDraft {
   photoName: string;
   loss: string;
   pendingResult: boolean;
+  bagVersion: number;
+  expectedStepId: string;
 }
 
 const drafts = new Map<string, BagReportDraft>();
@@ -19,6 +21,7 @@ export function loadBagDraft(bagId: string): BagReportDraft {
   if (existing) return { ...existing };
   const created: BagReportDraft = {
     bagId, requestId: requestId(), quantity: '', photoName: '', loss: '', pendingResult: false,
+    bagVersion: 0, expectedStepId: '',
   };
   drafts.set(bagId, created);
   return { ...created };

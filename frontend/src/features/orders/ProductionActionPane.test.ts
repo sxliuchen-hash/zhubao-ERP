@@ -125,7 +125,7 @@ describe('同单工序动作', () => {
     wrapper.unmount();
   });
   it('整袋报工切目标不串草稿，失败后仍用原请求', async () => {
-    vi.mocked(fetchBagAvailability).mockResolvedValue({ bagId: 'BAG-1', targetCode: 'MD-1', stepId: 'CUT', stepName: '切料', availableQuantity: 10, nextStepId: 'BLANK', nextStepName: '取胚', blockingReasons: [] });
+    vi.mocked(fetchBagAvailability).mockResolvedValue({ bagId: 'BAG-1', bagVersion: 1, targetCode: 'MD-1', stepId: 'CUT', stepName: '切料', availableQuantity: 10, nextStepId: 'BLANK', nextStepName: '取胚', blockingReasons: [] });
     vi.mocked(submitWholeBagReport).mockRejectedValue(new Error('网络超时'));
     const wrapper = mount(BagReportForm, { props: { bagId: 'BAG-1' } });
     await flushPromises();
@@ -149,6 +149,10 @@ describe('同单工序动作', () => {
     await wrapper.get('form').trigger('submit');
     await flushPromises();
     expect(vi.mocked(submitWholeBagReport).mock.calls[1][0].requestId).toBe(firstId);
+    expect(vi.mocked(submitWholeBagReport).mock.calls[0][0].expectedStepId).toBe('CUT');
+    expect(vi.mocked(submitWholeBagReport).mock.calls[0][0].bagVersion).toBe(1);
+    expect(vi.mocked(submitWholeBagReport).mock.calls[1][0].expectedStepId).toBe('CUT');
+    expect(vi.mocked(submitWholeBagReport).mock.calls[1][0].bagVersion).toBe(1);
     expect((wrapper.get('[aria-label="整袋数量"]').element as HTMLInputElement).value).toBe('12');
     wrapper.unmount();
   });

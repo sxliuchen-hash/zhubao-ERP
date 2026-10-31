@@ -12,11 +12,17 @@ const message = ref('');
 const pending = ref(false);
 const available = ref('');
 const block = ref('');
+const bagVersion = ref(0);
+const expectedStepId = ref('');
+const stepName = ref('');
 let currentBag = '';
 
 watch(() => props.bagId, (bagId, previous) => {
   if (previous && requestId.value) {
-    saveBagDraft({ bagId: previous, requestId: requestId.value, quantity: quantity.value, photoName: photoName.value, loss: loss.value, pendingResult: pending.value });
+    saveBagDraft({
+      bagId: previous, requestId: requestId.value, quantity: quantity.value, photoName: photoName.value,
+      loss: loss.value, pendingResult: pending.value, bagVersion: bagVersion.value, expectedStepId: expectedStepId.value,
+    });
   }
   currentBag = bagId;
   const draft = loadBagDraft(bagId);
@@ -25,6 +31,8 @@ watch(() => props.bagId, (bagId, previous) => {
   requestId.value = draft.requestId;
   loss.value = draft.loss;
   pending.value = draft.pendingResult;
+  bagVersion.value = draft.bagVersion;
+  expectedStepId.value = draft.expectedStepId;
   message.value = draft.pendingResult ? '结果待核对，请用原请求重试' : '';
   void readAvailability(bagId);
 }, { immediate: true });
@@ -35,6 +43,11 @@ async function readAvailability(bagId: string) {
     if (currentBag !== bagId) return;
     available.value = String(view.availableQuantity ?? '');
     block.value = view.blockingReasons?.[0] ?? '';
+    if (!pending.value) {
+      bagVersion.value = view.bagVersion;
+      expectedStepId.value = view.stepId;
+      stepName.value = view.stepName;
+    }
     if (!quantity.value && available.value) quantity.value = available.value;
   } catch (caught) {
     if (currentBag !== bagId) return;
@@ -49,7 +62,10 @@ function onPhoto(event: Event) {
 }
 
 function remember() {
-  saveBagDraft({ bagId: props.bagId, requestId: requestId.value, quantity: quantity.value, photoName: photoName.value, loss: loss.value, pendingResult: pending.value });
+  saveBagDraft({
+    bagId: props.bagId, requestId: requestId.value, quantity: quantity.value, photoName: photoName.value,
+    loss: loss.value, pendingResult: pending.value, bagVersion: bagVersion.value, expectedStepId: expectedStepId.value,
+  });
 }
 
 async function submit() {
@@ -58,13 +74,18 @@ async function submit() {
     message.value = '请先保留本次照片';
     return;
   }
+  if (!expectedStepId.value || !bagVersion.value) {
+    message.value = '请先读取当前工序';
+    return;
+  }
   pending.value = true;
   remember();
   try {
     await submitWholeBagReport({
       requestId: requestId.value,
       bagId: props.bagId,
-      bagVersion: 1,
+      bagVersion: bagVersion.value,
+      expectedStepId: expectedStepId.value,
       quantity: { confirmedQuantity: Number(quantity.value) },
       attachmentCode: photoName.value,
       progressPercent: null,
@@ -83,6 +104,7 @@ async function submit() {
 <template>
   <form class="bag-report" aria-label="整袋报工" @submit.prevent="submit">
     <p v-if="block" role="alert">{{ block }}</p>
+    <p v-if="stepName">当前工序 {{ stepName }}</p>
     <p v-if="available">可处理 {{ available }}</p>
     <label>本次数量<input v-model="quantity" aria-label="整袋数量" inputmode="decimal" @change="remember" /></label>
     <label>本次照片<input aria-label="整袋照片" type="file" accept="image/*" @change="onPhoto" /></label>

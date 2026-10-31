@@ -7,6 +7,7 @@ public record WholeBagReportCommand(
         String requestId,
         String bagId,
         int bagVersion,
+        String expectedStepId,
         QuantityInput quantity,
         String attachmentCode,
         Integer progressPercent
