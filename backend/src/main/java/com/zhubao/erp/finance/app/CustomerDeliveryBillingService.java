@@ -103,7 +103,7 @@ public class CustomerDeliveryBillingService {
         CustomerDeliveryBill bill = new CustomerDeliveryBill(
                 billId, requestId, billId, draft.deliveryId(), draft.customerId(),
                 CustomerDeliveryBillKind.INITIAL, snapshot.totalAmount(), 1);
-        bills.save(bill, billLines(billId, snapshot), session);
+        bills.save(bill, billLines(billId, lines, snapshot), session);
         if (delta.signum() != 0) {
             finance.saveReceivable(receivable(actor, draft, lines, snapshot, billId, delta, ""), session);
         }
@@ -135,7 +135,7 @@ public class CustomerDeliveryBillingService {
         CustomerDeliveryBill bill = new CustomerDeliveryBill(
                 billId, requestId, initial.rootBillId(), draft.deliveryId(), draft.customerId(),
                 CustomerDeliveryBillKind.ADJUSTMENT, snapshot.totalAmount(), version);
-        bills.save(bill, billLines(billId, snapshot), session);
+        bills.save(bill, billLines(billId, lines, snapshot), session);
         if (delta.signum() != 0) {
             String reverses = delta.signum() < 0 ? receivableCode(initial.billId()) : "";
             finance.saveReceivable(receivable(actor, draft, lines, snapshot, billId, delta, reverses), session);
@@ -204,12 +204,15 @@ public class CustomerDeliveryBillingService {
         return "YS" + billId.substring(2);
     }
 
-    private static List<CustomerDeliveryBillLine> billLines(String billId, CustomerChargeSnapshot snapshot) {
+    private static List<CustomerDeliveryBillLine> billLines(String billId, List<CustomerChargeLine> inputs,
+                                                            CustomerChargeSnapshot snapshot) {
+        if (inputs.size() != snapshot.lines().size()) {
+            throw new BusinessException("计费快照与原输入不一致");
+        }
         List<CustomerDeliveryBillLine> stored = new ArrayList<>();
-        int number = 1;
-        for (CustomerChargeSnapshot.CustomerChargeResultLine line : snapshot.lines()) {
-            stored.add(new CustomerDeliveryBillLine(
-                    billId, number++, line.name(), line.method(), line.amount(), line.expression()));
+        for (int i = 0; i < inputs.size(); i++) {
+            stored.add(CustomerDeliveryBillLine.capture(
+                    billId, i + 1, inputs.get(i), snapshot.lines().get(i), snapshot));
         }
         return stored;
     }

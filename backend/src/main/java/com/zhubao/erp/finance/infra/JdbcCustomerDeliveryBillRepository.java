@@ -1,6 +1,7 @@
 package com.zhubao.erp.finance.infra;
 
 import com.zhubao.erp.common.error.BusinessException;
+import com.zhubao.erp.finance.domain.CustomerChargeDirection;
 import com.zhubao.erp.finance.domain.CustomerChargeMethod;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBill;
 import com.zhubao.erp.finance.domain.CustomerDeliveryBillKind;
@@ -16,6 +17,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -94,10 +96,20 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
             try (ResultSet rows = statement.executeQuery()) {
                 List<CustomerDeliveryBillLine> result = new ArrayList<>();
                 while (rows.next()) {
+                    String direction = rows.getString("direction_code");
                     result.add(new CustomerDeliveryBillLine(
                             rows.getString("bill_id"), rows.getInt("line_no"), rows.getString("item_name"),
                             CustomerChargeMethod.valueOf(rows.getString("method_code")),
-                            rows.getBigDecimal("amount"), rows.getString("expression_text")));
+                            rows.getBigDecimal("amount"), rows.getString("expression_text"),
+                            text(rows.getString("target_code")), text(rows.getString("quantity_unit")),
+                            direction == null || direction.isBlank() ? null : CustomerChargeDirection.valueOf(direction),
+                            rows.getBigDecimal("input_quantity"), rows.getBigDecimal("unit_price"),
+                            rows.getBigDecimal("base_quantity"), rows.getBigDecimal("exempt_quantity"),
+                            rows.getBigDecimal("direct_amount"), rows.getBigDecimal("bill_quantity"),
+                            text(rows.getString("basis_text")), rows.getBigDecimal("shipped_quantity"),
+                            rows.getBigDecimal("loss_quantity"), rows.getString("coverage_unit"),
+                            integer(rows, "quantity_scale"), integer(rows, "price_scale"),
+                            integer(rows, "money_scale"), rows.getString("rounding_mode")));
                 }
                 return result;
             }
@@ -109,8 +121,12 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
     private void insertLine(Connection connection, CustomerDeliveryBillLine line) {
         try (PreparedStatement statement = connection.prepareStatement("""
                 insert into fin_customer_delivery_bill_line(
-                    bill_id, line_no, item_name, method_code, amount, expression_text)
-                values (?,?,?,?,?,?)
+                    bill_id, line_no, item_name, method_code, amount, expression_text,
+                    target_code, quantity_unit, direction_code, input_quantity, unit_price,
+                    base_quantity, exempt_quantity, direct_amount, bill_quantity, basis_text,
+                    shipped_quantity, loss_quantity, coverage_unit,
+                    quantity_scale, price_scale, money_scale, rounding_mode)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """)) {
             statement.setString(1, line.billId());
             statement.setInt(2, line.lineNo());
@@ -118,10 +134,56 @@ public class JdbcCustomerDeliveryBillRepository implements CustomerDeliveryBillR
             statement.setString(4, line.method().name());
             statement.setBigDecimal(5, line.amount());
             statement.setString(6, line.expression());
+            statement.setString(7, line.targetCode());
+            statement.setString(8, line.quantityUnit());
+            if (line.direction() == null) {
+                statement.setNull(9, Types.VARCHAR);
+            } else {
+                statement.setString(9, line.direction().name());
+            }
+            decimal(statement, 10, line.inputQuantity());
+            decimal(statement, 11, line.unitPrice());
+            decimal(statement, 12, line.baseQuantity());
+            decimal(statement, 13, line.exemptQuantity());
+            decimal(statement, 14, line.directAmount());
+            decimal(statement, 15, line.billQuantity());
+            statement.setString(16, line.basis());
+            decimal(statement, 17, line.shippedQuantity());
+            decimal(statement, 18, line.lossQuantity());
+            statement.setString(19, line.coverageUnit());
+            integer(statement, 20, line.quantityScale());
+            integer(statement, 21, line.priceScale());
+            integer(statement, 22, line.moneyScale());
+            statement.setString(23, line.rounding());
             statement.executeUpdate();
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存客户账单明细", ex);
         }
+    }
+
+    private static void decimal(PreparedStatement statement, int index, java.math.BigDecimal value) throws SQLException {
+        if (value == null) {
+            statement.setNull(index, Types.DECIMAL);
+        } else {
+            statement.setBigDecimal(index, value);
+        }
+    }
+
+    private static void integer(PreparedStatement statement, int index, Integer value) throws SQLException {
+        if (value == null) {
+            statement.setNull(index, Types.INTEGER);
+        } else {
+            statement.setInt(index, value);
+        }
+    }
+
+    private static Integer integer(ResultSet rows, String column) throws SQLException {
+        int value = rows.getInt(column);
+        return rows.wasNull() ? null : value;
+    }
+
+    private static String text(String value) {
+        return value == null ? "" : value;
     }
 
     private List<CustomerDeliveryBill> list(String where, String value) {

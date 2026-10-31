@@ -12,6 +12,8 @@ import com.zhubao.erp.business.infra.InMemoryDeliveryDraftRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.ChargeUnit;
 import com.zhubao.erp.finance.domain.CustomerBillAuthorization;
+import com.zhubao.erp.finance.domain.CustomerBillSnapshot;
+import com.zhubao.erp.finance.domain.CustomerDeliveryBillLine;
 import com.zhubao.erp.finance.domain.CustomerChargeDirection;
 import com.zhubao.erp.finance.domain.CustomerChargeLine;
 import com.zhubao.erp.finance.domain.CustomerChargeMethod;
@@ -100,6 +102,29 @@ class CustomerDeliveryBillingTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("计费目标不属于本次交付");
         assertThat(harness.bills.findInitial(deliveryId)).isEmpty();
+    }
+
+    @Test
+    void 已确认账单按原输入复算不解析表达式() {
+        Harness harness = harness((actor, customerId) -> { });
+        String deliveryId = confirmDelivery(harness, new BigDecimal("10"));
+        CustomerDeliveryBill bill = harness.billing.confirm(actor, "rf15-bill01", deliveryId, List.of(
+                new CustomerChargeLine("加工费", "MD-20261030-1001", CustomerChargeMethod.BASE_MINUS_QUANTITY, "颗",
+                        null, new BigDecimal("2"), new BigDecimal("10"), new BigDecimal("1.5"), null, null, "按基数扣免计")),
+                null, null);
+        List<CustomerDeliveryBillLine> stored = harness.bills.lines(bill.billId());
+        assertThat(stored).singleElement().satisfies(line -> {
+            assertThat(line.exemptQuantity()).isEqualByComparingTo("1.500");
+            assertThat(line.billQuantity()).isEqualByComparingTo("8.500");
+            assertThat(line.basis()).isEqualTo("按基数扣免计");
+            assertThat(line.expression()).contains("−");
+        });
+        assertThat(CustomerBillSnapshot.recompute(deliveryId, stored).totalAmount()).isEqualByComparingTo("17.00");
+        assertThatThrownBy(() -> CustomerBillSnapshot.recompute(deliveryId, List.of(new CustomerDeliveryBillLine(
+                bill.billId(), 1, "加工费", CustomerChargeMethod.QUANTITY, new BigDecimal("10.00"), "10颗 × 1元／颗＝10元",
+                "", "", null, null, null, null, null, null, null, "", null, null, null, null, null, null, null))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("账单快照不完整，不能复算");
     }
 
     @Test
