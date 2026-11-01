@@ -21,6 +21,9 @@ public class InMemoryCompanyMaterialReceiptRepository implements CompanyMaterial
     private final ConcurrentHashMap<String, CompanyMaterialReceipt> receipts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompanyMaterialBalance> balances = new ConcurrentHashMap<>();
 
+    @Override public java.util.List<CompanyMaterialReceipt> receiptsOf(String itemId) { return receipts.values().stream().filter(row -> row.itemId().equals(itemId)).sorted(java.util.Comparator.comparing(CompanyMaterialReceipt::receiptId)).toList(); }
+    @Override public java.util.List<CompanyMaterialBalance> balancesOf(String itemId) { return balances.values().stream().filter(row -> row.itemId().equals(itemId)).sorted(java.util.Comparator.comparing(CompanyMaterialBalance::batchCode).thenComparing(CompanyMaterialBalance::warehouseCode)).toList(); }
+
     @Override
     public void insert(CompanyMaterialReceipt receipt, WorkSession session) {
         CompanyMaterialReceipt previous = receipts.putIfAbsent(receipt.receiptId(), receipt);

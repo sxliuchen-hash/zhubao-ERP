@@ -22,6 +22,8 @@ public class InMemoryToolCustodyRepository implements ToolCustodyRepository {
     private final ConcurrentHashMap<String, Piece> pieces = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ToolLoan> loans = new ConcurrentHashMap<>();
 
+    @Override public List<com.zhubao.erp.inventory.domain.ToolPiece> piecesOf(String itemId) { return pieces.entrySet().stream().filter(entry -> entry.getValue().itemId.equals(itemId)).sorted(java.util.Map.Entry.comparingByKey()).map(entry -> new com.zhubao.erp.inventory.domain.ToolPiece(entry.getKey(),itemId,entry.getValue().warehouseCode,entry.getValue().holderId,entry.getValue().scrapped)).toList(); }
+
     @Override
     public void addStock(String itemId, String warehouseCode, BigDecimal quantity, String unit, WorkSession session) {
         String key = itemId + "\n" + warehouseCode;

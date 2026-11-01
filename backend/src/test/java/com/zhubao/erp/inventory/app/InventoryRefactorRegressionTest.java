@@ -162,6 +162,32 @@ class InventoryRefactorRegressionTest {
         assertThat(f.stocks.balance(item.itemId(), "批", "库").orElseThrow().quantity()).isEqualByComparingTo("8");
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void 工作区读取实际批次领用及逐件工具而不泄露采购金额(boolean jdbc) throws Exception {
+        Fixture f=fixture(jdbc);
+        FactoryItem material=item(f,"query-material",FactoryItemCategory.BEAD,null,null);
+        var receiptService=new CompanyMaterialReceiptService(f.items,f.stocks,f.finance,f.unit,guard);
+        var receipt=receiptService.receive("query-receipt",admin,material.itemId(),n("10"),n("1"),"件","库","2026-11-01",CompanyMaterialSourceKind.OPENING,"",null,"");
+        var issueService=new CompanyMaterialIssueService(f.items,f.stocks,f.issues,f.unit,guard);
+        issueService.issue("query-issue",admin,material.itemId(),receipt.batchCode(),"库","车间",n("3"),n("0.3"),"件","");
+        var query=new FactoryInventoryQuery(new FactoryItemService(f.items,f.unit,guard),f.stocks,f.issues,f.tools);
+        var position=query.read(admin,material.itemId(),"库");
+        assertThat(position.balances()).hasSize(2);
+        assertThat(position.issues()).singleElement().satisfies(row -> assertThat(row.quantity()).isEqualByComparingTo("3"));
+        assertThat(position.receipts()).singleElement().satisfies(row -> assertThat(row.receiptId()).isEqualTo(receipt.receiptId()));
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(position)).doesNotContain("payableCode","amount");
+        FactoryItem tool=item(f,"query-tool",FactoryItemCategory.REUSABLE_TOOL,null,CustodyMode.PIECE);
+        var service=new ToolCustodyService(f.items,f.tools,f.unit,guard);
+        service.placePiece("query-tool-in",admin,tool.itemId(),"库","TOOL-Q1");
+        service.borrow("query-tool-out",admin,tool.itemId(),"库","P1","甲",null,"TOOL-Q1");
+        var tools=query.read(admin,tool.itemId(),"库");
+        assertThat(tools.toolQuantity()).isNull();
+        assertThat(tools.pieces()).singleElement().satisfies(row -> { assertThat(row.pieceCode()).isEqualTo("TOOL-Q1"); assertThat(row.holderId()).isEqualTo("P1"); });
+        assertThat(tools.loans()).hasSize(1);
+        assertThatThrownBy(() -> query.read(new OperatorContext("操作工",RoleCode.OPERATOR,DataScope.ALL),material.itemId(),"库")).isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+    }
+
     private FactoryItem item(Fixture f, String request, FactoryItemCategory category, ConsumptionTiming timing, CustodyMode custody) {
         return new FactoryItemService(f.items, f.unit, guard).register(request, admin, category, request, "规格", "件", timing, custody);
     }

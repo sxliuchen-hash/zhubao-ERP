@@ -30,6 +30,17 @@ public class JdbcCompanyMaterialIssueRepository implements CompanyMaterialIssueR
         this.dataSource = dataSource;
     }
 
+    @Override public java.util.List<CompanyMaterialIssue> issuesOf(String itemId) {
+        try (Connection connection=dataSource.getConnection(); PreparedStatement query=connection.prepareStatement("select * from inv_company_material_issue where item_id=?")) {
+            query.setString(1,itemId);
+            try (ResultSet rows=query.executeQuery()) {
+                java.util.List<CompanyMaterialIssue> result=new java.util.ArrayList<>();
+                while (rows.next()) result.add(mapIssue(rows));
+                return java.util.List.copyOf(result);
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("无法读取本厂物品存量明细",ex); }
+    }
+
     @Override
     public void insert(CompanyMaterialIssue issue, WorkSession session) {
         Connection connection = WorkSessionBindings.requiredJdbc(session);

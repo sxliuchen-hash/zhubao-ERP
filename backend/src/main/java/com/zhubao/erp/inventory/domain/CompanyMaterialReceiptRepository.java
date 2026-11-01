@@ -8,6 +8,8 @@ import java.util.Optional;
 
 /** 公司料入库和对应批次余额。查询不写应付。 */
 public interface CompanyMaterialReceiptRepository {
+    java.util.List<CompanyMaterialReceipt> receiptsOf(String itemId);
+    java.util.List<CompanyMaterialBalance> balancesOf(String itemId);
     default java.util.Optional<CompanyMaterialBalance> lockBalance(String itemId, String batchCode, String warehouseCode,
                                                                   WorkSession session) {
         return balance(itemId, batchCode, warehouseCode);

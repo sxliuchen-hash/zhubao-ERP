@@ -29,6 +29,17 @@ public class JdbcToolCustodyRepository implements ToolCustodyRepository {
         this.dataSource = dataSource;
     }
 
+    @Override public java.util.List<com.zhubao.erp.inventory.domain.ToolPiece> piecesOf(String itemId) {
+        try (Connection connection=dataSource.getConnection(); PreparedStatement query=connection.prepareStatement("select * from inv_tool_piece where item_id=?")) {
+            query.setString(1,itemId);
+            try (ResultSet rows=query.executeQuery()) {
+                java.util.List<com.zhubao.erp.inventory.domain.ToolPiece> result=new java.util.ArrayList<>();
+                while (rows.next()) result.add(new com.zhubao.erp.inventory.domain.ToolPiece(rows.getString("piece_code"),rows.getString("item_id"),rows.getString("warehouse_code"),rows.getString("holder_id"),rows.getBoolean("scrapped")));
+                return java.util.List.copyOf(result);
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("无法读取本厂物品存量明细",ex); }
+    }
+
     @Override
     public void addStock(String itemId, String warehouseCode, BigDecimal quantity, String unit, WorkSession session) {
         Connection connection = WorkSessionBindings.requiredJdbc(session);

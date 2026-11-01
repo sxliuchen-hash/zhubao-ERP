@@ -20,6 +20,8 @@ public class InMemoryCompanyMaterialIssueRepository implements CompanyMaterialIs
     private final ConcurrentHashMap<String, CompanyMaterialIssue> issues = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompanyMaterialReturn> returns = new ConcurrentHashMap<>();
 
+    @Override public java.util.List<CompanyMaterialIssue> issuesOf(String itemId) { return issues.values().stream().filter(row -> row.itemId().equals(itemId)).sorted(java.util.Comparator.comparing(CompanyMaterialIssue::issueId)).toList(); }
+
     @Override
     public void insert(CompanyMaterialIssue issue, WorkSession session) {
         if (issues.putIfAbsent(issue.issueId(), issue) != null) {

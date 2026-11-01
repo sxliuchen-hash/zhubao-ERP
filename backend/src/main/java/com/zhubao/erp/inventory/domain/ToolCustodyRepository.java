@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ToolCustodyRepository {
+    List<ToolPiece> piecesOf(String itemId);
 
     void addStock(String itemId, String warehouseCode, BigDecimal quantity, String unit, WorkSession session);
 

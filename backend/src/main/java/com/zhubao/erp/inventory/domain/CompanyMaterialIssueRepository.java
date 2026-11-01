@@ -7,6 +7,7 @@ import java.util.Optional;
 
 /** 公司料领用和退回。查询不写库存。 */
 public interface CompanyMaterialIssueRepository {
+    java.util.List<CompanyMaterialIssue> issuesOf(String itemId);
 
     void insert(CompanyMaterialIssue issue, WorkSession session);
 
