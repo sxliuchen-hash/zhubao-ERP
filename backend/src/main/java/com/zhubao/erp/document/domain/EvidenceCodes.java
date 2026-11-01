@@ -13,6 +13,8 @@ public final class EvidenceCodes {
     public static final String WORK_ORDER = "WORK_ORDER";
     public static final String OUTBOUND_ORDER = "OUTBOUND_ORDER";
     public static final String REWORK = "REWORK";
+    public static final String SAMPLING = "SAMPLING";
+    public static final String GOLDWORK = "GOLDWORK";
 
     public static final String INTAKE = "INTAKE";
     public static final String PRODUCTION = "PRODUCTION";
@@ -36,7 +38,7 @@ public final class EvidenceCodes {
     public static final String HISTORICAL_LABEL = "历史单据证据";
 
     public static final Set<String> STAGES = Set.of(INTAKE, PRODUCTION, QUALITY, SHIPPING, "REWORK");
-    public static final Set<String> OBJECT_TYPES = Set.of(MOTHER_ORDER, WORK_ORDER, OUTBOUND_ORDER, REWORK, STOCK_DOCUMENT);
+    public static final Set<String> OBJECT_TYPES = Set.of(MOTHER_ORDER, WORK_ORDER, OUTBOUND_ORDER, REWORK, STOCK_DOCUMENT, SAMPLING, GOLDWORK);
 
     private static final Map<String, String> SCENE_LABELS = Map.of(
             "UNPACK", "拆包",
@@ -54,7 +56,9 @@ public final class EvidenceCodes {
             "mother", MOTHER_ORDER,
             "work_order", WORK_ORDER,
             "outbound", OUTBOUND_ORDER,
-            "rework", REWORK
+            "rework", REWORK,
+            "sampling", SAMPLING,
+            "goldwork", GOLDWORK
     );
 
     private EvidenceCodes() {

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useBusinessCommand } from '../workspace/useBusinessCommand';
+import ReportPhotoCapture from '../evidence/ReportPhotoCapture.vue';
 import { decideGoldworkQuality, reportGoldworkOperation } from '../../services/goldworkApi';
 
 const goldworkCode = ref('');
@@ -13,10 +15,8 @@ const priorQualityId = ref('');
 const outcome = ref('RELEASE');
 const note = ref('');
 const message = ref('');
+const operation = useBusinessCommand('goldwork-report', goldworkCode, { stepId, netWeight, weightUnit, purity, attachmentCode, reportId, priorQualityId, outcome, note }, message);
 
-function newRequestId() {
-  return `goldwork-report-${Date.now()}`;
-}
 
 function optionalNumber(text: string) {
   const trimmed = text.trim();
@@ -40,8 +40,7 @@ async function report() {
     message.value = '未知重量不能写成 0';
     return;
   }
-  const saved = await reportGoldworkOperation(goldworkCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('report', {
     stepId: stepId.value,
     pieceCount: null,
     netWeight: net,
@@ -51,8 +50,10 @@ async function report() {
     settleWage: false,
     postStock: false,
     closeWip: false,
-  });
+  }, (code, body) => reportGoldworkOperation(code, body));
+  if (!saved) return;
   reportId.value = saved.reportId;
+  attachmentCode.value = '';
   message.value = `已报工 ${saved.stepLabel}，未记工资`;
 }
 
@@ -66,8 +67,7 @@ async function decide() {
     message.value = '请填写本次检查份额';
     return;
   }
-  const saved = await decideGoldworkQuality(goldworkCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('quality', {
     reportId: reportId.value.trim(),
     priorQualityId: priorQualityId.value.trim(),
     outcome: outcome.value,
@@ -79,7 +79,8 @@ async function decide() {
     useBeadDefault: false,
     changePurity: false,
     changeFee: false,
-  });
+  }, (code, body) => decideGoldworkQuality(code, body));
+  if (!saved) return;
   message.value = `已记录 ${saved.outcome}，成色未改，收费未改`;
 }
 </script>
@@ -88,9 +89,10 @@ async function decide() {
   <section class="page-stack" aria-label="报工和质量">
     <header>
       <h2>报工与质量</h2>
-      <p>只报金工工序，必须填写照片编号。不上传文件，不记工资或库存。返工不改成色和收费。</p>
+      <p>拍照或选图后报工，不记工资或库存。返工不改成色和收费。</p>
     </header>
     <p role="status">{{ message }}</p>
+    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
     <label>金工号 <input v-model="goldworkCode" aria-label="报工金工号" /></label>
     <label>工序
       <select v-model="stepId" aria-label="报工工序">
@@ -104,7 +106,7 @@ async function decide() {
     <label>净重 <input v-model="netWeight" aria-label="报工净重" /></label>
     <label>单位 <input v-model="weightUnit" aria-label="报工单位" /></label>
     <label>成色 <input v-model="purity" aria-label="报工成色" /></label>
-    <label>照片编号 <input v-model="attachmentCode" aria-label="照片编号" /></label>
+    <ReportPhotoCapture v-model="attachmentCode" business-type="GOLDWORK" :business-code="goldworkCode" />
     <button type="button" @click="report">报工</button>
     <label>报工编号 <input v-model="reportId" aria-label="报工编号" /></label>
     <label>原轮次 <input v-model="priorQualityId" aria-label="原轮次" /></label>
@@ -117,5 +119,9 @@ async function decide() {
     </label>
     <label>说明 <input v-model="note" aria-label="质量说明" /></label>
     <button type="button" @click="decide">记录质量</button>
+    </fieldset>
+    <p v-if="operation.pending.value">正在提交，请稍候</p>
+    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
+    <button type="button" @click="operation.startNext">开始下一笔</button>
   </section>
 </template>

@@ -54,6 +54,13 @@ export interface StoredEvidenceFile {
   previewUrl: string;
 }
 
+export function uploadReportPhoto(type: 'SAMPLING' | 'GOLDWORK', code: string, file: File): Promise<StoredEvidenceFile> {
+  const body = new FormData();
+  body.set('file', file);
+  const module = type === 'SAMPLING' ? 'sampling' : 'goldwork';
+  return apiPostForm(`/api/${module}/orders/${encodeURIComponent(code)}/photos`, body);
+}
+
 export interface EvidenceTarget {
   targetType: string;
   targetCode: string;

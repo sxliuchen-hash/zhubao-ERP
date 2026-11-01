@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import GoldworkProductionPane from './GoldworkProductionPane.vue';
 import { decideGoldworkQuality, reportGoldworkOperation } from '../../services/goldworkApi';
+import { uploadReportPhoto, type StoredEvidenceFile } from '../../services/evidenceApi';
+vi.mock('../../services/evidenceApi', () => ({ uploadReportPhoto: vi.fn() }));
 
 vi.mock('../../services/goldworkApi', () => ({
   reportGoldworkOperation: vi.fn(),
@@ -34,7 +36,7 @@ describe('金工报工和质量', () => {
       feeChanged: false,
     });
     const wrapper = mount(GoldworkProductionPane);
-    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
+    expect(wrapper.find('input[type="file"]').exists()).toBe(true);
     expect(wrapper.find('option[value="POLISH_BEAD"]').exists()).toBe(false);
     await wrapper.get('[aria-label="报工金工号"]').setValue('GJ-20261031-0001');
     await wrapper.findAll('button').find((button) => button.text() === '报工')!.trigger('click');
@@ -44,7 +46,12 @@ describe('金工报工和质量', () => {
     await wrapper.get('[aria-label="报工工序"]').setValue('POLISH_GOLD');
     await wrapper.get('[aria-label="报工净重"]').setValue('1.23456');
     await wrapper.get('[aria-label="报工成色"]').setValue('足金');
-    await wrapper.get('[aria-label="照片编号"]').setValue('PH-1');
+    vi.mocked(uploadReportPhoto).mockResolvedValue({ code: 'PH-1' } as StoredEvidenceFile);
+    const photo = wrapper.findAll('input[type="file"]')[0];
+    Object.defineProperty(photo.element, 'files', { configurable: true, value: [new File(['photo'], 'photo.png', { type: 'image/png' })] });
+    await photo.trigger('change');
+    await flushPromises();
+    expect(uploadReportPhoto).toHaveBeenCalledWith('GOLDWORK', 'GJ-20261031-0001', expect.any(File));
     await wrapper.findAll('button').find((button) => button.text() === '报工')!.trigger('click');
     await flushPromises();
     const reported = vi.mocked(reportGoldworkOperation).mock.calls[0][1];

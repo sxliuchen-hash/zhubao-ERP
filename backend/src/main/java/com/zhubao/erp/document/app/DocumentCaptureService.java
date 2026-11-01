@@ -18,6 +18,12 @@ import com.zhubao.erp.document.infra.DocumentCaptureProperties;
 import com.zhubao.erp.business.domain.ChildWorkOrderRecord;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.OperatorContext;
+import com.zhubao.erp.security.app.PermissionGuard;
+import com.zhubao.erp.security.app.RefactorPermissionContract;
+import com.zhubao.erp.security.domain.PermissionCode;
+import com.zhubao.erp.security.error.PermissionDeniedException;
+import com.zhubao.erp.sampling.domain.SamplingOrderRepository;
+import com.zhubao.erp.goldwork.domain.GoldworkOrderRepository;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
@@ -43,6 +49,9 @@ public class DocumentCaptureService {
     private final DocumentCaptureProperties properties;
     private com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments;
     private com.zhubao.erp.business.app.BusinessDataAccess dataAccess;
+    private SamplingOrderRepository sampling;
+    private GoldworkOrderRepository goldwork;
+    private PermissionGuard permissions;
 
     public DocumentCaptureService(
             DocumentManagementRepository repository,
@@ -58,13 +67,24 @@ public class DocumentCaptureService {
         this.properties = properties;
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public DocumentCaptureService(DocumentManagementRepository repository, AttachmentObjectStorage storage,
             DocumentManagementService documentManagementService, BusinessDocumentRepository businessDocumentRepository,
             DocumentCaptureProperties properties, com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments,
             com.zhubao.erp.business.app.BusinessDataAccess dataAccess) {
         this(repository, storage, documentManagementService, businessDocumentRepository, properties);
         this.stockDocuments = stockDocuments; this.dataAccess = dataAccess;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DocumentCaptureService(DocumentManagementRepository repository, AttachmentObjectStorage storage,
+            DocumentManagementService documentManagementService, BusinessDocumentRepository businessDocumentRepository,
+            DocumentCaptureProperties properties, com.zhubao.erp.inventory.domain.StockDocumentRepository stockDocuments,
+            com.zhubao.erp.business.app.BusinessDataAccess dataAccess, SamplingOrderRepository sampling,
+            GoldworkOrderRepository goldwork, PermissionGuard permissions) {
+        this(repository, storage, documentManagementService, businessDocumentRepository, properties, stockDocuments, dataAccess);
+        this.sampling = sampling;
+        this.goldwork = goldwork;
+        this.permissions = permissions;
     }
 
     public EvidenceAttachmentUploadResult capture(
@@ -134,8 +154,14 @@ public class DocumentCaptureService {
             dataAccess.assertCanRead(operator, code);
         }
         String canonicalMediaType = AttachmentMediaPolicy.canonicalType(mediaType, false);
+        boolean independent = EvidenceCodes.SAMPLING.equals(canonicalType) || EvidenceCodes.GOLDWORK.equals(canonicalType);
+        if (independent) {
+            assertIndependent(operator, canonicalType, code);
+            if (!List.of("image/jpeg", "image/png").contains(canonicalMediaType)) throw new BusinessException("报工照片请上传JPEG或PNG");
+        }
         boolean video = AttachmentMediaPolicy.isVideo(canonicalMediaType);
-        String origin = stockReceipt && AttachmentOrigins.hits(businessDocumentRepository, code).isEmpty() ? EvidenceCodes.STOCK_DOCUMENT : AttachmentOrigins.uniqueMatch(businessDocumentRepository, canonicalType, code);
+        String origin = independent ? canonicalType : stockReceipt && AttachmentOrigins.hits(businessDocumentRepository, code).isEmpty()
+                ? EvidenceCodes.STOCK_DOCUMENT : AttachmentOrigins.uniqueMatch(businessDocumentRepository, canonicalType, code);
         if (requireVerified && origin.isEmpty()) {
             throw new BusinessException("无法确认这份文件属于哪张单据");
         }
@@ -226,6 +252,22 @@ public class DocumentCaptureService {
                 .filter(attachment -> !"已下线".equals(attachment.status()) && !"待核对".equals(attachment.status()))
                 .map(this::viewOf)
                 .toList();
+    }
+
+    private void assertIndependent(OperatorContext actor, String type, String code) {
+        if (sampling == null || goldwork == null || permissions == null) throw new BusinessException("独立业务照片采集尚未装配");
+        Long customer;
+        String name;
+        if (EvidenceCodes.SAMPLING.equals(type)) {
+            RefactorPermissionContract.assertAction(permissions, PermissionCode.SAMPLING_MAINTAIN, actor);
+            var order = sampling.find(code).orElseThrow(() -> new BusinessException("打样单不存在"));
+            customer = order.customerId(); name = order.customerName();
+        } else {
+            RefactorPermissionContract.assertAction(permissions, PermissionCode.GOLDWORK_MAINTAIN, actor);
+            var order = goldwork.find(code).orElseThrow(() -> new BusinessException("金工单不存在"));
+            customer = order.customerId(); name = order.customerName();
+        }
+        if (!CustomerScopeRules.allowed(actor, customer, name)) throw new PermissionDeniedException("单号不在当前账号的客户范围内");
     }
 
     private boolean sameFile(EvidenceAttachment attachment, String businessCode, String checksum, String origin) {

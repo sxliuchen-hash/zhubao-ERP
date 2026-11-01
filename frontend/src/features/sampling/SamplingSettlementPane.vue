@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import { deliverSampling, settleSamplingFee } from '../../services/samplingApi';
 
 const samplingCode = ref('');
@@ -12,10 +13,8 @@ const deliveryId = ref('');
 const amount = ref('');
 const reason = ref('');
 const message = ref('');
+const operation = useBusinessCommand('sampling-delivery', samplingCode, { versionKind, versionNo, quantity, unit, credentialCode, deliveryId, amount, reason }, message);
 
-function newRequestId() {
-  return `sampling-delivery-${Date.now()}`;
-}
 
 async function deliver() {
   const counted = Number(quantity.value);
@@ -23,15 +22,15 @@ async function deliver() {
     message.value = '交付数量必须大于零';
     return;
   }
-  const saved = await deliverSampling(samplingCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('deliver', {
     versionKind: versionKind.value,
     versionNo: Number(versionNo.value),
     materialUseId: '',
     quantity: counted,
     unit: unit.value.trim(),
     credentialCode: credentialCode.value.trim(),
-  });
+  }, (code, body) => deliverSampling(code, body));
+  if (!saved) return;
   deliveryId.value = saved.deliveryId;
   message.value = saved.orderClosed
     ? '不应把打样单标成完成'
@@ -43,14 +42,14 @@ async function charge() {
     message.value = '未知金额不能写成 0';
     return;
   }
-  const saved = await settleSamplingFee(samplingCode.value.trim(), deliveryId.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit(`fee:${deliveryId.value.trim()}`, {
     amount: amount.value.trim() ? Number(amount.value) : null,
     waive: false,
     reason: '',
     motherOrderCode: '',
     settleWages: false,
-  });
+  }, (code, body) => settleSamplingFee(code, deliveryId.value.trim(), body));
+  if (!saved) return;
   message.value = `已确认样费 ${saved.amount}`;
 }
 
@@ -59,14 +58,14 @@ async function waive() {
     message.value = '请填写免收原因';
     return;
   }
-  const saved = await settleSamplingFee(samplingCode.value.trim(), deliveryId.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit(`fee:${deliveryId.value.trim()}`, {
     amount: null,
     waive: true,
     reason: reason.value.trim(),
     motherOrderCode: '',
     settleWages: false,
-  });
+  }, (code, body) => settleSamplingFee(code, deliveryId.value.trim(), body));
+  if (!saved) return;
   message.value = saved.amount == null ? `已免收：${saved.reason}` : '免收不应有金额';
 }
 </script>
@@ -78,6 +77,7 @@ async function waive() {
       <p>部分交付不结束打样单。免收必须写原因，不记零元，也不抵大货。</p>
     </header>
     <p role="status">{{ message }}</p>
+    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
     <label>打样号 <input v-model="samplingCode" aria-label="交付打样号" /></label>
     <label>版本种类 <input v-model="versionKind" aria-label="交付版本种类" /></label>
     <label>版本号 <input v-model="versionNo" aria-label="交付版本号" /></label>
@@ -90,5 +90,9 @@ async function waive() {
     <button type="button" @click="charge">确认样费</button>
     <label>免收原因 <input v-model="reason" aria-label="免收原因" /></label>
     <button type="button" @click="waive">明确免收</button>
+    </fieldset>
+    <p v-if="operation.pending.value">正在提交，请稍候</p>
+    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
+    <button type="button" @click="operation.startNext">开始下一笔</button>
   </section>
 </template>

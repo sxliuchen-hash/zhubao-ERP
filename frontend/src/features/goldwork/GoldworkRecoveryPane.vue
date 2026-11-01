@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import { issueGoldworkSupplement, recordGoldworkRecovery, returnGoldworkSupplement } from '../../services/goldworkApi';
 
 const goldworkCode = ref('');
@@ -14,10 +15,8 @@ const weightUnit = ref('克');
 const purity = ref('');
 const recoveryKind = ref('RECOVERABLE');
 const message = ref('');
+const operation = useBusinessCommand('goldwork-recovery', goldworkCode, { sourceLineId, outputMovementId, originalLineId, sourceId, priorSupplementId, purpose, netWeight, weightUnit, purity, recoveryKind }, message);
 
-function newRequestId() {
-  return `goldwork-recovery-${Date.now()}`;
-}
 
 function optionalNumber(text: string) {
   const trimmed = text.trim();
@@ -37,8 +36,7 @@ async function recover() {
     message.value = '未知重量不能写成 0';
     return;
   }
-  const saved = await recordGoldworkRecovery(goldworkCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('recovery', {
     sourceLineId: sourceLineId.value.trim(),
     outputMovementId: outputMovementId.value.trim(),
     kind: recoveryKind.value,
@@ -52,7 +50,8 @@ async function recover() {
     feeOffset: null,
     autoReturn: false,
     inferWeight: false,
-  });
+  }, (code, body) => recordGoldworkRecovery(code, body));
+  if (!saved) return;
   message.value = `已记录回收 ${saved.recoveryId}，未折抵费用`;
 }
 
@@ -62,8 +61,7 @@ async function issue() {
     message.value = '未知重量不能写成 0';
     return;
   }
-  const saved = await issueGoldworkSupplement(goldworkCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('supplement', {
     originalLineId: originalLineId.value.trim(),
     sourceId: sourceId.value.trim(),
     sourceLineNo: null,
@@ -76,7 +74,8 @@ async function issue() {
     addOntoOriginal: false,
     changeOwner: false,
     feeAmount: null,
-  });
+  }, (code, body) => issueGoldworkSupplement(code, body));
+  if (!saved) return;
   priorSupplementId.value = saved.supplementId;
   message.value = `已补料 ${saved.supplementId}，未记补料费`;
 }
@@ -87,8 +86,7 @@ async function giveBack() {
     message.value = '未知重量不能写成 0';
     return;
   }
-  const saved = await returnGoldworkSupplement(goldworkCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('return-supplement', {
     originalLineId: originalLineId.value.trim(),
     priorSupplementId: priorSupplementId.value.trim(),
     purpose: purpose.value.trim() || '退回',
@@ -100,7 +98,8 @@ async function giveBack() {
     addOntoOriginal: false,
     changeOwner: false,
     feeAmount: null,
-  });
+  }, (code, body) => returnGoldworkSupplement(code, body));
+  if (!saved) return;
   message.value = `已退补 ${saved.supplementId}`;
 }
 </script>
@@ -112,6 +111,7 @@ async function giveBack() {
       <p>回收不并进成品，也不折抵费用。补料另记来源，不改最初来料，不另收补料费。</p>
     </header>
     <p role="status">{{ message }}</p>
+    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
     <label>金工号 <input v-model="goldworkCode" aria-label="回收金工号" /></label>
     <label>来源明细 <input v-model="sourceLineId" aria-label="回收来源明细" /></label>
     <label>成品产出 <input v-model="outputMovementId" aria-label="成品产出" /></label>
@@ -133,5 +133,9 @@ async function giveBack() {
     <label>原补料 <input v-model="priorSupplementId" aria-label="原补料" /></label>
     <button type="button" @click="issue">补料</button>
     <button type="button" @click="giveBack">退补</button>
+    </fieldset>
+    <p v-if="operation.pending.value">正在提交，请稍候</p>
+    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
+    <button type="button" @click="operation.startNext">开始下一笔</button>
   </section>
 </template>

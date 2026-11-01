@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import { receiveGoldworkMaterial, recordGoldworkMovement } from '../../services/goldworkApi';
 
 const goldworkCode = ref('');
@@ -16,10 +17,8 @@ const kind = ref('OUTPUT');
 const disposition = ref('');
 const conversionNote = ref('');
 const message = ref('');
+const operation = useBusinessCommand('goldwork-material', goldworkCode, { sourceId, sourceLineNo, sourceLineId, pieceCount, netWeight, grossWeight, weightUnit, purity, stepId, kind, disposition, conversionNote }, message);
 
-function newRequestId() {
-  return `goldwork-material-${Date.now()}`;
-}
 
 function optionalNumber(text: string) {
   const trimmed = text.trim();
@@ -45,8 +44,7 @@ async function receive() {
     message.value = '未知重量不能写成 0';
     return;
   }
-  const saved = await receiveGoldworkMaterial(goldworkCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('receive', {
     sourceId: sourceId.value.trim(),
     sourceLineNo: sourceLineNo.value.trim() ? Number(sourceLineNo.value) : null,
     pieceCount: pieces,
@@ -54,7 +52,8 @@ async function receive() {
     grossWeight: gross,
     weightUnit: weightUnit.value.trim(),
     purity: purity.value.trim(),
-  });
+  }, (code, body) => receiveGoldworkMaterial(code, body));
+  if (!saved) return;
   sourceLineId.value = saved.lineId;
   message.value = `已接收 ${saved.lineId}，精度 ${saved.precisionState}，未入账`;
 }
@@ -70,8 +69,7 @@ async function record() {
     message.value = '请选择金料来源';
     return;
   }
-  const saved = await recordGoldworkMovement(goldworkCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('movement', {
     stepId: stepId.value,
     kind: kind.value,
     sourceLineId: sourceLineId.value.trim(),
@@ -86,7 +84,8 @@ async function record() {
     inferShortage: false,
     conversionFactor: null,
     enforcePieceConservation: false,
-  });
+  }, (code, body) => recordGoldworkMovement(code, body));
+  if (!saved) return;
   message.value = `已记录 ${saved.kind}，净重${saved.netWeight == null ? '未填' : saved.netWeight}`;
 }
 </script>
@@ -98,6 +97,7 @@ async function record() {
       <p>净重和毛重分开填写。不把毛重写成净金，短重不自动算损耗，空着表示未知。</p>
     </header>
     <p role="status">{{ message }}</p>
+    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
     <label>金工号 <input v-model="goldworkCode" aria-label="金料金工号" /></label>
     <label>来源编号 <input v-model="sourceId" aria-label="来源编号" /></label>
     <label>来源行号 <input v-model="sourceLineNo" aria-label="来源行号" /></label>
@@ -128,5 +128,9 @@ async function record() {
     <label>处置 <input v-model="disposition" aria-label="处置" /></label>
     <label>转换说明 <input v-model="conversionNote" aria-label="转换说明" /></label>
     <button type="button" @click="record">记录投入产出</button>
+    </fieldset>
+    <p v-if="operation.pending.value">正在提交，请稍候</p>
+    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
+    <button type="button" @click="operation.startNext">开始下一笔</button>
   </section>
 </template>

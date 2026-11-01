@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import {
   addSamplingVersion,
   confirmSamplingVersion,
@@ -17,18 +18,19 @@ const modelFormat = ref('');
 const modelVersion = ref('');
 const modelLocationNote = ref('');
 const message = ref('');
-const requestId = ref(newRequestId());
+const operation = useBusinessCommand('sampling-version', samplingCode, { kind, parameterText, modelFileName, modelFormat, modelVersion, modelLocationNote }, message);
+watch(samplingCode, () => { versions.value = []; });
 
-function newRequestId() {
-  return `sampling-version-${Date.now()}`;
-}
 
 async function loadVersions() {
   if (!samplingCode.value.trim()) {
     message.value = '请填写打样号';
     return;
   }
-  versions.value = await fetchSamplingVersions(samplingCode.value.trim());
+  const code = samplingCode.value.trim();
+  const saved = await fetchSamplingVersions(code);
+  if (samplingCode.value.trim() !== code) return;
+  versions.value = saved;
   message.value = versions.value.length ? '已读取版本' : '没有版本';
 }
 
@@ -41,8 +43,7 @@ async function submit() {
     message.value = '只有模型版本可以登记模型引用';
     return;
   }
-  const saved = await addSamplingVersion(samplingCode.value.trim(), {
-    requestId: requestId.value,
+  const saved = await operation.submit('version', {
     kind: kind.value,
     parameterText: parameterText.value.trim(),
     evidenceCode: '',
@@ -51,8 +52,8 @@ async function submit() {
     modelVersion: modelVersion.value.trim(),
     modelLocationNote: modelLocationNote.value.trim(),
     modelEvidenceCode: '',
-  });
-  requestId.value = newRequestId();
+  }, (code, body) => addSamplingVersion(code, body));
+  if (!saved) return;
   message.value = saved.modelReferenced ? '已保存模型引用，不代表外部原件已备份' : `已保存${saved.kindLabel}版本`;
   await loadVersions();
 }
@@ -60,13 +61,13 @@ async function submit() {
 async function decide(version: SamplingVersionView, accepted: boolean) {
   const note = accepted ? '客户确认' : '需要修改';
   const action = accepted ? confirmSamplingVersion : rejectSamplingVersion;
-  await action(version.samplingCode, {
-    requestId: newRequestId(),
+  const saved = await operation.submit(`decision:${version.kind}:${version.versionNo}`, {
     kind: version.kind,
     versionNo: version.versionNo,
     note,
     credentialCode: '',
-  });
+  }, (code, body) => action(code, body));
+  if (!saved) return;
   message.value = accepted ? '已记录客户确认' : '已记录驳回';
   await loadVersions();
 }
@@ -84,6 +85,7 @@ function looksFetchable(note: string) {
       <p>已确认版本不会被新版本覆盖。没有大文件也能保存。有模型引用不等于已经备份外部原件。</p>
     </header>
     <p role="status">{{ message }}</p>
+    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
     <label>打样号 <input v-model="samplingCode" aria-label="版本打样号" /></label>
     <button type="button" @click="loadVersions">查询版本</button>
     <ul>
@@ -110,5 +112,9 @@ function looksFetchable(note: string) {
       <label>存放说明 <input v-model="modelLocationNote" aria-label="存放说明" /></label>
       <button type="submit">保存版本</button>
     </form>
+    </fieldset>
+    <p v-if="operation.pending.value">正在提交，请稍候</p>
+    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
+    <button type="button" @click="operation.startNext">开始下一笔</button>
   </section>
 </template>

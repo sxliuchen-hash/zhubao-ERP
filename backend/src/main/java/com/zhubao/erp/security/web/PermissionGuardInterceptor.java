@@ -102,6 +102,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
     private PermissionCode permissionFor(HttpServletRequest request) {
         String path = request.getRequestURI();
         if (path.equals("/api/goldwork/orders")
+                || path.matches("^/api/goldwork/orders/[^/]+/photos$")
                 || path.matches("^/api/goldwork/orders/[^/]+/materials$")
                 || path.matches("^/api/goldwork/orders/[^/]+/movements$")
                 || path.matches("^/api/goldwork/orders/[^/]+/recoveries$")
@@ -119,6 +120,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             }
         }
         if (path.equals("/api/sampling/orders")
+                || path.matches("^/api/sampling/orders/[^/]+/photos$")
                 || path.matches("^/api/sampling/orders/[^/]+/versions$")
                 || path.matches("^/api/sampling/orders/[^/]+/material-uses$")
                 || path.matches("^/api/sampling/orders/[^/]+/operations$")

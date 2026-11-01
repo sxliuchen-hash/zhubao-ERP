@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import SamplingProductionPane from './SamplingProductionPane.vue';
 import { pickSamplingMaterial, reportSamplingOperation } from '../../services/samplingApi';
+import { uploadReportPhoto, type StoredEvidenceFile } from '../../services/evidenceApi';
+vi.mock('../../services/evidenceApi', () => ({ uploadReportPhoto: vi.fn() }));
 
 vi.mock('../../services/samplingApi', () => ({
   pickSamplingMaterial: vi.fn(),
@@ -28,7 +30,7 @@ describe('打样材料与生产拍照', () => {
       version: 1,
     });
     const wrapper = mount(SamplingProductionPane);
-    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
+    expect(wrapper.find('input[type="file"]').exists()).toBe(true);
     await wrapper.get('[aria-label="生产打样号"]').setValue('DY-20261031-0001');
     await wrapper.get('[aria-label="公司收货"]').setValue('RC-1');
     await wrapper.get('[aria-label="车间"]').setValue('WS-DY');
@@ -46,7 +48,12 @@ describe('打样材料与生产拍照', () => {
     expect(reportSamplingOperation).not.toHaveBeenCalled();
 
     await wrapper.get('[aria-label="加工选择"]').setValue('BOTH');
-    await wrapper.get('[aria-label="照片编号"]').setValue('ATT-1');
+    vi.mocked(uploadReportPhoto).mockResolvedValue({ code: 'ATT-1' } as StoredEvidenceFile);
+    const photo = wrapper.findAll('input[type="file"]')[0];
+    Object.defineProperty(photo.element, 'files', { configurable: true, value: [new File(['photo'], 'photo.png', { type: 'image/png' })] });
+    await photo.trigger('change');
+    await flushPromises();
+    expect(uploadReportPhoto).toHaveBeenCalledWith('SAMPLING', 'DY-20261031-0001', expect.any(File));
     await wrapper.findAll('button').find((button) => button.text() === '报工')!.trigger('click');
     expect(wrapper.text()).toContain('雕刻与车型能否组合仍待核');
     expect(reportSamplingOperation).not.toHaveBeenCalled();

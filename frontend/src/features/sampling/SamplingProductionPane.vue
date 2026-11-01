@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useBusinessCommand } from '../workspace/useBusinessCommand';
+import ReportPhotoCapture from '../evidence/ReportPhotoCapture.vue';
 import { pickSamplingMaterial, reportSamplingOperation } from '../../services/samplingApi';
 
 const samplingCode = ref('');
@@ -15,10 +17,8 @@ const versionNo = ref('1');
 const makingChoice = ref('');
 const attachmentCode = ref('');
 const message = ref('');
+const operation = useBusinessCommand('sampling-make', samplingCode, { receiptId, sourceDocumentCode, lineNo, workshopCode, quantity, unit, stepId, versionKind, versionNo, makingChoice, attachmentCode }, message);
 
-function newRequestId() {
-  return `sampling-make-${Date.now()}`;
-}
 
 async function pick() {
   const counted = Number(quantity.value);
@@ -30,8 +30,7 @@ async function pick() {
     message.value = '未知重量不能写成 0';
     return;
   }
-  const saved = await pickSamplingMaterial(samplingCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('pick', {
     receiptId: receiptId.value.trim(),
     sourceDocumentCode: sourceDocumentCode.value.trim(),
     lineNo: lineNo.value.trim() ? Number(lineNo.value) : null,
@@ -39,7 +38,8 @@ async function pick() {
     quantity: counted,
     weight: null,
     unit: unit.value.trim(),
-  });
+  }, (code, body) => pickSamplingMaterial(code, body));
+  if (!saved) return;
   message.value = `已领用 ${saved.useId}，权属 ${saved.owner}`;
 }
 
@@ -52,8 +52,7 @@ async function report() {
     message.value = '雕刻与车型能否组合仍待核';
     return;
   }
-  const saved = await reportSamplingOperation(samplingCode.value.trim(), {
-    requestId: newRequestId(),
+  const saved = await operation.submit('report', {
     stepId: stepId.value,
     versionKind: versionKind.value,
     versionNo: Number(versionNo.value),
@@ -61,8 +60,10 @@ async function report() {
     quantity: Number(quantity.value),
     unit: unit.value.trim(),
     attachmentCode: attachmentCode.value.trim(),
-  });
+  }, (code, body) => reportSamplingOperation(code, body));
+  if (!saved) return;
   message.value = `已报工 ${saved.stepName}`;
+  attachmentCode.value = '';
 }
 </script>
 
@@ -70,9 +71,10 @@ async function report() {
   <section class="page-stack" aria-label="打样材料和报工">
     <header>
       <h2>材料与生产</h2>
-      <p>领用真实来源。报工必须有照片编号，不在这里上传大文件，也不开普通工单。</p>
+      <p>领用真实来源，拍照或选图后直接报工。模型大文件仍只登记存放引用。</p>
     </header>
     <p role="status">{{ message }}</p>
+    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
     <label>打样号 <input v-model="samplingCode" aria-label="生产打样号" /></label>
     <label>公司收货 <input v-model="receiptId" aria-label="公司收货" /></label>
     <label>客户收货 <input v-model="sourceDocumentCode" aria-label="客户收货" /></label>
@@ -99,7 +101,11 @@ async function report() {
         <option value="BOTH">雕刻加车型</option>
       </select>
     </label>
-    <label>照片编号 <input v-model="attachmentCode" aria-label="照片编号" /></label>
+    <ReportPhotoCapture v-model="attachmentCode" business-type="SAMPLING" :business-code="samplingCode" />
     <button type="button" @click="report">报工</button>
+    </fieldset>
+    <p v-if="operation.pending.value">正在提交，请稍候</p>
+    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
+    <button type="button" @click="operation.startNext">开始下一笔</button>
   </section>
 </template>
