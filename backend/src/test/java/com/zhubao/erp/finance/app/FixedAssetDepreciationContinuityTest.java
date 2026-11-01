@@ -37,6 +37,48 @@ class FixedAssetDepreciationContinuityTest {
     private final PermissionGuard guard = new PermissionGuard();
 
     @Test
+    void 历史金额不符或缺月不自动补尾差() {
+        InMemoryFinanceRepository books = new InMemoryFinanceRepository();
+        books.saveAsset(asset("FIN-AST-1"));
+        books.saveDepreciation(new DepreciationEntry("OLD", "FIN-AST-1", "2026-10", new BigDecimal("1.00")));
+        var service = service(books, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+        assertThatThrownBy(() -> service.run("dep-history-mismatch", finance, "2026-11", null)).hasMessageContaining("金额与计划不一致");
+        assertThatThrownBy(() -> service.run("dep-history-gap", finance, "2026-12", null)).hasMessageContaining("历史折旧");
+        assertThat(books.listDepreciations()).hasSize(1);
+    }
+
+    @Test
+    void 小额长期资产折旧不为负且合计不超过基础() {
+        InMemoryFinanceRepository books = new InMemoryFinanceRepository();
+        books.saveAsset(new FixedAsset("TINY", "工具", "设备", new BigDecimal("1.00"), BigDecimal.ZERO, "2026-01", 200, "财务", "2026-01-01"));
+        var service = service(books, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+        for (int i = 0; i < 200; i++) service.run("tiny-month-" + i, finance, java.time.YearMonth.of(2026, 1).plusMonths(i).toString(), null);
+        assertThat(books.listDepreciations()).allSatisfy(entry -> assertThat(entry.amount()).isNotNegative());
+        assertThat(books.listDepreciations().stream().map(DepreciationEntry::amount).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("1.00");
+    }
+
+    @Test
+    void 已发生处置的资产待核而其他资产可继续() {
+        InMemoryFinanceRepository books = new InMemoryFinanceRepository();
+        var dispositions = new com.zhubao.erp.finance.infra.InMemoryFixedAssetDispositionRepository();
+        var unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        books.saveAsset(asset("STOPPED"));
+        books.saveAsset(asset("NORMAL"));
+        var costs = new FinanceCostService(books, null, dispositions);
+        var service = new FixedAssetDepreciationContinuityService(books, costs, unit, guard);
+        unit.execute(new com.zhubao.erp.work.domain.CommandCall("seed-asset-disposition", "财务", "SEED", "ASSET", "STOPPED", "scrap"), session -> {
+            dispositions.insert(new com.zhubao.erp.finance.domain.FixedAssetDisposition("DSP1", "STOPPED", "SCRAP", "2026-10-20", "损坏", ""), session);
+            return "DSP1";
+        });
+        var result = service.run("dep-disposition-month", finance, "2026-10", null);
+        assertThat(result.entries()).extracting(DepreciationEntry::assetCode).containsExactly("NORMAL");
+        assertThat(result.awaitingAssetCodes()).containsExactly("STOPPED");
+        assertThatThrownBy(() -> costs.depreciate(new com.zhubao.erp.finance.domain.FinanceCommands.DepreciationRunCommand("2026-11")))
+                .hasMessageContaining("处置后的折旧规则待核");
+        assertThat(books.listDepreciations()).hasSize(1);
+    }
+
+    @Test
     void 末期尾差可复算且同月不重复() {
         InMemoryFinanceRepository books = new InMemoryFinanceRepository();
         FixedAssetDepreciationContinuityService service = service(books, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
@@ -84,7 +126,7 @@ class FixedAssetDepreciationContinuityTest {
     void 失败不留下新折旧() {
         InMemoryFinanceRepository books = new InMemoryFinanceRepository();
         books.saveAsset(asset("FIN-AST-1"));
-        books.saveDepreciation(new DepreciationEntry("FIN-DEP-OLD", "FIN-AST-1", "2026-10", new BigDecimal("1.00")));
+        books.saveDepreciation(new DepreciationEntry("FIN-DEP-OLD", "FIN-AST-1", "2026-10", new BigDecimal("333.33")));
         FixedAssetDepreciationContinuityService failing = service(books, new MemoryBusinessWorkUnit(
                 new InMemoryCommandRequestRepository(), () -> {
             throw new IllegalStateException("失败");
@@ -114,13 +156,10 @@ class FixedAssetDepreciationContinuityTest {
         books.saveAsset(asset("FIN-AST-1"));
         books.saveDepreciation(new DepreciationEntry("FIN-DEP-OLD", "FIN-AST-1", "2026-10", new BigDecimal("1.00")));
         FixedAssetDepreciationRun kept = service.run("h05-jdbc-k1", finance, "2026-10", null);
-        FixedAssetDepreciationRun next = service.run("h05-jdbc-n1", finance, "2026-12", null);
+        assertThatThrownBy(() -> service.run("h05-jdbc-n1", finance, "2026-12", null)).isInstanceOf(BusinessException.class).hasMessageContaining("历史折旧");
         assertThat(kept.entries()).singleElement().extracting(DepreciationEntry::amount).isEqualTo(new BigDecimal("1.00"));
-        assertThat(next.entries()).singleElement().extracting(DepreciationEntry::amount).isEqualTo(new BigDecimal("333.34"));
-        assertThat(service.run("h05-jdbc-n1", finance, "2026-12", null).entries())
-                .extracting(DepreciationEntry::code).containsExactly(next.entries().get(0).code());
         assertThat(books.listAssets()).singleElement().extracting(FixedAsset::originalValue).isEqualTo(new BigDecimal("1000.00"));
-        assertThat(books.listDepreciations()).hasSize(2);
+        assertThat(books.listDepreciations()).hasSize(1);
     }
 
     @Test

@@ -44,6 +44,21 @@ class FixedAssetCardAdoptionTest {
     private final PermissionGuard guard = new PermissionGuard();
 
     @Test
+    void 分隔符和缺项不能构造相同的请求内容() {
+        InMemoryFinanceRepository assets = new InMemoryFinanceRepository();
+        assets.saveAsset(legacy("FIN-AST-1", "抛光机", "1000.00"));
+        assets.saveAsset(legacy("FIN-AST-2", "车床", "1000.00"));
+        FixedAssetCardAdoptionService service = service(assets, new InMemoryFixedAssetPhysicalRepository(),
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+        service.supplement("card-delimiter-01", finance, "FIN-AST-1", 0L, "A|B", "C", "", "", "");
+        assertThatThrownBy(() -> service.supplement("card-delimiter-01", finance, "FIN-AST-1", 0L, "A", "B|C", "", "", ""))
+                .hasMessage("同一请求的内容不一致");
+        service.supplement("card-missing-01", finance, "FIN-AST-2", 0L, "-", "", "", "", "");
+        assertThatThrownBy(() -> service.supplement("card-missing-01", finance, "FIN-AST-2", 0L, "", "-", "", "", ""))
+                .hasMessage("同一请求的内容不一致");
+    }
+
+    @Test
     void 旧卡缺项待补且补登记不重复原值() {
         InMemoryFinanceRepository assets = new InMemoryFinanceRepository();
         InMemoryFixedAssetPhysicalRepository physical = new InMemoryFixedAssetPhysicalRepository();

@@ -1,5 +1,9 @@
 package com.zhubao.erp.finance.infra;
 
+import java.util.Map;
+
+import com.zhubao.erp.finance.domain.FixedAssetRepairPayment;
+
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.FixedAssetRepair;
 import com.zhubao.erp.finance.domain.FixedAssetRepairRepository;
@@ -18,6 +22,22 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InMemoryFixedAssetRepairRepository implements FixedAssetRepairRepository {
 
     private final ConcurrentHashMap<String, FixedAssetRepair> rows = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Map<String, FixedAssetRepairPayment>> payments = new ConcurrentHashMap<>();
+
+    @Override
+    public void savePayment(String repairId, FixedAssetRepairPayment payment, WorkSession session) {
+        var values = payments.computeIfAbsent(repairId, key -> new ConcurrentHashMap<>());
+        if (values.putIfAbsent(payment.paymentCode(), payment) != null) {
+            throw new BusinessException("维修付款凭据已保存");
+        }
+        if (session != null) session.onRollback(() -> values.remove(payment.paymentCode(), payment));
+    }
+
+    @Override
+    public List<FixedAssetRepairPayment> payments(String repairId) {
+        return payments.getOrDefault(repairId, Map.of()).values().stream()
+                .sorted(Comparator.comparing(FixedAssetRepairPayment::paymentCode)).toList();
+    }
 
     @Override
     public void insert(FixedAssetRepair repair, WorkSession session) {

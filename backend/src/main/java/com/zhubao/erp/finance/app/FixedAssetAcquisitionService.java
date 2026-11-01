@@ -325,9 +325,8 @@ public class FixedAssetAcquisitionService {
     private static void assertAssetPayable(Payable payable) {
         String kind = payable.kind() == null ? "" : payable.kind();
         String source = payable.sourceCode() == null ? "" : payable.sourceCode();
-        if (kind.equals("工资") || kind.equals("PAYROLL") || kind.equals("OUTSOURCE")
-                || kind.equals("CONSUMABLE") || kind.equals("公司料")
-                || source.startsWith("CONSUMABLE|") || source.startsWith("CMR|")
+        if (!(kind.equals("ASSET") || kind.equals("设备") || kind.equals("固定资产"))
+                || source.startsWith("REPAIR|") || source.startsWith("CONSUMABLE|") || source.startsWith("CMR|")
                 || source.startsWith("SETTLEMENT|") || source.startsWith("employee-target:")) {
             throw new BusinessException("工资、外协或物料应付不能当作资产原值");
         }

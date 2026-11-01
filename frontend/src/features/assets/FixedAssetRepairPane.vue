@@ -123,6 +123,7 @@ async function pay() {
         {{ row.repairId }} {{ row.stateLabel }} 原值 {{ row.originalValue }}
         费用 {{ row.costAmount == null ? '未齐' : row.costAmount }}
         {{ row.paid ? '已付' : '未付' }}
+        <span v-for="payment in row.payments" :key="payment.paymentCode">付款 {{ payment.paymentCode }} 凭据 {{ payment.voucher }}</span>
       </li>
     </ul>
     <form aria-label="登记维修" @submit.prevent="record">

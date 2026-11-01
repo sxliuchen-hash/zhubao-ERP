@@ -1,5 +1,7 @@
 package com.zhubao.erp.finance.app;
 
+import com.zhubao.erp.finance.domain.FixedAssetDispositionRepository;
+
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.ConsumableItem;
 import com.zhubao.erp.finance.domain.ConsumableMovement;
@@ -36,16 +38,23 @@ public class FinanceCostService {
 
     private final FinanceRepository finance;
     private final ConsumableQuantityWriteGate writes;
+    private final FixedAssetDispositionRepository dispositions;
     private final AtomicLong sequence = new AtomicLong();
 
     public FinanceCostService(FinanceRepository finance) {
         this(finance, null);
     }
 
+    public FinanceCostService(FinanceRepository finance, ConsumableQuantityWriteGate writes) {
+        this(finance, writes, null);
+    }
+
     @Autowired
-    public FinanceCostService(FinanceRepository finance, @Autowired(required = false) ConsumableQuantityWriteGate writes) {
+    public FinanceCostService(FinanceRepository finance, @Autowired(required = false) ConsumableQuantityWriteGate writes,
+                              @Autowired(required = false) FixedAssetDispositionRepository dispositions) {
         this.finance = finance;
         this.writes = writes;
+        this.dispositions = dispositions;
     }
 
     public List<ConsumableStockView> consumableStocks() {
@@ -194,15 +203,18 @@ public class FinanceCostService {
             if (exists) {
                 continue;
             }
+            if (depreciationBlocked(asset, yearMonth)) {
+                throw new BusinessException("资产停用或处置后的折旧规则待核：" + asset.code());
+            }
             DepreciationEntry entry = new DepreciationEntry(
                     FinanceTexts.code("FIN-DEP", sequence),
                     asset.code(),
                     yearMonth,
                     depreciationAmount(asset, index)
             );
-            finance.saveDepreciation(entry);
             created.add(entry);
         }
+        created.forEach(finance::saveDepreciation);
         return created;
     }
 
@@ -280,11 +292,29 @@ public class FinanceCostService {
     private BigDecimal depreciationAmount(FixedAsset asset, int index) {
         BigDecimal base = asset.originalValue().subtract(asset.residualValue());
         BigDecimal monthly = base.divide(BigDecimal.valueOf(asset.usefulMonths()), 2, RoundingMode.HALF_UP);
-        if (index < asset.usefulMonths()) {
-            return monthly;
+        List<DepreciationEntry> history = finance.listDepreciations().stream()
+                .filter(entry -> asset.code().equals(entry.assetCode())).toList();
+        if (history.stream().anyMatch(entry -> FinanceTexts.depreciationIndex(asset.startMonth(), entry.yearMonth()) >= index)) {
+            throw new BusinessException("存在本期或后续折旧记录，请先核对历史：" + asset.code());
         }
-        BigDecimal prior = monthly.multiply(BigDecimal.valueOf(asset.usefulMonths() - 1L));
-        return FinanceTexts.money(base.subtract(prior));
+        BigDecimal prior = BigDecimal.ZERO;
+        for (int month = 1; month < index; month++) {
+            String expectedMonth = java.time.YearMonth.parse(asset.startMonth()).plusMonths(month - 1L).toString();
+            DepreciationEntry entry = history.stream().filter(row -> expectedMonth.equals(row.yearMonth())).findFirst()
+                    .orElseThrow(() -> new BusinessException("历史折旧月份缺失，请先核对：" + asset.code()));
+            BigDecimal expected = monthly.min(base.subtract(prior).max(BigDecimal.ZERO));
+            if (entry.amount().compareTo(expected) != 0) {
+                throw new BusinessException("历史折旧金额与计划不一致，请先核对：" + asset.code());
+            }
+            prior = prior.add(entry.amount());
+        }
+        BigDecimal remaining = base.subtract(prior).max(BigDecimal.ZERO);
+        return FinanceTexts.money(index == asset.usefulMonths() ? remaining : monthly.min(remaining));
+    }
+
+    public boolean depreciationBlocked(FixedAsset asset, String month) {
+        return dispositions != null && dispositions.list(asset.code()).stream()
+                .anyMatch(event -> event.occurredOn().substring(0, 7).compareTo(month) <= 0);
     }
 
     private record OnHand(BigDecimal quantity, BigDecimal amount) {

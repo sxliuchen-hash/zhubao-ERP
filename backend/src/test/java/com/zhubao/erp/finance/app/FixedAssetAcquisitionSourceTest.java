@@ -40,6 +40,22 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class FixedAssetAcquisitionSourceTest {
+    @Test
+    void 维修或不明性质的应付不能作为购置来源() {
+        InMemoryFinanceRepository books = new InMemoryFinanceRepository();
+        FixedAssetAcquisitionService service = service(books, new InMemoryFixedAssetPhysicalRepository(),
+                new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
+        for (String kind : new String[]{"ASSET_REPAIR", "REPAIR", "其他"}) {
+            String code = "AP-" + kind;
+            books.savePayable(new Payable(code, kind, "2026-10", "维修商", "REPAIR|old", null, "",
+                    new BigDecimal("100.00"), BigDecimal.ZERO, "财务", "2026-10-01T08:00:00"));
+            assertThatThrownBy(() -> service.receive("asset-cover-" + kind, finance, "COVERED_PAYABLE", "",
+                    "新机器", "设备", null, BigDecimal.ZERO, "2026-10", 12, "", "2026-10-01", "", "", code, null, null, null))
+                    .isInstanceOf(BusinessException.class);
+        }
+        assertThat(books.listAssets()).isEmpty();
+        assertThat(books.listPayables()).hasSize(3);
+    }
 
     private final OperatorContext finance = new OperatorContext("财务", RoleCode.FINANCE_STATISTICIAN, DataScope.ALL);
     private final PermissionGuard guard = new PermissionGuard();

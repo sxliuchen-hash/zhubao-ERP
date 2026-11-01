@@ -1,5 +1,7 @@
 package com.zhubao.erp.finance.app;
 
+import com.zhubao.erp.finance.domain.FixedAssetRepairPayment;
+
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.FixedAsset;
 import com.zhubao.erp.finance.domain.FixedAssetRepair;
@@ -103,7 +105,7 @@ public class FixedAssetRepairService {
         String payload = id + "|" + paying.toPlainString() + "|" + day + "|" + proof;
         unit.execute(new CommandCall(
                 requestId, actor.operator(), "PAY_ASSET_REPAIR", "FIXED_ASSET", id, payload
-        ), session -> payIn(session, actor, id, paying, day));
+        ), session -> payIn(session, actor, id, paying, day, proof));
         FixedAssetRepair repair = repairs.find(id).orElseThrow(() -> new BusinessException("维修记录不存在"));
         return view(repair, requireAsset(repair.assetCode()));
     }
@@ -129,16 +131,17 @@ public class FixedAssetRepairService {
         return repair.repairId();
     }
 
-    private String payIn(WorkSession session, OperatorContext actor, String repairId, BigDecimal paying, String paidOn) {
+    private String payIn(WorkSession session, OperatorContext actor, String repairId, BigDecimal paying, String paidOn, String proof) {
         FixedAssetRepair repair = repairs.lock(repairId, session).orElseThrow(() -> new BusinessException("维修记录不存在"));
         if (repair.state() != FixedAssetRepairState.CONFIRMED || repair.payableCode().isEmpty()) {
             throw new BusinessException("费用尚未确认，不能付款");
         }
         int before = finance.listPayables().size();
-        finance.registerPayablePayment(new PayablePayment(
+        PayablePayment payment = finance.registerPayablePayment(new PayablePayment(
                 FinanceTexts.code("FIN-PMT", sequence), repair.payableCode(), paying, paidOn,
                 actor.operator(), FinanceTexts.now()
         ), "", session);
+        repairs.savePayment(repairId, new FixedAssetRepairPayment(payment.code(), proof), session);
         if (finance.listPayables().size() != before) {
             throw new BusinessException("付款不能再记一份维修成本");
         }
@@ -162,7 +165,8 @@ public class FixedAssetRepairService {
                 repair.payableCode(),
                 payable == null ? null : payable.amount(),
                 paidAmount,
-                paidAmount != null && paidAmount.signum() > 0
+                paidAmount != null && paidAmount.signum() > 0,
+                repairs.payments(repair.repairId())
         );
     }
 

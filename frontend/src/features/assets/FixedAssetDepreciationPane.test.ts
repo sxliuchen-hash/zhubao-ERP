@@ -12,6 +12,7 @@ describe('资产折旧延续', () => {
     vi.mocked(continueAssetDepreciation).mockResolvedValue({
       yearMonth: '2026-10',
       algorithm: 'USEFUL_MONTHS_WITH_FINAL_TAIL',
+      awaitingAssetCodes: ['STOPPED'],
       entries: [{ code: 'FIN-DEP-1', assetCode: 'FIN-AST-1', yearMonth: '2026-10', amount: 333.33 }],
     });
     const wrapper = mount(FixedAssetDepreciationPane);
@@ -31,6 +32,8 @@ describe('资产折旧延续', () => {
     }));
     expect(wrapper.text()).toContain('不是税务结论');
     expect(wrapper.text()).toContain('333.33');
+    expect(wrapper.text()).toContain('STOPPED');
+    expect(wrapper.text()).toContain('本次未新增');
     wrapper.unmount();
   });
 });

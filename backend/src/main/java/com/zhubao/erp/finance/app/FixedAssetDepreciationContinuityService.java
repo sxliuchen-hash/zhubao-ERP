@@ -31,12 +31,12 @@ public class FixedAssetDepreciationContinuityService {
     private final PermissionGuard permissions;
     private final AtomicLong sequence = new AtomicLong();
 
-    @Autowired
     public FixedAssetDepreciationContinuityService(FinanceRepository finance, BusinessWorkUnit unit, PermissionGuard permissions) {
         this(finance, new FinanceCostService(finance), unit, permissions);
     }
 
-    FixedAssetDepreciationContinuityService(FinanceRepository finance, FinanceCostService costs,
+    @Autowired
+    public FixedAssetDepreciationContinuityService(FinanceRepository finance, FinanceCostService costs,
                                             BusinessWorkUnit unit, PermissionGuard permissions) {
         this.finance = finance;
         this.costs = costs;
@@ -58,6 +58,9 @@ public class FixedAssetDepreciationContinuityService {
                 if (index < 1 || index > asset.usefulMonths()) {
                     continue;
                 }
+                if (costs.depreciationBlocked(asset, month)) {
+                    continue;
+                }
                 boolean exists = finance.listDepreciations().stream()
                         .anyMatch(entry -> asset.code().equals(entry.assetCode()) && month.equals(entry.yearMonth()));
                 if (exists) {
@@ -72,7 +75,8 @@ public class FixedAssetDepreciationContinuityService {
             }
             return month;
         });
-        return new FixedAssetDepreciationRun(month, FixedAssetDepreciationRun.MANAGEMENT_ALGORITHM, entries(month));
+        return new FixedAssetDepreciationRun(month, FixedAssetDepreciationRun.MANAGEMENT_ALGORITHM, entries(month),
+                finance.listAssets().stream().filter(asset -> costs.depreciationBlocked(asset, month)).map(FixedAsset::code).toList());
     }
 
     private List<DepreciationEntry> entries(String month) {

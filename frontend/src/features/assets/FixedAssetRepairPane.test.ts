@@ -26,6 +26,7 @@ describe('资产维修凭据', () => {
         costAmount: null,
         paidAmount: null,
         paid: false,
+      payments: [],
       },
     ]);
     vi.mocked(recordAssetRepair).mockResolvedValue({
@@ -41,6 +42,7 @@ describe('资产维修凭据', () => {
       costAmount: null,
       paidAmount: null,
       paid: false,
+      payments: [],
     });
     vi.mocked(confirmAssetRepair).mockResolvedValue({
       repairId: 'FIN-RPR-1',
@@ -55,6 +57,7 @@ describe('资产维修凭据', () => {
       costAmount: 200,
       paidAmount: 0,
       paid: false,
+      payments: [],
     });
     vi.mocked(payAssetRepair).mockResolvedValue({
       repairId: 'FIN-RPR-1',
@@ -69,6 +72,7 @@ describe('资产维修凭据', () => {
       costAmount: 200,
       paidAmount: 80,
       paid: true,
+      payments: [{ paymentCode: "PMT1", voucher: "PV-1" }],
     });
     const wrapper = mount(FixedAssetRepairPane);
     await wrapper.get('[aria-label="维修资产编码"]').setValue('FIN-AST-1');

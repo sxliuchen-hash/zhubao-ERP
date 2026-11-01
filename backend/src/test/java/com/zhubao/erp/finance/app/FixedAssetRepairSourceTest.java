@@ -36,6 +36,30 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class FixedAssetRepairSourceTest {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void 每次付款凭据独立保存并可回放读取(boolean jdbc) throws Exception {
+        var ds = jdbc ? dataSource() : null;
+        com.zhubao.erp.finance.domain.FinanceRepository books = jdbc ? new JdbcFinanceRepository(ds) : new InMemoryFinanceRepository();
+        com.zhubao.erp.finance.domain.FixedAssetRepairRepository repairs = jdbc ? new JdbcFixedAssetRepairRepository(ds) : new InMemoryFixedAssetRepairRepository();
+        com.zhubao.erp.work.app.BusinessWorkUnit unit = jdbc ? new JdbcBusinessWorkUnit(ds, new JdbcCommandRequestRepository(ds))
+                : new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        books.saveAsset(legacy());
+        FixedAssetRepairService service = new FixedAssetRepairService(books, repairs, unit, guard);
+        var recorded = service.record("repair-evidence-start", finance, legacy().code(), "2026-10-08", "维修商", "维修照片");
+        service.confirm("repair-evidence-cost", finance, recorded.repairId(), new BigDecimal("100.00"), "费用凭据");
+        var first = service.pay("repair-payment-first", finance, recorded.repairId(), new BigDecimal("40.00"), "2026-10-09", "付款凭据甲");
+        var last = service.pay("repair-payment-last", finance, recorded.repairId(), new BigDecimal("60.00"), "2026-10-10", "付款凭据乙");
+        assertThat(first.payments()).hasSize(1);
+        assertThat(last.payments()).extracting(com.zhubao.erp.finance.domain.FixedAssetRepairPayment::voucher)
+                .containsExactlyInAnyOrder("付款凭据甲", "付款凭据乙");
+        assertThat(service.pay("repair-payment-last", finance, recorded.repairId(), new BigDecimal("60.00"), "2026-10-10", "付款凭据乙").payments()).hasSize(2);
+        assertThat(last.evidenceLabel()).isEqualTo("费用凭据");
+        assertThat(last.paidAmount()).isEqualByComparingTo("100.00");
+        assertThat(books.listPayablePayments()).extracting(com.zhubao.erp.finance.domain.PayablePayment::code)
+                .containsExactlyInAnyOrderElementsOf(last.payments().stream().map(com.zhubao.erp.finance.domain.FixedAssetRepairPayment::paymentCode).toList());
+        if (jdbc) assertThat(new JdbcFixedAssetRepairRepository(ds).payments(recorded.repairId())).hasSize(2);
+    }
 
     private final OperatorContext finance = new OperatorContext("财务", RoleCode.FINANCE_STATISTICIAN, DataScope.ALL);
     private final PermissionGuard guard = new PermissionGuard();
@@ -207,7 +231,7 @@ class FixedAssetRepairSourceTest {
         dataSource.setPassword("");
         var scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
-            for (int version : new int[]{36, 44, 111}) {
+            for (int version : new int[]{36, 44, 111, 139}) {
                 String sql = scripts.stream().filter(script -> script.version() == version).findFirst().orElseThrow().sql();
                 for (String item : MigrationCatalog.statements(sql)) {
                     if (item.trim().regionMatches(true, 0, "create", 0, 6)) {

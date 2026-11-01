@@ -52,6 +52,7 @@ export interface FixedAssetRepairView {
   costAmount: number | null;
   paidAmount: number | null;
   paid: boolean;
+  payments: Array<{ paymentCode: string; voucher: string }>;
 }
 
 export function fetchAssetRepairs(assetCode: string): Promise<FixedAssetRepairView[]> {
@@ -91,6 +92,7 @@ export interface FixedAssetDepreciationRun {
   yearMonth: string;
   algorithm: string;
   entries: Array<{ code: string; assetCode: string; yearMonth: string; amount: number }>;
+  awaitingAssetCodes: string[];
 }
 
 export function continueAssetDepreciation(body: {

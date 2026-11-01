@@ -8,7 +8,11 @@ import java.util.List;
 public record FixedAssetDepreciationRun(
         String yearMonth,
         String algorithm,
-        List<DepreciationEntry> entries
+        List<DepreciationEntry> entries,
+        List<String> awaitingAssetCodes
 ) {
+    public FixedAssetDepreciationRun(String yearMonth, String algorithm, List<DepreciationEntry> entries) {
+        this(yearMonth, algorithm, entries, List.of());
+    }
     public static final String MANAGEMENT_ALGORITHM = "USEFUL_MONTHS_WITH_FINAL_TAIL";
 }

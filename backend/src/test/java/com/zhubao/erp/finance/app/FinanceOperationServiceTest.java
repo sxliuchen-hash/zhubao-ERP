@@ -170,6 +170,7 @@ class FinanceOperationServiceTest {
         assertThat(cost.depreciate(new DepreciationRunCommand("2026-10"))).singleElement()
                 .satisfies(entry -> assertThat(entry.amount()).isEqualByComparingTo("333.33"));
         assertThat(cost.depreciate(new DepreciationRunCommand("2026-10"))).isEmpty();
+        cost.depreciate(new DepreciationRunCommand("2026-11"));
         assertThat(cost.depreciate(new DepreciationRunCommand("2026-12"))).singleElement()
                 .satisfies(entry -> assertThat(entry.amount()).isEqualByComparingTo("333.34"));
 

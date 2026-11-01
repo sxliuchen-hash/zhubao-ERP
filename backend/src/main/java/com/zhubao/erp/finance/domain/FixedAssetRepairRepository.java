@@ -17,4 +17,8 @@ public interface FixedAssetRepairRepository {
     void confirm(String repairId, String evidenceCode, String payableCode, WorkSession session);
 
     List<FixedAssetRepair> list(String assetCode);
+
+    void savePayment(String repairId, FixedAssetRepairPayment payment, WorkSession session);
+
+    List<FixedAssetRepairPayment> payments(String repairId);
 }

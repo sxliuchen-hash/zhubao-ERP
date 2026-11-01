@@ -136,3 +136,4 @@
 136	TABLE	fin_customer_bill_source
 137	COLUMN	inv_company_material_receipt	business_date
 138	COLUMN	inv_tool_piece	scrapped
+139	TABLE	fin_fixed_asset_repair_payment

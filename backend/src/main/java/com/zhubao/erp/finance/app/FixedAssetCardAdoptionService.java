@@ -224,7 +224,7 @@ public class FixedAssetCardAdoptionService {
 
     private static String mark(String value) {
         String text = value == null ? "" : value.trim();
-        return text.isEmpty() ? "-" : text;
+        return text.length() + ":" + text;
     }
 
     private static String blankToNull(String value) {

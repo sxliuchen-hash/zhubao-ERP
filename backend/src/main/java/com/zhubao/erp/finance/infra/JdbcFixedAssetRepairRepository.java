@@ -1,5 +1,7 @@
 package com.zhubao.erp.finance.infra;
 
+import com.zhubao.erp.finance.domain.FixedAssetRepairPayment;
+
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.FixedAssetRepair;
 import com.zhubao.erp.finance.domain.FixedAssetRepairRepository;
@@ -27,6 +29,34 @@ public class JdbcFixedAssetRepairRepository implements FixedAssetRepairRepositor
 
     public JdbcFixedAssetRepairRepository(DataSource dataSource) {
         this.dataSource = dataSource;
+    }
+
+    @Override
+    public void savePayment(String repairId, FixedAssetRepairPayment payment, WorkSession session) {
+        try (PreparedStatement insert = WorkSessionBindings.requiredJdbc(session).prepareStatement(
+                "insert into fin_fixed_asset_repair_payment(payment_code,repair_id,voucher) values (?,?,?)")) {
+            insert.setString(1, payment.paymentCode());
+            insert.setString(2, repairId);
+            insert.setString(3, payment.voucher());
+            insert.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法保存维修付款凭据", ex);
+        }
+    }
+
+    @Override
+    public List<FixedAssetRepairPayment> payments(String repairId) {
+        try (Connection connection = dataSource.getConnection(); PreparedStatement query = connection.prepareStatement(
+                "select payment_code,voucher from fin_fixed_asset_repair_payment where repair_id=? order by payment_code")) {
+            query.setString(1, repairId);
+            try (ResultSet rows = query.executeQuery()) {
+                List<FixedAssetRepairPayment> result = new ArrayList<>();
+                while (rows.next()) result.add(new FixedAssetRepairPayment(rows.getString(1), rows.getString(2)));
+                return List.copyOf(result);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取维修付款凭据", ex);
+        }
     }
 
     @Override

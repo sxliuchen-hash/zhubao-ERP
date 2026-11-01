@@ -17,6 +17,7 @@ public record FixedAssetRepairView(
         String payableCode,
         BigDecimal costAmount,
         BigDecimal paidAmount,
-        boolean paid
+        boolean paid,
+        java.util.List<FixedAssetRepairPayment> payments
 ) {
 }

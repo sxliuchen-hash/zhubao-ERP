@@ -33,11 +33,11 @@ class DatabaseUpgradeServiceTest {
     Path directory;
 
     @Test
-    void 真实迁移目录连续保留到本次V138() {
+    void 真实迁移目录连续保留到本次V139() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(138);
+        assertThat(scripts).hasSize(139);
         assertThat(scripts).extracting(MigrationScript::version)
-                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 138).boxed().toList());
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 139).boxed().toList());
         assertThat(scripts.get(134).fileName()).isEqualTo("V135__m3_stock_weight_pending.sql");
         assertThat(scripts.get(134).probe().columnName()).isEqualTo("weight_pending");
         assertThat(scripts.get(135).fileName()).isEqualTo("V136__m3_customer_bill_sources.sql");
