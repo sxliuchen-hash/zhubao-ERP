@@ -14,6 +14,13 @@ public record EmployeeTargetClosure(
         BigDecimal employeeQuantity,
         BigDecimal outsourcingQuantity,
         BigDecimal lossQuantity,
-        String quantityUnit
+        String quantityUnit,
+        java.util.List<EmployeeProcessWork> work,
+        boolean workEvidenceComplete
 ) {
+    public EmployeeTargetClosure(BusinessKind kind, EmployeeClosureKind closure, BigDecimal employeeQuantity,
+                                 BigDecimal outsourcingQuantity, BigDecimal lossQuantity, String quantityUnit) {
+        this(kind, closure, employeeQuantity, outsourcingQuantity, lossQuantity, quantityUnit, java.util.List.of(), false);
+    }
+    public EmployeeTargetClosure { work = java.util.List.copyOf(work); }
 }

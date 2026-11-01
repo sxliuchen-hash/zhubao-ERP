@@ -86,24 +86,29 @@ public class EmployeeTargetSettlementService {
         if (closure.closure() == EmployeeClosureKind.TOTAL_LOSS) {
             throw new BusinessException("全损计酬尚未核定，不能按 0 或正常完工入账");
         }
-        if (closure.closure() == EmployeeClosureKind.REWORK_OPEN) {
+        if (closure.closure() == EmployeeClosureKind.REWORK_OPEN || closure.closure() == EmployeeClosureKind.REWORK_PAY_PENDING) {
             throw new BusinessException("返工计酬尚未核定，不能入账");
         }
         if (shares.stream().anyMatch(EmployeeWorkShare::proxy)) {
             throw new BusinessException("多人代报计酬尚未核定，不能入账");
         }
-        BigDecimal employeeQuantity = closure.employeeQuantity();
-        if (employeeQuantity == null || employeeQuantity.signum() <= 0) {
-            throw new BusinessException("员工实作数量无效");
+        if (!closure.workEvidenceComplete()) throw new BusinessException("员工实作依据不完整，请核对工序、人员及报工照片");
+        var remaining = new ArrayList<>(closure.work());
+        List<EmployeeWorkShare> verified = new ArrayList<>();
+        for (EmployeeWorkShare share : shares) {
+            var work = remaining.stream().filter(item -> item.payeeAccount().equals(share.payeeAccount())
+                    && (item.stepId().equals(share.processName()) || item.processName().equals(share.processName())))
+                    .findFirst().orElseThrow(() -> new BusinessException("计酬人员或工序没有对应实作依据"));
+            if (share.quantity().compareTo(work.quantity()) != 0)
+                throw new BusinessException("工费数量必须等于员工实作数量，不能自动扣损耗");
+            remaining.remove(work);
+            verified.add(new EmployeeWorkShare(share.payeeAccount(), work.stepId(), share.quantity(), share.unitPrice(), false));
         }
-        BigDecimal shareQuantity = shares.stream().map(EmployeeWorkShare::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (shareQuantity.compareTo(employeeQuantity) != 0) {
-            throw new BusinessException("工费数量必须等于员工实作数量，不能自动扣损耗");
-        }
+        if (!remaining.isEmpty()) throw new BusinessException("尚有工序或人员的实作未核算");
         String month = YearMonth.now().toString();
         String mother = target.startsWith("ZD-") ? "" : target;
         List<String> codes = new ArrayList<>();
-        for (EmployeeWorkShare share : shares) {
+        for (EmployeeWorkShare share : verified) {
             BigDecimal amount = share.quantity().multiply(share.unitPrice()).setScale(2, RoundingMode.HALF_UP);
             String code = "WG" + UUID.randomUUID().toString().replace("-", "");
             finance.savePayrollLine(new PayrollLine(

@@ -12,6 +12,14 @@ public record QuantityDispositionLine(
         BigDecimal loss,
         BigDecimal scrap,
         BigDecimal returned,
-        BigDecimal pending
+        BigDecimal pending,
+        BigDecimal workQuantity,
+        String workerAccount,
+        String workerName,
+        String attachmentCode
 ) {
+    public QuantityDispositionLine(String dispositionId, String requestId, String bagId, String stepId, BigDecimal handoff,
+                                   BigDecimal loss, BigDecimal scrap, BigDecimal returned, BigDecimal pending) {
+        this(dispositionId, requestId, bagId, stepId, handoff, loss, scrap, returned, pending, null, null, null, null);
+    }
 }

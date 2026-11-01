@@ -7,5 +7,6 @@ public enum EmployeeClosureKind {
     NOT_CLOSED,
     CLOSED_NORMAL,
     TOTAL_LOSS,
-    REWORK_OPEN
+    REWORK_OPEN,
+    REWORK_PAY_PENDING
 }

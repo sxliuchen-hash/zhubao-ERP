@@ -138,3 +138,5 @@ V137__m3_company_receipt_dates.sql
 V138__m3_tool_piece_disposition.sql
 V139__m3_asset_repair_payment_evidence.sql
 V140__m3_goldwork_partial_delivery.sql
+V141__m3_report_worker_identity.sql
+V142__m3_disposition_work_evidence.sql

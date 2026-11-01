@@ -16,6 +16,11 @@ public record WholeBagReport(
         String attachmentCode,
         String operatorName,
         Integer progressPercent,
-        String createdAt
+        String createdAt,
+        String workerAccount
 ) {
+    public WholeBagReport(String batchCode, String requestId, String bagId, int bagVersion, String targetCode, String stepId,
+                          BigDecimal quantity, String attachmentCode, String operatorName, Integer progressPercent, String createdAt) {
+        this(batchCode, requestId, bagId, bagVersion, targetCode, stepId, quantity, attachmentCode, operatorName, progressPercent, createdAt, null);
+    }
 }

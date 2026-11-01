@@ -32,8 +32,8 @@ public class JdbcQuantityDispositionRepository implements QuantityDispositionRep
         try (PreparedStatement statement = connection.prepareStatement("""
                 insert into biz_quantity_disposition(
                     disposition_id, request_id, bag_id, step_id, handoff_qty, loss_qty,
-                    scrap_qty, returned_qty, pending_qty)
-                values (?,?,?,?,?,?,?,?,?)
+                    scrap_qty, returned_qty, pending_qty, work_quantity, worker_account, worker_name, attachment_code)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """)) {
             statement.setString(1, line.dispositionId());
             statement.setString(2, line.requestId());
@@ -44,6 +44,10 @@ public class JdbcQuantityDispositionRepository implements QuantityDispositionRep
             statement.setBigDecimal(7, line.scrap());
             statement.setBigDecimal(8, line.returned());
             statement.setBigDecimal(9, line.pending());
+            statement.setBigDecimal(10, line.workQuantity());
+            statement.setString(11, line.workerAccount());
+            statement.setString(12, line.workerName());
+            statement.setString(13, line.attachmentCode());
             statement.executeUpdate();
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存数量处置", ex);
@@ -78,7 +82,8 @@ public class JdbcQuantityDispositionRepository implements QuantityDispositionRep
                 decimal(rows, "loss_qty"),
                 decimal(rows, "scrap_qty"),
                 decimal(rows, "returned_qty"),
-                decimal(rows, "pending_qty"));
+                decimal(rows, "pending_qty"), rows.getBigDecimal("work_quantity"), rows.getString("worker_account"),
+                rows.getString("worker_name"), rows.getString("attachment_code"));
     }
 
     private static BigDecimal decimal(ResultSet rows, String column) throws SQLException {

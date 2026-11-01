@@ -20,6 +20,12 @@ public record QuantityDispositionCommand(
         BigDecimal pending,
         String attachmentCode,
         StockMeasurement.Weight exitWeight,
-        StockDimension stockFrom
+        StockDimension stockFrom,
+        BigDecimal workQuantity
 ) {
+    public QuantityDispositionCommand(String requestId, String bagId, int bagVersion, BigDecimal handoff, BigDecimal loss,
+                                      BigDecimal scrap, BigDecimal returned, BigDecimal pending, String attachmentCode,
+                                      StockMeasurement.Weight exitWeight, StockDimension stockFrom) {
+        this(requestId, bagId, bagVersion, handoff, loss, scrap, returned, pending, attachmentCode, exitWeight, stockFrom, null);
+    }
 }

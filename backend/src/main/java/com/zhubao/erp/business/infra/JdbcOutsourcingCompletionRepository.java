@@ -61,6 +61,19 @@ public class JdbcOutsourcingCompletionRepository implements OutsourcingCompletio
         return one("return_id=?", returnId);
     }
 
+    @Override
+    public java.util.List<OutsourcingCompletion> listByTarget(String targetCode) {
+        try (Connection connection = dataSource.getConnection(); PreparedStatement query = connection.prepareStatement(
+                "select * from biz_outsourcing_completion where target_code=? order by completion_id")) {
+            query.setString(1, targetCode);
+            try (ResultSet rows = query.executeQuery()) {
+                java.util.List<OutsourcingCompletion> result = new java.util.ArrayList<>();
+                while (rows.next()) result.add(map(rows));
+                return java.util.List.copyOf(result);
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("无法读取目标外协实作", ex); }
+    }
+
     private Optional<OutsourcingCompletion> one(String where, String value) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
@@ -70,14 +83,17 @@ public class JdbcOutsourcingCompletionRepository implements OutsourcingCompletio
                 if (!rows.next()) {
                     return Optional.empty();
                 }
-                return Optional.of(new OutsourcingCompletion(
-                        rows.getString("completion_id"), rows.getString("request_id"), rows.getString("return_id"),
-                        rows.getString("task_id"), rows.getString("dispatch_id"), rows.getString("bag_id"),
-                        rows.getString("node_id"), rows.getString("target_code"), rows.getBigDecimal("quantity")));
+                return Optional.of(map(rows));
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("无法读取外协完成量", ex);
         }
+    }
+
+    private static OutsourcingCompletion map(ResultSet rows) throws SQLException {
+        return new OutsourcingCompletion(rows.getString("completion_id"), rows.getString("request_id"), rows.getString("return_id"),
+                rows.getString("task_id"), rows.getString("dispatch_id"), rows.getString("bag_id"),
+                rows.getString("node_id"), rows.getString("target_code"), rows.getBigDecimal("quantity"));
     }
 
     private static boolean duplicate(SQLException ex) {

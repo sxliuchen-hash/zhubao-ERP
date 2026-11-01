@@ -2,6 +2,9 @@ package com.zhubao.erp.finance.app;
 
 import com.zhubao.erp.business.app.ActivityBagService;
 import com.zhubao.erp.business.domain.ActivityBag;
+import com.zhubao.erp.business.domain.WholeBagReport;
+import com.zhubao.erp.business.infra.InMemoryWholeBagReportRepository;
+import com.zhubao.erp.business.infra.InMemoryOutsourcingCompletionRepository;
 import com.zhubao.erp.business.domain.BusinessKind;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
 import com.zhubao.erp.business.domain.NodePortionBalance;
@@ -49,7 +52,8 @@ class ProductionEmployeeClosureLookupTest {
         ActivityBag bag = new ActivityBagService(bags).open(
                 target, "牙骨", "REQ-1", "LINE-1", new BigDecimal("10"), StockMeasurement.unknown(), null);
         routes.insert(new RouteSnapshot("RS-RF07", BusinessKind.PROCESSING, target, 1, List.of("CUT", "BLANK"), true), null);
-        ProductionEmployeeClosureLookup lookup = lookup(bags, routes, portions, documents);
+        InMemoryWholeBagReportRepository reports = new InMemoryWholeBagReportRepository();
+        ProductionEmployeeClosureLookup lookup = new ProductionEmployeeClosureLookup(bags, routes, portions, new InMemoryReworkTaskRepository(), new InMemoryQuantityDispositionRepository(), documents, reports, new InMemoryOutsourcingCompletionRepository());
         EmployeeTargetClosure open = lookup.find(target).orElseThrow();
         assertThat(open.closure()).isEqualTo(EmployeeClosureKind.NOT_CLOSED);
         assertThat(open.lossQuantity()).isNull();
@@ -58,19 +62,21 @@ class ProductionEmployeeClosureLookupTest {
         EmployeeTargetSettlementService settlement = new EmployeeTargetSettlementService(
                 lookup, finance, actor -> { }, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()));
         OperatorContext actor = new OperatorContext("核算员", RoleCode.FINANCE_STATISTICIAN, DataScope.ALL);
-        EmployeeWorkShare share = new EmployeeWorkShare("payee-a", "抛光", new BigDecimal("10"), new BigDecimal("2"), false);
+        EmployeeWorkShare share = new EmployeeWorkShare("payee-a", "切料", new BigDecimal("10"), new BigDecimal("2"), false);
         assertThatThrownBy(() -> settlement.settle(actor, "rf07-open01", target, 7L, List.of(share)))
                 .hasMessage("加工目标尚未闭合，不能核算工资");
 
         portions.save(new NodePortionBalance(bag.id(), "CUT", new BigDecimal("10"), new BigDecimal("10")), null);
         portions.save(new NodePortionBalance(bag.id(), "BLANK", new BigDecimal("10"), new BigDecimal("10")), null);
+        reports.save(new WholeBagReport("BR-cut", "report-cut", bag.id(), 1, target, "CUT", new BigDecimal("10"), "ATT", "甲", null, "2026-11-01", "payee-a"), null);
+        reports.save(new WholeBagReport("BR-blank", "report-blank", bag.id(), 2, target, "BLANK", new BigDecimal("10"), "ATT", "乙", null, "2026-11-01", "payee-b"), null);
         EmployeeTargetClosure closed = lookup.find(target).orElseThrow();
         assertThat(closed.closure()).isEqualTo(EmployeeClosureKind.CLOSED_NORMAL);
-        assertThat(closed.employeeQuantity()).isEqualByComparingTo("10");
+        assertThat(closed.employeeQuantity()).isEqualByComparingTo("20");
         assertThat(closed.outsourcingQuantity()).isEqualByComparingTo("0");
         assertThat(closed.quantityUnit()).isEqualTo("颗");
-        assertThat(settlement.settle(actor, "rf07-done01", target, 7L, List.of(share))).hasSize(1);
-        assertThat(finance.listPayrollLines()).hasSize(1);
+        assertThat(settlement.settle(actor, "rf07-done01", target, 7L, List.of(share, new EmployeeWorkShare("payee-b", "BLANK", new BigDecimal("10"), new BigDecimal("3"), false)))).hasSize(2);
+        assertThat(finance.listPayrollLines()).hasSize(2);
         assertThat(lookup.find("MD-20261030-1999")).isEmpty();
     }
 
@@ -92,7 +98,7 @@ class ProductionEmployeeClosureLookupTest {
                 new InMemoryQuantityDispositionRepository(), documents);
     }
 
-    private static MotherOrderRecord mother(String code) {
+    static MotherOrderRecord mother(String code) {
         return new MotherOrderRecord(code, 7L, null, "牙骨", "2026-10-30", "", "", "", "", "",
                 "手串", "CUSTOMER", true, "WH", new BigDecimal("10"), "颗", null,
                 "RAW_WAITING", "", null, null, null, "收货员", "", "", "OPEN", "2026-10-30 08:00:00",
@@ -109,7 +115,9 @@ class ProductionEmployeeClosureLookupTest {
             InMemoryOutsourcingSourceRepository.class,
             InMemoryOutsourcingDispatchRepository.class,
             InMemoryQuantityDispositionRepository.class,
-            InMemoryBusinessDocumentRepository.class
+            InMemoryBusinessDocumentRepository.class,
+            InMemoryWholeBagReportRepository.class,
+            InMemoryOutsourcingCompletionRepository.class
     })
     static class AssemblyProbe {
     }

@@ -38,4 +38,9 @@ public class InMemoryOutsourcingCompletionRepository implements OutsourcingCompl
     public Optional<OutsourcingCompletion> findByReturn(String returnId) {
         return rows.stream().filter(row -> row.returnId().equals(returnId)).findFirst();
     }
+
+    @Override
+    public java.util.List<OutsourcingCompletion> listByTarget(String targetCode) {
+        return rows.stream().filter(row -> targetCode.equals(row.targetCode())).toList();
+    }
 }

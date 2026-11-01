@@ -165,10 +165,10 @@ class WholeBagReportServiceTest {
         dataSource.setPassword("");
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : List.of("V44__m3_command_request.sql", "V42__m3_business_evidence_link.sql",
-                    "V81__m3_activity_bag.sql", "V82__m3_whole_bag_report.sql")) {
+                    "V81__m3_activity_bag.sql", "V82__m3_whole_bag_report.sql", "V141__m3_report_worker_identity.sql")) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql", file), StandardCharsets.UTF_8);
                 for (String item : MigrationCatalog.statements(sql)) {
-                    if (item.trim().toLowerCase().startsWith("alter")) {
+                    if (!file.startsWith("V141") && item.trim().toLowerCase().startsWith("alter")) {
                         continue;
                     }
                     statement.execute(item);
@@ -195,8 +195,11 @@ class WholeBagReportServiceTest {
         WholeBagReportService service = new WholeBagReportService(
                 bags, query, portions, portions, reports, documents, links, unit);
         WholeBagReportCommand command = command("bag-c02-11", bag, "ATT-JDBC", new BigDecimal("500"), 30);
-        WholeBagReport first = service.report(command, operator());
-        WholeBagReport again = service.report(command, operator());
+        OperatorContext actualWorker = new OperatorContext("操作工", RoleCode.ADMIN, DataScope.ALL, false, "", List.of(), List.of(), "worker-001", "", "");
+        WholeBagReport first = service.report(command, actualWorker);
+        WholeBagReport again = service.report(command, actualWorker);
+        assertThat(first.workerAccount()).isEqualTo("worker-001");
+        assertThat(new JdbcWholeBagReportRepository(dataSource).findByRequest("bag-c02-11").orElseThrow().workerAccount()).isEqualTo("worker-001");
         assertThat(again.batchCode()).isEqualTo(first.batchCode());
         assertThat(reports.findByRequest("bag-c02-11").orElseThrow().progressPercent()).isEqualTo(30);
         assertThat(portions.find(bag.id(), "BLANK").orElseThrow().arrived()).isEqualByComparingTo("500");
@@ -229,7 +232,10 @@ class WholeBagReportServiceTest {
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
         try {
             java.util.List<java.util.concurrent.Future<Object>> futures = java.util.List.of(
-                    pool.submit(() -> fixture.service().report(cutting, operator())),
+                    pool.submit(() -> {
+                        try { return fixture.service().report(cutting, operator()); }
+                        catch (RuntimeException ex) { return ex; }
+                    }),
                     pool.submit(() -> {
                         try {
                             return fixture.service().report(competing, operator());

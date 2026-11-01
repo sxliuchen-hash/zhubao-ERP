@@ -105,6 +105,7 @@ public class QuantityDispositionService {
         String payload = String.join("|", bag.id(), Integer.toString(command.bagVersion()),
                 handoff.toPlainString(), loss.toPlainString(), scrap.toPlainString(), returned.toPlainString(),
                 pending.toPlainString(), text(command.attachmentCode()));
+        if (command.workQuantity() != null) payload += "|work=" + command.workQuantity().toPlainString();
         String text = workUnit.execute(new CommandCall(
                 command.requestId(), actor.operator().trim(), "QUANTITY_DISPOSITION", "BAG", bag.id(), payload
         ), session -> write(execute(command, actor, bag.id(), handoff, loss, scrap, returned, pending, session)));
@@ -126,6 +127,10 @@ public class QuantityDispositionService {
             throw new BusinessException(available.blockingReasons().isEmpty() ? "当前没有可处理数量" : available.blockingReasons().get(0));
         }
         BigDecimal used = handoff.add(loss).add(scrap).add(returned).add(pending);
+        if (command.workQuantity() != null && (command.workQuantity().signum() < 0
+                || command.workQuantity().scale() > 3 || command.workQuantity().compareTo(used.subtract(pending)) > 0)) {
+            throw new BusinessException("实际作业数量须在本次已处理份额内，最多三位小数");
+        }
         if (used.compareTo(available.availableQuantity()) > 0) {
             throw new BusinessException("处置数量超过当前可处理量");
         }
@@ -166,7 +171,8 @@ public class QuantityDispositionService {
         boolean weightPending = loss.add(scrap).add(returned).signum() > 0 && !knownWeight(command.exitWeight());
         dispositions.save(new QuantityDispositionLine(
                 "QD" + UUID.randomUUID().toString().replace("-", ""), command.requestId().trim(),
-                current.id(), available.stepId(), handoff, loss, scrap, returned, pending), session);
+                current.id(), available.stepId(), handoff, loss, scrap, returned, pending,
+                command.workQuantity(), actor.username().isBlank() ? null : actor.username(), actor.operator(), command.attachmentCode()), session);
         boolean earlierOpen = earlierOpen(current.targetCode(), route, stepIndex);
         boolean hereOpen = hereOpen(current.targetCode(), route, stepIndex);
         boolean stepClosed = !earlierOpen && !hereOpen;

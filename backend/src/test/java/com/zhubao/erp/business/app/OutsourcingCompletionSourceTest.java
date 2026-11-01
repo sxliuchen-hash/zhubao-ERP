@@ -186,7 +186,7 @@ class OutsourcingCompletionSourceTest {
         dataSource.setPassword("");
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : new String[]{
-                    "V44__m3_command_request.sql", "V81__m3_activity_bag.sql", "V82__m3_whole_bag_report.sql",
+                    "V44__m3_command_request.sql", "V81__m3_activity_bag.sql", "V82__m3_whole_bag_report.sql", "V141__m3_report_worker_identity.sql",
                     "V88__m3_outsourcing_source.sql", "V89__m3_outsourcing_dispatch.sql",
                     "V90__m3_outsourcing_return.sql", "V91__m3_outsourcing_completion.sql"}) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql/" + file), StandardCharsets.UTF_8);

@@ -228,7 +228,7 @@ class InitialBagAllocationTest {
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : List.of(
                     "V44__m3_command_request.sql", "V81__m3_activity_bag.sql",
-                    "V83__m3_quantity_disposition.sql", "V131__m3_source_allocation_guard.sql")) {
+                    "V83__m3_quantity_disposition.sql", "V142__m3_disposition_work_evidence.sql", "V131__m3_source_allocation_guard.sql")) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql", file), StandardCharsets.UTF_8);
                 for (String item : MigrationCatalog.statements(sql)) {
                     statement.execute(item);

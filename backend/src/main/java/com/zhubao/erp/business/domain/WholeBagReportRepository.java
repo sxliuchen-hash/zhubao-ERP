@@ -9,4 +9,6 @@ public interface WholeBagReportRepository {
     void save(WholeBagReport report, WorkSession session);
 
     Optional<WholeBagReport> findByRequest(String requestId);
+
+    java.util.List<WholeBagReport> listByTarget(String targetCode);
 }

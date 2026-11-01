@@ -32,8 +32,8 @@ public class JdbcWholeBagReportRepository implements WholeBagReportRepository {
         try (PreparedStatement statement = connection.prepareStatement("""
                 insert into biz_whole_bag_report(
                     batch_code, request_id, bag_id, bag_version, target_code, step_id, quantity,
-                    attachment_code, operator_name, progress_percent, created_at)
-                values (?,?,?,?,?,?,?,?,?,?,?)
+                    attachment_code, operator_name, progress_percent, created_at, worker_account)
+                values (?,?,?,?,?,?,?,?,?,?,?,?)
                 """)) {
             statement.setString(1, report.batchCode());
             statement.setString(2, report.requestId());
@@ -50,6 +50,7 @@ public class JdbcWholeBagReportRepository implements WholeBagReportRepository {
                 statement.setInt(10, report.progressPercent());
             }
             statement.setString(11, report.createdAt());
+            statement.setString(12, report.workerAccount());
             statement.executeUpdate();
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存整袋报工", ex);
@@ -85,6 +86,19 @@ public class JdbcWholeBagReportRepository implements WholeBagReportRepository {
                 rows.getString("attachment_code"),
                 rows.getString("operator_name"),
                 progressPercent,
-                rows.getString("created_at"));
+                rows.getString("created_at"), rows.getString("worker_account"));
+    }
+
+    @Override
+    public java.util.List<WholeBagReport> listByTarget(String targetCode) {
+        try (Connection connection = dataSource.getConnection(); PreparedStatement query = connection.prepareStatement(
+                "select * from biz_whole_bag_report where target_code=? order by batch_code")) {
+            query.setString(1, targetCode);
+            try (ResultSet rows = query.executeQuery()) {
+                java.util.List<WholeBagReport> result = new java.util.ArrayList<>();
+                while (rows.next()) result.add(map(rows));
+                return java.util.List.copyOf(result);
+            }
+        } catch (SQLException ex) { throw new IllegalStateException("无法读取目标报工作业", ex); }
     }
 }

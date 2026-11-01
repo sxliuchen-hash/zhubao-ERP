@@ -138,3 +138,5 @@
 138	COLUMN	inv_tool_piece	scrapped
 139	TABLE	fin_fixed_asset_repair_payment
 140	INDEX	gld_goldwork_delivery	idx_gld_delivery_quality
+141	COLUMN	biz_whole_bag_report	worker_account
+142	COLUMN	biz_quantity_disposition	work_quantity

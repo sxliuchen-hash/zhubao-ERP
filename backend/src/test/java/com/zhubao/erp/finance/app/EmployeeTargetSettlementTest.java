@@ -3,6 +3,7 @@ package com.zhubao.erp.finance.app;
 import com.zhubao.erp.business.domain.BusinessKind;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.finance.domain.EmployeeClosureKind;
+import com.zhubao.erp.finance.domain.EmployeeProcessWork;
 import com.zhubao.erp.finance.domain.EmployeeSettlementAuthorization;
 import com.zhubao.erp.finance.domain.EmployeeTargetClosure;
 import com.zhubao.erp.finance.domain.EmployeeTargetClosureLookup;
@@ -146,6 +147,8 @@ class EmployeeTargetSettlementTest {
     private static EmployeeTargetClosure closure(BusinessKind kind, EmployeeClosureKind state, String employee,
                                                  String outsourcing, String loss) {
         return new EmployeeTargetClosure(kind, state, new BigDecimal(employee), new BigDecimal(outsourcing),
-                loss == null ? null : new BigDecimal(loss), "颗");
+                loss == null ? null : new BigDecimal(loss), "颗", List.of(
+                new EmployeeProcessWork("payee-a", "甲", "POLISH_BEAD", "抛光", employee.equals("462") ? new BigDecimal("300") : new BigDecimal(employee).multiply(new BigDecimal("0.6"))),
+                new EmployeeProcessWork("payee-b", "乙", "POLISH_BEAD", "抛光", employee.equals("462") ? new BigDecimal("162") : new BigDecimal(employee).multiply(new BigDecimal("0.4")))), true);
     }
 }

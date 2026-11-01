@@ -1,188 +1,142 @@
 package com.zhubao.erp.finance.app;
 
-import com.zhubao.erp.business.domain.ActivityBag;
-import com.zhubao.erp.business.domain.ActivityBagRepository;
-import com.zhubao.erp.business.domain.BusinessDocumentRepository;
-import com.zhubao.erp.business.domain.BusinessKind;
-import com.zhubao.erp.business.domain.BusinessTargetReference;
-import com.zhubao.erp.business.domain.NodePortionBalance;
-import com.zhubao.erp.business.domain.NodePortionReader;
-import com.zhubao.erp.business.domain.OutsourcingDispatchRepository;
-import com.zhubao.erp.business.domain.OutsourcingSourceRepository;
-import com.zhubao.erp.business.domain.OutsourcingTask;
-import com.zhubao.erp.business.domain.QuantityDispositionLine;
-import com.zhubao.erp.business.domain.QuantityDispositionRepository;
-import com.zhubao.erp.business.domain.ReworkTask;
-import com.zhubao.erp.business.domain.ReworkTaskRepository;
-import com.zhubao.erp.business.domain.RouteSnapshot;
-import com.zhubao.erp.business.domain.RouteSnapshotRepository;
+import com.zhubao.erp.business.domain.*;
 import com.zhubao.erp.common.error.BusinessException;
-import com.zhubao.erp.finance.domain.EmployeeClosureKind;
-import com.zhubao.erp.finance.domain.EmployeeTargetClosure;
-import com.zhubao.erp.finance.domain.EmployeeTargetClosureLookup;
+import com.zhubao.erp.finance.domain.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
 import java.math.BigDecimal;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
-/**
- * 从袋、已确认路线、返工和外协发外读取整单是否可以核算工资。
- * 外协数量不并进员工实作。没有处置记录时损耗保持空，不写成 0。
- */
+/** 整单完工资格与计酬依据分开读取，按真实工序和账号核对作业，不从末道成品数推算工资。 */
 @Service
 public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLookup {
-
     private final ActivityBagRepository bags;
     private final RouteSnapshotRepository routes;
     private final NodePortionReader portions;
     private final ReworkTaskRepository rework;
-    private final OutsourcingSourceRepository tasks;
-    private final OutsourcingDispatchRepository dispatches;
     private final QuantityDispositionRepository dispositions;
     private final BusinessDocumentRepository documents;
+    private final WholeBagReportRepository reports;
+    private final OutsourcingCompletionRepository completions;
 
-    public ProductionEmployeeClosureLookup(ActivityBagRepository bags, RouteSnapshotRepository routes,
-                                           NodePortionReader portions, ReworkTaskRepository rework,
-                                           OutsourcingSourceRepository tasks, OutsourcingDispatchRepository dispatches,
-                                           QuantityDispositionRepository dispositions, BusinessDocumentRepository documents) {
-        this.bags = bags;
-        this.routes = routes;
-        this.portions = portions;
-        this.rework = rework;
-        this.tasks = tasks;
-        this.dispatches = dispatches;
-        this.dispositions = dispositions;
-        this.documents = documents;
+    public ProductionEmployeeClosureLookup(ActivityBagRepository bags, RouteSnapshotRepository routes, NodePortionReader portions,
+            ReworkTaskRepository rework, OutsourcingSourceRepository tasks, OutsourcingDispatchRepository dispatches,
+            QuantityDispositionRepository dispositions, BusinessDocumentRepository documents) {
+        this(bags, routes, portions, rework, dispositions, documents, null, null);
+    }
+
+    @Autowired
+    public ProductionEmployeeClosureLookup(ActivityBagRepository bags, RouteSnapshotRepository routes, NodePortionReader portions,
+            ReworkTaskRepository rework, QuantityDispositionRepository dispositions, BusinessDocumentRepository documents,
+            WholeBagReportRepository reports, OutsourcingCompletionRepository completions) {
+        this.bags = bags; this.routes = routes; this.portions = portions; this.rework = rework;
+        this.dispositions = dispositions; this.documents = documents; this.reports = reports; this.completions = completions;
     }
 
     @Override
     public Optional<EmployeeTargetClosure> find(String targetCode) {
         String target = targetCode == null ? "" : targetCode.trim();
         BusinessKind kind;
-        try {
-            kind = BusinessTargetReference.parse(target).kind();
-        } catch (BusinessException ex) {
-            return Optional.empty();
-        }
+        try { kind = BusinessTargetReference.parse(target).kind(); }
+        catch (BusinessException ex) { return Optional.empty(); }
         List<ActivityBag> all = bags.listByTarget(target);
+        if (all.isEmpty() && documents.findMotherOrderByCode(target).isEmpty() && documents.findChildWorkOrderByCode(target).isEmpty()) return Optional.empty();
         List<ActivityBag> leaves = all.stream().filter(ActivityBag::activeLeaf).toList();
-        if (leaves.isEmpty()) {
-            return Optional.empty();
-        }
+        List<QuantityDispositionLine> lines = all.stream().flatMap(bag -> dispositions.listByBag(bag.id()).stream()).toList();
+        List<OutsourcingCompletion> external = completions == null ? List.of() : completions.listByTarget(target);
+        BigDecimal outside = external.stream().map(OutsourcingCompletion::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal loss = lines.isEmpty() || lines.stream().anyMatch(line -> line.loss() == null) ? null
+                : lines.stream().map(QuantityDispositionLine::loss).reduce(BigDecimal.ZERO, BigDecimal::add);
         String unit = quantityUnit(target);
-        BigDecimal outsourcing = outsourcingQuantity(target);
-        BigDecimal loss = lossQuantity(leaves);
-        RouteSnapshot route = confirmed(kind, target);
-        if (route == null || route.stepIds().isEmpty()) {
-            return Optional.of(new EmployeeTargetClosure(
-                    kind, EmployeeClosureKind.NOT_CLOSED, BigDecimal.ZERO, outsourcing, loss, unit));
+        RouteSnapshot route = routes.list(kind, target).stream().filter(RouteSnapshot::confirmed)
+                .max(Comparator.comparingInt(RouteSnapshot::version)).orElse(null);
+        if (route == null || route.stepIds().isEmpty()) return result(kind, EmployeeClosureKind.NOT_CLOSED, outside, loss, unit, new Basis(List.of(), false));
+        Basis basis = work(target, all, leaves, route, lines, external);
+        BigDecimal assigned = all.stream().filter(bag -> bag.parentId() == null || bag.parentId().isBlank())
+                .map(ActivityBag::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal returned = lines.stream().map(QuantityDispositionLine::returned).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (leaves.isEmpty()) {
+            EmployeeClosureKind state = loss != null && loss.signum() > 0 && loss.compareTo(assigned.subtract(returned)) == 0
+                    ? EmployeeClosureKind.TOTAL_LOSS : EmployeeClosureKind.NOT_CLOSED;
+            return result(kind, state, outside, loss, unit, basis);
         }
-        if (reworkStillOpen(all, route)) {
-            return Optional.of(new EmployeeTargetClosure(
-                    kind, EmployeeClosureKind.REWORK_OPEN, BigDecimal.ZERO, outsourcing, loss, unit));
-        }
-        boolean open = false;
-        BigDecimal finished = BigDecimal.ZERO;
-        String lastStep = route.stepIds().get(route.stepIds().size() - 1);
-        for (ActivityBag leaf : leaves) {
-            if (remaining(leaf, route)) {
-                open = true;
-            }
-            finished = finished.add(handled(leaf.id(), lastStep));
-        }
-        BigDecimal employee = finished.subtract(outsourcing);
-        if (employee.signum() < 0) {
-            employee = BigDecimal.ZERO;
-        }
-        if (open) {
-            return Optional.of(new EmployeeTargetClosure(
-                    kind, EmployeeClosureKind.NOT_CLOSED, employee, outsourcing, loss, unit));
-        }
-        BigDecimal leafQuantity = leaves.stream().map(ActivityBag::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (employee.signum() == 0 && loss != null && loss.compareTo(leafQuantity) == 0 && loss.signum() > 0) {
-            return Optional.of(new EmployeeTargetClosure(
-                    kind, EmployeeClosureKind.TOTAL_LOSS, employee, outsourcing, loss, unit));
-        }
-        return Optional.of(new EmployeeTargetClosure(
-                kind, EmployeeClosureKind.CLOSED_NORMAL, employee, outsourcing, loss, unit));
+        List<ReworkTask> tasks = all.stream().flatMap(bag -> rework.listBySource(bag.id()).stream()).toList();
+        boolean reworkOpen = tasks.stream().map(task -> bags.find(task.reworkBagId()).orElse(null))
+                .anyMatch(bag -> bag != null && bag.activeLeaf() && remaining(bag, route));
+        if (reworkOpen) return result(kind, EmployeeClosureKind.REWORK_OPEN, outside, loss, unit, basis);
+        if (leaves.stream().anyMatch(bag -> remaining(bag, route))) return result(kind, EmployeeClosureKind.NOT_CLOSED, outside, loss, unit, basis);
+        // 完成返工不等于计酬规则已确认，保留普通实作供核对，整单工资仍受返工门槛约束。
+        return result(kind, tasks.isEmpty() ? EmployeeClosureKind.CLOSED_NORMAL : EmployeeClosureKind.REWORK_PAY_PENDING, outside, loss, unit, basis);
     }
 
-    private boolean reworkStillOpen(List<ActivityBag> bagsOnTarget, RouteSnapshot route) {
-        for (ActivityBag bag : bagsOnTarget) {
-            for (ReworkTask task : rework.listBySource(bag.id())) {
-                ActivityBag reworkBag = this.bags.find(task.reworkBagId()).orElse(null);
-                if (reworkBag != null && reworkBag.activeLeaf() && remaining(reworkBag, route)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    private Optional<EmployeeTargetClosure> result(BusinessKind kind, EmployeeClosureKind state, BigDecimal outside,
+            BigDecimal loss, String unit, Basis basis) {
+        BigDecimal employee = basis.complete ? basis.work.stream().map(EmployeeProcessWork::quantity).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
+        return Optional.of(new EmployeeTargetClosure(kind, state, employee, outside, loss, unit, basis.work, basis.complete));
     }
 
     private boolean remaining(ActivityBag bag, RouteSnapshot route) {
-        List<String> steps = route.stepIds();
-        for (int index = 0; index < steps.size(); index++) {
-            Optional<NodePortionBalance> stored = portions.find(bag.id(), steps.get(index));
-            BigDecimal arrived;
-            BigDecimal done;
-            if (stored.isPresent()) {
-                arrived = stored.get().arrived();
-                done = stored.get().handled();
-            } else if (index == 0) {
-                arrived = bag.quantity();
-                done = BigDecimal.ZERO;
-            } else {
-                continue;
-            }
-            if (arrived.subtract(done).signum() > 0) {
-                return true;
-            }
+        for (String step : route.stepIds()) {
+            var balance = portions.find(bag.id(), step);
+            if (balance.isEmpty() || balance.get().remaining().signum() > 0 || balance.get().arrived().compareTo(bag.quantity()) < 0) return true;
         }
         return false;
     }
 
-    private BigDecimal handled(String bagId, String stepId) {
-        return portions.find(bagId, stepId).map(NodePortionBalance::handled).orElse(BigDecimal.ZERO);
-    }
-
-    private BigDecimal outsourcingQuantity(String target) {
-        BigDecimal total = BigDecimal.ZERO;
-        for (OutsourcingTask task : tasks.listByTarget(target)) {
-            total = total.add(dispatches.listByTask(task.taskId()).stream()
-                    .map(dispatch -> dispatch.quantity())
-                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+    private Basis work(String target, List<ActivityBag> all, List<ActivityBag> leaves, RouteSnapshot route,
+            List<QuantityDispositionLine> lines, List<OutsourcingCompletion> external) {
+        Set<String> reworkBags = new HashSet<>();
+        all.forEach(bag -> rework.listBySource(bag.id()).forEach(task -> reworkBags.add(task.reworkBagId())));
+        boolean changed;
+        do {
+            changed = false;
+            for (ActivityBag bag : all) if (reworkBags.contains(bag.parentId())) changed |= reworkBags.add(bag.id());
+        } while (changed);
+        Map<String, EmployeeProcessWork> workers = new LinkedHashMap<>();
+        Map<String, BigDecimal> handled = new HashMap<>();
+        boolean complete = reports != null && completions != null && reworkBags.isEmpty();
+        if (reports != null) for (WholeBagReport report : reports.listByTarget(target)) {
+            if (reworkBags.contains(report.bagId())) continue;
+            handled.merge(report.stepId(), report.quantity(), BigDecimal::add);
+            if (report.workerAccount() == null || report.workerAccount().isBlank() || !route.stepIds().contains(report.stepId())) { complete = false; continue; }
+            add(workers, report.workerAccount(), report.operatorName(), report.stepId(), report.quantity());
         }
-        return total;
-    }
-
-    private BigDecimal lossQuantity(List<ActivityBag> leaves) {
-        boolean seen = false;
-        BigDecimal total = BigDecimal.ZERO;
-        for (ActivityBag leaf : leaves) {
-            for (QuantityDispositionLine line : dispositions.listByBag(leaf.id())) {
-                if (line.loss() == null) {
-                    continue;
-                }
-                seen = true;
-                total = total.add(line.loss());
+        for (QuantityDispositionLine line : lines) {
+            if (reworkBags.contains(line.bagId())) continue;
+            BigDecimal processed = line.handoff().add(line.loss()).add(line.scrap()).add(line.returned());
+            if (processed.signum() == 0) continue;
+            handled.merge(line.stepId(), processed, BigDecimal::add);
+            if (line.workQuantity() == null || line.workerAccount() == null || line.workerAccount().isBlank()
+                    || line.attachmentCode() == null || line.attachmentCode().isBlank() || !route.stepIds().contains(line.stepId())) { complete = false; continue; }
+            if (line.workQuantity().signum() > 0) add(workers, line.workerAccount(), line.workerName(), line.stepId(), line.workQuantity());
+        }
+        external.stream().filter(item -> !reworkBags.contains(item.bagId()))
+                .forEach(item -> handled.merge(item.nodeId(), item.quantity(), BigDecimal::add));
+        // 分袋会继承节点进度，历史父袋不能重复计数；后续工序退出的份额已在此前工序处理过。
+        for (int index = 0; index < route.stepIds().size(); index++) {
+            String step = route.stepIds().get(index);
+            BigDecimal expected = leaves.stream().map(bag -> portions.find(bag.id(), step).map(NodePortionBalance::handled).orElse(BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            for (QuantityDispositionLine line : lines) {
+                int exitedAt = route.stepIds().indexOf(line.stepId());
+                if (exitedAt >= index) expected = expected.add(line.loss()).add(line.scrap()).add(line.returned());
             }
+            if (handled.getOrDefault(step, BigDecimal.ZERO).compareTo(expected) != 0) complete = false;
         }
-        return seen ? total : null;
+        return new Basis(List.copyOf(workers.values()), complete);
     }
 
-    private RouteSnapshot confirmed(BusinessKind kind, String target) {
-        return routes.list(kind, target).stream()
-                .filter(RouteSnapshot::confirmed)
-                .max(Comparator.comparingInt(RouteSnapshot::version))
-                .orElse(null);
+    private static void add(Map<String, EmployeeProcessWork> workers, String account, String name, String step, BigDecimal quantity) {
+        String key = account + "\n" + step;
+        EmployeeProcessWork current = workers.get(key);
+        workers.put(key, new EmployeeProcessWork(account, name, step, ProcessCatalog.require(step).name(),
+                current == null ? quantity : current.quantity().add(quantity)));
     }
 
     private String quantityUnit(String target) {
-        return documents.findChildWorkOrderByCode(target)
-                .map(order -> order.quantityUnit() == null ? "" : order.quantityUnit())
-                .or(() -> documents.findMotherOrderByCode(target).map(order -> order.quantityUnit() == null ? "" : order.quantityUnit()))
-                .orElse("");
+        return documents.findChildWorkOrderByCode(target).map(order -> order.quantityUnit() == null ? "" : order.quantityUnit())
+                .or(() -> documents.findMotherOrderByCode(target).map(order -> order.quantityUnit() == null ? "" : order.quantityUnit())).orElse("");
     }
+    private record Basis(List<EmployeeProcessWork> work, boolean complete) {}
 }

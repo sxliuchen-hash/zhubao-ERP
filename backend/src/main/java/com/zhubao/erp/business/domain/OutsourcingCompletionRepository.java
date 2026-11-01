@@ -12,4 +12,6 @@ public interface OutsourcingCompletionRepository {
     Optional<OutsourcingCompletion> find(String completionId);
 
     Optional<OutsourcingCompletion> findByReturn(String returnId);
+
+    java.util.List<OutsourcingCompletion> listByTarget(String targetCode);
 }

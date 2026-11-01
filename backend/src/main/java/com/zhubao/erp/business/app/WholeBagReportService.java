@@ -160,7 +160,7 @@ public class WholeBagReportService {
         WholeBagReport report = new WholeBagReport(
                 batchCode, command.requestId().trim(), current.id(), current.version(), current.targetCode(),
                 available.stepId(), input.confirmedQuantity(), attachment.code(), actor.operator().trim(),
-                command.progressPercent(), now);
+                command.progressPercent(), now, actor.username().isBlank() ? null : actor.username());
         reports.save(report, session);
         links.insert(link(report, targetType), session);
         bags.save(new ActivityBag(

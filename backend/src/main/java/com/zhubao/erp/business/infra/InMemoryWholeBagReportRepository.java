@@ -31,4 +31,10 @@ public class InMemoryWholeBagReportRepository implements WholeBagReportRepositor
     public Optional<WholeBagReport> findByRequest(String requestId) {
         return Optional.ofNullable(byRequest.get(requestId));
     }
+
+    @Override
+    public java.util.List<WholeBagReport> listByTarget(String targetCode) {
+        return byRequest.values().stream().filter(report -> targetCode.equals(report.targetCode()))
+                .sorted(java.util.Comparator.comparing(WholeBagReport::batchCode)).toList();
+    }
 }
