@@ -68,11 +68,26 @@ export function renderA5Markup(page: A5Page): string {
 }
 
 function totals(rows: A5BagLine[]): A5UnitTotal[] {
-  const sums = new Map<string, number>();
+  const sums = new Map<string, { value: bigint; scale: number }>();
   for (const row of rows) {
-    sums.set(row.unit, (sums.get(row.unit) ?? 0) + Number(row.quantity));
+    const quantity = row.quantity.trim();
+    if (!/^\d+(\.\d+)?$/.test(quantity)) throw new Error('发货数量格式无效，无法打印合计');
+    const parts = quantity.split('.');
+    const scale = parts[1]?.length ?? 0;
+    const value = BigInt(parts.join(''));
+    const previous = sums.get(row.unit) ?? { value: 0n, scale: 0 };
+    const nextScale = Math.max(previous.scale, scale);
+    sums.set(row.unit, {
+      value: previous.value * 10n ** BigInt(nextScale - previous.scale) + value * 10n ** BigInt(nextScale - scale),
+      scale: nextScale,
+    });
   }
-  return [...sums.entries()].map(([unit, quantity]) => ({ unit, quantity: String(quantity) }));
+  return [...sums.entries()].map(([unit, sum]) => {
+    const digits = sum.value.toString().padStart(sum.scale + 1, '0');
+    if (sum.scale === 0) return { unit, quantity: digits };
+    const fraction = digits.slice(-sum.scale).replace(/0+$/, '');
+    return { unit, quantity: digits.slice(0, -sum.scale) + (fraction ? `.${fraction}` : '') };
+  });
 }
 
 function escapeHtml(value: string): string {

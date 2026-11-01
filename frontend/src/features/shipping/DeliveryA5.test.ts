@@ -19,6 +19,13 @@ function line(lineNo: number, unit: string, quantity: string, weight: string | n
 }
 
 describe('A5发货清单', () => {
+  it('小数与大数量按单位精确合计，非法数量拒绝打印', () => {
+    const pages = buildA5Pages({ deliveryId: 'FH-1', customerName: '客户', logistics: '', feeAmount: null,
+      lines: [line(1, '克', '0.1', null), line(2, '克', '0.20', null), line(3, '颗', '9007199254740993.001', null), line(4, '颗', '0.009', null)] });
+    expect(pages[0].pageTotals).toEqual([{ unit: '克', quantity: '0.3' }, { unit: '颗', quantity: '9007199254740993.01' }]);
+    expect(() => buildA5Pages({ deliveryId: 'FH-1', customerName: '客户', logistics: '', feeAmount: null, lines: [line(1, '颗', '未知', null)] }))
+      .toThrow('发货数量格式无效');
+  });
   it('按单位合计并续页，未定价不补0，不进入标签队列', async () => {
     const lines = [
       line(1, '颗', '300', null),
