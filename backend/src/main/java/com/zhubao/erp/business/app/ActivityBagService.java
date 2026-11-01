@@ -38,7 +38,12 @@ public class ActivityBagService {
     }
 
     public List<ActivityBag> openBySource(String sourceKey) {
-        return repository.listBySource(sourceKey).stream().filter(ActivityBag::activeLeaf).toList();
+        return bagsOfSource(sourceKey).stream().filter(ActivityBag::activeLeaf).toList();
+    }
+
+    /** 含已关闭的父袋。汇总来源占用时不能只看还开着的子袋。 */
+    public List<ActivityBag> bagsOfSource(String sourceKey) {
+        return repository.listBySource(sourceKey);
     }
 
     public void lockSource(String sourceKey, WorkSession session) {
