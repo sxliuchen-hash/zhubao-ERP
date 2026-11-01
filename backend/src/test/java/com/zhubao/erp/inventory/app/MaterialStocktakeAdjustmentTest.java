@@ -44,7 +44,7 @@ class MaterialStocktakeAdjustmentTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请填写盘点时点");
         MaterialStocktake opened = service.open(
-                "f09-open-01", admin, knife.itemId(), "", "柜-1", "2026-10-30T18:00:00", true);
+                "f09-open-01", admin, knife.itemId(), "", "柜-1", "NOW", true);
         assertThat(opened.bookQuantity()).isEqualByComparingTo("4");
         MaterialStocktake counted = service.count("f09-count01", admin, opened.stocktakeId(), 1, new BigDecimal("5"));
         assertThat(counted.bookQuantity()).isEqualByComparingTo("4");

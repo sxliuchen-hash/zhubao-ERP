@@ -108,8 +108,13 @@ public class ToolCustodyService {
                 id + "\n" + version + "\n" + counted.toPlainString()
         ), session -> {
             ToolLoan current = tools.find(id).orElseThrow(() -> new BusinessException("借出单不存在"));
+            assertPieceQuantity(current, counted);
             tools.settle(id, counted, version, session);
-            tools.addStock(current.itemId(), current.warehouseCode(), counted, current.unit(), session);
+            if (current.pieceCode().isEmpty()) {
+                tools.addStock(current.itemId(), current.warehouseCode(), counted, current.unit(), session);
+            } else {
+                tools.settlePiece(current, false, session);
+            }
             return id;
         });
         return tools.find(saved).orElseThrow(() -> new BusinessException("借出单不存在"));
@@ -134,11 +139,15 @@ public class ToolCustodyService {
                 id + "\n" + version + "\n" + counted.toPlainString() + "\n" + why
         ), session -> {
             ToolLoan current = tools.find(id).orElseThrow(() -> new BusinessException("借出单不存在"));
+            assertPieceQuantity(current, counted);
             if (current.outstanding().compareTo(counted) < 0) {
                 throw new BusinessException("处置数量不能超过未还");
             }
             if (closeQuantity) {
                 tools.settle(id, counted, version, session);
+                if (!current.pieceCode().isEmpty()) {
+                    tools.settlePiece(current, true, session);
+                }
             }
             String dispositionId = "TD-" + token();
             tools.record(new ToolDisposition(dispositionId, id, current.holderId(), kind, counted, why), session);
@@ -150,6 +159,12 @@ public class ToolCustodyService {
 
     public BigDecimal stock(String itemId, String warehouseCode) {
         return tools.stock(itemId, warehouseCode);
+    }
+
+    private static void assertPieceQuantity(ToolLoan loan, BigDecimal quantity) {
+        if (!loan.pieceCode().isEmpty() && quantity.compareTo(BigDecimal.ONE) != 0) {
+            throw new BusinessException("逐件工具须整件归还或处置");
+        }
     }
 
     public BigDecimal outstanding(String itemId, String holderId) {

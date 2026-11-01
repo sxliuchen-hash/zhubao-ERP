@@ -58,7 +58,7 @@ public class InMemoryToolCustodyRepository implements ToolCustodyRepository {
 
     @Override
     public void placePiece(String pieceCode, String itemId, String warehouseCode, WorkSession session) {
-        Piece previous = pieces.putIfAbsent(pieceCode, new Piece(itemId, warehouseCode, ""));
+        Piece previous = pieces.putIfAbsent(pieceCode, new Piece(itemId, warehouseCode, "", false));
         if (previous != null) {
             throw new BusinessException("工具编号已存在");
         }
@@ -71,10 +71,13 @@ public class InMemoryToolCustodyRepository implements ToolCustodyRepository {
     public void loan(ToolLoan loan, WorkSession session) {
         if (!loan.pieceCode().isEmpty()) {
             Piece piece = pieces.get(loan.pieceCode());
-            if (piece == null || !piece.holderId.isEmpty()) {
+            if (piece == null || !piece.itemId.equals(loan.itemId()) || !piece.warehouseCode.equals(loan.warehouseCode())) {
+                throw new BusinessException("工具编号与物品或位置不一致");
+            }
+            if (piece.scrapped || !piece.holderId.isEmpty()) {
                 throw new BusinessException("该工具已借出");
             }
-            pieces.put(loan.pieceCode(), new Piece(piece.itemId, piece.warehouseCode, loan.holderId()));
+            pieces.put(loan.pieceCode(), new Piece(piece.itemId, piece.warehouseCode, loan.holderId(), false));
             if (session != null) {
                 session.onRollback(() -> pieces.put(loan.pieceCode(), piece));
             }
@@ -150,6 +153,19 @@ public class InMemoryToolCustodyRepository implements ToolCustodyRepository {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private record Piece(String itemId, String warehouseCode, String holderId) {
+    @Override
+    public void settlePiece(ToolLoan loan, boolean scrap, WorkSession session) {
+        Piece piece = pieces.get(loan.pieceCode());
+        if (piece == null || piece.scrapped || !piece.holderId.equals(loan.holderId())
+                || !piece.itemId.equals(loan.itemId()) || !piece.warehouseCode.equals(loan.warehouseCode())) {
+            throw new BusinessException("工具编号的保管状态与借单不一致");
+        }
+        pieces.put(loan.pieceCode(), new Piece(piece.itemId, piece.warehouseCode, "", scrap));
+        if (session != null) {
+            session.onRollback(() -> pieces.put(loan.pieceCode(), piece));
+        }
+    }
+
+    private record Piece(String itemId, String warehouseCode, String holderId, boolean scrapped) {
     }
 }

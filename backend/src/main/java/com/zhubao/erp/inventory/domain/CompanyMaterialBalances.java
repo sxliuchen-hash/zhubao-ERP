@@ -48,6 +48,16 @@ public final class CompanyMaterialBalances {
         return StockMeasurement.known(source.value().subtract(moved.value()));
     }
 
+    public static void assertFullMovementWeight(CompanyMaterialBalance source, BigDecimal quantity,
+                                                 StockMeasurement.Weight moved) {
+        if (source.quantity().compareTo(quantity) == 0
+                && source.weight().state() == StockMeasurement.WeightState.KNOWN
+                && (moved.state() != StockMeasurement.WeightState.KNOWN
+                || moved.value().compareTo(source.weight().value()) != 0)) {
+            throw new BusinessException("全量领退的实称重量与来源不符，请先复称核对");
+        }
+    }
+
     public static BigDecimal knownAmount(BigDecimal amount) {
         if (amount == null) {
             return null;

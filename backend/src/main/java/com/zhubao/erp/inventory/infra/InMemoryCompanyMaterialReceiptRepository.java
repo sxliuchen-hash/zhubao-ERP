@@ -64,6 +64,7 @@ public class InMemoryCompanyMaterialReceiptRepository implements CompanyMaterial
             if (!current.unit().equals(unit)) {
                 throw new BusinessException("单位必须与来源批次一致");
             }
+            CompanyMaterialBalances.assertFullMovementWeight(current, quantity, weight);
             StockMeasurement.Weight left = CompanyMaterialBalances.remainder(current.weight(), weight);
             BigDecimal leftQuantity = current.quantity().subtract(quantity);
             if (leftQuantity.signum() == 0) {
@@ -96,7 +97,8 @@ public class InMemoryCompanyMaterialReceiptRepository implements CompanyMaterial
         if (payableCode == null || payableCode.isBlank()) {
             return false;
         }
-        return receipts.values().stream().anyMatch(receipt -> payableCode.equals(receipt.coveredPayableCode()));
+        return receipts.values().stream().anyMatch(receipt -> payableCode.equals(receipt.coveredPayableCode())
+                || payableCode.equals(receipt.payableCode()));
     }
 
     private static String key(String itemId, String batchCode, String warehouseCode) {

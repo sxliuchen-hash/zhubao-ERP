@@ -199,7 +199,7 @@ class GoldworkRecoverySourceTest {
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : new String[]{
                     "V36__m3_finance_operations.sql", "V44__m3_command_request.sql",
-                    "V97__m3_factory_item.sql", "V98__m3_company_material_receipt.sql",
+                    "V97__m3_factory_item.sql", "V98__m3_company_material_receipt.sql", "V137__m3_company_receipt_dates.sql",
                     "V122__m3_goldwork_order.sql", "V123__m3_goldwork_material.sql",
                     "V124__m3_goldwork_movement.sql", "V125__m3_goldwork_recovery.sql"}) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql/" + file), StandardCharsets.UTF_8);

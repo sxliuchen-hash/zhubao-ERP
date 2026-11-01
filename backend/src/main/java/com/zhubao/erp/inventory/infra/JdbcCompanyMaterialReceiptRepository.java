@@ -38,8 +38,8 @@ public class JdbcCompanyMaterialReceiptRepository implements CompanyMaterialRece
                 insert into inv_company_material_receipt(
                     receipt_id, item_id, batch_code, quantity, quantity_unit, weight_state, weight_value,
                     warehouse_code, source_kind, supplier_name, amount_state, amount_value,
-                    payable_code, covered_payable_code, version_no)
-                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    payable_code, covered_payable_code, version_no, business_date, recorded_at)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """)) {
             statement.setString(1, receipt.receiptId());
             statement.setString(2, receipt.itemId());
@@ -56,6 +56,8 @@ public class JdbcCompanyMaterialReceiptRepository implements CompanyMaterialRece
             statement.setString(13, receipt.payableCode());
             statement.setString(14, receipt.coveredPayableCode());
             statement.setInt(15, receipt.version());
+            statement.setString(16, receipt.businessDate());
+            statement.setString(17, receipt.recordedAt());
             statement.executeUpdate();
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存公司料入库", ex);
@@ -112,6 +114,7 @@ public class JdbcCompanyMaterialReceiptRepository implements CompanyMaterialRece
             if (!current.unit().equals(unit)) {
                 throw new BusinessException("单位必须与来源批次一致");
             }
+            CompanyMaterialBalances.assertFullMovementWeight(current, quantity, weight);
             StockMeasurement.Weight left = CompanyMaterialBalances.remainder(current.weight(), weight);
             BigDecimal leftQuantity = current.quantity().subtract(quantity);
             if (leftQuantity.signum() == 0) {
@@ -184,11 +187,23 @@ public class JdbcCompanyMaterialReceiptRepository implements CompanyMaterialRece
             return false;
         }
         Connection connection = WorkSessionBindings.requiredJdbc(session);
+        // 先锁同一应付，再读取两种来源列，避免不同请求并发重复覆盖。
+        try (PreparedStatement lock = connection.prepareStatement("select code from fin_payable where code=? for update")) {
+            lock.setString(1, payableCode);
+            try (ResultSet rows = lock.executeQuery()) {
+                if (!rows.next()) {
+                    throw new BusinessException("应付不存在");
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定入库应付", ex);
+        }
         try (PreparedStatement statement = connection.prepareStatement("""
                 select receipt_id from inv_company_material_receipt
-                 where covered_payable_code=?
+                 where covered_payable_code=? or payable_code=? for update
                 """)) {
             statement.setString(1, payableCode);
+            statement.setString(2, payableCode);
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next();
             }
@@ -209,6 +224,15 @@ public class JdbcCompanyMaterialReceiptRepository implements CompanyMaterialRece
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next() ? mapBalance(rows) : null;
             }
+        }
+    }
+
+    @Override
+    public Optional<CompanyMaterialBalance> lockBalance(String itemId, String batchCode, String warehouseCode, WorkSession session) {
+        try {
+            return Optional.ofNullable(lock(WorkSessionBindings.requiredJdbc(session), itemId, batchCode, warehouseCode));
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定盘点物料", ex);
         }
     }
 
@@ -237,7 +261,7 @@ public class JdbcCompanyMaterialReceiptRepository implements CompanyMaterialRece
                 rows.getBigDecimal("amount_value"),
                 rows.getString("payable_code"),
                 rows.getString("covered_payable_code"),
-                rows.getInt("version_no")
+                rows.getInt("version_no"), rows.getString("business_date"), rows.getString("recorded_at")
         );
     }
 

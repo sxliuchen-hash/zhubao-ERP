@@ -19,6 +19,16 @@ public record CompanyMaterialReceipt(
         BigDecimal amount,
         String payableCode,
         String coveredPayableCode,
-        int version
+        int version,
+        String businessDate,
+        String recordedAt
 ) {
+    public CompanyMaterialReceipt(String receiptId, String itemId, String batchCode, BigDecimal quantity,
+                                  String unit, StockMeasurement.Weight weight, String warehouseCode,
+                                  CompanyMaterialSourceKind sourceKind, String supplierName,
+                                  CompanyMaterialAmountState amountState, BigDecimal amount, String payableCode,
+                                  String coveredPayableCode, int version) {
+        this(receiptId, itemId, batchCode, quantity, unit, weight, warehouseCode, sourceKind, supplierName,
+                amountState, amount, payableCode, coveredPayableCode, version, null, null);
+    }
 }

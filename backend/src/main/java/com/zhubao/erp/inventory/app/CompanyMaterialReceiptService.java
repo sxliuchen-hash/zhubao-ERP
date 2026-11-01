@@ -58,6 +58,9 @@ public class CompanyMaterialReceiptService {
         if (sourceKind == null) {
             throw new BusinessException("请选择入库来源");
         }
+        if (sourceKind == CompanyMaterialSourceKind.COVERED_PAYABLE) {
+            RefactorPermissionContract.assertAction(permissions, PermissionCode.FINANCE_PAYABLE, actor);
+        }
         BigDecimal counted = quantity(quantity);
         StockMeasurement.Weight measured = weight(weight);
         String unitText = required(unitName, "请填写单位", 16);
@@ -127,7 +130,7 @@ public class CompanyMaterialReceiptService {
             CompanyMaterialReceipt receipt = new CompanyMaterialReceipt(
                     id, locked.itemId(), batch, counted, unitText, measured, warehouse, sourceKind,
                     storedSupplier, amountState, storedAmount, payableCode,
-                    existing == null ? "" : existing.code(), 1);
+                    existing == null ? "" : existing.code(), 1, day, LocalDateTime.now().withNano(0).toString());
             receipts.insert(receipt, session);
             receipts.add(new CompanyMaterialBalance(
                     locked.itemId(), batch, warehouse, counted, unitText, measured), session);

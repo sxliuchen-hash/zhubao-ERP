@@ -134,3 +134,5 @@
 134	TABLE	fin_customer_bill_coverage
 135	COLUMN	inv_stock_balance	weight_pending
 136	TABLE	fin_customer_bill_source
+137	COLUMN	inv_company_material_receipt	business_date
+138	COLUMN	inv_tool_piece	scrapped

@@ -12,6 +12,12 @@ public interface ToolCustodyRepository {
 
     BigDecimal stock(String itemId, String warehouseCode);
 
+    default BigDecimal lockStock(String itemId, String warehouseCode, WorkSession session) {
+        return stock(itemId, warehouseCode);
+    }
+
+    void settlePiece(ToolLoan loan, boolean scrap, WorkSession session);
+
     void placePiece(String pieceCode, String itemId, String warehouseCode, WorkSession session);
 
     void loan(ToolLoan loan, WorkSession session);

@@ -108,7 +108,7 @@ public class ConsumableIssueService {
             }
             stocks.add(new CompanyMaterialBalance(
                     current.itemId(), current.batchCode(), current.fromWarehouse(), counted, current.unit(), StockMeasurement.unknown()), session);
-            if (costs.costPosted(id)) {
+            if (timing == ConsumptionTiming.ON_ISSUE && costs.costPosted(id)) {
                 costs.insert(costEvent(id, ConsumableCostEvent.ADJUSTMENT, counted, adjustment(id, current.quantity(), counted)), session);
             }
             String code = "TH-" + token();
@@ -134,9 +134,6 @@ public class ConsumableIssueService {
                 requestId, actor.operator(), "CONSUME_CONSUMABLE", "CONSUMABLE_ISSUE", id,
                 id + "\n" + version + "\n" + counted.toPlainString()
         ), session -> {
-            if (costs.costPosted(id)) {
-                throw new BusinessException("领用已经计耗，不能再计一次");
-            }
             CompanyMaterialIssue locked = issues.find(id).orElseThrow(() -> new BusinessException("领用单不存在"));
             BigDecimal open = locked.quantity().subtract(locked.returnedQuantity()).subtract(locked.consumedQuantity());
             if (counted.compareTo(open) > 0) {

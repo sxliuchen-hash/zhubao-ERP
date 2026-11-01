@@ -24,7 +24,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * 按盘点时点保存账面快照。确认只追加差额，不覆盖原账面，也不把在外或已发算进实盘。
+ * 仅支持发起时盘点。期间发生领退时须重新盘点，不能把当前余额冒充历史余额。
  */
 @Service
 public class MaterialStocktakeService {
@@ -52,16 +52,22 @@ public class MaterialStocktakeService {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.STOCK_COMPANY_RECEIVE, actor);
         String when = time(countedAt);
         FactoryItem item = items.find(text(itemId)).orElseThrow(() -> new BusinessException("物品档案不存在"));
+        if (tool != (item.category() == com.zhubao.erp.inventory.domain.FactoryItemCategory.REUSABLE_TOOL)) {
+            throw new BusinessException("盘点类型与物品类别不一致");
+        }
+        if (tool && item.custodyMode() != com.zhubao.erp.inventory.domain.CustodyMode.QUANTITY) {
+            throw new BusinessException("逐件工具请按工具编号核对，不能使用数量差额盘点");
+        }
         String location = required(locationCode, "请填写盘点位置", 40);
         String batch = batchCode == null ? "" : batchCode.trim();
-        BigDecimal book = book(item, batch, location, tool);
         String id = unit.execute(new CommandCall(
                 requestId, actor.operator(), "OPEN_STOCKTAKE", "STOCKTAKE", item.itemId(),
                 item.itemId() + "\n" + batch + "\n" + location + "\n" + when + "\n" + tool
         ), session -> {
+            BigDecimal book = book(item, batch, location, session);
             String stocktakeId = "PD-" + token();
             stocktakes.insert(new MaterialStocktake(
-                    stocktakeId, when, item.itemId(), batch, location, book, null, MaterialStocktake.OPEN, 1), session);
+                    stocktakeId, LocalDateTime.now().withNano(0).toString(), item.itemId(), batch, location, book, null, MaterialStocktake.OPEN, 1), session);
             return stocktakeId;
         });
         return stocktakes.find(id).orElseThrow(() -> new BusinessException("盘点单不存在"));
@@ -92,6 +98,10 @@ public class MaterialStocktakeService {
             if (current.countedQuantity() == null) {
                 throw new BusinessException("请先填写实盘数量");
             }
+            FactoryItem item = items.find(current.itemId()).orElseThrow(() -> new BusinessException("物品档案不存在"));
+            if (book(item, current.batchCode(), current.locationCode(), session).compareTo(current.bookQuantity()) != 0) {
+                throw new BusinessException("盘点期间库存已变动，请重新发起盘点");
+            }
             BigDecimal delta = current.countedQuantity().subtract(current.bookQuantity());
             stocktakes.confirm(id, version, session);
             if (delta.signum() != 0) {
@@ -116,11 +126,11 @@ public class MaterialStocktakeService {
         materials.take(item.itemId(), current.batchCode(), current.locationCode(), delta.abs(), item.unit(), StockMeasurement.unknown(), session);
     }
 
-    private BigDecimal book(FactoryItem item, String batch, String location, boolean tool) {
-        if (tool || item.category() == com.zhubao.erp.inventory.domain.FactoryItemCategory.REUSABLE_TOOL) {
-            return tools.stock(item.itemId(), location);
+    private BigDecimal book(FactoryItem item, String batch, String location, com.zhubao.erp.work.domain.WorkSession session) {
+        if (item.category() == com.zhubao.erp.inventory.domain.FactoryItemCategory.REUSABLE_TOOL) {
+            return tools.lockStock(item.itemId(), location, session);
         }
-        return materials.balance(item.itemId(), batch, location).map(CompanyMaterialBalance::quantity).orElse(BigDecimal.ZERO);
+        return materials.lockBalance(item.itemId(), batch, location, session).map(CompanyMaterialBalance::quantity).orElse(BigDecimal.ZERO);
     }
 
     private static String time(String countedAt) {
@@ -128,12 +138,15 @@ public class MaterialStocktakeService {
         if (text.isEmpty()) {
             throw new BusinessException("请填写盘点时点");
         }
+        if ("NOW".equals(text)) {
+            return text;
+        }
         try {
             LocalDateTime.parse(text);
-            return text;
         } catch (DateTimeParseException ex) {
             throw new BusinessException("盘点时点需使用 yyyy-MM-ddTHH:mm:ss");
         }
+        throw new BusinessException("暂不支持历史时点盘点，请选择现在发起盘点");
     }
 
     private static BigDecimal nonNegative(BigDecimal counted) {

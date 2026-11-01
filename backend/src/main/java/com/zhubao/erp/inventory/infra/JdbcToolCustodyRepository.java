@@ -107,10 +107,14 @@ public class JdbcToolCustodyRepository implements ToolCustodyRepository {
         try {
             if (!loan.pieceCode().isEmpty()) {
                 try (PreparedStatement query = connection.prepareStatement(
-                        "select holder_id from inv_tool_piece where piece_code=? for update")) {
+                        "select * from inv_tool_piece where piece_code=? for update")) {
                     query.setString(1, loan.pieceCode());
                     try (ResultSet rows = query.executeQuery()) {
-                        if (!rows.next() || !rows.getString(1).isEmpty()) {
+                        if (!rows.next() || !rows.getString("item_id").equals(loan.itemId())
+                                || !rows.getString("warehouse_code").equals(loan.warehouseCode())) {
+                            throw new BusinessException("工具编号与物品或位置不一致");
+                        }
+                        if (!rows.getString("holder_id").isEmpty() || rows.getBoolean("scrapped")) {
                             throw new BusinessException("该工具已借出");
                         }
                     }
@@ -239,6 +243,39 @@ public class JdbcToolCustodyRepository implements ToolCustodyRepository {
                 .filter(loan -> loan.holderId().equals(holderId))
                 .map(ToolLoan::outstanding)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    @Override
+    public BigDecimal lockStock(String itemId, String warehouseCode, WorkSession session) {
+        try (PreparedStatement query = WorkSessionBindings.requiredJdbc(session).prepareStatement(
+                "select quantity from inv_tool_stock where item_id=? and warehouse_code=? for update")) {
+            query.setString(1, itemId);
+            query.setString(2, warehouseCode);
+            try (ResultSet rows = query.executeQuery()) {
+                return rows.next() ? rows.getBigDecimal(1) : BigDecimal.ZERO;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定盘点工具", ex);
+        }
+    }
+
+    @Override
+    public void settlePiece(ToolLoan loan, boolean scrap, WorkSession session) {
+        try (PreparedStatement update = WorkSessionBindings.requiredJdbc(session).prepareStatement("""
+                update inv_tool_piece set holder_id='', scrapped=?
+                 where piece_code=? and item_id=? and warehouse_code=? and holder_id=? and scrapped=false
+                """)) {
+            update.setBoolean(1, scrap);
+            update.setString(2, loan.pieceCode());
+            update.setString(3, loan.itemId());
+            update.setString(4, loan.warehouseCode());
+            update.setString(5, loan.holderId());
+            if (update.executeUpdate() != 1) {
+                throw new BusinessException("工具编号的保管状态与借单不一致");
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法更新逐件工具状态", ex);
+        }
     }
 
     private static ToolLoan map(ResultSet rows) throws SQLException {
