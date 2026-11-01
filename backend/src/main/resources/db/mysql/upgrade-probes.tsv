@@ -140,3 +140,4 @@
 140	INDEX	gld_goldwork_delivery	idx_gld_delivery_quality
 141	COLUMN	biz_whole_bag_report	worker_account
 142	COLUMN	biz_quantity_disposition	work_quantity
+143	COLUMN	biz_delivery_draft_line	processing_summary

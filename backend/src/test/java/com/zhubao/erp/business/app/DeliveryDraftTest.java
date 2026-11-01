@@ -278,7 +278,7 @@ class DeliveryDraftTest {
                                                 com.zhubao.erp.work.app.BusinessWorkUnit unit,
                                                 java.util.function.Predicate<String> inHouse) {
         return new DeliveryDraftService(drafts, bags, new DocumentProcessingTargetCustomer(documents),
-                inHouse::test, unit);
+                inHouse::test, unit, documents);
     }
 
     private static InMemoryBusinessDocumentRepository documents() {
@@ -313,7 +313,7 @@ class DeliveryDraftTest {
         dataSource.setPassword("");
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : new String[]{
-                    "V44__m3_command_request.sql", "V81__m3_activity_bag.sql", "V92__m3_delivery_draft.sql"}) {
+                    "V44__m3_command_request.sql", "V81__m3_activity_bag.sql", "V92__m3_delivery_draft.sql", "V143__m3_delivery_presentation_snapshot.sql"}) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql/" + file), StandardCharsets.UTF_8);
                 for (String item : MigrationCatalog.statements(sql)) {
                     statement.execute(item);

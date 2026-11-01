@@ -1,0 +1,16 @@
+import { apiGet, apiPost } from './apiClient';
+import type { LabelPayload } from './labelApi';
+export interface DeliveryLine { deliveryId: string; lineNo: number; bagId: string; bagVersion: number; targetCode: string; quantity: number; quantityUnit: string; materialCode: string; customerName: string | null; goodsSpecification: string | null; processingSummary: string | null; weight: { state: string; value: number | null } }
+export interface DeliveryDetail { draft: { deliveryId: string; customerId: number; version: number; status: string; logisticsNote: string; remark: string }; lines: DeliveryLine[]; sources: { lineNo: number; outboundCode: string; quantity: number; weight: number }[]; returns: { outboundCode: string; quantity: number }[] }
+export interface PublicDelivery { accessId: string; deliveryId: string; customerName: string | null; remark: string; publicPhotoIds: string[]; bags: { bagCode: string; material: string; specification: string | null; requirement: string | null; quantity: number; unit: string; weight: number | null; sourceCode: string }[] }
+export const fetchPublicDelivery = (token: string) => apiGet<PublicDelivery>(`/api/public/deliveries/${encodeURIComponent(token)}`);
+export function publicPhotoUrl(token: string, code: string) { return `${(import.meta.env.VITE_API_BASE_URL ?? '').trim()}/api/public/deliveries/${encodeURIComponent(token)}/photos/${encodeURIComponent(code)}`; }
+export const fetchDelivery = (id: string) => apiGet<DeliveryDetail>(`/api/business/deliveries/${encodeURIComponent(id)}`);
+export const openDelivery = (body: { requestId: string; customerId: number; logisticsNote: string; remark: string; selections: { bagId: string; bagVersion: number; targetCode: string; quantityUnit: string }[] }) => apiPost<typeof body, { draft: DeliveryDetail['draft'] }>('/api/business/deliveries', body);
+export const confirmDelivery = (id: string, body: { requestId: string; version: number }) => apiPost<typeof body, { draft: DeliveryDetail['draft'] }>(`/api/business/deliveries/${encodeURIComponent(id)}/confirmations`, body);
+export const publishDelivery = (id: string, body: { requestId: string; photoIds: string[] }) => apiPost<typeof body, string>(`/api/business/deliveries/${encodeURIComponent(id)}/public-links`, body);
+export const disableDeliveryLink = (id: string, token: string, body: { requestId: string; version: number }) => apiPost(`/api/business/deliveries/${encodeURIComponent(id)}/public-links/${encodeURIComponent(token)}/disable`, body);
+export const fetchDeliveryLabel = (id: string, line: number, token: string) => apiGet<{ payload: LabelPayload; overflow: string[] }>(`/api/business/deliveries/${encodeURIComponent(id)}/labels/${line}?accessId=${encodeURIComponent(token)}`);
+export const fetchDeliveryImpact = (id: string) => apiGet<{ confirmedChargeRecord: string; confirmedRefundRecord: string }>(`/api/business/deliveries/${encodeURIComponent(id)}/impact`);
+export const correctDelivery = (id: string, body: { requestId: string; version: number; intent: string }) => apiPost(`/api/business/deliveries/${encodeURIComponent(id)}/corrections`, body);
+export const receiveDeliveryReturn = (id: string, body: { requestId: string; outboundCode: string; quantity: string; weight: string }) => apiPost(`/api/business/deliveries/${encodeURIComponent(id)}/returns`, body);

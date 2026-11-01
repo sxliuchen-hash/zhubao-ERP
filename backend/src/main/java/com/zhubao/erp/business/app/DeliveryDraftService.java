@@ -37,6 +37,7 @@ import java.util.Set;
 @Service
 public class DeliveryDraftService {
 
+    private final com.zhubao.erp.business.domain.BusinessDocumentRepository documents;
     private final DeliveryDraftRepository drafts;
     private final ActivityBagRepository bags;
     private final ProcessingTargetCustomer customers;
@@ -46,6 +47,14 @@ public class DeliveryDraftService {
     public DeliveryDraftService(DeliveryDraftRepository drafts, ActivityBagRepository bags,
                                 ProcessingTargetCustomer customers, DeliveryInHouseCheck inHouse,
                                 BusinessWorkUnit workUnit) {
+        this(drafts, bags, customers, inHouse, workUnit, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DeliveryDraftService(DeliveryDraftRepository drafts, ActivityBagRepository bags,
+                                ProcessingTargetCustomer customers, DeliveryInHouseCheck inHouse,
+                                BusinessWorkUnit workUnit, com.zhubao.erp.business.domain.BusinessDocumentRepository documents) {
+        this.documents = documents;
         this.drafts = drafts;
         this.bags = bags;
         this.customers = customers;
@@ -116,16 +125,27 @@ public class DeliveryDraftService {
             BusinessTargetReference reference = references.get(index);
             ActivityBag bag = locked[index];
             String unit = unitOf(kind, reference, selections.get(index), customerId);
+            Presentation display = presentation(reference.code());
             draftLines.add(new DeliveryDraftLine(
                     deliveryId, index + 1, bag.id(), bag.version(), reference.kind(), reference.role(),
                     reference.code(), bag.quantity(), unit, bag.weight(), bag.materialCode(),
-                    bag.sourceKey(), bag.requirementVersion()));
+                    bag.sourceKey(), bag.requirementVersion(), display.customer(), display.goods(), display.requirement()));
         }
         DeliveryDraft draft = new DeliveryDraft(
                 deliveryId, requestId, customerId, kind, logisticsNote, remark, DeliveryDraftStatus.DRAFT, 1);
         drafts.save(draft, draftLines, session);
         return deliveryId;
     }
+
+    private Presentation presentation(String target) {
+        if (documents == null) return new Presentation(null, null, null);
+        return documents.findChildWorkOrderByCode(target)
+                .map(row -> new Presentation(row.customerName(), row.goodsName(), row.processingRequirement()))
+                .or(() -> documents.findMotherOrderByCode(target)
+                        .map(row -> new Presentation(row.customerName(), row.goodsName(), row.processingRequirement())))
+                .orElse(new Presentation(null, null, null));
+    }
+    private record Presentation(String customer, String goods, String requirement) {}
 
     private String unitOf(BusinessKind kind, BusinessTargetReference reference, DeliverySourceSelection selection,
                           long customerId) {

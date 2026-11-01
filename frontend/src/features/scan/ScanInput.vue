@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type Ref } from 'vue';
+import { computed, defineAsyncComponent, inject, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type Ref } from 'vue';
+const PublicDeliveryEntry = defineAsyncComponent(() => import('../shipping/PublicDeliveryEntry.vue'));
+import { parseDeliveryScan } from '../shipping/publicDelivery';
+import type { AuthSession } from '../../services/authApi';
 import { hasLiveCamera } from './cameraBarcode';
 import { bindMobileScanTarget, unbindMobileScanTarget } from './mobileScanBridge';
 import type { ScanDraft } from './scanDraft';
@@ -33,6 +36,9 @@ const emit = defineEmits<{
   'activate-camera': [];
 }>();
 
+const publicToken = ref('');
+const session = inject<Ref<AuthSession | null>>('zhubao-auth-session', ref(null));
+function showPublic(raw: string) { const parsed = parseDeliveryScan(raw); if (parsed.kind !== 'public') return false; publicToken.value = parsed.accessId; return true; }
 const scanner = useScanner();
 const scanning = scanner.scanning;
 const cameraActive = scanner.cameraActive;
@@ -78,6 +84,7 @@ function submitManual(event?: Event) {
     manualRef.value?.focus();
     return;
   }
+  if (showPublic(props.modelValue)) return;
   acceptSubmit = false;
   emit('recognize', draftOf(props.modelValue));
   queueMicrotask(() => {
@@ -103,6 +110,7 @@ function refocusAt(event: MouseEvent) {
 }
 
 function publish(raw: string) {
+  if (showPublic(raw)) return;
   emit('update:modelValue', raw);
   emit('recognize', draftOf(raw));
 }
@@ -249,6 +257,10 @@ async function onPhoto(event: Event) {
       @change="onPhoto"
     />
   </form>
+  <Teleport to="body"><section v-if="publicToken" role="dialog" aria-modal="true" aria-label="发货码详情" style="position:fixed;inset:0;z-index:9000;background:white;overflow:auto">
+    <button type="button" @click="publicToken = ''">返回当前办理</button>
+    <PublicDeliveryEntry :token="publicToken" :internal-allowed="Boolean(session && session.role !== 'CUSTOMER_PORTAL')" :finance-allowed="session?.effectivePermissions?.includes('FINANCE_CUSTOMER_READ') === true" />
+  </section></Teleport>
 </template>
 
 <style scoped>

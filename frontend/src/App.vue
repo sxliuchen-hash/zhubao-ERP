@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import AppShell from './components/AppShell.vue';
+const PublicDeliveryEntry = defineAsyncComponent(() => import('./features/shipping/PublicDeliveryEntry.vue')); 
+import { parseDeliveryScan } from './features/shipping/publicDelivery';
+const publicLocation = parseDeliveryScan(window.location.href);
+const publicBag = new URLSearchParams(window.location.search).get('bag') ?? '';
 import NavIcon from './components/NavIcon.vue';
 import WorkspaceLoadState from './components/WorkspaceLoadState.vue';
 import OrderActionHost from './features/orders/OrderActionHost.vue';
@@ -383,6 +387,8 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
 </script>
 
 <template>
+  <PublicDeliveryEntry v-if="publicLocation.kind === 'public'" :token="publicLocation.accessId" :bag="publicBag" :internal-allowed="Boolean(authSession && authSession.role !== 'CUSTOMER_PORTAL')" :finance-allowed="authSession?.effectivePermissions?.includes('FINANCE_CUSTOMER_READ') === true" />
+  <template v-else>
   <p v-if="!authReady" class="login-page">正在恢复登录</p>
   <div v-else-if="authRestoreError" class="login-page">
     <section class="login-card">
@@ -537,4 +543,5 @@ function flattenMenuCodes(items: NavigationMenuItem[]): string[] {
     <component :is="activeWorkspace" v-else :key="authRevision" />
   </AppShell>
 <OrderActionHost v-if="authReady && authSession && !authSession.passwordChangeRequired && !authRestoreError" ref="orderActionHost" :key="authRevision" :can-intake="canIntake" :can-production="canProduction" :can-change="canChange" :can-quality="canQuality" :can-shipping="canShipping" :can-aftercare="canAftercare" :can-label="canLabel" :can-bill="canBill" :can-settle="canSettle" :can-outsource="canOutsource" @active="orderActionOpen = $event" @saved="intakeSaved" @changed="orderRefresh += 1" />
+  </template>
 </template>

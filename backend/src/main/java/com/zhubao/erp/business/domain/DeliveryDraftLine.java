@@ -21,8 +21,17 @@ public record DeliveryDraftLine(
         StockMeasurement.Weight weight,
         String materialCode,
         String sourceKey,
-        String requirementVersion
+        String requirementVersion,
+        String customerName,
+        String goodsSpecification,
+        String processingSummary
 ) {
+    public DeliveryDraftLine(String deliveryId, int lineNo, String bagId, int bagVersion, BusinessKind businessKind,
+            BusinessTargetRole targetRole, String targetCode, BigDecimal quantity, String quantityUnit,
+            StockMeasurement.Weight weight, String materialCode, String sourceKey, String requirementVersion) {
+        this(deliveryId, lineNo, bagId, bagVersion, businessKind, targetRole, targetCode, quantity, quantityUnit,
+                weight, materialCode, sourceKey, requirementVersion, null, null, null);
+    }
     public DeliveryDraftLine {
         if (deliveryId == null || !deliveryId.matches("^FH-\\d{8}-\\d{4}$")) {
             throw new BusinessException("交付单号无效");

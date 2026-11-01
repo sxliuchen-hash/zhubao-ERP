@@ -42,7 +42,7 @@ class ShippingBagLabelTest {
                 new BigDecimal("80"), StockMeasurement.unknown(), 1), 0, null);
         var sheet = new com.zhubao.erp.business.app.DeliveryDraftService(
                 drafts, bags, new com.zhubao.erp.business.app.DocumentProcessingTargetCustomer(documents),
-                ignored -> true, unit).open("e11-draft1", "clerk-01", 7L, "", "短备注", List.of(
+                ignored -> true, unit, documents).open("e11-draft1", "clerk-01", 7L, "", "短备注", List.of(
                 new DeliverySourceSelection("BAG-B", 1, "MD-20261030-1001", "颗")));
         unit.execute(new CommandCall("e11-seed01", "clerk-01", "SEED_CONFIRM", "DELIVERY_DRAFT",
                 sheet.draft().deliveryId(), sheet.draft().deliveryId()), session -> {
@@ -53,21 +53,25 @@ class ShippingBagLabelTest {
                     new BigDecimal("80"), new BigDecimal("5"))), 1, session);
             return sheet.draft().deliveryId();
         });
-        ShippingBagLabelService labels = new ShippingBagLabelService(drafts);
+        var access = new com.zhubao.erp.scan.app.PublicDeliveryAccessService(drafts, new com.zhubao.erp.scan.infra.InMemoryPublicDeliveryAccessRepository(), unit);
+        String token = access.open("label-public", "clerk-01", sheet.draft().deliveryId(), List.of());
+        ShippingBagLabelService labels = new ShippingBagLabelService(drafts, access);
 
-        ShippingBagLabelPreview preview = labels.preview(sheet.draft().deliveryId(), 1);
-        ShippingBagLabelPreview reprint = labels.reprint(sheet.draft().deliveryId(), 1);
+        ShippingBagLabelPreview preview = labels.preview(sheet.draft().deliveryId(), 1, token);
+        ShippingBagLabelPreview reprint = labels.preview(sheet.draft().deliveryId(), 1, token);
 
         assertThat(preview.payload().type()).isEqualTo(LabelType.SHIPPING_BAG);
         assertThat(preview.payload().templateCode()).isEqualTo("SHIPPING_BAG_40X30");
         assertThat(preview.payload().primaryCode()).isEqualTo(sheet.draft().deliveryId() + "-1");
         assertThat(preview.payload().primaryCode()).doesNotStartWith("ZD-");
-        assertThat(preview.payload().qrContent()).isEqualTo("SB|" + sheet.draft().deliveryId() + "|1");
+        assertThat(preview.payload().qrContent()).isEqualTo("/d/" + token + "?bag=1");
         assertThat(preview.payload().qrContent()).doesNotStartWith("JG|");
         assertThat(preview.payload().printerSetting().widthMm()).isEqualTo(40);
         assertThat(preview.payload().printerSetting().heightMm()).isEqualTo(30);
         assertThat(preview.payload().fields()).extracting(LabelField::name).contains("数量", "要求");
-        assertThat(preview.payload().fields()).extracting(LabelField::value).doesNotContain("0克");
+        assertThat(preview.payload().fields()).extracting(LabelField::value).contains("恒信珠宝", "8mm珠料", "5克").doesNotContain("7", "REQ-1");
+        assertThat(access.read(token).customerName()).isEqualTo("恒信珠宝");
+        assertThat(access.read(token).bags().get(0).requirement()).isEqualTo("要求".repeat(10));
         assertThat(preview.overflow()).contains("要求放不下，完整内容见A5和扫码页");
         assertThat(reprint.payload().snapshotHash()).isEqualTo(preview.payload().snapshotHash());
         assertThat(drafts.confirmedSources(sheet.draft().deliveryId()).get(0).quantity()).isEqualByComparingTo("80");
@@ -97,8 +101,8 @@ class ShippingBagLabelTest {
 
     private static MotherOrderRecord mother() {
         return new MotherOrderRecord("MD-20261030-1001", 7L, 7L, "牙骨",
-                null, null, null, null, null, null, null, "CUSTOMER", true, "WH-01",
+                null, null, null, null, null, null, "8mm珠料", "CUSTOMER", true, "WH-01",
                 new BigDecimal("80"), "颗", null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, "要求".repeat(10), "2026-11-01", "恒信珠宝");
     }
 }

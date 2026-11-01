@@ -241,8 +241,8 @@ public class JdbcDeliveryDraftRepository implements DeliveryDraftRepository {
                 insert into biz_delivery_draft_line(
                     delivery_id, line_no, bag_id, bag_version, business_kind, target_role, target_code,
                     quantity, quantity_unit, weight_state, weight_value, material_code, source_key,
-                    requirement_version)
-                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    requirement_version, customer_name, goods_specification, processing_summary)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """)) {
             statement.setString(1, line.deliveryId());
             statement.setInt(2, line.lineNo());
@@ -262,6 +262,9 @@ public class JdbcDeliveryDraftRepository implements DeliveryDraftRepository {
             statement.setString(12, line.materialCode());
             statement.setString(13, line.sourceKey());
             statement.setString(14, line.requirementVersion());
+            statement.setString(15, line.customerName());
+            statement.setString(16, line.goodsSpecification());
+            statement.setString(17, line.processingSummary());
             statement.executeUpdate();
         } catch (SQLException ex) {
             throw writeFailure(ex);
@@ -320,7 +323,8 @@ public class JdbcDeliveryDraftRepository implements DeliveryDraftRepository {
                 weight,
                 rows.getString("material_code"),
                 rows.getString("source_key"),
-                rows.getString("requirement_version")
+                rows.getString("requirement_version"), rows.getString("customer_name"),
+                rows.getString("goods_specification"), rows.getString("processing_summary")
         );
     }
 

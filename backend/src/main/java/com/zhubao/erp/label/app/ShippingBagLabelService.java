@@ -30,22 +30,31 @@ public class ShippingBagLabelService {
     static final int FIT_LIMIT = 18;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    private final com.zhubao.erp.scan.app.PublicDeliveryAccessService publicAccess;
     private final DeliveryDraftRepository drafts;
 
     public ShippingBagLabelService(DeliveryDraftRepository drafts) {
+        this(drafts, null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public ShippingBagLabelService(DeliveryDraftRepository drafts, com.zhubao.erp.scan.app.PublicDeliveryAccessService publicAccess) {
+        this.publicAccess = publicAccess;
         this.drafts = drafts;
     }
 
     public ShippingBagLabelPreview preview(String deliveryId, int lineNo) {
-        return compose(deliveryId, lineNo);
+        return compose(deliveryId, lineNo, null);
     }
 
     /** 补打沿用同一确认快照，不写出库或库存。 */
     public ShippingBagLabelPreview reprint(String deliveryId, int lineNo) {
-        return compose(deliveryId, lineNo);
+        return compose(deliveryId, lineNo, null);
     }
 
-    private ShippingBagLabelPreview compose(String deliveryId, int lineNo) {
+    public ShippingBagLabelPreview preview(String deliveryId, int lineNo, String accessId) {
+        return compose(deliveryId, lineNo, accessId);
+    }
+    private ShippingBagLabelPreview compose(String deliveryId, int lineNo, String accessId) {
         String id = deliveryId == null ? "" : deliveryId.trim();
         DeliveryDraft draft = drafts.find(id).orElseThrow(() -> new BusinessException("交付草稿不存在"));
         if (draft.status() != DeliveryDraftStatus.CONFIRMED) {
@@ -59,16 +68,17 @@ public class ShippingBagLabelService {
                 .filter(row -> row.lineNo() == lineNo)
                 .findFirst()
                 .orElseThrow(() -> new BusinessException("发货袋不存在"));
+        if (publicAccess == null || accessId == null) throw new BusinessException("请先建立本次交付的公开扫码链接");
+        publicAccess.readForDelivery(accessId, id);
         String bagCode = id + "-" + lineNo;
         List<LabelField> fields = new ArrayList<>();
         fields.add(new LabelField("数量", source.quantity().stripTrailingZeros().toPlainString() + line.quantityUnit()));
-        fields.add(new LabelField("客户", Long.toString(draft.customerId())));
+        fields.add(new LabelField("客户", line.customerName() == null || line.customerName().isBlank() ? "客户未记录" : line.customerName()));
         fields.add(new LabelField("材质", line.materialCode()));
-        if (!line.requirementVersion().isBlank()) {
-            fields.add(new LabelField("要求", line.requirementVersion()));
-        }
-        if (line.weight().state() == StockMeasurement.WeightState.KNOWN && line.weight().value() != null) {
-            fields.add(new LabelField("重量", line.weight().value().stripTrailingZeros().toPlainString() + "克"));
+        if (line.goodsSpecification() != null && !line.goodsSpecification().isBlank()) fields.add(new LabelField("规格", line.goodsSpecification()));
+        if (line.processingSummary() != null && !line.processingSummary().isBlank()) fields.add(new LabelField("要求", line.processingSummary()));
+        if (source.weight() != null) {
+            fields.add(new LabelField("重量", source.weight().stripTrailingZeros().toPlainString() + "克"));
         }
         fields.add(new LabelField("来源", line.targetCode()));
         List<String> overflow = new ArrayList<>();
@@ -81,7 +91,7 @@ public class ShippingBagLabelService {
                 LabelType.SHIPPING_BAG,
                 "发货袋",
                 bagCode,
-                "SB|" + id + "|" + lineNo,
+                "/d/" + accessId + "?bag=" + lineNo,
                 fields,
                 "",
                 draft.remark(),

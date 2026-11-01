@@ -333,7 +333,7 @@ class DeliveryConfirmationTest {
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             for (String file : new String[]{
                     "V44__m3_command_request.sql", "V81__m3_activity_bag.sql",
-                    "V92__m3_delivery_draft.sql", "V93__m3_delivery_confirmation.sql"}) {
+                    "V92__m3_delivery_draft.sql", "V143__m3_delivery_presentation_snapshot.sql", "V93__m3_delivery_confirmation.sql"}) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql/" + file), StandardCharsets.UTF_8);
                 for (String item : MigrationCatalog.statements(sql)) {
                     statement.execute(item);

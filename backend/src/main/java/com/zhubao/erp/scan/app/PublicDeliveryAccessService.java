@@ -23,6 +23,8 @@ import java.util.List;
 @Service
 public class PublicDeliveryAccessService {
 
+    private final com.zhubao.erp.document.domain.DocumentManagementRepository documents;
+    private final com.zhubao.erp.document.app.DocumentManagementService content;
     private final DeliveryDraftRepository drafts;
     private final PublicDeliveryAccessRepository accesses;
     private final BusinessWorkUnit workUnit;
@@ -30,6 +32,13 @@ public class PublicDeliveryAccessService {
 
     public PublicDeliveryAccessService(DeliveryDraftRepository drafts, PublicDeliveryAccessRepository accesses,
                                        BusinessWorkUnit workUnit) {
+        this(drafts, accesses, workUnit, null, null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public PublicDeliveryAccessService(DeliveryDraftRepository drafts, PublicDeliveryAccessRepository accesses,
+            BusinessWorkUnit workUnit, com.zhubao.erp.document.domain.DocumentManagementRepository documents,
+            com.zhubao.erp.document.app.DocumentManagementService content) {
+        this.documents = documents; this.content = content;
         this.drafts = drafts;
         this.accesses = accesses;
         this.workUnit = workUnit;
@@ -37,9 +46,13 @@ public class PublicDeliveryAccessService {
 
     public String open(String requestId, String actorId, String deliveryId, List<String> publicPhotoIds) {
         String delivery = deliveryId == null ? "" : deliveryId.trim();
+        List<String> given = publicPhotoIds == null ? List.of() : publicPhotoIds;
+        new PublicDeliveryAccess("0".repeat(64), delivery, 1L, List.of(), given, true, 1);
+        List<String> photos = given.stream().sorted().distinct().toList();
+        String fingerprint = delivery + photos.stream().map(id -> "\n" + id.length() + ":" + id).collect(java.util.stream.Collectors.joining());
         return workUnit.execute(new CommandCall(
-                requestId, actorId, "OPEN_PUBLIC_DELIVERY", "DELIVERY_DRAFT", delivery, delivery
-        ), session -> openIn(delivery, publicPhotoIds, session));
+                requestId, actorId, "OPEN_PUBLIC_DELIVERY", "DELIVERY_DRAFT", delivery, fingerprint
+        ), session -> openIn(delivery, photos, session));
     }
 
     public void disable(String requestId, String actorId, String accessId) {
@@ -77,6 +90,7 @@ public class PublicDeliveryAccessService {
         if (bags.isEmpty()) {
             throw new BusinessException("发货袋不存在");
         }
+        for (String photo : publicPhotoIds) assertPhoto(deliveryId, photo);
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String accessId = HexFormat.of().formatHex(bytes);
@@ -87,8 +101,45 @@ public class PublicDeliveryAccessService {
         return accessId;
     }
 
+    public com.zhubao.erp.document.domain.AttachmentStreamContent photo(String accessId, String photoId) {
+        PublicDeliverySummary summary = read(accessId);
+        if (!summary.publicPhotoIds().contains(photoId)) throw new BusinessException("图片未获准公开");
+        assertPhoto(summary.deliveryId(), photoId);
+        if (content == null) throw new BusinessException("公开图片内容尚未装配");
+        var stream = content.contentStream(photoId);
+        return new com.zhubao.erp.document.domain.AttachmentStreamContent(stream.code(), stream.fileName(), stream.mediaType(), stream.size(), stream.header(),
+                (offset, length, output) -> {
+                    PublicDeliverySummary current = read(accessId);
+                    if (!current.publicPhotoIds().contains(photoId)) throw new BusinessException("图片未获准公开");
+                    assertPhoto(current.deliveryId(), photoId);
+                    stream.write(offset, length, output);
+                });
+    }
+
+    private void assertPhoto(String deliveryId, String code) {
+        if (documents == null) throw new BusinessException("公开图片必须核验真实交付附件");
+        var attachment = documents.findAttachmentByCode(code).orElseThrow(() -> new BusinessException("公开图片不存在"));
+        if (!java.util.Set.of("image/jpeg", "image/png").contains(attachment.mediaType())
+                || !java.util.Set.of("已上传", "已关联", "已归档").contains(attachment.status()))
+            throw new BusinessException("公开图片必须是有效JPEG或PNG照片");
+        boolean belongs = com.zhubao.erp.document.domain.EvidenceCodes.OUTBOUND_ORDER.equals(attachment.objectType())
+                && drafts.confirmedSources(deliveryId).stream().anyMatch(source -> source.outboundCode().equals(attachment.businessCode()));
+        if (!belongs) throw new BusinessException("公开图片不属于本次交付出库");
+    }
+
     private PublicDeliverySummary summary(PublicDeliveryAccess access) {
-        return new PublicDeliverySummary(
-                access.accessId(), access.deliveryId(), access.customerId(), access.bagCodes(), access.publicPhotoIds());
+        DeliveryDraft draft = drafts.find(access.deliveryId()).orElseThrow(() -> new BusinessException("交付不存在"));
+        var lines = drafts.lines(access.deliveryId());
+        var details = drafts.confirmedSources(access.deliveryId()).stream().map(source -> {
+            var line = lines.stream().filter(item -> item.lineNo() == source.lineNo()).findFirst().orElseThrow();
+            return new PublicDeliverySummary.Bag(source.deliveryId() + "-" + source.lineNo(), line.materialCode(),
+                    line.goodsSpecification(), line.processingSummary(), source.quantity(), line.quantityUnit(), source.weight(), line.targetCode());
+        }).toList();
+        var photos = access.publicPhotoIds().stream().filter(code -> {
+            try { assertPhoto(access.deliveryId(), code); return true; }
+            catch (BusinessException ex) { return false; }
+        }).toList();
+        String name = lines.isEmpty() ? null : lines.get(0).customerName();
+        return new PublicDeliverySummary(access.accessId(), access.deliveryId(), access.customerId(), access.bagCodes(), photos, name, details, draft.remark());
     }
 }
