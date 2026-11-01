@@ -17,6 +17,9 @@ import com.zhubao.erp.business.domain.DeliveryStockPlaceLookup;
 import com.zhubao.erp.business.domain.NodePortionBalance;
 import com.zhubao.erp.business.domain.NodePortionReader;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
+import com.zhubao.erp.business.domain.PendingQuantity;
+import com.zhubao.erp.business.domain.PortionInspection;
+import com.zhubao.erp.business.domain.PortionInspectionRepository;
 import com.zhubao.erp.business.domain.PortionRelease;
 import com.zhubao.erp.business.domain.PortionReleaseRepository;
 import com.zhubao.erp.business.domain.RouteSnapshot;
@@ -61,6 +64,8 @@ public class DeliveryConfirmationService {
     private final PortionReleaseRepository releases;
     private final RouteSnapshotRepository routes;
     private final NodePortionReader portions;
+    private final PendingQuantity pending;
+    private final PortionInspectionRepository inspections;
 
     public DeliveryConfirmationService(DeliveryDraftRepository drafts, ActivityBagRepository bags,
                                        DeliveryStockPlaceLookup places, DeliveryInHouseCheck inHouse,
@@ -69,12 +74,21 @@ public class DeliveryConfirmationService {
         this(drafts, bags, places, inHouse, stock, documents, workUnit, null, null, null);
     }
 
-    @Autowired
     public DeliveryConfirmationService(DeliveryDraftRepository drafts, ActivityBagRepository bags,
                                        DeliveryStockPlaceLookup places, DeliveryInHouseCheck inHouse,
                                        StockLedgerService stock, BusinessDocumentRepository documents,
                                        BusinessWorkUnit workUnit, PortionReleaseRepository releases,
                                        RouteSnapshotRepository routes, NodePortionReader portions) {
+        this(drafts, bags, places, inHouse, stock, documents, workUnit, releases, routes, portions, null, null);
+    }
+
+    @Autowired
+    public DeliveryConfirmationService(DeliveryDraftRepository drafts, ActivityBagRepository bags,
+                                       DeliveryStockPlaceLookup places, DeliveryInHouseCheck inHouse,
+                                       StockLedgerService stock, BusinessDocumentRepository documents,
+                                       BusinessWorkUnit workUnit, PortionReleaseRepository releases,
+                                       RouteSnapshotRepository routes, NodePortionReader portions,
+                                       PendingQuantity pending, PortionInspectionRepository inspections) {
         this.drafts = drafts;
         this.bags = bags;
         this.places = places;
@@ -85,6 +99,8 @@ public class DeliveryConfirmationService {
         this.releases = releases;
         this.routes = routes;
         this.portions = portions;
+        this.pending = pending;
+        this.inspections = inspections;
     }
 
     public DeliveryConfirmation confirm(String requestId, String actorId, String deliveryId, int expectedVersion) {
@@ -182,23 +198,51 @@ public class DeliveryConfirmationService {
         if (free.compareTo(quantity) < 0) {
             throw new BusinessException("质量尚未放行");
         }
-        if (routes != null && portions != null && !stringingDone(bag)) {
-            throw new BusinessException("穿串未完，不能仅凭质检合格发出");
+        assertRouteReady(bag, quantity);
+    }
+
+    private void assertRouteReady(ActivityBag bag, BigDecimal quantity) {
+        if (routes == null || portions == null) {
+            return;
+        }
+        RouteSnapshot route = confirmedRoute(bag);
+        if (route == null) {
+            return;
+        }
+        for (String stepId : route.stepIds()) {
+            NodePortionBalance row = portions.find(bag.id(), stepId).orElse(null);
+            if (!stepDone(row, quantity)) {
+                throw new BusinessException("STRING".equals(stepId)
+                        ? "穿串未完，不能仅凭质检合格发出"
+                        : "工序未完，不能发出");
+            }
+            if (pending != null && pending.pending(bag.id(), stepId).signum() > 0) {
+                throw new BusinessException("待核数量未清，不能发出");
+            }
+        }
+        if (inspections == null) {
+            return;
+        }
+        BigDecimal rework = BigDecimal.ZERO;
+        for (PortionInspection row : inspections.listByBag(bag.id())) {
+            rework = rework.add(row.rework());
+        }
+        if (rework.signum() > 0) {
+            throw new BusinessException("返工未完，不能发出");
         }
     }
 
-    private boolean stringingDone(ActivityBag bag) {
+    private RouteSnapshot confirmedRoute(ActivityBag bag) {
         BusinessKind kind = BusinessTargetReference.parse(bag.targetCode()).kind();
-        RouteSnapshot route = routes.list(kind, bag.targetCode()).stream()
+        return routes.list(kind, bag.targetCode()).stream()
                 .filter(RouteSnapshot::confirmed)
                 .max(Comparator.comparingInt(RouteSnapshot::version))
                 .orElse(null);
-        if (route == null || !route.stepIds().contains("STRING")) {
-            return true;
-        }
-        NodePortionBalance stringing = portions.find(bag.id(), "STRING").orElse(null);
-        return stringing != null && stringing.arrived().signum() > 0
-                && stringing.handled().compareTo(stringing.arrived()) == 0;
+    }
+
+    private static boolean stepDone(NodePortionBalance row, BigDecimal quantity) {
+        return row != null && row.arrived().compareTo(quantity) >= 0
+                && row.handled().compareTo(row.arrived()) >= 0;
     }
 
     private DeliveryConfirmedSource ship(String actor, DeliveryDraft draft, DeliveryDraftLine line, Resolved resolved,

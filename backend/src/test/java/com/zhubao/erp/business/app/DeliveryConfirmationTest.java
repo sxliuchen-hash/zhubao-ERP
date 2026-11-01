@@ -8,13 +8,16 @@ import com.zhubao.erp.business.domain.DeliveryConfirmation;
 import com.zhubao.erp.business.domain.DeliveryDraftStatus;
 import com.zhubao.erp.business.domain.DeliverySourceSelection;
 import com.zhubao.erp.business.domain.MotherOrderRecord;
+import com.zhubao.erp.business.domain.NodePortionBalance;
 import com.zhubao.erp.business.domain.OutboundOrderRecord;
+import com.zhubao.erp.business.domain.PortionInspection;
 import com.zhubao.erp.business.domain.PortionRelease;
 import com.zhubao.erp.business.domain.RouteSnapshot;
 import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.InMemoryDeliveryDraftRepository;
 import com.zhubao.erp.business.infra.InMemoryNodePortionReader;
+import com.zhubao.erp.business.infra.InMemoryPortionInspectionRepository;
 import com.zhubao.erp.business.infra.InMemoryPortionReleaseRepository;
 import com.zhubao.erp.business.infra.InMemoryRouteSnapshotRepository;
 import com.zhubao.erp.business.infra.JdbcActivityBagRepository;
@@ -41,6 +44,7 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.concurrent.atomic.AtomicReference;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -397,6 +401,57 @@ class DeliveryConfirmationTest {
                 .hasMessage("穿串未完，不能仅凭质检合格发出");
         assertThat(fixture.ledger.findBalance(finished("MD-20261030-1001", "MD-20261030-1001")).quantity())
                 .isEqualByComparingTo("10");
+    }
+
+    @Test
+    void 路线上未做完的工序不能凭其他成品余额发出() {
+        Fixture fixture = memoryFixture();
+        AtomicReference<BigDecimal> pending = new AtomicReference<>(BigDecimal.ZERO);
+        InMemoryPortionInspectionRepository inspections = new InMemoryPortionInspectionRepository();
+        DeliveryConfirmationService confirmation = new DeliveryConfirmationService(
+                fixture.store(), fixture.bags(), new DocumentDeliveryStockPlaceLookup(fixture.documents()),
+                bagId -> true, fixture.stock(), fixture.documents(), fixture.unit(),
+                fixture.releases(), fixture.routes(), fixture.portions(),
+                (bagId, stepId) -> pending.get(), inspections);
+        receive(fixture.stock(), finished("MD-20261030-1001", "MD-20261030-1001"), "QC-RF08B", "10", "1");
+        saveBag(fixture, "BAG-STEP", "MD-20261030-1001", "10", "1", "rf08-bag-02");
+        fixture.routes().insert(new RouteSnapshot(
+                "RS-RF08B", BusinessKind.PROCESSING, "MD-20261030-1001", 1, List.of("CUT", "BLANK"), true), null);
+        var blocked = fixture.drafts().open("rf08-draft2", "clerk-01", 7L, "", "", List.of(
+                new DeliverySourceSelection("BAG-STEP", 1, "MD-20261030-1001", "颗")));
+        assertThatThrownBy(() -> confirmation.confirm("rf08-step01", "clerk-01", blocked.draft().deliveryId(), 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("工序未完，不能发出");
+        fixture.portions().save(new NodePortionBalance("BAG-STEP", "CUT", new BigDecimal("10"), new BigDecimal("10")), null);
+        fixture.portions().save(new NodePortionBalance("BAG-STEP", "BLANK", new BigDecimal("10"), BigDecimal.ZERO), null);
+        assertThatThrownBy(() -> confirmation.confirm("rf08-step02", "clerk-01", blocked.draft().deliveryId(), 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("工序未完，不能发出");
+        fixture.portions().save(new NodePortionBalance("BAG-STEP", "BLANK", new BigDecimal("10"), new BigDecimal("10")), null);
+        pending.set(BigDecimal.ONE);
+        assertThatThrownBy(() -> confirmation.confirm("rf08-step03", "clerk-01", blocked.draft().deliveryId(), 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("待核数量未清，不能发出");
+        pending.set(BigDecimal.ZERO);
+        inspections.save(new PortionInspection(
+                "QC" + "c".repeat(32), "rf08-qc01", "BAG-STEP", "REQ-1",
+                new BigDecimal("8"), new BigDecimal("2"), BigDecimal.ZERO, BigDecimal.ZERO, List.of()), null);
+        assertThatThrownBy(() -> confirmation.confirm("rf08-step04", "clerk-01", blocked.draft().deliveryId(), 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("返工未完，不能发出");
+        assertThat(fixture.documents().listOutboundOrders()).isEmpty();
+        assertThat(fixture.ledger().findBalance(finished("MD-20261030-1001", "MD-20261030-1001")).quantity())
+                .isEqualByComparingTo("10");
+
+        saveBag(fixture, "BAG-DONE", "MD-20261030-1001", "10", "1", "rf08-bag-03");
+        fixture.portions().save(new NodePortionBalance("BAG-DONE", "CUT", new BigDecimal("10"), new BigDecimal("10")), null);
+        fixture.portions().save(new NodePortionBalance("BAG-DONE", "BLANK", new BigDecimal("10"), new BigDecimal("10")), null);
+        var ready = fixture.drafts().open("rf08-draft3", "clerk-01", 7L, "", "", List.of(
+                new DeliverySourceSelection("BAG-DONE", 1, "MD-20261030-1001", "颗")));
+        confirmation.confirm("rf08-step05", "clerk-01", ready.draft().deliveryId(), 1);
+        assertThat(fixture.documents().listOutboundOrders()).hasSize(1);
+        assertThat(fixture.ledger().findBalance(finished("MD-20261030-1001", "MD-20261030-1001")).quantity())
+                .isEqualByComparingTo("0");
     }
 
     private record Fixture(
