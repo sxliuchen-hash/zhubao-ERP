@@ -65,6 +65,10 @@ class SamplingDeliveryTest {
         new SamplingOperationService(orders, versions, operations, documents, unit, guard).report(
                 "s05-rpt-0001", keeper, order.samplingCode(), "SAMPLE_MAKE", "MODEL", 1,
                 List.of(), new BigDecimal("5"), "颗", "ATT-1");
+        documents.saveAttachment(photo("ATT-MODEL", order.samplingCode()));
+        new SamplingOperationService(orders, versions, operations, documents, unit, guard).report(
+                "s05-model-report", keeper, order.samplingCode(), "SAMPLE_MODEL", "MODEL", 1,
+                List.of(), new BigDecimal("5"), "颗", "ATT-MODEL");
         unit.execute(new CommandCall("s05-use-seed", keeper.operator(), "SEED_USE", "SAMPLING_MATERIAL", order.samplingCode(), "seed"),
                 session -> {
                     materials.insert(new SamplingMaterialUse(
@@ -117,7 +121,7 @@ class SamplingDeliveryTest {
                 "s05-jdbc-y1", keeper, order.samplingCode(), "BEAD", 1, "", "");
         documents.saveAttachment(photo("ATT-J1", order.samplingCode()));
         new SamplingOperationService(orders, versions, operations, documents, unit, guard).report(
-                "s05-jdbc-r1", keeper, order.samplingCode(), "SAMPLE_BEAD", "BEAD", 1,
+                "s05-jdbc-r1", keeper, order.samplingCode(), "SAMPLE_MAKE", "BEAD", 1,
                 List.of(), new BigDecimal("4"), "颗", "ATT-J1");
         JdbcSamplingDeliveryRepository deliveries = new JdbcSamplingDeliveryRepository(dataSource);
         SamplingDeliveryService service = new SamplingDeliveryService(
@@ -136,6 +140,30 @@ class SamplingDeliveryTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(deliveries.list(order.samplingCode())).hasSize(1);
         assertThat(orders.find(order.samplingCode()).orElseThrow().status().name()).isEqualTo("OPEN");
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            java.util.List<java.util.concurrent.Future<Boolean>> attempts = new java.util.ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                String request = "sampling-delivery-race-" + i;
+                attempts.add(pool.submit(() -> {
+                    start.await();
+                    try {
+                        service.deliver(request, keeper, order.samplingCode(), "BEAD", 1, "", new BigDecimal("2"), "颗", "交付凭据");
+                        return true;
+                    } catch (BusinessException ex) {
+                        assertThat(ex).hasMessage("交付数量超过已报工份额");
+                        return false;
+                    }
+                }));
+            }
+            start.countDown();
+            int successes = 0;
+            for (var attempt : attempts) if (attempt.get(10, java.util.concurrent.TimeUnit.SECONDS)) successes++;
+            assertThat(successes).isEqualTo(1);
+            assertThat(deliveries.list(order.samplingCode()).stream().map(com.zhubao.erp.sampling.domain.SamplingDelivery::quantity)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("3");
+        } finally { pool.shutdownNow(); }
     }
 
     private SamplingOrderView open(com.zhubao.erp.sampling.domain.SamplingOrderRepository orders, BusinessWorkUnit unit, String requestId) {

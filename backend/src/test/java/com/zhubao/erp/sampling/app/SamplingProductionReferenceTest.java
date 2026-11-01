@@ -38,6 +38,37 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SamplingProductionReferenceTest {
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void 样品引用的两端都必须在客户范围内且属于同一客户(boolean jdbc) throws Exception {
+        var ds = jdbc ? dataSource() : null;
+        BusinessWorkUnit unit = jdbc ? new JdbcBusinessWorkUnit(ds, new JdbcCommandRequestRepository(ds))
+                : new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        com.zhubao.erp.sampling.domain.SamplingOrderRepository orders = jdbc ? new JdbcSamplingOrderRepository(ds) : new InMemorySamplingOrderRepository();
+        com.zhubao.erp.sampling.domain.SamplingProductionLinkRepository links = jdbc ? new JdbcSamplingProductionLinkRepository(ds) : new InMemorySamplingProductionLinkRepository();
+        var documents = new InMemoryBusinessDocumentRepository();
+        documents.saveMotherOrder(mother("MD-20261031-0010", "原文"));
+        documents.saveMotherOrder(mother("MD-20261031-0011", "其他客户", 2L));
+        var versions = new InMemorySamplingVersionRepository();
+        var order = open(orders, unit, "scope-sample-order");
+        var vs = new SamplingVersionService(orders, versions, unit, guard);
+        vs.add("scope-sample-version", keeper, order.samplingCode(), "MODEL", "参数", "", "", "", "", "", "", null);
+        vs.confirm("scope-sample-confirm", keeper, order.samplingCode(), "MODEL", 1, "", "");
+        var service = new SamplingProductionLinkService(documents, orders, versions, links, unit, guard);
+        var denied = new OperatorContext("受限", RoleCode.ADMIN, DataScope.CUSTOMER_RANGE, false, "", java.util.List.of("999999"));
+        var empty = new OperatorContext("空范围", RoleCode.ADMIN, DataScope.CUSTOMER_RANGE);
+        assertThatThrownBy(() -> service.link("scope-denied-link", denied, "MD-20261031-0010", order.samplingCode(), "MODEL", 1))
+                .isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThatThrownBy(() -> service.link("scope-cross-link", keeper, "MD-20261031-0011", order.samplingCode(), "MODEL", 1))
+                .hasMessageContaining("同一客户");
+        service.link("scope-allowed-link", keeper, "MD-20261031-0010", order.samplingCode(), "MODEL", 1);
+        assertThatThrownBy(() -> service.find(denied, "MD-20261031-0010")).isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThatThrownBy(() -> service.find(empty, "MD-20261031-0010")).isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThatThrownBy(() -> service.unlink("scope-denied-unlink", denied, "MD-20261031-0010")).isInstanceOf(com.zhubao.erp.security.error.PermissionDeniedException.class);
+        assertThat(links.find("MD-20261031-0010")).isPresent();
+        assertThat(documents.findMotherOrderByCode("MD-20261031-0010").orElseThrow().processingRequirement()).isEqualTo("原文");
+    }
+
     private final OperatorContext keeper = new OperatorContext("打样员", RoleCode.ADMIN, DataScope.ALL);
     private final PermissionGuard guard = new PermissionGuard();
 
@@ -123,8 +154,12 @@ class SamplingProductionReferenceTest {
     }
 
     private static MotherOrderRecord mother(String code, String requirement) {
+        return mother(code, requirement, 1L);
+    }
+
+    private static MotherOrderRecord mother(String code, String requirement, Long customerId) {
         return new MotherOrderRecord(
-                code, 1L, 1L, "XY", "2026-10-31",
+                code, customerId, customerId, "XY", "2026-10-31",
                 "", "", "", "", "",
                 "珠", "CUSTOMER", true, "WH",
                 new BigDecimal("10"), "颗", new BigDecimal("1.0"), "RAW_WAITING", "",

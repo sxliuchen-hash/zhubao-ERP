@@ -17,6 +17,9 @@ import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.app.RefactorPermissionContract;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
+import com.zhubao.erp.security.domain.CustomerScopeRules;
+import com.zhubao.erp.security.domain.DataScope;
+import com.zhubao.erp.security.error.PermissionDeniedException;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
@@ -55,14 +58,19 @@ public class SamplingProductionLinkService {
     public SamplingProductionLinkView find(OperatorContext actor, String motherCode) {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.SAMPLING_VIEW, actor);
         String code = mother(motherCode);
-        return links.find(code).map(this::view).orElseGet(() -> SamplingProductionLinkView.absent(code));
+        MotherOrderRecord mother = requireMother(actor, code);
+        return links.find(code).map(link -> {
+            assertSameCustomer(mother, requireOrder(actor, link.samplingCode()));
+            return view(link);
+        }).orElseGet(() -> SamplingProductionLinkView.absent(code));
     }
 
     public SamplingProductionLinkView link(String requestId, OperatorContext actor, String motherCode,
                                            String samplingCode, String versionKind, Integer versionNo) {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.SAMPLING_MAINTAIN, actor);
         String mother = mother(motherCode);
-        SamplingOrder order = requireOrder(samplingCode);
+        SamplingOrder order = requireOrder(actor, samplingCode);
+        assertSameCustomer(requireMother(actor, mother), order);
         SamplingVersionKind kind = SamplingVersionKind.parse(versionKind);
         if (versionNo == null || versionNo < 1) {
             throw new BusinessException("请选择已确认版本");
@@ -70,26 +78,29 @@ public class SamplingProductionLinkService {
         String payload = mother + "|" + order.samplingCode() + "|" + kind.name() + "|" + versionNo;
         unit.execute(new CommandCall(
                 requestId, actor.operator(), "LINK_SAMPLING_PRODUCTION", "SAMPLING_LINK", mother, payload
-        ), session -> write(session, mother, order, kind, versionNo));
+        ), session -> write(session, actor, mother, order, kind, versionNo));
         return view(links.find(mother).orElseThrow(() -> new BusinessException("样品引用不存在")));
     }
 
     public SamplingProductionLinkView unlink(String requestId, OperatorContext actor, String motherCode) {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.SAMPLING_MAINTAIN, actor);
         String mother = mother(motherCode);
+        MotherOrderRecord source = requireMother(actor, mother);
+        links.find(mother).ifPresent(link -> assertSameCustomer(source, requireOrder(actor, link.samplingCode())));
         unit.execute(new CommandCall(
                 requestId, actor.operator(), "UNLINK_SAMPLING_PRODUCTION", "SAMPLING_LINK", mother, mother
         ), session -> {
-            links.lock(mother, session).orElseThrow(() -> new BusinessException("这张母单没有样品引用"));
+            SamplingProductionLink link = links.lock(mother, session).orElseThrow(() -> new BusinessException("这张母单没有样品引用"));
+            assertSameCustomer(requireMother(actor, mother), requireOrder(actor, link.samplingCode()));
             links.delete(mother, session);
             return mother;
         });
         return SamplingProductionLinkView.absent(mother);
     }
 
-    private String write(WorkSession session, String motherCode, SamplingOrder order, SamplingVersionKind kind, int versionNo) {
-        MotherOrderRecord mother = documents.findMotherOrderByCode(motherCode)
-                .orElseThrow(() -> new BusinessException("母单不存在"));
+    private String write(WorkSession session, OperatorContext actor, String motherCode, SamplingOrder order, SamplingVersionKind kind, int versionNo) {
+        MotherOrderRecord mother = requireMother(actor, motherCode);
+        assertSameCustomer(mother, requireOrder(actor, order.samplingCode()));
         if (links.lock(mother.code(), session).isPresent()) {
             throw new BusinessException("这张母单已经引用样品版本");
         }
@@ -108,9 +119,35 @@ public class SamplingProductionLinkService {
         return mother.code();
     }
 
-    private SamplingOrder requireOrder(String samplingCode) {
+    private SamplingOrder requireOrder(OperatorContext actor, String samplingCode) {
+        assertBound(actor);
         String code = samplingCode == null ? "" : samplingCode.trim();
-        return orders.find(code).orElseThrow(() -> new BusinessException("打样单不存在"));
+        SamplingOrder order = orders.find(code).orElseThrow(() -> new BusinessException("打样单不存在"));
+        if (!CustomerScopeRules.allowed(actor, order.customerId(), order.customerName())) {
+            throw new PermissionDeniedException("客户不在当前账号范围内");
+        }
+        return order;
+    }
+
+    private MotherOrderRecord requireMother(OperatorContext actor, String code) {
+        assertBound(actor);
+        MotherOrderRecord mother = documents.findMotherOrderByCode(code).orElseThrow(() -> new BusinessException("母单不存在"));
+        if (!CustomerScopeRules.allowed(actor, mother.customerId(), mother.customerName())) {
+            throw new PermissionDeniedException("客户不在当前账号范围内");
+        }
+        return mother;
+    }
+
+    private static void assertBound(OperatorContext actor) {
+        if (actor.dataScope() == DataScope.CUSTOMER_RANGE && actor.customerScope().isEmpty()) {
+            throw new PermissionDeniedException("客户范围账号没有绑定客户");
+        }
+    }
+
+    private static void assertSameCustomer(MotherOrderRecord mother, SamplingOrder order) {
+        if (!java.util.Objects.equals(mother.customerId(), order.customerId())) {
+            throw new BusinessException("母单与样品必须属于同一客户");
+        }
     }
 
     private static String mother(String motherCode) {

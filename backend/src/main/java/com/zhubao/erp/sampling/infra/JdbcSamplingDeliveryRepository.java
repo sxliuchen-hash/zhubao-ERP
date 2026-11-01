@@ -81,6 +81,15 @@ public class JdbcSamplingDeliveryRepository implements SamplingDeliveryRepositor
     @Override
     public List<SamplingDelivery> lockVersion(String samplingCode, SamplingVersionKind kind, int versionNo, WorkSession session) {
         Connection connection = WorkSessionBindings.requiredJdbc(session);
+        // 首次交付尚无可锁行，先锁订单，避免两个请求同时消耗同一完工份额。
+        try (PreparedStatement lock = connection.prepareStatement("select sampling_code from smp_sampling_order where sampling_code=? for update")) {
+            lock.setString(1, samplingCode);
+            try (ResultSet rows = lock.executeQuery()) {
+                if (!rows.next()) throw new BusinessException("打样单不存在");
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法锁定打样交付来源", ex);
+        }
         try (PreparedStatement statement = connection.prepareStatement(
                 selectSql() + " where sampling_code=? and version_kind=? and version_no=? for update")) {
             statement.setString(1, samplingCode);

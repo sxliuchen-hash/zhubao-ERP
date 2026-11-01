@@ -35,7 +35,7 @@ async function deliver() {
   deliveryId.value = saved.deliveryId;
   message.value = saved.orderClosed
     ? '不应把打样单标成完成'
-    : `已交付，剩余 ${saved.remainingQuantity}，样费未确认`;
+    : saved.remainingQuantity == null ? '交付实物份额待核，样费未确认' : `已交付，剩余 ${saved.remainingQuantity}，样费未确认`;
 }
 
 async function charge() {

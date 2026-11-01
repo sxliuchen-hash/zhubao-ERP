@@ -34,7 +34,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * 按已报工份额分次交付。交完已报数量也不结束打样单，因为完结资格尚未核定。
+ * 实物样品按选料与加工的报工份额分次交付。设计、建模及确认流转不叠加成实物数量。
  * 不写普通发货，也不记样费。
  */
 @Service
@@ -100,11 +100,9 @@ public class SamplingDeliveryService {
         if (!confirmed) {
             throw new BusinessException("版本与已确认版本不符");
         }
-        List<SamplingOperationReport> reports = operations.list(order.samplingCode()).stream()
-                .filter(report -> report.versionKind() == kind && report.versionNo() == versionNo)
-                .toList();
+        List<SamplingOperationReport> reports = deliverableReports(order.samplingCode(), kind, versionNo);
         if (reports.isEmpty()) {
-            throw new BusinessException("还没有可交付的报工");
+            throw new BusinessException("还没有选料与加工的实物报工，不能交付样品");
         }
         String unit = reports.get(0).unit();
         if (reports.stream().anyMatch(report -> !unit.equals(report.unit())) || !unit.equals(unitName)) {
@@ -133,8 +131,8 @@ public class SamplingDeliveryService {
     }
 
     private SamplingDeliveryView view(SamplingOrder order, SamplingDelivery delivery) {
-        BigDecimal reported = operations.list(order.samplingCode()).stream()
-                .filter(report -> report.versionKind() == delivery.versionKind() && report.versionNo() == delivery.versionNo())
+        List<SamplingOperationReport> reports = deliverableReports(order.samplingCode(), delivery.versionKind(), delivery.versionNo());
+        BigDecimal reported = reports.stream()
                 .map(SamplingOperationReport::quantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal delivered = deliveries.list(order.samplingCode()).stream()
@@ -148,8 +146,15 @@ public class SamplingDeliveryService {
         return new SamplingDeliveryView(
                 delivery.deliveryId(), delivery.samplingCode(), delivery.versionKind().name(), delivery.versionNo(),
                 delivery.materialUseId(), owner, delivery.quantity(), delivery.unit(), delivery.credentialCode(),
-                delivery.deliveredOn(), reported.subtract(delivered), false, order.status().name(), "UNCONFIRMED"
+                delivery.deliveredOn(), reports.isEmpty() || reported.compareTo(delivered) < 0 ? null : reported.subtract(delivered),
+                false, order.status().name(), "UNCONFIRMED"
         );
+    }
+
+    private List<SamplingOperationReport> deliverableReports(String samplingCode, SamplingVersionKind kind, int versionNo) {
+        return operations.list(samplingCode).stream()
+                .filter(report -> report.versionKind() == kind && report.versionNo() == versionNo && "SAMPLE_MAKE".equals(report.stepId()))
+                .toList();
     }
 
     private SamplingOrder requireVisible(OperatorContext actor, String samplingCode) {

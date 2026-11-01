@@ -2833,3 +2833,7 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 `POST /api/customer-portal/evidence/downloads`返回获准附件二进制流，不再返回JSON文件信息。请求仍为`{grantId, attachmentCode, ticket}`，必须携带当前客户登录身份；响应使用实际媒体类型、附件文件名、`Cache-Control: no-store`及`nosniff`。下线、待核对、撤销授权或客户身份失效时拒绝，流写出前重新检查。管理员可调用`POST /api/security/customer-evidence/grants/{grantId}/revocations`撤销该授权；原文件不删除。
 
 客户截止对账增加`quantities: [{materialCode, sourceCode, unit, receivedQuantity, shippedQuantity, lossQuantity}]`。跨单位或包含未知单位时旧的三个总数字段为null，不能当0或合计数；未知单位进入pending。正式`inbound_confirm`与对应收货冲正计算净额，截止后的更正不倒写此前结果；导出按相同来源与单位分列。
+
+### 打样交付与样品引用补充（2026-11-01）
+
+实物样品交付数量仅取同一已确认版本的`SAMPLE_MAKE`报工，不叠加设计、建模或珠型确认流转。没有实物报工拒绝交付；旧交付无法按此依据核实时，`remainingQuantity`为null，页面显示份额待核。样品引用母单的新增、读取和取消均校验两端客户范围，要求同一客户；不修改母单原要求。

@@ -153,7 +153,7 @@ export interface SamplingDeliveryView {
   unit: string;
   credentialCode: string;
   deliveredOn: string;
-  remainingQuantity: number;
+  remainingQuantity: number | null;
   orderClosed: boolean;
   orderStatus: string;
   feeState: string;
