@@ -60,6 +60,11 @@ public class JdbcReworkTaskRepository implements ReworkTaskRepository {
         return list("source_bag_id=?", sourceBagId);
     }
 
+    @Override
+    public List<ReworkTask> listByReworkBag(String reworkBagId) {
+        return list("rework_bag_id=?", reworkBagId);
+    }
+
     private List<ReworkTask> list(String where, String value) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(

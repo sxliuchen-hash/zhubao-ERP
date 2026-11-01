@@ -12,4 +12,6 @@ public interface ReworkTaskRepository {
     Optional<ReworkTask> findByRequest(String requestId);
 
     List<ReworkTask> listBySource(String sourceBagId);
+
+    List<ReworkTask> listByReworkBag(String reworkBagId);
 }

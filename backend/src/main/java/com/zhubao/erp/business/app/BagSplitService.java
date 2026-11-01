@@ -5,6 +5,10 @@ import com.zhubao.erp.business.domain.ActivityBagRepository;
 import com.zhubao.erp.business.domain.NodePortionBalance;
 import com.zhubao.erp.business.domain.NodePortionReader;
 import com.zhubao.erp.business.domain.NodePortionWriter;
+import com.zhubao.erp.business.domain.PortionInspection;
+import com.zhubao.erp.business.domain.PortionInspectionRepository;
+import com.zhubao.erp.business.domain.ReworkTask;
+import com.zhubao.erp.business.domain.ReworkTaskRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
@@ -17,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 一次命令关闭父袋并建立子份额。子袋使用新的袋号，不在父号后追加序号。
@@ -30,19 +35,29 @@ public class BagSplitService {
     private final BusinessWorkUnit unit;
     private final NodePortionReader portions;
     private final NodePortionWriter portionWriter;
+    private final PortionInspectionRepository inspections;
+    private final ReworkTaskRepository rework;
 
     public BagSplitService(ActivityBagRepository repository, ActivityBagService bags, BusinessWorkUnit unit) {
         this(repository, bags, unit, null, null);
     }
 
-    @Autowired
     public BagSplitService(ActivityBagRepository repository, ActivityBagService bags, BusinessWorkUnit unit,
                            NodePortionReader portions, NodePortionWriter portionWriter) {
+        this(repository, bags, unit, portions, portionWriter, null, null);
+    }
+
+    @Autowired
+    public BagSplitService(ActivityBagRepository repository, ActivityBagService bags, BusinessWorkUnit unit,
+                           NodePortionReader portions, NodePortionWriter portionWriter,
+                           PortionInspectionRepository inspections, ReworkTaskRepository rework) {
         this.repository = repository;
         this.bags = bags;
         this.unit = unit;
         this.portions = portions;
         this.portionWriter = portionWriter;
+        this.inspections = inspections;
+        this.rework = rework;
     }
 
     public String split(String requestId, String actorId, String parentId, List<BigDecimal> quantities) {
@@ -79,6 +94,7 @@ public class BagSplitService {
         }
         bags.close(parent.id(), session);
         copyPosition(parent, children, quantities, session);
+        copyQuality(parent, children, quantities, session);
         return children;
     }
 
@@ -107,6 +123,67 @@ public class BagSplitService {
                 portionWriter.save(new NodePortionBalance(childIds.get(index), row.stepId(), arrived, handled), session);
             }
         }
+    }
+
+    /**
+     * 质检和返工按子袋数量拆开。父袋保留原记录，子袋合计等于原数量，不把两层相加。
+     */
+    private void copyQuality(ActivityBag parent, List<String> childIds, List<BigDecimal> quantities, WorkSession session) {
+        if (inspections != null) {
+            for (PortionInspection row : inspections.listByBag(parent.id())) {
+                BigDecimal passLeft = row.pass();
+                BigDecimal reworkLeft = row.rework();
+                BigDecimal scrapLeft = row.scrap();
+                BigDecimal pendingLeft = row.pending();
+                for (int index = 0; index < childIds.size(); index++) {
+                    boolean last = index == childIds.size() - 1;
+                    BigDecimal pass = last ? passLeft : share(row.pass(), quantities.get(index), parent.quantity());
+                    BigDecimal rework = last ? reworkLeft : share(row.rework(), quantities.get(index), parent.quantity());
+                    BigDecimal scrap = last ? scrapLeft : share(row.scrap(), quantities.get(index), parent.quantity());
+                    BigDecimal pending = last ? pendingLeft : share(row.pending(), quantities.get(index), parent.quantity());
+                    if (!last) {
+                        passLeft = passLeft.subtract(pass);
+                        reworkLeft = reworkLeft.subtract(rework);
+                        scrapLeft = scrapLeft.subtract(scrap);
+                        pendingLeft = pendingLeft.subtract(pending);
+                    }
+                    if (pass.signum() == 0 && rework.signum() == 0 && scrap.signum() == 0 && pending.signum() == 0) {
+                        continue;
+                    }
+                    inspections.save(new PortionInspection(
+                            newId("QC"), childRequest(row.requestId(), index + 1), childIds.get(index), row.requirementVersion(),
+                            pass, rework, scrap, pending, row.failedClauses()), session);
+                }
+            }
+        }
+        if (rework == null) {
+            return;
+        }
+        for (ReworkTask task : rework.listByReworkBag(parent.id())) {
+            BigDecimal left = task.quantity();
+            for (int index = 0; index < childIds.size(); index++) {
+                boolean last = index == childIds.size() - 1;
+                BigDecimal quantity = last ? left : share(task.quantity(), quantities.get(index), parent.quantity());
+                if (!last) {
+                    left = left.subtract(quantity);
+                }
+                if (quantity.signum() == 0) {
+                    continue;
+                }
+                rework.save(new ReworkTask(
+                        newId("RW"), childRequest(task.requestId(), index + 1), parent.id(), childIds.get(index),
+                        task.targetCode(), task.requirementVersion(), task.round(), quantity), session);
+            }
+        }
+    }
+
+    private static String newId(String prefix) {
+        return prefix + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private static String childRequest(String requestId, int index) {
+        String text = requestId + "#" + index;
+        return text.length() <= 64 ? text : newId("SR");
     }
 
     private static BigDecimal share(BigDecimal amount, BigDecimal child, BigDecimal parent) {

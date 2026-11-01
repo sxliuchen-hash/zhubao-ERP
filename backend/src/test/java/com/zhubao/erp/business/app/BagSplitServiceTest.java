@@ -3,10 +3,14 @@ package com.zhubao.erp.business.app;
 import com.zhubao.erp.business.domain.ActivityBag;
 import com.zhubao.erp.business.domain.BusinessKind;
 import com.zhubao.erp.business.domain.NodePortionBalance;
+import com.zhubao.erp.business.domain.PortionInspection;
+import com.zhubao.erp.business.domain.ReworkTask;
 import com.zhubao.erp.business.domain.ProcessAvailableQuantity;
 import com.zhubao.erp.business.domain.RouteSnapshot;
 import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
 import com.zhubao.erp.business.infra.InMemoryNodePortionReader;
+import com.zhubao.erp.business.infra.InMemoryPortionInspectionRepository;
+import com.zhubao.erp.business.infra.InMemoryReworkTaskRepository;
 import com.zhubao.erp.business.infra.InMemoryRouteSnapshotRepository;
 import com.zhubao.erp.business.infra.JdbcActivityBagRepository;
 import com.zhubao.erp.common.error.BusinessException;
@@ -95,6 +99,49 @@ class BagSplitServiceTest {
         assertThat(cutHandled).isEqualByComparingTo("10");
         assertThat(query.lookup(parent.id(), operator).availableQuantity()).isEqualByComparingTo("0");
         assertThat(portions.list(parent.id())).hasSize(2);
+    }
+
+    @Test
+    void 质检和返工按子袋拆开且合计不加倍() {
+        InMemoryActivityBagRepository repository = new InMemoryActivityBagRepository();
+        InMemoryPortionInspectionRepository inspections = new InMemoryPortionInspectionRepository();
+        InMemoryReworkTaskRepository rework = new InMemoryReworkTaskRepository();
+        ActivityBagService bagService = new ActivityBagService(repository);
+        ActivityBag parent = bagService.open(
+                "MD-20261030-0506", "牙骨", "REQ-1", "LINE-1", new BigDecimal("10"), StockMeasurement.unknown(), null);
+        inspections.save(new PortionInspection(
+                "QC" + "a".repeat(32), "rf05-qc01", parent.id(), "REQ-1",
+                new BigDecimal("6"), new BigDecimal("3"), new BigDecimal("1"), BigDecimal.ZERO, List.of("裂纹")), null);
+        rework.save(new ReworkTask(
+                "RW" + "b".repeat(32), "rf05-rw01", "BAG-SOURCE", parent.id(), parent.targetCode(), "REQ-1", 1,
+                new BigDecimal("3")), null);
+        BagSplitService service = new BagSplitService(
+                repository, bagService, new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),
+                null, null, inspections, rework);
+        String[] children = service.split("rf05-quality", "wh", parent.id(), List.of(new BigDecimal("4"), new BigDecimal("6")))
+                .split(",");
+        BigDecimal pass = BigDecimal.ZERO;
+        BigDecimal reworked = BigDecimal.ZERO;
+        BigDecimal scrap = BigDecimal.ZERO;
+        BigDecimal reworkQuantity = BigDecimal.ZERO;
+        for (String id : children) {
+            PortionInspection row = inspections.listByBag(id).get(0);
+            assertThat(row.failedClauses()).containsExactly("裂纹");
+            pass = pass.add(row.pass());
+            reworked = reworked.add(row.rework());
+            scrap = scrap.add(row.scrap());
+            ReworkTask task = rework.listByReworkBag(id).get(0);
+            assertThat(task.sourceBagId()).isEqualTo(parent.id());
+            reworkQuantity = reworkQuantity.add(task.quantity());
+        }
+        assertThat(pass).isEqualByComparingTo("6");
+        assertThat(reworked).isEqualByComparingTo("3");
+        assertThat(scrap).isEqualByComparingTo("1");
+        assertThat(reworkQuantity).isEqualByComparingTo("3");
+        assertThat(inspections.listByBag(parent.id())).hasSize(1);
+        assertThat(rework.listByReworkBag(parent.id())).hasSize(1);
+        assertThat(inspections.all()).hasSize(3);
+        assertThat(rework.listBySource(parent.id())).hasSize(2);
     }
 
     @Test

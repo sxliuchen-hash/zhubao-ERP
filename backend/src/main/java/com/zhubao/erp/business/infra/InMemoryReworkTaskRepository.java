@@ -37,4 +37,9 @@ public class InMemoryReworkTaskRepository implements ReworkTaskRepository {
     public List<ReworkTask> listBySource(String sourceBagId) {
         return rows.stream().filter(row -> row.sourceBagId().equals(sourceBagId)).toList();
     }
+
+    @Override
+    public List<ReworkTask> listByReworkBag(String reworkBagId) {
+        return rows.stream().filter(row -> row.reworkBagId().equals(reworkBagId)).toList();
+    }
 }
