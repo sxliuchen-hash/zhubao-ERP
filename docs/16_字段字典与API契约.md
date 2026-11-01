@@ -2827,3 +2827,9 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 ### 资产修复契约（2026-11-01）
 
 维修查询与付款返回增加`payments: [{paymentCode, voucher}]`，逐次关联真实付款，原费用凭据独立保留。历史未保存的付款凭据不补造。折旧延续返回增加`awaitingAssetCodes`；资产发生停用、报废或处置后，影响规则未核定则跳过对应资产写入并返回待核编号。已有折旧保留，后续新增必须逐月核对历史，无缺月、金额差异或超额才能延续。已有应付覆盖购置须属于明确的资产购置性质，维修应付不适用。
+
+### 客户证据与对账修复契约（2026-11-01）
+
+`POST /api/customer-portal/evidence/downloads`返回获准附件二进制流，不再返回JSON文件信息。请求仍为`{grantId, attachmentCode, ticket}`，必须携带当前客户登录身份；响应使用实际媒体类型、附件文件名、`Cache-Control: no-store`及`nosniff`。下线、待核对、撤销授权或客户身份失效时拒绝，流写出前重新检查。管理员可调用`POST /api/security/customer-evidence/grants/{grantId}/revocations`撤销该授权；原文件不删除。
+
+客户截止对账增加`quantities: [{materialCode, sourceCode, unit, receivedQuantity, shippedQuantity, lossQuantity}]`。跨单位或包含未知单位时旧的三个总数字段为null，不能当0或合计数；未知单位进入pending。正式`inbound_confirm`与对应收货冲正计算净额，截止后的更正不倒写此前结果；导出按相同来源与单位分列。

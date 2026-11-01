@@ -73,7 +73,7 @@ public class CustomerOwnedStockQuery {
                 continue;
             }
             owned.add(balance);
-            if (!dimension.workOrderCode().isBlank()) {
+            if (dimension.workOrderCode() != null && !dimension.workOrderCode().isBlank()) {
                 targets.add(dimension.workOrderCode());
             }
             if (!dimension.motherOrderCode().isBlank()) {
@@ -91,7 +91,9 @@ public class CustomerOwnedStockQuery {
             if (balance.weightPending()) {
                 group.pending.add(bucketOf(dimension.stockStatus()));
             }
-            group.targets.add(dimension.workOrderCode());
+            if (dimension.workOrderCode() != null && !dimension.workOrderCode().isBlank()) {
+                group.targets.add(dimension.workOrderCode());
+            }
             group.targets.add(dimension.motherOrderCode());
         }
         List<CustomerOwnedStockView.Line> lines = new ArrayList<>();
@@ -173,7 +175,7 @@ public class CustomerOwnedStockQuery {
     }
 
     private static BusinessKind kindOf(StockDimension dimension) {
-        for (String code : List.of(dimension.workOrderCode(), dimension.motherOrderCode())) {
+        for (String code : new String[] {dimension.workOrderCode(), dimension.motherOrderCode()}) {
             if (code == null || code.isBlank()) {
                 continue;
             }

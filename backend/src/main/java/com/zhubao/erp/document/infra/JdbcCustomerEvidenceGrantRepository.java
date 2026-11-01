@@ -25,6 +25,17 @@ public class JdbcCustomerEvidenceGrantRepository implements CustomerEvidenceGran
     }
 
     @Override
+    public void revoke(String grantId) {
+        try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement(
+                "delete from doc_customer_evidence_grant where grant_id=?")) {
+            statement.setString(1, grantId);
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("撤销客户证据授权失败", ex);
+        }
+    }
+
+    @Override
     public void save(CustomerEvidenceGrant grant) {
         String sql = """
                 insert into doc_customer_evidence_grant (grant_id, customer_id, attachment_code, kind)

@@ -68,7 +68,7 @@ class CustomerPortalAuthorizationTest {
                 movement("wage-1", customerA, "MD-20261030-0001", "payroll", "80")
         ));
         CustomerOwnedStockQuery stock = new CustomerOwnedStockQuery(ledger, identities, outside(), code -> "颗");
-        CustomerStatementCutoffQuery statement = new CustomerStatementCutoffQuery(ledger, identities);
+        CustomerStatementCutoffQuery statement = new CustomerStatementCutoffQuery(ledger, identities, code -> "颗");
         InMemoryDocumentManagementRepository documents = new InMemoryDocumentManagementRepository();
         documents.saveAttachment(attachment("ATT-A", "bead.jpg", "image/jpeg", "PHOTO"));
         documents.saveAttachment(attachment("ATT-WAGE", "工资表.pdf", "application/pdf", "PAYROLL"));

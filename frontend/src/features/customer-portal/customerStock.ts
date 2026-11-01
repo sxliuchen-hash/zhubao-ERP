@@ -36,9 +36,10 @@ export interface CustomerEvidenceItem {
 export interface CustomerStatement {
   customerId: number;
   cutoff: string;
-  receivedQuantity: string | number;
-  shippedQuantity: string | number;
-  lossQuantity: string | number;
+  receivedQuantity: string | number | null;
+  shippedQuantity: string | number | null;
+  lossQuantity: string | number | null;
+  quantities: Array<{ materialCode: string; sourceCode: string; unit: string; receivedQuantity: string | number; shippedQuantity: string | number; lossQuantity: string | number }>;
   lossWeight: string;
   factoryAndOutside: string;
   bills: string;

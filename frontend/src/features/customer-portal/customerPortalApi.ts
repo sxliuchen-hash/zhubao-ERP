@@ -1,5 +1,5 @@
 import { loginAuthSession } from '../../services/authApi';
-import { apiGet, apiPost } from '../../services/apiClient';
+import { apiGet, apiPostBlob } from '../../services/apiClient';
 import type { CustomerEvidenceDetail, CustomerEvidenceItem, CustomerOwnedStock, CustomerStatement } from './customerStock';
 
 export function loginCustomer(username: string, password: string) {
@@ -18,8 +18,8 @@ export function loadEvidence(): Promise<CustomerEvidenceDetail> {
   return apiGet<CustomerEvidenceDetail>('/api/customer-portal/evidence');
 }
 
-export function downloadEvidence(item: CustomerEvidenceItem) {
-  return apiPost<{ grantId: string; attachmentCode: string; ticket: string }, { fileName: string }>(
+export async function downloadEvidence(item: CustomerEvidenceItem) {
+  const blob = await apiPostBlob(
     '/api/customer-portal/evidence/downloads',
     {
       grantId: item.grantId,
@@ -27,4 +27,13 @@ export function downloadEvidence(item: CustomerEvidenceItem) {
       ticket: item.downloadTicket,
     },
   );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = item.fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  return { fileName: item.fileName };
 }

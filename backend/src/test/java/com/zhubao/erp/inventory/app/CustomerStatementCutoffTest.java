@@ -40,6 +40,69 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CustomerStatementCutoffTest {
 
     @Test
+    void 实际确认收货写入的类型与单位进入客户对账() {
+        long customer = bind();
+        var ledger = new com.zhubao.erp.inventory.infra.InMemoryStockLedgerRepository();
+        var documents = new com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository();
+        var operation = new com.zhubao.erp.business.app.BusinessOperationService(new StockLedgerService(ledger), null, documents,
+                com.zhubao.erp.business.BusinessWorkFixture.unit());
+        operation.confirmInbound(new com.zhubao.erp.business.domain.ConfirmInboundCommand("MD-20261101-0001", customer, null,
+                "牙骨", "2026-11-01", "顺丰", "SF-ACTUAL", "客户", "库管", "库管", "测试珠料", "登记表", 1, "1", "原料库",
+                new BigDecimal("500"), "颗", new BigDecimal("20"), "库管", "照片证据", "收货", "抛光", "2026-11-30", "恒信珠宝", "actual-receipt-statement"));
+        var query = new CustomerStatementCutoffQuery(ledger, identities, new MotherOrderUnitSource(documents));
+        var statement = query.statement(portal(), Instant.now().plusSeconds(1));
+        assertThat(statement.receivedQuantity()).isEqualByComparingTo("500");
+        assertThat(statement.quantities()).singleElement().satisfies(line -> {
+            assertThat(line.sourceCode()).isEqualTo("MD-20261101-0001");
+            assertThat(line.unit()).isEqualTo("颗");
+        });
+        assertThat(statement.pending()).noneMatch(line -> line.contains("inbound_confirm"));
+        var sources = new com.zhubao.erp.business.infra.InMemoryOutsourcingSourceRepository();
+        var bags = new com.zhubao.erp.business.infra.InMemoryActivityBagRepository();
+        var custody = new com.zhubao.erp.business.app.OutsourcingDispatchService(sources,
+                new com.zhubao.erp.business.infra.InMemoryOutsourcingDispatchRepository(),
+                new com.zhubao.erp.business.infra.InMemoryOutsourcingReturnRepository(), bags, null,
+                com.zhubao.erp.business.BusinessWorkFixture.unit());
+        var stock = new CustomerOwnedStockQuery(ledger, identities, new CustomerOwnedOutsideShares(sources, custody, bags), new MotherOrderUnitSource(documents));
+        assertThat(stock.query(portal()).lines()).anySatisfy(line -> assertThat(line.quantity()).isEqualByComparingTo("500"));
+    }
+
+    @Test
+    void 颗克分列且正式收货与冲正按截止日计算净额() {
+        long customerId = bind();
+        Instant time = Instant.parse("2026-10-01T00:00:00Z");
+        var pieces = owned(customerId, "MD-20261030-0001", StockStatus.RAW_WAITING);
+        var grams = owned(customerId, "MD-20261030-0002", StockStatus.RAW_WAITING);
+        var unknown = owned(customerId, "MD-20261030-0003", StockStatus.RAW_WAITING);
+        var source = entry("actual-inbound", time, "inbound_confirm", null, pieces, "500", "20");
+        var reversal = new StockLedgerEntry("reverse-inbound", time.plusSeconds(1), "inbound_reversal", "MD-20261030-0001",
+                pieces, null, new BigDecimal("500"), new BigDecimal("20"), "更正", source.code());
+        var corrected = entry("corrected-inbound", time.plusSeconds(2), "inbound_confirm", null, pieces, "480", "19");
+        var weightReceipt = entry("weight-inbound", time, "inbound_confirm", null, grams, "0.5", "0.5");
+        var unknownReceipt = entry("unknown-inbound", time, "inbound_confirm", null, unknown, "7", null);
+        var ledger = new FixedLedger(List.of(source, reversal, corrected, weightReceipt, unknownReceipt));
+        var query = new CustomerStatementCutoffQuery(ledger, identities,
+                mother -> mother.endsWith("0001") ? "颗" : mother.endsWith("0002") ? "克" : "");
+        var before = query.statement(portal(), time);
+        assertThat(before.quantities()).anySatisfy(group -> {
+            assertThat(group.unit()).isEqualTo("颗");
+            assertThat(group.receivedQuantity()).isEqualByComparingTo("500");
+        });
+        var after = query.statement(portal(), time.plusSeconds(3));
+        assertThat(after.receivedQuantity()).isNull();
+        assertThat(after.quantities()).hasSize(2).anySatisfy(group -> {
+            assertThat(group.unit()).isEqualTo("颗");
+            assertThat(group.receivedQuantity()).isEqualByComparingTo("480");
+        }).anySatisfy(group -> {
+            assertThat(group.unit()).isEqualTo("克");
+            assertThat(group.receivedQuantity()).isEqualByComparingTo("0.5");
+        });
+        assertThat(after.pending()).anyMatch(line -> line.contains("数量单位待核"));
+        assertThat(after.exportText()).contains("收料,按单位分别核对").contains("\"颗\",480").contains("\"克\",0.5");
+        assertThat(ledger.writes).isZero();
+    }
+
+    @Test
     void 截止日后的收料不计入且导出与页面同口径() {
         long customerId = bind();
         Instant cutoff = Instant.parse("2026-10-03T00:00:00Z");
@@ -59,7 +122,7 @@ class CustomerStatementCutoffTest {
                 entry("sample-1", Instant.parse("2026-10-01T00:00:00Z"), "inbound", null,
                         owned(customerId, "DY-20261030-0001", StockStatus.RAW_WAITING), "5", "0.100")
         ));
-        CustomerStatementCutoffQuery query = new CustomerStatementCutoffQuery(ledger, identities);
+        CustomerStatementCutoffQuery query = new CustomerStatementCutoffQuery(ledger, identities, code -> "颗");
         CustomerStatementCutoff statement = query.statement(portal(), cutoff);
 
         assertThat(statement.receivedQuantity()).isEqualByComparingTo("1000");
@@ -92,7 +155,7 @@ class CustomerStatementCutoffTest {
         return new StockDimension(OwnerType.CUSTOMER, customerId, customerId, mother, "", "牙骨", "WH", status, "");
     }
 
-    private static long bind() {
+    private long bind() {
         identities = new CustomerPortalIdentityService(accounts, bindings, customers,
                 new InMemoryCustomerPortalIdentityActionRepository(accounts, bindings, new InMemoryAuthAuditRepository()),
                 sessions());
@@ -102,7 +165,7 @@ class CustomerStatementCutoffTest {
         return saved.customerId();
     }
 
-    private static AuthSessionService sessions() {
+    private AuthSessionService sessions() {
         AuthSessionService sessions = new AuthSessionService(
                 new NavigationMenuService(new InMemoryNavigationMenuRepository()),
                 new InMemoryAuthAuditRepository(), accounts, new PasswordHasher(), new PasswordExpiryPolicy(),
@@ -116,10 +179,10 @@ class CustomerStatementCutoffTest {
                 List.of(), List.of(), "portal-a", "", "");
     }
 
-    private static CustomerPortalIdentityService identities;
-    private static final InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(new PasswordHasher());
-    private static final InMemoryCustomerPortalBindingRepository bindings = new InMemoryCustomerPortalBindingRepository();
-    private static final InMemoryMasterDataRepository customers = new InMemoryMasterDataRepository();
+    private CustomerPortalIdentityService identities;
+    private final InMemoryAuthUserAccountRepository accounts = new InMemoryAuthUserAccountRepository(new PasswordHasher());
+    private final InMemoryCustomerPortalBindingRepository bindings = new InMemoryCustomerPortalBindingRepository();
+    private final InMemoryMasterDataRepository customers = new InMemoryMasterDataRepository();
 
     private static final class FixedLedger implements StockLedgerRepository {
         private final List<StockLedgerEntry> rows;

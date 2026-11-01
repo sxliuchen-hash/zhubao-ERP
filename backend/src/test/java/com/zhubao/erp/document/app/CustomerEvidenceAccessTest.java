@@ -35,6 +35,51 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** 客户只能下载明确获准的图片、PDF 或确认凭据。未获准、跨客户、改号和工资成本都不能读到。 */
 class CustomerEvidenceAccessTest {
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path files;
+
+    @Test
+    void 客户下载返回真实文件字节并且下线和撤销对旧票据生效() throws Exception {
+        InMemoryDocumentManagementRepository documents = new InMemoryDocumentManagementRepository();
+        var storageSettings = new com.zhubao.erp.document.infra.AttachmentStorageProperties();
+        storageSettings.setLocalRoot(files.toString());
+        var storage = new com.zhubao.erp.document.infra.LocalAttachmentObjectStorage(storageSettings);
+        var bytes = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", bytes);
+        byte[] original = bytes.toByteArray();
+        var saved = storage.put("DOC-CUSTOMER", "ATT-BYTES", "照片.png", "image/png", original);
+        var photo = attachment("ATT-BYTES", "照片.png", "image/png", "PHOTO", saved.storageLocation());
+        documents.saveAttachment(photo);
+        long customerId = bind("portal-download", "下载客户", "DOWNLOAD");
+        var service = new CustomerEvidenceAccessService(documents, grants, identities, new DocumentManagementService(documents, storage));
+        var grant = service.grant(admin(), customerId, photo.code());
+        var item = service.detail(portal("portal-download")).items().get(0);
+        var actors = org.mockito.Mockito.mock(com.zhubao.erp.security.app.OperatorContextResolver.class);
+        var request = org.mockito.Mockito.mock(jakarta.servlet.http.HttpServletRequest.class);
+        org.mockito.Mockito.when(actors.requireSession(request)).thenReturn(portal("portal-download"));
+        var controller = new com.zhubao.erp.document.web.CustomerEvidenceController(service, actors);
+        var response = controller.download(new com.zhubao.erp.document.web.CustomerEvidenceController.DownloadRequest(
+                grant.grantId(), photo.code(), item.downloadTicket()), request);
+        var output = new java.io.ByteArrayOutputStream();
+        response.getBody().writeTo(output);
+        assertThat(output.toByteArray()).isEqualTo(original);
+        assertThat(response.getHeaders().getContentType().toString()).isEqualTo("image/png");
+        assertThat(response.getHeaders().getFirst("Cache-Control")).isEqualTo("no-store");
+        documents.saveAttachment(photo.withStatus("已下线", "gray"));
+        assertThat(service.detail(portal("portal-download")).items()).isEmpty();
+        assertThatThrownBy(() -> service.downloadContent(portal("portal-download"), grant.grantId(), photo.code(), item.downloadTicket()))
+                .isInstanceOf(PermissionDeniedException.class);
+        documents.saveAttachment(photo);
+        var pendingStream = service.downloadContent(portal("portal-download"), grant.grantId(), photo.code(), item.downloadTicket());
+        service.revoke(admin(), grant.grantId());
+        assertThatThrownBy(() -> pendingStream.write(0, pendingStream.size(), new java.io.ByteArrayOutputStream()))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThat(service.detail(portal("portal-download")).items()).isEmpty();
+        var regrant = service.grant(admin(), customerId, photo.code());
+        assertThat(regrant.grantId()).isNotEqualTo(grant.grantId());
+        assertThatThrownBy(() -> service.downloadContent(portal("portal-download"), grant.grantId(), photo.code(), item.downloadTicket()))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
 
     @Test
     void 获准后才能下载且不能改号或看到工资() {

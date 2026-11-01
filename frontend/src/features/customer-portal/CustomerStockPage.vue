@@ -7,6 +7,7 @@ import {
   filterLines,
   weightText,
   type CustomerEvidenceDetail,
+  type CustomerEvidenceItem,
   type CustomerOwnedStock,
   type CustomerStatement,
   type CustomerStockLine,
@@ -77,11 +78,14 @@ async function readStatement() {
   }
 }
 
-async function downloadGranted() {
-  const item = evidence.value?.items[0];
-  if (!item) return;
-  const saved = await downloadEvidence(item);
-  downloadName.value = saved.fileName;
+async function downloadGranted(item: CustomerEvidenceItem) {
+  downloadName.value = '';
+  try {
+    const saved = await downloadEvidence(item);
+    downloadName.value = saved.fileName;
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : '文件下载失败';
+  }
 }
 </script>
 
@@ -103,9 +107,14 @@ async function downloadGranted() {
       <button type="button" @click="readStatement">读取对账</button>
       <p v-if="statementMessage" class="pending">{{ statementMessage }}</p>
       <article v-if="statement">
-        <p>收料 {{ statement.receivedQuantity }}</p>
-        <p>出厂 {{ statement.shippedQuantity }}</p>
-        <p>损耗 {{ statement.lossQuantity }} {{ statement.lossWeight }}</p>
+        <p v-if="statement.receivedQuantity == null">数量按来源和单位分别核对，不能合并相加</p>
+        <ul>
+          <li v-for="line in statement.quantities" :key="`${line.sourceCode}|${line.materialCode}|${line.unit}`">
+            {{ line.materialCode }} {{ line.sourceCode }} 收料 {{ line.receivedQuantity }}{{ line.unit }}
+            出厂 {{ line.shippedQuantity }}{{ line.unit }} 损耗 {{ line.lossQuantity }}{{ line.unit }}
+          </li>
+        </ul>
+        <p>损耗重量 {{ statement.lossWeight }}</p>
         <p>{{ statement.factoryAndOutside }}</p>
         <p>{{ statement.bills }}</p>
         <pre>{{ statement.exportText }}</pre>
@@ -135,8 +144,7 @@ async function downloadGranted() {
             照片可见范围尚未核定
           </p>
           <template v-else>
-            <p v-for="item in evidence.items" :key="item.grantId">{{ item.fileName }}</p>
-            <button type="button" @click="downloadGranted">下载获准文件</button>
+            <p v-for="item in evidence.items" :key="item.grantId">{{ item.fileName }} <button type="button" @click="downloadGranted(item)">下载获准文件</button></p>
             <p v-if="downloadName">已下载 {{ downloadName }}</p>
           </template>
         </article>

@@ -9,6 +9,7 @@ import com.zhubao.erp.document.domain.CustomerModelReferenceView;
 import com.zhubao.erp.document.domain.DesignArtifactReference;
 import com.zhubao.erp.document.domain.DocumentManagementRepository;
 import com.zhubao.erp.document.domain.EvidenceAttachment;
+import com.zhubao.erp.document.domain.AttachmentStreamContent;
 import com.zhubao.erp.security.app.CustomerPortalIdentityService;
 import com.zhubao.erp.security.domain.AuthTokenDigest;
 import com.zhubao.erp.security.domain.DataScope;
@@ -16,6 +17,7 @@ import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Locale;
 import java.util.UUID;
@@ -31,12 +33,20 @@ public class CustomerEvidenceAccessService {
     private final DocumentManagementRepository documents;
     private final CustomerEvidenceGrantRepository grants;
     private final CustomerPortalIdentityService identities;
+    private final DocumentManagementService content;
 
     public CustomerEvidenceAccessService(DocumentManagementRepository documents, CustomerEvidenceGrantRepository grants,
                                          CustomerPortalIdentityService identities) {
+        this(documents, grants, identities, null);
+    }
+
+    @Autowired
+    public CustomerEvidenceAccessService(DocumentManagementRepository documents, CustomerEvidenceGrantRepository grants,
+                                         CustomerPortalIdentityService identities, DocumentManagementService content) {
         this.documents = documents;
         this.grants = grants;
         this.identities = identities;
+        this.content = content;
     }
 
     /** 管理员逐张获准。不是按照片类别默认开放。 */
@@ -48,6 +58,7 @@ public class CustomerEvidenceAccessService {
             throw new BusinessException("客户绑定不能为空");
         }
         EvidenceAttachment attachment = requireAttachment(attachmentCode);
+        assertActive(attachment);
         String kind = kindOf(attachment);
         CustomerEvidenceGrant existing = grants.find(customerId, attachment.code()).orElse(null);
         if (existing != null) {
@@ -63,7 +74,8 @@ public class CustomerEvidenceAccessService {
     public CustomerEvidenceDetail detail(OperatorContext operator) {
         long customerId = customerId(operator);
         return new CustomerEvidenceDetail(customerId, VISIBILITY_UNDECIDED, grants.listByCustomer(customerId).stream()
-                .map(grant -> item(grant, requireAttachment(grant.attachmentCode())))
+                .flatMap(grant -> documents.findAttachmentByCode(grant.attachmentCode()).stream()
+                        .filter(attachment -> visible(grant, attachment)).map(attachment -> item(grant, attachment)))
                 .toList());
     }
 
@@ -79,12 +91,48 @@ public class CustomerEvidenceAccessService {
             throw new PermissionDeniedException("附件与获准详情不一致");
         }
         EvidenceAttachment attachment = requireAttachment(code);
+        assertActive(attachment);
         rejectSensitive(attachment);
         if (!kindOf(attachment).equals(grant.kind())) {
             throw new PermissionDeniedException("附件与获准详情不一致");
         }
         return new CustomerEvidenceDownload(grant.grantId(), attachment.code(), attachment.fileName(),
                 attachment.mediaType(), grant.kind());
+    }
+
+    public AttachmentStreamContent downloadContent(OperatorContext operator, String grantId, String attachmentCode, String ticket) {
+        download(operator, grantId, attachmentCode, ticket);
+        AttachmentStreamContent stream = content.contentStream(attachmentCode);
+        if (!com.zhubao.erp.document.domain.AttachmentMediaPolicy.matchesHeader(stream.mediaType(), stream.header(), stream.header().length)) {
+            throw new BusinessException("附件内容与文件类型不符，暂不可下载");
+        }
+        return new AttachmentStreamContent(stream.code(), stream.fileName(), stream.mediaType(), stream.size(), stream.header(),
+                (offset, length, output) -> {
+                    download(operator, grantId, attachmentCode, ticket);
+                    stream.write(offset, length, output);
+                });
+    }
+
+    public void revoke(OperatorContext operator, String grantId) {
+        if (operator == null || operator.role() != RoleCode.ADMIN) {
+            throw new PermissionDeniedException("只有管理员可以撤销客户证据授权");
+        }
+        grants.revoke(grantId);
+    }
+
+    private static void assertActive(EvidenceAttachment attachment) {
+        if (!java.util.Set.of("已上传", "已关联", "已归档").contains(attachment.status())) {
+            throw new PermissionDeniedException("附件已下线或待核对，暂不可访问");
+        }
+    }
+
+    private static boolean visible(CustomerEvidenceGrant grant, EvidenceAttachment attachment) {
+        try {
+            assertActive(attachment);
+            return kindOf(attachment).equals(grant.kind());
+        } catch (BusinessException | PermissionDeniedException ex) {
+            return false;
+        }
     }
 
     /** 只拿附件编号不能下载。必须先读获准详情里的票据。 */

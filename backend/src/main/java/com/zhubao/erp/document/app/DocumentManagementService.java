@@ -539,6 +539,15 @@ public class DocumentManagementService {
             throw new BusinessException("附件清晰度不支持");
         }
         validatePreviewToken(code, expiresAt, token, accessPurpose, resolution);
+        return readContentStream(code, accessPurpose, resolution);
+    }
+
+    /** 调用方先完成业务授权；流写出前仍会复核附件状态。 */
+    public AttachmentStreamContent contentStream(String code) {
+        return readContentStream(code, PURPOSE_DOWNLOAD, RESOLUTION_ORIGINAL);
+    }
+
+    private AttachmentStreamContent readContentStream(String code, String accessPurpose, String resolution) {
         EvidenceAttachment attachment = findAttachment(code)
                 .orElseThrow(() -> new BusinessException("附件不存在：" + code));
         assertActive(attachment);

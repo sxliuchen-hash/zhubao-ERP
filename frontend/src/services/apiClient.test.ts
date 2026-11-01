@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, getAuthToken, setAuthToken } from './apiClient';
+import { apiGet, apiPostBlob, getAuthToken, setAuthToken } from './apiClient';
 
 function jsonResponse(status: number, body: unknown): Response {
   return {
@@ -10,6 +10,19 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe('apiClient 身份失效', () => {
+  it('下载携带当前身份并返回文件字节，过期身份不能下载', async () => {
+    setAuthToken('customer-session');
+    const bytes = new Blob(['真实文件内容'], { type: 'application/pdf' });
+    const fetch = vi.fn().mockResolvedValue({ status: 200, ok: true, blob: async () => bytes });
+    vi.stubGlobal('fetch', fetch);
+    expect(await apiPostBlob('/api/customer-portal/evidence/downloads', { grantId: 'g1' })).toBe(bytes);
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/evidence/downloads'), expect.objectContaining({
+      method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer customer-session' }),
+    }));
+    fetch.mockResolvedValue(jsonResponse(401, { code: 401, message: '未登录', data: null }));
+    await expect(apiPostBlob('/api/customer-portal/evidence/downloads', {})).rejects.toThrow('未登录');
+    expect(getAuthToken()).toBe('');
+  });
   afterEach(() => {
     localStorage.clear();
     vi.unstubAllGlobals();

@@ -18,10 +18,15 @@ public record CustomerStatementCutoff(
         String bills,
         List<String> afterCutoff,
         List<String> pending,
-        String exportText
+        String exportText,
+        List<QuantityGroup> quantities
 ) {
     public CustomerStatementCutoff {
         afterCutoff = afterCutoff == null ? List.of() : List.copyOf(afterCutoff);
         pending = pending == null ? List.of() : List.copyOf(pending);
+        quantities = List.copyOf(quantities);
     }
+
+    public record QuantityGroup(String materialCode, String sourceCode, String unit,
+                                BigDecimal receivedQuantity, BigDecimal shippedQuantity, BigDecimal lossQuantity) {}
 }

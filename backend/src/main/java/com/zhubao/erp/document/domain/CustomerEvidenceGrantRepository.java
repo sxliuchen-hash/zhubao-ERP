@@ -12,4 +12,6 @@ public interface CustomerEvidenceGrantRepository {
     Optional<CustomerEvidenceGrant> find(long customerId, String attachmentCode);
 
     List<CustomerEvidenceGrant> listByCustomer(long customerId);
+
+    void revoke(String grantId);
 }

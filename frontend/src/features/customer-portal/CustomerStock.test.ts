@@ -103,6 +103,7 @@ describe('客户手机库存', () => {
       customerId: 1,
       cutoff: '2026-10-03T00:00:00Z',
       receivedQuantity: '1000',
+      quantities: [{ materialCode: '牙骨', sourceCode: 'MD-1', unit: '颗', receivedQuantity: '1000', shippedQuantity: '300', lossQuantity: '10' }],
       shippedQuantity: '300',
       lossQuantity: '10',
       lossWeight: '未称',
@@ -119,6 +120,19 @@ describe('客户手机库存', () => {
     expect(withPhoto.text()).toContain('收料,1000');
     expect(withPhoto.text()).toContain('账单可见范围尚未核定');
     expect(withPhoto.text()).not.toContain('工资');
+    vi.mocked(loadStatement).mockResolvedValue({
+      customerId: 1, cutoff: '2026-10-03T00:00:00Z', receivedQuantity: null, shippedQuantity: null, lossQuantity: null,
+      quantities: [
+        { materialCode: '牙骨', sourceCode: 'MD-1', unit: '颗', receivedQuantity: '100', shippedQuantity: '30', lossQuantity: '2' },
+        { materialCode: '足金', sourceCode: 'MD-2', unit: '克', receivedQuantity: '0.5', shippedQuantity: '0.2', lossQuantity: '0' },
+      ],
+      lossWeight: '未称', factoryAndOutside: '待核', bills: '待核', afterCutoff: [], pending: [], exportText: '按单位分别核对',
+    });
+    await statementButton?.trigger('click');
+    await flushPromises();
+    expect(withPhoto.text()).toContain('不能合并相加');
+    expect(withPhoto.text()).toContain('收料 100颗');
+    expect(withPhoto.text()).toContain('收料 0.5克');
     withPhoto.unmount();
   });
 });

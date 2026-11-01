@@ -16,6 +16,11 @@ public class InMemoryCustomerEvidenceGrantRepository implements CustomerEvidence
     private final ConcurrentHashMap<String, CustomerEvidenceGrant> grants = new ConcurrentHashMap<>();
 
     @Override
+    public void revoke(String grantId) {
+        grants.remove(grantId);
+    }
+
+    @Override
     public void save(CustomerEvidenceGrant grant) {
         grants.put(grant.grantId(), grant);
     }

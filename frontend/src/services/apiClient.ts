@@ -116,3 +116,11 @@ export async function apiPostForm<TResponse>(path: string, body: FormData): Prom
   });
   return readPayload<TResponse>(response);
 }
+
+export async function apiPostBlob(path: string, body: unknown): Promise<Blob> {
+  const response = await request(`${baseUrl}${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body),
+  });
+  if (!response.ok) await readPayload<never>(response);
+  return response.blob();
+}
