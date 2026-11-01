@@ -8,11 +8,14 @@ import StatusBadge from '../../components/StatusBadge.vue';
 import PrepStockPanel from './PrepStockPanel.vue';
 import ShippingPanel from '../shipping/ShippingPanel.vue';
 import StockLedgerPanel from '../inventory/StockLedgerPanel.vue';
+import FactoryOperationsWorkspace from '../inventory/FactoryOperationsWorkspace.vue';
+import DeliveryWorkspace from '../shipping/DeliveryWorkspace.vue';
 import InventoryAftercarePanel from '../inventory/InventoryAftercarePanel.vue';
 import type { InventoryBalance, Tone } from '../../data/m1PrototypeData';
 import { ApiRequestError } from '../../services/apiClient';
 import { fetchInventoryWorkspace, type InventoryWorkspaceModel } from '../../services/businessWorkspaceApi';
 
+const openDeliveryFromLink = new URLSearchParams(window.location.search).has('delivery');
 const emptyInventory = (): InventoryWorkspaceModel => ({ balances: [], ledgerEntries: [], timeline: [], evidence: [] });
 const workspace = ref<InventoryWorkspaceModel>(emptyInventory());
 const openShipping = inject<OpenShippingAction | null>('zhubao-open-shipping', null);
@@ -116,6 +119,8 @@ function aftercareSelected() {
 </script>
 
 <template>
+  <details :open="openDeliveryFromLink" class="section-block"><summary>独立发货、单袋贴纸与A5清单</summary><DeliveryWorkspace /></details>
+  <details v-if="session?.effectivePermissions?.includes('FACTORY_ITEM_MANAGE')" class="section-block"><summary>本厂物品与库存办理</summary><FactoryOperationsWorkspace /></details>
   <div class="inventory-trace-desk page-stack desk-page" :class="{ 'is-detail': detailOpen }">
     <div class="finance-sections" role="tablist" aria-label="库存分区">
       <button type="button" class="table-action" :class="{ active: stockTab === 'company' }" :aria-selected="stockTab === 'company'" @click="stockTab = 'company'">公司自有物料</button>

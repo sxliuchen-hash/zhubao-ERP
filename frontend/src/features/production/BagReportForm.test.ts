@@ -1,0 +1,27 @@
+import { flushPromises, mount } from '@vue/test-utils';
+import { expect, it, vi } from 'vitest';
+import BagReportForm from './BagReportForm.vue';
+import ReportPhotoCapture from '../evidence/ReportPhotoCapture.vue';
+import { fetchBagAvailability, submitWholeBagReport, submitQuantityDisposition } from '../../services/productionQualityApi';
+import { setAuthToken } from '../../services/apiClient';
+vi.mock('../../services/productionQualityApi', () => ({ fetchBagAvailability: vi.fn(), submitWholeBagReport: vi.fn(), submitQuantityDisposition: vi.fn() }));
+it('部分作业和损耗提交真实上传附件及明确实作量，响应丢失沿原请求恢复', async () => {
+  setAuthToken('partial-real');
+  vi.mocked(fetchBagAvailability).mockResolvedValue({ bagId: 'BAG1', targetCode: 'MD-20261101-0001', bagVersion: 1, stepId: 'CUT', stepName: '切料', availableQuantity: 500, nextStepId: 'BLANK', nextStepName: '取胚', blockingReasons: [] });
+  vi.mocked(submitQuantityDisposition).mockRejectedValueOnce(new Error('结果不明')).mockResolvedValue({ handoffBagId: 'BAG2', remainderBagId: 'BAG3' });
+  let view = mount(BagReportForm, { props: { bagId: 'BAG1' } });
+  await flushPromises();
+  await view.get('[aria-label="整袋数量"]').setValue('200');
+  await view.get('[aria-label="损耗数量"]').setValue('5');
+  view.getComponent(ReportPhotoCapture).vm.$emit('update:modelValue', 'ATT-UPLOADED');
+  await view.get('form').trigger('submit'); await flushPromises();
+  expect(submitWholeBagReport).not.toHaveBeenCalled();
+  expect(submitQuantityDisposition).toHaveBeenCalledWith(expect.objectContaining({ handoff: 195, loss: 5, workQuantity: 200, attachmentCode: 'ATT-UPLOADED', bagVersion: 1 }));
+  view.unmount();
+  vi.mocked(fetchBagAvailability).mockResolvedValue({ bagId: 'BAG1', targetCode: 'MD-20261101-0001', bagVersion: 2, stepId: '', stepName: '', availableQuantity: 0, nextStepId: '', nextStepName: '', blockingReasons: ['已关闭的父袋不计入可办理量'] });
+  view = mount(BagReportForm, { props: { bagId: 'BAG1' } }); await flushPromises();
+  await view.get('form').trigger('submit'); await flushPromises();
+  expect(vi.mocked(submitQuantityDisposition).mock.calls[1][0]).toEqual(vi.mocked(submitQuantityDisposition).mock.calls[0][0]);
+  expect(view.text()).toContain('本次报工已提交');
+  view.unmount();
+});

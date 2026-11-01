@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import {
-  fetchOutsourcingPosition,
+  fetchOutsourcingPosition, fetchOutsourcingReturns, confirmOutsourcingCompletion, type OutsourcingReturnCompletion,
   submitOutsourcingDispatch,
   submitOutsourcingReturn,
   type OutsourcingPosition,
@@ -10,6 +10,19 @@ import {
 const props = defineProps<{ orderCode: string; active: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
 
+const completionRows = ref<OutsourcingReturnCompletion[]>([]);
+const completionPending = ref(false);
+async function loadCompletions() {
+  if (!position.value || !matchesOrder.value) return;
+  try { completionRows.value = await fetchOutsourcingReturns(position.value.taskId); }
+  catch (cause) { error.value = cause instanceof Error ? cause.message : '读取收回明细失败'; }
+}
+async function complete(returnId: string) {
+  if (completionPending.value) return; completionPending.value = true;
+  try { await confirmOutsourcingCompletion({ requestId: `completion-${returnId}`, returnId }); await loadCompletions(); emit('changed'); }
+  catch (cause) { error.value = cause instanceof Error ? cause.message : '完工确认失败，请重试原操作'; }
+  finally { completionPending.value = false; }
+}
 const taskId = ref('');
 const position = ref<OutsourcingPosition | null>(null);
 const error = ref('');
@@ -117,6 +130,10 @@ async function receive() {
       <p>在外 {{ position.outQuantity }}</p>
       <p>待核 {{ position.pendingQuantity }}</p>
       <p v-if="position.outsourcingCountsAsInHouseStock">在外不能当成厂内现货</p>
+      <button type="button" @click="loadCompletions">读取收回完工明细</button>
+      <p v-for="row in completionRows" :key="row.returned.returnId">{{ row.returned.returnId }} · 实收 {{ row.returned.receivedQty }} · 未加工退回 {{ row.returned.unprocessedQty }}
+        <span v-if="row.completed">已确认完工</span><button v-else-if="row.returned.receivedQty > 0" type="button" :disabled="completionPending" @click="complete(row.returned.returnId)">确认实收部分完工</button>
+      </p>
       <label>本厂袋
         <select v-model="bagId" aria-label="本厂袋">
           <option value="">选择仍在本厂的袋</option>

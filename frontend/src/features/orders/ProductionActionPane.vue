@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, provide, ref, watch } from 'vue';
 import ProcessProgressPanel from '../m1/ProcessProgressPanel.vue';
-import BagReportForm from '../production/BagReportForm.vue';
+import BagWorkflowPane from '../production/BagWorkflowPane.vue';
 import ProductionPanel from '../production/ProductionPanel.vue';
 import type { ProcessStationReport } from '../../services/processStationApi';
 import type { OrderActionTarget, ProductionMode } from './orderActions';
@@ -15,7 +15,8 @@ const stationCreated = ref(false);
 const deliveredProcess = ref('');
 const progressLocked = ref(false);
 const stationLocked = ref(false);
-const locked = computed(() => progressLocked.value || stationLocked.value);
+const bagLocked = ref(false);
+const locked = computed(() => progressLocked.value || stationLocked.value || bagLocked.value);
 provide('zhubao-scan-suspended', computed(() => !props.active));
 watch(() => props.entryRevision, () => { if (!locked.value) mode.value = props.initialMode; }, { immediate: true });
 watch(mode, value => {
@@ -32,7 +33,7 @@ function switchMode(next: ProductionMode) { if (!locked.value) mode.value = next
     <p class="action-lead">当前单据 {{ target.code }}</p>
     <nav class="production-modes" aria-label="工序办理方式">
       <button class="secondary-button" type="button" :disabled="locked" :aria-pressed="mode === 'progress'" @click="switchMode('progress')">加工中，记进度<small>记录本工序做到哪里</small></button>
-      <button class="secondary-button" type="button" :disabled="locked" :aria-pressed="mode === 'bag'" @click="switchMode('bag')">整袋报工<small>拍照并一次提交</small></button>
+      <button class="secondary-button" type="button" :disabled="locked" :aria-pressed="mode === 'bag'" @click="switchMode('bag')">按袋报工<small>拍照、部分交工与损耗</small></button>
       <button class="secondary-button" type="button" :disabled="locked" :aria-pressed="mode === 'station'" @click="switchMode('station')">已做完，去交工<small>分批登记本次交出数量</small></button>
     </nav>
     <p v-if="locked" class="info-context" role="status">当前请求正在提交或等待结果核对，请先处理原请求。</p>
@@ -40,7 +41,7 @@ function switchMode(next: ProductionMode) { if (!locked.value) mode.value = next
       <ProcessProgressPanel v-if="progressCreated" embedded :initial-target="target" :formally-delivered-process="deliveredProcess" @saved="emit('changed')" @locked="progressLocked = $event" @handoff="switchMode('station')" @target-selected="emit('selected', $event, mode)" />
     </div>
     <div v-show="mode === 'bag'" :inert="mode !== 'bag' || undefined">
-      <BagReportForm v-if="bagCreated" :bag-id="target.code" />
+      <BagWorkflowPane v-if="bagCreated" :target-code="target.code" @changed="emit('changed')" @locked="bagLocked = $event" />
     </div>
     <div v-show="mode === 'station'" :inert="mode !== 'station' || undefined">
       <ProductionPanel v-if="stationCreated" field embedded :initial-target="target" title="登记本次交工" intro="核对加工要求，按本次实际交出的数量登记。" @saved="delivered" @locked="stationLocked = $event" @target-selected="emit('selected', $event, mode)" />

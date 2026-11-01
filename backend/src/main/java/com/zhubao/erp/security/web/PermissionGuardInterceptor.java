@@ -39,6 +39,7 @@ public class PermissionGuardInterceptor implements HandlerInterceptor {
             Map.entry("/api/business/production-quality/weights", PermissionCode.BUSINESS_PRODUCTION_REPORT),
             Map.entry("/api/business/production-quality/inspections", PermissionCode.BUSINESS_QUALITY_FREEZE),
             Map.entry("/api/business/production-quality/releases", PermissionCode.BUSINESS_QUALITY_RELEASE),
+            Map.entry("/api/business/production-quality/unfreezes", PermissionCode.BUSINESS_QUALITY_RELEASE),
             Map.entry("/api/business/production-quality/freezes", PermissionCode.BUSINESS_QUALITY_FREEZE),
             Map.entry("/api/business/production-quality/reworks", PermissionCode.BUSINESS_REWORK_DISPATCH),
             Map.entry("/api/business/operations/process-progress", PermissionCode.BUSINESS_PRODUCTION_REPORT),

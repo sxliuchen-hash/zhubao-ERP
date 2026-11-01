@@ -35,6 +35,8 @@ import java.math.BigDecimal;
 @RequestMapping("/api/business/outsourcing")
 public class OutsourcingController {
 
+    private final com.zhubao.erp.business.app.OutsourcingCompletionService completions;
+    private final com.zhubao.erp.business.domain.OutsourcingReturnRepository returnRows;
     private final OutsourcingQueryService query;
     private final OutsourcingDispatchService dispatches;
     private final OutsourcingReturnService returns;
@@ -45,6 +47,14 @@ public class OutsourcingController {
     public OutsourcingController(OutsourcingQueryService query, OutsourcingDispatchService dispatches,
                                  OutsourcingReturnService returns, OutsourcingSourceRepository sources,
                                  PermissionGuard permissions, OperatorContextResolver actors) {
+        this(query, dispatches, returns, sources, permissions, actors, null, null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public OutsourcingController(OutsourcingQueryService query, OutsourcingDispatchService dispatches,
+            OutsourcingReturnService returns, OutsourcingSourceRepository sources, PermissionGuard permissions,
+            OperatorContextResolver actors, com.zhubao.erp.business.app.OutsourcingCompletionService completions,
+            com.zhubao.erp.business.domain.OutsourcingReturnRepository returnRows) {
+        this.completions=completions; this.returnRows=returnRows;
         this.query = query;
         this.dispatches = dispatches;
         this.returns = returns;
@@ -83,6 +93,23 @@ public class OutsourcingController {
                 command.received(), command.unprocessed(), command.loss(),
                 command.weight() == null ? null : StockMeasurement.known(command.weight())));
     }
+
+    @GetMapping("/tasks/{taskId}/returns")
+    public ApiResponse<java.util.List<ReturnView>> returnList(@PathVariable String taskId,HttpServletRequest request) {
+        var view=query.position(taskId,actors.resolve(request),null);
+        return ApiResponse.ok(view.dispatches().stream().flatMap(dispatch -> returnRows.listByDispatch(dispatch.dispatchId()).stream())
+                .map(row -> new ReturnView(row,completions.findByReturn(row.returnId()).isPresent())).toList());
+    }
+    public record ReturnView(com.zhubao.erp.business.domain.OutsourcingReturn returned,boolean completed) {}
+
+    @PostMapping("/completions")
+    public ApiResponse<com.zhubao.erp.business.domain.OutsourcingCompletion> complete(@RequestBody CompletionRequest body, HttpServletRequest request) {
+        var actor=maintain(request);
+        var returned=returnRows.find(body.returnId()).orElseThrow(() -> new BusinessException("外协收回不存在"));
+        query.dispatch(returned.dispatchId(),actor);
+        return ApiResponse.ok(completions.confirm(body.requestId(),actor.username(),returned.returnId()));
+    }
+    public record CompletionRequest(String requestId,String returnId) {}
 
     private OperatorContext maintain(HttpServletRequest request) {
         OperatorContext actor = actors.resolve(request);

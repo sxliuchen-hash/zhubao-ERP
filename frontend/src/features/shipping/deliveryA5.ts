@@ -1,3 +1,5 @@
+import { renderQrSvg } from '../../services/qrcode';
+
 /** A5 发货清单的一袋。重量未知保持空，不写成 0。 */
 export interface A5BagLine {
   lineNo: number;
@@ -26,6 +28,7 @@ export interface A5Page {
   pageTotals: A5UnitTotal[];
   grandTotals: A5UnitTotal[] | null;
   feeText: string;
+  publicHref?: string;
 }
 
 const ROWS_PER_PAGE = 8;
@@ -37,6 +40,7 @@ export function buildA5Pages(input: {
   logistics: string;
   lines: A5BagLine[];
   feeAmount: string | null;
+  publicHref?: string;
 }): A5Page[] {
   const lines = [...input.lines].sort((left, right) => left.lineNo - right.lineNo);
   const pageCount = Math.max(1, Math.ceil(lines.length / ROWS_PER_PAGE));
@@ -55,6 +59,7 @@ export function buildA5Pages(input: {
       pageTotals: totals(rows),
       grandTotals: page + 1 === pageCount ? grand : null,
       feeText,
+      publicHref: input.publicHref,
     });
   }
   return pages;
@@ -64,7 +69,8 @@ export function renderA5Markup(page: A5Page): string {
   const rows = page.rows.map(row => `<tr><td>${row.lineNo}</td><td>${escapeHtml(row.bagCode)}</td><td>${escapeHtml(row.material)}</td><td>${escapeHtml(row.spec)}</td><td>${escapeHtml(row.quantity)}${escapeHtml(row.unit)}</td><td>${row.weight == null ? '未称' : `${escapeHtml(row.weight)}克`}</td><td>${escapeHtml(row.requirement)}</td><td>${escapeHtml(row.sourceCode)}</td></tr>`).join('');
   const pageTotals = page.pageTotals.map(item => `${escapeHtml(item.quantity)}${escapeHtml(item.unit)}`).join('，');
   const grand = page.grandTotals == null ? '' : `<p>整单合计 ${page.grandTotals.map(item => `${escapeHtml(item.quantity)}${escapeHtml(item.unit)}`).join('，')}</p>`;
-  return `<article class="a5-sheet" style="width:148mm;height:210mm"><header><span>${escapeHtml(page.deliveryId)}</span><span>${escapeHtml(page.customerName)}</span><span>${page.pageNo}/${page.pageCount}</span></header><p>物流 ${escapeHtml(page.logistics)}</p><table>${rows}</table><p>本页小计 ${pageTotals}</p>${grand}<p>费用 ${escapeHtml(page.feeText)}</p><p>经办____ 复核____ 客户签收____</p></article>`;
+  const qr = page.publicHref ? `<div style="width:22mm;flex-shrink:0">${renderQrSvg(page.publicHref)}<small>扫码查看整单</small></div>` : '';
+  return `<article class="a5-sheet" style="width:148mm;height:210mm"><header><span>${escapeHtml(page.deliveryId)}</span><span>${escapeHtml(page.customerName)}</span><span>${page.pageNo}/${page.pageCount}</span>${qr}</header><p>物流 ${escapeHtml(page.logistics)}</p><table><thead><tr><th>袋序</th><th>发货袋号</th><th>材质</th><th>规格</th><th>数量</th><th>重量</th><th>加工要求</th><th>加工来源</th></tr></thead><tbody>${rows}</tbody></table><p>本页小计 ${pageTotals}</p>${grand}<p>费用 ${escapeHtml(page.feeText)}</p><p>经办____ 复核____ 客户签收____</p></article>`;
 }
 
 function totals(rows: A5BagLine[]): A5UnitTotal[] {

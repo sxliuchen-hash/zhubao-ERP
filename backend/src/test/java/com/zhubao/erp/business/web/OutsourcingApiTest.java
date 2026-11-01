@@ -60,6 +60,9 @@ class OutsourcingApiTest {
     private OutsourcingTask task;
     private ActivityBag bag;
     private InMemoryOutsourcingDispatchRepository dispatchRows;
+    private InMemoryOutsourcingReturnRepository returnRows;
+    private com.zhubao.erp.business.infra.InMemoryOutsourcingCompletionRepository completionRows;
+    private com.zhubao.erp.business.app.ProcessAvailabilityQuery availability;
 
     @BeforeEach
     void setUp() {
@@ -67,6 +70,7 @@ class OutsourcingApiTest {
         InMemoryOutsourcingSourceRepository sources = new InMemoryOutsourcingSourceRepository();
         dispatchRows = new InMemoryOutsourcingDispatchRepository();
         InMemoryOutsourcingReturnRepository returns = new InMemoryOutsourcingReturnRepository();
+        returnRows = returns;
         InMemoryRouteSnapshotRepository routes = new InMemoryRouteSnapshotRepository();
         InMemoryDocumentManagementRepository documents = new InMemoryDocumentManagementRepository();
         MemoryBusinessWorkUnit unit = new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
@@ -96,9 +100,51 @@ class OutsourcingApiTest {
                 dispatchRows, returns, sources, bags, splits, unit);
         OutsourcingQueryService query = new OutsourcingQueryService(
                 sources, dispatchRows, returns, bags, dispatchService, returnService, documents, guard);
+        completionRows = new com.zhubao.erp.business.infra.InMemoryOutsourcingCompletionRepository();
+        var portions = new com.zhubao.erp.business.infra.InMemoryNodePortionReader();
+        availability = new com.zhubao.erp.business.app.ProcessAvailabilityQuery(bags,routes,portions,guard,
+                (bagId,stepId) -> BigDecimal.ZERO,new com.zhubao.erp.business.app.OutsourcingDeliveryInHouseCheck(dispatchService));
+        var completion = new com.zhubao.erp.business.app.OutsourcingCompletionService(returns, dispatchRows, sources,
+                completionRows, new com.zhubao.erp.finance.infra.InMemoryOutsourcingFeeBasisRepository(), bags, routes,
+                portions, portions, new com.zhubao.erp.business.infra.InMemoryPortionReleaseRepository(), unit);
         OutsourcingController controller = new OutsourcingController(
-                query, dispatchService, returnService, sources, guard, actors);
+                query, dispatchService, returnService, sources, guard, actors, completion, returns);
         mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
+    }
+
+    @Test
+    void 实收后另行确认外协完工且原请求回放错客户拒绝() throws Exception {
+        when(actors.resolve(any())).thenReturn(new OperatorContext("经办人", RoleCode.ADMIN, DataScope.ALL, false,
+                "session", List.of(), List.of(), "clerk-01", "", ""));
+        var worker=new OperatorContext("操作工",RoleCode.OPERATOR,DataScope.ALL);
+        org.assertj.core.api.Assertions.assertThat(availability.lookup(bag.id(),worker).actionable()).isTrue();
+        mvc.perform(post("/api/business/outsourcing/dispatches").contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                {"requestId":"complete-dispatch","taskId":"%s","bagId":"%s","bagVersion":1,"quantity":200}
+                """.formatted(task.taskId(), bag.id()))).andExpect(status().isOk());
+        org.assertj.core.api.Assertions.assertThat(availability.lookup(bag.id(),worker).availableQuantity()).isZero();
+        org.assertj.core.api.Assertions.assertThat(availability.lookup(bag.id(),worker).blockingReasons()).contains("本袋仍在外协处，收回前不能登记厂内报工");
+        String dispatchId = dispatchRows.listByTask(task.taskId()).get(0).dispatchId();
+        mvc.perform(post("/api/business/outsourcing/returns").contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                {"requestId":"complete-return","dispatchId":"%s","dispatchVersion":1,"received":150,"unprocessed":0,"loss":5,"weight":null}
+                """.formatted(dispatchId))).andExpect(status().isOk());
+        String returnId = returnRows.listByDispatch(dispatchId).get(0).returnId();
+        mvc.perform(get("/api/business/outsourcing/tasks/"+task.taskId()+"/returns"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].completed").value(false));
+        String body = """
+                {"requestId":"complete-confirm","returnId":"%s"}
+                """.formatted(returnId);
+        for (int attempt=0; attempt<2; attempt++) mvc.perform(post("/api/business/outsourcing/completions")
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.quantity").value(150));
+        org.assertj.core.api.Assertions.assertThat(completionRows.listByTarget(bag.targetCode())).hasSize(1);
+        mvc.perform(get("/api/business/outsourcing/tasks/"+task.taskId()+"/returns"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].completed").value(true));
+        when(actors.resolve(any())).thenReturn(new OperatorContext("经办人",RoleCode.ADMIN,DataScope.CUSTOMER_RANGE,
+                false,"session",List.of("8"),List.of(),"clerk-01","",""));
+        mvc.perform(post("/api/business/outsourcing/completions").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
     }
 
     @Test

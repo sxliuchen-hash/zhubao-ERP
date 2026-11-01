@@ -22,9 +22,12 @@ const props = defineProps<{
   outsourcingQuantity: string;
   lossQuantity: string | null;
   saved?: EmployeeSettlementSaved | null;
+  actionLabel?: string;
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
+  confirm: [payload: EmployeeSettlementSaved];
   save: [payload: { targetCode: string; version: number; shares: EmployeeShareDraft[] }];
 }>();
 
@@ -46,8 +49,9 @@ function blankShare(): EmployeeShareDraft {
   return { payeeAccount: '', processName: '', quantity: '', unitPrice: '', proxy: false };
 }
 
-function save() {
-  emit('save', { targetCode: props.targetCode, version: version.value, shares: shares.value.map(share => ({ ...share })) });
+function save(confirmed = false) {
+  const payload = { targetCode: props.targetCode, version: version.value, shares: shares.value.map(share => ({ ...share })) };
+  if (confirmed) emit('confirm', payload); else emit('save', payload);
 }
 </script>
 
@@ -62,6 +66,7 @@ function save() {
       <label>数量<input v-model="share.quantity" :aria-label="`第${index + 1}个实作数量`" /></label>
       <label>工价<input v-model="share.unitPrice" :aria-label="`第${index + 1}个工价`" /></label>
     </p>
-    <button type="button" @click="save">保存员工核算草稿</button>
+    <button v-if="actionLabel" type="button" :disabled="disabled" @click="save()">暂存草稿</button>
+    <button type="button" :disabled="disabled" @click="save(Boolean(actionLabel))">{{ actionLabel || '保存员工核算草稿' }}</button>
   </section>
 </template>

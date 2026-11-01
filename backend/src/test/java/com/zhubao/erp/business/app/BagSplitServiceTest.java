@@ -43,6 +43,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class BagSplitServiceTest {
 
     @Test
+    void 冻结的实物分袋后仍须逐袋复核不能绕过冻结() {
+        var repository=new InMemoryActivityBagRepository(); var bags=new ActivityBagService(repository);
+        var holds=new com.zhubao.erp.business.infra.InMemoryPortionReleaseRepository();
+        var parent=bags.open("MD-20261102-3001","牙骨","REQ","LINE",BigDecimal.TEN,StockMeasurement.unknown(),null);
+        holds.save(new com.zhubao.erp.business.domain.PortionRelease(parent.id(),BigDecimal.TEN,BigDecimal.ONE),null);
+        var service=new BagSplitService(repository,bags,new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),null,null,null,null,holds);
+        var children=service.split("split-frozen","a",parent.id(),List.of(new BigDecimal("4"),new BigDecimal("6"))).split(",");
+        for (String id:children) assertThat(holds.find(id).orElseThrow().frozen()).isEqualByComparingTo(repository.find(id).orElseThrow().quantity());
+    }
+
+    @Test
     void 分袋数量守恒且原请求不再次分袋() {
         InMemoryActivityBagRepository repository = new InMemoryActivityBagRepository();
         ActivityBagService bags = new ActivityBagService(repository);

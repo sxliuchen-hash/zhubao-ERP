@@ -236,7 +236,13 @@ watch(moreOpen, (open) => {
   void nextTick(() => moreFilterRef.value?.focus());
 });
 
+let deliveryLinkApplied = false;
 watch(visibleTabs, (nextTabs) => {
+  const query = new URLSearchParams(window.location.search);
+  const entry = query.has('billDelivery') ? 'finance' : query.has('delivery') ? 'inventory' : null;
+  if (!deliveryLinkApplied && authSession.value && entry && nextTabs.some(tab => tab.key === entry)) {
+    deliveryLinkApplied = true; activateTab(entry); return;
+  }
   if (!nextTabs.some((tab) => tab.key === activeTab.value)) {
     activateTab(nextTabs[0]?.key ?? 'dashboard');
   }

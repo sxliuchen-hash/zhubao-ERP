@@ -2847,3 +2847,38 @@ S5p 增加内部工作单元 `BusinessWorkUnit`，没有新的 HTTP 接口。请
 新增`POST /api/sampling/orders/{code}/photos`和`POST /api/goldwork/orders/{code}/photos`，multipart字段`file`，仅接受JPEG／PNG现场照片。分别要求`SAMPLING_MAINTAIN`／`GOLDWORK_MAINTAIN`并校验实际单据客户范围；返回原有附件上传结果，附件来源分别为`SAMPLING`、`GOLDWORK`，不能串到其他单据报工。拍照页面自动上传并带入附件编号，不要求手抄。
 
 打样／金工写表单在当前页面会话内按账号、单号和办理动作保留请求及草稿。结果不明必须原内容、原请求重试；不能改内容后把未确认的请求丢弃。成功后点击“开始下一笔”才允许同动作产生新请求；切单不串草稿或上传结果。
+
+### 按袋加工、独立交付与财务实际入口（2026-11-02）
+
+下列内部入口要求有效登录，并按真实母单／子单客户范围校验；客户端传入的客户编号不替代来源归属。客户账号只能进入其专用门户。所有写入携带稳定`requestId`，结果不明沿原请求和原内容核对，正式确认与页面草稿分开。
+
+| 入口 | 作用与权限 |
+|---|---|
+| `GET /api/business/production-targets/{target}` | 实际路线、来源袋、可办理与可发量；查询不建袋、不写库存 |
+| `POST /api/business/production-targets/{target}/starts` | `{requestId, steps}`；`BUSINESS_MOTHER_SPLIT`。按已有收货建立真实袋并转在制；多来源须先拆子单，已有执行或旧交工事实不得重复开工 |
+| `GET /api/business/production-targets/bags/{id}` | 返回实际袋、检验、冻结和重量事实 |
+| `POST /api/business/production-targets/bags/{id}/splits` | `{requestId, quantities}`；`BUSINESS_PRODUCTION_REPORT`。按实物分袋，数量守恒，已发货拒绝；冻结不随分袋解除 |
+| `POST /api/business/production-targets/bags/{id}/stock-releases` | `{requestId, version}`；`BUSINESS_OUTBOUND_SHIPMENT`。全部工序完成、在厂、质量足额放行且实称后转成品，不等于已发货 |
+| `POST /api/business/production-quality/unfreezes` | `{requestId, bagId, bagVersion, quantity}`；`BUSINESS_QUALITY_RELEASE`。只解除明确冻结，不增加合格或放行数量 |
+| `GET /api/business/outsourcing/tasks/{taskId}/returns` | 按真实任务返回逐次收回与是否已确认完工；原外协查阅权限 |
+| `POST /api/business/outsourcing/completions` | `{requestId, returnId}`；`OUTSOURCING_MAINTAIN`。只确认实际加工收回份额，另写原节点完成事实，不自动质检放行或记员工工资 |
+| `POST /api/business/deliveries` | `{requestId, customerId, logisticsNote, remark, selections:[{bagId,bagVersion,targetCode,quantityUnit}]}`；`BUSINESS_OUTBOUND_SHIPMENT`。同客户真实袋汇总建稿，草稿不出库 |
+| `GET /api/business/deliveries/{id}` | 草稿、实际明细、已确认出库来源及退回记录 |
+| `POST /api/business/deliveries/{id}/confirmations` | `{requestId, version}`；发货权限，逐袋同事务出库，独立FH号不代替加工单号 |
+| `GET /api/business/deliveries/{id}/impact` | 原出库已消费量、费用及退款事实；待核与没有分别返回 |
+| `POST /api/business/deliveries/{id}/corrections` | `{requestId, version, intent}`；按原交付事实办理更正，不覆盖已消费历史 |
+| `POST /api/business/deliveries/{id}/returns` | `{requestId, outboundCode, quantity, weight}`；`BUSINESS_CUSTOMER_RETURN`，按原出库退回待复核冻结 |
+| `POST /api/business/deliveries/{id}/public-links` | `{requestId, photoIds}`；发货权限。非空图片列表另限管理员，必须是本次真实出库下有效JPEG／PNG；列表本身纳入请求指纹 |
+| `POST /api/business/deliveries/{id}/public-links/{token}/disable` | `{requestId, version}`；停用公开链接，保留原发货事实 |
+| `GET /api/business/deliveries/{id}/labels/{lineNo}?accessId=...` | `LABEL_PRINT`；40×30发货袋载荷，只接受本交付有效公开映射；原厂内标签模板不变 |
+| `GET /api/public/deliveries/{token}` | 持码读取有限客户名称、袋规格、要求、实发数量重量和明确公开照片；不含账单、工资或成本 |
+| `GET /api/public/deliveries/{token}/photos/{attachmentCode}` | 实际图片流，写出前复核停用及下线，`no-store`、`nosniff`；不返回内部存放地址 |
+| `GET /api/finance/delivery-bills/{id}` | `FINANCE_CUSTOMER_READ`，返回本次实发来源及最新账单快照 |
+| `POST /api/finance/delivery-bills/{id}/confirmations`、`adjustments` | `FINANCE_BILLING_POST`；`{requestId,lines,lossQuantity,coveredAmount,coveredReceivableCode}`。首次出账与后续差额分别追加，旧凭据覆盖必须明确来源，空金额不补0 |
+| `GET /api/finance/employee-targets/{target}`、`POST .../settlements` | `FINANCE_PAYROLL`；确认请求`{requestId,shares}`。真实计酬账号／工序／实作数量核对，整单闭合后独立核算；客户编号由服务端真实目标取得 |
+| `GET /api/inventory/factory-items/{itemId}/inventory?warehouse=...` | `FACTORY_ITEM_MANAGE`；实际批次、库位、领用、未还及工具编号，不返回采购金额或应付 |
+| `POST /api/inventory/factory-items/{itemId}/tool-placements` | 原工具办理权限；`{requestId,warehouseCode,quantity,pieceCode}`，复用真实工具入库服务，不直接编辑余额 |
+
+普通报工照片沿已有采集入口使用`MOTHER_ORDER`／`WORK_ORDER`与`PROCESS`场景，不能把文件名当附件编号。数量处置可填写明确`workQuantity`，它与交出、损耗、报废、退回、待核分别保存；未知退出重量仍为空。实物未收回前不能登记厂内报工。末份额实称差异以新增复称流水核正，不修改原收货重量，也不推算损耗重量。
+
+V141保存整袋实际报工账号，V142保存部分处置的实作数量、人员及照片，V143保存新交付客户名称、品名规格与加工要求。历史缺失不补造。A5在已生成有效公开链接时打印整单二维码，单袋贴纸使用同链接加袋序。A5与发货40×30均调用各自尺寸的系统打印窗口，不触发出库；A5供库管打印时显示“账单另附”，财务金额由授权入口查看。打印窗口中分别选择实际办公或标签打印机；当前不通过原厂内标签队列派发这两种新纸面。

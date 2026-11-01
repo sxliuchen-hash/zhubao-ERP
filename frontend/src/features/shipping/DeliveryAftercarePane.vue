@@ -3,6 +3,8 @@ import { computed, ref } from 'vue';
 
 const props = defineProps<{
   deliveryId: string;
+  quantityDraft?: string;
+  disabled?: boolean;
   originalQuantity: string;
   returnedQuantity: string;
   hasCharge: boolean;
@@ -11,13 +13,16 @@ const props = defineProps<{
   receive: (quantity: string) => Promise<void>;
 }>();
 
+const emit = defineEmits<{ 'update:quantityDraft': [quantity: string] }>();
 const message = ref('');
-const returnQuantity = ref('');
+const entered = ref('');
+const returnQuantity = computed({ get: () => props.quantityDraft ?? entered.value, set: value => { entered.value = value; emit('update:quantityDraft', value); } });
 const returnedNow = ref(false);
 
 const remaining = computed(() => String(Number(props.originalQuantity) - Number(props.returnedQuantity)));
 
 async function ask(intent: 'REVERSE_BEFORE_HANDOVER' | 'OVERWRITE_QUANTITY' | 'CANCEL_AND_REOPEN') {
+  if (props.disabled) return;
   message.value = '';
   try {
     await props.correct(intent);
@@ -27,8 +32,9 @@ async function ask(intent: 'REVERSE_BEFORE_HANDOVER' | 'OVERWRITE_QUANTITY' | 'C
 }
 
 async function submitReturn() {
+  if (props.disabled) return;
   message.value = '';
-  if (!returnQuantity.value.trim() || Number(returnQuantity.value) > Number(remaining.value)) {
+  if (!Number.isFinite(Number(returnQuantity.value)) || Number(returnQuantity.value) <= 0 || !returnQuantity.value.trim() || Number(returnQuantity.value) > Number(remaining.value)) {
     message.value = '退货数量不得超过有效原交付';
     return;
   }
@@ -49,11 +55,11 @@ async function submitReturn() {
     <p>原发货单 {{ deliveryId }} · 原数量 {{ originalQuantity }} · 已退 {{ returnedQuantity }}</p>
     <p v-if="hasCharge">已确认费用仍保留</p>
     <p v-if="hasRefund">已确认退款仍保留</p>
-    <button type="button" @click="ask('OVERWRITE_QUANTITY')">更正数量</button>
-    <button type="button" @click="ask('CANCEL_AND_REOPEN')">取消并重开</button>
-    <button type="button" @click="ask('REVERSE_BEFORE_HANDOVER')">按未交接取消</button>
+    <button type="button" :disabled="disabled" @click="ask('OVERWRITE_QUANTITY')">更正数量</button>
+    <button type="button" :disabled="disabled" @click="ask('CANCEL_AND_REOPEN')">取消并重开</button>
+    <button type="button" :disabled="disabled" @click="ask('REVERSE_BEFORE_HANDOVER')">按未交接取消</button>
     <label>退货数量<input v-model="returnQuantity" aria-label="退货数量" /></label>
-    <button type="button" @click="submitReturn">办理退货</button>
+    <button type="button" :disabled="disabled" @click="submitReturn">办理退货</button>
     <p v-if="message">{{ message }}</p>
     <p v-if="returnedNow">状态：待复核</p>
   </section>

@@ -62,6 +62,7 @@ public class BusinessOperationService {
     private final OutboundSaveProbe outboundSaveProbe;
     private LabelVersionGuard labelGuard;
     private MasterDataService masterData;
+    private com.zhubao.erp.business.domain.ActivityBagRepository executionBags;
 
     public BusinessOperationService(StockLedgerService stockLedgerService) {
         this(stockLedgerService, null, null);
@@ -88,11 +89,24 @@ public class BusinessOperationService {
         this(stockLedgerService, approvalService, businessDocumentRepository, workUnit, MotherOrderSaveProbe.NONE, OutboundSaveProbe.NONE);
     }
 
-    @Autowired
     public BusinessOperationService(StockLedgerService stockLedgerService, ApprovalService approvalService,
             BusinessDocumentRepository businessDocumentRepository, BusinessWorkUnit workUnit, MasterDataService masterData) {
-        this(stockLedgerService, approvalService, businessDocumentRepository, workUnit);
-        this.masterData = masterData;
+        this(stockLedgerService,approvalService,businessDocumentRepository,workUnit,masterData,null);
+    }
+    @Autowired
+    public BusinessOperationService(StockLedgerService stockLedgerService,ApprovalService approvalService,
+            BusinessDocumentRepository businessDocumentRepository,BusinessWorkUnit workUnit,MasterDataService masterData,
+            com.zhubao.erp.business.domain.ActivityBagRepository executionBags) {
+        this(stockLedgerService,approvalService,businessDocumentRepository,workUnit);
+        this.masterData=masterData; this.executionBags=executionBags;
+    }
+    /** 已明确切入按袋执行的目标不能再写整单旧事实，原有目标继续使用原入口。 */
+    private void assertLegacyTarget(String mother,String work) {
+        assertLegacyTarget(work==null || work.isBlank() ? mother : work);
+    }
+
+    public void assertLegacyTarget(String target) {
+        if (executionBags!=null && !executionBags.listByTarget(target).isEmpty()) throw new BusinessException("本单已按袋加工，请从按袋报工、质检和独立发货入口办理");
     }
 
     public BusinessOperationService(
@@ -229,6 +243,7 @@ public class BusinessOperationService {
 
     /** 带工作单元时，冻结流水不另开连接。 */
     public QualityFreezeResult freezeQualityStock(FreezeQualityStockCommand command, WorkSession session) {
+        assertLegacyTarget(command.motherOrderCode(),command.workOrderCode());
         if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromSemiFinished = new StockDimension(
@@ -280,6 +295,7 @@ public class BusinessOperationService {
 
     /** 带工作单元时，开返工流水不另开连接。 */
     public ReworkDispatchResult dispatchRework(DispatchReworkCommand command, WorkSession session) {
+        assertLegacyTarget(command.motherOrderCode(),command.workOrderCode());
         if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFrozen = new StockDimension(
@@ -332,6 +348,7 @@ public class BusinessOperationService {
 
     /** 带工作单元时，返工报工流水不另开连接。 */
     public ReworkReportResult reportRework(ReportReworkCommand command, WorkSession session) {
+        assertLegacyTarget(command.motherOrderCode(),command.workOrderCode());
         if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromRework = new StockDimension(
@@ -384,6 +401,7 @@ public class BusinessOperationService {
 
     /** 带工作单元时，放行流水不另开连接。 */
     public QualityReleaseResult releaseQualityStock(ReleaseQualityStockCommand command, WorkSession session) {
+        assertLegacyTarget(command.motherOrderCode(),command.workOrderCode());
         if (session == null) throw new BusinessException("库存动作必须处于业务工作单元");
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromSemiFinished = new StockDimension(
@@ -482,6 +500,7 @@ public class BusinessOperationService {
 
     private OutboundShipmentResult postShipment(ShipFinishedStockCommand command, WorkSession session) {
         businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
+        assertLegacyTarget(command.motherOrderCode(),command.workOrderCode());
         assertOutboundOrderAvailable(command.shipmentCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromFinished = new StockDimension(
@@ -556,6 +575,7 @@ public class BusinessOperationService {
 
     private CustomerReturnResult postReturn(CustomerReturnCommand command, WorkSession session) {
         businessDocumentRepository.lockMotherOrder(command.motherOrderCode(), session);
+        assertLegacyTarget(command.motherOrderCode(),command.workOrderCode());
         assertAftercareDocumentAvailable("customer_return", command.returnCode(), command.motherOrderCode(), session);
         Long ownerCustomerId = command.ownerCustomerId() == null ? command.customerId() : command.ownerCustomerId();
         StockDimension fromShipped = new StockDimension(
@@ -699,6 +719,7 @@ public class BusinessOperationService {
     }
 
     private LossApprovalResult postLoss(ApproveLossCommand command, WorkSession session) {
+        if (executionBags!=null) { businessDocumentRepository.lockMotherOrder(command.motherOrderCode(),session); assertLegacyTarget(command.motherOrderCode(),command.workOrderCode()); }
         BigDecimal rawLossWeight = command.inputWeight()
                 .subtract(command.outputWeight())
                 .subtract(command.reasonableTransferWeight());

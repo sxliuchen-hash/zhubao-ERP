@@ -30,6 +30,7 @@ import java.util.UUID;
 @Service
 public class BagSplitService {
 
+    private final com.zhubao.erp.business.domain.PortionReleaseRepository holds;
     private final ActivityBagRepository repository;
     private final ActivityBagService bags;
     private final BusinessWorkUnit unit;
@@ -47,10 +48,16 @@ public class BagSplitService {
         this(repository, bags, unit, portions, portionWriter, null, null);
     }
 
-    @Autowired
     public BagSplitService(ActivityBagRepository repository, ActivityBagService bags, BusinessWorkUnit unit,
                            NodePortionReader portions, NodePortionWriter portionWriter,
                            PortionInspectionRepository inspections, ReworkTaskRepository rework) {
+        this(repository,bags,unit,portions,portionWriter,inspections,rework,null);
+    }
+    @Autowired
+    public BagSplitService(ActivityBagRepository repository,ActivityBagService bags,BusinessWorkUnit unit,NodePortionReader portions,
+            NodePortionWriter portionWriter,PortionInspectionRepository inspections,ReworkTaskRepository rework,
+            com.zhubao.erp.business.domain.PortionReleaseRepository holds) {
+        this.holds=holds;
         this.repository = repository;
         this.bags = bags;
         this.unit = unit;
@@ -83,6 +90,7 @@ public class BagSplitService {
             if (quantity == null || quantity.signum() <= 0) {
                 throw new BusinessException("分袋数量必须为正");
             }
+            com.zhubao.erp.inventory.domain.StockMeasurement.processingScale(quantity);
             sum = sum.add(quantity);
         }
         if (sum.compareTo(parent.quantity()) != 0) {
@@ -95,6 +103,8 @@ public class BagSplitService {
         bags.close(parent.id(), session);
         copyPosition(parent, children, quantities, session);
         copyQuality(parent, children, quantities, session);
+        if (holds!=null && holds.find(parent.id()).map(row -> row.frozen().signum()>0).orElse(false))
+            for (int index=0;index<children.size();index++) holds.save(new com.zhubao.erp.business.domain.PortionRelease(children.get(index),BigDecimal.ZERO,quantities.get(index)),session);
         return children;
     }
 

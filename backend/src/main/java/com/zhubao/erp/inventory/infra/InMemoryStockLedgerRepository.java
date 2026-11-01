@@ -107,19 +107,20 @@ public class InMemoryStockLedgerRepository implements StockLedgerRepository {
         if (session == null) {
             throw new IllegalStateException("外协损耗必须处于业务工作单元");
         }
-        if (entry.weight() != null || entry.to() != null || entry.from() == null
-                || !"outsourcing_loss".equals(entry.documentType())
-                || entry.quantity() == null || entry.quantity().signum() <= 0) {
-            throw new IllegalArgumentException("外协损耗只扣数量，未知重量不能按 0 入账");
-        }
+        StockTransferRules.verifyUnweighedProcess(entry);
         Map<StockDimension, StockBalance> balancesBefore = new LinkedHashMap<>(balances);
         List<StockLedgerEntry> ledgersBefore = new ArrayList<>(ledgers);
         StockBalance source = findBalance(entry.from());
         if (source.quantity().compareTo(entry.quantity()) < 0) {
             throw new BusinessException("来源库存数量不足");
         }
-        balances.put(entry.from(), new StockBalance(
-                source.dimension(), source.quantity().subtract(entry.quantity()), source.weight(), true));
+        BigDecimal left=source.quantity().subtract(entry.quantity());
+        BigDecimal movedBookWeight=entry.to()!=null && left.signum()==0 ? source.weight() : BigDecimal.ZERO;
+        balances.put(entry.from(), new StockBalance(source.dimension(),left,source.weight().subtract(movedBookWeight),true));
+        if (entry.to()!=null) {
+            StockBalance destination=findBalance(entry.to());
+            balances.put(entry.to(),new StockBalance(entry.to(),destination.quantity().add(entry.quantity()),destination.weight().add(movedBookWeight),true));
+        }
         ledgers.add(entry);
         session.onRollback(() -> {
             synchronized (this) {

@@ -86,14 +86,14 @@ public final class StockTransferRules {
         Objects.requireNonNull(entry, "库存台账不能为空");
         requireText(entry.code(), "库存台账号不能为空");
         Objects.requireNonNull(entry.bizTime(), "库存业务时间不能为空");
-        if (!"prep_customer_return".equals(entry.documentType()) && !"stock_correction".equals(entry.documentType())) {
+        if (!"prep_customer_return".equals(entry.documentType()) && !"stock_correction".equals(entry.documentType()) && !"stock_reweigh".equals(entry.documentType())) {
             throw new IllegalArgumentException("离厂或冲减的业务类型不正确");
         }
         requireText(entry.documentCode(), "库存业务单号不能为空");
         if (entry.to() != null || entry.from() == null) {
             throw new IllegalArgumentException("离厂或冲减只能扣减来源余额");
         }
-        if (entry.sourceLedgerCode() == null || entry.sourceLedgerCode().isBlank()) {
+        if (!"stock_reweigh".equals(entry.documentType()) && (entry.sourceLedgerCode() == null || entry.sourceLedgerCode().isBlank())) {
             throw new IllegalArgumentException("离厂或冲减必须关联原收货");
         }
         Objects.requireNonNull(entry.quantity(), "库存数量不能为空");
@@ -104,9 +104,28 @@ public final class StockTransferRules {
         if (entry.quantity().signum() == 0 && entry.weight().signum() == 0) {
             throw new IllegalArgumentException("库存转移数量和重量不能同时为零");
         }
+        if ("stock_reweigh".equals(entry.documentType()) && (entry.quantity().signum()!=0 || entry.weight().signum()<=0))
+            throw new IllegalArgumentException("复称只能调整重量，不能改数量");
         verifyPrecision(entry.quantity());
         verifyPrecision(entry.weight());
         verifyDimension(entry.from());
+    }
+
+    /** 未称重的开工、损耗和退出只流转实际数量，重量继续待核。 */
+    public static void verifyUnweighedProcess(StockLedgerEntry entry) {
+        if (entry.from()==null || entry.weight()!=null || entry.quantity()==null || entry.quantity().signum()<=0)
+            throw new IllegalArgumentException("未称流转须有来源及正数数量，重量必须保持未知");
+        verifyPrecision(entry.quantity()); verifyDimension(entry.from());
+        String type=entry.documentType();
+        if (entry.to()==null) {
+            if (!java.util.Set.of("outsourcing_loss","process_loss","process_return").contains(type)) throw new IllegalArgumentException("未称退出类型不正确");
+            if (!"outsourcing_loss".equals(type) && entry.from().stockStatus()!=StockStatus.WIP) throw new IllegalArgumentException("加工退出必须扣减在制");
+        } else {
+            boolean start="production_start".equals(type) && entry.from().stockStatus()==StockStatus.RAW_WAITING && entry.to().stockStatus()==StockStatus.WIP;
+            boolean scrap="process_scrap".equals(type) && entry.from().stockStatus()==StockStatus.WIP && entry.to().stockStatus()==StockStatus.SCRAP;
+            if (!start && !scrap) throw new IllegalArgumentException("未称流转类型或状态不正确");
+            verify(new StockLedgerEntry(entry.code(),entry.bizTime(),type,entry.documentCode(),entry.from(),entry.to(),entry.quantity(),BigDecimal.ZERO,entry.remark()));
+        }
     }
 
     public static void requireSufficient(StockBalance balance, StockLedgerEntry entry) {
@@ -189,7 +208,7 @@ public final class StockTransferRules {
     private static boolean isInitialWorkOrderSplit(StockLedgerEntry entry) {
         StockDimension from = entry.from();
         StockDimension to = entry.to();
-        return "work_order_split".equals(entry.documentType())
+        return ("work_order_split".equals(entry.documentType()) || "production_start".equals(entry.documentType()))
                 && from.stockStatus() == StockStatus.RAW_WAITING
                 && (from.workOrderCode() == null || from.workOrderCode().isBlank())
                 && to.stockStatus() == StockStatus.WIP

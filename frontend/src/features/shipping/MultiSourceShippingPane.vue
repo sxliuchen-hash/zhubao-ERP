@@ -21,9 +21,12 @@ const checked = ref(false);
 const requestId = ref('');
 const deliveryId = ref('');
 const message = ref('');
+const pending = ref(false);
+const attempted = ref(false);
 
 watch(() => props.orderCode, () => {
   selected.value = [];
+  attempted.value = false;
   checked.value = false;
   requestId.value = newRequest();
   deliveryId.value = '';
@@ -38,6 +41,7 @@ function newRequest() {
 }
 
 function toggle(bagId: string) {
+  if (pending.value || attempted.value) return;
   selected.value = selected.value.includes(bagId)
     ? selected.value.filter(id => id !== bagId)
     : [...selected.value, bagId];
@@ -46,7 +50,8 @@ function toggle(bagId: string) {
 }
 
 async function submit() {
-  if (!checked.value || blocked.value || chosen.value.length === 0) return;
+  if (pending.value || deliveryId.value || !checked.value || blocked.value || chosen.value.length === 0) return;
+  pending.value = true; attempted.value = true;
   message.value = '';
   try {
     const result = await props.confirm(requestId.value, chosen.value.map(bag => bag.bagId));
@@ -55,7 +60,7 @@ async function submit() {
   } catch (error) {
     deliveryId.value = '';
     message.value = error instanceof Error ? error.message : '确认失败';
-  }
+  } finally { pending.value = false; }
 }
 </script>
 
@@ -64,13 +69,13 @@ async function submit() {
     <h3>选择可发袋</h3>
     <p v-for="bag in bags" :key="bag.bagId">
       <label>
-        <input type="checkbox" :aria-label="`选择${bag.bagId}`" :checked="selected.includes(bag.bagId)" @change="toggle(bag.bagId)" />
+        <input type="checkbox" :aria-label="`选择${bag.bagId}`" :checked="selected.includes(bag.bagId)" :disabled="pending || attempted" @change="toggle(bag.bagId)" />
         {{ bag.bagId }} {{ bag.quantity }}{{ bag.unit }}
       </label>
       <span v-if="!bag.shippable">{{ bag.reason }}</span>
     </p>
     <label><input v-model="checked" type="checkbox" aria-label="已核对所选袋" /> 已核对数量、版本和客户</label>
-    <button type="button" :disabled="!checked || blocked || chosen.length === 0" @click="submit">确认发货</button>
+    <button type="button" :disabled="pending || Boolean(deliveryId) || !checked || blocked || chosen.length === 0" @click="submit">确认发货</button>
     <button type="button" @click="message = '打印不会出库'">预览发货贴纸</button>
     <p v-if="deliveryId">发货单号 {{ deliveryId }}</p>
     <p v-if="message">{{ message }}</p>

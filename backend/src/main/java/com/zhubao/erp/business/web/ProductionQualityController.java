@@ -120,6 +120,11 @@ public class ProductionQualityController {
         return ApiResponse.ok(releases.freeze(command.requestId(), command.bagId(), command.bagVersion(), command.quantity(), actorForBag(request, command.bagId())));
     }
 
+    @PostMapping("/unfreezes")
+    public ApiResponse<PortionRelease> unfreeze(@RequestBody HoldRequest command,HttpServletRequest request) {
+        return ApiResponse.ok(releases.unfreeze(command.requestId(),command.bagId(),command.bagVersion(),command.quantity(),actorForBag(request,command.bagId())));
+    }
+
     @GetMapping("/bags/{bagId}/shippable")
     public ApiResponse<ShippableView> shippable(@PathVariable String bagId, @RequestParam(defaultValue = "IN_HOUSE") String location,
                                                 HttpServletRequest request) {

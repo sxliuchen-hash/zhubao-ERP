@@ -31,6 +31,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class MySqlMigrationCompatibilityTest {
 
     @Test
+    void mysql整库升级后实际应用装配新加工财务与外协入口() {
+        new DatabaseUpgradeService(database, MigrationCatalog.loadClasspath()).upgrade(true);
+        new org.springframework.boot.test.context.runner.WebApplicationContextRunner()
+                .withInitializer(new org.springframework.boot.test.context.ConfigDataApplicationContextInitializer())
+                .withPropertyValues("spring.profiles.active=mysql", "zhubao.documents.preview.secret=mysql-isolated-test-preview-secret-32chars",
+                        "zhubao.documents.repository=jdbc", "zhubao.approval.repository=jdbc")
+                .withUserConfiguration(com.zhubao.erp.ZhubaoErpApplication.class)
+                .withBean(javax.sql.DataSource.class, () -> database)
+                .run(context -> {
+                    assertThat(context).hasNotFailed()
+                            .hasSingleBean(com.zhubao.erp.business.web.ProductionExecutionController.class)
+                            .hasSingleBean(com.zhubao.erp.finance.web.DeliveryFinanceController.class)
+                            .hasSingleBean(com.zhubao.erp.business.app.OutsourcingCompletionService.class)
+                            .hasSingleBean(com.zhubao.erp.business.infra.JdbcWholeBagReportRepository.class)
+                            .hasSingleBean(com.zhubao.erp.inventory.infra.JdbcStockLedgerRepository.class)
+                            .doesNotHaveBean(com.zhubao.erp.business.infra.InMemoryWholeBagReportRepository.class);
+                });
+    }
+
+    @Test
     void mysql档案装配路线和袋在重建上下文后保留且事务失败回滚() {
         new DatabaseUpgradeService(database, MigrationCatalog.loadClasspath()).upgrade(true);
         var snapshotId = new java.util.concurrent.atomic.AtomicReference<String>();

@@ -32,6 +32,7 @@ export function useBusinessCommand(namespace: string, target: Ref<string>, field
     for (const [name, field] of Object.entries(fields)) field.value = values[name] ?? defaults[name];
     restoring = false;
   }
+  restore(draft().fields);
   watch(target, (code, previous) => {
     draft(previous).fields = snapshot();
     restore(draft(code).fields);
@@ -84,6 +85,10 @@ export function useBusinessCommand(namespace: string, target: Ref<string>, field
     const command = [...draft().commands.values()].find(item => item.phase === 'unknown');
     if (command) { restore(command.fields); message.value = '已恢复上次填写，请重试原操作'; }
   }
+  function originalPayload<Body extends object>(action: string): Body | null {
+    const command = draft().commands.get(action);
+    return command?.phase === 'unknown' ? JSON.parse(command.payload) as Body : null;
+  }
   function startNext() {
     if (pending.value || hasUnconfirmed.value) { message.value = '请先确认上次办理结果'; return; }
     draft().commands.clear();
@@ -91,5 +96,11 @@ export function useBusinessCommand(namespace: string, target: Ref<string>, field
     draft().fields = snapshot();
     message.value = '已开始下一笔，请核对本次填写';
   }
-  return { pending, hasUnconfirmed, submit, restorePending, startNext };
+  return { pending, hasUnconfirmed, submit, restorePending, originalPayload, startNext };
+}
+
+/** 重开办理页时仍需保留结果不明的旧袋，不能因服务端已分袋就跳走原请求。 */
+export function hasPendingBusinessCommand(namespace: string, target: string): boolean {
+  const draft = drafts.get(`${getAuthToken()}\n${namespace}\n${target.trim()}`);
+  return Boolean(draft && [...draft.commands.values()].some(command => command.phase === 'unknown' || command.phase === 'pending'));
 }

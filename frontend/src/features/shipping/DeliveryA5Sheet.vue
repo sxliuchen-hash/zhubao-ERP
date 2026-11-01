@@ -8,13 +8,15 @@ const props = defineProps<{
   logistics: string;
   lines: A5BagLine[];
   feeAmount: string | null;
+  feeText?: string;
+  publicHref?: string;
   officePrinters: string[];
 }>();
 
 const emit = defineEmits<{ print: [printer: string] }>();
 const printer = ref(props.officePrinters[0] ?? '');
 const pages = computed(() => buildA5Pages(props));
-const markup = computed(() => pages.value.map(renderA5Markup).join(''));
+const markup = computed(() => pages.value.map(page => renderA5Markup({ ...page, feeText: props.feeText ?? page.feeText })).join(''));
 
 function printOffice() {
   if (!printer.value) return;

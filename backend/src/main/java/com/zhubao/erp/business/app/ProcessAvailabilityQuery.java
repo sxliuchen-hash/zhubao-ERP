@@ -36,20 +36,28 @@ public class ProcessAvailabilityQuery {
     private final NodePortionReader portions;
     private final PermissionGuard permissions;
     private final PendingQuantity pending;
+    private final com.zhubao.erp.business.domain.DeliveryInHouseCheck inHouse;
 
     public ProcessAvailabilityQuery(ActivityBagRepository bags, RouteSnapshotRepository routes,
                                     NodePortionReader portions, PermissionGuard permissions) {
         this(bags, routes, portions, permissions, (bagId, stepId) -> BigDecimal.ZERO);
     }
 
-    @Autowired
     public ProcessAvailabilityQuery(ActivityBagRepository bags, RouteSnapshotRepository routes,
                                     NodePortionReader portions, PermissionGuard permissions, PendingQuantity pending) {
+        this(bags,routes,portions,permissions,pending,null);
+    }
+
+    @Autowired
+    public ProcessAvailabilityQuery(ActivityBagRepository bags, RouteSnapshotRepository routes,
+                                    NodePortionReader portions, PermissionGuard permissions, PendingQuantity pending,
+                                    com.zhubao.erp.business.domain.DeliveryInHouseCheck inHouse) {
         this.bags = bags;
         this.routes = routes;
         this.portions = portions;
         this.permissions = permissions;
         this.pending = pending == null ? (bagId, stepId) -> BigDecimal.ZERO : pending;
+        this.inHouse = inHouse;
     }
 
     public ProcessAvailableQuantity lookup(String bagId, OperatorContext actor) {
@@ -57,6 +65,10 @@ public class ProcessAvailabilityQuery {
         List<String> blocks = new ArrayList<>();
         if (!canReport(actor)) {
             blocks.add("缺少生产报工权限");
+        }
+        if (inHouse!=null && !inHouse.inHouse(bag.id())) {
+            blocks.add("本袋仍在外协处，收回前不能登记厂内报工");
+            return answer(bag,"","",BigDecimal.ZERO,"","",blocks);
         }
         if (!bag.activeLeaf()) {
             blocks.add("已关闭的父袋不计入可办理量");

@@ -7,6 +7,7 @@ import com.zhubao.erp.inventory.domain.StockDimension;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockLedgerRepository;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
+import com.zhubao.erp.inventory.domain.StockTransferRules;
 import com.zhubao.erp.work.domain.WorkSession;
 import org.springframework.stereotype.Service;
 
@@ -97,6 +98,15 @@ public class StockLedgerService {
                 nextCode(), Instant.now(), "outsourcing_loss", documentCode, from, null, quantity, null,
                 "外协确认损耗，重量未称", null);
         return repository.appendUnweighedLoss(entry, session);
+    }
+
+    /** 数量先行但未实称时，去向也保留重量待核，不把未知写成0克的实际流转。 */
+    public StockLedgerEntry postUnweighedMovement(String type,String document,StockDimension from,StockDimension to,
+            BigDecimal quantity,String remark,WorkSession session) {
+        if (session==null) throw new BusinessException("未称数量流转必须处于业务工作单元");
+        var entry=new StockLedgerEntry(nextCode(),Instant.now(),type,document,from,to,quantity,null,remark,null);
+        StockTransferRules.verifyUnweighedProcess(entry);
+        return repository.appendUnweighedLoss(entry,session);
     }
 
     public StockLedgerEntry reverseInbound(ReceiptEntryReversal reversal, WorkSession session) {

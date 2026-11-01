@@ -26,6 +26,9 @@ import java.util.UUID;
 @Service
 public class ReworkPortionService {
 
+    private final com.zhubao.erp.business.domain.NodePortionReader portions;
+    private final com.zhubao.erp.business.domain.NodePortionWriter portionWriter;
+    private final com.zhubao.erp.business.domain.PortionReleaseRepository holds;
     private final ActivityBagRepository bags;
     private final ActivityBagService bagService;
     private final PortionInspectionRepository inspections;
@@ -37,6 +40,14 @@ public class ReworkPortionService {
     public ReworkPortionService(ActivityBagRepository bags, ActivityBagService bagService,
                                 PortionInspectionRepository inspections, PortionInspectionService inspectionService,
                                 ReworkTaskRepository tasks, PermissionGuard permissions, BusinessWorkUnit workUnit) {
+        this(bags,bagService,inspections,inspectionService,tasks,permissions,workUnit,null,null,null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public ReworkPortionService(ActivityBagRepository bags,ActivityBagService bagService,PortionInspectionRepository inspections,
+            PortionInspectionService inspectionService,ReworkTaskRepository tasks,PermissionGuard permissions,BusinessWorkUnit workUnit,
+            com.zhubao.erp.business.domain.NodePortionReader portions,com.zhubao.erp.business.domain.NodePortionWriter portionWriter,
+            com.zhubao.erp.business.domain.PortionReleaseRepository holds) {
+        this.portions=portions; this.portionWriter=portionWriter; this.holds=holds;
         this.bags = bags;
         this.bagService = bagService;
         this.inspections = inspections;
@@ -82,17 +93,26 @@ public class ReworkPortionService {
     }
 
     private String create(String requestId, String sourceBagId, int bagVersion, int round, BigDecimal rework, WorkSession session) {
-        ActivityBag source = bags.find(sourceBagId).orElseThrow(() -> new BusinessException("袋不存在"));
+        ActivityBag source = bags.lock(sourceBagId,session).orElseThrow(() -> new BusinessException("袋不存在"));
         if (source.version() != bagVersion) {
             throw new BusinessException("袋已被其他人修改，请刷新后重试");
         }
         if (!source.activeLeaf()) {
             throw new BusinessException("已关闭的袋不能再开返工");
         }
+        BigDecimal currentRework=inspections.listByBag(source.id()).stream().map(PortionInspection::rework).reduce(BigDecimal.ZERO,BigDecimal::add);
+        if (currentRework.compareTo(rework)!=0) throw new BusinessException("质检份额已变化，请刷新后再开返工");
         ActivityBag reworkBag = child(source, rework, session);
         BigDecimal remainder = source.quantity().subtract(rework);
         if (remainder.signum() > 0) {
-            child(source, remainder, session);
+            ActivityBag normal=child(source,remainder,session);
+            if (portions!=null && portionWriter!=null) for (var row : portions.list(source.id())) {
+                BigDecimal arrived=row.arrived().multiply(remainder).divide(source.quantity(),3,java.math.RoundingMode.DOWN);
+                BigDecimal handled=row.handled().multiply(remainder).divide(source.quantity(),3,java.math.RoundingMode.DOWN);
+                portionWriter.save(new com.zhubao.erp.business.domain.NodePortionBalance(normal.id(),row.stepId(),arrived,handled),session);
+            }
+            for (var row : inspections.listByBag(source.id())) if (row.pass().add(row.scrap()).add(row.pending()).signum()>0)
+                inspections.save(new PortionInspection("QC"+UUID.randomUUID().toString().replace("-",""),"rw-qc-"+UUID.randomUUID(),normal.id(),row.requirementVersion(),row.pass(),BigDecimal.ZERO,row.scrap(),row.pending(),row.failedClauses()),session);
         }
         bagService.close(source.id(), session);
         String id = "RW" + UUID.randomUUID().toString().replace("-", "");
@@ -109,6 +129,9 @@ public class ReworkPortionService {
                 source.requirementVersion(), source.sourceKey(), source.id(), false, quantity,
                 StockMeasurement.unknown(), 1);
         bags.save(child, 0, session);
+        // 原冻结未定位到具体实物时，子袋先全部保留冻结，必须逐袋复核解除，不能借分袋绕过。
+        if (holds!=null && holds.find(source.id()).map(row -> row.frozen().signum()>0).orElse(false))
+            holds.save(new com.zhubao.erp.business.domain.PortionRelease(child.id(),BigDecimal.ZERO,quantity),session);
         return child;
     }
 

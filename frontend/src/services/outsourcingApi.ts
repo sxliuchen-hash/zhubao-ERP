@@ -66,3 +66,7 @@ export function submitOutsourcingReturn(body: {
 }): Promise<{ returnId: string }> {
   return apiPost('/api/business/outsourcing/returns', body);
 }
+
+export interface OutsourcingReturnCompletion { returned: { returnId: string; receivedQty: number; unprocessedQty: number }; completed: boolean }
+export const fetchOutsourcingReturns = (taskId: string) => apiGet<OutsourcingReturnCompletion[]>(`/api/business/outsourcing/tasks/${encodeURIComponent(taskId)}/returns`);
+export const confirmOutsourcingCompletion = (body: { requestId: string; returnId: string }) => apiPost('/api/business/outsourcing/completions', body);

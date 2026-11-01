@@ -43,6 +43,7 @@ import java.util.UUID;
 @Service
 public class QuantityDispositionService {
 
+    private final ProcessingStockFlow stockFlow;
     private final ActivityBagRepository bags;
     private final ActivityBagService bagService;
     private final RouteSnapshotRepository routes;
@@ -61,6 +62,14 @@ public class QuantityDispositionService {
                                       QuantityDispositionRepository dispositions,
                                       DocumentManagementRepository documents, StockLedgerService stocks,
                                       BusinessWorkUnit workUnit) {
+        this(bags,bagService,routes,availability,portionReader,portions,dispositions,documents,stocks,workUnit,null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public QuantityDispositionService(ActivityBagRepository bags,ActivityBagService bagService,RouteSnapshotRepository routes,
+            ProcessAvailabilityQuery availability,NodePortionReader portionReader,NodePortionWriter portions,
+            QuantityDispositionRepository dispositions,DocumentManagementRepository documents,StockLedgerService stocks,
+            BusinessWorkUnit workUnit,ProcessingStockFlow stockFlow) {
+        this.stockFlow=stockFlow;
         this.bags = bags;
         this.bagService = bagService;
         this.routes = routes;
@@ -115,7 +124,8 @@ public class QuantityDispositionService {
     private QuantityDispositionResult execute(QuantityDispositionCommand command, OperatorContext actor, String bagId,
                                               BigDecimal handoff, BigDecimal loss, BigDecimal scrap,
                                               BigDecimal returned, BigDecimal pending, WorkSession session) {
-        ActivityBag current = bags.find(bagId).orElseThrow(() -> new BusinessException("袋不存在"));
+        if (stockFlow!=null) stockFlow.lock(bags.find(bagId).orElseThrow(() -> new BusinessException("袋不存在")).targetCode(),session);
+        ActivityBag current = bags.lock(bagId,session).orElseThrow(() -> new BusinessException("袋不存在"));
         if (current.version() != command.bagVersion()) {
             throw new BusinessException("袋已被其他人修改，请刷新后重试");
         }
@@ -167,7 +177,8 @@ public class QuantityDispositionService {
             }
         }
         bagService.close(current.id(), session);
-        String stockType = postStock(command, current, available.stepId(), loss, scrap, returned, session);
+        String stockType = stockFlow==null ? postStock(command,current,available.stepId(),loss,scrap,returned,session)
+                : stockFlow.dispose(command,current,available.stepId(),loss,scrap,returned,session);
         boolean weightPending = loss.add(scrap).add(returned).signum() > 0 && !knownWeight(command.exitWeight());
         dispositions.save(new QuantityDispositionLine(
                 "QD" + UUID.randomUUID().toString().replace("-", ""), command.requestId().trim(),

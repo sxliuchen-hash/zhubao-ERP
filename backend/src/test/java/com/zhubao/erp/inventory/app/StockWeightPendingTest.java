@@ -18,6 +18,37 @@ import static org.assertj.core.api.Assertions.*;
 class StockWeightPendingTest {
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
+    void 未称开工流转和实称核正使用同一数量账且回滚恢复两端(boolean jdbc) throws Exception {
+        var ds=jdbc ? StockRepositoryFixture.jdbcDataSource() : null;
+        if (jdbc) try (var connection=ds.getConnection();var sql=connection.createStatement()) {
+            for (String statement:MigrationCatalog.statements(Files.readString(Path.of("src/main/resources/db/mysql/V44__m3_command_request.sql")))) sql.execute(statement);
+        }
+        StockLedgerRepository repository=jdbc ? new JdbcStockLedgerRepository(ds) : new InMemoryStockLedgerRepository();
+        var stock=new StockLedgerService(repository);
+        var raw=new StockDimension(OwnerType.CUSTOMER,7L,7L,"MD-20261102-0001",null,"牙骨","WH",StockStatus.RAW_WAITING);
+        var wip=new StockDimension(OwnerType.CUSTOMER,7L,7L,"MD-20261102-0001","MD-20261102-0001","牙骨","WH",StockStatus.WIP);
+        stock.transfer(new StockTransferCommand("inbound_confirm","LEGACY-UNKNOWN",null,raw,BigDecimal.TEN,BigDecimal.ZERO,"历史重量尚未核对"));
+        BusinessWorkUnit failing=jdbc ? new JdbcBusinessWorkUnit(ds,new JdbcCommandRequestRepository(ds),() -> {throw new IllegalStateException("失败");}) : new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository(),() -> {throw new IllegalStateException("失败");});
+        var call=new CommandCall("unknown-start-01","a","START","MOTHER_ORDER",raw.motherOrderCode(),"10");
+        assertThatThrownBy(() -> failing.execute(call,session -> { stock.postUnweighedMovement("production_start","START",raw,wip,BigDecimal.TEN,"重量待核",session); return "done"; })).isInstanceOf(IllegalStateException.class);
+        assertThat(repository.findBalance(raw).quantity()).isEqualByComparingTo("10"); assertThat(repository.findBalance(wip).quantity()).isEqualByComparingTo("0");
+        BusinessWorkUnit unit=jdbc ? new JdbcBusinessWorkUnit(ds,new JdbcCommandRequestRepository(ds)) : new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository());
+        unit.execute(call,session -> { stock.postUnweighedMovement("production_start","START",raw,wip,BigDecimal.TEN,"重量待核",session); return "done"; });
+        assertThat(repository.findBalance(wip).weightPending()).isTrue();
+        unit.execute(new CommandCall("unknown-finish","a","FINISH","MOTHER_ORDER",raw.motherOrderCode(),"8"),session -> {
+            stock.postUnweighedMovement("process_loss","LOSS",wip,null,new BigDecimal("2"),"实损2颗未称",session);
+            stock.transfer(new StockTransferCommand("stock_reweigh","WEIGH",null,wip,BigDecimal.ZERO,new BigDecimal("0.8"),"剩余8颗实称0.8克"),session);
+            var finished=new StockDimension(wip.ownerType(),7L,7L,wip.motherOrderCode(),wip.workOrderCode(),"牙骨","WH",StockStatus.FINISHED);
+            stock.transfer(new StockTransferCommand("production_finished","BAG",wip,finished,new BigDecimal("8"),new BigDecimal("0.8"),"实称成品"),session);
+            return "done";
+        });
+        StockLedgerRepository reader=jdbc ? new JdbcStockLedgerRepository(ds) : repository;
+        assertThat(reader.findAllLedgers()).filteredOn(row -> "production_start".equals(row.documentType()) || "process_loss".equals(row.documentType())).allSatisfy(row -> assertThat(row.weight()).isNull());
+        assertThat(reader.findAllBalances()).filteredOn(row -> row.dimension().stockStatus()==StockStatus.FINISHED).singleElement().satisfies(row -> { assertThat(row.quantity()).isEqualByComparingTo("8"); assertThat(row.weight()).isEqualByComparingTo("0.8"); assertThat(row.weightPending()).isFalse(); });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void 未称损耗标待复称且失败回滚和重读一致(boolean jdbc) throws Exception {
         var ds = jdbc ? StockRepositoryFixture.jdbcDataSource() : null;
         if (jdbc) {

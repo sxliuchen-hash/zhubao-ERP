@@ -74,5 +74,12 @@ class QualityPortionReleaseTest {
         ShippableView frozen = releasesService.shippable(weighed.id(), PortionReleaseService.Location.IN_HOUSE);
         assertThat(frozen.shippable()).isFalse();
         assertThat(frozen.blockingReasons()).contains("冻结份额不能发出");
+        assertThatThrownBy(() -> releasesService.unfreeze("unfreeze-over",weighed.id(),weighed.version(),new BigDecimal("11"),inspector)).hasMessageContaining("不能超过");
+        assertThatThrownBy(() -> releasesService.unfreeze("unfreeze-scale",weighed.id(),weighed.version(),new BigDecimal("0.0001"),inspector)).hasMessageContaining("三位");
+        var thawed=releasesService.unfreeze("unfreeze-one",weighed.id(),weighed.version(),new BigDecimal("4"),inspector);
+        assertThat(thawed.released()).isEqualByComparingTo("10");
+        assertThat(thawed.frozen()).isEqualByComparingTo("6");
+        assertThat(releasesService.unfreeze("unfreeze-one",weighed.id(),weighed.version(),new BigDecimal("4"),inspector).frozen()).isEqualByComparingTo("6");
+        assertThat(releasesService.shippable(weighed.id(),PortionReleaseService.Location.IN_HOUSE).quantity()).isEqualByComparingTo("4");
     }
 }

@@ -35,6 +35,7 @@ import java.util.UUID;
  * 把实收份额接回原节点，并写出不含金额的外协费用依据。
  * 不放行质量，不把未加工退回记成完工，也不写客户账或员工工资。同一收回只确认一次。
  */
+@org.springframework.stereotype.Service
 public class OutsourcingCompletionService {
 
     private final OutsourcingReturnRepository returns;
@@ -67,6 +68,8 @@ public class OutsourcingCompletionService {
         this.releases = releases;
         this.workUnit = workUnit;
     }
+
+    public java.util.Optional<OutsourcingCompletion> findByReturn(String returnId) { return completions.findByReturn(returnId); }
 
     public OutsourcingCompletion confirm(String requestId, String actorId, String returnId) {
         String actor = actorId == null ? "" : actorId.trim();

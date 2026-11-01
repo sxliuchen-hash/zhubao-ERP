@@ -35,7 +35,7 @@ public interface StockLedgerRepository {
     }
 
     /**
-     * 外协确认损耗只扣数量。重量未知时不减余额重量，也不把未知写成 0。
+     * 已确认数量但重量未知的加工流转。沿用原未称损耗入口，退出不推算重量，转入也标待核。
      */
     default StockLedgerEntry appendUnweighedLoss(StockLedgerEntry entry, WorkSession session) {
         throw new UnsupportedOperationException("当前仓储未实现未称重损耗");

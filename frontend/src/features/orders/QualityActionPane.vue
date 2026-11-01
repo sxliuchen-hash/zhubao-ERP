@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, provide, ref, type Ref } from 'vue';
-import PortionQualityForm from '../quality/PortionQualityForm.vue';
+import BagWorkflowPane from '../production/BagWorkflowPane.vue';
 import QualityPanel from '../quality/QualityPanel.vue';
 import LossApplicationPanel from '../quality/LossApplicationPanel.vue';
 import type { AuthSession } from '../../services/authApi';
@@ -34,8 +34,11 @@ async function loadLoss() {
 
 <template>
   <div class="quality-action-pane field-job" :inert="!active || undefined">
+
+    <BagWorkflowPane :target-code="target.code" mode="quality" @changed="emit('changed')" />
+    <details><summary>原整单质检记录与办理</summary>
     <QualityPanel field embedded :initial-target="target" title="质检与返工复检" intro="先逐条判定，再按当前检验轮次分别办理返工、复检和放行。" @changed="emit('changed')" @target-selected="emit('selected', $event)" />
-    <PortionQualityForm :bag-id="target.code" />
+    </details>
     <details v-if="canLoss" class="section-block" @toggle="($event.target as HTMLDetailsElement).open && loadLoss()">
       <summary>物理损耗申请</summary>
       <p v-if="lossLoading" role="status">正在核对本单损耗来源…</p>

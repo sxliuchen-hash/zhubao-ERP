@@ -4,15 +4,15 @@ import { getAuthToken } from '../../services/apiClient';
 import { uploadReportPhoto } from '../../services/evidenceApi';
 import { stampPhotoTimestamp } from './photoStamp';
 
-const props = defineProps<{ businessType: 'SAMPLING' | 'GOLDWORK'; businessCode: string; modelValue: string }>();
+const props = defineProps<{ businessType: 'SAMPLING' | 'GOLDWORK' | 'MOTHER_ORDER' | 'WORK_ORDER'; businessCode: string; modelValue: string; draftKey?: string }>();
 const emit = defineEmits<{ 'update:modelValue': [code: string] }>();
 const owner = getAuthToken();
 const current = computed(() => {
-  const key = `${owner}\n${props.businessType}\n${props.businessCode.trim()}`;
+  const key = `${owner}\n${props.businessType}\n${props.businessCode.trim()}\n${props.draftKey ?? ''}`;
   if (!drafts.has(key)) drafts.set(key, { file: null, preview: '', attachment: props.modelValue, pending: false, message: '' });
   return drafts.get(key)!;
 });
-watch(() => props.businessCode, () => { emit('update:modelValue', current.value.attachment); });
+watch(() => [props.businessType, props.businessCode, props.draftKey], () => { emit('update:modelValue', current.value.attachment); });
 watch(() => props.modelValue, value => {
   const draft = current.value;
   if (!value && draft.attachment) {
@@ -35,27 +35,28 @@ async function choose(event: Event) {
   draft.attachment = '';
   emit('update:modelValue', '');
   const code = props.businessCode.trim();
+  const type = props.businessType;
   try {
     draft.file = await stampPhotoTimestamp(file);
     if (draft.preview) URL.revokeObjectURL(draft.preview);
     draft.preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(draft.file) : '';
     draft.attachment = '';
-    if (props.businessCode.trim() === code) emit('update:modelValue', '');
+    if (current.value === draft) emit('update:modelValue', '');
   } catch (error) { draft.message = error instanceof Error ? error.message : '照片处理失败'; }
   finally { draft.pending = false; input.value = ''; }
-  if (draft.file) await upload(draft, code);
+  if (draft.file) await upload(draft, code, type);
 }
 
-async function upload(draft = current.value, code = props.businessCode.trim()) {
+async function upload(draft = current.value, code = props.businessCode.trim(), type = props.businessType) {
   if (!draft.file || draft.pending) return;
   if (getAuthToken() !== owner) { draft.message = '账号已变化，请重新打开办理页'; return; }
   draft.pending = true;
   draft.message = '正在上传照片';
   try {
-    const saved = await uploadReportPhoto(props.businessType, code, draft.file);
+    const saved = await uploadReportPhoto(type, code, draft.file);
     draft.attachment = saved.code;
     draft.message = '照片已上传，可以报工';
-    if (props.businessCode.trim() === code) emit('update:modelValue', saved.code);
+    if (current.value === draft) emit('update:modelValue', saved.code);
   } catch (error) { draft.message = error instanceof Error ? error.message : '照片上传失败，文件已保留，请重试'; }
   finally { draft.pending = false; }
 }

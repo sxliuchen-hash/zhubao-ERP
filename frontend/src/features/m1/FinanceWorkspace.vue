@@ -26,8 +26,8 @@ import {
   type PayableView,
   type PayrollLine} from '../../services/financeApi';
 import CustomerBillPanel from '../finance/CustomerBillPanel.vue';
-import DeliveryChargePane from '../finance/DeliveryChargePane.vue';
-import EmployeeSettlementPane from '../finance/EmployeeSettlementPane.vue';
+import DeliveryBillingWorkspace from '../finance/DeliveryBillingWorkspace.vue';
+import EmployeeTargetWorkspace from '../finance/EmployeeTargetWorkspace.vue';
 import SettlementPanel from '../finance/SettlementPanel.vue';
 import FixedAssetCardPane from '../assets/FixedAssetCardPane.vue';
 import FixedAssetCustodyPane from '../assets/FixedAssetCustodyPane.vue';
@@ -87,7 +87,7 @@ async function allocateExisting() {
   } catch (caught) { error.value = caught instanceof Error ? caught.message : '后续核销失败'; }
   finally { busy.value = false; }
 }
-const section = ref<Section>('overview');
+const section = ref<Section>(new URLSearchParams(window.location.search).has('billDelivery') ? 'statement' : 'overview');
 const amountsHidden = ref(false);
 const sectionLabel = computed(() => sections.find((item) => item.key === section.value)?.label ?? '财务');
 const message = ref('');
@@ -120,7 +120,7 @@ watch([yearMonth, customerId], () => { ++pendingSequence; pendingReading.value =
 const settlementType = ref('CHILD');
 const settlementCode = ref('');
 const allocationReceipt = ref('');
-const deliveryChargeId = ref('');
+const deliveryChargeId = ref(new URLSearchParams(window.location.search).get('billDelivery') ?? '');
 const employeeTargetCode = ref('');
 const allocationReceivable = ref('');
 const allocationAmount = ref('');
@@ -1077,6 +1077,8 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'statement'" class="section-block">
+      <label>本次发货单<input v-model="deliveryChargeId" aria-label="本次发货单号" /></label>
+      <DeliveryBillingWorkspace v-if="deliveryChargeId.trim()" :delivery-id="deliveryChargeId.trim()" />
       <button v-if="openBill" class="secondary-button" type="button" @click="showBill('statement')">打开本客户账单与收款</button>
       <h2>客户账单</h2>
       <div class="finance-actions">
@@ -1129,10 +1131,8 @@ function kindLabel(kind: string) {
       <h2>客户账单与收款</h2><p>按客户编号与月份进入原客户面板，收起后仍保留请求与回执。一笔收款可以勾选多张订单核销，未核销部分仍是预收。</p>
       <button v-if="openBill" class="primary-button" type="button" @click="showBill('receipt')">核对客户账单与收款</button>
       <CustomerBillPanel v-else-if="validBillContext(billContext)" :key="customerId + ':' + yearMonth" :context="billContext" initial-mode="receipt" />
-      <label>本次发货单<input v-model="deliveryChargeId" aria-label="本次发货单号" /></label>
-      <DeliveryChargePane v-if="deliveryChargeId.trim()" :delivery-id="deliveryChargeId.trim()" customer-name="本次客户" shipped-quantity="" quantity-unit="颗" />
-      <label>员工核算目标<input v-model="employeeTargetCode" aria-label="员工核算目标" /></label>
-      <EmployeeSettlementPane v-if="employeeTargetCode.trim()" :target-code="employeeTargetCode.trim()" employee-quantity="" outsourcing-quantity="0" :loss-quantity="null" />
+
+
       <p v-else>请先填写正整数客户编号和有效月份。</p>
       <h3>已有预收后续核销</h3>
       <label>收款单号<input v-model="allocationReceipt" aria-label="预收收款单号" /></label>
@@ -1160,6 +1160,8 @@ function kindLabel(kind: string) {
     </section>
 
     <section v-else-if="section === 'payroll'" class="section-block">
+      <label>员工核算目标<input v-model="employeeTargetCode" aria-label="员工核算目标" /></label>
+      <EmployeeTargetWorkspace v-if="employeeTargetCode.trim()" :target-code="employeeTargetCode.trim()" />
       <h2>已确认工资</h2>
       <p class="finance-note">员工工价和整月工资试算已停止。工费在交货后按单确认，这里只查看已确认结果。</p>
       <p v-if="payrollLines.length === 0" class="empty-hint">暂无工资行</p>

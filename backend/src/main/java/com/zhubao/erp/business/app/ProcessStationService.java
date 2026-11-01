@@ -316,6 +316,7 @@ public class ProcessStationService {
             }
         }
         assertCustomer(ticket, account);
+        businessOperationService.assertLegacyTarget(ticket.orderCode());
         assertFormalCommand(ticket, command);
         String process = normalizeRequested(command.process());
         if (!ticket.processes().contains(process)) {
@@ -415,6 +416,7 @@ public class ProcessStationService {
                 ticket.keptMother() ? "MOTHER_ORDER" : "WORK_ORDER", ticket.orderCode(), payload), session -> {
             documents.lockMotherOrder(ticket.motherOrderCode(), session);
             documents.lockProcessBatchOrder(ticket.orderCode(), session);
+            businessOperationService.assertLegacyTarget(ticket.orderCode());
             if (!ticket.equals(resolve(command.code()))) throw new BusinessException("单据要求或工序已变化，请刷新本单后重新交工");
             List<ProcessBatchHandoff> batches = documents.listProcessBatches(ticket.orderCode(), session);
             if (submitted(ticket.orderCode(), process, session)) throw new BusinessException("这道工序已经全部交齐");

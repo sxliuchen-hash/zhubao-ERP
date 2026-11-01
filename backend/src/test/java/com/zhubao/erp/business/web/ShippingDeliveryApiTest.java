@@ -52,7 +52,16 @@ class ShippingDeliveryApiTest {
         var admin=new OperatorContext("管理员",RoleCode.ADMIN,DataScope.ALL,false,"",List.of(),List.of(),"admin","","");
         when(actors.requireSession(any())).thenReturn(admin);
         var controller=new ShippingDeliveryController(creation,confirmation,correction,returns,drafts,returned,access,business,actors,new PermissionGuard(),publicAccess,labels);
-        var mvc=MockMvcBuilders.standaloneSetup(controller,new PublicDeliveryController(publicAccess)).setControllerAdvice(new GlobalExceptionHandler()).build();
+        var finance=new com.zhubao.erp.finance.infra.InMemoryFinanceRepository();
+        var billRows=new com.zhubao.erp.finance.infra.InMemoryCustomerDeliveryBillRepository();
+        var billing=new com.zhubao.erp.finance.app.CustomerDeliveryBillingService(drafts,place,billRows,finance,(actor,customer) -> {},unit);
+        var closure=new com.zhubao.erp.finance.app.ProductionEmployeeClosureLookup(bags,new InMemoryRouteSnapshotRepository(),
+                new InMemoryNodePortionReader(),new InMemoryReworkTaskRepository(),new InMemoryQuantityDispositionRepository(),documents,
+                new InMemoryWholeBagReportRepository(),new InMemoryOutsourcingCompletionRepository());
+        var financeController=new com.zhubao.erp.finance.web.DeliveryFinanceController(access,business,drafts,billing,billRows,closure,
+                new com.zhubao.erp.finance.app.EmployeeTargetSettlementService(closure,finance,actor -> {},unit),
+                new DocumentProcessingTargetCustomer(documents),finance,actors,new PermissionGuard());
+        var mvc=MockMvcBuilders.standaloneSetup(controller,new PublicDeliveryController(publicAccess),financeController).setControllerAdvice(new GlobalExceptionHandler()).build();
         stock.transfer(new StockTransferCommand("quality_release","READY",null,new StockDimension(OwnerType.CUSTOMER,7L,7L,target,target,"牙骨","WH",StockStatus.FINISHED),BigDecimal.TEN,BigDecimal.ONE,"前置合格成品"));
         String opened=mvc.perform(post("/api/business/deliveries").contentType(MediaType.APPLICATION_JSON).content("{\"requestId\":\"api-draft-01\",\"customerId\":7,\"logisticsNote\":\"顺丰\",\"remark\":\"先发这袋\",\"selections\":[{\"bagId\":\"BAG-API\",\"bagVersion\":1,\"targetCode\":\""+target+"\",\"quantityUnit\":\"颗\"}]}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
@@ -63,12 +72,27 @@ class ShippingDeliveryApiTest {
         mvc.perform(get("/api/public/deliveries/"+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.customerName").value("客户甲")).andExpect(jsonPath("$.data.bags[0].requirement").value("抛光后穿串"));
         mvc.perform(get("/api/business/deliveries/"+id+"/labels/1").param("accessId",token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.payload.qrContent").value("/d/"+token+"?bag=1"));
         assertThat(documents.listOutboundOrders()).hasSize(1);
+        mvc.perform(get("/api/finance/delivery-bills/"+id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sources[0].quantity").value(10));
+        String billBody="""
+                {"requestId":"api-bill-confirm","lines":[{"name":"加工费","targetCode":"%s","method":"QUANTITY","quantityUnit":"颗","quantity":10,"unitPrice":2}]}
+                """.formatted(target);
+        for (int attempt=0;attempt<2;attempt++) mvc.perform(post("/api/finance/delivery-bills/"+id+"/confirmations")
+                .contentType(MediaType.APPLICATION_JSON).content(billBody)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalAmount").value(20));
+        assertThat(finance.listReceivables()).hasSize(1);
+        mvc.perform(get("/api/finance/employee-targets/"+target)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.closure.closure").value("NOT_CLOSED"));
         when(actors.requireSession(any())).thenReturn(new OperatorContext("其他客户",RoleCode.ADMIN,DataScope.CUSTOMER_RANGE,false,"",List.of("8"),List.of(),"other","",""));
         mvc.perform(get("/api/business/deliveries/"+id)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/finance/delivery-bills/"+id)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/finance/delivery-bills/"+id+"/confirmations").contentType(MediaType.APPLICATION_JSON).content(billBody)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/finance/employee-targets/"+target)).andExpect(status().isForbidden());
         mvc.perform(get("/api/business/deliveries/"+id+"/labels/1").param("accessId",token)).andExpect(status().isForbidden());
         when(actors.requireSession(any())).thenReturn(new OperatorContext("客户",RoleCode.CUSTOMER_PORTAL,DataScope.ALL));
         mvc.perform(get("/api/business/deliveries/"+id)).andExpect(status().isForbidden());
         when(actors.requireSession(any())).thenReturn(new OperatorContext("操作工",RoleCode.OPERATOR,DataScope.ALL));
+        mvc.perform(get("/api/finance/delivery-bills/"+id)).andExpect(status().isForbidden());
         mvc.perform(post("/api/business/deliveries/"+id+"/confirmations").contentType(MediaType.APPLICATION_JSON).content("{\"requestId\":\"wrong-role-01\",\"version\":2}")).andExpect(status().isForbidden());
         when(actors.requireSession(any())).thenReturn(admin);
         mvc.perform(post("/api/business/deliveries/"+id+"/public-links/"+token+"/disable").contentType(MediaType.APPLICATION_JSON).content("{\"requestId\":\"api-disable-01\",\"version\":1}")).andExpect(status().isOk());

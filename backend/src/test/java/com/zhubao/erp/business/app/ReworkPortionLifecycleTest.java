@@ -32,14 +32,18 @@ class ReworkPortionLifecycleTest {
         PermissionGuard guard = new PermissionGuard();
         ActivityBagService bagService = new ActivityBagService(bags);
         PortionInspectionService inspectionService = new PortionInspectionService(bags, inspections, guard, unit);
+        var portions=new com.zhubao.erp.business.infra.InMemoryNodePortionReader();
+        var holds=new com.zhubao.erp.business.infra.InMemoryPortionReleaseRepository();
         ReworkPortionService rework = new ReworkPortionService(
-                bags, bagService, inspections, inspectionService, tasks, guard, unit);
+                bags, bagService, inspections, inspectionService, tasks, guard, unit,portions,portions,holds);
         OperatorContext inspector = new OperatorContext("质检", RoleCode.QUALITY_INSPECTOR, DataScope.ALL);
         ActivityBag source = bagService.open("MD-20261030-0701", "牙骨", "REQ-3", "LINE-1",
                 new BigDecimal("10"), StockMeasurement.unknown(), null);
         inspectionService.record("qc-c07-01", source.id(), source.version(), "REQ-3",
                 new BigDecimal("6"), new BigDecimal("4"), BigDecimal.ZERO, BigDecimal.ZERO, java.util.List.of("裂纹"), inspector);
 
+        portions.save(new com.zhubao.erp.business.domain.NodePortionBalance(source.id(),"CUT",new BigDecimal("10"),new BigDecimal("10")),null);
+        holds.save(new com.zhubao.erp.business.domain.PortionRelease(source.id(),BigDecimal.ZERO,BigDecimal.TEN),null);
         ReworkTask opened = rework.open("rw-c07-01", source.id(), source.version(), 1, inspector);
         ReworkTask replay = rework.open("rw-c07-01", source.id(), source.version(), 1, inspector);
         assertThat(replay.reworkBagId()).isEqualTo(opened.reworkBagId());
@@ -63,6 +67,10 @@ class ReworkPortionLifecycleTest {
                 new BigDecimal("6"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, inspector))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("复检只能作用于返工份额");
-        assertThat(inspections.listByBag(remainder.id())).isEmpty();
+        assertThat(portions.find(remainder.id(),"CUT").orElseThrow().handled()).isEqualByComparingTo("6");
+        assertThat(portions.list(reworkBag.id())).isEmpty();
+        assertThat(holds.find(remainder.id()).orElseThrow().frozen()).isEqualByComparingTo("6");
+        assertThat(holds.find(reworkBag.id()).orElseThrow().frozen()).isEqualByComparingTo("4");
+        assertThat(inspections.listByBag(remainder.id())).singleElement().satisfies(row -> assertThat(row.pass()).isEqualByComparingTo("6"));
     }
 }

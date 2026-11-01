@@ -92,15 +92,22 @@ public class JdbcStockLedgerRepository implements StockLedgerRepository {
         if (session == null || session.connection().isEmpty()) {
             throw new IllegalStateException("外协损耗必须使用工作单元连接");
         }
-        if (entry.weight() != null || entry.to() != null || entry.from() == null
-                || !"outsourcing_loss".equals(entry.documentType())
-                || entry.quantity() == null || entry.quantity().signum() <= 0) {
-            throw new IllegalArgumentException("外协损耗只扣数量，未知重量不能按 0 入账");
-        }
+        StockTransferRules.verifyUnweighedProcess(entry);
         Connection connection = session.connection().get();
         try {
             insertLedger(connection, entry);
             debitQuantity(connection, entry);
+            if (entry.to()!=null) {
+                StockBalance remaining=readBalance(connection,entry.from());
+                BigDecimal movedBookWeight=remaining.quantity().signum()==0 ? remaining.weight() : BigDecimal.ZERO;
+                if (remaining.quantity().signum()==0) try (PreparedStatement update=connection.prepareStatement("update inv_stock_balance set available_weight=0 where dimension_key=?")) {
+                    update.setString(1,dimensionKey(entry.from())); update.executeUpdate();
+                }
+                creditBalance(connection,entry.to(),entry.quantity(),movedBookWeight,entry.code());
+                try (PreparedStatement update=connection.prepareStatement("update inv_stock_balance set weight_pending=true where dimension_key=?")) {
+                    update.setString(1,dimensionKey(entry.to())); update.executeUpdate();
+                }
+            }
             return entry;
         } catch (SQLException ex) {
             throw new IllegalStateException("外协损耗写入失败", ex);

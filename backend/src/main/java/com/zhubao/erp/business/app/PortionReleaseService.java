@@ -73,6 +73,22 @@ public class PortionReleaseService {
         return change(requestId, bagId, bagVersion, quantity, false, actor);
     }
 
+    /** 解除指定冻结不增加合格数量；没有实际放行的份额仍不能发货。 */
+    public PortionRelease unfreeze(String requestId,String bagId,int bagVersion,BigDecimal quantity,OperatorContext actor) {
+        assertPermission(actor,PermissionCode.BUSINESS_QUALITY_RELEASE);
+        if (quantity==null || quantity.signum()<=0) throw new BusinessException("解除冻结数量必须为正数");
+        com.zhubao.erp.inventory.domain.StockMeasurement.processingScale(quantity);
+        String result=workUnit.execute(new CommandCall(requestId,actor.operator(),"PORTION_UNFREEZE","BAG",bagId,bagId+"|"+bagVersion+"|"+quantity.toPlainString()),session -> {
+            var bag=bags.lock(bagId,session).orElseThrow(() -> new BusinessException("袋不存在"));
+            if (bag.version()!=bagVersion || !bag.activeLeaf()) throw new BusinessException("袋已变化，请刷新后再解除冻结");
+            var current=releases.find(bagId).orElse(new PortionRelease(bagId,BigDecimal.ZERO,BigDecimal.ZERO));
+            if (quantity.compareTo(current.frozen())>0) throw new BusinessException("解除数量不能超过本袋冻结份额");
+            var next=new PortionRelease(bagId,current.released(),current.frozen().subtract(quantity)); releases.save(next,session);
+            return next.bagId()+"|"+next.released()+"|"+next.frozen();
+        });
+        String[] fields=result.split("\\|",-1); return new PortionRelease(fields[0],new BigDecimal(fields[1]),new BigDecimal(fields[2]));
+    }
+
     public ShippableView shippable(String bagId, Location location) {
         ActivityBag bag = bags.find(required(bagId)).orElseThrow(() -> new BusinessException("袋不存在"));
         PortionRelease hold = releases.find(bag.id()).orElse(new PortionRelease(bag.id(), BigDecimal.ZERO, BigDecimal.ZERO));
@@ -100,6 +116,7 @@ public class PortionReleaseService {
         if (quantity == null || quantity.signum() <= 0) {
             throw new BusinessException("放行或冻结数量必须为正数");
         }
+        com.zhubao.erp.inventory.domain.StockMeasurement.processingScale(quantity);
         ActivityBag bag = bags.find(required(bagId)).orElseThrow(() -> new BusinessException("袋不存在"));
         String action = releasing ? "PORTION_RELEASE" : "PORTION_FREEZE";
         String text = workUnit.execute(new CommandCall(
