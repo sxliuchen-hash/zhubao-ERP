@@ -12,6 +12,8 @@ public record SchemaProbe(
     public enum Kind {
         TABLE,
         COLUMN,
-        ROW
+        COLUMN_NULLABLE,
+        ROW,
+        INDEX
     }
 }

@@ -428,3 +428,7 @@ sh ./verify-bundle.sh --manifest runtime-backups/zhubao_bundle_20261018_010000.m
 2026-10-28：DEMO 工作台仓储与 `ZHUBAO_BUSINESS_REPOSITORY/ZHUBAO_BUSINESS_SNAPSHOT_CODE` 已退出。工作台读取正式单据与台账；持久化仍由各真实领域仓储（如 `ZHUBAO_BUSINESS_DOCUMENT_REPOSITORY`）选择，不受旧变量控制。
 
 网关不再自动登记样例设备，`ZHUBAO_GATEWAY_DEMO_DEVICE_KEY` 已退出。新设备由管理员登记并分配各自密钥；已存储的设备不自动禁用或删除。
+
+### 2026-11-01 迁移探针补充
+
+结构探针增加`COLUMN_NULLABLE`及`INDEX`：前者核对真实允许空值约束，后者核对指定索引。V132必须确认`inv_stock_ledger.weight`已允许空值，字段存在本身不能证明该迁移完成；V140检查新的交付普通索引。已发布迁移原文保持不变。MySQL 8.4隔离测试已验证新库、初始化副本、V35升级至V140及路线袋跨上下文持久化，生产升级仍按原备份与授权流程办理。

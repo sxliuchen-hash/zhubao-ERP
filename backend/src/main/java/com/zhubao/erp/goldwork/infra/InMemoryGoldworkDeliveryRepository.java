@@ -20,9 +20,6 @@ public class InMemoryGoldworkDeliveryRepository implements GoldworkDeliveryRepos
 
     @Override
     public void insert(GoldworkDelivery delivery, WorkSession session) {
-        if (existsForQuality(delivery.qualityId(), session)) {
-            throw new BusinessException("同一放行份额不能重复交付");
-        }
         GoldworkDelivery previous = rows.putIfAbsent(delivery.deliveryId(), delivery);
         if (previous != null) {
             throw new BusinessException("交付冲突，请稍后重试");

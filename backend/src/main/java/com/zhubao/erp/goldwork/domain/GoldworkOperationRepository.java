@@ -11,6 +11,10 @@ public interface GoldworkOperationRepository {
 
     Optional<GoldworkOperationReport> find(String reportId);
 
+    default Optional<GoldworkOperationReport> lock(String reportId, WorkSession session) {
+        return find(reportId);
+    }
+
     boolean photoUsed(String attachmentCode, WorkSession session);
 
     List<GoldworkOperationReport> list(String goldworkCode);

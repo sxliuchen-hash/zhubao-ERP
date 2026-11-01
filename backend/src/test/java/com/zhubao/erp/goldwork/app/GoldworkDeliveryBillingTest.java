@@ -88,7 +88,7 @@ class GoldworkDeliveryBillingTest {
         assertThatThrownBy(() -> deliver(service, "m08-del-002", fixture.order().goldworkCode(), fixture.released().qualityId(),
                 null, null, false, false))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("同一放行份额不能重复交付");
+                .hasMessageContaining("超过原来源可用份额");
         assertThat(fixture.orders().find(fixture.order().goldworkCode()).orElseThrow().status()).isEqualTo(GoldworkOrderStatus.OPEN);
     }
 

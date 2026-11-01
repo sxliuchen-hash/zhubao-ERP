@@ -88,6 +88,14 @@ public class JdbcGoldworkOperationRepository implements GoldworkOperationReposit
     }
 
     @Override
+    public Optional<GoldworkOperationReport> lock(String reportId, WorkSession session) {
+        try (PreparedStatement query = WorkSessionBindings.requiredJdbc(session).prepareStatement(selectSql() + " where report_id=? for update")) {
+            query.setString(1, reportId);
+            try (ResultSet rows = query.executeQuery()) { return rows.next() ? Optional.of(map(rows)) : Optional.empty(); }
+        } catch (SQLException ex) { throw new IllegalStateException("无法锁定金工报工份额", ex); }
+    }
+
+    @Override
     public List<GoldworkOperationReport> list(String goldworkCode) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(

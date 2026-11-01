@@ -29,15 +29,33 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class DatabaseUpgradeServiceTest {
 
+    @Test
+    void 探针区分已有字段与允许空值并核对真实索引() throws Exception {
+        JdbcDataSource source = new JdbcDataSource();
+        source.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1");
+        var nullable = new SchemaProbe(SchemaProbe.Kind.COLUMN_NULLABLE, "weight_probe", "weight", "");
+        var index = new SchemaProbe(SchemaProbe.Kind.INDEX, "weight_probe", "idx_weight_probe", "");
+        JdbcSchemaInspector inspector = new JdbcSchemaInspector(source);
+        try (var connection = source.getConnection(); var statement = connection.createStatement()) {
+            statement.execute("create table weight_probe(weight decimal(18,3) not null)");
+            assertThat(inspector.matches(nullable)).isFalse();
+            assertThat(inspector.matches(index)).isFalse();
+            statement.execute("alter table weight_probe alter column weight drop not null");
+            statement.execute("create index idx_weight_probe on weight_probe(weight)");
+            assertThat(inspector.matches(nullable)).isTrue();
+            assertThat(inspector.matches(index)).isTrue();
+        }
+    }
+
     @TempDir
     Path directory;
 
     @Test
-    void 真实迁移目录连续保留到本次V139() {
+    void 真实迁移目录连续保留到本次V140() {
         List<MigrationScript> scripts = MigrationCatalog.loadDirectory(Path.of("src/main/resources/db/mysql"));
-        assertThat(scripts).hasSize(139);
+        assertThat(scripts).hasSize(140);
         assertThat(scripts).extracting(MigrationScript::version)
-                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 139).boxed().toList());
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 140).boxed().toList());
         assertThat(scripts.get(134).fileName()).isEqualTo("V135__m3_stock_weight_pending.sql");
         assertThat(scripts.get(134).probe().columnName()).isEqualTo("weight_pending");
         assertThat(scripts.get(135).fileName()).isEqualTo("V136__m3_customer_bill_sources.sql");

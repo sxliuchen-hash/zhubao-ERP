@@ -9,6 +9,10 @@ import com.zhubao.erp.goldwork.domain.GoldworkOrderRepository;
 import com.zhubao.erp.goldwork.domain.GoldworkQualityDecision;
 import com.zhubao.erp.goldwork.domain.GoldworkQualityOutcome;
 import com.zhubao.erp.goldwork.domain.GoldworkQualityRepository;
+import com.zhubao.erp.goldwork.domain.GoldworkOperationRepository;
+import com.zhubao.erp.goldwork.domain.GoldworkOperationReport;
+import com.zhubao.erp.goldwork.domain.GoldworkPortionAllocation;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.app.RefactorPermissionContract;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
@@ -37,14 +41,23 @@ public class GoldworkDeliveryService {
     private final GoldworkDeliveryRepository deliveries;
     private final BusinessWorkUnit unit;
     private final PermissionGuard permissions;
+    private final GoldworkOperationRepository reports;
 
     public GoldworkDeliveryService(GoldworkOrderRepository orders, GoldworkQualityRepository qualities,
                                    GoldworkDeliveryRepository deliveries, BusinessWorkUnit unit, PermissionGuard permissions) {
+        this(orders, qualities, deliveries, unit, permissions, null);
+    }
+
+    @Autowired
+    public GoldworkDeliveryService(GoldworkOrderRepository orders, GoldworkQualityRepository qualities,
+                                   GoldworkDeliveryRepository deliveries, BusinessWorkUnit unit, PermissionGuard permissions,
+                                   GoldworkOperationRepository reports) {
         this.orders = orders;
         this.qualities = qualities;
         this.deliveries = deliveries;
         this.unit = unit;
         this.permissions = permissions;
+        this.reports = reports;
     }
 
     public List<GoldworkDeliveryView> list(OperatorContext actor, String goldworkCode) {
@@ -88,19 +101,15 @@ public class GoldworkDeliveryService {
         if (quality.outcome() != GoldworkQualityOutcome.RELEASE) {
             throw new BusinessException("只有放行份额可以交付");
         }
-        boolean followed = qualities.list(order.goldworkCode()).stream()
-                .anyMatch(item -> quality.qualityId().equals(item.priorQualityId()));
-        if (followed) {
-            throw new BusinessException("该份额已进入后续轮次，不能按原放行交付");
-        }
-        if (deliveries.existsForQuality(quality.qualityId(), session)) {
-            throw new BusinessException("同一放行份额不能重复交付");
-        }
+        GoldworkOperationReport report = reports == null ? null : reports.lock(quality.reportId(), session)
+                .orElseThrow(() -> new BusinessException("报工来源不存在，份额待核"));
         String deliveryId = "GD-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT);
-        deliveries.insert(new GoldworkDelivery(
+        GoldworkDelivery delivery = new GoldworkDelivery(
                 deliveryId, order.goldworkCode(), quality.qualityId(), pieceCount, netWeight, weightUnit,
                 quality.purity(), "UNCONFIRMED"
-        ), session);
+        );
+        GoldworkPortionAllocation.assertDelivery(report, qualities.list(order.goldworkCode()), deliveries.list(order.goldworkCode()), quality, delivery);
+        deliveries.insert(delivery, session);
         return deliveryId;
     }
 

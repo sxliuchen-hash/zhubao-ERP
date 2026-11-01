@@ -30,6 +30,53 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @EnabledIfSystemProperty(named = "zhubao.test.mysql.url", matches = ".+")
 class MySqlMigrationCompatibilityTest {
 
+    @Test
+    void mysql档案装配路线和袋在重建上下文后保留且事务失败回滚() {
+        new DatabaseUpgradeService(database, MigrationCatalog.loadClasspath()).upgrade(true);
+        var snapshotId = new java.util.concurrent.atomic.AtomicReference<String>();
+        var runner = new org.springframework.boot.test.context.runner.ApplicationContextRunner()
+                .withInitializer(new org.springframework.boot.test.context.ConfigDataApplicationContextInitializer())
+                .withPropertyValues("spring.profiles.active=mysql")
+                .withUserConfiguration(RouteBagProbe.class)
+                .withBean(javax.sql.DataSource.class, () -> database);
+        runner.run(context -> {
+            assertThat(context).hasSingleBean(com.zhubao.erp.business.infra.JdbcActivityBagRepository.class)
+                    .hasSingleBean(com.zhubao.erp.business.infra.JdbcRouteSnapshotRepository.class)
+                    .doesNotHaveBean(com.zhubao.erp.business.infra.InMemoryActivityBagRepository.class);
+            var routes = new com.zhubao.erp.business.app.RouteSnapshotService(context.getBean(com.zhubao.erp.business.domain.RouteSnapshotRepository.class));
+            var bags = new com.zhubao.erp.business.app.ActivityBagService(context.getBean(com.zhubao.erp.business.domain.ActivityBagRepository.class));
+            var unit = new com.zhubao.erp.work.app.JdbcBusinessWorkUnit(database, new com.zhubao.erp.work.infra.JdbcCommandRequestRepository(database));
+            snapshotId.set(unit.execute(new com.zhubao.erp.work.domain.CommandCall("mysql-route-bag-create", "库管", "CREATE", "MOTHER_ORDER", "MD-20261101-0002", "创建"), session -> {
+                var snapshot = routes.capture(com.zhubao.erp.business.domain.BusinessKind.PROCESSING, "MD-20261101-0002", "牙骨", session);
+                bags.open("MD-20261101-0002", "牙骨", "REQ1", "SOURCE1", java.math.BigDecimal.TEN,
+                        com.zhubao.erp.inventory.domain.StockMeasurement.unknown(), session);
+                return snapshot.snapshotId();
+            }));
+        });
+        runner.run(context -> {
+            var routes = context.getBean(com.zhubao.erp.business.domain.RouteSnapshotRepository.class);
+            var bags = context.getBean(com.zhubao.erp.business.domain.ActivityBagRepository.class);
+            assertThat(routes.find(snapshotId.get())).isPresent();
+            assertThat(bags.listByTarget("MD-20261101-0002")).hasSize(1);
+            var failing = new com.zhubao.erp.work.app.JdbcBusinessWorkUnit(database,
+                    new com.zhubao.erp.work.infra.JdbcCommandRequestRepository(database), () -> { throw new IllegalStateException("模拟提交失败"); });
+            assertThatThrownBy(() -> failing.execute(new com.zhubao.erp.work.domain.CommandCall("mysql-route-bag-failure", "库管", "CREATE", "MOTHER_ORDER", "MD-20261101-0003", "失败"), session -> {
+                new com.zhubao.erp.business.app.RouteSnapshotService(routes).capture(com.zhubao.erp.business.domain.BusinessKind.PROCESSING, "MD-20261101-0003", "牙骨", session);
+                new com.zhubao.erp.business.app.ActivityBagService(bags).open("MD-20261101-0003", "牙骨", "REQ1", "SOURCE2", java.math.BigDecimal.ONE,
+                        com.zhubao.erp.inventory.domain.StockMeasurement.unknown(), session);
+                return "失败";
+            })).isInstanceOf(IllegalStateException.class);
+            assertThat(bags.listByTarget("MD-20261101-0003")).isEmpty();
+            assertThat(routes.list(com.zhubao.erp.business.domain.BusinessKind.PROCESSING, "MD-20261101-0003")).isEmpty();
+        });
+    }
+
+    @org.springframework.context.annotation.Configuration
+    @org.springframework.context.annotation.Import({com.zhubao.erp.business.infra.JdbcActivityBagRepository.class,
+            com.zhubao.erp.business.infra.JdbcRouteSnapshotRepository.class, com.zhubao.erp.business.infra.InMemoryActivityBagRepository.class,
+            com.zhubao.erp.business.infra.InMemoryRouteSnapshotRepository.class})
+    static class RouteBagProbe {}
+
     private MysqlDataSource server;
     private MysqlDataSource database;
     private String databaseName;

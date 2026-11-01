@@ -31,9 +31,6 @@ public class JdbcGoldworkDeliveryRepository implements GoldworkDeliveryRepositor
 
     @Override
     public void insert(GoldworkDelivery delivery, WorkSession session) {
-        if (existsForQuality(delivery.qualityId(), session)) {
-            throw new BusinessException("同一放行份额不能重复交付");
-        }
         Connection connection = WorkSessionBindings.requiredJdbc(session);
         try (PreparedStatement statement = connection.prepareStatement("""
                 insert into gld_goldwork_delivery(

@@ -129,7 +129,7 @@
 129	TABLE	gld_goldwork_delivery
 130	ROW	sys_navigation_menu	code	goldwork
 131	TABLE	biz_source_allocation_guard
-132	COLUMN	inv_stock_ledger	weight
+132	COLUMN_NULLABLE	inv_stock_ledger	weight
 133	COLUMN	fin_customer_delivery_bill_line	basis_text
 134	TABLE	fin_customer_bill_coverage
 135	COLUMN	inv_stock_balance	weight_pending
@@ -137,3 +137,4 @@
 137	COLUMN	inv_company_material_receipt	business_date
 138	COLUMN	inv_tool_piece	scrapped
 139	TABLE	fin_fixed_asset_repair_payment
+140	INDEX	gld_goldwork_delivery	idx_gld_delivery_quality

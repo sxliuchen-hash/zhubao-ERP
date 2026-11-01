@@ -25,7 +25,9 @@ public final class JdbcSchemaInspector {
         return switch (probe.kind()) {
             case TABLE -> tableExists(probe.tableName());
             case COLUMN -> columnExists(probe.tableName(), probe.columnName());
+            case COLUMN_NULLABLE -> columnExists(probe.tableName(), probe.columnName(), true);
             case ROW -> rowExists(probe);
+            case INDEX -> indexExists(probe.tableName(), probe.columnName());
         };
     }
 
@@ -55,13 +57,30 @@ public final class JdbcSchemaInspector {
     }
 
     public boolean columnExists(String tableName, String columnName) {
+        return columnExists(tableName, columnName, false);
+    }
+
+    private boolean columnExists(String tableName, String columnName, boolean requireNullable) {
         try (Connection connection = dataSource.getConnection()) {
             DatabaseMetaData meta = connection.getMetaData();
-            return columnExists(meta, connection, tableName, columnName)
-                    || columnExists(meta, connection, tableName.toUpperCase(Locale.ROOT), columnName.toUpperCase(Locale.ROOT));
+            return columnExists(meta, connection, tableName, columnName, requireNullable)
+                    || columnExists(meta, connection, tableName.toUpperCase(Locale.ROOT), columnName.toUpperCase(Locale.ROOT), requireNullable);
         } catch (SQLException ex) {
             throw new IllegalStateException("无法检查字段：" + tableName + "." + columnName, ex);
         }
+    }
+
+    private boolean indexExists(String table, String index) {
+        try (Connection connection = dataSource.getConnection()) {
+            for (String name : new String[] {table, table.toUpperCase(Locale.ROOT)}) {
+                try (ResultSet indexes = connection.getMetaData().getIndexInfo(connection.getCatalog(), connection.getSchema(), name, false, false)) {
+                    while (indexes.next()) {
+                        if (index.equalsIgnoreCase(indexes.getString("INDEX_NAME")) && inCurrentDatabase(connection, indexes)) return true;
+                    }
+                }
+            }
+            return false;
+        } catch (SQLException ex) { throw new IllegalStateException("无法检查索引：" + table + "." + index, ex); }
     }
 
     private boolean rowExists(SchemaProbe probe) {
@@ -100,11 +119,12 @@ public final class JdbcSchemaInspector {
         return false;
     }
 
-    private static boolean columnExists(DatabaseMetaData meta, Connection connection, String tableName, String columnName) throws SQLException {
+    private static boolean columnExists(DatabaseMetaData meta, Connection connection, String tableName, String columnName, boolean requireNullable) throws SQLException {
         try (ResultSet columns = meta.getColumns(connection.getCatalog(), connection.getSchema(), tableName, columnName)) {
             while (columns.next()) {
                 String name = columns.getString("COLUMN_NAME");
-                if (name != null && name.equalsIgnoreCase(columnName) && inCurrentDatabase(connection, columns)) {
+                if (name != null && name.equalsIgnoreCase(columnName) && inCurrentDatabase(connection, columns)
+                        && (!requireNullable || columns.getInt("NULLABLE") == DatabaseMetaData.columnNullable)) {
                     return true;
                 }
             }

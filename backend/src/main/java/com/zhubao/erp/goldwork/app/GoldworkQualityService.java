@@ -9,6 +9,9 @@ import com.zhubao.erp.goldwork.domain.GoldworkQualityDecision;
 import com.zhubao.erp.goldwork.domain.GoldworkQualityOutcome;
 import com.zhubao.erp.goldwork.domain.GoldworkQualityRepository;
 import com.zhubao.erp.goldwork.domain.GoldworkQualityView;
+import com.zhubao.erp.goldwork.domain.GoldworkDeliveryRepository;
+import com.zhubao.erp.goldwork.domain.GoldworkPortionAllocation;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.app.RefactorPermissionContract;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
@@ -37,14 +40,23 @@ public class GoldworkQualityService {
     private final GoldworkQualityRepository qualities;
     private final BusinessWorkUnit unit;
     private final PermissionGuard permissions;
+    private final GoldworkDeliveryRepository deliveries;
 
     public GoldworkQualityService(GoldworkOrderRepository orders, GoldworkOperationRepository reports,
                                   GoldworkQualityRepository qualities, BusinessWorkUnit unit, PermissionGuard permissions) {
+        this(orders, reports, qualities, unit, permissions, null);
+    }
+
+    @Autowired
+    public GoldworkQualityService(GoldworkOrderRepository orders, GoldworkOperationRepository reports,
+                                  GoldworkQualityRepository qualities, BusinessWorkUnit unit, PermissionGuard permissions,
+                                  GoldworkDeliveryRepository deliveries) {
         this.orders = orders;
         this.reports = reports;
         this.qualities = qualities;
         this.unit = unit;
         this.permissions = permissions;
+        this.deliveries = deliveries;
     }
 
     public List<GoldworkQualityView> list(OperatorContext actor, String goldworkCode) {
@@ -83,7 +95,8 @@ public class GoldworkQualityService {
 
     private String write(WorkSession session, GoldworkOrder order, String reportId, String priorQualityId, String outcomeText,
                          BigDecimal pieceCount, BigDecimal netWeight, String weightUnit, String note) {
-        GoldworkOperationReport report = requireReport(order, reportId);
+        GoldworkOperationReport report = reports.lock(text(reportId), session).orElseThrow(() -> new BusinessException("报工不存在"));
+        if (!report.goldworkCode().equals(order.goldworkCode())) throw new BusinessException("报工不属于这张金工单");
         GoldworkQualityOutcome outcome = parseOutcome(outcomeText);
         String priorId = text(priorQualityId);
         int round = 1;
@@ -95,10 +108,13 @@ public class GoldworkQualityService {
             round = prior.roundNo() + 1;
         }
         String qualityId = "GQ-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT);
-        qualities.insert(new GoldworkQualityDecision(
+        GoldworkQualityDecision decision = new GoldworkQualityDecision(
                 qualityId, order.goldworkCode(), report.reportId(), priorId, round, outcome,
                 pieceCount, netWeight, weightUnit, report.purity(), note
-        ), session);
+        );
+        GoldworkPortionAllocation.assertDecision(report, qualities.list(order.goldworkCode()),
+                deliveries == null ? List.of() : deliveries.list(order.goldworkCode()), decision);
+        qualities.insert(decision, session);
         return qualityId;
     }
 
