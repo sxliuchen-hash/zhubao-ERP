@@ -19,19 +19,30 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
     private final BusinessDocumentRepository documents;
     private final WholeBagReportRepository reports;
     private final OutsourcingCompletionRepository completions;
+    private final OutsourcingSourceRepository outsourceTasks;
+    private final OutsourcingDispatchRepository outsourceDispatches;
+    private final OutsourcingReturnRepository outsourceReturns;
 
     public ProductionEmployeeClosureLookup(ActivityBagRepository bags, RouteSnapshotRepository routes, NodePortionReader portions,
             ReworkTaskRepository rework, OutsourcingSourceRepository tasks, OutsourcingDispatchRepository dispatches,
             QuantityDispositionRepository dispositions, BusinessDocumentRepository documents) {
-        this(bags, routes, portions, rework, dispositions, documents, null, null);
+        this(bags, routes, portions, rework, tasks, dispatches, null, dispositions, documents, null, null);
+    }
+
+    public ProductionEmployeeClosureLookup(ActivityBagRepository bags, RouteSnapshotRepository routes, NodePortionReader portions,
+            ReworkTaskRepository rework, QuantityDispositionRepository dispositions, BusinessDocumentRepository documents,
+            WholeBagReportRepository reports, OutsourcingCompletionRepository completions) {
+        this(bags, routes, portions, rework, null, null, null, dispositions, documents, reports, completions);
     }
 
     @Autowired
     public ProductionEmployeeClosureLookup(ActivityBagRepository bags, RouteSnapshotRepository routes, NodePortionReader portions,
-            ReworkTaskRepository rework, QuantityDispositionRepository dispositions, BusinessDocumentRepository documents,
+            ReworkTaskRepository rework, OutsourcingSourceRepository tasks, OutsourcingDispatchRepository dispatches,
+            OutsourcingReturnRepository returns, QuantityDispositionRepository dispositions, BusinessDocumentRepository documents,
             WholeBagReportRepository reports, OutsourcingCompletionRepository completions) {
         this.bags = bags; this.routes = routes; this.portions = portions; this.rework = rework;
         this.dispositions = dispositions; this.documents = documents; this.reports = reports; this.completions = completions;
+        this.outsourceTasks = tasks; this.outsourceDispatches = dispatches; this.outsourceReturns = returns;
     }
 
     @Override
@@ -48,11 +59,14 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
         BigDecimal outside = external.stream().map(OutsourcingCompletion::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal loss = lines.isEmpty() || lines.stream().anyMatch(line -> line.loss() == null) ? null
                 : lines.stream().map(QuantityDispositionLine::loss).reduce(BigDecimal.ZERO, BigDecimal::add);
+        Map<String, BigDecimal> outsourcedLoss = confirmedOutsourcingLoss(target);
+        BigDecimal externalLoss = outsourcedLoss.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (externalLoss.signum() > 0) loss = loss == null ? externalLoss : loss.add(externalLoss);
         String unit = quantityUnit(target);
         RouteSnapshot route = routes.list(kind, target).stream().filter(RouteSnapshot::confirmed)
                 .max(Comparator.comparingInt(RouteSnapshot::version)).orElse(null);
         if (route == null || route.stepIds().isEmpty()) return result(kind, EmployeeClosureKind.NOT_CLOSED, outside, loss, unit, new Basis(List.of(), false));
-        Basis basis = work(target, all, leaves, route, lines, external);
+        Basis basis = work(target, all, leaves, route, lines, external, outsourcedLoss);
         BigDecimal assigned = all.stream().filter(bag -> bag.parentId() == null || bag.parentId().isBlank())
                 .map(ActivityBag::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal returned = lines.stream().map(QuantityDispositionLine::returned).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -85,7 +99,7 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
     }
 
     private Basis work(String target, List<ActivityBag> all, List<ActivityBag> leaves, RouteSnapshot route,
-            List<QuantityDispositionLine> lines, List<OutsourcingCompletion> external) {
+            List<QuantityDispositionLine> lines, List<OutsourcingCompletion> external, Map<String, BigDecimal> outsourcedLoss) {
         Set<String> reworkBags = new HashSet<>();
         all.forEach(bag -> rework.listBySource(bag.id()).forEach(task -> reworkBags.add(task.reworkBagId())));
         boolean changed;
@@ -122,6 +136,11 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
                 int exitedAt = route.stepIds().indexOf(line.stepId());
                 if (exitedAt >= index) expected = expected.add(line.loss()).add(line.scrap()).add(line.returned());
             }
+            // 外协节点确认的损耗不是该节点完工，但此前厂内工序已经处理过这些数量。
+            for (Map.Entry<String, BigDecimal> lost : outsourcedLoss.entrySet()) {
+                int lostAt = route.stepIds().indexOf(lost.getKey());
+                if (lostAt > index) expected = expected.add(lost.getValue());
+            }
             if (handled.getOrDefault(step, BigDecimal.ZERO).compareTo(expected) != 0) complete = false;
         }
         return new Basis(List.copyOf(workers.values()), complete);
@@ -132,6 +151,19 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
         EmployeeProcessWork current = workers.get(key);
         workers.put(key, new EmployeeProcessWork(account, name, step, ProcessCatalog.require(step).name(),
                 current == null ? quantity : current.quantity().add(quantity)));
+    }
+
+    private Map<String, BigDecimal> confirmedOutsourcingLoss(String target) {
+        if (outsourceTasks == null || outsourceDispatches == null || outsourceReturns == null) return Map.of();
+        Map<String, BigDecimal> loss = new LinkedHashMap<>();
+        for (OutsourcingTask task : outsourceTasks.listByTarget(target)) {
+            for (OutsourcingDispatch dispatch : outsourceDispatches.listByTask(task.taskId())) {
+                for (OutsourcingReturn row : outsourceReturns.listByDispatch(dispatch.dispatchId())) {
+                    if (row.lossQty() != null && row.lossQty().signum() > 0) loss.merge(task.nodeId(), row.lossQty(), BigDecimal::add);
+                }
+            }
+        }
+        return loss;
     }
 
     private String quantityUnit(String target) {

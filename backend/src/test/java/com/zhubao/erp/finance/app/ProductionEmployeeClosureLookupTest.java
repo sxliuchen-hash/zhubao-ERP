@@ -13,6 +13,7 @@ import com.zhubao.erp.business.infra.InMemoryActivityBagRepository;
 import com.zhubao.erp.business.infra.InMemoryBusinessDocumentRepository;
 import com.zhubao.erp.business.infra.InMemoryNodePortionReader;
 import com.zhubao.erp.business.infra.InMemoryOutsourcingDispatchRepository;
+import com.zhubao.erp.business.infra.InMemoryOutsourcingReturnRepository;
 import com.zhubao.erp.business.infra.InMemoryOutsourcingSourceRepository;
 import com.zhubao.erp.business.infra.InMemoryQuantityDispositionRepository;
 import com.zhubao.erp.business.infra.InMemoryReworkTaskRepository;
@@ -114,6 +115,7 @@ class ProductionEmployeeClosureLookupTest {
             InMemoryReworkTaskRepository.class,
             InMemoryOutsourcingSourceRepository.class,
             InMemoryOutsourcingDispatchRepository.class,
+            InMemoryOutsourcingReturnRepository.class,
             InMemoryQuantityDispositionRepository.class,
             InMemoryBusinessDocumentRepository.class,
             InMemoryWholeBagReportRepository.class,
