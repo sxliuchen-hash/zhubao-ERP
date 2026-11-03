@@ -26,7 +26,7 @@ it('按本次实发来源计费，暂存不入账，响应丢失重开仍恢复�
 });
 it('员工工费从真实人员工序预填，空工价不入账，已有记录仍可核对丢失响应的原请求', async () => {
   setAuthToken('native-wage-reopen');
-  const context = { closure: { closure: 'CLOSED_NORMAL', employeeQuantity: 1000, outsourcingQuantity: 0, lossQuantity: 20, quantityUnit: '颗', workEvidenceComplete: true, work: [{ payeeAccount: 'a', stepId: 'CUT', processName: '切料', quantity: 500 }, { payeeAccount: 'b', stepId: 'BLANK', processName: '取胚', quantity: 500 }] }, payroll: [] };
+  const context = { closure: { closure: 'CLOSED_NORMAL', employeeQuantity: 1000, outsourcingQuantity: 0, lossQuantity: 20, finishedQuantity: 500, quantityUnit: '颗', workEvidenceComplete: true, work: [{ payeeAccount: 'a', stepId: 'CUT', processName: '切料', quantity: 500 }, { payeeAccount: 'b', stepId: 'BLANK', processName: '取胚', quantity: 500 }] }, payroll: [] };
   vi.mocked(fetchEmployeeTarget).mockResolvedValueOnce(context).mockResolvedValueOnce({ ...context, payroll: [{ code: 'PAY-A', netAmount: 50 }] });
   vi.mocked(settleEmployeeTarget).mockRejectedValueOnce(new Error('响应丢失')).mockResolvedValueOnce([{ code: 'PAY-A' }, { code: 'PAY-B' }]);
   let view = mount(EmployeeTargetWorkspace, { props: { targetCode: 'MD-WAGE-REAL' } }); await flushPromises();
