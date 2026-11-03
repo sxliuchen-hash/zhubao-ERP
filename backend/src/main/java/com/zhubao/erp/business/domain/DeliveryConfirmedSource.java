@@ -43,6 +43,11 @@ public record DeliveryConfirmedSource(
         if (weight == null || weight.signum() <= 0) {
             throw new BusinessException("需要本份额的实际重量后才能转移或发货");
         }
-        weight = StockMeasurement.processingScale(weight);
+        if (weight.scale() > 6) {
+            throw new BusinessException("金工重量最多保留六位小数，不能截断后入账");
+        }
+        if (weight.scale() <= 3) {
+            weight = StockMeasurement.processingScale(weight);
+        }
     }
 }

@@ -8,6 +8,9 @@ import com.zhubao.erp.business.infra.InMemoryMasterDataRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.ops.infra.MigrationCatalog;
 import com.zhubao.erp.sampling.domain.SamplingOrderView;
+import com.zhubao.erp.sampling.infra.InMemorySamplingDeliveryRepository;
+import com.zhubao.erp.sampling.infra.InMemorySamplingFeeRepository;
+import com.zhubao.erp.sampling.infra.InMemorySamplingOperationRepository;
 import com.zhubao.erp.sampling.infra.InMemorySamplingOrderRepository;
 import com.zhubao.erp.sampling.infra.JdbcSamplingOrderRepository;
 import com.zhubao.erp.sampling.web.SamplingOrderController;
@@ -216,7 +219,10 @@ class SamplingOrderTest {
         OperatorContextResolver actors = mock(OperatorContextResolver.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(actors.resolve(request)).thenReturn(keeper);
-        SamplingOrderController controller = new SamplingOrderController(service, actors);
+        SamplingOrderController controller = new SamplingOrderController(service, new SamplingCompletionService(
+                orders, new InMemorySamplingOperationRepository(), new InMemorySamplingDeliveryRepository(),
+                new InMemorySamplingFeeRepository(), new MemoryBusinessWorkUnit(new InMemoryCommandRequestRepository()),
+                guard), actors);
         SamplingOrderView saved = controller.open(new SamplingOrderController.OpenRequest(
                 "s01-http-001", customer.customerId(), "COMPANY_PREPARED", "公司备料", "李四", "", ""
         ), request).data();

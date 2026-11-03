@@ -56,10 +56,7 @@ public class ConsumableIssueService {
                                       String workshopCode, BigDecimal quantity) {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.STOCK_COMPANY_ISSUE, actor);
         BigDecimal counted = positive(quantity);
-        FactoryItem item = consumable(itemId);
-        if (item.consumptionTiming() == ConsumptionTiming.UNDECIDED) {
-            throw new BusinessException("耗材计耗方式尚未选定");
-        }
+        FactoryItem item = issuedAsQuantity(consumable(itemId));
         CompanyMaterialReceipt receipt = stocks.find(text(receiptId)).orElseThrow(() -> new BusinessException("公司料入库不存在"));
         if (!receipt.itemId().equals(item.itemId())) {
             throw new BusinessException("领用批次与物品不一致");
@@ -89,6 +86,15 @@ public class ConsumableIssueService {
         return issues.find(issueId).orElseThrow(() -> new BusinessException("领用单不存在"));
     }
 
+    /** 本版领用当时计耗。未选定和按实际耗用的档案也按领用当时计。 */
+    private static FactoryItem issuedAsQuantity(FactoryItem item) {
+        if (item.consumptionTiming() == ConsumptionTiming.ON_ISSUE) {
+            return item;
+        }
+        return new FactoryItem(item.itemId(), item.category(), item.materialName(), item.specCode(), item.unit(),
+                ConsumptionTiming.ON_ISSUE, item.custodyMode(), item.enabled(), item.version());
+    }
+
     public CompanyMaterialReturn returnIssued(String requestId, OperatorContext actor, String issueId, int version, BigDecimal quantity) {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.STOCK_COMPANY_RETURN, actor);
         BigDecimal counted = positive(quantity);
@@ -99,8 +105,8 @@ public class ConsumableIssueService {
         ), session -> {
             CompanyMaterialIssue current = issues.find(id).orElseThrow(() -> new BusinessException("领用单不存在"));
             ConsumptionTiming timing = costs.timingOf(id);
-            if (timing == null || timing == ConsumptionTiming.UNDECIDED) {
-                throw new BusinessException("耗材计耗方式尚未选定");
+            if (timing == null) {
+                timing = ConsumptionTiming.ON_ISSUE;
             }
             issues.addReturned(id, counted, version, session);
             if (timing == ConsumptionTiming.ON_ACTUAL_USE) {
@@ -124,11 +130,8 @@ public class ConsumableIssueService {
         String id = text(issueId);
         CompanyMaterialIssue current = issues.find(id).orElseThrow(() -> new BusinessException("领用单不存在"));
         ConsumptionTiming timing = costs.timingOf(id);
-        if (timing == ConsumptionTiming.ON_ISSUE) {
-            throw new BusinessException("领用已经计耗，不能再计一次");
-        }
         if (timing != ConsumptionTiming.ON_ACTUAL_USE) {
-            throw new BusinessException("耗材计耗方式尚未选定");
+            throw new BusinessException("领用已经计耗，不能再计一次");
         }
         String eventId = unit.execute(new CommandCall(
                 requestId, actor.operator(), "CONSUME_CONSUMABLE", "CONSUMABLE_ISSUE", id,

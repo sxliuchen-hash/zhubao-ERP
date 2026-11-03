@@ -3,7 +3,7 @@ package com.zhubao.erp.security.domain;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 
 /**
- * 客户入口身份的读取边界。内部全部数据权限、顶岗和未核定凭据都不能当成客户身份使用。
+ * 客户入口身份的读取边界。内部全部数据权限和顶岗都不能当成客户身份使用。
  */
 public final class CustomerPortalRules {
 
@@ -24,9 +24,6 @@ public final class CustomerPortalRules {
                 || !account.coverDuties().isEmpty()
                 || !account.allowedProcesses().isEmpty()) {
             throw new PermissionDeniedException("客户身份不能携带内部全部数据权限或顶岗");
-        }
-        if (!UNISSUED_PASSWORD.equals(account.passwordHash())) {
-            throw new PermissionDeniedException("客户凭据交付方式尚未核定，不能登录");
         }
         String customerId = Long.toString(binding.customerId());
         if (!account.username().equals(binding.username())

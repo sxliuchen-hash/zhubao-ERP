@@ -6,7 +6,7 @@ import com.zhubao.erp.common.error.BusinessException;
 import java.math.BigDecimal;
 
 /**
- * 三业务共用的计量约定。未知重量不是 0。金工精度未核定前不截成三位后入账。
+ * 三业务共用的计量约定。未知重量不是 0。金工重量只作记录，不截成三位库存后入账。
  */
 public final class StockMeasurement {
 
@@ -60,7 +60,7 @@ public final class StockMeasurement {
 
     public static void rejectUndecidedGoldScale(BusinessKind kind) {
         if (kind == BusinessKind.GOLDWORK) {
-            throw new BusinessException("金工计量精度尚未核定，不能按现有三位库存截断后入账");
+            throw new BusinessException("本版金工重量只作记录，不能按三位库存入账");
         }
     }
 

@@ -32,7 +32,7 @@ class StockMeasurementContractTest {
         assertThat(StockMeasurement.processingScale(new BigDecimal("1.200"))).isEqualByComparingTo("1.200");
         assertThatThrownBy(() -> StockMeasurement.rejectUndecidedGoldScale(BusinessKind.GOLDWORK))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("尚未核定");
+                .hasMessageContaining("只作记录");
         StockMeasurement.rejectUndecidedGoldScale(BusinessKind.PROCESSING);
     }
 }

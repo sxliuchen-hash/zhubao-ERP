@@ -17,4 +17,7 @@ public interface SamplingOrderRepository {
 
     /** 锁住当天已有打样号，供同一事务分配下一个流水。 */
     List<String> lockDay(LocalDate day, WorkSession session);
+
+    /** 按原版本替换状态。版本不一致时拒绝，不覆盖其他字段。 */
+    void replace(SamplingOrder order, long expectedVersion, WorkSession session);
 }

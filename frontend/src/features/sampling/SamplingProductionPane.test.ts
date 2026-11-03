@@ -55,7 +55,8 @@ describe('打样材料与生产拍照', () => {
     await flushPromises();
     expect(uploadReportPhoto).toHaveBeenCalledWith('SAMPLING', 'DY-20261031-0001', expect.any(File));
     await wrapper.findAll('button').find((button) => button.text() === '报工')!.trigger('click');
-    expect(wrapper.text()).toContain('雕刻与车型能否组合仍待核');
-    expect(reportSamplingOperation).not.toHaveBeenCalled();
+    expect(reportSamplingOperation).toHaveBeenCalledWith('DY-20261031-0001', expect.objectContaining({
+      makingChoices: ['CARVE', 'SHAPE'],
+    }));
   });
 });

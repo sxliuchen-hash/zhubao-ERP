@@ -15,7 +15,6 @@ import com.zhubao.erp.business.domain.OrderCodes;
 import com.zhubao.erp.business.domain.ProcessingTargetCustomer;
 import com.zhubao.erp.business.domain.ProcessingTargetFacts;
 import com.zhubao.erp.common.error.BusinessException;
-import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.work.app.BusinessWorkUnit;
 import com.zhubao.erp.work.domain.CommandCall;
 import com.zhubao.erp.work.domain.WorkSession;
@@ -31,8 +30,8 @@ import java.util.Set;
 
 /**
  * 建立独立交付草稿。同一客户的多张普通加工目标可以放在一张草稿里。
- * 草稿不扣库存、不改袋、不写出库。跨种类混单未确认前不放开。
- * 打样只保存打样单号，金工精度未核定前不保存数量，两者都不写成普通工单。
+ * 草稿不扣库存、不改袋、不写出库。同一客户的普通加工、打样和金工可以放在一张交付头。
+ * 打样和金工只保存各自单号，不写成普通工单，也不按三位库存入账。
  */
 @Service
 public class DeliveryDraftService {
@@ -89,10 +88,10 @@ public class DeliveryDraftService {
         BusinessKind kind = references.get(0).kind();
         for (BusinessTargetReference reference : references) {
             if (reference.kind() != kind) {
-                throw new BusinessException("跨种类混单尚未确认，不能放在同一张交付单");
+                kind = BusinessKind.MIXED;
+                break;
             }
         }
-        StockMeasurement.rejectUndecidedGoldScale(kind);
         List<Integer> lockOrder = new ArrayList<>();
         for (int index = 0; index < selections.size(); index++) {
             lockOrder.add(index);
@@ -124,7 +123,7 @@ public class DeliveryDraftService {
         for (int index = 0; index < selections.size(); index++) {
             BusinessTargetReference reference = references.get(index);
             ActivityBag bag = locked[index];
-            String unit = unitOf(kind, reference, selections.get(index), customerId);
+            String unit = unitOf(reference.kind(), reference, selections.get(index), customerId);
             Presentation display = presentation(reference.code());
             draftLines.add(new DeliveryDraftLine(
                     deliveryId, index + 1, bag.id(), bag.version(), reference.kind(), reference.role(),

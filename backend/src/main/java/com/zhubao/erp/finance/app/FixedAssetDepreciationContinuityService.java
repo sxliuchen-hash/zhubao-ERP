@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 按现有使用月数算法延续折旧。已生成的月份不覆盖。
- * 停用或报废从哪个月影响折旧尚未核定，不能写入生效月。
+ * 本版不填写折旧生效月。停用、报废、处置后暂停新增折旧，已记折旧保留。
  */
 @Service
 public class FixedAssetDepreciationContinuityService {
@@ -47,7 +47,7 @@ public class FixedAssetDepreciationContinuityService {
     public FixedAssetDepreciationRun run(String requestId, OperatorContext actor, String yearMonth, String stopEffectiveMonth) {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.FINANCE_ASSET, actor);
         if (stopEffectiveMonth != null && !stopEffectiveMonth.isBlank()) {
-            throw new BusinessException("停用或报废影响折旧的生效月份尚未核定");
+            throw new BusinessException("本版不填写折旧生效月，停用后暂停新增折旧");
         }
         String month = FinanceTexts.month(yearMonth).toString();
         unit.execute(new CommandCall(

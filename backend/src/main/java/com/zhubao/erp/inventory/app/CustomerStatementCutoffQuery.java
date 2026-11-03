@@ -28,7 +28,7 @@ import java.util.Map;
 @Service
 public class CustomerStatementCutoffQuery {
 
-    static final String FACTORY_OUTSIDE_PENDING = "截止日的在厂与在外尚未核定，不把当前结存或 0 写成截止日数量";
+    static final String FACTORY_OUTSIDE_PENDING = "本版不显示截止日的在厂和在外，不把当前结存或 0 写成截止日数量";
     static final String BILLS_NOT_OPEN = "本版不向客户开放账单";
 
     private final StockLedgerRepository stocks;

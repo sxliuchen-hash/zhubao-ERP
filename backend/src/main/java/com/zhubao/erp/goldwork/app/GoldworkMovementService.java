@@ -122,7 +122,7 @@ public class GoldworkMovementService {
             throw new BusinessException("不能以短重推定责任或赔偿");
         }
         if (conversionFactor != null) {
-            throw new BusinessException("金料转换关系尚未核定，不能按系数换算重量");
+            throw new BusinessException("本版不按系数换算金料重量");
         }
         if (enforcePieceConservation) {
             throw new BusinessException("金工不按同颗数守恒");

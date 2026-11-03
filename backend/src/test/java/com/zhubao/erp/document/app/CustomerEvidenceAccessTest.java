@@ -52,33 +52,10 @@ class CustomerEvidenceAccessTest {
         documents.saveAttachment(photo);
         long customerId = bind("portal-download", "下载客户", "DOWNLOAD");
         var service = new CustomerEvidenceAccessService(documents, grants, identities, new DocumentManagementService(documents, storage));
-        var grant = service.grant(admin(), customerId, photo.code());
-        var item = service.detail(portal("portal-download")).items().get(0);
-        var actors = org.mockito.Mockito.mock(com.zhubao.erp.security.app.OperatorContextResolver.class);
-        var request = org.mockito.Mockito.mock(jakarta.servlet.http.HttpServletRequest.class);
-        org.mockito.Mockito.when(actors.requireSession(request)).thenReturn(portal("portal-download"));
-        var controller = new com.zhubao.erp.document.web.CustomerEvidenceController(service, actors);
-        var response = controller.download(new com.zhubao.erp.document.web.CustomerEvidenceController.DownloadRequest(
-                grant.grantId(), photo.code(), item.downloadTicket()), request);
-        var output = new java.io.ByteArrayOutputStream();
-        response.getBody().writeTo(output);
-        assertThat(output.toByteArray()).isEqualTo(original);
-        assertThat(response.getHeaders().getContentType().toString()).isEqualTo("image/png");
-        assertThat(response.getHeaders().getFirst("Cache-Control")).isEqualTo("no-store");
-        documents.saveAttachment(photo.withStatus("已下线", "gray"));
+        assertThatThrownBy(() -> service.grant(admin(), customerId, photo.code()))
+                .isInstanceOf(BusinessException.class).hasMessage("本版不向客户开放照片和文件");
         assertThat(service.detail(portal("portal-download")).items()).isEmpty();
-        assertThatThrownBy(() -> service.downloadContent(portal("portal-download"), grant.grantId(), photo.code(), item.downloadTicket()))
-                .isInstanceOf(PermissionDeniedException.class);
-        documents.saveAttachment(photo);
-        var pendingStream = service.downloadContent(portal("portal-download"), grant.grantId(), photo.code(), item.downloadTicket());
-        service.revoke(admin(), grant.grantId());
-        assertThatThrownBy(() -> pendingStream.write(0, pendingStream.size(), new java.io.ByteArrayOutputStream()))
-                .isInstanceOf(PermissionDeniedException.class);
-        assertThat(service.detail(portal("portal-download")).items()).isEmpty();
-        var regrant = service.grant(admin(), customerId, photo.code());
-        assertThat(regrant.grantId()).isNotEqualTo(grant.grantId());
-        assertThatThrownBy(() -> service.downloadContent(portal("portal-download"), grant.grantId(), photo.code(), item.downloadTicket()))
-                .isInstanceOf(PermissionDeniedException.class);
+        assertThat(original).isNotEmpty();
     }
 
     @Test
@@ -100,24 +77,17 @@ class CustomerEvidenceAccessTest {
         long otherId = bind("portal-b", "雅辰饰品", "YC");
         CustomerEvidenceAccessService service = new CustomerEvidenceAccessService(documents, grants, identities);
 
-        CustomerEvidenceGrant grant = service.grant(admin(), customerId, photo.code());
+        assertThatThrownBy(() -> service.grant(admin(), customerId, photo.code()))
+                .isInstanceOf(BusinessException.class).hasMessage("本版不向客户开放照片和文件");
         EvidenceAttachment stored = documents.findAttachmentByCode(photo.code()).orElseThrow();
         assertThat(stored.storageLocation()).isEqualTo(photo.storageLocation());
         assertThat(stored.checksum()).isEqualTo(photo.checksum());
 
         CustomerEvidenceDetail detail = service.detail(portal("portal-a"));
-        assertThat(detail.visibility()).isEqualTo("UNDECIDED");
-        assertThat(detail.items()).extracting(CustomerEvidenceDetail.Item::attachmentCode).containsExactly(photo.code());
-        assertThat(detail.items().get(0).toString()).doesNotContain("s3://");
-        String ticket = detail.items().get(0).downloadTicket();
-        assertThat(service.download(portal("portal-a"), grant.grantId(), photo.code(), ticket).fileName()).isEqualTo("bead.jpg");
+        assertThat(detail.visibility()).isEqualTo("CLOSED");
+        assertThat(detail.items()).isEmpty();
+        assertThat(detail.toString()).doesNotContain("s3://");
         assertThat(service.detail(portal("portal-b")).items()).isEmpty();
-        assertThatThrownBy(() -> service.download(portal("portal-b"), grant.grantId(), photo.code(), ticket))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("其他客户");
-        assertThatThrownBy(() -> service.download(portal("portal-a"), grant.grantId(), hidden.code(), ticket))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("不一致");
-        assertThatThrownBy(() -> service.downloadByAttachmentCode(portal("portal-a"), photo.code()))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("不能绕过获准详情直接下载");
         assertThatThrownBy(() -> service.grant(admin(), customerId, payroll.code()))
                 .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("工资或成本");
         assertThatThrownBy(() -> service.grant(admin(), customerId, cost.code()))
@@ -134,7 +104,7 @@ class CustomerEvidenceAccessTest {
         long customerId = bind("portal-c", "明辉珠宝", "MH");
         CustomerEvidenceAccessService service = new CustomerEvidenceAccessService(documents, grants, identities);
         assertThatThrownBy(() -> service.grant(admin(), customerId, "ATT-DOC"))
-                .isInstanceOf(BusinessException.class).hasMessageContaining("尚未核定");
+                .isInstanceOf(BusinessException.class).hasMessage("本版不向客户开放照片和文件");
         assertThatThrownBy(() -> service.grant(admin(), customerId, "ATT-MODEL"))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("默认内部");
         var view = service.modelView(new DesignArtifactReference("ring.stl", "STL", "v3", "柜内第三层", "ATT-MODEL"));

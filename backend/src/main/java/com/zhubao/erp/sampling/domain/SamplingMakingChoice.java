@@ -2,10 +2,11 @@ package com.zhubao.erp.sampling.domain;
 
 import com.zhubao.erp.common.error.BusinessException;
 
-/** 选料与加工上的一项选择。雕刻和车型能否同时办理尚未核定。 */
+/** 选料与加工上的选择。雕刻和车型可以同时办理。 */
 public enum SamplingMakingChoice {
     CARVE("雕刻"),
-    SHAPE("车型");
+    SHAPE("车型"),
+    CARVE_AND_SHAPE("雕刻和车型");
 
     private final String label;
 

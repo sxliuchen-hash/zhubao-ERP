@@ -140,13 +140,7 @@ async function downloadGranted(item: CustomerEvidenceItem) {
         </article>
         <article>
           <h2>照片和文件</h2>
-          <p v-if="!evidence || evidence.visibility === 'UNDECIDED' && evidence.items.length === 0">
-            照片可见范围尚未核定
-          </p>
-          <template v-else>
-            <p v-for="item in evidence.items" :key="item.grantId">{{ item.fileName }} <button type="button" @click="downloadGranted(item)">下载获准文件</button></p>
-            <p v-if="downloadName">已下载 {{ downloadName }}</p>
-          </template>
+          <p>本版不向客户开放照片和文件</p>
         </article>
         <article v-for="source in stock.sources" :key="source.kind">
           <p v-if="source.state === 'NOT_IMPLEMENTED'">{{ source.note }}</p>

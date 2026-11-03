@@ -71,10 +71,9 @@ class ConsumableIssueReturnTest {
                 .adopt("f06-adopt1", admin, "GLUE", "50ml", "WH-01");
         FactoryItemService catalog = new FactoryItemService(items, unit, guard);
         ConsumableIssueService service = new ConsumableIssueService(items, stocks, issues, costs, unit, guard);
-        assertThatThrownBy(() -> service.issue(
-                "f06-early01", admin, adopted.factoryItemId(), adopted.receiptId(), "WS-01", new BigDecimal("1")))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("耗材计耗方式尚未选定");
+        CompanyMaterialIssue early = service.issue(
+                "f06-early01", admin, adopted.factoryItemId(), adopted.receiptId(), "WS-01", new BigDecimal("1"));
+        assertThat(service.events(early.issueId())).hasSize(1);
 
         catalog.recordPolicy("f06-policy1", admin, adopted.factoryItemId(), 1, null, ConsumptionTiming.ON_ISSUE, null);
         CompanyMaterialIssue issued = service.issue(
@@ -104,14 +103,11 @@ class ConsumableIssueReturnTest {
         catalog.recordPolicy("f06-policy2", admin, paper.factoryItemId(), 1, null, ConsumptionTiming.ON_ACTUAL_USE, null);
         CompanyMaterialIssue moved = service.issue(
                 "f06-move-01", admin, paper.factoryItemId(), paper.receiptId(), "WS-02", new BigDecimal("3"));
-        assertThat(service.events(moved.issueId())).isEmpty();
-        assertThat(stocks.balance(paper.factoryItemId(), stocks.find(paper.receiptId()).orElseThrow().batchCode(), "WS-02")
-                .orElseThrow().quantity()).isEqualByComparingTo("3");
-        ConsumableCostEvent used = service.consume("f06-real-01", admin, moved.issueId(), 1, new BigDecimal("3"));
-        assertThat(used.amount()).isEqualByComparingTo("6.00");
         assertThat(service.events(moved.issueId())).hasSize(1);
-        service.consume("f06-real-01", admin, moved.issueId(), 1, new BigDecimal("3"));
-        assertThat(service.events(moved.issueId())).hasSize(1);
+        assertThat(service.events(moved.issueId()).get(0).amount()).isEqualByComparingTo("6.00");
+        assertThatThrownBy(() -> service.consume("f06-real-01", admin, moved.issueId(), 1, new BigDecimal("3")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("领用已经计耗，不能再计一次");
         assertThat(finance.listReceivables()).isEmpty();
     }
 

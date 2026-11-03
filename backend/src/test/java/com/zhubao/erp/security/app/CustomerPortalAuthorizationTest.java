@@ -73,7 +73,9 @@ class CustomerPortalAuthorizationTest {
         documents.saveAttachment(attachment("ATT-A", "bead.jpg", "image/jpeg", "PHOTO"));
         documents.saveAttachment(attachment("ATT-WAGE", "工资表.pdf", "application/pdf", "PAYROLL"));
         CustomerEvidenceAccessService evidence = new CustomerEvidenceAccessService(documents, new InMemoryCustomerEvidenceGrantRepository(), identities);
-        evidence.grant(admin(), customerA, "ATT-A");
+        assertThatThrownBy(() -> evidence.grant(admin(), customerA, "ATT-A"))
+                .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class)
+                .hasMessage("本版不向客户开放照片和文件");
 
         CustomerOwnedStockView viewA = stock.query(portal("portal-a"));
         assertThat(viewA.lines()).extracting(CustomerOwnedStockView.Line::materialCode).contains("牙骨").doesNotContain("紫金鼠", "胶水", "样珠", "足金");
@@ -90,13 +92,8 @@ class CustomerPortalAuthorizationTest {
         assertThat(stock.query(portal("portal-b")).lines()).extracting(CustomerOwnedStockView.Line::materialCode)
                 .contains("紫金鼠").doesNotContain("牙骨");
 
-        assertThat(evidence.detail(portal("portal-a")).items()).extracting(item -> item.attachmentCode()).containsExactly("ATT-A");
-        assertThat(evidence.detail(portal("portal-b")).items()).isEmpty();
-        String ticket = evidence.detail(portal("portal-a")).items().get(0).downloadTicket();
-        assertThat(evidence.download(portal("portal-a"), evidence.detail(portal("portal-a")).items().get(0).grantId(), "ATT-A", ticket).fileName())
-                .isEqualTo("bead.jpg");
-        assertThatThrownBy(() -> evidence.download(portal("portal-b"), evidence.detail(portal("portal-a")).items().get(0).grantId(), "ATT-A", ticket))
-                .isInstanceOf(PermissionDeniedException.class);
+        assertThat(evidence.detail(portal("portal-a")).items()).isEmpty();
+        assertThat(evidence.detail(portal("portal-a")).visibility()).isEqualTo("CLOSED");
         assertThatThrownBy(() -> evidence.grant(admin(), customerA, "ATT-WAGE"))
                 .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("工资或成本");
 

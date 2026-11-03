@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 客户入口身份管理。只接受管理员绑定稳定客户编号，不提供凭据签发。
+ * 客户入口身份管理。管理员绑定客户并设置或重置口令。账单和照片不在这里开放。
  */
 @RestController
 @RequestMapping("/api/security/customer-portal")
@@ -44,15 +44,15 @@ public class CustomerPortalIdentityController {
     }
 
     @PostMapping("/credentials")
-    public ApiResponse<Void> issueCredential(@RequestBody UsernameRequest request, HttpServletRequest httpRequest) {
-        service.issueCredential(operator(httpRequest), request.username());
-        throw new IllegalStateException("未核定的凭据不能签发成功");
+    public ApiResponse<Void> issueCredential(@RequestBody CredentialRequest request, HttpServletRequest httpRequest) {
+        service.issueCredential(operator(httpRequest), request.username(), request.password());
+        return ApiResponse.ok(null);
     }
 
     @PostMapping("/credential-recoveries")
-    public ApiResponse<Void> recoverCredential(@RequestBody UsernameRequest request, HttpServletRequest httpRequest) {
-        service.recoverCredential(operator(httpRequest), request.username());
-        throw new IllegalStateException("未核定的凭据不能找回成功");
+    public ApiResponse<Void> recoverCredential(@RequestBody CredentialRequest request, HttpServletRequest httpRequest) {
+        service.recoverCredential(operator(httpRequest), request.username(), request.password());
+        return ApiResponse.ok(null);
     }
 
     @PostMapping("/bindings/{username}/disable")
@@ -72,5 +72,8 @@ public class CustomerPortalIdentityController {
     }
 
     public record UsernameRequest(@NotBlank String username) {
+    }
+
+    public record CredentialRequest(@NotBlank String username, @NotBlank String password) {
     }
 }

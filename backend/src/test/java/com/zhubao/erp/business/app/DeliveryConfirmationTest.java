@@ -168,9 +168,9 @@ class DeliveryConfirmationTest {
         var sampling = fixture.drafts.open("e02-sample", "clerk-01", 9L, "", "", List.of(
                 new DeliverySourceSelection("BAG-DY", 1, "DY-20261030-0001", "颗")));
         assertThat(sampling.draft().businessKind()).isEqualTo(BusinessKind.SAMPLING);
-        assertThatThrownBy(() -> fixture.confirmation.confirm("e02-sampcf", "clerk-01", sampling.draft().deliveryId(), 1))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("打样和金工的交付确认尚未具备各自的库存来源，不能改记成普通工单");
+        var confirmedSampling = fixture.confirmation.confirm("e02-sampcf", "clerk-01", sampling.draft().deliveryId(), 1);
+        assertThat(confirmedSampling.draft().status()).isEqualTo(DeliveryDraftStatus.CONFIRMED);
+        assertThat(confirmedSampling.sources()).hasSize(1);
         assertThat(fixture.documents.findMotherOrderByCode("DY-20261030-0001")).isEmpty();
         assertThat(fixture.documents.listOutboundOrders()).isEmpty();
         assertThat(fixture.bags.find("BAG-B").orElseThrow().quantity()).isEqualByComparingTo("80");

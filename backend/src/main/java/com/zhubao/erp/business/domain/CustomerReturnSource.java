@@ -21,7 +21,7 @@ public record CustomerReturnSource(
         String adjustmentBasis,
         int version
 ) {
-    public static final String UNDECIDED_BASIS = "返修是否收费、是否计酬尚未核定";
+    public static final String UNDECIDED_BASIS = "退回返修不另收加工费，也不另计工资";
     private static final Pattern RETURN_ID = Pattern.compile("^CR[0-9a-f]{32}$");
     private static final Pattern REQUEST_ID = Pattern.compile("^[A-Za-z0-9._:-]{8,64}$");
 
@@ -58,7 +58,7 @@ public record CustomerReturnSource(
         }
         adjustmentBasis = adjustmentBasis == null ? "" : adjustmentBasis.trim();
         if (!adjustmentBasis.contains(UNDECIDED_BASIS) || adjustmentBasis.contains("0元")) {
-            throw new BusinessException("返修费用和计酬尚未核定，不能写入金额");
+            throw new BusinessException("退回返修不另收加工费，也不另计工资");
         }
         if (version < 1) {
             throw new BusinessException("退货版本不正确");

@@ -21,15 +21,11 @@ watch(() => props.itemId, () => {
 });
 
 async function submit() {
-  if (props.timing === 'UNDECIDED') {
-    message.value = '耗材计耗方式尚未选定';
-    return;
-  }
   if (!quantity.value.trim()) {
     message.value = '请填写数量';
     return;
   }
-  if (props.timing === 'ON_ISSUE') {
+  if (props.timing === 'ON_ISSUE' || props.timing === 'UNDECIDED') {
     await issueConsumable({
       requestId: `cons-issue-${props.itemId}`,
       itemId: props.itemId,
@@ -51,7 +47,7 @@ async function submit() {
 
 <template>
   <section aria-label="耗材耗用">
-    <p v-if="timing === 'UNDECIDED'">耗材计耗方式尚未选定</p>
+    <p v-if="timing === 'UNDECIDED'">本版领用当时计耗</p>
     <p v-else-if="timing === 'ON_ISSUE'">领用即耗，不重复计费</p>
     <p v-else>领用只转到车间，实际耗用才计费用</p>
     <label>数量 <input v-model="quantity" aria-label="耗用数量" /></label>

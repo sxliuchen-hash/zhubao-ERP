@@ -47,6 +47,21 @@ public class InMemorySamplingOrderRepository implements SamplingOrderRepository 
     }
 
     @Override
+    public void replace(SamplingOrder order, long expectedVersion, WorkSession session) {
+        SamplingOrder[] previous = new SamplingOrder[1];
+        rows.compute(order.samplingCode(), (code, current) -> {
+            if (current == null || current.version() != expectedVersion) {
+                throw new BusinessException("打样单已被其他人修改，请刷新后重试");
+            }
+            previous[0] = current;
+            return order;
+        });
+        if (session != null && previous[0] != null) {
+            session.onRollback(() -> rows.put(order.samplingCode(), previous[0]));
+        }
+    }
+
+    @Override
     public List<String> lockDay(LocalDate day, WorkSession session) {
         String prefix = "DY-" + day.format(DateTimeFormatter.BASIC_ISO_DATE) + "-";
         return rows.keySet().stream().filter(code -> code.startsWith(prefix)).sorted().toList();

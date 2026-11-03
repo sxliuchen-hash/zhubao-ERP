@@ -21,7 +21,7 @@ describe('资产折旧延续', () => {
     await wrapper.get('[aria-label="折旧月份"]').setValue('2026-10');
     await wrapper.get('form').trigger('submit');
     expect(continueAssetDepreciation).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('尚未核定');
+    expect(wrapper.text()).toContain('本版不填写折旧生效月');
 
     await wrapper.get('[aria-label="停用生效月"]').setValue('');
     await wrapper.get('form').trigger('submit');
@@ -33,7 +33,7 @@ describe('资产折旧延续', () => {
     expect(wrapper.text()).toContain('不是税务结论');
     expect(wrapper.text()).toContain('333.33');
     expect(wrapper.text()).toContain('STOPPED');
-    expect(wrapper.text()).toContain('本次未新增');
+    expect(wrapper.text()).toContain('本版暂停新增折旧，已记折旧保留');
     wrapper.unmount();
   });
 });

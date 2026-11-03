@@ -27,6 +27,7 @@ import com.zhubao.erp.business.domain.RouteSnapshotRepository;
 import com.zhubao.erp.common.error.BusinessException;
 import com.zhubao.erp.inventory.app.StockLedgerService;
 import com.zhubao.erp.inventory.domain.StockDimension;
+import com.zhubao.erp.inventory.domain.StockMeasurement;
 import com.zhubao.erp.inventory.domain.StockLedgerEntry;
 import com.zhubao.erp.inventory.domain.StockStatus;
 import com.zhubao.erp.inventory.domain.StockTransferCommand;
@@ -125,9 +126,6 @@ public class DeliveryConfirmationService {
         if (draft.status() != DeliveryDraftStatus.DRAFT) {
             throw new BusinessException("该交付单已经确认");
         }
-        if (draft.businessKind() != BusinessKind.PROCESSING) {
-            throw new BusinessException("打样和金工的交付确认尚未具备各自的库存来源，不能改记成普通工单");
-        }
         List<DeliveryDraftLine> lines = drafts.lines(draft.deliveryId());
         if (lines.isEmpty()) {
             throw new BusinessException("交付草稿至少选择一袋");
@@ -173,6 +171,13 @@ public class DeliveryConfirmationService {
         }
         if (drafts.bagConfirmed(bag.id())) {
             throw new BusinessException("该袋已经交付");
+        }
+        if (line.businessKind() != BusinessKind.PROCESSING) {
+            if (line.weight().state() != com.zhubao.erp.inventory.domain.StockMeasurement.WeightState.KNOWN
+                    || line.weight().value() == null || line.weight().value().signum() <= 0) {
+                throw new BusinessException("需要本份额的实际重量后才能转移或发货");
+            }
+            return new Resolved(bag, null);
         }
         assertShippable(bag, line.quantity());
         BusinessTargetReference reference = BusinessTargetReference.fromCode(line.targetCode());
@@ -247,6 +252,11 @@ public class DeliveryConfirmationService {
 
     private DeliveryConfirmedSource ship(String actor, DeliveryDraft draft, DeliveryDraftLine line, Resolved resolved,
                                          WorkSession session) {
+        if (line.businessKind() != BusinessKind.PROCESSING) {
+            String outboundCode = draft.deliveryId() + "-" + line.lineNo();
+            return new DeliveryConfirmedSource(draft.deliveryId(), line.lineNo(), line.bagId(), outboundCode,
+                    "RECORDED-" + line.lineNo(), line.quantity(), line.weight().value());
+        }
         DeliveryStockPlace place = resolved.place();
         String outboundCode = draft.deliveryId() + "-" + line.lineNo();
         boolean historical = documents.listOutboundOrders().stream()
@@ -258,8 +268,9 @@ public class DeliveryConfirmationService {
         }
         StockDimension from = dimension(place, StockStatus.FINISHED);
         StockDimension to = dimension(place, StockStatus.SHIPPED);
+        BigDecimal shipmentWeight = StockMeasurement.processingScale(resolved.bag().weight().value());
         StockLedgerEntry entry = stock.transfer(new StockTransferCommand(
-                "outbound_shipment", outboundCode, from, to, line.quantity(), resolved.bag().weight().value(),
+                "outbound_shipment", outboundCode, from, to, line.quantity(), shipmentWeight,
                 "交付 " + draft.deliveryId() + " 袋序 " + line.lineNo()
         ), session);
         documents.saveOutboundOrder(outbound(actor, draft, line, place, outboundCode, entry), session);

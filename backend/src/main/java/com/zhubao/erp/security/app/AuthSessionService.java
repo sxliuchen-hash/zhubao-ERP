@@ -150,10 +150,11 @@ public class AuthSessionService {
             recordAudit("LOGIN", username, "", "", "DENIED", "用户名或密码错误", "");
             throw new PermissionDeniedException("用户名或密码错误");
         }
-        if (account.get().role() == RoleCode.CUSTOMER_PORTAL) {
+        if (account.get().role() == RoleCode.CUSTOMER_PORTAL
+                && CustomerPortalRules.UNISSUED_PASSWORD.equals(account.get().passwordHash())) {
             recordAudit("LOGIN", account.get().username(), account.get().operator(), account.get().role().name(),
-                    "DENIED", "客户凭据交付方式尚未核定，不能登录", "");
-            throw new PermissionDeniedException("客户凭据交付方式尚未核定，不能登录");
+                    "DENIED", "客户账户还没有口令，不能登录", "");
+            throw new PermissionDeniedException("客户账户还没有口令，不能登录");
         }
         if (!passwordHasher.matches(command.password(), account.get().passwordHash())) {
             recordFailedLogin(account.get(), now);
@@ -311,8 +312,8 @@ public class AuthSessionService {
                 .orElseThrow(SessionInvalidException::new);
         if (currentAccount.role() == RoleCode.CUSTOMER_PORTAL) {
             recordAudit("PASSWORD_CHANGE", currentAccount.username(), currentAccount.operator(),
-                    currentAccount.role().name(), "DENIED", "客户凭据交付与找回方式尚未核定，不能找回凭据", entry.token());
-            throw new PermissionDeniedException("客户凭据交付与找回方式尚未核定，不能找回凭据");
+                    currentAccount.role().name(), "DENIED", "客户口令由管理员重置", entry.token());
+            throw new PermissionDeniedException("客户口令由管理员重置");
         }
         Instant now = Instant.now();
         if (!currentAccount.enabled()) {

@@ -107,10 +107,10 @@ class GoldworkMaterialReceiptTest {
                 null, new BigDecimal("0.2"), null, "克", "足金");
         assertThatThrownBy(() -> service.refuseCombine(fine.lineId(), same.lineId()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金工计量精度尚未核定，不能按现有三位库存截断后入账");
+                .hasMessage("本版金工重量只作记录，不能按三位库存入账");
         assertThatThrownBy(() -> StockMeasurement.rejectUndecidedGoldScale(BusinessKind.GOLDWORK))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金工计量精度尚未核定，不能按现有三位库存截断后入账");
+                .hasMessage("本版金工重量只作记录，不能按三位库存入账");
 
         documents.save(new StockDocument(
                 "JC-G", StockDocumentKinds.PREP_RECEIPT, StockDocumentKinds.POSTED, OwnerType.CUSTOMER.name(),

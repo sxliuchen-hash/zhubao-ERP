@@ -65,21 +65,15 @@ class ToolIssueCustodyTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("可借数量不足");
         assertThat(service.stock(knife.itemId(), "柜-1")).isEqualByComparingTo("1");
-        assertThatThrownBy(() -> service.borrow("f07-und-001", admin, undecided.itemId(), "柜-1", "P-01", "张三", BigDecimal.ONE, ""))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("工具保管方式尚未选定");
+        service.place("f07-und-pl", admin, undecided.itemId(), "柜-1", new BigDecimal("2"));
+        ToolLoan undecidedLoan = service.borrow("f07-und-001", admin, undecided.itemId(), "柜-1", "P-01", "张三", BigDecimal.ONE, "");
+        assertThat(undecidedLoan.quantity()).isEqualByComparingTo("1");
+        assertThat(service.stock(undecided.itemId(), "柜-1")).isEqualByComparingTo("1");
 
         var mold = catalog.register("f07-mold-01", admin, FactoryItemCategory.REUSABLE_TOOL, "模具", "M1", "件", null, CustodyMode.PIECE);
-        service.placePiece("f07-piece01", admin, mold.itemId(), "柜-2", "MJ-01");
-        service.placePiece("f07-piece02", admin, mold.itemId(), "柜-2", "MJ-02");
-        service.borrow("f07-piece-b1", admin, mold.itemId(), "柜-2", "P-01", "张三", null, "MJ-01");
-        assertThatThrownBy(() -> service.borrow("f07-piece-b2", admin, mold.itemId(), "柜-2", "P-02", "张三", null, "MJ-01"))
+        assertThatThrownBy(() -> service.borrow("f07-piece-b1", admin, mold.itemId(), "柜-2", "P-01", "张三", BigDecimal.ONE, "MJ-01"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("该工具已借出");
-        ToolLoan other = service.borrow("f07-piece-b3", admin, mold.itemId(), "柜-2", "P-02", "张三", null, "MJ-02");
-        assertThat(other.holderId()).isEqualTo("P-02");
-        assertThat(service.outstanding(mold.itemId(), "P-01")).isEqualByComparingTo("1");
-        assertThat(service.outstanding(mold.itemId(), "P-02")).isEqualByComparingTo("1");
+                .hasMessage("本版工具按数量借还");
     }
 
     @Test

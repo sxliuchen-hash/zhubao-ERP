@@ -91,6 +91,9 @@ public class SamplingDeliveryService {
 
     private String write(WorkSession session, SamplingOrder order, SamplingVersionKind kind, int versionNo,
                          String materialUseId, BigDecimal quantity, String unitName, String credentialCode) {
+        if (order.status() == com.zhubao.erp.sampling.domain.SamplingOrderStatus.COMPLETED) {
+            throw new BusinessException("打样单已经完结，不能再交付");
+        }
         if (versions.find(order.samplingCode(), kind, versionNo).isEmpty()) {
             throw new BusinessException("版本不存在");
         }

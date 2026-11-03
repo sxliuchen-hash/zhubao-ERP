@@ -45,7 +45,7 @@ public record GoldworkOperationReport(
             throw new BusinessException("报工日期无效");
         }
         if (!"UNDECIDED".equals(precisionState)) {
-            throw new BusinessException("金工计量精度尚未核定，不能入账");
+            throw new BusinessException("本版金工重量只作记录，不能按库存精度入账");
         }
     }
 

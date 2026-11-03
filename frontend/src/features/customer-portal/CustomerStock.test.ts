@@ -74,7 +74,7 @@ describe('客户手机库存', () => {
     expect(page.text()).toContain('本次读取时间');
     expect(page.text()).toContain('牙骨 颗 本厂 245 未称');
     expect(page.text()).toContain('打样库存适配尚未实现');
-    expect(page.text()).toContain('照片可见范围尚未核定');
+    expect(page.text()).toContain('本版不向客户开放照片和文件');
     await page.get('input[placeholder="材质或单位"]').setValue('紫金鼠');
     expect(page.text()).not.toContain('牙骨');
     await page.get('input[placeholder="材质或单位"]').setValue('');
@@ -83,18 +83,11 @@ describe('客户手机库存', () => {
     expect(page.text()).toContain('外协是其中项，不重复计入本厂');
     page.unmount();
 
-    vi.mocked(loadEvidence).mockResolvedValue({ customerId: 1, visibility: 'UNDECIDED', items: [photo] });
-    vi.mocked(downloadEvidence).mockResolvedValue({ fileName: 'bead.jpg' });
     const withPhoto = mount(CustomerStockPage);
     await withPhoto.get('form').trigger('submit');
     await flushPromises();
-    await withPhoto.get('button[type="button"]').trigger('click');
-    const download = withPhoto.findAll('button').find((button) => button.text() === '下载获准文件');
-    await download?.trigger('click');
-    await flushPromises();
-    expect(downloadEvidence).toHaveBeenCalledWith(photo);
-    expect(withPhoto.text()).toContain('已下载 bead.jpg');
-    await withPhoto.get('button[type="button"]').trigger('click');
+    expect(withPhoto.text()).toContain('本版不向客户开放照片和文件');
+    expect(downloadEvidence).not.toHaveBeenCalled();
     const statementButton = withPhoto.findAll('button').find((button) => button.text() === '读取对账');
     await statementButton?.trigger('click');
     expect(withPhoto.text()).toContain('请指定截止日');
@@ -107,7 +100,7 @@ describe('客户手机库存', () => {
       shippedQuantity: '300',
       lossQuantity: '10',
       lossWeight: '未称',
-      factoryAndOutside: '截止日的在厂与在外尚未核定',
+      factoryAndOutside: '本版不显示截止日的在厂和在外',
       bills: '本版不向客户开放账单',
       afterCutoff: [],
       pending: [],

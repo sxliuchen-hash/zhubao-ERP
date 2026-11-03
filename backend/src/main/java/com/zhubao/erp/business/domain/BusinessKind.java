@@ -6,5 +6,7 @@ package com.zhubao.erp.business.domain;
 public enum BusinessKind {
     PROCESSING,
     SAMPLING,
-    GOLDWORK
+    GOLDWORK,
+    /** 同一张交付头包含一种以上业务。不作为业务单号种类。 */
+    MIXED
 }

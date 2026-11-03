@@ -124,7 +124,7 @@ class GoldworkRecoverySourceTest {
         assertThat(stocks.balance(bead.itemId(), received.batchCode(), "WH-01").orElseThrow().quantity()).isEqualByComparingTo("10");
         assertThatThrownBy(() -> service.refuseAddToFinished(saved.recoveryId(), output.movementId()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金工计量精度尚未核定，不能按现有三位库存截断后入账");
+                .hasMessage("本版金工重量只作记录，不能按三位库存入账");
     }
 
     @Test

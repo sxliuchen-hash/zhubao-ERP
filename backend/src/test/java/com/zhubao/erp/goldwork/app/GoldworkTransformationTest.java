@@ -88,7 +88,7 @@ class GoldworkTransformationTest {
         assertThatThrownBy(() -> record(service, "m03-factor1", order.goldworkCode(), source.lineId(),
                 "OUTPUT", new BigDecimal("1"), null, "克", "18K", "", "改色", false, false, new BigDecimal("0.75"), false))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金料转换关系尚未核定，不能按系数换算重量");
+                .hasMessage("本版不按系数换算金料重量");
         assertThatThrownBy(() -> record(service, "m03-piece01", order.goldworkCode(), source.lineId(),
                 "INPUT", new BigDecimal("3"), null, "克", "足金", "", "", false, false, null, true))
                 .isInstanceOf(BusinessException.class)

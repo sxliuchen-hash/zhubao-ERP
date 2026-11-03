@@ -71,27 +71,19 @@ public class ToolCustodyService {
                            String holderId, String holderName, BigDecimal quantity, String pieceCode) {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.STOCK_COMPANY_ISSUE, actor);
         FactoryItem item = reusable(itemId);
-        if (item.custodyMode() == CustodyMode.UNDECIDED) {
-            throw new BusinessException("工具保管方式尚未选定");
+        if (item.custodyMode() == CustodyMode.PIECE || (pieceCode != null && !pieceCode.isBlank())) {
+            throw new BusinessException("本版工具按数量借还");
         }
         String holder = required(holderId, "请选择持有人", 40);
         String name = required(holderName, "请填写持有人姓名", 80);
         String warehouse = required(warehouseCode, "请填写位置", 40);
-        String piece = pieceCode == null ? "" : pieceCode.trim();
-        BigDecimal counted = item.custodyMode() == CustodyMode.PIECE ? BigDecimal.ONE : positive(quantity);
-        if (item.custodyMode() == CustodyMode.PIECE && piece.isEmpty()) {
-            throw new BusinessException("逐件工具必须填写编号");
-        }
-        if (item.custodyMode() == CustodyMode.QUANTITY && !piece.isEmpty()) {
-            throw new BusinessException("按数量借还的工具不用逐件编号");
-        }
+        String piece = "";
+        BigDecimal counted = positive(quantity);
         String loanId = unit.execute(new CommandCall(
                 requestId, actor.operator(), "BORROW_TOOL", "TOOL", item.itemId(),
                 item.itemId() + "\n" + warehouse + "\n" + holder + "\n" + name + "\n" + counted.toPlainString() + "\n" + piece
         ), session -> {
-            if (item.custodyMode() == CustodyMode.QUANTITY) {
-                tools.addStock(item.itemId(), warehouse, counted.negate(), item.unit(), session);
-            }
+            tools.addStock(item.itemId(), warehouse, counted.negate(), item.unit(), session);
             String id = "TL-" + token();
             tools.loan(new ToolLoan(id, item.itemId(), holder, name, counted, BigDecimal.ZERO, item.unit(), piece, warehouse, 1), session);
             return id;
@@ -181,6 +173,9 @@ public class ToolCustodyService {
 
     private FactoryItem tool(String itemId, CustodyMode mode) {
         FactoryItem found = reusable(itemId);
+        if (mode == CustodyMode.QUANTITY && found.custodyMode() == CustodyMode.UNDECIDED) {
+            return found;
+        }
         if (found.custodyMode() != mode) {
             throw new BusinessException(mode == CustodyMode.PIECE ? "这件工具不按逐件管理" : "这件工具不按数量管理");
         }

@@ -38,7 +38,7 @@ import java.util.UUID;
 
 /**
  * 按打样自己的节点报工。不强制普通 15 道工序，也不推进相关大货。
- * 雕刻和车型不能在未核定前同时选择。
+ * 雕刻和车型可以同时选择。
  */
 @Service
 public class SamplingOperationService {
@@ -94,6 +94,9 @@ public class SamplingOperationService {
     private String write(WorkSession session, OperatorContext actor, SamplingOrder order, ProcessStep step,
                          SamplingVersionKind kind, int versionNo, SamplingMakingChoice choice, BigDecimal quantity,
                          String unitName, String attachmentCode) {
+        if (order.status() == com.zhubao.erp.sampling.domain.SamplingOrderStatus.COMPLETED) {
+            throw new BusinessException("打样单已经完结，不能再报工");
+        }
         if (versions.find(order.samplingCode(), kind, versionNo).isEmpty()) {
             throw new BusinessException("版本不存在");
         }
@@ -147,14 +150,24 @@ public class SamplingOperationService {
                 .map(item -> item == null ? "" : item.trim())
                 .filter(item -> !item.isEmpty())
                 .toList();
-        if (choices.size() > 1) {
-            throw new BusinessException("雕刻与车型能否组合仍待核");
-        }
-        SamplingMakingChoice choice = choices.isEmpty() ? null : SamplingMakingChoice.parse(choices.get(0));
+        SamplingMakingChoice choice = combinedChoice(choices);
         if (choice != null && !"SAMPLE_MAKE".equals(step.id())) {
             throw new BusinessException("该节点不能选择雕刻或车型");
         }
         return choice;
+    }
+
+    private static SamplingMakingChoice combinedChoice(List<String> choices) {
+        if (choices.isEmpty()) {
+            return null;
+        }
+        if (choices.size() == 1) {
+            return SamplingMakingChoice.parse(choices.get(0));
+        }
+        if (choices.size() == 2 && choices.contains("CARVE") && choices.contains("SHAPE")) {
+            return SamplingMakingChoice.CARVE_AND_SHAPE;
+        }
+        throw new BusinessException("请选择雕刻、车型，或两者同时");
     }
 
     private static void assertPhoto(EvidenceAttachment attachment, String samplingCode) {

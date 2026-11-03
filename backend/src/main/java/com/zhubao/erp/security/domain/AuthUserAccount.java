@@ -225,6 +225,28 @@ public record AuthUserAccount(
         );
     }
 
+    public AuthUserAccount withPassword(String nextPasswordHash) {
+        return new AuthUserAccount(
+                username,
+                nextPasswordHash,
+                operator,
+                role,
+                dataScope,
+                enabled,
+                demoAccount,
+                Instant.now(),
+                0,
+                null,
+                customerScope,
+                false,
+                false,
+                allowedProcesses,
+                coverDuties,
+                teamCode,
+                departmentCode
+        );
+    }
+
     public AuthUserAccount withEnabled(boolean nextEnabled) {
         return new AuthUserAccount(
                 username,

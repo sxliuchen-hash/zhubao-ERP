@@ -48,15 +48,11 @@ async function report() {
     message.value = '没有有效的现场照片';
     return;
   }
-  if (makingChoice.value === 'BOTH') {
-    message.value = '雕刻与车型能否组合仍待核';
-    return;
-  }
   const saved = await operation.submit('report', {
     stepId: stepId.value,
     versionKind: versionKind.value,
     versionNo: Number(versionNo.value),
-    makingChoices: makingChoice.value ? [makingChoice.value] : [],
+    makingChoices: makingChoice.value === 'BOTH' ? ['CARVE', 'SHAPE'] : makingChoice.value ? [makingChoice.value] : [],
     quantity: Number(quantity.value),
     unit: unit.value.trim(),
     attachmentCode: attachmentCode.value.trim(),

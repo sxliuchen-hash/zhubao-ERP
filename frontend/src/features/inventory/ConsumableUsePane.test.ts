@@ -15,9 +15,8 @@ describe('耗材实际耗用', () => {
     });
     await wrapper.get('[aria-label="耗用数量"]').setValue('2');
     await wrapper.find('button').trigger('click');
-    expect(issueConsumable).not.toHaveBeenCalled();
-    expect(consumeConsumable).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('尚未选定');
+    expect(issueConsumable).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'FI-G', quantity: '2' }));
+    expect(wrapper.text()).toContain('不生成客户收费');
 
     await wrapper.setProps({ timing: 'ON_ISSUE' });
     await wrapper.get('[aria-label="耗用金额"]').setValue('');

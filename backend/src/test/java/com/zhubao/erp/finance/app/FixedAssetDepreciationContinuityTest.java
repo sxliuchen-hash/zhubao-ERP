@@ -86,7 +86,7 @@ class FixedAssetDepreciationContinuityTest {
         books.saveAsset(asset);
         assertThatThrownBy(() -> service.run("h05-stop-01", finance, "2026-10", "2026-11"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("停用或报废影响折旧的生效月份尚未核定");
+                .hasMessage("本版不填写折旧生效月，停用后暂停新增折旧");
         assertThat(books.listDepreciations()).isEmpty();
 
         FixedAssetDepreciationRun first = service.run("h05-m1-0001", finance, "2026-10", "");
@@ -174,7 +174,7 @@ class FixedAssetDepreciationContinuityTest {
         assertThatThrownBy(() -> controller.run(new FixedAssetDepreciationController.RunRequest(
                 "h05-http-01", "2026-10", "2026-10"), request))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("停用或报废影响折旧的生效月份尚未核定");
+                .hasMessage("本版不填写折旧生效月，停用后暂停新增折旧");
         FixedAssetDepreciationRun run = controller.run(new FixedAssetDepreciationController.RunRequest(
                 "h05-http-02", "2026-10", null), request).data();
         assertThat(run.algorithm()).isEqualTo(FixedAssetDepreciationRun.MANAGEMENT_ALGORITHM);

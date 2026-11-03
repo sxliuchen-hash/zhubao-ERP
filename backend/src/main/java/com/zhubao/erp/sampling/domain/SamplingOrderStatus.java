@@ -1,11 +1,11 @@
 package com.zhubao.erp.sampling.domain;
 
 /**
- * 打样单自身状态。建单后为进行中，不因缺少普通加工母单而无法存在。
- * 完结资格尚未核定，这里不提供已完成。
+ * 打样单自身状态。建单后为进行中。已报数量交完且每次样费已确认或免收后可以完结。
  */
 public enum SamplingOrderStatus {
-    OPEN("进行中");
+    OPEN("进行中"),
+    COMPLETED("已完成");
 
     private final String label;
 

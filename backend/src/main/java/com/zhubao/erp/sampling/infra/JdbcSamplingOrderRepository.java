@@ -113,6 +113,26 @@ public class JdbcSamplingOrderRepository implements SamplingOrderRepository {
         }
     }
 
+    @Override
+    public void replace(SamplingOrder order, long expectedVersion, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                update smp_sampling_order
+                   set status_code=?, version_no=?
+                 where sampling_code=? and version_no=?
+                """)) {
+            statement.setString(1, order.status().name());
+            statement.setLong(2, order.version());
+            statement.setString(3, order.samplingCode());
+            statement.setLong(4, expectedVersion);
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("打样单已被其他人修改，请刷新后重试");
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法更新打样单", ex);
+        }
+    }
+
     private static SamplingOrder map(ResultSet rows) throws SQLException {
         return new SamplingOrder(
                 rows.getString("sampling_code"),

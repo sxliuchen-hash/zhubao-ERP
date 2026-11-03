@@ -24,7 +24,7 @@ public final class GoldworkMeasurement {
             throw new BusinessException("计量不能为负");
         }
         if (value.scale() > 6) {
-            throw new BusinessException("金工计量精度尚未核定，不能截断后入账");
+            throw new BusinessException("金工重量最多保留六位小数，不能截断后入账");
         }
         return value;
     }

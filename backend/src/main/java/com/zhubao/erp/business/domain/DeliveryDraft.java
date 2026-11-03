@@ -5,7 +5,8 @@ import com.zhubao.erp.common.error.BusinessException;
 import java.util.regex.Pattern;
 
 /**
- * 独立交付草稿头。编号与加工单号分开，一张草稿只含一种业务、一个客户。
+ * 独立交付草稿头。编号与加工单号分开，一张草稿只含一个客户。
+ * 多种业务放在同一张交付头时，种类记为 MIXED。
  */
 public record DeliveryDraft(
         String deliveryId,

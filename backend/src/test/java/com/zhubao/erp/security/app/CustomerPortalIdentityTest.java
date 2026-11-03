@@ -165,14 +165,14 @@ class CustomerPortalIdentityTest {
     void 凭据未核定不能登录且停用后会话失效() {
         Fixture fixture = memory();
         fixture.service().bind(fixture.admin(), "portal-a", fixture.customerId());
-        assertThatThrownBy(() -> fixture.service().issueCredential(fixture.admin(), "portal-a"))
-                .isInstanceOf(BusinessException.class).hasMessageContaining("尚未核定");
-        assertThatThrownBy(() -> fixture.service().recoverCredential(fixture.admin(), "portal-a"))
-                .isInstanceOf(BusinessException.class).hasMessageContaining("尚未核定");
-        assertThat(fixture.accounts().findByUsername("portal-a").orElseThrow().passwordHash())
-                .isEqualTo(CustomerPortalRules.UNISSUED_PASSWORD);
         assertThatThrownBy(() -> fixture.sessions().login(new AuthLoginCommand("portal-a", "Secret123!")))
-                .isInstanceOf(PermissionDeniedException.class).hasMessageContaining("尚未核定");
+                .isInstanceOf(PermissionDeniedException.class).hasMessage("客户账户还没有口令，不能登录");
+        fixture.service().issueCredential(fixture.admin(), "portal-a", "Secret123!");
+        assertThat(fixture.sessions().login(new AuthLoginCommand("portal-a", "Secret123!")).token()).isNotBlank();
+        fixture.service().recoverCredential(fixture.admin(), "portal-a", "Reset123!");
+        assertThatThrownBy(() -> fixture.sessions().login(new AuthLoginCommand("portal-a", "Secret123!")))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThat(fixture.sessions().login(new AuthLoginCommand("portal-a", "Reset123!")).token()).isNotBlank();
 
         AuthUserAccount account = fixture.accounts().findByUsername("portal-a").orElseThrow();
         String token = "portal-session-token";
@@ -194,7 +194,7 @@ class CustomerPortalIdentityTest {
         assertThat(session.coverDuties()).isEmpty();
         assertThat(session.effectivePermissions()).isEmpty();
 
-        assertThat(fixture.service().disable(fixture.admin(), "portal-a")).isEqualTo(1);
+        assertThat(fixture.service().disable(fixture.admin(), "portal-a")).isEqualTo(2);
         assertThat(fixture.accounts().findByUsername("portal-a").orElseThrow().enabled()).isFalse();
         assertThat(fixture.bindings().findByUsername("portal-a").orElseThrow().enabled()).isFalse();
         assertThatThrownBy(() -> fixture.sessions().session("Bearer " + token)).isInstanceOf(SessionInvalidException.class);
@@ -302,7 +302,7 @@ class CustomerPortalIdentityTest {
         var sessions = sessionsFor(accounts, bindings, loginSessions);
         var service = new CustomerPortalIdentityService(accounts, bindings, customers,
                 new InMemoryCustomerPortalIdentityActionRepository(accounts, bindings, new InMemoryAuthAuditRepository()),
-                sessions);
+                sessions, new PasswordHasher(), new PasswordPolicy());
         return new Fixture(service, accounts, bindings, customers, sessions, loginSessions, new PermissionGuard(),
                 admin(), customerId);
     }

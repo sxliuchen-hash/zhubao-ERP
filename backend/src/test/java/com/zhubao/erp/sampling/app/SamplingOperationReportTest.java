@@ -74,11 +74,11 @@ class SamplingOperationReportTest {
                 List.of(), new BigDecimal("1"), "颗", "ATT-OK"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("打样不使用普通加工工序");
-        assertThatThrownBy(() -> fixture.operations.report(
-                "s04-bad-mix", keeper, order.samplingCode(), "SAMPLE_MAKE", "MODEL", 1,
-                List.of("CARVE", "SHAPE"), new BigDecimal("1"), "颗", "ATT-NEW"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("雕刻与车型能否组合仍待核");
+        photo(fixture.documents, "ATT-BOTH", order.samplingCode(), "image/jpeg", "可用", "SAMPLING");
+        var both = fixture.operations.report(
+                "s04-both-01", keeper, order.samplingCode(), "SAMPLE_MAKE", "MODEL", 1,
+                List.of("CARVE", "SHAPE"), new BigDecimal("1"), "颗", "ATT-BOTH");
+        assertThat(both.makingChoiceLabel()).isEqualTo("雕刻和车型");
         assertThatThrownBy(() -> fixture.operations.report(
                 "s04-bad-photo", keeper, order.samplingCode(), "SAMPLE_MODEL", "MODEL", 1,
                 List.of(), new BigDecimal("1"), "颗", ""))
@@ -100,7 +100,7 @@ class SamplingOperationReportTest {
                 List.of(), new BigDecimal("1"), "颗", "ATT-OK"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("这张照片已经用于其他业务，不能当作本次拍摄");
-        assertThat(fixture.operations.list(keeper, order.samplingCode())).hasSize(2);
+        assertThat(fixture.operations.list(keeper, order.samplingCode())).hasSize(3);
 
         OperatorContext worker = new OperatorContext("加工", RoleCode.OPERATOR, DataScope.ALL);
         assertThatThrownBy(() -> fixture.operations.report(

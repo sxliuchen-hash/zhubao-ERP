@@ -18,7 +18,7 @@ async function submit() {
     return;
   }
   if (stopMonth.value.trim()) {
-    message.value = '停用或报废影响折旧的生效月份尚未核定';
+    message.value = '本版不填写折旧生效月，停用后暂停新增折旧';
     return;
   }
   const saved = await continueAssetDepreciation({
@@ -39,7 +39,7 @@ async function submit() {
     <p>按使用月数均分并在末期调尾差。这只是当前管理算法，不是全部会计或税务处理。</p>
     <form aria-label="延续折旧" @submit.prevent="submit">
       <label>月份 <input v-model="yearMonth" aria-label="折旧月份" placeholder="YYYY-MM" /></label>
-      <label>停用生效月 <input v-model="stopMonth" aria-label="停用生效月" placeholder="尚未核定" /></label>
+      <label>停用生效月 <input v-model="stopMonth" aria-label="停用生效月" placeholder="本版不填" /></label>
       <button type="submit">延续折旧</button>
     </form>
     <ul v-if="run">

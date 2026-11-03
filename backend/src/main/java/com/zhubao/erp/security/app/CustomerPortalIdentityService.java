@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 受限客户身份。管理员按稳定客户编号绑定。本版一个客户只绑定一个账号，一个账号也只对应一个客户主体。
- * 不签发凭据，不按名称或自填编号认领，也不写入库存、客户账或工资。
+ * 管理员可以设置和重置口令。不按名称或自填编号认领，也不写入库存、客户账或工资。
  */
 @Service
 public class CustomerPortalIdentityService {
@@ -41,14 +41,25 @@ public class CustomerPortalIdentityService {
     private final MasterDataRepository customers;
     private final CustomerPortalIdentityActionRepository actions;
     private final AuthSessionService sessions;
+    private final PasswordHasher passwords;
+    private final PasswordPolicy passwordPolicy;
 
     public CustomerPortalIdentityService(AuthUserAccountRepository accounts, CustomerPortalBindingRepository bindings,
             MasterDataRepository customers, CustomerPortalIdentityActionRepository actions, AuthSessionService sessions) {
+        this(accounts, bindings, customers, actions, sessions, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CustomerPortalIdentityService(AuthUserAccountRepository accounts, CustomerPortalBindingRepository bindings,
+            MasterDataRepository customers, CustomerPortalIdentityActionRepository actions, AuthSessionService sessions,
+            PasswordHasher passwords, PasswordPolicy passwordPolicy) {
         this.accounts = accounts;
         this.bindings = bindings;
         this.customers = customers;
         this.actions = actions;
         this.sessions = sessions;
+        this.passwords = passwords;
+        this.passwordPolicy = passwordPolicy;
     }
 
     /** 绑定已核实的客户档案编号。同一对账号和客户再次绑定保持原记录，不重置凭据。 */
@@ -124,18 +135,34 @@ public class CustomerPortalIdentityService {
         throw new BusinessException("不能按客户名称或自填编号自动认领");
     }
 
-    /** 凭据交付方式尚未核定。不生成口令，也不表示签发成功。 */
-    public void issueCredential(OperatorContext operator, String username) {
-        requireAdmin(operator);
-        requireUsername(username);
-        throw new BusinessException("客户凭据交付与找回方式尚未核定，不能签发凭据");
+    /** 管理员设置初始口令。客户可以登录查看自己的库存，账单和照片仍然不开放。 */
+    public void issueCredential(OperatorContext operator, String username, String rawPassword) {
+        storePassword(operator, username, rawPassword, "设置客户初始口令");
     }
 
-    /** 找回方式尚未核定。不重置口令，也不表示找回成功。 */
-    public void recoverCredential(OperatorContext operator, String username) {
+    /** 管理员重置口令，并撤销该账号仍有效的会话。 */
+    public void recoverCredential(OperatorContext operator, String username, String rawPassword) {
+        storePassword(operator, username, rawPassword, "重置客户口令");
+        if (sessions != null) {
+            sessions.revokeSessionsForUsername(requireUsername(username), "管理员重置客户口令");
+        }
+    }
+
+    private void storePassword(OperatorContext operator, String username, String rawPassword, String reason) {
         requireAdmin(operator);
-        requireUsername(username);
-        throw new BusinessException("客户凭据交付与找回方式尚未核定，不能找回凭据");
+        String normalized = requireUsername(username);
+        if (passwords == null || passwordPolicy == null) {
+            throw new BusinessException("口令服务未配置");
+        }
+        passwordPolicy.assertAcceptable(rawPassword, normalized);
+        AuthUserAccount account = requirePortalAccount(normalized);
+        CustomerPortalBinding binding = bindings.findByUsername(normalized)
+                .orElseThrow(() -> new BusinessException("客户身份没有绑定客户主体"));
+        CustomerPortalRules.assertRestricted(account, binding);
+        actions.commit(new CustomerPortalIdentityAction(
+                account.withPassword(passwords.hash(rawPassword)),
+                binding,
+                audit(normalized, operator, reason)));
     }
 
     /** 停用客户身份并撤销该账号仍有效的会话。 */

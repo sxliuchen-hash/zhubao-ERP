@@ -43,10 +43,9 @@ public record DeliveryDraftLine(
         if (bagVersion < 1) {
             throw new BusinessException("袋版本不正确");
         }
-        if (businessKind == null || targetRole == null) {
+        if (businessKind == null || businessKind == BusinessKind.MIXED || targetRole == null) {
             throw new BusinessException("业务引用缺少种类或角色");
         }
-        StockMeasurement.rejectUndecidedGoldScale(businessKind);
         BusinessTargetReference reference = BusinessTargetReference.fromCode(targetCode);
         if (reference.kind() != businessKind || reference.role() != targetRole) {
             throw new BusinessException("业务引用种类与单号不一致");
@@ -59,6 +58,11 @@ public record DeliveryDraftLine(
         quantityUnit = required(quantityUnit, 16, "数量单位不能为空", "数量单位过长");
         if (weight == null || weight.state() != StockMeasurement.WeightState.KNOWN || weight.value() == null) {
             weight = StockMeasurement.unknown();
+        } else if (businessKind == BusinessKind.GOLDWORK) {
+            if (weight.value().scale() > 6) {
+                throw new BusinessException("金工重量最多保留六位小数，不能截断后入账");
+            }
+            weight = StockMeasurement.known(weight.value());
         } else {
             weight = StockMeasurement.known(StockMeasurement.processingScale(weight.value()));
         }

@@ -126,15 +126,15 @@ class DeliveryDraftTest {
                 new DeliverySourceSelection("BAG-C", 1, "MD-20261030-1003", "颗"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("不能把不同客户放在同一张交付单");
-        assertThatThrownBy(() -> service.open("e01-mixknd", "clerk-01", 7L, "", "", List.of(
+        var mixed = service.open("e01-mixknd", "clerk-01", 7L, "", "", List.of(
                 new DeliverySourceSelection("BAG-B", 1, "MD-20261030-1001", "颗"),
-                new DeliverySourceSelection("BAG-DY", 1, "DY-20261030-0001", "颗"))))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("跨种类混单尚未确认，不能放在同一张交付单");
-        assertThatThrownBy(() -> service.open("e01-gold01", "clerk-01", 7L, "", "", List.of(
-                new DeliverySourceSelection("BAG-GJ", 1, "GJ-20261030-0001", "克"))))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("金工计量精度尚未核定，不能按现有三位库存截断后入账");
+                new DeliverySourceSelection("BAG-DY", 1, "DY-20261030-0001", "颗")));
+        assertThat(mixed.draft().businessKind()).isEqualTo(com.zhubao.erp.business.domain.BusinessKind.MIXED);
+        assertThat(mixed.lines()).extracting(line -> line.businessKind().name()).containsExactly("PROCESSING", "SAMPLING");
+        var gold = service.open("e01-gold01", "clerk-01", 7L, "", "", List.of(
+                new DeliverySourceSelection("BAG-GJ", 1, "GJ-20261030-0001", "克")));
+        assertThat(gold.draft().businessKind()).isEqualTo(com.zhubao.erp.business.domain.BusinessKind.GOLDWORK);
+        assertThat(documents.listOutboundOrders()).isEmpty();
         assertThatThrownBy(() -> service.open("e01-unit01", "clerk-01", 7L, "", "", List.of(
                 new DeliverySourceSelection("BAG-B", 1, "MD-20261030-1001", "克"))))
                 .isInstanceOf(BusinessException.class)
@@ -181,8 +181,8 @@ class DeliveryDraftTest {
         assertThat(documents.findChildWorkOrderByCode("DY-20261030-0001")).isEmpty();
         assertThat(documents.listMotherOrders()).hasSize(mothers);
         assertThat(documents.listOutboundOrders()).isEmpty();
-        assertThat(drafts.findByRequest("e01-gold01")).isEmpty();
-        assertThat(drafts.findByRequest("e01-mixknd")).isEmpty();
+        assertThat(drafts.findByRequest("e01-gold01")).isPresent();
+        assertThat(drafts.findByRequest("e01-mixknd")).isPresent();
         assertThat(bags.saves).isZero();
         assertThat(stored.find("BAG-GJ").orElseThrow().targetCode()).isEqualTo("GJ-20261030-0001");
         assertThat(stored.find("BAG-GJ").orElseThrow().quantity()).isEqualByComparingTo("1.5");

@@ -149,7 +149,7 @@ class OutsourcingDispatchTest {
         assertThatThrownBy(() -> service.dispatch("d02-gold01", "clerk-01", gold.task().taskId(),
                 gold.bag().id(), gold.bag().version(), gold.bag().quantity()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金工计量精度尚未核定，不能按现有三位库存截断后入账");
+                .hasMessage("本版金工重量只作记录，不能按三位库存入账");
         assertThat(dispatches.listByTask(gold.task().taskId())).isEmpty();
         assertThat(service.holderOf(gold.bag().id())).isEqualTo(OutsourcingDispatchService.IN_HOUSE);
     }

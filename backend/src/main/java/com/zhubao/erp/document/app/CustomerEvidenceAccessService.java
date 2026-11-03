@@ -23,12 +23,12 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * 客户证据只读。未获准的照片和文件不展示，模型引用保持内部。不改附件原件，也不提供工资或成本。
+ * 本版不向客户开放照片和文件。模型引用保持内部。不改附件原件，也不提供工资或成本。
  */
 @Service
 public class CustomerEvidenceAccessService {
 
-    static final String VISIBILITY_UNDECIDED = "UNDECIDED";
+    static final String VISIBILITY_CLOSED = "CLOSED";
 
     private final DocumentManagementRepository documents;
     private final CustomerEvidenceGrantRepository grants;
@@ -59,45 +59,21 @@ public class CustomerEvidenceAccessService {
         }
         EvidenceAttachment attachment = requireAttachment(attachmentCode);
         assertActive(attachment);
-        String kind = kindOf(attachment);
-        CustomerEvidenceGrant existing = grants.find(customerId, attachment.code()).orElse(null);
-        if (existing != null) {
-            return existing;
+        rejectSensitive(attachment);
+        if (isModel(attachment)) {
+            throw new BusinessException("模型外部引用默认内部，不能获准给客户");
         }
-        CustomerEvidenceGrant grant = new CustomerEvidenceGrant(
-                "CEG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32),
-                customerId, attachment.code(), kind);
-        grants.save(grant);
-        return grant;
+        throw new BusinessException("本版不向客户开放照片和文件");
     }
 
     public CustomerEvidenceDetail detail(OperatorContext operator) {
         long customerId = customerId(operator);
-        return new CustomerEvidenceDetail(customerId, VISIBILITY_UNDECIDED, grants.listByCustomer(customerId).stream()
-                .flatMap(grant -> documents.findAttachmentByCode(grant.attachmentCode()).stream()
-                        .filter(attachment -> visible(grant, attachment)).map(attachment -> item(grant, attachment)))
-                .toList());
+        return new CustomerEvidenceDetail(customerId, VISIBILITY_CLOSED, java.util.List.of());
     }
 
     public CustomerEvidenceDownload download(OperatorContext operator, String grantId, String attachmentCode, String ticket) {
-        long customerId = customerId(operator);
-        CustomerEvidenceGrant grant = grants.findById(grantId)
-                .orElseThrow(() -> new PermissionDeniedException("不能绕过获准详情直接下载"));
-        if (grant.customerId() != customerId) {
-            throw new PermissionDeniedException("不能下载其他客户的证据");
-        }
-        String code = attachmentCode == null ? "" : attachmentCode.trim();
-        if (!grant.attachmentCode().equals(code) || ticket == null || !ticket.equals(ticketOf(grant))) {
-            throw new PermissionDeniedException("附件与获准详情不一致");
-        }
-        EvidenceAttachment attachment = requireAttachment(code);
-        assertActive(attachment);
-        rejectSensitive(attachment);
-        if (!kindOf(attachment).equals(grant.kind())) {
-            throw new PermissionDeniedException("附件与获准详情不一致");
-        }
-        return new CustomerEvidenceDownload(grant.grantId(), attachment.code(), attachment.fileName(),
-                attachment.mediaType(), grant.kind());
+        customerId(operator);
+        throw new BusinessException("本版不向客户开放照片和文件");
     }
 
     public AttachmentStreamContent downloadContent(OperatorContext operator, String grantId, String attachmentCode, String ticket) {
@@ -172,6 +148,13 @@ public class CustomerEvidenceAccessService {
             throw new PermissionDeniedException("不是客户身份");
         }
         return Long.parseLong(portal.customerScope().get(0));
+    }
+
+    private static boolean isModel(EvidenceAttachment attachment) {
+        String objectType = text(attachment.objectType());
+        String fileName = text(attachment.fileName()).toLowerCase(Locale.ROOT);
+        return objectType.contains("DESIGN") || objectType.contains("MODEL") || fileName.endsWith(".stl")
+                || fileName.endsWith(".obj") || fileName.endsWith(".3dm");
     }
 
     private static String kindOf(EvidenceAttachment attachment) {
