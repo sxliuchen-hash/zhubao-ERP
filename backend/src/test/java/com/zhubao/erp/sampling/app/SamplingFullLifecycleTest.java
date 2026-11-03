@@ -154,7 +154,7 @@ class SamplingFullLifecycleTest {
         SamplingFeeService fees = new SamplingFeeService(orders, deliveries, new InMemorySamplingFeeRepository(), finance, unit, guard);
         assertThatThrownBy(() -> fees.settle("z02-wage-001", keeper, opened.samplingCode(), first.deliveryId(), new BigDecimal("80.00"), false, "", "", true))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("打样员工计酬尚未核定");
+                .hasMessage("打样本版不核算工资");
         assertThatThrownBy(() -> fees.settle("z02-zero-001", keeper, opened.samplingCode(), first.deliveryId(), BigDecimal.ZERO, false, "", "", false))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("未知金额不能写成 0");

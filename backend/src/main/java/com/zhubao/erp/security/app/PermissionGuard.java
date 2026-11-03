@@ -53,6 +53,7 @@ public class PermissionGuard {
         allowManager(PermissionCode.FINANCE_ASSET, RoleCode.FINANCE_STATISTICIAN);
         allowManager(PermissionCode.FINANCE_PAYABLE, RoleCode.FINANCE_STATISTICIAN);
         allowManager(PermissionCode.FINANCE_CUSTOMER_READ, RoleCode.FINANCE_STATISTICIAN);
+        allowManager(PermissionCode.SAMPLING_FEE_WAIVE, RoleCode.BUSINESS_MANAGER);
         allowManager(PermissionCode.FINANCE_COMPANY_READ, RoleCode.FINANCE_STATISTICIAN);
         // 业务管理可分给多人，只顶上收货、报工和质检，不带财务入账、发货和账号管理。
         grant(PermissionCode.BUSINESS_INBOUND_CONFIRM, RoleCode.BUSINESS_MANAGER);

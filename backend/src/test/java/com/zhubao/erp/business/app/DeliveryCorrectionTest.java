@@ -67,19 +67,23 @@ class DeliveryCorrectionTest {
         harness.downstream.consumed = BigDecimal.ZERO;
         harness.downstream.charge = false;
         harness.downstream.refund = false;
-        assertThatThrownBy(() -> harness.correction.apply("e03-hand01", "clerk-01", confirmed.deliveryId(), 2,
-                DeliveryCorrectionIntent.REVERSE_BEFORE_HANDOVER))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("交接与取消规则尚未核定，不能按未交接直接取消");
-        assertThatThrownBy(() -> harness.correction.apply("e03-wipe01", "clerk-01", confirmed.deliveryId(), 2,
+        assertThat(harness.correction.impact(confirmed.deliveryId()).handover()).isEqualTo("未交接");
+        DeliveryDraft reversed = harness.correction.apply("e03-hand01", "clerk-01", confirmed.deliveryId(), 2,
+                DeliveryCorrectionIntent.REVERSE_BEFORE_HANDOVER);
+        DeliveryDraft reverseReplay = harness.correction.apply("e03-hand01", "clerk-01", confirmed.deliveryId(), 2,
+                DeliveryCorrectionIntent.REVERSE_BEFORE_HANDOVER);
+        assertThat(reverseReplay.deliveryId()).isEqualTo(reversed.deliveryId());
+        assertThat(reversed.status()).isEqualTo(DeliveryDraftStatus.REVERSED);
+        assertThatThrownBy(() -> harness.correction.apply("e03-wipe01", "clerk-01", confirmed.deliveryId(), 3,
                 DeliveryCorrectionIntent.CANCEL_AND_REOPEN))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("不能以取消重开抹平历史");
+                .hasMessage("只有已确认交付才能更正");
 
         DeliveryConfirmedSource source = harness.store.confirmedSources(confirmed.deliveryId()).get(0);
         assertThat(source.quantity()).isEqualByComparingTo("80");
-        assertThat(harness.store.find(confirmed.deliveryId()).orElseThrow().status()).isEqualTo(DeliveryDraftStatus.CONFIRMED);
-        assertThat(harness.store.find(confirmed.deliveryId()).orElseThrow().version()).isEqualTo(2);
+        assertThat(harness.store.find(confirmed.deliveryId()).orElseThrow().status()).isEqualTo(DeliveryDraftStatus.REVERSED);
+        assertThat(harness.store.find(confirmed.deliveryId()).orElseThrow().version()).isEqualTo(3);
+        assertThat(harness.store.bagConfirmed("BAG-B")).isFalse();
         assertThat(harness.store.listIds(null)).hasSize(1);
         assertThat(harness.documents.findOutboundOrderByCode(confirmed.deliveryId() + "-1").orElseThrow().quantity())
                 .isEqualByComparingTo("80");

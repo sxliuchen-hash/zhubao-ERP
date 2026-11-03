@@ -194,14 +194,14 @@ class ProcessingFullLifecycleTest {
         var wageReplay = chain.settle("z01-wage-ok");
         assertThat(wageReplay).extracting(PayrollLine::code).containsExactlyElementsOf(wages.stream().map(PayrollLine::code).toList());
         assertThat(wages).hasSize(3);
-        assertThat(wages.stream().map(PayrollLine::netAmount).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("162.00");
+        assertThat(wages.stream().map(PayrollLine::netAmount).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("160.00");
         assertThat(wages).allMatch(line -> line.lossDeduction().signum() == 0);
         assertThatThrownBy(() -> chain.settle("z01-wage-again"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("该目标已经核算过工资");
         assertThat(chain.finance.listPayrollLines()).hasSize(3);
         assertThat(chain.finance.listPayables()).allMatch(row -> "工资".equals(row.kind()));
-        assertThat(chain.finance.listPayables().stream().map(Payable::amount).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("162.00");
+        assertThat(chain.finance.listPayables().stream().map(Payable::amount).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("160.00");
         assertThat(chain.receivableTotal()).isEqualByComparingTo("960");
         assertThat(chain.mother().quantity()).isEqualByComparingTo("500");
         assertThat(chain.mother().evidenceCode()).isEqualTo("原来料照片");
@@ -323,7 +323,7 @@ class ProcessingFullLifecycleTest {
 
         List<PayrollLine> settle(String request) {
             return new EmployeeTargetSettlementService(lookup(), finance, actor -> { }, unit).settle(person("finance"), request, target, 7L, List.of(
-                    new EmployeeWorkShare("cutter", "CUT", n("500"), n("0.10"), false),
+                    new EmployeeWorkShare("cutter", "CUT", n("480"), n("0.10"), false),
                     new EmployeeWorkShare("polisher", "POLISH_BEAD", n("200"), n("0.20"), false),
                     new EmployeeWorkShare("blanker", "BLANK", n("480"), n("0.15"), false)));
         }

@@ -58,7 +58,7 @@ public class GoldworkCompletionService {
         if (countOutsourcingAsOutput) {
             throw new BusinessException("外协不算员工产量");
         }
-        throw new BusinessException("金工计酬尚未核定，不能结清");
+        throw new BusinessException("金工本版只记录件数，不核算工资");
     }
 
     private GoldworkOrder requireVisible(OperatorContext actor, String goldworkCode) {

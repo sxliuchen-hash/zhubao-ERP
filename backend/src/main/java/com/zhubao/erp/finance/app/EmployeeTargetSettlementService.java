@@ -30,8 +30,8 @@ import java.util.UUID;
 
 /**
  * 加工目标整体闭合后，按计酬人的实作份额确认工费。
- * 不因客户收款或一次发货重算。外协数量不算员工产量。损耗不自动扣工资。
- * 代报、返工和全损计酬尚未核定，这些情况只拒绝，不填 0。
+ * 不因客户收款或一次发货重算。外协数量不算员工产量。返工是售后，不改变工资。
+ * 工资数量按最终成品核定，定额工价由人工填写。没有最终成品不入账，也不写 0。
  */
 @Service
 public class EmployeeTargetSettlementService {
@@ -76,21 +76,22 @@ public class EmployeeTargetSettlementService {
             throw new BusinessException("该目标已经核算过工资");
         }
         EmployeeTargetClosure closure = closures.find(target).orElseThrow(() -> new BusinessException("加工目标不存在"));
+        if (closure.kind() == BusinessKind.GOLDWORK) {
+            throw new BusinessException("金工本版只记录件数，不核算工资");
+        }
         StockMeasurement.rejectUndecidedGoldScale(closure.kind());
         if (closure.kind() == BusinessKind.SAMPLING) {
-            throw new BusinessException("打样计酬尚未核定，不能入账");
+            throw new BusinessException("打样本版不核算工资");
         }
         if (closure.closure() == EmployeeClosureKind.NOT_CLOSED) {
             throw new BusinessException("加工目标尚未闭合，不能核算工资");
         }
-        if (closure.closure() == EmployeeClosureKind.TOTAL_LOSS) {
-            throw new BusinessException("全损计酬尚未核定，不能按 0 或正常完工入账");
-        }
-        if (closure.closure() == EmployeeClosureKind.REWORK_OPEN || closure.closure() == EmployeeClosureKind.REWORK_PAY_PENDING) {
-            throw new BusinessException("返工计酬尚未核定，不能入账");
+        if (closure.closure() == EmployeeClosureKind.TOTAL_LOSS
+                || closure.finishedQuantity() != null && closure.finishedQuantity().signum() == 0) {
+            throw new BusinessException("没有最终成品，不能按定额核算工资");
         }
         if (shares.stream().anyMatch(EmployeeWorkShare::proxy)) {
-            throw new BusinessException("多人代报计酬尚未核定，不能入账");
+            throw new BusinessException("工资只发给实际加工的人");
         }
         if (!closure.workEvidenceComplete()) throw new BusinessException("员工实作依据不完整，请核对工序、人员及报工照片");
         var remaining = new ArrayList<>(closure.work());
@@ -99,8 +100,10 @@ public class EmployeeTargetSettlementService {
             var work = remaining.stream().filter(item -> item.payeeAccount().equals(share.payeeAccount())
                     && (item.stepId().equals(share.processName()) || item.processName().equals(share.processName())))
                     .findFirst().orElseThrow(() -> new BusinessException("计酬人员或工序没有对应实作依据"));
-            if (share.quantity().compareTo(work.quantity()) != 0)
-                throw new BusinessException("工费数量必须等于员工实作数量，不能自动扣损耗");
+            BigDecimal expected = wageQuantity(work.quantity(), closure.finishedQuantity());
+            if (share.quantity().compareTo(expected) != 0) {
+                throw new BusinessException("工资数量按最终成品核定，定额工价请另行填写");
+            }
             remaining.remove(work);
             verified.add(new EmployeeWorkShare(share.payeeAccount(), work.stepId(), share.quantity(), share.unitPrice(), false));
         }
@@ -125,6 +128,13 @@ public class EmployeeTargetSettlementService {
             codes.add(code);
         }
         return String.join(",", codes);
+    }
+
+    private static BigDecimal wageQuantity(BigDecimal worked, BigDecimal finished) {
+        if (finished == null || worked.compareTo(finished) <= 0) {
+            return worked;
+        }
+        return finished;
     }
 
     private static ChargeUnit chargeUnit(String quantityUnit) {

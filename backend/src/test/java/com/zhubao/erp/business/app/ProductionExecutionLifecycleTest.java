@@ -67,9 +67,9 @@ class ProductionExecutionLifecycleTest {
         var lookup=new ProductionEmployeeClosureLookup(f.bags,f.routes,f.portions,new InMemoryReworkTaskRepository(),f.dispositionRows,f.documents,f.reportRows,new InMemoryOutsourcingCompletionRepository());
         assertThat(lookup.find(f.target).orElseThrow().lossQuantity()).isEqualByComparingTo("20");
         var employee=new EmployeeTargetSettlementService(lookup,finance,actor -> {},f.unit);
-        var wages=employee.settle(worker("finance"),"execution-wage",f.target,7L,List.of(new EmployeeWorkShare("a","CUT",n("500"),n("0.1"),false),new EmployeeWorkShare("b","BLANK",n("500"),n("0.2"),false)));
+        var wages=employee.settle(worker("finance"),"execution-wage",f.target,7L,List.of(new EmployeeWorkShare("a","CUT",n("480"),n("0.1"),false),new EmployeeWorkShare("b","BLANK",n("480"),n("0.2"),false)));
         assertThat(wages).hasSize(2);
-        assertThat(wages.stream().map(PayrollLine::netAmount).reduce(BigDecimal.ZERO,BigDecimal::add)).isEqualByComparingTo("150");
+        assertThat(wages.stream().map(PayrollLine::netAmount).reduce(BigDecimal.ZERO,BigDecimal::add)).isEqualByComparingTo("144");
         assertThat(f.documents.findMotherOrderByCode(f.target).orElseThrow().evidenceCode()).isEqualTo("原来料照片");
         assertThat(f.documents.findMotherOrderByCode(f.target).orElseThrow().quantity()).isEqualByComparingTo("500");
         assertThat(f.stock.ledgers()).filteredOn(row -> "process_loss".equals(row.documentType())).singleElement().satisfies(row -> assertThat(row.weight()).isNull());
@@ -94,7 +94,7 @@ class ProductionExecutionLifecycleTest {
         assertThat(billing.confirm(worker("finance"),"partial-bill-second",secondDelivery,List.of(new CustomerChargeLine("加工费",f.target,CustomerChargeMethod.QUANTITY,"颗",n("190"),n("2"),null,null,null,null,"本次实发")),null,null).totalAmount()).isEqualByComparingTo("380");
         assertThat(finance.listReceivables()).hasSize(2);
         var employee=new EmployeeTargetSettlementService(lookup,finance,actor -> {},f.unit);
-        assertThat(employee.settle(worker("finance"),"partial-settle",f.target,7L,List.of(new EmployeeWorkShare("a","CUT",n("500"),n("0.1"),false),new EmployeeWorkShare("b","BLANK",n("500"),n("0.2"),false)))).hasSize(2);
+        assertThat(employee.settle(worker("finance"),"partial-settle",f.target,7L,List.of(new EmployeeWorkShare("a","CUT",n("490"),n("0.1"),false),new EmployeeWorkShare("b","BLANK",n("490"),n("0.2"),false)))).hasSize(2);
         assertThat(f.documents.listOutboundOrders()).hasSize(2);
     }
 

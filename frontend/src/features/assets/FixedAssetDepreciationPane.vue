@@ -45,7 +45,7 @@ async function submit() {
     <ul v-if="run">
       <li v-for="entry in run.entries" :key="entry.code">{{ entry.assetCode }} {{ entry.yearMonth }} {{ entry.amount }}</li>
     </ul>
-    <p v-if="run?.awaitingAssetCodes.length">以下资产停用或处置后的折旧规则待核，本次未新增：{{ run.awaitingAssetCodes.join('、') }}</p>
+    <p v-if="run?.awaitingAssetCodes.length">以下资产已停用或处置，本版暂停新增折旧，已记折旧保留：{{ run.awaitingAssetCodes.join('、') }}</p>
     <p v-if="message">{{ message }}</p>
   </section>
 </template>

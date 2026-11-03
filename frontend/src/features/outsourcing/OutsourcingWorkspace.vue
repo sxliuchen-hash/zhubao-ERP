@@ -12,6 +12,7 @@ const emit = defineEmits<{ changed: [] }>();
 
 const completionRows = ref<OutsourcingReturnCompletion[]>([]);
 const completionPending = ref(false);
+const optionalPayable = ref('');
 async function loadCompletions() {
   if (!position.value || !matchesOrder.value) return;
   try { completionRows.value = await fetchOutsourcingReturns(position.value.taskId); }
@@ -19,7 +20,8 @@ async function loadCompletions() {
 }
 async function complete(returnId: string) {
   if (completionPending.value) return; completionPending.value = true;
-  try { await confirmOutsourcingCompletion({ requestId: `completion-${returnId}`, returnId }); await loadCompletions(); emit('changed'); }
+  const text = optionalPayable.value.trim();
+  try { await confirmOutsourcingCompletion({ requestId: `completion-${returnId}`, returnId, amount: text === '' ? null : Number(text) }); optionalPayable.value = ''; await loadCompletions(); emit('changed'); }
   catch (cause) { error.value = cause instanceof Error ? cause.message : '完工确认失败，请重试原操作'; }
   finally { completionPending.value = false; }
 }
@@ -132,7 +134,11 @@ async function receive() {
       <p v-if="position.outsourcingCountsAsInHouseStock">在外不能当成厂内现货</p>
       <button type="button" @click="loadCompletions">读取收回完工明细</button>
       <p v-for="row in completionRows" :key="row.returned.returnId">{{ row.returned.returnId }} · 实收 {{ row.returned.receivedQty }} · 未加工退回 {{ row.returned.unprocessedQty }}
-        <span v-if="row.completed">已确认完工</span><button v-else-if="row.returned.receivedQty > 0" type="button" :disabled="completionPending" @click="complete(row.returned.returnId)">确认实收部分完工</button>
+        <span v-if="row.completed">已确认完工</span>
+        <template v-else-if="row.returned.receivedQty > 0">
+          <label>应付款（选填）<input v-model="optionalPayable" aria-label="外协应付款" inputmode="decimal" placeholder="不填不生成应付" /></label>
+          <button type="button" :disabled="completionPending" @click="complete(row.returned.returnId)">确认实收部分完工</button>
+        </template>
       </p>
       <label>本厂袋
         <select v-model="bagId" aria-label="本厂袋">

@@ -168,6 +168,27 @@ public class JdbcDeliveryDraftRepository implements DeliveryDraftRepository {
     }
 
     @Override
+    public void reverse(DeliveryDraft reversed, int expectedVersion, WorkSession session) {
+        Connection connection = WorkSessionBindings.requiredJdbc(session);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                update biz_delivery_draft
+                   set status_code=?, version_no=?
+                 where delivery_id=? and version_no=? and status_code=?
+                """)) {
+            statement.setString(1, reversed.status().name());
+            statement.setInt(2, reversed.version());
+            statement.setString(3, reversed.deliveryId());
+            statement.setInt(4, expectedVersion);
+            statement.setString(5, DeliveryDraftStatus.CONFIRMED.name());
+            if (statement.executeUpdate() != 1) {
+                throw new BusinessException("交付草稿已被其他人修改，请刷新后重试");
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法取消已确认出库", ex);
+        }
+    }
+
+    @Override
     public List<DeliveryConfirmedSource> confirmedSources(String deliveryId) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
@@ -192,7 +213,11 @@ public class JdbcDeliveryDraftRepository implements DeliveryDraftRepository {
     public boolean bagConfirmed(String bagId) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "select bag_id from biz_delivery_confirmed_source where bag_id=?")) {
+                     """
+                     select s.bag_id from biz_delivery_confirmed_source s
+                       join biz_delivery_draft d on d.delivery_id=s.delivery_id
+                      where s.bag_id=? and d.status_code='CONFIRMED'
+                     """)) {
             statement.setString(1, bagId);
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next();

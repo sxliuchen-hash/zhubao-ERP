@@ -78,7 +78,7 @@ class SamplingFeeSettlementTest {
         assertThatThrownBy(() -> service.settle(
                 "s06-pay-0001", keeper, order.samplingCode(), "SD-S06-A", new BigDecimal("80.00"), false, "", "", true))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("打样员工计酬尚未核定");
+                .hasMessage("打样本版不核算工资");
         assertThat(finance.listReceivables()).isEmpty();
         assertThat(finance.listPayrollLines()).isEmpty();
 

@@ -57,6 +57,7 @@ public class JdbcBagWeightRepository implements BagWeightRepository {
             } else {
                 update(connection, fact);
             }
+            insertHistory(connection, fact);
         } catch (SQLException ex) {
             throw new IllegalStateException("无法保存袋重量", ex);
         }
@@ -92,6 +93,42 @@ public class JdbcBagWeightRepository implements BagWeightRepository {
             statement.setInt(3, fact.version());
             statement.setString(4, fact.bagId());
             statement.executeUpdate();
+        }
+    }
+
+    private void insertHistory(Connection connection, BagWeightFact fact) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "insert into biz_bag_weight_record(bag_id, version_no, weight_state, weight_value) values (?,?,?,?)")) {
+            statement.setString(1, fact.bagId());
+            statement.setInt(2, fact.version());
+            statement.setString(3, fact.state().name());
+            if (fact.value() == null) {
+                statement.setNull(4, Types.DECIMAL);
+            } else {
+                statement.setBigDecimal(4, fact.value());
+            }
+            statement.executeUpdate();
+        }
+    }
+
+    @Override
+    public java.util.List<BagWeightFact> history(String bagId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "select weight_state, weight_value, version_no from biz_bag_weight_record where bag_id=? order by version_no")) {
+            statement.setString(1, bagId);
+            try (ResultSet rows = statement.executeQuery()) {
+                java.util.List<BagWeightFact> history = new java.util.ArrayList<>();
+                while (rows.next()) {
+                    BigDecimal value = rows.getBigDecimal("weight_value");
+                    boolean missing = rows.wasNull();
+                    history.add(new BagWeightFact(bagId, BagWeightState.valueOf(rows.getString("weight_state")),
+                            missing ? null : value, rows.getInt("version_no")));
+                }
+                return history;
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法读取称重记录", ex);
         }
     }
 

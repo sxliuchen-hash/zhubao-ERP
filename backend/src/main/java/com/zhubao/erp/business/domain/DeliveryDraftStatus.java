@@ -6,5 +6,7 @@ package com.zhubao.erp.business.domain;
 public enum DeliveryDraftStatus {
     DRAFT,
     CONFIRMED,
-    ABANDONED
+    ABANDONED,
+    /** 未交接前取消出库。原出库记录保留，库存追加冲回。 */
+    REVERSED
 }

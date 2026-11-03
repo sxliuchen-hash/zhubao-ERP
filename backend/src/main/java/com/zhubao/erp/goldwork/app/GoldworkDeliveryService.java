@@ -74,7 +74,7 @@ public class GoldworkDeliveryService {
             throw new BusinessException("不能按克数乘金价计费");
         }
         if (amount != null) {
-            throw new BusinessException("金工收费时点尚未核定");
+            throw new BusinessException("金工本版只记录件数，不核算费用");
         }
         if (shipAsProcessing) {
             throw new BusinessException("金工交付不写普通发货");

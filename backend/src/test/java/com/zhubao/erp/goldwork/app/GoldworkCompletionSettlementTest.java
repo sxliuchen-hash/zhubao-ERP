@@ -53,7 +53,7 @@ class GoldworkCompletionSettlementTest {
 
         assertThatThrownBy(() -> service.complete(keeper, order.goldworkCode(), false))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金工计酬尚未核定，不能结清");
+                .hasMessage("金工本版只记录件数，不核算工资");
 
         movements.insert(movement(order.goldworkCode(), "GM-OUT", GoldworkMovementKind.OUTPUT, "", new BigDecimal("1.20000")), null);
         assertThatThrownBy(() -> service.complete(keeper, order.goldworkCode(), false))
@@ -92,7 +92,7 @@ class GoldworkCompletionSettlementTest {
                 .hasMessage("外协不算员工产量");
         assertThatThrownBy(() -> service.complete(keeper, ready.goldworkCode(), false))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金工计酬尚未核定，不能结清");
+                .hasMessage("金工本版只记录件数，不核算工资");
         assertThat(orders.find(order.goldworkCode()).orElseThrow().status()).isEqualTo(GoldworkOrderStatus.OPEN);
         assertThat(orders.find(clear.goldworkCode()).orElseThrow().status()).isEqualTo(GoldworkOrderStatus.OPEN);
         assertThat(orders.find(ready.goldworkCode()).orElseThrow().status()).isEqualTo(GoldworkOrderStatus.OPEN);

@@ -74,7 +74,7 @@ class FixedAssetDepreciationContinuityTest {
         assertThat(result.entries()).extracting(DepreciationEntry::assetCode).containsExactly("NORMAL");
         assertThat(result.awaitingAssetCodes()).containsExactly("STOPPED");
         assertThatThrownBy(() -> costs.depreciate(new com.zhubao.erp.finance.domain.FinanceCommands.DepreciationRunCommand("2026-11")))
-                .hasMessageContaining("处置后的折旧规则待核");
+                .hasMessageContaining("本版暂停新增折旧，已记折旧保留");
         assertThat(books.listDepreciations()).hasSize(1);
     }
 

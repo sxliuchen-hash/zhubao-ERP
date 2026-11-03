@@ -98,21 +98,22 @@ class EmployeeTargetSettlementTest {
         assertThatThrownBy(() -> service.settle(actor, "e07-loss01", "MD-LOSS", 7L, List.of(
                 new EmployeeWorkShare("payee-a", "抛光", new BigDecimal("0.001"), new BigDecimal("1"), false))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("全损计酬尚未核定，不能按 0 或正常完工入账");
-        assertThatThrownBy(() -> service.settle(actor, "e07-rewk01", "MD-REWORK", 7L, List.of(share)))
-                .isInstanceOf(BusinessException.class).hasMessage("返工计酬尚未核定，不能入账");
+                .hasMessage("没有最终成品，不能按定额核算工资");
+        List<PayrollLine> reworkPaid = service.settle(actor, "e07-rewk01", "MD-REWORK", 7L, List.of(
+                new EmployeeWorkShare("payee-a", "抛光", new BigDecimal("6"), new BigDecimal("1"), false),
+                new EmployeeWorkShare("payee-b", "抛光", new BigDecimal("4"), new BigDecimal("1"), false)));
+        assertThat(reworkPaid).hasSize(2);
         assertThatThrownBy(() -> service.settle(actor, "e07-prox01", "MD-PROXY", 7L, List.of(
                 new EmployeeWorkShare("payee-a", "抛光", new BigDecimal("10"), new BigDecimal("1"), true))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("多人代报计酬尚未核定，不能入账");
+                .hasMessage("工资只发给实际加工的人");
         assertThatThrownBy(() -> service.settle(actor, "e07-dy0001", "DY-20261030-0001", 7L, List.of(
                 new EmployeeWorkShare("payee-a", "打样", new BigDecimal("1"), new BigDecimal("1"), false))))
-                .isInstanceOf(BusinessException.class).hasMessage("打样计酬尚未核定，不能入账");
+                .isInstanceOf(BusinessException.class).hasMessage("打样本版不核算工资");
         assertThatThrownBy(() -> service.settle(actor, "e07-gj0001", "GJ-20261030-0001", 7L, List.of(
                 new EmployeeWorkShare("payee-a", "金工", new BigDecimal("1"), new BigDecimal("1"), false))))
-                .isInstanceOf(BusinessException.class).hasMessage("金工计量精度尚未核定，不能按现有三位库存截断后入账");
-        assertThat(finance.listPayrollLines()).isEmpty();
-        assertThat(finance.listPayables()).isEmpty();
+                .isInstanceOf(BusinessException.class).hasMessage("金工本版只记录件数，不核算工资");
+        assertThat(finance.listPayrollLines()).hasSize(2);
         assertThat(finance.listReceivables()).isEmpty();
     }
 
@@ -124,7 +125,7 @@ class EmployeeTargetSettlementTest {
         assertThatThrownBy(() -> service.settle(actor, "e07-short1", "MD-20261030-1001", 7L, List.of(
                 new EmployeeWorkShare("payee-a", "抛光", new BigDecimal("424"), new BigDecimal("2"), false))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("工费数量必须等于员工实作数量，不能自动扣损耗");
+                .hasMessage("工资数量按最终成品核定，定额工价请另行填写");
         EmployeeTargetSettlementService denied = new EmployeeTargetSettlementService(
                 target -> Optional.of(closure(BusinessKind.PROCESSING, EmployeeClosureKind.CLOSED_NORMAL, "10", "0", null)),
                 finance, actorContext -> {
@@ -149,6 +150,7 @@ class EmployeeTargetSettlementTest {
         return new EmployeeTargetClosure(kind, state, new BigDecimal(employee), new BigDecimal(outsourcing),
                 loss == null ? null : new BigDecimal(loss), "颗", List.of(
                 new EmployeeProcessWork("payee-a", "甲", "POLISH_BEAD", "抛光", employee.equals("462") ? new BigDecimal("300") : new BigDecimal(employee).multiply(new BigDecimal("0.6"))),
-                new EmployeeProcessWork("payee-b", "乙", "POLISH_BEAD", "抛光", employee.equals("462") ? new BigDecimal("162") : new BigDecimal(employee).multiply(new BigDecimal("0.4")))), true);
+                new EmployeeProcessWork("payee-b", "乙", "POLISH_BEAD", "抛光", employee.equals("462") ? new BigDecimal("162") : new BigDecimal(employee).multiply(new BigDecimal("0.4")))), true,
+                state == EmployeeClosureKind.CLOSED_NORMAL ? new BigDecimal(employee) : null);
     }
 }

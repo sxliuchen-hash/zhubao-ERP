@@ -204,7 +204,7 @@ public class FinanceCostService {
                 continue;
             }
             if (depreciationBlocked(asset, yearMonth)) {
-                throw new BusinessException("资产停用或处置后的折旧规则待核：" + asset.code());
+                throw new BusinessException("本版暂停新增折旧，已记折旧保留：" + asset.code());
             }
             DepreciationEntry entry = new DepreciationEntry(
                     FinanceTexts.code("FIN-DEP", sequence),

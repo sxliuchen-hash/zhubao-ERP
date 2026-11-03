@@ -141,3 +141,5 @@ V140__m3_goldwork_partial_delivery.sql
 V141__m3_report_worker_identity.sql
 V142__m3_disposition_work_evidence.sql
 V143__m3_delivery_presentation_snapshot.sql
+V144__m3_outsourcing_fee_amount.sql
+V145__m3_bag_weight_record.sql

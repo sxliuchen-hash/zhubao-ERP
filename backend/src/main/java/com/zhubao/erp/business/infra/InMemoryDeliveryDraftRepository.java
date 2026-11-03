@@ -125,6 +125,32 @@ public class InMemoryDeliveryDraftRepository implements DeliveryDraftRepository 
     }
 
     @Override
+    public void reverse(DeliveryDraft reversed, int expectedVersion, WorkSession session) {
+        int index = indexOf(reversed.deliveryId());
+        if (index < 0) {
+            throw new BusinessException("交付草稿不存在");
+        }
+        DeliveryDraft current = headers.get(index);
+        if (current.version() != expectedVersion || current.status() != DeliveryDraftStatus.CONFIRMED) {
+            throw new BusinessException("交付草稿已被其他人修改，请刷新后重试");
+        }
+        List<DeliveryConfirmedSource> sources = confirmed.getOrDefault(reversed.deliveryId(), List.of());
+        headers.set(index, reversed);
+        for (DeliveryConfirmedSource source : sources) {
+            confirmedBags.remove(source.bagId());
+        }
+        if (session != null) {
+            int at = index;
+            session.onRollback(() -> {
+                headers.set(at, current);
+                for (DeliveryConfirmedSource source : sources) {
+                    confirmedBags.put(source.bagId(), source);
+                }
+            });
+        }
+    }
+
+    @Override
     public List<DeliveryConfirmedSource> confirmedSources(String deliveryId) {
         return confirmed.getOrDefault(deliveryId, List.of()).stream()
                 .sorted(Comparator.comparingInt(DeliveryConfirmedSource::lineNo))

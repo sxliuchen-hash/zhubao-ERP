@@ -42,7 +42,7 @@ public record GoldworkDelivery(
         }
         purity = purity == null ? "" : purity.trim();
         if (!"UNCONFIRMED".equals(feeState)) {
-            throw new BusinessException("金工收费时点尚未核定");
+            throw new BusinessException("金工本版只记录件数，不核算费用");
         }
     }
 }

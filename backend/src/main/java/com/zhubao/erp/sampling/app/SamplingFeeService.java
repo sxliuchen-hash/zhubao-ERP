@@ -65,7 +65,7 @@ public class SamplingFeeService {
                                   BigDecimal amount, boolean waive, String reason, String motherOrderCode,
                                   boolean settleWages) {
         if (settleWages) {
-            throw new BusinessException("打样员工计酬尚未核定");
+            throw new BusinessException("打样本版不核算工资");
         }
         if (motherOrderCode != null && !motherOrderCode.isBlank()) {
             throw new BusinessException("样费不能抵大货");

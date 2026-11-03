@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import javax.sql.DataSource;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -30,8 +31,8 @@ public class JdbcOutsourcingFeeBasisRepository implements OutsourcingFeeBasisRep
         Connection connection = WorkSessionBindings.requiredJdbc(session);
         try (PreparedStatement statement = connection.prepareStatement("""
                 insert into fin_outsourcing_fee_basis(
-                    basis_id, completion_id, task_id, party_id, target_code, node_id, quantity)
-                values (?,?,?,?,?,?,?)
+                    basis_id, completion_id, task_id, party_id, target_code, node_id, quantity, amount)
+                values (?,?,?,?,?,?,?,?)
                 """)) {
             statement.setString(1, basis.basisId());
             statement.setString(2, basis.completionId());
@@ -40,6 +41,11 @@ public class JdbcOutsourcingFeeBasisRepository implements OutsourcingFeeBasisRep
             statement.setString(5, basis.targetCode());
             statement.setString(6, basis.nodeId());
             statement.setBigDecimal(7, basis.quantity());
+            if (basis.amount() == null) {
+                statement.setNull(8, java.sql.Types.DECIMAL);
+            } else {
+                statement.setBigDecimal(8, basis.amount());
+            }
             statement.executeUpdate();
         } catch (SQLException ex) {
             if (duplicate(ex)) {
@@ -59,10 +65,14 @@ public class JdbcOutsourcingFeeBasisRepository implements OutsourcingFeeBasisRep
                 if (!rows.next()) {
                     return Optional.empty();
                 }
+                BigDecimal amount = rows.getBigDecimal("amount");
+                if (rows.wasNull()) {
+                    amount = null;
+                }
                 return Optional.of(new OutsourcingFeeBasis(
                         rows.getString("basis_id"), rows.getString("completion_id"), rows.getString("task_id"),
                         rows.getString("party_id"), rows.getString("target_code"), rows.getString("node_id"),
-                        rows.getBigDecimal("quantity")));
+                        rows.getBigDecimal("quantity"), amount));
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("无法读取外协费用依据", ex);

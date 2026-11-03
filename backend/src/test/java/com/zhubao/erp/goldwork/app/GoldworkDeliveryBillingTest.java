@@ -62,7 +62,7 @@ class GoldworkDeliveryBillingTest {
         assertThatThrownBy(() -> deliver(service, "m08-amount1", fixture.order().goldworkCode(), fixture.released().qualityId(),
                 null, new BigDecimal("80"), false, false))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("金工收费时点尚未核定");
+                .hasMessage("金工本版只记录件数，不核算费用");
         assertThatThrownBy(() -> deliver(service, "m08-ship001", fixture.order().goldworkCode(), fixture.released().qualityId(),
                 null, null, true, false))
                 .isInstanceOf(BusinessException.class)

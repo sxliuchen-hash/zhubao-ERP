@@ -54,7 +54,7 @@ class EmployeeWorkEvidenceRegressionTest {
         assertThat(lost.lookup().find(lost.bag.targetCode()).orElseThrow().closure()).isEqualTo(EmployeeClosureKind.TOTAL_LOSS);
         assertThatThrownBy(() -> lost.settlement().settle(worker("finance"), "settle-loss", lost.bag.targetCode(), 7L,
             List.of(new EmployeeWorkShare("a", "CUT", n("10"), n("1"), false))))
-            .hasMessage("全损计酬尚未核定，不能按 0 或正常完工入账");
+            .hasMessage("没有最终成品，不能按定额核算工资");
     }
     @Test void 实际返工结束仍待核且普通名称和非代报不能绕过() {
         Fixture f = new Fixture();
@@ -65,10 +65,10 @@ class EmployeeWorkEvidenceRegressionTest {
         rework.open("rework-01", f.bag.id(), 1, 1, worker("qc"));
         for (ActivityBag leaf : f.bagService.activeLeaves(f.bag.targetCode())) for (String step : List.of("CUT", "BLANK"))
             f.portions.save(new NodePortionBalance(leaf.id(), step, leaf.quantity(), leaf.quantity()), null);
-        assertThat(f.lookup().find(f.bag.targetCode()).orElseThrow().closure()).isEqualTo(EmployeeClosureKind.REWORK_PAY_PENDING);
+        assertThat(f.lookup().find(f.bag.targetCode()).orElseThrow().closure()).isEqualTo(EmployeeClosureKind.CLOSED_NORMAL);
         assertThatThrownBy(() -> f.settlement().settle(worker("finance"), "settle-rework", f.bag.targetCode(), 7L,
             List.of(new EmployeeWorkShare("a", "CUT", n("8"), n("1"), false), new EmployeeWorkShare("b", "CUT", n("2"), n("1"), false))))
-            .hasMessage("返工计酬尚未核定，不能入账");
+            .hasMessage("员工实作依据不完整，请核对工序、人员及报工照片");
         assertThat(f.finance.listPayrollLines()).isEmpty();
     }
     @Test void 部分报工计酬身份和照片可由新建JDBC仓储读回() throws Exception {

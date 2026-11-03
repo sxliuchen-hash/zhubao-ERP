@@ -16,11 +16,19 @@ public record EmployeeTargetClosure(
         BigDecimal lossQuantity,
         String quantityUnit,
         java.util.List<EmployeeProcessWork> work,
-        boolean workEvidenceComplete
+        boolean workEvidenceComplete,
+        BigDecimal finishedQuantity
 ) {
     public EmployeeTargetClosure(BusinessKind kind, EmployeeClosureKind closure, BigDecimal employeeQuantity,
                                  BigDecimal outsourcingQuantity, BigDecimal lossQuantity, String quantityUnit) {
-        this(kind, closure, employeeQuantity, outsourcingQuantity, lossQuantity, quantityUnit, java.util.List.of(), false);
+        this(kind, closure, employeeQuantity, outsourcingQuantity, lossQuantity, quantityUnit, java.util.List.of(), false, null);
     }
+
+    public EmployeeTargetClosure(BusinessKind kind, EmployeeClosureKind closure, BigDecimal employeeQuantity,
+                                 BigDecimal outsourcingQuantity, BigDecimal lossQuantity, String quantityUnit,
+                                 java.util.List<EmployeeProcessWork> work, boolean workEvidenceComplete) {
+        this(kind, closure, employeeQuantity, outsourcingQuantity, lossQuantity, quantityUnit, work, workEvidenceComplete, null);
+    }
+
     public EmployeeTargetClosure { work = java.util.List.copyOf(work); }
 }

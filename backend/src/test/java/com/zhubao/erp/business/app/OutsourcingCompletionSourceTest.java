@@ -90,7 +90,8 @@ class OutsourcingCompletionSourceTest {
         assertThat(basis.quantity()).isEqualByComparingTo("150");
         assertThat(basis.partyId()).isEqualTo("WX-POLISH-01");
         assertThat(Arrays.stream(OutsourcingFeeBasis.class.getRecordComponents()).map(RecordComponent::getName))
-                .containsExactly("basisId", "completionId", "taskId", "partyId", "targetCode", "nodeId", "quantity");
+                .containsExactly("basisId", "completionId", "taskId", "partyId", "targetCode", "nodeId", "quantity", "amount");
+        assertThat(basis.amount()).isNull();
         assertThat(workshop.returnService().balance(returned.dispatchId()).stillOut()).isEqualByComparingTo("45");
         assertThatThrownBy(() -> workshop.completion().confirm("d04-ok-011", "clerk-01", returned.returnId()))
                 .isInstanceOf(BusinessException.class)
@@ -188,7 +189,8 @@ class OutsourcingCompletionSourceTest {
             for (String file : new String[]{
                     "V44__m3_command_request.sql", "V81__m3_activity_bag.sql", "V82__m3_whole_bag_report.sql", "V141__m3_report_worker_identity.sql",
                     "V88__m3_outsourcing_source.sql", "V89__m3_outsourcing_dispatch.sql",
-                    "V90__m3_outsourcing_return.sql", "V91__m3_outsourcing_completion.sql"}) {
+                    "V90__m3_outsourcing_return.sql", "V91__m3_outsourcing_completion.sql",
+                    "V144__m3_outsourcing_fee_amount.sql"}) {
                 String sql = Files.readString(Path.of("src/main/resources/db/mysql/" + file), StandardCharsets.UTF_8);
                 for (String item : MigrationCatalog.statements(sql)) {
                     statement.execute(item);

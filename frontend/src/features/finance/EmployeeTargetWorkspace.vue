@@ -8,11 +8,15 @@ const message = ref(''); const draftJson = ref(''); const context = ref<Employee
 const command = useBusinessCommand('employee-target', target, { draftJson }, message); const { pending, hasUnconfirmed } = command;
 const saved = computed<EmployeeSettlementSaved | null>(() => draftJson.value ? JSON.parse(draftJson.value) as EmployeeSettlementSaved : null);
 let sequence = 0;
+function wageQuantity(worked: number, finished: number | null | undefined) {
+  if (finished == null || worked <= finished) return worked;
+  return finished;
+}
 watch(target, async code => {
   const read = ++sequence; context.value = null; completed.value = false;
   try {
     const view = await fetchEmployeeTarget(code); if (read !== sequence) return; context.value = view;
-    if (!draftJson.value) draftJson.value = JSON.stringify({ targetCode: code, version: 1, shares: view.closure.work.map(work => ({ payeeAccount: work.payeeAccount, processName: work.stepId, quantity: String(work.quantity), unitPrice: '', proxy: false })) });
+    if (!draftJson.value) draftJson.value = JSON.stringify({ targetCode: code, version: 1, shares: view.closure.work.map(work => ({ payeeAccount: work.payeeAccount, processName: work.stepId, quantity: String(wageQuantity(work.quantity, view.closure.finishedQuantity)), unitPrice: '', proxy: false })) });
   } catch (cause) { if (read === sequence) message.value = cause instanceof Error ? cause.message : '实作依据读取失败'; }
 }, { immediate: true });
 async function submit(payload: EmployeeSettlementSaved) {
@@ -26,7 +30,8 @@ async function submit(payload: EmployeeSettlementSaved) {
   <section aria-label="员工真实工序核算">
     <p v-if="message" role="status">{{ message }}</p>
     <template v-if="context">
-      <p v-if="context.closure.closure !== 'CLOSED_NORMAL'">本单尚未具备普通计酬条件；返工、全损须先核定计酬规则。</p>
+      <p v-if="context.closure.finishedQuantity != null">最终成品 {{ context.closure.finishedQuantity }}{{ context.closure.quantityUnit }}。工资按这个数量核定，工价填写定额，返工不另计。</p>
+      <p v-if="context.closure.closure !== 'CLOSED_NORMAL'">本单尚未具备普通计酬条件。没有最终成品不能按定额入账。</p>
       <p v-if="!context.closure.workEvidenceComplete">实作人员或照片依据未齐，请核对原报工。</p>
       <p v-for="work in context.closure.work" :key="`${work.payeeAccount}:${work.stepId}`">{{ work.payeeAccount }} · {{ work.processName }} · {{ work.quantity }}{{ context.closure.quantityUnit }}</p>
       <p v-if="context.payroll.length">该目标已有工资记录，不能重复核算。</p>

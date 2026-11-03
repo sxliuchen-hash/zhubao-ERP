@@ -107,9 +107,9 @@ public class OutsourcingController {
         var actor=maintain(request);
         var returned=returnRows.find(body.returnId()).orElseThrow(() -> new BusinessException("外协收回不存在"));
         query.dispatch(returned.dispatchId(),actor);
-        return ApiResponse.ok(completions.confirm(body.requestId(),actor.username(),returned.returnId()));
+        return ApiResponse.ok(completions.confirm(body.requestId(),actor.username(),returned.returnId(),body.amount()));
     }
-    public record CompletionRequest(String requestId,String returnId) {}
+    public record CompletionRequest(String requestId,String returnId,java.math.BigDecimal amount) {}
 
     private OperatorContext maintain(HttpServletRequest request) {
         OperatorContext actor = actors.resolve(request);

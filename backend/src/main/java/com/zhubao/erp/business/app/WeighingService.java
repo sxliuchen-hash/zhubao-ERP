@@ -16,8 +16,8 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 
 /**
- * 记录本袋实际重量。补录不改变工序数量，也不产生工费。
- * 待复称和未知都不是 0，不能按颗数把原袋重量分摊到子袋。
+ * 记录本袋实际重量。补录不改变工序数量，不改原收货重量，也不产生工费。
+ * 每次称重都追加记录。当前适用重量取最新一次。待复称和未知都不是 0。
  */
 @Service
 public class WeighingService implements WeighingMarker {

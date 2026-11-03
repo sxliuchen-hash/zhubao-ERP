@@ -65,7 +65,7 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
         String unit = quantityUnit(target);
         RouteSnapshot route = routes.list(kind, target).stream().filter(RouteSnapshot::confirmed)
                 .max(Comparator.comparingInt(RouteSnapshot::version)).orElse(null);
-        if (route == null || route.stepIds().isEmpty()) return result(kind, EmployeeClosureKind.NOT_CLOSED, outside, loss, unit, new Basis(List.of(), false));
+        if (route == null || route.stepIds().isEmpty()) return result(kind, EmployeeClosureKind.NOT_CLOSED, outside, loss, unit, new Basis(List.of(), false), null);
         Basis basis = work(target, all, leaves, route, lines, external, outsourcedLoss);
         BigDecimal assigned = all.stream().filter(bag -> bag.parentId() == null || bag.parentId().isBlank())
                 .map(ActivityBag::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -73,21 +73,20 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
         if (leaves.isEmpty()) {
             EmployeeClosureKind state = loss != null && loss.signum() > 0 && loss.compareTo(assigned.subtract(returned)) == 0
                     ? EmployeeClosureKind.TOTAL_LOSS : EmployeeClosureKind.NOT_CLOSED;
-            return result(kind, state, outside, loss, unit, basis);
+            return result(kind, state, outside, loss, unit, basis, null);
         }
-        List<ReworkTask> tasks = all.stream().flatMap(bag -> rework.listBySource(bag.id()).stream()).toList();
-        boolean reworkOpen = tasks.stream().map(task -> bags.find(task.reworkBagId()).orElse(null))
-                .anyMatch(bag -> bag != null && bag.activeLeaf() && remaining(bag, route));
-        if (reworkOpen) return result(kind, EmployeeClosureKind.REWORK_OPEN, outside, loss, unit, basis);
-        if (leaves.stream().anyMatch(bag -> remaining(bag, route))) return result(kind, EmployeeClosureKind.NOT_CLOSED, outside, loss, unit, basis);
-        // 完成返工不等于计酬规则已确认，保留普通实作供核对，整单工资仍受返工门槛约束。
-        return result(kind, tasks.isEmpty() ? EmployeeClosureKind.CLOSED_NORMAL : EmployeeClosureKind.REWORK_PAY_PENDING, outside, loss, unit, basis);
+        // 返工只是售后，不改变工资闭合，也不计入最终成品。
+        Set<String> reworkIds = reworkBagIds(all);
+        List<ActivityBag> wageLeaves = leaves.stream().filter(bag -> !reworkIds.contains(bag.id())).toList();
+        if (wageLeaves.stream().anyMatch(bag -> remaining(bag, route))) return result(kind, EmployeeClosureKind.NOT_CLOSED, outside, loss, unit, basis, null);
+        BigDecimal finished = wageLeaves.stream().map(ActivityBag::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return result(kind, EmployeeClosureKind.CLOSED_NORMAL, outside, loss, unit, basis, finished);
     }
 
     private Optional<EmployeeTargetClosure> result(BusinessKind kind, EmployeeClosureKind state, BigDecimal outside,
-            BigDecimal loss, String unit, Basis basis) {
+            BigDecimal loss, String unit, Basis basis, BigDecimal finished) {
         BigDecimal employee = basis.complete ? basis.work.stream().map(EmployeeProcessWork::quantity).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
-        return Optional.of(new EmployeeTargetClosure(kind, state, employee, outside, loss, unit, basis.work, basis.complete));
+        return Optional.of(new EmployeeTargetClosure(kind, state, employee, outside, loss, unit, basis.work, basis.complete, finished));
     }
 
     private boolean remaining(ActivityBag bag, RouteSnapshot route) {
@@ -109,7 +108,7 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
         } while (changed);
         Map<String, EmployeeProcessWork> workers = new LinkedHashMap<>();
         Map<String, BigDecimal> handled = new HashMap<>();
-        boolean complete = reports != null && completions != null && reworkBags.isEmpty();
+        boolean complete = reports != null && completions != null;
         if (reports != null) for (WholeBagReport report : reports.listByTarget(target)) {
             if (reworkBags.contains(report.bagId())) continue;
             handled.merge(report.stepId(), report.quantity(), BigDecimal::add);
@@ -151,6 +150,17 @@ public class ProductionEmployeeClosureLookup implements EmployeeTargetClosureLoo
         EmployeeProcessWork current = workers.get(key);
         workers.put(key, new EmployeeProcessWork(account, name, step, ProcessCatalog.require(step).name(),
                 current == null ? quantity : current.quantity().add(quantity)));
+    }
+
+    private Set<String> reworkBagIds(List<ActivityBag> all) {
+        Set<String> reworkBags = new HashSet<>();
+        all.forEach(bag -> rework.listBySource(bag.id()).forEach(task -> reworkBags.add(task.reworkBagId())));
+        boolean changed;
+        do {
+            changed = false;
+            for (ActivityBag bag : all) if (reworkBags.contains(bag.parentId())) changed |= reworkBags.add(bag.id());
+        } while (changed);
+        return reworkBags;
     }
 
     private Map<String, BigDecimal> confirmedOutsourcingLoss(String target) {

@@ -72,18 +72,26 @@ public class OutsourcingCompletionService {
     public java.util.Optional<OutsourcingCompletion> findByReturn(String returnId) { return completions.findByReturn(returnId); }
 
     public OutsourcingCompletion confirm(String requestId, String actorId, String returnId) {
+        return confirm(requestId, actorId, returnId, null);
+    }
+
+    public OutsourcingCompletion confirm(String requestId, String actorId, String returnId, BigDecimal amount) {
         String actor = actorId == null ? "" : actorId.trim();
         if (actor.isEmpty()) {
             throw new BusinessException("操作人不能为空");
         }
+        if (amount != null && amount.signum() == 0) {
+            throw new BusinessException("未知金额不能写成 0");
+        }
         String id = returnId == null ? "" : returnId.trim();
+        String amountText = amount == null ? "" : amount.toPlainString();
         String result = workUnit.execute(new CommandCall(
-                requestId, actor, "OUTSOURCE_COMPLETE", "OUTSOURCE_RETURN", id, id
-        ), session -> confirmIn(requestId, actor, id, session));
+                requestId, actor, "OUTSOURCE_COMPLETE", "OUTSOURCE_RETURN", id, id + "|" + amountText
+        ), session -> confirmIn(requestId, actor, id, amount, session));
         return completions.find(result).orElseThrow(() -> new IllegalStateException("外协完成量保存后无法读取"));
     }
 
-    private String confirmIn(String requestId, String actor, String returnId, WorkSession session) {
+    private String confirmIn(String requestId, String actor, String returnId, BigDecimal optionalAmount, WorkSession session) {
         OutsourcingReturn returned = returns.find(returnId).orElseThrow(() -> new BusinessException("外协收回不存在"));
         if (returned.receivedQty().signum() <= 0 || returned.receivedBagId().isBlank()) {
             throw new BusinessException("未加工退回不能记成外协完工");
@@ -135,7 +143,7 @@ public class OutsourcingCompletionService {
         completions.save(completion, session);
         fees.save(new OutsourcingFeeBasis(
                 "FB" + UUID.randomUUID().toString().replace("-", ""), completion.completionId(), task.taskId(),
-                returned.partyId(), task.targetCode(), step.id(), returned.receivedQty()), session);
+                returned.partyId(), task.targetCode(), step.id(), returned.receivedQty(), optionalAmount), session);
         PortionRelease after = releases.find(bag.id()).orElse(new PortionRelease(bag.id(), BigDecimal.ZERO, BigDecimal.ZERO));
         if (after.released().compareTo(releasedOf(before)) != 0 || after.frozen().compareTo(frozenOf(before)) != 0) {
             throw new BusinessException("收回不能自动质量放行");
