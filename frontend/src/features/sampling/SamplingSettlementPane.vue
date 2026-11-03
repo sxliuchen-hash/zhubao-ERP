@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import { deliverSampling, settleSamplingFee } from '../../services/samplingApi';
 
+const props = defineProps<{ linkedCode?: string }>();
 const samplingCode = ref('');
+watch(() => props.linkedCode, (value) => { if (value) samplingCode.value = value; }, { immediate: true });
 const versionKind = ref('MODEL');
 const versionNo = ref('1');
 const quantity = ref('');
@@ -71,28 +73,39 @@ async function waive() {
 </script>
 
 <template>
-  <section class="page-stack" aria-label="打样交付和样费">
+  <section class="job-pane" aria-label="打样交付和样费">
     <header>
       <h2>分次交付和样费</h2>
       <p>部分交付不结束打样单。免收必须写原因，不记零元，也不抵大货。</p>
     </header>
-    <p role="status">{{ message }}</p>
-    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
-    <label>打样号 <input v-model="samplingCode" aria-label="交付打样号" /></label>
-    <label>版本种类 <input v-model="versionKind" aria-label="交付版本种类" /></label>
-    <label>版本号 <input v-model="versionNo" aria-label="交付版本号" /></label>
-    <label>数量 <input v-model="quantity" aria-label="交付数量" /></label>
-    <label>单位 <input v-model="unit" aria-label="交付单位" /></label>
-    <label>交付凭据 <input v-model="credentialCode" aria-label="交付凭据" /></label>
-    <button type="button" @click="deliver">交付</button>
-    <label>交付编号 <input v-model="deliveryId" aria-label="交付编号" /></label>
-    <label>样费 <input v-model="amount" aria-label="样费" /></label>
-    <button type="button" @click="charge">确认样费</button>
-    <label>免收原因 <input v-model="reason" aria-label="免收原因" /></label>
-    <button type="button" @click="waive">明确免收</button>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
+    <fieldset class="job-fieldset" :disabled="operation.pending.value">
+      <div class="info-fields">
+        <label><span>打样号</span><input v-model="samplingCode" aria-label="交付打样号" /></label>
+        <label><span>版本种类</span><input v-model="versionKind" aria-label="交付版本种类" /></label>
+        <label><span>版本号</span><input v-model="versionNo" aria-label="交付版本号" /></label>
+        <label><span>数量</span><input v-model="quantity" aria-label="交付数量" /></label>
+        <label><span>单位</span><input v-model="unit" aria-label="交付单位" /></label>
+        <label><span>交付凭据</span><input v-model="credentialCode" aria-label="交付凭据" /></label>
+      </div>
+      <div class="job-toolbar"><button type="button" class="primary-button" @click="deliver">交付</button></div>
+      <div class="job-block">
+        <h3>样费</h3>
+        <div class="info-fields">
+          <label><span>交付编号</span><input v-model="deliveryId" aria-label="交付编号" /></label>
+          <label><span>样费</span><input v-model="amount" aria-label="样费" /></label>
+          <label><span>免收原因</span><input v-model="reason" aria-label="免收原因" /></label>
+        </div>
+        <div class="job-toolbar">
+          <button type="button" class="primary-button" @click="charge">确认样费</button>
+          <button type="button" class="secondary-button" @click="waive">明确免收</button>
+        </div>
+      </div>
     </fieldset>
-    <p v-if="operation.pending.value">正在提交，请稍候</p>
-    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
-    <button type="button" @click="operation.startNext">开始下一笔</button>
+    <p v-if="operation.pending.value" role="status">正在提交，请稍候</p>
+    <div class="job-actions">
+      <button v-if="operation.hasUnconfirmed.value" type="button" class="secondary-button" @click="operation.restorePending">恢复上次填写</button>
+      <button type="button" class="secondary-button" @click="operation.startNext">开始下一笔</button>
+    </div>
   </section>
 </template>

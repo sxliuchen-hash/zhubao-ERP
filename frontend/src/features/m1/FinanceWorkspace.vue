@@ -1268,12 +1268,14 @@ function kindLabel(kind: string) {
         <button class="primary-button" type="submit" :disabled="busy">登记固定资产</button>
       </form>
       <button class="table-action" type="button" :disabled="busy" @click="depreciateAssets">计提本月折旧</button>
-      <FixedAssetCardPane />
-      <FixedAssetCustodyPane />
-      <FixedAssetRepairPane />
-      <FixedAssetDepreciationPane />
-      <FixedAssetDispositionPane />
-      <FixedAssetStocktakePane />
+      <div class="job-work">
+        <FixedAssetCardPane />
+        <FixedAssetCustodyPane />
+        <FixedAssetRepairPane />
+        <FixedAssetDepreciationPane />
+        <FixedAssetDispositionPane />
+        <FixedAssetStocktakePane />
+      </div>
     </section>
 
     <section v-else-if="section === 'payable'" class="section-block">

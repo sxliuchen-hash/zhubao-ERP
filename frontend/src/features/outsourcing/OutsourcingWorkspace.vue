@@ -120,45 +120,71 @@ async function receive() {
 </script>
 
 <template>
-  <section v-if="active" aria-label="外协发外与收回">
-    <p>当前单据 {{ orderCode }}</p>
-    <label>外协任务号 <input v-model="taskId" aria-label="外协任务号" /></label>
-    <button type="button" @click="load">读取任务</button>
-    <p v-if="error" role="alert">{{ error }}</p>
+  <section v-if="active" class="job-pane" aria-label="外协发外与收回">
+    <header>
+      <h2>外协发外与收回</h2>
+      <p>当前单据 {{ orderCode }}。先收回本厂，不能直接发给客户。</p>
+    </header>
+    <div class="info-fields">
+      <label><span>外协任务号</span><input v-model="taskId" aria-label="外协任务号" /></label>
+    </div>
+    <div class="job-toolbar">
+      <button type="button" class="primary-button" @click="load">读取任务</button>
+    </div>
+    <p v-if="error" class="operation-feedback danger" role="alert">{{ error }}</p>
     <template v-if="position && matchesOrder">
-      <p>外协方 {{ position.partyName }}</p>
-      <p>权属 {{ position.ownerType }} {{ position.ownerRef }}</p>
-      <p>来源 {{ sourceKeys.join('、') || '未记录' }}</p>
-      <p>在外 {{ position.outQuantity }}</p>
-      <p>待核 {{ position.pendingQuantity }}</p>
-      <p v-if="position.outsourcingCountsAsInHouseStock">在外不能当成厂内现货</p>
-      <button type="button" @click="loadCompletions">读取收回完工明细</button>
-      <p v-for="row in completionRows" :key="row.returned.returnId">{{ row.returned.returnId }} · 实收 {{ row.returned.receivedQty }} · 未加工退回 {{ row.returned.unprocessedQty }}
-        <span v-if="row.completed">已确认完工</span>
-        <template v-else-if="row.returned.receivedQty > 0">
-          <label>应付款（选填）<input v-model="optionalPayable" aria-label="外协应付款" inputmode="decimal" placeholder="不填不生成应付" /></label>
-          <button type="button" :disabled="completionPending" @click="complete(row.returned.returnId)">确认实收部分完工</button>
-        </template>
-      </p>
-      <label>本厂袋
-        <select v-model="bagId" aria-label="本厂袋">
-          <option value="">选择仍在本厂的袋</option>
-          <option v-for="line in inHouseBags" :key="line.bagId" :value="line.bagId">{{ line.bagId }} · {{ line.quantity }}</option>
-        </select>
-      </label>
-      <label>发外数量 <input v-model="quantity" aria-label="发外数量" inputmode="decimal" /></label>
-      <button type="button" :disabled="!bagId" @click="dispatchBag">发外</button>
-      <label>原发外行
-        <select v-model="dispatchId" aria-label="原发外行">
-          <option value="">选择仍在外的发外行</option>
-          <option v-for="line in openLines" :key="line.dispatchId" :value="line.dispatchId">{{ line.dispatchId }} · 仍在外 {{ line.stillOut }}</option>
-        </select>
-      </label>
-      <label>实收 <input v-model="received" aria-label="实收数量" inputmode="decimal" /></label>
-      <label>未加工退回 <input v-model="unprocessed" aria-label="未加工退回" inputmode="decimal" /></label>
-      <label>已确认损耗 <input v-model="loss" aria-label="已确认损耗" inputmode="decimal" /></label>
-      <label>实重 <input v-model="weight" aria-label="实重" inputmode="decimal" placeholder="不填表示未知重量" /></label>
-      <button type="button" :disabled="!dispatchId" @click="receive">按原行收回</button>
+      <div class="info-facts">
+        <p>外协方 {{ position.partyName }}</p>
+        <p>权属 {{ position.ownerType }} {{ position.ownerRef }}</p>
+        <p>来源 {{ sourceKeys.join('、') || '未记录' }}</p>
+        <p>在外 {{ position.outQuantity }}</p>
+        <p>待核 {{ position.pendingQuantity }}</p>
+      </div>
+      <p v-if="position.outsourcingCountsAsInHouseStock" class="info-context">在外不能当成厂内现货</p>
+      <div class="job-toolbar">
+        <button type="button" class="secondary-button" @click="loadCompletions">读取收回完工明细</button>
+      </div>
+      <ul class="job-records">
+        <li v-for="row in completionRows" :key="row.returned.returnId">
+          <span>{{ row.returned.returnId }} · 实收 {{ row.returned.receivedQty }} · 未加工退回 {{ row.returned.unprocessedQty }}</span>
+          <span v-if="row.completed">已确认完工</span>
+          <template v-else-if="row.returned.receivedQty > 0">
+            <label><span>应付款（选填）</span><input v-model="optionalPayable" aria-label="外协应付款" inputmode="decimal" placeholder="不填不生成应付" /></label>
+            <button type="button" class="primary-button" :disabled="completionPending" @click="complete(row.returned.returnId)">确认实收部分完工</button>
+          </template>
+        </li>
+      </ul>
+      <div class="job-split">
+      <div class="job-block">
+        <h3>发外</h3>
+        <div class="info-fields">
+          <label><span>本厂袋</span>
+            <select v-model="bagId" aria-label="本厂袋">
+              <option value="">选择仍在本厂的袋</option>
+              <option v-for="line in inHouseBags" :key="line.bagId" :value="line.bagId">{{ line.bagId }} · {{ line.quantity }}</option>
+            </select>
+          </label>
+          <label><span>发外数量</span><input v-model="quantity" aria-label="发外数量" inputmode="decimal" /></label>
+        </div>
+        <div class="job-toolbar"><button type="button" class="primary-button" :disabled="!bagId" @click="dispatchBag">发外</button></div>
+      </div>
+      <div class="job-block">
+        <h3>按原行收回</h3>
+        <div class="info-fields">
+          <label><span>原发外行</span>
+            <select v-model="dispatchId" aria-label="原发外行">
+              <option value="">选择仍在外的发外行</option>
+              <option v-for="line in openLines" :key="line.dispatchId" :value="line.dispatchId">{{ line.dispatchId }} · 仍在外 {{ line.stillOut }}</option>
+            </select>
+          </label>
+          <label><span>实收</span><input v-model="received" aria-label="实收数量" inputmode="decimal" /></label>
+          <label><span>未加工退回</span><input v-model="unprocessed" aria-label="未加工退回" inputmode="decimal" /></label>
+          <label><span>已确认损耗</span><input v-model="loss" aria-label="已确认损耗" inputmode="decimal" /></label>
+          <label><span>实重</span><input v-model="weight" aria-label="实重" inputmode="decimal" placeholder="不填表示未知重量" /></label>
+        </div>
+        <div class="job-toolbar"><button type="button" class="primary-button" :disabled="!dispatchId" @click="receive">按原行收回</button></div>
+      </div>
+      </div>
     </template>
   </section>
 </template>

@@ -222,8 +222,14 @@ const detailActions = computed(() => {
   if (session.value?.role === 'ADMIN' && current.motherOrderCode && ['MOTHER_ORDER', 'WORK_ORDER'].includes(current.objectType)) {
     items.push({ key: 'admin', label: '母单编辑与删除', run: () => { adminPanelOpen.value = true; }, rank: 55 });
   }
-  if (current.objectType === 'MOTHER_ORDER' && canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')) {
-    items.push({ key: 'intake', label: '收货与拆单资料', run: () => go('inbound', 'INTAKE', 'BUSINESS_INBOUND_CONFIRM'), rank: 45 });
+  // 来料页已经收进订单中心，再切页不会打开收货。母单直接进当前单据的办理。
+  const openCurrentIntake = openIntake;
+  if (openCurrentIntake && current.objectType === 'MOTHER_ORDER' && canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')) {
+    items.push({ key: 'intake', label: '收货与拆单资料', run: () => {
+      const selected = identity.value;
+      if (!selected || selected.objectType !== 'MOTHER_ORDER' || !canUse('inbound', 'BUSINESS_INBOUND_CONFIRM')) return;
+      openCurrentIntake({ objectType: 'MOTHER_ORDER', code: selected.code });
+    }, rank: 45 });
   }
   if (canWork.value && selectedRow.value?.processFormallyDelivered !== true && (openProduction || scan.context?.actions.some(action => action.code === 'REPORT_PROCESS' && action.allowed))) {
     items.push({ key: 'production', label: '报工', run: () => work('station'), rank: 5 });
@@ -323,7 +329,7 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
           <details v-if="moreActions.length" class="order-more-actions">
             <summary>更多操作</summary>
             <div>
-              <button v-for="action in moreActions" :key="action.key" class="secondary-button" type="button" @click="action.run">{{ action.label }}</button>
+              <button v-for="action in moreActions" :key="action.key" class="secondary-button" type="button" @click.stop="action.run">{{ action.label }}</button>
             </div>
           </details>
         </div>
@@ -355,9 +361,11 @@ onBeforeUnmount(() => { disposed = true; generation += 1; workspace.selection.va
 .order-count { color: var(--muted); }
 .order-scan-tools { margin: 8px 0 16px; }
 .order-scan-tools > summary { cursor: pointer; min-height: 36px; align-content: center; }
-.order-more-actions { flex: 1 1 100%; }
-.order-more-actions > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.order-more-actions { position: relative; z-index: 2; flex: 1 1 100%; }
+.order-more-actions > summary { width: max-content; cursor: pointer; }
+.order-more-actions > div { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .order-pagination, .order-detail-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.order-detail-actions { align-items: flex-start; }
 .order-pagination { justify-content: end; margin-top: 16px; }
 @media (min-width: 1200px) { .has-detail { grid-template-columns: minmax(0, 1fr) minmax(340px, 38%); gap: 16px; } }
 @media (min-width: 901px) and (max-width: 1199px) { .has-detail .order-list-panel { display: none; } }

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import ReportPhotoCapture from '../evidence/ReportPhotoCapture.vue';
 import { decideGoldworkQuality, reportGoldworkOperation } from '../../services/goldworkApi';
 
+const props = defineProps<{ linkedCode?: string }>();
 const goldworkCode = ref('');
+watch(() => props.linkedCode, (value) => { if (value) goldworkCode.value = value; }, { immediate: true });
 const stepId = ref('GOLD_CAST');
 const netWeight = ref('');
 const weightUnit = ref('克');
@@ -86,42 +88,51 @@ async function decide() {
 </script>
 
 <template>
-  <section class="page-stack" aria-label="报工和质量">
+  <section class="job-pane" aria-label="报工和质量">
     <header>
       <h2>报工与质量</h2>
       <p>拍照或选图后报工，不记工资或库存。返工不改成色和收费。</p>
     </header>
-    <p role="status">{{ message }}</p>
-    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
-    <label>金工号 <input v-model="goldworkCode" aria-label="报工金工号" /></label>
-    <label>工序
-      <select v-model="stepId" aria-label="报工工序">
-        <option value="GOLD_FLAT">平设</option>
-        <option value="GOLD_MODEL">建模</option>
-        <option value="GOLD_CAST">倒模</option>
-        <option value="GOLD_FINISH">执模</option>
-        <option value="POLISH_GOLD">抛光（金）</option>
-      </select>
-    </label>
-    <label>净重 <input v-model="netWeight" aria-label="报工净重" /></label>
-    <label>单位 <input v-model="weightUnit" aria-label="报工单位" /></label>
-    <label>成色 <input v-model="purity" aria-label="报工成色" /></label>
-    <ReportPhotoCapture v-model="attachmentCode" business-type="GOLDWORK" :business-code="goldworkCode" />
-    <button type="button" @click="report">报工</button>
-    <label>报工编号 <input v-model="reportId" aria-label="报工编号" /></label>
-    <label>原轮次 <input v-model="priorQualityId" aria-label="原轮次" /></label>
-    <label>结论
-      <select v-model="outcome" aria-label="质量结论">
-        <option value="RELEASE">放行</option>
-        <option value="REWORK">返工</option>
-        <option value="PENDING">待核</option>
-      </select>
-    </label>
-    <label>说明 <input v-model="note" aria-label="质量说明" /></label>
-    <button type="button" @click="decide">记录质量</button>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
+    <fieldset class="job-fieldset" :disabled="operation.pending.value">
+      <div class="info-fields">
+        <label><span>金工号</span><input v-model="goldworkCode" aria-label="报工金工号" /></label>
+        <label><span>工序</span>
+          <select v-model="stepId" aria-label="报工工序">
+            <option value="GOLD_FLAT">平设</option>
+            <option value="GOLD_MODEL">建模</option>
+            <option value="GOLD_CAST">倒模</option>
+            <option value="GOLD_FINISH">执模</option>
+            <option value="POLISH_GOLD">抛光（金）</option>
+          </select>
+        </label>
+        <label><span>净重</span><input v-model="netWeight" aria-label="报工净重" /></label>
+        <label><span>单位</span><input v-model="weightUnit" aria-label="报工单位" /></label>
+        <label><span>成色</span><input v-model="purity" aria-label="报工成色" /></label>
+        <div class="job-span"><ReportPhotoCapture v-model="attachmentCode" business-type="GOLDWORK" :business-code="goldworkCode" /></div>
+      </div>
+      <div class="job-toolbar"><button type="button" class="primary-button" @click="report">报工</button></div>
+      <div class="job-block">
+        <h3>质量</h3>
+        <div class="info-fields">
+          <label><span>报工编号</span><input v-model="reportId" aria-label="报工编号" /></label>
+          <label><span>原轮次</span><input v-model="priorQualityId" aria-label="原轮次" /></label>
+          <label><span>结论</span>
+            <select v-model="outcome" aria-label="质量结论">
+              <option value="RELEASE">放行</option>
+              <option value="REWORK">返工</option>
+              <option value="PENDING">待核</option>
+            </select>
+          </label>
+          <label><span>说明</span><input v-model="note" aria-label="质量说明" /></label>
+        </div>
+        <div class="job-toolbar"><button type="button" class="primary-button" @click="decide">记录质量</button></div>
+      </div>
     </fieldset>
-    <p v-if="operation.pending.value">正在提交，请稍候</p>
-    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
-    <button type="button" @click="operation.startNext">开始下一笔</button>
+    <p v-if="operation.pending.value" role="status">正在提交，请稍候</p>
+    <div class="job-actions">
+      <button v-if="operation.hasUnconfirmed.value" type="button" class="secondary-button" @click="operation.restorePending">恢复上次填写</button>
+      <button type="button" class="secondary-button" @click="operation.startNext">开始下一笔</button>
+    </div>
   </section>
 </template>

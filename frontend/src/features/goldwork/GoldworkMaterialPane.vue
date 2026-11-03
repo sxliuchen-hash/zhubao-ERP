@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import { receiveGoldworkMaterial, recordGoldworkMovement } from '../../services/goldworkApi';
 
+const props = defineProps<{ linkedCode?: string }>();
 const goldworkCode = ref('');
+watch(() => props.linkedCode, (value) => { if (value) goldworkCode.value = value; }, { immediate: true });
 const sourceId = ref('');
 const sourceLineNo = ref('');
 const sourceLineId = ref('');
@@ -91,46 +93,55 @@ async function record() {
 </script>
 
 <template>
-  <section class="page-stack" aria-label="金料和投入产出">
+  <section class="job-pane" aria-label="金料和投入产出">
     <header>
       <h2>金料与投入产出</h2>
       <p>净重和毛重分开填写。不把毛重写成净金，短重不自动算损耗，空着表示未知。</p>
     </header>
-    <p role="status">{{ message }}</p>
-    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
-    <label>金工号 <input v-model="goldworkCode" aria-label="金料金工号" /></label>
-    <label>来源编号 <input v-model="sourceId" aria-label="来源编号" /></label>
-    <label>来源行号 <input v-model="sourceLineNo" aria-label="来源行号" /></label>
-    <label>件数 <input v-model="pieceCount" aria-label="件数" /></label>
-    <label>净重 <input v-model="netWeight" aria-label="净重" /></label>
-    <label>毛重 <input v-model="grossWeight" aria-label="毛重" /></label>
-    <label>单位 <input v-model="weightUnit" aria-label="重量单位" /></label>
-    <label>成色 <input v-model="purity" aria-label="成色" /></label>
-    <button type="button" @click="receive">接收金料</button>
-    <label>来源明细 <input v-model="sourceLineId" aria-label="来源明细" /></label>
-    <label>工序
-      <select v-model="stepId" aria-label="金工工序">
-        <option value="GOLD_FLAT">平设</option>
-        <option value="GOLD_MODEL">建模</option>
-        <option value="GOLD_CAST">倒模</option>
-        <option value="GOLD_FINISH">执模</option>
-        <option value="POLISH_GOLD">抛光（金）</option>
-      </select>
-    </label>
-    <label>记录类型
-      <select v-model="kind" aria-label="记录类型">
-        <option value="INPUT">投入</option>
-        <option value="OUTPUT">产出</option>
-        <option value="WIP">在制</option>
-        <option value="DISPOSAL">处置</option>
-      </select>
-    </label>
-    <label>处置 <input v-model="disposition" aria-label="处置" /></label>
-    <label>转换说明 <input v-model="conversionNote" aria-label="转换说明" /></label>
-    <button type="button" @click="record">记录投入产出</button>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
+    <fieldset class="job-fieldset" :disabled="operation.pending.value">
+      <div class="info-fields">
+        <label><span>金工号</span><input v-model="goldworkCode" aria-label="金料金工号" /></label>
+        <label><span>来源编号</span><input v-model="sourceId" aria-label="来源编号" /></label>
+        <label><span>来源行号</span><input v-model="sourceLineNo" aria-label="来源行号" /></label>
+        <label><span>件数</span><input v-model="pieceCount" aria-label="件数" /></label>
+        <label><span>净重</span><input v-model="netWeight" aria-label="净重" /></label>
+        <label><span>毛重</span><input v-model="grossWeight" aria-label="毛重" /></label>
+        <label><span>单位</span><input v-model="weightUnit" aria-label="重量单位" /></label>
+        <label><span>成色</span><input v-model="purity" aria-label="成色" /></label>
+      </div>
+      <div class="job-toolbar"><button type="button" class="primary-button" @click="receive">接收金料</button></div>
+      <div class="job-block">
+        <h3>投入产出</h3>
+        <div class="info-fields">
+          <label><span>来源明细</span><input v-model="sourceLineId" aria-label="来源明细" /></label>
+          <label><span>工序</span>
+            <select v-model="stepId" aria-label="金工工序">
+              <option value="GOLD_FLAT">平设</option>
+              <option value="GOLD_MODEL">建模</option>
+              <option value="GOLD_CAST">倒模</option>
+              <option value="GOLD_FINISH">执模</option>
+              <option value="POLISH_GOLD">抛光（金）</option>
+            </select>
+          </label>
+          <label><span>记录类型</span>
+            <select v-model="kind" aria-label="记录类型">
+              <option value="INPUT">投入</option>
+              <option value="OUTPUT">产出</option>
+              <option value="WIP">在制</option>
+              <option value="DISPOSAL">处置</option>
+            </select>
+          </label>
+          <label><span>处置</span><input v-model="disposition" aria-label="处置" /></label>
+          <label><span>转换说明</span><input v-model="conversionNote" aria-label="转换说明" /></label>
+        </div>
+        <div class="job-toolbar"><button type="button" class="primary-button" @click="record">记录投入产出</button></div>
+      </div>
     </fieldset>
-    <p v-if="operation.pending.value">正在提交，请稍候</p>
-    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
-    <button type="button" @click="operation.startNext">开始下一笔</button>
+    <p v-if="operation.pending.value" role="status">正在提交，请稍候</p>
+    <div class="job-actions">
+      <button v-if="operation.hasUnconfirmed.value" type="button" class="secondary-button" @click="operation.restorePending">恢复上次填写</button>
+      <button type="button" class="secondary-button" @click="operation.startNext">开始下一笔</button>
+    </div>
   </section>
 </template>

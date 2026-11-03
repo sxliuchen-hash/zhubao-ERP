@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useBusinessCommand } from '../workspace/useBusinessCommand';
 import { issueGoldworkSupplement, recordGoldworkRecovery, returnGoldworkSupplement } from '../../services/goldworkApi';
 
+const props = defineProps<{ linkedCode?: string }>();
 const goldworkCode = ref('');
+watch(() => props.linkedCode, (value) => { if (value) goldworkCode.value = value; }, { immediate: true });
 const sourceLineId = ref('');
 const outputMovementId = ref('');
 const originalLineId = ref('');
@@ -105,37 +107,48 @@ async function giveBack() {
 </script>
 
 <template>
-  <section class="page-stack" aria-label="回收和补料">
+  <section class="job-pane" aria-label="回收和补料">
     <header>
       <h2>回收与补料</h2>
       <p>回收不并进成品，也不折抵费用。补料另记来源，不改最初来料，不另收补料费。</p>
     </header>
-    <p role="status">{{ message }}</p>
-    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
-    <label>金工号 <input v-model="goldworkCode" aria-label="回收金工号" /></label>
-    <label>来源明细 <input v-model="sourceLineId" aria-label="回收来源明细" /></label>
-    <label>成品产出 <input v-model="outputMovementId" aria-label="成品产出" /></label>
-    <label>净重 <input v-model="netWeight" aria-label="回收净重" /></label>
-    <label>单位 <input v-model="weightUnit" aria-label="回收单位" /></label>
-    <label>成色 <input v-model="purity" aria-label="回收成色" /></label>
-    <label>去向
-      <select v-model="recoveryKind" aria-label="回收去向">
-        <option value="RECOVERABLE">可回收金料</option>
-        <option value="REMAINDER">余料</option>
-        <option value="PHYSICAL_SCRAP">实物报废</option>
-        <option value="IRRECOVERABLE">不可恢复损耗</option>
-      </select>
-    </label>
-    <button type="button" @click="recover">记录回收</button>
-    <label>最初来料 <input v-model="originalLineId" aria-label="最初来料" /></label>
-    <label>补料来源 <input v-model="sourceId" aria-label="补料来源" /></label>
-    <label>用途 <input v-model="purpose" aria-label="补料用途" /></label>
-    <label>原补料 <input v-model="priorSupplementId" aria-label="原补料" /></label>
-    <button type="button" @click="issue">补料</button>
-    <button type="button" @click="giveBack">退补</button>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
+    <fieldset class="job-fieldset" :disabled="operation.pending.value">
+      <div class="info-fields">
+        <label><span>金工号</span><input v-model="goldworkCode" aria-label="回收金工号" /></label>
+        <label><span>来源明细</span><input v-model="sourceLineId" aria-label="回收来源明细" /></label>
+        <label><span>成品产出</span><input v-model="outputMovementId" aria-label="成品产出" /></label>
+        <label><span>净重</span><input v-model="netWeight" aria-label="回收净重" /></label>
+        <label><span>单位</span><input v-model="weightUnit" aria-label="回收单位" /></label>
+        <label><span>成色</span><input v-model="purity" aria-label="回收成色" /></label>
+        <label><span>去向</span>
+          <select v-model="recoveryKind" aria-label="回收去向">
+            <option value="RECOVERABLE">可回收金料</option>
+            <option value="REMAINDER">余料</option>
+            <option value="PHYSICAL_SCRAP">实物报废</option>
+            <option value="IRRECOVERABLE">不可恢复损耗</option>
+          </select>
+        </label>
+      </div>
+      <div class="job-toolbar"><button type="button" class="primary-button" @click="recover">记录回收</button></div>
+      <div class="job-block">
+        <h3>补料</h3>
+        <div class="info-fields">
+          <label><span>最初来料</span><input v-model="originalLineId" aria-label="最初来料" /></label>
+          <label><span>补料来源</span><input v-model="sourceId" aria-label="补料来源" /></label>
+          <label><span>用途</span><input v-model="purpose" aria-label="补料用途" /></label>
+          <label><span>原补料</span><input v-model="priorSupplementId" aria-label="原补料" /></label>
+        </div>
+        <div class="job-toolbar">
+          <button type="button" class="primary-button" @click="issue">补料</button>
+          <button type="button" class="secondary-button" @click="giveBack">退补</button>
+        </div>
+      </div>
     </fieldset>
-    <p v-if="operation.pending.value">正在提交，请稍候</p>
-    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
-    <button type="button" @click="operation.startNext">开始下一笔</button>
+    <p v-if="operation.pending.value" role="status">正在提交，请稍候</p>
+    <div class="job-actions">
+      <button v-if="operation.hasUnconfirmed.value" type="button" class="secondary-button" @click="operation.restorePending">恢复上次填写</button>
+      <button type="button" class="secondary-button" @click="operation.startNext">开始下一笔</button>
+    </div>
   </section>
 </template>

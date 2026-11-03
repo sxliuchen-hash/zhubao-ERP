@@ -115,10 +115,18 @@ async function pay() {
 </script>
 
 <template>
-  <section aria-label="资产维修">
-    <label>资产编码 <input v-model="assetCode" aria-label="维修资产编码" @change="clearMoney" /></label>
-    <button type="button" aria-label="查询维修" @click="loadRepairs">查询维修</button>
-    <ul>
+  <section class="job-panel" aria-label="资产维修">
+    <header class="job-head">
+      <h2>维修</h2>
+      <p>先登记维修，再凭据确认费用，付款另记。费用未齐不能确认。</p>
+    </header>
+    <div class="info-fields">
+      <label><span>资产编码</span><input v-model="assetCode" aria-label="维修资产编码" @change="clearMoney" /></label>
+    </div>
+    <div class="job-toolbar">
+      <button type="button" class="secondary-button" aria-label="查询维修" @click="loadRepairs">查询维修</button>
+    </div>
+    <ul class="job-records">
       <li v-for="row in repairs" :key="row.repairId">
         {{ row.repairId }} {{ row.stateLabel }} 原值 {{ row.originalValue }}
         费用 {{ row.costAmount == null ? '未齐' : row.costAmount }}
@@ -126,23 +134,23 @@ async function pay() {
         <span v-for="payment in row.payments" :key="payment.paymentCode">付款 {{ payment.paymentCode }} 凭据 {{ payment.voucher }}</span>
       </li>
     </ul>
-    <form aria-label="登记维修" @submit.prevent="record">
-      <label>维修日期 <input v-model="repairedOn" aria-label="维修日期" /></label>
-      <label>交接 <input v-model="handoverName" aria-label="维修交接" /></label>
-      <label>凭据 <input v-model="evidenceCode" aria-label="维修凭据" /></label>
-      <button type="submit">登记维修</button>
+    <form class="info-fields" aria-label="登记维修" @submit.prevent="record">
+      <label><span>维修日期</span><input v-model="repairedOn" aria-label="维修日期" /></label>
+      <label><span>交接</span><input v-model="handoverName" aria-label="维修交接" /></label>
+      <label><span>凭据</span><input v-model="evidenceCode" aria-label="维修凭据" /></label>
+      <div class="job-span"><button class="primary-button" type="submit">登记维修</button></div>
     </form>
-    <form aria-label="确认维修费用" @submit.prevent="confirmCost">
-      <label>维修单 <input v-model="repairId" aria-label="维修单号" /></label>
-      <label>费用 <input v-model="amount" aria-label="维修费用" placeholder="未齐" /></label>
-      <button type="submit">确认费用</button>
+    <form class="info-fields" aria-label="确认维修费用" @submit.prevent="confirmCost">
+      <label><span>维修单</span><input v-model="repairId" aria-label="维修单号" /></label>
+      <label><span>费用</span><input v-model="amount" aria-label="维修费用" placeholder="未齐" /></label>
+      <div class="job-span"><button class="primary-button" type="submit">确认费用</button></div>
     </form>
-    <form aria-label="支付维修费" @submit.prevent="pay">
-      <label>付款金额 <input v-model="payAmount" aria-label="维修付款金额" /></label>
-      <label>付款日期 <input v-model="paidOn" aria-label="维修付款日期" /></label>
-      <label>付款凭据 <input v-model="voucher" aria-label="维修付款凭据" /></label>
-      <button type="submit">登记付款</button>
+    <form class="info-fields" aria-label="支付维修费" @submit.prevent="pay">
+      <label><span>付款金额</span><input v-model="payAmount" aria-label="维修付款金额" /></label>
+      <label><span>付款日期</span><input v-model="paidOn" aria-label="维修付款日期" /></label>
+      <label><span>付款凭据</span><input v-model="voucher" aria-label="维修付款凭据" /></label>
+      <div class="job-span"><button class="primary-button" type="submit">登记付款</button></div>
     </form>
-    <p v-if="message">{{ message }}</p>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
   </section>
 </template>

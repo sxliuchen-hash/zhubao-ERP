@@ -350,6 +350,23 @@ describe('收货面板', () => {
     expect(wrapper.text()).not.toContain('收款');
   });
 
+  it('已保存母单的拆单留在当前收货页，不再跳走', async () => {
+    const openTab = vi.fn();
+    vi.mocked(submitMobileIntake).mockResolvedValue({
+      alreadyExists: false, motherOrderCode: 'MD-SPLIT-1', courierNo: 'SF1048329001',
+      customerName: '恒信珠宝', processingRequirement: '抛光', dueDate: '2026-10-20',
+      goodsName: '戒托', quantity: 1, weight: 2.5, ledgerCode: 'STK-1', qrContent: 'JG|mother|MD-SPLIT-1',
+    });
+    const wrapper = mount(IntakePanel, { props: { title: '收料', intro: '' }, global: { provide: { 'zhubao-open-tab': openTab } } });
+    await fillNewWaybill(wrapper);
+    await wrapper.findAll('button').find((button) => button.text() === '确认建单并入库')!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === '拆单与流转贴纸')!.trigger('click');
+    expect(openTab).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-production-arrangement]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('电脑收货同样显示保存结果和打印入口，继续收货后不残留上一张母单', async () => {
     vi.mocked(submitMobileIntake).mockResolvedValue({
       alreadyExists: false, motherOrderCode: 'MD-DESKTOP-1', courierNo: 'SF1048329001',

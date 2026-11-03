@@ -8,6 +8,7 @@ import './business-workspaces.css';
 import './system-workspaces.css';
 import './register-import.css';
 import './information-layout.css';
+import './job-desk.css';
 
 installLegacyWebViewPolyfills();
 

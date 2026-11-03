@@ -45,7 +45,7 @@ describe('打样单查询和建单', () => {
     const wrapper = mount(SamplingOrderWorkspace);
     expect(wrapper.text()).toContain('登记导入');
     expect(wrapper.text()).not.toContain('普通加工母单号');
-    await wrapper.get('button').trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === '查询打样单')!.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('DY-20261031-0001');
     expect(wrapper.text()).toContain('进行中');
@@ -56,7 +56,7 @@ describe('打样单查询和建单', () => {
     await wrapper.get('[aria-label="材料安排"]').setValue('COMPANY_PREPARED');
     await wrapper.get('[aria-label="样品要求"]').setValue('公司备料');
     await wrapper.get('[aria-label="负责人"]').setValue('李四');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.find('form').trigger('submit');
     await flushPromises();
     const body = vi.mocked(openSamplingOrder).mock.calls[0][0];
     expect(body.customerId).toBe(2);

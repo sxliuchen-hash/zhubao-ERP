@@ -66,27 +66,35 @@ async function submit() {
 </script>
 
 <template>
-  <section aria-label="资产交接">
-    <label>资产编码 <input v-model="assetCode" aria-label="交接资产编码" @change="clearDraft" /></label>
-    <label>卡片版本 <input v-model="expectedVersion" aria-label="交接版本" /></label>
-    <button type="button" aria-label="查询交接" @click="loadHistory">查询交接</button>
-    <ul>
+  <section class="job-panel" aria-label="资产交接">
+    <header class="job-head">
+      <h2>位置与保管</h2>
+      <p>只记录有变化的交接。不改的位置、保管人和状态留空。</p>
+    </header>
+    <div class="info-fields">
+      <label><span>资产编码</span><input v-model="assetCode" aria-label="交接资产编码" @change="clearDraft" /></label>
+      <label><span>卡片版本</span><input v-model="expectedVersion" aria-label="交接版本" /></label>
+    </div>
+    <div class="job-toolbar">
+      <button type="button" class="secondary-button" aria-label="查询交接" @click="loadHistory">查询交接</button>
+    </div>
+    <ul class="job-records">
       <li v-for="row in history" :key="row.transferId">
         原值 {{ row.originalValue }}，位置 {{ row.fromLocationLabel }} 到 {{ row.toLocationLabel }}，保管 {{ row.fromCustodianLabel }} 到 {{ row.toCustodianLabel }}
       </li>
     </ul>
-    <form aria-label="办理交接" @submit.prevent="submit">
-      <label>新位置 <input v-model="location" aria-label="新位置" placeholder="不改" /></label>
-      <label>新保管人 <input v-model="custodian" aria-label="新保管人" placeholder="不改" /></label>
-      <label>使用状态
+    <form class="info-fields" aria-label="办理交接" @submit.prevent="submit">
+      <label><span>新位置</span><input v-model="location" aria-label="新位置" placeholder="不改" /></label>
+      <label><span>新保管人</span><input v-model="custodian" aria-label="新保管人" placeholder="不改" /></label>
+      <label><span>使用状态</span>
         <select v-model="useStatus" aria-label="交接状态">
           <option value="">不改</option>
           <option value="在用">在用</option>
           <option value="闲置">闲置</option>
         </select>
       </label>
-      <button type="submit">提交交接</button>
+      <div class="job-span"><button class="primary-button" type="submit">提交交接</button></div>
     </form>
-    <p v-if="message">{{ message }}</p>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
   </section>
 </template>

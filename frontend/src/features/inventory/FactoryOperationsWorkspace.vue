@@ -74,28 +74,83 @@ async function save(path: string, body: Record<string, unknown>) {
 void list();
 </script>
 <template>
-  <section aria-label="本厂物品与库存办理" class="page-stack">
-    <h3>本厂珠料、配件、耗材与工具</h3>
-    <label>物品<select v-model="itemId" @change="select"><option value="">新建物品档案</option><option v-for="item in items" :key="item.itemId" :value="item.itemId">{{ item.materialName }} · {{ item.specCode }} · {{ item.unit }}</option></select></label>
-    <button type="button" @click="list">刷新物品</button>
-    <label>办理<select v-model="action"><option v-if="!itemId" value="register">新建档案</option><template v-else><option value="policy">确认管理方式</option><template v-if="!tool"><option value="receive">入库</option><option value="issue">领用到车间</option><option value="return">按原领用退回</option><option value="consume">确认实际耗用</option></template><template v-else><option value="tool-in">工具入库</option><option value="borrow">借出工具</option><option value="tool-return">按原借出归还</option><option value="tool-scrap">确认工具报废</option></template><option value="count-open">发起现在盘点</option><option value="count-record">填写本次实盘</option><option value="count-confirm">确认盘点差额</option></template></select></label>
-    <template v-if="!itemId"><label>类别<select v-model="category"><option value="BEAD">珠料</option><option value="ACCESSORY">配件</option><option value="CONSUMABLE">耗材</option><option value="REUSABLE_TOOL">工具</option></select></label><label>品名<input v-model="name" /></label><label>规格<input v-model="spec" /></label><label>单位<input v-model="unit" /></label></template>
-    <template v-if="action === 'register' || action === 'policy'"><label>耗材计耗<select v-model="timing"><option value="UNDECIDED">未选定</option><option value="ON_ISSUE">领用即耗</option><option value="ON_ACTUAL_USE">实际耗用</option></select></label><label>工具保管<select v-model="custody"><option value="UNDECIDED">未选定</option><option value="QUANTITY">按数量</option><option value="PIECE">逐件编号</option></select></label></template>
-    <template v-if="itemId"><label>库位<input v-model="warehouse" /></label><button type="button" @click="load">读取当前库存</button>
-      <template v-if="position"><p>管理方式：{{ ({ UNDECIDED: '未选定', ON_ISSUE: '领用即耗', ON_ACTUAL_USE: '实际耗用' } as Record<string,string>)[position.item.consumptionTiming] }} · {{ ({ UNDECIDED: '未选定', QUANTITY: '按数量', PIECE: '逐件编号' } as Record<string,string>)[position.item.custodyMode] }}</p><p v-for="row in position.balances" :key="`${row.batchCode}:${row.warehouseCode}`">库内 {{ row.batchCode }} · {{ row.warehouseCode }} · {{ row.quantity }}{{ row.unit }} · {{ row.weight.state === 'KNOWN' ? `${row.weight.value}克` : '重量待核' }}</p><p v-for="row in position.issues" :key="row.issueId">车间 {{ row.workshopCode }} · 领用 {{ row.issueId }} · 留存 {{ row.quantity - row.returnedQuantity - row.consumedQuantity }}{{ row.unit }}</p><p v-if="position.toolQuantity != null">所选库位可借 {{ position.toolQuantity }}{{ position.item.unit }}</p><p v-for="row in position.loans" :key="row.loanId">未还 {{ row.holderId }} {{ row.holderName }} · {{ row.quantity - row.returnedQuantity }}{{ row.unit }} · {{ row.loanId }}</p><p v-for="row in position.pieces" :key="row.pieceCode">工具 {{ row.pieceCode }} · {{ row.warehouseCode }} · {{ row.scrapped ? '已报废' : row.holderId ? `保管人 ${row.holderId}` : '在库' }}</p></template>
-    </template>
-    <template v-if="['receive','issue','return','consume','tool-in','borrow','tool-return','tool-scrap','count-record'].includes(action)"><label>{{ action === 'consume' ? '本次耗用数量' : action === 'count-record' ? '本次实盘数量' : '本次数量' }}<input v-model="quantity" inputmode="decimal" /></label></template>
-    <template v-if="['receive','issue','return'].includes(action) && !tool && !consumable"><label>本次实重（克）<input v-model="weight" placeholder="未知留空" /></label></template>
-    <template v-if="action === 'receive'"><label>入库日期<input v-model="businessDate" type="date" /></label><label>来源<select v-model="sourceKind"><option value="PURCHASE">采购新增</option><option value="OPENING">期初接续</option><option value="COVERED_PAYABLE">已有应付覆盖</option></select></label><label>供应商<input v-model="supplier" /></label><label>本次采购金额<input v-model="amount" placeholder="未知留空" /></label><label>已有应付编号<input v-model="coveredCode" /></label></template>
-    <template v-if="['issue','count-open'].includes(action) && !tool"><label>来源批次<select v-model="batch"><option value="">请选择</option><option v-for="row in position?.balances" :key="`${row.batchCode}:${row.warehouseCode}`" :value="row.batchCode">{{ row.batchCode }} · {{ row.warehouseCode }} · {{ row.quantity }}{{ row.unit }}</option></select></label></template>
-    <template v-if="action === 'issue'"><label>车间<input v-model="workshop" /></label><label v-if="consumable">原入库单<select v-model="receiptId"><option value="">请选择</option><option v-for="row in position?.receipts" :key="row.receiptId" :value="row.receiptId">{{ row.receiptId }} · {{ row.batchCode }} · {{ row.warehouseCode }}</option></select></label><label v-else>加工去向<input v-model="target" /></label></template>
-    <template v-if="['return','consume'].includes(action)"><label>原领用<select v-model="issueId"><option value="">请选择</option><option v-for="row in position?.issues" :key="row.issueId" :value="row.issueId">{{ row.issueId }} · {{ row.workshopCode }} · 未结 {{ row.quantity - row.returnedQuantity - row.consumedQuantity }}{{ row.unit }}</option></select></label></template>
-    <template v-if="action === 'consume' && !consumable"><label>同时退回<input v-model="returned" /></label><label>继续留下<input v-model="kept" /></label><label>其中报废<input v-model="scrap" /></label><label>本次耗用金额<input v-model="amount" placeholder="未知留空" /></label><label>耗用去向<input v-model="target" /></label></template>
-    <template v-if="['tool-in','borrow'].includes(action)"><label>逐件工具编号<input v-model="piece" placeholder="按数量管理时留空" /></label></template>
-    <template v-if="action === 'borrow'"><label>保管人编号<input v-model="holder" /></label><label>保管人姓名<input v-model="holderName" /></label></template>
-    <template v-if="['tool-return','tool-scrap'].includes(action)"><label>原借出<select v-model="loanId"><option value="">请选择</option><option v-for="row in position?.loans" :key="row.loanId" :value="row.loanId">{{ row.loanId }} · {{ row.holderName }} · 未还 {{ row.quantity - row.returnedQuantity }}{{ row.unit }}</option></select></label><label v-if="action === 'tool-scrap'">报废原因<input v-model="reason" /></label></template>
-    <p v-if="stocktake">本次盘点 {{ stocktake.stocktakeId }} · 原账面 {{ stocktake.bookQuantity }} · 实盘 {{ stocktake.countedQuantity ?? '待填' }} · 版本 {{ stocktake.version }}</p>
-    <p v-if="message" role="status">{{ message }}</p><button type="button" :disabled="pending" @click="submit">{{ pending ? '正在提交' : hasUnconfirmed ? '原请求重试' : '提交本次办理' }}</button>
-    <button v-if="hasUnconfirmed" type="button" @click="command.restorePending">恢复上次填写</button><button type="button" :disabled="pending || hasUnconfirmed" @click="command.startNext">开始下一笔</button>
+  <section aria-label="本厂物品与库存办理" class="job-panel">
+    <header class="job-head">
+      <h2>本厂珠料、配件、耗材与工具</h2>
+      <p>先选定物品和本次办理，再填这一笔需要的字段。未知重量和金额留空。</p>
+    </header>
+    <div class="info-fields">
+      <label><span>物品</span><select v-model="itemId" @change="select"><option value="">新建物品档案</option><option v-for="item in items" :key="item.itemId" :value="item.itemId">{{ item.materialName }} · {{ item.specCode }} · {{ item.unit }}</option></select></label>
+      <label><span>办理</span><select v-model="action"><option v-if="!itemId" value="register">新建档案</option><template v-else><option value="policy">确认管理方式</option><template v-if="!tool"><option value="receive">入库</option><option value="issue">领用到车间</option><option value="return">按原领用退回</option><option value="consume">确认实际耗用</option></template><template v-else><option value="tool-in">工具入库</option><option value="borrow">借出工具</option><option value="tool-return">按原借出归还</option><option value="tool-scrap">确认工具报废</option></template><option value="count-open">发起现在盘点</option><option value="count-record">填写本次实盘</option><option value="count-confirm">确认盘点差额</option></template></select></label>
+      <template v-if="!itemId">
+        <label><span>类别</span><select v-model="category"><option value="BEAD">珠料</option><option value="ACCESSORY">配件</option><option value="CONSUMABLE">耗材</option><option value="REUSABLE_TOOL">工具</option></select></label>
+        <label><span>品名</span><input v-model="name" /></label>
+        <label><span>规格</span><input v-model="spec" /></label>
+        <label><span>单位</span><input v-model="unit" /></label>
+      </template>
+      <template v-if="action === 'register' || action === 'policy'">
+        <label><span>耗材计耗</span><select v-model="timing"><option value="UNDECIDED">未选定</option><option value="ON_ISSUE">领用即耗</option><option value="ON_ACTUAL_USE">实际耗用</option></select></label>
+        <label><span>工具保管</span><select v-model="custody"><option value="UNDECIDED">未选定</option><option value="QUANTITY">按数量</option><option value="PIECE">逐件编号</option></select></label>
+      </template>
+      <template v-if="itemId">
+        <label><span>库位</span><input v-model="warehouse" /></label>
+      </template>
+    </div>
+    <div v-if="!itemId" class="job-toolbar">
+      <button type="button" class="secondary-button" @click="list">刷新物品</button>
+    </div>
+    <div v-if="itemId" class="job-toolbar">
+      <button type="button" class="secondary-button" @click="list">刷新物品</button>
+      <button type="button" class="secondary-button" @click="load">读取当前库存</button>
+    </div>
+    <div v-if="itemId && position" class="job-records">
+      <p>管理方式：{{ ({ UNDECIDED: '未选定', ON_ISSUE: '领用即耗', ON_ACTUAL_USE: '实际耗用' } as Record<string,string>)[position.item.consumptionTiming] }} · {{ ({ UNDECIDED: '未选定', QUANTITY: '按数量', PIECE: '逐件编号' } as Record<string,string>)[position.item.custodyMode] }}</p>
+      <p v-for="row in position.balances" :key="`${row.batchCode}:${row.warehouseCode}`">库内 {{ row.batchCode }} · {{ row.warehouseCode }} · {{ row.quantity }}{{ row.unit }} · {{ row.weight.state === 'KNOWN' ? `${row.weight.value}克` : '重量待核' }}</p>
+      <p v-for="row in position.issues" :key="row.issueId">车间 {{ row.workshopCode }} · 领用 {{ row.issueId }} · 留存 {{ row.quantity - row.returnedQuantity - row.consumedQuantity }}{{ row.unit }}</p>
+      <p v-if="position.toolQuantity != null">所选库位可借 {{ position.toolQuantity }}{{ position.item.unit }}</p>
+      <p v-for="row in position.loans" :key="row.loanId">未还 {{ row.holderId }} {{ row.holderName }} · {{ row.quantity - row.returnedQuantity }}{{ row.unit }} · {{ row.loanId }}</p>
+      <p v-for="row in position.pieces" :key="row.pieceCode">工具 {{ row.pieceCode }} · {{ row.warehouseCode }} · {{ row.scrapped ? '已报废' : row.holderId ? `保管人 ${row.holderId}` : '在库' }}</p>
+    </div>
+    <div class="info-fields">
+      <template v-if="['receive','issue','return','consume','tool-in','borrow','tool-return','tool-scrap','count-record'].includes(action)"><label><span>{{ action === 'consume' ? '本次耗用数量' : action === 'count-record' ? '本次实盘数量' : '本次数量' }}</span><input v-model="quantity" inputmode="decimal" /></label></template>
+      <template v-if="['receive','issue','return'].includes(action) && !tool && !consumable"><label><span>本次实重（克）</span><input v-model="weight" placeholder="未知留空" /></label></template>
+      <template v-if="action === 'receive'">
+        <label><span>入库日期</span><input v-model="businessDate" type="date" /></label>
+        <label><span>来源</span><select v-model="sourceKind"><option value="PURCHASE">采购新增</option><option value="OPENING">期初接续</option><option value="COVERED_PAYABLE">已有应付覆盖</option></select></label>
+        <label><span>供应商</span><input v-model="supplier" /></label>
+        <label><span>本次采购金额</span><input v-model="amount" placeholder="未知留空" /></label>
+        <label><span>已有应付编号</span><input v-model="coveredCode" /></label>
+      </template>
+      <template v-if="['issue','count-open'].includes(action) && !tool"><label><span>来源批次</span><select v-model="batch"><option value="">请选择</option><option v-for="row in position?.balances" :key="`${row.batchCode}:${row.warehouseCode}`" :value="row.batchCode">{{ row.batchCode }} · {{ row.warehouseCode }} · {{ row.quantity }}{{ row.unit }}</option></select></label></template>
+      <template v-if="action === 'issue'">
+        <label><span>车间</span><input v-model="workshop" /></label>
+        <label v-if="consumable"><span>原入库单</span><select v-model="receiptId"><option value="">请选择</option><option v-for="row in position?.receipts" :key="row.receiptId" :value="row.receiptId">{{ row.receiptId }} · {{ row.batchCode }} · {{ row.warehouseCode }}</option></select></label>
+        <label v-else><span>加工去向</span><input v-model="target" /></label>
+      </template>
+      <template v-if="['return','consume'].includes(action)"><label><span>原领用</span><select v-model="issueId"><option value="">请选择</option><option v-for="row in position?.issues" :key="row.issueId" :value="row.issueId">{{ row.issueId }} · {{ row.workshopCode }} · 未结 {{ row.quantity - row.returnedQuantity - row.consumedQuantity }}{{ row.unit }}</option></select></label></template>
+      <template v-if="action === 'consume' && !consumable">
+        <label><span>同时退回</span><input v-model="returned" /></label>
+        <label><span>继续留下</span><input v-model="kept" /></label>
+        <label><span>其中报废</span><input v-model="scrap" /></label>
+        <label><span>本次耗用金额</span><input v-model="amount" placeholder="未知留空" /></label>
+        <label><span>耗用去向</span><input v-model="target" /></label>
+      </template>
+      <template v-if="['tool-in','borrow'].includes(action)"><label><span>逐件工具编号</span><input v-model="piece" placeholder="按数量管理时留空" /></label></template>
+      <template v-if="action === 'borrow'">
+        <label><span>保管人编号</span><input v-model="holder" /></label>
+        <label><span>保管人姓名</span><input v-model="holderName" /></label>
+      </template>
+      <template v-if="['tool-return','tool-scrap'].includes(action)">
+        <label><span>原借出</span><select v-model="loanId"><option value="">请选择</option><option v-for="row in position?.loans" :key="row.loanId" :value="row.loanId">{{ row.loanId }} · {{ row.holderName }} · 未还 {{ row.quantity - row.returnedQuantity }}{{ row.unit }}</option></select></label>
+        <label v-if="action === 'tool-scrap'"><span>报废原因</span><input v-model="reason" /></label>
+      </template>
+    </div>
+    <p v-if="stocktake" class="info-context">本次盘点 {{ stocktake.stocktakeId }} · 原账面 {{ stocktake.bookQuantity }} · 实盘 {{ stocktake.countedQuantity ?? '待填' }} · 版本 {{ stocktake.version }}</p>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
+    <div class="job-actions">
+      <button type="button" class="primary-button" :disabled="pending" @click="submit">{{ pending ? '正在提交' : hasUnconfirmed ? '原请求重试' : '提交本次办理' }}</button>
+      <button v-if="hasUnconfirmed" type="button" class="secondary-button" @click="command.restorePending">恢复上次填写</button>
+      <button type="button" class="secondary-button" :disabled="pending || hasUnconfirmed" @click="command.startNext">开始下一笔</button>
+    </div>
   </section>
 </template>

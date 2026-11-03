@@ -206,6 +206,29 @@ describe('统一订单列表与详情', () => {
     expect(openIntake).toHaveBeenCalledOnce();
     wrapper.unmount();
   });
+  it('母单更多操作里的收货与拆单打开当前母单办理，不再切回来料页', async () => {
+    vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([
+      row('MO-9', { rowKey: 'MOTHER_ORDER|MO-9', objectType: 'MOTHER_ORDER', code: 'MO-9', motherOrderCode: 'MO-9', workOrderCode: null }),
+    ]));
+    vi.mocked(queryScanContext).mockResolvedValue(buildScanContext({ objectType: 'MOTHER_ORDER', code: 'MO-9', motherOrderCode: 'MO-9' }));
+    const openIntake = vi.fn();
+    const openTab = vi.fn();
+    const wrapper = mountWorkspace({
+      'zhubao-auth-session': ref({ effectivePermissions: ['BUSINESS_INBOUND_CONFIRM', 'BUSINESS_PRODUCTION_REPORT'] }),
+      'zhubao-visible-tabs': ref(['inbound', 'production']),
+      'zhubao-open-intake': openIntake,
+      'zhubao-open-production': vi.fn(),
+      'zhubao-open-tab': openTab,
+    });
+    await flushPromises();
+    await select(wrapper, 'MO-9');
+    const more = wrapper.get('.order-more-actions');
+    expect(more.get('summary').text()).toBe('更多操作');
+    await more.get('button').trigger('click');
+    expect(openIntake).toHaveBeenCalledWith({ objectType: 'MOTHER_ORDER', code: 'MO-9' });
+    expect(openTab).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
   it('读取 Q1 原始小数、总数和分类，不自动选择第一行，不把未知进度当 0', async () => {
     vi.mocked(fetchOrderWorkspace).mockResolvedValue(page([row(), row('WO-2', { processPercent: 100 })], { totalRows: 42, facetCounts: { ALL: 42, IN_PROCESS: 35 } }));
     const wrapper = mountWorkspace();

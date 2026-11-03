@@ -9,7 +9,9 @@ import {
   type SamplingVersionView,
 } from '../../services/samplingApi';
 
+const props = defineProps<{ linkedCode?: string }>();
 const samplingCode = ref('');
+watch(() => props.linkedCode, (value) => { if (value) samplingCode.value = value; }, { immediate: true });
 const versions = ref<SamplingVersionView[]>([]);
 const kind = ref('MODEL');
 const parameterText = ref('');
@@ -79,42 +81,48 @@ function looksFetchable(note: string) {
 </script>
 
 <template>
-  <section class="page-stack" aria-label="打样版本">
+  <section class="job-pane" aria-label="打样版本">
     <header>
       <h2>版本与客户确认</h2>
       <p>已确认版本不会被新版本覆盖。没有大文件也能保存。有模型引用不等于已经备份外部原件。</p>
     </header>
-    <p role="status">{{ message }}</p>
-    <fieldset class="page-stack" :disabled="operation.pending.value" style="margin:0;padding:0;border:0;min-width:0">
-    <label>打样号 <input v-model="samplingCode" aria-label="版本打样号" /></label>
-    <button type="button" @click="loadVersions">查询版本</button>
-    <ul>
-      <li v-for="version in versions" :key="`${version.kind}-${version.versionNo}`">
-        <span>{{ version.kindLabel }} 第 {{ version.versionNo }} 版 {{ version.decisionLabel }}</span>
-        <span v-if="version.parameterText"> {{ version.parameterText }}</span>
-        <span v-if="version.modelReferenced"> 存放引用不代表已备份外部原件</span>
-        <button v-if="version.decision === 'PENDING'" type="button" @click="decide(version, true)">确认</button>
-        <button v-if="version.decision === 'PENDING'" type="button" @click="decide(version, false)">驳回</button>
-      </li>
-    </ul>
-    <form @submit.prevent="submit">
-      <label>版本种类
-        <select v-model="kind" aria-label="版本种类">
-          <option value="FLAT">平设</option>
-          <option value="MODEL">模型</option>
-          <option value="BEAD">珠型</option>
-        </select>
-      </label>
-      <label>尺寸参数 <input v-model="parameterText" aria-label="尺寸参数" /></label>
-      <label>模型文件名 <input v-model="modelFileName" aria-label="模型文件名" /></label>
-      <label>模型格式 <input v-model="modelFormat" aria-label="模型格式" /></label>
-      <label>模型版本 <input v-model="modelVersion" aria-label="模型版本" /></label>
-      <label>存放说明 <input v-model="modelLocationNote" aria-label="存放说明" /></label>
-      <button type="submit">保存版本</button>
-    </form>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
+    <fieldset class="job-fieldset" :disabled="operation.pending.value">
+      <div class="info-fields">
+        <label><span>打样号</span><input v-model="samplingCode" aria-label="版本打样号" /></label>
+      </div>
+      <div class="job-toolbar">
+        <button type="button" class="secondary-button" @click="loadVersions">查询版本</button>
+      </div>
+      <ul class="job-records">
+        <li v-for="version in versions" :key="`${version.kind}-${version.versionNo}`">
+          <span>{{ version.kindLabel }} 第 {{ version.versionNo }} 版 {{ version.decisionLabel }}</span>
+          <span v-if="version.parameterText"> {{ version.parameterText }}</span>
+          <span v-if="version.modelReferenced"> 存放引用不代表已备份外部原件</span>
+          <button v-if="version.decision === 'PENDING'" type="button" class="secondary-button" @click="decide(version, true)">确认</button>
+          <button v-if="version.decision === 'PENDING'" type="button" class="secondary-button" @click="decide(version, false)">驳回</button>
+        </li>
+      </ul>
+      <form class="info-fields" @submit.prevent="submit">
+        <label><span>版本种类</span>
+          <select v-model="kind" aria-label="版本种类">
+            <option value="FLAT">平设</option>
+            <option value="MODEL">模型</option>
+            <option value="BEAD">珠型</option>
+          </select>
+        </label>
+        <label><span>尺寸参数</span><input v-model="parameterText" aria-label="尺寸参数" /></label>
+        <label><span>模型文件名</span><input v-model="modelFileName" aria-label="模型文件名" /></label>
+        <label><span>模型格式</span><input v-model="modelFormat" aria-label="模型格式" /></label>
+        <label><span>模型版本</span><input v-model="modelVersion" aria-label="模型版本" /></label>
+        <label><span>存放说明</span><input v-model="modelLocationNote" aria-label="存放说明" /></label>
+        <div class="job-span"><button class="primary-button" type="submit">保存版本</button></div>
+      </form>
     </fieldset>
-    <p v-if="operation.pending.value">正在提交，请稍候</p>
-    <button v-if="operation.hasUnconfirmed.value" type="button" @click="operation.restorePending">恢复上次填写</button>
-    <button type="button" @click="operation.startNext">开始下一笔</button>
+    <p v-if="operation.pending.value" role="status">正在提交，请稍候</p>
+    <div class="job-actions">
+      <button v-if="operation.hasUnconfirmed.value" type="button" class="secondary-button" @click="operation.restorePending">恢复上次填写</button>
+      <button type="button" class="secondary-button" @click="operation.startNext">开始下一笔</button>
+    </div>
   </section>
 </template>

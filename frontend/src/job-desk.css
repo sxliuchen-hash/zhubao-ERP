@@ -1,0 +1,257 @@
+/* 打样、金工、资产、外协和本厂物品：沿用订单列表卡片和生产作业卡片的排版。 */
+
+.job-desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.job-surface,
+.job-panel,
+.job-pane {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+  background: var(--content);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.job-head,
+.job-pane > header,
+.job-panel > header,
+.job-surface > header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin: -16px -16px 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+}
+
+.job-head:has(> .primary-button),
+.job-head:has(> .secondary-button) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.job-head h2,
+.job-pane h2,
+.job-surface h2,
+.job-block h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.job-block h3 { font-size: 14px; }
+
+.job-head p,
+.job-pane header p,
+.job-surface header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.job-head > div:first-child,
+.job-pane > header > div:first-child { min-width: 0; }
+
+.job-work {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  align-items: start;
+  min-width: 0;
+}
+
+.job-toolbar,
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.job-block {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+}
+
+.job-table-wrap { overflow-x: auto; max-width: 100%; }
+
+.job-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: transparent;
+}
+
+.job-table th,
+.job-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.job-table th {
+  color: var(--muted);
+  white-space: nowrap;
+  background: var(--soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.job-table tbody tr:last-child td { border-bottom: 0; }
+
+.job-row { cursor: pointer; }
+
+.job-row[aria-selected="true"] { background: var(--action-soft); }
+
+.job-code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.job-row[aria-selected="true"] .job-code,
+.job-code:hover { color: var(--action); }
+
+.job-order-cards { display: none; }
+
+.job-order-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--action);
+  border-radius: 12px;
+  background: var(--content);
+  color: inherit;
+  cursor: pointer;
+}
+
+.job-order-card[aria-selected="true"] { background: var(--action-soft); }
+
+.job-order-card strong { font-size: 14px; }
+
+.job-order-card small,
+.job-records small { color: var(--muted); }
+
+.job-count { margin: 0; color: var(--muted); font-size: 13px; }
+
+.job-empty {
+  margin: 0;
+  padding: 28px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--muted);
+  text-align: center;
+}
+
+.job-records {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.job-records > li,
+.job-records > p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--content);
+}
+
+.job-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.job-span { grid-column: 1 / -1; }
+
+.job-desk .operation-feedback:not(.danger):not(.warning):not(.success),
+.job-surface .operation-feedback:not(.danger):not(.warning):not(.success),
+.job-pane .operation-feedback:not(.danger):not(.warning):not(.success) {
+  margin: 0;
+  background: var(--action-soft);
+  color: var(--ink);
+}
+
+.job-split {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.job-pane .info-facts p {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--content);
+}
+
+.finance-workspace > .section-block > .job-work {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+@media (min-width: 1100px) {
+  .job-desk { grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.85fr); }
+  .job-desk > .job-work { grid-column: 1 / -1; }
+  .job-split { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 900px) {
+  .job-surface,
+  .job-panel,
+  .job-pane { padding: 12px; }
+  .job-head,
+  .job-pane > header,
+  .job-panel > header,
+  .job-surface > header { margin: -12px -12px 0; padding: 12px; }
+  .job-head { flex-direction: column; }
+  .job-head .primary-button,
+  .job-head .secondary-button { width: 100%; }
+  .job-table-wrap { display: none; }
+  .job-order-cards { display: grid; gap: 10px; }
+  .job-actions .primary-button,
+  .job-actions .secondary-button,
+  .job-toolbar .primary-button,
+  .job-toolbar .secondary-button { min-height: 44px; }
+}

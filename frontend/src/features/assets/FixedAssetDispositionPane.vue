@@ -65,30 +65,37 @@ async function submit() {
 </script>
 
 <template>
-  <section aria-label="资产处置">
-    <p>净值待核。报废不是收款，也不扣员工工资。</p>
-    <label>资产编码 <input v-model="assetCode" aria-label="处置资产编码" /></label>
-    <button type="button" aria-label="查询处置" @click="loadRows">查询处置</button>
-    <ul>
+  <section class="job-panel" aria-label="资产处置">
+    <header class="job-head">
+      <h2>停用、报废与处置</h2>
+      <p>净值待核。报废不是收款，也不扣员工工资。</p>
+    </header>
+    <div class="info-fields">
+      <label><span>资产编码</span><input v-model="assetCode" aria-label="处置资产编码" /></label>
+    </div>
+    <div class="job-toolbar">
+      <button type="button" class="secondary-button" aria-label="查询处置" @click="loadRows">查询处置</button>
+    </div>
+    <ul class="job-records">
       <li v-for="row in rows" :key="row.dispositionId">
         {{ row.kindLabel }} 原值 {{ row.originalValue }} 净值 {{ row.netValue == null ? '待核' : row.netValue }}
         折旧影响 {{ row.depreciationImpactLabel }} {{ row.received ? '已关联回款' : '未收款' }}
       </li>
     </ul>
-    <form aria-label="登记处置" @submit.prevent="submit">
-      <label>类型
+    <form class="info-fields" aria-label="登记处置" @submit.prevent="submit">
+      <label><span>类型</span>
         <select v-model="kind" aria-label="处置类型">
           <option value="STOP">停用</option>
           <option value="SCRAP">报废</option>
           <option value="DISPOSE">处置</option>
         </select>
       </label>
-      <label>日期 <input v-model="occurredOn" aria-label="处置日期" /></label>
-      <label>依据 <input v-model="basis" aria-label="处置依据" /></label>
-      <label>收款单 <input v-model="receiptCode" aria-label="回款收款单" placeholder="没有则留空" /></label>
-      <label>回款金额 <input v-model="proceeds" aria-label="回款金额" placeholder="未收款" /></label>
-      <button type="submit">登记处置</button>
+      <label><span>日期</span><input v-model="occurredOn" aria-label="处置日期" /></label>
+      <label><span>依据</span><input v-model="basis" aria-label="处置依据" /></label>
+      <label><span>收款单</span><input v-model="receiptCode" aria-label="回款收款单" placeholder="没有则留空" /></label>
+      <label><span>回款金额</span><input v-model="proceeds" aria-label="回款金额" placeholder="未收款" /></label>
+      <div class="job-span"><button class="primary-button" type="submit">登记处置</button></div>
     </form>
-    <p v-if="message">{{ message }}</p>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
   </section>
 </template>

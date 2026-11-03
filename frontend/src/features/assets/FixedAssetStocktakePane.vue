@@ -71,25 +71,30 @@ async function confirmSheet() {
 </script>
 
 <template>
-  <section aria-label="资产盘点">
-    <p>漏扫和未见不报废，也不改原值。确认与登记分开。</p>
-    <form aria-label="打开盘点" @submit.prevent="openSheet">
-      <label>资产编码 <input v-model="assetCode" aria-label="盘点资产编码" @change="location = ''" /></label>
-      <label>时点 <input v-model="countedAt" aria-label="盘点时点" /></label>
-      <button type="submit">打开盘点</button>
+  <section class="job-panel" aria-label="资产盘点">
+    <header class="job-head">
+      <h2>逐件盘点</h2>
+      <p>漏扫和未见不报废，也不改原值。确认与登记分开。</p>
+    </header>
+    <form class="info-fields" aria-label="打开盘点" @submit.prevent="openSheet">
+      <label><span>资产编码</span><input v-model="assetCode" aria-label="盘点资产编码" @change="location = ''" /></label>
+      <label><span>时点</span><input v-model="countedAt" aria-label="盘点时点" /></label>
+      <div class="job-span"><button class="secondary-button" type="submit">打开盘点</button></div>
     </form>
-    <form aria-label="登记实盘" @submit.prevent="countSheet">
-      <label>结果
+    <form class="info-fields" aria-label="登记实盘" @submit.prevent="countSheet">
+      <label><span>结果</span>
         <select v-model="seen" aria-label="实盘结果">
           <option value="PRESENT">在场</option>
           <option value="ABSENT">未见</option>
         </select>
       </label>
-      <label>实盘位置 <input v-model="location" aria-label="实盘位置" placeholder="不改" /></label>
-      <label>异常 <input v-model="exceptionText" aria-label="盘点异常" /></label>
-      <button type="submit">登记实盘</button>
+      <label><span>实盘位置</span><input v-model="location" aria-label="实盘位置" placeholder="不改" /></label>
+      <label><span>异常</span><input v-model="exceptionText" aria-label="盘点异常" /></label>
+      <div class="job-span"><button class="primary-button" type="submit">登记实盘</button></div>
     </form>
-    <button type="button" @click="confirmSheet">确认差异</button>
-    <p v-if="message">{{ message }}</p>
+    <div class="job-toolbar">
+      <button type="button" class="primary-button" @click="confirmSheet">确认差异</button>
+    </div>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
   </section>
 </template>

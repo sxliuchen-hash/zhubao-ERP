@@ -51,7 +51,6 @@ const arrangementLocked = ref(false);
 const productionDecision = ref('');
 const canArrange = computed(() => !authSession.value || (authSession.value.effectivePermissions ? authSession.value.effectivePermissions.includes('BUSINESS_MOTHER_SPLIT')
   : authSession.value.role === 'BUSINESS_MANAGER' ? authSession.value.coverDuties?.includes('SPLIT') : ['ADMIN', 'GENERAL_MANAGER', 'RECEIVER', 'WAREHOUSE_KEEPER', 'WORKSHOP_LEADER'].includes(authSession.value.role)));
-const canOpenInbound = computed(() => !visibleTabs.value || visibleTabs.value.includes('inbound'));
 
 const scanText = ref('');
 const scanHint = ref('');
@@ -207,12 +206,10 @@ function openLabelPage() {
   else openTab?.('label');
 }
 
+const splitAnchor = ref<HTMLElement | null>(null);
 function openMotherDetails() {
-  traceTarget.value = {
-    objectType: 'MOTHER_ORDER', code: intakeMotherCode.value, intent: 'INTAKE',
-    token: (traceTarget.value?.token ?? 0) + 1,
-  };
-  openTab?.('inbound');
+  // 拆单表单就在本页下方。再切来料页会关掉当前办理，点了像没有反应。
+  void nextTick(() => splitAnchor.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
 }
 
 function startNextIntake(mode: 'same-waybill' | 'same-customer' | 'new' = 'new') {
@@ -907,7 +904,7 @@ onMounted(loadCatalog);
     </dl>
     <div class="intake-next-actions">
       <button v-if="canOpenLabel" class="primary-button" type="button" aria-label="打开标签" @click="openLabelPage">预览并打印母单标签</button>
-      <button v-if="canOpenInbound" class="secondary-button" type="button" @click="openMotherDetails">拆单与流转贴纸</button>
+      <button v-if="canArrange" class="secondary-button" type="button" @click="openMotherDetails">拆单与流转贴纸</button>
       <label><input v-model="reuseRequirements" type="checkbox" />下一笔显式复用加工要求</label><label><input v-model="reuseDueDate" type="checkbox" />下一笔显式复用交期</label>
       <p>同运单继续保留客户及运单；同客户再收只保留客户和来源类型。材质、数量、重量和照片重新录入；要求、交期按上方勾选复用。</p>
       <button v-if="created?.courierNo" class="secondary-button" type="button" :disabled="arrangementLocked || businessLocked" @click="startNextIntake('same-waybill')">同运单继续</button>
@@ -921,7 +918,9 @@ onMounted(loadCatalog);
     </details>
   </article>
 
-  <MotherSplitPanel v-if="savedMother && canArrange" :mother-order-code="intakeMotherCode" intake-mode @arranged="productionDecision = $event.decision" @locked="arrangementLocked = $event" />
+  <div v-if="savedMother && canArrange" ref="splitAnchor">
+    <MotherSplitPanel :mother-order-code="intakeMotherCode" intake-mode @arranged="productionDecision = $event.decision" @locked="arrangementLocked = $event" />
+  </div>
 
   <section v-show="(draftAvailable || intakeMotherCode) && intakePurpose === 'processing'" :inert="intakePurpose !== 'processing' || undefined" class="section-block intake-create" :class="{ 'intake-stage-hidden': !savedMother && formStage !== 2 }">
     <h2 v-if="field && !savedMother">草稿文件</h2>

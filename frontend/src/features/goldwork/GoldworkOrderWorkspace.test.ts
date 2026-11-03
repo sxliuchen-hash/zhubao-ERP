@@ -42,8 +42,9 @@ describe('金工单查询和建单', () => {
     const wrapper = mount(GoldworkOrderWorkspace);
     expect(wrapper.text()).toContain('登记导入');
     expect(wrapper.text()).toContain('打样');
-    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
-    await wrapper.get('button').trigger('click');
+    expect(wrapper.text()).toContain('页面不上传模型');
+    expect(wrapper.find('input[accept*="3dm"]').exists()).toBe(false);
+    await wrapper.findAll('button').find((button) => button.text() === '查询金工单')!.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('GJ-20261031-0001');
     expect(wrapper.text()).toContain('足金戒托');

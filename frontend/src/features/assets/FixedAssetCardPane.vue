@@ -112,43 +112,49 @@ async function submit() {
 </script>
 
 <template>
-  <section aria-label="资产卡片">
-    <button type="button" @click="loadCards">查询卡片</button>
-    <p v-if="cards.length === 0">还没有查询到资产卡片</p>
-    <ul v-else>
+  <section class="job-panel" aria-label="资产卡片">
+    <header class="job-head">
+      <h2>资产卡片</h2>
+      <p>先查卡片，再记录新购置或接到已有卡片。未知金额留空，不能写成 0。</p>
+    </header>
+    <div class="job-toolbar">
+      <button type="button" class="secondary-button" @click="loadCards">查询卡片</button>
+    </div>
+    <p v-if="cards.length === 0" class="info-context">还没有查询到资产卡片</p>
+    <ul v-else class="job-records">
       <li v-for="card in cards" :key="card.code">
-        <button type="button" @click="chooseCard(card.code)">{{ card.code }} {{ card.name }}</button>
+        <button type="button" class="table-action" @click="chooseCard(card.code)">{{ card.code }} {{ card.name }}</button>
         <span>原值 {{ card.originalValue }}</span>
         <span>位置 {{ card.location.label }}</span>
         <span>保管 {{ card.custodian.label }}</span>
         <span>状态 {{ card.useStatus.label }}</span>
       </li>
     </ul>
-    <form aria-label="资产购置" @submit.prevent="submit">
-      <label>来源
+    <form class="info-fields" aria-label="资产购置" @submit.prevent="submit">
+      <label><span>来源</span>
         <select :value="source" aria-label="购置来源" @change="changeSource(($event.target as HTMLSelectElement).value)">
           <option value="PURCHASE">新购置</option>
           <option value="EXISTING_CARD">已有卡片</option>
         </select>
       </label>
-      <label v-if="source === 'EXISTING_CARD'">资产编码 <input v-model="assetCode" aria-label="已有资产编码" /></label>
+      <label v-if="source === 'EXISTING_CARD'"><span>资产编码</span><input v-model="assetCode" aria-label="已有资产编码" /></label>
       <template v-else>
-        <label>名称 <input v-model="name" aria-label="购置名称" /></label>
-        <label>分类 <input v-model="category" aria-label="购置分类" /></label>
-        <label>原值 <input v-model="originalValue" aria-label="购置原值" placeholder="未齐" /></label>
-        <label>残值 <input v-model="residualValue" aria-label="购置残值" /></label>
-        <label>起始月 <input v-model="startMonth" aria-label="折旧起始月" /></label>
-        <label>使用月数 <input v-model="usefulMonths" aria-label="使用月数" /></label>
+        <label><span>名称</span><input v-model="name" aria-label="购置名称" /></label>
+        <label><span>分类</span><input v-model="category" aria-label="购置分类" /></label>
+        <label><span>原值</span><input v-model="originalValue" aria-label="购置原值" placeholder="未齐" /></label>
+        <label><span>残值</span><input v-model="residualValue" aria-label="购置残值" /></label>
+        <label><span>起始月</span><input v-model="startMonth" aria-label="折旧起始月" /></label>
+        <label><span>使用月数</span><input v-model="usefulMonths" aria-label="使用月数" /></label>
       </template>
-      <label>供应商 <input v-model="supplierName" aria-label="供应商" /></label>
-      <label>日期 <input v-model="acquiredOn" aria-label="购置日期" /></label>
-      <label>交接位置 <input v-model="handoverLocation" aria-label="交接位置" /></label>
-      <label>交接人 <input v-model="handoverReceiver" aria-label="交接人" /></label>
-      <label>付款金额 <input v-model="paymentAmount" aria-label="付款金额" placeholder="未付" /></label>
-      <label>付款日期 <input v-model="paymentDate" aria-label="付款日期" /></label>
-      <label>付款凭据 <input v-model="paymentVoucher" aria-label="付款凭据" /></label>
-      <button type="submit">提交购置</button>
+      <label><span>供应商</span><input v-model="supplierName" aria-label="供应商" /></label>
+      <label><span>日期</span><input v-model="acquiredOn" aria-label="购置日期" /></label>
+      <label><span>交接位置</span><input v-model="handoverLocation" aria-label="交接位置" /></label>
+      <label><span>交接人</span><input v-model="handoverReceiver" aria-label="交接人" /></label>
+      <label><span>付款金额</span><input v-model="paymentAmount" aria-label="付款金额" placeholder="未付" /></label>
+      <label><span>付款日期</span><input v-model="paymentDate" aria-label="付款日期" /></label>
+      <label><span>付款凭据</span><input v-model="paymentVoucher" aria-label="付款凭据" /></label>
+      <div class="job-span"><button class="primary-button" type="submit">提交购置</button></div>
     </form>
-    <p v-if="message">{{ message }}</p>
+    <p v-if="message" class="operation-feedback" role="status">{{ message }}</p>
   </section>
 </template>
