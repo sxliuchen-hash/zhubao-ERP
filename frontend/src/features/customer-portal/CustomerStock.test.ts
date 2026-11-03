@@ -108,7 +108,7 @@ describe('客户手机库存', () => {
       lossQuantity: '10',
       lossWeight: '未称',
       factoryAndOutside: '截止日的在厂与在外尚未核定',
-      bills: '账单可见范围尚未核定',
+      bills: '本版不向客户开放账单',
       afterCutoff: [],
       pending: [],
       exportText: '收料,1000\n出厂,300\n损耗,10',
@@ -118,7 +118,7 @@ describe('客户手机库存', () => {
     await flushPromises();
     expect(withPhoto.text()).toContain('收料 1000');
     expect(withPhoto.text()).toContain('收料,1000');
-    expect(withPhoto.text()).toContain('账单可见范围尚未核定');
+    expect(withPhoto.text()).toContain('本版不向客户开放账单');
     expect(withPhoto.text()).not.toContain('工资');
     vi.mocked(loadStatement).mockResolvedValue({
       customerId: 1, cutoff: '2026-10-03T00:00:00Z', receivedQuantity: null, shippedQuantity: null, lossQuantity: null,

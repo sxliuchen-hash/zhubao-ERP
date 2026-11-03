@@ -32,7 +32,7 @@ import java.util.Comparator;
 import java.util.UUID;
 
 /**
- * 把实收份额接回原节点，并写出不含金额的外协费用依据。
+ * 把实收份额接回原节点，并按这笔任务写出费用依据。金额可以不填，不生成应付。
  * 不放行质量，不把未加工退回记成完工，也不写客户账或员工工资。同一收回只确认一次。
  */
 @org.springframework.stereotype.Service

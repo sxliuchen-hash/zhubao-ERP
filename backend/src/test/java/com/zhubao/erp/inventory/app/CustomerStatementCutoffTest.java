@@ -130,7 +130,7 @@ class CustomerStatementCutoffTest {
         assertThat(statement.lossQuantity()).isEqualByComparingTo("10");
         assertThat(statement.lossWeight()).isEqualTo("未称");
         assertThat(statement.factoryAndOutside()).contains("尚未核定");
-        assertThat(statement.bills()).contains("尚未核定");
+        assertThat(statement.bills()).isEqualTo("本版不向客户开放账单");
         assertThat(statement.afterCutoff()).anyMatch(line -> line.contains("50") && line.contains("未计入"));
         assertThat(statement.pending()).anyMatch(line -> line.contains("打样"));
         assertThat(statement.exportText()).contains("收料,1000");

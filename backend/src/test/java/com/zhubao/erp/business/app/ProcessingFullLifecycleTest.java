@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 普通加工从原收货走到客户账单、员工工资和公司材料成本。
- * 返工计酬与外协费用金额仍未核定，本链只核对其被拒绝或不生成应付。
+ * 工资按最终成品数量和定额工价核算，返工不改变工资。外协费用按任务选填，不生成应付。
  */
 class ProcessingFullLifecycleTest {
 

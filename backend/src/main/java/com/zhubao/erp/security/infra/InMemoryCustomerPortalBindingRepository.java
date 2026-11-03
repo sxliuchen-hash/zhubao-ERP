@@ -33,7 +33,7 @@ public class InMemoryCustomerPortalBindingRepository implements CustomerPortalBi
     void save(CustomerPortalBinding binding) {
         for (CustomerPortalBinding current : byUsername.values()) {
             if (current.customerId() == binding.customerId() && !current.username().equals(binding.username())) {
-                throw new BusinessException("同客户多人访问尚未核定，不能再绑定账号");
+                throw new BusinessException("本版一个客户只绑定一个账号");
             }
         }
         byUsername.put(binding.username(), binding);

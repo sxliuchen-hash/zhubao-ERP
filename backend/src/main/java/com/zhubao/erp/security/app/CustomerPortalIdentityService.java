@@ -25,7 +25,7 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 受限客户身份。管理员按稳定客户编号绑定，一个账号只对应一个客户主体。
+ * 受限客户身份。管理员按稳定客户编号绑定。本版一个客户只绑定一个账号，一个账号也只对应一个客户主体。
  * 不签发凭据，不按名称或自填编号认领，也不写入库存、客户账或工资。
  */
 @Service
@@ -80,7 +80,7 @@ public class CustomerPortalIdentityService {
             throw new BusinessException("不能借用内部账号作为客户身份");
         }
         if (bindings.findByCustomerId(customerId).isPresent()) {
-            throw new BusinessException("同客户多人访问尚未核定，不能再绑定账号");
+            throw new BusinessException("本版一个客户只绑定一个账号");
         }
         if (current != null) {
             throw new BusinessException("不能借用内部账号作为客户身份");

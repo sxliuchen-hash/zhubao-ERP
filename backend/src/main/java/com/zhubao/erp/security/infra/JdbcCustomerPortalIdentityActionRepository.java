@@ -50,7 +50,7 @@ public class JdbcCustomerPortalIdentityActionRepository implements CustomerPorta
                 SQLException sql = (SQLException) ex;
                 String message = sql.getMessage() == null ? "" : sql.getMessage();
                 if (message.toLowerCase(Locale.ROOT).contains("uk_auth_customer_portal_customer")) {
-                    throw new BusinessException("同客户多人访问尚未核定，不能再绑定账号");
+                    throw new BusinessException("本版一个客户只绑定一个账号");
                 }
                 throw new IllegalStateException("客户身份事务失败", sql);
             } finally {

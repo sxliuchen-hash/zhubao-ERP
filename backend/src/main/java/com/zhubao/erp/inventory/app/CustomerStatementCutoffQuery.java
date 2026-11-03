@@ -23,13 +23,13 @@ import java.util.Map;
 
 /**
  * 按指定截止时点只读汇总收料、出厂和损耗。不写出库、不生成账单。
- * 截止日后的变动单独列出。在厂与在外、客户账单都还没有核定口径，不填 0。
+ * 截止日后的变动单独列出。在厂与在外还没有核定口径，不填 0。客户账单本版不开放，也不写成 0。
  */
 @Service
 public class CustomerStatementCutoffQuery {
 
     static final String FACTORY_OUTSIDE_PENDING = "截止日的在厂与在外尚未核定，不把当前结存或 0 写成截止日数量";
-    static final String BILLS_UNDECIDED = "账单可见范围尚未核定";
+    static final String BILLS_NOT_OPEN = "本版不向客户开放账单";
 
     private final StockLedgerRepository stocks;
     private final CustomerPortalIdentityService identities;
@@ -149,7 +149,7 @@ public class CustomerStatementCutoffQuery {
         }
         CustomerStatementCutoff statement = new CustomerStatementCutoff(
                 customerId, cutoff, received, shipped, loss, lossWeight,
-                FACTORY_OUTSIDE_PENDING, BILLS_UNDECIDED, afterCutoff, pending, "", List.copyOf(groups.values()));
+                FACTORY_OUTSIDE_PENDING, BILLS_NOT_OPEN, afterCutoff, pending, "", List.copyOf(groups.values()));
         return new CustomerStatementCutoff(
                 statement.customerId(), statement.cutoff(), statement.receivedQuantity(), statement.shippedQuantity(),
                 statement.lossQuantity(), statement.lossWeight(), statement.factoryAndOutside(), statement.bills(),

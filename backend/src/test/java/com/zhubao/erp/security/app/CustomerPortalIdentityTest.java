@@ -139,7 +139,7 @@ class CustomerPortalIdentityTest {
         assertThatThrownBy(() -> fixture.service().bind(fixture.admin(), "portal-a", otherId))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("一个客户账号只能绑定一个客户主体");
         assertThatThrownBy(() -> fixture.service().bind(fixture.admin(), "portal-c", fixture.customerId()))
-                .isInstanceOf(BusinessException.class).hasMessageContaining("同客户多人访问尚未核定");
+                .isInstanceOf(BusinessException.class).hasMessageContaining("本版一个客户只绑定一个账号");
         assertThat(fixture.accounts().findByUsername("finance").orElseThrow().role()).isEqualTo(RoleCode.FINANCE_STATISTICIAN);
         assertThat(fixture.bindings().findByCustomerId(otherId)).isEmpty();
 
@@ -286,7 +286,7 @@ class CustomerPortalIdentityTest {
         AuthUserAccount second = portalAccount("portal-c", otherId);
         actions.commit(action(first, otherId, "audit-b"));
         assertThatThrownBy(() -> actions.commit(action(second, otherId, "audit-c")))
-                .isInstanceOf(BusinessException.class).hasMessageContaining("同客户多人访问尚未核定");
+                .isInstanceOf(BusinessException.class).hasMessageContaining("本版一个客户只绑定一个账号");
         assertThat(accounts.findByUsername("portal-c")).isEmpty();
         assertThat(bindings.findByUsername("portal-b").orElseThrow().customerId()).isEqualTo(otherId);
         assertThat(countAccounts(dataSource, "portal-c")).isZero();

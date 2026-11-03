@@ -103,7 +103,7 @@ class CustomerPortalAuthorizationTest {
         var cutoff = statement.statement(portal("portal-a"), Instant.parse("2026-10-31T00:00:00Z"));
         assertThat(cutoff.exportText()).contains("收料,1000");
         assertThat(cutoff.exportText()).doesNotContain("工资").doesNotContain("payroll").doesNotContain(",80");
-        assertThat(cutoff.bills()).contains("尚未核定");
+        assertThat(cutoff.bills()).isEqualTo("本版不向客户开放账单");
         assertThat(cutoff.exportText()).doesNotContain("账单,0");
         assertThatThrownBy(() -> statement.acknowledge(portal("portal-a"), cutoff.cutoff()))
                 .isInstanceOf(com.zhubao.erp.common.error.BusinessException.class)

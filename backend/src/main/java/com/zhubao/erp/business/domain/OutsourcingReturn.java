@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 
 /**
  * 一次按原发外行收回。实收、未加工退回和已确认损耗分开记。
+ * 已确认损耗按数量成立，不要求另附凭据。少回且未确认的仍在外，不能直接发给客户。
  * 未知重量保持未知，不按颗数估算，也不写成 0。
  */
 public record OutsourcingReturn(
