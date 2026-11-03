@@ -360,7 +360,10 @@ public class AuthUserAccountManagementService {
 
     private List<String> resolveCoverDuties(RoleCode role, List<String> requested, AuthUserAccount existing) {
         if (role != RoleCode.BUSINESS_MANAGER) {
-            return List.of();
+            List<String> source = requested == null
+                    ? (existing == null ? List.of() : existing.coverDuties())
+                    : requested;
+            return CoverDuties.pageGrants(source);
         }
         List<String> duties = requested == null
                 ? (existing == null || existing.coverDuties().isEmpty() ? CoverDuties.packageDefaults() : existing.coverDuties())

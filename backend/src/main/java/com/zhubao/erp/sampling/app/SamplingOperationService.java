@@ -19,6 +19,7 @@ import com.zhubao.erp.sampling.domain.SamplingVersionKind;
 import com.zhubao.erp.sampling.domain.SamplingVersionRepository;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.app.RefactorPermissionContract;
+import com.zhubao.erp.security.domain.ConfiguredProcessAccess;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -75,6 +76,7 @@ public class SamplingOperationService {
         RefactorPermissionContract.assertAction(permissions, PermissionCode.SAMPLING_MAINTAIN, actor);
         SamplingOrder order = requireVisible(actor, samplingCode);
         ProcessStep step = samplingStep(stepId);
+        ConfiguredProcessAccess.assertStep(actor, step);
         SamplingVersionKind kind = SamplingVersionKind.parse(versionKind);
         if (versionNo == null || versionNo < 1) {
             throw new BusinessException("请选择已确认版本");

@@ -12,7 +12,8 @@ public record OperatorContext(
         List<String> coverDuties,
         String username,
         String teamCode,
-        String departmentCode
+        String departmentCode,
+        List<String> allowedProcesses
 ) {
     public OperatorContext {
         customerScope = customerScope == null ? List.of() : List.copyOf(customerScope);
@@ -20,11 +21,19 @@ public record OperatorContext(
         username = username == null ? "" : username.trim();
         teamCode = teamCode == null ? "" : teamCode.trim();
         departmentCode = departmentCode == null ? "" : departmentCode.trim();
+        allowedProcesses = allowedProcesses == null ? List.of() : List.copyOf(allowedProcesses);
     }
 
     public OperatorContext(String operator, RoleCode role, DataScope dataScope, boolean headerBased, String sessionToken,
                            List<String> customerScope, List<String> coverDuties) {
         this(operator, role, dataScope, headerBased, sessionToken, customerScope, coverDuties, "", "", "");
+    }
+
+    public OperatorContext(String operator, RoleCode role, DataScope dataScope, boolean headerBased, String sessionToken,
+                           List<String> customerScope, List<String> coverDuties, String username, String teamCode,
+                           String departmentCode) {
+        this(operator, role, dataScope, headerBased, sessionToken, customerScope, coverDuties, username, teamCode,
+                departmentCode, List.of());
     }
 
     public OperatorContext(String operator, RoleCode role, DataScope dataScope) {

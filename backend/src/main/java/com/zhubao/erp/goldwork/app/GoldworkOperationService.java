@@ -14,6 +14,7 @@ import com.zhubao.erp.goldwork.domain.GoldworkOrder;
 import com.zhubao.erp.goldwork.domain.GoldworkOrderRepository;
 import com.zhubao.erp.security.app.PermissionGuard;
 import com.zhubao.erp.security.app.RefactorPermissionContract;
+import com.zhubao.erp.security.domain.ConfiguredProcessAccess;
 import com.zhubao.erp.security.domain.CustomerScopeRules;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -74,6 +75,7 @@ public class GoldworkOperationService {
             throw new BusinessException("报工不结束在制");
         }
         GoldworkOrder order = requireVisible(actor, goldworkCode);
+        ConfiguredProcessAccess.assertStep(actor, goldStep(order, stepId));
         String photo = text(attachmentCode);
         if (photo.isEmpty()) {
             throw new BusinessException("没有有效的现场照片");

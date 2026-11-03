@@ -13,6 +13,8 @@ import java.util.Set;
 public final class WorkshopProcesses {
 
     public static final List<String> DEFAULT_ORDER = List.of("雕刻", "镶嵌", "抛光");
+    /** 账号可勾选的工序。前三项仍是普通加工；打样、金工用前缀区分同名节点，不进入普通交工顺序。 */
+    public static final List<String> CONFIGURABLE = configurableNames();
 
     private WorkshopProcesses() {
     }
@@ -64,7 +66,7 @@ public final class WorkshopProcesses {
             if (trimmed.isEmpty()) {
                 continue;
             }
-            if (!DEFAULT_ORDER.contains(trimmed)) {
+            if (!CONFIGURABLE.contains(trimmed)) {
                 throw new BusinessException("未知工序：" + trimmed);
             }
             chosen.add(trimmed);
@@ -73,12 +75,23 @@ public final class WorkshopProcesses {
             return List.of();
         }
         List<String> ordered = new ArrayList<>();
-        for (String name : DEFAULT_ORDER) {
+        for (String name : CONFIGURABLE) {
             if (chosen.contains(name)) {
                 ordered.add(name);
             }
         }
         return List.copyOf(ordered);
+    }
+
+    private static List<String> configurableNames() {
+        List<String> names = new ArrayList<>(DEFAULT_ORDER);
+        for (ProcessStep step : ProcessCatalog.defaults(BusinessKind.SAMPLING, "")) {
+            names.add("打样/" + step.name());
+        }
+        for (ProcessStep step : ProcessCatalog.defaults(BusinessKind.GOLDWORK, "")) {
+            names.add("金工/" + step.name());
+        }
+        return List.copyOf(names);
     }
 
     public static String join(List<String> processes) {

@@ -24,8 +24,14 @@ public final class CoverDuties {
     public static final String RECEIVER = "RECEIVER";
     /** 收货员的寄存动作，再加上公司料、退还客户和冻结。默认不勾。 */
     public static final String WAREHOUSE = "WAREHOUSE";
+    /** 打样页面。默认不勾，任何角色都可以单独授予。 */
+    public static final String SAMPLING = "SAMPLING";
+    /** 金工页面。默认不勾，任何角色都可以单独授予。 */
+    public static final String GOLDWORK = "GOLDWORK";
+    private static final List<String> PAGE_GRANTS = List.of(SAMPLING, GOLDWORK);
     private static final List<String> ORDER = List.of(
-            INTAKE, REPORT, QUALITY, SPLIT, LABEL, MASTER, SHIP, RETURN, REGISTER, LOSS, RECEIVER, WAREHOUSE);
+            INTAKE, REPORT, QUALITY, SPLIT, LABEL, MASTER, SHIP, RETURN, REGISTER, LOSS, RECEIVER, WAREHOUSE,
+            SAMPLING, GOLDWORK);
     private static final List<String> DEFAULTS = List.of(INTAKE, REPORT, QUALITY, SPLIT, LABEL, MASTER);
 
     private CoverDuties() {
@@ -68,6 +74,18 @@ public final class CoverDuties {
 
     public static List<String> packageDefaults() {
         return DEFAULTS;
+    }
+
+    /** 非业务管理账号只保留打样、金工这两项可配置页面，不带走收货、报工等顶岗。 */
+    public static List<String> pageGrants(List<String> raw) {
+        List<String> normalized = raw == null ? List.of() : normalize(raw);
+        List<String> pages = new ArrayList<>();
+        for (String code : PAGE_GRANTS) {
+            if (normalized.contains(code)) {
+                pages.add(code);
+            }
+        }
+        return List.copyOf(pages);
     }
 
     public static boolean contains(List<String> duties, String code) {

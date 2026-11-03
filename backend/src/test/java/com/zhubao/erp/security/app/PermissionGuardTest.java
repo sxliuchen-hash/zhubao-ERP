@@ -1,11 +1,14 @@
 package com.zhubao.erp.security.app;
 
+import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.OperatorContext;
 import com.zhubao.erp.security.domain.PermissionCode;
 import com.zhubao.erp.security.domain.RoleCode;
 import com.zhubao.erp.security.error.PermissionDeniedException;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -14,6 +17,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PermissionGuardTest {
 
     private final PermissionGuard permissionGuard = new PermissionGuard();
+
+    @Test
+    void 打样和金工只对勾选了页面的账号开放() {
+        OperatorContext operator = new OperatorContext("操作工", RoleCode.OPERATOR, DataScope.SELF);
+        OperatorContext sampling = new OperatorContext("打样员", RoleCode.OPERATOR, DataScope.SELF, false, "",
+                List.of(), List.of(CoverDuties.SAMPLING));
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.SAMPLING_VIEW, operator))
+                .isInstanceOf(PermissionDeniedException.class);
+        assertThatCode(() -> permissionGuard.assertAllowed(PermissionCode.SAMPLING_MAINTAIN, sampling))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> permissionGuard.assertAllowed(PermissionCode.GOLDWORK_VIEW, sampling))
+                .isInstanceOf(PermissionDeniedException.class);
+    }
 
     @Test
     void allowsRoleWithinOperationBoundary() {

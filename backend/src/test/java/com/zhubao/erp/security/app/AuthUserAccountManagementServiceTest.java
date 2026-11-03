@@ -14,6 +14,7 @@ import com.zhubao.erp.security.domain.AuthSession;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.AuthUserAccountRepository;
 import com.zhubao.erp.security.domain.ChangeOwnPasswordCommand;
+import com.zhubao.erp.security.domain.CoverDuties;
 import com.zhubao.erp.security.domain.DataScope;
 import com.zhubao.erp.security.domain.ManageAuthUserAccountCommand;
 import com.zhubao.erp.security.domain.OperatorContext;
@@ -133,6 +134,28 @@ class AuthUserAccountManagementServiceTest {
                 List.of()
         ), admin);
         assertThat(cleared.allowedProcesses()).isEmpty();
+    }
+
+    @Test
+    void 操作工勾选打样后能看到打样页且未勾的金工不出现() {
+        Fixture fixture = fixture();
+        fixture.managementService().upsert(new ManageAuthUserAccountCommand(
+                "sampler",
+                "Secure-2026-Sample!",
+                "打样员 周宁",
+                "OPERATOR",
+                "SELF",
+                null,
+                true,
+                false,
+                null,
+                List.of("打样/平设", "雕刻"),
+                List.of(CoverDuties.SAMPLING, "INTAKE")
+        ), admin);
+        AuthSession session = fixture.sessionService().login(new AuthLoginCommand("sampler", "Secure-2026-Sample!"));
+        assertThat(session.allowedProcesses()).containsExactly("雕刻", "打样/平设");
+        assertThat(session.coverDuties()).containsExactly(CoverDuties.SAMPLING);
+        assertThat(session.menuCodes()).contains("sampling", "production").doesNotContain("goldwork");
     }
 
     @Test

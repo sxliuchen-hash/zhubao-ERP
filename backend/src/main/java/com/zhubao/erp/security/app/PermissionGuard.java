@@ -95,6 +95,15 @@ public class PermissionGuard {
         if (operatorContext.role() == RoleCode.ADMIN) {
             return;
         }
+        if (permission == PermissionCode.SAMPLING_VIEW || permission == PermissionCode.SAMPLING_MAINTAIN
+                || permission == PermissionCode.GOLDWORK_VIEW || permission == PermissionCode.GOLDWORK_MAINTAIN) {
+            if (!coverAllows(permission, operatorContext.coverDuties())) {
+                throw new PermissionDeniedException(
+                        "角色 " + operatorContext.role() + " 无权执行 " + permission.label()
+                );
+            }
+            return;
+        }
         Set<RoleCode> allowedRoles = roleMatrix.getOrDefault(permission, Set.of());
         if (!allowedRoles.contains(operatorContext.role())
                 || operatorContext.role() == RoleCode.BUSINESS_MANAGER && !coverAllows(permission, operatorContext.coverDuties())) {
@@ -158,6 +167,8 @@ public class PermissionGuard {
             case BUSINESS_CUSTOMER_RETURN -> CoverDuties.RETURN;
             case REGISTER_IMPORT_REVIEW, REGISTER_IMPORT_POSTING -> CoverDuties.REGISTER;
             case BUSINESS_LOSS_APPROVAL -> CoverDuties.LOSS;
+            case SAMPLING_VIEW, SAMPLING_MAINTAIN -> CoverDuties.SAMPLING;
+            case GOLDWORK_VIEW, GOLDWORK_MAINTAIN -> CoverDuties.GOLDWORK;
             case ORDER_CHANGE_REVIEW -> null;
             case DESK_TASK_ASSIGN, GATEWAY_READING_CONSUME, DOCUMENT_ATTACHMENT_UPLOAD, DOCUMENT_CAPTURE -> null;
             case STOCK_COMPANY_RECEIVE, STOCK_COMPANY_ISSUE, STOCK_COMPANY_RETURN,

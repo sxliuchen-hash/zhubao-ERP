@@ -32,6 +32,17 @@ const coverDutyOptions = [
   { code: 'LOSS', label: '损耗审批', packaged: false },
   { code: 'RECEIVER', label: '收货员', packaged: false },
   { code: 'WAREHOUSE', label: '库管', packaged: false },
+  { code: 'SAMPLING', label: '打样', packaged: false },
+  { code: 'GOLDWORK', label: '金工', packaged: false },
+];
+const pageGrantOptions = [
+  { code: 'SAMPLING', label: '打样' },
+  { code: 'GOLDWORK', label: '金工' },
+];
+const processGroups = [
+  { label: '普通加工', names: ['雕刻', '镶嵌', '抛光'] },
+  { label: '打样', names: ['打样/平设', '打样/建模', '打样/珠型确认', '打样/选料与加工', '打样/交付确认'] },
+  { label: '金工', names: ['金工/平设', '金工/建模', '金工/倒模', '金工/执模', '金工/抛光（金）'] },
 ];
 const defaultCoverDuties = coverDutyOptions.filter((item) => item.packaged).map((item) => item.code);
 const editorMode = ref<'create' | 'edit' | 'password' | null>(null);
@@ -49,7 +60,6 @@ const organizationHint = computed(() => {
   if (editor.value.dataScope === 'CUSTOMER_RANGE' && selectedCustomerCodes.value.length === 0) return '未选择客户时，看不到任何客户单据';
   return '';
 });
-const processes = ['雕刻', '镶嵌', '抛光'];
 const isAdmin = computed(() => session.value?.role === 'ADMIN');
 const visibleAccounts = computed(() => accounts.value.filter(account => {
   const matchesText = `${account.username} ${account.operator} ${account.roleLabel}`.toLowerCase().includes(keyword.value.trim().toLowerCase());
@@ -112,7 +122,9 @@ function openEditor(account?: AuthUserAccountSummary, passwordOnly = false) {
     dataScope: account.dataScope, customerCodes: account.customerScope.join('\n'),
     teamCode: account.teamCode ?? '', departmentCode: account.departmentCode ?? '',
     allowedProcesses: [...(account.allowedProcesses ?? [])],
-    coverDuties: account.role === 'BUSINESS_MANAGER' && account.coverDuties?.length ? [...account.coverDuties] : [...defaultCoverDuties],
+    coverDuties: account.role === 'BUSINESS_MANAGER'
+      ? (account.coverDuties?.length ? [...account.coverDuties] : [...defaultCoverDuties])
+      : [...(account.coverDuties ?? [])],
     enabled: account.enabled, demoAccount: false,
   } : emptyEditor();
   void nextTick(() => editorSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
@@ -176,7 +188,9 @@ async function saveAccount() {
       role: form.role, dataScope: form.dataScope, customerScope: form.dataScope === 'CUSTOMER_RANGE' ? customerScope : [],
       teamCode: form.teamCode.trim(), departmentCode: form.departmentCode.trim(),
       allowedProcesses: [...form.allowedProcesses],
-      coverDuties: form.role === 'BUSINESS_MANAGER' ? [...form.coverDuties] : [],
+      coverDuties: form.role === 'BUSINESS_MANAGER'
+        ? [...form.coverDuties]
+        : form.coverDuties.filter((code) => code === 'SAMPLING' || code === 'GOLDWORK'),
       enabled: form.enabled, demoAccount: form.demoAccount,
     });
     if (form.username === session.value?.username) {
@@ -272,6 +286,15 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <label>部门编号<input v-model="editor.departmentCode" aria-label="部门编号" maxlength="40" placeholder="选择本部门时必填" /></label>
               <p v-if="organizationHint" class="operation-feedback danger">{{ organizationHint }}</p>
             </div>
+            <div v-if="editorMode !== 'password' && editor.role !== 'BUSINESS_MANAGER'" class="cover-duty-panel">
+              <p>打样和金工默认不开放。勾选后这个账号能看到对应页面；下面的工序一个都不勾，表示该页面里的工序都能做。</p>
+              <div class="user-checks" aria-label="打样和金工页面">
+                <label v-for="duty in pageGrantOptions" :key="duty.code">
+                  <input v-model="editor.coverDuties" type="checkbox" :value="duty.code" :aria-label="`页面${duty.label}`" />
+                  {{ duty.label }}
+                </label>
+              </div>
+            </div>
             <div v-if="editorMode !== 'password' && editor.role === 'BUSINESS_MANAGER'" class="cover-duty-panel">
               <p>默认勾选收货、报工、质检，以及拆单、标签和客户档案。收货员可办理客户寄存收货、领用和退回；库管还包括公司料、退还客户和冻结。这两项和其余项默认不勾，可以按人另加或取消。数据范围在上面单独选。</p>
               <div class="user-checks" aria-label="业务管理权限">
@@ -294,7 +317,15 @@ async function removeAccount(account: AuthUserAccountSummary) {
               <p v-if="unresolvedCustomerCodes.length">历史授权值待人工核对：{{ unresolvedCustomerCodes.join('、') }}。请选择对应客户档案。</p>
             </div>
             <template v-if="editorMode !== 'password'">
-              <p>可操作工序</p><div class="user-checks"><label v-for="process in processes" :key="process"><input v-model="editor.allowedProcesses" type="checkbox" :value="process" />{{ process }}</label></div>
+              <p>可操作工序</p>
+              <p class="info-context">打样或金工的工序一个都不勾，表示该页面里的工序都能做。勾了具体工序后，只能报已勾的工序。</p>
+              <div v-for="group in processGroups" :key="group.label" class="user-checks" :aria-label="`${group.label}工序`">
+                <span>{{ group.label }}</span>
+                <label v-for="process in group.names" :key="process">
+                  <input v-model="editor.allowedProcesses" type="checkbox" :value="process" :aria-label="`工序${process}`" />
+                  {{ process.includes('/') ? process.slice(process.indexOf('/') + 1) : process }}
+                </label>
+              </div>
               <div class="user-checks"><label><input v-model="editor.enabled" type="checkbox" :disabled="editor.username === session?.username" />启用账号</label></div>
               <details class="user-permissions"><summary>查看角色包含的操作权限（{{ selectedRole?.permissions.length ?? 0 }} 项）</summary><p>这里是角色模板。业务管理还要看已勾选的顶岗；桌面和手机使用同一份登录会话。菜单或按钮没显示，也不能绕过接口。</p><ul><li v-for="permission in selectedRole?.permissions ?? []" :key="permission.code">{{ permission.label }}</li></ul></details>
             </template>

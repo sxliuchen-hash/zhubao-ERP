@@ -11,6 +11,7 @@ import com.zhubao.erp.security.domain.AuthAuditRepository;
 import com.zhubao.erp.security.domain.AuthLoginSession;
 import com.zhubao.erp.security.domain.AuthLoginSessionRepository;
 import com.zhubao.erp.security.domain.AuthSession;
+import com.zhubao.erp.security.domain.NavigationMenuItem;
 import com.zhubao.erp.security.domain.AuthTokenDigest;
 import com.zhubao.erp.security.domain.AuthUserAccount;
 import com.zhubao.erp.security.domain.CustomerPortalBinding;
@@ -32,6 +33,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -261,7 +263,8 @@ public class AuthSessionService {
                 value.user().coverDuties(),
                 value.user().username(),
                 value.user().teamCode(),
-                value.user().departmentCode()
+                value.user().departmentCode(),
+                value.user().allowedProcesses()
         ));
     }
 
@@ -580,7 +583,7 @@ public class AuthSessionService {
 
     private AuthSession toSession(SessionEntry entry) {
         AuthUserAccount user = entry.user();
-        List<String> menuCodes = coverMenus(navigationMenuService.menuCodesFor(user.role()), user);
+        List<String> menuCodes = visibleMenus(user);
         return new AuthSession(
                 entry.token(),
                 user.username(),
@@ -597,9 +600,7 @@ public class AuthSessionService {
                 user.passwordChangeRequired(),
                 effectiveCustomerScope(user),
                 menuCodes,
-                navigationMenuService.menuTreeFor(user.role()).stream()
-                        .filter(item -> menuCodes.contains(item.code()))
-                        .toList(),
+                menuTree(user.role(), menuCodes),
                 user.allowedProcesses(),
                 user.coverDuties(),
                 user.teamCode(),
@@ -666,6 +667,31 @@ public class AuthSessionService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private List<String> visibleMenus(AuthUserAccount user) {
+        List<String> menus = new ArrayList<>(coverMenus(navigationMenuService.menuCodesFor(user.role()), user));
+        grantPage(menus, "sampling", CoverDuties.SAMPLING, user);
+        grantPage(menus, "goldwork", CoverDuties.GOLDWORK, user);
+        return List.copyOf(menus);
+    }
+
+    private void grantPage(List<String> menus, String code, String duty, AuthUserAccount user) {
+        if (user.role() != RoleCode.ADMIN && CoverDuties.contains(user.coverDuties(), duty) && !menus.contains(code)) {
+            menus.add(code);
+        }
+    }
+
+    private List<NavigationMenuItem> menuTree(RoleCode role, List<String> menuCodes) {
+        List<NavigationMenuItem> tree = new ArrayList<>(navigationMenuService.menuTreeFor(role).stream()
+                .filter(item -> menuCodes.contains(item.code()))
+                .toList());
+        for (String code : List.of("sampling", "goldwork")) {
+            if (menuCodes.contains(code) && tree.stream().noneMatch(item -> item.code().equals(code))) {
+                navigationMenuService.find(code).ifPresent(tree::add);
+            }
+        }
+        return List.copyOf(tree);
     }
 
     private List<String> coverMenus(List<String> menus, AuthUserAccount user) {

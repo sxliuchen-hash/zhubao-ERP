@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -26,6 +27,10 @@ public class NavigationMenuService {
         return repository.findMenuItems().stream()
                 .filter(item -> allowedCodes.contains(item.code()))
                 .toList();
+    }
+
+    public Optional<NavigationMenuItem> find(String code) {
+        return repository.findMenuItems().stream().filter(item -> item.code().equals(code)).findFirst();
     }
 
     public List<String> menuCodesFor(RoleCode role) {
